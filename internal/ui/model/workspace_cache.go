@@ -204,6 +204,7 @@ func (m *UI) applyBusyState(msg busyStateMsg) []tea.Cmd {
 	}
 
 	busy := m.isAgentBusy()
+	m.chat.SetAgentBusy(busy)
 	if busy {
 		// A session reload that raced an unpopulated busy cache (the
 		// zero-value read at boot) froze the animation clock even though

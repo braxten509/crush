@@ -98,6 +98,9 @@ type Chat struct {
 	flat    []chat.MessageItem
 	groupOf map[string]*chat.ToolGroupItem
 	folded  map[chat.MessageItem]bool
+	// agentBusy is passed to groups so the live one keeps a status
+	// between steps.
+	agentBusy bool
 
 	// animRunning is true while the shared animation clock has a tick
 	// outstanding. The clock stops itself when no visible item is spinning
@@ -533,6 +536,7 @@ func (m *Chat) regroup() {
 	m.groupOf = groupOf
 	for g := range used {
 		g.SetLive(owner[g] == len(items)-1)
+		g.SetBusy(m.agentBusy)
 	}
 
 	newOff, ok := owner[anchor]
@@ -591,6 +595,14 @@ func (m *Chat) hasVisibleAnimation() bool {
 // arriving before EnsureAnimating assumes the command was lost and arms a
 // new one. Generous enough that a slow frame never trips it.
 const animClockLostAfter = 2 * time.Second
+
+// SetAgentBusy tells status groups whether the agent is still working.
+func (m *Chat) SetAgentBusy(busy bool) {
+	m.agentBusy = busy
+	for _, g := range m.groupOf {
+		g.SetBusy(busy)
+	}
+}
 
 // SetAnimationsAllowed gates the shared animation clock. It is cleared
 // when a session is reloaded whose agent is not busy so ghost spinners (an

@@ -31,6 +31,9 @@ type ToolGroupItem struct {
 	// live marks the group at the end of the chat, where the model may
 	// still be working: it says what is happening right now.
 	live bool
+	// busy is whether the agent is still working, so a live group keeps
+	// a status between steps (a tool finished, the next hasn't started).
+	busy bool
 	// Line where each shown child starts in the expanded render, for
 	// routing clicks to it.
 	childLines []int
@@ -120,6 +123,14 @@ func (g *ToolGroupItem) SetLive(live bool) {
 	}
 }
 
+// SetBusy sets whether the agent is still working.
+func (g *ToolGroupItem) SetBusy(busy bool) {
+	if g.busy != busy {
+		g.busy = busy
+		g.Bump()
+	}
+}
+
 // Child returns the step with the given ID, or nil.
 func (g *ToolGroupItem) Child(id string) MessageItem {
 	for _, c := range g.children {
@@ -201,6 +212,11 @@ func (g *ToolGroupItem) status() string {
 		case ToolStatusRunning:
 			return toolActivity(last.ToolCall().Name)
 		}
+	}
+	if g.busy {
+		// The last step is done but the agent isn't: the model is
+		// working out what to do next.
+		return "Thinking"
 	}
 	return ""
 }

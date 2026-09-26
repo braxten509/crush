@@ -83,6 +83,13 @@ func stripLineNumbers(s string) string {
 	return strings.Join(lines, "\n")
 }
 
+// autoApproved reports whether Crush would grant every tool call in the
+// session anyway, so the CLI can skip asking.
+func (m *Model) autoApproved(sessionID string) bool {
+	a, ok := m.Perms.(interface{ AutoApproved(string) bool })
+	return ok && sessionID != "" && a.AutoApproved(sessionID)
+}
+
 // approve asks the user, through Crush's permission dialog, whether a CLI may
 // run a tool. The request mirrors what Crush's own tool would ask, so
 // "allow for session" and YOLO mode behave the same.

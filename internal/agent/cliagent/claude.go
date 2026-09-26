@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
@@ -72,7 +75,104 @@ type claudeUsage struct {
 	CacheRead     int64 `json:"cache_read_input_tokens"`
 }
 
-func runClaude(ctx context.Context, m *Model, t Turn) error {
+// claudeIdle is how long a finished session's Claude process stays open for
+// the next prompt.
+const claudeIdle = 15 * time.Minute
+
+// claudeKey is what a live Claude process was started with; a turn that
+// needs anything else starts a new one.
+type claudeKey struct {
+	dir, model, effort string
+	bypass             bool
+}
+
+// claudeLive is a Claude process kept open between the turns of one Crush
+// session, as the interactive CLI does, so follow-ups skip its startup
+// (settings, hooks, MCP servers).
+type claudeLive struct {
+	p       *proc
+	lines   <-chan []byte
+	key     claudeKey
+	native  string
+	idle    chan struct{} // closed to end the between-turns drain
+	drained chan struct{}
+	dead    atomic.Bool
+	timer   *time.Timer
+}
+
+// claudeSessions holds the live processes, one per Crush session.
+var claudeSessions = struct {
+	mu sync.Mutex
+	m  map[string]*claudeLive
+}{m: map[string]*claudeLive{}}
+
+// takeClaude hands over the session's live process if it can run this turn,
+// closing it otherwise.
+func takeClaude(sessionID string, key claudeKey, resume string) *claudeLive {
+	claudeSessions.mu.Lock()
+	l := claudeSessions.m[sessionID]
+	delete(claudeSessions.m, sessionID)
+	claudeSessions.mu.Unlock()
+	if l == nil {
+		return nil
+	}
+	l.timer.Stop()
+	close(l.idle)
+	<-l.drained
+	if l.dead.Load() || l.key != key || resume == "" || resume != l.native {
+		l.p.finish()
+		return nil
+	}
+	return l
+}
+
+// keepClaude parks a process after a finished turn until the session's next
+// prompt, or closes it after [claudeIdle].
+func keepClaude(sessionID string, l *claudeLive) {
+	l.idle, l.drained = make(chan struct{}), make(chan struct{})
+	go func() {
+		// Output between turns (a background task finishing) has no turn to
+		// show it in.
+		// ponytail: dropped; relay it once Crush can show unprompted turns.
+		defer close(l.drained)
+		for {
+			select {
+			case <-l.idle:
+				return
+			case _, ok := <-l.lines:
+				if !ok {
+					l.dead.Store(true)
+					<-l.idle
+					return
+				}
+			}
+		}
+	}()
+	l.timer = time.AfterFunc(claudeIdle, func() {
+		claudeSessions.mu.Lock()
+		if claudeSessions.m[sessionID] != l {
+			claudeSessions.mu.Unlock()
+			return
+		}
+		delete(claudeSessions.m, sessionID)
+		claudeSessions.mu.Unlock()
+		close(l.idle)
+		<-l.drained
+		l.p.finish()
+	})
+	claudeSessions.mu.Lock()
+	old := claudeSessions.m[sessionID]
+	claudeSessions.m[sessionID] = l
+	claudeSessions.mu.Unlock()
+	if old != nil {
+		old.timer.Stop()
+		close(old.idle)
+		<-old.drained
+		old.p.finish()
+	}
+}
+
+func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	args := []string{
 		"-p", "--input-format", "stream-json", "--output-format", "stream-json",
 		"--verbose", "--include-partial-messages", "--permission-prompt-tool", "stdio",
@@ -81,28 +181,68 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 		"--replay-user-messages",
 		"--model", m.ID,
 	}
-	if t.Effort != "" {
-		args = append(args, "--effort", t.Effort)
+	if key.effort != "" {
+		args = append(args, "--effort", key.effort)
 	}
 	if t.Resume != "" {
 		args = append(args, "--resume", t.Resume)
 	}
+	if key.bypass {
+		// Crush would approve every call anyway. Asking also changes how
+		// Claude works: it splits jobs into more tool calls, each costing a
+		// model round.
+		args = append(args, "--permission-mode", "bypassPermissions")
+	}
+	// Wait for MCP servers before the first request, as `claude -p` with a
+	// prompt argument does. Streamed input doesn't by default, so the first
+	// prompt can't use their tools and their late arrival adds thousands of
+	// tokens to the turn.
+	env := []string{"MCP_CONNECTION_NONBLOCKING=0"}
 	if t.NoTools {
-		args = append(args, "--tools", "", "--no-session-persistence", "--strict-mcp-config")
+		args = append(args, "--tools", "", "--no-session-persistence", "--strict-mcp-config", "--safe-mode")
+		if t.System != "" {
+			args = append(args, "--system-prompt", t.System)
+		}
+		env = nil
 	}
-	p, err := startProc(m.Dir, "claude", args...)
+	p, err := startProcEnv(m.Dir, env, "claude", args...)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer p.finish()
+	// A CLI that dies right away fails this write; the read loop then
+	// reports why.
+	_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-init", "request": map[string]any{"subtype": "initialize"}})
+	return &claudeLive{p: p, lines: p.readLines(), key: key}, nil
+}
+
+func runClaude(ctx context.Context, m *Model, t Turn) error {
+	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, bypass: !t.NoTools && m.autoApproved(t.SessionID)}
+	keep := !t.NoTools && t.SessionID != ""
+	var live *claudeLive
+	if keep {
+		live = takeClaude(t.SessionID, key, t.Resume)
+	}
+	fresh := live == nil
+	if fresh {
+		var err error
+		if live, err = startClaude(m, t, key); err != nil {
+			return err
+		}
+	}
+	p := live.p
+	finished := false
+	defer func() {
+		if finished && keep && live.native != "" {
+			keepClaude(t.SessionID, live)
+		} else {
+			p.finish()
+		}
+	}()
 	stop := p.watchCancel(ctx, func() {
 		_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-interrupt", "request": map[string]any{"subtype": "interrupt"}})
 	})
 	defer stop()
 
-	// A CLI that dies right away fails these writes; the read loop below
-	// then reports why.
-	_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-init", "request": map[string]any{"subtype": "initialize"}})
 	_ = p.send(claudeUserMessage(t.Prompt))
 
 	// Claude takes messages written mid-turn in at its next tool result, or
@@ -119,22 +259,24 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	// Crush tool name and input per tool_use ID, for results and approvals.
 	calls := map[string][2]string{}
 	started := false
-	for p.lines.Scan() {
+	for raw := range live.lines {
 		var line claudeLine
-		if json.Unmarshal(p.lines.Bytes(), &line) != nil {
+		if json.Unmarshal(raw, &line) != nil {
 			continue
 		}
 		switch line.Type {
 		case "system":
+			// Claude reports this again for each prompt a live process takes.
 			if line.Subtype == "init" && line.SessionID != "" {
 				started = true
+				live.native = line.SessionID
 				if err := t.Emit(Event{Type: EventSession, Session: line.SessionID}); err != nil {
 					return err
 				}
 			}
 
 		case "rate_limit_event":
-			setLimits(config.TypeClaudeCode, claudeRateLimit(p.lines.Bytes()))
+			setLimits(config.TypeClaudeCode, claudeRateLimit(raw))
 
 		case "stream_event":
 			if err := claudeStreamEvent(line.Event, t.Emit); err != nil {
@@ -202,13 +344,14 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 			if sent.pending() > 0 {
 				continue
 			}
+			finished = true
 			return nil
 		}
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if !started && t.Resume != "" {
+	if fresh && !started && t.Resume != "" {
 		return ErrResume
 	}
 	return exitError("claude", p)

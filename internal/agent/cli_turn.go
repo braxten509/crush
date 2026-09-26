@@ -63,6 +63,46 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 	}
 }
 
+// cliSummarize writes the session summary from inside the CLI's own session,
+// which already holds the conversation (cached), instead of pasting the
+// whole transcript into a fresh request. It returns nil, nil when the CLI
+// has no session to summarize from.
+func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sessionID, effort string, history []message.Message, prompt string, summary *message.Message) (*fantasy.AgentResult, error) {
+	link := m.Links.Get(sessionID, m.Kind)
+	if link.Native == "" {
+		return nil, nil
+	}
+	prompt = string(summaryPrompt) + "\n\n" + prompt + "\n\nDon't use any tools: reply with the summary only."
+	text, resume := cliHandoff(history, link, prompt)
+	if resume == "" {
+		return nil, nil
+	}
+	var total, last fantasy.Usage
+	err := m.Run(ctx, cliagent.Turn{SessionID: sessionID, Prompt: text, Resume: resume, Effort: effort, Emit: func(e cliagent.Event) error {
+		switch e.Type {
+		case cliagent.EventText:
+			summary.AppendContent(e.Text)
+		case cliagent.EventToolCall:
+			// Anything said before a tool call isn't the summary.
+			summary.ResetStreamedContent()
+		case cliagent.EventUsage:
+			last = e.Usage
+			total.InputTokens += e.Usage.InputTokens
+			total.OutputTokens += e.Usage.OutputTokens
+			total.TotalTokens += e.Usage.TotalTokens
+			total.CacheCreationTokens += e.Usage.CacheCreationTokens
+			total.CacheReadTokens += e.Usage.CacheReadTokens
+		default:
+			return nil
+		}
+		return a.messages.Update(ctx, *summary)
+	}})
+	if err != nil {
+		return nil, err
+	}
+	return &fantasy.AgentResult{TotalUsage: total, Response: fantasy.Response{Usage: last}}, nil
+}
+
 func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessionID, native string) {
 	msgs, err := a.messages.List(ctx, sessionID)
 	if err != nil || len(msgs) == 0 {

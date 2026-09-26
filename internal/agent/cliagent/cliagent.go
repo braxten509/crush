@@ -71,7 +71,9 @@ type Turn struct {
 	// NoTools runs a one-shot, text-only request that is not saved as a
 	// native session (titles, summaries).
 	NoTools bool
-	Emit    func(Event) error
+	// System replaces Claude's own system prompt on NoTools requests.
+	System string
+	Emit   func(Event) error
 	// Steer returns messages the user queued while the turn runs, or "".
 	// Drivers whose CLI can take input mid-turn poll it, send what it
 	// returns and emit EventUserMessage with the same text once the CLI
@@ -140,7 +142,21 @@ func (m *Model) Model() string    { return m.ID }
 func (m *Model) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
 	var text strings.Builder
 	var usage fantasy.Usage
-	err := m.Run(ctx, Turn{Prompt: flattenPrompt(call.Prompt), NoTools: true, Emit: func(e Event) error {
+	t := Turn{Prompt: flattenPrompt(call.Prompt), NoTools: true}
+	if m.Kind == config.TypeClaudeCode {
+		// A short system prompt of its own keeps these requests to a few
+		// hundred tokens instead of Claude Code's whole agent setup.
+		var sys, rest fantasy.Prompt
+		for _, msg := range call.Prompt {
+			if msg.Role == fantasy.MessageRoleSystem {
+				sys = append(sys, msg)
+			} else {
+				rest = append(rest, msg)
+			}
+		}
+		t.System, t.Prompt = flattenPrompt(sys), flattenPrompt(rest)
+	}
+	t.Emit = func(e Event) error {
 		switch e.Type {
 		case EventText:
 			text.WriteString(e.Text)
@@ -148,8 +164,8 @@ func (m *Model) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Respo
 			usage = e.Usage
 		}
 		return nil
-	}})
-	if err != nil {
+	}
+	if err := m.Run(ctx, t); err != nil {
 		return nil, err
 	}
 	return &fantasy.Response{
@@ -344,11 +360,20 @@ type proc struct {
 	stderr *tailBuffer
 	mu     sync.Mutex
 	closed bool
+	quit   chan struct{} // closed by finish; see readLines
 }
 
 func startProc(dir, name string, args ...string) (*proc, error) {
+	return startProcEnv(dir, nil, name, args...)
+}
+
+// startProcEnv is startProc with extra environment variables.
+func startProcEnv(dir string, env []string, name string, args ...string) (*proc, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	if env != nil {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	ownGroup(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -358,7 +383,7 @@ func startProc(dir, name string, args ...string) (*proc, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &proc{cmd: cmd, stdin: stdin, stderr: &tailBuffer{max: 8 << 10}}
+	p := &proc{cmd: cmd, stdin: stdin, stderr: &tailBuffer{max: 8 << 10}, quit: make(chan struct{})}
 	cmd.Stderr = p.stderr
 	p.lines = bufio.NewScanner(stdout)
 	p.lines.Buffer(make([]byte, 0, 1<<20), 64<<20)
@@ -392,8 +417,32 @@ func (p *proc) closeInput() {
 	}
 }
 
+// readLines delivers stdout lines on a channel, closed when output ends,
+// for procs that outlive one turn. Once the proc is finished, lines nobody
+// takes are dropped so the CLI never blocks writing on its way out.
+func (p *proc) readLines() <-chan []byte {
+	ch := make(chan []byte)
+	go func() {
+		defer close(ch)
+		for p.lines.Scan() {
+			select {
+			case ch <- bytes.Clone(p.lines.Bytes()):
+			case <-p.quit:
+			}
+		}
+	}()
+	return ch
+}
+
 // finish waits for the process, killing it if it lingers.
 func (p *proc) finish() {
+	p.mu.Lock()
+	select {
+	case <-p.quit:
+	default:
+		close(p.quit)
+	}
+	p.mu.Unlock()
 	p.closeInput()
 	timer := time.AfterFunc(5*time.Second, p.kill)
 	defer timer.Stop()

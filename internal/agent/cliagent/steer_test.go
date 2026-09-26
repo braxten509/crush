@@ -65,3 +65,31 @@ cat >/dev/null
 	require.Equal(t, []EventType{EventSession, EventUserMessage}, types(events))
 	require.Equal(t, "PINEAPPLE", events[1].Text)
 }
+
+func TestClaudeKeepsProcess(t *testing.T) {
+	// One process answers each prompt it reads; every start is logged.
+	dir := t.TempDir()
+	starts := filepath.Join(dir, "starts")
+	script := `echo start >> ` + starts + `
+read -r _
+while read -r _; do
+echo '{"type":"system","subtype":"init","session_id":"s1"}'
+echo '{"type":"result","subtype":"success","result":"ok"}'
+done
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\n"+script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	m := &Model{Kind: config.TypeClaudeCode, ID: "m", Dir: t.TempDir()}
+	turn := func(resume string) {
+		require.NoError(t, m.Run(context.Background(), Turn{SessionID: "keep-test", Prompt: "hi", Resume: resume, Emit: func(Event) error { return nil }}))
+	}
+	turn("")
+	turn("s1")
+	m.ID = "other" // A different model needs its own process.
+	turn("s1")
+	takeClaude("keep-test", claudeKey{}, "") // Close the parked one.
+
+	data, err := os.ReadFile(starts)
+	require.NoError(t, err)
+	require.Equal(t, "start\nstart\n", string(data))
+}

@@ -937,7 +937,9 @@ func resolveSelectedModels(cfg *Config, knownProviders []catwalk.Provider) (reso
 				break
 			}
 		}
-		if !isKnownProvider {
+		if cliSmall, ok := cfg.CLISmallModel(large.Provider); ok {
+			small = cliSmall
+		} else if !isKnownProvider {
 			slog.Warn("Using large model as small model for unknown provider", "provider", large.Provider, "model", large.Model)
 			small = large
 		}

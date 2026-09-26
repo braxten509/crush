@@ -31,6 +31,8 @@ var claudeEfforts = []string{"low", "medium", "high", "xhigh", "max"}
 type cliProvider struct {
 	bin string
 	cfg ProviderConfig
+	// small is the model used for titles; the last model if it's missing.
+	small string
 }
 
 // Built-in model lists, used until discovery (cli_models.go) has cached
@@ -47,7 +49,7 @@ var cliProviders = []cliProvider{
 			{ID: "sonnet", Name: "Claude Sonnet", ContextWindow: 400_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
 			{ID: "haiku", Name: "Claude Haiku", ContextWindow: 400_000, DefaultMaxTokens: 32_000, SupportsImages: true},
 		},
-	}},
+	}, "haiku"},
 	{"codex", ProviderConfig{
 		ID:       string(TypeCodexCLI),
 		Name:     "Codex",
@@ -59,35 +61,35 @@ var cliProviders = []cliProvider{
 			{ID: "gpt-6-luna", Name: "GPT-6 Luna", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "medium"},
 			{ID: "gpt-5.6-terra", Name: "GPT-5.6 Terra", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium"},
 		},
-	}},
+	}, "gpt-6-luna"},
 	{"grok", ProviderConfig{
 		ID:       string(TypeGrokCLI),
 		Name:     "Grok",
 		Type:     TypeGrokCLI,
 		FlatRate: true,
 		Models:   cliModels("grok-4.7", "Grok 4.7", "grok-4.7-build-fast", "Grok 4.7 Build Fast", "grok-4.6", "Grok 4.6", "grok-4.5", "Grok 4.5"),
-	}},
+	}, "grok-4.7-build-fast"},
 	{"abacusai", ProviderConfig{
 		ID:       string(TypeAbacusCLI),
 		Name:     "Abacus",
 		Type:     TypeAbacusCLI,
 		FlatRate: true,
 		Models:   cliModels("ROUTE_LLM", "RouteLLM", "CLAUDE_V5_5_OPUS_THINKING", "Opus 5.5", "OPENAI_GPT6_ASTRA_THINKING", "GPT-6 Astra", "XAI_GROK_4_7", "Grok 4.7", "ROUTE_LLM_LOW", "RouteLLM Low"),
-	}},
+	}, "ROUTE_LLM_LOW"},
 	{"agy", ProviderConfig{
 		ID:       string(TypeAGYCLI),
 		Name:     "Antigravity",
 		Type:     TypeAGYCLI,
 		FlatRate: true,
 		Models:   cliModels("gemini-3.1-pro-high", "Gemini 3.1 Pro (High)", "gemini-3.8-flash-high", "Gemini 3.8 Flash (High)", "claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)", "gemini-3.8-flash-low", "Gemini 3.8 Flash (Low)"),
-	}},
+	}, "gemini-3.8-flash-low"},
 	{"opencode", ProviderConfig{
 		ID:       string(TypeOpenCodeCLI),
 		Name:     "OpenCode Go",
 		Type:     TypeOpenCodeCLI,
 		FlatRate: true,
 		Models:   cliModels("opencode-go/glm-5.3", "glm-5.3", "opencode-go/kimi-k3", "kimi-k3", "opencode-go/deepseek-v4-pro", "deepseek-v4-pro", "opencode-go/glm-5.3-flash", "glm-5.3-flash"),
-	}},
+	}, "opencode-go/glm-5.3-flash"},
 }
 
 // cliModels builds models from id, name pairs. These CLIs don't report
@@ -158,19 +160,34 @@ func (c *Config) addCLIProviders(path string) {
 }
 
 // defaultCLIModels picks the first enabled agent CLI's first model as the
-// large model and its last (smallest) as the small one.
+// large model and its small model as the small one.
 func (c *Config) defaultCLIModels() (SelectedModel, SelectedModel, bool) {
 	for _, p := range cliProviders {
 		cfg, ok := c.Providers.Get(p.cfg.ID)
 		if !ok || cfg.Disable || len(cfg.Models) == 0 {
 			continue
 		}
-		large, small := cfg.Models[0], cfg.Models[len(cfg.Models)-1]
+		large := cfg.Models[0]
+		small, _ := c.CLISmallModel(cfg.ID)
 		return SelectedModel{Provider: cfg.ID, Model: large.ID, MaxTokens: large.DefaultMaxTokens, ReasoningEffort: large.DefaultReasoningEffort},
-			SelectedModel{Provider: cfg.ID, Model: small.ID, MaxTokens: small.DefaultMaxTokens, ReasoningEffort: small.DefaultReasoningEffort},
-			true
+			small, true
 	}
 	return SelectedModel{}, SelectedModel{}, false
+}
+
+// CLISmallModel returns the cheap, fast model an agent CLI uses for titles,
+// or false if providerID isn't an agent CLI.
+func (c *Config) CLISmallModel(providerID string) (SelectedModel, bool) {
+	cfg, ok := c.Providers.Get(providerID)
+	i := slices.IndexFunc(cliProviders, func(p cliProvider) bool { return p.cfg.ID == providerID })
+	if !ok || i < 0 || len(cfg.Models) == 0 {
+		return SelectedModel{}, false
+	}
+	m := cfg.Models[len(cfg.Models)-1]
+	if j := slices.IndexFunc(cfg.Models, func(m catwalk.Model) bool { return m.ID == cliProviders[i].small }); j >= 0 {
+		m = cfg.Models[j]
+	}
+	return SelectedModel{Provider: providerID, Model: m.ID, MaxTokens: m.DefaultMaxTokens, ReasoningEffort: m.DefaultReasoningEffort}, true
 }
 
 func onPath(path, bin string) bool {

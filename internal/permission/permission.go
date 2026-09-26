@@ -283,6 +283,14 @@ func (s *permissionService) AutoApproveSession(sessionID string) {
 	s.autoApproveSessionsMu.Unlock()
 }
 
+// AutoApproved reports whether every request from the session is granted
+// without asking (YOLO mode or an auto-approved session).
+func (s *permissionService) AutoApproved(sessionID string) bool {
+	s.autoApproveSessionsMu.RLock()
+	defer s.autoApproveSessionsMu.RUnlock()
+	return s.skip.Load() || s.autoApproveSessions[sessionID]
+}
+
 func (s *permissionService) SubscribeNotifications(ctx context.Context) <-chan pubsub.Event[PermissionNotification] {
 	return s.notificationBroker.Subscribe(ctx)
 }

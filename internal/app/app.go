@@ -595,6 +595,9 @@ func (app *App) overrideReasoningEffort(ctx context.Context, reasoningEffort str
 func (app *App) GetDefaultSmallModel(providerID string) config.SelectedModel {
 	cfg := app.config.Config()
 	largeModelCfg := cfg.Models[config.SelectedModelTypeLarge]
+	if small, ok := cfg.CLISmallModel(providerID); ok {
+		return small
+	}
 
 	// Find the provider in the known providers list to get its default small model.
 	knownProviders, _ := config.Providers(cfg)

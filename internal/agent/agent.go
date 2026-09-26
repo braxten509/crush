@@ -1490,41 +1490,47 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 
 	summaryPromptText := buildSummaryPrompt(currentSession.Todos)
 
-	resp, err := agent.Stream(genCtx, fantasy.AgentStreamCall{
-		Prompt:          summaryPromptText,
-		Messages:        aiMsgs,
-		Headers:         sessionHeaders(sessionID),
-		ProviderOptions: opts,
-		OnAuthRefresh:   onAuthRefresh,
-		ModelProvider: func() fantasy.LanguageModel {
-			return a.largeModel.Get().Model
-		},
-		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-			prepared.Messages = options.Messages
-			if systemPromptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
-			}
-			return callContext, prepared, nil
-		},
-		OnReasoningDelta: func(id string, text string) error {
-			summaryMessage.AppendReasoningContent(text)
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-			// Handle anthropic signature.
-			if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
-				if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
-					summaryMessage.AppendReasoningSignature(signature.Signature)
+	var resp *fantasy.AgentResult
+	if cliModel, ok := largeModel.Model.(*cliagent.Model); ok {
+		resp, err = a.cliSummarize(genCtx, cliModel, sessionID, largeModel.ModelCfg.ReasoningEffort, msgs, summaryPromptText, &summaryMessage)
+	}
+	if resp == nil && err == nil {
+		resp, err = agent.Stream(genCtx, fantasy.AgentStreamCall{
+			Prompt:          summaryPromptText,
+			Messages:        aiMsgs,
+			Headers:         sessionHeaders(sessionID),
+			ProviderOptions: opts,
+			OnAuthRefresh:   onAuthRefresh,
+			ModelProvider: func() fantasy.LanguageModel {
+				return a.largeModel.Get().Model
+			},
+			PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+				prepared.Messages = options.Messages
+				if systemPromptPrefix != "" {
+					prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
 				}
-			}
-			summaryMessage.FinishThinking()
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-		OnTextDelta: func(id, text string) error {
-			summaryMessage.AppendContent(text)
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-	})
+				return callContext, prepared, nil
+			},
+			OnReasoningDelta: func(id string, text string) error {
+				summaryMessage.AppendReasoningContent(text)
+				return a.messages.Update(genCtx, summaryMessage)
+			},
+			OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
+				// Handle anthropic signature.
+				if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
+					if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
+						summaryMessage.AppendReasoningSignature(signature.Signature)
+					}
+				}
+				summaryMessage.FinishThinking()
+				return a.messages.Update(genCtx, summaryMessage)
+			},
+			OnTextDelta: func(id, text string) error {
+				summaryMessage.AppendContent(text)
+				return a.messages.Update(genCtx, summaryMessage)
+			},
+		})
+	}
 	if err != nil {
 		isCancelErr := errors.Is(err, context.Canceled)
 		if isCancelErr {

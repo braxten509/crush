@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
@@ -17,7 +18,7 @@ import (
 const toolGroupShown = 5
 
 // ToolGroupItem folds a run of tool calls (and the thinking-only steps
-// between them) into one status line that shows the latest action.
+// between them) into one status line that says what it is doing.
 // Clicking it shows the last few steps in full.
 type ToolGroupItem struct {
 	*list.Versioned
@@ -28,12 +29,15 @@ type ToolGroupItem struct {
 	children []MessageItem
 	expanded bool
 	// live marks the group at the end of the chat, where the model may
-	// still be working: it shows the latest step instead of a summary.
+	// still be working: it says what is happening right now.
 	live bool
 	// Line where each shown child starts in the expanded render, for
 	// routing clicks to it.
 	childLines []int
 	shown      []MessageItem
+	// anim animates the "| Running a command" status while working.
+	anim      *anim.Anim
+	animLabel string
 }
 
 var (
@@ -50,6 +54,13 @@ func NewToolGroupItem(sty *styles.Styles) *ToolGroupItem {
 		highlightableMessageItem: defaultHighlighter(sty, v),
 		focusableMessageItem:     newFocusableMessageItem(v),
 		sty:                      sty,
+		anim: anim.New(anim.Settings{
+			Size:        3,
+			GradColorA:  sty.WorkingGradFromColor,
+			GradColorB:  sty.WorkingGradToColor,
+			LabelColor:  sty.WorkingLabelColor,
+			CycleColors: true,
+		}),
 	}
 }
 
@@ -141,6 +152,9 @@ func (g *ToolGroupItem) Finished() bool {
 
 // Spinning implements Animatable.
 func (g *ToolGroupItem) Spinning() bool {
+	if g.status() != "" {
+		return true
+	}
 	for _, c := range g.children {
 		if a, ok := c.(Animatable); ok && a.Spinning() {
 			return true
@@ -158,7 +172,66 @@ func (g *ToolGroupItem) Advance() bool {
 			changed = true
 		}
 	}
+	if g.status() != "" && g.anim.Advance() {
+		g.Bump()
+		changed = true
+	}
 	return changed
+}
+
+// status says what the model is doing right now ("Thinking", "Running a
+// command"), or "" when the group isn't working.
+func (g *ToolGroupItem) status() string {
+	if !g.live || len(g.children) == 0 {
+		return ""
+	}
+	switch last := g.children[len(g.children)-1].(type) {
+	case *AssistantMessageItem:
+		if last.isSpinning() {
+			return "Thinking"
+		}
+	case ToolMessageItem:
+		st, ok := last.(interface{ computeStatus() ToolStatus })
+		if !ok {
+			return ""
+		}
+		switch st.computeStatus() {
+		case ToolStatusAwaitingPermission:
+			return "Waiting for approval"
+		case ToolStatusRunning:
+			return toolActivity(last.ToolCall().Name)
+		}
+	}
+	return ""
+}
+
+// toolActivity describes a running tool in a few words.
+func toolActivity(name string) string {
+	switch name {
+	case tools.BashToolName:
+		return "Running a command"
+	case tools.JobOutputToolName, tools.JobKillToolName:
+		return "Checking a command"
+	case tools.ViewToolName:
+		return "Reading a file"
+	case tools.EditToolName, tools.MultiEditToolName, tools.WriteToolName:
+		return "Editing a file"
+	case tools.GrepToolName, tools.GlobToolName, tools.LSToolName, tools.SourcegraphToolName:
+		return "Searching"
+	case tools.WebSearchToolName:
+		return "Searching the web"
+	case tools.FetchToolName, tools.WebFetchToolName, tools.DownloadToolName:
+		return "Reading a web page"
+	case tools.TodosToolName:
+		return "Updating the plan"
+	}
+	if strings.HasPrefix(name, "lsp_") {
+		return "Checking code"
+	}
+	if server, _, ok := strings.Cut(strings.TrimPrefix(name, "mcp_"), "_"); ok && strings.HasPrefix(name, "mcp_") {
+		return "Using " + server
+	}
+	return "Working"
 }
 
 // ToggleExpanded implements Expandable.
@@ -237,8 +310,8 @@ func (g *ToolGroupItem) Render(width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// header is the status line: the latest step while working, a summary
-// once done.
+// header is the status line: the action count, plus what is happening
+// now while working or a summary once done.
 func (g *ToolGroupItem) header(width int) string {
 	marker := "▸ "
 	if g.expanded {
@@ -247,14 +320,12 @@ func (g *ToolGroupItem) header(width int) string {
 	var tools, failed int
 	var edited []string
 	seen := map[string]bool{}
-	var latest MessageItem
 	for _, c := range g.children {
 		t, ok := c.(ToolMessageItem)
 		if !ok {
 			continue
 		}
 		tools++
-		latest = c
 		if st, ok := t.(interface{ computeStatus() ToolStatus }); ok && st.computeStatus() == ToolStatusError {
 			failed++
 		}
@@ -268,34 +339,31 @@ func (g *ToolGroupItem) header(width int) string {
 		count += "s"
 	}
 
-	var line string
-	switch last := g.children[len(g.children)-1]; {
-	case g.live && !g.expanded:
-		// Working: show what is happening right now.
-		if a, ok := last.(*AssistantMessageItem); ok && a.isSpinning() {
-			line = a.renderSpinning()
-		} else if latest != nil {
-			line, _, _ = strings.Cut(latest.RawRender(width+MessageLeftPaddingTotal), "\n")
+	status := g.status()
+	icon := g.sty.Tool.IconSuccess.Render()
+	if status != "" || g.Spinning() {
+		icon = g.sty.Tool.IconPending.Render()
+	} else if failed > 0 {
+		icon = g.sty.Tool.IconError.Render()
+	}
+	line := icon + " " + g.sty.Tool.NameNormal.Render(count)
+	if len(edited) > 0 && status == "" {
+		files := strings.Join(edited[:min(3, len(edited))], ", ")
+		if len(edited) > 3 {
+			files += fmt.Sprintf(" +%d", len(edited)-3)
 		}
-		line += g.sty.Tool.ParamKey.Render(" · " + count)
-	default:
-		icon := g.sty.Tool.IconSuccess.Render()
-		if g.Spinning() {
-			icon = g.sty.Tool.IconPending.Render()
-		} else if failed > 0 {
-			icon = g.sty.Tool.IconError.Render()
+		line += g.sty.Tool.ParamKey.Render(" · edited " + files)
+	}
+	if failed > 0 {
+		line += g.sty.Tool.ErrorMessage.Render(fmt.Sprintf(" · %d failed", failed))
+	}
+	if status != "" {
+		// Working: say what's happening now, not the whole command.
+		if status != g.animLabel {
+			g.animLabel = status
+			g.anim.SetLabel(status)
 		}
-		line = icon + " " + g.sty.Tool.NameNormal.Render(count)
-		if len(edited) > 0 {
-			files := strings.Join(edited[:min(3, len(edited))], ", ")
-			if len(edited) > 3 {
-				files += fmt.Sprintf(" +%d", len(edited)-3)
-			}
-			line += g.sty.Tool.ParamKey.Render(" · edited " + files)
-		}
-		if failed > 0 {
-			line += g.sty.Tool.ErrorMessage.Render(fmt.Sprintf(" · %d failed", failed))
-		}
+		line += g.sty.Tool.ParamKey.Render(" | ") + g.anim.Render()
 	}
 	return ansi.Truncate(g.sty.Tool.ParamKey.Render(marker)+line, width, "…")
 }

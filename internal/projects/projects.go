@@ -18,6 +18,7 @@ type Project struct {
 	Path         string    `json:"path"`
 	DataDir      string    `json:"data_dir"`
 	LastAccessed time.Time `json:"last_accessed"`
+	Saved        bool      `json:"saved,omitempty"`
 }
 
 // ProjectList holds the list of tracked projects.
@@ -123,4 +124,44 @@ func List() ([]Project, error) {
 		return nil, err
 	}
 	return list.Projects, nil
+}
+
+// MarkSaved flags workingDir as a user-saved project, adding it if needed.
+func MarkSaved(workingDir string) error {
+	list, err := Load()
+	if err != nil {
+		return err
+	}
+	for i, p := range list.Projects {
+		if p.Path == workingDir {
+			list.Projects[i].Saved = true
+			return Save(list)
+		}
+	}
+	list.Projects = append(list.Projects, Project{Path: workingDir, LastAccessed: time.Now().UTC(), Saved: true})
+	return Save(list)
+}
+
+// Unsave removes workingDir from the saved projects.
+func Unsave(workingDir string) error {
+	list, err := Load()
+	if err != nil {
+		return err
+	}
+	for i, p := range list.Projects {
+		if p.Path == workingDir {
+			list.Projects[i].Saved = false
+			return Save(list)
+		}
+	}
+	return nil
+}
+
+// SavedList returns user-saved projects sorted by last accessed.
+func SavedList() ([]Project, error) {
+	all, err := List()
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(all, func(p Project) bool { return !p.Saved }), nil
 }

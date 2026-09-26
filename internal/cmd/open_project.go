@@ -5,76 +5,44 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
-	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/table"
+	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/projects"
-	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
 var openProjectCmd = &cobra.Command{
-	Use:   "open-project",
-	Short: "Open and start a session in a saved project",
-	Long:  "List your saved projects and start a Crush session in one of them",
+	Use:   "open-project [number]",
+	Short: "Start Crush in a saved project",
+	Long:  "List your saved projects and start a Crush session in the one you pick",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectList, err := projects.List()
+		saved, err := projects.SavedList()
 		if err != nil {
 			return err
 		}
-
-		if len(projectList) == 0 {
-			cmd.Println("No projects tracked yet. Use 'crush save-project' to save one.")
+		if len(saved) == 0 {
+			cmd.Println("No saved projects yet. Use 'crush save-project' or Save Project inside Crush.")
 			return nil
 		}
 
-		if term.IsTerminal(os.Stdout.Fd()) {
-			// Interactive mode: show table and prompt for selection
-			t := table.New().
-				Border(lipgloss.RoundedBorder()).
-				StyleFunc(func(row, col int) lipgloss.Style {
-					return lipgloss.NewStyle().Padding(0, 2)
-				}).
-				Headers("#", "Path", "Last Accessed")
-
-			for i, p := range projectList {
-				t.Row(
-					fmt.Sprintf("%d", i+1),
-					p.Path,
-					p.LastAccessed.Local().Format("2006-01-02 15:04"),
-				)
+		choice := ""
+		if len(args) == 1 {
+			choice = args[0]
+		} else {
+			for i, p := range saved {
+				cmd.Printf("%2d  %s\n", i+1, home.Short(p.Path))
 			}
-			lipgloss.Println(t)
-
 			cmd.Print("\nSelect a project (number): ")
-
-			reader := bufio.NewReader(os.Stdin)
-			input, _ := reader.ReadString('\n')
-			input = input[:len(input)-1] // Remove newline
-
-			selected, err := strconv.Atoi(input)
-			if err != nil || selected < 1 || selected > len(projectList) {
-				cmd.Println("Invalid selection")
-				return nil
-			}
-
-			selectedProject := projectList[selected-1]
-			cmd.Printf("Opening project: %s\n", selectedProject.Path)
-
-			// Register the access time
-			if err := projects.Register(selectedProject.Path, selectedProject.DataDir); err != nil {
-				return err
-			}
-
-			// Output cd command that can be sourced
-			cmd.Printf("cd '%s'\n", selectedProject.Path)
-			return nil
+			line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			choice = strings.TrimSpace(line)
 		}
 
-		// Non-interactive mode: output simple list
-		for i, p := range projectList {
-			cmd.Printf("%d\t%s\t%s\n", i+1, p.Path, p.LastAccessed.Format("2006-01-02T15:04:05Z07:00"))
+		n, err := strconv.Atoi(choice)
+		if err != nil || n < 1 || n > len(saved) {
+			return fmt.Errorf("invalid selection %q", choice)
 		}
-		return nil
+		return relaunch(saved[n-1].Path, relaunchArgs(cmd, saved[n-1].Path))
 	},
 }

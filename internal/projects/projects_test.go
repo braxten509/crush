@@ -184,3 +184,38 @@ func TestRegisterWithExternalDataDir(t *testing.T) {
 		t.Errorf("Expected data_dir /var/data/crush/myproject, got %s", projects[0].DataDir)
 	}
 }
+
+func TestSavedSurvivesRegister(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(tmpDir, "crush"))
+
+	for _, p := range []string{"/a", "/b"} {
+		if err := Register(p, p+"/.crush"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := MarkSaved("/a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Register("/a", "/a/.crush"); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := SavedList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != 1 || saved[0].Path != "/a" {
+		t.Fatalf("expected only /a saved, got %+v", saved)
+	}
+
+	if err := Unsave("/a"); err != nil {
+		t.Fatal(err)
+	}
+	if saved, _ := SavedList(); len(saved) != 0 {
+		t.Fatalf("expected no saved projects, got %+v", saved)
+	}
+	if all, _ := List(); len(all) != 2 {
+		t.Fatalf("unsave should keep history, got %+v", all)
+	}
+}

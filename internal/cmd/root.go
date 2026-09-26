@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -113,10 +114,11 @@ crush --continue
 		sessionID, _ := cmd.Flags().GetString("session")
 		continueLast, _ := cmd.Flags().GetBool("continue")
 
-		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd)
+		ws, shutdown, err := setupWorkspaceWithProgressBar(cmd)
 		if err != nil {
 			return err
 		}
+		cleanup := sync.OnceFunc(shutdown)
 		defer cleanup()
 
 		if sessionID != "" {
@@ -146,6 +148,10 @@ crush --continue
 			event.Error(err)
 			slog.Error("TUI run error", "error", err)
 			return errors.New("Crush crashed. If metrics are enabled, we were notified about it. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/charmbracelet/crush/issues/new?template=bug.yml") //nolint:staticcheck
+		}
+		if dir := model.RelaunchDir(); dir != "" {
+			cleanup()
+			return relaunch(dir, relaunchArgs(cmd, dir))
 		}
 		var banner config.ExitBanner
 		if cfg := com.Config(); cfg != nil {
@@ -180,6 +186,21 @@ func printSessionResume(model *ui.UI, banner config.ExitBanner) {
 		return
 	}
 	fmt.Fprintln(colorprofile.NewWriter(os.Stderr, os.Environ()), body)
+}
+
+// relaunchArgs keeps session-wide flags but drops project-specific ones
+// (session, continue, data dir) when restarting Crush in another project.
+func relaunchArgs(cmd *cobra.Command, dir string) []string {
+	args := []string{"--cwd", dir}
+	for _, name := range []string{"yolo", "debug"} {
+		if on, _ := cmd.Flags().GetBool(name); on {
+			args = append(args, "--"+name)
+		}
+	}
+	if cmd.Flags().Changed("host") {
+		args = append(args, "--host", clientHost)
+	}
+	return args
 }
 
 // copied from cobra:

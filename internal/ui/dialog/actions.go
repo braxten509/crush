@@ -95,7 +95,12 @@ type (
 		Name string
 	}
 	ActionInitializeProject struct{}
-	ActionSummarize         struct {
+	ActionSaveProject       struct{}
+	// ActionOpenProject relaunches Crush in a saved project directory.
+	ActionOpenProject struct {
+		Path string
+	}
+	ActionSummarize struct {
 		SessionID string
 	}
 	// ActionSelectReasoningEffort is a message indicating a reasoning effort

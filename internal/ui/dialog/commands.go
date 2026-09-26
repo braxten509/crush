@@ -539,6 +539,8 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "toggle_yolo", "Toggle Yolo Mode", "ctrl+y", ActionToggleYoloMode{}),
 		NewCommandItem(c.com.Styles, "toggle_help", "Toggle Help", "ctrl+g", ActionToggleHelp{}),
 		NewCommandItem(c.com.Styles, "init", "Initialize Project", "", ActionInitializeProject{}),
+		NewCommandItem(c.com.Styles, "save_project", "Save Project", "", ActionSaveProject{}),
+		NewCommandItem(c.com.Styles, "open_project", "Open Project", "", ActionOpenDialog{ProjectsID}).WithAliases("projects"),
 	)
 
 	// Add transparent background toggle.

@@ -42,6 +42,7 @@ import (
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
@@ -208,6 +209,10 @@ type UI struct {
 	initialSessionID string
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
+
+	// relaunchDir is set when the user opens another project; the caller
+	// restarts Crush there after the program exits.
+	relaunchDir string
 
 	lastUserMessageTime int64
 
@@ -2449,6 +2454,32 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		cmds = append(cmds, m.initializeProject())
 		m.dialog.CloseDialog(dialog.CommandsID)
+
+	case dialog.ActionSaveProject:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		dir := m.com.Workspace.WorkingDir()
+		cmds = append(cmds, func() tea.Msg {
+			if err := projects.MarkSaved(dir); err != nil {
+				return util.ReportError(err)()
+			}
+			return util.NewInfoMsg("Saved project " + home.Short(dir))
+		})
+	case dialog.ActionOpenProject:
+		if msg.Path == m.com.Workspace.WorkingDir() {
+			m.dialog.CloseDialog(dialog.ProjectsID)
+			cmds = append(cmds, util.ReportInfo("Already in this project"))
+			break
+		}
+		if m.isAgentBusy() {
+			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before switching projects..."))
+			break
+		}
+		if _, err := os.Stat(msg.Path); err != nil {
+			cmds = append(cmds, util.ReportError(err))
+			break
+		}
+		m.relaunchDir = msg.Path
+		cmds = append(cmds, tea.Quit)
 
 	case dialog.ActionSelectModel:
 		if cmd := m.handleSelectModel(msg); cmd != nil {
@@ -4852,6 +4883,11 @@ func (m *UI) CurrentSession() *session.Session {
 	return m.session
 }
 
+// RelaunchDir returns the project directory to restart Crush in, if any.
+func (m *UI) RelaunchDir() string {
+	return m.relaunchDir
+}
+
 // mimeOf detects the MIME type of the given content.
 func mimeOf(content []byte) string {
 	mimeBufferSize := min(512, len(content))
@@ -5361,6 +5397,17 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		if cmd := m.openNotificationsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case dialog.ProjectsID:
+		if m.dialog.ContainsDialog(dialog.ProjectsID) {
+			m.dialog.BringToFront(dialog.ProjectsID)
+			break
+		}
+		projectsDialog, err := dialog.NewProjects(m.com)
+		if err != nil {
+			cmds = append(cmds, util.ReportInfo(err.Error()))
+			break
+		}
+		m.dialog.OpenDialog(projectsDialog)
 	case dialog.FilePickerID:
 		if cmd := m.openFilesDialog(); cmd != nil {
 			cmds = append(cmds, cmd)

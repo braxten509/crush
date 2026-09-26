@@ -343,8 +343,16 @@ func (g *ToolGroupItem) header(width int) string {
 	icon := g.sty.Tool.IconSuccess.Render()
 	if status != "" || g.Spinning() {
 		icon = g.sty.Tool.IconPending.Render()
-	} else if failed > 0 {
-		icon = g.sty.Tool.IconError.Render()
+	} else {
+		// Check only the last tool's status for the icon, skipping thinking-only steps
+		for i := len(g.children) - 1; i >= 0; i-- {
+			if lastTool, ok := g.children[i].(interface{ computeStatus() ToolStatus }); ok {
+				if lastTool.computeStatus() == ToolStatusError {
+					icon = g.sty.Tool.IconError.Render()
+				}
+				break
+			}
+		}
 	}
 	line := icon + " " + g.sty.Tool.NameNormal.Render(count)
 	if len(edited) > 0 && status == "" {

@@ -449,6 +449,8 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 	wg.Wait()
 	discoverCancel()
 
+	c.addCLIProviders(env.Get("PATH"))
+
 	// Validate the custom providers.
 	for id, providerConfig := range c.Providers.Seq2() {
 		if knownProviderNames[id] {
@@ -462,6 +464,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 		providerConfig.Type = cmp.Or(providerConfig.Type, catwalk.TypeOpenAICompat)
 		if !slices.Contains(catwalk.KnownProviderTypes(), providerConfig.Type) &&
 			providerConfig.Type != hyper.Name &&
+			!IsCLIProviderType(providerConfig.Type) &&
 			!discover.IsKnownCustomProvider(string(providerConfig.Type)) {
 			slog.Warn("Skipping custom provider due to unsupported provider type", "provider", id)
 			c.Providers.Del(id)
@@ -471,6 +474,11 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 		if providerConfig.Disable {
 			slog.Debug("Skipping custom provider due to disable flag", "provider", id)
 			c.Providers.Del(id)
+			continue
+		}
+		if IsCLIProviderType(providerConfig.Type) {
+			// Agent CLIs bring their own login and endpoint.
+			c.Providers.Set(id, providerConfig)
 			continue
 		}
 		apiKey, err := resolver.ResolveValue(providerConfig.APIKey)
@@ -729,6 +737,11 @@ func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (large
 	if len(knownProviders) == 0 && c.Providers.Len() == 0 {
 		err = fmt.Errorf("no providers configured, please configure at least one provider")
 		return largeModel, smallModel, err
+	}
+
+	// Agent CLIs come first: they need no API key and are this fork's point.
+	if large, small, ok := c.defaultCLIModels(); ok {
+		return large, small, nil
 	}
 
 	// Use the first provider enabled based on the known providers order

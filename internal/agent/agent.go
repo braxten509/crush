@@ -34,6 +34,7 @@ import (
 	"charm.land/fantasy/providers/openrouter"
 	"charm.land/fantasy/providers/vercel"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -841,7 +842,14 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	if call.MaxOutputTokens > 0 {
 		maxOutputTokens = &call.MaxOutputTokens
 	}
-	result, err = agent.Stream(genCtx, fantasy.AgentStreamCall{
+	// Agent CLIs run their own tool loop; cliStream drives the same
+	// callbacks from the CLI's events.
+	stream := agent.Stream
+	cliModel, isCLI := largeModel.Model.(*cliagent.Model)
+	if isCLI {
+		stream = a.cliStream(cliModel, call, msgs, largeModel.ModelCfg.ReasoningEffort)
+	}
+	result, err = stream(genCtx, fantasy.AgentStreamCall{
 		Prompt:           message.PromptWithTextAttachments(call.Prompt, call.Attachments),
 		Files:            files,
 		Messages:         history,
@@ -873,14 +881,19 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			// into this turn; uncanceled prompts with a RunID are left
 			// queued so each runs as its own turn (with its own
 			// RunComplete) via the recursive run path below.
-			fold, canceledRunIDs := a.drainQueueForStep(call.SessionID)
-			a.publishCanceledQueueDrops(canceledRunIDs)
-			for _, queued := range fold {
-				userMessage, createErr := a.createUserMessage(callContext, queued)
-				if createErr != nil {
-					return callContext, prepared, createErr
+			// An agent CLI can't take them mid-turn, so for it they
+			// stay queued and run as the next turn.
+			// ponytail: Claude hooks / Codex turn/steer could inject them.
+			if !isCLI {
+				fold, canceledRunIDs := a.drainQueueForStep(call.SessionID)
+				a.publishCanceledQueueDrops(canceledRunIDs)
+				for _, queued := range fold {
+					userMessage, createErr := a.createUserMessage(callContext, queued)
+					if createErr != nil {
+						return callContext, prepared, createErr
+					}
+					prepared.Messages = append(prepared.Messages, userMessage.ToAIMessage()...)
 				}
-				prepared.Messages = append(prepared.Messages, userMessage.ToAIMessage()...)
 			}
 
 			prepared.Messages = a.workaroundProviderMediaLimitations(prepared.Messages, largeModel)

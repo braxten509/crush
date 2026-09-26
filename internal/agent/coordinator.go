@@ -21,6 +21,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/prompt"
@@ -1040,9 +1041,15 @@ func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Mo
 	// Bound each request with the configured timeout so unreachable or hung
 	// providers fail instead of blocking a session forever. The wrapper is
 	// applied per request, so retries get a fresh budget each attempt.
+	// Agent CLIs manage their own timeouts, and the session agent needs the
+	// unwrapped model to recognize them.
 	requestTimeout := c.cfg.Config().Options.GetRequestTimeout()
-	largeModel = newRequestTimeoutModel(largeModel, requestTimeout)
-	smallModel = newRequestTimeoutModel(smallModel, requestTimeout)
+	if !config.IsCLIProviderType(largeProviderCfg.Type) {
+		largeModel = newRequestTimeoutModel(largeModel, requestTimeout)
+	}
+	if !config.IsCLIProviderType(smallProviderCfg.Type) {
+		smallModel = newRequestTimeoutModel(smallModel, requestTimeout)
+	}
 
 	// Hyper completions no longer report the hypercredit balance, so wrap
 	// the Hyper models to fetch it from /v1/credits on every request.
@@ -1340,6 +1347,10 @@ func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model con
 			baseURL = strings.TrimSuffix(baseURL, "/v1")
 			return c.buildAnthropicProvider(baseURL, apiKey, headers, providerCfg.ID)
 		}
+	}
+
+	if config.IsCLIProviderType(providerCfg.Type) {
+		return cliagent.NewProvider(providerCfg.Type, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.permissions, c.history), nil
 	}
 
 	switch providerCfg.Type {

@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -173,6 +174,7 @@ type SessionAgent interface {
 	SetTools(tools []fantasy.AgentTool)
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)
+	Interrupt(sessionID string)
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
@@ -258,6 +260,10 @@ type sessionAgent struct {
 	// across the agent. Cancel uses its current value as the per-session
 	// high-water mark.
 	acceptSeqGen uint64
+	// interrupted marks sessions whose active run was stopped by
+	// Interrupt, so the run hands off to its queued prompts on exit
+	// instead of leaving them waiting.
+	interrupted *csync.Map[string, bool]
 }
 
 type SessionAgentOptions struct {
@@ -298,6 +304,7 @@ func NewSessionAgent(
 		dispatchMu:           csync.NewMap[string, *sync.Mutex](),
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
+		interrupted:          csync.NewMap[string, bool](),
 	}
 }
 
@@ -416,6 +423,15 @@ func (a *sessionAgent) enqueueCall(call SessionAgentCall) {
 	queued.Accepted = nil
 	existing = append(existing, queued)
 	a.messageQueue.Set(call.SessionID, existing)
+}
+
+// requeueFront puts calls back at the front of the session's queue.
+func (a *sessionAgent) requeueFront(sessionID string, calls []SessionAgentCall) {
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	defer mu.Unlock()
+	queued, _ := a.messageQueue.Get(sessionID)
+	a.messageQueue.Set(sessionID, append(slices.Clone(calls), queued...))
 }
 
 // drainQueueForStep partitions the session's queued calls for the current
@@ -823,6 +839,14 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// non-interactive clients waiting on RunComplete.
 		a.publishRunComplete(ctx, call, complete)
 	}()
+	// An interrupted run (canceled or not) hands off to the queue on exit.
+	// This runs before the RunComplete publish above, which still reports
+	// this turn as canceled.
+	defer func() {
+		if interrupted, _ := a.interrupted.Take(call.SessionID); interrupted {
+			a.runNextQueued(ctx, call.SessionID, ac)
+		}
+	}()
 
 	history, files := a.preparePrompt(msgs, largeModel.CatwalkCfg.SupportsImages, call.Attachments...)
 
@@ -881,9 +905,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			// into this turn; uncanceled prompts with a RunID are left
 			// queued so each runs as its own turn (with its own
 			// RunComplete) via the recursive run path below.
-			// An agent CLI can't take them mid-turn, so for it they
-			// stay queued and run as the next turn.
-			// ponytail: Claude hooks / Codex turn/steer could inject them.
+			// An agent CLI folds them in itself through Turn.Steer.
 			if !isCLI {
 				fold, canceledRunIDs := a.drainQueueForStep(call.SessionID)
 				a.publishCanceledQueueDrops(canceledRunIDs)
@@ -2121,10 +2143,53 @@ func (a *sessionAgent) Cancel(sessionID string) {
 		a.cancelMark.Set(sessionID, max(existing, mark))
 	}
 
+	a.interrupted.Del(sessionID)
 	if a.QueuedPrompts(sessionID) > 0 {
 		slog.Debug("Clearing queued prompts", "session_id", sessionID)
 		a.clearQueueAndNotify(sessionID)
 	}
+}
+
+// Interrupt stops the active run but keeps queued prompts, which then run
+// next. With nothing queued it is a plain Cancel.
+func (a *sessionAgent) Interrupt(sessionID string) {
+	if a.QueuedPrompts(sessionID) == 0 {
+		a.Cancel(sessionID)
+		return
+	}
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	defer mu.Unlock()
+	ac, ok := a.activeRequests.Get(sessionID)
+	if !ok || ac == nil {
+		return
+	}
+	a.interrupted.Set(sessionID, true)
+	ac.cancel()
+}
+
+// runNextQueued releases the finished run's active entry and starts the
+// first queued prompt in the background; its own handoff drains the rest.
+func (a *sessionAgent) runNextQueued(ctx context.Context, sessionID string, ac *activeCancel) {
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	a.activeRequests.CompareAndDelete(sessionID, ac)
+	queued, _ := a.messageQueue.Get(sessionID)
+	if len(queued) == 0 || a.IsSessionBusy(sessionID) {
+		mu.Unlock()
+		return
+	}
+	next := queued[0]
+	a.messageQueue.Set(sessionID, queued[1:])
+	// Same accept reservation as the normal handoff, so a cancel landing
+	// before the next run registers still stops it.
+	next.Accepted = a.BeginAccepted(sessionID)
+	mu.Unlock()
+	go func() {
+		if _, err := a.Run(context.WithoutCancel(ctx), next); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("Queued prompt after interrupt failed", "session_id", sessionID, "error", err)
+		}
+	}()
 }
 
 func (a *sessionAgent) ClearQueue(sessionID string) {

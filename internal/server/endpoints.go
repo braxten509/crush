@@ -378,6 +378,14 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionPromptClear),
 
+		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/interrupt").
+			Summary("Interrupt the active run and send the next queued prompt").
+			Tags("agent").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Fails(404, 500).
+			Handle(c.handlePostWorkspaceAgentSessionInterrupt),
+
 		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/summarize").
 			Summary("Summarize session").
 			Tags("agent").

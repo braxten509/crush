@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/config"
 )
 
 // Claude Code's stream-json protocol, as used by its Agent SDKs: Messages
@@ -24,6 +25,7 @@ type claudeLine struct {
 	Result    string                 `json:"result"`
 	Errors    []string               `json:"errors"`
 	Origin    *struct{ Kind string } `json:"origin"`
+	IsReplay  bool                   `json:"isReplay"`
 }
 
 type claudeEvent struct {
@@ -74,6 +76,9 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	args := []string{
 		"-p", "--input-format", "stream-json", "--output-format", "stream-json",
 		"--verbose", "--include-partial-messages", "--permission-prompt-tool", "stdio",
+		// Echoes each user message as the model takes it in, which is how
+		// steered messages are confirmed.
+		"--replay-user-messages",
 		"--model", m.ID,
 	}
 	if t.Effort != "" {
@@ -98,7 +103,18 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	// A CLI that dies right away fails these writes; the read loop below
 	// then reports why.
 	_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-init", "request": map[string]any{"subtype": "initialize"}})
-	_ = p.send(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": t.Prompt}})
+	_ = p.send(claudeUserMessage(t.Prompt))
+
+	// Claude takes messages written mid-turn in at its next tool result, or
+	// runs them right after the turn if it was already answering.
+	var sent steered
+	stopSteer := pollSteer(t, func() bool { return true }, func(text string) {
+		sent.add(text)
+		if p.send(claudeUserMessage(text)) != nil {
+			sent.take(text)
+		}
+	})
+	defer stopSteer()
 
 	// Crush tool name and input per tool_use ID, for results and approvals.
 	calls := map[string][2]string{}
@@ -116,6 +132,9 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 					return err
 				}
 			}
+
+		case "rate_limit_event":
+			setLimits(config.TypeClaudeCode, claudeRateLimit(p.lines.Bytes()))
 
 		case "stream_event":
 			if err := claudeStreamEvent(line.Event, t.Emit); err != nil {
@@ -135,6 +154,14 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 			}
 
 		case "user":
+			if line.IsReplay {
+				if text := claudeUserText(line.Message); sent.take(text) {
+					if err := t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			for _, b := range claudeBlocks(line.Message) {
 				if b.Type != "tool_result" {
 					continue
@@ -169,6 +196,12 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 				}
 				return errors.New(strings.TrimSpace("Claude Code: " + msg))
 			}
+			// A message steered in as the model finished runs as a
+			// follow-up; wait for that one too.
+			stopSteer()
+			if sent.pending() > 0 {
+				continue
+			}
 			return nil
 		}
 	}
@@ -179,6 +212,28 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 		return ErrResume
 	}
 	return exitError("claude", p)
+}
+
+func claudeUserMessage(text string) map[string]any {
+	return map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}}
+}
+
+// claudeUserText returns the text of a replayed user message.
+func claudeUserText(msg *claudeMessage) string {
+	if msg == nil {
+		return ""
+	}
+	var text string
+	if json.Unmarshal(msg.Content, &text) == nil {
+		return text
+	}
+	var sb strings.Builder
+	for _, b := range claudeBlocks(msg) {
+		if b.Type == "text" {
+			sb.WriteString(b.Text)
+		}
+	}
+	return sb.String()
 }
 
 func claudeStreamEvent(ev *claudeEvent, emit func(Event) error) error {

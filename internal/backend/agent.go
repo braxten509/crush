@@ -247,6 +247,20 @@ func (b *Backend) ClearQueue(workspaceID, sessionID string) error {
 	return nil
 }
 
+// Interrupt stops the active run for the session and lets the next queued
+// prompt run.
+func (b *Backend) Interrupt(workspaceID, sessionID string) error {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return err
+	}
+
+	if ws.AgentCoordinator != nil {
+		ws.AgentCoordinator.Interrupt(sessionID)
+	}
+	return nil
+}
+
 // QueuedPromptsList returns the list of queued prompt strings for a
 // session.
 func (b *Backend) QueuedPromptsList(workspaceID, sessionID string) ([]string, error) {

@@ -674,6 +674,19 @@ func (l *List) SetItems(items ...Item) {
 	l.totalHeightValid = false
 }
 
+// ReplaceItems swaps in a new item slice at the given scroll position and
+// selection, where SetItems would reset the scroll to the top of the
+// offset item.
+func (l *List) ReplaceItems(items []Item, offsetIdx, offsetLine, selectedIdx int) {
+	l.SetItems(items...)
+	if len(items) == 0 {
+		return
+	}
+	l.offsetIdx = min(max(offsetIdx, 0), len(items)-1)
+	l.offsetLine = max(offsetLine, 0)
+	l.selectedIdx = min(selectedIdx, len(items)-1)
+}
+
 // AppendItems appends items to the list.
 func (l *List) AppendItems(items ...Item) {
 	l.items = append(l.items, items...)

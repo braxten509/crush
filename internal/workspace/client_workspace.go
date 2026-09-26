@@ -252,6 +252,10 @@ func (w *ClientWorkspace) AgentCancel(sessionID string) {
 	_ = w.client.CancelAgentSession(context.Background(), w.workspaceID(), sessionID)
 }
 
+func (w *ClientWorkspace) AgentInterrupt(sessionID string) {
+	_ = w.client.InterruptAgentSession(context.Background(), w.workspaceID(), sessionID)
+}
+
 func (w *ClientWorkspace) AgentIsBusy() bool {
 	info, err := w.client.GetAgentInfo(context.Background(), w.workspaceID())
 	if err != nil {

@@ -42,10 +42,10 @@ var cliProviders = []cliProvider{
 		Type:     TypeClaudeCode,
 		FlatRate: true,
 		Models: []catwalk.Model{
-			{ID: "opus", Name: "Claude Opus", ContextWindow: 200_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
-			{ID: "fable", Name: "Claude Fable", ContextWindow: 200_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
-			{ID: "sonnet", Name: "Claude Sonnet", ContextWindow: 200_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
-			{ID: "haiku", Name: "Claude Haiku", ContextWindow: 200_000, DefaultMaxTokens: 32_000, SupportsImages: true},
+			{ID: "opus", Name: "Claude Opus", ContextWindow: 400_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
+			{ID: "fable", Name: "Claude Fable", ContextWindow: 400_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
+			{ID: "sonnet", Name: "Claude Sonnet", ContextWindow: 400_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
+			{ID: "haiku", Name: "Claude Haiku", ContextWindow: 400_000, DefaultMaxTokens: 32_000, SupportsImages: true},
 		},
 	}},
 	{"codex", ProviderConfig{
@@ -95,7 +95,7 @@ var cliProviders = []cliProvider{
 func cliModels(idNames ...string) []catwalk.Model {
 	var models []catwalk.Model
 	for i := 0; i+1 < len(idNames); i += 2 {
-		models = append(models, catwalk.Model{ID: idNames[i], Name: idNames[i+1], ContextWindow: 200_000, DefaultMaxTokens: 32_000})
+		models = append(models, catwalk.Model{ID: idNames[i], Name: idNames[i+1], ContextWindow: 400_000, DefaultMaxTokens: 32_000})
 	}
 	return models
 }

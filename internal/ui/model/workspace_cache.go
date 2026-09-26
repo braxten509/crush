@@ -184,10 +184,17 @@ func (m *UI) applyBusyState(msg busyStateMsg) []tea.Cmd {
 	}
 	prevBusy := m.isAgentBusy()
 	prevYolo := m.yoloModeCached()
+	prevProvider := m.agentModel.ModelCfg.Provider
 	m.agentBusyCache.set(msg.agentBusy)
 	m.yoloCache.set(msg.yolo)
 	m.agentReady = msg.ready
 	m.agentModel = msg.model
+
+	var cmds []tea.Cmd
+	if msg.ready && msg.model.ModelCfg.Provider != prevProvider {
+		// Show a newly selected agent CLI's usage limits right away.
+		cmds = append(cmds, m.fetchCLILimits())
+	}
 	if prevYolo != msg.yolo {
 		// A remote/async toggle changed yolo mode: update the editor
 		// prompt function so the prompt icon/style tracks the new mode.
@@ -196,7 +203,6 @@ func (m *UI) applyBusyState(msg busyStateMsg) []tea.Cmd {
 		m.setEditorPrompt(msg.yolo)
 	}
 
-	var cmds []tea.Cmd
 	busy := m.isAgentBusy()
 	if busy {
 		// A session reload that raced an unpopulated busy cache (the

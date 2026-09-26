@@ -190,6 +190,9 @@ type (
 
 	// hyperCreditsPollMsg is sent by the Hyper credits poll timer.
 	hyperCreditsPollMsg struct{}
+
+	// cliLimitsMsg is sent when an agent CLI's usage limits were fetched.
+	cliLimitsMsg struct{}
 )
 
 // UI represents the main user interface model.
@@ -621,7 +624,7 @@ func (m *UI) Init() tea.Cmd {
 	if m.com.IsHyper() {
 		cmds = append(cmds, m.fetchHyperCredits())
 	}
-	cmds = append(cmds, m.hyperCreditsTicker())
+	cmds = append(cmds, m.fetchCLILimits(), m.hyperCreditsTicker())
 	cmds = append(cmds, m.checkPendingMCPAuth())
 	return tea.Batch(cmds...)
 }
@@ -1464,7 +1467,13 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.com.IsHyper() && !m.isAgentBusy() {
 			cmds = append(cmds, m.fetchHyperCredits())
 		}
+		// Same for agent CLI usage limits: turns report their own.
+		if !m.isAgentBusy() {
+			cmds = append(cmds, m.fetchCLILimits())
+		}
 		cmds = append(cmds, m.hyperCreditsTicker())
+	case cliLimitsMsg:
+		// New limits are read while drawing; this only redraws.
 	case util.InfoMsg:
 		if msg.Type == util.InfoTypeError {
 			slog.Error("Error reported", "error", msg.Msg)
@@ -1879,6 +1888,7 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 		if assistantItem, ok := existingItem.(*chat.AssistantMessageItem); ok {
 			assistantItem.SetMessage(&msg)
 			assistantItem.SetPlanAgent(m.mode == uiInputModePlan)
+			m.chat.Refold(assistantItem)
 		}
 	}
 
@@ -3049,6 +3059,14 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 
+	// Ctrl+Enter stops the active run and sends the next queued prompt.
+	if key.Matches(msg, m.keyMap.Chat.Interrupt) && m.isAgentBusy() {
+		if cmd := m.interruptAgent(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return tea.Batch(cmds...)
+	}
+
 	switch m.state {
 	case uiOnboarding:
 		return tea.Batch(cmds...)
@@ -3724,6 +3742,9 @@ func (m *UI) ShortHelp() []key.Binding {
 				cancelBinding.SetHelp("esc", "clear queue")
 			}
 			binds = append(binds, cancelBinding)
+			if m.promptQueue > 0 {
+				binds = append(binds, k.Chat.Interrupt)
+			}
 		}
 
 		switch m.focus {
@@ -3843,6 +3864,9 @@ func (m *UI) FullHelp() [][]key.Binding {
 				cancelBinding.SetHelp("esc", "clear queue")
 			}
 			binds = append(binds, []key.Binding{cancelBinding})
+			if m.promptQueue > 0 {
+				binds = append(binds, []key.Binding{k.Chat.Interrupt})
+			}
 		}
 
 		mainBinds := []key.Binding{}
@@ -5239,6 +5263,24 @@ func cancelTimerCmd() tea.Cmd {
 	return tea.Tick(cancelTimerDuration, func(time.Time) tea.Msg {
 		return cancelTimerExpiredMsg{}
 	})
+}
+
+// interruptAgent stops the active run without the double-press confirm
+// and without clearing the queue, so the next queued prompt runs.
+func (m *UI) interruptAgent() tea.Cmd {
+	if !m.hasSession() || !m.agentReady {
+		return nil
+	}
+	m.isCanceling = false
+	if m.bangCancel != nil {
+		m.bangCancel()
+		m.bangCancel = nil
+	}
+	m.com.Workspace.AgentInterrupt(m.session.ID)
+	m.todoIsSpinning = false
+	m.invalidateBusyCaches()
+	m.renderPills()
+	return m.dispatchBusyRefresh()
 }
 
 // cancelAgent handles the cancel key press. The first press sets isCanceling to true

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/version"
 )
 
@@ -49,7 +51,11 @@ type codexItem struct {
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
-	Query string `json:"query"`
+	Query   string `json:"query"`
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
 }
 
 type codexChange struct {
@@ -108,6 +114,25 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	var threadID string
 	defer stop()
 
+	// Messages queued mid-turn go in through turn/steer; Codex reports each
+	// as a userMessage item when the model takes it in.
+	var sent steered
+	steers := 0
+	stopSteer := pollSteer(t, func() bool { return active.Load() != nil }, func(text string) {
+		ids := active.Load()
+		steers++
+		sent.add(text)
+		err := p.send(map[string]any{"id": "steer-" + strconv.Itoa(steers), "method": "turn/steer", "params": map[string]any{
+			"threadId":       ids[0],
+			"expectedTurnId": ids[1],
+			"input":          []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}},
+		}})
+		if err != nil {
+			sent.take(text)
+		}
+	})
+	defer stopSteer()
+
 	// Crush's permission prompts replace Codex's own; the sandbox still
 	// applies. YOLO mode lifts both, matching Crush's own tools.
 	approval, sandbox := "on-request", "workspace-write"
@@ -162,6 +187,14 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 
 		// Responses to our requests.
 		if msg.Method == "" {
+			if strings.HasPrefix(id, "steer-") {
+				// A steer that missed the turn is never confirmed, so it
+				// runs as the next turn instead.
+				if msg.Error != nil {
+					slog.Debug("Codex did not take a steered message", "error", msg.Error.Message)
+				}
+				continue
+			}
 			if msg.Error != nil {
 				if id == codexThreadID && t.Resume != "" {
 					return ErrResume
@@ -235,6 +268,12 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 					CacheReadTokens: u.Last.CachedInputTokens,
 				}})
 			}
+		case "account/rateLimits/updated":
+			var up struct {
+				RateLimits codexSnapshot `json:"rateLimits"`
+			}
+			_ = json.Unmarshal(msg.Params, &up)
+			setLimits(config.TypeCodexCLI, up.RateLimits.limits())
 		case "turn/completed":
 			switch params.Turn.Status {
 			case "completed":
@@ -249,6 +288,14 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 
 		case "item/started":
 			switch item.Type {
+			case "userMessage":
+				var text strings.Builder
+				for _, c := range item.Content {
+					text.WriteString(c.Text)
+				}
+				if sent.take(text.String()) {
+					err = t.Emit(Event{Type: EventUserMessage, Text: text.String()})
+				}
 			case "agentMessage":
 				// Consecutive messages without tools in between would run
 				// together.

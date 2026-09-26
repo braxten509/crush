@@ -2,6 +2,7 @@ package model
 
 import (
 	"image"
+	"slices"
 	"strings"
 	"time"
 
@@ -90,6 +91,13 @@ type Chat struct {
 	com      *common.Common
 	list     *list.List
 	idInxMap map[string]int // Map of message IDs to their indices in the list
+
+	// flat holds every message item in order. The list shows it with
+	// each run of tool calls folded into a status group; groupOf and
+	// folded remember the grouping so groups keep their state.
+	flat    []chat.MessageItem
+	groupOf map[string]*chat.ToolGroupItem
+	folded  map[chat.MessageItem]bool
 
 	// animRunning is true while the shared animation clock has a tick
 	// outstanding. The clock stops itself when no visible item is spinning
@@ -430,40 +438,115 @@ func (m *Chat) InvalidateVisibleRenderCaches() {
 
 // SetMessages sets the chat messages to the provided list of message items.
 func (m *Chat) SetMessages(msgs ...chat.MessageItem) tea.Cmd {
-	m.idInxMap = make(map[string]int)
 	m.scrollbarVisible = false // Reset scrollbar visibility on new session load
-
-	items := make([]list.Item, len(msgs))
-	for i, msg := range msgs {
-		m.idInxMap[msg.ID()] = i
-		// Register nested tool IDs for tools that contain nested tools.
-		if container, ok := msg.(chat.NestedToolContainer); ok {
-			for _, nested := range container.NestedTools() {
-				m.idInxMap[nested.ID()] = i
-			}
-		}
-		items[i] = msg
-	}
-	m.list.SetItems(items...)
+	m.flat = slices.Clone(msgs)
+	m.groupOf = nil
+	m.regroup()
 	m.ScrollToBottom()
 	return nil
 }
 
 // AppendMessages appends a new message item to the chat list.
 func (m *Chat) AppendMessages(msgs ...chat.MessageItem) {
-	items := make([]list.Item, len(msgs))
-	indexOffset := m.list.Len()
-	for i, msg := range msgs {
-		m.idInxMap[msg.ID()] = indexOffset + i
-		// Register nested tool IDs for tools that contain nested tools.
-		if container, ok := msg.(chat.NestedToolContainer); ok {
+	if len(msgs) == 0 {
+		return
+	}
+	m.flat = append(m.flat, msgs...)
+	m.regroup()
+}
+
+// Refold regroups the chat if item changed whether it folds into a status
+// group, e.g. a thinking step that started to answer.
+func (m *Chat) Refold(item chat.MessageItem) {
+	if f, ok := m.folded[item]; ok && f != chat.Foldable(item) {
+		m.regroup()
+	}
+}
+
+// regroup rebuilds the list from flat, folding each run of tool calls into
+// a status group, and keeps the scroll position and selection on the same
+// items.
+func (m *Chat) regroup() {
+	// ponytail: O(n) per structural change; fine for thousands of items.
+	offIdx, offLine := m.list.ScrollPosition()
+	anchor, selected := m.list.ItemAt(offIdx), m.list.ItemAt(m.list.Selected())
+
+	items := make([]list.Item, 0, len(m.flat))
+	m.idInxMap = make(map[string]int, len(m.flat))
+	groupOf := make(map[string]*chat.ToolGroupItem)
+	m.folded = make(map[chat.MessageItem]bool, len(m.flat))
+	owner := make(map[list.Item]int, len(m.flat))
+	used := make(map[*chat.ToolGroupItem]bool)
+	place := func(it chat.MessageItem, idx int) {
+		m.idInxMap[it.ID()] = idx
+		owner[it] = idx
+		if container, ok := it.(chat.NestedToolContainer); ok {
 			for _, nested := range container.NestedTools() {
-				m.idInxMap[nested.ID()] = indexOffset + i
+				m.idInxMap[nested.ID()] = idx
 			}
 		}
-		items[i] = msg
 	}
-	m.list.AppendItems(items...)
+	for i := 0; i < len(m.flat); {
+		j := i
+		for j < len(m.flat) && chat.Foldable(m.flat[j]) {
+			m.folded[m.flat[j]] = true
+			j++
+		}
+		if run := m.flat[i:j]; chat.GroupsTools(run) {
+			// Reuse the group that held any of these steps so it keeps
+			// its expanded state.
+			var g *chat.ToolGroupItem
+			for _, it := range run {
+				if old := m.groupOf[it.ID()]; old != nil && !used[old] {
+					g = old
+					break
+				}
+			}
+			if g == nil {
+				g = chat.NewToolGroupItem(m.com.Styles)
+			}
+			used[g] = true
+			if !slices.Equal(g.Children(), run) {
+				g.SetChildren(slices.Clone(run))
+			}
+			idx := len(items)
+			items = append(items, g)
+			owner[g] = idx
+			m.idInxMap[g.ID()] = idx
+			for _, it := range run {
+				groupOf[it.ID()] = g
+				place(it, idx)
+			}
+			i = j
+			continue
+		}
+		if j == i {
+			m.folded[m.flat[i]] = false
+			j = i + 1
+		}
+		for _, it := range m.flat[i:j] {
+			place(it, len(items))
+			items = append(items, it)
+		}
+		i = j
+	}
+	m.groupOf = groupOf
+	for g := range used {
+		g.SetLive(owner[g] == len(items)-1)
+	}
+
+	newOff, ok := owner[anchor]
+	if !ok || items[newOff] != anchor {
+		offLine = 0
+	}
+	if !ok {
+		newOff = offIdx
+	}
+	newSel, ok := owner[selected]
+	if !ok {
+		newSel = m.list.Selected()
+	}
+	m.list.ReplaceItems(items, newOff, offLine, newSel)
 }
 
 // UpdateNestedToolIDs updates the ID map for nested tools within a container.
@@ -473,13 +556,7 @@ func (m *Chat) UpdateNestedToolIDs(containerID string) {
 	if !ok {
 		return
 	}
-
-	item, ok := m.list.ItemAt(idx).(chat.MessageItem)
-	if !ok {
-		return
-	}
-
-	container, ok := item.(chat.NestedToolContainer)
+	container, ok := m.MessageItem(containerID).(chat.NestedToolContainer)
 	if !ok {
 		return
 	}
@@ -893,6 +970,7 @@ func (m *Chat) SelectNearestInView(scrolledUp bool) {
 // ClearMessages removes all messages from the chat list.
 func (m *Chat) ClearMessages() {
 	m.idInxMap = make(map[string]int)
+	m.flat, m.groupOf, m.folded = nil, nil, nil
 	m.scrollbarVisible = false
 	m.list.SetItems()
 	m.ClearMouse()
@@ -900,26 +978,16 @@ func (m *Chat) ClearMessages() {
 
 // RemoveMessage removes a message from the chat list by its ID.
 func (m *Chat) RemoveMessage(id string) {
-	idx, ok := m.idInxMap[id]
-	if !ok {
+	i := slices.IndexFunc(m.flat, func(it chat.MessageItem) bool { return it.ID() == id })
+	if i < 0 {
 		return
 	}
-
-	// Remove from list
-	m.list.RemoveItem(idx)
-
-	// Remove from index map
-	delete(m.idInxMap, id)
-
-	// Rebuild index map for all items after the removed one
-	for i := idx; i < m.list.Len(); i++ {
-		if item, ok := m.list.ItemAt(i).(chat.MessageItem); ok {
-			m.idInxMap[item.ID()] = i
-		}
-	}
+	m.flat = slices.Delete(m.flat, i, i+1)
+	m.regroup()
 }
 
-// MessageItem returns the message item with the given ID, or nil if not found.
+// MessageItem returns the message item with the given ID, or nil if not
+// found. Steps folded into a status group are returned themselves.
 func (m *Chat) MessageItem(id string) chat.MessageItem {
 	idx, ok := m.idInxMap[id]
 	if !ok {
@@ -928,6 +996,11 @@ func (m *Chat) MessageItem(id string) chat.MessageItem {
 	item, ok := m.list.ItemAt(idx).(chat.MessageItem)
 	if !ok {
 		return nil
+	}
+	if g, ok := item.(*chat.ToolGroupItem); ok && g.ID() != id {
+		if child := g.Child(id); child != nil {
+			return child
+		}
 	}
 	return item
 }

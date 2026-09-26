@@ -453,6 +453,20 @@ func (c *Client) ClearAgentSessionQueuedPrompts(ctx context.Context, id string, 
 	return nil
 }
 
+// InterruptAgentSession stops the active run and lets the next queued
+// prompt run.
+func (c *Client) InterruptAgentSession(ctx context.Context, id string, sessionID string) error {
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/interrupt", id, sessionID), nil, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to interrupt session agent: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to interrupt session agent: status code %d", rsp.StatusCode)
+	}
+	return nil
+}
+
 // GetAgentInfo retrieves the agent status for a workspace.
 func (c *Client) GetAgentInfo(ctx context.Context, id string) (*proto.AgentInfo, error) {
 	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/agent", id), nil, nil)

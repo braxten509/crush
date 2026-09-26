@@ -1,0 +1,67 @@
+package cliagent
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"sync/atomic"
+	"testing"
+
+	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/config"
+	"github.com/stretchr/testify/require"
+)
+
+// steerTurn runs a turn whose Steer hands over "PINEAPPLE" once.
+func steerTurn(t *testing.T, kind string, script string) []Event {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, kind), []byte("#!/bin/sh\n"+script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	m := &Model{Kind: map[string]catwalk.Type{"claude": config.TypeClaudeCode, "codex": config.TypeCodexCLI}[kind], ID: "m", Dir: t.TempDir()}
+	var given atomic.Bool
+	var events []Event
+	err := m.Run(context.Background(), Turn{
+		Prompt: "hi",
+		Emit:   func(e Event) error { events = append(events, e); return nil },
+		Steer: func() string {
+			if given.Swap(true) {
+				return ""
+			}
+			return "PINEAPPLE"
+		},
+	})
+	require.NoError(t, err)
+	return events
+}
+
+func TestClaudeSteer(t *testing.T) {
+	// The steered message lands as the model finishes, so Claude answers
+	// it as a follow-up after its first result; the driver waits for it.
+	events := steerTurn(t, "claude", `read -r _; read -r _
+echo '{"type":"system","subtype":"init","session_id":"s1"}'
+read -r steer
+case "$steer" in *PINEAPPLE*) ;; *) exit 1;; esac
+echo '{"type":"result","subtype":"success","result":"first"}'
+echo '{"type":"user","message":{"role":"user","content":"PINEAPPLE"},"isReplay":true}'
+echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"second"}}}'
+echo '{"type":"result","subtype":"success","result":"second"}'
+cat >/dev/null
+`)
+	require.Equal(t, []EventType{EventSession, EventUserMessage, EventText}, types(events))
+	require.Equal(t, "PINEAPPLE", events[1].Text)
+}
+
+func TestCodexSteer(t *testing.T) {
+	events := steerTurn(t, "codex", `read -r _; echo '{"id":"1","result":{}}'
+read -r _; read -r _; echo '{"id":"2","result":{"thread":{"id":"th"}}}'
+read -r _; echo '{"id":"3","result":{"turn":{"id":"tu"}}}'
+read -r steer
+case "$steer" in *turn/steer*expectedTurnId*tu*PINEAPPLE*|*PINEAPPLE*expectedTurnId*tu*|*expectedTurnId*tu*PINEAPPLE*) ;; *) exit 1;; esac
+echo '{"id":"steer-1","result":{"turnId":"tu"}}'
+echo '{"method":"item/started","params":{"item":{"type":"userMessage","id":"u2","content":[{"type":"text","text":"PINEAPPLE"}]}}}'
+echo '{"method":"turn/completed","params":{"turn":{"id":"tu","status":"completed"}}}'
+cat >/dev/null
+`)
+	require.Equal(t, []EventType{EventSession, EventUserMessage}, types(events))
+	require.Equal(t, "PINEAPPLE", events[1].Text)
+}

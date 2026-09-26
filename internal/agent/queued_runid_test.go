@@ -44,6 +44,7 @@ func (m *gatedStreamModel) Stream(ctx context.Context, call fantasy.Call) (fanta
 		select {
 		case <-m.gate:
 		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 	text := m.text

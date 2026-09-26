@@ -938,3 +938,11 @@ func (a *AssistantMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	}
 	return false, nil
 }
+
+// onlyThinking reports whether this step shows nothing but thinking, so
+// it can fold into a tool status group.
+func (a *AssistantMessageItem) onlyThinking() bool {
+	m := a.message
+	return strings.TrimSpace(m.Content().Text) == "" && !m.IsErrorLike() &&
+		m.FinishReason() != message.FinishReasonCanceled && !m.IsSummaryMessage && !a.planAgent
+}

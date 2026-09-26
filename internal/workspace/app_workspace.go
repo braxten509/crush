@@ -175,6 +175,12 @@ func (w *AppWorkspace) AgentCancel(sessionID string) {
 	}
 }
 
+func (w *AppWorkspace) AgentInterrupt(sessionID string) {
+	if w.app.AgentCoordinator != nil {
+		w.app.AgentCoordinator.Interrupt(sessionID)
+	}
+}
+
 func (w *AppWorkspace) AgentIsBusy() bool {
 	if w.app.AgentCoordinator == nil {
 		return false

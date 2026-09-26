@@ -36,13 +36,14 @@ var ErrResume = errors.New("native session could not be resumed")
 type EventType int
 
 const (
-	EventText       EventType = iota // Text
-	EventReasoning                   // Text
-	EventToolStart                   // ID, Name
-	EventToolCall                    // ID, Name, Input
-	EventToolResult                  // ID, Name, Output, Metadata, IsError
-	EventUsage                       // Usage (per model request)
-	EventSession                     // Session (native session ID)
+	EventText        EventType = iota // Text
+	EventReasoning                    // Text
+	EventToolStart                    // ID, Name
+	EventToolCall                     // ID, Name, Input
+	EventToolResult                   // ID, Name, Output, Metadata, IsError
+	EventUsage                        // Usage (per model request)
+	EventSession                      // Session (native session ID)
+	EventUserMessage                  // Text (a steered message the CLI took in)
 )
 
 // Event is one normalized piece of a CLI turn. Tool names and inputs are
@@ -71,6 +72,11 @@ type Turn struct {
 	// native session (titles, summaries).
 	NoTools bool
 	Emit    func(Event) error
+	// Steer returns messages the user queued while the turn runs, or "".
+	// Drivers whose CLI can take input mid-turn poll it, send what it
+	// returns and emit EventUserMessage with the same text once the CLI
+	// takes it in. Anything never confirmed is Crush's to run later.
+	Steer func() string
 }
 
 // Model is a CLI-backed model. It implements [fantasy.LanguageModel] for
@@ -257,6 +263,77 @@ func (l *Links) Set(sessionID string, kind catwalk.Type, link Link) error {
 		return err
 	}
 	return os.Rename(tmp, l.path)
+}
+
+// pollSteer hands queued messages to send while the turn runs, whenever
+// ready says the CLI can take one. The returned stop func is idempotent;
+// once it returns, send is never called again.
+func pollSteer(t Turn, ready func() bool, send func(text string)) (stop func()) {
+	if t.Steer == nil || t.NoTools {
+		return func() {}
+	}
+	var (
+		mu      sync.Mutex
+		stopped bool
+	)
+	done := make(chan struct{})
+	go func() {
+		tick := time.NewTicker(250 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-tick.C:
+			}
+			mu.Lock()
+			if !stopped && ready() {
+				if text := t.Steer(); text != "" {
+					send(text)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
+	return func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if !stopped {
+			stopped = true
+			close(done)
+		}
+	}
+}
+
+// steered tracks messages sent to a CLI mid-turn until it confirms them.
+type steered struct {
+	mu    sync.Mutex
+	texts []string
+}
+
+func (s *steered) add(text string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.texts = append(s.texts, text)
+}
+
+// take removes text if it was steered, reporting whether it was.
+func (s *steered) take(text string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, t := range s.texts {
+		if t == text {
+			s.texts = append(s.texts[:i], s.texts[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+func (s *steered) pending() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.texts)
 }
 
 // proc is a CLI child process speaking newline-delimited JSON on stdio.

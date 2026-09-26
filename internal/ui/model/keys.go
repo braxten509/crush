@@ -41,6 +41,7 @@ type KeyMap struct {
 		NewSession     key.Binding
 		AddAttachment  key.Binding
 		Cancel         key.Binding
+		Interrupt      key.Binding
 		Tab            key.Binding
 		Details        key.Binding
 		TogglePills    key.Binding
@@ -205,6 +206,10 @@ func DefaultKeyMap() KeyMap {
 	km.Chat.Cancel = key.NewBinding(
 		key.WithKeys("esc", "alt+esc"),
 		key.WithHelp("esc", "cancel"),
+	)
+	km.Chat.Interrupt = key.NewBinding(
+		key.WithKeys("ctrl+enter"),
+		key.WithHelp("ctrl+enter", "interrupt, send queued"),
 	)
 	km.Chat.Tab = key.NewBinding(
 		key.WithKeys("tab"),

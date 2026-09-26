@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
@@ -25,11 +26,12 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		prompt := message.PromptWithTextAttachments(call.Prompt, call.Attachments)
 		text, resume := cliHandoff(history, link, prompt)
 
-		s := &cliSteps{ctx: ctx, sc: sc, m: m, sessionID: call.SessionID}
+		s := &cliSteps{ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID}
 		if err := s.begin(); err != nil {
 			return nil, err
 		}
-		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Resume: resume, Effort: effort, Emit: s.handle}
+		defer s.returnUnsteered()
+		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer}
 		err := m.Run(ctx, turn)
 		if errors.Is(err, cliagent.ErrResume) {
 			// The native session is gone; hand the whole conversation to a
@@ -50,6 +52,12 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		}
 		if err := s.finish(fantasy.FinishReasonStop); err != nil {
 			return nil, err
+		}
+		// The CLI can't be stopped between its own steps, so the stop
+		// conditions (auto-summarize among them) are checked once the turn
+		// is done.
+		for _, stop := range sc.StopWhen {
+			stop(s.steps)
 		}
 		return s.result(), nil
 	}
@@ -73,6 +81,7 @@ type cliSteps struct {
 	ctx       context.Context
 	sc        fantasy.AgentStreamCall
 	m         *cliagent.Model
+	a         *sessionAgent
 	sessionID string
 	// File content before each pending edit, by tool call ID.
 	edits map[string][2]string
@@ -87,6 +96,67 @@ type cliSteps struct {
 	tools    int
 	steps    []fantasy.StepResult
 	native   string
+
+	// Queued prompts handed to the CLI mid-turn, until it takes them in.
+	// steer runs on the driver's poller, the rest on its read loop.
+	steerMu sync.Mutex
+	steered []cliSteered
+}
+
+type cliSteered struct {
+	text  string
+	calls []SessionAgentCall
+}
+
+// steer takes the queued prompts for the CLI to fold into the running turn.
+func (s *cliSteps) steer() string {
+	fold, canceled := s.a.drainQueueForStep(s.sessionID)
+	s.a.publishCanceledQueueDrops(canceled)
+	if len(fold) == 0 {
+		return ""
+	}
+	texts := make([]string, len(fold))
+	for i, q := range fold {
+		texts[i] = message.PromptWithTextAttachments(q.Prompt, q.Attachments)
+	}
+	text := strings.Join(texts, "\n\n")
+	s.steerMu.Lock()
+	s.steered = append(s.steered, cliSteered{text: text, calls: fold})
+	s.steerMu.Unlock()
+	return text
+}
+
+// takeSteered removes and returns the prompts sent as text.
+func (s *cliSteps) takeSteered(text string) []SessionAgentCall {
+	s.steerMu.Lock()
+	defer s.steerMu.Unlock()
+	for i, st := range s.steered {
+		if st.text == text {
+			s.steered = append(s.steered[:i], s.steered[i+1:]...)
+			return st.calls
+		}
+	}
+	return nil
+}
+
+// returnUnsteered puts prompts the CLI never took in back at the front of
+// the queue so they run as the next turn. A plain cancel drops them, the
+// same as it drops the rest of the queue.
+func (s *cliSteps) returnUnsteered() {
+	s.steerMu.Lock()
+	var calls []SessionAgentCall
+	for _, st := range s.steered {
+		calls = append(calls, st.calls...)
+	}
+	s.steered = nil
+	s.steerMu.Unlock()
+	if len(calls) == 0 {
+		return
+	}
+	if interrupted, _ := s.a.interrupted.Get(s.sessionID); s.ctx.Err() != nil && !interrupted {
+		return
+	}
+	s.a.requeueFront(s.sessionID, calls)
 }
 
 func (s *cliSteps) begin() error {
@@ -135,6 +205,26 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		s.native = e.Session
 	case cliagent.EventUsage:
 		s.usage = e.Usage
+	case cliagent.EventUserMessage:
+		calls := s.takeSteered(e.Text)
+		if len(calls) == 0 {
+			return nil
+		}
+		// The user's message goes between the model's steps, as it does
+		// when a native turn folds in queued prompts.
+		reason := fantasy.FinishReasonStop
+		if s.tools > 0 {
+			reason = fantasy.FinishReasonToolCalls
+		}
+		if err := s.finish(reason); err != nil {
+			return err
+		}
+		for _, q := range calls {
+			if _, err := s.a.createUserMessage(s.ctx, q); err != nil {
+				return err
+			}
+		}
+		return s.begin()
 	case cliagent.EventReasoning:
 		if err := s.talk(); err != nil {
 			return err

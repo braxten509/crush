@@ -2,17 +2,24 @@ package model
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"image"
 	"strings"
+	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	mcp "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/logo"
+	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // modelInfo renders the current model information including reasoning
@@ -57,7 +64,75 @@ func (m *UI) modelInfo(width int) string {
 	if model != nil {
 		modelName = model.CatwalkCfg.Name
 	}
-	return common.ModelInfo(m.com.Styles, modelName, providerName, reasoningInfo, modelContext, width, m.hyperCredits)
+	info := common.ModelInfo(m.com.Styles, modelName, providerName, reasoningInfo, modelContext, width, m.hyperCredits)
+	if kind := m.cliKind(); kind != "" {
+		if limits := cliagent.Limits(kind, model.ModelCfg.Model); len(limits) > 0 {
+			info = lipgloss.JoinVertical(lipgloss.Left, info, "", usageLimits(m.com.Styles, limits, width))
+		}
+	}
+	return info
+}
+
+// cliKind is the agent CLI behind the selected model, or "" for API models.
+func (m *UI) cliKind() catwalk.Type {
+	model := m.selectedLargeModel()
+	cfg := m.com.Config()
+	if model == nil || cfg == nil || cfg.Providers == nil {
+		return ""
+	}
+	if p, ok := cfg.Providers.Get(model.ModelCfg.Provider); ok && config.IsCLIProviderType(p.Type) {
+		return p.Type
+	}
+	return ""
+}
+
+// fetchCLILimits refreshes the selected agent CLI's usage limits.
+func (m *UI) fetchCLILimits() tea.Cmd {
+	kind := m.cliKind()
+	if kind == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		if cliagent.RefreshLimits(context.Background(), kind) {
+			return cliLimitsMsg{}
+		}
+		return nil
+	}
+}
+
+// usageLimits renders what is left of each subscription usage window.
+func usageLimits(t *styles.Styles, limits []cliagent.Limit, width int) string {
+	nameWidth := 0
+	for _, l := range limits {
+		nameWidth = max(nameWidth, lipgloss.Width(l.Name))
+	}
+	label := t.ModelInfo.Reasoning.UnsetPadding()
+	lines := []string{t.ModelInfo.Reasoning.Render("Usage left")}
+	for _, l := range limits {
+		left := l.Left()
+		pct := t.ModelInfo.TokenPercentage
+		if left < 20 {
+			pct = t.LSP.WarningDiagnostic
+		}
+		line := "  " + label.Render(fmt.Sprintf("%-*s ", nameWidth, l.Name)) + pct.Render(fmt.Sprintf("%3.0f%%", left))
+		if in := time.Until(l.ResetsAt); in > 0 {
+			line += t.ModelInfo.TokenCount.Render("  resets " + shortDuration(in))
+		}
+		lines = append(lines, ansi.Truncate(line, width, "…"))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// shortDuration formats d as its two largest units, e.g. "2h41m" or "3d4h".
+func shortDuration(d time.Duration) string {
+	m := int(d.Round(time.Minute).Minutes())
+	switch {
+	case m >= 24*60:
+		return fmt.Sprintf("%dd%dh", m/(24*60), m%(24*60)/60)
+	case m >= 60:
+		return fmt.Sprintf("%dh%dm", m/60, m%60)
+	}
+	return fmt.Sprintf("%dm", max(m, 1))
 }
 
 // updateSidebarScrollState renders the sidebar content and computes scroll

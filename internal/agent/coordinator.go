@@ -130,6 +130,7 @@ type Coordinator interface {
 	RunAccepted(ctx context.Context, accept *AcceptedRun, sessionID, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error)
 	BeginAccepted(sessionID string) *AcceptedRun
 	Cancel(sessionID string)
+	Interrupt(sessionID string)
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
@@ -1425,6 +1426,10 @@ func (c *coordinator) BeginAccepted(sessionID string) *AcceptedRun {
 
 func (c *coordinator) Cancel(sessionID string) {
 	c.currentAgent().Cancel(sessionID)
+}
+
+func (c *coordinator) Interrupt(sessionID string) {
+	c.currentAgent().Interrupt(sessionID)
 }
 
 func (c *coordinator) CancelAll() {

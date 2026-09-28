@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"charm.land/fantasy"
@@ -66,6 +70,15 @@ const (
 // runACP drives an ACP agent started with args. setModel selects m.ID with
 // session/set_model for agents that take no model flag.
 func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, setModel bool) error {
+	if name == "opencode" && !t.NoTools {
+		if env, signal := opencodeEnv(); signal != "" {
+			t.Env = append(slices.Clone(t.Env), env...)
+			defer os.Remove(signal)
+			if t.SessionID != "" {
+				defer onBackground(t.SessionID, func() bool { return pressCtrlB(signal) })()
+			}
+		}
+	}
 	p, err := startProcEnv(m.Dir, t.Env, name, args...)
 	if err != nil {
 		return err
@@ -89,6 +102,66 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 
 	calls := map[string]*acpTool{}
 	loading := t.Resume != "" // session/load replays history first; skip it
+
+	// OpenCode folds a session/prompt sent mid-turn into the running turn
+	// at its next step, then answers it with the turn's own result. It
+	// sends no echo, so a message counts as taken once a tool call ends
+	// and the model moves on, or once its prompt is answered. Grok would
+	// only queue it as a separate turn.
+	var (
+		steerMu  sync.Mutex
+		steerIDs = map[string]string{} // unanswered steered prompts
+		steerN   int
+		sent     steered
+		prompted atomic.Bool
+		boundary bool   // a tool call ended since the last confirm
+		final    []byte // the turn's result, held while steered prompts are open
+	)
+	stopSteer := func() {}
+	if name == "opencode" {
+		stopSteer = pollSteer(t, prompted.Load, func(text string) {
+			steerMu.Lock()
+			steerN++
+			id := "steer-" + strconv.Itoa(steerN)
+			steerIDs[id] = text
+			steerMu.Unlock()
+			sent.add(text)
+			if p.send(map[string]any{"jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": map[string]any{
+				"sessionId": *session.Load(),
+				"prompt":    []any{map[string]any{"type": "text", "text": text}},
+			}}) != nil {
+				steerMu.Lock()
+				delete(steerIDs, id)
+				steerMu.Unlock()
+				sent.take(text)
+			}
+		})
+	}
+	defer stopSteer()
+	confirm := func(texts ...string) error {
+		for _, text := range texts {
+			if sent.take(text) {
+				if err := t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	confirmAll := func() error {
+		steerMu.Lock()
+		var texts []string
+		for _, text := range steerIDs {
+			texts = append(texts, text)
+		}
+		steerMu.Unlock()
+		return confirm(texts...)
+	}
+	openSteers := func() int {
+		steerMu.Lock()
+		defer steerMu.Unlock()
+		return len(steerIDs)
+	}
 	for p.lines.Scan() {
 		var msg rpcMessage
 		if json.Unmarshal(p.lines.Bytes(), &msg) != nil {
@@ -98,6 +171,22 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 
 		if msg.Method != "" && id != "" {
 			go acpRequest(ctx, m, t, p, msg)
+			continue
+		}
+
+		if msg.Method == "" && strings.HasPrefix(id, "steer-") {
+			steerMu.Lock()
+			text := steerIDs[id]
+			delete(steerIDs, id)
+			steerMu.Unlock()
+			if msg.Error != nil {
+				sent.take(text) // not taken; Crush runs it next
+			} else if err := confirm(text); err != nil {
+				return err
+			}
+			if final != nil && openSteers() == 0 {
+				return acpFinish(name, final, t.Emit)
+			}
 			continue
 		}
 
@@ -132,27 +221,17 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 				}
 				_ = p.send(map[string]any{"jsonrpc": "2.0", "id": acpPromptID, "method": "session/prompt", "params": map[string]any{
 					"sessionId": sid,
-					"prompt":    []any{map[string]any{"type": "text", "text": t.Prompt}},
+					"prompt":    []any{map[string]any{"type": "text", "text": withImagePaths(t.Prompt, t.Attachments)}},
 				}})
+				prompted.Store(true)
 			case acpPromptID:
-				var res struct {
-					StopReason string    `json:"stopReason"`
-					Usage      *acpUsage `json:"usage"`
-					Meta       *acpUsage `json:"_meta"`
+				stopSteer()
+				if openSteers() > 0 {
+					// Their answers follow; one may even run as its own turn.
+					final = msg.Result
+					continue
 				}
-				_ = json.Unmarshal(msg.Result, &res)
-				if u := acpTurnUsage(res.Usage, res.Meta); u != nil {
-					if err := t.Emit(Event{Type: EventUsage, Usage: *u}); err != nil {
-						return err
-					}
-				}
-				switch res.StopReason {
-				case "cancelled":
-					return context.Canceled
-				case "refusal":
-					return errors.New(name + " refused to continue")
-				}
-				return nil
+				return acpFinish(name, msg.Result, t.Emit)
 			}
 			continue
 		}
@@ -164,6 +243,18 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 			Update acpUpdate `json:"update"`
 		}
 		_ = json.Unmarshal(msg.Params, &params)
+		switch u := params.Update; {
+		case u.SessionUpdate == "tool_call_update" && (u.Status == "completed" || u.Status == "failed"):
+			boundary = true
+		case u.SessionUpdate == "agent_message_chunk", u.SessionUpdate == "agent_thought_chunk", u.SessionUpdate == "tool_call":
+			// The model's next step, which has the messages sent before it.
+			if (boundary || final != nil) && sent.pending() > 0 {
+				if err := confirmAll(); err != nil {
+					return err
+				}
+			}
+			boundary = false
+		}
 		if err := acpHandleUpdate(params.Update, calls, t.Emit); err != nil {
 			return err
 		}
@@ -175,6 +266,28 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 		return ErrResume
 	}
 	return exitError(name, p)
+}
+
+// acpFinish reports a finished session/prompt's usage and stop reason.
+func acpFinish(name string, result json.RawMessage, emit func(Event) error) error {
+	var res struct {
+		StopReason string    `json:"stopReason"`
+		Usage      *acpUsage `json:"usage"`
+		Meta       *acpUsage `json:"_meta"`
+	}
+	_ = json.Unmarshal(result, &res)
+	if u := acpTurnUsage(res.Usage, res.Meta); u != nil {
+		if err := emit(Event{Type: EventUsage, Usage: *u}); err != nil {
+			return err
+		}
+	}
+	switch res.StopReason {
+	case "cancelled":
+		return context.Canceled
+	case "refusal":
+		return errors.New(name + " refused to continue")
+	}
+	return nil
 }
 
 func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) error) error {

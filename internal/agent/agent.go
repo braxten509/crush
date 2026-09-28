@@ -87,16 +87,19 @@ type SessionAgentCall struct {
 	RunID             string
 	Channel           string
 	HiddenUserMessage bool
-	Prompt            string
-	ProviderOptions   fantasy.ProviderOptions
-	Attachments       []message.Attachment
-	MaxOutputTokens   int64
-	Temperature       *float64
-	TopP              *float64
-	TopK              *int64
-	FrequencyPenalty  *float64
-	PresencePenalty   *float64
-	NonInteractive    bool
+	// CLIContinue shows a reply the agent CLI started on its own between
+	// turns instead of sending Prompt (cliagent.Turn.Continue).
+	CLIContinue      bool
+	Prompt           string
+	ProviderOptions  fantasy.ProviderOptions
+	Attachments      []message.Attachment
+	MaxOutputTokens  int64
+	Temperature      *float64
+	TopP             *float64
+	TopK             *int64
+	FrequencyPenalty *float64
+	PresencePenalty  *float64
+	NonInteractive   bool
 	// OnComplete, when non-nil, replaces the default RunComplete
 	// publish path: the inner Run hands the terminal payload to this
 	// callback instead of emitting it on the RunComplete broker. The
@@ -227,6 +230,9 @@ type sessionAgent struct {
 	// steering holds the running agent CLI turn per session, whose steered
 	// prompts still count as queued until the CLI takes them in.
 	steering *csync.Map[string, *cliSteps]
+	// interrupting holds prompts an Interrupt will run once the canceled run
+	// ends; they count as queued and keep the session busy meanwhile.
+	interrupting *csync.Map[string, []SessionAgentCall]
 
 	// dispatchMu holds a per-session mutex that serializes the
 	// accepted -> (cancel-on-entry | queued | active) transition in
@@ -305,6 +311,7 @@ func NewSessionAgent(
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, *activeCancel](),
 		steering:             csync.NewMap[string, *cliSteps](),
+		interrupting:         csync.NewMap[string, []SessionAgentCall](),
 		dispatchMu:           csync.NewMap[string, *sync.Mutex](),
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
@@ -525,6 +532,9 @@ func (a *sessionAgent) clearQueueAndNotify(sessionID string) {
 	a.messageQueue.Del(sessionID)
 	if s, _ := a.steering.Get(sessionID); s != nil {
 		s.hideSteered()
+	}
+	if pending, took := a.interrupting.Take(sessionID); took {
+		queued, ok = append(pending, queued...), true
 	}
 	if !ok {
 		return
@@ -2169,6 +2179,9 @@ func (a *sessionAgent) Interrupt(sessionID string) {
 	if len(calls) == 0 {
 		return
 	}
+	// Still listed as queued, and the session still busy, while the
+	// canceled run winds down. Set after Cancel, which clears the queue.
+	a.interrupting.Set(sessionID, calls)
 	// ponytail: merged into one prompt reported under the first RunID; the
 	// TUI doesn't set RunIDs on queued prompts.
 	next := calls[0]
@@ -2178,11 +2191,15 @@ func (a *sessionAgent) Interrupt(sessionID string) {
 	}
 	go func() {
 		// Wait for the canceled run to wind down, as a user would.
-		for deadline := time.Now().Add(time.Minute); a.IsSessionBusy(sessionID); time.Sleep(50 * time.Millisecond) {
+		for deadline := time.Now().Add(time.Minute); a.isRunning(sessionID); time.Sleep(50 * time.Millisecond) {
 			if time.Now().After(deadline) {
+				a.interrupting.Del(sessionID)
 				slog.Error("Interrupted run never ended; queued prompt not sent", "session_id", sessionID)
 				return
 			}
+		}
+		if _, ok := a.interrupting.Take(sessionID); !ok {
+			return // the queue was cleared meanwhile
 		}
 		next.acceptSeq, next.Accepted = 0, a.BeginAccepted(sessionID)
 		if _, err := a.Run(context.Background(), next); err != nil && !errors.Is(err, context.Canceled) {
@@ -2218,7 +2235,7 @@ func (a *sessionAgent) CancelAll() {
 }
 
 func (a *sessionAgent) IsBusy() bool {
-	var busy bool
+	busy := a.interrupting.Len() > 0
 	for ac := range a.activeRequests.Seq() {
 		if ac != nil {
 			busy = true
@@ -2229,8 +2246,13 @@ func (a *sessionAgent) IsBusy() bool {
 }
 
 func (a *sessionAgent) IsSessionBusy(sessionID string) bool {
-	_, busy := a.activeRequests.Get(sessionID)
-	return busy
+	_, pending := a.interrupting.Get(sessionID)
+	return a.isRunning(sessionID) || pending
+}
+
+func (a *sessionAgent) isRunning(sessionID string) bool {
+	_, ok := a.activeRequests.Get(sessionID)
+	return ok
 }
 
 func (a *sessionAgent) QueuedPrompts(sessionID string) int {
@@ -2243,6 +2265,10 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 	var prompts []string
 	if s, _ := a.steering.Get(sessionID); s != nil {
 		prompts = s.pendingSteered()
+	}
+	pending, _ := a.interrupting.Get(sessionID)
+	for _, call := range pending {
+		prompts = append(prompts, call.Prompt)
 	}
 	l, _ := a.messageQueue.Get(sessionID)
 	for _, call := range l {

@@ -248,10 +248,150 @@ func gruvboxDarkOverrides(s Styles) Styles {
 	return s
 }
 
+// terminalOpts returns the quickStyleOpts for the Terminal theme: plain
+// white-on-dark text with the Konsole default (Breeze) ANSI colors, so Crush
+// looks like an ordinary shell session.
+func terminalOpts() quickStyleOpts {
+	return quickStyleOpts{
+		primary:   lipgloss.Color("#11d116"), // green, like a shell prompt
+		secondary: lipgloss.Color("#3daee9"), // bright blue
+		accent:    lipgloss.Color("#1cdc9a"), // bright green
+		keyword:   lipgloss.Color("#fdbc4b"), // bright yellow
+
+		fgBase:       lipgloss.Color("#fcfcfc"),
+		fgMoreSubtle: lipgloss.Color("#bdc3c7"),
+		fgSubtle:     lipgloss.Color("#dcdfe1"),
+		fgMostSubtle: lipgloss.Color("#7f8c8d"),
+
+		onPrimary: lipgloss.Color("#232627"),
+
+		bgBase:         lipgloss.Color("#232627"),
+		bgLeastVisible: lipgloss.Color("#2c3032"),
+		bgLessVisible:  lipgloss.Color("#383c3e"),
+		bgMostVisible:  lipgloss.Color("#4d5254"),
+
+		separator: lipgloss.Color("#383c3e"),
+
+		destructive:       lipgloss.Color("#ed1515"),
+		error:             lipgloss.Color("#c0392b"),
+		warningSubtle:     lipgloss.Color("#fdbc4b"),
+		warning:           lipgloss.Color("#f67400"),
+		attention:         lipgloss.Color("#f67400"),
+		busy:              lipgloss.Color("#fdbc4b"),
+		info:              lipgloss.Color("#1d99f3"),
+		infoMoreSubtle:    lipgloss.Color("#3daee9"),
+		infoMostSubtle:    lipgloss.Color("#1b668f"),
+		success:           lipgloss.Color("#11d116"),
+		successMoreSubtle: lipgloss.Color("#1cdc9a"),
+		successMostSubtle: lipgloss.Color("#16a085"),
+		yolo:              lipgloss.Color("#fdbc4b"),
+		plan:              lipgloss.Color("#1abc9c"),
+		planMoreSubtle:    lipgloss.Color("#4d5254"),
+
+		button:         lipgloss.Color("#1d99f3"),
+		buttonSubtle:   lipgloss.Color("#383c3e"),
+		buttonInactive: lipgloss.Color("#4d5254"),
+		buttonHovered:  lipgloss.Color("#7f8c8d"),
+
+		ansiBlack:   lipgloss.Color("#232627"),
+		ansiRed:     lipgloss.Color("#ed1515"),
+		ansiGreen:   lipgloss.Color("#11d116"),
+		ansiYellow:  lipgloss.Color("#f67400"),
+		ansiBlue:    lipgloss.Color("#1d99f3"),
+		ansiMagenta: lipgloss.Color("#9b59b6"),
+		ansiCyan:    lipgloss.Color("#1abc9c"),
+		ansiWhite:   lipgloss.Color("#fcfcfc"),
+
+		ansiBrightBlack:   lipgloss.Color("#7f8c8d"),
+		ansiBrightRed:     lipgloss.Color("#c0392b"),
+		ansiBrightGreen:   lipgloss.Color("#1cdc9a"),
+		ansiBrightYellow:  lipgloss.Color("#fdbc4b"),
+		ansiBrightBlue:    lipgloss.Color("#3daee9"),
+		ansiBrightMagenta: lipgloss.Color("#8e44ad"),
+		ansiBrightCyan:    lipgloss.Color("#16a085"),
+		ansiBrightWhite:   lipgloss.Color("#ffffff"),
+	}
+}
+
+// claudeCodeOpts returns the quickStyleOpts for the Claude Code theme, using
+// the colors of Claude Code's dark theme: Claude orange, lavender prompts,
+// teal plan mode and muted grays.
+func claudeCodeOpts() quickStyleOpts {
+	return quickStyleOpts{
+		primary:   lipgloss.Color("#d77757"), // claude orange
+		secondary: lipgloss.Color("#eb9f7f"), // claude shimmer
+		accent:    lipgloss.Color("#b1b9f9"), // suggestion lavender
+		keyword:   lipgloss.Color("#af87ff"), // auto-accept purple
+
+		fgBase:       lipgloss.Color("#ffffff"),
+		fgMoreSubtle: lipgloss.Color("#999999"),
+		fgSubtle:     lipgloss.Color("#c8c8c8"),
+		fgMostSubtle: lipgloss.Color("#808080"),
+
+		onPrimary: lipgloss.Color("#1f1f1e"),
+
+		bgBase:         lipgloss.Color("#1f1f1e"),
+		bgLeastVisible: lipgloss.Color("#2a2a28"),
+		bgLessVisible:  lipgloss.Color("#373734"),
+		bgMostVisible:  lipgloss.Color("#505050"),
+
+		separator: lipgloss.Color("#505050"),
+
+		destructive:       lipgloss.Color("#ff6b80"),
+		error:             lipgloss.Color("#ff6b80"),
+		warningSubtle:     lipgloss.Color("#ffd75f"),
+		warning:           lipgloss.Color("#ffc107"),
+		attention:         lipgloss.Color("#d77757"),
+		busy:              lipgloss.Color("#ffc107"),
+		info:              lipgloss.Color("#b1b9f9"),
+		infoMoreSubtle:    lipgloss.Color("#b1b9f9"),
+		infoMostSubtle:    lipgloss.Color("#5769f7"),
+		success:           lipgloss.Color("#4eba65"),
+		successMoreSubtle: lipgloss.Color("#6fd087"),
+		successMostSubtle: lipgloss.Color("#38a660"),
+		yolo:              lipgloss.Color("#ff6b80"),
+		plan:              lipgloss.Color("#48968c"),
+		planMoreSubtle:    lipgloss.Color("#2f5f59"),
+
+		// Claude Code's diff greens and reds.
+		diffInsertFg:       lipgloss.Color("#38a660"),
+		diffInsertCodeBg:   lipgloss.Color("#225c2b"),
+		diffInsertGutterBg: lipgloss.Color("#1a4420"),
+		diffDeleteFg:       lipgloss.Color("#b3596b"),
+		diffDeleteCodeBg:   lipgloss.Color("#7a2936"),
+		diffDeleteGutterBg: lipgloss.Color("#5a1f29"),
+
+		button:         lipgloss.Color("#d77757"),
+		buttonSubtle:   lipgloss.Color("#373734"),
+		buttonInactive: lipgloss.Color("#505050"),
+		buttonHovered:  lipgloss.Color("#808080"),
+
+		ansiBlack:   lipgloss.Color("#1f1f1e"),
+		ansiRed:     lipgloss.Color("#ff6b80"),
+		ansiGreen:   lipgloss.Color("#4eba65"),
+		ansiYellow:  lipgloss.Color("#ffc107"),
+		ansiBlue:    lipgloss.Color("#5769f7"),
+		ansiMagenta: lipgloss.Color("#fd5db1"),
+		ansiCyan:    lipgloss.Color("#48968c"),
+		ansiWhite:   lipgloss.Color("#c8c8c8"),
+
+		ansiBrightBlack:   lipgloss.Color("#808080"),
+		ansiBrightRed:     lipgloss.Color("#ff8a9a"),
+		ansiBrightGreen:   lipgloss.Color("#6fd087"),
+		ansiBrightYellow:  lipgloss.Color("#ffd75f"),
+		ansiBrightBlue:    lipgloss.Color("#b1b9f9"),
+		ansiBrightMagenta: lipgloss.Color("#af87ff"),
+		ansiBrightCyan:    lipgloss.Color("#6cc5b8"),
+		ansiBrightWhite:   lipgloss.Color("#ffffff"),
+	}
+}
+
 // builtinThemes maps theme names to their quickStyleOpts palette definitions.
 var builtinThemes = map[string]func() quickStyleOpts{
 	"charmtone-panther": charmtoneOpts,
+	"claude-code":       claudeCodeOpts,
 	"gruvbox-dark":      gruvboxDarkOpts,
+	"terminal":          terminalOpts,
 }
 
 // builtinThemeOverrides maps theme names to functions that apply

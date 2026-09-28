@@ -252,6 +252,10 @@ func (w *ClientWorkspace) AgentCancel(sessionID string) {
 	_ = w.client.CancelAgentSession(context.Background(), w.workspaceID(), sessionID)
 }
 
+// ponytail: in-process only, like sub-agents; add a server route if client
+// mode needs it.
+func (w *ClientWorkspace) AgentBackground(string) bool { return false }
+
 func (w *ClientWorkspace) AgentInterrupt(sessionID string) {
 	_ = w.client.InterruptAgentSession(context.Background(), w.workspaceID(), sessionID)
 }

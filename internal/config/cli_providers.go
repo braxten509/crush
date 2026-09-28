@@ -141,6 +141,14 @@ func (c *Config) addCLIProviders(path string) {
 			if models := cachedModels(p.cfg.ID); len(models) > 0 {
 				cfg.Models = models
 			}
+			if cfg.Type != TypeCodexCLI {
+				// Crush hands every other CLI its images (inline for Claude,
+				// as saved files otherwise). Codex's catalog says per model.
+				cfg.Models = slices.Clone(cfg.Models)
+				for i := range cfg.Models {
+					cfg.Models[i].SupportsImages = true
+				}
+			}
 			c.Providers.Set(p.cfg.ID, cfg)
 			continue
 		}

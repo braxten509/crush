@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/commands"
@@ -173,6 +174,10 @@ func (w *AppWorkspace) AgentCancel(sessionID string) {
 	if w.app.AgentCoordinator != nil {
 		w.app.AgentCoordinator.Cancel(sessionID)
 	}
+}
+
+func (w *AppWorkspace) AgentBackground(sessionID string) bool {
+	return cliagent.Background(sessionID)
 }
 
 func (w *AppWorkspace) AgentInterrupt(sessionID string) {

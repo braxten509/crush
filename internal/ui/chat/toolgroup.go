@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -41,7 +42,19 @@ type ToolGroupItem struct {
 	// anim animates the "| Running a command" status while working.
 	anim      *anim.Anim
 	animLabel string
+	// canBackground is whether the agent can move a running command to
+	// the background (Ctrl+B). The group times the command it shows to
+	// offer that once it runs long.
+	canBackground bool
+	runningID     string
+	runningSince  time.Time
+	backgrounded  string // the command Ctrl+B was pressed for
+	hinted        bool
 }
+
+// backgroundHintAfter is how long a command runs before the group offers
+// Ctrl+B, as Claude Code does.
+const backgroundHintAfter = 60 * time.Second
 
 var (
 	_ MessageItem = (*ToolGroupItem)(nil)
@@ -132,6 +145,53 @@ func (g *ToolGroupItem) SetBusy(busy bool) {
 }
 
 // Child returns the step with the given ID, or nil.
+// SetCanBackground says whether Ctrl+B can move the agent's running command
+// to the background.
+func (g *ToolGroupItem) SetCanBackground(can bool) {
+	if g.canBackground != can {
+		g.canBackground = can
+		g.Bump()
+	}
+}
+
+// runningCommand returns the ID of the command the live group is waiting
+// on, or "".
+func (g *ToolGroupItem) runningCommand() string {
+	if !g.live || len(g.children) == 0 {
+		return ""
+	}
+	last, ok := g.children[len(g.children)-1].(ToolMessageItem)
+	if !ok || last.ToolCall().Name != tools.BashToolName {
+		return ""
+	}
+	if st, ok := last.(interface{ computeStatus() ToolStatus }); !ok || st.computeStatus() != ToolStatusRunning {
+		return ""
+	}
+	return last.ToolCall().ID
+}
+
+// CanBackground reports whether Ctrl+B would move the group's running
+// command to the background.
+func (g *ToolGroupItem) CanBackground() bool {
+	id := g.runningCommand()
+	if id != g.runningID {
+		g.runningID, g.runningSince = id, time.Now()
+	}
+	return g.canBackground && id != "" && id != g.backgrounded
+}
+
+// BackgroundHint reports whether the group shows the Ctrl+B hint: its
+// command has run for [backgroundHintAfter].
+func (g *ToolGroupItem) BackgroundHint() bool {
+	return g.CanBackground() && time.Since(g.runningSince) >= backgroundHintAfter
+}
+
+// Backgrounded hides the hint once Ctrl+B was pressed for the command.
+func (g *ToolGroupItem) Backgrounded() {
+	g.backgrounded = g.runningID
+	g.Bump()
+}
+
 func (g *ToolGroupItem) Child(id string) MessageItem {
 	for _, c := range g.children {
 		if c.ID() == id {
@@ -184,6 +244,11 @@ func (g *ToolGroupItem) Advance() bool {
 		}
 	}
 	if g.status() != "" && g.anim.Advance() {
+		g.Bump()
+		changed = true
+	}
+	if hint := g.BackgroundHint(); hint != g.hinted {
+		g.hinted = hint
 		g.Bump()
 		changed = true
 	}
@@ -296,6 +361,9 @@ func (g *ToolGroupItem) RawRender(width int) string {
 	inner := width - MessageLeftPaddingTotal
 	var sb strings.Builder
 	sb.WriteString(g.header(inner))
+	if g.BackgroundHint() {
+		sb.WriteString("\n" + g.sty.Tool.ParamKey.Render("  ctrl+b to run in background"))
+	}
 	g.childLines, g.shown = g.childLines[:0], g.shown[:0]
 	if g.expanded {
 		start := max(0, len(g.children)-toolGroupShown)

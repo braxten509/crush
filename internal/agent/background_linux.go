@@ -38,6 +38,7 @@ func linuxMarkedProcs(markers []string) map[int]proc {
 			continue
 		}
 		ppid, _ := strconv.Atoi(fields[1])
+		sid, _ := strconv.Atoi(fields[3])
 		ticks, _ := strconv.ParseInt(fields[19], 10, 64)
 		cmdline, _ := os.ReadFile(dir + "/cmdline")
 		args := strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")
@@ -45,7 +46,7 @@ func linuxMarkedProcs(markers []string) map[int]proc {
 			continue // A zombie or kernel thread.
 		}
 		// ponytail: assumes USER_HZ is 100, true on every Linux in use.
-		procs[pid] = proc{pid: pid, ppid: ppid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond)}
+		procs[pid] = proc{pid: pid, ppid: ppid, sid: sid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond)}
 	}
 	return procs
 }

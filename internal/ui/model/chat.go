@@ -101,6 +101,9 @@ type Chat struct {
 	// agentBusy is passed to groups so the live one keeps a status
 	// between steps.
 	agentBusy bool
+	// canBackground is passed to groups: whether Ctrl+B can move the
+	// agent's running command to the background.
+	canBackground bool
 
 	// animRunning is true while the shared animation clock has a tick
 	// outstanding. The clock stops itself when no visible item is spinning
@@ -537,6 +540,7 @@ func (m *Chat) regroup() {
 	for g := range used {
 		g.SetLive(owner[g] == len(items)-1)
 		g.SetBusy(m.agentBusy)
+		g.SetCanBackground(m.canBackground)
 	}
 
 	newOff, ok := owner[anchor]
@@ -602,6 +606,26 @@ func (m *Chat) SetAgentBusy(busy bool) {
 	for _, g := range m.groupOf {
 		g.SetBusy(busy)
 	}
+}
+
+// SetCanBackground tells status groups whether Ctrl+B can move the agent's
+// running command to the background.
+func (m *Chat) SetCanBackground(can bool) {
+	m.canBackground = can
+	for _, g := range m.groupOf {
+		g.SetCanBackground(can)
+	}
+}
+
+// BackgroundableGroup returns the group whose running command Ctrl+B would
+// move to the background, or nil.
+func (m *Chat) BackgroundableGroup() *chat.ToolGroupItem {
+	for _, g := range m.groupOf {
+		if g.CanBackground() {
+			return g
+		}
+	}
+	return nil
 }
 
 // SetAnimationsAllowed gates the shared animation clock. It is cleared

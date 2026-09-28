@@ -21,6 +21,14 @@ func WithRunID(ctx context.Context, runID string) context.Context {
 	return context.WithValue(ctx, runIDContextKey{}, runID)
 }
 
+type cliContinueKey struct{}
+
+// withCLIContinue marks a run that shows a reply the agent CLI started on
+// its own; see cliagent.OnUnprompted.
+func withCLIContinue(ctx context.Context) context.Context {
+	return context.WithValue(ctx, cliContinueKey{}, true)
+}
+
 // RunIDFromContext returns the RunID set by [WithRunID], or "" if
 // none was set or the value is not a string. Exported because the
 // coordinator and tests in other packages need to read it; safe to

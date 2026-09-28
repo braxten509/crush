@@ -8,4 +8,4 @@ func ownGroup(*exec.Cmd) {}
 
 func (p *proc) kill() { _ = p.cmd.Process.Kill() }
 
-func (p *proc) killCommands() {}
+func (p *proc) killCommands([]openCall) {}

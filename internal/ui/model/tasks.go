@@ -81,6 +81,7 @@ func (m *UI) handleTaskEvent(t agent.Task) tea.Cmd {
 	}
 	m.tasks[t.ID] = t
 	m.relayoutTasks()
+	m.refreshBackgroundDialog()
 	return m.taskTick()
 }
 
@@ -114,7 +115,18 @@ func (m *UI) pollBgProcs() tea.Cmd {
 func (m *UI) handleBgProcs(procs []agent.Process) tea.Cmd {
 	m.bgProcs = procs
 	m.relayoutTasks()
+	m.refreshBackgroundDialog()
 	return m.pollBgProcs()
+}
+
+// refreshBackgroundDialog keeps an open background dialog in step with
+// what is actually running.
+func (m *UI) refreshBackgroundDialog() {
+	for _, id := range []string{dialog.BackgroundID, dialog.SubAgentsID} {
+		if d, ok := m.dialog.Dialog(id).(*dialog.Background); ok {
+			d.SetItems(m.visibleTasks(), m.bgProcs, "")
+		}
+	}
 }
 
 // focusTaskRow selects the row from the editor, if it has anything.
@@ -154,7 +166,7 @@ func (m *UI) handleTaskRowKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		}
 		return m.openBackgroundDialog(), true
 	case "enter", "space":
-		return m.openBackgroundDialog(), true
+		return m.openTaskRowDialog(), true
 	default:
 		m.tasksFocused = false
 		return nil, false
@@ -232,9 +244,25 @@ func splitTasks(editor uv.Rectangle, rows int) (uv.Rectangle, uv.Rectangle) {
 	return editor, tasks
 }
 
-// openBackgroundDialog lists the sub-agents and processes to stop or kill,
-// starting on the one selected in the row.
+// openTaskRowDialog opens the dialog matching the selected row item.
+func (m *UI) openTaskRowDialog() tea.Cmd {
+	if m.taskSel < len(m.visibleTasks()) {
+		return m.openSubAgentsDialog()
+	}
+	return m.openBackgroundDialog()
+}
+
+// openBackgroundDialog lists only background processes.
 func (m *UI) openBackgroundDialog() tea.Cmd {
+	m.tasksFocused = false
+	m.dialog.CloseDialog(dialog.SubAgentsID)
+	m.dialog.CloseDialog(dialog.BackgroundID)
+	m.dialog.OpenDialog(dialog.NewBackground(m.com, m.bgProcs))
+	return nil
+}
+
+// openSubAgentsDialog lists only sub-agents, selecting the one in the row.
+func (m *UI) openSubAgentsDialog() tea.Cmd {
 	m.tasksFocused = false
 	tasks := m.visibleTasks()
 	var selected string
@@ -242,6 +270,7 @@ func (m *UI) openBackgroundDialog() tea.Cmd {
 		selected = tasks[m.taskSel].ID
 	}
 	m.dialog.CloseDialog(dialog.BackgroundID)
-	m.dialog.OpenDialog(dialog.NewBackground(m.com, tasks, m.bgProcs, selected))
+	m.dialog.CloseDialog(dialog.SubAgentsID)
+	m.dialog.OpenDialog(dialog.NewSubAgents(m.com, tasks, selected))
 	return nil
 }

@@ -277,6 +277,19 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 	}
 }
 
+// Pending returns the request that is waiting for an answer, if any.
+func (s *permissionService) Pending() (PermissionRequest, bool) {
+	s.activeRequestMu.Lock()
+	defer s.activeRequestMu.Unlock()
+	if s.activeRequest == nil {
+		return PermissionRequest{}, false
+	}
+	if _, ok := s.pendingRequests.Get(s.activeRequest.ID); !ok {
+		return PermissionRequest{}, false
+	}
+	return *s.activeRequest, true
+}
+
 func (s *permissionService) AutoApproveSession(sessionID string) {
 	s.autoApproveSessionsMu.Lock()
 	s.autoApproveSessions[sessionID] = true

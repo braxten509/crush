@@ -58,7 +58,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
 	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific crush server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
-	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
+	rootCmd.Flags().BoolP("yolo", "y", true, "Automatically accept all permissions (dangerous mode; default on, --yolo=false to disable)")
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
@@ -193,9 +193,8 @@ func printSessionResume(model *ui.UI, banner config.ExitBanner) {
 func relaunchArgs(cmd *cobra.Command, dir string) []string {
 	args := []string{"--cwd", dir}
 	for _, name := range []string{"yolo", "debug"} {
-		if on, _ := cmd.Flags().GetBool(name); on {
-			args = append(args, "--"+name)
-		}
+		on, _ := cmd.Flags().GetBool(name)
+		args = append(args, fmt.Sprintf("--%s=%t", name, on))
 	}
 	if cmd.Flags().Changed("host") {
 		args = append(args, "--host", clientHost)

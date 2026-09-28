@@ -2987,9 +2987,20 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			return true
 		case key.Matches(msg, m.keyMap.Chat.Background):
 			if m.state == uiChat {
-				cmds = append(cmds, m.openBackgroundDialog())
+				if m.tasksFocused {
+					cmds = append(cmds, m.openTaskRowDialog())
+				} else {
+					cmds = append(cmds, m.openBackgroundDialog())
+				}
 				return true
 			}
+		case key.Matches(msg, m.keyMap.Chat.ToggleSidebar) && m.hasSession() && m.chat.BackgroundableGroup() != nil:
+			// While a command is running, Ctrl+B moves it to the
+			// background, as in Claude Code.
+			if g := m.chat.BackgroundableGroup(); m.com.Workspace.AgentBackground(m.session.ID) {
+				g.Backgrounded()
+			}
+			return true
 		case key.Matches(msg, m.keyMap.Chat.ToggleSidebar):
 			if m.canToggleSidebar() {
 				cmds = append(cmds, m.toggleCompactMode())
@@ -4282,8 +4293,10 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 	// The screen area we're working with
 	area := image.Rect(0, 0, w, h)
 
-	// The help height
-	helpHeight := 1
+	// The help height: the short hint row is hidden, so the status bar only
+	// takes rows when the full help (ctrl+g) is open. Badges and
+	// notifications draw on the bottom margin row instead.
+	helpHeight := 0
 	// The editor height: textarea height + margin for attachments and bottom spacing.
 	// When an inline editor is active, use its height instead.
 	editorHeight := m.textarea.Height() + editorHeightMargin
@@ -5427,6 +5440,8 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		}
 	case dialog.BackgroundID:
 		cmds = append(cmds, m.openBackgroundDialog())
+	case dialog.SubAgentsID:
+		cmds = append(cmds, m.openSubAgentsDialog())
 	case dialog.ProjectsID:
 		if m.dialog.ContainsDialog(dialog.ProjectsID) {
 			m.dialog.BringToFront(dialog.ProjectsID)

@@ -152,6 +152,9 @@ type Workspace interface {
 	// AgentInterrupt stops the active run and sends the next queued
 	// prompt, if any.
 	AgentInterrupt(sessionID string)
+	// AgentBackground moves the commands the running turn waits on to the
+	// background (Ctrl+B), reporting whether the agent could be asked.
+	AgentBackground(sessionID string) bool
 	AgentIsBusy() bool
 	AgentIsSessionBusy(sessionID string) bool
 	AgentModel() AgentModel

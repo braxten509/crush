@@ -2,6 +2,7 @@ package cliagent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/message"
 )
 
 // Claude Code's stream-json protocol, as used by its Agent SDKs: Messages
@@ -30,6 +32,11 @@ type claudeLine struct {
 	Errors    []string               `json:"errors"`
 	Origin    *struct{ Kind string } `json:"origin"`
 	IsReplay  bool                   `json:"isReplay"`
+	// Set on lines from a sub-agent Claude runs itself.
+	ParentToolUseID string `json:"parent_tool_use_id"`
+	// task_started: the tool call a foreground task runs for.
+	ToolUseID      string `json:"tool_use_id"`
+	IsBackgrounded bool   `json:"is_backgrounded"`
 }
 
 type claudeEvent struct {
@@ -95,10 +102,18 @@ type claudeLive struct {
 	lines   <-chan []byte
 	key     claudeKey
 	native  string
+	pending [][]byte      // a reply Claude started between turns, unread
 	idle    chan struct{} // closed to end the between-turns drain
 	drained chan struct{}
 	dead    atomic.Bool
 	timer   *time.Timer
+}
+
+type claudeTurn struct {
+	p *proc
+	// ctrlB is set by a Ctrl+B that may have come before Claude started
+	// the command; the command is backgrounded once it does.
+	ctrlB atomic.Bool
 }
 
 // claudeSessions holds the live processes, one per Crush session.
@@ -132,17 +147,26 @@ func takeClaude(sessionID string, key claudeKey, resume string) *claudeLive {
 func keepClaude(sessionID string, l *claudeLive) {
 	l.idle, l.drained = make(chan struct{}), make(chan struct{})
 	go func() {
-		// Output between turns (a background task finishing) has no turn to
-		// show it in.
-		// ponytail: dropped; relay it once Crush can show unprompted turns.
+		// Claude replies on its own when a background task finishes. The
+		// reply is left unread for a Crush turn to show (OnUnprompted);
+		// the status lines before it are dropped.
 		defer close(l.drained)
 		for {
 			select {
 			case <-l.idle:
 				return
-			case _, ok := <-l.lines:
+			case raw, ok := <-l.lines:
 				if !ok {
 					l.dead.Store(true)
+					<-l.idle
+					return
+				}
+				var line claudeLine
+				if json.Unmarshal(raw, &line) == nil && line.Type == "system" && line.Subtype == "init" {
+					l.pending = [][]byte{raw}
+					if OnUnprompted != nil {
+						go OnUnprompted(sessionID)
+					}
 					<-l.idle
 					return
 				}
@@ -238,6 +262,9 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 		live = takeClaude(t.SessionID, key, t.Resume)
 	}
 	fresh := live == nil
+	if fresh && t.Continue {
+		return nil // the process that replied is gone
+	}
 	if fresh {
 		var err error
 		if live, err = startClaude(m, t, key); err != nil {
@@ -246,6 +273,13 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	}
 	p := live.p
 	finished := false
+	ctl := &claudeTurn{p: p}
+	if t.SessionID != "" && !t.NoTools {
+		defer onBackground(t.SessionID, func() bool {
+			ctl.ctrlB.Store(true)
+			return p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b", "request": map[string]any{"subtype": "background_tasks"}}) == nil
+		})()
+	}
 	defer func() {
 		if finished && keep && live.native != "" {
 			keepClaude(t.SessionID, live)
@@ -253,12 +287,26 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 			p.finish()
 		}
 	}()
-	stop := p.watchCancel(ctx, func() {
+	interrupt := func() {
 		_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-interrupt", "request": map[string]any{"subtype": "interrupt"}})
-	})
+	}
+	stop := p.watchCancel(ctx, interrupt)
 	defer stop()
 
-	_ = p.send(claudeUserMessage(t.Prompt))
+	pending := live.pending
+	live.pending = nil
+	// Results before Claude takes in this prompt end a reply it started on
+	// its own; the prompt's own result may carry a background notice's
+	// origin when one was folded into it.
+	promptTaken := t.Continue
+	if t.Continue {
+		if len(pending) == 0 {
+			finished = true
+			return nil // already shown by another turn
+		}
+	} else {
+		_ = p.send(claudePrompt(t.Prompt, t.Attachments))
+	}
 
 	// Claude takes messages written mid-turn in at its next tool result, or
 	// runs them right after the turn if it was already answering.
@@ -278,25 +326,79 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	// doesn't echo every message it's given, and an unconfirmed one must
 	// not hold the turn open forever. Crush runs it next instead.
 	var steerWait <-chan time.Time
+	// Tool calls still running, by start time. Claude only reads steered
+	// messages at a tool result, so one waiting on a long call has the call
+	// moved to the background (Ctrl+B) to deliver it now.
+	// The moved call keeps running in the background row; Claude replies
+	// about it later on its own (OnUnprompted).
+	running := map[string]time.Time{}
+	interrupted := 0 // results since the turn was interrupted
+	bgTick := time.NewTicker(time.Second)
+	defer bgTick.Stop()
 read:
 	for {
 		var raw []byte
-		select {
-		case r, ok := <-live.lines:
-			if !ok {
-				break read
+		if len(pending) > 0 {
+			raw, pending = pending[0], pending[1:]
+		} else {
+			select {
+			case r, ok := <-live.lines:
+				if !ok {
+					break read
+				}
+				raw, steerWait = r, nil
+			case <-steerWait:
+				finished = true
+				return nil
+			case <-bgTick.C:
+				if sent.pending() == 0 || ctx.Err() != nil {
+					continue
+				}
+				for id, at := range running {
+					if time.Since(at) >= steerBackgroundAfter {
+						delete(running, id) // asked once
+						_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-bg-" + id, "request": map[string]any{"subtype": "background_tasks", "tool_use_id": id}})
+					}
+				}
+				continue
 			}
-			raw, steerWait = r, nil
-		case <-steerWait:
-			finished = true
-			return nil
 		}
 		var line claudeLine
 		if json.Unmarshal(raw, &line) != nil {
 			continue
 		}
+		if line.ParentToolUseID != "" {
+			continue // a sub-agent's own steps; its result comes as a tool result
+		}
+		if ctx.Err() != nil {
+			// Interrupted. Claude runs messages steered in but not yet
+			// taken right after, so that turn is stopped too. The process
+			// is then kept: exiting would stop its background tasks.
+			stopSteer()
+			switch {
+			case line.Type == "user" && line.IsReplay:
+				sent.take(claudeUserText(line.Message))
+			case line.Type == "system" && line.Subtype == "init" && interrupted > 0:
+				interrupt()
+			case line.Type == "result":
+				interrupted++
+				if sent.pending() == 0 || interrupted > 1 {
+					finished = true
+					return ctx.Err()
+				}
+			}
+			continue
+		}
 		switch line.Type {
 		case "system":
+			// Only a started task can be backgrounded; asking earlier
+			// finds nothing.
+			if line.Subtype == "task_started" && line.ToolUseID != "" && !line.IsBackgrounded {
+				running[line.ToolUseID] = time.Now()
+				if ctl.ctrlB.Swap(false) {
+					_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b-" + line.ToolUseID, "request": map[string]any{"subtype": "background_tasks", "tool_use_id": line.ToolUseID}})
+				}
+			}
 			// Claude reports this again for each prompt a live process takes.
 			if line.Subtype == "init" && line.SessionID != "" {
 				started = true
@@ -332,6 +434,8 @@ read:
 					if err := t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
 						return err
 					}
+				} else {
+					promptTaken = true
 				}
 				continue
 			}
@@ -340,6 +444,8 @@ read:
 					continue
 				}
 				call := calls[b.ToolUseID]
+				delete(running, b.ToolUseID)
+				ctl.ctrlB.Store(false) // the command it was for is done
 				out := claudeResultText(b.Content)
 				meta := ""
 				if !b.IsError {
@@ -356,12 +462,14 @@ read:
 		case "result":
 			// A background task finishing reports its own result outside
 			// the prompt; it does not end this turn.
-			if line.Origin != nil && line.Origin.Kind == "task-notification" {
-				continue
-			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+			notice := line.Origin != nil && line.Origin.Kind == "task-notification"
+			if !promptTaken && notice {
+				continue // a reply Claude started on its own before this prompt
+			}
+			promptTaken = true
 			if line.IsError || (line.Subtype != "" && line.Subtype != "success") {
 				msg := line.Result
 				if msg == "" {
@@ -392,6 +500,27 @@ read:
 // steerEchoTimeout is how long a finished turn waits for Claude to start on
 // a steered message.
 var steerEchoTimeout = 15 * time.Second
+
+// steerBackgroundAfter is how long a tool call may hold up a steered message
+// before it is moved to the background.
+var steerBackgroundAfter = 3 * time.Second
+
+// claudePrompt is the turn's user message, with its images inline.
+func claudePrompt(text string, attachments []message.Attachment) map[string]any {
+	msg := claudeUserMessage(text)
+	content := []any{map[string]any{"type": "text", "text": text}}
+	for _, a := range attachments {
+		if a.IsImage() {
+			content = append(content, map[string]any{"type": "image", "source": map[string]any{
+				"type": "base64", "media_type": a.MimeType, "data": base64.StdEncoding.EncodeToString(a.Content),
+			}})
+		}
+	}
+	if len(content) > 1 {
+		msg["message"].(map[string]any)["content"] = content
+	}
+	return msg
+}
 
 func claudeUserMessage(text string) map[string]any {
 	return map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}}

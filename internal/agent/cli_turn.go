@@ -56,7 +56,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		a.steering.Set(call.SessionID, s)
 		defer a.steering.CompareAndDelete(call.SessionID, s)
 		defer s.returnUnsteered()
-		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, Env: env, Instructions: instructions}
+		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, Env: env, Instructions: instructions}
 		err := m.Run(ctx, turn)
 		if errors.Is(err, cliagent.ErrResume) {
 			// The native session is gone; hand the whole conversation to a

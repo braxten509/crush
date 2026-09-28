@@ -548,7 +548,8 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "init", "Initialize Project", "", ActionInitializeProject{}),
 		NewCommandItem(c.com.Styles, "save_project", "Save Project", "", ActionSaveProject{}),
 		NewCommandItem(c.com.Styles, "open_project", "Open Project", "", ActionOpenDialog{ProjectsID}).WithAliases("projects"),
-		NewCommandItem(c.com.Styles, "background", "Background Tasks", "ctrl+x", ActionOpenDialog{BackgroundID}).WithAliases("processes", "sub-agents", "kill"),
+		NewCommandItem(c.com.Styles, "background", "Background Processes", "ctrl+x", ActionOpenDialog{BackgroundID}).WithAliases("processes", "kill"),
+		NewCommandItem(c.com.Styles, "sub_agents", "Sub-agents", "", ActionOpenDialog{SubAgentsID}).WithAliases("agents", "tasks", "stop"),
 	)
 
 	// Add transparent background toggle.

@@ -61,6 +61,7 @@ type Task struct {
 	Name      string     `json:"name"`
 	CLI       string     `json:"cli"`
 	Model     string     `json:"model"`
+	Effort    string     `json:"effort,omitempty"`
 	Status    TaskStatus `json:"status"`
 	Started   time.Time  `json:"started"`
 	Ended     time.Time  `json:"ended"`
@@ -144,6 +145,24 @@ func StopTask(id string) error {
 		}
 	}
 	return fmt.Errorf("no task %q", id)
+}
+
+// SessionTasks returns copies of a session's sub-agents, running or ended.
+func SessionTasks(sessionID string) []Task {
+	hubsMu.Lock()
+	defer hubsMu.Unlock()
+	var out []Task
+	for _, h := range hubs {
+		h.mu.Lock()
+		for _, t := range h.tasks {
+			if t.SessionID == sessionID {
+				out = append(out, *t)
+			}
+		}
+		h.mu.Unlock()
+	}
+	slices.SortFunc(out, func(a, b Task) int { return a.Started.Compare(b.Started) })
+	return out
 }
 
 // env is added to the CLI process of a session that may spawn tasks.
@@ -292,7 +311,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	h.seq++
 	t := &Task{
 		ID: fmt.Sprintf("t%d", h.seq), SessionID: req.Session, ChildID: child.ID, Name: name,
-		CLI: cliName(provider.Type), Model: model.ID, Status: TaskRunning, Started: time.Now(),
+		CLI: cliName(provider.Type), Model: model.ID, Effort: selected.ReasoningEffort, Status: TaskRunning, Started: time.Now(),
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	h.cancels[t.ID] = cancel

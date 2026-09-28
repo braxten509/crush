@@ -198,6 +198,7 @@ type questionService struct {
 	pending            chan []Answer
 	cancelled          chan struct{}
 	pendingID          string
+	pendingReq         Request
 }
 
 // NewService creates a new question service.
@@ -248,6 +249,7 @@ func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error
 	s.pending = make(chan []Answer, 1)
 	s.cancelled = make(chan struct{})
 	s.pendingID = req.ID
+	s.pendingReq = req
 	s.mu.Unlock()
 
 	defer func() {
@@ -255,6 +257,7 @@ func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error
 		s.pending = nil
 		s.cancelled = nil
 		s.pendingID = ""
+		s.pendingReq = Request{}
 		s.mu.Unlock()
 	}()
 
@@ -268,6 +271,16 @@ func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error
 	case answers := <-s.pending:
 		return answers, nil
 	}
+}
+
+// Pending returns the questions that are waiting for answers, if any.
+func (s *questionService) Pending() (Request, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pending == nil {
+		return Request{}, false
+	}
+	return s.pendingReq, true
 }
 
 // Answer resolves the pending question. Returns false if no

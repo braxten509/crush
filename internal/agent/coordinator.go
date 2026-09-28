@@ -262,6 +262,12 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 
 	c.mainAgent = agent
 	c.mainAgentName = config.AgentCoder
+	cliagent.OnUnprompted = func(sessionID string) {
+		ctx := message.WithHiddenUserMessage(withCLIContinue(context.Background()))
+		if _, err := c.Run(ctx, sessionID, "A background task finished."); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("Showing an agent CLI's reply between turns", "session_id", sessionID, "error", err)
+		}
+	}
 	return c, nil
 }
 
@@ -395,6 +401,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 			Channel:           channel,
 			Prompt:            prompt,
 			HiddenUserMessage: message.HiddenUserMessage(ctx),
+			CLIContinue:       ctx.Value(cliContinueKey{}) != nil,
 			Attachments:       attachments,
 			MaxOutputTokens:   maxTokens,
 			ProviderOptions:   mergedOptions,

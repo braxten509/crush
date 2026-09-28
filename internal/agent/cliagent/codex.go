@@ -10,7 +10,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -97,13 +99,143 @@ const (
 	codexTurnID   = "3"
 )
 
-func runCodex(ctx context.Context, m *Model, t Turn) error {
-	// Crush hands every CLI the shared memory; Codex's own stays off.
-	p, err := startProcEnv(m.Dir, t.Env, "codex", "app-server", "--disable", "memories")
-	if err != nil {
-		return err
+// codexKey is what a live Codex process's thread was started with; a turn
+// that needs anything else starts a new one.
+type codexKey struct{ dir, model, tier, approval, sandbox string }
+
+// codexLive is a Codex process kept open between the turns of one Crush
+// session, so commands it moved to the background keep running and the
+// model can check on them, and follow-ups skip its startup.
+type codexLive struct {
+	p       *proc
+	lines   <-chan []byte
+	key     codexKey
+	thread  string
+	idle    chan struct{} // closed to end the between-turns drain
+	drained chan struct{}
+	dead    atomic.Bool
+	timer   *time.Timer
+}
+
+var codexSessions = struct {
+	mu sync.Mutex
+	m  map[string]*codexLive
+}{m: map[string]*codexLive{}}
+
+// takeCodex hands over the session's live process if it can run this turn,
+// closing it otherwise.
+// ponytail: a turn with other settings closes it, stopping any commands it
+// moved to the background; so does [claudeIdle] without a turn.
+func takeCodex(sessionID string, key codexKey, resume string) *codexLive {
+	codexSessions.mu.Lock()
+	l := codexSessions.m[sessionID]
+	delete(codexSessions.m, sessionID)
+	codexSessions.mu.Unlock()
+	if l == nil {
+		return nil
 	}
-	defer p.finish()
+	l.timer.Stop()
+	close(l.idle)
+	<-l.drained
+	if l.dead.Load() || l.key != key || resume == "" || resume != l.thread {
+		l.p.finish()
+		return nil
+	}
+	return l
+}
+
+// keepCodex parks a process after a finished turn until the session's next
+// prompt, or closes it after [claudeIdle].
+func keepCodex(sessionID string, l *codexLive) {
+	l.idle, l.drained = make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(l.drained)
+		for {
+			select {
+			case <-l.idle:
+				return
+			case _, ok := <-l.lines:
+				if !ok {
+					l.dead.Store(true)
+					<-l.idle
+					return
+				}
+			}
+		}
+	}()
+	l.timer = time.AfterFunc(claudeIdle, func() {
+		codexSessions.mu.Lock()
+		if codexSessions.m[sessionID] != l {
+			codexSessions.mu.Unlock()
+			return
+		}
+		delete(codexSessions.m, sessionID)
+		codexSessions.mu.Unlock()
+		close(l.idle)
+		<-l.drained
+		l.p.finish()
+	})
+	codexSessions.mu.Lock()
+	old := codexSessions.m[sessionID]
+	codexSessions.m[sessionID] = l
+	codexSessions.mu.Unlock()
+	if old != nil {
+		old.timer.Stop()
+		close(old.idle)
+		<-old.drained
+		old.p.finish()
+	}
+}
+
+// codexCtrlB is what Codex is told after Ctrl+B interrupted its turn; the
+// interrupt kept it from learning the commands' terminal sessions.
+func codexCtrlB(sessions []string) string {
+	where := "in its terminal session"
+	if len(sessions) > 0 {
+		where = "in terminal session " + strings.Join(sessions, ", ") + " (poll it with write_stdin and empty input)"
+	}
+	return "The user pressed Ctrl+B to move the command you were waiting on to the background. It is still running " + where + ", so don't start it again and don't wait for it now: carry on with anything else, or say in a sentence that it's running in the background and end your turn. Check on it later, e.g. when the user asks."
+}
+
+func runCodex(ctx context.Context, m *Model, t Turn) error {
+	// Crush's permission prompts replace Codex's own; the sandbox still
+	// applies. YOLO mode lifts both, matching Crush's own tools.
+	approval, sandbox := "on-request", "workspace-write"
+	if t.NoTools {
+		approval, sandbox = "never", "read-only"
+	} else if m.autoApproved(t.SessionID) {
+		approval, sandbox = "never", "danger-full-access"
+	}
+	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: approval, sandbox: sandbox}
+	// A sub-agent runs one turn, so its process isn't kept for more.
+	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
+	var live *codexLive
+	if keep {
+		live = takeCodex(t.SessionID, key, t.Resume)
+	}
+	var (
+		p        *proc
+		lines    <-chan []byte
+		threadID string
+	)
+	if live != nil {
+		p, lines, threadID = live.p, live.lines, live.thread
+	} else {
+		// Crush hands every CLI the shared memory; Codex's own stays off.
+		var err error
+		if p, err = startProcEnv(m.Dir, t.Env, "codex", "app-server", "--disable", "memories"); err != nil {
+			return err
+		}
+		lines = p.readLines()
+	}
+	finished := false
+	defer func() {
+		if finished && keep && threadID != "" {
+			keepCodex(t.SessionID, &codexLive{p: p, lines: lines, key: key, thread: threadID})
+		} else {
+			p.finish()
+		}
+	}()
 
 	// Thread and turn IDs, read by the cancel watcher.
 	var active atomic.Pointer[[2]string]
@@ -114,7 +246,6 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			p.closeInput()
 		}
 	})
-	var threadID string
 	defer stop()
 
 	// Messages queued mid-turn go in through turn/steer; Codex reports each
@@ -136,17 +267,53 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	})
 	defer stopSteer()
 
-	// Crush's permission prompts replace Codex's own; the sandbox still
-	// applies. YOLO mode lifts both, matching Crush's own tools.
-	approval, sandbox := "on-request", "workspace-write"
-	if t.NoTools {
-		approval, sandbox = "never", "read-only"
-	} else if m.autoApproved(t.SessionID) {
-		approval, sandbox = "never", "danger-full-access"
+	startTurn := func(input []any) {
+		params := map[string]any{"threadId": threadID, "input": input}
+		if t.Effort != "" {
+			params["effort"] = t.Effort
+		}
+		if m.ServiceTier != "" {
+			params["serviceTier"] = m.ServiceTier
+		}
+		_ = p.send(map[string]any{"id": codexTurnID, "method": "turn/start", "params": params})
 	}
-	_ = p.send(map[string]any{"id": codexInitID, "method": "initialize", "params": map[string]any{
-		"clientInfo": map[string]any{"name": "crush", "title": "Crush", "version": version.Version},
-	}})
+	if live != nil {
+		if err := t.Emit(Event{Type: EventSession, Session: threadID}); err != nil {
+			return err
+		}
+		startTurn(codexInput(t.Prompt, t.Attachments))
+	} else {
+		_ = p.send(map[string]any{"id": codexInitID, "method": "initialize", "params": map[string]any{
+			"clientInfo": map[string]any{"name": "crush", "title": "Crush", "version": version.Version},
+			// For thread/backgroundTerminals/list after Ctrl+B.
+			"capabilities": map[string]any{"experimentalApi": true},
+		}})
+	}
+
+	// Ctrl+B interrupts the turn: Codex keeps its commands running in
+	// their terminal sessions, and a new turn tells the model so.
+	var running atomic.Int32 // commands in progress
+	var ctrlB, movedToBg atomic.Bool
+	interruptForBg := func() {
+		if ids := active.Load(); ids != nil && movedToBg.CompareAndSwap(false, true) {
+			ctrlB.Store(false)
+			_ = p.send(map[string]any{"id": "ctrl-b", "method": "turn/interrupt", "params": map[string]any{"threadId": ids[0], "turnId": ids[1]}})
+		}
+	}
+	if t.SessionID != "" && !t.NoTools {
+		defer onBackground(t.SessionID, func() bool {
+			if active.Load() == nil {
+				return false
+			}
+			ctrlB.Store(true)
+			if running.Load() > 0 {
+				interruptForBg()
+			}
+			return true
+		})()
+	}
+	openCmds := map[string]bool{}
+	backgrounded := map[string]bool{} // their results are already shown
 
 	// Crush tool name and input per item (file changes expand to one call
 	// per file), and command output streamed so far.
@@ -172,9 +339,9 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		return t.Emit(Event{Type: EventToolResult, ID: id, Name: call[0], Output: out, Metadata: meta, IsError: isError})
 	}
 
-	for p.lines.Scan() {
+	for raw := range lines {
 		var msg rpcMessage
-		if json.Unmarshal(p.lines.Bytes(), &msg) != nil {
+		if json.Unmarshal(raw, &msg) != nil {
 			continue
 		}
 		id := strings.Trim(string(msg.ID), `"`)
@@ -187,8 +354,40 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			go codexRequest(ctx, m, t, p, msg, params, changes[params.ItemID])
 			continue
 		}
+		if ctx.Err() != nil {
+			// Interrupted: once the turn winds down the process is kept, as
+			// exiting would stop the commands it runs in the background.
+			stopSteer()
+			if msg.Method == "turn/completed" {
+				finished = true
+				return ctx.Err()
+			}
+			continue
+		}
 
 		// Responses to our requests.
+		if msg.Method == "" && id == "ctrl-b-list" {
+			var res struct {
+				Data []struct {
+					ItemID    string `json:"itemId"`
+					ProcessID string `json:"processId"`
+				} `json:"data"`
+			}
+			_ = json.Unmarshal(msg.Result, &res)
+			var sessions []string
+			var all []string
+			for _, d := range res.Data {
+				all = append(all, d.ProcessID)
+				if backgrounded[d.ItemID] {
+					sessions = append(sessions, d.ProcessID)
+				}
+			}
+			if len(sessions) == 0 {
+				sessions = all
+			}
+			startTurn([]any{map[string]any{"type": "text", "text": codexCtrlB(sessions), "text_elements": []any{}}})
+			continue
+		}
 		if msg.Method == "" {
 			if strings.HasPrefix(id, "steer-") {
 				// A steer that missed the turn is never confirmed, so it
@@ -229,17 +428,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 				if err := t.Emit(Event{Type: EventSession, Session: threadID}); err != nil {
 					return err
 				}
-				params := map[string]any{
-					"threadId": threadID,
-					"input":    codexInput(t.Prompt, t.Attachments),
-				}
-				if t.Effort != "" {
-					params["effort"] = t.Effort
-				}
-				if m.ServiceTier != "" {
-					params["serviceTier"] = m.ServiceTier
-				}
-				_ = p.send(map[string]any{"id": codexTurnID, "method": "turn/start", "params": params})
+				startTurn(codexInput(t.Prompt, t.Attachments))
 			case codexTurnID:
 				var res struct {
 					Turn struct {
@@ -284,8 +473,24 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			_ = json.Unmarshal(msg.Params, &up)
 			setLimits(config.TypeCodexCLI, up.RateLimits.limits())
 		case "turn/completed":
+			if params.Turn.Status == "interrupted" && movedToBg.Load() && ctx.Err() == nil {
+				movedToBg.Store(false)
+				active.Store(nil)
+				for id := range openCmds {
+					backgrounded[id] = true
+					if err := emitResult(id, "Moved to the background (Ctrl+B). Still running.", false); err != nil {
+						return err
+					}
+				}
+				clear(openCmds)
+				running.Store(0)
+				// The follow-up turn starts once the sessions are known.
+				_ = p.send(map[string]any{"id": "ctrl-b-list", "method": "thread/backgroundTerminals/list", "params": map[string]any{"threadId": threadID}})
+				continue
+			}
 			switch params.Turn.Status {
 			case "completed":
+				finished = true
 				return nil
 			case "interrupted":
 				return context.Canceled
@@ -296,6 +501,23 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			return errors.New("Codex: turn " + params.Turn.Status)
 
 		case "item/started":
+			// A command Codex handed back still running (its yield time ran
+			// out) goes on as a background terminal once the model moves on.
+			// Its item stays open until it exits.
+			if item.Type != "userMessage" {
+				for id := range openCmds {
+					delete(openCmds, id)
+					running.Add(-1)
+					backgrounded[id] = true
+					out := ""
+					if b := output[id]; b != nil {
+						out = strings.TrimRight(b.String(), "\n") + "\n\n"
+					}
+					if err := emitResult(id, strings.TrimLeft(out, "\n")+"Still running in the background.", false); err != nil {
+						return err
+					}
+				}
+			}
 			switch item.Type {
 			case "userMessage":
 				var text strings.Builder
@@ -312,7 +534,12 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 					err = t.Emit(Event{Type: EventText, Text: "\n\n"})
 				}
 			case "commandExecution":
+				openCmds[item.ID] = true
+				running.Add(1)
 				err = emitCall(item.ID, tools.BashToolName, marshal(map[string]string{"command": unwrapShell(item.Command), "description": ""}))
+				if ctrlB.Load() {
+					interruptForBg()
+				}
 			case "fileChange":
 				changes[item.ID] = item.Changes
 				for i, c := range item.Changes {
@@ -331,6 +558,13 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			failed := item.Status == "failed" || item.Status == "declined"
 			switch item.Type {
 			case "commandExecution":
+				if _, ok := calls[item.ID]; !ok || backgrounded[item.ID] {
+					break // backgrounded here or in an earlier turn; the model reads its output itself
+				}
+				if openCmds[item.ID] {
+					delete(openCmds, item.ID)
+					running.Add(-1)
+				}
 				out := ""
 				if item.AggregatedOutput != nil {
 					out = *item.AggregatedOutput
@@ -377,6 +611,9 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if live != nil {
+		return errors.New("Codex: the kept process ended")
 	}
 	return exitError("codex", p)
 }

@@ -97,7 +97,7 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 		}
 	})
 	defer stop()
-	_ = p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": t.Prompt}})
+	_ = p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": withImagePaths(t.Prompt, t.Attachments)}})
 
 	announced := map[int]bool{}
 	for p.lines.Scan() {

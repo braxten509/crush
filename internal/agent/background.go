@@ -22,6 +22,7 @@ type Process struct {
 // proc is one process from the process table.
 type proc struct {
 	pid, ppid int
+	sid       int // session ID
 	args      []string
 	started   time.Time
 }
@@ -66,6 +67,11 @@ func isCommandRoot(p proc, procs map[int]proc) bool {
 	if !marked {
 		// The CLI itself is Crush's child; anything else was orphaned.
 		return p.ppid != os.Getpid()
+	}
+	if p.sid == p.pid && parent.ppid == os.Getpid() {
+		// Codex starts commands in sessions of their own, without a shell
+		// in between; the CLIs' helpers don't do that.
+		return true
 	}
 	return isShell(p.args) && !isShell(parent.args)
 }

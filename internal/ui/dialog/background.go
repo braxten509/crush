@@ -19,16 +19,19 @@ import (
 )
 
 const (
-	// BackgroundID is the identifier for the background work dialog.
-	BackgroundID              = "background"
+	// BackgroundID is the identifier for the background processes dialog.
+	BackgroundID = "background"
+	// SubAgentsID is the identifier for the sub-agents dialog.
+	SubAgentsID               = "sub-agents"
 	backgroundDialogMaxWidth  = 100
 	backgroundDialogMinHeight = 6
 	backgroundDialogMaxHeight = 24
 )
 
-// Background lists the running sub-agents and the processes the agents
-// left running, and stops or kills the selected one.
+// Background lists either sub-agents or background processes, and stops or
+// kills the selected one.
 type Background struct {
+	id    string
 	com   *common.Common
 	help  help.Model
 	list  *list.FilterableList
@@ -59,37 +62,67 @@ var (
 	_ ListItem = (*BackgroundItem)(nil)
 )
 
-// NewBackground creates the dialog for the given sub-agents and processes,
-// selecting the item with the given ID if there is one.
-func NewBackground(com *common.Common, tasks []agent.Task, procs []agent.Process, selected string) *Background {
-	b := &Background{com: com}
+// NewBackground creates the background processes dialog.
+func NewBackground(com *common.Common, procs []agent.Process) *Background {
+	b := newBackground(com, BackgroundID)
+	b.SetItems(nil, procs, "")
+	return b
+}
+
+// NewSubAgents creates the sub-agents dialog, selecting the given task.
+func NewSubAgents(com *common.Common, tasks []agent.Task, selected string) *Background {
+	b := newBackground(com, SubAgentsID)
+	b.SetItems(tasks, nil, selected)
+	return b
+}
+
+func newBackground(com *common.Common, id string) *Background {
+	b := &Background{com: com, id: id}
 	b.help = help.New()
 	b.help.Styles = com.Styles.DialogHelpStyles()
 	b.list = list.NewFilterableList()
 	b.list.Focus()
 
-	b.keyMap.Stop = key.NewBinding(key.WithKeys("x", "delete", "backspace"), key.WithHelp("x", "stop/kill"))
+	stopLabel := "kill"
+	if id == SubAgentsID {
+		stopLabel = "stop"
+	}
+	b.keyMap.Stop = key.NewBinding(key.WithKeys("x", "delete", "backspace"), key.WithHelp("x", stopLabel))
 	b.keyMap.Next = key.NewBinding(key.WithKeys("down", "j", "ctrl+n"), key.WithHelp("↓", "next item"))
 	b.keyMap.Previous = key.NewBinding(key.WithKeys("up", "k", "ctrl+p"), key.WithHelp("↑", "previous item"))
 	b.keyMap.UpDown = key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose"))
 	b.keyMap.Close = CloseKey
 
-	for _, t := range tasks {
-		if t.Status == agent.TaskRunning {
-			b.items = append(b.items, &BackgroundItem{Versioned: list.NewVersioned(), task: &t, t: com.Styles})
-		}
-	}
-	for _, p := range procs {
-		b.items = append(b.items, &BackgroundItem{Versioned: list.NewVersioned(), proc: &p, t: com.Styles})
-	}
-	b.list.SetItems(b.items...)
-	sel := slices.IndexFunc(b.items, func(i list.FilterableItem) bool { return i.(*BackgroundItem).ID() == selected })
-	b.list.SetSelected(max(sel, 0))
 	return b
 }
 
+// SetItems refreshes this dialog's category, preserving the selection.
+func (b *Background) SetItems(tasks []agent.Task, procs []agent.Process, selected string) {
+	if item, ok := b.list.SelectedItem().(*BackgroundItem); ok {
+		selected = item.ID()
+	}
+	b.items = nil
+	if b.id == SubAgentsID {
+		for _, t := range tasks {
+			if t.Status == agent.TaskRunning {
+				b.items = append(b.items, &BackgroundItem{Versioned: list.NewVersioned(), task: &t, t: b.com.Styles})
+			}
+		}
+	} else {
+		for _, p := range procs {
+			b.items = append(b.items, &BackgroundItem{Versioned: list.NewVersioned(), proc: &p, t: b.com.Styles})
+		}
+	}
+	sel := b.list.Selected()
+	if i := slices.IndexFunc(b.items, func(i list.FilterableItem) bool { return i.(*BackgroundItem).ID() == selected }); i >= 0 {
+		sel = i
+	}
+	b.list.SetItems(b.items...)
+	b.list.SetSelected(max(min(sel, len(b.items)-1), 0))
+}
+
 // ID implements Dialog.
-func (b *Background) ID() string { return BackgroundID }
+func (b *Background) ID() string { return b.id }
 
 // HandleMsg implements [Dialog].
 func (b *Background) HandleMsg(msg tea.Msg) Action {
@@ -157,9 +190,14 @@ func (b *Background) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	listHeight, listTotalHeight, _ := sizeDialogList(t, b.list, innerWidth, height)
 
 	rc := NewRenderContext(t, width)
-	rc.Title = "Background"
+	rc.Title = "Background Processes"
+	empty := "No background processes are running."
+	if b.id == SubAgentsID {
+		rc.Title = "Sub-agents"
+		empty = "No sub-agents are running."
+	}
 	if len(b.items) == 0 {
-		rc.AddPart(t.Dialog.NormalItem.Render("Nothing is running in the background."))
+		rc.AddPart(t.Dialog.NormalItem.Render(empty))
 	} else {
 		b.list.ScrollToSelected()
 		listView := t.Dialog.List.Height(b.list.Height()).Render(b.list.Render())
@@ -203,7 +241,11 @@ func (i *BackgroundItem) title() string {
 
 func (i *BackgroundItem) info() string {
 	if i.task != nil {
-		return fmt.Sprintf("sub-agent · %s/%s · %s", i.task.CLI, i.task.Model, since(i.task.Started))
+		model := i.task.Model
+		if i.task.Effort != "" {
+			model += "/" + i.task.Effort
+		}
+		return fmt.Sprintf("%s/%s · %s", i.task.CLI, model, since(i.task.Started))
 	}
 	return fmt.Sprintf("pid %d · %s", i.proc.PID, since(i.proc.Started))
 }

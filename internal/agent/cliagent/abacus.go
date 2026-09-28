@@ -58,7 +58,19 @@ func runAbacus(ctx context.Context, m *Model, t Turn) error {
 		_ = p.send(map[string]any{"type": "control_request", "request_id": "interrupt", "request": map[string]any{"subtype": "interrupt"}})
 	})
 	defer stop()
-	_ = p.send(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": t.Prompt}})
+	_ = p.send(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": withImagePaths(t.Prompt, t.Attachments)}})
+
+	// Abacus queues messages written mid-turn and hands them to the model
+	// at its next step, reporting user_message_dequeued. Unconfirmed ones
+	// are run by Crush after the turn.
+	var sent steered
+	stopSteer := pollSteer(t, func() bool { return true }, func(text string) {
+		sent.add(text)
+		if p.send(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}}) != nil {
+			sent.take(text)
+		}
+	})
+	defer stopSteer()
 
 	open := map[string][2]string{} // running calls: Crush name, input
 	var order []string
@@ -95,6 +107,7 @@ func runAbacus(ctx context.Context, m *Model, t Turn) error {
 		case "control_request":
 			go abacusControl(ctx, m, t, p, line)
 		case "result":
+			stopSteer()
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -166,6 +179,12 @@ func runAbacus(ctx context.Context, m *Model, t Turn) error {
 			case "file_write_done":
 				if err := result(e.ToolCallID, ""); err != nil {
 					return err
+				}
+			case "user_message_dequeued":
+				for _, text := range sent.takeIn(e.Content) {
+					if err := t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
+						return err
+					}
 				}
 			case "error":
 				lastErr = e.Error.Message

@@ -157,7 +157,13 @@ func (m *UI) handleRemoteAction(a *remote.Action) tea.Cmd {
 }
 
 func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
-	if !m.hasSession() || a.SessionID != m.session.ID {
+	// No session is the window's new chat: the phone's first message starts
+	// it, as typing it here would.
+	var current string
+	if m.hasSession() {
+		current = m.session.ID
+	}
+	if a.SessionID != current {
 		return nil, errors.New("the Crush window switched to another chat")
 	}
 	switch a.Kind {
@@ -172,13 +178,15 @@ func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
 		return m.interruptAgent(), nil
 	case remote.ActBackground:
 		g := m.chat.BackgroundableGroup()
-		if g == nil || !m.com.Workspace.AgentBackground(m.session.ID) {
+		if g == nil || current == "" || !m.com.Workspace.AgentBackground(current) {
 			return nil, errors.New("no running command can move to the background")
 		}
 		g.Backgrounded()
 		return nil, nil
 	case remote.ActClearQueue:
-		m.clearPromptQueue()
+		if current != "" {
+			m.clearPromptQueue()
+		}
 		return nil, nil
 	case remote.ActYolo:
 		if m.mode == uiInputModePlan && (m.isAgentBusy() || m.modeSwitching) {
@@ -206,7 +214,10 @@ func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
 	case remote.ActMode:
 		return m.toggleInputMode(), nil
 	case remote.ActSummarize:
-		return m.summarizeSession(m.session.ID), nil
+		if current == "" {
+			return nil, errors.New("a new chat has nothing to summarize yet")
+		}
+		return m.summarizeSession(current), nil
 	}
 	return nil, errors.New("unknown request " + strconv.Itoa(int(a.Kind)))
 }

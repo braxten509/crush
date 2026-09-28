@@ -304,8 +304,9 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 
 // request is the body every phone action carries.
 type request struct {
-	// Session is the chat the phone is looking at. Actions for a chat the
-	// window no longer shows are refused.
+	// Session is the chat the phone is looking at; empty is the window's new
+	// chat, before its first message. Actions for a chat the window no longer
+	// shows are refused.
 	Session     string            `json:"session"`
 	Text        string            `json:"text,omitempty"`
 	Attachments []upload          `json:"attachments,omitempty"`
@@ -335,12 +336,7 @@ func (s *Server) readRequest(w http.ResponseWriter, r *http.Request) (request, b
 		writeError(w, http.StatusBadRequest, fmt.Errorf("bad request: %w", err))
 		return req, false
 	}
-	current := s.hub.currentSession()
-	if current == "" {
-		writeError(w, http.StatusConflict, errors.New("no chat is open in this Crush window"))
-		return req, false
-	}
-	if req.Session != current {
+	if req.Session != s.hub.currentSession() {
 		writeError(w, http.StatusConflict, errors.New("the Crush window switched to another chat"))
 		return req, false
 	}
@@ -543,6 +539,10 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		writeError(w, http.StatusBadRequest, errors.New("the name is empty"))
+		return
+	}
+	if req.Session == "" {
+		writeError(w, http.StatusConflict, errors.New("a new chat can be renamed after its first message"))
 		return
 	}
 	sess, err := s.src.GetSession(r.Context(), req.Session)

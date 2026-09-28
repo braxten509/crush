@@ -207,6 +207,31 @@ func TestActionsGoThroughTheTUI(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, code)
 }
 
+func TestTheNewChatTakesTheFirstMessage(t *testing.T) {
+	t.Parallel()
+
+	// The window shows no chat yet: its new chat, before the first message.
+	env := newTestEnv(t, phoneAddr)
+	got := make(chan *Action, 1)
+	go func() {
+		for a := range env.srv.Actions() {
+			got <- a
+			a.Done(nil)
+		}
+	}()
+
+	code, _ := env.post("/v1/send", map[string]any{"session": "", "text": "hello"})
+	require.Equal(t, http.StatusOK, code)
+	a := <-got
+	require.Equal(t, ActSend, a.Kind)
+	require.Empty(t, a.SessionID)
+
+	// It has no name to change until that message starts it.
+	code, body := env.post("/v1/rename", map[string]any{"session": "", "title": "Plans"})
+	require.Equal(t, http.StatusConflict, code)
+	require.Contains(t, body, "first message")
+}
+
 func TestPromptsAreAnsweredDirectly(t *testing.T) {
 	t.Parallel()
 

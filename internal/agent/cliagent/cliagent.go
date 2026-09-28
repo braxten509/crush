@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -144,6 +145,8 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 		if t.Effort != "" {
 			args = append(args, "--reasoning-effort", t.Effort)
 		}
+		// Crush hands every CLI the shared memory; Grok's own stays off.
+		t.Env = append(slices.Clone(t.Env), "GROK_MEMORY=0")
 		return runACP(ctx, m, t, "grok", append(args, "stdio"), false)
 	case config.TypeOpenCodeCLI:
 		return runACP(ctx, m, t, "opencode", []string{"acp"}, true)

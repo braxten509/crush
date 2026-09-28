@@ -40,6 +40,14 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 				text = a.tasks.instructions() + "\n\n" + text
 			}
 		}
+		// Claude Code loads the shared memory itself.
+		var memory string
+		if m.Kind != config.TypeClaudeCode {
+			memory = memoryInstructions(a.isSubAgent)
+		}
+		if memory != "" && resume == "" {
+			text = memory + "\n\n" + text
+		}
 
 		s := &cliSteps{ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID}
 		if err := s.begin(); err != nil {
@@ -57,6 +65,9 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			turn.Prompt, turn.Resume = cliHandoff(history, cliagent.Link{}, prompt)
 			if a.tasks != nil && instructions == "" {
 				turn.Prompt = a.tasks.instructions() + "\n\n" + turn.Prompt
+			}
+			if memory != "" {
+				turn.Prompt = memory + "\n\n" + turn.Prompt
 			}
 			err = m.Run(ctx, turn)
 		}

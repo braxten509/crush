@@ -98,7 +98,8 @@ const (
 )
 
 func runCodex(ctx context.Context, m *Model, t Turn) error {
-	p, err := startProcEnv(m.Dir, t.Env, "codex", "app-server")
+	// Crush hands every CLI the shared memory; Codex's own stays off.
+	p, err := startProcEnv(m.Dir, t.Env, "codex", "app-server", "--disable", "memories")
 	if err != nil {
 		return err
 	}

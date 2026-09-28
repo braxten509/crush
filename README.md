@@ -326,6 +326,23 @@ shell, and any `$(...)` in `crush.json` runs at load time. Don't launch Crush
 in a directory whose config you haven't reviewed, and don't randomly `source`
 files from the internet into your config.
 
+### Codex FAST mode
+
+With a Codex model selected, open commands with `ctrl+p` and choose
+**Enable FAST Mode** (search `fast`). **Disable FAST Mode** switches back to
+standard speed. The selection is saved, applies to new and resumed chats, and
+appears as **FAST** beside the reasoning level. Reasoning effort stays unchanged.
+
+You can also select the tier in `crushrc`:
+
+```bash
+model large codex-cli/gpt-6-astra --reasoning-effort max --service-tier fast
+```
+
+In JSON, set `models.large.service_tier` to `"fast"` or `"default"`. Leaving it
+unset inherits Codex's own setting. FAST uses more of your Codex usage allowance;
+availability depends on the model and account.
+
 ### Environment Variables
 
 The top-level `env` field sets environment variables at startup, before

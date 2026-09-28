@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/chat"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -119,6 +120,12 @@ func queueList(queueItems []string, t *styles.Styles) string {
 	var lines []string
 	for _, item := range queueItems {
 		text := item
+		if name, status, ok := agent.ParseTaskNotification(item); ok {
+			text = "Result of task " + name
+			if name == agent.AskName && (status == agent.AskAnswered || status == agent.AskCancelled) {
+				text = "Your answers to the questions"
+			}
+		}
 		if ansi.StringWidth(text) > maxQueueDisplayLength {
 			text = ansi.Truncate(text, maxQueueDisplayLength-1, "…")
 		}

@@ -804,6 +804,14 @@
           ],
           "description": "Reasoning effort level for OpenAI models that support it"
         },
+        "service_tier": {
+          "type": "string",
+          "enum": [
+            "fast",
+            "default"
+          ],
+          "description": "Codex service tier; omitted inherits the CLI setting"
+        },
         "think": {
           "type": "boolean",
           "description": "Enable thinking mode for Anthropic models that support reasoning"

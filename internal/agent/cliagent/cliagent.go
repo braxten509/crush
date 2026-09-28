@@ -25,6 +25,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/history"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 )
 
@@ -46,6 +47,10 @@ const (
 	EventUserMessage                  // Text (a steered message the CLI took in)
 )
 
+// TextBreak is sent as text when a new text block starts. It separates two
+// of the model's messages that land in one step and is dropped otherwise.
+const TextBreak = "\n\n"
+
 // Event is one normalized piece of a CLI turn. Tool names and inputs are
 // already translated to Crush's own tools where one matches, so the UI can
 // use its native renderers.
@@ -64,16 +69,22 @@ type Event struct {
 
 // Turn is one user prompt sent to a CLI.
 type Turn struct {
-	SessionID string // Crush session, used for permission prompts
-	Prompt    string
-	Resume    string // native session to continue; empty starts a new one
-	Effort    string
+	SessionID   string // Crush session, used for permission prompts
+	Prompt      string
+	Resume      string // native session to continue; empty starts a new one
+	Effort      string
+	Attachments []message.Attachment
 	// NoTools runs a one-shot, text-only request that is not saved as a
 	// native session (titles, summaries).
 	NoTools bool
 	// System replaces Claude's own system prompt on NoTools requests.
 	System string
-	Emit   func(Event) error
+	// Instructions are added to Claude's system prompt. Other CLIs have no
+	// such option, so Crush puts them in the prompt instead.
+	Instructions string
+	// Env is added to the CLI process environment.
+	Env  []string
+	Emit func(Event) error
 	// Steer returns messages the user queued while the turn runs, or "".
 	// Drivers whose CLI can take input mid-turn poll it, send what it
 	// returns and emit EventUserMessage with the same text once the CLI
@@ -84,32 +95,41 @@ type Turn struct {
 // Model is a CLI-backed model. It implements [fantasy.LanguageModel] for
 // one-shot text requests; full agent turns go through [Model.Run].
 type Model struct {
-	Kind  catwalk.Type
-	ID    string
-	Dir   string
-	Perms permission.Service
-	Files history.Service
-	Links *Links
+	Kind        catwalk.Type
+	ID          string
+	ServiceTier string
+	Dir         string
+	Perms       permission.Service
+	Files       history.Service
+	Links       *Links
+	// Guarded runs a background sub-agent: nobody is there to approve its
+	// tool calls, so Crush answers them itself, granting whatever its own
+	// YOLO mode allows. The CLI's bypass modes stay off so every call
+	// still comes to Crush.
+	Guarded bool
+	// Env is added to the CLI process environment on every turn.
+	Env []string
 }
 
 // NewProvider returns a [fantasy.Provider] whose models run through the
 // agent CLI of the given kind.
-func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service) fantasy.Provider {
-	return &provider{kind: kind, dir: dir, perms: perms, files: files, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
+func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string) fantasy.Provider {
+	return &provider{kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
 }
 
 type provider struct {
-	kind  catwalk.Type
-	dir   string
-	perms permission.Service
-	files history.Service
-	links *Links
+	kind        catwalk.Type
+	serviceTier string
+	dir         string
+	perms       permission.Service
+	files       history.Service
+	links       *Links
 }
 
 func (p *provider) Name() string { return string(p.kind) }
 
 func (p *provider) LanguageModel(_ context.Context, modelID string) (fantasy.LanguageModel, error) {
-	return &Model{Kind: p.kind, ID: modelID, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
+	return &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
 }
 
 // Run executes one turn, emitting events until the CLI finishes it.
@@ -237,6 +257,9 @@ type Link struct {
 	// Through is the last Crush message the native session has seen.
 	// Anything after it happened elsewhere and is handed over on resume.
 	Through string `json:"through"`
+	// Tasks is set once the native session was told how to spawn
+	// sub-agents.
+	Tasks bool `json:"tasks,omitempty"`
 }
 
 // Links persists [Link]s per Crush session and CLI.

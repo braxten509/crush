@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -86,6 +87,9 @@ func stripLineNumbers(s string) string {
 // autoApproved reports whether Crush would grant every tool call in the
 // session anyway, so the CLI can skip asking.
 func (m *Model) autoApproved(sessionID string) bool {
+	if m.Guarded {
+		return false
+	}
 	a, ok := m.Perms.(interface{ AutoApproved(string) bool })
 	return ok && sessionID != "" && a.AutoApproved(sessionID)
 }
@@ -94,12 +98,28 @@ func (m *Model) autoApproved(sessionID string) bool {
 // run a tool. The request mirrors what Crush's own tool would ask, so
 // "allow for session" and YOLO mode behave the same.
 func (m *Model) approve(ctx context.Context, sessionID, callID, name, input string) bool {
-	if m.Perms == nil || sessionID == "" {
-		return false
-	}
 	var in map[string]any
 	_ = json.Unmarshal([]byte(input), &in)
 	str := func(k string) string { s, _ := in[k].(string); return s }
+	if sleepRefused(name, input) {
+		slog.Info("Refused a foreground sleep", "command", str("command"))
+		return false
+	}
+	if m.Guarded {
+		if name == tools.BashToolName && tools.CommandBlocked(str("command")) {
+			slog.Info("Blocked a sub-agent command", "command", str("command"))
+			return false
+		}
+		return true
+	}
+	if m.Perms == nil || sessionID == "" {
+		return false
+	}
+	if name == tools.BashToolName && IsSpawnCommand(str("command")) {
+		// Starting a sub-agent is Crush's own feature; asking every time
+		// defeats the point of running them in the background.
+		return true
+	}
 
 	req := permission.CreatePermissionRequest{
 		SessionID:  sessionID,
@@ -131,6 +151,88 @@ func (m *Model) approve(ctx context.Context, sessionID, callID, name, input stri
 	}
 	ok, err := m.Perms.Request(ctx, req)
 	return err == nil && ok
+}
+
+// sleepRefused reports whether a tool call is a shell command that starts
+// with a long foreground sleep, which Crush refuses as its own shell does.
+func sleepRefused(name, input string) bool {
+	var in struct{ Command string }
+	return name == tools.BashToolName && json.Unmarshal([]byte(input), &in) == nil && tools.LeadingSleep(in.Command)
+}
+
+// IsSpawnCommand reports whether a shell command only runs `crush spawn` or
+// `crush ask`:
+// one or more lines of it, each optionally fed by a quoted heredoc, with
+// nothing that could run anything else.
+func IsSpawnCommand(cmd string) bool {
+	lines := strings.Split(strings.TrimSpace(cmd), "\n")
+	for len(lines) > 0 {
+		line := strings.TrimSpace(lines[0])
+		lines = lines[1:]
+		if line == "" {
+			continue
+		}
+		delim, ok := spawnLine(line)
+		if !ok {
+			return false
+		}
+		if delim == "" {
+			continue
+		}
+		end := slices.Index(lines, delim)
+		if end < 0 {
+			return false
+		}
+		lines = lines[end+1:]
+	}
+	return true
+}
+
+// spawnLine checks one `crush spawn` or `crush ask` line and returns its
+// heredoc delimiter, if it has one.
+func spawnLine(line string) (delim string, ok bool) {
+	rest, ok := "", false
+	bin, _ := os.Executable()
+	for _, prefix := range []string{"crush spawn", "crush ask", bin + " spawn", bin + " ask"} {
+		if rest, ok = strings.CutPrefix(line, prefix); ok {
+			break
+		}
+	}
+	if !ok || (rest != "" && rest[0] != ' ') {
+		return "", false
+	}
+	if i := strings.Index(rest, "<<"); i >= 0 {
+		d := strings.TrimSpace(rest[i+2:])
+		// Only a quoted delimiter keeps the shell from expanding the body.
+		if len(d) < 3 || (d[0] != '\'' && d[0] != '"') || d[len(d)-1] != d[0] {
+			return "", false
+		}
+		delim, rest = d[1:len(d)-1], rest[:i]
+		if strings.ContainsAny(delim, "'\" \t") {
+			return "", false
+		}
+	}
+	var quote byte
+	for i := 0; i < len(rest); i++ {
+		c := rest[i]
+		switch {
+		case quote == '\'':
+			if c == '\'' {
+				quote = 0
+			}
+		case quote == '"':
+			if c == '"' {
+				quote = 0
+			} else if c == '$' || c == '`' || c == '\\' {
+				return "", false
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case strings.IndexByte(";&|`$<>(){}\\*?[#~", c) >= 0:
+			return "", false
+		}
+	}
+	return delim, quote == 0
 }
 
 // EditedFile returns the file a Crush edit or write call changes, if any.

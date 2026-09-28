@@ -210,6 +210,7 @@ type sessionAgent struct {
 	tools              *csync.Slice[fantasy.AgentTool]
 
 	isSubAgent bool
+	tasks      *taskHub
 	sessions   session.Service
 	messages   message.Service
 	// cfg backs channel reply routing (config lookup + MCP tool
@@ -223,6 +224,9 @@ type sessionAgent struct {
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, *activeCancel]
+	// steering holds the running agent CLI turn per session, whose steered
+	// prompts still count as queued until the CLI takes them in.
+	steering *csync.Map[string, *cliSteps]
 
 	// dispatchMu holds a per-session mutex that serializes the
 	// accepted -> (cancel-on-entry | queued | active) transition in
@@ -260,18 +264,16 @@ type sessionAgent struct {
 	// across the agent. Cancel uses its current value as the per-session
 	// high-water mark.
 	acceptSeqGen uint64
-	// interrupted marks sessions whose active run was stopped by
-	// Interrupt, so the run hands off to its queued prompts on exit
-	// instead of leaving them waiting.
-	interrupted *csync.Map[string, bool]
 }
 
 type SessionAgentOptions struct {
-	LargeModel           Model
-	SmallModel           Model
-	SystemPromptPrefix   string
-	SystemPrompt         string
-	IsSubAgent           bool
+	LargeModel         Model
+	SmallModel         Model
+	SystemPromptPrefix string
+	SystemPrompt       string
+	IsSubAgent         bool
+	// Tasks lets the session's agent CLI spawn background sub-agents.
+	Tasks                *taskHub
 	DisableAutoSummarize bool
 	IsYolo               bool
 	Sessions             session.Service
@@ -291,6 +293,7 @@ func NewSessionAgent(
 		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
 		systemPrompt:         csync.NewValue(opts.SystemPrompt),
 		isSubAgent:           opts.IsSubAgent,
+		tasks:                opts.Tasks,
 		sessions:             opts.Sessions,
 		messages:             opts.Messages,
 		cfg:                  opts.Cfg,
@@ -301,10 +304,10 @@ func NewSessionAgent(
 		runComplete:          opts.RunComplete,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, *activeCancel](),
+		steering:             csync.NewMap[string, *cliSteps](),
 		dispatchMu:           csync.NewMap[string, *sync.Mutex](),
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
-		interrupted:          csync.NewMap[string, bool](),
 	}
 }
 
@@ -520,6 +523,9 @@ func (a *sessionAgent) publishCanceledQueueDrops(drops []SessionAgentCall) {
 func (a *sessionAgent) clearQueueAndNotify(sessionID string) {
 	queued, ok := a.messageQueue.Get(sessionID)
 	a.messageQueue.Del(sessionID)
+	if s, _ := a.steering.Get(sessionID); s != nil {
+		s.hideSteered()
+	}
 	if !ok {
 		return
 	}
@@ -764,7 +770,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// can take tens of seconds. Blocking Run on it delays the
 	// response to the caller. Use a detached context so the title
 	// goroutine survives Run's cancel.
-	if !hasUserTextMessage(msgs) {
+	// Sub-agent sessions are titled by whoever started them.
+	if !hasUserTextMessage(msgs) && !a.isSubAgent {
 		titleCtx := context.WithoutCancel(ctx)
 		go a.GenerateTitle(titleCtx, call.SessionID, call.Prompt)
 	}
@@ -838,14 +845,6 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// subscriber channel can't silently drop it and hang
 		// non-interactive clients waiting on RunComplete.
 		a.publishRunComplete(ctx, call, complete)
-	}()
-	// An interrupted run (canceled or not) hands off to the queue on exit.
-	// This runs before the RunComplete publish above, which still reports
-	// this turn as canceled.
-	defer func() {
-		if interrupted, _ := a.interrupted.Take(call.SessionID); interrupted {
-			a.runNextQueued(ctx, call.SessionID, ac)
-		}
 	}()
 
 	history, files := a.preparePrompt(msgs, largeModel.CatwalkCfg.SupportsImages, call.Attachments...)
@@ -2149,50 +2148,44 @@ func (a *sessionAgent) Cancel(sessionID string) {
 		a.cancelMark.Set(sessionID, max(existing, mark))
 	}
 
-	a.interrupted.Del(sessionID)
 	if a.QueuedPrompts(sessionID) > 0 {
 		slog.Debug("Clearing queued prompts", "session_id", sessionID)
 		a.clearQueueAndNotify(sessionID)
 	}
 }
 
-// Interrupt stops the active run but keeps queued prompts, which then run
-// next. With nothing queued it is a plain Cancel.
+// Interrupt is Esc then Enter: it cancels the active run, then sends the
+// queued prompts as the next turn.
 func (a *sessionAgent) Interrupt(sessionID string) {
-	if a.QueuedPrompts(sessionID) == 0 {
-		a.Cancel(sessionID)
+	// Taken off the queue first, so Cancel doesn't report them dropped.
+	var calls []SessionAgentCall
+	if s, _ := a.steering.Get(sessionID); s != nil {
+		calls = s.queuedCalls()
+		s.hideSteered()
+	}
+	queued, _ := a.messageQueue.Take(sessionID)
+	calls = append(calls, queued...)
+	a.Cancel(sessionID)
+	if len(calls) == 0 {
 		return
 	}
-	mu := a.sessionMu(sessionID)
-	mu.Lock()
-	defer mu.Unlock()
-	ac, ok := a.activeRequests.Get(sessionID)
-	if !ok || ac == nil {
-		return
+	// ponytail: merged into one prompt reported under the first RunID; the
+	// TUI doesn't set RunIDs on queued prompts.
+	next := calls[0]
+	for _, c := range calls[1:] {
+		next.Prompt += "\n\n" + c.Prompt
+		next.Attachments = append(next.Attachments, c.Attachments...)
 	}
-	a.interrupted.Set(sessionID, true)
-	ac.cancel()
-}
-
-// runNextQueued releases the finished run's active entry and starts the
-// first queued prompt in the background; its own handoff drains the rest.
-func (a *sessionAgent) runNextQueued(ctx context.Context, sessionID string, ac *activeCancel) {
-	mu := a.sessionMu(sessionID)
-	mu.Lock()
-	a.activeRequests.CompareAndDelete(sessionID, ac)
-	queued, _ := a.messageQueue.Get(sessionID)
-	if len(queued) == 0 || a.IsSessionBusy(sessionID) {
-		mu.Unlock()
-		return
-	}
-	next := queued[0]
-	a.messageQueue.Set(sessionID, queued[1:])
-	// Same accept reservation as the normal handoff, so a cancel landing
-	// before the next run registers still stops it.
-	next.Accepted = a.BeginAccepted(sessionID)
-	mu.Unlock()
 	go func() {
-		if _, err := a.Run(context.WithoutCancel(ctx), next); err != nil && !errors.Is(err, context.Canceled) {
+		// Wait for the canceled run to wind down, as a user would.
+		for deadline := time.Now().Add(time.Minute); a.IsSessionBusy(sessionID); time.Sleep(50 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				slog.Error("Interrupted run never ended; queued prompt not sent", "session_id", sessionID)
+				return
+			}
+		}
+		next.acceptSeq, next.Accepted = 0, a.BeginAccepted(sessionID)
+		if _, err := a.Run(context.Background(), next); err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("Queued prompt after interrupt failed", "session_id", sessionID, "error", err)
 		}
 	}()
@@ -2241,21 +2234,19 @@ func (a *sessionAgent) IsSessionBusy(sessionID string) bool {
 }
 
 func (a *sessionAgent) QueuedPrompts(sessionID string) int {
-	l, ok := a.messageQueue.Get(sessionID)
-	if !ok {
-		return 0
-	}
-	return len(l)
+	return len(a.QueuedPromptsList(sessionID))
 }
 
+// QueuedPromptsList lists the queued prompts, led by any an agent CLI has
+// been handed but not taken in yet, so they stay visible until they land.
 func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
-	l, ok := a.messageQueue.Get(sessionID)
-	if !ok {
-		return nil
+	var prompts []string
+	if s, _ := a.steering.Get(sessionID); s != nil {
+		prompts = s.pendingSteered()
 	}
-	prompts := make([]string, len(l))
-	for i, call := range l {
-		prompts[i] = call.Prompt
+	l, _ := a.messageQueue.Get(sessionID)
+	for _, call := range l {
+		prompts = append(prompts, call.Prompt)
 	}
 	return prompts
 }

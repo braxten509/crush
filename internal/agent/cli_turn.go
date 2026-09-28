@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -25,19 +27,37 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		link := m.Links.Get(call.SessionID, m.Kind)
 		prompt := message.PromptWithTextAttachments(call.Prompt, call.Attachments)
 		text, resume := cliHandoff(history, link, prompt)
+		env := slices.Clone(m.Env)
+		var instructions string
+		if a.tasks != nil {
+			env = append(env, a.tasks.env(call.SessionID)...)
+			switch {
+			case m.Kind == config.TypeClaudeCode:
+				// Claude takes them as part of its system prompt, which
+				// survives its own compaction.
+				instructions = a.tasks.instructions()
+			case resume == "" || !link.Tasks:
+				text = a.tasks.instructions() + "\n\n" + text
+			}
+		}
 
 		s := &cliSteps{ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID}
 		if err := s.begin(); err != nil {
 			return nil, err
 		}
+		a.steering.Set(call.SessionID, s)
+		defer a.steering.CompareAndDelete(call.SessionID, s)
 		defer s.returnUnsteered()
-		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer}
+		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, Env: env, Instructions: instructions}
 		err := m.Run(ctx, turn)
 		if errors.Is(err, cliagent.ErrResume) {
 			// The native session is gone; hand the whole conversation to a
 			// fresh one instead.
 			slog.Warn("Agent CLI could not resume its session; starting fresh", "cli", m.Kind, "session", resume)
 			turn.Prompt, turn.Resume = cliHandoff(history, cliagent.Link{}, prompt)
+			if a.tasks != nil && instructions == "" {
+				turn.Prompt = a.tasks.instructions() + "\n\n" + turn.Prompt
+			}
 			err = m.Run(ctx, turn)
 		}
 
@@ -45,7 +65,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		// to here; the next turn resumes it and only hands over what other
 		// agents add in between.
 		if s.native != "" {
-			a.saveCLILink(context.WithoutCancel(ctx), m, call.SessionID, s.native)
+			a.saveCLILink(context.WithoutCancel(ctx), m, call.SessionID, s.native, a.tasks != nil)
 		}
 		if err != nil {
 			return nil, err
@@ -103,12 +123,12 @@ func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sess
 	return &fantasy.AgentResult{TotalUsage: total, Response: fantasy.Response{Usage: last}}, nil
 }
 
-func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessionID, native string) {
+func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessionID, native string, tasks bool) {
 	msgs, err := a.messages.List(ctx, sessionID)
 	if err != nil || len(msgs) == 0 {
 		return
 	}
-	link := cliagent.Link{Native: native, Through: msgs[len(msgs)-1].ID}
+	link := cliagent.Link{Native: native, Through: msgs[len(msgs)-1].ID, Tasks: tasks}
 	if err := m.Links.Set(sessionID, m.Kind, link); err != nil {
 		slog.Error("Failed to save agent CLI session link", "error", err)
 	}
@@ -143,15 +163,64 @@ type cliSteps struct {
 	steered []cliSteered
 }
 
+// queuedCalls lists the prompts handed to the CLI but not taken in yet.
+func (s *cliSteps) queuedCalls() []SessionAgentCall {
+	s.steerMu.Lock()
+	defer s.steerMu.Unlock()
+	var calls []SessionAgentCall
+	for _, st := range s.steered {
+		if !st.hidden {
+			calls = append(calls, st.calls...)
+		}
+	}
+	return calls
+}
+
 type cliSteered struct {
 	text  string
 	calls []SessionAgentCall
+	// hidden drops it from the queue display once the queue is cleared;
+	// it can't be unsent, so it still shows in chat if the CLI takes it.
+	hidden bool
+}
+
+// pendingSteered lists the prompts handed to the CLI but not taken in yet.
+func (s *cliSteps) pendingSteered() []string {
+	s.steerMu.Lock()
+	defer s.steerMu.Unlock()
+	var prompts []string
+	for _, st := range s.steered {
+		if st.hidden {
+			continue
+		}
+		for _, q := range st.calls {
+			prompts = append(prompts, q.Prompt)
+		}
+	}
+	return prompts
+}
+
+func (s *cliSteps) hideSteered() {
+	s.steerMu.Lock()
+	defer s.steerMu.Unlock()
+	for i := range s.steered {
+		s.steered[i].hidden = true
+	}
 }
 
 // steer takes the queued prompts for the CLI to fold into the running turn.
 func (s *cliSteps) steer() string {
 	fold, canceled := s.a.drainQueueForStep(s.sessionID)
 	s.a.publishCanceledQueueDrops(canceled)
+	// Steering is text-only. Leave images and subsequent prompts queued
+	// for the next turn so their attachment bytes and ordering are kept.
+	for i, q := range fold {
+		if slices.ContainsFunc(q.Attachments, message.Attachment.IsImage) {
+			s.a.requeueFront(s.sessionID, fold[i:])
+			fold = fold[:i]
+			break
+		}
+	}
 	if len(fold) == 0 {
 		return ""
 	}
@@ -186,14 +255,13 @@ func (s *cliSteps) returnUnsteered() {
 	s.steerMu.Lock()
 	var calls []SessionAgentCall
 	for _, st := range s.steered {
-		calls = append(calls, st.calls...)
+		if !st.hidden {
+			calls = append(calls, st.calls...)
+		}
 	}
 	s.steered = nil
 	s.steerMu.Unlock()
-	if len(calls) == 0 {
-		return
-	}
-	if interrupted, _ := s.a.interrupted.Get(s.sessionID); s.ctx.Err() != nil && !interrupted {
+	if len(calls) == 0 || s.ctx.Err() != nil {
 		return
 	}
 	s.a.requeueFront(s.sessionID, calls)
@@ -275,6 +343,9 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		}
 		return s.sc.OnReasoningDelta("0", e.Text)
 	case cliagent.EventText:
+		if e.Text == cliagent.TextBreak && !s.hasText() {
+			return nil
+		}
 		if err := s.talk(); err != nil {
 			return err
 		}
@@ -350,6 +421,15 @@ func (s *cliSteps) result() *fantasy.AgentResult {
 		}
 	}
 	return res
+}
+
+// hasText reports whether the open step ends in text.
+func (s *cliSteps) hasText() bool {
+	if !s.open || s.tools > 0 || len(s.content) == 0 {
+		return false
+	}
+	_, ok := s.content[len(s.content)-1].(fantasy.TextContent)
+	return ok
 }
 
 func appendText(content fantasy.ResponseContent, delta string) fantasy.ResponseContent {

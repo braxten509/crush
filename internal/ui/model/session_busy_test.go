@@ -403,15 +403,10 @@ func TestSendMessageSetsOptimisticBusy(t *testing.T) {
 	require.True(t, m.isAgentBusy(),
 		"sendMessage must optimistically mark the agent busy")
 
-	// esc right after enter: isAgentBusy gates cancelAgent, first press
-	// arms the double-press cancel.
+	// esc right after enter: isAgentBusy gates cancelAgent, one press cancels.
 	require.Zero(t, m.promptQueue)
 	m.cancelAgent()
-	require.True(t, m.isCanceling, "first esc press must arm cancellation")
-
-	// Second press must actually cancel.
-	m.cancelAgent()
-	require.Equal(t, 1, ws.cancelCalls, "second esc press must cancel the agent")
+	require.Equal(t, 1, ws.cancelCalls, "one esc press must cancel the agent")
 }
 
 // TestCancelAgentClearsQueueFromCachedCount: the queue-clear decision must
@@ -434,7 +429,7 @@ func TestCancelAgentClearsQueueFromCachedCount(t *testing.T) {
 	require.Zero(t, ws.queueListCalls, "the decision must use the cached count, not a probe")
 	require.Zero(t, m.promptQueue, "the cached count must be zeroed immediately")
 	require.Empty(t, m.promptQueueItems)
-	require.False(t, m.isCanceling, "clearing the queue must not arm cancellation")
+	require.Zero(t, ws.cancelCalls, "clearing the queue must not cancel the run")
 }
 
 // TestBackstopRefreshesStaleCaches: when the memoized state outlives its TTL

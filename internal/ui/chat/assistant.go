@@ -771,6 +771,8 @@ func (a *AssistantMessageItem) renderSpinning() string {
 		a.anim.SetLabel("Thinking")
 	} else if a.message.IsSummaryMessage {
 		a.anim.SetLabel("Summarizing")
+	} else {
+		a.anim.SetLabel("Working")
 	}
 	return a.anim.Render()
 }
@@ -798,11 +800,10 @@ func (a *AssistantMessageItem) renderError(width int) string {
 
 // isSpinning returns true if the assistant message is still generating.
 func (a *AssistantMessageItem) isSpinning() bool {
-	isThinking := a.message.IsThinking()
-	isFinished := a.message.IsFinished()
-	hasContent := strings.TrimSpace(a.message.Content().Text) != ""
-	hasToolCalls := len(a.message.ToolCalls()) > 0
-	return (isThinking || !isFinished) && !hasContent && !hasToolCalls
+	// Commentary can be followed by a long wait for the next provider event.
+	// Keep status visible until the step finishes or hands off to tools,
+	// whose own status takes over.
+	return !a.message.IsFinished() && len(a.message.ToolCalls()) == 0
 }
 
 // SetMessage is used to update the underlying message. Only the

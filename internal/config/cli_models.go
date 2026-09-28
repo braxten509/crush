@@ -43,7 +43,8 @@ func cliModelCachePath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "crush", "cli-models.json")
+	// Earlier caches did not record Codex image capabilities.
+	return filepath.Join(dir, "crush", "cli-models-v2.json")
 }
 
 func readModelCache() map[string][]catwalk.Model {
@@ -87,6 +88,9 @@ func refreshCLIModels(path string) {
 				if j := slices.IndexFunc(p.cfg.Models, func(k catwalk.Model) bool { return k.ID == m.ID }); j >= 0 {
 					known := p.cfg.Models[j]
 					known.Name = cmpOr(m.Name, known.Name)
+					if p.cfg.Type == TypeCodexCLI {
+						known.SupportsImages = m.SupportsImages
+					}
 					models[i] = known
 				}
 			}
@@ -205,10 +209,11 @@ func discoverCodex(ctx context.Context) ([]catwalk.Model, error) {
 	var res struct {
 		Result struct {
 			Data []struct {
-				ID                        string `json:"id"`
-				DisplayName               string `json:"displayName"`
-				Hidden                    bool   `json:"hidden"`
-				DefaultReasoningEffort    string `json:"defaultReasoningEffort"`
+				ID                        string   `json:"id"`
+				DisplayName               string   `json:"displayName"`
+				Hidden                    bool     `json:"hidden"`
+				InputModalities           []string `json:"inputModalities"`
+				DefaultReasoningEffort    string   `json:"defaultReasoningEffort"`
 				SupportedReasoningEfforts []struct {
 					ReasoningEffort string `json:"reasoningEffort"`
 				} `json:"supportedReasoningEfforts"`
@@ -228,6 +233,8 @@ func discoverCodex(ctx context.Context) ([]catwalk.Model, error) {
 			m.ReasoningLevels = append(m.ReasoningLevels, e.ReasoningEffort)
 		}
 		m.CanReason = len(m.ReasoningLevels) > 0
+		// Older Codex catalogs omit modalities and support text and images.
+		m.SupportsImages = d.InputModalities == nil || slices.Contains(d.InputModalities, "image")
 		models = append(models, m)
 	}
 	return models, nil

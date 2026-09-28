@@ -48,6 +48,12 @@ func (m *UI) modelInfo(width int) string {
 					reasoningInfo = fmt.Sprintf("Reasoning %s", common.FormatReasoningEffort(reasoningEffort))
 				}
 			}
+			if providerConfig.Type == config.TypeCodexCLI && model.ModelCfg.ServiceTier == "fast" {
+				if reasoningInfo != "" {
+					reasoningInfo += " · "
+				}
+				reasoningInfo += "FAST"
+			}
 		}
 	}
 

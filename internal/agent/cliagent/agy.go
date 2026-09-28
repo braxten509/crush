@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 
@@ -64,7 +66,26 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	if t.Resume != "" {
 		args = append(args, "--conversation", t.Resume)
 	}
-	p, err := startProc(m.Dir, agyBin(), args...)
+	name := agyBin()
+	if m.Guarded && !t.NoTools {
+		// AGY runs every command without asking and can't hand them to
+		// Crush, and its own sandbox falls back to running on the host.
+		// Codex's sandbox keeps it to the project (plus its own state and
+		// the network), which also rules out sudo.
+		if _, err := exec.LookPath("codex"); err != nil {
+			return errors.New("AGY sub-agents run inside Codex's sandbox, and codex isn't installed")
+		}
+		state := filepath.Join(os.Getenv("HOME"), ".gemini")
+		args = append([]string{
+			"sandbox",
+			"-c", `sandbox_mode="workspace-write"`,
+			"-c", "sandbox_workspace_write.network_access=true",
+			"-c", fmt.Sprintf("sandbox_workspace_write.writable_roots=[%q]", state),
+			"--", name,
+		}, args...)
+		name = "codex"
+	}
+	p, err := startProcEnv(m.Dir, t.Env, name, args...)
 	if err != nil {
 		return err
 	}

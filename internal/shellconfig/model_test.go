@@ -82,6 +82,21 @@ func TestModelSelectRejectsInvalidTopP(t *testing.T) {
 	require.Contains(t, err.Error(), "between 0 and 1")
 }
 
+func TestModelSelectServiceTier(t *testing.T) {
+	t.Parallel()
+	for _, tier := range []string{"fast", "default"} {
+		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
+			result := loadScript(t, "model large codex-cli/gpt-6-astra --reasoning-effort max --service-tier "+tier)
+			model := result["models"].(map[string]any)["large"].(map[string]any)
+			require.Equal(t, tier, model["service_tier"])
+			require.Equal(t, "max", model["reasoning_effort"])
+		})
+	}
+	_, err := LoadShellConfig(t.Context(), filepath.Join(t.TempDir(), "crushrc"), []byte("model large codex-cli/gpt-6-astra --service-tier typo"))
+	require.ErrorContains(t, err, "--service-tier expects fast or default")
+}
+
 func TestModelSelectRejectsNonObjectProviderOptions(t *testing.T) {
 	t.Parallel()
 

@@ -246,6 +246,11 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				}
 			}
 
+			// A long leading sleep only stalls the agent, so it runs in the
+			// background instead, as Claude Code does.
+			movedSleep := !params.RunInBackground && LeadingSleep(params.Command)
+			params.RunInBackground = params.RunInBackground || movedSleep
+
 			// If explicitly requested as background, start immediately with detached context
 			if params.RunInBackground {
 				startTime := time.Now()
@@ -298,6 +303,9 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					ShellID:          bgShell.ID,
 				}
 				response := fmt.Sprintf("Background shell started with ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
+				if movedSleep {
+					response = "A sleep of 2 seconds or more doesn't run in the foreground, so this runs in the background. To wait for something, loop on a check (until <check>; do sleep 2; done).\n\n" + response
+				}
 				return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 			}
 

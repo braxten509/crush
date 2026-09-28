@@ -2,6 +2,7 @@ package cliagent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/version"
 )
 
@@ -96,7 +98,7 @@ const (
 )
 
 func runCodex(ctx context.Context, m *Model, t Turn) error {
-	p, err := startProc(m.Dir, "codex", "app-server")
+	p, err := startProcEnv(m.Dir, t.Env, "codex", "app-server")
 	if err != nil {
 		return err
 	}
@@ -138,7 +140,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	approval, sandbox := "on-request", "workspace-write"
 	if t.NoTools {
 		approval, sandbox = "never", "read-only"
-	} else if m.Perms != nil && m.Perms.SkipRequests() {
+	} else if m.autoApproved(t.SessionID) {
 		approval, sandbox = "never", "danger-full-access"
 	}
 	_ = p.send(map[string]any{"id": codexInitID, "method": "initialize", "params": map[string]any{
@@ -205,6 +207,9 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			case codexInitID:
 				_ = p.send(map[string]any{"method": "initialized"})
 				params := map[string]any{"cwd": m.Dir, "model": m.ID, "approvalPolicy": approval, "sandbox": sandbox}
+				if m.ServiceTier != "" {
+					params["serviceTier"] = m.ServiceTier
+				}
 				method := "thread/start"
 				if t.Resume != "" {
 					method, params["threadId"] = "thread/resume", t.Resume
@@ -225,10 +230,13 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 				}
 				params := map[string]any{
 					"threadId": threadID,
-					"input":    []any{map[string]any{"type": "text", "text": t.Prompt, "text_elements": []any{}}},
+					"input":    codexInput(t.Prompt, t.Attachments),
 				}
 				if t.Effort != "" {
 					params["effort"] = t.Effort
+				}
+				if m.ServiceTier != "" {
+					params["serviceTier"] = m.ServiceTier
 				}
 				_ = p.send(map[string]any{"id": codexTurnID, "method": "turn/start", "params": params})
 			case codexTurnID:
@@ -370,6 +378,22 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		return ctx.Err()
 	}
 	return exitError("codex", p)
+}
+
+// codexInput includes the captured image bytes, including clipboard images
+// that have no persistent file on disk.
+func codexInput(prompt string, attachments []message.Attachment) []any {
+	input := []any{map[string]any{"type": "text", "text": prompt, "text_elements": []any{}}}
+	for _, attachment := range attachments {
+		if !attachment.IsImage() {
+			continue
+		}
+		input = append(input, map[string]any{
+			"type": "image",
+			"url":  "data:" + attachment.MimeType + ";base64," + base64.StdEncoding.EncodeToString(attachment.Content),
+		})
+	}
+	return input
 }
 
 // codexRequest answers a server request. Command and file approvals go to

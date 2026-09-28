@@ -6,11 +6,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/attachments"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // skillInvocation represents the XML structure for a loaded skill.
@@ -64,6 +66,14 @@ func (m *UserMessageItem) RawRender(width int) string {
 	}
 
 	msgContent := strings.TrimSpace(m.message.Content().Text)
+
+	// A background task's result is for the agent; show a one-line notice.
+	if name, status, ok := agent.ParseTaskNotification(msgContent); ok {
+		content = m.renderTaskNotification(name, status, cappedWidth)
+		height = lipgloss.Height(content)
+		m.setCachedRender(content, cappedWidth, height)
+		return m.renderHighlighted(content, cappedWidth, height)
+	}
 
 	// Check if this is a skill invocation (loaded_skill XML)
 	if strings.HasPrefix(msgContent, "<loaded_skill>") {
@@ -119,6 +129,26 @@ func (m *UserMessageItem) renderSkillInvocation(content string, width int) strin
 	}
 
 	return toolOutputSkillContent(m.sty, skill.Name, skill.Description)
+}
+
+func (m *UserMessageItem) renderTaskNotification(name, status string, width int) string {
+	icon := m.sty.Tool.IconSuccess.Render()
+	if name == agent.AskName && (status == agent.AskAnswered || status == agent.AskCancelled) {
+		if status == agent.AskCancelled {
+			icon = m.sty.Tool.IconCancelled.Render()
+		}
+		line := icon + " " + m.sty.Pills.HelpText.Render("Your answers to the questions: ") + m.sty.Pills.TodoLabel.Render(status)
+		return ansi.Truncate(line, width, "…")
+	}
+	verb := "finished"
+	switch agent.TaskStatus(status) {
+	case agent.TaskFailed:
+		icon, verb = m.sty.Tool.IconError.Render(), "failed"
+	case agent.TaskStopped:
+		icon, verb = m.sty.Tool.IconCancelled.Render(), "stopped"
+	}
+	line := icon + " " + m.sty.Pills.HelpText.Render("Task ") + m.sty.Pills.TodoLabel.Render(name) + m.sty.Pills.HelpText.Render(" "+verb)
+	return ansi.Truncate(line, width, "…")
 }
 
 // Render implements MessageItem.

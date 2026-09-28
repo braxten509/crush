@@ -27,6 +27,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	agenttools "github.com/charmbracelet/crush/internal/agent/tools"
@@ -143,8 +144,6 @@ type shellStreamMsg struct {
 }
 
 type (
-	// cancelTimerExpiredMsg is sent when the cancel timer expires.
-	cancelTimerExpiredMsg struct{}
 	// userCommandsLoadedMsg is sent when user commands are loaded.
 	userCommandsLoadedMsg struct {
 		Commands []commands.CustomCommand
@@ -248,9 +247,18 @@ type UI struct {
 	// overrides it when a layout change happens in the same update.
 	frames           *frameCache
 	scrollOnlyUpdate bool
-	frameDirty       bool
-	frameSkipPut     bool
-	frameGCArmed     bool
+
+	// tasks are the background sub-agents seen this run, by ID, and
+	// bgProcs the processes the agents left running. They share a row
+	// under the editor, which Down selects (tasksFocused, taskSel).
+	tasks        map[string]agent.Task
+	taskTicking  bool
+	bgProcs      []agent.Process
+	tasksFocused bool
+	taskSel      int
+	frameDirty   bool
+	frameSkipPut bool
+	frameGCArmed bool
 	// planReadySessionID holds the session whose plan run emitted the
 	// plan-ready marker but has not been confirmed for execution yet. It
 	// lets the user reopen the handoff prompt after dismissing it.
@@ -268,9 +276,6 @@ type UI struct {
 
 	dialog *dialog.Overlay
 	status *Status
-
-	// isCanceling tracks whether the user has pressed escape once to cancel.
-	isCanceling bool
 
 	// bangMode tracks whether the editor is in bang (!) shell mode.
 	bangMode     bool
@@ -594,7 +599,7 @@ func (m *UI) Init() tea.Cmd {
 		}
 	}
 	// load the user commands async
-	cmds = append(cmds, m.loadCustomCommands())
+	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs())
 	// Prime the memoized LSP state off-thread.
 	if cmd := m.requestLSPRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -1101,10 +1106,18 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case pubsub.Event[agent.Task]:
+		if cmd := m.handleTaskEvent(msg.Payload); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case taskTickMsg:
+		if cmd := m.handleTaskTick(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case bgProcsMsg:
+		cmds = append(cmds, m.handleBgProcs(msg.procs))
 	case pubsub.Event[question.Notification]:
 		m.handleQuestionNotification(msg.Payload)
-	case cancelTimerExpiredMsg:
-		m.isCanceling = false
 	case tea.TerminalVersionMsg:
 		termVersion := strings.ToLower(msg.Name)
 		// Only enable progress bar for the following terminals.
@@ -2196,6 +2209,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			return util.NewInfoMsg("Thinking mode " + status)
 		}))
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionToggleFastMode:
+		cmds = append(cmds, m.toggleFastMode())
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleTransparentBackground:
 		cmds = append(cmds, func() tea.Msg {
 			cfg := m.com.Config()
@@ -2969,6 +2985,11 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			m.detailsOpen = !m.detailsOpen
 			m.updateLayoutAndSize()
 			return true
+		case key.Matches(msg, m.keyMap.Chat.Background):
+			if m.state == uiChat {
+				cmds = append(cmds, m.openBackgroundDialog())
+				return true
+			}
 		case key.Matches(msg, m.keyMap.Chat.ToggleSidebar):
 			if m.canToggleSidebar() {
 				cmds = append(cmds, m.toggleCompactMode())
@@ -3080,8 +3101,16 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 		return tea.Batch(cmds...)
 	}
 
-	// Handle cancel key when agent is busy.
-	if key.Matches(msg, m.keyMap.Chat.Cancel) {
+	// The background row under the editor takes keys while selected.
+	if m.tasksFocused && m.focus == uiFocusEditor && m.activeInline == nil {
+		if cmd, ok := m.handleTaskRowKey(msg); ok {
+			return cmd
+		}
+	}
+
+	// Handle cancel key when agent is busy, unless esc is closing something
+	// in the editor first (completions, attachment delete, history).
+	if key.Matches(msg, m.keyMap.Chat.Cancel) && !m.editorWantsEsc() {
 		if m.isAgentBusy() {
 			if cmd := m.cancelAgent(); cmd != nil {
 				cmds = append(cmds, cmd)
@@ -3260,6 +3289,11 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Editor.HistoryNext):
+				// Past the end of the editor, Down selects the
+				// background row.
+				if m.promptHistory.index < 0 && m.isAtEditorEnd() && m.focusTaskRow() {
+					break
+				}
 				cmd := m.handleHistoryDown(msg)
 				if cmd != nil {
 					cmds = append(cmds, cmd)
@@ -3585,6 +3619,9 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			editor.Draw(scr, layout.editor)
 			m.inlineCursor = nil
 		}
+		if layout.tasks.Dy() > 0 {
+			uv.NewStyledString(m.renderTasks(layout.tasks.Dx())).Draw(scr, layout.tasks)
+		}
 
 		// Draw details overlay in compact mode when open
 		if m.isCompact && m.detailsOpen {
@@ -3767,9 +3804,7 @@ func (m *UI) ShortHelp() []key.Binding {
 		// Show cancel binding if agent is busy.
 		if m.isAgentBusy() {
 			cancelBinding := k.Chat.Cancel
-			if m.isCanceling {
-				cancelBinding.SetHelp("esc", "press again to cancel")
-			} else if m.promptQueue > 0 {
+			if m.promptQueue > 0 {
 				cancelBinding.SetHelp("esc", "clear queue")
 			}
 			binds = append(binds, cancelBinding)
@@ -3889,9 +3924,7 @@ func (m *UI) FullHelp() [][]key.Binding {
 		// Show cancel binding if agent is busy.
 		if m.isAgentBusy() {
 			cancelBinding := k.Chat.Cancel
-			if m.isCanceling {
-				cancelBinding.SetHelp("esc", "press again to cancel")
-			} else if m.promptQueue > 0 {
+			if m.promptQueue > 0 {
 				cancelBinding.SetHelp("esc", "clear queue")
 			}
 			binds = append(binds, []key.Binding{cancelBinding})
@@ -4348,6 +4381,13 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		uiLayout.editor = editorRect
 
 	case uiChat:
+		// Background tasks are listed under the editor, so the editor
+		// block grows to hold them.
+		tasksHeight := 0
+		if m.activeInline == nil {
+			tasksHeight = m.tasksHeight()
+		}
+		editorHeight += tasksHeight
 		if m.isCompact {
 			// Layout
 			//
@@ -4396,7 +4436,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 			}
 			// Add bottom margin to main
 			uiLayout.main.Max.Y -= 1
-			uiLayout.editor = editorRect
+			uiLayout.editor, uiLayout.tasks = splitTasks(editorRect, tasksHeight)
 		} else {
 			// Layout
 			//
@@ -4436,7 +4476,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 			}
 			// Add bottom margin to main
 			uiLayout.main.Max.Y -= 1
-			uiLayout.editor = editorRect
+			uiLayout.editor, uiLayout.tasks = splitTasks(editorRect, tasksHeight)
 		}
 	}
 
@@ -4462,6 +4502,9 @@ type uiLayout struct {
 
 	// editor is the area for the editor pane.
 	editor uv.Rectangle
+
+	// tasks lists background sub-agents under the editor.
+	tasks uv.Rectangle
 
 	// sidebar is the area for the sidebar.
 	sidebar uv.Rectangle
@@ -5292,22 +5335,12 @@ func (m *UI) runShellCommandInternal(command string, isFirstMessage bool) tea.Cm
 	return tea.Batch(cmds...)
 }
 
-const cancelTimerDuration = 2 * time.Second
-
-// cancelTimerCmd creates a command that expires the cancel timer.
-func cancelTimerCmd() tea.Cmd {
-	return tea.Tick(cancelTimerDuration, func(time.Time) tea.Msg {
-		return cancelTimerExpiredMsg{}
-	})
-}
-
 // interruptAgent stops the active run without the double-press confirm
 // and without clearing the queue, so the next queued prompt runs.
 func (m *UI) interruptAgent() tea.Cmd {
 	if !m.hasSession() || !m.agentReady {
 		return nil
 	}
-	m.isCanceling = false
 	if m.bangCancel != nil {
 		m.bangCancel()
 		m.bangCancel = nil
@@ -5319,9 +5352,13 @@ func (m *UI) interruptAgent() tea.Cmd {
 	return m.dispatchBusyRefresh()
 }
 
-// cancelAgent handles the cancel key press. The first press sets isCanceling to true
-// and starts a timer. The second press (before the timer expires) actually
-// cancels the agent.
+// editorWantsEsc reports whether esc has another job in the focused editor.
+func (m *UI) editorWantsEsc() bool {
+	return m.focus == uiFocusEditor && (m.completionsOpen || m.attachments.Deleting() || m.promptHistory.index >= 0)
+}
+
+// cancelAgent handles the cancel key press: with prompts queued it clears
+// the queue, otherwise it cancels the active run.
 func (m *UI) cancelAgent() tea.Cmd {
 	if !m.hasSession() {
 		return nil
@@ -5331,27 +5368,6 @@ func (m *UI) cancelAgent() tea.Cmd {
 	// is a synchronous HTTP round-trip in client/server mode.
 	if !m.agentReady {
 		return nil
-	}
-
-	if m.isCanceling {
-		// Second escape press — actually cancel.
-		m.isCanceling = false
-
-		// Cancel a running bang command if one is in progress.
-		if m.bangCancel != nil {
-			m.bangCancel()
-			m.bangCancel = nil
-		}
-
-		m.com.Workspace.AgentCancel(m.session.ID)
-		// Stop the spinning todo indicator and drop the memoized busy
-		// state the cancel just changed; the pill re-renders now from
-		// last-known state and again when the off-thread refresh (and
-		// the agent's own events) land.
-		m.todoIsSpinning = false
-		m.invalidateBusyCaches()
-		m.renderPills()
-		return m.dispatchBusyRefresh()
 	}
 
 	// Queued prompts pending: esc clears the queue. Decide from the cached
@@ -5368,9 +5384,21 @@ func (m *UI) cancelAgent() tea.Cmd {
 		return nil
 	}
 
-	// First escape press - set canceling state and start timer.
-	m.isCanceling = true
-	return cancelTimerCmd()
+	// Cancel a running bang command if one is in progress.
+	if m.bangCancel != nil {
+		m.bangCancel()
+		m.bangCancel = nil
+	}
+
+	m.com.Workspace.AgentCancel(m.session.ID)
+	// Stop the spinning todo indicator and drop the memoized busy
+	// state the cancel just changed; the pill re-renders now from
+	// last-known state and again when the off-thread refresh (and
+	// the agent's own events) land.
+	m.todoIsSpinning = false
+	m.invalidateBusyCaches()
+	m.renderPills()
+	return m.dispatchBusyRefresh()
 }
 
 // openDialog opens a dialog by its ID.
@@ -5397,6 +5425,8 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		if cmd := m.openNotificationsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case dialog.BackgroundID:
+		cmds = append(cmds, m.openBackgroundDialog())
 	case dialog.ProjectsID:
 		if m.dialog.ContainsDialog(dialog.ProjectsID) {
 			m.dialog.BringToFront(dialog.ProjectsID)
@@ -5880,6 +5910,13 @@ func (m *UI) newSession() tea.Cmd {
 		planCmd,
 		func() tea.Msg {
 			m.com.Workspace.LSPStopAll(context.Background())
+			return nil
+		},
+		func() tea.Msg {
+			// A new chat starts clean: end what the agents left running.
+			for _, p := range agent.BackgroundProcesses() {
+				_ = agent.KillProcess(p.PID)
+			}
 			return nil
 		},
 		m.loadPromptHistory(),

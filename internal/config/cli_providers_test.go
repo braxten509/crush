@@ -59,3 +59,37 @@ func TestListModels(t *testing.T) {
 	require.Equal(t, []string{"gemini-x-high=Gemini X (High)"}, ids(TypeAGYCLI))
 	require.Equal(t, []string{"opencode-go/glm-5.3=glm-5.3", "opencode-go/kimi-k3=kimi-k3"}, ids(TypeOpenCodeCLI))
 }
+
+func TestCodexImageCapabilities(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	script := `#!/bin/sh
+read -r line
+read -r line
+read -r line
+echo '{"id":2,"result":{"data":[{"id":"gpt-6-astra","inputModalities":["text"]},{"id":"new-vision","inputModalities":["text","image"]},{"id":"legacy"},{"id":"hidden","hidden":true}]}}'
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	models, err := discoverCodex(t.Context())
+	require.NoError(t, err)
+	require.Len(t, models, 3)
+	require.False(t, models[0].SupportsImages)
+	require.True(t, models[1].SupportsImages)
+	require.True(t, models[2].SupportsImages)
+	// Refresh must not overwrite the catalog's explicit text-only capability
+	// with the built-in fallback, and new capabilities must survive caching.
+	refreshCLIModels(dir)
+	models = cachedModels(string(TypeCodexCLI))
+	require.Len(t, models, 3)
+	require.False(t, models[0].SupportsImages)
+	require.True(t, models[1].SupportsImages)
+	require.True(t, models[2].SupportsImages)
+	for _, provider := range cliProviders {
+		if provider.cfg.Type == TypeCodexCLI {
+			for _, model := range provider.cfg.Models {
+				require.True(t, model.SupportsImages, model.ID)
+			}
+		}
+	}
+}

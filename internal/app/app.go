@@ -84,6 +84,7 @@ type App struct {
 	// drive their exit on a deterministic, payload-bearing event
 	// instead of guessing from message finish parts.
 	runCompletions *pubsub.Broker[notify.RunComplete]
+	tasks          *pubsub.Broker[agent.Task]
 
 	// herdrClient reports agent state to herdr when running inside
 	// a herdr-managed pane. Nil when not in a herdr environment.
@@ -125,6 +126,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 		tuiWG:              &sync.WaitGroup{},
 		agentNotifications: pubsub.NewBroker[notify.Notification](),
 		runCompletions:     pubsub.NewBroker[notify.RunComplete](),
+		tasks:              pubsub.NewBroker[agent.Task](),
 	}
 
 	app.setupEvents()
@@ -676,6 +678,7 @@ func (app *App) setupEvents() {
 	app.subscribe(ctx, "history", app.History.Subscribe)
 	app.subscribe(ctx, "agent-notifications", app.agentNotifications.Subscribe)
 	app.subscribeMustDeliver(ctx, "run-completions", app.runCompletions.Subscribe)
+	app.subscribe(ctx, "tasks", app.tasks.Subscribe)
 	app.subscribe(ctx, "mcp", mcp.SubscribeEvents)
 	app.subscribe(ctx, "mcp-channels", app.subscribeScopedChannelEvents)
 	app.subscribe(ctx, "lsp", SubscribeLSPEvents)
@@ -807,6 +810,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		LSPManager:  app.LSPManager,
 		Notify:      app.agentNotifications,
 		RunComplete: app.runCompletions,
+		Tasks:       app.tasks,
 		Skills:      app.Skills,
 		Interactive: interactive,
 	})

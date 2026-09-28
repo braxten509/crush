@@ -38,6 +38,7 @@ type Attachments struct {
 
 func (m *Attachments) List() []message.Attachment { return m.list }
 func (m *Attachments) Reset()                     { m.list = nil }
+func (m *Attachments) Deleting() bool             { return m.deleting }
 
 func (m *Attachments) Update(msg tea.Msg) bool {
 	switch msg := msg.(type) {

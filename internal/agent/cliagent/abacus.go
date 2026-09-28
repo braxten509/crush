@@ -49,7 +49,7 @@ func runAbacus(ctx context.Context, m *Model, t Turn) error {
 	if t.Resume != "" {
 		args = append(args, "--resume", t.Resume)
 	}
-	p, err := startProc(m.Dir, "abacusai", args...)
+	p, err := startProcEnv(m.Dir, t.Env, "abacusai", args...)
 	if err != nil {
 		return err
 	}

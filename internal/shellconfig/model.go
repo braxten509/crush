@@ -21,7 +21,7 @@ import (
 //	model large [<provider>/<id>] [--think] [--reasoning-effort L]
 //	    [--max-tokens N] [--temperature F] [--top-p F] [--top-k N]
 //	    [--frequency-penalty F] [--presence-penalty F]
-//	    [--provider-options JSON]
+//	    [--provider-options JSON] [--service-tier fast|default]
 //	model small [<provider>/<id>] [...]
 //
 // "add" registers a model on an existing provider (the provider must have
@@ -142,6 +142,12 @@ func modelRemove(b *ConfigBuilder, args []string, stderr io.Writer) error {
 var modelSelectFlags = []flagSpec{
 	{name: "--think", jsonKey: "think", kind: flagBoolTrue, op: opSet},
 	{name: "--reasoning-effort", jsonKey: "reasoning_effort", kind: flagString, op: opSet},
+	{name: "--service-tier", jsonKey: "service_tier", kind: flagString, op: opSet, validate: func(v any) error {
+		if v != "fast" && v != "default" {
+			return fmt.Errorf("--service-tier expects fast or default, got %q", v)
+		}
+		return nil
+	}},
 	{name: "--max-tokens", jsonKey: "max_tokens", kind: flagInt, op: opSet},
 	{name: "--temperature", jsonKey: "temperature", kind: flagFloat, op: opSet},
 	{name: "--top-p", jsonKey: "top_p", kind: flagFloat, op: opSet, validate: func(v any) error {

@@ -60,15 +60,18 @@ func TestCLISteer(t *testing.T) {
 		OnStepFinish: func(fantasy.StepResult) error { steps++; return nil },
 	}}
 	require.NoError(t, s.begin())
+	sa.steering.Set(sess.ID, s)
 
 	// Queued prompts go to the CLI together, and show up in the chat as
 	// their own step boundary once it takes them in.
 	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "one"})
 	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "two"})
 	require.Equal(t, "one\n\ntwo", s.steer())
-	require.Zero(t, sa.QueuedPrompts(sess.ID))
 	require.Empty(t, s.steer())
+	// They stay listed as queued until the CLI takes them in.
+	require.Equal(t, []string{"one", "two"}, sa.QueuedPromptsList(sess.ID))
 	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventUserMessage, Text: "one\n\ntwo"}))
+	require.Zero(t, sa.QueuedPrompts(sess.ID))
 	require.Equal(t, 1, steps)
 	msgs, err := env.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
@@ -89,4 +92,29 @@ func TestCLISteer(t *testing.T) {
 	s.ctx = ctx
 	s.returnUnsteered()
 	require.Zero(t, sa.QueuedPrompts(sess.ID))
+
+	// Clearing the queue hides a handed-over prompt and doesn't requeue it.
+	s.ctx = t.Context()
+	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "five"})
+	require.Equal(t, "five", s.steer())
+	sa.clearQueueAndNotify(sess.ID)
+	require.Zero(t, sa.QueuedPrompts(sess.ID))
+	s.returnUnsteered()
+	require.Zero(t, sa.QueuedPrompts(sess.ID))
+}
+
+func TestCLISteerPreservesQueuedImages(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sa := NewSessionAgent(SessionAgentOptions{Sessions: env.sessions, Messages: env.messages}).(*sessionAgent)
+	s := &cliSteps{ctx: t.Context(), a: sa, sessionID: "images"}
+	imageCall := SessionAgentCall{SessionID: "images", Prompt: "look", Attachments: []message.Attachment{{MimeType: "image/png", Content: []byte("image bytes")}}}
+	sa.enqueueCall(SessionAgentCall{SessionID: "images", Prompt: "before"})
+	sa.enqueueCall(imageCall)
+	sa.enqueueCall(SessionAgentCall{SessionID: "images", Prompt: "after"})
+	require.Equal(t, "before", s.steer())
+	require.Empty(t, s.steer())
+	require.Equal(t, []string{"look", "after"}, sa.QueuedPromptsList("images"))
+	queued, _ := sa.drainQueueForStep("images")
+	require.Equal(t, imageCall, queued[0])
 }

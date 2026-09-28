@@ -2,6 +2,7 @@ package cliagent
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -18,10 +19,12 @@ func TestLimitParsing(t *testing.T) {
 	require.Equal(t, "Weekly", claude[1].Name)
 	require.Equal(t, time.Unix(1790470800, 0), claude[1].ResetsAt)
 
+	// Resets in the future, or Left() reports the window as full again.
+	resets := time.Now().Add(time.Hour).Unix()
 	var snap codexSnapshot
-	require.NoError(t, json.Unmarshal([]byte(`{"limitId":"codex","primary":{"usedPercent":73,"windowDurationMins":10080,"resetsAt":1790458667},"secondary":{"usedPercent":5,"windowDurationMins":300,"resetsAt":0}}`), &snap))
+	require.NoError(t, json.Unmarshal(fmt.Appendf(nil, `{"limitId":"codex","primary":{"usedPercent":73,"windowDurationMins":10080,"resetsAt":%d},"secondary":{"usedPercent":5,"windowDurationMins":300,"resetsAt":0}}`, resets), &snap))
 	codex := snap.limits()
-	require.Equal(t, []Limit{{Name: "Weekly", Used: 73, ResetsAt: time.Unix(1790458667, 0)}, {Name: "5h", Used: 5}}, codex)
+	require.Equal(t, []Limit{{Name: "Weekly", Used: 73, ResetsAt: time.Unix(resets, 0)}, {Name: "5h", Used: 5}}, codex)
 	require.InDelta(t, 27, codex[0].Left(), 0.001)
 
 	other := "codex_other"

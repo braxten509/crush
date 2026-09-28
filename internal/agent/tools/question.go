@@ -87,30 +87,9 @@ func NewQuestionTool(svc question.Service) fantasy.AgentTool {
 		func(ctx context.Context, params QuestionParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			sessionID := GetSessionFromContext(ctx)
 
-			if len(params.Questions) == 0 {
-				return fantasy.NewTextErrorResponse("at least one question is required"), nil
-			}
-			if len(params.Questions) > question.MaxQuestions {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("exceeds maximum of %d questions per batch (got %d). Split into multiple batches and tell the user there will be follow-up questions", question.MaxQuestions, len(params.Questions))), nil
-			}
-
-			questions := make([]question.Question, len(params.Questions))
-			for i, item := range params.Questions {
-				qType := question.Type(item.Type)
-				if qType != question.TypeYesNo && qType != question.TypeSingleChoice && qType != question.TypeMultiChoice && qType != question.TypeFreeText {
-					label := item.Label
-					if label == "" {
-						label = item.Question
-					}
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("question %d [%s]: invalid type %q (must be yes_no, single_choice, multi_choice, or free_text)", i+1, label, item.Type)), nil
-				}
-				questions[i] = question.Question{
-					Type:        qType,
-					Label:       item.Label,
-					Text:        item.Question,
-					Description: item.Description,
-					Choices:     convertChoices(item.GetChoices()),
-				}
+			questions, err := BuildQuestions(params)
+			if err != nil {
+				return fantasy.NewTextErrorResponse(err.Error()), nil
 			}
 
 			req := question.Request{
@@ -134,6 +113,41 @@ func NewQuestionTool(svc question.Service) fantasy.AgentTool {
 			return formatAnswers(answers, questions)
 		},
 	)
+}
+
+// BuildQuestions checks the tool input and converts it to questions.
+func BuildQuestions(params QuestionParams) ([]question.Question, error) {
+	if len(params.Questions) == 0 {
+		return nil, errors.New("at least one question is required")
+	}
+	if len(params.Questions) > question.MaxQuestions {
+		return nil, fmt.Errorf("exceeds maximum of %d questions per batch (got %d). Split into multiple batches and tell the user there will be follow-up questions", question.MaxQuestions, len(params.Questions))
+	}
+	questions := make([]question.Question, len(params.Questions))
+	for i, item := range params.Questions {
+		qType := question.Type(item.Type)
+		if qType != question.TypeYesNo && qType != question.TypeSingleChoice && qType != question.TypeMultiChoice && qType != question.TypeFreeText {
+			label := item.Label
+			if label == "" {
+				label = item.Question
+			}
+			return nil, fmt.Errorf("question %d [%s]: invalid type %q (must be yes_no, single_choice, multi_choice, or free_text)", i+1, label, item.Type)
+		}
+		questions[i] = question.Question{
+			Type:        qType,
+			Label:       item.Label,
+			Text:        item.Question,
+			Description: item.Description,
+			Choices:     convertChoices(item.GetChoices()),
+		}
+	}
+	return questions, nil
+}
+
+// FormatAnswers writes the user's answers out for the agent.
+func FormatAnswers(answers []question.Answer, questions []question.Question) string {
+	resp, _ := formatAnswers(answers, questions)
+	return resp.Content
 }
 
 func convertChoices(in []QuestionChoice) []question.Choice {

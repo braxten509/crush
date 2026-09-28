@@ -155,6 +155,7 @@ type coordinator struct {
 	notify      pubsub.Publisher[notify.Notification]
 	runComplete pubsub.Publisher[notify.RunComplete]
 	interactive bool
+	tasks       *taskHub
 
 	// agentMu guards mainAgent and mainAgentName: SetMainAgent runs on
 	// HTTP handler goroutines while runs, cancels, and probes read the
@@ -186,6 +187,8 @@ type CoordinatorOptions struct {
 	LSPManager  *lsp.Manager
 	Notify      pubsub.Publisher[notify.Notification]
 	RunComplete pubsub.Publisher[notify.RunComplete]
+	// Tasks receives background sub-agent updates. Nil turns them off.
+	Tasks       pubsub.Publisher[Task]
 	Skills      *skills.Manager
 	Interactive bool
 }
@@ -220,6 +223,9 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		activeSkills: activeSkills,
 		skillTracker: skillTracker,
 		interactive:  opts.Interactive,
+	}
+	if opts.Tasks != nil {
+		c.tasks = newTaskHub(c, opts.Tasks)
 	}
 
 	agentCfg, ok := opts.Config.Config().Agents[config.AgentCoder]
@@ -791,12 +797,17 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 	}
 
 	largeProviderCfg, _ := c.cfg.Config().Providers.Get(large.ModelCfg.Provider)
+	var tasks *taskHub
+	if agent.ID == config.AgentCoder {
+		tasks = c.tasks
+	}
 	result := NewSessionAgent(SessionAgentOptions{
 		LargeModel:           large,
 		SmallModel:           small,
 		SystemPromptPrefix:   largeProviderCfg.SystemPromptPrefix,
 		SystemPrompt:         "",
 		IsSubAgent:           isSubAgent,
+		Tasks:                tasks,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
 		IsYolo:               c.permissions.SkipRequests(),
 		Sessions:             c.sessions,
@@ -1351,7 +1362,7 @@ func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model con
 	}
 
 	if config.IsCLIProviderType(providerCfg.Type) {
-		return cliagent.NewProvider(providerCfg.Type, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.permissions, c.history), nil
+		return cliagent.NewProvider(providerCfg.Type, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.permissions, c.history, model.ServiceTier), nil
 	}
 
 	switch providerCfg.Type {
@@ -1433,6 +1444,9 @@ func (c *coordinator) Interrupt(sessionID string) {
 }
 
 func (c *coordinator) CancelAll() {
+	if c.tasks != nil {
+		c.tasks.stopAll()
+	}
 	c.currentAgent().CancelAll()
 }
 

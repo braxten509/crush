@@ -66,7 +66,7 @@ const (
 // runACP drives an ACP agent started with args. setModel selects m.ID with
 // session/set_model for agents that take no model flag.
 func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, setModel bool) error {
-	p, err := startProc(m.Dir, name, args...)
+	p, err := startProcEnv(m.Dir, t.Env, name, args...)
 	if err != nil {
 		return err
 	}

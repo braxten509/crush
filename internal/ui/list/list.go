@@ -668,7 +668,7 @@ func (l *List) PrependItems(items ...Item) {
 func (l *List) SetItems(items ...Item) {
 	l.items = items
 	l.selectedIdx = min(l.selectedIdx, len(l.items)-1)
-	l.offsetIdx = min(l.offsetIdx, len(l.items)-1)
+	l.offsetIdx = max(min(l.offsetIdx, len(l.items)-1), 0)
 	l.offsetLine = 0
 	l.retainCacheFor(items)
 	l.totalHeightValid = false

@@ -74,6 +74,9 @@ type SelectedModel struct {
 	// Only used by models that use the openai provider and need this set.
 	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"description=Reasoning effort level for OpenAI models that support it,enum=low,enum=medium,enum=high"`
 
+	// Codex service tier. Empty inherits the CLI setting; default disables FAST.
+	ServiceTier string `json:"service_tier,omitempty" jsonschema:"description=Codex service tier; omitted inherits the CLI setting,enum=fast,enum=default"`
+
 	// Used by anthropic models that can reason to indicate if the model should think.
 	Think bool `json:"think,omitempty" jsonschema:"description=Enable thinking mode for Anthropic models that support reasoning"`
 

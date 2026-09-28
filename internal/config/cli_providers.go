@@ -56,10 +56,10 @@ var cliProviders = []cliProvider{
 		Type:     TypeCodexCLI,
 		FlatRate: true,
 		Models: []catwalk.Model{
-			{ID: "gpt-6-astra", Name: "GPT-6 Astra", ContextWindow: 872_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium"},
-			{ID: "gpt-6-sol", Name: "GPT-6 Sol", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium"},
-			{ID: "gpt-6-luna", Name: "GPT-6 Luna", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "medium"},
-			{ID: "gpt-5.6-terra", Name: "GPT-5.6 Terra", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium"},
+			{ID: "gpt-6-astra", Name: "GPT-6 Astra", ContextWindow: 872_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium", SupportsImages: true},
+			{ID: "gpt-6-sol", Name: "GPT-6 Sol", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium", SupportsImages: true},
+			{ID: "gpt-6-luna", Name: "GPT-6 Luna", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "medium", SupportsImages: true},
+			{ID: "gpt-5.6-terra", Name: "GPT-5.6 Terra", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium", SupportsImages: true},
 		},
 	}, "gpt-6-luna"},
 	{"grok", ProviderConfig{

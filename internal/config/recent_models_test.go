@@ -156,3 +156,22 @@ func TestUpdatePreferredModel_TypeIsolation(t *testing.T) {
 	require.Len(t, store.Config().RecentModels[SelectedModelTypeSmall], 1)
 	require.Equal(t, smallModel, store.Config().RecentModels[SelectedModelTypeSmall][0])
 }
+
+func TestUpdatePreferredModelServiceTier(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cfg := &Config{}
+	cfg.setDefaults(dir, "")
+	store := testStoreWithPath(cfg, dir)
+	selected := SelectedModel{Provider: "codex-cli", Model: "gpt-6-astra", ReasoningEffort: "max"}
+	for _, tier := range []string{"fast", "default"} {
+		selected.ServiceTier = tier
+		require.NoError(t, store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, selected))
+		data, err := os.ReadFile(store.globalDataPath)
+		require.NoError(t, err)
+		var saved Config
+		require.NoError(t, json.Unmarshal(data, &saved))
+		require.Equal(t, selected, saved.Models[SelectedModelTypeLarge])
+		require.Equal(t, selected, store.Config().Models[SelectedModelTypeLarge])
+	}
+}

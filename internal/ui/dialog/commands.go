@@ -463,6 +463,13 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	if agentCfg, ok := cfg.Agents[config.AgentCoder]; ok {
 		providerCfg := cfg.GetProviderForModel(agentCfg.Model)
 		model := cfg.GetModelByType(agentCfg.Model)
+		if providerCfg != nil && model != nil && providerCfg.Type == config.TypeCodexCLI {
+			status := "Enable"
+			if cfg.Models[agentCfg.Model].ServiceTier == "fast" {
+				status = "Disable"
+			}
+			commands = append(commands, NewCommandItem(c.com.Styles, "toggle_fast_mode", status+" FAST Mode", "", ActionToggleFastMode{}).WithAliases("fast", "speed"))
+		}
 		if providerCfg != nil && model != nil && model.CanReason {
 			selectedModel := cfg.Models[agentCfg.Model]
 
@@ -541,6 +548,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "init", "Initialize Project", "", ActionInitializeProject{}),
 		NewCommandItem(c.com.Styles, "save_project", "Save Project", "", ActionSaveProject{}),
 		NewCommandItem(c.com.Styles, "open_project", "Open Project", "", ActionOpenDialog{ProjectsID}).WithAliases("projects"),
+		NewCommandItem(c.com.Styles, "background", "Background Tasks", "ctrl+x", ActionOpenDialog{BackgroundID}).WithAliases("processes", "sub-agents", "kill"),
 	)
 
 	// Add transparent background toggle.

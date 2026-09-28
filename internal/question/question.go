@@ -161,7 +161,7 @@ const (
 	MaxChoiceLabelLength       = 200
 	MaxChoiceDescriptionLength = 200
 	MaxChoices                 = 5
-	MaxQuestions               = 5
+	MaxQuestions               = 11 // the prompter skill asks up to 10, plus overall notes
 )
 
 // Notification is published when a question batch is resolved so

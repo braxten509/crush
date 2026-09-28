@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 )
 
@@ -187,6 +188,11 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	if t.Resume != "" {
 		args = append(args, "--resume", t.Resume)
 	}
+	if m.Guarded && !t.NoTools {
+		// Edits need no approval under Crush's YOLO rules either; commands
+		// still come to Crush to be checked.
+		args = append(args, "--permission-mode", "acceptEdits")
+	}
 	if key.bypass {
 		// Crush would approve every call anyway. Asking also changes how
 		// Claude works: it splits jobs into more tool calls, each costing a
@@ -197,7 +203,15 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	// prompt argument does. Streamed input doesn't by default, so the first
 	// prompt can't use their tools and their late arrival adds thousands of
 	// tokens to the turn.
-	env := []string{"MCP_CONNECTION_NONBLOCKING=0"}
+	env := append([]string{"MCP_CONNECTION_NONBLOCKING=0"}, t.Env...)
+	if t.Instructions != "" {
+		args = append(args, "--append-system-prompt", t.Instructions)
+	}
+	if !t.NoTools {
+		// Main agents ask the user through `crush ask` and sub-agents
+		// through their report; Claude's own question tool reaches no one.
+		args = append(args, "--disallowedTools=AskUserQuestion")
+	}
 	if t.NoTools {
 		args = append(args, "--tools", "", "--no-session-persistence", "--strict-mcp-config", "--safe-mode")
 		if t.System != "" {
@@ -217,7 +231,8 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 
 func runClaude(ctx context.Context, m *Model, t Turn) error {
 	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, bypass: !t.NoTools && m.autoApproved(t.SessionID)}
-	keep := !t.NoTools && t.SessionID != ""
+	// A sub-agent runs one turn, so its process isn't kept for more.
+	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *claudeLive
 	if keep {
 		live = takeClaude(t.SessionID, key, t.Resume)
@@ -259,7 +274,23 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	// Crush tool name and input per tool_use ID, for results and approvals.
 	calls := map[string][2]string{}
 	started := false
-	for raw := range live.lines {
+	// Armed while waiting on steered messages after a result; Claude
+	// doesn't echo every message it's given, and an unconfirmed one must
+	// not hold the turn open forever. Crush runs it next instead.
+	var steerWait <-chan time.Time
+read:
+	for {
+		var raw []byte
+		select {
+		case r, ok := <-live.lines:
+			if !ok {
+				break read
+			}
+			raw, steerWait = r, nil
+		case <-steerWait:
+			finished = true
+			return nil
+		}
 		var line claudeLine
 		if json.Unmarshal(raw, &line) != nil {
 			continue
@@ -342,6 +373,7 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 			// follow-up; wait for that one too.
 			stopSteer()
 			if sent.pending() > 0 {
+				steerWait = time.After(steerEchoTimeout)
 				continue
 			}
 			finished = true
@@ -356,6 +388,10 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	}
 	return exitError("claude", p)
 }
+
+// steerEchoTimeout is how long a finished turn waits for Claude to start on
+// a steered message.
+var steerEchoTimeout = 15 * time.Second
 
 func claudeUserMessage(text string) map[string]any {
 	return map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}}
@@ -385,6 +421,9 @@ func claudeStreamEvent(ev *claudeEvent, emit func(Event) error) error {
 	}
 	switch ev.Type {
 	case "content_block_start":
+		if ev.ContentBlock.Type == "text" {
+			return emit(Event{Type: EventText, Text: TextBreak})
+		}
 		if ev.ContentBlock.Type == "tool_use" {
 			name, _ := claudeTool(ev.ContentBlock.Name, nil)
 			return emit(Event{Type: EventToolStart, ID: ev.ContentBlock.ID, Name: name})
@@ -434,7 +473,11 @@ func claudeControl(ctx context.Context, m *Model, t Turn, p *proc, line claudeLi
 		respond(map[string]any{"behavior": "allow", "updatedInput": in})
 		return
 	}
-	respond(map[string]any{"behavior": "deny", "message": "The user denied this tool call."})
+	msg := "The user denied this tool call."
+	if sleepRefused(name, input) {
+		msg = tools.SleepRefusal
+	}
+	respond(map[string]any{"behavior": "deny", "message": msg})
 }
 
 func claudeBlocks(msg *claudeMessage) []claudeBlock {

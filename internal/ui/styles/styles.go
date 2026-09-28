@@ -592,8 +592,9 @@ type Styles struct {
 		Help lipgloss.Style
 
 		// Mode badges shown before the help hints.
-		ModeBadgePlan lipgloss.Style
-		ModeBadgeYolo lipgloss.Style
+		ModeBadgePlan   lipgloss.Style
+		ModeBadgeYolo   lipgloss.Style
+		ModeBadgeRemote lipgloss.Style // Remote Control is sharing the chat
 
 		// Full-width banners shown when switching modes.
 		ModeBannerPlan      lipgloss.Style

@@ -160,21 +160,7 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 		c.dockerMCPAvailable = &msg.available
 		c.dockerMCPCheckInFlight = false
 		if c.selected == SystemCommands {
-			// Preserve the current selection across the rebuild to avoid reset
-			var prevID string
-			if item, ok := c.list.SelectedItem().(*CommandItem); ok && item != nil {
-				prevID = item.id
-			}
-			c.setCommandItems(c.selected)
-			if prevID != "" {
-				for i, it := range c.list.FilteredItems() {
-					if ci, ok := it.(*CommandItem); ok && ci != nil && ci.id == prevID {
-						c.list.SetSelected(i)
-						c.list.ScrollToSelected()
-						break
-					}
-				}
-			}
+			c.refreshCommandItems()
 		}
 		return nil
 	case spinner.TickMsg:
@@ -296,8 +282,8 @@ func (c *Commands) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	if area.Dx() != c.windowWidth && c.selected == SystemCommands {
 		c.windowWidth = area.Dx()
 		// since some items in the list depend on width (e.g. toggle sidebar command),
-		// we need to reset the command items when width changes
-		c.setCommandItems(c.selected)
+		// we need to rebuild the command items when width changes
+		c.refreshCommandItems()
 	}
 
 	innerWidth := width - c.com.Styles.Dialog.View.GetHorizontalFrameSize()
@@ -400,7 +386,36 @@ func (c *Commands) previousCommandType() CommandType {
 // setCommandItems sets the command items based on the specified command type.
 func (c *Commands) setCommandItems(commandType CommandType) {
 	c.selected = commandType
+	c.list.SetItems(c.commandItems()...)
+	c.list.SetFilter("")
+	c.list.ScrollToTop()
+	c.list.SetSelected(0)
+	c.input.SetValue("")
+}
 
+// refreshCommandItems rebuilds the shown commands when their entries change
+// while the palette is open. It keeps the typed filter and the selection:
+// the change can land between keystrokes, and clearing the filter there
+// would run another command on enter (a lone "e" picks Quit).
+func (c *Commands) refreshCommandItems() {
+	var prevID string
+	if item, ok := c.list.SelectedItem().(*CommandItem); ok && item != nil {
+		prevID = item.id
+	}
+	c.list.SetItems(c.commandItems()...)
+	c.list.SetFilter(c.input.Value())
+	c.list.SetSelected(0)
+	for i, it := range c.list.FilteredItems() {
+		if ci, ok := it.(*CommandItem); ok && ci != nil && ci.id == prevID {
+			c.list.SetSelected(i)
+			break
+		}
+	}
+	c.list.ScrollToSelected()
+}
+
+// commandItems returns the items of the selected command type.
+func (c *Commands) commandItems() []list.FilterableItem {
 	commandItems := []list.FilterableItem{}
 	switch c.selected {
 	case SystemCommands:
@@ -437,12 +452,7 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 			commandItems = append(commandItems, NewCommandItem(c.com.Styles, "mcp_"+cmd.ID, cmd.PromptID, "", action))
 		}
 	}
-
-	c.list.SetItems(commandItems...)
-	c.list.SetFilter("")
-	c.list.ScrollToTop()
-	c.list.SetSelected(0)
-	c.input.SetValue("")
+	return commandItems
 }
 
 // defaultCommands returns the list of default system commands.
@@ -550,6 +560,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "open_project", "Open Project", "", ActionOpenDialog{ProjectsID}).WithAliases("projects"),
 		NewCommandItem(c.com.Styles, "background", "Background Processes", "ctrl+x", ActionOpenDialog{BackgroundID}).WithAliases("processes", "kill"),
 		NewCommandItem(c.com.Styles, "sub_agents", "Sub-agents", "", ActionOpenDialog{SubAgentsID}).WithAliases("agents", "tasks", "stop"),
+		NewCommandItem(c.com.Styles, "remote", "Remote Control", "", ActionOpenDialog{RemoteID}).WithAliases("rc", "phone"),
 	)
 
 	// Add transparent background toggle.
@@ -580,7 +591,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 func (c *Commands) SetCustomCommands(customCommands []commands.CustomCommand) {
 	c.customCommands = customCommands
 	if c.selected == UserCommands {
-		c.setCommandItems(c.selected)
+		c.refreshCommandItems()
 	}
 }
 
@@ -588,7 +599,7 @@ func (c *Commands) SetCustomCommands(customCommands []commands.CustomCommand) {
 func (c *Commands) SetMCPPrompts(mcpPrompts []commands.MCPPrompt) {
 	c.mcpPrompts = mcpPrompts
 	if c.selected == MCPPrompts {
-		c.setCommandItems(c.selected)
+		c.refreshCommandItems()
 	}
 }
 

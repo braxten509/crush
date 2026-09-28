@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,9 @@ type claudeLine struct {
 	Errors    []string               `json:"errors"`
 	Origin    *struct{ Kind string } `json:"origin"`
 	IsReplay  bool                   `json:"isReplay"`
+	// Indexes into Message.Content, supplied by Claude Code for user-facing
+	// narration carried in thinking blocks. Unlisted blocks are reasoning.
+	NarrationBlockIndexes []int `json:"narration_block_indexes"`
 	// Set on lines from a sub-agent Claude runs itself.
 	ParentToolUseID string `json:"parent_tool_use_id"`
 	// task_started: the tool call a foreground task runs for.
@@ -67,6 +71,7 @@ type claudeBlock struct {
 	Content   json.RawMessage `json:"content"`
 	IsError   bool            `json:"is_error"`
 	Text      string          `json:"text"`
+	Thinking  string          `json:"thinking"`
 }
 
 type claudeRequest struct {
@@ -321,6 +326,24 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 
 	// Crush tool name and input per tool_use ID, for results and approvals.
 	calls := map[string][2]string{}
+	// Classification arrives with the completed assistant block, after its
+	// thinking deltas. Hold those deltas so narration never enters reasoning.
+	var thinking strings.Builder
+	flushThinking := func(narration bool) error {
+		text := thinking.String()
+		thinking.Reset()
+		if text == "" {
+			return nil
+		}
+		kind := EventReasoning
+		if narration {
+			kind = EventText
+			if err := t.Emit(Event{Type: EventText, Text: TextBreak}); err != nil {
+				return err
+			}
+		}
+		return t.Emit(Event{Type: kind, Text: text})
+	}
 	started := false
 	// Armed while waiting on steered messages after a result; Claude
 	// doesn't echo every message it's given, and an unconfirmed one must
@@ -412,12 +435,24 @@ read:
 			setLimits(config.TypeClaudeCode, claudeRateLimit(raw))
 
 		case "stream_event":
+			if ev := line.Event; ev != nil && ev.Type == "content_block_delta" && ev.Delta.Type == "thinking_delta" {
+				thinking.WriteString(ev.Delta.Thinking)
+				continue
+			}
 			if err := claudeStreamEvent(line.Event, t.Emit); err != nil {
 				return err
 			}
 
 		case "assistant":
-			for _, b := range claudeBlocks(line.Message) {
+			for index, b := range claudeBlocks(line.Message) {
+				if b.Type == "thinking" {
+					thinking.Reset()
+					thinking.WriteString(b.Thinking)
+					if err := flushThinking(slices.Contains(line.NarrationBlockIndexes, index)); err != nil {
+						return err
+					}
+					continue
+				}
 				if b.Type != "tool_use" {
 					continue
 				}
@@ -460,6 +495,9 @@ read:
 			go claudeControl(ctx, m, t, p, line)
 
 		case "result":
+			if err := flushThinking(false); err != nil {
+				return err
+			}
 			// A background task finishing reports its own result outside
 			// the prompt; it does not end this turn.
 			if ctx.Err() != nil {
@@ -487,6 +525,9 @@ read:
 			finished = true
 			return nil
 		}
+	}
+	if err := flushThinking(false); err != nil {
+		return err
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()

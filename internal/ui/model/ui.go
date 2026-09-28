@@ -46,6 +46,7 @@ import (
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
+	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/stringext"
@@ -208,6 +209,12 @@ type UI struct {
 	initialSessionID string
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
+
+	// remote is the window's Remote Control share, nil while off.
+	remote         *remote.Server
+	remotePresence remote.Presence
+	remotePhones   []string
+	remoteStarting bool
 
 	// relaunchDir is set when the user opens another project; the caller
 	// restarts Crush there after the program exits.
@@ -808,6 +815,7 @@ func (m *UI) loadMCPrompts() tea.Msg {
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	m.beginFrameUpdate()
+	defer m.syncRemotePresence()
 	// Update terminal capabilities
 	m.caps.Update(msg)
 	switch msg := msg.(type) {
@@ -825,6 +833,12 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notifyWindowFocused = true
 	case tea.BlurMsg:
 		m.notifyWindowFocused = false
+	case remoteStartedMsg:
+		cmds = append(cmds, m.handleRemoteStarted(msg))
+	case remoteActionMsg:
+		cmds = append(cmds, m.handleRemoteAction(msg.action))
+	case remotePhonesMsg:
+		cmds = append(cmds, m.handleRemotePhones())
 	case dialog.CollapseInlineMsg:
 		m.focusActiveInline(uiFocusMain)
 	case pubsub.Event[notify.Notification]:
@@ -2117,14 +2131,8 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 
 	// Command dialog messages.
 	case dialog.ActionToggleYoloMode:
-		if m.mode == uiInputModePlan {
-			// Same as Ctrl+Y in plan mode: YOLO only exists as YOLO
-			// coding, so activating it leaves plan mode.
-			if cmd := m.switchPlanToYolo(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		} else {
-			m.toggleYoloMode()
+		if cmd := m.toggleYoloCommand(); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionSelectNotificationStyle:
@@ -2154,13 +2162,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
 			break
 		}
-		cmds = append(cmds, func() tea.Msg {
-			err := m.com.Workspace.AgentSummarize(context.Background(), msg.SessionID)
-			if err != nil {
-				return util.ReportError(err)()
-			}
-			return nil
-		})
+		cmds = append(cmds, m.summarizeSession(msg.SessionID))
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleHelp:
 		m.status.ToggleHelp()
@@ -2185,29 +2187,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleThinking:
-		cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
-			cfg := m.com.Config()
-			if cfg == nil {
-				return util.ReportError(errors.New("configuration not found"))()
-			}
-
-			agentCfg, ok := cfg.Agents[config.AgentCoder]
-			if !ok {
-				return util.ReportError(errors.New("agent configuration not found"))()
-			}
-
-			currentModel := cfg.Models[agentCfg.Model]
-			currentModel.Think = !currentModel.Think
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
-				return util.ReportError(err)()
-			}
-			m.com.Workspace.UpdateAgentModel(context.TODO())
-			status := "disabled"
-			if currentModel.Think {
-				status = "enabled"
-			}
-			return util.NewInfoMsg("Thinking mode " + status)
-		}))
+		cmds = append(cmds, m.toggleThinking())
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleFastMode:
 		cmds = append(cmds, m.toggleFastMode())
@@ -2457,6 +2437,8 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionQuit:
 		cmds = append(cmds, tea.Quit)
+	case dialog.ActionRemoteOff:
+		cmds = append(cmds, m.stopRemote())
 	case dialog.ActionEnableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.enableDockerMCP)
@@ -2506,30 +2488,12 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait..."))
 			break
 		}
-
-		cfg := m.com.Config()
-		if cfg == nil {
-			cmds = append(cmds, util.ReportError(errors.New("configuration not found")))
-			break
-		}
-
-		agentCfg, ok := cfg.Agents[config.AgentCoder]
-		if !ok {
-			cmds = append(cmds, util.ReportError(errors.New("agent configuration not found")))
-			break
-		}
-
-		currentModel := cfg.Models[agentCfg.Model]
-		currentModel.ReasoningEffort = msg.Effort
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
+		cmd, err := m.setReasoningEffort(msg.Effort)
+		if err != nil {
 			cmds = append(cmds, util.ReportError(err))
 			break
 		}
-
-		cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
-			m.com.Workspace.UpdateAgentModel(context.TODO())
-			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
-		}))
+		cmds = append(cmds, cmd)
 		m.dialog.CloseDialog(dialog.ReasoningID)
 	case dialog.ActionPermissionResponse:
 		m.dialog.CloseDialog(dialog.PermissionsID)
@@ -5386,14 +5350,7 @@ func (m *UI) cancelAgent() tea.Cmd {
 	// Queued prompts pending: esc clears the queue. Decide from the cached
 	// count (event-driven) instead of a synchronous workspace probe.
 	if m.promptQueue > 0 {
-		m.com.Workspace.AgentClearQueue(m.session.ID)
-		m.promptQueue = 0
-		m.promptQueueItems = nil
-		m.promptQueueCheckedAt = time.Now()
-		// Bump the queue generation so a fetch started before this clear
-		// cannot land and repopulate the pill we just emptied.
-		m.invalidatePromptQueue()
-		m.updateLayoutAndSize()
+		m.clearPromptQueue()
 		return nil
 	}
 
@@ -5412,6 +5369,91 @@ func (m *UI) cancelAgent() tea.Cmd {
 	m.invalidateBusyCaches()
 	m.renderPills()
 	return m.dispatchBusyRefresh()
+}
+
+// clearPromptQueue drops the prompts queued behind the running turn.
+func (m *UI) clearPromptQueue() {
+	m.com.Workspace.AgentClearQueue(m.session.ID)
+	m.promptQueue = 0
+	m.promptQueueItems = nil
+	m.promptQueueCheckedAt = time.Now()
+	// Bump the queue generation so a fetch started before this clear
+	// cannot land and repopulate the pill we just emptied.
+	m.invalidatePromptQueue()
+	m.updateLayoutAndSize()
+}
+
+// toggleYoloCommand is Ctrl+Y from the command palette.
+func (m *UI) toggleYoloCommand() tea.Cmd {
+	if m.mode == uiInputModePlan {
+		// Same as Ctrl+Y in plan mode: YOLO only exists as YOLO
+		// coding, so activating it leaves plan mode.
+		return m.switchPlanToYolo()
+	}
+	m.toggleYoloMode()
+	return nil
+}
+
+// summarizeSession compacts the session into a summary.
+func (m *UI) summarizeSession(sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		err := m.com.Workspace.AgentSummarize(context.Background(), sessionID)
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return nil
+	}
+}
+
+// toggleThinking flips thinking for models without reasoning levels.
+func (m *UI) toggleThinking() tea.Cmd {
+	return m.updateAgentModelCmd(func() tea.Msg {
+		cfg := m.com.Config()
+		if cfg == nil {
+			return util.ReportError(errors.New("configuration not found"))()
+		}
+
+		agentCfg, ok := cfg.Agents[config.AgentCoder]
+		if !ok {
+			return util.ReportError(errors.New("agent configuration not found"))()
+		}
+
+		currentModel := cfg.Models[agentCfg.Model]
+		currentModel.Think = !currentModel.Think
+		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
+			return util.ReportError(err)()
+		}
+		m.com.Workspace.UpdateAgentModel(context.TODO())
+		status := "disabled"
+		if currentModel.Think {
+			status = "enabled"
+		}
+		return util.NewInfoMsg("Thinking mode " + status)
+	})
+}
+
+// setReasoningEffort stores the effort for the coder's model.
+func (m *UI) setReasoningEffort(effort string) (tea.Cmd, error) {
+	cfg := m.com.Config()
+	if cfg == nil {
+		return nil, errors.New("configuration not found")
+	}
+
+	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	if !ok {
+		return nil, errors.New("agent configuration not found")
+	}
+
+	currentModel := cfg.Models[agentCfg.Model]
+	currentModel.ReasoningEffort = effort
+	if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
+		return nil, err
+	}
+
+	return m.updateAgentModelCmd(func() tea.Msg {
+		m.com.Workspace.UpdateAgentModel(context.TODO())
+		return util.NewInfoMsg("Reasoning effort set to " + effort)
+	}), nil
 }
 
 // openDialog opens a dialog by its ID.
@@ -5442,6 +5484,8 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		cmds = append(cmds, m.openBackgroundDialog())
 	case dialog.SubAgentsID:
 		cmds = append(cmds, m.openSubAgentsDialog())
+	case dialog.RemoteID:
+		cmds = append(cmds, m.openRemote())
 	case dialog.ProjectsID:
 		if m.dialog.ContainsDialog(dialog.ProjectsID) {
 			m.dialog.BringToFront(dialog.ProjectsID)

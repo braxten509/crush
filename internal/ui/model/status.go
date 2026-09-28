@@ -31,6 +31,8 @@ type Status struct {
 	// inputMode and yolo drive the mode badge shown before the help hints.
 	inputMode uiInputMode
 	yolo      bool
+	// remote shows the Remote Control badge.
+	remote bool
 }
 
 // NewStatus creates a new status bar and help model.
@@ -59,19 +61,28 @@ func (s *Status) SetMode(mode uiInputMode, yolo bool) {
 	s.yolo = yolo
 }
 
-// modeBadge renders the badge for the current mode, or an empty string in
-// the default coding mode.
+// SetRemote shows or hides the Remote Control badge.
+func (s *Status) SetRemote(on bool) {
+	s.remote = on
+}
+
+// modeBadge renders the badges for the current mode and Remote Control, or
+// an empty string in the default coding mode.
 func (s *Status) modeBadge() string {
 	t := s.com.Styles
+	var badges []string
 	// Mirror the editor prompt precedence: planning wins over YOLO, which
 	// can be carried into plan mode.
-	if s.inputMode == uiInputModePlan {
-		return t.Status.ModeBadgePlan.String()
+	switch {
+	case s.inputMode == uiInputModePlan:
+		badges = append(badges, t.Status.ModeBadgePlan.String())
+	case s.yolo:
+		badges = append(badges, t.Status.ModeBadgeYolo.String())
 	}
-	if s.yolo {
-		return t.Status.ModeBadgeYolo.String()
+	if s.remote {
+		badges = append(badges, t.Status.ModeBadgeRemote.String())
 	}
-	return ""
+	return strings.Join(badges, " ")
 }
 
 // SetWidth sets the width of the status bar and help view.

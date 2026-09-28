@@ -1160,6 +1160,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Status.Help = lipgloss.NewStyle().Padding(0, 1)
 	s.Status.ModeBadgePlan = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.primary).Padding(0, 1).Bold(true).SetString("PLAN MODE")
 	s.Status.ModeBadgeYolo = lipgloss.NewStyle().Foreground(o.bgBase).Background(o.busy).Padding(0, 1).Bold(true).SetString("YOLO MODE")
+	s.Status.ModeBadgeRemote = lipgloss.NewStyle().Foreground(o.bgBase).Background(o.info).Padding(0, 1).Bold(true).SetString("REMOTE")
 	s.Status.ModeBannerPlanBadge = s.Status.ModeBadgePlan
 	s.Status.ModeBannerPlan = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.planMoreSubtle).Padding(0, 1)
 	s.Status.ModeBannerYoloBadge = s.Status.ModeBadgeYolo

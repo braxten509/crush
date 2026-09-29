@@ -22,11 +22,14 @@ const (
 )
 
 type (
-	// taskTickMsg expires completed sub-agents after their linger period.
+	// taskTickMsg turns the spinner and expires completed sub-agents after their linger period.
 	taskTickMsg struct{}
 	// bgProcsMsg carries a fresh list of background processes.
 	bgProcsMsg struct{ procs []agent.Process }
 )
+
+// taskSpinner is the half circle that turns while sub-agents run.
+var taskSpinner = []string{"◐", "◓", "◑", "◒"}
 
 func (m *UI) visibleTasks() []agent.Task {
 	if !m.hasSession() {
@@ -167,7 +170,19 @@ func (m *UI) renderTasks(width int) string {
 	t := m.com.Styles
 	items := make([]string, 0, 2)
 	if len(tasks) > 0 {
-		items = append(items, t.Pills.TodoLabel.Render("Subagents")+" "+t.Pills.HelpText.Render(fmt.Sprintf("(%d)", len(tasks))))
+		label := fmt.Sprintf("%d subagents", len(tasks))
+		if len(tasks) == 1 {
+			label = "1 subagent"
+		}
+		// Spins while any sub-agent runs; taskTick redraws it every second.
+		icon := t.Tool.IconSuccess.Render()
+		for _, task := range tasks {
+			if task.Status == agent.TaskRunning {
+				icon = t.Pills.TodoSpinner.Render(taskSpinner[time.Now().Unix()%int64(len(taskSpinner))])
+				break
+			}
+		}
+		items = append(items, icon+" "+t.Pills.TodoLabel.Render(label))
 	}
 	if n := len(m.bgProcs); n > 0 {
 		label := fmt.Sprintf("%d background processes", n)

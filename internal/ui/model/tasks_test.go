@@ -69,7 +69,7 @@ func TestTaskRowCollapsesAgentDetails(t *testing.T) {
 			m.tasksFocused = focused
 			row := m.renderTasks(width)
 			out := ansi.Strip(row)
-			require.Contains(t, out, "Subagents (2)")
+			require.Contains(t, out, "2 subagents")
 			require.Contains(t, out, "1 background process")
 			for _, task := range m.tasks {
 				require.NotContains(t, out, task.Name)

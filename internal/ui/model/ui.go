@@ -676,6 +676,15 @@ func (m *UI) sendNotification(n notification.Notification) tea.Cmd {
 	return m.notifyBackend.Send(n)
 }
 
+// playNotificationSound also alerts users who are looking at the terminal.
+func (m *UI) playNotificationSound(sound notification.Sound) tea.Cmd {
+	cfg := m.com.Config()
+	if cfg != nil && cfg.Options != nil && cfg.Options.Notifications == "disabled" {
+		return nil
+	}
+	return notification.PlaySound(sound)
+}
+
 // selectNotificationBackend chooses the appropriate notification backend based
 // on terminal capabilities, environment, and user configuration. This is a pure
 // function that should be called once during initialization or when capabilities
@@ -1114,6 +1123,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pubsub.Event[question.Request]:
 		m.openBatchFormDialog(msg.Payload)
 		m.chat.ScrollToBottom()
+		cmds = append(cmds, m.playNotificationSound(notification.SoundQuestion))
 		if cmd := m.sendNotification(notification.Notification{
 			Title:   "Crush is waiting...",
 			Message: fmt.Sprintf("%d questions need your input", len(msg.Payload.Questions)),
@@ -5841,6 +5851,7 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 	switch n.Type {
 	case notify.TypeAgentFinished:
 		common.StopTurn()
+		cmds = append(cmds, m.playNotificationSound(notification.SoundComplete))
 		cmds = append(cmds, m.sendNotification(notification.Notification{
 			Title:   "Crush is waiting...",
 			Message: fmt.Sprintf("Agent's turn completed in \"%s\"", n.SessionTitle),

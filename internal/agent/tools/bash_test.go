@@ -61,26 +61,39 @@ func TestBashTool_DefaultAutoBackgroundThreshold(t *testing.T) {
 	require.Contains(t, meta.Output, "done")
 }
 
-func TestBashTool_CustomAutoBackgroundThreshold(t *testing.T) {
-	workingDir := t.TempDir()
-	tool := newBashToolForTest(workingDir)
-	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
-
-	resp := runBashTool(t, tool, ctx, BashParams{
-		Description:         "custom threshold",
-		Command:             "sleep 1.5 && echo done",
-		AutoBackgroundAfter: 1,
-	})
-
-	require.False(t, resp.IsError)
-	var meta BashResponseMetadata
-	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
-	require.True(t, meta.Background)
-	require.NotEmpty(t, meta.ShellID)
-	require.Contains(t, resp.Content, "moved to background")
-
-	bgManager := shell.GetBackgroundShellManager()
-	require.NoError(t, bgManager.Kill(meta.ShellID))
+func TestBashTool_WaitBackgroundThreshold(t *testing.T) {
+	for _, tt := range []struct {
+		command    string
+		background bool
+	}{
+		{"sleep 1.5 && echo done", false},
+		{"sleep 10 && echo done", false},
+		{"sleep 11 && echo done", true},
+	} {
+		t.Run(tt.command, func(t *testing.T) {
+			tool := newBashToolForTest(t.TempDir())
+			ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+			resp := runBashTool(t, tool, ctx, BashParams{
+				Description:         "wait threshold",
+				Command:             tt.command,
+				AutoBackgroundAfter: 1,
+			})
+			require.False(t, resp.IsError)
+			var meta BashResponseMetadata
+			require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+			if meta.ShellID != "" {
+				t.Cleanup(func() { _ = shell.GetBackgroundShellManager().Kill(meta.ShellID) })
+			}
+			require.Equal(t, tt.background, meta.Background)
+			if tt.background {
+				require.NotEmpty(t, meta.ShellID)
+				require.Contains(t, resp.Content, "longer than 10 seconds")
+			} else {
+				require.Empty(t, meta.ShellID)
+				require.Contains(t, meta.Output, "done")
+			}
+		})
+	}
 }
 
 type recordingPermissionService struct {

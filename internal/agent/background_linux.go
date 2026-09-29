@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -62,13 +63,15 @@ func hasMarker(env []byte, markers []string) bool {
 	return false
 }
 
-func bootTime() time.Time {
-	data, _ := os.ReadFile("/proc/stat")
-	for _, line := range strings.Split(string(data), "\n") {
-		if v, ok := strings.CutPrefix(line, "btime "); ok {
-			sec, _ := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
-			return time.Unix(sec, 0)
-		}
+var bootTime = sync.OnceValue(func() time.Time {
+	// Uptime retains subsecond precision for matching command start times;
+	// /proc/stat's btime truncates to a whole second. Cache it so process
+	// identity checks see the same start time on successive scans.
+	data, _ := os.ReadFile("/proc/uptime")
+	up, _, _ := strings.Cut(string(data), " ")
+	seconds, err := strconv.ParseFloat(up, 64)
+	if err != nil {
+		return time.Time{}
 	}
-	return time.Time{}
-}
+	return time.Now().Add(-time.Duration(seconds * float64(time.Second)))
+})

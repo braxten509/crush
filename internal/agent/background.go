@@ -8,6 +8,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 )
 
 // Process is a command an agent CLI started that is still running: a shell
@@ -51,12 +53,30 @@ func BackgroundProcesses() []Process {
 	procs := markedProcs(markers)
 	var out []Process
 	for _, p := range procs {
-		if isCommandRoot(p, procs) {
+		if isCommandRoot(p, procs) && !isForegroundCommand(p, procs) {
 			out = append(out, Process{PID: p.pid, Command: commandText(p.args), Started: p.started})
 		}
 	}
 	slices.SortFunc(out, func(a, b Process) int { return a.Started.Compare(b.Started) })
 	return out
+}
+
+// isForegroundCommand checks the owning CLI's pending tools before listing
+// a command as background. Include the unwrapped shell script so Claude's
+// quoting does not prevent a match.
+func isForegroundCommand(p proc, procs map[int]proc) bool {
+	args := append(slices.Clone(p.args), commandText(p.args))
+	for parent := p.ppid; parent > 0; {
+		if cliagent.IsForegroundCommand(parent, args, p.started) {
+			return true
+		}
+		q, ok := procs[parent]
+		if !ok || q.ppid == parent {
+			break
+		}
+		parent = q.ppid
+	}
+	return false
 }
 
 // isCommandRoot reports whether p is where a command starts: the shell a

@@ -178,6 +178,8 @@ type Message struct {
 	CreatedAt        int64
 	UpdatedAt        int64
 	IsSummaryMessage bool
+	// IsCompacting is live CLI status; it is not persisted in history.
+	IsCompacting bool
 	// PrismModelID and PrismModelName identify the model that actually
 	// served the turn, as reported by the Hyper Prism model router
 	// headers. Empty when the turn was not routed through Prism.
@@ -500,6 +502,7 @@ func (m *Message) ResetStreamedContent() {
 }
 
 func (m *Message) AddFinish(reason FinishReason, message, details string) {
+	m.IsCompacting = false
 	// remove any existing finish part
 	for i, part := range m.Parts {
 		if _, ok := part.(Finish); ok {

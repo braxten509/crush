@@ -333,7 +333,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	return &snapshot, nil
 }
 
-const subAgentPreamble = `You are a sub-agent that another AI agent started in the background from Crush. Do the task below on your own; nobody can answer questions while you work. Never ask the user anything (no "crush ask", no question tools): settle small details yourself. If the task says to check with the user first, or an open question would change the work substantially, don't guess: stop before that part and end with the questions (and the options you see) in your final report, so the agent that started you can answer them or ask the user. You end as soon as you stop replying, so finish what you start instead of leaving it running in the background. Crush refuses a "sleep" of 2 seconds or more in the foreground; to wait for something, loop on a check (until <check>; do sleep 2; done). When you're done, end with a concise report of what you did and found: that final message is all the other agent will see.
+const subAgentPreamble = `You are a sub-agent that another AI agent started in the background from Crush. Do the task below on your own; nobody can answer questions while you work. Never ask the user anything (no "crush ask", no question tools): settle small details yourself. If the task says to check with the user first, or an open question would change the work substantially, don't guess: stop before that part and end with the questions (and the options you see) in your final report, so the agent that started you can answer them or ask the user. You end as soon as you stop replying, so finish what you start instead of leaving it running in the background. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Crush refuses a "sleep" longer than 10 seconds in the foreground; to wait for something, loop on a check (until <check>; do sleep 2; done). When you're done, end with a concise report of what you did and found: that final message is all the other agent will see.
 
 `
 
@@ -521,7 +521,7 @@ CLIs and models (the first model is the default):
 %[2]s
 Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there. Stop one with: %[1]s spawn --stop <task-id>
 
-Crush refuses a "sleep" of 2 seconds or more in the foreground. Run long waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).
+Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Run longer waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).
 
 Use sub-agents for independent work that can run in parallel (research, separate parts of a change, reviews, second opinions from another model). Do quick or tightly coupled work yourself. Only use them when the user asks for sub-agents, other models, or parallel work, or when the task clearly benefits.
 </crush_sub_agents>

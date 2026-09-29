@@ -767,10 +767,10 @@ func (a *AssistantMessageItem) renderMarkdown(content string, width int) string 
 }
 
 func (a *AssistantMessageItem) renderSpinning() string {
-	if a.message.IsThinking() {
+	if a.message.IsSummaryMessage || a.message.IsCompacting {
+		a.anim.SetLabel("Compacting...")
+	} else if a.message.IsThinking() {
 		a.anim.SetLabel("Thinking")
-	} else if a.message.IsSummaryMessage {
-		a.anim.SetLabel("Summarizing")
 	} else {
 		a.anim.SetLabel("Working")
 	}
@@ -945,5 +945,5 @@ func (a *AssistantMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 func (a *AssistantMessageItem) onlyThinking() bool {
 	m := a.message
 	return strings.TrimSpace(m.Content().Text) == "" && !m.IsErrorLike() &&
-		m.FinishReason() != message.FinishReasonCanceled && !m.IsSummaryMessage && !a.planAgent
+		m.FinishReason() != message.FinishReasonCanceled && !m.IsSummaryMessage && !m.IsCompacting && !a.planAgent
 }

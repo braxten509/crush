@@ -880,7 +880,13 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	stream := agent.Stream
 	cliModel, isCLI := largeModel.Model.(*cliagent.Model)
 	if isCLI {
-		stream = a.cliStream(cliModel, call, msgs, largeModel.ModelCfg.ReasoningEffort)
+		stream = a.cliStream(cliModel, call, msgs, largeModel.ModelCfg.ReasoningEffort, func(active bool) error {
+			if currentAssistant == nil {
+				return nil
+			}
+			currentAssistant.IsCompacting = active
+			return a.messages.Update(genCtx, *currentAssistant)
+		})
 	}
 	result, err = stream(genCtx, fantasy.AgentStreamCall{
 		Prompt:           message.PromptWithTextAttachments(call.Prompt, call.Attachments),

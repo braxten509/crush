@@ -1327,6 +1327,7 @@ func protoToMessage(m proto.Message) message.Message {
 		CreatedAt:               m.CreatedAt,
 		UpdatedAt:               m.UpdatedAt,
 		IsSummaryMessage:        m.IsSummaryMessage,
+		IsCompacting:            m.IsCompacting,
 	}
 
 	for _, p := range m.Parts {

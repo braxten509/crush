@@ -95,11 +95,14 @@ func wordText(w *syntax.Word) string {
 	return b.String()
 }
 
-// SleepRefusal tells an agent why its sleep didn't run.
-const SleepRefusal = "Blocked: a `sleep` of 2 seconds or more in the foreground only stalls you. Run the wait in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done)."
+// ForegroundWaitLimit is the longest wait protected from automatic backgrounding.
+const ForegroundWaitLimit = 10 * time.Second
 
-// LeadingSleep reports whether command starts by sleeping for 2 seconds or
-// more in the foreground, which only stalls the agent. Like Claude Code,
+// SleepRefusal tells an agent why its sleep didn't run.
+const SleepRefusal = "Blocked: a `sleep` longer than 10 seconds in the foreground only stalls you. Run the wait in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done)."
+
+// LeadingSleep reports whether command starts by sleeping for more than
+// 10 seconds in the foreground, which only stalls the agent. Like Claude Code,
 // Crush refuses it; a wait belongs in the background or in a loop that
 // checks for what it's waiting on.
 func LeadingSleep(command string) bool {
@@ -134,5 +137,5 @@ func LeadingSleep(command string) bool {
 		}
 		d = time.Duration(secs * float64(time.Second))
 	}
-	return d >= 2*time.Second
+	return d > ForegroundWaitLimit
 }

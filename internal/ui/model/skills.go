@@ -33,8 +33,7 @@ func cachedBuiltinSkills() []*skills.Skill {
 	return builtinSkillsCache.skills
 }
 
-// skillsInfo renders the skill discovery status section showing loaded and
-// invalid skills.
+// skillsInfo renders the skill discovery status section showing loaded skills.
 func (m *UI) skillsInfo(width, maxItems int, isSection bool) string {
 	t := m.com.Styles
 
@@ -72,6 +71,9 @@ func (m *UI) skillStatusItems() []skillStatusItem {
 		return strings.Compare(a.Path, b.Path)
 	})
 	for _, state := range states {
+		if state.State != skills.StateNormal {
+			continue
+		}
 		name := state.Name
 		if name == "" {
 			name = filepath.Base(filepath.Dir(state.Path))
@@ -83,12 +85,8 @@ func (m *UI) skillStatusItems() []skillStatusItem {
 			continue
 		}
 		stateNames[name] = struct{}{}
-		icon := t.Resource.OnlineIcon.String()
-		if state.State == skills.StateError {
-			icon = t.Resource.ErrorIcon.String()
-		}
 		items = append(items, skillStatusItem{
-			icon:  icon,
+			icon:  t.Resource.OnlineIcon.String(),
 			name:  name,
 			title: t.Resource.Name.Render(name),
 		})

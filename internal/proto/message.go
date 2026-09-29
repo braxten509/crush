@@ -34,6 +34,7 @@ type Message struct {
 	CreatedAt               int64         `json:"created_at"`
 	UpdatedAt               int64         `json:"updated_at"`
 	IsSummaryMessage        bool          `json:"is_summary_message,omitempty"`
+	IsCompacting            bool          `json:"is_compacting,omitempty"`
 }
 
 // MessageRole represents the role of a message sender.

@@ -50,6 +50,7 @@ const (
 	EventUsage                        // Usage (per model request)
 	EventSession                      // Session (native session ID)
 	EventUserMessage                  // Text (a steered message the CLI took in)
+	EventCompacting                   // Compacting (native context compaction status)
 )
 
 // TextBreak is sent as text when a new text block starts. It separates two
@@ -60,16 +61,17 @@ const TextBreak = "\n\n"
 // already translated to Crush's own tools where one matches, so the UI can
 // use its native renderers.
 type Event struct {
-	Type     EventType
-	Text     string
-	ID       string
-	Name     string
-	Input    string
-	Output   string
-	Metadata string
-	IsError  bool
-	Usage    fantasy.Usage
-	Session  string
+	Compacting bool
+	Type       EventType
+	Text       string
+	ID         string
+	Name       string
+	Input      string
+	Output     string
+	Metadata   string
+	IsError    bool
+	Usage      fantasy.Usage
+	Session    string
 }
 
 // Turn is one user prompt sent to a CLI.
@@ -634,6 +636,10 @@ func (o *openCalls) list() []openCall {
 // watchCancel calls interrupt once ctx is done, then gives the CLI a few
 // seconds to wind down before killing it. The returned func stops watching.
 func (p *proc) watchCancel(ctx context.Context, interrupt func()) func() {
+	calls, _ := ctx.Value(openCallsKey{}).(*openCalls)
+	if calls != nil {
+		foregroundCalls.Store(p.cmd.Process.Pid, calls)
+	}
 	done := make(chan struct{})
 	go func() {
 		select {
@@ -654,7 +660,12 @@ func (p *proc) watchCancel(ctx context.Context, interrupt func()) func() {
 		case <-done:
 		}
 	}()
-	return func() { close(done) }
+	return func() {
+		close(done)
+		if calls != nil {
+			foregroundCalls.CompareAndDelete(p.cmd.Process.Pid, calls)
+		}
+	}
 }
 
 // tailBuffer keeps the last max bytes written to it.

@@ -6,8 +6,6 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -103,18 +101,6 @@ func (p *proc) killCommands(calls []openCall) {
 			break
 		}
 	}
-}
-
-// runBy reports whether a process with these arguments runs the call: as a
-// shell's script, or run directly with the words the shell would give it.
-func (c openCall) runBy(args []string) bool {
-	if slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, c.command) }) {
-		return true
-	}
-	if len(c.words) == 0 || len(args) < len(c.words) {
-		return false
-	}
-	return filepath.Base(args[0]) == filepath.Base(c.words[0]) && slices.Equal(args[1:len(c.words)], c.words[1:])
 }
 
 // bootTime is when the system started, from /proc/uptime: to the hundredth

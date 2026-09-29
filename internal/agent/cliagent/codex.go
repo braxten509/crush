@@ -312,7 +312,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			return true
 		})()
 	}
-	openCmds := map[string]bool{}
+	openCmds := map[string]time.Time{}
 	backgrounded := map[string]bool{} // their results are already shown
 
 	// Crush tool name and input per item (file changes expand to one call
@@ -500,12 +500,18 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			}
 			return errors.New("Codex: turn " + params.Turn.Status)
 
+		case "thread/compacted":
+			err = t.Emit(Event{Type: EventCompacting})
+
 		case "item/started":
 			// A command Codex handed back still running (its yield time ran
 			// out) goes on as a background terminal once the model moves on.
 			// Its item stays open until it exits.
 			if item.Type != "userMessage" {
-				for id := range openCmds {
+				for id, started := range openCmds {
+					if time.Since(started) <= tools.ForegroundWaitLimit {
+						continue
+					}
 					delete(openCmds, id)
 					running.Add(-1)
 					backgrounded[id] = true
@@ -519,6 +525,8 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 				}
 			}
 			switch item.Type {
+			case "contextCompaction":
+				err = t.Emit(Event{Type: EventCompacting, Compacting: true})
 			case "userMessage":
 				var text strings.Builder
 				for _, c := range item.Content {
@@ -534,7 +542,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 					err = t.Emit(Event{Type: EventText, Text: "\n\n"})
 				}
 			case "commandExecution":
-				openCmds[item.ID] = true
+				openCmds[item.ID] = time.Now()
 				running.Add(1)
 				err = emitCall(item.ID, tools.BashToolName, marshal(map[string]string{"command": unwrapShell(item.Command), "description": ""}))
 				if ctrlB.Load() {
@@ -557,11 +565,13 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		case "item/completed":
 			failed := item.Status == "failed" || item.Status == "declined"
 			switch item.Type {
+			case "contextCompaction":
+				err = t.Emit(Event{Type: EventCompacting})
 			case "commandExecution":
 				if _, ok := calls[item.ID]; !ok || backgrounded[item.ID] {
 					break // backgrounded here or in an earlier turn; the model reads its output itself
 				}
-				if openCmds[item.ID] {
+				if _, ok := openCmds[item.ID]; ok {
 					delete(openCmds, item.ID)
 					running.Add(-1)
 				}

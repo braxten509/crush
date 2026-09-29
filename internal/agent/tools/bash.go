@@ -304,7 +304,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				}
 				response := fmt.Sprintf("Background shell started with ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
 				if movedSleep {
-					response = "A sleep of 2 seconds or more doesn't run in the foreground, so this runs in the background. To wait for something, loop on a check (until <check>; do sleep 2; done).\n\n" + response
+					response = "A sleep longer than 10 seconds doesn't run in the foreground, so this runs in the background. To wait for something, loop on a check (until <check>; do sleep 2; done).\n\n" + response
 				}
 				return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 			}
@@ -324,7 +324,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
 
-			autoBackgroundAfter := cmp.Or(params.AutoBackgroundAfter, DefaultAutoBackgroundAfter)
+			autoBackgroundAfter := max(int(ForegroundWaitLimit/time.Second)+1, cmp.Or(params.AutoBackgroundAfter, DefaultAutoBackgroundAfter))
 			autoBackgroundThreshold := time.Duration(autoBackgroundAfter) * time.Second
 			timeout := time.After(autoBackgroundThreshold)
 

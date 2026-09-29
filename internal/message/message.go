@@ -111,6 +111,7 @@ type pendingState struct {
 // Message: a finished stream would otherwise pin its parts — reasoning
 // text, tool inputs, tool results — on the heap forever.
 type flushBaseline struct {
+	compacting          bool
 	toolCallsFinished   []bool
 	reasoningFinishedAt int64
 }
@@ -124,6 +125,7 @@ func newFlushBaseline(m *Message) flushBaseline {
 		finished[i] = c.Finished
 	}
 	return flushBaseline{
+		compacting:          m.IsCompacting,
 		toolCallsFinished:   finished,
 		reasoningFinishedAt: m.ReasoningContent().FinishedAt,
 	}
@@ -473,6 +475,10 @@ func floatPtr(v sql.NullFloat64) *float64 {
 // snapshot (or nil if no write has landed yet).
 func shouldFlushNow(prev *flushBaseline, next *Message) bool {
 	if next.IsFinished() {
+		return true
+	}
+
+	if (prev != nil && prev.compacting != next.IsCompacting) || (prev == nil && next.IsCompacting) {
 		return true
 	}
 

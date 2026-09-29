@@ -22,7 +22,7 @@ import (
 // CLI. The CLI runs its own tool loop; this drives the same callbacks a
 // native turn would (one step per model response), so messages, usage,
 // permissions and rendering work exactly as they do for API models.
-func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
+func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string, onCompacting func(bool) error) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
 	return func(ctx context.Context, sc fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
 		link := m.Links.Get(call.SessionID, m.Kind)
 		prompt := message.PromptWithTextAttachments(call.Prompt, call.Attachments)
@@ -49,7 +49,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			text = memory + "\n\n" + text
 		}
 
-		s := &cliSteps{ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID}
+		s := &cliSteps{ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting}
 		if err := s.begin(); err != nil {
 			return nil, err
 		}
@@ -149,11 +149,13 @@ func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessi
 // so a new assistant message) starts whenever the model talks again after
 // running tools, matching how native turns are split.
 type cliSteps struct {
-	ctx       context.Context
-	sc        fantasy.AgentStreamCall
-	m         *cliagent.Model
-	a         *sessionAgent
-	sessionID string
+	ctx          context.Context
+	sc           fantasy.AgentStreamCall
+	m            *cliagent.Model
+	a            *sessionAgent
+	sessionID    string
+	onCompacting func(bool) error
+	compacting   bool
 	// File content before each pending edit, by tool call ID.
 	edits map[string][2]string
 	// Last full content seen per file, for CLIs that report an edit only
@@ -286,6 +288,17 @@ func (s *cliSteps) begin() error {
 	return nil
 }
 
+func (s *cliSteps) setCompacting(active bool) error {
+	if s.compacting == active {
+		return nil
+	}
+	s.compacting = active
+	if s.onCompacting != nil {
+		return s.onCompacting(active)
+	}
+	return nil
+}
+
 func (s *cliSteps) finish(reason fantasy.FinishReason) error {
 	if !s.open {
 		return nil
@@ -319,7 +332,22 @@ func (s *cliSteps) talk() error {
 }
 
 func (s *cliSteps) handle(e cliagent.Event) error {
+	// Resume normal status on activity even if a CLI omits its end event.
+	if s.compacting && (e.Type == cliagent.EventText || e.Type == cliagent.EventReasoning || e.Type == cliagent.EventToolStart || e.Type == cliagent.EventToolCall || e.Type == cliagent.EventUserMessage) {
+		if err := s.setCompacting(false); err != nil {
+			return err
+		}
+	}
 	switch e.Type {
+	case cliagent.EventCompacting:
+		if e.Compacting {
+			// A completed tool step may still be the current message.
+			// Give compaction its own visible assistant status.
+			if err := s.talk(); err != nil {
+				return err
+			}
+		}
+		return s.setCompacting(e.Compacting)
 	case cliagent.EventSession:
 		s.native = e.Session
 	case cliagent.EventUsage:

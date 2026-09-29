@@ -118,3 +118,28 @@ func TestCLISteerPreservesQueuedImages(t *testing.T) {
 	queued, _ := sa.drainQueueForStep("images")
 	require.Equal(t, imageCall, queued[0])
 }
+
+func TestCLICompactionAfterTools(t *testing.T) {
+	t.Parallel()
+	var statuses []bool
+	var steps int
+	s := &cliSteps{
+		ctx: t.Context(), open: true, tools: 1,
+		onCompacting: func(active bool) error { statuses = append(statuses, active); return nil },
+		sc: fantasy.AgentStreamCall{
+			PrepareStep: func(ctx context.Context, _ fantasy.PrepareStepFunctionOptions) (context.Context, fantasy.PrepareStepResult, error) {
+				return ctx, fantasy.PrepareStepResult{}, nil
+			},
+			OnStepFinish:     func(fantasy.StepResult) error { steps++; return nil },
+			OnReasoningStart: func(string, fantasy.ReasoningContent) error { return nil },
+		},
+	}
+	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventCompacting, Compacting: true}))
+	require.Equal(t, 1, steps, "compaction must start a visible step after tools")
+	require.Zero(t, s.tools)
+	require.Equal(t, []bool{true}, statuses)
+	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventCompacting, Compacting: true}))
+	require.Equal(t, []bool{true}, statuses, "duplicate statuses should be ignored")
+	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventReasoning, Text: "Continuing"}))
+	require.Equal(t, []bool{true, false}, statuses, "normal output must clear compaction even without an end event")
+}

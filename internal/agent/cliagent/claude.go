@@ -23,6 +23,7 @@ import (
 type claudeLine struct {
 	Type      string                 `json:"type"`
 	Subtype   string                 `json:"subtype"`
+	Status    string                 `json:"status"`
 	SessionID string                 `json:"session_id"`
 	Event     *claudeEvent           `json:"event"`
 	Message   *claudeMessage         `json:"message"`
@@ -39,7 +40,9 @@ type claudeLine struct {
 	// Set on lines from a sub-agent Claude runs itself.
 	ParentToolUseID string `json:"parent_tool_use_id"`
 	// task_started: the tool call a foreground task runs for.
-	ToolUseID      string `json:"tool_use_id"`
+	ToolUseID string `json:"tool_use_id"`
+	// task_started and task_notification (the task ended): which task.
+	TaskID         string `json:"task_id"`
 	IsBackgrounded bool   `json:"is_backgrounded"`
 }
 
@@ -90,7 +93,7 @@ type claudeUsage struct {
 
 // claudeIdle is how long a finished session's Claude process stays open for
 // the next prompt.
-const claudeIdle = 15 * time.Minute
+var claudeIdle = 15 * time.Minute
 
 // claudeKey is what a live Claude process was started with; a turn that
 // needs anything else starts a new one.
@@ -112,6 +115,35 @@ type claudeLive struct {
 	drained chan struct{}
 	dead    atomic.Bool
 	timer   *time.Timer
+	// Tasks Claude has started and not reported ended, by task ID. Exiting
+	// would stop the background ones and lose their results.
+	tasksMu sync.Mutex
+	tasks   map[string]bool
+}
+
+// track notes the tasks a line starts or ends.
+func (l *claudeLive) track(line claudeLine) {
+	if line.Type != "system" || line.TaskID == "" {
+		return
+	}
+	l.tasksMu.Lock()
+	defer l.tasksMu.Unlock()
+	switch line.Subtype {
+	case "task_started":
+		if l.tasks == nil {
+			l.tasks = map[string]bool{}
+		}
+		l.tasks[line.TaskID] = true
+	case "task_notification":
+		delete(l.tasks, line.TaskID)
+	}
+}
+
+// busy reports whether a task Claude started is still running.
+func (l *claudeLive) busy() bool {
+	l.tasksMu.Lock()
+	defer l.tasksMu.Unlock()
+	return len(l.tasks) > 0
 }
 
 type claudeTurn struct {
@@ -148,7 +180,7 @@ func takeClaude(sessionID string, key claudeKey, resume string) *claudeLive {
 }
 
 // keepClaude parks a process after a finished turn until the session's next
-// prompt, or closes it after [claudeIdle].
+// prompt, or closes it after [claudeIdle] with no task running.
 func keepClaude(sessionID string, l *claudeLive) {
 	l.idle, l.drained = make(chan struct{}), make(chan struct{})
 	go func() {
@@ -167,7 +199,11 @@ func keepClaude(sessionID string, l *claudeLive) {
 					return
 				}
 				var line claudeLine
-				if json.Unmarshal(raw, &line) == nil && line.Type == "system" && line.Subtype == "init" {
+				if json.Unmarshal(raw, &line) != nil {
+					continue
+				}
+				l.track(line)
+				if line.Type == "system" && line.Subtype == "init" {
 					l.pending = [][]byte{raw}
 					if OnUnprompted != nil {
 						go OnUnprompted(sessionID)
@@ -181,6 +217,11 @@ func keepClaude(sessionID string, l *claudeLive) {
 	l.timer = time.AfterFunc(claudeIdle, func() {
 		claudeSessions.mu.Lock()
 		if claudeSessions.m[sessionID] != l {
+			claudeSessions.mu.Unlock()
+			return
+		}
+		if l.busy() && !l.dead.Load() {
+			l.timer.Reset(claudeIdle) // Claude reports the task when it ends
 			claudeSessions.mu.Unlock()
 			return
 		}
@@ -316,13 +357,16 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	// Claude takes messages written mid-turn in at its next tool result, or
 	// runs them right after the turn if it was already answering.
 	var sent steered
-	stopSteer := pollSteer(t, func() bool { return true }, func(text string) {
-		sent.add(text)
-		if p.send(claudeUserMessage(text)) != nil {
-			sent.take(text)
-		}
-	})
-	defer stopSteer()
+	startSteer := func() func() {
+		return pollSteer(t, func() bool { return true }, func(text string) {
+			sent.add(text)
+			if p.send(claudeUserMessage(text)) != nil {
+				sent.take(text)
+			}
+		})
+	}
+	stopSteer := startSteer()
+	defer func() { stopSteer() }()
 
 	// Crush tool name and input per tool_use ID, for results and approvals.
 	calls := map[string][2]string{}
@@ -378,7 +422,7 @@ read:
 					continue
 				}
 				for id, at := range running {
-					if time.Since(at) >= steerBackgroundAfter {
+					if time.Since(at) > steerBackgroundAfter {
 						delete(running, id) // asked once
 						_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-bg-" + id, "request": map[string]any{"subtype": "background_tasks", "tool_use_id": id}})
 					}
@@ -390,6 +434,7 @@ read:
 		if json.Unmarshal(raw, &line) != nil {
 			continue
 		}
+		live.track(line)
 		if line.ParentToolUseID != "" {
 			continue // a sub-agent's own steps; its result comes as a tool result
 		}
@@ -414,6 +459,11 @@ read:
 		}
 		switch line.Type {
 		case "system":
+			if line.Subtype == "status" || line.Subtype == "compact_boundary" {
+				if err := t.Emit(Event{Type: EventCompacting, Compacting: line.Status == "compacting"}); err != nil {
+					return err
+				}
+			}
 			// Only a started task can be backgrounded; asking earlier
 			// finds nothing.
 			if line.Subtype == "task_started" && line.ToolUseID != "" && !line.IsBackgrounded {
@@ -519,6 +569,9 @@ read:
 			// follow-up; wait for that one too.
 			stopSteer()
 			if sent.pending() > 0 {
+				// The follow-up is still part of this Crush turn. Keep
+				// forwarding new prompts while Claude works on it.
+				stopSteer = startSteer()
 				steerWait = time.After(steerEchoTimeout)
 				continue
 			}
@@ -544,7 +597,7 @@ var steerEchoTimeout = 15 * time.Second
 
 // steerBackgroundAfter is how long a tool call may hold up a steered message
 // before it is moved to the background.
-var steerBackgroundAfter = 3 * time.Second
+var steerBackgroundAfter = tools.ForegroundWaitLimit
 
 // claudePrompt is the turn's user message, with its images inline.
 func claudePrompt(text string, attachments []message.Attachment) map[string]any {

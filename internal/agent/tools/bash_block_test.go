@@ -34,7 +34,12 @@ func TestLeadingSleep(t *testing.T) {
 	t.Parallel()
 	for cmd, want := range map[string]bool{
 		"sleep 30":                          true,
-		"sleep 2 && ls":                     true,
+		"sleep 2 && ls":                     false,
+		"sleep 3":                           false,
+		"sleep 10":                          false,
+		"sleep 10s && ls":                   false,
+		"sleep 10.001":                      true,
+		"sleep 11":                          true,
 		"sleep 5m; echo hi":                 true,
 		"sleep 1":                           false,
 		"sleep 0.5 && ls":                   false,

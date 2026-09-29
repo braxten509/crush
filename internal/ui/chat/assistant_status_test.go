@@ -53,3 +53,31 @@ func TestAssistantStatusStopsOnTerminalResult(t *testing.T) {
 		})
 	}
 }
+
+func TestCompactingStatus(t *testing.T) {
+	t.Parallel()
+	for _, summary := range []bool{false, true} {
+		sty := styles.CharmtonePantera()
+		msg := &message.Message{ID: "compact", Role: message.Assistant, IsSummaryMessage: summary, IsCompacting: !summary}
+		msg.AppendReasoningContent("Preparing context.")
+		item := NewAssistantMessageItem(&sty, msg).(*AssistantMessageItem)
+		require.Contains(t, ansi.Strip(item.Render(80)), "Compacting...")
+		require.False(t, Foldable(item), "compaction must stay visible outside tool groups")
+
+		if !summary {
+			msg.IsCompacting = false
+			item.SetMessage(msg)
+			require.NotContains(t, ansi.Strip(item.Render(80)), "Compacting...")
+			require.Contains(t, ansi.Strip(item.Render(80)), "Thinking")
+		}
+		for _, reason := range []message.FinishReason{message.FinishReasonEndTurn, message.FinishReasonCanceled, message.FinishReasonError} {
+			finished := msg.Clone()
+			finished.IsCompacting = true
+			finished.AddFinish(reason, "", "")
+			item.SetMessage(&finished)
+			require.False(t, finished.IsCompacting)
+			require.False(t, item.Spinning())
+			require.NotContains(t, ansi.Strip(item.Render(80)), "Compacting...")
+		}
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
@@ -66,6 +67,53 @@ cat >/dev/null
 	require.Equal(t, "PINEAPPLE", events[1].Text)
 }
 
+func TestClaudeSteersDuringFollowUp(t *testing.T) {
+	// Each message arrives during the reply to the previous one. Claude
+	// takes it after that reply's result, without ending the Crush turn.
+	dir := t.TempDir()
+	script := `#!/bin/sh
+read -r _; read -r _
+echo '{"type":"system","subtype":"init","session_id":"s1"}'
+for text in FIRST SECOND THIRD; do
+  read -r steer
+  case "$steer" in *"$text"*) ;; *) exit 1;; esac
+  echo '{"type":"result","subtype":"success"}'
+  echo "{\"type\":\"user\",\"message\":{\"content\":\"$text\"},\"isReplay\":true}"
+done
+echo '{"type":"result","subtype":"success"}'
+cat >/dev/null
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	m := &Model{Kind: config.TypeClaudeCode, ID: "m", Dir: t.TempDir()}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var acknowledged atomic.Int32
+	var confirmed []string
+	next := 0
+	prompts := []string{"FIRST", "SECOND", "THIRD"}
+	err := m.Run(ctx, Turn{
+		Prompt: "hi",
+		Emit: func(e Event) error {
+			if e.Type == EventUserMessage {
+				confirmed = append(confirmed, e.Text)
+				acknowledged.Add(1)
+			}
+			return nil
+		},
+		Steer: func() string {
+			if next == len(prompts) || next > int(acknowledged.Load()) {
+				return ""
+			}
+			text := prompts[next]
+			next++
+			return text
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, prompts, confirmed)
+}
+
 func TestClaudeKeepsProcess(t *testing.T) {
 	// One process answers each prompt it reads; every start is logged.
 	dir := t.TempDir()
@@ -92,4 +140,33 @@ done
 	data, err := os.ReadFile(starts)
 	require.NoError(t, err)
 	require.Equal(t, "start\nstart\n", string(data))
+}
+
+func TestClaudeKeptWhileTaskRuns(t *testing.T) {
+	// The task ends on its own 400ms after the turn; the idle limit is 100ms.
+	dir := t.TempDir()
+	script := `read -r _
+read -r _
+echo '{"type":"system","subtype":"init","session_id":"s1"}'
+echo '{"type":"system","subtype":"task_started","task_id":"t1","is_backgrounded":true}'
+echo '{"type":"result","subtype":"success","result":"ok"}'
+sleep 0.4
+echo '{"type":"system","subtype":"task_notification","task_id":"t1","status":"completed"}'
+while read -r _; do :; done
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\n"+script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	idle := claudeIdle
+	claudeIdle = 100 * time.Millisecond
+	t.Cleanup(func() { claudeIdle = idle })
+	m := &Model{Kind: config.TypeClaudeCode, ID: "m", Dir: t.TempDir()}
+	require.NoError(t, m.Run(context.Background(), Turn{SessionID: "task-test", Prompt: "hi", Emit: func(Event) error { return nil }}))
+	parked := func() bool {
+		claudeSessions.mu.Lock()
+		defer claudeSessions.mu.Unlock()
+		return claudeSessions.m["task-test"] != nil
+	}
+	time.Sleep(250 * time.Millisecond)
+	require.True(t, parked(), "closed while its task was running")
+	require.Eventually(t, func() bool { return !parked() }, 3*time.Second, 20*time.Millisecond, "kept after its task ended")
 }

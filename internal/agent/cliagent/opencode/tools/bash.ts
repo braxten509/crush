@@ -12,6 +12,15 @@ const signalFile = process.env.CRUSH_BG_SIGNAL ?? ""
 const logDir = path.join(os.homedir(), ".cache", "crush", "background")
 const maxOutput = 30_000
 const defaultTimeout = 2 * 60 * 1000
+const autoBackgroundAfter = 11_000
+
+function backgroundSignal() {
+  try {
+    return signalFile ? fs.statSync(signalFile).mtimeMs : 0
+  } catch {
+    return 0
+  }
+}
 
 export default tool({
   description: `Executes a given bash command with an optional timeout.
@@ -23,6 +32,7 @@ All commands run in the current working directory by default. Use the \`workdir\
 - Output longer than ${maxOutput} characters is cut to its end.
 - The default timeout is 2 minutes; pass \`timeout\` (milliseconds) for longer commands, or run long-lived processes in the background (e.g. \`cmd > log 2>&1 &\`).
 - The user can move a running command to the background. Its result then says so and names a log file; read that file later to check on it.
+- Keep waits of 10 seconds or less in the foreground. Commands still running after 11 seconds automatically continue in the background, with output saved to a log.
 - For git commits and PRs, write multi-line messages with a HEREDOC.`,
   args: {
     command: tool.schema.string().describe("The command to execute"),
@@ -36,6 +46,7 @@ All commands run in the current working directory by default. Use the \`workdir\
       .describe("Clear, concise description of what this command does in 5-10 words."),
   },
   async execute(args, ctx) {
+    const initialSignal = backgroundSignal()
     await ctx.ask({
       permission: "bash",
       patterns: [args.command],
@@ -58,21 +69,19 @@ All commands run in the current working directory by default. Use the \`workdir\
     )
     fs.closeSync(fd)
 
-    const outcome = await new Promise<"exit" | "background" | "timeout" | "abort">((resolve) => {
+    const outcome = await new Promise<"exit" | "background" | "auto-background" | "timeout" | "abort">((resolve) => {
       const limit = args.timeout ?? defaultTimeout
-      const done = (r: "exit" | "background" | "timeout" | "abort") => {
+      const done = (r: "exit" | "background" | "auto-background" | "timeout" | "abort") => {
         clearInterval(tick)
         ctx.abort.removeEventListener("abort", onAbort)
         resolve(r)
       }
       const onAbort = () => done("abort")
-      // A press up to 2s before the command started counts: the user saw it
-      // listed while it waited for approval.
       const tick = setInterval(() => {
-        try {
-          if (signalFile && fs.statSync(signalFile).mtimeMs >= started - 2000) return done("background")
-        } catch {}
-        if (Date.now() - started > limit) done("timeout")
+        if (backgroundSignal() > initialSignal) return done("background")
+        const elapsed = Date.now() - started
+        if (elapsed > limit) return done("timeout")
+        if (elapsed > autoBackgroundAfter) done("auto-background")
       }, 200)
       ctx.abort.addEventListener("abort", onAbort)
       child.on("exit", () => done("exit"))
@@ -93,8 +102,12 @@ All commands run in the current working directory by default. Use the \`workdir\
 
     switch (outcome) {
       case "background":
+      case "auto-background":
         child.unref()
-        return `${cut(output)}\n\n[The user moved this command to the background (Ctrl+B). It is still running as process group ${child.pid}. Its output continues in ${log}, which ends with an "[exit code: N]" line when it finishes. Don't wait for it now; read that file later to check on it.]`
+        const reason = outcome === "background"
+          ? "The user moved this command to the background (Ctrl+B)."
+          : "This command ran for more than 10 seconds and continues in the background."
+        return `${cut(output)}\n\n[${reason} It is still running as process group ${child.pid}. Its output continues in ${log}, which ends with an "[exit code: N]" line when it finishes. Don't wait for it now; read that file later to check on it.]`
       case "timeout":
         stop()
         return `${cut(output)}\n\n[The command timed out after ${args.timeout ?? defaultTimeout} ms and was stopped.]`

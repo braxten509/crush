@@ -9,14 +9,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
-	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
-// A row under the editor lists background sub-agents (while they run, and
-// briefly after they end) and how many processes the agents left running.
-// Down from the end of the editor selects it; left/right pick an item.
+// A row under the editor has one entry for sub-agents and one for background
+// processes. Down selects the row; Enter opens the selected category's list.
 
 const (
 	taskLinger     = 8 * time.Second
@@ -24,13 +22,11 @@ const (
 )
 
 type (
-	// taskTickMsg refreshes the sub-agents' elapsed times.
+	// taskTickMsg expires completed sub-agents after their linger period.
 	taskTickMsg struct{}
 	// bgProcsMsg carries a fresh list of background processes.
 	bgProcsMsg struct{ procs []agent.Process }
 )
-
-var taskSpinner = []string{"◐", "◓", "◑", "◒"}
 
 func (m *UI) visibleTasks() []agent.Task {
 	if !m.hasSession() {
@@ -46,10 +42,13 @@ func (m *UI) visibleTasks() []agent.Task {
 	return out
 }
 
-// taskRowLen is how many items the row has: the sub-agents, then the
+// taskRowLen is how many categories the row has: sub-agents, then
 // processes, if any.
 func (m *UI) taskRowLen() int {
-	n := len(m.visibleTasks())
+	n := 0
+	if len(m.visibleTasks()) > 0 {
+		n++
+	}
 	if len(m.bgProcs) > 0 {
 		n++
 	}
@@ -142,8 +141,11 @@ func (m *UI) focusTaskRow() bool {
 // handleTaskRowKey handles keys while the row is selected. Anything it
 // doesn't use gives focus back to the editor and is handled there.
 func (m *UI) handleTaskRowKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
-	tasks := m.visibleTasks()
 	n := m.taskRowLen()
+	if n == 0 {
+		m.tasksFocused = false
+		return nil, false
+	}
 	switch msg.String() {
 	case "left":
 		m.taskSel = (m.taskSel + n - 1) % n
@@ -151,21 +153,7 @@ func (m *UI) handleTaskRowKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		m.taskSel = (m.taskSel + 1) % n
 	case "up", "esc":
 		m.tasksFocused = false
-	case "x", "delete", "backspace":
-		if m.taskSel < len(tasks) {
-			t := tasks[m.taskSel]
-			if t.Status != agent.TaskRunning {
-				return nil, true
-			}
-			return func() tea.Msg {
-				if err := agent.StopTask(t.ID); err != nil {
-					return util.ReportError(err)()
-				}
-				return util.NewInfoMsg("Stopped sub-agent " + t.Name)
-			}, true
-		}
-		return m.openBackgroundDialog(), true
-	case "enter", "space":
+	case "enter", "space", "x", "delete", "backspace":
 		return m.openTaskRowDialog(), true
 	default:
 		m.tasksFocused = false
@@ -177,22 +165,9 @@ func (m *UI) handleTaskRowKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 func (m *UI) renderTasks(width int) string {
 	tasks := m.visibleTasks()
 	t := m.com.Styles
-	items := make([]string, 0, len(tasks)+1)
-	for _, task := range tasks {
-		var icon string
-		end := task.Ended
-		switch task.Status {
-		case agent.TaskRunning:
-			icon = t.Pills.TodoSpinner.Render(taskSpinner[time.Now().Unix()%int64(len(taskSpinner))])
-			end = time.Now()
-		case agent.TaskDone:
-			icon = t.Tool.IconSuccess.Render()
-		case agent.TaskFailed:
-			icon = t.Tool.IconError.Render()
-		default:
-			icon = t.Tool.IconCancelled.Render()
-		}
-		items = append(items, icon+" "+t.Pills.TodoLabel.Render(task.Name)+" "+t.Pills.HelpText.Render(task.CLI+" "+formatElapsed(end.Sub(task.Started))))
+	items := make([]string, 0, 2)
+	if len(tasks) > 0 {
+		items = append(items, t.Pills.TodoLabel.Render("Subagents")+" "+t.Pills.HelpText.Render(fmt.Sprintf("(%d)", len(tasks))))
 	}
 	if n := len(m.bgProcs); n > 0 {
 		label := fmt.Sprintf("%d background processes", n)
@@ -216,24 +191,11 @@ func (m *UI) renderTasks(width int) string {
 	switch {
 	case !m.tasksFocused:
 		hint = "↓ manage"
-	case m.taskSel < len(tasks):
-		hint = "←/→ select · x stop · enter list · ↑ back"
 	default:
-		hint = "←/→ select · enter list · ↑ back"
+		hint = "enter list · ←/→ select · ↑ back"
 	}
 	line := " " + strings.Join(items, " ") + "  " + t.Pills.HelpText.Render(hint)
 	return ansi.Truncate(line, width, "…")
-}
-
-func formatElapsed(d time.Duration) string {
-	d = d.Round(time.Second)
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
-	}
-	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 // splitTasks takes the task row off the bottom of the editor block.
@@ -246,7 +208,7 @@ func splitTasks(editor uv.Rectangle, rows int) (uv.Rectangle, uv.Rectangle) {
 
 // openTaskRowDialog opens the dialog matching the selected row item.
 func (m *UI) openTaskRowDialog() tea.Cmd {
-	if m.taskSel < len(m.visibleTasks()) {
+	if m.taskSel == 0 && len(m.visibleTasks()) > 0 {
 		return m.openSubAgentsDialog()
 	}
 	return m.openBackgroundDialog()
@@ -261,16 +223,12 @@ func (m *UI) openBackgroundDialog() tea.Cmd {
 	return nil
 }
 
-// openSubAgentsDialog lists only sub-agents, selecting the one in the row.
+// openSubAgentsDialog lists only sub-agents.
 func (m *UI) openSubAgentsDialog() tea.Cmd {
 	m.tasksFocused = false
 	tasks := m.visibleTasks()
-	var selected string
-	if m.taskSel < len(tasks) {
-		selected = tasks[m.taskSel].ID
-	}
 	m.dialog.CloseDialog(dialog.BackgroundID)
 	m.dialog.CloseDialog(dialog.SubAgentsID)
-	m.dialog.OpenDialog(dialog.NewSubAgents(m.com, tasks, selected))
+	m.dialog.OpenDialog(dialog.NewSubAgents(m.com, tasks, ""))
 	return nil
 }

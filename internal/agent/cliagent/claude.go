@@ -99,7 +99,7 @@ var claudeIdle = 15 * time.Minute
 // needs anything else starts a new one.
 type claudeKey struct {
 	dir, model, effort string
-	bypass             bool
+	bypass, fast       bool
 }
 
 // claudeLive is a Claude process kept open between the turns of one Crush
@@ -255,6 +255,10 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	if key.effort != "" {
 		args = append(args, "--effort", key.effort)
 	}
+	if key.fast {
+		// Claude Code has no flag for it; headless runs opt in through settings.
+		args = append(args, "--settings", `{"fastMode":true}`)
+	}
 	if t.Resume != "" {
 		args = append(args, "--resume", t.Resume)
 	}
@@ -300,7 +304,7 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 }
 
 func runClaude(ctx context.Context, m *Model, t Turn) error {
-	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, bypass: !t.NoTools && m.autoApproved(t.SessionID)}
+	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, fast: m.ServiceTier == "fast", bypass: !t.NoTools && m.autoApproved(t.SessionID)}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *claudeLive

@@ -47,6 +47,7 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/remote"
+	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/stringext"
@@ -281,8 +282,9 @@ type UI struct {
 	keyMap KeyMap
 	keyenh tea.KeyboardEnhancementsMsg
 
-	dialog *dialog.Overlay
-	status *Status
+	dialog       *dialog.Overlay
+	secureDialog *dialog.SecureEntry
+	status       *Status
 
 	// bangMode tracks whether the editor is in bang (!) shell mode.
 	bangMode     bool
@@ -822,6 +824,39 @@ func (m *UI) loadMCPrompts() tea.Msg {
 
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Secure input bypasses chat, clipboard attachments, global keys, history,
+	// question answers, and remote presence handling entirely.
+	switch typed := msg.(type) {
+	case *secureentry.Request:
+		if m.secureDialog != nil {
+			return m, func() tea.Msg { typed.Finish(false); return nil }
+		}
+		m.secureDialog = dialog.NewSecureEntry(m.com, typed)
+		return m, nil
+	case dialog.SecureEntrySaved:
+		if m.secureDialog != nil && m.secureDialog.Saved(typed) {
+			m.secureDialog = nil
+			return m, func() tea.Msg { typed.Request.Finish(true); return nil }
+		}
+		return m, nil
+	case dialog.SecureEntryPaste:
+		if m.secureDialog == nil {
+			clear(typed.Value)
+			return m, nil
+		}
+	}
+	if m.secureDialog != nil {
+		switch msg.(type) {
+		case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.PasteMsg, dialog.SecureEntryPaste,
+			tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseMotionMsg, tea.MouseWheelMsg:
+			done, cmd := m.secureDialog.Handle(msg)
+			if done {
+				m.secureDialog = nil
+			}
+			return m, cmd
+		}
+	}
+
 	var cmds []tea.Cmd
 	m.beginFrameUpdate()
 	defer m.syncRemotePresence()
@@ -3649,6 +3684,10 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			Min: image.Pt(4, 1),
 			Max: image.Pt(8, 3),
 		})
+	}
+
+	if m.secureDialog != nil {
+		return m.secureDialog.Draw(scr, scr.Bounds())
 	}
 
 	// This needs to come last to overlay on top of everything. We always pass

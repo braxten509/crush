@@ -18,7 +18,7 @@ import (
 
 const (
 	taskLinger     = 8 * time.Second
-	bgProcsRefresh = 2 * time.Second
+	bgProcsRefresh = time.Second
 )
 
 type (

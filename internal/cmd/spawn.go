@@ -25,6 +25,10 @@ The prompt comes from the argument or stdin. Crush reports the result back to th
 Review internal/auth for bugs and report what you find.
 EOF
 
+crush spawn --cli claude --model opus --effort max --fast --name "Compose a tune" <<'EOF'
+Write the song.
+EOF
+
 crush spawn --stop t2`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -37,6 +41,8 @@ crush spawn --stop t2`,
 		if req.Stop == "" {
 			req.CLI, _ = cmd.Flags().GetString("cli")
 			req.Model, _ = cmd.Flags().GetString("model")
+			req.Effort, _ = cmd.Flags().GetString("effort")
+			req.Fast, _ = cmd.Flags().GetBool("fast")
 			req.Name, _ = cmd.Flags().GetString("name")
 			if len(args) > 0 {
 				req.Prompt = args[0]
@@ -67,8 +73,15 @@ crush spawn --stop t2`,
 			cmd.Printf("Stopped task %s (%s).\n", t.ID, t.Name)
 			return nil
 		}
-		cmd.Printf("Started task %s (%s) on %s/%s. It runs in the background; its result will arrive as a <%s> message when it finishes. Don't wait for it.\n",
-			t.ID, t.Name, t.CLI, t.Model, agent.TaskNotificationTag)
+		tuning := ""
+		if t.Effort != "" {
+			tuning += ", effort " + t.Effort
+		}
+		if t.Fast {
+			tuning += ", fast"
+		}
+		cmd.Printf("Started task %s (%s) on %s/%s%s. It runs in the background; its result will arrive as a <%s> message when it finishes. Don't wait for it.\n",
+			t.ID, t.Name, t.CLI, t.Model, tuning, agent.TaskNotificationTag)
 		return nil
 	},
 }
@@ -76,6 +89,8 @@ crush spawn --stop t2`,
 func init() {
 	spawnCmd.Flags().String("cli", "", "Agent CLI to run the sub-agent on (claude, codex, grok, opencode, agy, abacus)")
 	spawnCmd.Flags().String("model", "", "Model to use (defaults to the CLI's first model)")
+	spawnCmd.Flags().String("effort", "", "Reasoning effort, one of the model's levels (like low, medium, high, xhigh, max)")
+	spawnCmd.Flags().Bool("fast", false, "Run in fast mode (claude and codex only)")
 	spawnCmd.Flags().String("name", "", "Short title shown in Crush")
 	spawnCmd.Flags().String("stop", "", "Stop the task with this ID instead")
 	rootCmd.AddCommand(spawnCmd)

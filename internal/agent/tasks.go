@@ -22,6 +22,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
+	"github.com/charmbracelet/crush/internal/secureentry"
 )
 
 // Background sub-agents ("tasks"). An agent CLI running a session starts one
@@ -62,6 +63,7 @@ type Task struct {
 	CLI       string     `json:"cli"`
 	Model     string     `json:"model"`
 	Effort    string     `json:"effort,omitempty"`
+	Fast      bool       `json:"fast,omitempty"`
 	Status    TaskStatus `json:"status"`
 	Started   time.Time  `json:"started"`
 	Ended     time.Time  `json:"ended"`
@@ -72,11 +74,17 @@ type TaskRequest struct {
 	Session string `json:"session"`
 	CLI     string `json:"cli,omitempty"`
 	Model   string `json:"model,omitempty"`
-	Name    string `json:"name,omitempty"`
-	Prompt  string `json:"prompt,omitempty"`
-	Stop    string `json:"stop,omitempty"`
+	// Effort is the reasoning effort, one of the model's levels; empty
+	// keeps the model's default.
+	Effort string `json:"effort,omitempty"`
+	// Fast runs Claude or Codex in its fast mode.
+	Fast   bool   `json:"fast,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Prompt string `json:"prompt,omitempty"`
+	Stop   string `json:"stop,omitempty"`
 	// Ask holds question tool input from `crush ask`.
-	Ask json.RawMessage `json:"ask,omitempty"`
+	Ask         json.RawMessage   `json:"ask,omitempty"`
+	SecureEntry *secureentry.Spec `json:"secure_entry,omitempty"`
 }
 
 type TaskReply struct {
@@ -205,6 +213,12 @@ func (h *taskHub) handle(data []byte) TaskReply {
 	if err := json.Unmarshal(data, &req); err != nil {
 		return TaskReply{Error: "bad request: " + err.Error()}
 	}
+	if req.SecureEntry != nil {
+		if err := h.secureEntry(req); err != nil {
+			return TaskReply{Error: err.Error()}
+		}
+		return TaskReply{}
+	}
 	if req.Ask != nil {
 		if err := h.ask(req); err != nil {
 			return TaskReply{Error: err.Error()}
@@ -271,7 +285,10 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {
 		return nil, fmt.Errorf("unknown session %q", req.Session)
 	}
-	selected := config.SelectedModel{Provider: provider.ID, Model: model.ID, ReasoningEffort: model.DefaultReasoningEffort}
+	selected, err := taskModel(*provider, model, req)
+	if err != nil {
+		return nil, err
+	}
 	fp, err := h.c.buildProvider(*provider, selected, true)
 	if err != nil {
 		return nil, err
@@ -311,7 +328,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	h.seq++
 	t := &Task{
 		ID: fmt.Sprintf("t%d", h.seq), SessionID: req.Session, ChildID: child.ID, Name: name,
-		CLI: cliName(provider.Type), Model: model.ID, Effort: selected.ReasoningEffort, Status: TaskRunning, Started: time.Now(),
+		CLI: cliName(provider.Type), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, Status: TaskRunning, Started: time.Now(),
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	h.cancels[t.ID] = cancel
@@ -331,6 +348,29 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		h.finish(t.ID, subAgentOutput(result), err)
 	}()
 	return &snapshot, nil
+}
+
+// taskModel is the model a sub-agent runs on, tuned as its request asks:
+// the effort must be one of the model's levels, and only Claude and Codex
+// have a fast mode.
+func taskModel(provider config.ProviderConfig, model catwalk.Model, req TaskRequest) (config.SelectedModel, error) {
+	selected := config.SelectedModel{Provider: provider.ID, Model: model.ID, ReasoningEffort: model.DefaultReasoningEffort}
+	if effort := strings.ToLower(strings.TrimSpace(req.Effort)); effort != "" {
+		if !slices.Contains(model.ReasoningLevels, effort) {
+			if len(model.ReasoningLevels) == 0 {
+				return selected, fmt.Errorf("%s model %q has no effort levels", cliName(provider.Type), model.ID)
+			}
+			return selected, fmt.Errorf("%s model %q takes effort %s, not %q", cliName(provider.Type), model.ID, strings.Join(model.ReasoningLevels, ", "), effort)
+		}
+		selected.ReasoningEffort = effort
+	}
+	if req.Fast {
+		if provider.Type != config.TypeClaudeCode && provider.Type != config.TypeCodexCLI {
+			return selected, fmt.Errorf("fast mode is only for claude and codex, not %s", cliName(provider.Type))
+		}
+		selected.ServiceTier = "fast"
+	}
+	return selected, nil
 }
 
 const subAgentPreamble = `You are a sub-agent that another AI agent started in the background from Crush. Do the task below on your own; nobody can answer questions while you work. Never ask the user anything (no "crush ask", no question tools): settle small details yourself. If the task says to check with the user first, or an open question would change the work substantially, don't guess: stop before that part and end with the questions (and the options you see) in your final report, so the agent that started you can answer them or ask the user. You end as soon as you stop replying, so finish what you start instead of leaving it running in the background. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Crush refuses a "sleep" longer than 10 seconds in the foreground; to wait for something, loop on a check (until <check>; do sleep 2; done). When you're done, end with a concise report of what you did and found: that final message is all the other agent will see.
@@ -503,7 +543,11 @@ func (h *taskHub) instructions() string {
 		if len(ids) > 8 {
 			ids = append(ids[:8], "…")
 		}
-		fmt.Fprintf(&clis, "- %s: %s\n", cliName(p.Type), strings.Join(ids, ", "))
+		fmt.Fprintf(&clis, "- %s: %s", cliName(p.Type), strings.Join(ids, ", "))
+		if levels := p.Models[0].ReasoningLevels; len(levels) > 0 {
+			fmt.Fprintf(&clis, " (effort: %s)", strings.Join(levels, ", "))
+		}
+		clis.WriteString("\n")
 	}
 	bin, err := os.Executable()
 	if err != nil {
@@ -513,12 +557,13 @@ func (h *taskHub) instructions() string {
 You are running inside Crush, which can run sub-agents for you in the background, like Claude Code's background agents. Each sub-agent is a separate agent CLI working in this same directory. It does not see this conversation, so give it a complete, self-contained task.
 
 Start one with your shell tool. It returns right away with a task ID:
-  %[1]s spawn --cli <cli> [--model <model>] --name "<short title>" <<'EOF'
+  %[1]s spawn --cli <cli> [--model <model>] [--effort <level>] [--fast] --name "<short title>" <<'EOF'
   <task>
   EOF
 
-CLIs and models (the first model is the default):
+CLIs and models (the first model is the default), with their effort levels:
 %[2]s
+--effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode (claude and codex only).
 Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there. Stop one with: %[1]s spawn --stop <task-id>
 
 Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Run longer waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).
@@ -533,7 +578,14 @@ The user answers questions in Crush's question form, not in chat. Whenever you n
   EOF
 
 Types: single_choice and multi_choice (2-5 choices, each with an id and label, optional short description; the form adds a type-your-own answer and notes on its own, so never add an "Other" choice), yes_no (only for accept/reject), free_text. Every question needs a description. Ask up to %[4]d at once; several show as tabs with a review step before submitting. Then end your turn with at most one short line saying the questions are open: the answers arrive as a <%[3]s> message named %[5]q. Only one set of questions can be open at a time. Sub-agents can't ask the user. When you hand one work that needs the user's input, ask the user first and put the answers in its task. When a sub-agent's result comes back with questions, answer them yourself when you can, and ask the user only what you can't settle.
-</crush_questions>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName)
+</crush_questions>
+
+<crush_secure_entry>
+For API keys, tokens, passwords, and other secrets, NEVER use questions, chat, CLI stdin, command arguments, environment variables, or your own tools to collect the value. Prepare a file with a literal %%s placeholder, then run:
+  %[1]s secure-entry --file /absolute/path/to/file --label "Service API key"
+Only metadata is passed to that command. It opens a masked local Crush dialog, writes the value directly to the file with 0600 permissions, and returns only saved/cancelled as a <%[3]s> named "Secure entry". End your turn after opening it. Never read, print, diff, attach, commit, or send the populated file to tools/models. The program itself reads and edits the file locally.
+For multiple keys, prepare ALL placeholders before collecting any key, then open one dialog at a time for the SAME file. By default each replaces the first remaining %%s. Use --placeholder UNIQUE_MARKER or --occurrence N to select another slot; unique markers are best for multiple keys. Replacement is literal, not printf or a shell expansion. Prepare valid quoting for the intended file format. Existing keys must never be read by you to edit another slot. Secure entry is local-terminal only, not available through the phone or server clients.
+</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName)
 }
 
 func modelIDs(models []catwalk.Model) []string {
@@ -550,4 +602,24 @@ func firstLine(s string, n int) string {
 		return string(r[:n]) + "…"
 	}
 	return s
+}
+
+// secureEntry sends metadata to the local TUI and receives only a fixed status.
+func (h *taskHub) secureEntry(req TaskRequest) error {
+	ctx := context.Background()
+	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {
+		return errors.New("unknown session")
+	}
+	result, err := secureentry.Open(req.Session, *req.SecureEntry)
+	if err != nil {
+		return err
+	}
+	go func() {
+		status := <-result
+		msg := fmt.Sprintf("<%s>\n<name>Secure entry</name>\n<status>%s</status>\n<result>Secure entry %s. No value is returned. Do not read or print the destination file.</result>\n</%s>", TaskNotificationTag, status, status, TaskNotificationTag)
+		if _, err := h.c.Run(ctx, req.Session, msg); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("Failed to deliver secure entry status")
+		}
+	}()
+	return nil
 }

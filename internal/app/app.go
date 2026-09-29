@@ -34,6 +34,7 @@ import (
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
+	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/skills"
@@ -838,6 +839,8 @@ func (app *App) Subscribe(program *tea.Program) {
 	})
 	defer app.tuiWG.Done()
 
+	detachSecureEntry := secureentry.Attach(func(r *secureentry.Request) { program.Send(r) })
+	defer detachSecureEntry()
 	events := app.events.Subscribe(tuiCtx)
 	for {
 		select {

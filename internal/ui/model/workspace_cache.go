@@ -32,6 +32,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
 
@@ -207,7 +208,7 @@ func (m *UI) applyBusyState(msg busyStateMsg) []tea.Cmd {
 
 	busy := m.isAgentBusy()
 	m.chat.SetAgentBusy(busy)
-	m.chat.SetCanBackground(cliagent.CanBackground(catwalk.Type(msg.model.ModelCfg.Provider)))
+	m.chat.SetCanBackground(cliagent.CanBackground(catwalk.Type(msg.model.ModelCfg.Provider)) || msg.model.ModelCfg.Provider == config.AbacusProviderID)
 	if busy {
 		// A session reload that raced an unpopulated busy cache (the
 		// zero-value read at boot) froze the animation clock even though

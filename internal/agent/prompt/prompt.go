@@ -167,8 +167,11 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	platform := cmp.Or(p.platform, runtime.GOOS)
 
 	cfg := store.Config()
-	contextFiles := loadContextFiles(cfg.Options.ContextPaths, store)
-	globalContextFiles := loadContextFiles(cfg.Options.GlobalContextPaths, store)
+	var contextFiles, globalContextFiles map[string][]ContextFile
+	if !cfg.Options.DisableInstructionFiles {
+		contextFiles = loadContextFiles(cfg.Options.ContextPaths, store)
+		globalContextFiles = loadContextFiles(cfg.Options.GlobalContextPaths, store)
+	}
 
 	// Discover and load skills metadata.
 	var availSkillXML string

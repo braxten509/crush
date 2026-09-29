@@ -893,6 +893,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handlePlanHandoff(msg.Payload); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case agentFinishedMsg:
+		cmds = append(cmds, m.handleAgentFinished(msg))
 	case busyStateMsg:
 		cmds = append(cmds, m.applyBusyState(msg)...)
 	case promptQueueMsg:
@@ -5468,6 +5470,11 @@ func (m *UI) toggleThinking() tea.Cmd {
 		}
 
 		currentModel := cfg.Models[agentCfg.Model]
+		provider := cfg.GetProviderForModel(agentCfg.Model)
+		catalog := cfg.GetModelByType(agentCfg.Model)
+		if provider == nil || catalog == nil || !config.SupportsThinkingToggle(*provider, *catalog) {
+			return util.ReportError(errors.New("selected model does not support a thinking toggle"))()
+		}
 		currentModel.Think = !currentModel.Think
 		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
 			return util.ReportError(err)()
@@ -5494,6 +5501,9 @@ func (m *UI) setReasoningEffort(effort string) (tea.Cmd, error) {
 	}
 
 	currentModel := cfg.Models[agentCfg.Model]
+	if err := cfg.ValidateReasoningEffort(currentModel.Provider, currentModel.Model, effort); err != nil {
+		return nil, err
+	}
 	currentModel.ReasoningEffort = effort
 	if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
 		return nil, err
@@ -5889,12 +5899,7 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 	var cmds []tea.Cmd
 	switch n.Type {
 	case notify.TypeAgentFinished:
-		common.StopTurn()
-		cmds = append(cmds, m.playNotificationSound(notification.SoundComplete))
-		cmds = append(cmds, m.sendNotification(notification.Notification{
-			Title:   "Crush is waiting...",
-			Message: fmt.Sprintf("Agent's turn completed in \"%s\"", n.SessionTitle),
-		}))
+		cmds = append(cmds, m.checkAgentFinished(n))
 		// Show what the stored balance says right away, and fetch again:
 		// the refresh for the turn's last response is only kicked off once
 		// its request finishes, so it may still be in flight here.

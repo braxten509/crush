@@ -113,7 +113,6 @@ func refreshCLIModels(path string) {
 
 var cliDiscovery = map[catwalk.Type]func(context.Context) ([]catwalk.Model, error){
 	TypeCodexCLI:    discoverCodex,
-	TypeAbacusCLI:   discoverAbacus,
 	TypeGrokCLI:     listModels(regexp.MustCompile(`^\s*[*-]\s+(\S+)`), "", "grok", "models"),
 	TypeAGYCLI:      listModels(regexp.MustCompile(`^(\S+)\t(.+)$`), "", "agy", "models"),
 	TypeOpenCodeCLI: listModels(regexp.MustCompile(`^(opencode-go/(\S+))$`), "opencode-go/", "opencode", "models", "opencode-go"),
@@ -236,42 +235,6 @@ func discoverCodex(ctx context.Context) ([]catwalk.Model, error) {
 		// Older Codex catalogs omit modalities and support text and images.
 		m.SupportsImages = d.InputModalities == nil || slices.Contains(d.InputModalities, "image")
 		models = append(models, m)
-	}
-	return models, nil
-}
-
-func discoverAbacus(ctx context.Context) ([]catwalk.Model, error) {
-	line, err := rpcExchange(ctx, "abacusai", []string{"-p", "--input-format", "stream-json", "--output-format", "stream-json"}, []any{
-		map[string]any{"type": "control_request", "request_id": "models", "request": map[string]any{"subtype": "get_model_catalog"}},
-	}, func(b []byte) bool { return strings.Contains(string(b), `"request_id":"models"`) })
-	if err != nil || line == nil {
-		return nil, err
-	}
-	var res struct {
-		Response struct {
-			Response struct {
-				Groups []struct {
-					Origin string `json:"origin"`
-					Models []struct {
-						ID   string `json:"id"`
-						Name string `json:"name"`
-					} `json:"models"`
-				} `json:"groups"`
-			} `json:"response"`
-		} `json:"response"`
-	}
-	if err := json.Unmarshal(line, &res); err != nil {
-		return nil, err
-	}
-	var models []catwalk.Model
-	for _, g := range res.Response.Response.Groups {
-		// Only Abacus's own models; the other groups are API keys.
-		if g.Origin != "abacus" {
-			continue
-		}
-		for _, m := range g.Models {
-			models = append(models, cliModels(m.ID, m.Name)...)
-		}
 	}
 	return models, nil
 }

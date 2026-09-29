@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"os"
 	"strconv"
 	"strings"
@@ -47,7 +48,14 @@ func linuxMarkedProcs(markers []string) map[int]proc {
 			continue // A zombie or kernel thread.
 		}
 		// ponytail: assumes USER_HZ is 100, true on every Linux in use.
-		procs[pid] = proc{pid: pid, ppid: ppid, sid: sid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond)}
+		nativeShellID := ""
+		for _, variable := range bytes.Split(env, []byte{0}) {
+			if value, ok := strings.CutPrefix(string(variable), tools.NativeShellEnv+"="); ok {
+				nativeShellID = value
+				break
+			}
+		}
+		procs[pid] = proc{pid: pid, ppid: ppid, sid: sid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond), nativeShellID: nativeShellID}
 	}
 	return procs
 }

@@ -7,12 +7,14 @@ import (
 	_ "net/http/pprof"
 	"os"
 
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/cmd"
 	_ "github.com/charmbracelet/crush/internal/dns"
 	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
+	defer cliagent.CloseInstructionViews()
 	if os.Getenv("CRUSH_PROFILE") != "" {
 		go func() {
 			slog.Info("Serving pprof at localhost:6060")

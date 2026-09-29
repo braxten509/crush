@@ -619,6 +619,31 @@ func (a *sessionAgent) publishRunComplete(ctx context.Context, call SessionAgent
 	a.runComplete.PublishMustDeliver(ctx, pubsub.UpdatedEvent, complete)
 }
 
+// notifySessionFinished runs after the final message flush. A completed
+// model turn is not a completed session while another prompt is queued,
+// accepted for dispatch, interrupting, or already running.
+func (a *sessionAgent) notifySessionFinished(call SessionAgentCall, title string) {
+	if call.NonInteractive || a.notify == nil {
+		return
+	}
+	mu := a.sessionMu(call.SessionID)
+	mu.Lock()
+	defer mu.Unlock()
+	a.acceptedMu.Lock()
+	defer a.acceptedMu.Unlock()
+	accepted, _ := a.acceptedRuns.Get(call.SessionID)
+	queued, _ := a.messageQueue.Get(call.SessionID)
+	if a.IsSessionBusy(call.SessionID) || accepted > 0 || len(queued) > 0 {
+		return
+	}
+	a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
+		SessionID:    call.SessionID,
+		SessionTitle: title,
+		Type:         notify.TypeAgentFinished,
+		RunID:        call.RunID,
+	})
+}
+
 // ValidateCall performs the cheap structural validation that
 // sessionAgent.Run requires before a call can be dispatched: a call must
 // carry either a non-empty prompt or a text attachment, and it must name a
@@ -717,6 +742,13 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// the lock so a Cancel that arrives between here and assistant creation
 	// is not lost.
 	runCtx := context.WithValue(ctx, tools.SessionIDContextKey, call.SessionID)
+	if a.tasks != nil {
+		env := a.tasks.env(call.SessionID)
+		if a.isSubAgent {
+			env = []string{TasksDirEnv + "=" + a.tasks.dir, TasksSessionEnv + "="}
+		}
+		runCtx = context.WithValue(runCtx, tools.ShellEnvContextKey, env)
+	}
 	genCtx, cancel = context.WithCancel(runCtx)
 	ac := &activeCancel{cancel: cancel}
 	a.activeRequests.Set(call.SessionID, ac)
@@ -737,6 +769,12 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	largeModel := a.largeModel.Get()
 	systemPrompt := a.systemPrompt.Get()
 	promptPrefix := a.systemPromptPrefix.Get()
+	if _, isCLI := largeModel.Model.(*cliagent.Model); !isCLI && a.cfg != nil && a.cfg.Config().Options != nil && a.cfg.Config().Options.DisableInstructionFiles {
+		systemPrompt += "\n\n" + sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
+		if a.tasks != nil && !a.isSubAgent {
+			systemPrompt += "\n\n" + a.tasks.instructions()
+		}
+	}
 	var instructions strings.Builder
 
 	for _, server := range mcp.GetStates() {
@@ -802,7 +840,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// with — and be superseded by — the recursive call's own
 	// RunComplete (each queued user prompt is its own turn and
 	// publishes exactly one terminal event).
-	var skipRunComplete bool
+	var skipRunComplete, notifyOnSuccess bool
 	// currentAssistant is declared here so the deferred RunComplete
 	// publish below can capture the pointer that PrepareStep will
 	// later (re)assign for each streaming step. The final assistant
@@ -830,7 +868,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// closed. A short timeout bounds the flush.
 		flushCtx, flushCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer flushCancel()
-		if flushErr := a.messages.FlushAll(flushCtx); flushErr != nil {
+		flushErr := a.messages.FlushAll(flushCtx)
+		if flushErr != nil {
 			slog.Error("Failed to flush pending message updates after run", "error", flushErr)
 		}
 		if skipRunComplete {
@@ -855,6 +894,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// subscriber channel can't silently drop it and hang
 		// non-interactive clients waiting on RunComplete.
 		a.publishRunComplete(ctx, call, complete)
+		if notifyOnSuccess && flushErr == nil && complete.Error == "" && !complete.Cancelled {
+			a.notifySessionFinished(call, currentSession.Title)
+		}
 	}()
 
 	history, files := a.preparePrompt(msgs, largeModel.CatwalkCfg.SupportsImages, call.Attachments...)
@@ -1333,27 +1375,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		a.sendChannelReply(ctx, call, currentAssistant.Content().String(), completedToolCalls)
 	}
 
-	// Release active request before publishing the notification.
-	// TUI handlers poll IsSessionBusy() and only re-evaluate when a
-	// tea.Msg arrives, so the cleanup must precede the notify or
-	// subscribers see stale busy state at the moment of receipt.
-	a.activeRequests.Del(call.SessionID)
 	cancel()
 
-	// Send notification that agent has finished its turn (skip for
-	// nested/non-interactive sessions).
-	if !call.NonInteractive && a.notify != nil {
-		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
-			SessionID:    call.SessionID,
-			SessionTitle: currentSession.Title,
-			Type:         notify.TypeAgentFinished,
-		})
-	}
-
 	// Hand off to the next queued prompt (if any) under dispatchMu so
-	// the transition from this finished run to the queued run is atomic
-	// against a concurrent Cancel. activeRequests for this session was
-	// just deleted above, so without the lock there is a window in
+	// releasing this finished run and reserving the queued run is atomic
+	// against a concurrent Cancel. Without the lock there is a window in
 	// which the session looks idle and a cancel becomes a no-op that
 	// fails to stop the queued prompt. Holding the lock lets us observe
 	// a pending cancel recorded against the session and drop the queue
@@ -1364,6 +1390,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// closing the dequeue -> re-register window.
 	mu := a.sessionMu(call.SessionID)
 	mu.Lock()
+	a.activeRequests.CompareAndDelete(call.SessionID, ac)
 	queuedMessages, _ := a.messageQueue.Get(call.SessionID)
 	if mark, ok := a.cancelMark.Get(call.SessionID); ok && mark > 0 && len(queuedMessages) > 0 {
 		// A cancel was recorded for this session (e.g. it arrived while
@@ -1404,6 +1431,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			a.cancelMark.Del(call.SessionID)
 		}
 		mu.Unlock()
+		// The deferred flush emits completion only for the last successful
+		// turn, then rechecks for work accepted during that flush.
+		notifyOnSuccess = true
 		return result, err
 	}
 	// There are queued messages, restart the loop. Suppress the outer

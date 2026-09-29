@@ -38,7 +38,9 @@ func (m *UI) modelInfo(width int) string {
 			// Only check reasoning if model can reason
 			if model.CatwalkCfg.CanReason {
 				if len(model.CatwalkCfg.ReasoningLevels) == 0 {
-					if model.ModelCfg.Think {
+					if !config.SupportsThinkingToggle(providerConfig, model.CatwalkCfg) {
+						reasoningInfo = "Thinking"
+					} else if model.ModelCfg.Think {
 						reasoningInfo = "Thinking On"
 					} else {
 						reasoningInfo = "Thinking Off"
@@ -48,7 +50,7 @@ func (m *UI) modelInfo(width int) string {
 					reasoningInfo = fmt.Sprintf("Reasoning %s", common.FormatReasoningEffort(reasoningEffort))
 				}
 			}
-			if providerConfig.Type == config.TypeCodexCLI && model.ModelCfg.ServiceTier == "fast" {
+			if config.SupportsFastMode(providerConfig, model.CatwalkCfg) && model.ModelCfg.ServiceTier == "fast" {
 				if reasoningInfo != "" {
 					reasoningInfo += " · "
 				}

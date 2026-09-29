@@ -16,6 +16,7 @@ type (
 	supportsImagesKey   string
 	modelNameKey        string
 	channelContextKey   string
+	shellEnvContextKey  string
 )
 
 const (
@@ -28,7 +29,8 @@ const (
 	// ModelNameContextKey is the key for the model name in the context.
 	ModelNameContextKey modelNameKey = "model_name"
 	// ChannelContextKey is the key for the channel that originated the turn.
-	ChannelContextKey channelContextKey = "channel"
+	ChannelContextKey  channelContextKey  = "channel"
+	ShellEnvContextKey shellEnvContextKey = "shell_env"
 )
 
 // getContextValue is a generic helper that retrieves a typed value from context.

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -67,8 +68,22 @@ func (p *proc) killCommands(calls []openCall) {
 		// ponytail: assumes USER_HZ is 100, true on every Linux in use.
 		procs[pid] = info{ppid, pgrp, boot.Add(time.Duration(ticks) * 10 * time.Millisecond), strings.Split(string(cmdline), "\x00")}
 	}
+	cli := p.cmd.Process.Pid
+	// Bubblewrap keeps a monitor above the actual CLI. Commands still belong
+	// to the CLI's children, not to that transparent monitor.
+	if filepath.Base(p.cmd.Path) == "bwrap" {
+		for pid, q := range procs {
+			if q.ppid == cli && len(q.args) > 0 && filepath.Base(q.args[0]) != "bwrap" {
+				cli = pid
+				break
+			}
+		}
+	}
 	runs := func(pid int, c openCall) bool {
 		for {
+			if pid == cli {
+				return false
+			}
 			q, ok := procs[pid]
 			if !ok || q.started.Before(c.at.Add(-500*time.Millisecond)) {
 				return false
@@ -76,13 +91,12 @@ func (p *proc) killCommands(calls []openCall) {
 			if c.runBy(q.args) {
 				return true
 			}
-			if q.ppid == p.cmd.Process.Pid {
+			if q.ppid == cli {
 				return false
 			}
 			pid = q.ppid
 		}
 	}
-	cli := p.cmd.Process.Pid
 	for pid, q := range procs {
 		for _, c := range calls {
 			if !runs(pid, c) {

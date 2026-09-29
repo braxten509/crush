@@ -632,15 +632,18 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	slices.Sort(c.Options.ContextPaths)
 	c.Options.ContextPaths = slices.Compact(c.Options.ContextPaths)
 
-	// Add the default skills directories if not already present.
-	for _, dir := range GlobalSkillsDirs() {
-		if !slices.Contains(c.Options.SkillsPaths, dir) {
-			c.Options.SkillsPaths = append(c.Options.SkillsPaths, dir)
+	if c.Options.DisableInstructionFiles {
+		c.Options.SkillsPaths = []string{filepath.Join(home.Dir(), ".agents", "skills")}
+	} else {
+		// Add the default skills directories if not already present.
+		for _, dir := range GlobalSkillsDirs() {
+			if !slices.Contains(c.Options.SkillsPaths, dir) {
+				c.Options.SkillsPaths = append(c.Options.SkillsPaths, dir)
+			}
 		}
+		// Project specific skills dirs.
+		c.Options.SkillsPaths = append(c.Options.SkillsPaths, ProjectSkillsDir(workingDir)...)
 	}
-
-	// Project specific skills dirs.
-	c.Options.SkillsPaths = append(c.Options.SkillsPaths, ProjectSkillsDir(workingDir)...)
 
 	if str, ok := os.LookupEnv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
 		c.Options.DisableProviderAutoUpdate, _ = strconv.ParseBool(str)
@@ -848,6 +851,7 @@ func resolveSelectedModels(cfg *Config, knownProviders []catwalk.Provider) (reso
 			large = defaultLarge
 			result.LargeFallback = true
 		} else {
+			large.ServiceTier = largeModelSelected.ServiceTier
 			if largeModelSelected.MaxTokens > 0 {
 				large.MaxTokens = largeModelSelected.MaxTokens
 			} else {
@@ -893,6 +897,7 @@ func resolveSelectedModels(cfg *Config, knownProviders []catwalk.Provider) (reso
 			small = defaultSmall
 			result.SmallFallback = true
 		} else {
+			small.ServiceTier = smallModelSelected.ServiceTier
 			if smallModelSelected.MaxTokens > 0 {
 				small.MaxTokens = smallModelSelected.MaxTokens
 			} else {

@@ -521,6 +521,10 @@
           "type": "array",
           "description": "Paths to files containing context information for the AI"
         },
+        "disable_instruction_files": {
+          "type": "boolean",
+          "description": "Use shared Crush instructions and memory instead of personal and project instruction files"
+        },
         "global_context_paths": {
           "items": {
             "type": "string"
@@ -798,11 +802,16 @@
         "reasoning_effort": {
           "type": "string",
           "enum": [
+            "none",
+            "minimal",
             "low",
             "medium",
-            "high"
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
           ],
-          "description": "Reasoning effort level for OpenAI models that support it"
+          "description": "Reasoning effort level supported by the selected model"
         },
         "service_tier": {
           "type": "string",

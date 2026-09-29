@@ -493,6 +493,7 @@ func effectiveReasoningEffort(model Model) string {
 }
 
 func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.ProviderOptions {
+	providerCfg = config.AbacusProviderForModel(providerCfg, model.CatwalkCfg)
 	options := fantasy.ProviderOptions{}
 
 	cfgOpts := []byte("{}")
@@ -539,6 +540,20 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 		slog.Error("Could not create config for call", "err", err)
 		return options
 	}
+	delete(mergedOptions, config.AbacusAPIFormatOption)
+	if providerCfg.ID == config.AbacusProviderID && len(providerCfg.ExtraBody) > 0 {
+		extra, _ := mergedOptions["extra_body"].(map[string]any)
+		extra = maps.Clone(extra)
+		if extra == nil {
+			extra = make(map[string]any)
+		}
+		for key, value := range providerCfg.ExtraBody {
+			if _, exists := extra[key]; !exists {
+				extra[key] = value
+			}
+		}
+		mergedOptions["extra_body"] = extra
+	}
 
 	reasoningEffort := effectiveReasoningEffort(model)
 	shouldSetEffort := model.CatwalkCfg.CanReason &&
@@ -547,11 +562,18 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 
 	switch providerCfg.Type {
 	case openai.Name, azure.Name:
+		if providerCfg.ID == config.AbacusProviderID && config.SupportsFastMode(providerCfg, model.CatwalkCfg) && model.ModelCfg.ServiceTier != "" {
+			if model.ModelCfg.ServiceTier == "fast" {
+				mergedOptions["service_tier"] = "priority"
+			} else {
+				mergedOptions["service_tier"] = "auto"
+			}
+		}
 		_, hasReasoningEffort := mergedOptions["reasoning_effort"]
 		if !hasReasoningEffort && shouldSetEffort {
 			mergedOptions["reasoning_effort"] = reasoningEffort
 		}
-		if openai.IsResponsesModel(model.CatwalkCfg.ID) {
+		if openai.IsResponsesModel(model.CatwalkCfg.ID) || (providerCfg.ID == config.AbacusProviderID && config.AbacusAPIFormat(model.CatwalkCfg) == "responses") {
 			if openai.IsResponsesReasoningModel(model.CatwalkCfg.ID) {
 				mergedOptions["reasoning_summary"] = "auto"
 				mergedOptions["include"] = []openai.IncludeType{openai.IncludeReasoningEncryptedContent}
@@ -673,6 +695,36 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 		// TODO: Abstract this in Fantasy somehow?
 		// TODO: Allow custom providers to specify how to set this?
 		switch providerCfg.ID {
+		case config.AbacusProviderID:
+			if existing, ok := mergedOptions["extra_body"].(map[string]any); ok {
+				for key, value := range existing {
+					extraBody[key] = value
+				}
+			}
+			id := strings.ToLower(model.CatwalkCfg.ID)
+			if _, explicit := extraBody["thinking"]; explicit {
+				break
+			}
+			switch {
+			case strings.Contains(id, "minimax"):
+				if model.ModelCfg.Think || shouldSetEffort {
+					mode := "enabled"
+					if strings.Contains(id, "minimax-m3") {
+						mode = "adaptive"
+						extraBody["reasoning_split"] = true
+					}
+					extraBody["thinking"] = map[string]any{"type": mode}
+				} else {
+					extraBody["thinking"] = map[string]any{"type": "disabled"}
+				}
+				delete(mergedOptions, "reasoning_effort")
+			case strings.Contains(id, "deepseek") || strings.HasPrefix(id, "zai-org/"):
+				if model.ModelCfg.Think || (shouldSetEffort && reasoningEffort != "none") {
+					extraBody["thinking"] = map[string]any{"type": "enabled"}
+				} else {
+					extraBody["thinking"] = map[string]any{"type": "disabled"}
+				}
+			}
 		case hyper.Name:
 			extraBody["thinking"] = model.ModelCfg.Think
 		case string(catwalk.InferenceProviderIoNet):
@@ -1343,6 +1395,9 @@ func (c *coordinator) isAnthropicThinking(model config.SelectedModel) bool {
 }
 
 func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model config.SelectedModel, isSubAgent bool) (fantasy.Provider, error) {
+	if providerCfg.ID == config.AbacusProviderID {
+		return c.buildAbacusProvider(providerCfg, model)
+	}
 	headers := maps.Clone(providerCfg.ExtraHeaders)
 	if headers == nil {
 		headers = make(map[string]string)

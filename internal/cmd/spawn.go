@@ -87,7 +87,7 @@ crush spawn --stop t2`,
 }
 
 func init() {
-	spawnCmd.Flags().String("cli", "", "Agent CLI to run the sub-agent on (claude, codex, grok, opencode, agy, abacus)")
+	spawnCmd.Flags().String("cli", "", "Agent CLI to run the sub-agent on (claude, codex, grok, opencode, agy)")
 	spawnCmd.Flags().String("model", "", "Model to use (defaults to the CLI's first model)")
 	spawnCmd.Flags().String("effort", "", "Reasoning effort, one of the model's levels (like low, medium, high, xhigh, max)")
 	spawnCmd.Flags().Bool("fast", false, "Run in fast mode (claude and codex only)")

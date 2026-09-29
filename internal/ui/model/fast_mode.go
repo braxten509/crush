@@ -22,8 +22,9 @@ func (m *UI) toggleFastMode() tea.Cmd {
 		return util.ReportError(errors.New("agent configuration not found"))
 	}
 	provider := cfg.GetProviderForModel(agentCfg.Model)
-	if provider == nil || provider.Type != config.TypeCodexCLI {
-		return util.ReportError(errors.New("FAST mode requires a Codex model"))
+	model := cfg.GetModelByType(agentCfg.Model)
+	if provider == nil || model == nil || !config.SupportsFastMode(*provider, *model) {
+		return util.ReportError(errors.New("selected model does not support FAST mode"))
 	}
 	selected := cfg.Models[agentCfg.Model]
 	status := "enabled"

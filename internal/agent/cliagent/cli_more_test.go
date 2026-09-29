@@ -75,34 +75,3 @@ func TestAGYTurn(t *testing.T) {
 	_, err = collect(t, "agy", "other")
 	require.ErrorIs(t, err, ErrResume)
 }
-
-func TestAbacusTurn(t *testing.T) {
-	fakeCLI(t, "abacusai", `{"type":"system","subtype":"init","session_id":null}
-{"type":"event","event":{"type":"conversation_info","conversationId":"ab1"}}
-{"type":"event","event":{"type":"thinking_delta","content":"plan"}}
-{"type":"event","event":{"type":"tool_call","toolCall":{"id":"b1","name":"bash","args":{"command":"ls"},"endpoint":"bash"}}}
-{"type":"event","event":{"type":"file_read","filepath":"/f","toolCallId":"r1"}}
-{"type":"event","event":{"type":"tool_call","toolCall":{"id":"r1","name":"read","args":{"path":"/f"},"endpoint":"file_read"}}}
-{"type":"event","event":{"type":"tool_result","result":{"toolCallId":"b1","output":"a.txt"}}}
-{"type":"event","event":{"type":"tool_call","toolCall":{"id":"e1","name":"edit","args":{"path":"/f","old_str":"a","new_str":"b"},"endpoint":"file_str_replace"}}}
-{"type":"event","event":{"type":"file_write_done","toolCallId":"e1"}}
-{"type":"event","event":{"type":"text_delta","content":"Done."}}
-{"type":"event","event":{"type":"turn_complete"}}
-{"type":"result","subtype":"success","is_error":false}
-`)
-	events, err := collect(t, "abacus", "")
-	require.NoError(t, err)
-	require.Equal(t, []EventType{
-		EventSession, EventReasoning,
-		EventToolStart, EventToolCall,
-		EventToolStart, EventToolCall, EventToolResult,
-		EventToolResult,
-		EventToolStart, EventToolCall, EventToolResult,
-		EventText,
-	}, types(events))
-	require.Equal(t, "ab1", events[0].Session)
-	require.Equal(t, "view", events[5].Name)
-	require.Equal(t, "b1", events[7].ID)
-	require.Equal(t, "a.txt", events[7].Output)
-	require.JSONEq(t, `{"file_path":"/f","old_string":"a","new_string":"b"}`, events[9].Input)
-}

@@ -91,12 +91,7 @@ type Resolver interface {
 }
 
 type modelsResponse struct {
-	Data []struct {
-		ID      string `json:"id"`
-		Object  string `json:"object"`
-		Created int64  `json:"created"`
-		OwnedBy string `json:"owned_by"`
-	} `json:"data"`
+	Data []json.RawMessage `json:"data"`
 }
 
 // DiscoverModels fetches available models from the provider's /models endpoint.
@@ -131,8 +126,21 @@ func DiscoverModels(ctx context.Context, cfg Config, resolver Resolver) ([]catwa
 	copy(result, cfg.ExistingModels)
 
 	// Append discovered models not already in the list.
-	for _, e := range modelsResp.Data {
+	for _, raw := range modelsResp.Data {
+		var e struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(raw, &e); err != nil {
+			return nil, fmt.Errorf("decoding model for provider %s: %w", cfg.ID, err)
+		}
 		if _, ok := existing[e.ID]; ok {
+			continue
+		}
+		if cfg.ID == "abacus" {
+			model, ok := abacusModel(raw)
+			if ok {
+				result = append(result, model)
+			}
 			continue
 		}
 		result = append(result, catwalk.Model{

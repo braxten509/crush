@@ -25,7 +25,7 @@ func collect(t *testing.T, kind string, resume string) ([]Event, error) {
 	var events []Event
 	m := &Model{Kind: map[string]catwalk.Type{
 		"claude": config.TypeClaudeCode, "codex": config.TypeCodexCLI, "grok": config.TypeGrokCLI,
-		"opencode": config.TypeOpenCodeCLI, "agy": config.TypeAGYCLI, "abacus": config.TypeAbacusCLI,
+		"opencode": config.TypeOpenCodeCLI, "agy": config.TypeAGYCLI,
 	}[kind], ID: "m", Dir: t.TempDir()}
 	err := m.Run(context.Background(), Turn{Prompt: "hi", Resume: resume, Emit: func(e Event) error {
 		events = append(events, e)

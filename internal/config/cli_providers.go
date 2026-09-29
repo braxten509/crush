@@ -16,7 +16,6 @@ const (
 	TypeClaudeCode  catwalk.Type = "claude-code"
 	TypeCodexCLI    catwalk.Type = "codex-cli"
 	TypeGrokCLI     catwalk.Type = "grok-cli"
-	TypeAbacusCLI   catwalk.Type = "abacus-cli"
 	TypeAGYCLI      catwalk.Type = "agy-cli"
 	TypeOpenCodeCLI catwalk.Type = "opencode-cli"
 )
@@ -69,13 +68,6 @@ var cliProviders = []cliProvider{
 		FlatRate: true,
 		Models:   cliModels("grok-4.7", "Grok 4.7", "grok-4.7-build-fast", "Grok 4.7 Build Fast", "grok-4.6", "Grok 4.6", "grok-4.5", "Grok 4.5"),
 	}, "grok-4.7-build-fast"},
-	{"abacusai", ProviderConfig{
-		ID:       string(TypeAbacusCLI),
-		Name:     "Abacus",
-		Type:     TypeAbacusCLI,
-		FlatRate: true,
-		Models:   cliModels("ROUTE_LLM", "RouteLLM", "CLAUDE_V5_5_OPUS_THINKING", "Opus 5.5", "OPENAI_GPT6_ASTRA_THINKING", "GPT-6 Astra", "XAI_GROK_4_7", "Grok 4.7", "ROUTE_LLM_LOW", "RouteLLM Low"),
-	}, "ROUTE_LLM_LOW"},
 	{"agy", ProviderConfig{
 		ID:       string(TypeAGYCLI),
 		Name:     "Antigravity",

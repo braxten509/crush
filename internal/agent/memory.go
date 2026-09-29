@@ -8,9 +8,8 @@ import (
 )
 
 // The shared memory is one folder of memory files that every agent the
-// user runs reads and writes. Claude Code loads it on its own (its
-// autoMemoryDirectory setting points there), so only the other CLIs are
-// handed its index and the rules for using it.
+// user runs reads and writes. Every CLI receives its index and writing rules
+// from Crush, independently of the CLI's native memory settings.
 
 const memoryIndexLimit = 25_000 // what Claude Code loads of MEMORY.md
 

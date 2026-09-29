@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	agentprompt "github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -244,15 +245,22 @@ func cliName(t catwalk.Type) string {
 	return strings.TrimSuffix(s, "-code")
 }
 
+func taskProviderName(provider config.ProviderConfig) string {
+	if provider.ID == config.AbacusProviderID {
+		return provider.ID
+	}
+	return cliName(provider.Type)
+}
+
 // cliProviders lists the configured agent CLI providers.
-func (h *taskHub) cliProviders() []config.ProviderConfig {
+func (h *taskHub) taskProviders() []config.ProviderConfig {
 	var out []config.ProviderConfig
 	for _, p := range h.c.cfg.Config().Providers.Seq2() {
-		if config.IsCLIProviderType(p.Type) && !p.Disable && len(p.Models) > 0 {
+		if (config.IsCLIProviderType(p.Type) || p.ID == config.AbacusProviderID) && !p.Disable && len(p.Models) > 0 {
 			out = append(out, p)
 		}
 	}
-	slices.SortFunc(out, func(a, b config.ProviderConfig) int { return strings.Compare(cliName(a.Type), cliName(b.Type)) })
+	slices.SortFunc(out, func(a, b config.ProviderConfig) int { return strings.Compare(taskProviderName(a), taskProviderName(b)) })
 	return out
 }
 
@@ -263,9 +271,9 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	}
 	var provider *config.ProviderConfig
 	var names []string
-	for _, p := range h.cliProviders() {
-		names = append(names, cliName(p.Type))
-		if strings.EqualFold(req.CLI, cliName(p.Type)) || strings.EqualFold(req.CLI, string(p.Type)) {
+	for _, p := range h.taskProviders() {
+		names = append(names, taskProviderName(p))
+		if strings.EqualFold(req.CLI, taskProviderName(p)) || (config.IsCLIProviderType(p.Type) && strings.EqualFold(req.CLI, string(p.Type))) {
 			provider = &p
 		}
 	}
@@ -276,7 +284,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	if req.Model != "" {
 		i := slices.IndexFunc(provider.Models, func(m catwalk.Model) bool { return strings.EqualFold(m.ID, req.Model) })
 		if i < 0 {
-			return nil, fmt.Errorf("unknown %s model %q; available: %s", cliName(provider.Type), req.Model, strings.Join(modelIDs(provider.Models), ", "))
+			return nil, fmt.Errorf("unknown %s model %q; available: %s", taskProviderName(*provider), req.Model, strings.Join(modelIDs(provider.Models), ", "))
 		}
 		model = provider.Models[i]
 	}
@@ -306,6 +314,10 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		cm.Env = []string{TasksDirEnv + "=" + h.dir}
 	}
 	m := Model{Model: lm, CatwalkCfg: model, ModelCfg: selected, FlatRate: provider.FlatRate}
+	var subTasks *taskHub
+	if !config.IsCLIProviderType(provider.Type) {
+		subTasks = h
+	}
 	sub := NewSessionAgent(SessionAgentOptions{
 		LargeModel:  m,
 		SmallModel:  m,
@@ -314,21 +326,45 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		Sessions:    h.c.sessions,
 		Messages:    h.c.messages,
 		Cfg:         h.c.cfg,
+		Tasks:       subTasks,
 		Notify:      h.c.notify,
 		RunComplete: h.c.runComplete,
 	})
+	if !config.IsCLIProviderType(provider.Type) {
+		lm = newRequestTimeoutModel(lm, h.c.cfg.Config().Options.GetRequestTimeout())
+		m.Model = lm
+		sub.SetModels(m, m)
+		agentCfg := h.c.cfg.Config().Agents[config.AgentTask]
+		nativeTools, err := h.c.buildTools(ctx, agentCfg, true)
+		if err != nil {
+			return nil, err
+		}
+		sub.SetTools(nativeTools)
+		p, err := taskPrompt(agentprompt.WithWorkingDir(h.c.cfg.WorkingDir()))
+		if err != nil {
+			return nil, err
+		}
+		text, err := p.Build(ctx, lm.Provider(), model.ID, h.c.cfg)
+		if err != nil {
+			return nil, err
+		}
+		sub.SetSystemPrompt(text)
+	}
 
 	name := cmp.Or(strings.TrimSpace(req.Name), firstLine(prompt, 40))
 	child, err := h.c.sessions.CreateTaskSession(ctx, uuid.NewString(), req.Session, name)
 	if err != nil {
 		return nil, err
 	}
+	if !config.IsCLIProviderType(provider.Type) {
+		h.c.permissions.AutoApproveSession(child.ID)
+	}
 
 	h.mu.Lock()
 	h.seq++
 	t := &Task{
 		ID: fmt.Sprintf("t%d", h.seq), SessionID: req.Session, ChildID: child.ID, Name: name,
-		CLI: cliName(provider.Type), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, Status: TaskRunning, Started: time.Now(),
+		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, Status: TaskRunning, Started: time.Now(),
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	h.cancels[t.ID] = cancel
@@ -344,6 +380,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 			Prompt:          subAgentPreamble + prompt,
 			MaxOutputTokens: model.DefaultMaxTokens,
 			NonInteractive:  true,
+			ProviderOptions: getProviderOptions(m, *provider),
 		})
 		h.finish(t.ID, subAgentOutput(result), err)
 	}()
@@ -358,14 +395,14 @@ func taskModel(provider config.ProviderConfig, model catwalk.Model, req TaskRequ
 	if effort := strings.ToLower(strings.TrimSpace(req.Effort)); effort != "" {
 		if !slices.Contains(model.ReasoningLevels, effort) {
 			if len(model.ReasoningLevels) == 0 {
-				return selected, fmt.Errorf("%s model %q has no effort levels", cliName(provider.Type), model.ID)
+				return selected, fmt.Errorf("%s model %q has no effort levels", taskProviderName(provider), model.ID)
 			}
-			return selected, fmt.Errorf("%s model %q takes effort %s, not %q", cliName(provider.Type), model.ID, strings.Join(model.ReasoningLevels, ", "), effort)
+			return selected, fmt.Errorf("%s model %q takes effort %s, not %q", taskProviderName(provider), model.ID, strings.Join(model.ReasoningLevels, ", "), effort)
 		}
 		selected.ReasoningEffort = effort
 	}
 	if req.Fast {
-		if provider.Type != config.TypeClaudeCode && provider.Type != config.TypeCodexCLI {
+		if provider.Type != config.TypeClaudeCode && !config.SupportsFastMode(provider, model) {
 			return selected, fmt.Errorf("fast mode is only for claude and codex, not %s", cliName(provider.Type))
 		}
 		selected.ServiceTier = "fast"
@@ -538,12 +575,12 @@ func ParseTaskNotification(text string) (name, status string, ok bool) {
 // instructions tell a session's agent how to use sub-agents.
 func (h *taskHub) instructions() string {
 	var clis strings.Builder
-	for _, p := range h.cliProviders() {
+	for _, p := range h.taskProviders() {
 		ids := modelIDs(p.Models)
 		if len(ids) > 8 {
 			ids = append(ids[:8], "…")
 		}
-		fmt.Fprintf(&clis, "- %s: %s", cliName(p.Type), strings.Join(ids, ", "))
+		fmt.Fprintf(&clis, "- %s: %s", taskProviderName(p), strings.Join(ids, ", "))
 		if levels := p.Models[0].ReasoningLevels; len(levels) > 0 {
 			fmt.Fprintf(&clis, " (effort: %s)", strings.Join(levels, ", "))
 		}
@@ -554,16 +591,16 @@ func (h *taskHub) instructions() string {
 		bin = "crush"
 	}
 	return fmt.Sprintf(`<crush_sub_agents>
-You are running inside Crush, which can run sub-agents for you in the background, like Claude Code's background agents. Each sub-agent is a separate agent CLI working in this same directory. It does not see this conversation, so give it a complete, self-contained task.
+You are running inside Crush, which can run sub-agents for you in the background, like Claude Code's background agents. Each sub-agent uses the chosen provider (an agent CLI or the Abacus API) in this same directory. It does not see this conversation, so give it a complete, self-contained task.
 
 Start one with your shell tool. It returns right away with a task ID:
   %[1]s spawn --cli <cli> [--model <model>] [--effort <level>] [--fast] --name "<short title>" <<'EOF'
   <task>
   EOF
 
-CLIs and models (the first model is the default), with their effort levels:
+Providers and models (the first model is the default), with their effort levels:
 %[2]s
---effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode (claude and codex only).
+--effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode where supported (Claude Code, Codex, and Abacus OpenAI priority models). Abacus effort levels depend on the chosen model; recent Claude models accept low, medium, high, xhigh, max.
 Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there. Stop one with: %[1]s spawn --stop <task-id>
 
 Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Run longer waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).

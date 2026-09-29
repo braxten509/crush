@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"charm.land/fantasy"
@@ -14,6 +15,36 @@ import (
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBashCtrlBLeavesCommandRunning(t *testing.T) {
+	tool := newBashToolForTest(t.TempDir())
+	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), SessionIDContextKey, "background-test"))
+	defer cancel()
+	finished := make(chan fantasy.ToolResponse, 1)
+	go func() {
+		finished <- runBashTool(t, tool, ctx, BashParams{Command: "sleep 3 && echo survived", Description: "background test"})
+	}()
+	require.Eventually(t, func() bool { return BackgroundShell("background-test") }, time.Second, 10*time.Millisecond)
+	var response fantasy.ToolResponse
+	select {
+	case response = <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("Ctrl+B did not release the foreground call")
+	}
+	var metadata BashResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(response.Metadata), &metadata))
+	require.True(t, metadata.Background)
+	require.NotEmpty(t, metadata.ShellID)
+	cancel()
+	job, ok := shell.GetBackgroundShellManager().Get(metadata.ShellID)
+	require.True(t, ok)
+	job.Wait()
+	stdout, _, _, err := job.GetOutput()
+	require.NoError(t, err)
+	require.Contains(t, stdout, "survived")
+	require.NoError(t, shell.GetBackgroundShellManager().Remove(metadata.ShellID))
+	require.False(t, BackgroundShell("background-test"))
+}
 
 type mockBashPermissionService struct {
 	*pubsub.Broker[permission.PermissionRequest]

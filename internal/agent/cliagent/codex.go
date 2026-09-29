@@ -223,7 +223,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	} else {
 		// Crush hands every CLI the shared memory; Codex's own stays off.
 		var err error
-		if p, err = startProcEnv(m.Dir, t.Env, "codex", "app-server", "--disable", "memories"); err != nil {
+		if p, err = startProcEnv(m.Dir, t.Env, "codex", "app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0"); err != nil {
 			return err
 		}
 		lines = p.readLines()

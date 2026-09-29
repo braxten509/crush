@@ -7,8 +7,15 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/home"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSharedInstructionsUseOnlySharedSkills(t *testing.T) {
+	cfg := &Config{Options: &Options{DisableInstructionFiles: true, SkillsPaths: []string{"project-skills"}}}
+	cfg.setDefaults(t.TempDir(), t.TempDir())
+	require.Equal(t, []string{filepath.Join(home.Dir(), ".agents", "skills")}, cfg.Options.SkillsPaths)
+}
 
 func TestAddCLIProviders(t *testing.T) {
 	detectCLIs = true
@@ -16,11 +23,14 @@ func TestAddCLIProviders(t *testing.T) {
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "abacusai"), []byte("#!/bin/sh\n"), 0o755))
 
 	cfg := &Config{Providers: csync.NewMapFrom(map[string]ProviderConfig{
 		string(TypeCodexCLI): {Disable: true},
 	})}
 	cfg.addCLIProviders(dir)
+	_, abacusRegistered := cfg.Providers.Get("abacus-cli")
+	require.False(t, abacusRegistered)
 
 	claude, ok := cfg.Providers.Get(string(TypeClaudeCode))
 	require.True(t, ok, "claude on PATH is registered")

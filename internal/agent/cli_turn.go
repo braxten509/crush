@@ -40,12 +40,11 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 				text = a.tasks.instructions() + "\n\n" + text
 			}
 		}
-		// Claude Code loads the shared memory itself.
-		var memory string
-		if m.Kind != config.TypeClaudeCode {
-			memory = memoryInstructions(a.isSubAgent)
-		}
-		if memory != "" && resume == "" {
+		// Native memory is disabled; every CLI receives Crush's shared store.
+		memory := sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
+		if m.Kind == config.TypeClaudeCode && memory != "" {
+			instructions = memory + "\n\n" + instructions
+		} else if memory != "" && (resume == "" || !link.SharedInstructions) {
 			text = memory + "\n\n" + text
 		}
 
@@ -139,7 +138,7 @@ func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessi
 	if err != nil || len(msgs) == 0 {
 		return
 	}
-	link := cliagent.Link{Native: native, Through: msgs[len(msgs)-1].ID, Tasks: tasks}
+	link := cliagent.Link{Native: native, Through: msgs[len(msgs)-1].ID, Tasks: tasks, SharedInstructions: true}
 	if err := m.Links.Set(sessionID, m.Kind, link); err != nil {
 		slog.Error("Failed to save agent CLI session link", "error", err)
 	}

@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 )
 
 // Process is a command an agent CLI started that is still running: a shell
@@ -23,10 +25,11 @@ type Process struct {
 
 // proc is one process from the process table.
 type proc struct {
-	pid, ppid int
-	sid       int // session ID
-	args      []string
-	started   time.Time
+	pid, ppid     int
+	sid           int // session ID
+	args          []string
+	started       time.Time
+	nativeShellID string
 }
 
 // markedProcs lists the processes carrying one of the hubs' environment
@@ -65,6 +68,9 @@ func BackgroundProcesses() []Process {
 // a command as background. Include the unwrapped shell script so Claude's
 // quoting does not prevent a match.
 func isForegroundCommand(p proc, procs map[int]proc) bool {
+	if p.nativeShellID != "" && tools.IsForegroundShell(p.nativeShellID) {
+		return true
+	}
 	args := append(slices.Clone(p.args), commandText(p.args))
 	for parent := p.ppid; parent > 0; {
 		if cliagent.IsForegroundCommand(parent, args, p.started) {
@@ -85,10 +91,17 @@ func isForegroundCommand(p proc, procs map[int]proc) bool {
 func isCommandRoot(p proc, procs map[int]proc) bool {
 	parent, marked := procs[p.ppid]
 	if !marked {
+		if p.ppid == os.Getpid() && p.sid == p.pid && p.nativeShellID != "" {
+			return true
+		}
 		// The CLI itself is Crush's child; anything else was orphaned.
 		return p.ppid != os.Getpid()
 	}
-	if p.sid == p.pid && parent.ppid == os.Getpid() {
+	cliParent := parent.ppid == os.Getpid()
+	if wrapper, ok := procs[parent.ppid]; ok && len(wrapper.args) > 0 {
+		cliParent = cliParent || (wrapper.ppid == os.Getpid() && filepath.Base(wrapper.args[0]) == "bwrap")
+	}
+	if p.sid == p.pid && cliParent {
 		// Codex starts commands in sessions of their own, without a shell
 		// in between; the CLIs' helpers don't do that.
 		return true

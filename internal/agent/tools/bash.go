@@ -222,6 +222,9 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			}
 
 			sessionID := GetSessionFromContext(ctx)
+			shellEnv := getContextValue(ctx, ShellEnvContextKey, []string(nil))
+			backgroundSignal := make(chan struct{}, 1)
+			shellEnv = append(append([]string(nil), shellEnv...), fmt.Sprintf("%s=%p", NativeShellEnv, backgroundSignal))
 			if sessionID == "" {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for executing shell command")
 			}
@@ -257,7 +260,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				bgManager := shell.GetBackgroundShellManager()
 				bgManager.Cleanup()
 				// Use background context so it continues after tool returns
-				bgShell, err := bgManager.Start(context.Background(), execWorkingDir, blockFuncs(), params.Command, params.Description)
+				bgShell, err := bgManager.Start(context.Background(), execWorkingDir, blockFuncs(), params.Command, params.Description, shellEnv...)
 				if err != nil {
 					return fantasy.ToolResponse{}, fmt.Errorf("error starting background shell: %w", err)
 				}
@@ -315,12 +318,15 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			// Start with detached context so it can survive if moved to background
 			bgManager := shell.GetBackgroundShellManager()
 			bgManager.Cleanup()
-			bgShell, err := bgManager.Start(context.Background(), execWorkingDir, blockFuncs(), params.Command, params.Description)
+			bgShell, err := bgManager.Start(context.Background(), execWorkingDir, blockFuncs(), params.Command, params.Description, shellEnv...)
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error starting shell: %w", err)
 			}
 
 			// Wait for either completion, auto-background threshold, or context cancellation
+			unregisterBackground := registerShellBackground(sessionID, backgroundSignal)
+			defer unregisterBackground()
+			manuallyBackgrounded := false
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
 
@@ -341,6 +347,10 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 						break waitLoop
 					}
 				case <-timeout:
+					stdout, stderr, done, execErr = bgShell.GetOutput()
+					break waitLoop
+				case <-backgroundSignal:
+					manuallyBackgrounded = true
 					stdout, stderr, done, execErr = bgShell.GetOutput()
 					break waitLoop
 				case <-ctx.Done():
@@ -390,6 +400,9 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				ShellID:          bgShell.ID,
 			}
 			response := fmt.Sprintf("Command is taking longer than expected and has been moved to background.\n\nBackground shell ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
+			if manuallyBackgrounded {
+				response = fmt.Sprintf("Command moved to the background by the user.\n\nBackground shell ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
+			}
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 		},
 	)

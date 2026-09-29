@@ -756,7 +756,7 @@ func (h *hub) modelLocked() modelView {
 	mv.Provider, mv.Model = selected.Provider, selected.Model
 	if p := cfg.GetProviderForModel(agentCfg.Model); p != nil {
 		mv.CLI = cmp.Or(p.Name, p.ID)
-		if p.Type == config.TypeCodexCLI {
+		if model := cfg.GetModelByType(agentCfg.Model); model != nil && config.SupportsFastMode(*p, *model) {
 			fast := selected.ServiceTier == "fast"
 			mv.Fast = &fast
 		}
@@ -768,7 +768,7 @@ func (h *hub) modelLocked() modelView {
 			if len(m.ReasoningLevels) > 0 {
 				mv.Efforts = m.ReasoningLevels
 				mv.Effort = cmp.Or(selected.ReasoningEffort, m.DefaultReasoningEffort)
-			} else {
+			} else if provider := cfg.GetProviderForModel(agentCfg.Model); provider != nil && config.SupportsThinkingToggle(*provider, *m) {
 				think := selected.Think
 				mv.Think = &think
 			}

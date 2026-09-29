@@ -1,5 +1,5 @@
 // Package cliagent runs turns through installed agent CLIs (Claude Code,
-// Codex, Grok, OpenCode, AGY, Abacus) instead of an HTTP API. Each CLI
+// Codex, Grok, OpenCode, AGY) instead of an HTTP API. Each CLI
 // keeps its own tools, login and settings; this package speaks its
 // streaming protocol and turns what it does into [Event]s that Crush
 // renders like any other turn.
@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -169,8 +170,6 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 		return runACP(ctx, m, t, "opencode", []string{"acp"}, true)
 	case config.TypeAGYCLI:
 		return runAGY(ctx, m, t)
-	case config.TypeAbacusCLI:
-		return runAbacus(ctx, m, t)
 	}
 	return fmt.Errorf("unknown agent CLI %q", m.Kind)
 }
@@ -280,6 +279,8 @@ type Link struct {
 	// Tasks is set once the native session was told how to spawn
 	// sub-agents.
 	Tasks bool `json:"tasks,omitempty"`
+	// SharedInstructions records delivery without invalidating the session.
+	SharedInstructions bool `json:"shared_instructions,omitempty"`
 }
 
 // Links persists [Link]s per Crush session and CLI.
@@ -509,6 +510,22 @@ func startProc(dir, name string, args ...string) (*proc, error) {
 // startProcEnv is startProc with extra environment variables.
 func startProcEnv(dir string, env []string, name string, args ...string) (*proc, error) {
 	cmd := exec.Command(name, args...)
+	if !testing.Testing() {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		var cleanup func()
+		cmd, cleanup, err = instructionCommand(dir, home, name, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer cleanup()
+	}
+	return startProcCommand(cmd, dir, env)
+}
+
+func startProcCommand(cmd *exec.Cmd, dir string, env []string) (*proc, error) {
 	cmd.Dir = dir
 	if env != nil {
 		cmd.Env = append(os.Environ(), env...)
@@ -527,7 +544,7 @@ func startProcEnv(dir string, env []string, name string, args ...string) (*proc,
 	p.lines = bufio.NewScanner(stdout)
 	p.lines.Buffer(make([]byte, 0, 1<<20), 64<<20)
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("starting %s: %w", name, err)
+		return nil, fmt.Errorf("starting %s: %w", cmd.Path, err)
 	}
 	return p, nil
 }

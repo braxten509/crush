@@ -9,6 +9,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,6 +28,14 @@ func TestTaskRequestRoundTrip(t *testing.T) {
 	require.Contains(t, reply.Error, `no task "t9"`)
 	_, err := os.Stat(filepath.Join(h.dir, "x.req"))
 	require.True(t, os.IsNotExist(err), "the request is consumed")
+}
+
+func TestAbacusAvailableForBackgroundTasks(t *testing.T) {
+	provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{{ID: "claude-opus-5-5-thinking"}}}
+	h := &taskHub{c: &coordinator{cfg: config.NewTestStore(&config.Config{Providers: csync.NewMapFrom(map[string]config.ProviderConfig{"abacus": provider})})}}
+	providers := h.taskProviders()
+	require.Len(t, providers, 1)
+	require.Equal(t, "abacus", taskProviderName(providers[0]))
 }
 
 func TestTaskNotificationParses(t *testing.T) {
@@ -62,4 +71,11 @@ func TestTaskModelTuning(t *testing.T) {
 	require.ErrorContains(t, err, "has no effort levels")
 	_, err = taskModel(grok, catwalk.Model{ID: "grok-4.7"}, TaskRequest{Fast: true})
 	require.ErrorContains(t, err, "only for claude and codex")
+	abacus := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat}
+	m, err = taskModel(abacus, catwalk.Model{ID: "claude-opus-5-5-thinking", ReasoningLevels: opus.ReasoningLevels}, TaskRequest{Effort: "MAX"})
+	require.NoError(t, err)
+	require.Equal(t, "max", m.ReasoningEffort)
+	m, err = taskModel(abacus, catwalk.Model{ID: "gpt-6.1-sol", ReasoningLevels: opus.ReasoningLevels}, TaskRequest{Effort: "high", Fast: true})
+	require.NoError(t, err)
+	require.Equal(t, "fast", m.ServiceTier)
 }

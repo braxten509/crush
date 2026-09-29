@@ -2,6 +2,7 @@ package shell
 
 import (
 	"context"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -9,6 +10,21 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestBackgroundShellEnvironmentIsPerInvocation(t *testing.T) {
+	t.Setenv("CRUSH_TASKS_SESSION", "parent-session")
+	manager := newBackgroundShellManager()
+	for _, session := range []string{"session-one", "session-two"} {
+		job, err := manager.Start(t.Context(), t.TempDir(), nil, `printf '%s' "$CRUSH_TASKS_SESSION"`, "", "CRUSH_TASKS_SESSION="+session)
+		require.NoError(t, err)
+		job.Wait()
+		stdout, _, done, err := job.GetOutput()
+		require.NoError(t, err)
+		require.True(t, done)
+		require.Equal(t, session, stdout)
+	}
+	require.Equal(t, "parent-session", os.Getenv("CRUSH_TASKS_SESSION"))
+}
 
 func TestBackgroundShellManager_Start(t *testing.T) {
 	t.Skip("Skipping this until I figure out why its flaky")

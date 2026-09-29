@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,10 +10,63 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
+	env := testEnv(t)
+	h := &taskHub{dir: t.TempDir()}
+	hubsMu.Lock()
+	hubs = append(hubs, h)
+	hubsMu.Unlock()
+	t.Cleanup(func() {
+		hubsMu.Lock()
+		hubs = slices.DeleteFunc(hubs, func(candidate *taskHub) bool { return candidate == h })
+		hubsMu.Unlock()
+	})
+	tool := tools.NewBashTool(env.permissions, env.workingDir, env.workingDir, &config.Attribution{TrailerStyle: config.TrailerStyleNone}, "fixture")
+	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, t.Name()))
+	defer cancel()
+	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, []string{TasksDirEnv + "=" + h.dir})
+	done := make(chan fantasy.ToolResponse, 1)
+	go func() {
+		response, err := tool.Run(ctx, fantasy.ToolCall{ID: "fixture", Name: tools.BashToolName, Input: `{"command":"sleep 3","description":"native background fixture"}`})
+		require.NoError(t, err)
+		done <- response
+	}()
+	require.Eventually(t, func() bool {
+		processes := markedProcs(hubMarkers())
+		for _, process := range processes {
+			if process.nativeShellID != "" && tools.IsForegroundShell(process.nativeShellID) && isCommandRoot(process, processes) {
+				return true
+			}
+		}
+		return false
+	}, time.Second, 20*time.Millisecond)
+	require.Empty(t, BackgroundProcesses())
+	require.True(t, tools.BackgroundShell(t.Name()))
+	response := <-done
+	var metadata tools.BashResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(response.Metadata), &metadata))
+	require.Eventually(t, func() bool {
+		for _, process := range BackgroundProcesses() {
+			if process.Command == "sleep 3" {
+				return true
+			}
+		}
+		return false
+	}, time.Second, 20*time.Millisecond)
+	cancel()
+	job, ok := shell.GetBackgroundShellManager().Get(metadata.ShellID)
+	require.True(t, ok)
+	job.Wait()
+	require.NoError(t, shell.GetBackgroundShellManager().Remove(metadata.ShellID))
+}
 
 func TestBackgroundCountAfterCtrlB(t *testing.T) {
 	h := &taskHub{dir: t.TempDir()}

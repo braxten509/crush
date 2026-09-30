@@ -67,6 +67,22 @@ func resultMetadata(name, input, output string) string {
 	return ""
 }
 
+// markBackground flags a bash result whose command kept running in the
+// background, so Crush shows it as moved rather than finished.
+func markBackground(name, meta string) string {
+	if name != tools.BashToolName {
+		return meta
+	}
+	var m tools.BashResponseMetadata
+	_ = json.Unmarshal([]byte(meta), &m)
+	m.Background = true
+	return marshal(m)
+}
+
+// openCodeBackgroundMark is in every result Crush's OpenCode bash tool
+// (opencode/tools/bash.ts) gives for a command it left running.
+const openCodeBackgroundMark = "It is still running as process group "
+
 var lineNumber = regexp.MustCompile(`^\s*\d+[\t→]`)
 
 // stripLineNumbers removes the `cat -n` style prefixes Claude's Read tool

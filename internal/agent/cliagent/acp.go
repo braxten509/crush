@@ -349,6 +349,9 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 			if !failed {
 				_, input := acpTool2Crush(tc)
 				meta = resultMetadata(tc.crushName, input, out)
+				if strings.Contains(out, openCodeBackgroundMark) {
+					meta = markBackground(tc.crushName, meta)
+				}
 			}
 			delete(calls, u.ToolCallID)
 			return emit(Event{Type: EventToolResult, ID: u.ToolCallID, Name: tc.crushName, Output: out, Metadata: meta, IsError: failed})

@@ -475,6 +475,49 @@ func TestPlanHandoffBlurPreservesAndRestoresInline(t *testing.T) {
 	require.Equal(t, "confirm", u.ShortHelp()[1].Help().Desc)
 }
 
+// By default Tab and clicks move focus; with composer_focus_only, Tab
+// does nothing and clicking the chat or sidebar leaves focus on the
+// composer.
+func TestComposerFocusOnlySetting(t *testing.T) {
+	t.Parallel()
+
+	for _, only := range []bool{false, true} {
+		u, ws := newPlanUI(t, "sess-1")
+		ws.cfg.Options = &config.Options{TUI: &config.TUIOptions{ComposerFocusOnly: only}}
+		u.keyMap = DefaultKeyMap()
+		u.attachments = attachments.New(nil, attachments.Keymap{})
+		u.status = NewStatus(u.com, nil)
+		u.state = uiChat
+		u.focus = uiFocusEditor
+
+		u.handleKeyPressMsg(tea.KeyPressMsg{Code: tea.KeyTab})
+		if only {
+			require.Equal(t, uiFocusEditor, u.focus, "Tab does nothing")
+		} else {
+			require.Equal(t, uiFocusMain, u.focus, "Tab focuses the chat")
+		}
+		// Set after Tab, which can redo the layout.
+		u.layout.main = image.Rect(0, 0, 60, 10)
+		u.layout.sidebar = image.Rect(60, 0, 80, 10)
+		u.layout.editor = image.Rect(0, 10, 60, 14)
+		u.sidebarScrollable = true
+		u.handleClickFocus(tea.MouseClickMsg{X: 1, Y: 11})
+		require.Equal(t, uiFocusEditor, u.focus, "clicking the composer focuses it")
+		u.handleClickFocus(tea.MouseClickMsg{X: 5, Y: 3})
+		if only {
+			require.Equal(t, uiFocusEditor, u.focus)
+		} else {
+			require.Equal(t, uiFocusMain, u.focus)
+		}
+		u.handleClickFocus(tea.MouseClickMsg{X: 70, Y: 3})
+		if only {
+			require.Equal(t, uiFocusEditor, u.focus)
+		} else {
+			require.Equal(t, uiFocusSidebar, u.focus)
+		}
+	}
+}
+
 func TestPlanHandoffCollapsedClickRestoresFocus(t *testing.T) {
 	t.Parallel()
 

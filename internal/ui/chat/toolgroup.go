@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -401,7 +402,7 @@ func (g *ToolGroupItem) header(width int) string {
 	if g.expanded {
 		marker = "▾ "
 	}
-	var tools, failed int
+	var tools, failed, moved int
 	var edited []string
 	seen := map[string]bool{}
 	for _, c := range g.children {
@@ -412,6 +413,9 @@ func (g *ToolGroupItem) header(width int) string {
 		tools++
 		if st, ok := t.(interface{ computeStatus() ToolStatus }); ok && st.computeStatus() == ToolStatusError {
 			failed++
+		}
+		if isMovedToBackground(t) {
+			moved++
 		}
 		if f := editedFile(t); f != "" && !seen[f] {
 			seen[f] = true
@@ -433,6 +437,9 @@ func (g *ToolGroupItem) header(width int) string {
 			if lastTool, ok := g.children[i].(interface{ computeStatus() ToolStatus }); ok {
 				if lastTool.computeStatus() == ToolStatusError {
 					icon = g.sty.Tool.IconError.Render()
+				} else if t, ok := g.children[i].(ToolMessageItem); ok && isMovedToBackground(t) {
+					// Still running, so not a finished ✓.
+					icon = g.sty.Tool.IconPending.SetString(backgroundIcon).Render()
 				}
 				break
 			}
@@ -446,6 +453,9 @@ func (g *ToolGroupItem) header(width int) string {
 		}
 		line += g.sty.Tool.ParamKey.Render(" · edited " + files)
 	}
+	if moved > 0 {
+		line += g.sty.Tool.ParamKey.Render(fmt.Sprintf(" · %d backgrounded", moved))
+	}
 	if failed > 0 {
 		line += g.sty.Tool.ErrorMessage.Render(fmt.Sprintf(" · %d failed", failed))
 	}
@@ -458,6 +468,16 @@ func (g *ToolGroupItem) header(width int) string {
 		line += g.sty.Tool.ParamKey.Render(" | ") + g.anim.Render()
 	}
 	return ansi.Truncate(g.sty.Tool.ParamKey.Render(marker)+line, width, "…")
+}
+
+// backgroundIcon marks background work, as in the background row.
+const backgroundIcon = "⚙"
+
+// isMovedToBackground reports whether the tool's command went on running
+// in the background instead of finishing.
+func isMovedToBackground(t ToolMessageItem) bool {
+	r, ok := t.(interface{ Result() *message.ToolResult })
+	return ok && movedToBackground(r.Result())
 }
 
 // editedFile returns the file a file-changing tool touched, or "".

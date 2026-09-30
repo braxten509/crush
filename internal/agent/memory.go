@@ -21,13 +21,22 @@ func memoryDir() string {
 	return filepath.Join(home, ".local", "share", "agent-memory")
 }
 
+// sharedMemoryEnv sets the shared memory for one Crush process: "off" leaves
+// it out, "readonly" gives every agent the sub-agents' read-only version (for
+// runs that must not change what other agents remember, like benchmarks).
+const sharedMemoryEnv = "CRUSH_SHARED_MEMORY"
+
+func sharedMemoryOff() bool      { return os.Getenv(sharedMemoryEnv) == "off" }
+func sharedMemoryReadOnly() bool { return os.Getenv(sharedMemoryEnv) == "readonly" }
+
 // memoryInstructions tells a CLI where the shared memory is, what's in it
 // and how to add to it. Sub-agents only read it. It's empty when there is
-// no memory yet.
+// no memory yet, or when CRUSH_SHARED_MEMORY=off.
 func memoryInstructions(subAgent bool) string {
-	if testing.Testing() {
+	if testing.Testing() || sharedMemoryOff() {
 		return ""
 	}
+	subAgent = subAgent || sharedMemoryReadOnly()
 	dir := memoryDir()
 	index, err := os.ReadFile(filepath.Join(dir, "MEMORY.md"))
 	if err != nil {

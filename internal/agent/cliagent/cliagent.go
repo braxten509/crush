@@ -23,7 +23,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -101,6 +100,9 @@ type Turn struct {
 	// returns and emit EventUserMessage with the same text once the CLI
 	// takes it in. Anything never confirmed is Crush's to run later.
 	Steer func() string
+	// SteerReady wakes the driver as soon as a prompt is queued. Polling
+	// remains a fallback for prompts queued before the driver starts.
+	SteerReady <-chan struct{}
 }
 
 // Model is a CLI-backed model. It implements [fantasy.LanguageModel] for
@@ -377,6 +379,7 @@ func pollSteer(t Turn, ready func() bool, send func(text string)) (stop func()) 
 			select {
 			case <-done:
 				return
+			case <-t.SteerReady:
 			case <-tick.C:
 			}
 			mu.Lock()
@@ -509,20 +512,7 @@ func startProc(dir, name string, args ...string) (*proc, error) {
 
 // startProcEnv is startProc with extra environment variables.
 func startProcEnv(dir string, env []string, name string, args ...string) (*proc, error) {
-	cmd := exec.Command(name, args...)
-	if !testing.Testing() {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		var cleanup func()
-		cmd, cleanup, err = instructionCommand(dir, home, name, args...)
-		if err != nil {
-			return nil, err
-		}
-		defer cleanup()
-	}
-	return startProcCommand(cmd, dir, env)
+	return startProcCommand(exec.Command(name, args...), dir, env)
 }
 
 func startProcCommand(cmd *exec.Cmd, dir string, env []string) (*proc, error) {

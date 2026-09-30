@@ -60,7 +60,9 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		_ = json.Unmarshal([]byte(opts.Result.Metadata), &meta)
 	}
 
-	if meta.Background {
+	// Crush's own background jobs; a CLI command moved to the background
+	// has no job ID and shows as a command tagged background.
+	if meta.Background && meta.ShellID != "" {
 		description := cmp.Or(meta.Description, params.Command)
 		content := "Command: " + params.Command + "\n" + opts.Result.Content
 		return renderJobTool(sty, opts, cappedWidth, "Start", meta.ShellID, description, content)
@@ -75,7 +77,7 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		cmd = highlighted
 	}
 	toolParams := []string{cmd}
-	if params.RunInBackground {
+	if params.RunInBackground || movedToBackground(opts.Result) {
 		toolParams = append(toolParams, "background", "true")
 	}
 
@@ -107,6 +109,21 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
 	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, output, bodyWidth, opts.ExpandedContent))
 	return joinToolParts(header, body)
+}
+
+// movedToBackground reports whether a bash result's command went on
+// running in the background: a Crush job, or a CLI command moved there.
+// Crush's bash also flags a background command that ended right away;
+// that one has an end time and no job ID.
+func movedToBackground(result *message.ToolResult) bool {
+	if result == nil || result.Name != tools.BashToolName {
+		return false
+	}
+	var meta tools.BashResponseMetadata
+	if json.Unmarshal([]byte(result.Metadata), &meta) != nil {
+		return false
+	}
+	return meta.Background && (meta.ShellID != "" || meta.EndTime == 0)
 }
 
 // -----------------------------------------------------------------------------

@@ -83,18 +83,7 @@ func (m *UserMessageItem) RawRender(width int) string {
 		return m.renderHighlighted(content, cappedWidth, height)
 	}
 
-	renderer := common.UserMarkdownRenderer(m.sty, cappedWidth)
-	mu := common.LockMarkdownRenderer(renderer)
-
-	mu.Lock()
-	result, err := renderer.Render(msgContent)
-	mu.Unlock()
-
-	if err != nil {
-		content = msgContent
-	} else {
-		content = strings.TrimSuffix(result, "\n")
-	}
+	content = m.renderPlain(msgContent, cappedWidth)
 
 	if len(m.message.BinaryContent()) > 0 {
 		attachmentsStr := m.renderAttachments(cappedWidth)
@@ -114,21 +103,27 @@ func (m *UserMessageItem) RawRender(width int) string {
 func (m *UserMessageItem) renderSkillInvocation(content string, width int) string {
 	var skill skillInvocation
 	if err := xml.Unmarshal([]byte(content), &skill); err != nil {
-		// If parsing fails, just render as markdown
-		renderer := common.UserMarkdownRenderer(m.sty, width)
-		mu := common.LockMarkdownRenderer(renderer)
-
-		mu.Lock()
-		result, err := renderer.Render(content)
-		mu.Unlock()
-
-		if err != nil {
-			return content
-		}
-		return strings.TrimSuffix(result, "\n")
+		return m.renderPlain(content, width)
 	}
 
 	return toolOutputSkillContent(m.sty, skill.Name, skill.Description)
+}
+
+// renderPlain shows text exactly as the user sent it: no Markdown, so
+// nothing like <tags>, *stars* or `backticks` is hidden or restyled. Only
+// escape sequences are dropped (they'd drive the terminal) and tabs become
+// spaces so wrapping measures them.
+func (m *UserMessageItem) renderPlain(text string, width int) string {
+	text = strings.NewReplacer("\r\n", "\n", "\r", "\n", "\t", "    ").Replace(ansi.Strip(text))
+	style := lipgloss.NewStyle()
+	if c := m.sty.Markdown.Document.Color; c != nil {
+		style = style.Foreground(lipgloss.Color(*c))
+	}
+	lines := strings.Split(ansi.Wrap(text, width, ""), "\n")
+	for i, line := range lines {
+		lines[i] = style.Render(line)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *UserMessageItem) renderTaskNotification(name, status string, width int) string {

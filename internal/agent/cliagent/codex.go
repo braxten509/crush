@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -335,6 +336,9 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		meta := ""
 		if !isError {
 			meta = resultMetadata(call[0], call[1], out)
+			if backgrounded[id] {
+				meta = markBackground(call[0], meta)
+			}
 		}
 		return t.Emit(Event{Type: EventToolResult, ID: id, Name: call[0], Output: out, Metadata: meta, IsError: isError})
 	}
@@ -631,7 +635,10 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 // codexInput includes the captured image bytes, including clipboard images
 // that have no persistent file on disk.
 func codexInput(prompt string, attachments []message.Attachment) []any {
-	input := []any{map[string]any{"type": "text", "text": prompt, "text_elements": []any{}}}
+	var input []any
+	if prompt != "" || !slices.ContainsFunc(attachments, message.Attachment.IsImage) {
+		input = append(input, map[string]any{"type": "text", "text": prompt, "text_elements": []any{}})
+	}
 	for _, attachment := range attachments {
 		if !attachment.IsImage() {
 			continue

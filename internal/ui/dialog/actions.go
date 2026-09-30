@@ -60,6 +60,7 @@ type (
 		Style string
 	}
 	ActionToggleTransparentBackground struct{}
+	ActionToggleComposerFocusOnly     struct{}
 	ActionToggleMouseSupport          struct{}
 	ActionSwitchTheme                 struct {
 		Theme string

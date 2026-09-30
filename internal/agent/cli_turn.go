@@ -48,14 +48,14 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			text = memory + "\n\n" + text
 		}
 
-		s := &cliSteps{ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting}
+		s := &cliSteps{ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, steerReady: make(chan struct{}, 1)}
 		if err := s.begin(); err != nil {
 			return nil, err
 		}
 		a.steering.Set(call.SessionID, s)
 		defer a.steering.CompareAndDelete(call.SessionID, s)
 		defer s.returnUnsteered()
-		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, Env: env, Instructions: instructions}
+		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, SteerReady: s.steerReady, Env: env, Instructions: instructions}
 		err := m.Run(ctx, turn)
 		if errors.Is(err, cliagent.ErrResume) {
 			// The native session is gone; hand the whole conversation to a
@@ -173,6 +173,9 @@ type cliSteps struct {
 	// steer runs on the driver's poller, the rest on its read loop.
 	steerMu sync.Mutex
 	steered []cliSteered
+	// Buffered so enqueueing under the dispatch lock never waits on the
+	// driver's queue drain, which takes the same lock.
+	steerReady chan struct{}
 }
 
 // queuedCalls lists the prompts handed to the CLI but not taken in yet.

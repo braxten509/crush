@@ -346,6 +346,14 @@ type TUIOptions struct {
 	Scrollbar   string      `json:"scrollbar,omitempty" jsonschema:"description=Chat scrollbar visibility,enum=default,enum=always,enum=never,default=default"`
 	Mouse       *bool       `json:"mouse,omitempty" jsonschema:"description=Enable terminal mouse capture for selection\\, clicks\\, and scrolling in the TUI. Disable to let the terminal emulator or tmux handle text selection and copy/paste,default=true"`
 	ExitBanner  ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Crush,enum=default,enum=compact,enum=none,default=default"`
+	// ComposerFocusOnly keeps keyboard focus on the composer.
+	ComposerFocusOnly bool `json:"composer_focus_only,omitempty" jsonschema:"description=Keep keyboard focus on the composer: Tab doesn't move focus and clicking the chat or sidebar doesn't take it. The chat still works with the mouse,default=false"`
+}
+
+// FocusesComposerOnly reports whether keyboard focus stays on the composer.
+// The nil receiver means the default (focus can move).
+func (t *TUIOptions) FocusesComposerOnly() bool {
+	return t != nil && t.ComposerFocusOnly
 }
 
 // IsTransparent reports whether the TUI draws a transparent background. The
@@ -948,6 +956,20 @@ func (c *Config) ValidateReasoningEffort(provider, modelID, effort string) error
 		"model %q does not support reasoning effort %q, accepted values: %s",
 		modelID, effort, strings.Join(model.ReasoningLevels, ", "),
 	)
+}
+
+// ValidateFastMode checks that the model has a fast mode: Claude Code and
+// Codex models do, and so do Abacus's OpenAI priority models.
+func (c *Config) ValidateFastMode(provider, modelID string) error {
+	providerConfig, ok := c.Providers.Get(provider)
+	model := c.GetModel(provider, modelID)
+	if !ok || model == nil {
+		return fmt.Errorf("model %q not found for provider %q", modelID, provider)
+	}
+	if providerConfig.Type == TypeClaudeCode || SupportsFastMode(providerConfig, *model) {
+		return nil
+	}
+	return fmt.Errorf("model %q has no fast mode; only Claude Code, Codex and Abacus OpenAI priority models do", modelID)
 }
 
 // IsModelAvailable returns true if the provider is enabled and the model

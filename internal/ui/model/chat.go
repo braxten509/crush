@@ -155,8 +155,13 @@ type Chat struct {
 
 	// Scrollbar visibility state
 	scrollbarVisible bool
-	scrollbarHideSeq int    // current sequence number for hide timer
-	scrollbarMode    string // "default", "always", or "never"
+	scrollbarHideSeq int // current sequence number for hide timer
+	// scrollbarEdge is the chat area's last column, where the scrollbar
+	// shows (-1 before the first draw). scrollbarGrab is where on the
+	// thumb a drag holds it, or -1 when not dragging.
+	scrollbarEdge int
+	scrollbarGrab int
+	scrollbarMode string // "default", "always", or "never"
 
 	// resizing suppresses the O(N) total-height scan while a resize is in
 	// flight (and during the incremental warm afterward), so a drag only
@@ -196,6 +201,8 @@ func NewChat(com *common.Common, scrollbarMode string) *Chat {
 		com:           com,
 		idInxMap:      make(map[string]int),
 		scrollbarMode: scrollbarMode,
+		scrollbarEdge: -1,
+		scrollbarGrab: -1,
 		animAllowed:   true,
 	}
 	l := list.NewList()
@@ -281,6 +288,7 @@ func (m *Chat) Draw(scr uv.Screen, area uv.Rectangle) {
 	// Draw scrollbar if visible and needed. Only reached when not resizing
 	// (showScrollbar requires it), so TotalHeight is already computed and
 	// cached above.
+	m.scrollbarEdge = area.Dx() - 1
 	if scrollbarWidth > 0 {
 		scrollbar := common.Scrollbar(m.com.Styles, listHeight, m.list.TotalHeight()-1, listHeight, m.list.Offset())
 		if scrollbar != "" {
@@ -840,14 +848,18 @@ func (m *Chat) showScrollbar() tea.Cmd {
 }
 
 // HideScrollbar hides the scrollbar if the sequence matches.
-func (m *Chat) HideScrollbar(seq int) {
+// It stays up while being dragged, and checks again after another
+// timeout.
+func (m *Chat) HideScrollbar(seq int) tea.Cmd {
 	// Only hide scrollbar for "default" mode
-	if m.scrollbarMode != config.ScrollbarDefault {
-		return
+	if m.scrollbarMode != config.ScrollbarDefault || seq != m.scrollbarHideSeq {
+		return nil
 	}
-	if seq == m.scrollbarHideSeq {
-		m.scrollbarVisible = false
+	if m.DraggingScrollbar() {
+		return m.showScrollbar()
 	}
+	m.scrollbarVisible = false
+	return nil
 }
 
 // ScrollToBottomAndSelectLast scrolls the chat view to the bottom, selects
@@ -1184,6 +1196,78 @@ func (m *Chat) HandleDelayedClick(msg DelayedClickMsg) bool {
 	}
 
 	return false
+}
+
+// scrollbarThumb returns the thumb's first row and size and the scroll
+// range, matching [common.Scrollbar]; ok is false when the chat doesn't
+// scroll.
+func (m *Chat) scrollbarThumb() (pos, size, track, maxOffset int, ok bool) {
+	height := m.list.Height() - 1
+	if m.scrollbarMode == config.ScrollbarNever || height <= 0 || !m.list.Overflows(m.list.Height()) {
+		return 0, 0, 0, 0, false
+	}
+	content := m.list.TotalHeight() - 1
+	if content <= height {
+		return 0, 0, 0, 0, false
+	}
+	size = max(1, height*height/content)
+	track = height - size
+	maxOffset = content - height
+	if track > 0 {
+		pos = min(track, m.list.Offset()*track/maxOffset)
+	}
+	return pos, size, track, maxOffset, true
+}
+
+// HandleScrollbarPress starts dragging the scrollbar when (x, y) is on
+// its column, even while it's hidden (the column is the chat's empty
+// right edge). Pressing the track jumps the thumb there, held by its
+// middle.
+func (m *Chat) HandleScrollbarPress(x, y int) (bool, tea.Cmd) {
+	if x < 0 || x != m.scrollbarEdge {
+		return false, nil
+	}
+	pos, size, _, _, ok := m.scrollbarThumb()
+	if !ok || y < 0 || y >= m.list.Height()-1 {
+		return false, nil
+	}
+	m.scrollbarGrab = y - pos
+	if y < pos || y >= pos+size {
+		m.scrollbarGrab = size / 2
+	}
+	return true, m.HandleScrollbarDrag(y)
+}
+
+// DraggingScrollbar reports whether a scrollbar drag is in progress.
+func (m *Chat) DraggingScrollbar() bool {
+	return m.scrollbarGrab >= 0
+}
+
+// HandleScrollbarDrag scrolls so the thumb follows the pointer at row y.
+func (m *Chat) HandleScrollbarDrag(y int) tea.Cmd {
+	if m.scrollbarGrab < 0 {
+		return nil
+	}
+	_, _, track, maxOffset, ok := m.scrollbarThumb()
+	if !ok {
+		return nil
+	}
+	target := maxOffset
+	if track > 0 {
+		pos := min(max(y-m.scrollbarGrab, 0), track)
+		target = (pos*maxOffset + track/2) / track
+	}
+	if delta := target - m.list.Offset(); delta != 0 {
+		return m.ScrollBy(delta)
+	}
+	return m.showScrollbar()
+}
+
+// HandleScrollbarRelease ends a scrollbar drag.
+func (m *Chat) HandleScrollbarRelease() bool {
+	dragging := m.scrollbarGrab >= 0
+	m.scrollbarGrab = -1
+	return dragging
 }
 
 // HandleMouseUp handles mouse up events for the chat component.

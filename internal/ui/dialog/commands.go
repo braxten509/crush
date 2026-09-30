@@ -570,6 +570,13 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	}
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_transparent", transparentLabel, "", ActionToggleTransparentBackground{}))
 
+	// Add the composer-only focus toggle.
+	focusLabel := "Keep Focus on Composer"
+	if cfg != nil && cfg.Options != nil && cfg.Options.TUI.FocusesComposerOnly() {
+		focusLabel = "Let Tab Move Focus"
+	}
+	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_composer_focus", focusLabel, "", ActionToggleComposerFocusOnly{}).WithAliases("tab", "focus"))
+
 	commands = append(commands, NewCommandItem(c.com.Styles, "switch_theme", "Themes", "", ActionOpenDialog{ThemeID}))
 
 	// Add mouse support toggle.

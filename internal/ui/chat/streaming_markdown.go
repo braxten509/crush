@@ -5,6 +5,7 @@ import (
 
 	"charm.land/glamour/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // streamingMarkdown caches a "stable prefix" glamour render so each
@@ -102,7 +103,7 @@ func (s *streamingMarkdown) Render(content string, width int, renderer *glamour.
 		// Counted against the trimmed form: that is what the
 		// windowing callers measure, and the glue paths below
 		// already return trimmed output.
-		s.lastLines = countLines(trimGlamourMargins(out))
+		s.lastLines = countLines(strings.TrimSpace(out))
 		return out
 	}
 
@@ -430,9 +431,21 @@ func glueRenders(prefix, trail string) string {
 // (including newlines) from a glamour-rendered fragment.
 // Glamour adds a leading blank line for documents that open with
 // a heading or paragraph, plus a trailing newline; both must be
-// removed before concatenation.
+// removed before concatenation. Its blank margin lines are often
+// styled (color codes around padding), so a line counts as blank by
+// what it shows, not by its bytes; otherwise a styled margin
+// survives and the glue adds a second blank line. A content line's own indentation (a table's leading space) is kept.
 func trimGlamourMargins(s string) string {
-	return strings.Trim(s, " \t\n")
+	lines := strings.Split(s, "\n")
+	blank := func(line string) bool { return strings.TrimSpace(ansi.Strip(line)) == "" }
+	start, end := 0, len(lines)
+	for start < end && blank(lines[start]) {
+		start++
+	}
+	for end > start && blank(lines[end-1]) {
+		end--
+	}
+	return strings.TrimRight(strings.Join(lines[start:end], "\n"), " \t")
 }
 
 // findSafeMarkdownBoundary returns the byte offset of the END of

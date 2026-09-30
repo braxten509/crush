@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -30,6 +29,9 @@ type proc struct {
 	args          []string
 	started       time.Time
 	nativeShellID string
+	// busService is set on services a D-Bus daemon started on demand for a
+	// command (portals, secret stores); they aren't commands the agent ran.
+	busService bool
 }
 
 // markedProcs lists the processes carrying one of the hubs' environment
@@ -56,7 +58,7 @@ func BackgroundProcesses() []Process {
 	procs := markedProcs(markers)
 	var out []Process
 	for _, p := range procs {
-		if isCommandRoot(p, procs) && !isForegroundCommand(p, procs) {
+		if !p.busService && isCommandRoot(p, procs) && !isForegroundCommand(p, procs) {
 			out = append(out, Process{PID: p.pid, Command: commandText(p.args), Started: p.started})
 		}
 	}
@@ -97,11 +99,7 @@ func isCommandRoot(p proc, procs map[int]proc) bool {
 		// The CLI itself is Crush's child; anything else was orphaned.
 		return p.ppid != os.Getpid()
 	}
-	cliParent := parent.ppid == os.Getpid()
-	if wrapper, ok := procs[parent.ppid]; ok && len(wrapper.args) > 0 {
-		cliParent = cliParent || (wrapper.ppid == os.Getpid() && filepath.Base(wrapper.args[0]) == "bwrap")
-	}
-	if p.sid == p.pid && cliParent {
+	if p.sid == p.pid && parent.ppid == os.Getpid() {
 		// Codex starts commands in sessions of their own, without a shell
 		// in between; the CLIs' helpers don't do that.
 		return true

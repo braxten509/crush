@@ -44,6 +44,8 @@ type claudeLine struct {
 	// task_started and task_notification (the task ended): which task.
 	TaskID         string `json:"task_id"`
 	IsBackgrounded bool   `json:"is_backgrounded"`
+	// On a tool result: set when the command went on in the background.
+	ToolUseResult json.RawMessage `json:"tool_use_result"`
 }
 
 type claudeEvent struct {
@@ -543,6 +545,12 @@ read:
 				meta := ""
 				if !b.IsError {
 					meta = resultMetadata(call[0], call[1], out)
+					var res struct {
+						BackgroundTaskID string `json:"backgroundTaskId"`
+					}
+					if json.Unmarshal(line.ToolUseResult, &res) == nil && res.BackgroundTaskID != "" {
+						meta = markBackground(call[0], meta)
+					}
 				}
 				if err := t.Emit(Event{Type: EventToolResult, ID: b.ToolUseID, Name: call[0], Output: out, Metadata: meta, IsError: b.IsError}); err != nil {
 					return err
@@ -610,15 +618,21 @@ var steerBackgroundAfter = tools.ForegroundWaitLimit
 // claudePrompt is the turn's user message, with its images inline.
 func claudePrompt(text string, attachments []message.Attachment) map[string]any {
 	msg := claudeUserMessage(text)
-	content := []any{map[string]any{"type": "text", "text": text}}
+	var content []any
+	if text != "" {
+		// The API rejects empty text blocks, as in an image-only message.
+		content = append(content, map[string]any{"type": "text", "text": text})
+	}
+	images := 0
 	for _, a := range attachments {
 		if a.IsImage() {
 			content = append(content, map[string]any{"type": "image", "source": map[string]any{
 				"type": "base64", "media_type": a.MimeType, "data": base64.StdEncoding.EncodeToString(a.Content),
 			}})
+			images++
 		}
 	}
-	if len(content) > 1 {
+	if images > 0 {
 		msg["message"].(map[string]any)["content"] = content
 	}
 	return msg

@@ -49,13 +49,18 @@ func linuxMarkedProcs(markers []string) map[int]proc {
 		}
 		// ponytail: assumes USER_HZ is 100, true on every Linux in use.
 		nativeShellID := ""
+		busService := false
 		for _, variable := range bytes.Split(env, []byte{0}) {
 			if value, ok := strings.CutPrefix(string(variable), tools.NativeShellEnv+"="); ok {
 				nativeShellID = value
-				break
+			}
+			// D-Bus sets this for every service it activates, and the
+			// service's own children inherit it.
+			if bytes.HasPrefix(variable, []byte("DBUS_STARTER_BUS_TYPE=")) {
+				busService = true
 			}
 		}
-		procs[pid] = proc{pid: pid, ppid: ppid, sid: sid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond), nativeShellID: nativeShellID}
+		procs[pid] = proc{pid: pid, ppid: ppid, sid: sid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond), nativeShellID: nativeShellID, busService: busService}
 	}
 	return procs
 }

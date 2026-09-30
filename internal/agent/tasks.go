@@ -540,6 +540,21 @@ func (h *taskHub) finish(id, output string, err error) {
 	}
 }
 
+// hasRunning reports whether any sub-agent of the session is still running.
+func (h *taskHub) hasRunning(sessionID string) bool {
+	if h == nil {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, t := range h.tasks {
+		if t.SessionID == sessionID && t.Status == TaskRunning {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *taskHub) publish(t Task) {
 	if h.events != nil {
 		h.events.Publish(pubsub.UpdatedEvent, t)

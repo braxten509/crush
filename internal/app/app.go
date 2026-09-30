@@ -267,7 +267,7 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 
 // RunNonInteractive runs the application in non-interactive mode with the
 // given prompt, printing to stdout.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner bool, continueSessionID string, useLast bool) error {
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, fast, hideSpinner bool, continueSessionID string, useLast bool) error {
 	slog.Info("Running in non-interactive mode")
 
 	// Re-initialize the coder agent without interactive-only tools.
@@ -284,13 +284,15 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		}
 	}
 
-	// The reasoning effort applies to the model that will actually run.
-	// On a continued session without an explicit model override, the
-	// model is resolved later from the session's last assistant message,
-	// so the override is applied after that restore instead.
+	// The reasoning effort and fast mode apply to the model that will
+	// actually run. On a continued session without an explicit model
+	// override, the model is resolved later from the session's last
+	// assistant message, so the override is applied after that restore
+	// instead.
+	tuned := reasoningEffort != "" || fast
 	deferredEffort := (continueSessionID != "" || useLast) && largeModel == "" && smallModel == ""
-	if reasoningEffort != "" && !deferredEffort {
-		if err := app.overrideReasoningEffort(ctx, reasoningEffort); err != nil {
+	if tuned && !deferredEffort {
+		if err := app.overrideTuning(ctx, reasoningEffort, fast); err != nil {
 			return err
 		}
 	}
@@ -365,8 +367,8 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		slog.Info("Created session for non-interactive run", "session_id", sess.ID)
 	}
 
-	if reasoningEffort != "" && deferredEffort {
-		if err := app.overrideReasoningEffort(ctx, reasoningEffort); err != nil {
+	if tuned && deferredEffort {
+		if err := app.overrideTuning(ctx, reasoningEffort, fast); err != nil {
 			return err
 		}
 	}
@@ -571,24 +573,33 @@ func (app *App) overrideModelsForNonInteractive(ctx context.Context, largeModel,
 	return app.AgentCoordinator.UpdateModels(ctx)
 }
 
-// overrideReasoningEffort validates the requested reasoning effort against
-// the large model in effect for this run (which may have been overridden by
-// --model or restored from a continued session) and applies it as an
-// in-memory override.
-func (app *App) overrideReasoningEffort(ctx context.Context, reasoningEffort string) error {
+// overrideTuning validates the requested reasoning effort and fast mode
+// against the large model in effect for this run (which may have been
+// overridden by --model or restored from a continued session) and applies
+// them as an in-memory override. An empty effort keeps the model's own.
+func (app *App) overrideTuning(ctx context.Context, reasoningEffort string, fast bool) error {
 	cfg := app.config.Config()
 	selected, ok := cfg.Models[config.SelectedModelTypeLarge]
 	if !ok {
 		return fmt.Errorf("no large model selected; set one with the --model flag or 'model large'")
 	}
-	if err := cfg.ValidateReasoningEffort(selected.Provider, selected.Model, reasoningEffort); err != nil {
-		return err
+	if reasoningEffort != "" {
+		if err := cfg.ValidateReasoningEffort(selected.Provider, selected.Model, reasoningEffort); err != nil {
+			return err
+		}
+		selected.ReasoningEffort = reasoningEffort
 	}
-	selected.ReasoningEffort = reasoningEffort
-	slog.Info("Overriding reasoning effort for non-interactive run",
+	if fast {
+		if err := cfg.ValidateFastMode(selected.Provider, selected.Model); err != nil {
+			return err
+		}
+		selected.ServiceTier = "fast"
+	}
+	slog.Info("Overriding model tuning for non-interactive run",
 		"provider", selected.Provider,
 		"model", selected.Model,
-		"reasoning_effort", reasoningEffort)
+		"reasoning_effort", selected.ReasoningEffort,
+		"service_tier", selected.ServiceTier)
 	app.config.OverridePreferredModel(config.SelectedModelTypeLarge, selected)
 	return app.AgentCoordinator.UpdateModels(ctx)
 }

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"syscall"
 	"testing"
 	"time"
 
@@ -181,4 +182,36 @@ func TestCommandText(t *testing.T) {
 	require.Equal(t, "echo 'hi'", commandText([]string{"bash", "-c", `eval 'echo '\''hi'\''' \< /dev/null`}))
 	require.Equal(t, "go test ./...", commandText([]string{"/bin/bash", "-lc", "go test ./..."}))
 	require.Equal(t, "node server.js", commandText([]string{"node", "server.js"}))
+}
+
+func TestBackgroundProcessesSkipBusServices(t *testing.T) {
+	h := &taskHub{dir: t.TempDir()}
+	hubsMu.Lock()
+	hubs = append(hubs, h)
+	hubsMu.Unlock()
+	t.Cleanup(func() {
+		hubsMu.Lock()
+		hubs = slices.DeleteFunc(hubs, func(x *taskHub) bool { return x == h })
+		hubsMu.Unlock()
+	})
+
+	// Two commands that outlive their shell; one looks like a service a
+	// D-Bus daemon started, which isn't the agent's own command.
+	orphan := func(extraEnv ...string) {
+		cmd := exec.Command("sh", "-c", "sleep 30 >/dev/null 2>&1 &")
+		cmd.Env = append(append(os.Environ(), TasksDirEnv+"="+h.dir), extraEnv...)
+		require.NoError(t, cmd.Run())
+	}
+	orphan()
+	orphan("DBUS_STARTER_BUS_TYPE=session")
+	t.Cleanup(func() {
+		for _, p := range markedProcs(hubMarkers()) {
+			_ = syscall.Kill(p.pid, syscall.SIGKILL)
+		}
+	})
+
+	require.Eventually(t, func() bool { return len(markedProcs(hubMarkers())) == 2 }, 5*time.Second, 50*time.Millisecond)
+	found := BackgroundProcesses()
+	require.Len(t, found, 1)
+	require.Equal(t, "sleep 30", found[0].Command)
 }

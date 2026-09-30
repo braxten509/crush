@@ -1271,6 +1271,12 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Adjust for chat area position
 			x -= m.layout.main.Min.X
 			y -= m.layout.main.Min.Y
+			if msg.Button == uv.MouseLeft && image.Pt(msg.X, msg.Y).In(m.layout.main) {
+				if handled, cmd := m.chat.HandleScrollbarPress(x, y); handled {
+					cmds = append(cmds, cmd)
+					return m, tea.Batch(cmds...)
+				}
+			}
 			if !image.Pt(msg.X, msg.Y).In(m.layout.sidebar) {
 				if handled, cmd := m.chat.HandleMouseDown(x, y); handled {
 					m.lastClickTime = time.Now()
@@ -1314,6 +1320,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch m.state {
 		case uiChat:
+			if m.chat.DraggingScrollbar() {
+				cmds = append(cmds, m.chat.HandleScrollbarDrag(msg.Y-m.layout.main.Min.Y))
+				return m, tea.Batch(cmds...)
+			}
 			// Skip chat edge-scrolling when an inline editor is
 			// active to prevent accidental scrolling while hovering
 			// over question forms or other inline components.
@@ -1369,6 +1379,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch m.state {
 		case uiChat:
+			if m.chat.HandleScrollbarRelease() {
+				return m, tea.Batch(cmds...)
+			}
 			x, y := msg.X, msg.Y
 			// Adjust for chat area position
 			x -= m.layout.main.Min.X
@@ -1405,8 +1418,11 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// others send DeltaY=1.
 		switch m.state {
 		case uiChat:
-			// When sidebar is focused, route wheel events to sidebar scrolling.
-			if m.focus == uiFocusSidebar {
+			// A focused sidebar gets the wheel; with composer_focus_only
+			// (where it can't be focused) the wheel scrolls it while
+			// the pointer is over it.
+			overSidebar := image.Pt(msg.Mouse.X, msg.Mouse.Y).In(m.layout.sidebar) && m.sidebarScrollable
+			if m.focus == uiFocusSidebar || (overSidebar && m.composerFocusOnly()) {
 				lines := int(msg.DeltaY)
 				if lines != 0 {
 					m.sidebarOffset = max(0, min(m.sidebarOffset+lines, m.sidebarMaxOffsetVal))
@@ -1434,7 +1450,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case scrollbarHideMsg:
 		if m.state == uiChat {
-			m.chat.HideScrollbar(msg.seq)
+			cmds = append(cmds, m.chat.HideScrollbar(msg.seq))
 		}
 	case chatWarmMsg:
 		// A resize has settled; warm the message cache one batch at a time
@@ -1897,7 +1913,7 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 	switch {
 	case m.state != uiChat:
 		return nil
-	case m.focus != uiFocusSidebar && image.Pt(msg.X, msg.Y).In(m.layout.sidebar) && m.sidebarScrollable:
+	case m.focus != uiFocusSidebar && image.Pt(msg.X, msg.Y).In(m.layout.sidebar) && m.sidebarScrollable && !m.composerFocusOnly():
 		m.focus = uiFocusSidebar
 		m.textarea.Blur()
 		m.chat.Blur()
@@ -1911,7 +1927,9 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 			m.chat.Blur()
 		}
 		m.sidebarScrollbarVisible = false
-	case m.focus != uiFocusMain && image.Pt(msg.X, msg.Y).In(m.layout.main):
+	case m.focus != uiFocusMain && image.Pt(msg.X, msg.Y).In(m.layout.main) && !m.composerFocusOnly():
+		// With composer_focus_only the chat still handles the click
+		// (selection, expanding groups) without taking focus.
 		if m.activeInline != nil {
 			m.focusActiveInline(uiFocusMain)
 		} else {
@@ -1922,6 +1940,16 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 		m.sidebarScrollbarVisible = false
 	}
 	return cmd
+}
+
+// composerFocusOnly reports whether the composer keeps keyboard focus
+// (options.tui.composer_focus_only): Tab and clicks never move it away.
+func (m *UI) composerFocusOnly() bool {
+	if m.com == nil || m.com.Workspace == nil {
+		return false
+	}
+	cfg := m.com.Config()
+	return cfg != nil && cfg.Options != nil && cfg.Options.TUI.FocusesComposerOnly()
 }
 
 // focusActiveInline moves focus between an inline editor and the chat while
@@ -2259,6 +2287,28 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			}
 			return util.NewInfoMsg("Transparent background " + status)
 		})
+		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionToggleComposerFocusOnly:
+		newValue := !m.composerFocusOnly()
+		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.composer_focus_only", newValue); err != nil {
+			cmds = append(cmds, util.ReportError(err))
+		} else {
+			if newValue && m.focus != uiFocusEditor {
+				// Hand focus back to the composer it now keeps.
+				if m.activeInline != nil {
+					m.focusActiveInline(uiFocusEditor)
+				} else {
+					m.focus = uiFocusEditor
+					cmds = append(cmds, m.textarea.Focus())
+					m.chat.Blur()
+				}
+			}
+			status := "Tab moves focus again"
+			if newValue {
+				status = "Focus stays on the composer"
+			}
+			cmds = append(cmds, util.ReportInfo(status))
+		}
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionSwitchTheme:
 		themeName := msg.Theme
@@ -3086,10 +3136,13 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 		return m.handleDialogMsg(msg)
 	}
 
-	// Tab always toggles focus between editor and chat, even when
-	// an inline editor is active. This lets users collapse the
-	// question form to view chat.
+	// Tab toggles focus between an inline editor and the chat, which
+	// lets users collapse the question form to view chat. With
+	// composer_focus_only it does nothing.
 	if m.activeInline != nil && key.Matches(msg, m.keyMap.Tab) {
+		if m.composerFocusOnly() {
+			return tea.Batch(cmds...)
+		}
 		if m.focus == uiFocusEditor {
 			m.focusActiveInline(uiFocusMain)
 		} else {
@@ -3241,7 +3294,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 
 				attachments := m.attachments.List()
 				m.attachments.Reset()
-				if len(value) == 0 && !message.ContainsTextAttachment(attachments) {
+				if len(value) == 0 && len(attachments) == 0 {
 					// Enter on an empty editor while a ready plan is pending
 					// reopens the dismissed handoff prompt.
 					if m.mode == uiInputModePlan && m.hasSession() && m.planReadySessionID == m.session.ID {
@@ -3266,7 +3319,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Tab):
-				if m.state != uiLanding {
+				if m.state != uiLanding && !m.composerFocusOnly() {
 					m.setState(m.state, uiFocusMain)
 					m.textarea.Blur()
 					m.chat.Focus()
@@ -3817,7 +3870,7 @@ func (m *UI) ShortHelp() []key.Binding {
 		}
 	}
 
-	tab := k.Tab
+	tab := m.tabHelp()
 	commands := k.Commands
 	if m.focus == uiFocusEditor && m.textarea.Value() == "" {
 		commands.SetHelp("/ or ctrl+p", "commands")
@@ -3837,13 +3890,6 @@ func (m *UI) ShortHelp() []key.Binding {
 			if m.promptQueue > 0 {
 				binds = append(binds, k.Chat.Interrupt)
 			}
-		}
-
-		switch m.focus {
-		case uiFocusEditor:
-			tab.SetHelp("tab", "focus chat")
-		default:
-			tab.SetHelp("tab", "focus editor")
 		}
 
 		binds = append(
@@ -3887,8 +3933,10 @@ func (m *UI) ShortHelp() []key.Binding {
 		// TODO: other states
 		// if m.session == nil {
 		// no session selected
+		landingTab := k.Tab
+		landingTab.SetEnabled(!m.composerFocusOnly())
 		binds = append(binds,
-			k.Tab,
+			landingTab,
 			commands,
 			k.ShiftTab,
 			k.Models,
@@ -3960,17 +4008,9 @@ func (m *UI) FullHelp() [][]key.Binding {
 		}
 
 		mainBinds := []key.Binding{}
-		tab := k.Tab
-		switch m.focus {
-		case uiFocusEditor:
-			tab.SetHelp("tab", "focus chat")
-		default:
-			tab.SetHelp("tab", "focus editor")
-		}
-
 		mainBinds = append(
 			mainBinds,
-			tab,
+			m.tabHelp(),
 			k.ShiftTab,
 			commands,
 			k.Models,
@@ -4101,14 +4141,34 @@ func (m *UI) FullHelp() [][]key.Binding {
 	return binds
 }
 
-// inlineFocusHelp returns the Tab binding used to restore a blurred inline
-// editor. Collapsible editors provide context-specific wording.
-func (m *UI) inlineFocusHelp() key.Binding {
+// tabHelp is the Tab binding's help for the current focus. It's disabled
+// (hidden from help) with composer_focus_only, where Tab does nothing.
+func (m *UI) tabHelp() key.Binding {
 	tab := m.keyMap.Tab
+	if m.composerFocusOnly() {
+		tab.SetEnabled(false)
+		return tab
+	}
+	if m.focus == uiFocusEditor {
+		tab.SetHelp("tab", "focus chat")
+	} else {
+		tab.SetHelp("tab", "focus editor")
+	}
+	return tab
+}
+
+// inlineFocusHelp returns the binding that restores a blurred inline
+// editor: Tab, or a click with composer_focus_only. Collapsible editors
+// provide context-specific wording.
+func (m *UI) inlineFocusHelp() key.Binding {
 	description := "focus editor"
 	if collapsed, ok := m.activeInline.(dialog.CollapsibleInlineEditor); ok {
 		description = collapsed.CollapsedHelp()
 	}
+	if m.composerFocusOnly() {
+		return key.NewBinding(key.WithKeys("click"), key.WithHelp("click", description))
+	}
+	tab := m.keyMap.Tab
 	tab.SetHelp("tab", description)
 	return tab
 }

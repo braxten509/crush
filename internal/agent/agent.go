@@ -142,6 +142,9 @@ type SessionAgentCall struct {
 	// is rewritten and no longer carries the element, so the reply
 	// target is not lost when a long channel turn is summarized.
 	channelMeta map[string]string
+	// notificationPrompt retains the original turn's origin when auto-
+	// summarization rewrites Prompt for a continuation of the same work.
+	notificationPrompt *string
 }
 
 // filterToolsForChannel scopes the tool list for a turn. A channel-originated
@@ -433,6 +436,12 @@ func (a *sessionAgent) enqueueCall(call SessionAgentCall) {
 	queued.Accepted = nil
 	existing = append(existing, queued)
 	a.messageQueue.Set(call.SessionID, existing)
+	if s, _ := a.steering.Get(call.SessionID); s != nil {
+		select {
+		case s.steerReady <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // requeueFront puts calls back at the front of the session's queue.
@@ -619,11 +628,31 @@ func (a *sessionAgent) publishRunComplete(ctx context.Context, call SessionAgent
 	a.runComplete.PublishMustDeliver(ctx, pubsub.UpdatedEvent, complete)
 }
 
-// notifySessionFinished runs after the final message flush. A completed
-// model turn is not a completed session while another prompt is queued,
+// notifySessionFinished runs after the final message flush. Only a normal,
+// nonempty main-session answer can finish the user's work, and child
+// sessions never generate completion alerts. Follow-ups nobody typed (a
+// sub-agent's result, answers from `crush ask`, a CLI's reply after a
+// background task) only ding once none of the session's sub-agents is
+// still running.
+// A model turn is not a completed session while another prompt is queued,
 // accepted for dispatch, interrupting, or already running.
-func (a *sessionAgent) notifySessionFinished(call SessionAgentCall, title string) {
-	if call.NonInteractive || a.notify == nil {
+func (a *sessionAgent) notifySessionFinished(call SessionAgentCall, sess session.Session, assistant *message.Message) {
+	if a.notify == nil || a.isSubAgent || sess.ParentSessionID != "" || call.NonInteractive {
+		return
+	}
+	prompt := call.Prompt
+	if call.notificationPrompt != nil {
+		prompt = *call.notificationPrompt
+	}
+	_, _, followUp := ParseTaskNotification(strings.TrimSpace(prompt))
+	if (followUp || call.CLIContinue) && a.tasks.hasRunning(call.SessionID) {
+		return
+	}
+	if assistant == nil || assistant.Role != message.Assistant || assistant.IsSummaryMessage || assistant.IsCompacting || assistant.FinishReason() != message.FinishReasonEndTurn {
+		return
+	}
+	text := assistant.Content()
+	if text.Hidden || (strings.TrimSpace(text.String()) == "" && len(assistant.ImageURLContent()) == 0 && len(assistant.BinaryContent()) == 0) {
 		return
 	}
 	mu := a.sessionMu(call.SessionID)
@@ -638,7 +667,7 @@ func (a *sessionAgent) notifySessionFinished(call SessionAgentCall, title string
 	}
 	a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 		SessionID:    call.SessionID,
-		SessionTitle: title,
+		SessionTitle: sess.Title,
 		Type:         notify.TypeAgentFinished,
 		RunID:        call.RunID,
 	})
@@ -646,12 +675,12 @@ func (a *sessionAgent) notifySessionFinished(call SessionAgentCall, title string
 
 // ValidateCall performs the cheap structural validation that
 // sessionAgent.Run requires before a call can be dispatched: a call must
-// carry either a non-empty prompt or a text attachment, and it must name a
+// carry either a non-empty prompt or an attachment, and it must name a
 // session. It is exported so callers that accept a run before dispatching it
 // (e.g. backend.SendMessage) can apply the same checks and keep the error
 // contract consistent.
 func ValidateCall(call SessionAgentCall) error {
-	if call.Prompt == "" && !message.ContainsTextAttachment(call.Attachments) {
+	if call.Prompt == "" && len(call.Attachments) == 0 {
 		return ErrEmptyPrompt
 	}
 	if call.SessionID == "" {
@@ -663,6 +692,10 @@ func ValidateCall(call SessionAgentCall) error {
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *fantasy.AgentResult, retErr error) {
 	if err := ValidateCall(call); err != nil {
 		return nil, err
+	}
+	if call.notificationPrompt == nil {
+		prompt := call.Prompt
+		call.notificationPrompt = &prompt
 	}
 
 	if call.Channel != "" && call.channelMeta == nil {
@@ -895,7 +928,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// non-interactive clients waiting on RunComplete.
 		a.publishRunComplete(ctx, call, complete)
 		if notifyOnSuccess && flushErr == nil && complete.Error == "" && !complete.Cancelled {
-			a.notifySessionFinished(call, currentSession.Title)
+			a.notifySessionFinished(call, currentSession, currentAssistant)
 		}
 	}()
 
@@ -930,8 +963,15 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			return a.messages.Update(genCtx, *currentAssistant)
 		})
 	}
+	prompt := message.PromptWithTextAttachments(call.Prompt, call.Attachments)
+	if prompt == "" && len(files) > 0 && !isCLI {
+		// Fantasy refuses files without a prompt, so an image-only
+		// message goes in as its own user message.
+		history = append(history, fantasy.Message{Role: fantasy.MessageRoleUser, Content: filesAsParts(files)})
+		files = nil
+	}
 	result, err = stream(genCtx, fantasy.AgentStreamCall{
-		Prompt:           message.PromptWithTextAttachments(call.Prompt, call.Attachments),
+		Prompt:           prompt,
 		Files:            files,
 		Messages:         history,
 		Headers:          sessionHeaders(call.SessionID),
@@ -1788,6 +1828,14 @@ If not, please feel free to ignore. Again do not mention this message to the use
 	}
 
 	return history, files
+}
+
+func filesAsParts(files []fantasy.FilePart) []fantasy.MessagePart {
+	parts := make([]fantasy.MessagePart, 0, len(files))
+	for _, f := range files {
+		parts = append(parts, f)
+	}
+	return parts
 }
 
 // filterFileParts removes fantasy.FilePart entries from a slice of message

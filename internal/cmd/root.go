@@ -25,7 +25,6 @@ import (
 	fang "charm.land/fang/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
-	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/config"
@@ -237,7 +236,6 @@ func Execute() {
 		fang.WithVersion(version.Version),
 		fang.WithNotifySignal(os.Interrupt),
 	); err != nil {
-		cliagent.CloseInstructionViews()
 		os.Exit(1)
 	}
 }

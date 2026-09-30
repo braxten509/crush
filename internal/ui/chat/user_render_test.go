@@ -92,41 +92,30 @@ func TestUserMessageSoftWrapsLongLines(t *testing.T) {
 		"a line longer than the width must wrap onto multiple lines")
 }
 
-// TestUserMessageMarkdownConstructsUnaffected pins the blast radius of
-// the #3502 fix: preserving newlines must not disturb block-level
-// Markdown that users legitimately paste into the prompt.
-func TestUserMessageMarkdownConstructsUnaffected(t *testing.T) {
+// TestUserMessageShowsTextAsSent: sent messages aren't Markdown, so tags,
+// emphasis marks, backticks and list markers all show exactly as typed.
+func TestUserMessageShowsTextAsSent(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name  string
-		input string
-		want  []string
-	}{
-		{
-			name:  "bullet list keeps one item per line",
-			input: "- one\n- two\n- three",
-			want:  []string{"one", "two", "three"},
-		},
-		{
-			name:  "numbered list keeps one item per line",
-			input: "1. first\n2. second",
-			want:  []string{"first", "second"},
-		},
-		{
-			name:  "fenced code block keeps its lines",
-			input: "```go\nfunc main() {\n\tx := 1\n}\n```",
-			want:  []string{"func main() {", "x := 1", "}"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, input := range []string{
+		"keep <b>tags</b> and <crush-task-result> visible",
+		"*stars* _underscores_ `backticks` ~~tildes~~",
+		"# not a heading",
+		"- one\n- two\n1. first",
+		"```go\nfunc main() {}\n```",
+		"[link](https://example.com) and a\\backslash",
+	} {
+		t.Run(input, func(t *testing.T) {
 			t.Parallel()
-			joined := strings.Join(renderedLines(t, tt.input, 80), "\n")
-			for _, w := range tt.want {
-				require.Contains(t, joined, w)
+			var got []string
+			for _, l := range renderedLines(t, input, 80) {
+				got = append(got, l)
 			}
+			require.Equal(t, input, strings.Join(got, "\n"))
 		})
 	}
+
+	out := newTestUserItem(t, "plain *text*").RawRender(80)
+	require.NotContains(t, out, "\x1b[3m", "no italics")
+	require.NotContains(t, out, ";3m", "no italics")
 }

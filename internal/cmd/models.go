@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"sort"
@@ -22,7 +24,10 @@ var modelsCmd = &cobra.Command{
 crush models
 
 # Search models
-crush models gpt5`,
+crush models gpt5
+
+# Usable models with their effort levels and fast mode, as JSON
+crush models --json`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := ResolveCwd(cmd)
@@ -39,6 +44,9 @@ crush models gpt5`,
 		}
 
 		term := strings.ToLower(strings.Join(args, " "))
+		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+			return printModelsJSON(cmd.OutOrStdout(), cfg.Config(), term)
+		}
 
 		type providerEntry struct {
 			name       string
@@ -162,6 +170,52 @@ crush models gpt5`,
 	},
 }
 
+// modelInfo is one usable model in `crush models --json`.
+type modelInfo struct {
+	Provider               string   `json:"provider"`
+	ProviderName           string   `json:"provider_name"`
+	Model                  string   `json:"model"`
+	Name                   string   `json:"name"`
+	ReasoningLevels        []string `json:"reasoning_levels"`
+	DefaultReasoningEffort string   `json:"default_reasoning_effort,omitempty"`
+	Fast                   bool     `json:"fast"`
+}
+
+// printModelsJSON lists the models of configured providers, which are the
+// ones `crush run --model` and `crush spawn` can use, with the reasoning
+// levels and fast mode each accepts.
+func printModelsJSON(w io.Writer, cfg *config.Config, term string) error {
+	list := []modelInfo{}
+	for providerID, provider := range cfg.Providers.Seq2() {
+		if provider.Disable {
+			continue
+		}
+		models := provider.Models
+		if providerID == string(catwalk.InferenceProviderOpenAI) && provider.OAuthToken != nil {
+			models = provider.ChatGPTModels
+		}
+		for _, model := range models {
+			if term != "" && !slices.ContainsFunc([]string{provider.ID, provider.Name, model.ID, model.Name}, func(s string) bool {
+				return strings.Contains(strings.ToLower(s), term)
+			}) {
+				continue
+			}
+			list = append(list, modelInfo{
+				Provider: providerID, ProviderName: provider.Name, Model: model.ID, Name: model.Name,
+				ReasoningLevels: append([]string{}, model.ReasoningLevels...), DefaultReasoningEffort: model.DefaultReasoningEffort,
+				Fast: cfg.ValidateFastMode(providerID, model.ID) == nil,
+			})
+		}
+	}
+	slices.SortFunc(list, func(a, b modelInfo) int {
+		return strings.Compare(a.Provider+"/"+a.Model, b.Provider+"/"+b.Model)
+	})
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(list)
+}
+
 func init() {
+	modelsCmd.Flags().Bool("json", false, "Print usable models with their reasoning levels and fast mode as JSON")
 	rootCmd.AddCommand(modelsCmd)
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"charm.land/log/v2"
@@ -81,7 +82,7 @@ crush run --continue "Follow up on your last response"
 		)
 
 		// Cancel on SIGINT or SIGTERM.
-		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+		ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 
 		prompt := strings.Join(args, " ")
@@ -342,6 +343,9 @@ func runNonInteractive(
 
 		case <-ctx.Done():
 			stopSpinner()
+			cancelCtx, cancelRequest := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelRequest()
+			_ = c.CancelAgentSession(cancelCtx, ws.ID, sess.ID)
 			return ctx.Err()
 		}
 	}

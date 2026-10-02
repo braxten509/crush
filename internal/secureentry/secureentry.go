@@ -132,6 +132,8 @@ func Prepare(spec Spec) (*Target, error) {
 		spec.Label = "API key"
 	}
 	spec.File = filepath.Clean(spec.File)
+	// Register before the dialog can save, including for existing trackers.
+	markSensitive(spec.File)
 	root, err := os.OpenRoot(filepath.Dir(spec.File))
 	if err != nil {
 		return nil, errors.New("cannot open destination directory")

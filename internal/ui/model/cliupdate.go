@@ -30,6 +30,12 @@ type cliUpdatesInstalledMsg struct {
 	errs      []error
 }
 
+// cliUpdatePrompt is an open CLI update form and the updates it offers.
+type cliUpdatePrompt struct {
+	form    *dialog.QuestionForm
+	updates []cliupdate.Update
+}
+
 // checkCLIUpdates looks for newer releases of the installed agent CLIs.
 // The startup check runs at most once per [cliupdate.AutoCheckEvery].
 func (m *UI) checkCLIUpdates(manual bool) tea.Cmd {
@@ -66,7 +72,7 @@ func (m *UI) handleCLIUpdates(msg cliUpdatesMsg) tea.Cmd {
 	}
 	if m.activeInline != nil {
 		// Don't replace a question or plan form that's waiting on the user.
-		return m.showCLIUpdateStatus(util.InfoTypeUpdate, fmt.Sprintf("%s available. Run Update Agent CLIs from the command palette.", updateList(updates)))
+		return m.showCLIUpdatesAvailable(updates)
 	}
 	if msg.manual {
 		m.status.ClearInfoMsg()
@@ -102,11 +108,24 @@ func (m *UI) openCLIUpdateForm(updates []cliupdate.Update) {
 		}
 		return m.installCLIUpdates(updates)
 	}
+	m.cliUpdatePrompt = &cliUpdatePrompt{form: form, updates: updates}
 	m.activeInline = form
 	m.textarea.Blur()
 	m.focus = uiFocusEditor
 	m.activeInline.SetFocused(true)
 	m.updateLayoutAndSize()
+}
+
+// cliUpdatePromptOpen reports whether the CLI update form is the active
+// inline editor.
+func (m *UI) cliUpdatePromptOpen() bool {
+	return m.cliUpdatePrompt != nil && m.activeInline == m.cliUpdatePrompt.form
+}
+
+// showCLIUpdatesAvailable points at the command palette for updates the
+// user wasn't asked about.
+func (m *UI) showCLIUpdatesAvailable(updates []cliupdate.Update) tea.Cmd {
+	return m.showCLIUpdateStatus(util.InfoTypeUpdate, fmt.Sprintf("%s available. Run Update Agent CLIs from the command palette.", updateList(updates)))
 }
 
 func (m *UI) installCLIUpdates(updates []cliupdate.Update) tea.Cmd {

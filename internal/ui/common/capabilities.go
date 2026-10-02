@@ -39,6 +39,37 @@ type Capabilities struct {
 	ReportFocusEvents bool
 	// OSC99Notifications indicates whether the terminal supports OSC 99 notifications.
 	OSC99Notifications bool
+	// UnicodeCore indicates the terminal reported grapheme width support
+	// (mode 2027), so the renderer already measures by grapheme cluster.
+	UnicodeCore bool
+}
+
+// The width probe prints an emoji-presentation sequence (a symbol plus
+// U+FE0F) at the start of a row and reads the cursor back. Per-codepoint
+// (wcwidth) measuring counts it as one cell; terminals such as Konsole draw it
+// as two without answering the mode 2027 query, and that mismatch shifts the
+// rest of the row, sidebar included. The probe row is 2 because a cursor
+// report for row 1 reads the same as a modified F3 key.
+const (
+	widthProbeRow  = 2
+	widthProbeText = "\U0001F5E3\uFE0F"
+)
+
+// WidthProbe returns the sequence that measures how wide the terminal draws
+// [widthProbeText]. The cursor is saved and restored around it; the caller
+// must repaint the screen afterwards, since the probe overwrites cells.
+func WidthProbe() string {
+	return ansi.SaveCursor + ansi.CursorPosition(1, widthProbeRow) + widthProbeText +
+		ansi.RequestCursorPositionReport + ansi.RestoreCursor
+}
+
+// WidthProbeResult reports whether msg answers [WidthProbe] and, if so,
+// whether the terminal drew the probe two cells wide.
+func WidthProbeResult(msg tea.CursorPositionMsg) (wide, ok bool) {
+	if msg.Y != widthProbeRow-1 || msg.X < 1 || msg.X > 2 {
+		return false, false
+	}
+	return msg.X == 2, true
 }
 
 // Update updates the capabilities based on the given message.
@@ -66,6 +97,8 @@ func (c *Capabilities) Update(msg any) {
 		switch m.Mode {
 		case ansi.ModeFocusEvent:
 			c.ReportFocusEvents = modeSupported(m.Value)
+		case ansi.ModeUnicodeCore:
+			c.UnicodeCore = c.UnicodeCore || m.Value.IsSet() || m.Value.IsReset() || m.Value.IsPermanentlySet()
 		}
 	case uv.UnknownOscEvent:
 		if notification.DetectOSC99Support(string(m)) {
@@ -96,6 +129,17 @@ func QueryCmd(env uv.Environ) tea.Cmd {
 	}
 
 	return tea.Raw(sb.String())
+}
+
+// WidthMethod is how the terminal measures text: by grapheme cluster when
+// it reported mode 2027 (or the width probe showed it draws that way), else
+// per codepoint. Frames must be drawn with the renderer's method, or a row
+// holding a cluster the two disagree on shifts by a cell.
+func (c Capabilities) WidthMethod() ansi.Method {
+	if c.UnicodeCore {
+		return ansi.GraphemeWidth
+	}
+	return ansi.WcWidth
 }
 
 // SupportsTrueColor returns true if the terminal supports true color.

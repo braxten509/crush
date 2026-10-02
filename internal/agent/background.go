@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 	"syscall"
@@ -29,6 +28,9 @@ type proc struct {
 	args          []string
 	started       time.Time
 	nativeShellID string
+	// session is the main session whose agent started the process; it is
+	// empty under a sub-agent, which has no session of its own to report to.
+	session string
 	// busService is set on services a D-Bus daemon started on demand for a
 	// command (portals, secret stores); they aren't commands the agent ran.
 	busService bool
@@ -49,15 +51,30 @@ func hubMarkers() []string {
 	return markers
 }
 
+// backgroundMinAge is how long a CLI's process must have run before it can
+// be background work; a variable so tests can shorten it.
+var backgroundMinAge = tools.ForegroundWaitLimit
+
 // BackgroundProcesses lists what the main agents' CLIs left running.
+// Sub-agents' processes are left out (sub-agents are listed on their own),
+// and so are short-lived ones: commands only go to the background after
+// [tools.ForegroundWaitLimit], so anything younger is a CLI helper such as a
+// hook, unless the user moved commands to the background while it ran.
 func BackgroundProcesses() []Process {
 	markers := hubMarkers()
 	if len(markers) == 0 {
 		return nil
 	}
 	procs := markedProcs(markers)
+	now, moved := time.Now(), cliagent.LastBackground()
 	var out []Process
 	for _, p := range procs {
+		if p.session == "" {
+			continue
+		}
+		if p.nativeShellID == "" && now.Sub(p.started) < backgroundMinAge && !p.started.Before(moved) {
+			continue
+		}
 		if !p.busService && isCommandRoot(p, procs) && !isForegroundCommand(p, procs) {
 			out = append(out, Process{PID: p.pid, Command: commandText(p.args), Started: p.started})
 		}
@@ -116,24 +133,9 @@ func isShell(args []string) bool {
 	return slices.Contains([]string{"sh", "bash", "zsh", "dash", "ksh", "fish"}, name)
 }
 
-// claudeEval pulls the command out of Claude Code's shell wrapper.
-var claudeEval = regexp.MustCompile(`eval '((?:[^']|'\\'')*)'`)
-
-// commandText is what a user would call the command: the script a shell
-// runs rather than the shell, without the CLIs' wrappers.
+// commandText is what a user would call the command, without CLI wrappers.
 func commandText(args []string) string {
-	if isShell(args) {
-		for i, a := range args[1:] {
-			if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.Contains(a, "c") && i+2 < len(args) {
-				script := args[i+2]
-				if m := claudeEval.FindStringSubmatch(script); m != nil {
-					script = strings.ReplaceAll(m[1], `'\''`, "'")
-				}
-				return strings.TrimSpace(script)
-			}
-		}
-	}
-	return strings.Join(args, " ")
+	return cliagent.CommandText(args)
 }
 
 // KillProcess ends a listed background process and everything it started:

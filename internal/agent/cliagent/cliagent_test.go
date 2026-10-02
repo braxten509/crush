@@ -47,6 +47,7 @@ func TestClaudeTurn(t *testing.T) {
 {"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Read","input":{"file_path":"/a.go"},"tool_use_id":"t1"}}
 {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"     3\tpackage a\n     4\tfunc A() {}"}]}}
 {"type":"stream_event","event":{"type":"message_delta","usage":{"input_tokens":5,"output_tokens":7,"cache_read_input_tokens":100}}}
+{"type":"stream_event","event":{"type":"message_stop"}}
 {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Done."}}}
 {"type":"result","subtype":"success","result":"Done."}
 `)

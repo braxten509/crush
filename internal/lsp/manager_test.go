@@ -2,9 +2,11 @@ package lsp
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	powernapconfig "github.com/charmbracelet/x/powernap/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -112,4 +114,49 @@ func TestCanAutoStartCachesMissingCommand(t *testing.T) {
 	require.False(t, manager.canAutoStart("gopls", "main.go", t.TempDir(), server))
 	require.False(t, manager.canAutoStart("gopls", "main.go", t.TempDir(), server))
 	require.Equal(t, 1, lookups)
+}
+
+func TestFailedStartReportsError(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Options: &config.Options{},
+		LSP: map[string]config.LSPConfig{
+			"broken": {Command: "true", FileTypes: []string{"md"}, Timeout: 5},
+		},
+	}
+	manager := NewManager(config.NewTestStore(cfg))
+
+	var reported []ServerState
+	manager.SetCallback(func(_ string, client *Client) {
+		if client != nil {
+			reported = append(reported, client.GetServerState())
+		}
+	})
+
+	server, ok := manager.manager.GetServer("broken")
+	require.True(t, ok)
+	manager.startServer("broken", "README.md", server)
+
+	require.NotEmpty(t, reported)
+	require.Equal(t, StateError, reported[len(reported)-1])
+	_, stored := manager.clients.Get("broken")
+	require.False(t, stored)
+}
+
+func TestNoAutoStartInBroadWorkspace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	manager := &Manager{
+		unavailable: csync.NewMap[string, time.Time](),
+		now:         time.Now,
+		lookPath:    func(string) (string, error) { return "/usr/bin/marksman", nil },
+	}
+	server := &powernapconfig.ServerConfig{Command: "marksman", FileTypes: []string{"md"}}
+
+	require.False(t, manager.canAutoStart("marksman", filepath.Join(home, "a.md"), home, server))
+	require.False(t, manager.canAutoStart("marksman", "/a.md", "/", server))
+	project := filepath.Join(home, "project")
+	require.True(t, manager.canAutoStart("marksman", filepath.Join(project, "a.md"), project, server))
 }

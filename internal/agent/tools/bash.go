@@ -251,7 +251,12 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			}
 
 			ctx, report := filechange.WithCommandReview(ctx, execWorkingDir, config.GlobalCacheDir(), filepath.Dir(config.GlobalConfigData()))
-			defer func() { toolResponse.Metadata = filechange.WithReview(toolResponse.Metadata, report.Finish()) }()
+			backgrounded := false
+			defer func() {
+				if !backgrounded {
+					toolResponse.Metadata = filechange.WithReview(toolResponse.Metadata, report.Finish())
+				}
+			}()
 
 			// A long leading sleep only stalls the agent, so it runs in the
 			// background instead, as Claude Code does.
@@ -301,6 +306,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				}
 
 				// Still running after fast-failure check - return as background job
+				backgrounded = true
 				metadata := BashResponseMetadata{
 					StartTime:        startTime.UnixMilli(),
 					EndTime:          time.Now().UnixMilli(),
@@ -395,6 +401,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			}
 
 			// Still running - keep as background job
+			backgrounded = true
 			metadata := BashResponseMetadata{
 				StartTime:        startTime.UnixMilli(),
 				EndTime:          time.Now().UnixMilli(),

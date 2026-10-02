@@ -54,7 +54,7 @@ func TestGrokDiscoveryAndCacheKeepEffortControls(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "grok"), []byte(script), 0o755))
 	}
 	write(grokMetadataFixture)
-	models, err := discoverGrok(t.Context())
+	models, err := discoverGrok(t.Context(), filepath.Join(dir, "grok"))
 	require.NoError(t, err)
 	args, err := os.ReadFile(arguments)
 	require.NoError(t, err)

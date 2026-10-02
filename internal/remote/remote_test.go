@@ -497,10 +497,10 @@ func (f *fakeSource) PendingQuestion() (question.Request, bool) {
 	return *f.q, true
 }
 
-func (f *fakeSource) QuestionAnswer(answers []question.Answer) bool {
+func (f *fakeSource) QuestionAnswerRequest(id, sessionID string, answers []question.Answer) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.q == nil {
+	if f.q == nil || f.q.ID != id || f.q.SessionID != sessionID {
 		return false
 	}
 	f.q = nil
@@ -508,12 +508,14 @@ func (f *fakeSource) QuestionAnswer(answers []question.Answer) bool {
 	return true
 }
 
-func (f *fakeSource) QuestionCancel() bool {
+func (f *fakeSource) QuestionCancelRequest(id, sessionID string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	ok := f.q != nil
+	if f.q == nil || f.q.ID != id || f.q.SessionID != sessionID {
+		return false
+	}
 	f.q = nil
-	return ok
+	return true
 }
 
 func (f *fakeSource) Config() *config.Config { return nil }

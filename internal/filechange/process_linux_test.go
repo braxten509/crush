@@ -129,6 +129,12 @@ func TestShellReviewIgnoresWrapperOfAnotherCommand(t *testing.T) {
 	require.Nil(t, monitor.End("bash"))
 }
 
+func TestWritesToDevicesAreNotEdits(t *testing.T) {
+	review, err := runObserved(t, t.TempDir(), "printf x > /dev/null; printf y > /dev/stderr")
+	require.NoError(t, err)
+	require.Nil(t, review)
+}
+
 func TestReadOnlyShellHasNoReview(t *testing.T) {
 	root := t.TempDir()
 	put(t, root, "read.txt", "unchanged\n")

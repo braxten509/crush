@@ -33,8 +33,8 @@ type Source interface {
 	PermissionSkipRequests() bool
 
 	PendingQuestion() (question.Request, bool)
-	QuestionAnswer(answers []question.Answer) bool
-	QuestionCancel() bool
+	QuestionAnswerRequest(id, sessionID string, answers []question.Answer) bool
+	QuestionCancelRequest(id, sessionID string) bool
 
 	Config() *config.Config
 	WorkingDir() string
@@ -77,6 +77,14 @@ func (a appSource) PendingQuestion() (question.Request, bool) {
 		return q.Pending()
 	}
 	return question.Request{}, false
+}
+
+func (a appSource) QuestionAnswerRequest(id, sessionID string, answers []question.Answer) bool {
+	return a.App().Questions.AnswerRequest(id, sessionID, answers)
+}
+
+func (a appSource) QuestionCancelRequest(id, sessionID string) bool {
+	return a.App().Questions.CancelRequest(id, sessionID)
 }
 
 func (a appSource) Tasks(sessionID string) []agent.Task { return agent.SessionTasks(sessionID) }

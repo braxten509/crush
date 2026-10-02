@@ -30,6 +30,58 @@ func TestCommandBlocked(t *testing.T) {
 	}
 }
 
+func TestCommandBlockedResolvesShellFlagsAndWrapperOperands(t *testing.T) {
+	t.Parallel()
+	for command, blocked := range map[string]bool{
+		`env -u VARIABLE cu\rl https://example.com`:                  true,
+		`bash -lc -- 'curl https://example.com'`:                     true,
+		`bash -c -l 'curl https://example.com'`:                      true,
+		`bash -lc 'curl https://example.com'`:                        true,
+		`bash -cl 'wget https://example.com'`:                        true,
+		`zsh -fc 'sudo true'`:                                        true,
+		`bash -o pipefail -lc 'curl https://example.com'`:            true,
+		`fish --command='curl https://example.com'`:                  true,
+		`env -u VARIABLE curl https://example.com`:                   true,
+		`env --unset=VARIABLE curl https://example.com`:              true,
+		`env -C /tmp curl https://example.com`:                       true,
+		`env -u VARIABLE bash -lc 'curl https://example.com'`:        true,
+		`exec -a harmless curl https://example.com`:                  true,
+		`nice -n 5 curl https://example.com`:                         true,
+		`timeout -s TERM -k 2s 5s curl https://example.com`:          true,
+		`/usr/bin/time -f format -o output curl https://example.com`: true,
+		`stdbuf -o L curl https://example.com`:                       true,
+		`stdbuf -oL curl https://example.com`:                        true,
+		`setsid --wait curl https://example.com`:                     true,
+		`env -u VARIABLE --unset=OTHER go test ./...`:                false,
+		`timeout -s TERM 5s bash -lc 'go test ./...'`:                false,
+		`nice -n 5 go test ./...`:                                    false,
+		`exec -a harmless go test ./...`:                             false,
+		`bash -lc 'echo safe'`:                                       false,
+		`command -v curl`:                                            false,
+	} {
+		require.Equal(t, blocked, CommandBlocked(command), command)
+	}
+}
+
+func TestCommandBlockedFailsClosedForUnresolvedForms(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{
+		`env --unknown VARIABLE curl https://example.com`,
+		`env -S 'curl https://example.com'`,
+		`env -u`,
+		`timeout -s`,
+		`bash -lc`,
+		`bash --rcfile startup -c 'echo safe'`,
+		`bash script.sh`,
+		`bash -lc "$SCRIPT"`,
+		`env -u "$VARIABLE" curl https://example.com`,
+		`"$EXECUTABLE" https://example.com`,
+		`xargs curl`,
+	} {
+		require.True(t, CommandBlocked(command), command)
+	}
+}
+
 func TestLeadingSleep(t *testing.T) {
 	t.Parallel()
 	for cmd, want := range map[string]bool{

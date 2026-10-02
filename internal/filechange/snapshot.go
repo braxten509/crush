@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/charmbracelet/crush/internal/secureentry"
 )
 
 // Bound previews of the files editing tools identify. Files without a text
@@ -67,6 +69,7 @@ type Tracker struct {
 	files   map[string]entry
 	extra   map[string]bool
 	order   int64
+	store   *snapshotStore
 }
 
 func New(ctx context.Context, root string, exclude ...string) (*Tracker, error) {
@@ -131,6 +134,12 @@ func (t *Tracker) Track(path string) {
 	if err == nil && info.IsDir() {
 		return
 	}
+	// Terminals, pipes, sockets and kernel files (/proc, /sys, cgroups) are
+	// written all the time by the programs a command starts; they are not
+	// edits anyone reviews.
+	if err == nil && !info.Mode().IsRegular() && info.Mode()&fs.ModeSymlink == 0 || onKernelFilesystem(path) {
+		return
+	}
 	t.extra[path] = true
 	if err != nil {
 		return
@@ -139,7 +148,7 @@ func (t *Tracker) Track(path string) {
 	for _, e := range t.files {
 		budget -= len(e.state.Content)
 	}
-	t.files[path] = readEntry(path, info, &budget)
+	t.files[path] = t.readEntry(path, info, &budget)
 }
 
 // Checkpoint advances the baseline only after a completed scan. Previously
@@ -159,6 +168,10 @@ func (t *Tracker) Checkpoint(ctx context.Context) (*Review, error) {
 		paths[path] = true
 	}
 	for path := range paths {
+		if t.excluded(path) {
+			delete(t.extra, path)
+			continue
+		}
 		before, had := t.files[path]
 		after, has := next[path]
 		if had && has && before.state == after.state {
@@ -199,9 +212,12 @@ func (t *Tracker) scan(ctx context.Context) (map[string]entry, error) {
 		if known {
 			budget += len(previous.state.Content)
 		}
-		next[path] = readEntry(path, info, &budget)
+		next[path] = t.readEntry(path, info, &budget)
 	}
 	for path := range t.extra {
+		if t.excluded(path) {
+			continue
+		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -219,7 +235,17 @@ func (t *Tracker) scan(ctx context.Context) (map[string]entry, error) {
 	return next, nil
 }
 
+func (t *Tracker) readEntry(path string, info fs.FileInfo, budget *int) entry {
+	if t.store != nil {
+		return t.store.read(path, info)
+	}
+	return readEntry(path, info, budget)
+}
+
 func (t *Tracker) excluded(path string) bool {
+	if secureentry.Sensitive(path) {
+		return true
+	}
 	// Ignore only VCS bookkeeping and explicit Crush runtime paths. Hidden,
 	// untracked and gitignored project files are deliberately included.
 	for _, part := range strings.Split(filepath.Clean(path), string(filepath.Separator)) {
@@ -240,6 +266,14 @@ func within(path, root string) bool {
 }
 
 func readEntry(path string, info fs.FileInfo, budget *int) entry {
+	var captured entry
+	if !secureentry.ReviewFile(path, func() { captured = readReviewEntry(path, info, budget) }) {
+		return entry{info: info, state: State{Omitted: "Secure entry destination"}}
+	}
+	return captured
+}
+
+func readReviewEntry(path string, info fs.FileInfo, budget *int) entry {
 	e := entry{info: info, changeTime: changeTime(info), state: State{Size: info.Size(), Mode: uint32(info.Mode())}}
 	// A metadata signature lets very large files be reviewed without reading
 	// multi-gigabyte build products on every agent turn.

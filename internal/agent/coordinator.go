@@ -262,12 +262,19 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 
 	c.mainAgent = agent
 	c.mainAgentName = config.AgentCoder
-	cliagent.OnUnprompted = func(sessionID string) {
+	cliagent.OnUnprompted(func(sessionID string) bool {
+		if c.sessions == nil {
+			return false
+		}
+		if _, err := c.sessions.Get(context.Background(), sessionID); err != nil {
+			return false // another workspace's session
+		}
 		ctx := message.WithHiddenUserMessage(withCLIContinue(context.Background()))
 		if _, err := c.Run(ctx, sessionID, "A background task finished."); err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("Showing an agent CLI's reply between turns", "session_id", sessionID, "error", err)
 		}
-	}
+		return true
+	})
 	return c, nil
 }
 
@@ -315,6 +322,78 @@ func (c *coordinator) RunAccepted(ctx context.Context, accept *AcceptedRun, sess
 // dispatchMu; when nil (the in-process/local path) no accept tracking
 // applies.
 func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if c.interactive || c.tasks == nil {
+		return c.runTurn(ctx, accept, sessionID, prompt, attachments...)
+	}
+	run, owner := c.tasks.beginSessionRun(ctx, sessionID)
+	if !owner {
+		var turnCtx context.Context = sessionFollowUpContext{Context: run.ctx, values: ctx}
+		if sessionID != run.sessionID {
+			// Descendant sessions share cancellation and lifetime, but
+			// cannot complete the parent's externally correlated request.
+			turnCtx = WithRunID(turnCtx, "")
+		} else if run.observe(RunIDFromContext(ctx)) {
+			turnCtx = WithRunID(turnCtx, RunIDFromContext(ctx))
+			MarkRunCompletePublished(ctx)
+		}
+		ownTurn := sessionID == run.sessionID
+		if ownTurn {
+			run.turnStarted()
+		}
+		result, err := c.runTurn(turnCtx, accept, sessionID, prompt, attachments...)
+		if ownTurn {
+			run.turnEnded()
+		}
+		run.release(err)
+		return result, err
+	}
+	defer c.tasks.endSessionRun(run)
+	run.turnStarted()
+	result, err := c.runTurn(run.ctx, accept, sessionID, prompt, attachments...)
+	run.turnEnded()
+	run.release(err)
+	complete, hasComplete, err := run.wait()
+	if err != nil {
+		complete.SessionID = sessionID
+		hasComplete = true
+	}
+	if run.ctx.Err() != nil {
+		c.currentAgent().Cancel(sessionID)
+		err = run.ctx.Err()
+		complete.SessionID = sessionID
+		complete.Cancelled = true
+		hasComplete = true
+	}
+	if hasComplete {
+		complete.RunID = RunIDFromContext(ctx)
+		if err != nil {
+			complete.Error = err.Error()
+		}
+		if c.runComplete != nil {
+			publishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			c.runComplete.PublishMustDeliver(publishCtx, pubsub.UpdatedEvent, complete)
+			for _, runID := range run.observerIDs() {
+				observed := complete
+				observed.RunID = runID
+				c.runComplete.PublishMustDeliver(publishCtx, pubsub.UpdatedEvent, observed)
+			}
+			MarkRunCompletePublished(ctx)
+		}
+		if err == nil && run.followUps {
+			if result == nil {
+				result = &fantasy.AgentResult{}
+			}
+			result.Response.Content = fantasy.ResponseContent{fantasy.TextContent{Text: complete.Text}}
+		}
+	}
+	return result, err
+}
+
+func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
 	if err := c.readyWg.Wait(); err != nil {
 		return nil, err
 	}
@@ -385,6 +464,12 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 		latest = rc
 		hasLatest = true
 	}
+	// Unlike the per-turn retry closure, the session owner outlives queued
+	// dispatch. Its callback can safely stay on calls after enqueueing.
+	sessionRun := sessionRunFromContext(ctx, sessionID)
+	if sessionRun != nil {
+		onComplete = sessionRun.record
+	}
 	// Propagate the caller-supplied RunID (set via agent.WithRunID
 	// at the HTTP boundary in backend.SendMessage) onto the
 	// SessionAgentCall so the terminal RunComplete event echoes it
@@ -412,6 +497,8 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 			PresencePenalty:   presPenalty,
 			OnComplete:        onComplete,
 			Accepted:          accept,
+			NonInteractive:    !c.interactive,
+			sessionRun:        sessionRun,
 			OnAuthRefresh:     c.makeAuthRefreshCallback(providerCfg),
 		})
 	}
@@ -430,7 +517,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 		})
 	}
 
-	if hasLatest && c.runComplete != nil {
+	if hasLatest && c.runComplete != nil && sessionRunFromContext(ctx, sessionID) == nil {
 		c.runComplete.PublishMustDeliver(ctx, pubsub.UpdatedEvent, latest)
 		// Signal to the dispatcher (backend.runAgent) that the
 		// authoritative terminal RunComplete for this run was already
@@ -1504,6 +1591,13 @@ func (c *coordinator) BeginAccepted(sessionID string) *AcceptedRun {
 }
 
 func (c *coordinator) Cancel(sessionID string) {
+	if c.tasks != nil {
+		c.tasks.mu.Lock()
+		if run := c.tasks.sessionRuns[sessionID]; run != nil {
+			run.cancel()
+		}
+		c.tasks.mu.Unlock()
+	}
 	c.currentAgent().Cancel(sessionID)
 }
 

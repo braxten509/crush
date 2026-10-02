@@ -56,16 +56,16 @@ func TestListModels(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", t.TempDir())
 
-	ids := func(typ catwalk.Type) (out []string) {
-		models, err := cliDiscovery[typ](t.Context())
+	ids := func(typ catwalk.Type, bin string) (out []string) {
+		models, err := cliDiscovery[typ](t.Context(), filepath.Join(dir, bin))
 		require.NoError(t, err)
 		for _, m := range models {
 			out = append(out, m.ID+"="+m.Name)
 		}
 		return out
 	}
-	require.Equal(t, []string{"gemini-x-high=Gemini X (High)"}, ids(TypeAGYCLI))
-	require.Equal(t, []string{"opencode-go/glm-5.3=glm-5.3", "opencode-go/kimi-k3=kimi-k3"}, ids(TypeOpenCodeCLI))
+	require.Equal(t, []string{"gemini-x-high=Gemini X (High)"}, ids(TypeAGYCLI, "agy"))
+	require.Equal(t, []string{"opencode-go/glm-5.3=glm-5.3", "opencode-go/kimi-k3=kimi-k3"}, ids(TypeOpenCodeCLI, "opencode"))
 }
 
 func TestCodexImageCapabilities(t *testing.T) {
@@ -79,7 +79,7 @@ echo '{"id":2,"result":{"data":[{"id":"gpt-6-astra","inputModalities":["text"]},
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	models, err := discoverCodex(t.Context())
+	models, err := discoverCodex(t.Context(), filepath.Join(dir, "codex"))
 	require.NoError(t, err)
 	require.Len(t, models, 3)
 	require.False(t, models[0].SupportsImages)

@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"mvdan.cc/sh/v3/shell"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // foregroundCalls exposes each live CLI's pending shell calls to the
@@ -32,11 +35,49 @@ func IsForegroundCommand(cliPID int, args []string, started time.Time) bool {
 // runBy reports whether a process with these arguments runs the call: as a
 // shell's script, or run directly with the words the shell would give it.
 func (c openCall) runBy(args []string) bool {
-	if slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, c.command) }) {
+	command := CommandText(args)
+	if (command != strings.Join(args, " ") && strings.Contains(command, c.command)) || slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, c.command) }) {
 		return true
 	}
 	if len(c.words) == 0 || len(args) < len(c.words) {
 		return false
 	}
 	return filepath.Base(args[0]) == filepath.Base(c.words[0]) && slices.Equal(args[1:len(c.words)], c.words[1:])
+}
+
+// CommandText returns the script a shell runs, decoding the CLI's eval wrapper.
+// Background listing and foreground cancellation use the same normalization.
+func CommandText(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	name := strings.TrimPrefix(filepath.Base(args[0]), "-")
+	if slices.Contains([]string{"sh", "bash", "zsh", "dash", "ksh", "fish"}, name) {
+		for i, arg := range args[1:] {
+			if strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") && strings.Contains(arg, "c") && i+2 < len(args) {
+				script := args[i+2]
+				if file, err := syntax.NewParser().Parse(strings.NewReader(script), ""); err == nil {
+					var decoded string
+					syntax.Walk(file, func(node syntax.Node) bool {
+						call, ok := node.(*syntax.CallExpr)
+						if decoded != "" || !ok || len(call.Args) < 2 || call.Args[0].Lit() != "eval" {
+							return decoded == ""
+						}
+						var word strings.Builder
+						if syntax.NewPrinter().Print(&word, call.Args[1]) == nil {
+							if fields, err := shell.Fields(word.String(), func(string) string { return "" }); err == nil && len(fields) == 1 {
+								decoded = fields[0]
+							}
+						}
+						return decoded == ""
+					})
+					if decoded != "" {
+						script = decoded
+					}
+				}
+				return strings.TrimSpace(script)
+			}
+		}
+	}
+	return strings.Join(args, " ")
 }

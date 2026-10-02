@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -130,17 +129,7 @@ func (c *Config) addCLIProviders(path string) {
 				continue
 			}
 			cfg = p.cfg
-			if models := cachedModels(p.cfg.ID); len(models) > 0 {
-				cfg.Models = models
-			}
-			if cfg.Type != TypeCodexCLI {
-				// Crush hands every other CLI its images (inline for Claude,
-				// as saved files otherwise). Codex's catalog says per model.
-				cfg.Models = slices.Clone(cfg.Models)
-				for i := range cfg.Models {
-					cfg.Models[i].SupportsImages = true
-				}
-			}
+			cfg.Models = p.models()
 			c.Providers.Set(p.cfg.ID, cfg)
 			continue
 		}
@@ -149,7 +138,7 @@ func (c *Config) addCLIProviders(path string) {
 			cfg.Name = p.cfg.Name
 		}
 		if len(cfg.Models) == 0 {
-			cfg.Models = slices.Clone(p.cfg.Models)
+			cfg.Models = p.models()
 		}
 		cfg.FlatRate = true
 		c.Providers.Set(p.cfg.ID, cfg)
@@ -190,11 +179,20 @@ func (c *Config) CLISmallModel(providerID string) (SelectedModel, bool) {
 	return SelectedModel{Provider: providerID, Model: m.ID, MaxTokens: m.DefaultMaxTokens, ReasoningEffort: m.DefaultReasoningEffort}, true
 }
 
-func onPath(path, bin string) bool {
-	for _, dir := range filepath.SplitList(path) {
-		if info, err := os.Stat(filepath.Join(dir, bin)); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
-			return true
+func (p cliProvider) models() []catwalk.Model {
+	models := cachedModels(p.cfg.ID)
+	if len(models) == 0 {
+		models = slices.Clone(p.cfg.Models)
+	}
+	if p.cfg.Type != TypeCodexCLI {
+		// Crush hands every other CLI its images. Codex's catalog says per model.
+		for i := range models {
+			models[i].SupportsImages = true
 		}
 	}
-	return false
+	return models
+}
+
+func onPath(path, bin string) bool {
+	return findCLI(path, bin) != ""
 }

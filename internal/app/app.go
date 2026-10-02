@@ -265,6 +265,14 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 	}
 }
 
+// RunWaitingLine and RunResumedLine are written to stderr by
+// [App.RunNonInteractive] when the agent starts and stops waiting on its
+// sub-agents.
+const (
+	RunWaitingLine = "Waiting for sub-agents to finish..."
+	RunResumedLine = "Sub-agents finished; continuing."
+)
+
 // RunNonInteractive runs the application in non-interactive mode with the
 // given prompt, printing to stdout.
 func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, fast, hideSpinner bool, continueSessionID string, useLast bool) error {
@@ -386,6 +394,23 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	}
 	done := make(chan response, 1)
 
+	messageEvents := app.Messages.Subscribe(ctx)
+	completionEvents := app.runCompletions.Subscribe(ctx)
+	var lastCompletion notify.RunComplete
+	readCompletion := func(event pubsub.Event[notify.RunComplete]) {
+		if event.Payload.SessionID == sess.ID {
+			lastCompletion = event.Payload
+		}
+	}
+	// Waiting on sub-agents is reported on stderr, one line each time it
+	// starts or ends, so callers such as benchmarks can show it.
+	statusEvents := make(chan bool, 16)
+	runCtx := agent.WithRunStatus(ctx, func(waiting bool) {
+		select {
+		case statusEvents <- waiting:
+		case <-ctx.Done():
+		}
+	})
 	go func(ctx context.Context, sessionID, prompt string) {
 		result, err := app.AgentCoordinator.Run(ctx, sess.ID, prompt)
 		if err != nil {
@@ -397,11 +422,32 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		done <- response{
 			result: result,
 		}
-	}(ctx, sess.ID, prompt)
+	}(runCtx, sess.ID, prompt)
 
-	messageEvents := app.Messages.Subscribe(ctx)
 	messageReadBytes := make(map[string]int)
 	var printed bool
+	var lastPrintedMessageID string
+	printMessage := func(msg message.Message) error {
+		content := msg.Content().String()
+		readBytes := messageReadBytes[msg.ID]
+		if len(content) < readBytes {
+			return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
+		}
+		part := content[readBytes:]
+		if readBytes == 0 {
+			part = strings.TrimLeft(part, " \t")
+		}
+		if (printed || strings.TrimSpace(part) != "") && part != "" {
+			if printed && lastPrintedMessageID != msg.ID {
+				fmt.Fprint(output, "\n\n")
+			}
+			printed = true
+			lastPrintedMessageID = msg.ID
+			fmt.Fprint(output, part)
+		}
+		messageReadBytes[msg.ID] = len(content)
+		return nil
+	}
 
 	defer func() {
 		if progress && stderrTTY {
@@ -430,33 +476,63 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 				}
 				return fmt.Errorf("agent processing failed: %w", result.err)
 			}
+			// Completion can beat the last message event through the pubsub
+			// fan-in. The coordinator publishes before returning, so drain
+			// its broker and use the exact final message ID. Timestamp order
+			// is ambiguous when several replies finish in the same second.
+		readCompletions:
+			for {
+				select {
+				case event, ok := <-completionEvents:
+					if !ok {
+						break readCompletions
+					}
+					readCompletion(event)
+				default:
+					break readCompletions
+				}
+			}
+			var msg message.Message
+			var err error
+			if lastCompletion.MessageID != "" {
+				msg, err = app.Messages.Get(ctx, lastCompletion.MessageID)
+			} else {
+				msg, err = app.Messages.GetLastAssistantMessage(ctx, sess.ID)
+			}
+			if err == nil {
+				return printMessage(msg)
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 			return nil
+
+		case event, ok := <-completionEvents:
+			if !ok {
+				completionEvents = nil
+			} else {
+				readCompletion(event)
+			}
+
+		case waiting := <-statusEvents:
+			stopSpinner()
+			if printed && stderrTTY {
+				fmt.Fprintln(os.Stderr)
+			}
+			if waiting {
+				fmt.Fprintln(os.Stderr, RunWaitingLine)
+			} else {
+				fmt.Fprintln(os.Stderr, RunResumedLine)
+			}
 
 		case event := <-messageEvents:
 			msg := event.Payload
 			if msg.SessionID == sess.ID && msg.Role == message.Assistant && len(msg.Parts) > 0 {
 				stopSpinner()
 
-				content := msg.Content().String()
-				readBytes := messageReadBytes[msg.ID]
-
-				if len(content) < readBytes {
-					slog.Error("Non-interactive: message content is shorter than read bytes", "message_length", len(content), "read_bytes", readBytes)
-					return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
+				if err := printMessage(msg); err != nil {
+					return err
 				}
-
-				part := content[readBytes:]
-				// Trim leading whitespace. Sometimes the LLM includes leading
-				// formatting and intentation, which we don't want here.
-				if readBytes == 0 {
-					part = strings.TrimLeft(part, " \t")
-				}
-				// Ignore initial whitespace-only messages.
-				if printed || strings.TrimSpace(part) != "" {
-					printed = true
-					fmt.Fprint(output, part)
-				}
-				messageReadBytes[msg.ID] = len(content)
 			}
 
 		case <-ctx.Done():

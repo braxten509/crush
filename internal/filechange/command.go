@@ -21,11 +21,18 @@ type CommandReview struct {
 	direct   *Tracker
 	directAt map[string]int64
 	changes  []Change
+	store    *snapshotStore
 }
 
 func WithCommandReview(ctx context.Context, root string, exclude ...string) (context.Context, *CommandReview) {
-	report := &CommandReview{root: root, exclude: exclude}
+	report := &CommandReview{root: root, exclude: exclude, store: newSnapshotStore()}
 	return context.WithValue(ctx, commandContextKey{}, report), report
+}
+
+// CommandReviewFromContext returns the report owned by this shell job.
+func CommandReviewFromContext(ctx context.Context) *CommandReview {
+	report, _ := ctx.Value(commandContextKey{}).(*CommandReview)
+	return report
 }
 
 func BeforeOpen(ctx context.Context, path string, flags int) {
@@ -37,6 +44,9 @@ func BeforeOpen(ctx context.Context, path string, flags int) {
 	defer report.mutex.Unlock()
 	if report.direct == nil {
 		report.direct, _ = New(context.Background(), report.root, report.exclude...)
+		if report.direct != nil {
+			report.direct.store = report.store
+		}
 		report.directAt = map[string]int64{}
 	}
 	if report.direct != nil {
@@ -54,6 +64,7 @@ func StartCommand(ctx context.Context, cmd *exec.Cmd) (*ProcessReview, error) {
 		return nil, cmd.Start()
 	}
 	observer := newProcessReview(report.root, report.exclude)
+	observer.store = report.store
 	observer.observeRoot = true
 	observer.calls["command"] = &processCall{words: cmd.Args}
 	observer.report = report
@@ -86,10 +97,9 @@ func (r *CommandReview) Finish() *Review {
 		}
 	}
 	changes := make([]Change, 0, len(earliest))
-	budget := maxTextTotal
 	for path, change := range earliest {
 		if info, err := os.Lstat(path); err == nil {
-			state := readEntry(path, info, &budget).state
+			state := r.store.read(path, info).state
 			change.After = &state
 		} else if os.IsNotExist(err) {
 			change.After = nil

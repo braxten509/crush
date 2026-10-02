@@ -256,8 +256,11 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	// as a userMessage item when the model takes it in.
 	var sent steered
 	steers := 0
-	stopSteer := pollSteerInput(t, func() bool { return active.Load() != nil }, func(text string, attachments []message.Attachment) {
+	stopSteer := pollSteerInputRetry(t, func() bool { return active.Load() != nil }, func(text string, attachments []message.Attachment) bool {
 		ids := active.Load()
+		if ids == nil {
+			return false
+		}
 		steers++
 		sent.add(text)
 		err := p.send(map[string]any{"id": "steer-" + strconv.Itoa(steers), "method": "turn/steer", "params": map[string]any{
@@ -268,6 +271,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		if err != nil {
 			sent.take(text)
 		}
+		return true
 	})
 	defer stopSteer()
 

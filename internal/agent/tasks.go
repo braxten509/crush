@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -96,6 +97,7 @@ type TaskReply struct {
 type taskHub struct {
 	c      *coordinator
 	dir    string
+	root   *os.Root
 	events pubsub.Publisher[Task]
 
 	mu      sync.Mutex
@@ -106,20 +108,28 @@ type taskHub struct {
 	userStopped map[string]bool
 	// asking is set while questions from `crush ask` are open.
 	asking bool
+	// sessionRuns owns non-interactive runs and their follow-up producers.
+	sessionRuns map[string]*sessionRun
 }
 
 func newTaskHub(c *coordinator, events pubsub.Publisher[Task]) *taskHub {
 	base := filepath.Join(os.TempDir(), fmt.Sprintf("crush-%d", os.Getuid()))
-	if err := os.MkdirAll(base, 0o700); err != nil {
+	if err := privateTaskBase(base); err != nil {
 		slog.Warn("Sub-agents disabled: no request directory", "error", err)
 		return nil
 	}
-	dir, err := os.MkdirTemp(base, "tasks-")
+	removeStaleTaskDirectories(base)
+	dir, err := os.MkdirTemp(base, fmt.Sprintf("tasks-%d-", os.Getpid()))
 	if err != nil {
 		slog.Warn("Sub-agents disabled: no request directory", "error", err)
 		return nil
 	}
-	h := &taskHub{c: c, dir: dir, events: events, cancels: map[string]context.CancelFunc{}, tasks: map[string]*Task{}, userStopped: map[string]bool{}}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		_ = os.Remove(dir)
+		return nil
+	}
+	h := &taskHub{c: c, dir: dir, root: root, events: events, cancels: map[string]context.CancelFunc{}, tasks: map[string]*Task{}, userStopped: map[string]bool{}}
 	go h.watch()
 	hubsMu.Lock()
 	hubs = append(hubs, h)
@@ -181,30 +191,88 @@ func (h *taskHub) env(sessionID string) []string {
 
 // ponytail: polls the request dir; fsnotify if the latency ever matters.
 func (h *taskHub) watch() {
+	root := h.root
+	if root == nil {
+		var err error
+		root, err = os.OpenRoot(h.dir)
+		if err != nil {
+			return
+		}
+	}
+	defer root.Close()
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()
 	for range tick.C {
-		entries, err := os.ReadDir(h.dir)
-		if errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Lstat(h.dir); errors.Is(err, os.ErrNotExist) {
 			return
+		}
+		directory, err := root.Open(".")
+		if err != nil {
+			return
+		}
+		entries, err := directory.ReadDir(-1)
+		_ = directory.Close()
+		if err != nil {
+			continue
 		}
 		for _, e := range entries {
 			name, ok := strings.CutSuffix(e.Name(), ".req")
 			if !ok {
 				continue
 			}
-			path := filepath.Join(h.dir, e.Name())
-			data, err := os.ReadFile(path)
-			_ = os.Remove(path)
+			if !e.Type().IsRegular() {
+				continue
+			}
+			data, err := root.ReadFile(e.Name())
+			_ = root.Remove(e.Name())
 			if err != nil {
 				continue
 			}
 			reply := h.handle(data)
 			out, _ := json.Marshal(reply)
-			tmp := filepath.Join(h.dir, name+".tmp")
-			if os.WriteFile(tmp, out, 0o600) == nil {
-				_ = os.Rename(tmp, filepath.Join(h.dir, name+".ack"))
-			}
+			_ = writeTaskReply(root, name, out)
+		}
+	}
+}
+
+func writeTaskReply(root *os.Root, name string, out []byte) error {
+	tmp := ".reply-" + uuid.NewString()
+	file, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	defer root.Remove(tmp)
+	_, err = file.Write(out)
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return root.Rename(tmp, name+".ack")
+}
+
+func removeStaleTaskDirectories(base string) {
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		suffix, ok := strings.CutPrefix(entry.Name(), "tasks-")
+		owner, random, okPID := strings.Cut(suffix, "-")
+		pid, err := strconv.Atoi(owner)
+		if !ok || !okPID || random == "" || err != nil || pid <= 0 || !entry.IsDir() || taskProcessAlive(pid) {
+			continue
+		}
+		info, err := entry.Info()
+		if err == nil && privateTaskDirectory(info) {
+			_ = root.RemoveAll(entry.Name())
 		}
 	}
 }
@@ -265,6 +333,13 @@ func (h *taskHub) taskProviders() []config.ProviderConfig {
 }
 
 func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
+	ctx, release := h.reserveFollowUp(req.Session)
+	started := false
+	defer func() {
+		if !started {
+			release()
+		}
+	}()
 	prompt := strings.TrimSpace(req.Prompt)
 	if prompt == "" {
 		return nil, errors.New("the task prompt is empty")
@@ -289,7 +364,6 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		model = provider.Models[i]
 	}
 
-	ctx := context.Background()
 	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {
 		return nil, fmt.Errorf("unknown session %q", req.Session)
 	}
@@ -369,11 +443,16 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	runCtx, cancel := context.WithCancel(ctx)
 	h.cancels[t.ID] = cancel
 	h.tasks[t.ID] = t
+	if run := h.sessionRuns[req.Session]; run != nil {
+		h.sessionRuns[child.ID] = run
+	}
 	snapshot := *t
 	h.mu.Unlock()
 	h.publish(snapshot)
 
+	started = true
 	go func() {
+		defer release()
 		defer cancel()
 		result, err := sub.Run(runCtx, SessionAgentCall{
 			SessionID:       child.ID,
@@ -382,7 +461,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 			NonInteractive:  true,
 			ProviderOptions: getProviderOptions(m, *provider),
 		})
-		h.finish(t.ID, subAgentOutput(result), err)
+		h.finish(ctx, t.ID, subAgentOutput(result), err)
 	}()
 	return &snapshot, nil
 }
@@ -433,7 +512,13 @@ func (h *taskHub) ask(req TaskRequest) error {
 	if err := r.Validate(); err != nil {
 		return err
 	}
-	ctx := context.Background()
+	ctx, release := h.reserveFollowUp(req.Session)
+	started := false
+	defer func() {
+		if !started {
+			release()
+		}
+	}()
 	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {
 		return fmt.Errorf("unknown session %q", req.Session)
 	}
@@ -443,8 +528,16 @@ func (h *taskHub) ask(req TaskRequest) error {
 		return errors.New("other questions are still open; wait for their answers first")
 	}
 	h.asking = true
+	started = true
 	go func() {
-		answers, err := h.c.questions.Ask(ctx, r)
+		defer release()
+		var answers []question.Answer
+		var err error
+		if h.c.interactive {
+			answers, err = h.c.questions.Ask(ctx, r)
+		} else {
+			err = question.ErrCancelled
+		}
 		h.mu.Lock()
 		h.asking = false
 		h.mu.Unlock()
@@ -452,6 +545,9 @@ func (h *taskHub) ask(req TaskRequest) error {
 		switch {
 		case errors.Is(err, question.ErrCancelled):
 			status, out = AskCancelled, "The user closed the questions without answering."
+			if !h.c.interactive {
+				out = "Questions were cancelled because this non-interactive run cannot receive user answers. Continue without assuming an answer."
+			}
 		case err != nil:
 			status, out = string(TaskFailed), "Error: "+err.Error()
 		default:
@@ -502,9 +598,12 @@ func (h *taskHub) stopAll() {
 			h.cancels[id]()
 		}
 	}
+	for _, run := range h.sessionRuns {
+		run.cancel()
+	}
 }
 
-func (h *taskHub) finish(id, output string, err error) {
+func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	h.mu.Lock()
 	t := h.tasks[id]
 	stopped := t.Status == TaskStopped
@@ -522,7 +621,6 @@ func (h *taskHub) finish(id, output string, err error) {
 	h.mu.Unlock()
 	h.publish(snapshot)
 
-	ctx := context.Background()
 	if err := h.c.updateParentSessionCost(ctx, snapshot.ChildID, snapshot.SessionID); err != nil {
 		slog.Warn("Failed to add task cost to its parent session", "task", id, "error", err)
 	}
@@ -658,16 +756,24 @@ func firstLine(s string, n int) string {
 
 // secureEntry sends metadata to the local TUI and receives only a fixed status.
 func (h *taskHub) secureEntry(req TaskRequest) error {
-	ctx := context.Background()
+	ctx, release := h.reserveFollowUp(req.Session)
 	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {
+		release()
 		return errors.New("unknown session")
 	}
 	result, err := secureentry.Open(req.Session, *req.SecureEntry)
 	if err != nil {
+		release()
 		return err
 	}
 	go func() {
-		status := <-result
+		defer release()
+		var status string
+		select {
+		case status = <-result:
+		case <-ctx.Done():
+			return
+		}
 		msg := fmt.Sprintf("<%s>\n<name>Secure entry</name>\n<status>%s</status>\n<result>Secure entry %s. No value is returned. Do not read or print the destination file.</result>\n</%s>", TaskNotificationTag, status, status, TaskNotificationTag)
 		if _, err := h.c.Run(ctx, req.Session, msg); err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("Failed to deliver secure entry status")

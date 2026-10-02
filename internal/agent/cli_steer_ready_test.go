@@ -9,7 +9,7 @@ import (
 func TestQueuedPromptWakesCLISteering(t *testing.T) {
 	t.Parallel()
 	sa := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
-	s := &cliSteps{a: sa, sessionID: "wake", steerReady: make(chan struct{}, 1)}
+	s := &cliSteps{ctx: t.Context(), a: sa, sessionID: "wake", steerReady: make(chan struct{}, 1)}
 	sa.steering.Set(s.sessionID, s)
 	// enqueueCall runs under the dispatch lock in Run. Its notification
 	// must not wait for the driver's drain, which needs that same lock.

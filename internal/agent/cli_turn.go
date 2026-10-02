@@ -173,6 +173,7 @@ type cliSteps struct {
 
 	// Queued prompts handed to the CLI mid-turn, until it takes them in.
 	// steer runs on the driver's poller, the rest on its read loop.
+	// When both locks are needed, take the session dispatch mutex first.
 	steerMu sync.Mutex
 	steered []cliSteered
 	// Buffered so enqueueing under the dispatch lock never waits on the
@@ -180,8 +181,10 @@ type cliSteps struct {
 	steerReady chan struct{}
 }
 
-// queuedCalls lists the prompts handed to the CLI but not taken in yet.
-func (s *cliSteps) queuedCalls() []SessionAgentCall {
+// takePendingSteered transfers pending prompts to Interrupt atomically
+// against CLI acknowledgements. Late acknowledgements cannot consume a
+// prompt whose ownership has already moved to the replacement turn.
+func (s *cliSteps) takePendingSteered() []SessionAgentCall {
 	s.steerMu.Lock()
 	defer s.steerMu.Unlock()
 	var calls []SessionAgentCall
@@ -190,6 +193,7 @@ func (s *cliSteps) queuedCalls() []SessionAgentCall {
 			calls = append(calls, st.calls...)
 		}
 	}
+	s.steered = nil
 	return calls
 }
 
@@ -236,13 +240,22 @@ func (s *cliSteps) steerWithImages() (string, []message.Attachment) {
 }
 
 func (s *cliSteps) steerCalls(images bool) (string, []message.Attachment) {
-	fold, canceled := s.a.drainQueueForStep(s.sessionID)
-	s.a.publishCanceledQueueDrops(canceled)
+	mu := s.a.sessionMu(s.sessionID)
+	mu.Lock()
+	var canceled []SessionAgentCall
+	defer func() {
+		mu.Unlock()
+		s.a.publishCanceledQueueDrops(canceled)
+	}()
+	if s.ctx.Err() != nil {
+		return "", nil
+	}
+	fold, canceled := s.a.drainQueueForStepLocked(s.sessionID)
 	// Steering is text-only. Leave images and subsequent prompts queued
 	// for the next turn so their attachment bytes and ordering are kept.
 	for i, q := range fold {
 		if !images && slices.ContainsFunc(q.Attachments, message.Attachment.IsImage) {
-			s.a.requeueFront(s.sessionID, fold[i:])
+			s.a.requeueFrontLocked(s.sessionID, fold[i:])
 			fold = fold[:i]
 			break
 		}
@@ -287,6 +300,9 @@ func (s *cliSteps) takeSteered(text string) []SessionAgentCall {
 // the queue so they run as the next turn. A plain cancel drops them, the
 // same as it drops the rest of the queue.
 func (s *cliSteps) returnUnsteered() {
+	mu := s.a.sessionMu(s.sessionID)
+	mu.Lock()
+	defer mu.Unlock()
 	s.steerMu.Lock()
 	var calls []SessionAgentCall
 	for _, st := range s.steered {
@@ -299,7 +315,7 @@ func (s *cliSteps) returnUnsteered() {
 	if len(calls) == 0 || s.ctx.Err() != nil {
 		return
 	}
-	s.a.requeueFront(s.sessionID, calls)
+	s.a.requeueFrontLocked(s.sessionID, calls)
 }
 
 func (s *cliSteps) begin() error {

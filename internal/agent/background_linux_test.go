@@ -33,7 +33,7 @@ func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 	tool := tools.NewBashTool(env.permissions, env.workingDir, env.workingDir, &config.Attribution{TrailerStyle: config.TrailerStyleNone}, "fixture")
 	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, t.Name()))
 	defer cancel()
-	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, []string{TasksDirEnv + "=" + h.dir})
+	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, []string{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "=" + t.Name()})
 	done := make(chan fantasy.ToolResponse, 1)
 	go func() {
 		response, err := tool.Run(ctx, fantasy.ToolCall{ID: "fixture", Name: tools.BashToolName, Input: `{"command":"sleep 3","description":"native background fixture"}`})
@@ -116,7 +116,7 @@ finally:
 	go func() {
 		done <- model.Run(ctx, cliagent.Turn{
 			SessionID: t.Name(), Prompt: "start",
-			Env:  []string{TasksDirEnv + "=" + h.dir},
+			Env:  []string{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "=" + t.Name()},
 			Emit: func(cliagent.Event) error { return nil },
 		})
 	}()
@@ -146,6 +146,7 @@ finally:
 }
 
 func TestBackgroundProcesses(t *testing.T) {
+	noMinAge(t)
 	h := &taskHub{dir: t.TempDir()}
 	hubsMu.Lock()
 	hubs = append(hubs, h)
@@ -159,7 +160,7 @@ func TestBackgroundProcesses(t *testing.T) {
 	// A stand-in CLI (not a shell) that runs a command through a shell,
 	// like an agent's bash tool does.
 	cli := exec.Command("python3", "-c", `import subprocess; subprocess.run(["bash", "-c", "sleep 30; true"])`)
-	cli.Env = append(os.Environ(), TasksDirEnv+"="+h.dir)
+	cli.Env = append(os.Environ(), TasksDirEnv+"="+h.dir, TasksSessionEnv+"="+t.Name())
 	require.NoError(t, cli.Start())
 	t.Cleanup(func() { _ = cli.Process.Kill(); _ = cli.Wait() })
 
@@ -185,6 +186,7 @@ func TestCommandText(t *testing.T) {
 }
 
 func TestBackgroundProcessesSkipBusServices(t *testing.T) {
+	noMinAge(t)
 	h := &taskHub{dir: t.TempDir()}
 	hubsMu.Lock()
 	hubs = append(hubs, h)
@@ -199,7 +201,7 @@ func TestBackgroundProcessesSkipBusServices(t *testing.T) {
 	// D-Bus daemon started, which isn't the agent's own command.
 	orphan := func(extraEnv ...string) {
 		cmd := exec.Command("sh", "-c", "sleep 30 >/dev/null 2>&1 &")
-		cmd.Env = append(append(os.Environ(), TasksDirEnv+"="+h.dir), extraEnv...)
+		cmd.Env = append(append(os.Environ(), TasksDirEnv+"="+h.dir, TasksSessionEnv+"="+t.Name()), extraEnv...)
 		require.NoError(t, cmd.Run())
 	}
 	orphan()
@@ -214,4 +216,55 @@ func TestBackgroundProcessesSkipBusServices(t *testing.T) {
 	found := BackgroundProcesses()
 	require.Len(t, found, 1)
 	require.Equal(t, "sleep 30", found[0].Command)
+}
+
+func noMinAge(t *testing.T) {
+	old := backgroundMinAge
+	backgroundMinAge = 0
+	t.Cleanup(func() { backgroundMinAge = old })
+}
+
+func registerTestHub(t *testing.T) *taskHub {
+	h := &taskHub{dir: t.TempDir()}
+	hubsMu.Lock()
+	hubs = append(hubs, h)
+	hubsMu.Unlock()
+	t.Cleanup(func() {
+		hubsMu.Lock()
+		hubs = slices.DeleteFunc(hubs, func(x *taskHub) bool { return x == h })
+		hubsMu.Unlock()
+	})
+	return h
+}
+
+// startDetached starts a command in a session of its own under a stand-in
+// CLI, like Codex runs commands and hooks.
+func startDetached(t *testing.T, h *taskHub, session string) {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "setsid sleep 30 >/dev/null 2>&1 &")
+	cmd.Env = append(os.Environ(), TasksDirEnv+"="+h.dir, TasksSessionEnv+"="+session)
+	require.NoError(t, cmd.Run())
+	t.Cleanup(func() {
+		for _, p := range markedProcs([]string{TasksDirEnv + "=" + h.dir}) {
+			_ = syscall.Kill(p.pid, syscall.SIGKILL)
+		}
+	})
+	require.Eventually(t, func() bool { return len(markedProcs([]string{TasksDirEnv + "=" + h.dir})) == 1 }, 5*time.Second, 20*time.Millisecond)
+}
+
+func TestSubAgentProcessesAreNotBackground(t *testing.T) {
+	noMinAge(t)
+	h := registerTestHub(t)
+	startDetached(t, h, "") // a sub-agent has no session of its own
+	require.Empty(t, BackgroundProcesses())
+}
+
+func TestYoungProcessesAreNotBackground(t *testing.T) {
+	h := registerTestHub(t)
+	backgroundMinAge = time.Hour
+	t.Cleanup(func() { backgroundMinAge = tools.ForegroundWaitLimit })
+	startDetached(t, h, t.Name())
+	require.Empty(t, BackgroundProcesses(), "a command younger than the limit is a helper, not background work")
+	backgroundMinAge = 0
+	require.Len(t, BackgroundProcesses(), 1, "once it is old enough it is listed")
 }

@@ -136,6 +136,11 @@ func fromSnapshot(change filechange.Change) (File, bool) {
 	if before == nil && after == nil || before != nil && after != nil && *before == *after {
 		return File{}, false
 	}
+	// Terminals, pipes and sockets aren't files anyone edits; their only
+	// "change" is a timestamp. Older saved reviews still contain them.
+	if specialFile(before) || specialFile(after) {
+		return File{}, false
+	}
 	f := File{Path: change.Path}
 	switch {
 	case before == nil:
@@ -168,6 +173,10 @@ func fromSnapshot(change filechange.Change) (File, bool) {
 		note(f.Kind.String() + " empty file")
 	}
 	return f, true
+}
+
+func specialFile(state *filechange.State) bool {
+	return state != nil && strings.HasPrefix(state.Omitted, "Special file")
 }
 
 // Stats sums the added and removed lines of files.

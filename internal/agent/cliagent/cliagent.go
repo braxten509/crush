@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -293,8 +294,10 @@ type Link struct {
 // ponytail: one small JSON file rewritten per turn; a DB table if it grows.
 type Links struct {
 	path string
-	mu   sync.Mutex
 }
+
+// linksMu serializes read/modify/write across providers sharing a file.
+var linksMu sync.Mutex
 
 func (l *Links) load() map[string]Link {
 	links := map[string]Link{}
@@ -306,15 +309,15 @@ func (l *Links) load() map[string]Link {
 
 // Get returns the link for a session and CLI, or the zero Link.
 func (l *Links) Get(sessionID string, kind catwalk.Type) Link {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	linksMu.Lock()
+	defer linksMu.Unlock()
 	return l.load()[sessionID+"/"+string(kind)]
 }
 
 // Set stores the link for a session and CLI.
 func (l *Links) Set(sessionID string, kind catwalk.Type, link Link) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	linksMu.Lock()
+	defer linksMu.Unlock()
 	links := l.load()
 	links[sessionID+"/"+string(kind)] = link
 	data, err := json.Marshal(links)
@@ -350,7 +353,24 @@ func onBackground(sessionID string, fn func() bool) func() {
 // session's CLI could be asked: Claude, Codex and OpenCode can.
 func Background(sessionID string) bool {
 	v, ok := backgrounders.Load(sessionID)
-	return ok && v.(*backgrounder).fn()
+	if !ok || !v.(*backgrounder).fn() {
+		return false
+	}
+	lastBackground.Store(time.Now().UnixNano())
+	return true
+}
+
+// lastBackground is when [Background] last moved commands (Unix nanoseconds).
+var lastBackground atomic.Int64
+
+// LastBackground reports when the user last moved a CLI's running commands
+// to the background, or the zero time if never. Commands already running
+// then are background work even before they reach the usual age.
+func LastBackground() time.Time {
+	if ns := lastBackground.Load(); ns != 0 {
+		return time.Unix(0, ns)
+	}
+	return time.Time{}
 }
 
 // CanBackground reports whether a CLI's running commands can be moved to
@@ -359,10 +379,40 @@ func CanBackground(kind catwalk.Type) bool {
 	return kind == config.TypeClaudeCode || kind == config.TypeCodexCLI || kind == config.TypeOpenCodeCLI
 }
 
-// OnUnprompted is called with a Crush session whose kept CLI process started
-// a reply on its own between turns (a background task it ran finished). The
-// caller runs a turn with [Turn.Continue] set to show it.
-var OnUnprompted func(sessionID string)
+// unprompted holds the handlers [OnUnprompted] registered, one per
+// coordinator (a server can run several workspaces).
+var unprompted struct {
+	sync.Mutex
+	handlers []*func(sessionID string) bool
+}
+
+// OnUnprompted registers a handler for a Crush session whose kept CLI
+// process started a reply on its own between turns (a background task it ran
+// finished). The handler that owns the session returns true and runs a turn
+// with [Turn.Continue] set to show it. The returned func unregisters it.
+func OnUnprompted(handler func(sessionID string) bool) (remove func()) {
+	h := &handler
+	unprompted.Lock()
+	unprompted.handlers = append(unprompted.handlers, h)
+	unprompted.Unlock()
+	return func() {
+		unprompted.Lock()
+		defer unprompted.Unlock()
+		unprompted.handlers = slices.DeleteFunc(unprompted.handlers, func(x *func(string) bool) bool { return x == h })
+	}
+}
+
+// notifyUnprompted hands sessionID to the first handler that owns it.
+func notifyUnprompted(sessionID string) {
+	unprompted.Lock()
+	handlers := slices.Clone(unprompted.handlers)
+	unprompted.Unlock()
+	for _, h := range handlers {
+		if (*h)(sessionID) {
+			return
+		}
+	}
+}
 
 // pollSteer hands queued messages to send while the turn runs, whenever
 // ready says the CLI can take one. The returned stop func is idempotent;
@@ -373,6 +423,14 @@ func pollSteer(t Turn, ready func() bool, send func(text string)) (stop func()) 
 }
 
 func pollSteerInput(t Turn, ready func() bool, send func(string, []message.Attachment)) (stop func()) {
+	return pollSteerInputRetry(t, ready, func(text string, attachments []message.Attachment) bool {
+		send(text, attachments)
+		return true
+	})
+}
+
+// pollSteerInputRetry retains input when a turn transition prevents delivery.
+func pollSteerInputRetry(t Turn, ready func() bool, send func(string, []message.Attachment) bool) (stop func()) {
 	if (t.Steer == nil && t.SteerInput == nil) || t.NoTools {
 		return func() {}
 	}
@@ -382,6 +440,8 @@ func pollSteerInput(t Turn, ready func() bool, send func(string, []message.Attac
 	)
 	done := make(chan struct{})
 	go func() {
+		var text string
+		var attachments []message.Attachment
 		tick := time.NewTicker(250 * time.Millisecond)
 		defer tick.Stop()
 		for {
@@ -393,15 +453,15 @@ func pollSteerInput(t Turn, ready func() bool, send func(string, []message.Attac
 			}
 			mu.Lock()
 			if !stopped && ready() {
-				var text string
-				var attachments []message.Attachment
-				if t.SteerInput != nil {
-					text, attachments = t.SteerInput()
-				} else {
-					text = t.Steer()
+				if text == "" && len(attachments) == 0 {
+					if t.SteerInput != nil {
+						text, attachments = t.SteerInput()
+					} else {
+						text = t.Steer()
+					}
 				}
-				if text != "" || len(attachments) != 0 {
-					send(text, attachments)
+				if (text != "" || len(attachments) != 0) && send(text, attachments) {
+					text, attachments = "", nil
 				}
 			}
 			mu.Unlock()
@@ -519,7 +579,8 @@ type proc struct {
 	lines      *bufio.Scanner
 	stderr     *tailBuffer
 	mu         sync.Mutex
-	closed     bool
+	closed     atomic.Bool
+	quitOnce   sync.Once
 	quit       chan struct{} // closed by finish; see readLines
 }
 
@@ -578,7 +639,7 @@ func (p *proc) send(v any) error {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.closed {
+	if p.closed.Load() {
 		return io.ErrClosedPipe
 	}
 	_, err = p.stdin.Write(append(data, '\n'))
@@ -587,10 +648,7 @@ func (p *proc) send(v any) error {
 
 // closeInput ends stdin, which both CLIs treat as "exit when done".
 func (p *proc) closeInput() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if !p.closed {
-		p.closed = true
+	if p.closed.CompareAndSwap(false, true) {
 		_ = p.stdin.Close()
 	}
 }
@@ -614,16 +672,10 @@ func (p *proc) readLines() <-chan []byte {
 
 // finish waits for the process, killing it if it lingers.
 func (p *proc) finish() {
-	p.mu.Lock()
-	select {
-	case <-p.quit:
-	default:
-		close(p.quit)
-	}
-	p.mu.Unlock()
-	p.closeInput()
 	timer := time.AfterFunc(5*time.Second, p.kill)
 	defer timer.Stop()
+	p.quitOnce.Do(func() { close(p.quit) })
+	p.closeInput()
 	if err := p.fileReview.Wait(p.cmd); err != nil {
 		slog.Debug("Agent CLI exited", "cmd", p.cmd.Path, "error", err, "stderr", p.stderr.String())
 	}
@@ -683,6 +735,11 @@ func (p *proc) watchCancel(ctx context.Context, interrupt func()) func() {
 	go func() {
 		select {
 		case <-ctx.Done():
+			timer := time.AfterFunc(5*time.Second, func() {
+				p.kill()
+				p.closeInput()
+			})
+			defer timer.Stop()
 			// Stop the commands the turn is waiting on first: some CLIs
 			// start them detached, where stopping the CLI doesn't reach
 			// them. Older ones run in the background and stay.
@@ -690,12 +747,7 @@ func (p *proc) watchCancel(ctx context.Context, interrupt func()) func() {
 				p.killCommands(calls.list())
 			}
 			interrupt()
-			select {
-			case <-time.After(5 * time.Second):
-				p.closeInput()
-				p.kill()
-			case <-done:
-			}
+			<-done
 		case <-done:
 		}
 	}()

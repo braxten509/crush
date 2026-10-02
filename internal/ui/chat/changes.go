@@ -129,19 +129,17 @@ func ignoredReviewPath(path, root string) bool {
 		path = filepath.Join(root, path)
 	}
 	path = filepath.Clean(path)
-	for _, component := range strings.Split(path, string(filepath.Separator)) {
-		switch component {
-		case ".cache", ".git", ".config", ".agents", ".claude", ".codex",
-			".crush", ".gemini", ".grok", ".opencode", ".cursor", ".agy", ".antigravity":
-			return true
-		}
+	home, _ := os.UserHomeDir()
+	if hiddenFolderPath(path, home) || agentToolPath(path) {
+		return true
 	}
 	cache, _ := os.UserCacheDir()
 	configuration, _ := os.UserConfigDir()
-	excluded := []string{os.TempDir(), cache, configuration, "/tmp", "/var/tmp", "/dev/shm"}
+	// Devices and kernel files (/dev/tty, /sys/fs/cgroup/...) are written by
+	// the programs a command starts; they are never edits.
+	excluded := []string{os.TempDir(), cache, configuration, "/tmp", "/var/tmp", "/dev", "/proc", "/sys"}
 	// Application data and state are noise too, including shared agent memory
-	// and sessions. Keep ~/.local/bin visible: it can contain user-written tools.
-	home, _ := os.UserHomeDir()
+	// and sessions.
 	for _, location := range []struct{ variable, fallback string }{
 		{"XDG_DATA_HOME", "share"},
 		{"XDG_STATE_HOME", "state"},
@@ -160,6 +158,50 @@ func ignoredReviewPath(path, root string) bool {
 		}
 		directory = filepath.Clean(directory)
 		if path == directory || strings.HasPrefix(path, directory+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+// Instruction files the user reads and edits stay visible even inside an
+// agent's folder.
+var instructionFiles = map[string]bool{
+	"AGENTS.md": true, "CLAUDE.md": true, "CLAUDE.local.md": true, "CRUSH.md": true, "GEMINI.md": true,
+}
+
+// hiddenFolderPath reports a path inside any folder whose name starts with a
+// dot (.git, .claude-flow, .github, ...). Dot files themselves (.gitignore,
+// .env) stay visible, and so does ~/.local/bin, which holds user-written tools.
+func hiddenFolderPath(path, home string) bool {
+	if instructionFiles[filepath.Base(path)] {
+		return false
+	}
+	if home != "" {
+		tools := filepath.Join(home, ".local", "bin")
+		if path == tools || strings.HasPrefix(path, tools+string(filepath.Separator)) {
+			return false
+		}
+	}
+	folders := strings.Split(filepath.Dir(path), string(filepath.Separator))
+	for _, folder := range folders {
+		if strings.HasPrefix(folder, ".") && folder != "." && folder != ".." {
+			return true
+		}
+	}
+	return false
+}
+
+// agentToolPath reports state that agent tooling keeps outside dot folders:
+// agent databases, skill lockfiles and swarm runtimes.
+func agentToolPath(path string) bool {
+	if instructionFiles[filepath.Base(path)] {
+		return false
+	}
+	for _, component := range strings.Split(path, string(filepath.Separator)) {
+		name := strings.ToLower(component)
+		if name == "skills-lock.json" || strings.HasPrefix(name, "agentdb.") ||
+			strings.HasPrefix(name, "claude-flow") || strings.HasPrefix(name, "ruflo") {
 			return true
 		}
 	}

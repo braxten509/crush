@@ -1,6 +1,7 @@
 package filechange
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"os/exec"
@@ -22,6 +23,9 @@ type ProcessReview struct {
 	calls       map[string]*processCall
 	detached    chan struct{}
 	invocations map[uint64]*invocation
+	executions  map[uint64]*invocation
+	store       *snapshotStore
+	nextCall    uint64
 	next        uint64
 	observeRoot bool
 	report      *CommandReview
@@ -31,6 +35,9 @@ type processCall struct {
 	command string
 	words   []string
 	quoted  []string
+	order   uint64
+	root    *invocation
+	ended   bool
 }
 
 // quotedForms are the command as a wrapper script embeds it in single quotes,
@@ -48,7 +55,7 @@ func quotedForms(command string) []string {
 }
 
 func newProcessReview(root string, exclude []string) *ProcessReview {
-	return &ProcessReview{root: root, exclude: exclude, calls: map[string]*processCall{}, invocations: map[uint64]*invocation{}}
+	return &ProcessReview{root: root, exclude: exclude, calls: map[string]*processCall{}, invocations: map[uint64]*invocation{}, executions: map[uint64]*invocation{}, store: newSnapshotStore()}
 }
 
 func (p *ProcessReview) Begin(id, command string) {
@@ -58,7 +65,9 @@ func (p *ProcessReview) Begin(id, command string) {
 	words, _ := shell.Fields(command, func(string) string { return "" })
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	p.calls[id] = &processCall{command: command, words: words, quoted: quotedForms(command)}
+	p.nextCall++
+	p.calls[id] = &processCall{command: command, words: words, quoted: quotedForms(command), order: p.nextCall}
+	p.bindCalls()
 }
 
 // Each executed process retains its invocation chain, so a shell tool can be
@@ -66,7 +75,9 @@ func (p *ProcessReview) Begin(id, command string) {
 // Only mutations are captured; neither reads nor folders are inventoried.
 type invocation struct {
 	number   uint64
-	commands [][]string
+	args     []string
+	parent   *invocation
+	owner    *processCall
 	tracker  *Tracker
 	captured map[string]int64
 }
@@ -75,11 +86,44 @@ func (p *ProcessReview) executed(parent *invocation, args []string) *invocation 
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.next++
-	record := &invocation{number: p.next, commands: [][]string{args}}
-	if parent != nil {
-		record.commands = append(record.commands, parent.commands...)
-	}
+	record := &invocation{number: p.next, args: args, parent: parent}
+	p.executions[record.number] = record
+	p.bindCalls()
 	return record
+}
+
+// Bind one command occurrence, then follow its process subtree. Late tool
+// reports claim the earliest unclaimed occurrence, never every argv match.
+func (p *ProcessReview) bindCalls() {
+	calls := make([]*processCall, 0, len(p.calls))
+	for _, call := range p.calls {
+		if call.root == nil {
+			calls = append(calls, call)
+		}
+	}
+	slices.SortFunc(calls, func(a, b *processCall) int { return cmp.Compare(a.order, b.order) })
+	for _, call := range calls {
+		for _, record := range p.executions {
+			if record.call() != nil || !call.matches(record.args) {
+				continue
+			}
+			if call.root == nil || record.number < call.root.number {
+				call.root = record
+			}
+		}
+		if call.root != nil {
+			call.root.owner = call
+		}
+	}
+}
+
+func (record *invocation) call() *processCall {
+	for current := record; current != nil; current = current.parent {
+		if current.owner != nil {
+			return current.owner
+		}
+	}
+	return nil
 }
 
 func (call *processCall) matches(args []string) bool {
@@ -106,11 +150,15 @@ func (p *ProcessReview) before(record *invocation, path string) {
 	}
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+	if call := record.call(); call != nil && call.ended {
+		return
+	}
 	if record.tracker == nil {
 		tracker, err := New(context.Background(), p.root, p.exclude...)
 		if err != nil {
 			return
 		}
+		tracker.store = p.store
 		record.tracker = tracker
 		record.captured = map[string]int64{}
 	}
@@ -134,14 +182,17 @@ func (p *ProcessReview) End(id string) *Review {
 	if call == nil {
 		return nil
 	}
+	call.ended = true
 	var records []*invocation
 	for number, record := range p.invocations {
-		for _, command := range record.commands {
-			if call.matches(command) {
-				records = append(records, record)
-				delete(p.invocations, number)
-				break
-			}
+		if record.call() == call {
+			records = append(records, record)
+			delete(p.invocations, number)
+		}
+	}
+	for number, record := range p.executions {
+		if record.call() == call {
+			delete(p.executions, number)
 		}
 	}
 	slices.SortFunc(records, func(a, b *invocation) int {

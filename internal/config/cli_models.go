@@ -85,7 +85,7 @@ func refreshCLIModels(path string) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			models, err := discover(ctx)
+			models, err := discover(ctx, resolveBin(path, p.bin))
 			if err != nil || len(models) == 0 {
 				slog.Debug("Agent CLI model discovery failed", "cli", p.bin, "error", err)
 				return
@@ -125,23 +125,23 @@ func refreshCLIModels(path string) {
 	if err != nil || file == "" || os.MkdirAll(filepath.Dir(file), 0o700) != nil {
 		return
 	}
-	if os.WriteFile(file+".tmp", data, 0o600) == nil {
-		_ = os.Rename(file+".tmp", file)
+	if err := atomicWriteFile(file, data, 0o600); err != nil {
+		slog.Debug("Write CLI model cache failed", "error", err)
 	}
 }
 
-var cliDiscovery = map[catwalk.Type]func(context.Context) ([]catwalk.Model, error){
+var cliDiscovery = map[catwalk.Type]func(context.Context, string) ([]catwalk.Model, error){
 	TypeCodexCLI:    discoverCodex,
 	TypeGrokCLI:     discoverGrok,
-	TypeAGYCLI:      listModels(regexp.MustCompile(`^(\S+)\t(.+)$`), "", "agy", "models"),
-	TypeOpenCodeCLI: listModels(regexp.MustCompile(`^(opencode-go/(\S+))$`), "opencode-go/", "opencode", "models", "opencode-go"),
+	TypeAGYCLI:      listModels(regexp.MustCompile(`^(\S+)\t(.+)$`), "", "models"),
+	TypeOpenCodeCLI: listModels(regexp.MustCompile(`^(opencode-go/(\S+))$`), "opencode-go/", "models", "opencode-go"),
 }
 
 // Grok's plain `models` output only has names. Its ACP initialization response
 // reports each model's supported efforts and default without starting a session
 // or sending a prompt.
-func discoverGrok(ctx context.Context) ([]catwalk.Model, error) {
-	line, err := rpcExchange(ctx, resolveBin("grok"), []string{"agent", "--no-leader", "stdio"}, []any{
+func discoverGrok(ctx context.Context, bin string) ([]catwalk.Model, error) {
+	line, err := rpcExchange(ctx, bin, []string{"agent", "--no-leader", "stdio"}, []any{
 		map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{
 			"protocolVersion": 1, "clientCapabilities": map[string]any{},
 		}},
@@ -228,9 +228,9 @@ func grokModelMetadata(data []byte) ([]catwalk.Model, error) {
 // listModels runs a CLI's model listing command and takes a model from each
 // line re matches: group 1 is the ID, group 2 (if any) the display name.
 // The ID with trimPrefix removed stands in for a missing name.
-func listModels(re *regexp.Regexp, trimPrefix, bin string, args ...string) func(context.Context) ([]catwalk.Model, error) {
-	return func(ctx context.Context) ([]catwalk.Model, error) {
-		out, err := exec.CommandContext(ctx, resolveBin(bin), args...).Output()
+func listModels(re *regexp.Regexp, trimPrefix string, args ...string) func(context.Context, string) ([]catwalk.Model, error) {
+	return func(ctx context.Context, bin string) ([]catwalk.Model, error) {
+		out, err := exec.CommandContext(ctx, bin, args...).Output()
 		if err != nil {
 			return nil, err
 		}
@@ -252,15 +252,16 @@ func listModels(re *regexp.Regexp, trimPrefix, bin string, args ...string) func(
 
 // resolveBin skips shell wrappers by preferring ~/.local/bin, where these
 // CLIs install themselves.
-func resolveBin(bin string) string {
-	if testing.Testing() {
-		return bin // Test fakes on PATH must take precedence over installed CLIs.
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		path := filepath.Join(home, ".local", "bin", bin)
-		if fi, err := os.Stat(path); err == nil && fi.Mode()&0o111 != 0 {
-			return path
+func resolveBin(path, bin string) string {
+	if !testing.Testing() {
+		if home, err := os.UserHomeDir(); err == nil {
+			if executable := findCLI(filepath.Join(home, ".local", "bin"), bin); executable != "" {
+				return executable
+			}
 		}
+	}
+	if executable := findCLI(path, bin); executable != "" {
+		return executable
 	}
 	return bin
 }
@@ -301,8 +302,8 @@ func rpcExchange(ctx context.Context, bin string, args []string, requests []any,
 	return nil, ctx.Err()
 }
 
-func discoverCodex(ctx context.Context) ([]catwalk.Model, error) {
-	line, err := rpcExchange(ctx, "codex", []string{"app-server"}, []any{
+func discoverCodex(ctx context.Context, bin string) ([]catwalk.Model, error) {
+	line, err := rpcExchange(ctx, bin, []string{"app-server"}, []any{
 		map[string]any{"id": 1, "method": "initialize", "params": map[string]any{"clientInfo": map[string]any{"name": "crush", "version": "0"}}},
 		map[string]any{"method": "initialized"},
 		map[string]any{"id": 2, "method": "model/list", "params": map[string]any{}},

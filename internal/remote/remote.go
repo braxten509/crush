@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -214,6 +215,20 @@ type peerKey struct{}
 // guard lets only the owner's tailnet devices in.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+			// The native phone client sends JSON without an Origin. There is
+			// no browser client, so browser-originated actions are refused.
+			if len(r.Header.Values("Origin")) != 0 {
+				writeError(w, http.StatusForbidden, errors.New("browser actions are not supported"))
+				return
+			}
+			contentTypes := r.Header.Values("Content-Type")
+			contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if len(contentTypes) != 1 || err != nil || contentType != "application/json" {
+				writeError(w, http.StatusUnsupportedMediaType, errors.New("Content-Type must be application/json"))
+				return
+			}
+		}
 		p, err := s.gate.check(r.Context(), r.RemoteAddr)
 		if err != nil {
 			slog.Warn("Remote request refused", "from", r.RemoteAddr, "error", err)
@@ -402,6 +417,9 @@ func saveUploads(ups []upload) ([]message.Attachment, error) {
 		return nil, nil
 	}
 	dir := uploadDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
 	var out []message.Attachment
 	for i, u := range ups {
 		data, err := base64.StdEncoding.DecodeString(u.Data)
@@ -413,8 +431,8 @@ func saveUploads(ups []upload) ([]message.Attachment, error) {
 			name = "attachment"
 		}
 		// A folder per upload keeps the file's own name, which the chat shows.
-		folder := filepath.Join(dir, time.Now().Format("20060102-150405")+"-"+strconv.Itoa(i))
-		if err := os.MkdirAll(folder, 0o700); err != nil {
+		folder, err := os.MkdirTemp(dir, "upload-")
+		if err != nil {
 			return nil, err
 		}
 		path := filepath.Join(folder, name)
@@ -483,7 +501,7 @@ func (s *Server) handlePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	perm, pending := s.src.PendingPermission()
-	if !pending || perm.ID != req.ID {
+	if !pending || req.Session == "" || perm.ID != req.ID || perm.SessionID != req.Session {
 		writeError(w, http.StatusConflict, errors.New("that request was already answered"))
 		return
 	}
@@ -513,15 +531,15 @@ func (s *Server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q, pending := s.src.PendingQuestion()
-	if !pending || q.ID != req.ID {
+	if !pending || req.Session == "" || q.ID != req.ID || q.SessionID != req.Session {
 		writeError(w, http.StatusConflict, errors.New("those questions were already answered"))
 		return
 	}
 	var resolved bool
 	if req.Cancel {
-		resolved = s.src.QuestionCancel()
+		resolved = s.src.QuestionCancelRequest(req.ID, req.Session)
 	} else {
-		resolved = s.src.QuestionAnswer(req.Answers)
+		resolved = s.src.QuestionAnswerRequest(req.ID, req.Session, req.Answers)
 	}
 	if !resolved {
 		writeError(w, http.StatusConflict, errors.New("those questions were already answered"))

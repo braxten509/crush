@@ -25,6 +25,7 @@ type claudeLine struct {
 	Subtype   string                 `json:"subtype"`
 	Status    string                 `json:"status"`
 	SessionID string                 `json:"session_id"`
+	Usage     *claudeUsage           `json:"usage"`
 	Event     *claudeEvent           `json:"event"`
 	Message   *claudeMessage         `json:"message"`
 	RequestID string                 `json:"request_id"`
@@ -60,11 +61,13 @@ type claudeEvent struct {
 		Text     string `json:"text"`
 		Thinking string `json:"thinking"`
 	} `json:"delta"`
-	Usage *claudeUsage `json:"usage"`
+	Usage   *claudeUsage   `json:"usage"`
+	Message *claudeMessage `json:"message"`
 }
 
 type claudeMessage struct {
 	Content json.RawMessage `json:"content"`
+	Usage   *claudeUsage    `json:"usage"`
 }
 
 type claudeBlock struct {
@@ -207,9 +210,7 @@ func keepClaude(sessionID string, l *claudeLive) {
 				l.track(line)
 				if line.Type == "system" && line.Subtype == "init" {
 					l.pending = [][]byte{raw}
-					if OnUnprompted != nil {
-						go OnUnprompted(sessionID)
-					}
+					go notifyUnprompted(sessionID)
 					<-l.idle
 					return
 				}
@@ -399,6 +400,7 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 		}
 		return t.Emit(Event{Type: kind, Text: text})
 	}
+	recordUsage := claudeUsageRecorder(t.Emit)
 	started := false
 	// Armed while waiting on steered messages after a result; Claude
 	// doesn't echo every message it's given, and an unconfirmed one must
@@ -424,7 +426,7 @@ read:
 				if !ok {
 					break read
 				}
-				raw, steerWait = r, nil
+				raw = r
 			case <-steerWait:
 				finished = true
 				return nil
@@ -496,6 +498,12 @@ read:
 			setLimits(config.TypeClaudeCode, claudeRateLimit(raw))
 
 		case "stream_event":
+			if ev := line.Event; ev != nil && (ev.Type == "message_start" || ev.Type == "content_block_start" || ev.Type == "content_block_delta") {
+				steerWait = nil
+			}
+			if err := recordUsage(line); err != nil {
+				return err
+			}
 			if ev := line.Event; ev != nil && ev.Type == "content_block_delta" && ev.Delta.Type == "thinking_delta" {
 				thinking.WriteString(ev.Delta.Thinking)
 				continue
@@ -505,6 +513,10 @@ read:
 			}
 
 		case "assistant":
+			steerWait = nil
+			if err := recordUsage(line); err != nil {
+				return err
+			}
 			for index, b := range claudeBlocks(line.Message) {
 				if b.Type == "thinking" {
 					thinking.Reset()
@@ -527,6 +539,7 @@ read:
 		case "user":
 			if line.IsReplay {
 				if text := claudeUserText(line.Message); sent.take(text) {
+					steerWait = nil
 					if err := t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
 						return err
 					}
@@ -575,6 +588,9 @@ read:
 				continue // a reply Claude started on its own before this prompt
 			}
 			promptTaken = true
+			if err := recordUsage(line); err != nil {
+				return err
+			}
 			if line.IsError || (line.Subtype != "" && line.Subtype != "success") {
 				msg := line.Result
 				if msg == "" {
@@ -683,16 +699,6 @@ func claudeStreamEvent(ev *claudeEvent, emit func(Event) error) error {
 				return emit(Event{Type: EventReasoning, Text: ev.Delta.Thinking})
 			}
 		}
-	case "message_delta":
-		if u := ev.Usage; u != nil {
-			return emit(Event{Type: EventUsage, Usage: fantasy.Usage{
-				InputTokens:         u.InputTokens,
-				OutputTokens:        u.OutputTokens,
-				TotalTokens:         u.InputTokens + u.OutputTokens + u.CacheCreation + u.CacheRead,
-				CacheCreationTokens: u.CacheCreation,
-				CacheReadTokens:     u.CacheRead,
-			}})
-		}
 	}
 	return nil
 }
@@ -750,4 +756,73 @@ func claudeResultText(raw json.RawMessage) string {
 		}
 	}
 	return strings.Join(parts, "\n")
+}
+
+// claudeUsageRecorder emits each request once, merging cumulative stream
+// updates and ignoring the turn-wide result when request usage was emitted.
+func claudeUsageRecorder(emit func(Event) error) func(claudeLine) error {
+	var usage *claudeUsage
+	emitted, recorded, streaming := false, false, false
+	merge := func(update *claudeUsage) {
+		if update == nil {
+			return
+		}
+		if usage == nil {
+			usage = &claudeUsage{}
+		}
+		usage.InputTokens = max(usage.InputTokens, update.InputTokens)
+		usage.OutputTokens = max(usage.OutputTokens, update.OutputTokens)
+		usage.CacheCreation = max(usage.CacheCreation, update.CacheCreation)
+		usage.CacheRead = max(usage.CacheRead, update.CacheRead)
+	}
+	flush := func() error {
+		if usage == nil || emitted {
+			return nil
+		}
+		emitted, recorded = true, true
+		return emit(Event{Type: EventUsage, Usage: fantasy.Usage{
+			InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens,
+			TotalTokens:         usage.InputTokens + usage.OutputTokens + usage.CacheCreation + usage.CacheRead,
+			CacheCreationTokens: usage.CacheCreation, CacheReadTokens: usage.CacheRead,
+		}})
+	}
+	return func(line claudeLine) error {
+		switch line.Type {
+		case "stream_event":
+			if ev := line.Event; ev != nil {
+				switch ev.Type {
+				case "message_start":
+					if err := flush(); err != nil {
+						return err
+					}
+					usage, emitted, streaming = nil, false, true
+					if ev.Message != nil {
+						merge(ev.Message.Usage)
+					}
+				case "message_delta":
+					streaming = true
+					merge(ev.Usage)
+				case "message_stop":
+					return flush()
+				}
+			}
+		case "assistant":
+			if line.Message != nil {
+				if !streaming {
+					usage, emitted = nil, false
+				}
+				merge(line.Message.Usage)
+				return flush()
+			}
+		case "result":
+			if !recorded {
+				merge(line.Usage)
+			}
+			if err := flush(); err != nil {
+				return err
+			}
+			usage, emitted, recorded, streaming = nil, false, false, false
+		}
+		return nil
+	}
 }

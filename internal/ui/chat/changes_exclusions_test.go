@@ -18,14 +18,18 @@ func TestReviewExcludesAgentAndApplicationFiles(t *testing.T) {
 	for _, directory := range []string{".agents", ".claude", ".codex", ".config", ".crush", ".gemini", ".grok", ".opencode", ".cursor", ".agy", ".antigravity"} {
 		require.True(t, ignoredReviewPath(directory+"/settings.json", "/workspace"))
 		require.True(t, ignoredReviewPath("/home/reviewer/"+directory+"/settings.json", ""))
-		require.False(t, ignoredReviewPath(directory+"-example/main.go", "/workspace"))
+		require.False(t, ignoredReviewPath(directory[1:]+"/main.go", "/workspace"))
 	}
 	for _, path := range []string{"/settings/app/config", "/app-data/agent-memory/note.md", "/app-state/prompter/prompt.md"} {
 		require.True(t, ignoredReviewPath(path, ""), path)
 	}
-	for _, path := range []string{"/workspace/.env", "/workspace/.github/workflows/test.yml", "/workspace/.gitignore", "/workspace/config/settings.json", "/home/reviewer/.local/bin/helper", "/app-data-source/main.go"} {
+	for _, path := range []string{"/workspace/.env", "/workspace/.gitignore", "/workspace/config/settings.json", "/home/reviewer/.local/bin/helper", "/app-data-source/main.go"} {
 		require.False(t, ignoredReviewPath(path, ""), path)
 	}
+	for _, path := range []string{"/dev/tty", "/dev/pts/2", "/dev/shm/x", "/proc/self/oom_score_adj", "/sys/fs/cgroup/app.slice/cgroup.procs"} {
+		require.True(t, ignoredReviewPath(path, ""), path)
+	}
+	require.False(t, ignoredReviewPath("/workspace/dev/tty.go", ""), "only the real device folders")
 	t.Setenv("XDG_DATA_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "relative-invalid")
 	require.True(t, ignoredReviewPath(".local/share/agent-memory/note.md", "/home/reviewer"))
@@ -54,4 +58,22 @@ func TestSavedReviewAndLegacyEditsHideAgentFiles(t *testing.T) {
 	require.Contains(t, header, "edited main.go +1 −0")
 	require.NotContains(t, header, "SKILL.md")
 	require.NotContains(t, header, "settings.json")
+}
+
+func TestReviewHidesDotFoldersAndAgentState(t *testing.T) {
+	t.Setenv("HOME", "/home/reviewer")
+	for _, path := range []string{
+		".claude-flow/metrics/learning.json", ".github/workflows/test.yml", "src/.vite/deps/a.js",
+		"agentdb.rvf", "agentdb.rvf.lock", "skills-lock.json", "claude-flow.config.json",
+	} {
+		require.True(t, ignoredReviewPath(path, "/workspace"), path)
+	}
+	for _, path := range []string{
+		".gitignore", ".env", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "docs/agents.md",
+		"internal/agent/agent.go", "src/agentdb/main.go",
+	} {
+		require.False(t, ignoredReviewPath(path, "/workspace"), path)
+	}
+	require.False(t, ignoredReviewPath("/home/reviewer/.local/bin/pa-dev", ""))
+	require.True(t, ignoredReviewPath("/home/reviewer/.local/lib/tool.py", ""))
 }

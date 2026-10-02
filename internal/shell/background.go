@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/filechange"
 )
 
 const (
@@ -57,6 +58,7 @@ type BackgroundShell struct {
 	stderr      *syncBuffer
 	done        chan struct{}
 	exitErr     error
+	review      *filechange.Review
 	completedAt atomic.Int64 // Unix timestamp when job completed (0 if still running)
 }
 
@@ -123,6 +125,9 @@ func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, b
 
 		err := shell.ExecStream(shellCtx, command, bgShell.stdout, bgShell.stderr)
 
+		if report := filechange.CommandReviewFromContext(shellCtx); report != nil {
+			bgShell.review = report.Finish()
+		}
 		bgShell.exitErr = err
 		bgShell.completedAt.Store(time.Now().Unix())
 	}()
@@ -243,5 +248,15 @@ func (bs *BackgroundShell) WaitContext(ctx context.Context) bool {
 		return true
 	case <-ctx.Done():
 		return false
+	}
+}
+
+// Review returns the immutable final report once the job has completed.
+func (bs *BackgroundShell) Review() *filechange.Review {
+	select {
+	case <-bs.done:
+		return bs.review
+	default:
+		return nil
 	}
 }

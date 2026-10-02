@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/secureentry"
 )
 
 // turnFileReview records only files named by editing tools. Starting a turn or
@@ -93,6 +94,7 @@ func (r *turnFileReview) save(ctx context.Context, result message.ToolResult) er
 	if review != nil && (!r.cli || len(review.Changes) > 0) {
 		result.Review = review
 	}
+	result.Review = withoutSensitiveChanges(result.Review)
 	msg, err := r.messages.Create(ctx, r.sessionID, message.CreateMessageParams{
 		Role: message.Tool, Parts: []message.ContentPart{result},
 	})
@@ -133,7 +135,7 @@ func (r *turnFileReview) finishTool(ctx context.Context, id, resultID string) {
 			if result.Review != nil {
 				merged.Changes = append(slices.Clone(result.Review.Changes), review.Changes...)
 			}
-			result.Review = &merged
+			result.Review = withoutSensitiveChanges(&merged)
 			msg.Parts[i] = result
 			break
 		}
@@ -141,4 +143,26 @@ func (r *turnFileReview) finishTool(ctx context.Context, id, resultID string) {
 	if err := r.messages.Update(ctx, msg); err != nil {
 		slog.Warn("Cannot save final file changes", "error", err)
 	}
+}
+
+func withoutSensitiveChanges(review *filechange.Review) *filechange.Review {
+	if review == nil {
+		return nil
+	}
+	filtered := *review
+	filtered.Changes = make([]filechange.Change, 0, len(review.Changes))
+	for _, change := range review.Changes {
+		path := change.Path
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(review.Root, path)
+		}
+		if !secureentry.Sensitive(path) {
+			filtered.Changes = append(filtered.Changes, change)
+		}
+	}
+	// A review left with nothing to show would still be listed as an edit.
+	if len(filtered.Changes) == 0 && len(review.Changes) > 0 {
+		return nil
+	}
+	return &filtered
 }

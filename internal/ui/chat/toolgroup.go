@@ -30,6 +30,9 @@ type ToolGroupItem struct {
 
 	sty      *styles.Styles
 	children []MessageItem
+	// dropped carries the versions of replaced steps, so the group's
+	// version never repeats when a step leaves it.
+	dropped  uint64
 	expanded bool
 	// live marks the group at the end of the chat, where the model may
 	// still be working: it says what is happening right now.
@@ -132,6 +135,9 @@ func (g *ToolGroupItem) Children() []MessageItem {
 
 // SetChildren replaces the steps in the group.
 func (g *ToolGroupItem) SetChildren(children []MessageItem) {
+	for _, c := range g.children {
+		g.dropped += c.Version()
+	}
 	g.children = children
 	g.syncCompact()
 	g.Bump()
@@ -213,7 +219,7 @@ func (g *ToolGroupItem) Child(id string) MessageItem {
 // Version implements list.Item. Steps change on their own, so the group's
 // version moves whenever any of theirs does.
 func (g *ToolGroupItem) Version() uint64 {
-	v := g.Versioned.Version()
+	v := g.Versioned.Version() + g.dropped
 	for _, c := range g.children {
 		v += c.Version()
 	}

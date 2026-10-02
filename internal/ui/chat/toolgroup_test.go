@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
@@ -200,4 +201,28 @@ func TestToolGroupHidesLegacyTemporaryEdits(t *testing.T) {
 	require.Empty(t, group.Changes())
 	require.NotContains(t, ansi.Strip(group.header(120)), "edited")
 	require.Equal(t, [2]int{}, group.changesCols)
+}
+
+// Dropping a step must move the group's version, or the list keeps
+// serving the render cached for the old steps.
+func TestToolGroupVersionMovesWhenStepRemoved(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	mk := func(id string) MessageItem {
+		tc := message.ToolCall{ID: id, Name: "bash", Input: `{"command":"ls"}`, Finished: true}
+		return NewToolMessageItem(&sty, "m1", tc, &message.ToolResult{ToolCallID: id, Content: "ok"}, false, "")
+	}
+	t1, t2 := mk("a"), mk("b")
+	g := NewToolGroupItem(&sty)
+	g.SetChildren([]MessageItem{t1, t2})
+	l := list.NewList()
+	l.SetSize(100, 40)
+	l.SetItems(g)
+	require.Contains(t, ansi.Strip(l.Render()), "2 actions")
+
+	before := g.Version()
+	g.SetChildren([]MessageItem{t1})
+	require.Greater(t, g.Version(), before)
+	require.NotContains(t, ansi.Strip(l.Render()), "2 actions")
 }

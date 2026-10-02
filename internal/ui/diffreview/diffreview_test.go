@@ -143,3 +143,12 @@ func TestBuildUnified(t *testing.T) {
 	created := Build([]Edit{{Path: "/p/n.go", Unified: "--- /dev/null\n+++ b/p/n.go\n@@ -0,0 +1 @@\n+hi\n"}})
 	require.Equal(t, Added, created[0].Kind)
 }
+
+func TestSnapshotSpecialFilesAreNotChanges(t *testing.T) {
+	t.Parallel()
+	tty := func(stamp string) *filechange.State {
+		return &filechange.State{Digest: "stat:0:" + stamp, Mode: 0o20620, Omitted: "Special file (Dc)"}
+	}
+	files := Build([]Edit{{Path: "/dev/tty", Snapshot: &filechange.Change{Path: "/dev/tty", Before: tty("1"), After: tty("2")}}})
+	require.Empty(t, files, "a terminal whose timestamp moved is not an edit")
+}

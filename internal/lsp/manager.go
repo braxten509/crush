@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -116,6 +117,21 @@ func (s *Manager) Start(ctx context.Context, path string) {
 		})
 	}
 	wg.Wait()
+}
+
+// broadWorkspace reports whether dir is the home folder or the filesystem
+// root. Servers started there index every project on the machine and
+// usually time out before they finish initializing.
+func broadWorkspace(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	dir = filepath.Clean(dir)
+	if dir == filepath.Dir(dir) {
+		return true
+	}
+	home, err := os.UserHomeDir()
+	return err == nil && dir == filepath.Clean(home)
 }
 
 // skipAutoStartCommands contains commands that are too generic or ambiguous to
@@ -235,6 +251,9 @@ func (s *Manager) startServer(name, filepath string, server *powernapconfig.Serv
 
 	if _, err := client.Initialize(initCtx, s.cfg.WorkingDir()); err != nil {
 		slog.Error("LSP client initialization failed", "name", name, "error", err)
+		// The deferred callback reports this client, so mark it failed;
+		// otherwise the sidebar keeps showing it as starting forever.
+		client.SetServerState(StateError)
 		client.Shutdown()
 		s.clients.Del(name)
 		return
@@ -256,6 +275,10 @@ func (s *Manager) canAutoStart(
 ) bool {
 	if skipAutoStartCommands[server.Command] {
 		slog.Debug("LSP command too generic for auto-start, skipping", "name", name, "command", server.Command)
+		return false
+	}
+	if broadWorkspace(workDir) {
+		slog.Debug("Working directory too broad for LSP auto-start, skipping", "name", name, "dir", workDir)
 		return false
 	}
 

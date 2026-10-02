@@ -26,6 +26,10 @@ import (
 
 func TestMain(m *testing.M) {
 	slog.SetLogLoggerLevel(slog.LevelError)
+	// Test commands inherit this environment. When `go test` itself runs
+	// under a D-Bus activated service, the marker would make every test
+	// process look like a bus service and hide it from background listing.
+	os.Unsetenv("DBUS_STARTER_BUS_TYPE")
 	m.Run()
 }
 

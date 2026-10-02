@@ -395,6 +395,10 @@ func (h *hub) register(name string, lite bool) (*client, []byte) {
 		h.mu.Unlock()
 		h.flush()
 		h.mu.Lock()
+		if h.closed {
+			c.close()
+			return c, nil
+		}
 	}
 	h.clients[c] = struct{}{}
 	h.phonesChanged()

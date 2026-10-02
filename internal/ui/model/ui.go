@@ -66,6 +66,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
 	"github.com/charmbracelet/ultraviolet/screen"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/editor"
 	xstrings "github.com/charmbracelet/x/exp/strings"
 )
@@ -306,7 +307,10 @@ type UI struct {
 
 	// sendProgressBar instructs the TUI to send progress bar updates to the
 	// terminal.
-	sendProgressBar    bool
+	sendProgressBar bool
+	// widthProbePending is set while the terminal's answer to
+	// common.WidthProbe is outstanding.
+	widthProbePending  bool
 	progressBarEnabled bool
 
 	// caps hold different terminal capabilities that we query for.
@@ -322,6 +326,9 @@ type UI struct {
 
 	// Active inline editor replaces the textarea when non-nil.
 	activeInline dialog.InlineEditor
+	// cliUpdatePrompt is the CLI update form last opened, so agent
+	// questions don't mistake it for one of theirs.
+	cliUpdatePrompt *cliUpdatePrompt
 	// inlineCursor stores the cursor from the last inline editor
 	// Draw call, used by the cursor positioning logic below.
 	inlineCursor *tea.Cursor
@@ -824,6 +831,13 @@ func (m *UI) loadMCPrompts() tea.Msg {
 
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// A release ends a scrollbar drag wherever it goes, so a dialog or the
+	// secure entry opening mid-drag can't leave the drag stuck on.
+	var endedScrollbarDrag bool
+	if _, ok := msg.(tea.MouseReleaseMsg); ok {
+		endedScrollbarDrag = m.chat.HandleScrollbarRelease()
+	}
+
 	// Secure input bypasses chat, clipboard attachments, global keys, history,
 	// question answers, and remote presence handling entirely.
 	switch typed := msg.(type) {
@@ -869,6 +883,14 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sendProgressBar = slices.Contains(msg, "WT_SESSION")
 		}
 		cmds = append(cmds, common.QueryCmd(uv.Environ(msg)))
+		if !m.widthProbePending {
+			m.widthProbePending = true
+			cmds = append(cmds, tea.Raw(common.WidthProbe()))
+		}
+	case tea.CursorPositionMsg:
+		if cmd := m.handleWidthProbe(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case tea.ModeReportMsg:
 		m.updateNotificationBackend()
 	case uv.UnknownOscEvent:
@@ -1158,7 +1180,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pubsub.Event[permission.PermissionNotification]:
 		m.handlePermissionNotification(msg.Payload)
 	case pubsub.Event[question.Request]:
-		m.openBatchFormDialog(msg.Payload)
+		if cmd := m.openBatchFormDialog(msg.Payload); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		m.chat.ScrollToBottom()
 		cmds = append(cmds, m.playNotificationSound(notification.SoundQuestion))
 		if cmd := m.sendNotification(notification.Notification{
@@ -1382,7 +1406,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch m.state {
 		case uiChat:
-			if m.chat.HandleScrollbarRelease() {
+			if endedScrollbarDrag {
 				return m, tea.Batch(cmds...)
 			}
 			x, y := msg.X, msg.Y
@@ -3837,6 +3861,7 @@ func (m *UI) View() tea.View {
 	}
 
 	canvas := uv.NewScreenBuffer(m.width, m.height)
+	canvas.Method = m.caps.WidthMethod()
 	v.Cursor = m.Draw(canvas, canvas.Bounds())
 
 	content := strings.ReplaceAll(canvas.Render(), "\r\n", "\n") // normalize newlines
@@ -4486,10 +4511,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 	case uiChat:
 		// Background tasks are listed under the editor, so the editor
 		// block grows to hold them.
-		tasksHeight := 0
-		if m.activeInline == nil {
-			tasksHeight = m.tasksHeight()
-		}
+		tasksHeight := m.tasksHeight()
 		editorHeight += tasksHeight
 		if m.isCompact {
 			// Layout
@@ -5799,7 +5821,14 @@ func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
 
 // openBatchFormDialog activates a tabbed multi-question form in
 // the editor area. Single questions render without tabs or confirm.
-func (m *UI) openBatchFormDialog(batch question.Request) {
+func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
+	var cmd tea.Cmd
+	if m.cliUpdatePromptOpen() {
+		// The question takes the editor; the CLI update offer moves to
+		// the status bar instead of vanishing.
+		cmd = m.showCLIUpdatesAvailable(m.cliUpdatePrompt.updates)
+		m.activeInline = nil
+	}
 	// Close any existing question form first to prevent stacking.
 	if qf, ok := m.activeInline.(*dialog.QuestionForm); ok && qf != nil {
 		m.activeInline = nil
@@ -5817,14 +5846,16 @@ func (m *UI) openBatchFormDialog(batch question.Request) {
 	m.focus = uiFocusEditor
 	m.activeInline.SetFocused(true)
 	m.updateLayoutAndSize()
+	return cmd
 }
 
 // handleQuestionNotification dismisses an open question form when
 // any client resolved the pending batch. Only one question can be
 // pending at a time, so any notification means the current form
-// is stale regardless of BatchID.
+// is stale regardless of BatchID. The CLI update form isn't one of
+// the service's questions, so it stays.
 func (m *UI) handleQuestionNotification(_ question.Notification) {
-	if _, ok := m.activeInline.(*dialog.QuestionForm); ok {
+	if _, ok := m.activeInline.(*dialog.QuestionForm); ok && !m.cliUpdatePromptOpen() {
 		m.activeInline = nil
 		m.textarea.Focus()
 		m.updateLayoutAndSize()
@@ -6494,4 +6525,28 @@ func renderLogo(t *styles.Styles, compact, hyper bool, width int) string {
 		Width:        width,
 		Hyper:        hyper,
 	})
+}
+
+// handleWidthProbe switches the renderer to grapheme measuring when the
+// terminal drew the probe's emoji sequence two cells wide without reporting
+// mode 2027 support. Bubble Tea only enables grapheme width from a mode 2027
+// report, so the command delivers one. The screen is repainted either way
+// because the probe wrote over it.
+func (m *UI) handleWidthProbe(msg tea.CursorPositionMsg) tea.Cmd {
+	if !m.widthProbePending {
+		return nil
+	}
+	wide, ok := common.WidthProbeResult(msg)
+	if !ok {
+		return nil
+	}
+	m.widthProbePending = false
+	slog.Debug("Terminal width probe", "wide", wide, "mode_2027", m.caps.UnicodeCore)
+	if wide && !m.caps.UnicodeCore {
+		return tea.Sequence(
+			func() tea.Msg { return tea.ModeReportMsg{Mode: ansi.ModeUnicodeCore, Value: ansi.ModeSet} },
+			tea.ClearScreen,
+		)
+	}
+	return tea.ClearScreen
 }

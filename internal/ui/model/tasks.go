@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
@@ -58,8 +59,10 @@ func (m *UI) taskRowLen() int {
 	return n
 }
 
+// tasksHeight is the row's height in the layout. It only shows in the chat,
+// and an inline editor such as a question form takes its place.
 func (m *UI) tasksHeight() int {
-	if m.taskRowLen() > 0 {
+	if m.state == uiChat && m.activeInline == nil && m.taskRowLen() > 0 {
 		return 1
 	}
 	return 0
@@ -148,6 +151,10 @@ func (m *UI) handleTaskRowKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if n == 0 {
 		m.tasksFocused = false
 		return nil, false
+	}
+	// The background key opens what's selected, like Enter.
+	if key.Matches(msg, m.keyMap.Chat.Background) {
+		return m.openTaskRowDialog(), true
 	}
 	switch msg.String() {
 	case "left":

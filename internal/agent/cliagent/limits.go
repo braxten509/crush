@@ -43,6 +43,7 @@ var limitStore struct {
 	sync.Mutex
 	byKind  map[catwalk.Type][]Limit
 	fetched map[catwalk.Type]time.Time
+	pending map[catwalk.Type]bool
 }
 
 // Limits returns the last known usage limits of a CLI that apply to a
@@ -81,11 +82,20 @@ func RefreshLimits(ctx context.Context, kind catwalk.Type) bool {
 		return false
 	}
 	limitStore.Lock()
-	last := limitStore.fetched[kind]
-	limitStore.Unlock()
-	if time.Since(last) < limitRefresh {
+	if limitStore.pending[kind] || time.Since(limitStore.fetched[kind]) < limitRefresh {
+		limitStore.Unlock()
 		return false
 	}
+	if limitStore.pending == nil {
+		limitStore.pending = map[catwalk.Type]bool{}
+	}
+	limitStore.pending[kind] = true
+	limitStore.Unlock()
+	defer func() {
+		limitStore.Lock()
+		delete(limitStore.pending, kind)
+		limitStore.Unlock()
+	}()
 	limits, err := fetch(ctx)
 	if err != nil {
 		// Back off like a success so a broken source isn't hammered.
@@ -168,6 +178,9 @@ func grokBilling(raw json.RawMessage) ([]Limit, error) {
 		used = v.Val
 	}
 	name := strings.ToLower(strings.TrimPrefix(c.Period.Type, "USAGE_PERIOD_TYPE_"))
+	if name == "" {
+		return nil, errors.New("grok reported an empty usage period")
+	}
 	name = strings.ToUpper(name[:1]) + name[1:]
 	return []Limit{{Name: name, Used: used, ResetsAt: c.Period.End}}, nil
 }
@@ -177,12 +190,12 @@ func grokBilling(raw json.RawMessage) ([]Limit, error) {
 // and refreshes it on any network command, so an expired token is renewed
 // by running `agy models`.
 func fetchAGYLimits(ctx context.Context) ([]Limit, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	token, err := agyToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels", strings.NewReader("{}"))
 	if err != nil {
 		return nil, err
@@ -223,8 +236,18 @@ func fetchAGYLimits(ctx context.Context) ([]Limit, error) {
 }
 
 func agyToken(ctx context.Context) (string, error) {
+	command := func(name string, args ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, name, args...)
+		ownGroup(cmd)
+		cmd.Cancel = func() error {
+			(&proc{cmd: cmd}).kill()
+			return nil
+		}
+		cmd.WaitDelay = time.Second // A helper may inherit stdout past cancellation.
+		return cmd
+	}
 	read := func() (string, time.Time) {
-		out, err := exec.CommandContext(ctx, "secret-tool", "lookup", "service", "gemini", "username", "antigravity").Output()
+		out, err := command("secret-tool", "lookup", "service", "gemini", "username", "antigravity").Output()
 		if err != nil {
 			return "", time.Time{}
 		}
@@ -238,9 +261,15 @@ func agyToken(ctx context.Context) (string, error) {
 		return v.Token.AccessToken, v.Token.Expiry
 	}
 	token, expiry := read()
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
 	if token == "" || time.Until(expiry) < time.Minute {
-		_ = exec.CommandContext(ctx, agyBin(), "models").Run()
+		_ = command(agyBin(), "models").Run()
 		token, expiry = read()
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
 	}
 	if token == "" || time.Until(expiry) < 0 {
 		return "", errors.New("no AGY login in the keyring")

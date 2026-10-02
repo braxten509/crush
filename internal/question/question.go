@@ -3,8 +3,7 @@
 // the permission service pattern: publish a request over pubsub,
 // block on a channel, and resolve when the UI sends back answers.
 //
-// Only one question can be pending at a time (the tool blocks until
-// answered), so no correlation IDs are needed in the domain model.
+// Remote answers are correlated with the pending request and session.
 package question
 
 import (
@@ -186,9 +185,15 @@ type Service interface {
 	// Answer resolves the pending question with the given answers.
 	Answer(answers []Answer) bool
 
+	// AnswerRequest resolves only the matching request and session.
+	AnswerRequest(id, sessionID string, answers []Answer) bool
+
 	// Cancel cancels the pending question. Returns false if no
 	// question is pending.
 	Cancel() bool
+
+	// CancelRequest cancels only the matching request and session.
+	CancelRequest(id, sessionID string) bool
 }
 
 type questionService struct {
@@ -245,19 +250,23 @@ func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error
 		return nil, err
 	}
 
+	pending := make(chan []Answer, 1)
+	cancelled := make(chan struct{})
 	s.mu.Lock()
-	s.pending = make(chan []Answer, 1)
-	s.cancelled = make(chan struct{})
+	s.pending = pending
+	s.cancelled = cancelled
 	s.pendingID = req.ID
 	s.pendingReq = req
 	s.mu.Unlock()
 
 	defer func() {
 		s.mu.Lock()
-		s.pending = nil
-		s.cancelled = nil
-		s.pendingID = ""
-		s.pendingReq = Request{}
+		if s.pending == pending {
+			s.pending = nil
+			s.cancelled = nil
+			s.pendingID = ""
+			s.pendingReq = Request{}
+		}
 		s.mu.Unlock()
 	}()
 
@@ -266,9 +275,9 @@ func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-s.cancelled:
+	case <-cancelled:
 		return nil, ErrCancelled
-	case answers := <-s.pending:
+	case answers := <-pending:
 		return answers, nil
 	}
 }
@@ -286,38 +295,44 @@ func (s *questionService) Pending() (Request, bool) {
 // Answer resolves the pending question. Returns false if no
 // question is pending (already answered or cancelled).
 func (s *questionService) Answer(answers []Answer) bool {
-	s.mu.Lock()
-	batchID := s.pendingID
-	ch := s.pending
-	s.mu.Unlock()
+	return s.resolve("", "", false, answers, false)
+}
 
-	if ch == nil {
-		return false
-	}
-	ch <- answers
-
-	// Publish a notification so non-answering clients can dismiss
-	// their open question forms.
-	if batchID != "" {
-		s.notificationBroker.Publish(pubsub.CreatedEvent, Notification{
-			BatchID: batchID,
-		})
-	}
-	return true
+func (s *questionService) AnswerRequest(id, sessionID string, answers []Answer) bool {
+	return s.resolve(id, sessionID, true, answers, false)
 }
 
 // Cancel cancels the pending question. Returns false if no
 // question is pending.
 func (s *questionService) Cancel() bool {
-	s.mu.Lock()
-	batchID := s.pendingID
-	cancelCh := s.cancelled
-	s.mu.Unlock()
+	return s.resolve("", "", false, nil, true)
+}
 
-	if cancelCh == nil {
+func (s *questionService) CancelRequest(id, sessionID string) bool {
+	return s.resolve(id, sessionID, true, nil, true)
+}
+
+// resolve takes the pending request under the lock so only one caller wins.
+func (s *questionService) resolve(id, sessionID string, scoped bool, answers []Answer, cancel bool) bool {
+	s.mu.Lock()
+	if s.pending == nil || (scoped && (id == "" || sessionID == "" || s.pendingID != id || s.pendingReq.SessionID != sessionID)) {
+		s.mu.Unlock()
 		return false
 	}
-	close(cancelCh)
+	batchID := s.pendingID
+	ch := s.pending
+	cancelCh := s.cancelled
+	s.pending = nil
+	s.cancelled = nil
+	s.pendingID = ""
+	s.pendingReq = Request{}
+	s.mu.Unlock()
+
+	if cancel {
+		close(cancelCh)
+	} else {
+		ch <- answers
+	}
 
 	// Publish a notification so non-answering clients can dismiss
 	// their open question forms.

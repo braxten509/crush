@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/shell"
 )
 
@@ -86,7 +87,9 @@ func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 			}
 
 			result := fmt.Sprintf("Status: %s\n\n%s", status, output)
-			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result), metadata), nil
+			response := fantasy.WithResponseMetadata(fantasy.NewTextResponse(result), metadata)
+			response.Metadata = filechange.WithReview(response.Metadata, bgShell.Review())
+			return response, nil
 		},
 	)
 }

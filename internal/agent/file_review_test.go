@@ -14,9 +14,44 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/ui/diffreview"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSecureEntryExcludedFromLateAndFutureReviews(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sess, err := env.sessions.Create(t.Context(), "secure entry review")
+	require.NoError(t, err)
+	path := filepath.Join(env.workingDir, "credentials.env")
+	r := &turnFileReview{root: env.workingDir, messages: env.messages, sessionID: sess.ID,
+		trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
+	r.track("template", "write", `{"file_path":"credentials.env"}`)
+	require.NoError(t, os.WriteFile(path, []byte("TOKEN=%s\n"), 0o600))
+	require.NoError(t, r.save(t.Context(), message.ToolResult{ToolCallID: "template", Name: "write"}))
+	target, err := secureentry.Prepare(secureentry.Spec{File: path, Occurrence: 1})
+	require.NoError(t, err)
+	defer target.Close()
+	require.NoError(t, target.Save([]byte("synthetic-secret-never-in-chat")))
+	r.finish(t.Context())
+	future := &turnFileReview{root: env.workingDir, messages: env.messages, sessionID: sess.ID,
+		trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
+	future.track("later", "edit", `{"file_path":"credentials.env"}`)
+	// Native tool reviews and snapshots both obey the sensitive exclusion.
+	require.NoError(t, future.save(t.Context(), message.ToolResult{ToolCallID: "later", Name: "edit", Metadata: filechange.WithReview("", &filechange.Review{Root: env.workingDir,
+		Changes: []filechange.Change{{Path: path, After: &filechange.State{Content: "synthetic-secret-never-in-chat"}}}})}))
+	future.finish(t.Context())
+	require.NoError(t, env.messages.FlushAll(t.Context()))
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	encoded, err := json.Marshal(msgs)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "synthetic-secret-never-in-chat")
+	require.Len(t, msgs[0].ToolResults()[0].Review.Changes, 1, "the original placeholder review is safe")
+	require.Empty(t, msgs[1].ToolResults()[0].Review.Changes)
+}
 
 // Run the real CLI event adapter and the shared agent callbacks. The fake CLI
 // deliberately writes before emitting the tool call, as some real CLIs do.

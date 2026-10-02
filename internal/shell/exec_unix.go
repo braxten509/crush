@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/filechange"
 	"mvdan.cc/sh/v3/interp"
 )
 
@@ -61,7 +62,8 @@ func processGroupExecHandler(killTimeout time.Duration) interp.ExecHandlerFunc {
 		}
 		isolateProcess(&cmd)
 
-		err = cmd.Start()
+		observer, startErr := filechange.StartCommand(ctx, &cmd)
+		err = startErr
 		if err == nil {
 			stopf := context.AfterFunc(ctx, func() {
 				if killTimeout <= 0 {
@@ -76,7 +78,7 @@ func processGroupExecHandler(killTimeout time.Duration) interp.ExecHandlerFunc {
 			})
 			defer stopf()
 
-			err = cmd.Wait()
+			err = observer.Wait(&cmd)
 		}
 
 		return exitStatusFromError(ctx, hc.Stderr, err)

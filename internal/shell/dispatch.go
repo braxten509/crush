@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -199,7 +200,11 @@ func dispatchShebang(ctx context.Context, scriptPath string, probe []byte, args 
 	cmd.Stderr = hc.Stderr
 	isolateProcess(cmd)
 
-	if err := cmd.Run(); err != nil {
+	observer, runErr := filechange.StartCommand(ctx, cmd)
+	if runErr == nil {
+		runErr = observer.Wait(cmd)
+	}
+	if err := runErr; err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			code := exitErr.ExitCode()

@@ -83,6 +83,9 @@ type Config struct {
 	// Existing models from config — IDs present in this list are skipped
 	// during discovery (user-specified models win).
 	ExistingModels []catwalk.Model
+	// Current native-provider metadata supplies controls for the same model,
+	// without guessing from a different model in its family.
+	KnownProviders []catwalk.Provider
 }
 
 // Resolver resolves variable references (e.g. $ENV_VAR) in config values.
@@ -137,7 +140,7 @@ func DiscoverModels(ctx context.Context, cfg Config, resolver Resolver) ([]catwa
 			continue
 		}
 		if cfg.ID == "abacus" {
-			model, ok := abacusModel(raw)
+			model, ok := abacusModel(raw, cfg.KnownProviders...)
 			if ok {
 				result = append(result, model)
 			}

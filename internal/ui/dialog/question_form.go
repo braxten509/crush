@@ -58,6 +58,12 @@ type QuestionForm struct {
 	// this to wire up workspace submission.
 	OnAnswer func(responses []question.Answer)
 
+	// OnAnswerCmd, if set, is called on submit like OnAnswer and its
+	// command runs once the form closes (local forms that aren't backed by
+	// the workspace question service).
+	OnAnswerCmd func(responses []question.Answer) tea.Cmd
+	pendingCmd  tea.Cmd
+
 	// OnCancel is called when the user presses escape to cancel
 	// the entire question batch. The UI sets this to wire up
 	// workspace cancellation.
@@ -237,7 +243,7 @@ func (f *QuestionForm) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 				f.switchTab(f.activeIdx + 1)
 			} else if !f.hasConfirm {
 				f.submit()
-				return true, cmd
+				return true, tea.Batch(cmd, f.takePendingCmd())
 			}
 			return false, cmd
 		}
@@ -319,7 +325,20 @@ func (f *QuestionForm) submit() {
 	if f.OnAnswer != nil {
 		f.OnAnswer(responses)
 	}
+	if f.OnAnswerCmd != nil {
+		f.pendingCmd = f.OnAnswerCmd(responses)
+	}
 }
+
+func (f *QuestionForm) takePendingCmd() tea.Cmd {
+	cmd := f.pendingCmd
+	f.pendingCmd = nil
+	return cmd
+}
+
+// PendingCmd implements [CmdOnDone] for forms closed another way than
+// HandleKey's return (mouse clicks, the confirm tab).
+func (f *QuestionForm) PendingCmd() tea.Cmd { return f.takePendingCmd() }
 
 // cancel calls OnCancel to signal that the user dismissed the
 // question batch without answering.

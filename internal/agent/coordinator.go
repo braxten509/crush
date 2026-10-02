@@ -1154,7 +1154,7 @@ func (c *coordinator) hyperAPIKey() string {
 	return config.ResolveHyperAPIKey(c.cfg.Config())
 }
 
-func (c *coordinator) buildAnthropicProvider(baseURL, apiKey string, headers map[string]string, providerID string) (fantasy.Provider, error) {
+func (c *coordinator) buildAnthropicProvider(baseURL, apiKey string, headers map[string]string, providerID string, clients ...*http.Client) (fantasy.Provider, error) {
 	var opts []anthropic.Option
 
 	switch {
@@ -1182,6 +1182,9 @@ func (c *coordinator) buildAnthropicProvider(baseURL, apiKey string, headers map
 	if c.cfg.Config().Options.Debug {
 		httpClient := log.NewHTTPClient()
 		opts = append(opts, anthropic.WithHTTPClient(httpClient))
+	}
+	if len(clients) > 0 {
+		opts = append(opts, anthropic.WithHTTPClient(clients[0]))
 	}
 	return anthropic.New(opts...)
 }
@@ -1247,7 +1250,7 @@ func (c *coordinator) buildVercelProvider(_, apiKey string, headers map[string]s
 	return vercel.New(opts...)
 }
 
-func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers map[string]string, extraBody map[string]any, providerID string, isSubAgent bool) (fantasy.Provider, error) {
+func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers map[string]string, extraBody map[string]any, providerID string, isSubAgent bool, clients ...*http.Client) (fantasy.Provider, error) {
 	opts := []openaicompat.Option{
 		openaicompat.WithBaseURL(baseURL),
 		openaicompat.WithAPIKey(apiKey),
@@ -1285,6 +1288,9 @@ func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers 
 	}
 	if httpClient == nil && c.cfg.Config().Options.Debug {
 		httpClient = log.NewHTTPClient()
+	}
+	if len(clients) > 0 {
+		httpClient = clients[0]
 	}
 	if httpClient != nil {
 		opts = append(opts, openaicompat.WithHTTPClient(httpClient))

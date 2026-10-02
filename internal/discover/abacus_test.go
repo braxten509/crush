@@ -4,8 +4,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,7 +16,7 @@ func TestAbacusDiscoverySupportsCodingModels(t *testing.T) {
 		require.Equal(t, "/v1/models", r.URL.Path)
 		require.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 		_, _ = w.Write([]byte(`{"data":[
-		 {"id":"gpt-6.1-sol","display_name":"GPT-6.1 Sol","model_type":"text_generation","api_formats":["openai","responses"],"tools":true,"thinking":true,"input_modalities":["text","image"],"context_length":1000000,"max_completion_tokens":128000,"input_token_rate":"0.000002","output_token_rate":"0.00001","cached_input_token_rate":"0.0000001"},
+		 {"id":"gpt-6.1-sol","display_name":"GPT-6.1 Sol","model_type":"text_generation","api_formats":["openai","responses"],"tools":true,"thinking":true,"input_modalities":["text","image"],"context_length":1000000,"max_completion_tokens":128000,"input_token_rate":"0.000002","output_token_rate":"0.00001","cached_input_token_rate":"0.0000001","reasoning_levels":["low","medium","high","xhigh","max"]},
 		 {"id":"route-llm","model_type":"text_generation","api_formats":["openai"],"tools":true,"context_length":null},
 		 {"id":"flux2","model_type":"image_generation","output_modalities":["image"]},
 		 {"id":"responses-only","model_type":"text_generation","api_formats":["responses"],"tools":true},
@@ -52,10 +54,48 @@ func TestAbacusClaudeAndGeminiEffortProfiles(t *testing.T) {
 	} {
 		t.Run(test.id, func(t *testing.T) {
 			raw := []byte(`{"id":"` + test.id + `","model_type":"text_generation","api_formats":["openai","anthropic"],"tools":true}`)
-			model, ok := abacusModel(raw)
+			// Native catalogue metadata is supplied by config loading, even
+			// when the native provider itself is disabled.
+			model, ok := abacusModel(raw, catwalk.Provider{ID: "anthropic", Models: []catwalk.Model{{
+				ID: strings.TrimSuffix(test.id, "-thinking"), CanReason: true,
+				ReasoningLevels: test.levels, DefaultReasoningEffort: test.defaultEffort,
+			}}})
 			require.True(t, ok)
 			require.Equal(t, test.levels, model.ReasoningLevels)
 			require.Equal(t, test.defaultEffort, model.DefaultReasoningEffort)
 		})
 	}
+}
+
+func TestAbacusControlsUseTheExactCurrentModel(t *testing.T) {
+	provider := catwalk.Provider{ID: "openai", Models: []catwalk.Model{
+		{ID: "gpt-6-astra", CanReason: true, ReasoningLevels: []string{"low", "high", "max"}},
+		{ID: "gpt-6-sol", CanReason: true, ReasoningLevels: []string{"none", "low", "high"}, DefaultReasoningEffort: "high"},
+	}}
+	model, ok := abacusModel([]byte(`{"id":"gpt-6-sol","model_type":"text_generation","api_formats":["responses"],"tools":true}`), provider)
+	require.True(t, ok)
+	require.Equal(t, []string{"none", "low", "high"}, model.ReasoningLevels)
+	require.Equal(t, "high", model.DefaultReasoningEffort)
+	unknown, ok := abacusModel([]byte(`{"id":"gpt-6-new","model_type":"text_generation","api_formats":["responses"],"tools":true}`), provider)
+	require.True(t, ok)
+	require.Empty(t, unknown.ReasoningLevels, "a new model must not inherit a sibling's controls")
+	declared, ok := abacusModel([]byte(`{"id":"gpt-6-sol","model_type":"text_generation","api_formats":["responses"],"tools":true,"reasoning_levels":["medium"],"default_reasoning_effort":"medium"}`), provider)
+	require.True(t, ok)
+	require.Equal(t, []string{"medium"}, declared.ReasoningLevels)
+	require.Equal(t, "medium", declared.DefaultReasoningEffort)
+}
+
+func TestAbacusNamedModelsDoNotChangeTheirAPIIdentifier(t *testing.T) {
+	provider := catwalk.Provider{ID: "deepseek", Models: []catwalk.Model{{
+		ID: "deepseek-v4-pro", Name: "DeepSeek-V4-Pro", CanReason: true,
+		ReasoningLevels: []string{"low", "high", "max"}, DefaultReasoningEffort: "high",
+	}}}
+	model, ok := abacusModel([]byte(`{"id":"deepseek-ai/DeepSeek-V4-Pro-0813","display_name":"Deepseek V4 Pro","model_type":"text_generation","api_formats":["openai"],"tools":true}`), provider)
+	require.True(t, ok)
+	require.Equal(t, "deepseek-ai/DeepSeek-V4-Pro-0813", model.ID)
+	require.Equal(t, []string{"low", "high", "max"}, model.ReasoningLevels)
+	provider.Models = append(provider.Models, catwalk.Model{ID: "different-version", Name: "Deepseek V4 Pro", ReasoningLevels: []string{"medium"}})
+	model, ok = abacusModel([]byte(`{"id":"unknown-alias","display_name":"Deepseek V4 Pro","model_type":"text_generation","api_formats":["openai"],"tools":true}`), provider)
+	require.True(t, ok)
+	require.Empty(t, model.ReasoningLevels, "ambiguous display names cannot supply controls")
 }

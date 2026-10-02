@@ -226,6 +226,7 @@ func PushPopCrushEnv() func() {
 }
 
 func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env env.Env, resolver VariableResolver, knownProviders []catwalk.Provider) error {
+	catalogProviders := knownProviders
 	knownProviderNames := make(map[string]bool)
 	restore := PushPopCrushEnv()
 	defer restore()
@@ -235,6 +236,9 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 	// We skip to the custom provider validation loop which handles all
 	// user-configured providers uniformly.
 	if c.Options.DisableDefaultProviders {
+		if len(catalogProviders) == 0 {
+			catalogProviders = ModelCatalog()
+		}
 		knownProviders = nil
 	}
 
@@ -432,6 +436,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 			APIKey:         pc.APIKey,
 			ExtraHeaders:   pc.ExtraHeaders,
 			ExistingModels: pc.Models,
+			KnownProviders: catalogProviders,
 		}
 		providerType := cmp.Or(pc.Type, catwalk.TypeOpenAICompat)
 		wg.Go(func() {

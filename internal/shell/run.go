@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/filechange"
+	"github.com/charmbracelet/crush/internal/filepathext"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -189,6 +191,10 @@ func newRunner(cwd string, env []string, stdin io.Reader, stdout, stderr io.Writ
 		interp.Interactive(false),
 		interp.Env(expand.ListEnviron(env...)),
 		interp.Dir(cwd),
+		interp.OpenHandler(func(ctx context.Context, path string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			filechange.BeforeOpen(ctx, filepathext.SmartJoin(interp.HandlerCtx(ctx).Dir, path), flag)
+			return interp.DefaultOpenHandler()(ctx, path, flag, perm)
+		}),
 		execHandlerOption(blockFuncs),
 	)
 }

@@ -561,6 +561,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "background", "Background Processes", "ctrl+x", ActionOpenDialog{BackgroundID}).WithAliases("processes", "kill"),
 		NewCommandItem(c.com.Styles, "sub_agents", "Sub-agents", "", ActionOpenDialog{SubAgentsID}).WithAliases("agents", "tasks", "stop"),
 		NewCommandItem(c.com.Styles, "remote", "Remote Control", "", ActionOpenDialog{RemoteID}).WithAliases("rc", "phone"),
+		NewCommandItem(c.com.Styles, "update_clis", "Update Agent CLIs", "", ActionCheckCLIUpdates{}).WithAliases("upgrade", "version"),
 	)
 
 	// Add transparent background toggle.

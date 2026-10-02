@@ -1161,6 +1161,15 @@ func (m *Chat) HandleMouseDown(x, y int) (bool, tea.Cmd) {
 	return true, cmd
 }
 
+// TakeChangesRequest returns the tool group whose changes the last click
+// asked to review, or nil.
+func (m *Chat) TakeChangesRequest() *chat.ToolGroupItem {
+	if g, ok := m.list.SelectedItem().(*chat.ToolGroupItem); ok && g.TakeChangesRequest() {
+		return g
+	}
+	return nil
+}
+
 // HandleDelayedClick handles a delayed single-click action (like expansion).
 // It only executes if the click ID matches (i.e., no double-click occurred)
 // and no text selection was made (drag to select).

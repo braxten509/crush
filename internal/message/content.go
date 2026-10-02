@@ -13,6 +13,7 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -117,13 +118,14 @@ type ToolCall struct {
 func (ToolCall) isPart() {}
 
 type ToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	Data       string `json:"data"`
-	MIMEType   string `json:"mime_type"`
-	Metadata   string `json:"metadata"`
-	IsError    bool   `json:"is_error"`
+	ToolCallID string             `json:"tool_call_id"`
+	Name       string             `json:"name"`
+	Content    string             `json:"content"`
+	Data       string             `json:"data"`
+	MIMEType   string             `json:"mime_type"`
+	Metadata   string             `json:"metadata"`
+	IsError    bool               `json:"is_error"`
+	Review     *filechange.Review `json:"review,omitempty"`
 }
 
 func (ToolResult) isPart() {}

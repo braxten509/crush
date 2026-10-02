@@ -85,11 +85,12 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 		}, args...)
 		name = "codex"
 	}
-	p, err := startProcEnv(m.Dir, t.Env, name, args...)
+	p, err := startReviewProc(m.Dir, t.Env, !t.NoTools, name, args...)
 	if err != nil {
 		return err
 	}
 	defer p.finish()
+	t.Emit = p.reviewEvents(t.Emit)
 	// Print mode has no interrupt message, but SIGINT stops the turn.
 	stop := p.watchCancel(ctx, func() {
 		if p.cmd.Process.Signal(os.Interrupt) != nil {

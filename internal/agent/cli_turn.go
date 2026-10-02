@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -55,7 +57,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		a.steering.Set(call.SessionID, s)
 		defer a.steering.CompareAndDelete(call.SessionID, s)
 		defer s.returnUnsteered()
-		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, SteerReady: s.steerReady, Env: env, Instructions: instructions}
+		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, SteerInput: s.steerWithImages, SteerReady: s.steerReady, Env: env, Instructions: instructions}
 		err := m.Run(ctx, turn)
 		if errors.Is(err, cliagent.ErrResume) {
 			// The native session is gone; hand the whole conversation to a
@@ -225,29 +227,47 @@ func (s *cliSteps) hideSteered() {
 
 // steer takes the queued prompts for the CLI to fold into the running turn.
 func (s *cliSteps) steer() string {
+	text, _ := s.steerCalls(false)
+	return text
+}
+
+func (s *cliSteps) steerWithImages() (string, []message.Attachment) {
+	return s.steerCalls(true)
+}
+
+func (s *cliSteps) steerCalls(images bool) (string, []message.Attachment) {
 	fold, canceled := s.a.drainQueueForStep(s.sessionID)
 	s.a.publishCanceledQueueDrops(canceled)
 	// Steering is text-only. Leave images and subsequent prompts queued
 	// for the next turn so their attachment bytes and ordering are kept.
 	for i, q := range fold {
-		if slices.ContainsFunc(q.Attachments, message.Attachment.IsImage) {
+		if !images && slices.ContainsFunc(q.Attachments, message.Attachment.IsImage) {
 			s.a.requeueFront(s.sessionID, fold[i:])
 			fold = fold[:i]
 			break
 		}
 	}
 	if len(fold) == 0 {
-		return ""
+		return "", nil
 	}
 	texts := make([]string, len(fold))
+	var attachments []message.Attachment
 	for i, q := range fold {
 		texts[i] = message.PromptWithTextAttachments(q.Prompt, q.Attachments)
+		for _, attachment := range q.Attachments {
+			if attachment.IsImage() {
+				attachments = append(attachments, attachment)
+			}
+		}
 	}
 	text := strings.Join(texts, "\n\n")
+	if strings.TrimSpace(text) == "" && len(attachments) > 0 {
+		text = "Please review the attached images."
+	}
 	s.steerMu.Lock()
 	s.steered = append(s.steered, cliSteered{text: text, calls: fold})
 	s.steerMu.Unlock()
-	return text
+	return text, attachments
 }
 
 // takeSteered removes and returns the prompts sent as text.
@@ -404,6 +424,9 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 	case cliagent.EventToolCall:
 		s.tools++
 		if path := cliagent.EditedFile(e.Name, e.Input); path != "" {
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(s.m.Dir, path)
+			}
 			before, _ := os.ReadFile(path)
 			if s.edits == nil {
 				s.edits = map[string][2]string{}
@@ -432,9 +455,15 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 			}
 			s.known[edit[0]] = string(after)
 			s.m.RecordEdit(s.ctx, s.sessionID, edit[0], edit[1])
-			if e.Metadata == "" {
-				// The CLI didn't say what changed; diff the file itself.
-				meta, _ := json.Marshal(tools.EditResponseMetadata{OldContent: edit[1], NewContent: string(after)})
+			// Diff the whole file, as Crush's own edit tool does, rather
+			// than the replaced text the CLI reports: the diff then has
+			// real line numbers.
+			// A late event can arrive with the new contents already on disk.
+			// Keep the CLI's reported diff instead of replacing it with an
+			// empty local diff when no earlier full-file content is known.
+			if edit[1] != string(after) || e.Metadata == "" {
+				_, adds, dels := diff.GenerateDiff(edit[1], string(after), edit[0])
+				meta, _ := json.Marshal(tools.EditResponseMetadata{Additions: adds, Removals: dels, OldContent: edit[1], NewContent: string(after)})
 				e.Metadata = string(meta)
 			}
 		}

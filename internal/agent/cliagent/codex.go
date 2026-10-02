@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/version"
+	"mvdan.cc/sh/v3/shell"
 )
 
 // Codex is driven through `codex app-server`, its JSON-RPC protocol for rich
@@ -224,11 +226,12 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	} else {
 		// Crush hands every CLI the shared memory; Codex's own stays off.
 		var err error
-		if p, err = startProcEnv(m.Dir, t.Env, "codex", "app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0"); err != nil {
+		if p, err = startReviewProc(m.Dir, t.Env, !t.NoTools, "codex", "app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0"); err != nil {
 			return err
 		}
 		lines = p.readLines()
 	}
+	t.Emit = p.reviewEvents(t.Emit)
 	finished := false
 	defer func() {
 		if finished && keep && threadID != "" {
@@ -253,14 +256,14 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	// as a userMessage item when the model takes it in.
 	var sent steered
 	steers := 0
-	stopSteer := pollSteer(t, func() bool { return active.Load() != nil }, func(text string) {
+	stopSteer := pollSteerInput(t, func() bool { return active.Load() != nil }, func(text string, attachments []message.Attachment) {
 		ids := active.Load()
 		steers++
 		sent.add(text)
 		err := p.send(map[string]any{"id": "steer-" + strconv.Itoa(steers), "method": "turn/steer", "params": map[string]any{
 			"threadId":       ids[0],
 			"expectedTurnId": ids[1],
-			"input":          []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}},
+			"input":          codexInput(text, attachments),
 		}})
 		if err != nil {
 			sent.take(text)
@@ -712,16 +715,34 @@ func splitDiff(diff string) (string, string) {
 	return before.String(), after.String()
 }
 
-var shellWrapper = regexp.MustCompile(`^\S*sh -l?c (?:'(.*)'|"(.*)")$`)
+var shellWrapper = regexp.MustCompile(`(?s)^\S*sh -l?c (?:'(.*)'|"(.*)")$`)
 
 // unwrapShell turns Codex's `/bin/zsh -lc 'cmd'` into `cmd` for display.
 func unwrapShell(cmd string) string {
-	m := shellWrapper.FindStringSubmatch(cmd)
-	switch {
-	case m == nil:
-		return cmd
-	case m[2] != "":
-		return strings.NewReplacer(`\"`, `"`, `\\`, `\`, `\$`, `$`, "\\`", "`").Replace(m[2])
+	// Providers may wrap an already wrapped command. Decode each shell argv
+	// rather than stripping its first and last quote: mixed shell quoting can
+	// start with a single quote and end with a double quote.
+	for {
+		decoded := unwrapShellOnce(cmd)
+		if decoded == cmd {
+			return cmd
+		}
+		cmd = decoded
 	}
-	return strings.ReplaceAll(m[1], `'\''`, `'`)
+}
+
+func unwrapShellOnce(cmd string) string {
+	m := shellWrapper.FindStringSubmatch(cmd)
+	if m != nil && m[2] != "" {
+		// Preserve Codex's JSON-style command representation, including newlines.
+		if command, err := strconv.Unquote(`"` + m[2] + `"`); err == nil {
+			return command
+		}
+	}
+	words, err := shell.Fields(cmd, func(name string) string { return "$" + name })
+	if err == nil && len(words) == 3 && strings.HasSuffix(filepath.Base(words[0]), "sh") &&
+		(words[1] == "-lc" || words[1] == "-c") {
+		return words[2]
+	}
+	return cmd
 }

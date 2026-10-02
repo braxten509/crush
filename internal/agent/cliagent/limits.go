@@ -118,7 +118,10 @@ func fetchGrokLimits(ctx context.Context) ([]Limit, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer p.kill()
+	defer func() {
+		p.kill()
+		p.finish() // Reap the short-lived usage probe as well as stopping it.
+	}()
 	defer p.watchCancel(ctx, p.closeInput)()
 	_ = p.send(map[string]any{"jsonrpc": "2.0", "id": "1", "method": "initialize", "params": map[string]any{"protocolVersion": 1, "clientCapabilities": map[string]any{}}})
 	for p.lines.Scan() {
@@ -376,7 +379,10 @@ func fetchCodexLimits(ctx context.Context) ([]Limit, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer p.kill()
+	defer func() {
+		p.kill()
+		p.finish() // Reap the short-lived usage probe as well as stopping it.
+	}()
 	defer p.watchCancel(ctx, p.closeInput)()
 	_ = p.send(map[string]any{"id": "1", "method": "initialize", "params": map[string]any{"clientInfo": map[string]any{"name": "crush", "title": "Crush", "version": "0"}}})
 	_ = p.send(map[string]any{"method": "initialized"})

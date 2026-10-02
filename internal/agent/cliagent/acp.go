@@ -79,11 +79,12 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 			}
 		}
 	}
-	p, err := startProcEnv(m.Dir, t.Env, name, args...)
+	p, err := startReviewProc(m.Dir, t.Env, !t.NoTools, name, args...)
 	if err != nil {
 		return err
 	}
 	defer p.finish()
+	t.Emit = p.reviewEvents(t.Emit)
 
 	var session atomic.Pointer[string]
 	stop := p.watchCancel(ctx, func() {

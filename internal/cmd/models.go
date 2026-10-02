@@ -37,6 +37,9 @@ crush models --json`,
 
 		dataDir, _ := cmd.Flags().GetString("data-dir")
 		debug, _ := cmd.Flags().GetBool("debug")
+		if refresh, _ := cmd.Flags().GetBool("refresh"); refresh {
+			config.RefreshCLIModels()
+		}
 
 		cfg, err := config.Init(cwd, dataDir, debug)
 		if err != nil {
@@ -217,5 +220,6 @@ func printModelsJSON(w io.Writer, cfg *config.Config, term string) error {
 
 func init() {
 	modelsCmd.Flags().Bool("json", false, "Print usable models with their reasoning levels and fast mode as JSON")
+	modelsCmd.Flags().Bool("refresh", false, "Refresh installed CLI model capabilities before listing models")
 	rootCmd.AddCommand(modelsCmd)
 }

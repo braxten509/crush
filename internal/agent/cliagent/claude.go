@@ -299,7 +299,7 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	// Crush supplies the shared memory index and rules through Instructions.
 	env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1", "CLAUDE_CODE_DISABLE_ORG_MEMORY=1")
 	env = append(env, "CLAUDE_CODE_DISABLE_CLAUDE_MDS=1")
-	p, err := startProcEnv(m.Dir, env, "claude", args...)
+	p, err := startReviewProc(m.Dir, env, !t.NoTools, "claude", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -328,6 +328,7 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 		}
 	}
 	p := live.p
+	t.Emit = p.reviewEvents(t.Emit)
 	finished := false
 	ctl := &claudeTurn{p: p}
 	if t.SessionID != "" && !t.NoTools {
@@ -368,9 +369,9 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	// runs them right after the turn if it was already answering.
 	var sent steered
 	startSteer := func() func() {
-		return pollSteer(t, func() bool { return true }, func(text string) {
+		return pollSteerInput(t, func() bool { return true }, func(text string, attachments []message.Attachment) {
 			sent.add(text)
-			if p.send(claudeUserMessage(text)) != nil {
+			if p.send(claudePrompt(text, attachments)) != nil {
 				sent.take(text)
 			}
 		})

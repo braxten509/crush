@@ -50,9 +50,9 @@ func TestBuildItemsFoldsToolCallsLikeTheTUI(t *testing.T) {
 	}
 
 	items := buildItems(msgs, chatState{workingDir: "/work"})
-	require.Equal(t, []string{"user", "thinking", "group", "reply"}, kinds(items))
+	require.Equal(t, []string{"user", "group", "reply"}, kinds(items))
 
-	group := items[2]
+	group := items[1]
 	require.Equal(t, "group:tc1", group.ID)
 	require.False(t, group.Live)
 	require.Equal(t, "2 actions · edited main.go", group.Summary)
@@ -61,8 +61,8 @@ func TestBuildItemsFoldsToolCallsLikeTheTUI(t *testing.T) {
 	require.Equal(t, "done", group.Steps[0].State)
 	require.Equal(t, 2, group.Steps[1].Added)
 	require.Equal(t, 1, group.Steps[1].Removed)
-	require.Equal(t, "Fixed it.", items[3].Text)
-	require.False(t, items[3].Streaming)
+	require.Equal(t, "Fixed it.", items[2].Text)
+	require.False(t, items[2].Streaming)
 }
 
 func TestBuildItemsStepStates(t *testing.T) {
@@ -169,8 +169,8 @@ func TestStepDetail(t *testing.T) {
 	require.Equal(t, 1, removed)
 
 	d, ok = stepDetail(msgs, "a1:think")
-	require.True(t, ok)
-	require.Equal(t, "Hmm.", d.Output)
+	require.False(t, ok)
+	require.Empty(t, d.Output)
 
 	_, ok = stepDetail(msgs, "nope")
 	require.False(t, ok)

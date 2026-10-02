@@ -970,6 +970,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		history = append(history, fantasy.Message{Role: fantasy.MessageRoleUser, Content: filesAsParts(files)})
 		files = nil
 	}
+	fileReview := a.startFileReview(genCtx, call.SessionID)
+	defer fileReview.finish(ctx)
 	result, err = stream(genCtx, fantasy.AgentStreamCall{
 		Prompt:           prompt,
 		Files:            files,
@@ -1129,6 +1131,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			return m.Model
 		},
 		OnToolCall: func(tc fantasy.ToolCallContent) error {
+			fileReview.track(tc.ToolCallID, tc.ToolName, tc.Input)
 			input, wasSanitized := sanitizeToolInput(tc.ToolName, tc.ToolCallID, tc.Input)
 			if wasSanitized {
 				sanitizedToolCalls[tc.ToolCallID] = true
@@ -1156,13 +1159,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			}
 			// Use parent ctx instead of genCtx to ensure the message is created
 			// even if the request is canceled mid-stream
-			_, createMsgErr := a.messages.Create(ctx, currentAssistant.SessionID, message.CreateMessageParams{
-				Role: message.Tool,
-				Parts: []message.ContentPart{
-					toolResult,
-				},
-			})
-			return createMsgErr
+			return fileReview.save(ctx, toolResult)
 		},
 		OnStepFinish: func(stepResult fantasy.StepResult) error {
 			for _, w := range stepResult.Warnings {
@@ -1327,12 +1324,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				Content:    content,
 				IsError:    true,
 			}
-			_, createErr = a.messages.Create(cleanupCtx, currentAssistant.SessionID, message.CreateMessageParams{
-				Role: message.Tool,
-				Parts: []message.ContentPart{
-					toolResult,
-				},
-			})
+			createErr = fileReview.save(cleanupCtx, toolResult)
 			if createErr != nil {
 				return nil, createErr
 			}
@@ -1388,6 +1380,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		return nil, err
 	}
 
+	// Finish before summarization or a recursive queued turn starts touching
+	// the folder; its changes belong to that turn's own review.
+	fileReview.finish(ctx)
 	if shouldSummarize {
 		a.activeRequests.Del(call.SessionID)
 		if summarizeErr := a.Summarize(genCtx, call.SessionID, call.ProviderOptions, call.OnAuthRefresh); summarizeErr != nil {

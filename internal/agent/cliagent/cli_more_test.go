@@ -3,8 +3,10 @@ package cliagent
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,6 +48,37 @@ cat >/dev/null
 	require.Equal(t, "edit", events[6].Name)
 	require.JSONEq(t, `{"file_path":"/x","old_string":"a","new_string":"b"}`, events[6].Input)
 	require.Equal(t, int64(40), events[9].Usage.InputTokens)
+}
+
+func TestGrokSelectedEffortReachesTheCLI(t *testing.T) {
+	dir := t.TempDir()
+	arguments := filepath.Join(dir, "arguments")
+	t.Setenv("GROK_TEST_ARGUMENTS", arguments)
+	script := `#!/bin/sh
+printf '%s\n' "$@" > "$GROK_TEST_ARGUMENTS"
+read -r request
+echo '{"jsonrpc":"2.0","id":"1","result":{"protocolVersion":1}}'
+read -r request
+echo '{"jsonrpc":"2.0","id":"2","result":{"sessionId":"effort-test"}}'
+read -r request
+echo '{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}'
+cat >/dev/null
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "grok"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	model := &Model{Kind: config.TypeGrokCLI, ID: "grok-4.7", Dir: dir}
+	for _, effort := range []string{"", "low", "medium", "high", "xhigh"} {
+		require.NoError(t, model.Run(t.Context(), Turn{Prompt: "hi", Effort: effort, NoTools: true, Emit: func(Event) error { return nil }}))
+		data, err := os.ReadFile(arguments)
+		require.NoError(t, err)
+		args := strings.Split(strings.TrimSpace(string(data)), "\n")
+		want := []string{"agent", "--no-leader", "-m", "grok-4.7"}
+		if effort != "" {
+			want = append(want, "--reasoning-effort", effort)
+		}
+		want = append(want, "stdio")
+		require.Equal(t, want, args)
+	}
 }
 
 func TestAGYTurn(t *testing.T) {

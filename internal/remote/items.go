@@ -208,22 +208,6 @@ func assistantEntries(m message.Message, last bool, results map[string]resultAt,
 	calls := m.ToolCalls()
 	text := strings.TrimSpace(m.Content().Text)
 
-	if r := m.ReasoningContent(); strings.TrimSpace(r.Thinking) != "" {
-		it := Item{
-			ID:        m.ID + ":think",
-			Kind:      "thinking",
-			Time:      m.CreatedAt,
-			Text:      strings.TrimSpace(r.Thinking),
-			Seconds:   int(m.ThinkingDuration().Seconds()),
-			Streaming: r.FinishedAt == 0 && !finished && st.busy && last,
-		}
-		onlyThinking := text == "" && len(calls) == 0
-		e := entry{item: it, thinking: onlyThinking, foldable: onlyThinking}
-		if onlyThinking {
-			e.step = &Step{ID: it.ID, Kind: "think", Tool: "THINK", Target: firstLine(it.Text), State: stepStateThinking(it.Streaming), Started: m.CreatedAt}
-		}
-		out = append(out, e)
-	}
 	if text != "" {
 		out = append(out, entry{item: Item{
 			ID:        m.ID,
@@ -724,9 +708,6 @@ func stepDetail(msgs []message.Message, id string) (StepDetail, bool) {
 				res = &rr
 				resMsg = m.ID + "/r" + strconv.Itoa(i)
 			}
-		}
-		if strings.TrimSuffix(id, ":think") == m.ID && strings.HasSuffix(id, ":think") {
-			return StepDetail{ID: id, Output: m.ReasoningContent().Thinking}, true
 		}
 	}
 	if call == nil {

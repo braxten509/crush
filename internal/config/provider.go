@@ -160,11 +160,33 @@ func CatwalkUpdated() bool {
 // is not an error at all: the cached or embedded catalog is a sound answer, so
 // those are logged and the fallback is returned.
 func Providers(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, error) {
+	providers, err := modelCatalog(cfg, opts...)
+	if cfg.Options.DisableDefaultProviders {
+		// Abacus can use native capability metadata without making the
+		// disabled providers appear in the model picker or onboarding.
+		return nil, nil
+	}
+	return providers, err
+}
+
+// ModelCatalog returns metadata from the completed provider load; it neither
+// enables providers nor starts another network request.
+func ModelCatalog() []catwalk.Provider {
+	return providerList
+}
+
+func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, error) {
 	providerOnce.Do(func() {
 		var wg sync.WaitGroup
 		providers := csync.NewSlice[catwalk.Provider]()
 		autoupdate := !cfg.Options.DisableProviderAutoUpdate
 		customProvidersOnly := cfg.Options.DisableDefaultProviders
+		abacusDiscovery := false
+		if cfg.Providers != nil {
+			abacus, hasAbacus := cfg.Providers.Get(AbacusProviderID)
+			abacusDiscovery = hasAbacus && !abacus.Disable &&
+				(abacus.AutoDiscoverModels == nil && len(abacus.Models) == 0 || abacus.AutoDiscoverModels != nil && *abacus.AutoDiscoverModels)
+		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cancel()
@@ -175,7 +197,7 @@ func Providers(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, er
 		var hyperProvider catwalk.Provider
 
 		wg.Go(func() {
-			if customProvidersOnly {
+			if customProvidersOnly && !abacusDiscovery {
 				return
 			}
 			catwalkURL := cmp.Or(os.Getenv("CATWALK_URL"), defaultCatwalkURL)

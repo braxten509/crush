@@ -253,7 +253,7 @@ func spawnLine(line string) (delim string, ok bool) {
 
 // EditedFile returns the file a Crush edit or write call changes, if any.
 func EditedFile(name, input string) string {
-	if name != tools.EditToolName && name != tools.WriteToolName {
+	if name != tools.EditToolName && name != tools.MultiEditToolName && name != tools.WriteToolName {
 		return ""
 	}
 	var in struct {

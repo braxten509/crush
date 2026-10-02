@@ -748,6 +748,8 @@ func quickStyle(o quickStyleOpts) Styles {
 
 	s.Tool.NameNormal = base.Foreground(o.info)
 	s.Tool.NameNested = base.Foreground(o.info)
+	s.Tool.ChangesAdd = base.Foreground(o.diffInsertFg)
+	s.Tool.ChangesDel = base.Foreground(o.diffDeleteFg)
 
 	s.Tool.ParamMain = subtle
 	s.Tool.ParamKey = subtle

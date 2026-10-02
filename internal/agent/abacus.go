@@ -7,7 +7,6 @@ import (
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/openai"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/openai-go/option"
 )
 
@@ -32,18 +31,16 @@ func (c *coordinator) buildAbacusProvider(provider config.ProviderConfig, select
 	if headers == nil {
 		headers = make(map[string]string)
 	}
+	client := c.abacusHTTPClient(provider, model, selected)
 	if effective.Type == catwalk.TypeAnthropic {
-		return c.buildAnthropicProvider(baseURL, apiKey, headers, provider.ID)
+		return c.buildAnthropicProvider(baseURL, apiKey, headers, provider.ID, client)
 	}
 	if config.AbacusAPIFormat(model) != "responses" {
-		return c.buildOpenaiCompatProvider(baseURL, apiKey, headers, provider.ExtraBody, provider.ID, false)
+		return c.buildOpenaiCompatProvider(baseURL, apiKey, headers, provider.ExtraBody, provider.ID, false, client)
 	}
-	opts := []openai.Option{openai.WithAPIKey(apiKey), openai.WithBaseURL(baseURL), openai.WithUseResponsesAPI(), openai.WithResponsesAPIFunc(func(string) bool { return true })}
+	opts := []openai.Option{openai.WithAPIKey(apiKey), openai.WithBaseURL(baseURL), openai.WithUseResponsesAPI(), openai.WithResponsesAPIFunc(func(string) bool { return true }), openai.WithHTTPClient(client)}
 	if len(headers) > 0 {
 		opts = append(opts, openai.WithHeaders(headers))
-	}
-	if c.cfg.Config().Options.Debug {
-		opts = append(opts, openai.WithHTTPClient(log.NewHTTPClient()))
 	}
 	var sdkOptions []option.RequestOption
 	for key, value := range provider.ExtraBody {

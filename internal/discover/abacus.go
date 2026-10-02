@@ -6,26 +6,27 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/catwalk/pkg/embedded"
 )
 
-func abacusModel(raw json.RawMessage) (catwalk.Model, bool) {
+func abacusModel(raw json.RawMessage, providers ...catwalk.Provider) (catwalk.Model, bool) {
 	var entry struct {
-		ID                   string   `json:"id"`
-		DisplayName          string   `json:"display_name"`
-		ModelType            string   `json:"model_type"`
-		APIFormats           []string `json:"api_formats"`
-		InputModalities      []string `json:"input_modalities"`
-		ContextLength        int64    `json:"context_length"`
-		MaxCompletionTokens  int64    `json:"max_completion_tokens"`
-		InputTokenRate       string   `json:"input_token_rate"`
-		OutputTokenRate      string   `json:"output_token_rate"`
-		CachedInputTokenRate string   `json:"cached_input_token_rate"`
-		Thinking             bool     `json:"thinking"`
-		Tools                bool     `json:"tools"`
+		ID                     string   `json:"id"`
+		DisplayName            string   `json:"display_name"`
+		ModelType              string   `json:"model_type"`
+		APIFormats             []string `json:"api_formats"`
+		InputModalities        []string `json:"input_modalities"`
+		ContextLength          int64    `json:"context_length"`
+		MaxCompletionTokens    int64    `json:"max_completion_tokens"`
+		InputTokenRate         string   `json:"input_token_rate"`
+		OutputTokenRate        string   `json:"output_token_rate"`
+		CachedInputTokenRate   string   `json:"cached_input_token_rate"`
+		Thinking               bool     `json:"thinking"`
+		Tools                  bool     `json:"tools"`
+		ReasoningLevels        []string `json:"reasoning_levels"`
+		DefaultReasoningEffort string   `json:"default_reasoning_effort"`
 	}
 	if json.Unmarshal(raw, &entry) != nil || entry.ID == "" || entry.ModelType != "text_generation" || !entry.Tools || len(entry.APIFormats) == 0 {
 		return catwalk.Model{}, false
@@ -54,48 +55,56 @@ func abacusModel(raw json.RawMessage) (catwalk.Model, bool) {
 		CanReason:         entry.Thinking || strings.HasSuffix(entry.ID, "-thinking"),
 		Options:           catwalk.ModelOptions{ProviderOptions: map[string]any{"abacus_api_format": format}},
 	}
-	applyAbacusControls(&model)
+	applyAbacusControls(&model, providers)
+	if entry.ReasoningLevels != nil {
+		model.ReasoningLevels = slices.Clone(entry.ReasoningLevels)
+		model.DefaultReasoningEffort = entry.DefaultReasoningEffort
+		model.CanReason = model.CanReason || len(entry.ReasoningLevels) > 0
+	}
+	if !slices.Contains(model.ReasoningLevels, model.DefaultReasoningEffort) {
+		model.DefaultReasoningEffort = ""
+	}
 	return model, true
 }
 
-var abacusKnownModels = sync.OnceValue(func() map[string]catwalk.Model {
-	models := map[string]catwalk.Model{}
-	for _, provider := range embedded.GetAll() {
+func applyAbacusControls(model *catwalk.Model, providers []catwalk.Provider) {
+	if len(providers) == 0 {
+		providers = embedded.GetAll()
+	}
+	// Provider namespaces and the optional thinking label do not identify a
+	// different version. Never replace version numbers or infer a sibling's
+	// controls (for example, GPT-6 Sol and Astra have different effort levels).
+	identity := func(id string) string {
+		id = strings.ToLower(id)
+		if i := strings.LastIndex(id, "/"); i >= 0 {
+			id = id[i+1:]
+		}
+		return strings.TrimSuffix(id, "-thinking")
+	}
+	name := func(value string) string {
+		return strings.ToLower(strings.NewReplacer(" ", "", "-", "", "_", "").Replace(value))
+	}
+	var matches []catwalk.Model
+	for _, provider := range providers {
 		switch string(provider.ID) {
-		case "anthropic", "openai", "gemini", "xai", "deepseek", "zai":
-			for _, model := range provider.Models {
-				models[strings.ToLower(model.ID)] = model
+		case "anthropic", "openai", "gemini", "xai", "deepseek", "zai", "minimax", "moonshotai":
+			for _, known := range provider.Models {
+				if identity(known.ID) == identity(model.ID) {
+					model.CanReason = known.CanReason || model.CanReason
+					model.ReasoningLevels = slices.Clone(known.ReasoningLevels)
+					model.DefaultReasoningEffort = known.DefaultReasoningEffort
+					return
+				}
+				if model.Name != "" && known.Name != "" && name(known.Name) == name(model.Name) {
+					matches = append(matches, known)
+				}
 			}
 		}
 	}
-	return models
-})
-
-func applyAbacusControls(model *catwalk.Model) {
-	id := strings.ToLower(strings.TrimSuffix(model.ID, "-thinking"))
-	knownID := id
-	switch {
-	case strings.HasPrefix(id, "claude-opus-5-5"):
-		knownID = "claude-opus-5"
-	case strings.HasPrefix(id, "claude-sonnet-5-5"):
-		knownID = "claude-sonnet-5"
-	case strings.HasPrefix(id, "gpt-6"):
-		knownID = "gpt-6-astra"
-	case strings.Contains(id, "deepseek-v4"):
-		if strings.Contains(id, "pro") {
-			knownID = "deepseek-v4-pro"
-		} else {
-			knownID = "deepseek-v4-flash"
-		}
-	case strings.HasPrefix(id, "zai-org/"):
-		knownID = strings.TrimPrefix(id, "zai-org/")
-	}
-	if known, ok := abacusKnownModels()[knownID]; ok {
+	if len(matches) == 1 {
+		known := matches[0]
 		model.CanReason = known.CanReason || model.CanReason
 		model.ReasoningLevels = slices.Clone(known.ReasoningLevels)
 		model.DefaultReasoningEffort = known.DefaultReasoningEffort
-	}
-	if strings.HasPrefix(id, "claude-opus-5-5") {
-		model.DefaultReasoningEffort = "medium"
 	}
 }

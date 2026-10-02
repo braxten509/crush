@@ -17,6 +17,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/shell"
@@ -199,7 +200,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 	return fantasy.NewAgentTool(
 		BashToolName,
 		string(bashDescription(attribution, modelID)),
-		func(ctx context.Context, params BashParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params BashParams, call fantasy.ToolCall) (toolResponse fantasy.ToolResponse, resultErr error) {
 			if params.Command == "" {
 				return fantasy.NewTextErrorResponse("missing command"), nil
 			}
@@ -249,6 +250,9 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				}
 			}
 
+			ctx, report := filechange.WithCommandReview(ctx, execWorkingDir, config.GlobalCacheDir(), filepath.Dir(config.GlobalConfigData()))
+			defer func() { toolResponse.Metadata = filechange.WithReview(toolResponse.Metadata, report.Finish()) }()
+
 			// A long leading sleep only stalls the agent, so it runs in the
 			// background instead, as Claude Code does.
 			movedSleep := !params.RunInBackground && LeadingSleep(params.Command)
@@ -260,7 +264,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				bgManager := shell.GetBackgroundShellManager()
 				bgManager.Cleanup()
 				// Use background context so it continues after tool returns
-				bgShell, err := bgManager.Start(context.Background(), execWorkingDir, blockFuncs(), params.Command, params.Description, shellEnv...)
+				bgShell, err := bgManager.Start(context.WithoutCancel(ctx), execWorkingDir, blockFuncs(), params.Command, params.Description, shellEnv...)
 				if err != nil {
 					return fantasy.ToolResponse{}, fmt.Errorf("error starting background shell: %w", err)
 				}
@@ -318,7 +322,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			// Start with detached context so it can survive if moved to background
 			bgManager := shell.GetBackgroundShellManager()
 			bgManager.Cleanup()
-			bgShell, err := bgManager.Start(context.Background(), execWorkingDir, blockFuncs(), params.Command, params.Description, shellEnv...)
+			bgShell, err := bgManager.Start(context.WithoutCancel(ctx), execWorkingDir, blockFuncs(), params.Command, params.Description, shellEnv...)
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error starting shell: %w", err)
 			}

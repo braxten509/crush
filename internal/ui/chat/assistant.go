@@ -182,6 +182,7 @@ type AssistantMessageItem struct {
 	sty               *styles.Styles
 	anim              *anim.Anim
 	thinkingViewMode  thinkingViewMode
+	hideReasoning     bool
 	thinkingBoxHeight int // Tracks the rendered thinking box height for click detection.
 
 	// planAgent marks this item as plan-agent output. While the plan
@@ -234,6 +235,12 @@ var _ Expandable = (*AssistantMessageItem)(nil)
 
 // NewAssistantMessageItem creates a new AssistantMessageItem.
 func NewAssistantMessageItem(sty *styles.Styles, message *message.Message) MessageItem {
+	return newAssistantMessageItem(sty, message, true)
+}
+
+// Keep the low-level renderer separate from the chat's visibility policy.
+// All normal chat items hide reasoning, regardless of provider or view mode.
+func newAssistantMessageItem(sty *styles.Styles, message *message.Message, hideReasoning bool) MessageItem {
 	v := list.NewVersioned()
 	a := &AssistantMessageItem{
 		Versioned:                v,
@@ -241,6 +248,7 @@ func NewAssistantMessageItem(sty *styles.Styles, message *message.Message) Messa
 		cachedMessageItem:        &cachedMessageItem{},
 		focusableMessageItem:     newFocusableMessageItem(v),
 		message:                  message,
+		hideReasoning:            hideReasoning,
 		sty:                      sty,
 	}
 
@@ -407,7 +415,10 @@ func (a *AssistantMessageItem) compositionKey() uint64 {
 // render is recomputed.
 func (a *AssistantMessageItem) renderMessageContent(width int) (string, int) {
 	var messageParts []string
-	thinking := strings.TrimSpace(a.message.ReasoningContent().Thinking)
+	thinking := ""
+	if !a.hideReasoning {
+		thinking = strings.TrimSpace(a.message.ReasoningContent().Thinking)
+	}
 	content := strings.TrimSpace(a.message.Content().Text)
 
 	if thinking != "" {
@@ -461,6 +472,9 @@ func (a *AssistantMessageItem) renderMessageContent(width int) (string, int) {
 // hash from the saved state rather than re-hashing the entire
 // accumulated text. See CHARM-1785.
 func (a *AssistantMessageItem) thinkingKey() (uint64, uint64) {
+	if a.hideReasoning {
+		return 0, 0
+	}
 	thinking := a.message.ReasoningContent().Thinking
 	srcHash := a.thinkingHashIncremental(thinking)
 
@@ -869,6 +883,9 @@ func (a *AssistantMessageItem) clearCache() {
 // there is nothing to expand, and mutating the view mode would
 // thrash the thinking-section cache key for no visible benefit.
 func (a *AssistantMessageItem) ToggleExpanded() bool {
+	if a.hideReasoning {
+		return false
+	}
 	if strings.TrimSpace(a.message.ReasoningContent().Thinking) == "" {
 		return a.thinkingViewMode != thinkingCollapsed
 	}
@@ -923,7 +940,7 @@ func (a *AssistantMessageItem) tailWindowWouldTruncate() bool {
 // path. Toggling here directly would double-toggle because the caller always
 // runs the generic path after a handled click.
 func (a *AssistantMessageItem) HandleMouseClick(btn ansi.MouseButton, x, y int) bool {
-	if btn != ansi.MouseLeft {
+	if a.hideReasoning || btn != ansi.MouseLeft {
 		return false
 	}
 	// Only the thinking box is clickable; other regions of the assistant

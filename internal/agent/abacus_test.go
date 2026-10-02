@@ -15,17 +15,41 @@ import (
 )
 
 func TestAbacusNativeRequestsCarryModelControls(t *testing.T) {
-	for _, test := range []struct{ id, path, effort, tier string }{
-		{"claude-opus-5-5-thinking", "/v1/messages", "max", ""},
-		{"gpt-6.1-sol", "/v1/responses", "xhigh", "fast"},
-		{"gpt-5.3-codex", "/v1/responses", "high", ""},
-		{"gemini-3.8-flash", "/v1/chat/completions", "low", ""},
+	for _, test := range []struct {
+		id, path, effort, tier string
+		renamed                bool
+	}{
+		{"claude-opus-5-5", "/v1/messages", "max", "", false},
+		{"gpt-6.1-sol", "/v1/responses", "xhigh", "fast", false},
+		{"gpt-5.3-codex", "/v1/responses", "high", "", false},
+		{"gemini-3.8-flash", "/v1/chat/completions", "low", "", false},
+		{"claude-opus-5-5-thinking", "/v1/messages", "max", "", true},
+		{"gpt-6.1-sol", "/v1/responses", "xhigh", "fast", true},
+		{"gemini-3.8-flash", "/v1/chat/completions", "low", "", true},
 	} {
 		t.Run(test.id, func(t *testing.T) {
 			var received map[string]any
+			modelID := test.id
+			if test.renamed {
+				modelID += "-current"
+			}
+			name := test.id + " display name"
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/v1/models" {
+					format := map[string]string{"/v1/messages": "anthropic", "/v1/responses": "responses", "/v1/chat/completions": "openai"}[test.path]
+					require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{
+						"id": modelID, "display_name": name, "model_type": "text_generation", "tools": true,
+						"api_formats": []string{format}, "reasoning_levels": []string{test.effort}, "max_completion_tokens": 128000,
+					}}}))
+					return
+				}
 				require.Equal(t, test.path, r.URL.Path)
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&received))
+				if test.renamed && received["model"] == test.id {
+					w.WriteHeader(http.StatusNotFound)
+					_, _ = w.Write([]byte(`{"error":{"message":"Unknown model"}}`))
+					return
+				}
 				w.Header().Set("Content-Type", "application/json")
 				switch test.path {
 				case "/v1/messages":
@@ -39,7 +63,7 @@ func TestAbacusNativeRequestsCarryModelControls(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			catalog := catwalk.Model{ID: test.id, CanReason: true, ReasoningLevels: []string{test.effort}, DefaultMaxTokens: 128000}
+			catalog := catwalk.Model{ID: test.id, Name: name, CanReason: true, ReasoningLevels: []string{test.effort}, DefaultMaxTokens: 128000}
 			provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, BaseURL: server.URL + "/v1", APIKey: "test-key", Models: []catwalk.Model{catalog}}
 			selected := config.SelectedModel{Provider: provider.ID, Model: test.id, ReasoningEffort: test.effort, ServiceTier: test.tier}
 			c := &coordinator{cfg: config.NewTestStore(&config.Config{Options: &config.Options{}})}
@@ -54,7 +78,7 @@ func TestAbacusNativeRequestsCarryModelControls(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, int64(2), response.Usage.OutputTokens)
-			require.Equal(t, test.id, received["model"])
+			require.Equal(t, modelID, received["model"])
 			switch test.path {
 			case "/v1/messages":
 				require.Equal(t, test.effort, received["output_config"].(map[string]any)["effort"])

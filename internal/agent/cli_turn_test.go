@@ -143,3 +143,22 @@ func TestCLICompactionAfterTools(t *testing.T) {
 	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventReasoning, Text: "Continuing"}))
 	require.Equal(t, []bool{true, false}, statuses, "normal output must clear compaction even without an end event")
 }
+
+func TestCLISteerImagesWithoutBlockingFollowingText(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sa := NewSessionAgent(SessionAgentOptions{Sessions: env.sessions, Messages: env.messages}).(*sessionAgent)
+	s := &cliSteps{ctx: t.Context(), a: sa, sessionID: "image-steering"}
+	image := message.Attachment{MimeType: "image/png", FileName: "screen.png", Content: []byte("image bytes")}
+	sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "look at this", Attachments: []message.Attachment{image}})
+	sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "also check the model"})
+	text, images := s.steerWithImages()
+	require.Equal(t, "look at this\n\nalso check the model", text)
+	require.Equal(t, []message.Attachment{image}, images)
+	// A failed or unacknowledged delivery must still restore both complete requests in order.
+	s.returnUnsteered()
+	queued, _ := sa.drainQueueForStep(s.sessionID)
+	require.Len(t, queued, 2)
+	require.Equal(t, image, queued[0].Attachments[0])
+	require.Equal(t, "also check the model", queued[1].Prompt)
+}

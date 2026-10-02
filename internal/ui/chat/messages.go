@@ -484,10 +484,11 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, toolResults m
 // empty message.
 func ShouldRenderAssistantMessage(msg *message.Message) bool {
 	content := strings.TrimSpace(msg.Content().Text)
-	thinking := strings.TrimSpace(msg.ReasoningContent().Thinking)
 	isCancelled := msg.FinishReason() == message.FinishReasonCanceled
 	hasToolCalls := len(msg.ToolCalls()) > 0
-	return !hasToolCalls || content != "" || thinking != "" || msg.IsThinking() || msg.IsErrorLike() || isCancelled
+	// Keep a live status before the first reply/tool, but do not leave empty
+	// thinking-only rows behind when a turn finishes or hands off to tools.
+	return content != "" || msg.IsErrorLike() || isCancelled || (!msg.IsFinished() && !hasToolCalls)
 }
 
 // BuildToolResultMap creates a map of tool call IDs to their results from a list of messages.

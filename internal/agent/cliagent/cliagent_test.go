@@ -2,12 +2,17 @@ package cliagent
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,10 +98,23 @@ func TestCodexTurn(t *testing.T) {
 	require.Equal(t, int64(10), events[8].Usage.InputTokens)
 }
 
+func TestUnwrapShellMixedAndNestedQuotes(t *testing.T) {
+	command := "python3 - <<'PY'\nprint('hello\\n')\nPY"
+	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'" }
+	wrapped := "/bin/zsh -lc " + quote(command)
+	require.Equal(t, command, unwrapShell(wrapped))
+	require.Equal(t, command, unwrapShell("/bin/zsh -lc "+quote(wrapped)))
+	// Mixed segments do not have to end with the quote used at the start.
+	require.Equal(t, "echo 'hello'", unwrapShell(`/bin/zsh -lc 'echo '"'hello'"`))
+}
+
 func TestHelpers(t *testing.T) {
 	require.Equal(t, "echo 'a b'", unwrapShell(`/bin/zsh -lc 'echo '\''a b'\'''`))
 	require.Equal(t, `say "x" $HOME`, unwrapShell(`/bin/bash -lc "say \"x\" \$HOME"`))
 	require.Equal(t, "ls -la", unwrapShell("ls -la"))
+	command := "python3 - <<'PY'\nprint('hello\\n')\nPY"
+	require.Equal(t, command, unwrapShell("/bin/zsh -lc "+strconv.Quote(command)))
+	require.Equal(t, command, unwrapShell("/bin/zsh -lc '"+strings.ReplaceAll(command, "'", `'\''`)+"'"))
 	require.Equal(t, "not numbered\n  1\tx", stripLineNumbers("not numbered\n  1\tx"))
 
 	name, input := claudeTool("mcp__github__get_issue", []byte(`{"n":1}`))
@@ -110,4 +128,46 @@ func types(events []Event) []EventType {
 		out[i] = e.Type
 	}
 	return out
+}
+
+func TestCodexNestedShellReview(t *testing.T) {
+	outside := t.TempDir()
+	command := fmt.Sprintf("python3 - <<'PY'\nfrom pathlib import Path\nPath(%q).write_text('hello\\n')\nPY", filepath.Join(outside, "hello.txt"))
+	commandJSON, err := json.Marshal(command)
+	require.NoError(t, err)
+	bin := t.TempDir()
+	script := fmt.Sprintf(`#!/usr/bin/python3
+import json,sys,subprocess,shlex
+sys.stdin.readline()
+def send(value): print(json.dumps(value),flush=True)
+send({'id':'1','result':{}})
+send({'id':'2','result':{'thread':{'id':'fixture'}}})
+send({'id':'3','result':{'turn':{'id':'turn'}}})
+command = %s
+inner = shlex.join(['/bin/sh','-lc',command])
+reported = shlex.join(['/bin/sh','-lc',inner])
+send({'method':'item/started','params':{'item':{'type':'commandExecution','id':'write','command':reported}}})
+subprocess.run(['/bin/sh','-lc',inner],check=True)
+send({'method':'item/completed','params':{'item':{'type':'commandExecution','id':'write','status':'completed','aggregatedOutput':'','exitCode':0}}})
+send({'method':'turn/completed','params':{'turn':{'id':'turn','status':'completed'}}})
+sys.stdin.read()
+`, commandJSON)
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	events, err := collect(t, "codex", "")
+	require.NoError(t, err)
+	found := false
+	for _, event := range events {
+		if event.Type != EventToolResult {
+			continue
+		}
+		_, review := filechange.TakeReview(event.Metadata)
+		require.NotNil(t, review, "nested shell writes must reach the diff review")
+		require.Len(t, review.Changes, 1)
+		require.Equal(t, filepath.Join(outside, "hello.txt"), review.Changes[0].Path)
+		require.Nil(t, review.Changes[0].Before)
+		require.Equal(t, "hello\n", review.Changes[0].After.Content)
+		found = true
+	}
+	require.True(t, found)
 }

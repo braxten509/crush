@@ -367,6 +367,10 @@ type Styles struct {
 		NameNormal lipgloss.Style // Top-level tool name
 		NameNested lipgloss.Style // Nested child tool name (inside Agent/Agentic Fetch)
 
+		// Line counts of a tool group's file changes (+N −N)
+		ChangesAdd lipgloss.Style
+		ChangesDel lipgloss.Style
+
 		// Parameter list styles
 		ParamMain lipgloss.Style
 		ParamKey  lipgloss.Style

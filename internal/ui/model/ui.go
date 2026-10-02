@@ -608,7 +608,7 @@ func (m *UI) Init() tea.Cmd {
 		}
 	}
 	// load the user commands async
-	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs())
+	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs(), m.checkCLIUpdates(false))
 	// Prime the memoized LSP state off-thread.
 	if cmd := m.requestLSPRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -1209,6 +1209,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case DelayedClickMsg:
 		// Handle delayed single-click action (e.g., expansion).
 		m.chat.HandleDelayedClick(msg)
+		if g := m.chat.TakeChangesRequest(); g != nil {
+			m.dialog.OpenDialog(dialog.NewChanges(m.com, g.ChangesTitle(), g.Changes()))
+		}
 	case tea.MouseClickMsg:
 		// Pass mouse events to dialogs first if any are open.
 		if m.dialog.HasDialogs() {
@@ -1591,6 +1594,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			TTL:  ttl,
 		})
 		cmds = append(cmds, clearInfoMsgCmd(ttl))
+	case cliUpdatesMsg:
+		cmds = append(cmds, m.handleCLIUpdates(msg))
+	case cliUpdatesInstalledMsg:
+		cmds = append(cmds, m.handleCLIUpdatesInstalled(msg))
 	case workspace.ConnectionEvent:
 		cmds = append(cmds, m.handleConnectionEvent(msg)...)
 	case util.ClearStatusMsg:
@@ -2000,11 +2007,16 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 	}
 
 	shouldRenderAssistant := chat.ShouldRenderAssistantMessage(&msg)
-	// If the message of the assistant does not have any response just tool
-	// calls we need to remove it, but keep the info item per finished turn
-	// renders so the footer (model/provider/duration) remains visible.
-	if !shouldRenderAssistant && len(msg.ToolCalls()) > 0 && existingItem != nil {
+	// Remove empty status/reasoning rows after a step finishes or hands off
+	// to tools. The separate model/provider/duration footer stays visible.
+	if !shouldRenderAssistant && existingItem != nil {
 		m.chat.RemoveMessage(msg.ID)
+	} else if shouldRenderAssistant && existingItem == nil && msg.Role == message.Assistant {
+		// A previously hidden reasoning/tool-only step can acquire reply text
+		// later in the stream. Restore that visible reply without its thoughts.
+		item := chat.NewAssistantMessageItem(m.com.Styles, &msg).(*chat.AssistantMessageItem)
+		item.SetPlanAgent(m.mode == uiInputModePlan)
+		m.chat.AppendMessages(item)
 	}
 
 	// The info item shows for every turn with a Prism-routed model, and
@@ -2288,6 +2300,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			return util.NewInfoMsg("Transparent background " + status)
 		})
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionCheckCLIUpdates:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.checkCLIUpdates(true))
 	case dialog.ActionToggleComposerFocusOnly:
 		newValue := !m.composerFocusOnly()
 		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.composer_focus_only", newValue); err != nil {

@@ -27,7 +27,9 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
@@ -100,6 +102,8 @@ type Turn struct {
 	// returns and emit EventUserMessage with the same text once the CLI
 	// takes it in. Anything never confirmed is Crush's to run later.
 	Steer func() string
+	// SteerInput preserves images for drivers with native multimodal steering.
+	SteerInput func() (string, []message.Attachment)
 	// SteerReady wakes the driver as soon as a prompt is queued. Polling
 	// remains a fallback for prompts queued before the driver starts.
 	SteerReady <-chan struct{}
@@ -364,7 +368,12 @@ var OnUnprompted func(sessionID string)
 // ready says the CLI can take one. The returned stop func is idempotent;
 // once it returns, send is never called again.
 func pollSteer(t Turn, ready func() bool, send func(text string)) (stop func()) {
-	if t.Steer == nil || t.NoTools {
+	t.SteerInput = nil // Text-only drivers leave images queued, preserving their ordering.
+	return pollSteerInput(t, ready, func(text string, _ []message.Attachment) { send(text) })
+}
+
+func pollSteerInput(t Turn, ready func() bool, send func(string, []message.Attachment)) (stop func()) {
+	if (t.Steer == nil && t.SteerInput == nil) || t.NoTools {
 		return func() {}
 	}
 	var (
@@ -384,8 +393,15 @@ func pollSteer(t Turn, ready func() bool, send func(text string)) (stop func()) 
 			}
 			mu.Lock()
 			if !stopped && ready() {
-				if text := t.Steer(); text != "" {
-					send(text)
+				var text string
+				var attachments []message.Attachment
+				if t.SteerInput != nil {
+					text, attachments = t.SteerInput()
+				} else {
+					text = t.Steer()
+				}
+				if text != "" || len(attachments) != 0 {
+					send(text, attachments)
 				}
 			}
 			mu.Unlock()
@@ -497,13 +513,14 @@ func (s *steered) pending() int {
 
 // proc is a CLI child process speaking newline-delimited JSON on stdio.
 type proc struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	lines  *bufio.Scanner
-	stderr *tailBuffer
-	mu     sync.Mutex
-	closed bool
-	quit   chan struct{} // closed by finish; see readLines
+	fileReview *filechange.ProcessReview
+	cmd        *exec.Cmd
+	stdin      io.WriteCloser
+	lines      *bufio.Scanner
+	stderr     *tailBuffer
+	mu         sync.Mutex
+	closed     bool
+	quit       chan struct{} // closed by finish; see readLines
 }
 
 func startProc(dir, name string, args ...string) (*proc, error) {
@@ -515,7 +532,15 @@ func startProcEnv(dir string, env []string, name string, args ...string) (*proc,
 	return startProcCommand(exec.Command(name, args...), dir, env)
 }
 
+func startReviewProc(dir string, env []string, review bool, name string, args ...string) (*proc, error) {
+	return startProcCommandReview(exec.Command(name, args...), dir, env, review)
+}
+
 func startProcCommand(cmd *exec.Cmd, dir string, env []string) (*proc, error) {
+	return startProcCommandReview(cmd, dir, env, false)
+}
+
+func startProcCommandReview(cmd *exec.Cmd, dir string, env []string, review bool) (*proc, error) {
 	cmd.Dir = dir
 	if env != nil {
 		cmd.Env = append(os.Environ(), env...)
@@ -533,7 +558,14 @@ func startProcCommand(cmd *exec.Cmd, dir string, env []string) (*proc, error) {
 	cmd.Stderr = p.stderr
 	p.lines = bufio.NewScanner(stdout)
 	p.lines.Buffer(make([]byte, 0, 1<<20), 64<<20)
-	if err := cmd.Start(); err != nil {
+	if review {
+		p.fileReview, err = filechange.StartProcess(cmd, dir, config.GlobalCacheDir(), filepath.Dir(config.GlobalConfigData()))
+	} else {
+		err = cmd.Start()
+	}
+	if err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
 		return nil, fmt.Errorf("starting %s: %w", cmd.Path, err)
 	}
 	return p, nil
@@ -592,7 +624,7 @@ func (p *proc) finish() {
 	p.closeInput()
 	timer := time.AfterFunc(5*time.Second, p.kill)
 	defer timer.Stop()
-	if err := p.cmd.Wait(); err != nil {
+	if err := p.fileReview.Wait(p.cmd); err != nil {
 		slog.Debug("Agent CLI exited", "cmd", p.cmd.Path, "error", err, "stderr", p.stderr.String())
 	}
 }
@@ -712,4 +744,25 @@ func lastLines(s string, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// Observe shell tool calls at the protocol boundary so mutations are attached
+// to the action which made them, including tools that exit with an error.
+func (p *proc) reviewEvents(emit func(Event) error) func(Event) error {
+	return func(event Event) error {
+		if p.fileReview != nil {
+			if event.Type == EventToolCall && event.Name == tools.BashToolName {
+				var input struct {
+					Command string `json:"command"`
+				}
+				if json.Unmarshal([]byte(event.Input), &input) == nil {
+					p.fileReview.Begin(event.ID, input.Command)
+				}
+			}
+			if event.Type == EventToolResult {
+				event.Metadata = filechange.WithReview(event.Metadata, p.fileReview.End(event.ID))
+			}
+		}
+		return emit(event)
+	}
 }

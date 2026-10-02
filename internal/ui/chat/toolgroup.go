@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/anim"
+	"github.com/charmbracelet/crush/internal/ui/diffreview"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
@@ -21,7 +22,7 @@ const toolGroupShown = 5
 
 // ToolGroupItem folds a run of tool calls (and the thinking-only steps
 // between them) into one status line that says what it is doing.
-// Clicking it shows the last few steps in full.
+// The disclosure expands its steps; the action count opens any file changes.
 type ToolGroupItem struct {
 	*list.Versioned
 	*highlightableMessageItem
@@ -51,6 +52,13 @@ type ToolGroupItem struct {
 	runningSince  time.Time
 	backgrounded  string // the command Ctrl+B was pressed for
 	hinted        bool
+	// changes caches [ToolGroupItem.Changes] for changesKey. changesCols
+	// covers the action-count label which opens the review; changesRequested
+	// records a click on that label.
+	changesKey       string
+	changes          []diffreview.File
+	changesCols      [2]int
+	changesRequested bool
 }
 
 // backgroundHintAfter is how long a command runs before the group offers
@@ -334,10 +342,14 @@ func (g *ToolGroupItem) syncCompact() {
 	}
 }
 
-// HandleMouseClick implements list.MouseClickable. The status line toggles
-// the group; a click on a shown step toggles that step instead.
+// HandleMouseClick implements list.MouseClickable. The action count opens
+// changes; the disclosure and the rest of the header toggle the group.
 func (g *ToolGroupItem) HandleMouseClick(btn ansi.MouseButton, x, y int) bool {
 	if btn != ansi.MouseLeft {
+		return false
+	}
+	if y == 0 && x >= g.changesCols[0] && x < g.changesCols[1] {
+		g.changesRequested = true
 		return false
 	}
 	if !g.expanded || y == 0 {
@@ -417,15 +429,12 @@ func (g *ToolGroupItem) header(width int) string {
 		if isMovedToBackground(t) {
 			moved++
 		}
-		if f := editedFile(t); f != "" && !seen[f] {
+		if f := editedFile(t); f != "" && !seen[f] && !ignoredReviewPath(f, "") {
 			seen[f] = true
 			edited = append(edited, filepath.Base(f))
 		}
 	}
-	count := fmt.Sprintf("%d action", tools)
-	if tools != 1 {
-		count += "s"
-	}
+	count := actionCount(tools)
 
 	status := g.status()
 	icon := g.sty.Tool.IconSuccess.Render()
@@ -446,12 +455,42 @@ func (g *ToolGroupItem) header(width int) string {
 		}
 	}
 	line := icon + " " + g.sty.Tool.NameNormal.Render(count)
-	if len(edited) > 0 && status == "" {
-		files := strings.Join(edited[:min(3, len(edited))], ", ")
-		if len(edited) > 3 {
-			files += fmt.Sprintf(" +%d", len(edited)-3)
+	// The original action label, immediately after the status icon, opens
+	// the review. File names and line counts remain a passive summary.
+	g.changesCols = [2]int{}
+	changes := g.Changes()
+	if len(changes) > 0 {
+		start := ansi.StringWidth(marker + icon + " ")
+		end := min(width, start+ansi.StringWidth(count))
+		if end > start {
+			g.changesCols = [2]int{MessageLeftPaddingTotal + start, MessageLeftPaddingTotal + end}
 		}
-		line += g.sty.Tool.ParamKey.Render(" · edited " + files)
+	}
+	// Shells, MCP tools and failed commands can change files too. Use the
+	// captured filesystem changes for the file labels whenever available.
+	if len(changes) > 0 {
+		edited = nil
+		for _, change := range changes {
+			edited = append(edited, filepath.Base(change.Path))
+		}
+	}
+	if (len(edited) > 0 && status == "") || len(changes) > 0 {
+		line += g.sty.Tool.ParamKey.Render(" · ")
+		if len(edited) > 0 && status == "" {
+			files := strings.Join(edited[:min(3, len(edited))], ", ")
+			if len(edited) > 3 {
+				files += fmt.Sprintf(" +%d", len(edited)-3)
+			}
+			line += g.sty.Tool.ParamKey.Render("edited " + files)
+			if len(changes) > 0 {
+				line += " "
+			}
+		}
+		if len(changes) > 0 {
+			adds, dels := diffreview.Stats(changes)
+			line += g.sty.Tool.ChangesAdd.Render(fmt.Sprintf("+%d", adds)) + " " +
+				g.sty.Tool.ChangesDel.Render(fmt.Sprintf("−%d", dels))
+		}
 	}
 	if moved > 0 {
 		line += g.sty.Tool.ParamKey.Render(fmt.Sprintf(" · %d backgrounded", moved))

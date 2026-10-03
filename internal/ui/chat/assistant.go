@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -181,9 +182,14 @@ type AssistantMessageItem struct {
 	message           *message.Message
 	sty               *styles.Styles
 	anim              *anim.Anim
+	activity          activityTimer
 	thinkingViewMode  thinkingViewMode
 	hideReasoning     bool
 	thinkingBoxHeight int // Tracks the rendered thinking box height for click detection.
+
+	// bulletLine is the rendered line that opens the reply text and gets
+	// the "•" marker in its gutter, or -1 when there is no reply text.
+	bulletLine int
 
 	// planAgent marks this item as plan-agent output. While the plan
 	// streams (the message is not finished) and the plan-start marker
@@ -260,10 +266,11 @@ func newAssistantMessageItem(sty *styles.Styles, message *message.Message, hideR
 		LabelColor:  sty.WorkingLabelColor,
 		CycleColors: true,
 		Suffix: func() string {
-			return common.Elapsed()
+			return a.activity.elapsed(time.Now())
 		},
 		SuffixColor: sty.WorkingTimerColor,
 	})
+	a.syncActivity(time.Now())
 	return a
 }
 
@@ -274,6 +281,7 @@ func (a *AssistantMessageItem) Spinning() bool {
 
 // Advance implements [Animatable].
 func (a *AssistantMessageItem) Advance() bool {
+	a.syncActivity(time.Now())
 	if !a.isSpinning() || !a.anim.Advance() {
 		return false
 	}
@@ -295,10 +303,27 @@ func (a *AssistantMessageItem) ID() string {
 // RawRender implements [MessageItem].
 func (a *AssistantMessageItem) RawRender(width int) string {
 	cappedWidth := cappedMessageWidth(width)
+	a.bulletLine = -1
 
 	var spinner string
 	if a.isSpinning() {
 		spinner = a.renderSpinning()
+	}
+
+	if a.message.IsCompacting || a.message.IsSummaryMessage {
+		if spinner != "" {
+			return spinner
+		}
+		if a.message.IsSummaryMessage {
+			switch a.message.FinishReason() {
+			case message.FinishReasonError:
+				return a.renderError(cappedWidth)
+			case message.FinishReasonCanceled:
+				return a.sty.Messages.ThinkingFooterTitle.Render("Compaction canceled")
+			default:
+				return a.sty.Messages.ThinkingFooterTitle.Render("Conversation compacted")
+			}
+		}
 	}
 
 	content, height := a.renderMessageContent(cappedWidth)
@@ -342,9 +367,17 @@ func (a *AssistantMessageItem) Render(width int) string {
 	rendered := a.RawRender(width)
 	lines := strings.Split(rendered, "\n")
 	for i, line := range lines {
-		if a.focused {
+		switch {
+		case i == a.bulletLine:
+			// Each reply opens with a "•" in the gutter, like Codex.
+			bullet := a.sty.Messages.AssistantBullet
+			if a.focused {
+				bullet = bullet.Foreground(a.sty.Messages.AssistantFocused.GetBorderLeftForeground())
+			}
+			lines[i] = bullet.Render("•") + " " + line
+		case a.focused:
 			lines[i] = focused + line
-		} else {
+		default:
 			lines[i] = blurred + line
 		}
 	}
@@ -425,11 +458,26 @@ func (a *AssistantMessageItem) renderMessageContent(width int) (string, int) {
 		messageParts = append(messageParts, a.cachedThinking(width))
 	}
 
+	a.bulletLine = -1
 	if content != "" {
 		if thinking != "" {
 			messageParts = append(messageParts, "")
 		}
-		messageParts = append(messageParts, a.cachedContent(width))
+		rendered := a.cachedContent(width)
+		// Plan cards open with their own border, which is marker enough.
+		if !common.PlanStartMarkerPresent(a.message.Content().Text) && !common.PlanReadyMarkerPresent(a.message.Content().Text) {
+			start := lipgloss.Height(strings.Join(messageParts, "\n"))
+			if len(messageParts) == 0 {
+				start = 0
+			}
+			for i, line := range strings.Split(rendered, "\n") {
+				if strings.TrimSpace(ansi.Strip(line)) != "" {
+					a.bulletLine = start + i
+					break
+				}
+			}
+		}
+		messageParts = append(messageParts, rendered)
 	}
 
 	if a.message.IsFinished() {
@@ -780,15 +828,44 @@ func (a *AssistantMessageItem) renderMarkdown(content string, width int) string 
 	return a.streamingContent.Render(content, width, renderer)
 }
 
-func (a *AssistantMessageItem) renderSpinning() string {
+func (a *AssistantMessageItem) activityStatus(now time.Time) string {
+	if !a.isSpinning() {
+		return ""
+	}
 	if a.message.IsSummaryMessage || a.message.IsCompacting {
-		a.anim.SetLabel("Compacting...")
-	} else if a.message.IsThinking() {
-		a.anim.SetLabel("Thinking")
-	} else {
-		a.anim.SetLabel("Working")
+		return "Compacting conversation"
+	}
+	if a.message.Activity == "thinking" || a.message.IsThinking() {
+		return "Thinking"
+	}
+	if a.message.Activity == "responding" && now.Sub(time.Unix(a.message.ActivityAt, 0)) < 5*time.Second {
+		return "Responding"
+	}
+	return "Working"
+}
+
+func (a *AssistantMessageItem) syncActivity(now time.Time) string {
+	status := a.activityStatus(now)
+	a.activity.update(status, now)
+	return status
+}
+
+func (a *AssistantMessageItem) renderSpinning() string {
+	now := time.Now()
+	label := a.syncActivity(now)
+	a.anim.SetLabel(label)
+	if label == "Compacting conversation" {
+		return renderCompactingStatus(a.sty, a.activity.elapsed(now), a.anim.RenderEllipsis())
 	}
 	return a.anim.Render()
+}
+
+func renderCompactingStatus(sty *styles.Styles, elapsed, dots string) string {
+	label := lipgloss.NewStyle().Foreground(sty.WorkingLabelColor).Render("Compacting conversation") + dots
+	if elapsed != "" {
+		label += " " + lipgloss.NewStyle().Foreground(sty.WorkingTimerColor).Render(elapsed)
+	}
+	return label
 }
 
 // renderError renders an error or provider-refusal banner.
@@ -826,6 +903,7 @@ func (a *AssistantMessageItem) isSpinning() bool {
 // RawRender.
 func (a *AssistantMessageItem) SetMessage(msg *message.Message) {
 	a.message = msg
+	a.syncActivity(time.Now())
 	// Bump the F6 version even if the underlying *message.Message
 	// pointer is identical: callers may have mutated the message in
 	// place (delta append) and we cannot tell from here. The
@@ -839,6 +917,22 @@ func (a *AssistantMessageItem) SetMessage(msg *message.Message) {
 	// need an explicit drop here either. If the message started
 	// spinning the UI's animation clock picks it up on the next
 	// update.
+}
+
+// Cancel shows a cancellation before the agent's terminal event arrives.
+func (a *AssistantMessageItem) Canceled() bool {
+	return a.message.FinishReason() == message.FinishReasonCanceled
+}
+
+// Cancel shows a cancellation before the agent's terminal event arrives.
+func (a *AssistantMessageItem) Cancel() string {
+	if a.message.IsFinished() {
+		return ""
+	}
+	msg := a.message.Clone()
+	msg.AddFinish(message.FinishReasonCanceled, "", "")
+	a.SetMessage(&msg)
+	return msg.ID
 }
 
 // Finished implements list.Item. The assistant message is freezable

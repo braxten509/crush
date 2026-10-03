@@ -232,8 +232,8 @@ func TestPlanHandoffAdaptiveChoiceLayout(t *testing.T) {
 	require.Equal(t, firstY+1, secondY)
 }
 
-// The choice view carries the question badge; the badge must follow focus:
-// the focused icon while the editor is focused, the blurred icon when the
+// The choice view carries the question mark; it must follow focus: the
+// focused color while the editor is focused, the blurred color when the
 // chat has focus.
 func TestPlanHandoffChoiceQuestionBadgeFollowsFocus(t *testing.T) {
 	t.Parallel()
@@ -248,8 +248,9 @@ func TestPlanHandoffChoiceQuestionBadgeFollowsFocus(t *testing.T) {
 	require.Contains(t, focusedLine, "?")
 	require.Contains(t, focusedLine, planHandoffQuestion)
 	requirePlanHandoffColorEqual(t,
-		sty.Editor.PromptQuestionIconFocused.GetBackground(),
-		focused.CellAt(1+planHandoffIndent, 0).Style.Bg)
+		sty.Editor.PromptQuestionIconFocused.GetForeground(),
+		focused.CellAt(planHandoffIndent, 0).Style.Fg)
+	require.Nil(t, focused.CellAt(planHandoffIndent, 0).Style.Bg, "the mark has no chip")
 
 	p.SetFocused(false)
 	blurred := uv.NewScreenBuffer(80, p.Height(80))
@@ -258,8 +259,9 @@ func TestPlanHandoffChoiceQuestionBadgeFollowsFocus(t *testing.T) {
 	require.Contains(t, blurredLine, "?")
 	require.Contains(t, blurredLine, planHandoffQuestion)
 	requirePlanHandoffColorEqual(t,
-		sty.Editor.PromptQuestionIconBlurred.GetBackground(),
-		blurred.CellAt(1+planHandoffIndent, 0).Style.Bg)
+		sty.Editor.PromptQuestionIconBlurred.GetForeground(),
+		blurred.CellAt(planHandoffIndent, 0).Style.Fg)
+	require.Nil(t, blurred.CellAt(planHandoffIndent, 0).Style.Bg, "the mark has no chip")
 }
 
 // When the chat has focus the handoff must keep its focused layout — the

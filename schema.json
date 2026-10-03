@@ -510,6 +510,11 @@
     },
     "Options": {
       "properties": {
+        "auto_compact_token_limit": {
+          "type": "integer",
+          "minimum": 1000,
+          "description": "Global automatic compaction threshold in tokens; defaults to 400000"
+        },
         "context_paths": {
           "items": {
             "type": "string",
@@ -821,6 +826,10 @@
           ],
           "description": "Codex service tier; omitted inherits the CLI setting"
         },
+        "ultracode": {
+          "type": "boolean",
+          "description": "Turn on Claude Code's Ultracode (dynamic workflows on every task)"
+        },
         "think": {
           "type": "boolean",
           "description": "Enable thinking mode for Anthropic models that support reasoning"
@@ -932,6 +941,11 @@
           ],
           "description": "Exit banner style after quitting Crush",
           "default": "default"
+        },
+        "composer_focus_only": {
+          "type": "boolean",
+          "description": "Keep keyboard focus on the composer: Tab doesn't move focus and clicking the chat or sidebar doesn't take it. The chat still works with the mouse",
+          "default": false
         }
       },
       "additionalProperties": false,

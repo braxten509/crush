@@ -222,3 +222,5 @@ func TestSetMainAgent_PropagatesCoordinatorError(t *testing.T) {
 	err := b.SetMainAgent(ws.ID, "123")
 	require.ErrorIs(t, err, wantErr)
 }
+
+func (c *blockingCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }

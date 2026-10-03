@@ -1,7 +1,6 @@
 package dialog
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -168,20 +167,22 @@ func (s *SecureEntry) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	if s.saving {
 		mask = "Saving…"
 	}
+	// Only the field and its keys: the request's label is the title, and
+	// the file, placeholder and privacy notes were noise (user request).
 	body := []string{
-		line(s.request.Label),
-		t.Dialog.SecondaryText.Width(inner).Render(ansi.Hardwrap(s.request.File, max(1, inner), false)),
-		line(fmt.Sprintf("Replace: %s · occurrence %d", s.request.Placeholder, s.request.Occurrence)),
 		"",
 		t.Dialog.InputPrompt.Width(inner).Render("> " + mask),
 		"",
-		line("Saved only to this file · owner access only"),
-		line("The agent receives only saved/cancelled status."),
-		line(s.errorText),
-		line("enter save  ·  esc cancel  ·  ctrl+u clear"),
 	}
+	if s.errorText != "" {
+		body = append(body, line(s.errorText))
+	}
+	body = append(body, line("enter save  ·  esc cancel  ·  ctrl+u clear"))
 	rc := NewRenderContext(t, width)
 	rc.Title = "Secure entry"
+	if label := strings.TrimSpace(s.request.Label); label != "" {
+		rc.Title = label
+	}
 	rc.AddPart(lipgloss.JoinVertical(lipgloss.Left, body...))
 	view := rc.Render()
 	// Clip the result to tiny terminals without allowing wrapped frame overflow.

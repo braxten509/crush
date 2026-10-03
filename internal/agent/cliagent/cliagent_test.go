@@ -85,6 +85,7 @@ func TestCodexTurn(t *testing.T) {
 `)
 	events, err := collect(t, "codex", "")
 	require.NoError(t, err)
+	events = withoutActivity(events)
 	require.Equal(t, []EventType{
 		EventSession, EventText,
 		EventToolStart, EventToolCall, EventToolResult,

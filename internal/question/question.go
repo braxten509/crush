@@ -27,7 +27,15 @@ const (
 	TypeSingleChoice Type = "single_choice"
 	TypeMultiChoice  Type = "multi_choice"
 	TypeFreeText     Type = "free_text"
+	// TypeSecureEntry is a masked field that saves straight to a prepared
+	// file. Only `crush ask` in the local terminal shows it; the shared
+	// service refuses it, so it never reaches remote clients.
+	TypeSecureEntry Type = "secure_entry"
 )
+
+// ErrSecureEntryLocal is returned when a secure entry would leave the local
+// terminal.
+var ErrSecureEntryLocal = errors.New("secure_entry questions only work through crush ask in the local Crush terminal")
 
 // Choice represents a single selectable option.
 type Choice struct {
@@ -44,6 +52,9 @@ type Question struct {
 	Text        string   `json:"question"`
 	Description string   `json:"description,omitempty"`
 	Choices     []Choice `json:"choices,omitempty"`
+	// Selected lists the choice IDs a multi_choice question opens with
+	// checked.
+	Selected []string `json:"selected,omitempty"`
 }
 
 // Answer carries the user's response to a single Question.
@@ -106,6 +117,10 @@ func (q Question) Validate() error {
 	switch q.Type {
 	case TypeYesNo, TypeFreeText:
 		// No choices needed.
+	case TypeSecureEntry:
+		if len(q.Choices) > 0 {
+			return fmt.Errorf("%s: secure_entry takes no choices", label)
+		}
 	case TypeSingleChoice, TypeMultiChoice:
 		if len(q.Choices) < 2 {
 			return fmt.Errorf("%s: %s requires at least 2 choices in the \"choices\" array (got %d). Use \"choices\", not \"options\"", label, q.Type, len(q.Choices))
@@ -136,6 +151,37 @@ func (q Question) Validate() error {
 		return fmt.Errorf("%s: unknown type %q (must be yes_no, single_choice, multi_choice, or free_text)", label, q.Type)
 	}
 	return nil
+}
+
+// HasSecureEntry reports whether any question is a secure entry.
+func (r Request) HasSecureEntry() bool {
+	for _, q := range r.Questions {
+		if q.Type == TypeSecureEntry {
+			return true
+		}
+	}
+	return false
+}
+
+// Prepare fills in missing IDs and the confirm defaults of multi-question
+// batches.
+func (r *Request) Prepare() {
+	if r.ID == "" {
+		r.ID = uuid.New().String()
+	}
+	for i := range r.Questions {
+		if r.Questions[i].ID == "" {
+			r.Questions[i].ID = uuid.New().String()
+		}
+	}
+	if len(r.Questions) >= 2 {
+		if r.ConfirmTitle == "" {
+			r.ConfirmTitle = "Ready to go?"
+		}
+		if r.ConfirmDescription == "" {
+			r.ConfirmDescription = "Review your answers above and confirm."
+		}
+	}
 }
 
 // identifier returns a human-readable label for error messages.
@@ -227,24 +273,12 @@ func (s *questionService) SubscribeNotifications(ctx context.Context) <-chan pub
 
 // Ask publishes a request and blocks until the user answers.
 func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error) {
-	if req.ID == "" {
-		req.ID = uuid.New().String()
+	// Requests published here reach every client, including phones and
+	// servers, so secure entries never come through.
+	if req.HasSecureEntry() {
+		return nil, ErrSecureEntryLocal
 	}
-	for i := range req.Questions {
-		if req.Questions[i].ID == "" {
-			req.Questions[i].ID = uuid.New().String()
-		}
-	}
-
-	// Apply defaults for multi-question confirm fields.
-	if len(req.Questions) >= 2 {
-		if req.ConfirmTitle == "" {
-			req.ConfirmTitle = "Ready to go?"
-		}
-		if req.ConfirmDescription == "" {
-			req.ConfirmDescription = "Review your answers above and confirm."
-		}
-	}
+	req.Prepare()
 
 	if err := req.Validate(); err != nil {
 		return nil, err

@@ -29,6 +29,26 @@ func questionIconPrompt(sty *styles.Styles, focused bool) string {
 	return sty.Editor.PromptQuestionIconBlurred.Render()
 }
 
+// questionDescription renders a question's markdown description in the
+// text column, two cells in under the title (past the "?" mark), wrapped
+// to fit width. Shared by all question component types.
+func questionDescription(sty *styles.Styles, text string, width int) string {
+	w := max(1, width-2)
+	r := common.MarkdownRenderer(sty, w)
+	mu := common.LockMarkdownRenderer(r)
+	mu.Lock()
+	out, err := r.Render(text)
+	mu.Unlock()
+	if err != nil {
+		out = ansi.Wrap(text, w, "")
+	}
+	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	for i := range lines {
+		lines[i] = "  " + lines[i]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // choiceList is the shared base for single-choice and multi-choice
 // question components. It embeds questionEditor for fill-in, notes,
 // and editor handling. Concrete types embed it and only implement
@@ -393,15 +413,7 @@ func (c *choiceList) buildLines(innerWidth int, fillInPrefix string, itemFn choi
 
 // renderDescription renders the markdown description at width.
 func (c *choiceList) renderDescription(width int) string {
-	r := common.MarkdownRenderer(c.Styles, width)
-	mu := common.LockMarkdownRenderer(r)
-	mu.Lock()
-	out, err := r.Render(c.Request.Description)
-	mu.Unlock()
-	if err != nil {
-		return c.Request.Description
-	}
-	return strings.TrimSuffix(out, "\n")
+	return questionDescription(c.Styles, c.Request.Description, width)
 }
 
 // choiceItemRenderer renders a choice's label content as a string.

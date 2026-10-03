@@ -126,17 +126,21 @@ func contrastRatio(fg, bg string) float64 {
 
 func TestGruvboxDark_InlineCodeContrast(t *testing.T) {
 	// Regression test for the reported low-contrast inline code in Gruvbox
-	// Dark (bright red on the code background was only ~2.6:1).
+	// Dark. Inline code has no background chip, so its color must read on
+	// the chat background itself.
 	const minAA = 4.5
 	s, err := LoadTheme("gruvbox-dark")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 	code := s.Markdown.Code
-	if code.Color == nil || code.BackgroundColor == nil {
-		t.Fatal("inline code style is missing fg/bg colors")
+	if code.Color == nil {
+		t.Fatal("inline code style is missing its color")
 	}
-	if ratio := contrastRatio(*code.Color, *code.BackgroundColor); ratio < minAA {
+	if code.BackgroundColor != nil {
+		t.Fatal("inline code must not have a background chip")
+	}
+	if ratio := contrastRatio(*code.Color, "#282828"); ratio < minAA {
 		t.Errorf("gruvbox-dark inline code contrast %.2f is below WCAG AA (%.1f)", ratio, minAA)
 	}
 }

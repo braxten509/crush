@@ -9,7 +9,7 @@ import (
 func TestQueuedPromptWakesCLISteering(t *testing.T) {
 	t.Parallel()
 	sa := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
-	s := &cliSteps{ctx: t.Context(), a: sa, sessionID: "wake", steerReady: make(chan struct{}, 1)}
+	s := &cliSteps{running: toolRunningForSteer(), ctx: t.Context(), a: sa, sessionID: "wake", steerReady: make(chan struct{}, 1)}
 	sa.steering.Set(s.sessionID, s)
 	// enqueueCall runs under the dispatch lock in Run. Its notification
 	// must not wait for the driver's drain, which needs that same lock.
@@ -30,3 +30,7 @@ func TestQueuedPromptWakesCLISteering(t *testing.T) {
 	default:
 	}
 }
+
+// toolRunningForSteer marks a tool as running, the only time a turn takes
+// queued prompts in.
+func toolRunningForSteer() map[string]bool { return map[string]bool{"tool": true} }

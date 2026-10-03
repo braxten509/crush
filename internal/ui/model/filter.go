@@ -12,6 +12,8 @@ import (
 // terminal escape samples can queue ahead of later key presses.
 const inputFilterInterval = 16 * time.Millisecond
 
+const mouseWheelLines = 3
+
 // Filter coalesces high-frequency terminal mouse input before it reaches the
 // Bubble Tea update loop. It is safe for use with tea.WithFilter.
 type Filter struct {
@@ -86,14 +88,14 @@ func (f *Filter) allow(last *time.Time) bool {
 
 // wheelDeltas converts Bubble Tea's wheel button direction into signed scroll
 // deltas. Bubble Tea represents wheel movement as button presses, so we
-// synthesize a unit delta for each sample and let Filter aggregate the units
-// when events are coalesced.
+// synthesize three vertical lines per sample and let Filter aggregate those
+// lines when events are coalesced.
 func wheelDeltas(mouse tea.Mouse) (float64, float64) {
 	switch mouse.Button {
 	case tea.MouseWheelUp:
-		return 0, -1
+		return 0, -mouseWheelLines
 	case tea.MouseWheelDown:
-		return 0, 1
+		return 0, mouseWheelLines
 	case tea.MouseWheelLeft:
 		return -1, 0
 	case tea.MouseWheelRight:

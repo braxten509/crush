@@ -36,9 +36,10 @@ type FreeText struct {
 // freeTextMinEditorHeight and freeTextMaxEditorHeight bound the
 // answer textarea. It starts at the minimum and, when the form has
 // taller sibling tabs, grows at draw time to fill the shared form
-// height, capped at the maximum.
+// height, capped at the maximum. With the blank band row above it,
+// the minimum makes the same 3-row band as the composer.
 const (
-	freeTextMinEditorHeight = 3
+	freeTextMinEditorHeight = 2
 	freeTextMaxEditorHeight = 6
 )
 
@@ -122,19 +123,10 @@ func (d *FreeText) Height(width int) int {
 	h := sectionHeight(d.Request.Text, w-lipgloss.Width(iconPrompt)) // question
 	h++                                                              // blank
 	if d.Request.Description != "" {
-		r := common.MarkdownRenderer(d.Styles, w)
-		mu := common.LockMarkdownRenderer(r)
-		mu.Lock()
-		out, err := r.Render(d.Request.Description)
-		mu.Unlock()
-		if err == nil {
-			out = strings.TrimSuffix(out, "\n")
-			h += strings.Count(out, "\n") + 1
-		} else {
-			h += sectionHeight(d.Request.Description, w)
-		}
+		h += strings.Count(questionDescription(d.Styles, d.Request.Description, w), "\n") + 1
 		h++ // blank
 	}
+	h++                          // blank band row above the answer
 	h += freeTextMinEditorHeight // textarea (minimum; grows to fill at draw time)
 	h++                          // trailing blank for bottom padding
 	return h
@@ -151,13 +143,14 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	d.lastWidth = area.Dx()
 	viewport := area.Dy()
 
-	barActive := d.Styles.Editor.QuestionCursorBar.Render("┃ ")
-	const barInactive = "  "
-	bar := barInactive
+	// The answer field is drawn like the composer: a full-width band
+	// with the "›" mark in the 2-cell gutter and the text after it.
+	mark, rest := d.Styles.Editor.PromptNormalIconBlurred.Render(), d.Styles.Editor.PromptNormalBlurred.Render()
 	if d.focused {
-		bar = barActive
+		mark, rest = d.Styles.Editor.PromptNormalIconFocused.Render(), d.Styles.Editor.PromptNormalFocused.Render()
 	}
-	prefixWidth := lipgloss.Width(bar)
+	prefixWidth := lipgloss.Width(mark)
+	band := d.Styles.Editor.Textarea.Focused.Base.GetBackground()
 	iconPrompt := questionIconPrompt(d.Styles, d.focused)
 	iconWidth := lipgloss.Width(iconPrompt)
 
@@ -166,6 +159,7 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	type ftLine struct {
 		text    string
 		cursorX int
+		band    bool // paint the answer band across the whole row
 	}
 
 	// build renders the full content (header, description, textarea)
@@ -184,16 +178,7 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		lines = append(lines, ftLine{cursorX: -1}) // blank
 
 		if d.Request.Description != "" {
-			r := common.MarkdownRenderer(d.Styles, contentWidth)
-			mu := common.LockMarkdownRenderer(r)
-			mu.Lock()
-			desc, err := r.Render(d.Request.Description)
-			mu.Unlock()
-			if err != nil {
-				desc = d.Request.Description
-			}
-			desc = strings.TrimSuffix(desc, "\n")
-			for _, l := range strings.Split(desc, "\n") {
+			for _, l := range strings.Split(questionDescription(d.Styles, d.Request.Description, contentWidth), "\n") {
 				lines = append(lines, ftLine{text: l, cursorX: -1})
 			}
 			lines = append(lines, ftLine{cursorX: -1}) // blank
@@ -201,6 +186,7 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 		// Grow the textarea to fill the form height, bounded by the
 		// min and max editor heights.
+		lines = append(lines, ftLine{cursorX: -1, band: true}) // blank band row
 		headerLines := len(lines)
 		fill := viewport - headerLines - 1 // -1 for trailing padding
 		available := min(freeTextMaxEditorHeight, max(freeTextMinEditorHeight, fill))
@@ -208,13 +194,16 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		d.editor.SetWidth(contentWidth - 2 - prefixWidth)
 		tc := d.editor.Cursor()
 		for j, ln := range strings.Split(d.editor.View(), "\n") {
-			text := bar + ln
+			text := rest + ln
+			if j == 0 {
+				text = mark + ln
+			}
 			cursorX := -1
 			if tc != nil && tc.Y == j {
 				cursorRow = len(lines)
 				cursorX = tc.X + prefixWidth
 			}
-			lines = append(lines, ftLine{text: text, cursorX: cursorX})
+			lines = append(lines, ftLine{text: text, cursorX: cursorX, band: true})
 		}
 		lines = append(lines, ftLine{cursorX: -1}) // trailing bottom padding, matches Height()
 		return lines, cursorRow
@@ -256,6 +245,22 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		ln := lines[idx]
 		y := area.Min.Y + screenRow
 		drawStyledText(scr, image.Rect(area.Min.X, y, area.Min.X+contentWidth, y+1), ln.text)
+		if ln.band {
+			// Cells the text left bare (padding, the empty rows, the
+			// right edge) take the band color too.
+			for x := area.Min.X; x < area.Max.X; x++ {
+				cell := scr.CellAt(x, y)
+				if cell == nil {
+					fill := uv.EmptyCell
+					fill.Style.Bg = band
+					scr.SetCell(x, y, &fill)
+				} else if cell.Style.Bg == nil {
+					c := *cell
+					c.Style.Bg = band
+					scr.SetCell(x, y, &c)
+				}
+			}
+		}
 		if ln.cursorX >= 0 && ln.cursorX < contentWidth && baseCursor != nil {
 			c := *baseCursor
 			c.X = ln.cursorX

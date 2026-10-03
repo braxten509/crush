@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,26 +21,70 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 )
 
+// cliPromptWithAttachments carries non-image binary files through native
+// drivers that only accept text and images. Text files remain inline; the
+// cache references hold the original bytes even if the source disappears.
+func cliPromptWithAttachments(prompt string, attachments []message.Attachment) (string, error) {
+	text := message.PromptWithTextAttachments(prompt, attachments)
+	for _, attachment := range attachments {
+		if attachment.IsText() || attachment.IsImage() {
+			continue
+		}
+		cache, err := os.UserCacheDir()
+		if err != nil {
+			return "", fmt.Errorf("attachment cache: %w", err)
+		}
+		directory := filepath.Join(cache, "crush", "attachments")
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			return "", fmt.Errorf("attachment cache: %w", err)
+		}
+		extension := filepath.Ext(attachment.FileName)
+		if extension == "" {
+			extension = filepath.Ext(attachment.FilePath)
+		}
+		if extension == "" {
+			extension = ".bin"
+		}
+		path := filepath.Join(directory, fmt.Sprintf("%x%s", sha256.Sum256(attachment.Content), extension))
+		if err := os.WriteFile(path, attachment.Content, 0o600); err != nil {
+			return "", fmt.Errorf("saving attachment: %w", err)
+		}
+		text += fmt.Sprintf("\n\nAttached file %q (%s), available at %s", attachment.FileName, attachment.MimeType, path)
+	}
+	return text, nil
+}
+
 // cliStream stands in for fantasy's Agent.Stream when the model is an agent
 // CLI. The CLI runs its own tool loop; this drives the same callbacks a
 // native turn would (one step per model response), so messages, usage,
 // permissions and rendering work exactly as they do for API models.
-func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string, onCompacting func(bool) error) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
+func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string, onCompacting func(bool) error, onActivity func() error) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
 	return func(ctx context.Context, sc fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
 		link := m.Links.Get(call.SessionID, m.Kind)
-		prompt := message.PromptWithTextAttachments(call.Prompt, call.Attachments)
+		prompt, err := cliPromptWithAttachments(call.Prompt, call.Attachments)
+		if err != nil {
+			return nil, err
+		}
 		text, resume := cliHandoff(history, link, prompt)
+		// Refresh even resumed CLI sessions: their native skill catalogs and
+		// kept system prompts may predate a /skills toggle or installation.
+		skillPolicy := currentNativeSkillPolicy(a.cfg)
+		if skillPolicy != "" {
+			text = skillPolicy + "\n\n" + text
+		}
 		env := slices.Clone(m.Env)
-		var instructions string
+		var instructions, taskInstructionsHash string
 		if a.tasks != nil {
+			taskInstructions := a.tasks.instructions()
+			taskInstructionsHash = fmt.Sprintf("%x", sha256.Sum256([]byte(taskInstructions)))
 			env = append(env, a.tasks.env(call.SessionID)...)
 			switch {
 			case m.Kind == config.TypeClaudeCode:
 				// Claude takes them as part of its system prompt, which
 				// survives its own compaction.
-				instructions = a.tasks.instructions()
-			case resume == "" || !link.Tasks:
-				text = a.tasks.instructions() + "\n\n" + text
+				instructions = taskInstructions
+			case resume == "" || !link.Tasks || link.TaskInstructionsHash != taskInstructionsHash:
+				text = taskInstructions + "\n\n" + text
 			}
 		}
 		// Native memory is disabled; every CLI receives Crush's shared store.
@@ -50,20 +95,25 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			text = memory + "\n\n" + text
 		}
 
-		s := &cliSteps{ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, steerReady: make(chan struct{}, 1)}
+		s := &cliSteps{call: call, onQueuedInput: call.onQueuedInput, ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, onActivity: onActivity, steerReady: make(chan struct{}, 1)}
 		if err := s.begin(); err != nil {
 			return nil, err
 		}
 		a.steering.Set(call.SessionID, s)
 		defer a.steering.CompareAndDelete(call.SessionID, s)
 		defer s.returnUnsteered()
+		// Prompts sent mid-turn go in at the next tool boundary (see
+		// steerCalls), or wait for the turn to end if no tool runs.
 		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, SteerInput: s.steerWithImages, SteerReady: s.steerReady, Env: env, Instructions: instructions}
-		err := m.Run(ctx, turn)
+		err = m.Run(ctx, turn)
 		if errors.Is(err, cliagent.ErrResume) {
 			// The native session is gone; hand the whole conversation to a
 			// fresh one instead.
 			slog.Warn("Agent CLI could not resume its session; starting fresh", "cli", m.Kind, "session", resume)
 			turn.Prompt, turn.Resume = cliHandoff(history, cliagent.Link{}, prompt)
+			if skillPolicy != "" {
+				turn.Prompt = skillPolicy + "\n\n" + turn.Prompt
+			}
 			if a.tasks != nil && instructions == "" {
 				turn.Prompt = a.tasks.instructions() + "\n\n" + turn.Prompt
 			}
@@ -77,7 +127,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		// to here; the next turn resumes it and only hands over what other
 		// agents add in between.
 		if s.native != "" {
-			a.saveCLILink(context.WithoutCancel(ctx), m, call.SessionID, s.native, a.tasks != nil)
+			a.saveCLILink(context.WithoutCancel(ctx), m, call.SessionID, s.native, a.tasks != nil, taskInstructionsHash)
 		}
 		if err != nil {
 			return nil, err
@@ -135,12 +185,12 @@ func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sess
 	return &fantasy.AgentResult{TotalUsage: total, Response: fantasy.Response{Usage: last}}, nil
 }
 
-func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessionID, native string, tasks bool) {
+func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessionID, native string, tasks bool, taskInstructionsHash string) {
 	msgs, err := a.messages.List(ctx, sessionID)
 	if err != nil || len(msgs) == 0 {
 		return
 	}
-	link := cliagent.Link{Native: native, Through: msgs[len(msgs)-1].ID, Tasks: tasks, SharedInstructions: true}
+	link := cliagent.Link{Native: native, Through: msgs[len(msgs)-1].ID, Tasks: tasks, TaskInstructionsHash: taskInstructionsHash, SharedInstructions: true}
 	if err := m.Links.Set(sessionID, m.Kind, link); err != nil {
 		slog.Error("Failed to save agent CLI session link", "error", err)
 	}
@@ -150,12 +200,16 @@ func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessi
 // so a new assistant message) starts whenever the model talks again after
 // running tools, matching how native turns are split.
 type cliSteps struct {
+	call          SessionAgentCall
+	onQueuedInput func([]SessionAgentCall)
+
 	ctx          context.Context
 	sc           fantasy.AgentStreamCall
 	m            *cliagent.Model
 	a            *sessionAgent
 	sessionID    string
 	onCompacting func(bool) error
+	onActivity   func() error
 	compacting   bool
 	// File content before each pending edit, by tool call ID.
 	edits map[string][2]string
@@ -179,6 +233,39 @@ type cliSteps struct {
 	// Buffered so enqueueing under the dispatch lock never waits on the
 	// driver's queue drain, which takes the same lock.
 	steerReady chan struct{}
+
+	// running holds the tool calls that have started but not returned.
+	// Queued prompts go to the CLI only then, so it adds them to the
+	// tool's result: the next tool boundary.
+	runningMu sync.Mutex
+	running   map[string]bool
+}
+
+// setToolRunning records a tool call starting or returning. A start wakes
+// the steering poller so queued prompts reach the CLI while it runs.
+func (s *cliSteps) setToolRunning(id string, running bool) {
+	s.runningMu.Lock()
+	if running {
+		if s.running == nil {
+			s.running = map[string]bool{}
+		}
+		s.running[id] = true
+	} else {
+		delete(s.running, id)
+	}
+	s.runningMu.Unlock()
+	if running {
+		select {
+		case s.steerReady <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (s *cliSteps) toolRunning() bool {
+	s.runningMu.Lock()
+	defer s.runningMu.Unlock()
+	return len(s.running) > 0
 }
 
 // takePendingSteered transfers pending prompts to Interrupt atomically
@@ -229,7 +316,8 @@ func (s *cliSteps) hideSteered() {
 	}
 }
 
-// steer takes the queued prompts for the CLI to fold into the running turn.
+// steer takes the queued prompts for the CLI to fold into the running turn,
+// while one of its tools runs.
 func (s *cliSteps) steer() string {
 	text, _ := s.steerCalls(false)
 	return text
@@ -247,18 +335,21 @@ func (s *cliSteps) steerCalls(images bool) (string, []message.Attachment) {
 		mu.Unlock()
 		s.a.publishCanceledQueueDrops(canceled)
 	}()
-	if s.ctx.Err() != nil {
+	if s.ctx.Err() != nil || !s.toolRunning() {
+		return "", nil
+	}
+	queued, _ := s.a.messageQueue.Get(s.sessionID)
+	if len(queued) > 0 && !s.a.compatibleQueuedCalls(s.call, queued[0]) {
 		return "", nil
 	}
 	fold, canceled := s.a.drainQueueForStepLocked(s.sessionID)
-	// Steering is text-only. Leave images and subsequent prompts queued
-	// for the next turn so their attachment bytes and ordering are kept.
-	for i, q := range fold {
-		if !images && slices.ContainsFunc(q.Attachments, message.Attachment.IsImage) {
-			s.a.requeueFrontLocked(s.sessionID, fold[i:])
-			fold = fold[:i]
-			break
-		}
+	// A text-only driver cannot accept any portion of an image batch.
+	// Keep the complete drain together for the next native turn.
+	if !images && slices.ContainsFunc(fold, func(q SessionAgentCall) bool {
+		return slices.ContainsFunc(q.Attachments, message.Attachment.IsImage)
+	}) {
+		s.a.requeueFrontLocked(s.sessionID, fold)
+		return "", nil
 	}
 	if len(fold) == 0 {
 		return "", nil
@@ -266,7 +357,13 @@ func (s *cliSteps) steerCalls(images bool) (string, []message.Attachment) {
 	texts := make([]string, len(fold))
 	var attachments []message.Attachment
 	for i, q := range fold {
-		texts[i] = message.PromptWithTextAttachments(q.Prompt, q.Attachments)
+		text, err := cliPromptWithAttachments(q.Prompt, q.Attachments)
+		if err != nil {
+			s.a.requeueFrontLocked(s.sessionID, fold)
+			slog.Error("Preparing native CLI attachments", "error", err)
+			return "", nil
+		}
+		texts[i] = text
 		for _, attachment := range q.Attachments {
 			if attachment.IsImage() {
 				attachments = append(attachments, attachment)
@@ -302,20 +399,18 @@ func (s *cliSteps) takeSteered(text string) []SessionAgentCall {
 func (s *cliSteps) returnUnsteered() {
 	mu := s.a.sessionMu(s.sessionID)
 	mu.Lock()
-	defer mu.Unlock()
-	s.steerMu.Lock()
-	var calls []SessionAgentCall
-	for _, st := range s.steered {
-		if !st.hidden {
-			calls = append(calls, st.calls...)
-		}
+	calls := s.takePendingSteered()
+	if len(calls) == 0 {
+		mu.Unlock()
+		return
 	}
-	s.steered = nil
-	s.steerMu.Unlock()
-	if len(calls) == 0 || s.ctx.Err() != nil {
+	if s.ctx.Err() != nil {
+		mu.Unlock()
+		s.a.publishCanceledQueueDrops(calls)
 		return
 	}
 	s.a.requeueFrontLocked(s.sessionID, calls)
+	mu.Unlock()
 }
 
 func (s *cliSteps) begin() error {
@@ -377,6 +472,11 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		}
 	}
 	switch e.Type {
+	case cliagent.EventActivity:
+		if s.onActivity != nil {
+			return s.onActivity()
+		}
+		return nil
 	case cliagent.EventCompacting:
 		if e.Compacting {
 			// A completed tool step may still be the current message.
@@ -394,6 +494,9 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		calls := s.takeSteered(e.Text)
 		if len(calls) == 0 {
 			return nil
+		}
+		if s.onQueuedInput != nil {
+			s.onQueuedInput(calls)
 		}
 		// The user's message goes between the model's steps, as it does
 		// when a native turn folds in queued prompts.
@@ -436,9 +539,11 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 			return err
 		}
 		s.tools++
+		s.setToolRunning(e.ID, true)
 		return s.sc.OnToolInputStart(e.ID, e.Name)
 	case cliagent.EventToolCall:
 		s.tools++
+		s.setToolRunning(e.ID, true)
 		if path := cliagent.EditedFile(e.Name, e.Input); path != "" {
 			if !filepath.IsAbs(path) {
 				path = filepath.Join(s.m.Dir, path)
@@ -457,6 +562,7 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		s.content = append(s.content, tc)
 		return s.sc.OnToolCall(tc)
 	case cliagent.EventToolResult:
+		s.setToolRunning(e.ID, false)
 		var out fantasy.ToolResultOutputContent = fantasy.ToolResultOutputContentText{Text: e.Output}
 		if e.IsError {
 			out = fantasy.ToolResultOutputContentError{Error: errors.New(e.Output)}

@@ -82,6 +82,9 @@ func (m *UI) handleCLIUpdates(msg cliUpdatesMsg) tea.Cmd {
 }
 
 func (m *UI) openCLIUpdateForm(updates []cliupdate.Update) {
+	if m.secureQuestionFormOpen() {
+		return
+	}
 	names := make([]string, len(updates))
 	changes := make([]string, len(updates))
 	for i, u := range updates {

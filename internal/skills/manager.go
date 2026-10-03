@@ -23,6 +23,7 @@ import (
 // multiple workspaces concurrently and must not enable mirroring.
 type Manager struct {
 	mu           sync.RWMutex
+	refreshMu    sync.Mutex
 	allSkills    []*Skill
 	activeSkills []*Skill
 	states       []*SkillState
@@ -104,12 +105,16 @@ func (m *Manager) ActiveSkills() []*Skill {
 // ResolvedPaths returns the expanded skills directory paths stored at
 // construction time.
 func (m *Manager) ResolvedPaths() []string {
-	return m.resolvedPaths
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return slices.Clone(m.resolvedPaths)
 }
 
 // WorkingDir returns the workspace working directory stored at
 // construction time.
 func (m *Manager) WorkingDir() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.workingDir
 }
 

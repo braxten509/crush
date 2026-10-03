@@ -47,6 +47,7 @@ type ToolGroupItem struct {
 	// anim animates the "| Running a command" status while working.
 	anim      *anim.Anim
 	animLabel string
+	activity  activityTimer
 	// canBackground is whether the agent can move a running command to
 	// the background (Ctrl+B). The group times the command it shows to
 	// offer that once it runs long.
@@ -59,6 +60,7 @@ type ToolGroupItem struct {
 	// covers the action-count label which opens the review; changesRequested
 	// records a click on that label.
 	changesKey       string
+	storedSummary    string
 	changes          []diffreview.File
 	changesCols      [2]int
 	changesRequested bool
@@ -77,19 +79,22 @@ var (
 // NewToolGroupItem returns an empty group; SetChildren fills it.
 func NewToolGroupItem(sty *styles.Styles) *ToolGroupItem {
 	v := list.NewVersioned()
-	return &ToolGroupItem{
+	g := &ToolGroupItem{
 		Versioned:                v,
 		highlightableMessageItem: defaultHighlighter(sty, v),
 		focusableMessageItem:     newFocusableMessageItem(v),
 		sty:                      sty,
-		anim: anim.New(anim.Settings{
-			Size:        3,
-			GradColorA:  sty.WorkingGradFromColor,
-			GradColorB:  sty.WorkingGradToColor,
-			LabelColor:  sty.WorkingLabelColor,
-			CycleColors: true,
-		}),
 	}
+	g.anim = anim.New(anim.Settings{
+		Size:        3,
+		GradColorA:  sty.WorkingGradFromColor,
+		GradColorB:  sty.WorkingGradToColor,
+		LabelColor:  sty.WorkingLabelColor,
+		CycleColors: true,
+		Suffix:      func() string { return g.activity.elapsed(time.Now()) },
+		SuffixColor: sty.WorkingTimerColor,
+	})
+	return g
 }
 
 // Foldable reports whether item belongs in a status group: tool calls
@@ -147,6 +152,7 @@ func (g *ToolGroupItem) SetChildren(children []MessageItem) {
 func (g *ToolGroupItem) SetLive(live bool) {
 	if g.live != live {
 		g.live = live
+		g.syncActivity(time.Now())
 		g.Bump()
 	}
 }
@@ -252,6 +258,7 @@ func (g *ToolGroupItem) Spinning() bool {
 // Advance implements Animatable. Steps bump their own versions, which the
 // group's version includes.
 func (g *ToolGroupItem) Advance() bool {
+	g.syncActivity(time.Now())
 	changed := false
 	for _, c := range g.children {
 		if a, ok := c.(Animatable); ok && a.Spinning() && a.Advance() {
@@ -278,6 +285,12 @@ func (g *ToolGroupItem) status() string {
 	}
 	switch last := g.children[len(g.children)-1].(type) {
 	case *AssistantMessageItem:
+		if last.message.IsCompacting {
+			return "Compacting conversation"
+		}
+		if last.Canceled() {
+			return ""
+		}
 		if last.isSpinning() {
 			return "Thinking"
 		}
@@ -287,6 +300,8 @@ func (g *ToolGroupItem) status() string {
 			return ""
 		}
 		switch st.computeStatus() {
+		case ToolStatusCanceled:
+			return ""
 		case ToolStatusAwaitingPermission:
 			return "Waiting for approval"
 		case ToolStatusRunning:
@@ -304,6 +319,8 @@ func (g *ToolGroupItem) status() string {
 // toolActivity describes a running tool in a few words.
 func toolActivity(name string) string {
 	switch name {
+	case "agent", "task":
+		return "Waiting for subagent"
 	case tools.BashToolName:
 		return "Running a command"
 	case tools.JobOutputToolName, tools.JobKillToolName:
@@ -465,7 +482,8 @@ func (g *ToolGroupItem) header(width int) string {
 	// the review. File names and line counts remain a passive summary.
 	g.changesCols = [2]int{}
 	changes := g.Changes()
-	if len(changes) > 0 {
+	storedSummary := g.StoredReviewSummary()
+	if len(changes) > 0 || storedSummary != "" {
 		start := ansi.StringWidth(marker + icon + " ")
 		end := min(width, start+ansi.StringWidth(count))
 		if end > start {
@@ -476,16 +494,28 @@ func (g *ToolGroupItem) header(width int) string {
 	// captured filesystem changes for the file labels whenever available.
 	if len(changes) > 0 {
 		edited = nil
+		seen = map[string]bool{}
 		for _, change := range changes {
+			if !change.HasEdits() || seen[change.Path] {
+				continue
+			}
+			seen[change.Path] = true
 			edited = append(edited, filepath.Base(change.Path))
 		}
 	}
-	if (len(edited) > 0 && status == "") || len(changes) > 0 {
+	if summary := diffreview.TransferSummary(changes); summary != "" {
+		line += g.sty.Tool.ParamKey.Render(" · " + summary)
+	}
+	if storedSummary != "" {
+		line += g.sty.Tool.ParamKey.Render(" · " + storedSummary)
+	}
+	if storedSummary == "" && len(edited) > 0 && (status == "" || len(changes) > 0) {
 		line += g.sty.Tool.ParamKey.Render(" · ")
 		if len(edited) > 0 && status == "" {
-			files := strings.Join(edited[:min(3, len(edited))], ", ")
-			if len(edited) > 3 {
-				files += fmt.Sprintf(" +%d", len(edited)-3)
+			// One name at most, the latest file; the rest are a count.
+			files := edited[len(edited)-1]
+			if len(edited) > 1 {
+				files += fmt.Sprintf(" and %d more", len(edited)-1)
 			}
 			line += g.sty.Tool.ParamKey.Render("edited " + files)
 			if len(changes) > 0 {
@@ -504,15 +534,33 @@ func (g *ToolGroupItem) header(width int) string {
 	if failed > 0 {
 		line += g.sty.Tool.ErrorMessage.Render(fmt.Sprintf(" · %d failed", failed))
 	}
-	if status != "" {
+	g.syncActivity(time.Now())
+	if status != "" && status != g.animLabel {
+		g.animLabel = status
+		g.anim.SetLabel(status)
+	}
+	if status == "Compacting conversation" {
+		line += g.sty.Tool.ParamKey.Render(" | ") + renderCompactingStatus(g.sty, g.activity.elapsed(time.Now()), g.anim.RenderEllipsis())
+	} else if status != "" {
 		// Working: say what's happening now, not the whole command.
-		if status != g.animLabel {
-			g.animLabel = status
-			g.anim.SetLabel(status)
-		}
 		line += g.sty.Tool.ParamKey.Render(" | ") + g.anim.Render()
 	}
 	return ansi.Truncate(g.sty.Tool.ParamKey.Render(marker)+line, width, "…")
+}
+
+func (g *ToolGroupItem) syncActivity(now time.Time) {
+	key := g.status()
+	if key != "" {
+		// Keep thinking time when an assistant heartbeat arrives after a
+		// finished tool, but restart for successive calls of the same tool.
+		for i := len(g.children) - 1; i >= 0; i-- {
+			if tool, ok := g.children[i].(ToolMessageItem); ok {
+				key += "\x00" + tool.ToolCall().ID
+				break
+			}
+		}
+	}
+	g.activity.update(key, now)
 }
 
 // backgroundIcon marks background work, as in the background row.

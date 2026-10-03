@@ -44,10 +44,15 @@ type ConfirmComponent struct {
 	hoverX       int
 	hoverY       int
 
-	// OnConfirm is called when the user confirms.
-	OnConfirm func()
+	// OnConfirm is called when the user confirms. It returns false when
+	// submitting failed and the form stays open.
+	OnConfirm func() bool
 	// OnReject is called when the user says "not yet".
 	OnReject func()
+
+	// secure holds the secure fields by question index. Their review
+	// says only whether a value is entered or saved.
+	secure map[int]*SecureQuestion
 }
 
 // NewConfirmComponent creates a new confirmation component.
@@ -98,10 +103,7 @@ func (c *ConfirmComponent) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return false, nil
 	case key.Matches(msg, c.keyEnter):
 		if c.confirmYes {
-			if c.OnConfirm != nil {
-				c.OnConfirm()
-			}
-			return true, nil
+			return c.OnConfirm == nil || c.OnConfirm(), nil
 		}
 		if c.OnReject != nil {
 			c.OnReject()
@@ -130,7 +132,13 @@ func (c *ConfirmComponent) ShortHelp() []key.Binding {
 // unansweredCount returns how many questions have no meaningful answer.
 func (c *ConfirmComponent) unansweredCount() int {
 	n := 0
-	for _, ans := range c.Answers {
+	for i, ans := range c.Answers {
+		if sq := c.secure[i]; sq != nil {
+			if !sq.Entered() {
+				n++
+			}
+			continue
+		}
 		if ans == nil || (len(ans.SelectedIDs) == 0 && ans.FillInText == "" && ans.Yes == nil) {
 			n++
 		}
@@ -151,17 +159,7 @@ func (c *ConfirmComponent) Height(width int) int {
 	h := sectionHeight(c.Title, w-lipgloss.Width(iconPrompt)) // title
 	h++                                                       // blank
 	if c.Description != "" {
-		r := common.MarkdownRenderer(c.Styles, w)
-		mu := common.LockMarkdownRenderer(r)
-		mu.Lock()
-		out, err := r.Render(c.Description)
-		mu.Unlock()
-		if err == nil {
-			out = strings.TrimSuffix(out, "\n")
-			h += strings.Count(out, "\n") + 1
-		} else {
-			h += sectionHeight(c.Description, w)
-		}
+		h += strings.Count(questionDescription(c.Styles, c.Description, w), "\n") + 1
 		h++ // blank
 	}
 	h += len(c.QuestionLabels) // one bullet per question
@@ -199,20 +197,8 @@ func (c *ConfirmComponent) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	// Description.
 	if c.Description != "" {
-		r := common.MarkdownRenderer(c.Styles, area.Dx())
-		mu := common.LockMarkdownRenderer(r)
-		mu.Lock()
-		desc, err := r.Render(c.Description)
-		mu.Unlock()
-		if err == nil {
-			desc = strings.TrimSuffix(desc, "\n")
-			for _, l := range strings.Split(desc, "\n") {
-				lines = append(lines, line{text: l})
-			}
-		} else {
-			for _, l := range strings.Split(c.Description, "\n") {
-				lines = append(lines, line{text: l})
-			}
+		for _, l := range strings.Split(questionDescription(c.Styles, c.Description, area.Dx()), "\n") {
+			lines = append(lines, line{text: l})
 		}
 		lines = append(lines, line{}) // blank
 	}
@@ -317,10 +303,7 @@ func (c *ConfirmComponent) HandleMouseClick(x, y int) (bool, bool) {
 	switch common.HitButtonIndex(c.compositor, x, y) {
 	case 0: // Yup!
 		c.confirmYes = true
-		if c.OnConfirm != nil {
-			c.OnConfirm()
-		}
-		return true, true
+		return c.OnConfirm == nil || c.OnConfirm(), true
 	case 1: // Not yet
 		c.confirmYes = false
 		if c.OnReject != nil {
@@ -340,6 +323,9 @@ func (c *ConfirmComponent) UpdateAnswers(answers []*question.Answer) {
 // answerSummary returns a human-readable summary of an answer.
 // Choice IDs are resolved to display labels when possible.
 func (c *ConfirmComponent) answerSummary(idx int) string {
+	if sq := c.secure[idx]; sq != nil {
+		return sq.summary()
+	}
 	if idx >= len(c.Answers) || c.Answers[idx] == nil {
 		return "(not answered)"
 	}

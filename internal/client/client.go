@@ -11,6 +11,7 @@ import (
 	"net/url"
 	stdpath "path"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -24,11 +25,12 @@ const DummyHost = "api.crush.localhost"
 
 // Client represents an RPC client connected to a Crush server.
 type Client struct {
-	h        *http.Client
-	path     string
-	network  string
-	addr     string
-	clientID string
+	h              *http.Client
+	path           string
+	network        string
+	addr           string
+	clientID       string
+	recallRequests sync.Map // workspace/session -> request token retained after a failed response
 }
 
 // DefaultClient creates a new [Client] connected to the default server address.

@@ -301,12 +301,16 @@ func TestCompletionNotificationWaitsForQueuedChain(t *testing.T) {
 			last.SessionID = sess.ID
 			_, err = agent.Run(t.Context(), last)
 			require.NoError(t, err)
-			for i := range 2 {
+			turns := 2 // main, then the complete queue batch
+			if test.last.CLIContinue {
+				turns = 3 // native continuations have separate dispatch semantics
+			}
+			for i := range turns - 1 {
 				close(model.gates[i].release)
 				waitCompletionGate(t, model.gates[i+1])
 				requireNoCompletionNotification(t, events)
 			}
-			close(model.gates[2].release)
+			close(model.gates[turns-1].release)
 			require.NoError(t, <-done)
 			if test.wantNotify {
 				requireCompletionNotification(t, events, sess.ID)

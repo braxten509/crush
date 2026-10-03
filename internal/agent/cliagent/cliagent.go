@@ -54,6 +54,7 @@ const (
 	EventSession                      // Session (native session ID)
 	EventUserMessage                  // Text (a steered message the CLI took in)
 	EventCompacting                   // Compacting (native context compaction status)
+	EventActivity                     // Provider event received, without content.
 )
 
 // TextBreak is sent as text when a new text block starts. It separates two
@@ -113,13 +114,16 @@ type Turn struct {
 // Model is a CLI-backed model. It implements [fantasy.LanguageModel] for
 // one-shot text requests; full agent turns go through [Model.Run].
 type Model struct {
-	Kind        catwalk.Type
-	ID          string
-	ServiceTier string
-	Dir         string
-	Perms       permission.Service
-	Files       history.Service
-	Links       *Links
+	Kind                  catwalk.Type
+	ID                    string
+	ServiceTier           string
+	AutoCompactTokenLimit int64
+	// Ultracode turns on Claude Code's Ultracode.
+	Ultracode bool
+	Dir       string
+	Perms     permission.Service
+	Files     history.Service
+	Links     *Links
 	// Guarded runs a background sub-agent: nobody is there to approve its
 	// tool calls, so Crush answers them itself, granting whatever its own
 	// YOLO mode allows. The CLI's bypass modes stay off so every call
@@ -131,23 +135,29 @@ type Model struct {
 
 // NewProvider returns a [fantasy.Provider] whose models run through the
 // agent CLI of the given kind.
-func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string) fantasy.Provider {
-	return &provider{kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
+func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string, ultracode bool, autoCompactTokenLimit ...int64) fantasy.Provider {
+	limit := config.DefaultAutoCompactTokenLimit
+	if len(autoCompactTokenLimit) > 0 && autoCompactTokenLimit[0] > 0 {
+		limit = autoCompactTokenLimit[0]
+	}
+	return &provider{autoCompactTokenLimit: limit, kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, ultracode: ultracode, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
 }
 
 type provider struct {
-	kind        catwalk.Type
-	serviceTier string
-	dir         string
-	perms       permission.Service
-	files       history.Service
-	links       *Links
+	autoCompactTokenLimit int64
+	kind                  catwalk.Type
+	serviceTier           string
+	ultracode             bool
+	dir                   string
+	perms                 permission.Service
+	files                 history.Service
+	links                 *Links
 }
 
 func (p *provider) Name() string { return string(p.kind) }
 
 func (p *provider) LanguageModel(_ context.Context, modelID string) (fantasy.LanguageModel, error) {
-	return &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
+	return &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, AutoCompactTokenLimit: p.autoCompactTokenLimit, Ultracode: p.ultracode, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
 }
 
 // Run executes one turn, emitting events until the CLI finishes it.
@@ -286,6 +296,8 @@ type Link struct {
 	// Tasks is set once the native session was told how to spawn
 	// sub-agents.
 	Tasks bool `json:"tasks,omitempty"`
+	// TaskInstructionsHash refreshes changed guidance in existing conversations.
+	TaskInstructionsHash string `json:"task_instructions_hash,omitempty"`
 	// SharedInstructions records delivery without invalidating the session.
 	SharedInstructions bool `json:"shared_instructions,omitempty"`
 }
@@ -482,6 +494,20 @@ func pollSteerInputRetry(t Turn, ready func() bool, send func(string, []message.
 // The original may be a temporary file (a screenshot tool's) that is gone by
 // the time the CLI looks.
 func withImagePaths(prompt string, attachments []message.Attachment) string {
+	return prompt + imagePathNote(attachments, "open them with your file-reading tool")
+}
+
+// withSavedImagePaths lists saved copies of images a CLI also gets inline,
+// so the model can hand them on by path, as to a sub-agent.
+func withSavedImagePaths(prompt string, attachments []message.Attachment) string {
+	return prompt + imagePathNote(attachments, "they are also saved as files at")
+}
+
+// imageNoteStart begins every image path note, so echoes of a prompt can be
+// matched back to what the user typed.
+const imageNoteStart = "\n\n<system_info>The user attached these images; "
+
+func imagePathNote(attachments []message.Attachment, how string) string {
 	var sb strings.Builder
 	for _, a := range attachments {
 		if !a.IsImage() {
@@ -495,9 +521,17 @@ func withImagePaths(prompt string, attachments []message.Attachment) string {
 		fmt.Fprintf(&sb, "\n%s", path)
 	}
 	if sb.Len() == 0 {
-		return prompt
+		return ""
 	}
-	return prompt + "\n\n<system_info>The user attached these images; open them with your file-reading tool:</system_info>" + sb.String()
+	return imageNoteStart + how + ":</system_info>" + sb.String()
+}
+
+// withoutImagePaths drops an image path note from an echoed prompt.
+func withoutImagePaths(text string) string {
+	if i := strings.Index(text, imageNoteStart); i >= 0 {
+		return text[:i]
+	}
+	return text
 }
 
 // saveImage writes an image attachment to Crush's attachment folder, named
@@ -517,8 +551,10 @@ func saveImage(a message.Attachment) (string, error) {
 		ext = "." + strings.TrimPrefix(a.MimeType, "image/")
 	}
 	path := filepath.Join(dir, hex.EncodeToString(sum[:16])+ext)
+	now := time.Now()
+	defer pruneAttachments(dir, now)
 	if _, err := os.Stat(path); err == nil {
-		return path, nil
+		return path, os.Chtimes(path, now, now)
 	}
 	return path, os.WriteFile(path, a.Content, 0o600)
 }

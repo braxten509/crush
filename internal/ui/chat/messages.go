@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/attachments"
-	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // MessageLeftPaddingTotal is the total width that is taken up by the border +
@@ -282,6 +282,19 @@ func ShouldShowAssistantInfo(msg *message.Message) bool {
 	return finishData.Reason == message.FinishReasonEndTurn || msg.PrismModelName != ""
 }
 
+// InfoLabelsNothing reports whether an info row placed after prev would
+// label nothing: it would open the chat, follow a prompt or another info
+// row, or follow the compaction marker.
+func InfoLabelsNothing(prev list.Item) bool {
+	switch it := prev.(type) {
+	case nil, *AssistantInfoItem, *UserMessageItem:
+		return true
+	case *AssistantMessageItem:
+		return it.message.IsSummaryMessage || it.message.IsCompacting
+	}
+	return false
+}
+
 // AssistantInfoItem renders model info and response time after assistant completes.
 type AssistantInfoItem struct {
 	*list.Versioned
@@ -354,8 +367,8 @@ func (a *AssistantInfoItem) renderContent(width int) string {
 	if finishData == nil {
 		return ""
 	}
-	// The final turn of a prompt keeps the full footer (duration and
-	// separator line); intermediate turns render a compact header.
+	// The final turn of a prompt keeps the full footer (provider and
+	// duration); intermediate turns render a compact header.
 	isFinalTurn := finishData.Reason == message.FinishReasonEndTurn
 
 	icon := a.sty.Messages.AssistantInfoIcon.Render(styles.ModelIcon)
@@ -389,7 +402,7 @@ func (a *AssistantInfoItem) renderContent(width int) string {
 	if savings != "" {
 		assistant = fmt.Sprintf("%s %s", assistant, savings)
 	}
-	return common.Section(a.sty, assistant, width)
+	return ansi.Truncate(a.sty.Section.Title.Render(assistant), width, "…")
 }
 
 // cappedMessageWidth returns the maximum width for message content for readability.

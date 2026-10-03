@@ -111,10 +111,13 @@ func (w *AppWorkspace) ListAllUserMessages(ctx context.Context) ([]message.Messa
 
 func (w *AppWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error {
 	if w.app.AgentCoordinator == nil {
-		return errors.New("agent coordinator not initialized")
+		return &message.DefinitiveSubmissionError{Err: ErrAgentNotInitialized}
 	}
 	_, err := w.app.AgentCoordinator.Run(ctx, sessionID, prompt, attachments...)
-	return err
+	if err != nil {
+		return &message.DefinitiveSubmissionError{Err: err}
+	}
+	return nil
 }
 
 func (w *AppWorkspace) AgentRunChannel(ctx context.Context, channel, sessionID, prompt string, attachments ...message.Attachment) error {
@@ -185,6 +188,13 @@ func (w *AppWorkspace) AgentInterrupt(sessionID string) {
 	if w.app.AgentCoordinator != nil {
 		w.app.AgentCoordinator.Interrupt(sessionID)
 	}
+}
+
+func (w *AppWorkspace) AgentRecallQueuedPrompt(_ context.Context, sessionID string) (*message.QueuedPrompt, error) {
+	if w.app.AgentCoordinator == nil {
+		return nil, ErrAgentNotInitialized
+	}
+	return w.app.AgentCoordinator.RecallQueuedPrompt(sessionID), nil
 }
 
 func (w *AppWorkspace) AgentIsBusy() bool {
@@ -426,6 +436,7 @@ func (w *AppWorkspace) InitializePrompt() (string, error) {
 
 func (w *AppWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
 	mgr := w.app.Skills
+	mgr.Refresh(skills.ConfigDiscovery(w.store))
 	return skills.Catalog(mgr.ActiveSkills(), mgr.ResolvedPaths(), mgr.WorkingDir()), nil
 }
 

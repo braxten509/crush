@@ -334,3 +334,5 @@ func TestSessionGetIncludesAttachedClients(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	require.Equal(t, 1, got.AttachedClients)
 }
+
+func (s *stubCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }

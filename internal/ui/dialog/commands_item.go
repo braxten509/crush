@@ -24,6 +24,7 @@ type CommandItem struct {
 	cache       map[int]string
 	focused     bool
 	hideInfo    bool
+	muted       bool
 }
 
 var _ ListItem = &CommandItem{Versioned: list.NewVersioned()}
@@ -56,6 +57,11 @@ func (c *CommandItem) WithAliases(aliases ...string) *CommandItem {
 // the title.
 func (c *CommandItem) WithDescription(desc string) *CommandItem {
 	c.description = desc
+	return c
+}
+
+func (c *CommandItem) WithMuted(muted bool) *CommandItem {
+	c.muted = muted
 	return c
 }
 
@@ -135,6 +141,10 @@ func (c *CommandItem) Render(width int) string {
 		ItemFocused:     c.t.Dialog.SelectedItem,
 		InfoTextBlurred: c.t.Dialog.ListItem.InfoBlurred,
 		InfoTextFocused: c.t.Dialog.ListItem.InfoFocused,
+	}
+	if c.muted && !c.focused {
+		styles.ItemBlurred = styles.ItemBlurred.Foreground(c.t.Dialog.SecondaryText.GetForeground())
+		styles.InfoTextBlurred = styles.InfoTextBlurred.Foreground(c.t.Dialog.SecondaryText.GetForeground())
 	}
 	shortcut := c.shortcut
 	if c.hideInfo {

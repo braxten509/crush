@@ -309,9 +309,9 @@ func ToPromptXML(skills []*Skill) string {
 			continue
 		}
 		sb.WriteString("  <skill>\n")
-		fmt.Fprintf(&sb, "    <name>%s</name>\n", escape(s.Name))
-		fmt.Fprintf(&sb, "    <description>%s</description>\n", escape(s.Description))
-		fmt.Fprintf(&sb, "    <location>%s</location>\n", escape(s.SkillFilePath))
+		fmt.Fprintf(&sb, "    <name>%s</name>\n", escapeDirectoryMetadata(s.Name))
+		fmt.Fprintf(&sb, "    <description>%s</description>\n", escapeDirectoryMetadata(s.Description))
+		fmt.Fprintf(&sb, "    <location>%s</location>\n", escapeDirectoryMetadata(s.SkillFilePath))
 		if s.Builtin {
 			sb.WriteString("    <type>builtin</type>\n")
 		}
@@ -319,6 +319,13 @@ func ToPromptXML(skills []*Skill) string {
 	}
 	sb.WriteString("</available_skills>")
 	return sb.String()
+}
+
+// Native CLIs scan user input for dollar-prefixed skill commands before the
+// model sees it. Catalog examples must remain data, not trigger invocations.
+// XML decoding preserves the original metadata for readers.
+func escapeDirectoryMetadata(value string) string {
+	return strings.ReplaceAll(escape(value), "$", "&#36;")
 }
 
 // FormatInvocation generates XML for a skill when invoked as a user command.

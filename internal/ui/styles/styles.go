@@ -28,26 +28,6 @@ const (
 
 	ArrowRightIcon string = "→"
 
-	// CodespanPadding is the padding rendered around inline code spans in
-	// markdown. It displays identically to the blank padding it replaced,
-	// but selection copies recognize it and turn it back into the original
-	// backticks (see list.HighlightContent).
-	//
-	// It is a no-break space tagged with the text-presentation variation
-	// selector (U+FE0E): the pair is a single one-cell grapheme that
-	// renders as a blank and, being non-breaking, keeps word wrap from
-	// tearing a codespan between its padding and its text. The selector
-	// makes the sentinel distinct from a real no-break space in message
-	// text (pasted text, some LLM output), which a selection copy must
-	// preserve verbatim.
-	//
-	// The selector must be U+FE0E, not the emoji-presentation U+FE0F:
-	// ansi.StringWidth measures any cluster ending in U+FE0F as two
-	// cells wide, while terminals render it as one, and that mismatch
-	// makes the frame differ repaint the line on every frame (visible
-	// as flicker).
-	CodespanPadding string = "\u00a0\ufe0e"
-
 	ToolPending string = "●"
 	ToolSuccess string = "✓"
 	ToolError   string = "×"
@@ -157,7 +137,7 @@ type Styles struct {
 	Editor struct {
 		Textarea textarea.Styles
 
-		// Normal mode prompt ("> " icon on the first line, "::: " after).
+		// Normal mode prompt ("›" on the first line, blank after).
 		PromptNormalIconFocused lipgloss.Style
 		PromptNormalIconBlurred lipgloss.Style
 		PromptNormalFocused     lipgloss.Style
@@ -175,13 +155,13 @@ type Styles struct {
 		PromptYoloDotsFocused lipgloss.Style
 		PromptYoloDotsBlurred lipgloss.Style
 
-		// Bang mode prompt (" ! " icon + ":::" dots, Turtle color).
+		// Bang mode prompt ("!" on the composer band).
 		PromptBangIconFocused lipgloss.Style
 		PromptBangIconBlurred lipgloss.Style
 		PromptBangDotsFocused lipgloss.Style
 		PromptBangDotsBlurred lipgloss.Style
 
-		// Question mode prompt (" ? " icon + ":::" dots).
+		// Question mode prompt (" ? " badge in question forms).
 		PromptQuestionIconFocused lipgloss.Style
 		PromptQuestionIconBlurred lipgloss.Style
 
@@ -231,6 +211,8 @@ type Styles struct {
 		GradCanvas         lipgloss.Style // Blank canvas for gradient painting
 		SmallGradFromColor color.Color    // Small "Crush" wordmark gradient start
 		SmallGradToColor   color.Color    // Small "Crush" wordmark gradient end
+		ShineColor         color.Color    // Light the wordmark's moving shine blends toward
+		FlowColor          color.Color    // Third color of the wordmark's flowing gradient
 	}
 
 	// Working indicator gradient (spinners/shimmers on assistant "thinking",
@@ -267,7 +249,22 @@ type Styles struct {
 		WorkingDir   lipgloss.Style // Working directory path (PrettyPath)
 	}
 
-	// ModelInfo (model name, provider, reasoning, token/cost summary)
+	// ComposerFooter is the compact model, context, quota, and return row.
+	ComposerFooter struct {
+		Model  lipgloss.Style
+		Text   lipgloss.Style
+		Accent lipgloss.Style
+		// Each stat has its own color so they stand apart, as in Codex.
+		Tokens      lipgloss.Style
+		Context     lipgloss.Style
+		Limit5h     lipgloss.Style
+		LimitWeekly lipgloss.Style
+		LimitOther  lipgloss.Style
+		Resets      lipgloss.Style
+		Separator   lipgloss.Style
+	}
+
+	// ModelInfo (model name, provider, reasoning, token/cost summary).
 	ModelInfo struct {
 		Icon                 lipgloss.Style // Model icon (◇)
 		Name                 lipgloss.Style // Model name text
@@ -315,8 +312,11 @@ type Styles struct {
 	// Chat
 	// Messages - chat message item styles
 	Messages struct {
+		// The user's messages sit on a full-width band; these style the
+		// "›" marker on its first line.
 		UserBlurred      lipgloss.Style
 		UserFocused      lipgloss.Style
+		UserBackground   color.Color // band behind the user's messages
 		AssistantBlurred lipgloss.Style
 		AssistantFocused lipgloss.Style
 		NoContent        lipgloss.Style
@@ -327,6 +327,9 @@ type Styles struct {
 		ToolCallFocused  lipgloss.Style
 		ToolCallCompact  lipgloss.Style
 		ToolCallBlurred  lipgloss.Style
+
+		// AssistantBullet colors the "•" that opens each reply.
+		AssistantBullet lipgloss.Style
 
 		// Shell (bang mode) item styles.
 		ShellBarFocused    lipgloss.Style // Left vertical bar when focused.

@@ -1,6 +1,7 @@
 package dialog
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/question"
+	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -68,6 +70,11 @@ type QuestionForm struct {
 	// the entire question batch. The UI sets this to wire up
 	// workspace cancellation.
 	OnCancel func()
+
+	// secure is the local form behind secure fields, which saves them and
+	// resolves the request itself. nil for ordinary forms.
+	secure    *secureentry.Form
+	dismissed bool
 }
 
 var _ CollapsibleInlineEditor = (*QuestionForm)(nil)
@@ -77,9 +84,24 @@ var _ CollapsibleInlineEditor = (*QuestionForm)(nil)
 // component type (YesNo, SingleChoice, MultiChoice, FreeText).
 // A Confirm tab is appended for multi-question batches.
 func NewQuestionForm(sty *styles.Styles, batch question.Request) *QuestionForm {
+	return newQuestionForm(sty, batch, nil)
+}
+
+// NewSecureQuestionForm shows a local form with secure fields. Submitting
+// writes the entered values to their files and resolves the form with the
+// answers; cancelling resolves it without writing. It needs no OnAnswer or
+// OnCancel.
+func NewSecureQuestionForm(sty *styles.Styles, form *secureentry.Form) *QuestionForm {
+	f := newQuestionForm(sty, form.Request, form)
+	f.secure = form
+	return f
+}
+
+func newQuestionForm(sty *styles.Styles, batch question.Request, secure *secureentry.Form) *QuestionForm {
 	comps := make([]questionResponder, len(batch.Questions))
 	labels := make([]string, len(batch.Questions))
 	ids := make([]string, len(batch.Questions))
+	secureFields := map[int]*SecureQuestion{}
 	for i, req := range batch.Questions {
 		switch req.Type {
 		case question.TypeYesNo:
@@ -89,6 +111,16 @@ func NewQuestionForm(sty *styles.Styles, batch question.Request) *QuestionForm {
 		case question.TypeMultiChoice:
 			comps[i] = NewMultiChoice(sty, req)
 		case question.TypeFreeText:
+			comps[i] = NewFreeText(sty, req)
+		case question.TypeSecureEntry:
+			var field *secureentry.Field
+			if secure != nil {
+				field = secure.Field(req.ID)
+			}
+			sq := NewSecureQuestion(sty, req, field)
+			secureFields[i] = sq
+			comps[i] = sq
+		default:
 			comps[i] = NewFreeText(sty, req)
 		}
 		if req.Label != "" {
@@ -119,6 +151,7 @@ func NewQuestionForm(sty *styles.Styles, batch question.Request) *QuestionForm {
 			batch.Questions,
 			answers,
 		)
+		confirmComp.secure = secureFields
 		allLabels = make([]string, len(labels)+1)
 		copy(allLabels, labels)
 		allLabels[len(labels)] = "Confirm"
@@ -181,8 +214,12 @@ func (f *QuestionForm) isConfirmTab() bool {
 	return f.hasConfirm && f.activeIdx == f.numQuestions
 }
 
-// isAnswered reports whether a question has a meaningful answer.
+// isAnswered reports whether a question has a meaningful answer. A
+// secure field counts once a value is entered.
 func (f *QuestionForm) isAnswered(idx int) bool {
+	if sq := f.secureQuestion(idx); sq != nil {
+		return sq.Entered()
+	}
 	if idx >= len(f.answers) || f.answers[idx] == nil {
 		return false
 	}
@@ -193,28 +230,79 @@ func (f *QuestionForm) isAnswered(idx int) bool {
 // firstUnanswered returns the index of the first unanswered
 // question, or -1 if all are answered.
 func (f *QuestionForm) firstUnanswered() int {
-	for i, ans := range f.answers {
-		if ans == nil {
-			return i
-		}
-		if len(ans.SelectedIDs) == 0 && ans.FillInText == "" && ans.Yes == nil {
+	for i := range f.answers {
+		if !f.isAnswered(i) {
 			return i
 		}
 	}
 	return -1
 }
 
+// secureQuestion returns the secure field at idx, or nil.
+func (f *QuestionForm) secureQuestion(idx int) *SecureQuestion {
+	if idx < 0 || idx >= f.numQuestions {
+		return nil
+	}
+	sq, _ := f.questions[idx].(*SecureQuestion)
+	return sq
+}
+
+// HasSecureEntry reports whether the form saves secure fields locally. The
+// UI must not resolve such a form through the question service.
+func (f *QuestionForm) HasSecureEntry() bool { return f.secure != nil }
+
+func (f *QuestionForm) OwnsSecureForm(form *secureentry.Form) bool { return f.secure == form }
+
+// Dismiss releases a form the UI drops without the user answering it, such
+// as when another form replaces it. A secure form is cancelled and its
+// buffers are cleared; ordinary forms are left to their service.
+func (f *QuestionForm) Dismiss() {
+	f.dismissed = true
+	if f.secure != nil {
+		f.clearSecrets()
+		f.secure.Cancel()
+	}
+}
+
+func (f *QuestionForm) HandleSecurePaste(msg SecureQuestionPaste) {
+	defer msg.Discard()
+	if f.dismissed || f.secure == nil || f.secure.Closed() {
+		return
+	}
+	for i := range f.numQuestions {
+		if sq := f.secureQuestion(i); sq != nil && sq == msg.question && sq.usable() {
+			sq.insert(msg.value)
+			return
+		}
+	}
+}
+
+func (f *QuestionForm) SecureEntryActive() bool { return f.secureQuestion(f.activeIdx) != nil }
+
+// clearSecrets wipes every secure field buffer.
+func (f *QuestionForm) clearSecrets() {
+	for i := range f.numQuestions {
+		if sq := f.secureQuestion(i); sq != nil {
+			sq.Clear()
+		}
+	}
+}
+
 // HandleKey routes keys to the active tab. Returns true when the
 // entire batch is submitted.
 func (f *QuestionForm) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
-	// Tab navigation works on all tabs including confirm.
-	switch {
-	case key.Matches(msg, f.keyNextTab):
-		f.switchTab(f.activeIdx + 1)
-		return false, nil
-	case key.Matches(msg, f.keyPrevTab):
-		f.switchTab(f.activeIdx - 1)
-		return false, nil
+	// Tab navigation works on all tabs including confirm. A secure field
+	// types [ and ] (secrets contain them); ctrl+left/right still switch.
+	typesBracket := msg.Text == "[" || msg.Text == "]"
+	if sq := f.secureQuestion(f.activeIdx); sq == nil || !sq.usable() || !typesBracket {
+		switch {
+		case key.Matches(msg, f.keyNextTab):
+			f.switchTab(f.activeIdx + 1)
+			return false, nil
+		case key.Matches(msg, f.keyPrevTab):
+			f.switchTab(f.activeIdx - 1)
+			return false, nil
+		}
 	}
 
 	// Confirm tab delegates to ConfirmComponent.
@@ -241,8 +329,7 @@ func (f *QuestionForm) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			f.syncConfirmAnswers()
 			if f.activeIdx < len(f.labels)-1 {
 				f.switchTab(f.activeIdx + 1)
-			} else if !f.hasConfirm {
-				f.submit()
+			} else if !f.hasConfirm && f.submit() {
 				return true, tea.Batch(cmd, f.takePendingCmd())
 			}
 			return false, cmd
@@ -310,11 +397,13 @@ func (f *QuestionForm) syncConfirmAnswers() {
 	}
 }
 
-// submit collects stored responses and calls OnAnswer.
-func (f *QuestionForm) submit() {
+// submit collects stored responses and calls OnAnswer. A secure form first
+// writes its fields; when that fails it shows the fixed error on the field
+// and returns false, so the form stays open and nothing is answered.
+func (f *QuestionForm) submit() bool {
 	responses := make([]question.Answer, f.numQuestions)
 	for i, ans := range f.answers {
-		if ans != nil {
+		if ans != nil && f.secureQuestion(i) == nil {
 			responses[i] = *ans
 		} else {
 			responses[i] = question.Answer{
@@ -322,12 +411,51 @@ func (f *QuestionForm) submit() {
 			}
 		}
 	}
+	if f.secure != nil {
+		return f.submitSecure(responses)
+	}
 	if f.OnAnswer != nil {
 		f.OnAnswer(responses)
 	}
 	if f.OnAnswerCmd != nil {
 		f.pendingCmd = f.OnAnswerCmd(responses)
 	}
+	return true
+}
+
+func (f *QuestionForm) submitSecure(responses []question.Answer) bool {
+	values := map[string][]byte{}
+	for i := range f.numQuestions {
+		if sq := f.secureQuestion(i); sq != nil {
+			if value := sq.value(); value != nil {
+				values[f.requestIDs[i]] = value
+			}
+		}
+	}
+	err := f.secure.Submit(responses, values)
+	for _, value := range values {
+		clear(value)
+	}
+	for i := range f.numQuestions {
+		if sq := f.secureQuestion(i); sq != nil && !sq.usable() {
+			sq.Clear()
+		}
+	}
+	var fieldErr *secureentry.FieldError
+	switch {
+	case err == nil, errors.Is(err, secureentry.ErrClosed):
+		// Saved, or cancelled elsewhere: either way the form is done.
+		f.clearSecrets()
+		return true
+	case errors.As(err, &fieldErr):
+		for i := range f.numQuestions {
+			if sq := f.secureQuestion(i); sq != nil && f.requestIDs[i] == fieldErr.QuestionID {
+				sq.errorText = fieldErr.Error()
+				f.switchTab(i)
+			}
+		}
+	}
+	return false
 }
 
 func (f *QuestionForm) takePendingCmd() tea.Cmd {
@@ -343,6 +471,7 @@ func (f *QuestionForm) PendingCmd() tea.Cmd { return f.takePendingCmd() }
 // cancel calls OnCancel to signal that the user dismissed the
 // question batch without answering.
 func (f *QuestionForm) cancel() {
+	f.Dismiss()
 	if f.OnCancel != nil {
 		f.OnCancel()
 	}
@@ -354,6 +483,13 @@ func (f *QuestionForm) ShortHelp() []key.Binding {
 		return f.confirmComp.ShortHelp()
 	}
 	bindings := []key.Binding{f.keyPrevTab, f.keyNextTab}
+	if sq := f.secureQuestion(f.activeIdx); sq != nil && sq.usable() {
+		// [ and ] are typed into the secret here.
+		bindings = []key.Binding{
+			key.NewBinding(key.WithKeys("ctrl+left"), key.WithHelp("ctrl+←", "prev tab")),
+			key.NewBinding(key.WithKeys("ctrl+right"), key.WithHelp("ctrl+→", "next tab")),
+		}
+	}
 	if f.activeIdx < f.numQuestions {
 		bindings = append(bindings, f.questions[f.activeIdx].ShortHelp()...)
 	}
@@ -800,8 +936,7 @@ func (f *QuestionForm) HandleMouseClick(x, y int) (bool, bool) {
 				if f.activeIdx < len(f.labels)-1 {
 					f.switchTab(f.activeIdx + 1)
 					return false, true
-				} else if !f.hasConfirm {
-					f.submit()
+				} else if !f.hasConfirm && f.submit() {
 					return true, true
 				}
 			}

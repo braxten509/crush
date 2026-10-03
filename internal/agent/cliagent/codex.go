@@ -104,7 +104,10 @@ const (
 
 // codexKey is what a live Codex process's thread was started with; a turn
 // that needs anything else starts a new one.
-type codexKey struct{ dir, model, tier, approval, sandbox string }
+type codexKey struct {
+	dir, model, tier, approval, sandbox string
+	autoCompactTokenLimit               int64
+}
 
 // codexLive is a Codex process kept open between the turns of one Crush
 // session, so commands it moved to the background keep running and the
@@ -209,7 +212,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	} else if m.autoApproved(t.SessionID) {
 		approval, sandbox = "never", "danger-full-access"
 	}
-	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: approval, sandbox: sandbox}
+	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: approval, sandbox: sandbox, autoCompactTokenLimit: m.AutoCompactTokenLimit}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *codexLive
@@ -226,12 +229,18 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	} else {
 		// Crush hands every CLI the shared memory; Codex's own stays off.
 		var err error
-		if p, err = startReviewProc(m.Dir, t.Env, !t.NoTools, "codex", "app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0"); err != nil {
+		args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0"}
+		if m.AutoCompactTokenLimit > 0 {
+			args = append(args, "-c", fmt.Sprintf("model_auto_compact_token_limit=%d", m.AutoCompactTokenLimit))
+		}
+		if p, err = startReviewProc(m.Dir, t.Env, !t.NoTools, "codex", args...); err != nil {
 			return err
 		}
 		lines = p.readLines()
 	}
 	t.Emit = p.reviewEvents(t.Emit)
+	compacting := false
+	lastActivity := time.Time{}
 	finished := false
 	defer func() {
 		if finished && keep && threadID != "" {
@@ -266,7 +275,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		err := p.send(map[string]any{"id": "steer-" + strconv.Itoa(steers), "method": "turn/steer", "params": map[string]any{
 			"threadId":       ids[0],
 			"expectedTurnId": ids[1],
-			"input":          codexInput(text, attachments),
+			"input":          codexInput(withSavedImagePaths(text, attachments), attachments),
 		}})
 		if err != nil {
 			sent.take(text)
@@ -289,7 +298,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		if err := t.Emit(Event{Type: EventSession, Session: threadID}); err != nil {
 			return err
 		}
-		startTurn(codexInput(t.Prompt, t.Attachments))
+		startTurn(codexInput(withSavedImagePaths(t.Prompt, t.Attachments), t.Attachments))
 	} else {
 		_ = p.send(map[string]any{"id": codexInitID, "method": "initialize", "params": map[string]any{
 			"clientInfo": map[string]any{"name": "crush", "title": "Crush", "version": version.Version},
@@ -439,7 +448,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 				if err := t.Emit(Event{Type: EventSession, Session: threadID}); err != nil {
 					return err
 				}
-				startTurn(codexInput(t.Prompt, t.Attachments))
+				startTurn(codexInput(withSavedImagePaths(t.Prompt, t.Attachments), t.Attachments))
 			case codexTurnID:
 				var res struct {
 					Turn struct {
@@ -453,14 +462,26 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		}
 
 		var params codexParams
+		if (strings.HasPrefix(msg.Method, "item/") || msg.Method == "thread/tokenUsage/updated") && time.Since(lastActivity) >= time.Second {
+			if err := t.Emit(Event{Type: EventActivity}); err != nil {
+				return err
+			}
+			lastActivity = time.Now()
+		}
 		_ = json.Unmarshal(msg.Params, &params)
 		item := params.Item
 		var err error
 		switch msg.Method {
 		case "item/agentMessage/delta":
+			if compacting {
+				break
+			}
 			textOpen = true
 			err = t.Emit(Event{Type: EventText, Text: params.Delta})
 		case "item/reasoning/summaryTextDelta", "item/reasoning/textDelta":
+			if compacting {
+				break
+			}
 			err = t.Emit(Event{Type: EventReasoning, Text: params.Delta})
 		case "item/commandExecution/outputDelta":
 			if output[params.ItemID] == nil {
@@ -512,6 +533,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			return errors.New("Codex: turn " + params.Turn.Status)
 
 		case "thread/compacted":
+			compacting = false
 			err = t.Emit(Event{Type: EventCompacting})
 
 		case "item/started":
@@ -536,17 +558,28 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 				}
 			}
 			switch item.Type {
+			case "reasoning":
+				if compacting {
+					break
+				}
+				// Some models expose reasoning lifecycle without text deltas.
+				// Preserve the activity state without manufacturing or displaying thoughts.
+				err = t.Emit(Event{Type: EventReasoning})
 			case "contextCompaction":
+				compacting = true
 				err = t.Emit(Event{Type: EventCompacting, Compacting: true})
 			case "userMessage":
 				var text strings.Builder
 				for _, c := range item.Content {
 					text.WriteString(c.Text)
 				}
-				if sent.take(text.String()) {
-					err = t.Emit(Event{Type: EventUserMessage, Text: text.String()})
+				if typed := withoutImagePaths(text.String()); sent.take(typed) {
+					err = t.Emit(Event{Type: EventUserMessage, Text: typed})
 				}
 			case "agentMessage":
+				if compacting {
+					break
+				}
 				// Consecutive messages without tools in between would run
 				// together.
 				if textOpen {
@@ -577,6 +610,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			failed := item.Status == "failed" || item.Status == "declined"
 			switch item.Type {
 			case "contextCompaction":
+				compacting = false
 				err = t.Emit(Event{Type: EventCompacting})
 			case "commandExecution":
 				if _, ok := calls[item.ID]; !ok || backgrounded[item.ID] {

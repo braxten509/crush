@@ -3,6 +3,7 @@ package cliagent
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -107,4 +108,42 @@ func TestAGYTurn(t *testing.T) {
 	// An unknown conversation makes agy start a new one silently.
 	_, err = collect(t, "agy", "other")
 	require.ErrorIs(t, err, ErrResume)
+}
+
+func TestClaudeSettingsReachTheCLI(t *testing.T) {
+	dir := t.TempDir()
+	arguments := filepath.Join(dir, "arguments")
+	t.Setenv("CLAUDE_TEST_ARGUMENTS", arguments)
+	script := `#!/bin/sh
+printf '%s\n' "$@" > "$CLAUDE_TEST_ARGUMENTS"
+read -r _
+echo '{"type":"system","subtype":"init","session_id":"s1"}'
+echo '{"type":"result","subtype":"success","result":"ok"}'
+cat >/dev/null
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	for _, tc := range []struct {
+		tier      string
+		ultracode bool
+		settings  string
+	}{
+		{"", false, ""},
+		{"fast", false, `{"fastMode":true}`},
+		{"", true, `{"ultracode":true}`},
+		{"fast", true, `{"fastMode":true,"ultracode":true}`},
+	} {
+		model := &Model{Kind: config.TypeClaudeCode, ID: "opus", Dir: dir, ServiceTier: tc.tier, Ultracode: tc.ultracode}
+		require.NoError(t, model.Run(t.Context(), Turn{Prompt: "hi", NoTools: true, Emit: func(Event) error { return nil }}))
+		data, err := os.ReadFile(arguments)
+		require.NoError(t, err)
+		args := strings.Split(strings.TrimSpace(string(data)), "\n")
+		i := slices.Index(args, "--settings")
+		if tc.settings == "" {
+			require.Equal(t, -1, i)
+			continue
+		}
+		require.Greater(t, i, -1)
+		require.JSONEq(t, tc.settings, args[i+1])
+	}
 }

@@ -132,3 +132,26 @@ func TestTaskRowRefreshSkipsRelayoutUnderInlineEditor(t *testing.T) {
 	require.Zero(t, editor.calls)
 	require.Zero(t, m.layout.tasks.Dy())
 }
+
+func TestTaskCountChangesImmediatelyOnCompletion(t *testing.T) {
+	t.Parallel()
+	m := newFrameTestUI(t)
+	m.session = &session.Session{ID: "parent"}
+	first := agent.Task{ID: "t1", SessionID: "parent", Name: "First", Status: agent.TaskRunning, Started: time.Now()}
+	second := agent.Task{ID: "t2", SessionID: "parent", Name: "Second", Status: agent.TaskRunning, Started: time.Now()}
+	m.handleTaskEvent(first)
+	m.handleTaskEvent(second)
+	m.openSubAgentsDialog()
+	require.Contains(t, ansi.Strip(m.renderTasks(80)), "2 subagents")
+	first.Status, first.Ended = agent.TaskDone, time.Now()
+	m.handleTaskEvent(first)
+	require.Contains(t, ansi.Strip(m.renderTasks(80)), "1 subagent")
+	require.Len(t, m.visibleTasks(), 1, "no tick or linger delay is needed")
+	scr := uv.NewScreenBuffer(100, 24)
+	m.dialog.Dialog(dialog.SubAgentsID).Draw(scr, scr.Bounds())
+	require.NotContains(t, ansi.Strip(scr.Render()), "First")
+	second.Status, second.Ended = agent.TaskFailed, time.Now()
+	m.handleTaskEvent(second)
+	require.Empty(t, m.renderTasks(80))
+	require.Zero(t, m.layout.tasks.Dy())
+}

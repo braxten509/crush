@@ -126,8 +126,11 @@ type Backend struct {
 	// workspace this mechanism exists to prevent. The cost is one UUID per
 	// client process, and the server only outlives its clients for as long
 	// as sessions keep arriving inside the idle-shutdown window.
-	retired map[string]struct{}
-	mu      sync.Mutex
+	retired  map[string]struct{}
+	mu       sync.Mutex
+	recallMu sync.Mutex
+	// Unacknowledged recalls retain their payload across failed responses.
+	recalledPrompts map[string]*retainedRecall
 
 	cfg         *config.ConfigStore
 	ctx         context.Context

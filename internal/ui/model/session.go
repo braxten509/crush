@@ -1,12 +1,14 @@
 package model
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -18,16 +20,21 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
+	"github.com/charmbracelet/crush/internal/workspace"
 	"github.com/charmbracelet/x/ansi"
 )
 
 // loadSessionMsg is a message indicating that a session and its files have
-// been loaded.
+// been loaded. seq identifies the load that produced it (zero applies
+// unconditionally); prepared holds the chat items built off the UI thread,
+// and is rebuilt on the spot when nil.
 type loadSessionMsg struct {
+	seq       uint64
 	session   *session.Session
 	files     []SessionFile
 	readFiles []string
 	messages  []message.Message
+	prepared  *preparedTranscript
 }
 
 // lspFilePaths returns deduplicated file paths from both modified and read
@@ -64,45 +71,62 @@ type SessionFile struct {
 
 // loadSession loads the session along with its associated files and computes
 // the diff statistics (additions and deletions) for each file in the session.
-// It returns a tea.Cmd that, when executed, fetches the session data and
-// returns a sessionFilesLoadedMsg containing the processed session files.
+// The session, its files and its transcript are fetched concurrently off the
+// UI thread, and the chat items (including nested agent tools, which need a
+// fetch each) are built there too, so Update only swaps them in. It must run
+// on the UI thread: it starts tracking the load (see sessionLoadState).
 //
 // The returned batch also reports the new current-session selection to
 // the workspace so the server can update its per-client presence map.
 // That report is fire-and-forget: errors are logged at debug and the
 // UI never blocks on the call.
 func (m *UI) loadSession(sessionID string) tea.Cmd {
+	ctx, seq, switching := m.beginSessionLoad(sessionID)
+	ws := m.com.Workspace
+	sty := m.com.Styles
+	canceled := m.sessionLoad.canceled
 	load := func() tea.Msg {
-		session, err := m.com.Workspace.GetSession(context.Background(), sessionID)
-		if err != nil {
-			return util.ReportError(err)
-		}
-
-		sessionFiles, err := m.loadSessionFiles(sessionID)
-		if err != nil {
-			return util.ReportError(err)
-		}
-
-		readFiles, err := m.com.Workspace.FileTrackerListReadFiles(context.Background(), sessionID)
-		if err != nil {
-			slog.Error("Failed to load read files for session", "error", err)
-		}
-
+		var (
+			wg           sync.WaitGroup
+			sess         session.Session
+			sessErr      error
+			sessionFiles []SessionFile
+			filesErr     error
+			readFiles    []string
+			messages     []message.Message
+			messagesErr  error
+		)
+		wg.Go(func() { sess, sessErr = ws.GetSession(ctx, sessionID) })
+		wg.Go(func() { sessionFiles, filesErr = loadSessionFiles(ctx, ws, sessionID) })
+		wg.Go(func() {
+			var err error
+			readFiles, err = ws.FileTrackerListReadFiles(ctx, sessionID)
+			if err != nil {
+				slog.Error("Failed to load read files for session", "error", err)
+			}
+		})
 		// Read the transcript here, not in Update: a long session is tens
 		// of megabytes and would freeze the event loop while it loads.
-		messages, err := m.com.Workspace.ListMessages(context.Background(), sessionID)
-		if err != nil {
-			return util.ReportError(err)
+		wg.Go(func() { messages, messagesErr = ws.ListMessages(ctx, sessionID) })
+		wg.Wait()
+		if err := cmp.Or(sessErr, filesErr, messagesErr); err != nil {
+			return sessionLoadFailedMsg{seq: seq, err: err}
 		}
 
 		return loadSessionMsg{
-			session:   &session,
+			seq:       seq,
+			session:   &sess,
 			files:     sessionFiles,
 			readFiles: readFiles,
 			messages:  messages,
+			prepared:  prepareTranscript(ctx, ws, sty, ws.Config(), ws.WorkingDir(), messages, canceled),
 		}
 	}
-	return tea.Batch(load, m.reportCurrentSession(sessionID))
+	cmds := []tea.Cmd{load, m.reportCurrentSession(sessionID)}
+	if switching {
+		cmds = append(cmds, sessionLoadTick(seq))
+	}
+	return tea.Batch(cmds...)
 }
 
 // reportCurrentSession returns a fire-and-forget tea.Cmd that
@@ -120,7 +144,11 @@ func (m *UI) reportCurrentSession(sessionID string) tea.Cmd {
 }
 
 func (m *UI) loadSessionFiles(sessionID string) ([]SessionFile, error) {
-	files, err := m.com.Workspace.ListSessionHistory(context.Background(), sessionID)
+	return loadSessionFiles(context.Background(), m.com.Workspace, sessionID)
+}
+
+func loadSessionFiles(ctx context.Context, ws workspace.Workspace, sessionID string) ([]SessionFile, error) {
+	files, err := ws.ListSessionHistory(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

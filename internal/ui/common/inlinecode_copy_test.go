@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRenderedInlineCodeHasNoVisibleBackticks guards the display side of the
-// inline-code copy fix: codespans render blank padding (a no-break-space
-// sentinel), never the backticks themselves. The sentinel is what selection
-// copies turn back into backticks (see list.HighlightContent).
-func TestRenderedInlineCodeHasNoVisibleBackticks(t *testing.T) {
+// TestRenderedInlineCodeIsPlainColoredText guards the inline code look:
+// codespans render as colored text only, with no backticks, no padding and
+// no background chip (copies get their backticks back from the message
+// source, see list.HighlightSource).
+func TestRenderedInlineCodeIsPlainColoredText(t *testing.T) {
 	t.Parallel()
 
 	sty := styles.CharmtonePantera()
@@ -25,7 +25,7 @@ func TestRenderedInlineCodeHasNoVisibleBackticks(t *testing.T) {
 		defer mu.Unlock()
 		rendered, err := r.Render(src)
 		require.NoError(t, err)
-		return ansi.Strip(rendered)
+		return rendered
 	}
 
 	for name, r := range map[string]*glamour.TermRenderer{
@@ -34,15 +34,13 @@ func TestRenderedInlineCodeHasNoVisibleBackticks(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			actual := render(t, r, `message "this is `+"`code`"+`" ok`)
+			rendered := render(t, r, `message "this is `+"`code`"+`" ok`)
+			actual := ansi.Strip(rendered)
 
 			require.NotContains(t, actual, "`", "codespan backticks must not render on screen")
-			require.Contains(
-				t,
-				actual,
-				`this is `+styles.CodespanPadding+`code`+styles.CodespanPadding+`" ok`,
-				"codespan must render with the sentinel padding",
-			)
+			require.Contains(t, actual, `this is code" ok`, "codespan must render without padding")
+			require.Nil(t, sty.Markdown.Code.BackgroundColor, "inline code must not have a background")
+			require.Nil(t, sty.QuietMarkdown.Code.BackgroundColor, "quiet inline code must not have a background")
 		})
 	}
 }

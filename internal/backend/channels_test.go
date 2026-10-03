@@ -339,3 +339,5 @@ func TestRouteChannelMessage_ConfigEnabled(t *testing.T) {
 	}
 	ws.runWG.Wait()
 }
+
+func (c *recordingCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }

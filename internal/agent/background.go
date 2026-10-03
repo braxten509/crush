@@ -1,7 +1,10 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
 	"strings"
@@ -10,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // Process is a command an agent CLI started that is still running: a shell
@@ -17,6 +21,7 @@ import (
 // their helpers (MCP servers, search tools) aren't listed.
 type Process struct {
 	PID     int
+	JobID   string // Managed shell jobs need no operating-system child process.
 	Command string
 	Started time.Time
 }
@@ -28,6 +33,7 @@ type proc struct {
 	args          []string
 	started       time.Time
 	nativeShellID string
+	managedJobID  string
 	// session is the main session whose agent started the process; it is
 	// empty under a sub-agent, which has no session of its own to report to.
 	session string
@@ -57,9 +63,9 @@ var backgroundMinAge = tools.ForegroundWaitLimit
 
 // BackgroundProcesses lists what the main agents' CLIs left running.
 // Sub-agents' processes are left out (sub-agents are listed on their own),
-// and so are short-lived ones: commands only go to the background after
-// [tools.ForegroundWaitLimit], so anything younger is a CLI helper such as a
-// hook, unless the user moved commands to the background while it ran.
+// Short-lived attached helpers are excluded. Native background shells,
+// commands explicitly moved to the background, and orphaned commands are
+// visible immediately.
 func BackgroundProcesses() []Process {
 	markers := hubMarkers()
 	if len(markers) == 0 {
@@ -67,12 +73,15 @@ func BackgroundProcesses() []Process {
 	}
 	procs := markedProcs(markers)
 	now, moved := time.Now(), cliagent.LastBackground()
-	var out []Process
+	out := managedBackgroundProcesses()
 	for _, p := range procs {
+		if managedBackgroundJob(p.managedJobID) != nil {
+			continue
+		}
 		if p.session == "" {
 			continue
 		}
-		if p.nativeShellID == "" && now.Sub(p.started) < backgroundMinAge && !p.started.Before(moved) {
+		if p.nativeShellID == "" && !isDetached(p, procs) && now.Sub(p.started) < backgroundMinAge && !p.started.Before(moved) {
 			continue
 		}
 		if !p.busService && isCommandRoot(p, procs) && !isForegroundCommand(p, procs) {
@@ -81,6 +90,95 @@ func BackgroundProcesses() []Process {
 	}
 	slices.SortFunc(out, func(a, b Process) int { return a.Started.Compare(b.Started) })
 	return out
+}
+
+// isDetached reports whether p was left running by a command that already
+// ended (`nohup … &`, `setsid`): its parent is neither one of the marked
+// processes nor Crush, so it was reparented. CLI helpers and hooks always
+// keep their parent, so detached processes are background work at any age;
+// and no CLI reports on them, so Crush tells the agent when they end.
+func isDetached(p proc, procs map[int]proc) bool {
+	_, marked := procs[p.ppid]
+	return !marked && p.ppid != os.Getpid()
+}
+
+// detachedScanInterval is how often a hub looks for detached processes
+// that ended; a variable so tests can shorten it.
+var detachedScanInterval = 2 * time.Second
+
+// detachedKey identifies a process across scans; PIDs get reused, so the
+// start time is part of it.
+type detachedKey struct {
+	pid     int
+	started time.Time
+}
+
+type detachedProc struct {
+	session string
+	command string
+}
+
+// watchDetached tells a session's agent when a process it detached ends,
+// until the hub closes. Processes that ended before a scan saw them are
+// not reported: they were too short to be background work.
+func (h *taskHub) watchDetached() {
+	markers := []string{TasksDirEnv + "=" + h.dir}
+	seen := map[detachedKey]detachedProc{}
+	tick := time.NewTicker(detachedScanInterval)
+	defer tick.Stop()
+	for range tick.C {
+		if _, err := os.Lstat(h.dir); errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		for k, d := range completedDetached(seen, markedProcs(markers)) {
+			go h.reportDetached(k, d, time.Now())
+		}
+	}
+}
+
+// A failed scan is not evidence that jobs ended. Entries are removed only
+// after a successful scan no longer contains the same process identity.
+func completedDetached(seen map[detachedKey]detachedProc, procs map[int]proc) map[detachedKey]detachedProc {
+	ended := make(map[detachedKey]detachedProc)
+	if procs == nil {
+		return ended
+	}
+	alive := make(map[detachedKey]bool)
+	for _, p := range procs {
+		key := detachedKey{p.pid, p.started}
+		// A previously tracked process stays alive even if it is reparented.
+		alive[key] = true
+		if p.session == "" || p.busService || p.nativeShellID != "" || !isDetached(p, procs) {
+			continue
+		}
+		if _, ok := seen[key]; !ok {
+			seen[key] = detachedProc{session: p.session, command: commandText(p.args)}
+		}
+	}
+	for key, process := range seen {
+		if !alive[key] {
+			ended[key] = process
+			delete(seen, key)
+		}
+	}
+	return ended
+}
+
+func (h *taskHub) reportDetached(k detachedKey, d detachedProc, ended time.Time) {
+	if h.c == nil {
+		return
+	}
+	if _, err := h.c.Run(context.Background(), d.session, detachedNotification(k, d, ended)); err != nil && !errors.Is(err, context.Canceled) {
+		slog.Error("Failed to report an ended background process", "error", err)
+	}
+}
+
+// detachedNotification is the message telling the agent a detached
+// process ended. Crush isn't its parent, so there is no exit status.
+func detachedNotification(k detachedKey, d detachedProc, ended time.Time) string {
+	took := ended.Sub(k.started).Round(time.Second)
+	return fmt.Sprintf("<%s>\n<name>%s</name>\n<status>ended</status>\n<result>\nThe background process `%s` (PID %d) ended after about %s. Crush can't see its exit status; check its output file if it wrote one.\n</result>\n</%s>",
+		TaskNotificationTag, BackgroundProcessName, d.command, k.pid, took, TaskNotificationTag)
 }
 
 // isForegroundCommand checks the owning CLI's pending tools before listing
@@ -138,11 +236,30 @@ func commandText(args []string) string {
 	return cliagent.CommandText(args)
 }
 
+// StopBackgroundProcess also handles managed scripts running shell builtins,
+// which have no separate PID to kill.
+func StopBackgroundProcess(process Process) error {
+	if process.JobID != "" {
+		for _, running := range managedBackgroundProcesses() {
+			if running.JobID == process.JobID {
+				return shell.GetBackgroundShellManager().Kill(process.JobID)
+			}
+		}
+		return fmt.Errorf("background job %q is no longer running", process.JobID)
+	}
+	return KillProcess(process.PID)
+}
+
 // KillProcess ends a listed background process and everything it started:
 // SIGTERM first, then SIGKILL for whatever is left a few seconds later.
 func KillProcess(pid int) error {
 	markers := hubMarkers()
 	procs := markedProcs(markers)
+	if process, ok := procs[pid]; ok {
+		if job := managedBackgroundJob(process.managedJobID); job != nil {
+			return shell.GetBackgroundShellManager().Kill(job.ID)
+		}
+	}
 	root, ok := procs[pid]
 	if !ok || !isCommandRoot(root, procs) {
 		return fmt.Errorf("process %d is not one of the agents' background processes", pid)

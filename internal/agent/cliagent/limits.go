@@ -77,14 +77,30 @@ func setLimits(kind catwalk.Type, limits []Limit) {
 // RefreshLimits asks a CLI's service for its usage limits unless they are
 // recent. It reports whether new limits were stored.
 func RefreshLimits(ctx context.Context, kind catwalk.Type) bool {
+	updated, _ := refreshLimits(ctx, kind, false)
+	return updated
+}
+
+// RefreshLimitsNow bypasses the refresh interval for an explicit usage request.
+// Concurrent requests still share the same in-flight guard.
+func RefreshLimitsNow(ctx context.Context, kind catwalk.Type) error {
+	_, err := refreshLimits(ctx, kind, true)
+	return err
+}
+
+func refreshLimits(ctx context.Context, kind catwalk.Type, force bool) (bool, error) {
 	fetch := limitFetchers[kind]
 	if fetch == nil {
-		return false
+		return false, errors.New("This CLI does not report usage limits")
 	}
 	limitStore.Lock()
-	if limitStore.pending[kind] || time.Since(limitStore.fetched[kind]) < limitRefresh {
+	if limitStore.pending[kind] {
 		limitStore.Unlock()
-		return false
+		return false, errors.New("Usage refresh is already in progress")
+	}
+	if !force && time.Since(limitStore.fetched[kind]) < limitRefresh {
+		limitStore.Unlock()
+		return false, nil
 	}
 	if limitStore.pending == nil {
 		limitStore.pending = map[catwalk.Type]bool{}
@@ -97,6 +113,9 @@ func RefreshLimits(ctx context.Context, kind catwalk.Type) bool {
 		limitStore.Unlock()
 	}()
 	limits, err := fetch(ctx)
+	if err == nil && force && len(limits) == 0 {
+		err = errors.New("No usage windows were returned by this CLI")
+	}
 	if err != nil {
 		// Back off like a success so a broken source isn't hammered.
 		limitStore.Lock()
@@ -105,10 +124,10 @@ func RefreshLimits(ctx context.Context, kind catwalk.Type) bool {
 		}
 		limitStore.fetched[kind] = time.Now()
 		limitStore.Unlock()
-		return false
+		return false, err
 	}
 	setLimits(kind, limits)
-	return true
+	return true, nil
 }
 
 var limitFetchers = map[catwalk.Type]func(context.Context) ([]Limit, error){

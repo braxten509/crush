@@ -70,11 +70,10 @@ func TestTextareaMouseSelection(t *testing.T) {
 	}
 	u.textarea.CursorStart()
 
-	// The textarea renders one row below the editor top (the attachments
-	// row is always reserved, even when empty). The default prompt
-	// ("┃ ") is 2 cells wide.
+	// The textarea renders below the separator and attachments rows, which
+	// are always reserved. The prompt is 2 cells wide.
 	startX := u.layout.editor.Min.X + 2
-	y := u.layout.editor.Min.Y + 1
+	y := u.layout.editor.Min.Y + editorTextTop
 
 	_, _ = u.Update(tea.MouseClickMsg(tea.Mouse{X: startX, Y: y, Button: uv.MouseLeft}))
 	require.True(t, u.textareaMouseSelecting)

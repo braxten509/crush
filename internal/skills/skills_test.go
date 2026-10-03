@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"encoding/xml"
 	"os"
 	"path/filepath"
 	"strings"
@@ -517,4 +518,23 @@ func TestFilter(t *testing.T) {
 			require.Len(t, result, tt.wantLen)
 		})
 	}
+}
+
+func TestDirectoryEscapesCommandMarkersWithoutChangingMetadata(t *testing.T) {
+	t.Parallel()
+	skill := &Skill{Name: "sample", Description: "Use $sample, /sample, and <examples> & details", SkillFilePath: "/skills/$sample/SKILL.md", Instructions: "Run $sample"}
+	catalog := ToPromptXML([]*Skill{skill})
+	require.NotContains(t, catalog, "$sample")
+	var decoded struct {
+		Skills []struct {
+			Name        string `xml:"name"`
+			Description string `xml:"description"`
+			Location    string `xml:"location"`
+		} `xml:"skill"`
+	}
+	require.NoError(t, xml.Unmarshal([]byte(catalog), &decoded))
+	require.Len(t, decoded.Skills, 1)
+	require.Equal(t, skill.Description, decoded.Skills[0].Description)
+	require.Equal(t, skill.SkillFilePath, decoded.Skills[0].Location)
+	require.Contains(t, skill.FormatInvocation(), "Run $sample")
 }

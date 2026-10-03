@@ -857,6 +857,7 @@ func resolveSelectedModels(cfg *Config, knownProviders []catwalk.Provider) (reso
 			result.LargeFallback = true
 		} else {
 			large.ServiceTier = largeModelSelected.ServiceTier
+			large.Ultracode = largeModelSelected.Ultracode
 			if largeModelSelected.MaxTokens > 0 {
 				large.MaxTokens = largeModelSelected.MaxTokens
 			} else {
@@ -903,6 +904,7 @@ func resolveSelectedModels(cfg *Config, knownProviders []catwalk.Provider) (reso
 			result.SmallFallback = true
 		} else {
 			small.ServiceTier = smallModelSelected.ServiceTier
+			small.Ultracode = smallModelSelected.Ultracode
 			if smallModelSelected.MaxTokens > 0 {
 				small.MaxTokens = smallModelSelected.MaxTokens
 			} else {

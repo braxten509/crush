@@ -76,12 +76,13 @@ type CurrentSession struct {
 // SessionID may arrive first, and filtering by SessionID alone
 // would terminate the caller before its own turn ran.
 type RunComplete struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id,omitempty"`
-	MessageID string `json:"message_id"`
-	Text      string `json:"text,omitempty"`
-	Error     string `json:"error,omitempty"`
-	Cancelled bool   `json:"cancelled,omitempty"`
+	SubmissionID string `json:"submission_id,omitempty"`
+	SessionID    string `json:"session_id"`
+	RunID        string `json:"run_id,omitempty"`
+	MessageID    string `json:"message_id"`
+	Text         string `json:"text,omitempty"`
+	Error        string `json:"error,omitempty"`
+	Cancelled    bool   `json:"cancelled,omitempty"`
 }
 
 // SkillInfo describes a visible skill exposed to a frontend.
@@ -142,6 +143,7 @@ func (a AgentInfo) IsZero() bool {
 // remains correct only when no other turns are in flight for the
 // same session.
 type AgentMessage struct {
+	SubmissionID      string       `json:"submission_id,omitempty"`
 	HiddenUserMessage bool         `json:"hidden_user_message,omitempty"`
 	SessionID         string       `json:"session_id"`
 	RunID             string       `json:"run_id,omitempty"`

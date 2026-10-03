@@ -56,7 +56,7 @@ func TestInterruptPreservesEachQueuedRequest(t *testing.T) {
 			sa.activeRequests.Del(sess.ID)
 			require.Eventually(t, func() bool {
 				msgs, _ := env.messages.List(t.Context(), sess.ID)
-				return len(msgs) == 4 && !sa.IsSessionBusy(sess.ID)
+				return len(msgs) == 3 && !sa.IsSessionBusy(sess.ID)
 			}, 5*time.Second, time.Millisecond)
 			require.Zero(t, sa.QueuedPrompts(sess.ID))
 			got := map[string]notify.RunComplete{}
@@ -88,11 +88,11 @@ func TestInterruptPreservesEachQueuedRequest(t *testing.T) {
 			}
 			msgs, err := env.messages.List(t.Context(), sess.ID)
 			require.NoError(t, err)
-			require.Len(t, msgs, 4)
+			require.Len(t, msgs, 3)
 			for i, id := range []string{"first", "second"} {
-				require.Equal(t, id+" prompt", msgs[i*2].Content().String())
-				require.Len(t, msgs[i*2].BinaryContent(), 1)
-				require.Equal(t, []byte(id+" attachment"), msgs[i*2].BinaryContent()[0].Data)
+				require.Equal(t, id+" prompt", msgs[i].Content().String())
+				require.Len(t, msgs[i].BinaryContent(), 1)
+				require.Equal(t, []byte(id+" attachment"), msgs[i].BinaryContent()[0].Data)
 			}
 		})
 	}
@@ -106,7 +106,7 @@ func TestCLIInterruptWaitsForSteeringTransfer(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	s := &cliSteps{a: sa, ctx: ctx, sessionID: sess.ID}
+	s := &cliSteps{running: toolRunningForSteer(), a: sa, ctx: ctx, sessionID: sess.ID}
 	sa.steering.Set(sess.ID, s)
 	sa.activeRequests.Set(sess.ID, &activeCancel{cancel: cancel})
 	sa.messageQueue.Set(sess.ID, []SessionAgentCall{{SessionID: sess.ID, Prompt: "preserve this prompt"}})
@@ -158,7 +158,7 @@ func TestCLIInterruptClaimsSteeredCallsBeforeLateAcknowledgement(t *testing.T) {
 	sa, _ := newCancelTestAgent(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	s := &cliSteps{a: sa, ctx: ctx, sessionID: "late-ack"}
+	s := &cliSteps{running: toolRunningForSteer(), a: sa, ctx: ctx, sessionID: "late-ack"}
 	sa.steering.Set(s.sessionID, s)
 	sa.activeRequests.Set(s.sessionID, &activeCancel{cancel: cancel})
 	sa.messageQueue.Set(s.sessionID, []SessionAgentCall{{SessionID: s.sessionID, Prompt: "once"}})

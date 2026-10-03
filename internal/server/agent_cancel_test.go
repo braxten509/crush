@@ -234,3 +234,5 @@ func TestPostAgent_DetachesRequestContext(t *testing.T) {
 		return coord.ranCount.Load() == 1
 	}, 2*time.Second, 10*time.Millisecond)
 }
+
+func (s *runCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }

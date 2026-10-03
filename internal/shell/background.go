@@ -48,6 +48,7 @@ func (sb *syncBuffer) String() string {
 // BackgroundShell represents a shell running in the background.
 type BackgroundShell struct {
 	ID          string
+	Started     time.Time
 	Command     string
 	Description string
 	Shell       *Shell
@@ -107,6 +108,7 @@ func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, b
 
 	bgShell := &BackgroundShell{
 		ID:          id,
+		Started:     time.Now(),
 		Command:     command,
 		Description: description,
 		WorkingDir:  workingDir,

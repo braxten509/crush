@@ -119,14 +119,8 @@ func TestDrainQueueForStep_NoMarkFoldsAllNonRunID(t *testing.T) {
 	require.Empty(t, canceledWithRunID)
 }
 
-// TestDrainQueueForStep_KeepsRunIDPromptsQueued is the core of fix 2: a
-// queued prompt that carries a RunID must NOT be folded into the active
-// turn. Folding it would silently absorb it into another turn and never
-// publish a RunComplete for its RunID, hanging a `crush run` caller that
-// blocks on that event. Such prompts are left in the queue so the
-// recursive run path gives each its own turn and its own RunComplete.
-// Non-RunID prompts are still folded.
-func TestDrainQueueForStep_KeepsRunIDPromptsQueued(t *testing.T) {
+// RunID-bearing prompts retain identity while sharing one atomic drain.
+func TestDrainQueueForStep_BatchesRunIDPrompts(t *testing.T) {
 	t.Parallel()
 
 	env := testEnv(t)
@@ -144,15 +138,13 @@ func TestDrainQueueForStep_KeepsRunIDPromptsQueued(t *testing.T) {
 
 	fold, canceledWithRunID := a.drainQueueForStep(sessionID)
 
-	require.Len(t, fold, 1, "only the non-RunID prompt is folded into the active turn")
+	require.Len(t, fold, 3, "RunID-bearing prompts belong to the same atomic batch")
 	require.Equal(t, "fold-me", fold[0].Prompt)
+	require.Equal(t, "run-a", fold[1].RunID)
+	require.Equal(t, "run-b", fold[2].RunID)
 	require.Empty(t, canceledWithRunID)
-
-	kept, ok := a.messageQueue.Get(sessionID)
-	require.True(t, ok, "RunID-bearing prompts must remain queued for the recursive run path")
-	require.Len(t, kept, 2)
-	require.Equal(t, "run-a", kept[0].RunID)
-	require.Equal(t, "run-b", kept[1].RunID)
+	_, ok := a.messageQueue.Get(sessionID)
+	require.False(t, ok)
 }
 
 // TestDrainQueueForStep_ReportsCanceledRunIDDrops verifies that a queued
@@ -179,15 +171,14 @@ func TestDrainQueueForStep_ReportsCanceledRunIDDrops(t *testing.T) {
 
 	fold, canceledWithRunID := a.drainQueueForStep(sessionID)
 
-	require.Empty(t, fold, "no uncanceled non-RunID prompts to fold")
+	require.Len(t, fold, 1, "the surviving RunID prompt belongs to the drained batch")
+	require.Equal(t, "run-survives", fold[0].RunID)
 	require.Len(t, canceledWithRunID, 1,
 		"only the dropped RunID-bearing prompt needs a terminal RunComplete")
 	require.Equal(t, "run-canceled", canceledWithRunID[0].RunID)
 
-	kept, ok := a.messageQueue.Get(sessionID)
-	require.True(t, ok)
-	require.Len(t, kept, 1, "the uncanceled RunID prompt stays queued")
-	require.Equal(t, "run-survives", kept[0].RunID)
+	_, ok := a.messageQueue.Get(sessionID)
+	require.False(t, ok)
 }
 
 // TestRunCompletePublisher_MustDeliverOverTakesPublish exercises the

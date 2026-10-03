@@ -44,17 +44,32 @@ type Change struct {
 	Path string `json:"path"`
 	// Order follows capture time, not the tool call's position in the chat.
 	// Parallel tools often finish out of order.
-	Order  int64  `json:"order,omitempty"`
-	Before *State `json:"before,omitempty"`
-	After  *State `json:"after,omitempty"`
+	Order    int64     `json:"order,omitempty"`
+	Before   *State    `json:"before,omitempty"`
+	After    *State    `json:"after,omitempty"`
+	Transfer *Transfer `json:"transfer,omitempty"`
 }
 
 // Review is persisted with a tool result, outside the content sent to models.
 // A non-nil review also records coverage when no files changed, preventing
 // legacy edit metadata from inventing a diff for an unsuccessful/no-op edit.
 type Review struct {
-	Root    string   `json:"root"`
-	Changes []Change `json:"changes,omitempty"`
+	Root      string         `json:"root"`
+	Changes   []Change       `json:"changes,omitempty"`
+	ID        string         `json:"id,omitempty"`
+	SessionID string         `json:"session_id,omitempty"`
+	Summary   *ReviewSummary `json:"summary,omitempty"`
+}
+
+// ReviewSummary is small enough to keep in a transcript. File contents and
+// the complete file list are fetched only when the review is opened.
+type ReviewSummary struct {
+	Files     int      `json:"files"`
+	Paths     []string `json:"paths,omitempty"`
+	Copied    int      `json:"copied,omitempty"`
+	Checkouts int      `json:"checkouts,omitempty"`
+	Moved     int      `json:"moved,omitempty"`
+	Generated int      `json:"generated,omitempty"`
 }
 
 type entry struct {
@@ -64,12 +79,13 @@ type entry struct {
 }
 
 type Tracker struct {
-	root    string
-	exclude []string
-	files   map[string]entry
-	extra   map[string]bool
-	order   int64
-	store   *snapshotStore
+	root     string
+	exclude  []string
+	files    map[string]entry
+	extra    map[string]bool
+	order    int64
+	store    *snapshotStore
+	imported bool
 }
 
 func New(ctx context.Context, root string, exclude ...string) (*Tracker, error) {
@@ -203,6 +219,14 @@ func (t *Tracker) scan(ctx context.Context) (map[string]entry, error) {
 	}
 	visit := func(path string, info fs.FileInfo) {
 		previous, known := t.files[path]
+		if !known && (t.imported || generatedArtifact(path)) {
+			reason := "Copied content"
+			if !t.imported {
+				reason = "Generated build artifact"
+			}
+			next[path] = entry{info: info, changeTime: changeTime(info), state: State{Size: info.Size(), Mode: uint32(info.Mode()), Omitted: reason}}
+			return
+		}
 		if known && os.SameFile(previous.info, info) && previous.info.Size() == info.Size() &&
 			previous.info.Mode() == info.Mode() && previous.info.ModTime().Equal(info.ModTime()) &&
 			previous.changeTime == changeTime(info) {

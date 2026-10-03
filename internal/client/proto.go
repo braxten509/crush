@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
+	"github.com/google/uuid"
 )
 
 // ListWorkspaces retrieves all workspaces from the server.
@@ -453,8 +454,39 @@ func (c *Client) ClearAgentSessionQueuedPrompts(ctx context.Context, id string, 
 	return nil
 }
 
-// InterruptAgentSession stops the active run and lets the next queued
-// prompt run.
+// RecallAgentSessionQueuedPrompt withdraws the newest prompt still owned by Crush.
+func (c *Client) RecallAgentSessionQueuedPrompt(ctx context.Context, id, sessionID string) (*proto.AgentMessage, error) {
+	key := id + "\x00" + sessionID
+	token, _ := c.recallRequests.LoadOrStore(key, uuid.NewString())
+	query := url.Values{"request_id": {token.(string)}}
+	path := fmt.Sprintf("/workspaces/%s/agent/sessions/%s/prompts/recall", id, sessionID)
+	rsp, err := c.post(ctx, path, query, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to recall queued prompt: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to recall queued prompt: status code %d", rsp.StatusCode)
+	}
+	var prompt *proto.AgentMessage
+	if err := json.NewDecoder(rsp.Body).Decode(&prompt); err != nil {
+		return nil, fmt.Errorf("failed to decode recalled prompt: %w", err)
+	}
+	c.recallRequests.CompareAndDelete(key, token)
+	// Delivery succeeded. A failed acknowledgement keeps the server's copy;
+	// it must never turn a successfully recovered prompt into a UI error.
+	go func() {
+		ackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ack, err := c.post(ackCtx, path, url.Values{"request_id": {token.(string)}, "acknowledge": {"true"}}, nil, nil)
+		if err == nil {
+			ack.Body.Close()
+		}
+	}()
+	return prompt, nil
+}
+
+// InterruptAgentSession stops the active run and lets the next queued prompt run.
 func (c *Client) InterruptAgentSession(ctx context.Context, id string, sessionID string) error {
 	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/interrupt", id, sessionID), nil, nil, nil)
 	if err != nil {
@@ -520,6 +552,7 @@ func (c *Client) SetMainAgent(ctx context.Context, id, agentID string) error {
 // turn on the same session (e.g. interactive TUI usage).
 func (c *Client) SendMessage(ctx context.Context, id string, sessionID, runID, channel, prompt string, attachments ...message.Attachment) error {
 	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent", id), nil, jsonBody(proto.AgentMessage{
+		SubmissionID:      message.SubmissionID(ctx),
 		HiddenUserMessage: message.HiddenUserMessage(ctx),
 		SessionID:         sessionID,
 		RunID:             runID,
@@ -533,9 +566,9 @@ func (c *Client) SendMessage(ctx context.Context, id string, sessionID, runID, c
 	defer rsp.Body.Close()
 	if rsp.StatusCode != http.StatusOK && rsp.StatusCode != http.StatusAccepted {
 		if msg := decodeErrorMessage(rsp.Body); msg != "" {
-			return fmt.Errorf("failed to send message to agent: status code %d: %s", rsp.StatusCode, msg)
+			return &message.DefinitiveSubmissionError{Err: fmt.Errorf("failed to send message to agent: status code %d: %s", rsp.StatusCode, msg)}
 		}
-		return fmt.Errorf("failed to send message to agent: status code %d", rsp.StatusCode)
+		return &message.DefinitiveSubmissionError{Err: fmt.Errorf("failed to send message to agent: status code %d", rsp.StatusCode)}
 	}
 	return nil
 }

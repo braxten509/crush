@@ -583,6 +583,7 @@ type modelView struct {
 	Efforts  []string `json:"efforts,omitempty"`
 	Think    *bool    `json:"think,omitempty"`
 	Fast     *bool    `json:"fast,omitempty"`
+	Ultra    *bool    `json:"ultracode,omitempty"`
 	Yolo     bool     `json:"yolo"`
 	Plan     bool     `json:"plan"`
 	Images   bool     `json:"images"`
@@ -764,6 +765,10 @@ func (h *hub) modelLocked() modelView {
 			fast := selected.ServiceTier == "fast"
 			mv.Fast = &fast
 		}
+		if model := cfg.GetModelByType(agentCfg.Model); model != nil && config.SupportsUltracode(*p, *model) {
+			ultra := selected.Ultracode
+			mv.Ultra = &ultra
+		}
 	}
 	if m := cfg.GetModelByType(agentCfg.Model); m != nil {
 		mv.Name = cmp.Or(m.Name, m.ID)
@@ -849,6 +854,13 @@ func (h *hub) commandsLocked(m modelView) []commandView {
 			label = "Turn off FAST mode"
 		}
 		out = append(out, commandView{ID: "fast", Label: label, Alias: "fast"})
+	}
+	if m.Ultra != nil {
+		label := "Turn on Ultracode"
+		if *m.Ultra {
+			label = "Turn off Ultracode"
+		}
+		out = append(out, commandView{ID: "ultracode", Label: label, Alias: "ultracode"})
 	}
 	if m.Think != nil {
 		label := "Turn on thinking"

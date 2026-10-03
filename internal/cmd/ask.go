@@ -14,7 +14,8 @@ var askCmd = &cobra.Command{
 	Use:   "ask",
 	Short: "Ask the user questions in Crush's question form from inside a Crush session",
 	Long: `Ask the user questions in Crush's question form. Only works from an agent CLI that Crush is running.
-The questions are JSON on stdin, in the format of Crush's question tool. The command returns right away; the answers reach the session as a message once the user submits.`,
+The questions are JSON on stdin, in the format of Crush's question tool. The command returns right away; the answers reach the session as a message once the user submits.
+A secure_entry question is a masked field for a secret: it takes only metadata (label, question, description, file, placeholder, occurrence), never a value. On Submit the value is written straight into the prepared file, and only "saved" or "cancelled" comes back. Forms with secure_entry questions only open in the local Crush terminal.`,
 	Example: `crush ask <<'EOF'
 {"questions":[{"type":"single_choice","label":"Database","question":"Which database?","description":"Picks the storage layer.","choices":[{"id":"pg","label":"Postgres"},{"id":"sqlite","label":"SQLite"}]}]}
 EOF`,

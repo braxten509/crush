@@ -163,3 +163,5 @@ func TestRunAgent_CancellationPublishesNoErrorTerminal(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+func (c *errorCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }

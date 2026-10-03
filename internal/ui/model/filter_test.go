@@ -32,7 +32,7 @@ func TestFilter_SingleEventPassthrough(t *testing.T) {
 	msg, ok := result.(common.CoalescedWheelMsg)
 	require.True(t, ok, "expected CoalescedWheelMsg")
 	require.Equal(t, float64(0), msg.DeltaX)
-	require.Equal(t, float64(1), msg.DeltaY)
+	require.Equal(t, float64(3), msg.DeltaY)
 }
 
 func TestFilter_CoalescesSameDirection(t *testing.T) {
@@ -58,7 +58,7 @@ func TestFilter_CoalescesSameDirection(t *testing.T) {
 	result = f.Filter(nil, wheelDown())
 	msg, ok := result.(common.CoalescedWheelMsg)
 	require.True(t, ok, "expected CoalescedWheelMsg after window")
-	require.Equal(t, float64(3), msg.DeltaY, "should accumulate 3 down events")
+	require.Equal(t, float64(9), msg.DeltaY, "should accumulate 3 down events")
 }
 
 func TestFilter_DirectionChangeWithinWindowAccumulatesNewDirection(t *testing.T) {
@@ -78,7 +78,7 @@ func TestFilter_DirectionChangeWithinWindowAccumulatesNewDirection(t *testing.T)
 	result = f.Filter(nil, wheelUp())
 	msg, ok := result.(common.CoalescedWheelMsg)
 	require.True(t, ok)
-	require.Equal(t, float64(-2), msg.DeltaY, "should have 2 accumulated up events")
+	require.Equal(t, float64(-6), msg.DeltaY, "should have 2 accumulated up events")
 }
 
 func TestFilter_DirectionChangeDropsStaleAccumulator(t *testing.T) {
@@ -103,7 +103,7 @@ func TestFilter_DirectionChangeDropsStaleAccumulator(t *testing.T) {
 	result = f.Filter(nil, wheelDown())
 	msg, ok := result.(common.CoalescedWheelMsg)
 	require.True(t, ok)
-	require.Equal(t, float64(2), msg.DeltaY, "should drop stale opposite-direction events")
+	require.Equal(t, float64(6), msg.DeltaY, "should drop stale opposite-direction events")
 }
 
 func TestFilter_WindowExpiryEmitsAccumulated(t *testing.T) {
@@ -127,7 +127,7 @@ func TestFilter_WindowExpiryEmitsAccumulated(t *testing.T) {
 	result = f.Filter(nil, wheelUp())
 	msg, ok := result.(common.CoalescedWheelMsg)
 	require.True(t, ok)
-	require.Equal(t, float64(-3), msg.DeltaY, "should include accumulated events plus triggering event")
+	require.Equal(t, float64(-9), msg.DeltaY, "should include accumulated events plus triggering event")
 }
 
 func TestFilter_MotionThrottledIndependently(t *testing.T) {

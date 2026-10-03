@@ -38,7 +38,7 @@ func (m *UI) visibleTasks() []agent.Task {
 	}
 	var out []agent.Task
 	for _, t := range m.tasks {
-		if t.SessionID == m.session.ID && (t.Status == agent.TaskRunning || time.Since(t.Ended) < taskLinger) {
+		if t.SessionID == m.session.ID && t.Status == agent.TaskRunning {
 			out = append(out, t)
 		}
 	}

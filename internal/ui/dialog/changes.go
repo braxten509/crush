@@ -347,7 +347,7 @@ func (c *Changes) layout(width int) {
 	adds, dels := diffreview.Stats(c.files)
 
 	// "2 files changed +12 −3"
-	add(bg.Foreground(p.text).Bold(true).Render(countNoun(len(c.files), "file")+" changed")+bg.Render("  ")+
+	add(bg.Foreground(p.text).Bold(true).Render(diffreview.Summary(c.files))+bg.Render("  ")+
 		c.stat(bg, adds, dels), -1, -1, false)
 	add("", -1, -1, false)
 
@@ -358,6 +358,9 @@ func (c *Changes) layout(width int) {
 	for i, f := range c.files {
 		dot := bg.Foreground(c.kindColor(f.Kind)).Render("■")
 		stat := c.stat(bg, f.Adds, f.Dels)
+		if !f.HasEdits() {
+			stat = bg.Foreground(p.text3).Render(f.Kind.String())
+		}
 		room := inner - 2 - 2 - lipgloss.Width(stat) - 2
 		path := bg.Foreground(p.text).Render(truncateLeft(c.shortPath(f.Path), room))
 		gap := max(1, inner-2-lipgloss.Width(dot)-1-lipgloss.Width(path)-lipgloss.Width(stat))

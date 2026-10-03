@@ -173,6 +173,16 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Handle(c.handleGetWorkspaceSessionMessages),
 
+		apigen.Get("/v1/workspaces/{id}/sessions/{sid}/messages/{mid}/review").
+			Summary("Load retained file review details").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			PathParam("mid", "Message ID").
+			Responds(proto.Message{}).
+			Fails(404, 500).
+			Handle(c.handleGetMessageReview),
+
 		apigen.Get("/v1/workspaces/{id}/sessions/{sid}/messages/user").
 			Summary("Get user messages for session").
 			Tags("sessions").
@@ -366,6 +376,7 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Tags("agent").
 			PathParam("id", "Workspace ID").
 			PathParam("sid", "Session ID").
+			QueryParam("details", "Return prompt text and submission IDs when true").
 			Responds([]string{}).
 			Fails(404, 500).
 			Handle(c.handleGetWorkspaceAgentSessionPromptList),
@@ -385,6 +396,17 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			PathParam("sid", "Session ID").
 			Fails(404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionInterrupt),
+
+		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/prompts/recall").
+			Summary("Withdraw the newest queued prompt for editing").
+			Tags("agent").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			QueryParam("request_id", "Idempotent recall request token").
+			QueryParam("acknowledge", "Release retained payload after successful delivery").
+			Responds(proto.AgentMessage{}).
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspaceAgentSessionPromptRecall),
 
 		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/summarize").
 			Summary("Summarize session").
@@ -509,6 +531,17 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Responds(proto.ReadSkillResponse{}).
 			Fails(400, 404, 500).
 			Handle(c.handlePostWorkspaceSkillRead),
+
+		apigen.Get("/v1/workspaces/{id}/skills/installed").
+			Summary("List installed skills including disabled skills").
+			Tags("skills").PathParam("id", "Workspace ID").
+			Fails(404, 500).Handle(c.handleGetInstalledSkills),
+
+		apigen.Post("/v1/workspaces/{id}/skills/manage").
+			Summary("Install or enable/disable a skill").
+			Tags("skills").PathParam("id", "Workspace ID").
+			Accepts(proto.ManageSkillRequest{}).
+			Fails(400, 404, 500).Handle(c.handleManageSkill),
 
 		apigen.Post("/v1/workspaces/{id}/mcp/refresh-tools").
 			Summary("Refresh MCP tools").

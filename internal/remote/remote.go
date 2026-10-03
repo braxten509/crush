@@ -49,6 +49,7 @@ const (
 	ActEffort                       // set the reasoning Effort
 	ActThink                        // toggle thinking
 	ActFast                         // toggle FAST mode
+	ActUltracode                    // toggle Claude's Ultracode
 	ActYolo                         // toggle YOLO mode
 	ActMode                         // switch between code and plan mode
 	ActSummarize                    // /compact
@@ -484,6 +485,7 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		"summarize": ActSummarize,
 		"think":     ActThink,
 		"fast":      ActFast,
+		"ultracode": ActUltracode,
 		"yolo":      ActYolo,
 		"mode":      ActMode,
 	}

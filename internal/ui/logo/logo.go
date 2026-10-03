@@ -4,6 +4,7 @@ package logo
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"math/rand/v2"
 	"strings"
 
@@ -16,17 +17,26 @@ import (
 // a given amount via the boolean argument.
 type letterform func(bool) string
 
-const diag = `╱`
-
 // Opts are the options for rendering the Crush title art.
 type Opts struct {
-	FieldColor   color.Color // diagonal lines
 	TitleColorA  color.Color // left gradient ramp point
 	TitleColorB  color.Color // right gradient ramp point
 	CharmColor   color.Color // Charm™ text color
 	VersionColor color.Color // version text color
 	Width        int         // width of the rendered logo, used for truncation
 	Hyper        bool        // whether it is Crush or Hypercrush
+
+	// Flow animates the letters: a gradient through TitleColorA,
+	// TitleColorB and FlowColor that drifts diagonally, looping as Flow goes
+	// from 0 to 1. Without a FlowColor the letters keep the plain A to B
+	// gradient.
+	Flow      float64
+	FlowColor color.Color
+
+	// Shine is how far a diagonal band of light has swept across the
+	// letters, from 0 to 1. 0 draws no shine. ShineColor is the light.
+	Shine      float64
+	ShineColor color.Color
 
 	// When true, stretch a random letterform on each render. Has no effect in
 	// compact mode. Mainly for testing. In production you will want to cache
@@ -41,9 +51,6 @@ type Opts struct {
 // or wider for the main pane.
 func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 	charm := "Charm™"
-	if !o.Hyper {
-		charm = " " + charm
-	}
 
 	fg := func(c color.Color, s string) string {
 		return lipgloss.NewStyle().Foreground(c).Render(s)
@@ -85,9 +92,10 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 		crush = renderWord(spacing, stretchIndex, hyperLetterforms...) + "\n" + crush
 	}
 	crushWidth := lipgloss.Width(crush)
+	rows := strings.Split(crush, "\n")
 	b := new(strings.Builder)
-	for r := range strings.SplitSeq(crush, "\n") {
-		fmt.Fprintln(b, styles.ApplyForegroundGrad(base, r, o.TitleColorA, o.TitleColorB))
+	for y, r := range rows {
+		fmt.Fprintln(b, paintRow(base, r, y, crushWidth, len(rows), o))
 	}
 	crush = b.String()
 
@@ -106,44 +114,78 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 
 	// Narrow version. If this is Hypercrush, this is also a stacked version.
 	if compact {
-		field := fg(o.FieldColor, strings.Repeat(diag, crushWidth))
-		return strings.Join([]string{field, field, crush, field, ""}, "\n")
+		return crush + "\n"
 	}
 
-	fieldHeight := lipgloss.Height(crush)
-
-	// Left field.
-	const leftWidth = 6
-	leftFieldRow := fg(o.FieldColor, strings.Repeat(diag, leftWidth))
-	leftField := new(strings.Builder)
-	for range fieldHeight {
-		fmt.Fprintln(leftField, leftFieldRow)
-	}
-
-	// Right field.
-	rightWidth := max(15, o.Width-crushWidth-leftWidth-2) // 2 for the gap.
-	const stepDownAt = 0
-	rightField := new(strings.Builder)
-	for i := range fieldHeight {
-		width := rightWidth
-		if i >= stepDownAt {
-			width = rightWidth - (i - stepDownAt)
-		}
-		fmt.Fprint(rightField, fg(o.FieldColor, strings.Repeat(diag, width)), "\n")
-	}
-
-	// Return the wide version.
-	const hGap = " "
-	logo := lipgloss.JoinHorizontal(lipgloss.Top, leftField.String(), hGap, crush, hGap, rightField.String())
 	if o.Width > 0 {
 		// Truncate the logo to the specified width.
-		lines := strings.Split(logo, "\n")
+		lines := strings.Split(crush, "\n")
 		for i, line := range lines {
 			lines[i] = ansi.Truncate(line, o.Width, "")
 		}
-		logo = strings.Join(lines, "\n")
+		crush = strings.Join(lines, "\n")
 	}
-	return logo
+	return crush
+}
+
+// shineWidth is the width of the band of light, as a share of the
+// wordmark's diagonal span.
+const shineWidth = 0.12
+
+// paintRow colors one row of the wordmark: a horizontal gradient, lit by
+// the shine where its diagonal band crosses the row. The band leans like
+// "/", so lower rows light up a little later than the rows above them.
+func paintRow(base lipgloss.Style, row string, y, width, height int, o Opts) string {
+	if row == "" {
+		return ""
+	}
+	shining := o.Shine > 0 && o.Shine < 1 && o.ShineColor != nil
+	if o.FlowColor == nil && !shining {
+		return styles.ApplyForegroundGrad(base, row, o.TitleColorA, o.TitleColorB)
+	}
+	plain := []rune(ansi.Strip(row))
+	ramp := lipgloss.Blend1D(len(plain), o.TitleColorA, o.TitleColorB)
+	span := float64(width + 2*height)
+	center := -shineWidth + o.Shine*(1+2*shineWidth)
+	var out strings.Builder
+	for x, c := range ramp {
+		// Cells are about twice as tall as wide, so two columns per row
+		// gives a 45° diagonal.
+		pos := float64(x+2*y) / span
+		if o.FlowColor != nil {
+			c = cycle(pos*flowRepeat-o.Flow, o.TitleColorA, o.TitleColorB, o.FlowColor)
+		}
+		if shining {
+			if light := 1 - math.Abs(pos-center)/shineWidth; light > 0 {
+				c = mix(c, o.ShineColor, math.Sqrt(light))
+			}
+		}
+		out.WriteString(base.Foreground(c).Render(string(plain[x])))
+	}
+	return out.String()
+}
+
+// flowRepeat is how many times the flowing gradient's colors repeat across
+// the wordmark's diagonal.
+const flowRepeat = 1.0
+
+// cycle samples a looping gradient through the given colors at u; u wraps,
+// so the last color blends back into the first.
+func cycle(u float64, stops ...color.Color) color.Color {
+	u -= math.Floor(u)
+	at := u * float64(len(stops))
+	i := int(at)
+	return mix(stops[i%len(stops)], stops[(i+1)%len(stops)], at-float64(i))
+}
+
+// mix blends a toward b by t, from 0 (all a) to 1 (all b).
+func mix(a, b color.Color, t float64) color.Color {
+	ar, ag, ab, _ := a.RGBA()
+	br, bg, bb, _ := b.RGBA()
+	at := func(x, y uint32) uint8 {
+		return uint8((float64(x)*(1-t) + float64(y)*t) / 257)
+	}
+	return color.RGBA{at(ar, br), at(ag, bg), at(ab, bb), 255}
 }
 
 // SmallRender renders a smaller version of the Crush logo, suitable for
@@ -156,10 +198,5 @@ func SmallRender(t *styles.Styles, width int, o Opts) string {
 	charm := "Charm™"
 	title := t.Logo.SmallCharm.Render(charm)
 	title = fmt.Sprintf("%s %s", title, styles.ApplyBoldForegroundGrad(t.Logo.GradCanvas, name, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor))
-	remainingWidth := width - lipgloss.Width(title) - 1 // 1 for the space after the name
-	if remainingWidth > 0 {
-		lines := strings.Repeat("╱", remainingWidth)
-		title = fmt.Sprintf("%s %s", title, t.Logo.SmallDiagonals.Render(lines))
-	}
-	return title
+	return ansi.Truncate(title, width, "")
 }

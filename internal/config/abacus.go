@@ -47,6 +47,12 @@ func SupportsFastMode(provider ProviderConfig, model catwalk.Model) bool {
 		(strings.HasPrefix(model.ID, "gpt-") || strings.HasPrefix(model.ID, "o3") || strings.HasPrefix(model.ID, "o4"))
 }
 
+// SupportsUltracode reports whether the model has Claude Code's Ultracode.
+// Claude offers it on the models with effort levels; Haiku has neither.
+func SupportsUltracode(provider ProviderConfig, model catwalk.Model) bool {
+	return provider.Type == TypeClaudeCode && len(model.ReasoningLevels) > 0
+}
+
 func SupportsThinkingToggle(provider ProviderConfig, model catwalk.Model) bool {
 	if !model.CanReason || len(model.ReasoningLevels) > 0 {
 		return false

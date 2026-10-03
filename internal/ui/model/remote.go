@@ -203,7 +203,7 @@ func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
 	case remote.ActModel:
 		return m.remoteSelectModel(a.Provider, a.Model)
 	case remote.ActEffort:
-		return m.setReasoningEffort(a.Effort)
+		return m.setReasoningEffort(a.Effort, nil)
 	case remote.ActThink:
 		return m.toggleThinking(), nil
 	case remote.ActFast:
@@ -211,6 +211,8 @@ func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
 			return nil, errors.New("FAST mode requires a Codex model")
 		}
 		return m.toggleFastMode(), nil
+	case remote.ActUltracode:
+		return m.toggleUltracode(), nil
 	case remote.ActMode:
 		return m.toggleInputMode(), nil
 	case remote.ActSummarize:

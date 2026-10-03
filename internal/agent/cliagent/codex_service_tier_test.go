@@ -2,6 +2,7 @@ package cliagent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,7 @@ func TestCodexServiceTier(t *testing.T) {
 				// Capture the real driver's requests, answering each only after
 				// reading it so the test also covers the protocol handshake.
 				script := `#!/bin/sh
+printf '%s\n' "$@" > args.txt
 read -r line
 printf '%s\n' "$line" > requests.jsonl
 echo '{"id":"1","result":{}}'
@@ -36,7 +38,11 @@ cat >/dev/null
 `
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755))
 				t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-				provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, tier)
+				limit := int64(400000)
+				if resume != "" {
+					limit = 240000
+				}
+				provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, tier, false, limit)
 				model, err := provider.LanguageModel(t.Context(), "gpt-6-astra")
 				require.NoError(t, err)
 				require.NoError(t, model.(*Model).Run(t.Context(), Turn{
@@ -44,6 +50,11 @@ cat >/dev/null
 				}))
 				assertRequests := func(ephemeral bool) {
 					t.Helper()
+					args, err := os.ReadFile(filepath.Join(dir, "args.txt"))
+					require.NoError(t, err)
+					require.Contains(t, string(args), fmt.Sprintf("model_auto_compact_token_limit=%d", limit))
+					require.NotContains(t, string(args), "model_auto_compact_token_limit=160000")
+					require.NotContains(t, string(args), "model_context_window=")
 					data, err := os.ReadFile(filepath.Join(dir, "requests.jsonl"))
 					require.NoError(t, err)
 					lines := strings.Split(strings.TrimSpace(string(data)), "\n")

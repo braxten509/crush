@@ -607,8 +607,27 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionPromptClear(w http.Respons
 	w.WriteHeader(http.StatusOK)
 }
 
-// handlePostWorkspaceAgentSessionInterrupt stops the active run and lets
-// the next queued prompt run.
+// handlePostWorkspaceAgentSessionPromptRecall withdraws an editable queued prompt.
+func (c *controllerV1) handlePostWorkspaceAgentSessionPromptRecall(w http.ResponseWriter, r *http.Request) {
+	requestID := r.URL.Query().Get("request_id")
+	if requestID == "" {
+		jsonError(w, http.StatusBadRequest, "request_id is required")
+		return
+	}
+	if r.URL.Query().Get("acknowledge") == "true" {
+		c.backend.AcknowledgeRecalledPrompt(r.PathValue("id"), r.PathValue("sid"), requestID)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	prompt, err := c.backend.RecallQueuedPrompt(r.PathValue("id"), r.PathValue("sid"), requestID)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, prompt)
+}
+
+// handlePostWorkspaceAgentSessionInterrupt stops the active run and lets the next queued prompt run.
 func (c *controllerV1) handlePostWorkspaceAgentSessionInterrupt(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	sid := r.PathValue("sid")
@@ -655,6 +674,15 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionShell(w http.ResponseWrite
 func (c *controllerV1) handleGetWorkspaceAgentSessionPromptList(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	sid := r.PathValue("sid")
+	if r.URL.Query().Get("details") == "true" {
+		entries, err := c.backend.QueuedPromptSummaries(id, sid)
+		if err != nil {
+			c.handleError(w, r, err)
+			return
+		}
+		jsonEncode(w, entries)
+		return
+	}
 	prompts, err := c.backend.QueuedPromptsList(id, sid)
 	if err != nil {
 		c.handleError(w, r, err)

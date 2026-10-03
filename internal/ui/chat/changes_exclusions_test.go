@@ -77,3 +77,15 @@ func TestReviewHidesDotFoldersAndAgentState(t *testing.T) {
 	require.False(t, ignoredReviewPath("/home/reviewer/.local/bin/pa-dev", ""))
 	require.True(t, ignoredReviewPath("/home/reviewer/.local/lib/tool.py", ""))
 }
+
+func TestReviewHidesScratchFolders(t *testing.T) {
+	t.Setenv("HOME", "/home/reviewer")
+	for _, path := range []string{
+		"scratch/pa-tap/app/build.gradle.kts", "/home/reviewer/scratch/notes.md", "project/tmp/out.txt", "Temp/a.go", "src/Scratch/x.go",
+	} {
+		require.True(t, ignoredReviewPath(path, "/home/reviewer"), path)
+	}
+	for _, path := range []string{"scratch.go", "src/scratchpad/main.go", "internal/temperature/temp.go", "tmp.txt"} {
+		require.False(t, ignoredReviewPath(path, "/workspace"), path)
+	}
+}

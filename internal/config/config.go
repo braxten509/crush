@@ -77,6 +77,10 @@ type SelectedModel struct {
 	// FAST mode: Codex CLI settings or Abacus OpenAI priority processing.
 	ServiceTier string `json:"service_tier,omitempty" jsonschema:"description=Codex service tier; omitted inherits the CLI setting,enum=fast,enum=default"`
 
+	// Ultracode: Claude Code's standing dynamic-workflow mode, on at any
+	// effort level.
+	Ultracode bool `json:"ultracode,omitempty" jsonschema:"description=Turn on Claude Code's Ultracode (dynamic workflows on every task)"`
+
 	// Used by anthropic models that can reason to indicate if the model should think.
 	Think bool `json:"think,omitempty" jsonschema:"description=Enable thinking mode for Anthropic models that support reasoning"`
 
@@ -346,6 +350,9 @@ type TUIOptions struct {
 	Scrollbar   string      `json:"scrollbar,omitempty" jsonschema:"description=Chat scrollbar visibility,enum=default,enum=always,enum=never,default=default"`
 	Mouse       *bool       `json:"mouse,omitempty" jsonschema:"description=Enable terminal mouse capture for selection\\, clicks\\, and scrolling in the TUI. Disable to let the terminal emulator or tmux handle text selection and copy/paste,default=true"`
 	ExitBanner  ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Crush,enum=default,enum=compact,enum=none,default=default"`
+	// ComposerFooter lists the stats shown under the composer, in a fixed
+	// order; unset shows the defaults. See the Customize Composer command.
+	ComposerFooter []string `json:"composer_footer,omitempty" jsonschema:"description=Stats shown under the composer: model\, settings\, tokens\, context\, limit_5h\, limit_weekly\, limit_other\, resets. Unset shows all but resets"`
 	// ComposerFocusOnly keeps keyboard focus on the composer.
 	ComposerFocusOnly bool `json:"composer_focus_only,omitempty" jsonschema:"description=Keep keyboard focus on the composer: Tab doesn't move focus and clicking the chat or sidebar doesn't take it. The chat still works with the mouse,default=false"`
 }
@@ -462,6 +469,7 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 }
 
 type Options struct {
+	AutoCompactTokenLimit   int64       `json:"auto_compact_token_limit,omitempty" jsonschema:"description=Global automatic compaction threshold in tokens; defaults to 400000,minimum=1000"`
 	ContextPaths            []string    `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
 	DisableInstructionFiles bool        `json:"disable_instruction_files,omitempty" jsonschema:"description=Use shared Crush instructions and memory instead of personal and project instruction files"`
 	GlobalContextPaths      []string    `json:"global_context_paths,omitempty" jsonschema:"description=Paths to files containing global context information for the AI,default=~/.config/crush/CRUSH.md,default=~/.config/AGENTS.md"`

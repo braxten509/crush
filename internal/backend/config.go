@@ -201,6 +201,7 @@ func (b *Backend) ListSkills(workspaceID string) ([]proto.SkillInfo, error) {
 		return nil, err
 	}
 	mgr := ws.Skills
+	mgr.Refresh(skills.ConfigDiscovery(ws.Cfg))
 	entries := skills.Catalog(mgr.ActiveSkills(), mgr.ResolvedPaths(), mgr.WorkingDir())
 	result := make([]proto.SkillInfo, len(entries))
 	for i, entry := range entries {

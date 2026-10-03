@@ -132,6 +132,7 @@ type Workspace interface {
 
 	// Messages
 	ListMessages(ctx context.Context, sessionID string) ([]message.Message, error)
+	LoadMessageReview(ctx context.Context, sessionID, messageID string) (message.Message, error)
 	ListUserMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	ListAllUserMessages(ctx context.Context) ([]message.Message, error)
 
@@ -169,6 +170,7 @@ type Workspace interface {
 	AgentQueuedPrompts(sessionID string) int
 	AgentQueuedPromptsList(sessionID string) []string
 	AgentClearQueue(sessionID string)
+	AgentRecallQueuedPrompt(ctx context.Context, sessionID string) (*message.QueuedPrompt, error)
 	AgentSetMain(agentID string) error
 	AgentSummarize(ctx context.Context, sessionID string) error
 	UpdateAgentModel(ctx context.Context) error

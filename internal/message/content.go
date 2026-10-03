@@ -69,7 +69,8 @@ func (tc ReasoningContent) String() string {
 func (ReasoningContent) isPart() {}
 
 type TextContent struct {
-	Text string `json:"text"`
+	Text         string `json:"text"`
+	SubmissionID string `json:"submission_id,omitempty"`
 	// Hidden marks generated user continuations that remain in model history.
 	Hidden bool `json:"hidden,omitempty"`
 }
@@ -182,6 +183,9 @@ type Message struct {
 	IsSummaryMessage bool
 	// IsCompacting is live CLI status; it is not persisted in history.
 	IsCompacting bool
+	// ActivityAt records the last live provider event, not a timer tick.
+	ActivityAt int64
+	Activity   string
 	// PrismModelID and PrismModelName identify the model that actually
 	// served the turn, as reported by the Hyper Prism model router
 	// headers. Empty when the turn was not routed through Prism.
@@ -292,17 +296,16 @@ func (m *Message) IsErrorLike() bool {
 }
 
 func (m *Message) IsThinking() bool {
-	if m.ReasoningContent().Thinking != "" && m.Content().Text == "" && !m.IsFinished() {
-		return true
-	}
-	return false
+	reasoning := m.ReasoningContent()
+	return (reasoning.StartedAt > 0 || reasoning.Thinking != "") && reasoning.FinishedAt == 0 && m.Content().Text == "" && !m.IsFinished()
 }
 
 func (m *Message) AppendContent(delta string) {
 	found := false
 	for i, part := range m.Parts {
 		if c, ok := part.(TextContent); ok {
-			m.Parts[i] = TextContent{Text: c.Text + delta, Hidden: c.Hidden}
+			c.Text += delta
+			m.Parts[i] = c
 			found = true
 		}
 	}

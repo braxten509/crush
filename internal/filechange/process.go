@@ -21,7 +21,6 @@ type ProcessReview struct {
 	root        string
 	exclude     []string
 	calls       map[string]*processCall
-	detached    chan struct{}
 	invocations map[uint64]*invocation
 	executions  map[uint64]*invocation
 	store       *snapshotStore
@@ -80,6 +79,7 @@ type invocation struct {
 	owner    *processCall
 	tracker  *Tracker
 	captured map[string]int64
+	moves    map[string]moveSource
 }
 
 func (p *ProcessReview) executed(parent *invocation, args []string) *invocation {
@@ -159,6 +159,7 @@ func (p *ProcessReview) before(record *invocation, path string) {
 			return
 		}
 		tracker.store = p.store
+		tracker.imported = transferKind(record.args) != ""
 		record.tracker = tracker
 		record.captured = map[string]int64{}
 	}
@@ -205,8 +206,6 @@ func (p *ProcessReview) End(id string) *Review {
 		return 0
 	})
 	review := &Review{Root: p.root}
-	paths := map[string]int{}
-	earliest := map[string]int64{}
 	for _, record := range records {
 		changes, err := record.tracker.Checkpoint(context.Background())
 		if err != nil {
@@ -214,17 +213,16 @@ func (p *ProcessReview) End(id string) *Review {
 		}
 		for _, change := range changes.Changes {
 			change.Order = record.captured[change.Path]
-			if index, ok := paths[change.Path]; ok {
-				review.Changes[index].After = change.After
-				if record.captured[change.Path] < earliest[change.Path] {
-					review.Changes[index].Before = change.Before
-					earliest[change.Path] = record.captured[change.Path]
-				}
-			} else {
-				paths[change.Path] = len(review.Changes)
-				earliest[change.Path] = record.captured[change.Path]
-				review.Changes = append(review.Changes, change)
+			if kind := transferKind(record.args); kind != "" && change.Before == nil && change.After != nil {
+				change.Transfer = &Transfer{Kind: kind}
 			}
+			if change.Before == nil && change.After != nil && change.After.Omitted == "Generated build artifact" {
+				change.Transfer = &Transfer{Kind: "generated"}
+			}
+			if source, ok := record.moves[change.Path]; ok && change.Before == nil && change.After != nil && source.movedTo(change.Path) {
+				change.Transfer = &Transfer{Kind: "move", Source: source.path, Baseline: source.state}
+			}
+			review.Changes = append(review.Changes, change)
 		}
 		record.tracker = nil
 		record.captured = nil
@@ -232,6 +230,7 @@ func (p *ProcessReview) End(id string) *Review {
 	if len(review.Changes) == 0 {
 		return nil
 	}
+	review.Changes = mergeChanges(review.Changes)
 	return review
 }
 
@@ -280,12 +279,8 @@ func StartProcess(cmd *exec.Cmd, root string, exclude ...string) (*ProcessReview
 	return review, nil
 }
 
-// Wait avoids racing exec.Cmd's wait with ptrace's syscall-stop notifications.
-// Only the tracer consumes stops; exec.Cmd still collects the real exit status.
+// Wait collects the command's exit, then adds its changes to the command report.
 func (p *ProcessReview) Wait(cmd *exec.Cmd) error {
-	if p != nil && p.detached != nil {
-		<-p.detached
-	}
 	err := cmd.Wait()
 	if p != nil && p.report != nil {
 		if review := p.End("command"); review != nil {

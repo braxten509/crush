@@ -4,10 +4,12 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
 // promptHistoryLoadedMsg is sent when prompt history is loaded.
@@ -51,11 +53,13 @@ func (m *UI) handleHistoryUp(msg tea.Msg) tea.Cmd {
 	prevHeight := m.textarea.Height()
 	// Navigate to older history entry from cursor position (0,0).
 	if m.textarea.Length() == 0 || m.isAtEditorStart() {
-		if m.historyPrev() {
-			// we send this so that the textarea moves the view to the correct position
-			// without this the cursor will show up in the wrong place.
-			return m.updateTextareaWithPrevHeight(nil, prevHeight)
+		if !m.bangMode && len(m.recalledDrafts[m.currentSessionID()]) > 0 {
+			return m.restoreRecalledDrafts()
 		}
+		if !m.bangMode && m.hasSession() && m.agentReady && (m.isAgentBusy() || m.promptQueue > 0 || m.failedRecalls[m.currentSessionID()]) {
+			return m.recallQueuedPrompt()
+		}
+		return m.historyUpFromStart(prevHeight)
 	}
 
 	// First move cursor to start before entering history.
@@ -66,6 +70,103 @@ func (m *UI) handleHistoryUp(msg tea.Msg) tea.Cmd {
 
 	// Let textarea handle normal cursor movement.
 	return m.updateTextarea(msg)
+}
+
+func (m *UI) historyUpFromStart(prevHeight int) tea.Cmd {
+	if m.historyPrev() {
+		// we send this so that the textarea moves the view to the correct position
+		// without this the cursor will show up in the wrong place.
+		return m.updateTextareaWithPrevHeight(nil, prevHeight)
+	}
+	return nil
+}
+
+type queuedPromptRecalledMsg struct {
+	sessionID    string
+	draft        string
+	historyIndex int
+	prompt       *message.QueuedPrompt
+	err          error
+}
+
+func (m *UI) recallQueuedPrompt() tea.Cmd {
+	if m.promptRecallInFlight {
+		return nil
+	}
+	m.promptRecallInFlight = true
+	ws, sessionID, draft := m.com.Workspace, m.currentSessionID(), m.textarea.Value()
+	historyIndex := m.promptHistory.index
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		prompt, err := ws.AgentRecallQueuedPrompt(ctx, sessionID)
+		return queuedPromptRecalledMsg{sessionID: sessionID, draft: draft, historyIndex: historyIndex, prompt: prompt, err: err}
+	}
+}
+
+func (m *UI) applyRecalledPrompt(msg queuedPromptRecalledMsg) tea.Cmd {
+	m.promptRecallInFlight = false
+	if msg.err != nil {
+		if m.failedRecalls == nil {
+			m.failedRecalls = make(map[string]bool)
+		}
+		m.failedRecalls[msg.sessionID] = true
+		return util.ReportError(msg.err)
+	}
+	delete(m.failedRecalls, msg.sessionID)
+	if msg.prompt != nil {
+		m.finishPendingPrompt(msg.prompt.SubmissionID, false)
+		if m.recalledDrafts == nil {
+			m.recalledDrafts = make(map[string][]message.QueuedPrompt)
+		}
+		m.recalledDrafts[msg.sessionID] = append(m.recalledDrafts[msg.sessionID], *msg.prompt)
+	}
+	if msg.sessionID != m.currentSessionID() {
+		return nil
+	}
+	m.invalidatePromptQueue()
+	m.promptQueueCheckedAt = time.Time{}
+	m.invalidateBusyCaches()
+	cmds := []tea.Cmd{m.dispatchPromptQueueRefresh(), m.dispatchBusyRefresh()}
+	if msg.prompt != nil {
+		cmds = append(cmds, m.restoreRecalledDrafts())
+		if m.bangMode {
+			cmds = append(cmds, util.ReportInfo("Queued message recovered. Press Up outside shell mode to edit it."))
+		}
+	} else if m.textarea.Value() == msg.draft && m.promptHistory.index == msg.historyIndex && (m.textarea.Length() == 0 || m.isAtEditorStart()) {
+		// The CLI may have taken it before Up arrived. Only navigate history
+		// if the user hasn't started editing while the request was in flight.
+		cmds = append(cmds, m.historyUpFromStart(m.textarea.Height()))
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *UI) restoreRecalledDrafts() tea.Cmd {
+	drafts := m.recalledDrafts[m.currentSessionID()]
+	if len(drafts) == 0 || m.bangMode {
+		return nil
+	}
+	delete(m.recalledDrafts, m.currentSessionID())
+	prevHeight := m.textarea.Height()
+	text := m.textarea.Value()
+	for _, draft := range drafts {
+		if text != "" && draft.Prompt != "" {
+			text += "\n\n"
+		}
+		text += draft.Prompt
+		for _, attachment := range draft.Attachments {
+			m.attachments.Update(attachment)
+		}
+	}
+	m.textarea.SetValue(text)
+	// Recovered messages are agent prompts, even if they begin with '!'.
+	m.setEditorPrompt(m.yoloModeCached())
+	m.textarea.MoveToEnd()
+	m.promptHistory.index = -1
+	m.promptHistory.draft = text
+	m.closeCompletions()
+	m.updateLayoutAndSize()
+	return m.updateTextareaWithPrevHeight(nil, prevHeight)
 }
 
 // handleHistoryDown handles down arrow for history navigation.

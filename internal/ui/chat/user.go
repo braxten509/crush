@@ -55,6 +55,8 @@ func (m *UserMessageItem) Finished() bool {
 	return true
 }
 
+func (m *UserMessageItem) SubmissionID() string { return m.message.Content().SubmissionID }
+
 // RawRender implements [MessageItem].
 func (m *UserMessageItem) RawRender(width int) string {
 	cappedWidth := cappedMessageWidth(width)
@@ -162,21 +164,64 @@ func (m *UserMessageItem) Render(width int) string {
 			return cached
 		}
 	}
-	var prefix string
-	if m.focused {
-		prefix = m.sty.Messages.UserFocused.Render()
-	} else {
-		prefix = m.sty.Messages.UserBlurred.Render()
-	}
 	lines := strings.Split(m.RawRender(width), "\n")
-	for i, line := range lines {
-		lines[i] = prefix + line
+	if m.isNotice() {
+		// A task's result is a notice for the agent, not something the
+		// user typed: it lines up with replies, without the band.
+		prefix := m.sty.Messages.AssistantBlurred.Render()
+		for i, line := range lines {
+			lines[i] = prefix + line
+		}
+	} else {
+		marker := m.sty.Messages.UserBlurred
+		if m.focused {
+			marker = m.sty.Messages.UserFocused
+		}
+		for i, line := range lines {
+			lead := "  "
+			if i == 0 {
+				lead = "› "
+			}
+			lines[i] = common.OnBand(marker.Render(lead)+line, width, m.sty.Messages.UserBackground)
+		}
+		// A row of padding above and below, like the composer's band.
+		pad := common.OnBand("", width, m.sty.Messages.UserBackground)
+		lines = append(append([]string{pad}, lines...), pad)
 	}
 	out := strings.Join(lines, "\n")
 	if useCache {
 		m.setCachedPrefixedRender(out, width, key)
 	}
 	return out
+}
+
+// RawTop is how many rendered rows sit above the raw content: the band's
+// top padding row.
+func (m *UserMessageItem) RawTop() int {
+	if m.isNotice() {
+		return 0
+	}
+	return 1
+}
+
+// SetHighlight implements list.Highlightable. Rows count from the band's
+// top padding row, which the highlighted content does not have.
+func (m *UserMessageItem) SetHighlight(startLine, startCol, endLine, endCol int) {
+	if top := m.RawTop(); top > 0 {
+		if startLine > 0 {
+			startLine -= top
+		}
+		if endLine > 0 {
+			endLine -= top
+		}
+	}
+	m.highlightableMessageItem.SetHighlight(startLine, startCol, endLine, endCol)
+}
+
+// isNotice reports whether the message is a background task's result.
+func (m *UserMessageItem) isNotice() bool {
+	_, _, ok := agent.ParseTaskNotification(strings.TrimSpace(m.message.Content().Text))
+	return ok
 }
 
 // ID implements MessageItem.

@@ -105,6 +105,7 @@ var claudeIdle = 15 * time.Minute
 type claudeKey struct {
 	dir, model, effort string
 	bypass, fast       bool
+	ultracode          bool
 }
 
 // claudeLive is a Claude process kept open between the turns of one Crush
@@ -250,6 +251,9 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	args := []string{
 		"-p", "--input-format", "stream-json", "--output-format", "stream-json",
 		"--verbose", "--include-partial-messages", "--permission-prompt-tool", "stdio",
+		// Crush's Claude processes are headless. Override the user's Chrome
+		// integration opt-in so background agents never open browser tabs.
+		"--no-chrome",
 		// Echoes each user message as the model takes it in, which is how
 		// steered messages are confirmed.
 		"--replay-user-messages",
@@ -258,9 +262,18 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	if key.effort != "" {
 		args = append(args, "--effort", key.effort)
 	}
+	// Claude Code has no flags for these; headless runs opt in through
+	// settings.
+	settings := map[string]bool{}
 	if key.fast {
-		// Claude Code has no flag for it; headless runs opt in through settings.
-		args = append(args, "--settings", `{"fastMode":true}`)
+		settings["fastMode"] = true
+	}
+	if key.ultracode {
+		settings["ultracode"] = true
+	}
+	if len(settings) > 0 {
+		b, _ := json.Marshal(settings)
+		args = append(args, "--settings", string(b))
 	}
 	if t.Resume != "" {
 		args = append(args, "--resume", t.Resume)
@@ -311,7 +324,7 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 }
 
 func runClaude(ctx context.Context, m *Model, t Turn) error {
-	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, fast: m.ServiceTier == "fast", bypass: !t.NoTools && m.autoApproved(t.SessionID)}
+	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID)}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *claudeLive
@@ -363,7 +376,7 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 			return nil // already shown by another turn
 		}
 	} else {
-		_ = p.send(claudePrompt(t.Prompt, t.Attachments))
+		_ = p.send(claudePrompt(withSavedImagePaths(t.Prompt, t.Attachments), t.Attachments))
 	}
 
 	// Claude takes messages written mid-turn in at its next tool result, or
@@ -372,7 +385,11 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	startSteer := func() func() {
 		return pollSteerInput(t, func() bool { return true }, func(text string, attachments []message.Attachment) {
 			sent.add(text)
-			if p.send(claudePrompt(text, attachments)) != nil {
+			prompt := claudePrompt(withSavedImagePaths(text, attachments), attachments)
+			// Explicitly fold this input in at the next tool boundary. Claude's
+			// default priority can be "later", which waits for the whole turn.
+			prompt["priority"] = "next"
+			if p.send(prompt) != nil {
 				sent.take(text)
 			}
 		})
@@ -406,15 +423,7 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	// doesn't echo every message it's given, and an unconfirmed one must
 	// not hold the turn open forever. Crush runs it next instead.
 	var steerWait <-chan time.Time
-	// Tool calls still running, by start time. Claude only reads steered
-	// messages at a tool result, so one waiting on a long call has the call
-	// moved to the background (Ctrl+B) to deliver it now.
-	// The moved call keeps running in the background row; Claude replies
-	// about it later on its own (OnUnprompted).
-	running := map[string]time.Time{}
 	interrupted := 0 // results since the turn was interrupted
-	bgTick := time.NewTicker(time.Second)
-	defer bgTick.Stop()
 read:
 	for {
 		var raw []byte
@@ -430,17 +439,6 @@ read:
 			case <-steerWait:
 				finished = true
 				return nil
-			case <-bgTick.C:
-				if sent.pending() == 0 || ctx.Err() != nil {
-					continue
-				}
-				for id, at := range running {
-					if time.Since(at) > steerBackgroundAfter {
-						delete(running, id) // asked once
-						_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-bg-" + id, "request": map[string]any{"subtype": "background_tasks", "tool_use_id": id}})
-					}
-				}
-				continue
 			}
 		}
 		var line claudeLine
@@ -458,7 +456,7 @@ read:
 			stopSteer()
 			switch {
 			case line.Type == "user" && line.IsReplay:
-				sent.take(claudeUserText(line.Message))
+				sent.take(withoutImagePaths(claudeUserText(line.Message)))
 			case line.Type == "system" && line.Subtype == "init" && interrupted > 0:
 				interrupt()
 			case line.Type == "result":
@@ -480,7 +478,6 @@ read:
 			// Only a started task can be backgrounded; asking earlier
 			// finds nothing.
 			if line.Subtype == "task_started" && line.ToolUseID != "" && !line.IsBackgrounded {
-				running[line.ToolUseID] = time.Now()
 				if ctl.ctrlB.Swap(false) {
 					_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b-" + line.ToolUseID, "request": map[string]any{"subtype": "background_tasks", "tool_use_id": line.ToolUseID}})
 				}
@@ -538,7 +535,7 @@ read:
 
 		case "user":
 			if line.IsReplay {
-				if text := claudeUserText(line.Message); sent.take(text) {
+				if text := withoutImagePaths(claudeUserText(line.Message)); sent.take(text) {
 					steerWait = nil
 					if err := t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
 						return err
@@ -553,7 +550,6 @@ read:
 					continue
 				}
 				call := calls[b.ToolUseID]
-				delete(running, b.ToolUseID)
 				ctl.ctrlB.Store(false) // the command it was for is done
 				out := claudeResultText(b.Content)
 				meta := ""
@@ -627,10 +623,6 @@ read:
 // steerEchoTimeout is how long a finished turn waits for Claude to start on
 // a steered message.
 var steerEchoTimeout = 15 * time.Second
-
-// steerBackgroundAfter is how long a tool call may hold up a steered message
-// before it is moved to the background.
-var steerBackgroundAfter = tools.ForegroundWaitLimit
 
 // claudePrompt is the turn's user message, with its images inline.
 func claudePrompt(text string, attachments []message.Attachment) map[string]any {

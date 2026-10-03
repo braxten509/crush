@@ -1,6 +1,8 @@
 package cliagent
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/message"
@@ -22,4 +24,23 @@ func TestImageOnlyPrompt(t *testing.T) {
 
 	require.Equal(t, "hi", claudePrompt("hi", nil)["message"].(map[string]any)["content"])
 	require.Len(t, codexInput("hi", images), 2)
+}
+
+// Claude and Codex see images inline, but also get the saved copies' paths so
+// they can pass them on; echoes drop the note to match what the user typed.
+func TestSavedImagePaths(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	images := []message.Attachment{{MimeType: "image/png", Content: []byte("png")}}
+
+	require.Equal(t, "hi", withSavedImagePaths("hi", nil))
+	for _, text := range []string{"look at this", ""} {
+		full := withSavedImagePaths(text, images)
+		require.NotEqual(t, text, full)
+		require.Equal(t, text, withoutImagePaths(full))
+
+		path := full[strings.LastIndex(full, "\n")+1:]
+		saved, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, "png", string(saved))
+	}
 }

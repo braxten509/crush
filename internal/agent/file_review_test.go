@@ -43,7 +43,7 @@ func TestSecureEntryExcludedFromLateAndFutureReviews(t *testing.T) {
 		Changes: []filechange.Change{{Path: path, After: &filechange.State{Content: "synthetic-secret-never-in-chat"}}}})}))
 	future.finish(t.Context())
 	require.NoError(t, env.messages.FlushAll(t.Context()))
-	msgs, err := env.messages.List(t.Context(), sess.ID)
+	msgs, err := loadFileReviewMessages(env.messages, t.Context(), sess.ID)
 	require.NoError(t, err)
 	require.Len(t, msgs, 2)
 	encoded, err := json.Marshal(msgs)
@@ -76,7 +76,7 @@ echo '{"type":"result","subtype":"success"}'
 	for path, content := range map[string]string{"changed.txt": "before\n", "unrelated.txt": "not edited\n"} {
 		require.NoError(t, os.WriteFile(filepath.Join(env.workingDir, path), []byte(content), 0o644))
 	}
-	provider := cliagent.NewProvider(config.TypeClaudeCode, env.workingDir, t.TempDir(), env.permissions, env.history, "")
+	provider := cliagent.NewProvider(config.TypeClaudeCode, env.workingDir, t.TempDir(), env.permissions, env.history, "", false)
 	model, err := provider.LanguageModel(t.Context(), "fixture")
 	require.NoError(t, err)
 	// Avoid title generation starting another CLI process for the fixture.
@@ -86,7 +86,7 @@ echo '{"type":"result","subtype":"success"}'
 	require.NoError(t, err)
 	_, err = sa.Run(t.Context(), SessionAgentCall{SessionID: session.ID, Prompt: "Apply fixture changes", NonInteractive: true})
 	require.NoError(t, err)
-	msgs, err := env.messages.List(t.Context(), session.ID)
+	msgs, err := loadFileReviewMessages(env.messages, t.Context(), session.ID)
 	require.NoError(t, err)
 	var results []message.ToolResult
 	for _, msg := range msgs {
@@ -134,7 +134,7 @@ func TestFileReviewPersistsFailedAndLateChanges(t *testing.T) {
 	require.NoError(t, env.messages.FlushAll(t.Context()))
 
 	// Reload through the database/JSON path used when a chat is reopened.
-	saved, err := env.messages.List(t.Context(), session.ID)
+	saved, err := loadFileReviewMessages(env.messages, t.Context(), session.ID)
 	require.NoError(t, err)
 	require.Len(t, saved, 2)
 	firstReview := saved[0].ToolResults()[0].Review
@@ -174,7 +174,7 @@ func TestFileReviewIgnoresNonEditingTools(t *testing.T) {
 	}
 	r.finish(t.Context())
 	require.Empty(t, r.trackers)
-	msgs, err := env.messages.List(t.Context(), session.ID)
+	msgs, err := loadFileReviewMessages(env.messages, t.Context(), session.ID)
 	require.NoError(t, err)
 	for _, msg := range msgs {
 		require.Nil(t, msg.ToolResults()[0].Review)

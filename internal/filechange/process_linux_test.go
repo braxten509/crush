@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -179,4 +180,91 @@ func TestShellReviewPreservesExitStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestObservedCommandRunsAtFullSpeed(t *testing.T) {
+	root := t.TempDir()
+	// 400k system calls took ~7 s when every call stopped the command.
+	command := `python3 -c "import os
+fd = os.open('/dev/null', os.O_WRONLY)
+for _ in range(200000): os.write(fd, b'x'); os.getppid()
+open('done', 'w').write('ok')"`
+	started := time.Now()
+	review, err := runObserved(t, root, command)
+	require.NoError(t, err)
+	require.Less(t, time.Since(started), 3*time.Second)
+	require.NotNil(t, review)
+	require.Len(t, review.Changes, 1)
+	require.Equal(t, filepath.Join(root, "done"), review.Changes[0].Path)
+}
+
+// A program a command leaves running must keep working after Crush exits:
+// without the keeper its filtered calls would fail with ENOSYS.
+func TestLeftoverProcessWritesAfterWatcherExits(t *testing.T) {
+	if root := os.Getenv("CRUSH_KEEPER_TEST_ROOT"); root != "" {
+		cmd := exec.Command("/bin/sh", "-c", "(sleep 1; mkdir made; echo written > made/file; mv made/file made/moved) >/dev/null 2>&1 &")
+		cmd.Dir = root
+		monitor, err := StartProcess(cmd, root)
+		require.NoError(t, err)
+		require.NoError(t, monitor.Wait(cmd))
+		return // the test process exits while the background shell sleeps
+	}
+	root := t.TempDir()
+	child := exec.Command(os.Args[0], "-test.run=^TestLeftoverProcessWritesAfterWatcherExits$", "-test.count=1")
+	child.Env = append(os.Environ(), "CRUSH_KEEPER_TEST_ROOT="+root)
+	output, err := child.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Eventually(t, func() bool {
+		data, err := os.ReadFile(filepath.Join(root, "made", "moved"))
+		return err == nil && string(data) == "written\n"
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// Go starts commands with vfork; a collection during the child's exec used to
+// deadlock when the exec waited for Crush.
+func TestStartingCommandsDuringGarbageCollection(t *testing.T) {
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				runtime.GC()
+			}
+		}
+	}()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for index := range 40 {
+			root := t.TempDir()
+			review, err := runObserved(t, root, fmt.Sprintf("printf %d > out", index))
+			if err != nil || review == nil || len(review.Changes) != 1 {
+				t.Errorf("command %d: review %v, err %v", index, review, err)
+				return
+			}
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("starting observed commands deadlocked")
+	}
+}
+
+// Commands may trace their own children (debuggers, strace, Go tests that use
+// SysProcAttr.Ptrace); the watcher no longer holds the ptrace slot.
+func TestObservedCommandCanUsePtrace(t *testing.T) {
+	if _, err := exec.LookPath("strace"); err != nil {
+		t.Skip("strace not installed")
+	}
+	root := t.TempDir()
+	review, err := runObserved(t, root, "strace -f -o trace.log sh -c 'echo traced > out'")
+	require.NoError(t, err)
+	require.NotNil(t, review)
+	data, err := os.ReadFile(filepath.Join(root, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "traced\n", string(data))
 }

@@ -55,7 +55,8 @@ var (
 
 var (
 	availableRunes = []rune("0123456789abcdefABCDEF~!@#$£€%^&*()+=_")
-	ellipsisFrames = []string{".", "..", "...", ""}
+	// Reserve three columns so the timer stays fixed across frames.
+	ellipsisFrames = []string{".  ", ".. ", "..."}
 )
 
 // Internal ID management. The ID seeds the deterministic birth schedule so
@@ -431,22 +432,9 @@ func (a *Anim) Render() string {
 			}
 		}
 	}
-	// Render animated ellipsis at the end of the label if all characters
-	// have been initialized. Skip when a suffix is active to avoid visual
-	// competition between the animated dots and the timer.
+	// Keep the animated ellipsis visible alongside the elapsed time.
 	if a.initialized.Load() && a.labelWidth > 0 {
-		showEllipsis := true
-		if a.suffix != nil {
-			if s := a.suffix(); s != "" {
-				showEllipsis = false
-			}
-		}
-		if showEllipsis {
-			ellipsisStep := int(a.ellipsisStep.Load())
-			if ellipsisFrame, ok := a.ellipsisFrames.Get(ellipsisStep / ellipsisAnimSpeed); ok {
-				b.WriteString(ellipsisFrame)
-			}
-		}
+		b.WriteString(a.RenderEllipsis())
 	}
 
 	// Render optional suffix (e.g., elapsed time).
@@ -459,6 +447,12 @@ func (a *Anim) Render() string {
 	}
 
 	return b.String()
+}
+
+// RenderEllipsis returns the current animated dots without scrambled glyphs.
+func (a *Anim) RenderEllipsis() string {
+	step := int(a.ellipsisStep.Load()) / ellipsisAnimSpeed % len(ellipsisFrames)
+	return lipgloss.NewStyle().Foreground(a.labelColor).Render(ellipsisFrames[step])
 }
 
 // makeGradientRamp() returns a slice of colors blended between the given keys.

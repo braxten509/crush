@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -21,6 +22,8 @@ type CreateMessageParams struct {
 
 // Message represents a message in the proto layer.
 type Message struct {
+	ActivityAt              int64         `json:"activity_at,omitempty"`
+	Activity                string        `json:"activity,omitempty"`
 	ID                      string        `json:"id"`
 	Role                    MessageRole   `json:"role"`
 	SessionID               string        `json:"session_id"`
@@ -104,8 +107,9 @@ func (ReasoningContent) isPart() {}
 
 // TextContent represents a text part of a message.
 type TextContent struct {
-	Text   string `json:"text"`
-	Hidden bool   `json:"hidden,omitempty"`
+	Text         string `json:"text"`
+	SubmissionID string `json:"submission_id,omitempty"`
+	Hidden       bool   `json:"hidden,omitempty"`
 }
 
 // String returns the text content as a string.
@@ -159,13 +163,14 @@ func (ToolCall) isPart() {}
 
 // ToolResult represents the result of a tool call.
 type ToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	Data       string `json:"data,omitempty"`
-	MIMEType   string `json:"mime_type,omitempty"`
-	Metadata   string `json:"metadata"`
-	IsError    bool   `json:"is_error"`
+	Review     *filechange.Review `json:"review,omitempty"`
+	ToolCallID string             `json:"tool_call_id"`
+	Name       string             `json:"name"`
+	Content    string             `json:"content"`
+	Data       string             `json:"data,omitempty"`
+	MIMEType   string             `json:"mime_type,omitempty"`
+	Metadata   string             `json:"metadata"`
+	IsError    bool               `json:"is_error"`
 }
 
 func (ToolResult) isPart() {}
@@ -333,7 +338,8 @@ func (m *Message) AppendContent(delta string) {
 	found := false
 	for i, part := range m.Parts {
 		if c, ok := part.(TextContent); ok {
-			m.Parts[i] = TextContent{Text: c.Text + delta, Hidden: c.Hidden}
+			c.Text += delta
+			m.Parts[i] = c
 			found = true
 		}
 	}

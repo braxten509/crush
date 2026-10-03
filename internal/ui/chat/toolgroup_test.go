@@ -133,7 +133,7 @@ func TestToolGroupChanges(t *testing.T) {
 	require.Zero(t, files[1].Lines[0].Old, "replaced text has no place in the file")
 
 	header := ansi.Strip(g.header(120))
-	require.Contains(t, header, "3 actions · edited a.go, b.go +3 −2")
+	require.Contains(t, header, "3 actions · edited b.go and 1 more +3 −2", "one file name at most: the latest")
 
 	// Click the original action text, immediately after the success icon.
 	start := MessageLeftPaddingTotal + ansi.StringWidth(header[:strings.Index(header, "3 actions")])
@@ -182,10 +182,10 @@ func TestIgnoredReviewPaths(t *testing.T) {
 	t.Setenv("TMPDIR", "/scratch/runtime")
 	t.Setenv("XDG_CACHE_HOME", "/custom/cache")
 	t.Setenv("XDG_CONFIG_HOME", "/custom/config")
-	for _, path := range []string{"/tmp/a", "/var/tmp/a", "/dev/shm/a", "/scratch/runtime/a", "/custom/cache/a", ".cache/a", "/work/.cache/a", "/custom/config/go/telemetry/local/count", "/custom/config/app/settings.json"} {
+	for _, path := range []string{"/tmp/a", "/var/tmp/a", "/workspace/tmp/main.go", "/dev/shm/a", "/scratch/runtime/a", "/custom/cache/a", ".cache/a", "/work/.cache/a", "/custom/config/go/telemetry/local/count", "/custom/config/app/settings.json"} {
 		require.True(t, ignoredReviewPath(path, ""), path)
 	}
-	for _, path := range []string{"/tmp-source/main.go", "/workspace/tmp/main.go", "/workspace/cache.go", "/custom/cache-source/main.go", "/custom/config-source/main.go", "/home/user/Desktop/hello.txt"} {
+	for _, path := range []string{"/tmp-source/main.go", "/workspace/cache.go", "/custom/cache-source/main.go", "/custom/config-source/main.go", "/home/user/Desktop/hello.txt"} {
 		require.False(t, ignoredReviewPath(path, ""), path)
 	}
 	require.True(t, ignoredReviewPath("relative.txt", "/tmp/project"))
@@ -225,4 +225,23 @@ func TestToolGroupVersionMovesWhenStepRemoved(t *testing.T) {
 	g.SetChildren([]MessageItem{t1})
 	require.Greater(t, g.Version(), before)
 	require.NotContains(t, ansi.Strip(l.Render()), "2 actions")
+}
+
+// A file edited twice is still one file in the summary.
+func TestToolGroupChangesNameEachFileOnce(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	edit := func(id, old, new string) MessageItem {
+		tc := message.ToolCall{ID: id, Name: "edit", Input: `{"file_path":"/p/a.go","old_string":"` + old + `","new_string":"` + new + `"}`, Finished: true}
+		return NewToolMessageItem(&sty, "m1", tc, &message.ToolResult{ToolCallID: id, Name: "edit", Content: "ok",
+			Metadata: `{"additions":1,"removals":1,"old_content":"` + old + `\n","new_content":"` + new + `\n"}`}, false, "")
+	}
+	g := NewToolGroupItem(&sty)
+	g.SetChildren([]MessageItem{edit("e1", "x", "y"), edit("e2", "y", "z")})
+
+	header := ansi.Strip(g.header(120))
+	require.Contains(t, header, "edited a.go +")
+	require.NotContains(t, header, "more")
+	require.Equal(t, 1, strings.Count(header, "a.go"), header)
 }

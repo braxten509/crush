@@ -56,6 +56,12 @@ func (m *UI) modelInfo(width int) string {
 				}
 				reasoningInfo += "FAST"
 			}
+			if config.SupportsUltracode(providerConfig, model.CatwalkCfg) && model.ModelCfg.Ultracode {
+				if reasoningInfo != "" {
+					reasoningInfo += " · "
+				}
+				reasoningInfo += "Ultracode"
+			}
 		}
 	}
 
@@ -73,10 +79,8 @@ func (m *UI) modelInfo(width int) string {
 		modelName = model.CatwalkCfg.Name
 	}
 	info := common.ModelInfo(m.com.Styles, modelName, providerName, reasoningInfo, modelContext, width, m.hyperCredits)
-	if kind := m.cliKind(); kind != "" {
-		if limits := cliagent.Limits(kind, model.ModelCfg.Model); len(limits) > 0 {
-			info = lipgloss.JoinVertical(lipgloss.Left, info, "", usageLimits(m.com.Styles, limits, width))
-		}
+	if limits := m.selectedCLILimits(); len(limits) > 0 {
+		info = lipgloss.JoinVertical(lipgloss.Left, info, "", usageLimits(m.com.Styles, limits, width))
 	}
 	return info
 }
@@ -92,6 +96,17 @@ func (m *UI) cliKind() catwalk.Type {
 		return p.Type
 	}
 	return ""
+}
+
+// selectedCLILimits shares the same cached subscription data across layouts.
+func (m *UI) selectedCLILimits() []cliagent.Limit {
+	if m.selectedLargeModel() == nil {
+		return nil
+	}
+	if kind := m.cliKind(); kind != "" {
+		return cliagent.Limits(kind, m.agentModel.ModelCfg.Model)
+	}
+	return nil
 }
 
 // fetchCLILimits refreshes the selected agent CLI's usage limits.

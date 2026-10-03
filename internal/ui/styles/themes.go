@@ -238,13 +238,10 @@ func gruvboxDarkOpts() quickStyleOpts {
 // gruvboxDarkOverrides applies Gruvbox-specific tweaks on top of the
 // token-driven base styles.
 func gruvboxDarkOverrides(s Styles) Styles {
-	// The shared quickStyle renders inline code as the destructive
-	// (bright red) color on the code background. In Gruvbox that pairing
-	// (#fb4934 on #504945) is only ~2.6:1 contrast, which is hard to
-	// read. Use Gruvbox orange on the darkest background instead, which
-	// keeps a warm "code" feel while clearing WCAG AA (~5.8:1).
+	// The shared quickStyle renders inline code in the destructive (bright
+	// red) color, which in Gruvbox reads poorly against the background. Use
+	// Gruvbox orange instead, which keeps a warm "code" feel.
 	s.Markdown.Code.Color = hex(lipgloss.Color("#fe8019"))
-	s.Markdown.Code.BackgroundColor = hex(lipgloss.Color("#282828"))
 	return s
 }
 
@@ -386,10 +383,85 @@ func claudeCodeOpts() quickStyleOpts {
 	}
 }
 
+// graphiteOpts returns the Graphite theme: quiet gray surfaces with one
+// ice-blue accent. Green stays a small success mark only.
+func graphiteOpts() quickStyleOpts {
+	// High contrast, like Codex: near-white text, a light gray for
+	// secondary text, bands that stand clear of the background, and
+	// saturated accents.
+	return quickStyleOpts{
+		primary:   lipgloss.Color("#5fb3ef"), // clear sky blue
+		secondary: lipgloss.Color("#9ccff5"), // light sky blue
+		accent:    lipgloss.Color("#5fb3ef"),
+		keyword:   lipgloss.Color("#b48ce6"), // violet
+
+		fgBase:       lipgloss.Color("#ffffff"), // pure white: text stands out
+		fgSubtle:     lipgloss.Color("#d9dbde"),
+		fgMoreSubtle: lipgloss.Color("#a8abb0"),
+		fgMostSubtle: lipgloss.Color("#868a91"),
+
+		onPrimary: lipgloss.Color("#1e1f22"),
+
+		bgBase:         lipgloss.Color("#1e1f22"),
+		bgLeastVisible: lipgloss.Color("#42454a"),
+		bgLessVisible:  lipgloss.Color("#4b4e54"),
+		bgMostVisible:  lipgloss.Color("#5d6168"),
+
+		separator: lipgloss.Color("#4d5057"),
+
+		destructive:       lipgloss.Color("#f08ca6"),
+		error:             lipgloss.Color("#f08ca6"),
+		warningSubtle:     lipgloss.Color("#f5b98c"),
+		warning:           lipgloss.Color("#f0c674"),
+		attention:         lipgloss.Color("#5fb3ef"),
+		busy:              lipgloss.Color("#f0c674"),
+		info:              lipgloss.Color("#5fb3ef"),
+		infoMoreSubtle:    lipgloss.Color("#7fc2f0"),
+		infoMostSubtle:    lipgloss.Color("#4a86b3"),
+		success:           lipgloss.Color("#7fd197"),
+		successMoreSubtle: lipgloss.Color("#9adcad"),
+		successMostSubtle: lipgloss.Color("#5f9e72"),
+		yolo:              lipgloss.Color("#f0c674"),
+		plan:              lipgloss.Color("#b48ce6"),
+		planMoreSubtle:    lipgloss.Color("#544a72"),
+
+		diffInsertFg:       lipgloss.Color("#7fd197"),
+		diffInsertCodeBg:   lipgloss.Color("#26402e"),
+		diffInsertGutterBg: lipgloss.Color("#203527"),
+		diffDeleteFg:       lipgloss.Color("#f08ca6"),
+		diffDeleteCodeBg:   lipgloss.Color("#4a2830"),
+		diffDeleteGutterBg: lipgloss.Color("#3c2128"),
+
+		button:         lipgloss.Color("#5fb3ef"),
+		buttonSubtle:   lipgloss.Color("#44474d"),
+		buttonInactive: lipgloss.Color("#575b62"),
+		buttonHovered:  lipgloss.Color("#868a91"),
+
+		ansiBlack:   lipgloss.Color("#1e1f22"),
+		ansiRed:     lipgloss.Color("#f08ca6"),
+		ansiGreen:   lipgloss.Color("#7fd197"),
+		ansiYellow:  lipgloss.Color("#f0c674"),
+		ansiBlue:    lipgloss.Color("#5fb3ef"),
+		ansiMagenta: lipgloss.Color("#b48ce6"),
+		ansiCyan:    lipgloss.Color("#5fd0d0"),
+		ansiWhite:   lipgloss.Color("#d9dbde"),
+
+		ansiBrightBlack:   lipgloss.Color("#868a91"),
+		ansiBrightRed:     lipgloss.Color("#f7aabd"),
+		ansiBrightGreen:   lipgloss.Color("#9adcad"),
+		ansiBrightYellow:  lipgloss.Color("#f6d68f"),
+		ansiBrightBlue:    lipgloss.Color("#9ccff5"),
+		ansiBrightMagenta: lipgloss.Color("#cbaef0"),
+		ansiBrightCyan:    lipgloss.Color("#8fe0e0"),
+		ansiBrightWhite:   lipgloss.Color("#ffffff"),
+	}
+}
+
 // builtinThemes maps theme names to their quickStyleOpts palette definitions.
 var builtinThemes = map[string]func() quickStyleOpts{
 	"charmtone-panther": charmtoneOpts,
 	"claude-code":       claudeCodeOpts,
+	"graphite":          graphiteOpts,
 	"gruvbox-dark":      gruvboxDarkOpts,
 	"terminal":          terminalOpts,
 }

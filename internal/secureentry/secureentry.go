@@ -35,6 +35,8 @@ type Request struct {
 
 func (r *Request) String() string { return "secure-entry request" }
 
+func (r *Request) abort() { r.Finish(false) }
+
 // Save writes locally and returns only a fixed, non-secret error.
 func (r *Request) Save(value []byte) error { return r.target.Save(value) }
 
@@ -42,18 +44,26 @@ func (r *Request) Save(value []byte) error { return r.target.Save(value) }
 func (r *Request) Finish(saved bool) {
 	r.once.Do(func() {
 		r.target.Close()
-		status := "cancelled"
+		status := StatusCancelled
 		if saved {
-			status = "saved"
+			status = StatusSaved
 		}
 		r.done <- status
 	})
 }
 
+// The only statuses that ever leave secure entry.
+const (
+	StatusSaved     = "saved"
+	StatusCancelled = "cancelled"
+)
+
+// broker holds the single open secure entry: a dialog or a question form.
 var broker struct {
 	sync.Mutex
-	deliver func(*Request)
-	pending *Request
+	deliver     func(*Request)
+	deliverForm func(*Form)
+	pending     interface{ abort() }
 }
 
 // Attach connects only the local TUI, bypassing shared app/remote events.
@@ -67,7 +77,7 @@ func Attach(deliver func(*Request)) func() {
 		pending := broker.pending
 		broker.Unlock()
 		if pending != nil {
-			pending.Finish(false)
+			pending.abort()
 		}
 	}
 }
@@ -92,7 +102,7 @@ func Open(session string, spec Spec) (<-chan string, error) {
 	go func() {
 		status := <-r.done
 		broker.Lock()
-		if broker.pending == r {
+		if pending, ok := broker.pending.(*Request); ok && pending == r {
 			broker.pending = nil
 		}
 		broker.Unlock()
@@ -115,23 +125,45 @@ type Target struct {
 
 func (t *Target) String() string { return "secure-entry target" }
 
-func Prepare(spec Spec) (*Target, error) {
+// normalize checks the metadata and fills in its defaults.
+func (spec Spec) normalize() (Spec, error) {
 	if !filepath.IsAbs(spec.File) {
-		return nil, errors.New("the destination must be an absolute path")
+		return spec, errors.New("the destination must be an absolute path")
 	}
 	if strings.IndexFunc(spec.File+spec.Label+spec.Placeholder, unicode.IsControl) >= 0 {
-		return nil, errors.New("entry metadata cannot contain control characters")
+		return spec, errors.New("entry metadata cannot contain control characters")
 	}
 	if spec.Placeholder == "" {
 		spec.Placeholder = "%s"
 	}
 	if spec.Occurrence < 1 {
-		return nil, errors.New("occurrence must be at least 1")
+		return spec, errors.New("occurrence must be at least 1")
 	}
 	if spec.Label == "" {
 		spec.Label = "API key"
 	}
 	spec.File = filepath.Clean(spec.File)
+	return spec, nil
+}
+
+// findSlot returns the offset of the occurrence-th literal placeholder.
+func findSlot(data []byte, placeholder string, occurrence int) (int, error) {
+	offset := 0
+	for range occurrence {
+		index := bytes.Index(data[offset:], []byte(placeholder))
+		if index < 0 {
+			return 0, errors.New("the requested placeholder was not found")
+		}
+		offset += index + len(placeholder)
+	}
+	return offset - len(placeholder), nil
+}
+
+func Prepare(spec Spec) (*Target, error) {
+	spec, err := spec.normalize()
+	if err != nil {
+		return nil, err
+	}
 	// Register before the dialog can save, including for existing trackers.
 	markSensitive(spec.File)
 	root, err := os.OpenRoot(filepath.Dir(spec.File))
@@ -145,27 +177,26 @@ func Prepare(spec Spec) (*Target, error) {
 		return nil, err
 	}
 	defer clear(data)
-	offset := 0
-	for range spec.Occurrence {
-		index := bytes.Index(data[offset:], []byte(spec.Placeholder))
-		if index < 0 {
-			root.Close()
-			return nil, errors.New("the requested placeholder was not found")
-		}
-		offset += index + len(spec.Placeholder)
+	t.offset, err = findSlot(data, spec.Placeholder, spec.Occurrence)
+	if err != nil {
+		root.Close()
+		return nil, err
 	}
-	t.offset = offset - len(spec.Placeholder)
 	t.fingerprint = sha256.Sum256(data)
 	t.info = info
 	return t, nil
 }
 
-func (t *Target) read() ([]byte, os.FileInfo, error) {
-	info, err := t.root.Lstat(t.name)
+func (t *Target) read() ([]byte, os.FileInfo, error) { return readFile(t.root, t.name) }
+
+// readFile reads a regular file in root without following a final symlink.
+// Callers clear the returned contents; errors never include them.
+func readFile(root *os.Root, name string) ([]byte, os.FileInfo, error) {
+	info, err := root.Lstat(name)
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, nil, errors.New("destination must be an existing regular file, not a symlink")
 	}
-	file, err := t.root.Open(t.name)
+	file, err := root.Open(name)
 	if err != nil {
 		return nil, nil, errors.New("cannot open destination file")
 	}
@@ -191,22 +222,36 @@ func (t *Target) Close() {
 	}
 }
 
+// ErrClosed is returned once the entry was saved or cancelled.
+var ErrClosed = errors.New("secure entry is closed")
+
+// checkValue returns a fixed error for values that can't be saved.
+func checkValue(value []byte) error {
+	if len(value) == 0 {
+		return errors.New("enter a value before saving")
+	}
+	if len(value) > MaxValueSize {
+		return errors.New("value exceeds 64 KiB")
+	}
+	if bytes.ContainsAny(value, "\x00\r\n") {
+		return errors.New("enter a single-line value without control characters")
+	}
+	return nil
+}
+
+// MaxValueSize bounds an entered value.
+const MaxValueSize = 64 << 10
+
 // Save replaces exactly one literal placeholder and atomically installs a
 // private (0600) file. Existing keys stay local and are never formatted/logged.
 func (t *Target) Save(value []byte) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.root == nil {
-		return errors.New("secure entry is closed")
+		return ErrClosed
 	}
-	if len(value) == 0 {
-		return errors.New("enter a value before saving")
-	}
-	if len(value) > 64<<10 {
-		return errors.New("value exceeds 64 KiB")
-	}
-	if bytes.ContainsAny(value, "\x00\r\n") {
-		return errors.New("enter a single-line value without control characters")
+	if err := checkValue(value); err != nil {
+		return err
 	}
 	data, info, err := t.read()
 	if err != nil {

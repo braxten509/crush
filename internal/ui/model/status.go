@@ -17,7 +17,8 @@ import (
 const DefaultStatusTTL = 5 * time.Second
 
 // badgeLeftInset is the number of cells between the status bar's left edge
-// and the mode badge.
+// and the mode badge. With the badge's own padding its text lines up with
+// the composer's text.
 const badgeLeftInset = 1
 
 // Status is the status bar and help model.
@@ -33,6 +34,14 @@ type Status struct {
 	yolo      bool
 	// remote shows the Remote Control badge.
 	remote bool
+	// bandLeft and bandWidth place notices on the composer's band (zero
+	// width: the whole row).
+	bandLeft, bandWidth int
+}
+
+// SetBand sets the columns of the composer's band, which notices span.
+func (s *Status) SetBand(left, width int) {
+	s.bandLeft, s.bandWidth = left, width
 }
 
 // NewStatus creates a new status bar and help model.
@@ -143,17 +152,18 @@ func (s *Status) Draw(scr uv.Screen, area uv.Rectangle) {
 	var msgStyle lipgloss.Style
 	// Mode banners show the same badge that sits next to the help hints, so
 	// they honor the same left inset to keep the indicator from jumping when
-	// the banner appears or expires.
-	indInset := 0
+	// the banner appears or expires. Other notices fill that inset with
+	// their own background, so their band starts where the composer's does.
+	banner := false
 	switch s.msg.Type {
 	case util.InfoTypePlan:
 		indStyle = s.com.Styles.Status.ModeBannerPlanBadge
 		msgStyle = s.com.Styles.Status.ModeBannerPlan
-		indInset = badgeLeftInset
+		banner = true
 	case util.InfoTypeYolo:
 		indStyle = s.com.Styles.Status.ModeBannerYoloBadge
 		msgStyle = s.com.Styles.Status.ModeBannerYolo
-		indInset = badgeLeftInset
+		banner = true
 	case util.InfoTypeError:
 		indStyle = s.com.Styles.Status.ErrorIndicator
 		msgStyle = s.com.Styles.Status.ErrorMessage
@@ -171,10 +181,19 @@ func (s *Status) Draw(scr uv.Screen, area uv.Rectangle) {
 		msgStyle = s.com.Styles.Status.SuccessMessage
 	}
 
+	left, width := 0, area.Dx()
+	if s.bandWidth > 0 {
+		left = min(max(0, s.bandLeft), area.Dx())
+		width = min(s.bandWidth, area.Dx()-left)
+	}
+	inset := strings.Repeat(" ", badgeLeftInset)
+	if !banner {
+		inset = lipgloss.NewStyle().Background(msgStyle.GetBackground()).Render(inset)
+	}
 	ind := indStyle.String()
 	indWidth := lipgloss.Width(ind)
 	msgPad := msgStyle.GetPaddingLeft() + msgStyle.GetPaddingRight()
-	avail := max(0, area.Dx()-indWidth-msgPad-indInset)
+	avail := max(0, width-badgeLeftInset-indWidth-msgPad)
 	msg := strings.Join(strings.Split(s.msg.Msg, "\n"), " ")
 	msg = ansi.Truncate(msg, avail, "…")
 	if w := lipgloss.Width(msg); w < avail {
@@ -183,7 +202,7 @@ func (s *Status) Draw(scr uv.Screen, area uv.Rectangle) {
 	info := msgStyle.Render(msg)
 
 	// Draw the info message over the help view
-	uv.NewStyledString(strings.Repeat(" ", indInset)+ind+info).Draw(scr, area)
+	uv.NewStyledString(strings.Repeat(" ", left)+inset+ind+info).Draw(scr, area)
 }
 
 // clearInfoMsgCmd returns a command that clears the info message after the

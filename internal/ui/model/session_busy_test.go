@@ -7,7 +7,6 @@ import (
 
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 
 	"github.com/charmbracelet/crush/internal/agent/notify"
@@ -45,6 +44,7 @@ type countingWorkspace struct {
 	permSetCalls    int
 	clearQueueCalls int
 	cancelCalls     int
+	interruptCalls  int
 	modelCalls      int
 	lspStateCalls   int
 	lspDiagCalls    int
@@ -84,6 +84,7 @@ func (w *countingWorkspace) PermissionSetSkipRequests(skip bool) {
 
 func (w *countingWorkspace) AgentClearQueue(string) { w.clearQueueCalls++; w.queued = nil }
 func (w *countingWorkspace) AgentCancel(string)     { w.cancelCalls++ }
+func (w *countingWorkspace) AgentInterrupt(string)  { w.interruptCalls++ }
 
 func (w *countingWorkspace) AgentModel() workspace.AgentModel {
 	w.modelCalls++
@@ -127,6 +128,7 @@ func (w *countingWorkspace) resetCounters() {
 	w.readyCalls, w.agentBusyCalls = 0, 0
 	w.queuedCalls, w.queueListCalls, w.permCalls = 0, 0, 0
 	w.permSetCalls, w.clearQueueCalls, w.cancelCalls = 0, 0, 0
+	w.interruptCalls = 0
 	w.modelCalls, w.lspStateCalls, w.lspDiagCalls = 0, 0, 0
 }
 
@@ -184,7 +186,7 @@ func runCmds(m *UI, cmd tea.Cmd) {
 		for _, c := range msg {
 			runCmds(m, c)
 		}
-	case busyStateMsg, promptQueueMsg, agentRunSubmittedMsg, lspStatesMsg, agentModelChangedMsg:
+	case busyStateMsg, promptQueueMsg, agentRunSubmittedMsg, agentInterruptedMsg, pendingPromptResolvedMsg, lspStatesMsg, agentModelChangedMsg:
 		_, next := m.Update(msg)
 		runCmds(m, next)
 	}
@@ -409,31 +411,80 @@ func TestSendMessageSetsOptimisticBusy(t *testing.T) {
 
 	// esc right after enter: isAgentBusy gates cancelAgent, one press cancels.
 	require.Zero(t, m.promptQueue)
-	m.cancelAgent()
-	require.Equal(t, 1, ws.cancelCalls, "one esc press must cancel the agent")
+	runCmds(m, m.cancelAgent())
+	require.Equal(t, 1, ws.interruptCalls, "one esc press must stop the agent")
 }
 
-// TestCancelAgentClearsQueueFromCachedCount: the queue-clear decision must
-// come from the memoized count — no synchronous AgentQueuedPrompts probe —
-// and clearing must zero the cached count immediately.
-func TestCancelAgentClearsQueueFromCachedCount(t *testing.T) {
+// Escape preserves queued messages even before the UI's queue count refreshes.
+func TestEscapeSendsQueuedFromCachedCount(t *testing.T) {
 	pinTTLs(t)
+	for _, cached := range []bool{false, true} {
+		name := "stale"
+		if cached {
+			name = "fresh"
+		}
+		t.Run(name, func(t *testing.T) {
+			ws := &countingWorkspace{ready: true, queued: []string{"a", "b"}}
+			m := newBusyUI(ws)
+			m.promptHistory.index = -1
+			warmCaches(m, true)
+			if cached {
+				m.promptQueue = len(ws.queued)
+				m.promptQueueItems = append([]string(nil), ws.queued...)
+			}
+			ws.resetCounters()
 
-	ws := &countingWorkspace{ready: true, queued: []string{"a"}}
+			_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+			require.NotNil(t, cmd)
+			require.Zero(t, ws.interruptCalls, "Escape must not wait on a synchronous workspace call")
+			require.Zero(t, ws.clearQueueCalls, "esc must not delete queued messages")
+			require.Zero(t, ws.queuedCalls, "esc must not probe the workspace synchronously")
+			require.Zero(t, ws.queueListCalls, "esc must not probe the workspace synchronously")
+			runCmds(m, cmd)
+			require.Equal(t, 1, ws.interruptCalls, "esc must interrupt and send the queue")
+			require.Equal(t, []string{"a", "b"}, ws.queued)
+			if cached {
+				require.Equal(t, 2, m.promptQueue)
+				require.Equal(t, []string{"a", "b"}, m.promptQueueItems)
+			}
+			require.Zero(t, ws.cancelCalls, "a plain cancel would discard the queue")
+		})
+	}
+}
+
+func TestEscapeWithoutQueueCancelsActiveRun(t *testing.T) {
+	pinTTLs(t)
+	ws := &countingWorkspace{ready: true, agentBusy: true}
+	m := newBusyUI(ws)
+	m.promptHistory.index = -1
+	warmCaches(m, true)
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	runCmds(m, cmd)
+	require.Equal(t, 1, ws.interruptCalls, "interrupt with no queue cancels the active run")
+	require.Zero(t, ws.cancelCalls)
+	require.Zero(t, ws.clearQueueCalls)
+}
+
+func TestEscapeQueueHelp(t *testing.T) {
+	ws := &countingWorkspace{ready: true, agentBusy: true}
 	m := newBusyUI(ws)
 	warmCaches(m, true)
 	m.promptQueue = 1
-	m.promptQueueItems = []string{"a"}
-	ws.resetCounters()
 
-	cmd := m.cancelAgent()
-	require.Nil(t, cmd)
-	require.Equal(t, 1, ws.clearQueueCalls, "esc with a queue must clear it")
-	require.Zero(t, ws.queuedCalls, "the decision must use the cached count, not a probe")
-	require.Zero(t, ws.queueListCalls, "the decision must use the cached count, not a probe")
-	require.Zero(t, m.promptQueue, "the cached count must be zeroed immediately")
-	require.Empty(t, m.promptQueueItems)
-	require.Zero(t, ws.cancelCalls, "clearing the queue must not cancel the run")
+	short := m.ShortHelp()
+	full := m.FullHelp()
+	for _, row := range full {
+		short = append(short, row...)
+	}
+	count := 0
+	for _, binding := range short {
+		if binding.Help().Key == "esc" {
+			require.Equal(t, "interrupt, send queued", binding.Help().Desc)
+			count++
+		}
+	}
+	require.Equal(t, 2, count, "both short and full help must describe the queued action")
 }
 
 // TestBackstopRefreshesStaleCaches: when the memoized state outlives its TTL
@@ -813,20 +864,22 @@ func TestRemoteYoloToggleUpdatesEditorPrompt(t *testing.T) {
 	m.textarea.SetWidth(40)
 	m.yoloCache.set(false)
 	m.setEditorPrompt(false)
-	normalPrompt := ansi.Strip(m.textarea.View())
+	// YOLO shares the normal mark and differs only in color, so compare
+	// the styled views.
+	normalPrompt := m.textarea.View()
 
 	// A remote toggle flips yolo on; delivered via an off-thread refresh.
 	m.applyBusyState(busyStateMsg{gen: m.busyFetchGen, yolo: true})
 	require.True(t, m.yoloModeCached(), "the refresh must write the new yolo value through the cache")
-	yoloPrompt := ansi.Strip(m.textarea.View())
+	yoloPrompt := m.textarea.View()
 	require.NotEqual(t, normalPrompt, yoloPrompt,
 		"a remote yolo toggle must change the rendered editor prompt")
-	require.Contains(t, yoloPrompt, "!",
+	require.Contains(t, yoloPrompt, m.com.Styles.Editor.PromptYoloIconFocused.Render(),
 		"the yolo prompt icon must render after a remote toggle")
 
 	// Flipping back off must restore the normal prompt.
 	m.applyBusyState(busyStateMsg{gen: m.busyFetchGen, yolo: false})
 	require.False(t, m.yoloModeCached())
-	require.Equal(t, normalPrompt, ansi.Strip(m.textarea.View()),
+	require.Equal(t, normalPrompt, m.textarea.View(),
 		"toggling yolo off must restore the normal editor prompt")
 }

@@ -99,6 +99,10 @@ func init() {
 // sendTaskRequest drops a request into Crush's task directory and waits for
 // its reply.
 func sendTaskRequest(dir string, req agent.TaskRequest) (agent.TaskReply, error) {
+	return sendTaskRequestTimeout(dir, req, 30*time.Second)
+}
+
+func sendTaskRequestTimeout(dir string, req agent.TaskRequest, timeout time.Duration) (agent.TaskReply, error) {
 	var reply agent.TaskReply
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -115,7 +119,7 @@ func sendTaskRequest(dir string, req agent.TaskRequest) (agent.TaskReply, error)
 		return reply, fmt.Errorf("can't reach Crush: %w", err)
 	}
 	ack := filepath.Join(dir, id+".ack")
-	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
 		data, err := os.ReadFile(ack)
 		if err != nil {
 			continue

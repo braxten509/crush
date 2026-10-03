@@ -233,10 +233,8 @@ func (w *ClientWorkspace) ListAllUserMessages(ctx context.Context) ([]message.Me
 // -- Agent --
 
 func (w *ClientWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error {
-	// The interactive TUI does not consume notify.RunComplete for
-	// completion detection (it observes message events directly),
-	// so passing an empty RunID is correct here: it skips the
-	// correlator stamping path without functional consequences.
+	// SubmissionID tracks optimistic UI feedback. Keep RunID empty so
+	// interactive follow-ups can still be steered into the running turn.
 	return w.client.SendMessage(ctx, w.workspaceID(), sessionID, "", "", prompt, attachments...)
 }
 
@@ -258,6 +256,14 @@ func (w *ClientWorkspace) AgentBackground(string) bool { return false }
 
 func (w *ClientWorkspace) AgentInterrupt(sessionID string) {
 	_ = w.client.InterruptAgentSession(context.Background(), w.workspaceID(), sessionID)
+}
+
+func (w *ClientWorkspace) AgentRecallQueuedPrompt(ctx context.Context, sessionID string) (*message.QueuedPrompt, error) {
+	prompt, err := w.client.RecallAgentSessionQueuedPrompt(ctx, w.workspaceID(), sessionID)
+	if err != nil || prompt == nil {
+		return nil, err
+	}
+	return &message.QueuedPrompt{Prompt: prompt.Prompt, Attachments: proto.AttachmentsToMessage(prompt.Attachments), SubmissionID: prompt.SubmissionID}, nil
 }
 
 func (w *ClientWorkspace) AgentIsBusy() bool {
@@ -1216,12 +1222,13 @@ func (w *ClientWorkspace) translateEvent(ev any) tea.Msg {
 		return pubsub.Event[notify.RunComplete]{
 			Type: e.Type,
 			Payload: notify.RunComplete{
-				SessionID: e.Payload.SessionID,
-				RunID:     e.Payload.RunID,
-				MessageID: e.Payload.MessageID,
-				Text:      e.Payload.Text,
-				Error:     e.Payload.Error,
-				Cancelled: e.Payload.Cancelled,
+				SubmissionID: e.Payload.SubmissionID,
+				SessionID:    e.Payload.SessionID,
+				RunID:        e.Payload.RunID,
+				MessageID:    e.Payload.MessageID,
+				Text:         e.Payload.Text,
+				Error:        e.Payload.Error,
+				Cancelled:    e.Payload.Cancelled,
 			},
 		}
 	case pubsub.Event[proto.SkillsEvent]:
@@ -1315,6 +1322,8 @@ func protoToFile(f proto.File) history.File {
 
 func protoToMessage(m proto.Message) message.Message {
 	msg := message.Message{
+		ActivityAt:              m.ActivityAt,
+		Activity:                m.Activity,
 		ID:                      m.ID,
 		SessionID:               m.SessionID,
 		Role:                    message.MessageRole(m.Role),
@@ -1333,7 +1342,7 @@ func protoToMessage(m proto.Message) message.Message {
 	for _, p := range m.Parts {
 		switch v := p.(type) {
 		case proto.TextContent:
-			msg.Parts = append(msg.Parts, message.TextContent{Text: v.Text, Hidden: v.Hidden})
+			msg.Parts = append(msg.Parts, message.TextContent{Text: v.Text, Hidden: v.Hidden, SubmissionID: v.SubmissionID})
 		case proto.ReasoningContent:
 			msg.Parts = append(msg.Parts, message.ReasoningContent{
 				Thinking:   v.Thinking,
@@ -1350,6 +1359,7 @@ func protoToMessage(m proto.Message) message.Message {
 			})
 		case proto.ToolResult:
 			msg.Parts = append(msg.Parts, message.ToolResult{
+				Review:     v.Review,
 				ToolCallID: v.ToolCallID,
 				Name:       v.Name,
 				Content:    v.Content,

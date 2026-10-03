@@ -33,6 +33,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
 
@@ -94,12 +95,17 @@ type promptQueueMsg struct {
 	// overwriting newer optimistic or invalidated queue state.
 	gen     uint64
 	prompts []string
+	entries []message.QueuedPromptSummary
 }
 
 // agentRunSubmittedMsg reports that AgentRun accepted a prompt (it either
 // started a run or was enqueued behind one), so busy and queue state should
 // be re-fetched.
-type agentRunSubmittedMsg struct{}
+type agentRunSubmittedMsg struct {
+	submissionID string
+	dispatchID   string
+	err          error
+}
 
 // agentModelChangedMsg reports that the coordinator's model was updated
 // (model selection, thinking toggle, reasoning effort), so the memoized
@@ -149,11 +155,16 @@ func (m *UI) dispatchBusyRefresh() tea.Cmd {
 	m.busyFetchInFlight = true
 	ws := m.com.Workspace
 	gen := m.busyFetchGen
+	sessionID := m.currentSessionID()
 	return func() tea.Msg {
 		st := busyStateMsg{gen: gen}
 		if ws.AgentIsReady() {
 			st.ready = true
-			st.agentBusy = ws.AgentIsBusy()
+			if sessionID == "" {
+				st.agentBusy = ws.AgentIsBusy()
+			} else {
+				st.agentBusy = ws.AgentIsSessionBusy(sessionID)
+			}
 			st.model = ws.AgentModel()
 		}
 		st.yolo = ws.PermissionSkipRequests()
@@ -258,7 +269,16 @@ func (m *UI) dispatchPromptQueueRefresh() tea.Cmd {
 	return func() tea.Msg {
 		msg := promptQueueMsg{forSession: sessionID, gen: gen}
 		if ws.AgentIsReady() {
-			msg.prompts = ws.AgentQueuedPromptsList(sessionID)
+			if detailed, ok := ws.(interface {
+				AgentQueuedPromptSummaries(string) []message.QueuedPromptSummary
+			}); ok {
+				msg.entries = detailed.AgentQueuedPromptSummaries(sessionID)
+				for _, entry := range msg.entries {
+					msg.prompts = append(msg.prompts, entry.Prompt)
+				}
+			} else {
+				msg.prompts = ws.AgentQueuedPromptsList(sessionID)
+			}
 		}
 		return msg
 	}
@@ -279,11 +299,20 @@ func (m *UI) applyPromptQueue(msg promptQueueMsg) []tea.Cmd {
 		return nil
 	}
 	m.promptQueueCheckedAt = time.Now()
-	itemsChanged := !slices.Equal(m.promptQueueItems, msg.prompts)
+	previousVisible := m.visiblePromptQueueCount()
+	// The new authoritative snapshot replaces the old queue against which
+	// these confirmed timeline copies were matched.
+	for id, copy := range m.confirmedQueueCopies {
+		if copy.SessionID == msg.forSession {
+			delete(m.confirmedQueueCopies, id)
+		}
+	}
+	itemsChanged := !slices.Equal(m.promptQueueItems, msg.prompts) || !slices.Equal(m.promptQueueEntries, msg.entries)
 	countChanged := len(msg.prompts) != m.promptQueue
 	m.promptQueueItems = msg.prompts
+	m.promptQueueEntries = msg.entries
 	m.promptQueue = len(msg.prompts)
-	if countChanged {
+	if countChanged || previousVisible != m.visiblePromptQueueCount() {
 		m.updateLayoutAndSize()
 	} else if itemsChanged {
 		m.renderPills()

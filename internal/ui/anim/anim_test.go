@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,4 +71,22 @@ func TestAdvanceIndependentInstances(t *testing.T) {
 
 	a2.Advance()
 	require.Equal(t, int64(1), a2.framesSinceStart.Load())
+}
+
+func TestEllipsisRemainsWithTimer(t *testing.T) {
+	t.Parallel()
+	a := New(Settings{Label: "Thinking", NoScramble: true, Suffix: func() string { return "10s" }})
+	require.Equal(t, "Thinking.   10s", ansi.Strip(a.Render()))
+	for range ellipsisAnimSpeed {
+		a.Advance()
+	}
+	require.Equal(t, "Thinking..  10s", ansi.Strip(a.Render()))
+	for range ellipsisAnimSpeed {
+		a.Advance()
+	}
+	require.Equal(t, "Thinking... 10s", ansi.Strip(a.Render()))
+	for range ellipsisAnimSpeed {
+		a.Advance()
+	}
+	require.Equal(t, "Thinking.   10s", ansi.Strip(a.Render()), "cycle directly back to one dot")
 }

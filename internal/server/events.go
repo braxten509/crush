@@ -139,12 +139,13 @@ func wrapEvent(ev any) *pubsub.Payload {
 		return envelope(pubsub.PayloadTypeRunComplete, pubsub.Event[proto.RunComplete]{
 			Type: e.Type,
 			Payload: proto.RunComplete{
-				SessionID: e.Payload.SessionID,
-				RunID:     e.Payload.RunID,
-				MessageID: e.Payload.MessageID,
-				Text:      e.Payload.Text,
-				Error:     e.Payload.Error,
-				Cancelled: e.Payload.Cancelled,
+				SubmissionID: e.Payload.SubmissionID,
+				SessionID:    e.Payload.SessionID,
+				RunID:        e.Payload.RunID,
+				MessageID:    e.Payload.MessageID,
+				Text:         e.Payload.Text,
+				Error:        e.Payload.Error,
+				Cancelled:    e.Payload.Cancelled,
 			},
 		})
 	case pubsub.Event[proto.ConfigChanged]:
@@ -270,6 +271,8 @@ func fileToProto(f history.File) proto.File {
 
 func messageToProto(m message.Message) proto.Message {
 	msg := proto.Message{
+		ActivityAt:              m.ActivityAt,
+		Activity:                m.Activity,
 		ID:                      m.ID,
 		SessionID:               m.SessionID,
 		Role:                    proto.MessageRole(m.Role),
@@ -288,7 +291,7 @@ func messageToProto(m message.Message) proto.Message {
 	for _, p := range m.Parts {
 		switch v := p.(type) {
 		case message.TextContent:
-			msg.Parts = append(msg.Parts, proto.TextContent{Text: v.Text, Hidden: v.Hidden})
+			msg.Parts = append(msg.Parts, proto.TextContent{Text: v.Text, Hidden: v.Hidden, SubmissionID: v.SubmissionID})
 		case message.ReasoningContent:
 			msg.Parts = append(msg.Parts, proto.ReasoningContent{
 				Thinking:   v.Thinking,
@@ -305,6 +308,7 @@ func messageToProto(m message.Message) proto.Message {
 			})
 		case message.ToolResult:
 			msg.Parts = append(msg.Parts, proto.ToolResult{
+				Review:     v.Review,
 				ToolCallID: v.ToolCallID,
 				Name:       v.Name,
 				Content:    v.Content,

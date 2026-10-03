@@ -928,6 +928,8 @@ func (app *App) Subscribe(program *tea.Program) {
 
 	detachSecureEntry := secureentry.Attach(func(r *secureentry.Request) { program.Send(r) })
 	defer detachSecureEntry()
+	detachSecureForms := secureentry.AttachForms(func(form *secureentry.Form) { program.Send(form) })
+	defer detachSecureForms()
 	events := app.events.Subscribe(tuiCtx)
 	for {
 		select {

@@ -102,6 +102,12 @@ func (s *ShellItem) Complete(output string, exitCode int) {
 	s.Bump()
 }
 
+func (s *ShellItem) Cancel() {
+	if s.pending {
+		s.Complete(s.output.String(), 130)
+	}
+}
+
 // AppendOutput appends incremental output to a pending ShellItem.
 func (s *ShellItem) AppendOutput(chunk string) {
 	if !s.pending {
@@ -216,6 +222,8 @@ func (s *ShellItem) RawRender(width int) string {
 			// Nothing streamed yet: show the spinner under the header.
 			return header + "\n" + s.anim.Render()
 		}
+	} else if s.exitCode == 130 {
+		header += " " + s.sty.Tool.StateCancelled.Render("(Canceled)")
 	} else if s.exitCode != 0 {
 		header += " " + s.sty.Messages.ShellExitCode.Render(fmt.Sprintf("(exit %d)", s.exitCode))
 	}

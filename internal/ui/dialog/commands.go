@@ -461,6 +461,8 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "new_session", "New Session", "ctrl+n", ActionNewSession{}).WithAliases("clear"),
 		NewCommandItem(c.com.Styles, "switch_session", "Sessions", "ctrl+s", ActionOpenDialog{SessionsID}),
 		NewCommandItem(c.com.Styles, "switch_model", "Switch Model", "ctrl+l", ActionOpenDialog{ModelsID}),
+		NewCommandItem(c.com.Styles, "usage", "Usage", "", ActionOpenDialog{UsageID}),
+		NewCommandItem(c.com.Styles, "autocompact", "Autocompact", "", ActionOpenDialog{AutocompactID}),
 	}
 
 	// Only show compact command if there's an active session
@@ -479,6 +481,13 @@ func (c *Commands) defaultCommands() []*CommandItem {
 				status = "Disable"
 			}
 			commands = append(commands, NewCommandItem(c.com.Styles, "toggle_fast_mode", status+" FAST Mode", "", ActionToggleFastMode{}).WithAliases("fast", "speed"))
+		}
+		if providerCfg != nil && model != nil && config.SupportsUltracode(*providerCfg, *model) {
+			status := "Turn On"
+			if cfg.Models[agentCfg.Model].Ultracode {
+				status = "Turn Off"
+			}
+			commands = append(commands, NewCommandItem(c.com.Styles, "toggle_ultracode", status+" Ultracode", "", ActionToggleUltracode{}).WithAliases("ultracode", "ultra", "workflows"))
 		}
 		if providerCfg != nil && model != nil && model.CanReason {
 			selectedModel := cfg.Models[agentCfg.Model]
@@ -502,7 +511,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	}
 	// Only show toggle compact mode command if window width is larger than compact breakpoint (120)
 	if c.windowWidth >= sidebarCompactModeBreakpoint && c.hasSession {
-		commands = append(commands, NewCommandItem(c.com.Styles, "toggle_sidebar", "Toggle Sidebar", "ctrl+b", ActionToggleCompactMode{}))
+		commands = append(commands, NewCommandItem(c.com.Styles, "toggle_sidebar", "Toggle Sidebar", "", ActionToggleCompactMode{}))
 	}
 	if c.hasSession {
 		cfgPrime := c.com.Config()
@@ -562,6 +571,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "sub_agents", "Sub-agents", "", ActionOpenDialog{SubAgentsID}).WithAliases("agents", "tasks", "stop"),
 		NewCommandItem(c.com.Styles, "remote", "Remote Control", "", ActionOpenDialog{RemoteID}).WithAliases("rc", "phone"),
 		NewCommandItem(c.com.Styles, "update_clis", "Update Agent CLIs", "", ActionCheckCLIUpdates{}).WithAliases("upgrade", "version"),
+		NewCommandItem(c.com.Styles, "skills", "Skills", "", ActionOpenDialog{SkillsID}).WithAliases("install skills", "enable skills", "disable skills"),
 	)
 
 	// Add transparent background toggle.
@@ -577,6 +587,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		focusLabel = "Let Tab Move Focus"
 	}
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_composer_focus", focusLabel, "", ActionToggleComposerFocusOnly{}).WithAliases("tab", "focus"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "customize_composer", "Customize Composer", "", ActionCustomizeComposer{}).WithAliases("footer", "stats", "status"))
 
 	commands = append(commands, NewCommandItem(c.com.Styles, "switch_theme", "Themes", "", ActionOpenDialog{ThemeID}))
 

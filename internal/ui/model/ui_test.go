@@ -226,12 +226,13 @@ func newPlanUI(t *testing.T, sessionID string) (*UI, *testWorkspace) {
 		Styles:    &sty,
 	}
 	u := &UI{
-		com:      com,
-		mode:     uiInputModePlan,
-		textarea: textarea.New(),
-		dialog:   dialog.NewOverlay(),
-		session:  sess,
-		chat:     NewChat(com, config.ScrollbarDefault),
+		com:        com,
+		mode:       uiInputModePlan,
+		agentReady: true,
+		textarea:   textarea.New(),
+		dialog:     dialog.NewOverlay(),
+		session:    sess,
+		chat:       NewChat(com, config.ScrollbarDefault),
 	}
 	return u, ws
 }
@@ -265,7 +266,7 @@ func TestHandlePlanHandoff_MarkerOpensInline(t *testing.T) {
 	require.True(t, isPlanHandoffInline(u))
 }
 
-func TestToggleSidebarKeyBinding(t *testing.T) {
+func TestCtrlBDoesNotToggleSidebar(t *testing.T) {
 	t.Parallel()
 
 	sty := styles.CharmtonePantera()
@@ -294,27 +295,30 @@ func TestToggleSidebarKeyBinding(t *testing.T) {
 	}
 	u.status = NewStatus(com, u)
 
-	// Ctrl+b hides the sidebar and moves focus off it, persisting compact
-	// mode.
-	u.handleKeyPressMsg(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
-	require.True(t, u.forceCompactMode)
-	require.True(t, u.isCompact)
-	require.Equal(t, uiFocusEditor, u.focus)
-	require.Equal(t, []bool{true}, ws.compactCalls)
-
-	// Ctrl+b again shows the sidebar.
+	// With no command to background, Ctrl+B must leave sidebar and focus alone.
 	u.handleKeyPressMsg(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 	require.False(t, u.forceCompactMode)
 	require.False(t, u.isCompact)
+	require.Equal(t, uiFocusSidebar, u.focus)
+	require.Empty(t, ws.compactCalls)
+
+	// The command palette action still hides and restores the sidebar.
+	u.handleDialogAction(dialog.ActionToggleCompactMode{})
+	require.True(t, u.forceCompactMode)
+	require.True(t, u.isCompact)
+	require.Equal(t, uiFocusEditor, u.focus)
+	u.handleKeyPressMsg(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	require.True(t, u.isCompact)
+	require.Equal(t, []bool{true}, ws.compactCalls)
+	u.handleDialogAction(dialog.ActionToggleCompactMode{})
+	require.False(t, u.isCompact)
 	require.Equal(t, []bool{true, false}, ws.compactCalls)
 
-	// The binding is advertised in the help bar while the sidebar is
-	// available.
 	var shortHelp []string
 	for _, b := range u.ShortHelp() {
 		shortHelp = append(shortHelp, b.Help().Desc)
 	}
-	require.Contains(t, shortHelp, "toggle sidebar")
+	require.NotContains(t, shortHelp, "toggle sidebar")
 
 	var fullHelp []string
 	for _, row := range u.FullHelp() {
@@ -322,7 +326,7 @@ func TestToggleSidebarKeyBinding(t *testing.T) {
 			fullHelp = append(fullHelp, b.Help().Desc)
 		}
 	}
-	require.Contains(t, fullHelp, "toggle sidebar")
+	require.NotContains(t, fullHelp, "toggle sidebar")
 }
 
 func TestHandlePlanHandoff_NoMarkerNoInline(t *testing.T) {

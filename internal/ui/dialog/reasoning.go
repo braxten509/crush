@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 )
 
@@ -29,13 +30,17 @@ type Reasoning struct {
 	help  help.Model
 	list  *list.FilterableList
 	input textinput.Model
+	// ultracode is the Ultracode switch, applied with the effort on
+	// confirm; nil when the model has no Ultracode.
+	ultracode *bool
 
 	keyMap struct {
-		Select   key.Binding
-		Next     key.Binding
-		Previous key.Binding
-		UpDown   key.Binding
-		Close    key.Binding
+		Select    key.Binding
+		Next      key.Binding
+		Previous  key.Binding
+		UpDown    key.Binding
+		Ultracode key.Binding
+		Close     key.Binding
 	}
 }
 
@@ -95,6 +100,10 @@ func NewReasoning(com *common.Common) (*Reasoning, error) {
 		key.WithKeys("up", "down"),
 		key.WithHelp("↑/↓", "choose"),
 	)
+	r.keyMap.Ultracode = key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "ultracode"),
+	)
 	r.keyMap.Close = CloseKey
 
 	if err := r.setReasoningItems(); err != nil {
@@ -116,6 +125,9 @@ func (r *Reasoning) HandleMsg(msg tea.Msg) Action {
 		switch {
 		case key.Matches(msg, r.keyMap.Close):
 			return ActionClose{}
+		case r.ultracode != nil && key.Matches(msg, r.keyMap.Ultracode):
+			on := !*r.ultracode
+			r.ultracode = &on
 		case key.Matches(msg, r.keyMap.Previous):
 			r.list.Focus()
 			if r.list.IsSelectedFirst() {
@@ -143,7 +155,7 @@ func (r *Reasoning) HandleMsg(msg tea.Msg) Action {
 			if !ok {
 				break
 			}
-			return ActionSelectReasoningEffort{Effort: reasoningItem.effort}
+			return ActionSelectReasoningEffort{Effort: reasoningItem.effort, Ultracode: r.ultracode}
 		default:
 			prevValue := r.input.Value()
 			var cmd tea.Cmd
@@ -179,8 +191,13 @@ func (r *Reasoning) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
 		t.Dialog.View.GetVerticalFrameSize()
+	// The Ultracode switch takes one line under the list.
+	extra := 0
+	if r.ultracode != nil {
+		extra = 1
+	}
 	desiredHeight := heightOffset + listTotalHeight
-	maxAvailable := area.Dy() - t.Dialog.View.GetVerticalBorderSize()
+	maxAvailable := area.Dy() - t.Dialog.View.GetVerticalBorderSize() - extra
 	height := max(reasoningDialogMinHeight, min(reasoningDialogMaxHeight, desiredHeight, maxAvailable))
 
 	listHeight, listTotalHeight, _ := sizeDialogList(t, r.list, innerWidth, height)
@@ -200,6 +217,9 @@ func (r *Reasoning) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	listView := t.Dialog.List.Height(r.list.Height()).Render(r.list.Render())
 	listView = joinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, r.list.Offset())
 	rc.AddPart(listView)
+	if r.ultracode != nil {
+		rc.AddPart(r.ultracodeLine(innerWidth))
+	}
 	rc.Help = renderDialogHelp(t, &r.help, r, innerWidth)
 
 	view := rc.Render()
@@ -209,13 +229,25 @@ func (r *Reasoning) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	return cur
 }
 
+// ultracodeLine shows the Ultracode switch under the effort list.
+func (r *Reasoning) ultracodeLine(width int) string {
+	t := r.com.Styles
+	state := t.Dialog.SecondaryText.UnsetPadding().Render("off")
+	if *r.ultracode {
+		state = t.Dialog.TitleAccent.Render("on")
+	}
+	line := t.Dialog.PrimaryText.UnsetPadding().Render("Ultracode ") + state +
+		t.Dialog.SecondaryText.UnsetPadding().Render(" · workflows on every task")
+	return " " + ansi.Truncate(line, max(0, width-2), "…")
+}
+
 // ShortHelp implements [help.KeyMap].
 func (r *Reasoning) ShortHelp() []key.Binding {
-	return []key.Binding{
-		r.keyMap.UpDown,
-		r.keyMap.Select,
-		r.keyMap.Close,
+	bindings := []key.Binding{r.keyMap.UpDown}
+	if r.ultracode != nil {
+		bindings = append(bindings, r.keyMap.Ultracode)
 	}
+	return append(bindings, r.keyMap.Select, r.keyMap.Close)
 }
 
 // FullHelp implements [help.KeyMap].
@@ -249,6 +281,11 @@ func (r *Reasoning) setReasoningItems() error {
 
 	if len(model.ReasoningLevels) == 0 {
 		return errors.New("no reasoning levels available")
+	}
+
+	if provider := cfg.GetProviderForModel(agentCfg.Model); provider != nil && config.SupportsUltracode(*provider, *model) {
+		on := selectedModel.Ultracode
+		r.ultracode = &on
 	}
 
 	currentEffort := selectedModel.ReasoningEffort

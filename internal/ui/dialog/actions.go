@@ -52,6 +52,8 @@ type (
 	ActionToggleCompactMode       struct{}
 	ActionToggleThinking          struct{}
 	ActionToggleFastMode          struct{}
+	ActionSetAutocompact          struct{ Tokens int64 }
+	ActionToggleUltracode         struct{}
 	ActionTogglePills             struct{}
 	ActionExternalEditor          struct{}
 	ActionToggleYoloMode          struct{}
@@ -61,6 +63,7 @@ type (
 	}
 	ActionToggleTransparentBackground struct{}
 	ActionToggleComposerFocusOnly     struct{}
+	ActionCustomizeComposer           struct{}
 	ActionCheckCLIUpdates             struct{}
 	ActionToggleMouseSupport          struct{}
 	ActionSwitchTheme                 struct {
@@ -110,6 +113,9 @@ type (
 	// has been selected.
 	ActionSelectReasoningEffort struct {
 		Effort string
+		// Ultracode is the dialog's Ultracode switch, nil when the model
+		// has none.
+		Ultracode *bool
 	}
 	ActionPermissionResponse struct {
 		Permission permission.PermissionRequest

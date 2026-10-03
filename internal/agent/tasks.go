@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/fantasy"
 	"github.com/google/uuid"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
@@ -25,6 +27,7 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/secureentry"
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // Background sub-agents ("tasks"). An agent CLI running a session starts one
@@ -85,13 +88,15 @@ type TaskRequest struct {
 	Prompt string `json:"prompt,omitempty"`
 	Stop   string `json:"stop,omitempty"`
 	// Ask holds question tool input from `crush ask`.
-	Ask         json.RawMessage   `json:"ask,omitempty"`
-	SecureEntry *secureentry.Spec `json:"secure_entry,omitempty"`
+	Ask         json.RawMessage    `json:"ask,omitempty"`
+	SecureEntry *secureentry.Spec  `json:"secure_entry,omitempty"`
+	Background  *BackgroundRequest `json:"background,omitempty"`
 }
 
 type TaskReply struct {
-	Task  *Task  `json:"task,omitempty"`
-	Error string `json:"error,omitempty"`
+	Task       *Task                 `json:"task,omitempty"`
+	Error      string                `json:"error,omitempty"`
+	Background *fantasy.ToolResponse `json:"background,omitempty"`
 }
 
 type taskHub struct {
@@ -109,7 +114,9 @@ type taskHub struct {
 	// asking is set while questions from `crush ask` are open.
 	asking bool
 	// sessionRuns owns non-interactive runs and their follow-up producers.
-	sessionRuns map[string]*sessionRun
+	sessionRuns      map[string]*sessionRun
+	backgroundOwners map[string]string
+	backgroundShells map[string]*shell.BackgroundShell
 }
 
 func newTaskHub(c *coordinator, events pubsub.Publisher[Task]) *taskHub {
@@ -131,6 +138,7 @@ func newTaskHub(c *coordinator, events pubsub.Publisher[Task]) *taskHub {
 	}
 	h := &taskHub{c: c, dir: dir, root: root, events: events, cancels: map[string]context.CancelFunc{}, tasks: map[string]*Task{}, userStopped: map[string]bool{}}
 	go h.watch()
+	go h.watchDetached()
 	hubsMu.Lock()
 	hubs = append(hubs, h)
 	hubsMu.Unlock()
@@ -228,6 +236,17 @@ func (h *taskHub) watch() {
 			if err != nil {
 				continue
 			}
+			// Permission prompts for background jobs must not block questions,
+			// stop requests, or other jobs from reaching the hub.
+			var request TaskRequest
+			if json.Unmarshal(data, &request) == nil && request.Background != nil {
+				go func() {
+					reply := h.handle(data)
+					out, _ := json.Marshal(reply)
+					_ = writeTaskReply(root, name, out)
+				}()
+				continue
+			}
 			reply := h.handle(data)
 			out, _ := json.Marshal(reply)
 			_ = writeTaskReply(root, name, out)
@@ -281,6 +300,9 @@ func (h *taskHub) handle(data []byte) TaskReply {
 	var req TaskRequest
 	if err := json.Unmarshal(data, &req); err != nil {
 		return TaskReply{Error: "bad request: " + err.Error()}
+	}
+	if req.Background != nil {
+		return h.background(req)
 	}
 	if req.SecureEntry != nil {
 		if err := h.secureEntry(req); err != nil {
@@ -500,17 +522,17 @@ func (h *taskHub) ask(req TaskRequest) error {
 	if h.c.questions == nil {
 		return errors.New("this Crush can't show questions")
 	}
-	var params tools.QuestionParams
-	if err := json.Unmarshal(req.Ask, &params); err != nil {
-		return fmt.Errorf("bad questions JSON: %w", err)
-	}
-	qs, err := tools.BuildQuestions(params)
+	r, secure, err := askQuestions(req.Ask)
 	if err != nil {
 		return err
 	}
-	r := question.Request{SessionID: req.Session, Questions: qs, ConfirmTitle: params.ConfirmTitle, ConfirmDescription: params.ConfirmDescription}
+	r.SessionID = req.Session
+	r.Prepare()
 	if err := r.Validate(); err != nil {
 		return err
+	}
+	if secure != nil && !h.c.interactive {
+		return errors.New("secure_entry questions need the local interactive Crush terminal, which this run doesn't have")
 	}
 	ctx, release := h.reserveFollowUp(req.Session)
 	started := false
@@ -527,15 +549,38 @@ func (h *taskHub) ask(req TaskRequest) error {
 	if h.asking {
 		return errors.New("other questions are still open; wait for their answers first")
 	}
+	// Forms with secure fields go only to the local terminal, never the
+	// question service that phones and servers see.
+	var form *secureentry.Form
+	if secure != nil {
+		if form, err = secureentry.OpenForm(req.Session, r, secure); err != nil {
+			return err
+		}
+	}
 	h.asking = true
 	started = true
 	go func() {
 		defer release()
 		var answers []question.Answer
+		var statuses map[string]string
 		var err error
-		if h.c.interactive {
+		switch {
+		case form != nil:
+			var result secureentry.FormResult
+			select {
+			case result = <-form.Result():
+			case <-ctx.Done():
+				err = ctx.Err()
+				form.Cancel()
+				result = <-form.Result()
+			}
+			answers, statuses = result.Answers, result.Statuses
+			if err == nil && result.Cancelled {
+				err = question.ErrCancelled
+			}
+		case h.c.interactive:
 			answers, err = h.c.questions.Ask(ctx, r)
-		} else {
+		default:
 			err = question.ErrCancelled
 		}
 		h.mu.Lock()
@@ -551,7 +596,10 @@ func (h *taskHub) ask(req TaskRequest) error {
 		case err != nil:
 			status, out = string(TaskFailed), "Error: "+err.Error()
 		default:
-			out = tools.FormatAnswers(answers, r.Questions)
+			out = formatAskAnswers(answers, r.Questions)
+		}
+		if form != nil {
+			out = strings.TrimSpace(out + "\n\n" + secureEntryStatuses(r.Questions, statuses))
 		}
 		msg := fmt.Sprintf("<%s>\n<name>%s</name>\n<status>%s</status>\n<result>\n%s\n</result>\n</%s>",
 			TaskNotificationTag, AskName, status, out, TaskNotificationTag)
@@ -562,6 +610,127 @@ func (h *taskHub) ask(req TaskRequest) error {
 	return nil
 }
 
+// secureAskItem is the only shape a secure_entry question may have:
+// metadata, never a value.
+type secureAskItem struct {
+	Type        string `json:"type"`
+	Label       string `json:"label,omitempty"`
+	Question    string `json:"question"`
+	Description string `json:"description"`
+	File        string `json:"file"`
+	Placeholder string `json:"placeholder,omitempty"`
+	Occurrence  int    `json:"occurrence,omitempty"`
+}
+
+// askQuestions turns `crush ask` input into a request, plus the destination
+// of each secure_entry question by question ID (nil when there are none).
+func askQuestions(data json.RawMessage) (question.Request, map[string]secureentry.Spec, error) {
+	var params tools.QuestionParams
+	if err := json.Unmarshal(data, &params); err != nil {
+		return question.Request{}, nil, fmt.Errorf("bad questions JSON: %w", err)
+	}
+	// Check the ordinary questions in place, so errors keep their numbers.
+	checked := params
+	checked.Questions = slices.Clone(params.Questions)
+	var secureAt []int
+	for i, item := range checked.Questions {
+		if item.Type == string(question.TypeSecureEntry) {
+			secureAt = append(secureAt, i)
+			checked.Questions[i].Type = string(question.TypeFreeText)
+		}
+	}
+	qs, err := tools.BuildQuestions(checked)
+	if err != nil {
+		return question.Request{}, nil, err
+	}
+	r := question.Request{Questions: qs, ConfirmTitle: params.ConfirmTitle, ConfirmDescription: params.ConfirmDescription}
+	if len(secureAt) == 0 {
+		return r, nil, nil
+	}
+	raw, err := rawAskQuestions(data)
+	if err != nil || len(raw) != len(qs) {
+		return question.Request{}, nil, errors.New("bad questions JSON: questions must be an array")
+	}
+	specs := make(map[string]secureentry.Spec, len(secureAt))
+	for _, i := range secureAt {
+		var item secureAskItem
+		decoder := json.NewDecoder(bytes.NewReader(raw[i]))
+		decoder.DisallowUnknownFields()
+		// The decoder's own error could quote the input; report fixed text.
+		if decoder.Decode(&item) != nil {
+			return question.Request{}, nil, fmt.Errorf("question %d: secure_entry takes only type, label, question, description, file, placeholder and occurrence; never put a value in the JSON", i+1)
+		}
+		if item.File == "" {
+			return question.Request{}, nil, fmt.Errorf("question %d: secure_entry needs the absolute path of a prepared file in \"file\"", i+1)
+		}
+		id := uuid.NewString()
+		qs[i] = question.Question{ID: id, Type: question.TypeSecureEntry, Label: item.Label, Text: item.Question, Description: item.Description}
+		specs[id] = secureentry.Spec{File: item.File, Label: cmp.Or(item.Label, item.Question), Placeholder: item.Placeholder, Occurrence: cmp.Or(item.Occurrence, 1)}
+	}
+	return r, specs, nil
+}
+
+// rawAskQuestions returns each question's JSON, accepting the questions as
+// an array or as a string-encoded array, like tools.QuestionParams.
+func rawAskQuestions(data json.RawMessage) ([]json.RawMessage, error) {
+	var envelope struct {
+		Questions json.RawMessage `json:"questions"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return nil, err
+	}
+	var raw []json.RawMessage
+	if json.Unmarshal(envelope.Questions, &raw) == nil {
+		return raw, nil
+	}
+	var encoded string
+	if err := json.Unmarshal(envelope.Questions, &encoded); err != nil {
+		return nil, err
+	}
+	err := json.Unmarshal([]byte(strings.TrimSpace(encoded)), &raw)
+	return raw, err
+}
+
+// formatAskAnswers writes the ordinary answers for the agent. Secure
+// questions are left out: only their status is reported.
+func formatAskAnswers(answers []question.Answer, questions []question.Question) string {
+	var ordinary []question.Question
+	var ordinaryAnswers []question.Answer
+	for _, q := range questions {
+		if q.Type == question.TypeSecureEntry {
+			continue
+		}
+		answer := question.Answer{QuestionID: q.ID}
+		if i := slices.IndexFunc(answers, func(a question.Answer) bool { return a.QuestionID == q.ID }); i >= 0 {
+			answer = answers[i]
+		}
+		ordinary = append(ordinary, q)
+		ordinaryAnswers = append(ordinaryAnswers, answer)
+	}
+	if len(ordinary) == 0 {
+		return ""
+	}
+	return tools.FormatAnswers(ordinaryAnswers, ordinary)
+}
+
+// secureEntryStatuses reports each secure question as saved or cancelled,
+// the only results secure entry ever returns.
+func secureEntryStatuses(questions []question.Question, statuses map[string]string) string {
+	var b strings.Builder
+	b.WriteString("Secure entries (no value is returned; do not read, print or send the destination files):")
+	for _, q := range questions {
+		if q.Type != question.TypeSecureEntry {
+			continue
+		}
+		status := secureentry.StatusCancelled
+		if statuses[q.ID] == secureentry.StatusSaved {
+			status = secureentry.StatusSaved
+		}
+		fmt.Fprintf(&b, "\n- %s: %s", cmp.Or(q.Label, q.Text), status)
+	}
+	return b.String()
+}
+
 // Answers from `crush ask` come back as a task result with this name and
 // one of these statuses.
 const (
@@ -569,6 +738,10 @@ const (
 	AskAnswered  = "answered"
 	AskCancelled = "cancelled"
 )
+
+// BackgroundProcessName names the task result telling an agent that a
+// process it detached ended.
+const BackgroundProcessName = "Background process"
 
 func (h *taskHub) stop(sessionID, id string) (*Task, error) {
 	h.mu.Lock()
@@ -688,7 +861,9 @@ func ParseTaskNotification(text string) (name, status string, ok bool) {
 // instructions tell a session's agent how to use sub-agents.
 func (h *taskHub) instructions() string {
 	var clis strings.Builder
-	for _, p := range h.taskProviders() {
+	providers := h.taskProviders()
+	slices.SortFunc(providers, func(a, b config.ProviderConfig) int { return strings.Compare(taskProviderName(a), taskProviderName(b)) })
+	for _, p := range providers {
 		ids := modelIDs(p.Models)
 		if len(ids) > 8 {
 			ids = append(ids[:8], "…")
@@ -717,6 +892,7 @@ Providers and models (the first model is the default), with their effort levels:
 Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there. Stop one with: %[1]s spawn --stop <task-id>
 
 Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Run longer waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).
+Always run tests (test suites, test scripts, builds run to test) in the background, never in the foreground, using %[1]s bg -- 'timeout 600 <command>' for agent CLIs. This registers the job with Crush, makes it visible, and delivers a completion message. Use %[1]s bg --output <job-id> for output or %[1]s bg --stop <job-id> to stop it. Do not use nohup or a bare trailing ampersand for tracked jobs. Native API agents can use the bash tool's run_in_background option. Give every test command a time limit so a hung test ends on its own (for example "timeout 600 <command>", or the runner's own flag like "go test -timeout 10m"). Keep working while they run; check their output when you need the results instead of blocking on them, and if your tool tells you when a background command finishes, you can end your turn and continue then.
 
 Use sub-agents for independent work that can run in parallel (research, separate parts of a change, reviews, second opinions from another model). Do quick or tightly coupled work yourself. Only use them when the user asks for sub-agents, other models, or parallel work, or when the task clearly benefits.
 </crush_sub_agents>
@@ -727,11 +903,15 @@ The user answers questions in Crush's question form, not in chat. Whenever you n
   {"questions":[{"type":"single_choice","label":"<tab label, 3 words max>","question":"<one line>","description":"<why it matters, required>","choices":[{"id":"a","label":"<choice>"},{"id":"b","label":"<choice>"}]}]}
   EOF
 
-Types: single_choice and multi_choice (2-5 choices, each with an id and label, optional short description; the form adds a type-your-own answer and notes on its own, so never add an "Other" choice), yes_no (only for accept/reject), free_text. Every question needs a description. Ask up to %[4]d at once; several show as tabs with a review step before submitting. Then end your turn with at most one short line saying the questions are open: the answers arrive as a <%[3]s> message named %[5]q. Only one set of questions can be open at a time. Sub-agents can't ask the user. When you hand one work that needs the user's input, ask the user first and put the answers in its task. When a sub-agent's result comes back with questions, answer them yourself when you can, and ask the user only what you can't settle.
+Types: single_choice and multi_choice (2-5 choices, each with an id and label, optional short description; the form adds a type-your-own answer and notes on its own, so never add an "Other" choice), yes_no (only for accept/reject), free_text, secure_entry (a masked secret field; see crush_secure_entry). Every question needs a description. Ask up to %[4]d at once; several show as tabs with a review step before submitting. Then end your turn with at most one short line saying the questions are open: the answers arrive as a <%[3]s> message named %[5]q. Only one set of questions can be open at a time. Sub-agents can't ask the user. When you hand one work that needs the user's input, ask the user first and put the answers in its task. When a sub-agent's result comes back with questions, answer them yourself when you can, and ask the user only what you can't settle.
 </crush_questions>
 
 <crush_secure_entry>
-For API keys, tokens, passwords, and other secrets, NEVER use questions, chat, CLI stdin, command arguments, environment variables, or your own tools to collect the value. Prepare a file with a literal %%s placeholder, then run:
+For API keys, tokens, passwords, and other secrets, NEVER use ordinary questions (free_text and the like), chat, CLI stdin, command arguments, environment variables, or your own tools to collect the value. Prepare a file with a literal placeholder for each secret first.
+When you also have other questions, put the secrets in the same %[1]s ask form as secure_entry questions instead of opening a separate secure entry. They show as masked tabs next to the others, with one review and one Submit:
+  {"type":"secure_entry","label":"API key","question":"Enter the service key","description":"Used by the service","file":"/absolute/path/to/file","placeholder":"KEY_SLOT","occurrence":1}
+That JSON is metadata only: never include a value. placeholder defaults to %%s and occurrence to 1, counted in the file as you prepared it. Give every secret in one file its own placeholder (or occurrence). Values are written only when the user submits the whole form; the answers message has the ordinary answers plus each secure entry as only saved or cancelled.
+For secrets alone, run:
   %[1]s secure-entry --file /absolute/path/to/file --label "Service API key"
 Only metadata is passed to that command. It opens a masked local Crush dialog, writes the value directly to the file with 0600 permissions, and returns only saved/cancelled as a <%[3]s> named "Secure entry". End your turn after opening it. Never read, print, diff, attach, commit, or send the populated file to tools/models. The program itself reads and edits the file locally.
 For multiple keys, prepare ALL placeholders before collecting any key, then open one dialog at a time for the SAME file. By default each replaces the first remaining %%s. Use --placeholder UNIQUE_MARKER or --occurrence N to select another slot; unique markers are best for multiple keys. Replacement is literal, not printf or a shell expansion. Prepare valid quoting for the intended file format. Existing keys must never be read by you to edit another slot. Secure entry is local-terminal only, not available through the phone or server clients.

@@ -232,13 +232,13 @@ func (s *ConfigStore) RefetchHyperProvider(ctx context.Context) error {
 		}
 		nc.Providers.Set(string(hyperProvider.ID), pc)
 	}
+	nc.SetupAgents()
 	s.setConfig(nc)
 
 	// Also update the memoized provider list so callers of
 	// config.Providers() (e.g. the models dialog) see fresh data.
 	UpdateProviderInList(hyperProvider)
 
-	s.SetupAgents()
 	return nil
 }
 
@@ -1372,15 +1372,8 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 		return fmt.Errorf("failed to configure providers during reload: %w", err)
 	}
 
-	// Update store state BEFORE running model/agent setup (so they see new config)
-	s.setConfig(cfg)
-	s.loadedPaths = loadedPaths
-	s.resolver = resolver
-	s.knownProviders = providers
-	s.overrides = overrides
-	s.workspacePath = workspacePath
-
-	// Mirror startup flow: setup models and agents against NEW config.
+	// Finish the new snapshot before publishing it. Existing agents may read
+	// Config concurrently, so post-publication map replacement is a data race.
 	var setupErr error
 	if !cfg.IsConfigured() {
 		slog.Warn("No providers configured after reload")
@@ -1391,7 +1384,7 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 		} else {
 			cfg.Models[SelectedModelTypeLarge] = resolved.Large
 			cfg.Models[SelectedModelTypeSmall] = resolved.Small
-			s.SetupAgents()
+			cfg.SetupAgents()
 		}
 	}
 
@@ -1405,6 +1398,12 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 		s.workspacePath = oldWorkspacePath
 		return setupErr
 	}
+	s.setConfig(cfg)
+	s.loadedPaths = loadedPaths
+	s.resolver = resolver
+	s.knownProviders = providers
+	s.overrides = overrides
+	s.workspacePath = workspacePath
 
 	// Rebuild staleness tracking. Track every discovered config path, not
 	// just the ones that loaded, so a config file created after this reload

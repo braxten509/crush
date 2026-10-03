@@ -137,6 +137,7 @@ type Coordinator interface {
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
 	ClearQueue(sessionID string)
+	RecallQueuedPrompt(sessionID string) *message.QueuedPrompt
 	Summarize(context.Context, string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
@@ -482,6 +483,7 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 	run := func() (*fantasy.AgentResult, error) {
 		return agent.Run(ctx, SessionAgentCall{
 			SessionID:         sessionID,
+			SubmissionID:      message.SubmissionID(ctx),
 			RunID:             runID,
 			Channel:           channel,
 			Prompt:            prompt,
@@ -1517,7 +1519,7 @@ func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model con
 	}
 
 	if config.IsCLIProviderType(providerCfg.Type) {
-		return cliagent.NewProvider(providerCfg.Type, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.permissions, c.history, model.ServiceTier), nil
+		return cliagent.NewProvider(providerCfg.Type, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.permissions, c.history, model.ServiceTier, model.Ultracode, c.cfg.Config().Options.GetAutoCompactTokenLimit()), nil
 	}
 
 	switch providerCfg.Type {
@@ -1614,6 +1616,10 @@ func (c *coordinator) CancelAll() {
 
 func (c *coordinator) ClearQueue(sessionID string) {
 	c.currentAgent().ClearQueue(sessionID)
+}
+
+func (c *coordinator) RecallQueuedPrompt(sessionID string) *message.QueuedPrompt {
+	return c.currentAgent().RecallQueuedPrompt(sessionID)
 }
 
 func (c *coordinator) IsBusy() bool {

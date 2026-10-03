@@ -149,3 +149,41 @@ func TestExpiredQuestionCannotClearReplacement(t *testing.T) {
 	require.True(t, s.CancelRequest("new", "s2"))
 	require.ErrorIs(t, awaitQuestion(t, current).err, ErrCancelled)
 }
+
+// The shared service reaches phones and servers, so it never publishes a
+// secure entry.
+func TestServiceRefusesSecureEntries(t *testing.T) {
+	t.Parallel()
+	s := NewService()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	events := s.Subscribe(ctx)
+	_, err := s.Ask(ctx, Request{SessionID: "s", Questions: []Question{
+		{Type: TypeFreeText, Text: "Name?", Description: "d"},
+		{Type: TypeSecureEntry, Text: "Key?", Description: "d"},
+	}})
+	require.ErrorIs(t, err, ErrSecureEntryLocal)
+	select {
+	case <-events:
+		t.Fatal("a secure entry was published")
+	case <-time.After(50 * time.Millisecond):
+	}
+	_, pending := s.Pending()
+	require.False(t, pending)
+}
+
+func TestSecureEntryValidationAndPrepare(t *testing.T) {
+	t.Parallel()
+	r := Request{Questions: []Question{
+		{Type: TypeSecureEntry, Text: "Key?", Description: "d"},
+		{Type: TypeYesNo, Text: "Ok?", Description: "d"},
+	}}
+	require.True(t, r.HasSecureEntry())
+	r.Prepare()
+	require.NotEmpty(t, r.ID)
+	require.NotEmpty(t, r.Questions[0].ID)
+	require.NotEmpty(t, r.ConfirmTitle)
+	require.NoError(t, r.Validate())
+	r.Questions[0].Choices = []Choice{{ID: "a", Label: "A"}}
+	require.ErrorContains(t, r.Validate(), "no choices")
+}

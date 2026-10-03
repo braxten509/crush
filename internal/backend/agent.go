@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
@@ -90,6 +91,7 @@ func (b *Backend) runAgent(ws *Workspace, msg proto.AgentMessage, accept *agent.
 	defer accept.Close()
 
 	ctx := ws.ctx
+	ctx = message.WithSubmissionID(ctx, msg.SubmissionID)
 	if msg.HiddenUserMessage {
 		ctx = message.WithHiddenUserMessage(ctx)
 	}
@@ -116,14 +118,15 @@ func (b *Backend) runAgent(ws *Workspace, msg proto.AgentMessage, accept *agent.
 	// Reliable terminal fallback. Only needed when a RunID waiter
 	// exists and the coordinator has not already emitted the run's
 	// terminal RunComplete; otherwise this would be a duplicate.
-	if msg.RunID == "" || agent.RunCompletePublished(ctx) {
+	if (msg.RunID == "" && msg.SubmissionID == "") || agent.RunCompletePublished(ctx) {
 		return
 	}
 	if rc := ws.RunCompletions(); rc != nil {
 		rc.PublishMustDeliver(ctx, pubsub.UpdatedEvent, notify.RunComplete{
-			SessionID: msg.SessionID,
-			RunID:     msg.RunID,
-			Error:     err.Error(),
+			SubmissionID: msg.SubmissionID,
+			SessionID:    msg.SessionID,
+			RunID:        msg.RunID,
+			Error:        err.Error(),
 		})
 	}
 }
@@ -245,6 +248,60 @@ func (b *Backend) ClearQueue(workspaceID, sessionID string) error {
 		ws.AgentCoordinator.ClearQueue(sessionID)
 	}
 	return nil
+}
+
+type retainedRecall struct {
+	mu      sync.Mutex
+	claimed bool
+	prompt  *proto.AgentMessage
+}
+
+func (b *Backend) recalledPrompt(workspaceID, sessionID, requestID string) *retainedRecall {
+	b.recallMu.Lock()
+	defer b.recallMu.Unlock()
+	if b.recalledPrompts == nil {
+		b.recalledPrompts = make(map[string]*retainedRecall)
+	}
+	key := workspaceID + "\x00" + sessionID + "\x00" + requestID
+	entry := b.recalledPrompts[key]
+	if entry == nil {
+		entry = &retainedRecall{}
+		b.recalledPrompts[key] = entry
+	}
+	return entry
+}
+
+// RecallQueuedPrompt atomically withdraws a prompt and retains it until delivery.
+func (b *Backend) RecallQueuedPrompt(workspaceID, sessionID, requestID string) (*proto.AgentMessage, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	if ws.AgentCoordinator == nil {
+		return nil, ErrAgentNotInitialized
+	}
+	entry := b.recalledPrompt(workspaceID, sessionID, requestID)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if !entry.claimed {
+		prompt := ws.AgentCoordinator.RecallQueuedPrompt(sessionID)
+		if prompt != nil {
+			entry.prompt = &proto.AgentMessage{SessionID: sessionID, Prompt: prompt.Prompt, Attachments: proto.AttachmentsFromMessage(prompt.Attachments), SubmissionID: prompt.SubmissionID}
+		}
+		entry.claimed = true
+	}
+	return entry.prompt, nil
+}
+
+// AcknowledgeRecalledPrompt drops attachment bytes only after delivery. Keep
+// a tombstone so a late duplicate request cannot claim a different prompt.
+func (b *Backend) AcknowledgeRecalledPrompt(workspaceID, sessionID, requestID string) {
+	entry := b.recalledPrompt(workspaceID, sessionID, requestID)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.claimed {
+		entry.prompt = nil
+	}
 }
 
 // Interrupt stops the active run for the session and lets the next queued

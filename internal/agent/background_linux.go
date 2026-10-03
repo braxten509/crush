@@ -49,9 +49,13 @@ func linuxMarkedProcs(markers []string) map[int]proc {
 		}
 		// ponytail: assumes USER_HZ is 100, true on every Linux in use.
 		nativeShellID := ""
+		managedJobID := ""
 		session := ""
 		busService := false
 		for _, variable := range bytes.Split(env, []byte{0}) {
+			if value, ok := strings.CutPrefix(string(variable), managedJobEnv+"="); ok {
+				managedJobID = value
+			}
 			if value, ok := strings.CutPrefix(string(variable), tools.NativeShellEnv+"="); ok {
 				nativeShellID = value
 			}
@@ -64,7 +68,7 @@ func linuxMarkedProcs(markers []string) map[int]proc {
 				busService = true
 			}
 		}
-		procs[pid] = proc{pid: pid, ppid: ppid, sid: sid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond), nativeShellID: nativeShellID, session: session, busService: busService}
+		procs[pid] = proc{pid: pid, ppid: ppid, sid: sid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond), nativeShellID: nativeShellID, managedJobID: managedJobID, session: session, busService: busService}
 	}
 	return procs
 }

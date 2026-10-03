@@ -38,37 +38,37 @@ type KeyMap struct {
 	}
 
 	Chat struct {
-		NewSession     key.Binding
-		AddAttachment  key.Binding
-		Cancel         key.Binding
-		Interrupt      key.Binding
-		Tab            key.Binding
-		Details        key.Binding
-		TogglePills    key.Binding
-		ToggleSidebar  key.Binding
-		Background     key.Binding
-		PillLeft       key.Binding
-		PillRight      key.Binding
-		Down           key.Binding
-		Up             key.Binding
-		UpDown         key.Binding
-		DownOneItem    key.Binding
-		UpOneItem      key.Binding
-		UpDownOneItem  key.Binding
-		PageDown       key.Binding
-		PageUp         key.Binding
-		HalfPageDown   key.Binding
-		HalfPageUp     key.Binding
-		Home           key.Binding
-		End            key.Binding
-		EndFollow      key.Binding
-		Copy           key.Binding
-		ClearHighlight key.Binding
-		Expand         key.Binding
-		ScrollLeft     key.Binding
-		ScrollRight    key.Binding
-		FocusSidebar   key.Binding
-		FocusChat      key.Binding
+		NewSession        key.Binding
+		AddAttachment     key.Binding
+		Cancel            key.Binding
+		Interrupt         key.Binding
+		Tab               key.Binding
+		Details           key.Binding
+		TogglePills       key.Binding
+		BackgroundCommand key.Binding
+		Background        key.Binding
+		PillLeft          key.Binding
+		PillRight         key.Binding
+		Down              key.Binding
+		Up                key.Binding
+		UpDown            key.Binding
+		DownOneItem       key.Binding
+		UpOneItem         key.Binding
+		UpDownOneItem     key.Binding
+		PageDown          key.Binding
+		PageUp            key.Binding
+		HalfPageDown      key.Binding
+		HalfPageUp        key.Binding
+		Home              key.Binding
+		End               key.Binding
+		EndFollow         key.Binding
+		Copy              key.Binding
+		ClearHighlight    key.Binding
+		Expand            key.Binding
+		ScrollLeft        key.Binding
+		ScrollRight       key.Binding
+		FocusSidebar      key.Binding
+		FocusChat         key.Binding
 	}
 
 	Initialize struct {
@@ -228,9 +228,9 @@ func DefaultKeyMap() KeyMap {
 		key.WithKeys("ctrl+x"),
 		key.WithHelp("ctrl+x", "background"),
 	)
-	km.Chat.ToggleSidebar = key.NewBinding(
+	km.Chat.BackgroundCommand = key.NewBinding(
 		key.WithKeys("ctrl+b"),
-		key.WithHelp("ctrl+b", "toggle sidebar"),
+		key.WithHelp("ctrl+b", "background command"),
 	)
 	km.Chat.PillLeft = key.NewBinding(
 		key.WithKeys("left"),

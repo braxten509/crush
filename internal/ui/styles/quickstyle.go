@@ -200,25 +200,27 @@ func quickStyle(o quickStyleOpts) Styles {
 		},
 	}
 
+	// The composer sits on a band, like the user's sent messages.
+	band := base.Background(o.bgLeastVisible)
 	s.Editor.Textarea = textarea.Styles{
 		Focused: textarea.StyleState{
-			Base:             base,
-			Text:             base,
-			LineNumber:       base.Foreground(o.fgMostSubtle),
-			CursorLine:       base,
-			CursorLineNumber: base.Foreground(o.fgMostSubtle),
-			Placeholder:      base.Foreground(o.fgMostSubtle),
-			Prompt:           base.Foreground(o.accent),
+			Base:             band,
+			Text:             band,
+			LineNumber:       band.Foreground(o.fgMostSubtle),
+			CursorLine:       band,
+			CursorLineNumber: band.Foreground(o.fgMostSubtle),
+			Placeholder:      band.Foreground(o.fgMostSubtle),
+			Prompt:           band.Foreground(o.accent),
 			Selection:        base.Foreground(o.onPrimary).Background(o.secondary),
 		},
 		Blurred: textarea.StyleState{
-			Base:             base,
-			Text:             base.Foreground(o.fgMoreSubtle),
-			LineNumber:       base.Foreground(o.fgMoreSubtle),
-			CursorLine:       base,
-			CursorLineNumber: base.Foreground(o.fgMoreSubtle),
-			Placeholder:      base.Foreground(o.fgMostSubtle),
-			Prompt:           base.Foreground(o.fgMoreSubtle),
+			Base:             band,
+			Text:             band.Foreground(o.fgMoreSubtle),
+			LineNumber:       band.Foreground(o.fgMoreSubtle),
+			CursorLine:       band,
+			CursorLineNumber: band.Foreground(o.fgMoreSubtle),
+			Placeholder:      band.Foreground(o.fgMostSubtle),
+			Prompt:           band.Foreground(o.fgMoreSubtle),
 			Selection:        base.Foreground(o.onPrimary).Background(o.secondary),
 		},
 		Cursor: textarea.CursorStyle{
@@ -233,7 +235,9 @@ func quickStyle(o quickStyleOpts) Styles {
 			StylePrimitive: ansi.StylePrimitive{
 				// BlockPrefix: "\n",
 				// BlockSuffix: "\n",
-				Color: hex(o.fgSubtle),
+				// Replies are in the full text color, like Codex: a
+				// shaded body made the reply read as secondary.
+				Color: hex(o.fgBase),
 			},
 			// Margin: new(uint(defaultMargin)),
 		},
@@ -252,13 +256,11 @@ func quickStyle(o quickStyleOpts) Styles {
 				Bold:        new(true),
 			},
 		},
+		// No background chip on headings, the same as inline code: text
+		// on a colored block is harder to read.
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          " ",
-				Suffix:          " ",
-				Color:           hex(o.warningSubtle),
-				BackgroundColor: hex(o.primary),
-				Bold:            new(true),
+				Prefix: "# ",
 			},
 		},
 		H2: ansi.StyleBlock{
@@ -328,22 +330,13 @@ func quickStyle(o quickStyleOpts) Styles {
 			Color:  hex(o.fgMoreSubtle),
 			Format: "Image: {{.text}} →",
 		},
+		// Inline code is colored text only: no background and no padding,
+		// like Codex. A chip background made code harder to read, and the
+		// padding would show as stray spaces without it. Copies still get
+		// the backticks back from the message source (list.HighlightSource).
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				// Pad inline code with a no-break-space sentinel instead of
-				// a plain space. It displays identically, but selection
-				// copies turn it back into the original backticks (see
-				// [CodespanPadding] and list.HighlightContent); a plain
-				// space is indistinguishable from real text, so copies lost
-				// the backticks ("this is  code "). The sentinel carries a
-				// variation selector so copies can tell it apart from a
-				// real no-break space in the message text, and being
-				// non-breaking it keeps word wrap from tearing a codespan
-				// between its padding and its text.
-				Prefix:          CodespanPadding,
-				Suffix:          CodespanPadding,
-				Color:           hex(o.destructive),
-				BackgroundColor: hex(o.bgLessVisible),
+				Color: hex(o.destructive),
 			},
 		},
 		CodeBlock: ansi.StyleCodeBlock{
@@ -454,7 +447,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	planMD := s.Markdown
 	headingColor := hex(o.info)
 	headingBold := new(true)
-	for _, h := range []*ansi.StyleBlock{&planMD.H2, &planMD.H3, &planMD.H4, &planMD.H5} {
+	for _, h := range []*ansi.StyleBlock{&planMD.H1, &planMD.H2, &planMD.H3, &planMD.H4, &planMD.H5} {
 		if h.Color == nil {
 			h.Color = headingColor
 		}
@@ -463,9 +456,10 @@ func quickStyle(o quickStyleOpts) Styles {
 		}
 	}
 	// Replace raw markdown prefixes ("## ", "### ", …) with clean indentation so
-	// the plan card doesn't show literal ## / ### characters. H1 keeps its own
-	// distinct box styling; H2 gets no prefix (top-level sections stand on their
-	// own with bold+color); H3–H5 use increasing indentation for hierarchy.
+	// the plan card doesn't show literal # / ## characters. H1 and H2 get no
+	// prefix (they stand on their own with bold+color); H3–H5 use increasing
+	// indentation for hierarchy.
+	planMD.H1.Prefix = ""
 	planMD.H2.Prefix = ""
 	planMD.H3.Prefix = "  "
 	planMD.H4.Prefix = "    "
@@ -606,17 +600,13 @@ func quickStyle(o quickStyleOpts) Styles {
 			Color:           plainFg,
 			BackgroundColor: plainBg,
 		},
-		// Inline code is the one primitive that must NOT take plainFg/plainBg:
-		// with both matching the surrounding text it renders identically to it,
-		// leaving only the Prefix/Suffix spaces to hint at a code span. A step up
-		// in background (and a slightly brighter foreground) keeps the quiet
-		// palette while making the chip readable.
+		// Inline code is the one primitive that must NOT take plainFg: with
+		// the same color as the surrounding text it would be invisible as
+		// code. A slightly brighter foreground marks it without a chip
+		// background, which made it harder to read.
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          CodespanPadding,
-				Suffix:          CodespanPadding,
-				Color:           hex(o.fgSubtle),
-				BackgroundColor: hex(o.bgLessVisible),
+				Color: hex(o.fgSubtle),
 			},
 		},
 		CodeBlock: ansi.StyleCodeBlock{
@@ -846,27 +836,38 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Button.Negative = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.error)
 
 	// Editor
-	s.Editor.PromptNormalIconFocused = lipgloss.NewStyle().Foreground(o.success).Bold(true).SetString("  > ")
-	s.Editor.PromptNormalIconBlurred = s.Editor.PromptNormalIconFocused.Foreground(o.fgMoreSubtle).Bold(false)
-	s.Editor.PromptNormalFocused = lipgloss.NewStyle().Foreground(o.successMostSubtle).SetString("::: ")
-	s.Editor.PromptNormalBlurred = s.Editor.PromptNormalFocused.Foreground(o.fgMoreSubtle)
-	// The bullet is 1 cell everywhere (unlike ⏸, whose rendered width is
-	// terminal-dependent), so the badge fills the 4-cell prompt column
-	// exactly and stays flush with the ":::" continuation dots.
-	s.Editor.PromptPlanIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.onPrimary).Background(o.primary).Bold(true).SetString(" ⏸ ")
-	s.Editor.PromptPlanIconBlurred = s.Editor.PromptPlanIconFocused.Foreground(o.bgBase).Background(o.fgMoreSubtle)
-	s.Editor.PromptPlanDotsFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.primary).SetString(":::")
-	s.Editor.PromptPlanDotsBlurred = s.Editor.PromptPlanDotsFocused.Foreground(o.fgMoreSubtle)
-	s.Editor.PromptYoloIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.bgBase).Background(o.busy).Bold(true).SetString(" ! ")
-	s.Editor.PromptYoloIconBlurred = s.Editor.PromptYoloIconFocused.Foreground(o.bgBase).Background(o.fgMoreSubtle)
-	s.Editor.PromptYoloDotsFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.warningSubtle).SetString(":::")
-	s.Editor.PromptYoloDotsBlurred = s.Editor.PromptYoloDotsFocused.Foreground(o.fgMoreSubtle)
-	s.Editor.PromptBangIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.onPrimary).Background(o.primary).Bold(true).SetString(" ! ")
-	s.Editor.PromptBangIconBlurred = s.Editor.PromptBangIconFocused.Foreground(o.bgBase).Background(o.fgMoreSubtle)
-	s.Editor.PromptBangDotsFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.primary).SetString(":::")
-	s.Editor.PromptBangDotsBlurred = s.Editor.PromptBangDotsFocused.Foreground(o.fgMoreSubtle)
-	s.Editor.PromptQuestionIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.fgBase).Background(o.primary).Bold(true).SetString(" ? ")
-	s.Editor.PromptQuestionIconBlurred = s.Editor.PromptQuestionIconFocused.Foreground(o.bgBase).Background(o.fgMoreSubtle)
+	// The prompt column is 2 cells on the composer band: a mark for the
+	// mode, colored by it, on the first row; blank on the rest. Unfocused,
+	// the mark turns bold near-white, not gray: a one-cell glyph on the
+	// band was too faint to find.
+	promptBand := lipgloss.NewStyle().Background(o.bgLeastVisible)
+	promptMark := func(c color.Color, mark string) lipgloss.Style {
+		return promptBand.Foreground(c).Bold(true).SetString(mark + " ")
+	}
+	promptRest := promptBand.SetString("  ")
+	s.Editor.PromptNormalIconFocused = promptMark(o.accent, "›")
+	s.Editor.PromptNormalIconBlurred = promptMark(o.fgBase, "›")
+	s.Editor.PromptNormalFocused = promptRest
+	s.Editor.PromptNormalBlurred = promptRest
+	s.Editor.PromptPlanIconFocused = promptMark(o.plan, "⏸")
+	s.Editor.PromptPlanIconBlurred = promptMark(o.fgBase, "⏸")
+	s.Editor.PromptPlanDotsFocused = promptRest
+	s.Editor.PromptPlanDotsBlurred = promptRest
+	// YOLO keeps the normal mark in its own color; the status line names it.
+	s.Editor.PromptYoloIconFocused = promptMark(o.busy, "›")
+	s.Editor.PromptYoloIconBlurred = promptMark(o.fgBase, "›")
+	s.Editor.PromptYoloDotsFocused = promptRest
+	s.Editor.PromptYoloDotsBlurred = promptRest
+	s.Editor.PromptBangIconFocused = promptMark(o.primary, "!")
+	s.Editor.PromptBangIconBlurred = promptMark(o.fgBase, "!")
+	s.Editor.PromptBangDotsFocused = promptRest
+	s.Editor.PromptBangDotsBlurred = promptRest
+	// Question forms replace the composer. Their "?" sits in the same
+	// 2-cell column as the composer's mark, as plain colored text: a chip
+	// background made it read as a button and pushed the title out of the
+	// text column.
+	s.Editor.PromptQuestionIconFocused = lipgloss.NewStyle().Foreground(o.primary).Bold(true).SetString("? ")
+	s.Editor.PromptQuestionIconBlurred = lipgloss.NewStyle().Foreground(o.fgBase).Bold(true).SetString("? ")
 	s.Editor.QuestionSelected = lipgloss.NewStyle().Foreground(o.secondary).Bold(true)
 	s.Editor.QuestionUnselected = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Editor.QuestionBody = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
@@ -923,6 +924,8 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Logo.GradCanvas = lipgloss.NewStyle()
 	s.Logo.SmallGradFromColor = o.secondary
 	s.Logo.SmallGradToColor = o.primary
+	s.Logo.ShineColor = o.ansiBrightWhite
+	s.Logo.FlowColor = o.keyword
 
 	// Section
 	s.Section.Title = subtle
@@ -968,6 +971,18 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Sidebar.SessionTitle = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
 	s.Sidebar.WorkingDir = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
 
+	// Composer footer.
+	s.ComposerFooter.Model = lipgloss.NewStyle().Foreground(o.fgBase).Bold(true)
+	s.ComposerFooter.Text = lipgloss.NewStyle().Foreground(o.fgSubtle)
+	s.ComposerFooter.Accent = lipgloss.NewStyle().Foreground(o.secondary)
+	s.ComposerFooter.Tokens = lipgloss.NewStyle().Foreground(o.info)
+	s.ComposerFooter.Context = lipgloss.NewStyle().Foreground(o.warningSubtle)
+	s.ComposerFooter.Limit5h = lipgloss.NewStyle().Foreground(o.keyword)
+	s.ComposerFooter.LimitWeekly = lipgloss.NewStyle().Foreground(o.destructive)
+	s.ComposerFooter.LimitOther = lipgloss.NewStyle().Foreground(o.infoMoreSubtle)
+	s.ComposerFooter.Resets = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
+	s.ComposerFooter.Separator = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+
 	// ModelInfo
 	s.ModelInfo.Icon = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.ModelInfo.Name = lipgloss.NewStyle().Foreground(o.fgBase)
@@ -991,13 +1006,13 @@ func quickStyle(o quickStyleOpts) Styles {
 	}
 
 	s.Messages.NoContent = lipgloss.NewStyle().Foreground(o.fgBase)
-	s.Messages.UserBlurred = s.Messages.NoContent.PaddingLeft(1).BorderLeft(true).
-		BorderForeground(o.primary).BorderStyle(lipgloss.NormalBorder())
-	s.Messages.UserFocused = s.Messages.NoContent.PaddingLeft(1).BorderLeft(true).
-		BorderForeground(o.primary).BorderStyle(messageFocussedBorder)
+	s.Messages.UserBlurred = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.bgLeastVisible)
+	s.Messages.UserFocused = lipgloss.NewStyle().Foreground(o.primary).Background(o.bgLeastVisible).Bold(true)
+	s.Messages.UserBackground = o.bgLeastVisible
 	s.Messages.AssistantBlurred = s.Messages.NoContent.PaddingLeft(2)
 	s.Messages.AssistantFocused = s.Messages.NoContent.PaddingLeft(1).BorderLeft(true).
 		BorderForeground(o.successMostSubtle).BorderStyle(messageFocussedBorder)
+	s.Messages.AssistantBullet = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
 	s.Messages.Thinking = lipgloss.NewStyle().MaxHeight(10)
 	s.Messages.ErrorTag = lipgloss.NewStyle().Padding(0, 1).
 		Background(o.destructive).Foreground(o.onPrimary)
@@ -1160,23 +1175,23 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Dialog.Sessions.InfoFocused = lipgloss.NewStyle().Foreground(o.fgBase)
 
 	s.Status.Help = lipgloss.NewStyle().Padding(0, 1)
-	s.Status.ModeBadgePlan = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.primary).Padding(0, 1).Bold(true).SetString("PLAN MODE")
-	s.Status.ModeBadgeYolo = lipgloss.NewStyle().Foreground(o.bgBase).Background(o.busy).Padding(0, 1).Bold(true).SetString("YOLO MODE")
-	s.Status.ModeBadgeRemote = lipgloss.NewStyle().Foreground(o.bgBase).Background(o.info).Padding(0, 1).Bold(true).SetString("REMOTE")
+	s.Status.ModeBadgePlan = lipgloss.NewStyle().Foreground(o.plan).Padding(0, 1).Bold(true).SetString("PLAN MODE")
+	s.Status.ModeBadgeYolo = lipgloss.NewStyle().Foreground(o.busy).Padding(0, 1).Bold(true).SetString("YOLO MODE")
+	s.Status.ModeBadgeRemote = lipgloss.NewStyle().Foreground(o.info).Padding(0, 1).Bold(true).SetString("REMOTE")
 	s.Status.ModeBannerPlanBadge = s.Status.ModeBadgePlan
 	s.Status.ModeBannerPlan = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.planMoreSubtle).Padding(0, 1)
 	s.Status.ModeBannerYoloBadge = s.Status.ModeBadgeYolo
 	s.Status.ModeBannerYolo = lipgloss.NewStyle().Foreground(o.bgBase).Background(o.yolo).Padding(0, 1)
-	s.Status.SuccessIndicator = base.Foreground(o.bgLessVisible).Background(o.success).Padding(0, 1).Bold(true).SetString("OKAY!")
-	s.Status.InfoIndicator = s.Status.SuccessIndicator
-	s.Status.UpdateIndicator = s.Status.SuccessIndicator.SetString("HEY!")
-	s.Status.WarnIndicator = s.Status.SuccessIndicator.Foreground(o.bgMostVisible).Background(o.warning).SetString("WARNING")
-	s.Status.ErrorIndicator = s.Status.SuccessIndicator.Foreground(o.bgBase).Background(o.destructive).SetString("ERROR")
-	s.Status.SuccessMessage = base.Foreground(o.bgLessVisible).Background(o.successMostSubtle).Padding(0, 1)
+	s.Status.SuccessIndicator = base.Foreground(o.success).Background(o.bgLeastVisible).Padding(0, 1).Bold(true).SetString("OKAY!")
+	s.Status.InfoIndicator = s.Status.SuccessIndicator.Foreground(o.info)
+	s.Status.UpdateIndicator = s.Status.SuccessIndicator.Foreground(o.accent).SetString("HEY!")
+	s.Status.WarnIndicator = s.Status.SuccessIndicator.Foreground(o.warning).SetString("WARNING")
+	s.Status.ErrorIndicator = s.Status.SuccessIndicator.Foreground(o.error).SetString("ERROR")
+	s.Status.SuccessMessage = base.Foreground(o.fgSubtle).Background(o.bgLeastVisible).Padding(0, 1)
 	s.Status.InfoMessage = s.Status.SuccessMessage
 	s.Status.UpdateMessage = s.Status.SuccessMessage
-	s.Status.WarnMessage = s.Status.SuccessMessage.Foreground(o.bgMostVisible).Background(o.warningSubtle)
-	s.Status.ErrorMessage = s.Status.SuccessMessage.Foreground(o.onPrimary).Background(o.error)
+	s.Status.WarnMessage = s.Status.SuccessMessage
+	s.Status.ErrorMessage = s.Status.SuccessMessage
 
 	// Completions styles
 	s.Completions.Normal = base.Background(o.bgLessVisible).Foreground(o.fgBase)

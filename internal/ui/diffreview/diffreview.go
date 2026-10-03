@@ -22,6 +22,9 @@ const (
 	Modified Kind = iota
 	Added
 	Deleted
+	Copied
+	Moved
+	Generated
 )
 
 func (k Kind) String() string {
@@ -30,6 +33,12 @@ func (k Kind) String() string {
 		return "Added"
 	case Deleted:
 		return "Deleted"
+	case Copied:
+		return "Copied"
+	case Moved:
+		return "Moved"
+	case Generated:
+		return "Generated"
 	}
 	return "Changed"
 }
@@ -58,6 +67,7 @@ type File struct {
 	Kind       Kind
 	Lines      []Line
 	Adds, Dels int
+	Transfer   string
 }
 
 // Edit is one tool call's change to a file. Full edits carry the whole file
@@ -90,6 +100,21 @@ func Build(edits []Edit) []File {
 		byPath[e.Path] = append(byPath[e.Path], e)
 	}
 	var files []File
+	movedSources := map[string]bool{}
+	for _, es := range byPath {
+		captured := true
+		for _, e := range es {
+			captured = captured && e.Snapshot != nil
+		}
+		if !captured {
+			continue
+		}
+		slices.SortStableFunc(es, func(a, b Edit) int { return cmp.Compare(a.Snapshot.Order, b.Snapshot.Order) })
+		first, last := es[0].Snapshot, es[len(es)-1].Snapshot
+		if first.Transfer != nil && first.Transfer.Kind == "move" && last.After != nil {
+			movedSources[first.Transfer.Source] = true
+		}
+	}
 	for _, path := range order {
 		es := byPath[path]
 		captured := true
@@ -97,8 +122,17 @@ func Build(edits []Edit) []File {
 			captured = captured && e.Snapshot != nil
 		}
 		if captured {
-			slices.SortStableFunc(es, func(a, b Edit) int { return cmp.Compare(a.Snapshot.Order, b.Snapshot.Order) })
-			if f, ok := fromSnapshot(filechange.Change{Path: path, Before: es[0].Snapshot.Before, After: es[len(es)-1].Snapshot.After}); ok {
+			change := *es[0].Snapshot
+			if change.Transfer != nil {
+				transfer := *change.Transfer
+				transfer.Baseline = change.ImportedState()
+				change.Transfer = &transfer
+			}
+			change.After = es[len(es)-1].Snapshot.After
+			if movedSources[path] && change.After == nil {
+				continue
+			}
+			if f, ok := fromSnapshot(change); ok {
 				files = append(files, f)
 			}
 			continue
@@ -132,6 +166,23 @@ func Build(edits []Edit) []File {
 }
 
 func fromSnapshot(change filechange.Change) (File, bool) {
+	if transfer := change.Transfer; transfer != nil && change.Before == nil && change.After != nil {
+		// Imported lines are the baseline. Only later edits get +/- counts.
+		f, _ := fromSnapshot(filechange.Change{Path: change.Path, Before: change.ImportedState(), After: change.After})
+		f.Path, f.Kind, f.Transfer = change.Path, Copied, transfer.Kind
+		label := "Copied file"
+		if transfer.Kind == "checkout" {
+			label = "Copied from repository checkout"
+		}
+		if transfer.Kind == "move" {
+			f.Kind, label = Moved, "Moved from "+transfer.Source
+		}
+		if transfer.Kind == "generated" {
+			f.Kind, label = Generated, "Generated build artifact"
+		}
+		f.Lines = append([]Line{{Text: label}}, f.Lines...)
+		return f, true
+	}
 	before, after := change.Before, change.After
 	if before == nil && after == nil || before != nil && after != nil && *before == *after {
 		return File{}, false

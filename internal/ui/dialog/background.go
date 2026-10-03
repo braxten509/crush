@@ -38,6 +38,7 @@ type Background struct {
 	items []list.FilterableItem
 
 	keyMap struct {
+		Open     key.Binding
 		Stop     key.Binding
 		Next     key.Binding
 		Previous key.Binding
@@ -45,6 +46,9 @@ type Background struct {
 		Close    key.Binding
 	}
 }
+
+// ActionViewSubAgent opens a task transcript without changing the parent session.
+type ActionViewSubAgent struct{ Task agent.Task }
 
 // BackgroundItem is a sub-agent or a process.
 type BackgroundItem struct {
@@ -92,6 +96,10 @@ func newBackground(com *common.Common, id string) *Background {
 	b.keyMap.Previous = key.NewBinding(key.WithKeys("up", "k", "ctrl+p"), key.WithHelp("↑", "previous item"))
 	b.keyMap.UpDown = key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose"))
 	b.keyMap.Close = CloseKey
+	b.keyMap.Open = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open chat"), key.WithDisabled())
+	if id == SubAgentsID {
+		b.keyMap.Open.SetEnabled(true)
+	}
 
 	return b
 }
@@ -147,6 +155,10 @@ func (b *Background) HandleMsg(msg tea.Msg) Action {
 			b.list.SelectNext()
 		}
 		b.list.ScrollToSelected()
+	case key.Matches(km, b.keyMap.Open):
+		if item, ok := b.list.SelectedItem().(*BackgroundItem); ok && item.task != nil && item.task.ChildID != "" {
+			return ActionViewSubAgent{Task: *item.task}
+		}
 	case key.Matches(km, b.keyMap.Stop):
 		item, ok := b.list.SelectedItem().(*BackgroundItem)
 		if !ok {
@@ -163,7 +175,7 @@ func (b *Background) HandleMsg(msg tea.Msg) Action {
 				}
 				return util.NewInfoMsg("Stopped sub-agent " + item.task.Name)
 			}
-			if err := agent.KillProcess(item.proc.PID); err != nil {
+			if err := agent.StopBackgroundProcess(*item.proc); err != nil {
 				return util.ReportError(err)()
 			}
 			return util.NewInfoMsg("Killed " + item.proc.Command)
@@ -210,12 +222,12 @@ func (b *Background) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 // ShortHelp implements [help.KeyMap].
 func (b *Background) ShortHelp() []key.Binding {
-	return []key.Binding{b.keyMap.UpDown, b.keyMap.Stop, b.keyMap.Close}
+	return []key.Binding{b.keyMap.Open, b.keyMap.UpDown, b.keyMap.Stop, b.keyMap.Close}
 }
 
 // FullHelp implements [help.KeyMap].
 func (b *Background) FullHelp() [][]key.Binding {
-	return [][]key.Binding{{b.keyMap.Stop, b.keyMap.Next, b.keyMap.Previous, b.keyMap.Close}}
+	return [][]key.Binding{{b.keyMap.Open, b.keyMap.Stop, b.keyMap.Next, b.keyMap.Previous, b.keyMap.Close}}
 }
 
 // Finished implements list.Item.
@@ -225,6 +237,9 @@ func (i *BackgroundItem) Finished() bool { return true }
 func (i *BackgroundItem) ID() string {
 	if i.task != nil {
 		return i.task.ID
+	}
+	if i.proc.JobID != "" {
+		return "job:" + i.proc.JobID
 	}
 	return strconv.Itoa(i.proc.PID)
 }
@@ -246,6 +261,9 @@ func (i *BackgroundItem) info() string {
 			model += "/" + i.task.Effort
 		}
 		return fmt.Sprintf("%s/%s · %s", i.task.CLI, model, since(i.task.Started))
+	}
+	if i.proc.JobID != "" {
+		return fmt.Sprintf("job %s · %s", i.proc.JobID, since(i.proc.Started))
 	}
 	return fmt.Sprintf("pid %d · %s", i.proc.PID, since(i.proc.Started))
 }

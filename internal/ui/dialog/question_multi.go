@@ -3,6 +3,7 @@ package dialog
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -29,9 +30,15 @@ type MultiChoice struct {
 // NewMultiChoice creates a new inline multi-choice component.
 func NewMultiChoice(sty *styles.Styles, req question.Question) *MultiChoice {
 	cl := newChoiceList(sty, req)
+	selected := make(map[int]bool)
+	for i, c := range req.Choices {
+		if slices.Contains(req.Selected, c.ID) {
+			selected[i] = true
+		}
+	}
 	return &MultiChoice{
 		choiceList: cl,
-		selected:   make(map[int]bool),
+		selected:   selected,
 		keyToggle:  key.NewBinding(key.WithKeys(" ", "space"), key.WithHelp("space", "toggle")),
 		keyDone:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done")),
 	}

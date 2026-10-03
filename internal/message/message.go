@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -48,6 +49,7 @@ type Service interface {
 	Create(ctx context.Context, sessionID string, params CreateMessageParams) (Message, error)
 	Update(ctx context.Context, message Message) error
 	Get(ctx context.Context, id string) (Message, error)
+	LoadReview(ctx context.Context, id string) (Message, error)
 	List(ctx context.Context, sessionID string) ([]Message, error)
 	// ListFromSummary returns the messages at or after summaryMessageID,
 	// which is all a compacted session still sends.
@@ -136,8 +138,9 @@ type service struct {
 	q        db.Querier
 	debounce time.Duration
 
-	mu      sync.Mutex
-	pending map[string]*pendingState
+	mu       sync.Mutex
+	pending  map[string]*pendingState
+	reviewMu sync.Mutex
 }
 
 // ServiceOption configures a [Service] at construction.
@@ -196,6 +199,16 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 			Reason: "stop",
 		})
 	}
+	id := uuid.New().String()
+	var payload []byte
+	storage, separate := s.q.(reviewStorage)
+	if separate {
+		var err error
+		params.Parts, payload, err = separateReviews(id, sessionID, params.Parts)
+		if err != nil {
+			return Message{}, err
+		}
+	}
 	partsJSON, err := marshalParts(params.Parts)
 	if err != nil {
 		return Message{}, err
@@ -204,21 +217,32 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 	if params.IsSummaryMessage {
 		isSummary = 1
 	}
-	dbMessage, err := s.q.CreateMessage(ctx, db.CreateMessageParams{
-		ID:               uuid.New().String(),
+	arg := db.CreateMessageParams{
+		ID:               id,
 		SessionID:        sessionID,
 		Role:             string(params.Role),
 		Parts:            string(partsJSON),
 		Model:            sql.NullString{String: string(params.Model), Valid: true},
 		Provider:         sql.NullString{String: params.Provider, Valid: params.Provider != ""},
 		IsSummaryMessage: isSummary,
-	})
+	}
+	var dbMessage db.Message
+	if separate && len(payload) > 0 {
+		dbMessage, err = storage.CreateMessageWithReview(ctx, arg, payload)
+	} else {
+		dbMessage, err = s.q.CreateMessage(ctx, arg)
+	}
 	if err != nil {
 		return Message{}, err
 	}
 	message, err := s.fromDBItem(dbMessage)
 	if err != nil {
 		return Message{}, err
+	}
+	if separate && message.Role == Assistant && message.IsFinished() && message.Content().Text != "" {
+		if err := storage.PruneMessageReviews(ctx, sessionID); err != nil {
+			return Message{}, err
+		}
 	}
 	// Clone the message before publishing to avoid race conditions with
 	// concurrent modifications to the Parts slice.
@@ -384,7 +408,10 @@ func (s *service) flushOne(ctx context.Context, id string, syncCaller bool) erro
 		p.dirty = false
 		s.mu.Unlock()
 
-		err := s.write(ctx, snap)
+		written, err := s.write(ctx, snap)
+		if err == nil {
+			snap = written
+		}
 
 		s.mu.Lock()
 		p.flushing = false
@@ -429,17 +456,26 @@ func (s *service) flushOne(ctx context.Context, id string, syncCaller bool) erro
 
 // write performs the unguarded SQL write + UpdatedAt stamp. Caller
 // owns publishing.
-func (s *service) write(ctx context.Context, msg Message) error {
+func (s *service) write(ctx context.Context, msg Message) (Message, error) {
+	var payload []byte
+	storage, separate := s.q.(reviewStorage)
+	if separate {
+		var err error
+		msg.Parts, payload, err = separateReviews(msg.ID, msg.SessionID, msg.Parts)
+		if err != nil {
+			return Message{}, err
+		}
+	}
 	parts, err := marshalParts(msg.Parts)
 	if err != nil {
-		return err
+		return Message{}, err
 	}
 	finishedAt := sql.NullInt64{}
 	if f := msg.FinishPart(); f != nil {
 		finishedAt.Int64 = f.Time
 		finishedAt.Valid = true
 	}
-	if err := s.q.UpdateMessage(ctx, db.UpdateMessageParams{
+	arg := db.UpdateMessageParams{
 		ID:                      msg.ID,
 		Parts:                   string(parts),
 		PrismModelID:            sql.NullString{String: msg.PrismModelID, Valid: msg.PrismModelID != ""},
@@ -447,10 +483,21 @@ func (s *service) write(ctx context.Context, msg Message) error {
 		PrismHypercreditSavings: nullableFloat(msg.PrismHypercreditSavings),
 		PrismDollarSavings:      nullableFloat(msg.PrismDollarSavings),
 		FinishedAt:              finishedAt,
-	}); err != nil {
-		return err
 	}
-	return nil
+	if separate && len(payload) > 0 {
+		err = storage.UpdateMessageWithReview(ctx, arg, payload)
+	} else {
+		err = s.q.UpdateMessage(ctx, arg)
+	}
+	if err != nil {
+		return Message{}, err
+	}
+	if separate && msg.Role == Assistant && msg.IsFinished() && msg.Content().Text != "" {
+		if err := storage.PruneMessageReviews(ctx, msg.SessionID); err != nil {
+			return Message{}, err
+		}
+	}
+	return msg, nil
 }
 
 func nullableFloat(v *float64) sql.NullFloat64 {
@@ -512,10 +559,26 @@ func (s *service) Get(ctx context.Context, id string) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	return s.fromDBItem(dbMessage)
+	msg, err := s.fromDBItem(dbMessage)
+	if err != nil {
+		return Message{}, err
+	}
+	for _, result := range msg.ToolResults() {
+		if result.Review != nil && result.Review.Summary != nil {
+			full, err := s.LoadReview(ctx, id)
+			if errors.Is(err, ErrReviewExpired) {
+				return msg, nil
+			}
+			return full, err
+		}
+	}
+	return msg, nil
 }
 
 func (s *service) List(ctx context.Context, sessionID string) ([]Message, error) {
+	if err := s.migrateReviews(ctx, sessionID); err != nil {
+		return nil, err
+	}
 	dbMessages, err := s.q.ListMessagesBySession(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -533,6 +596,9 @@ func (s *service) List(ctx context.Context, sessionID string) ([]Message, error)
 func (s *service) ListFromSummary(ctx context.Context, sessionID, summaryMessageID string) ([]Message, error) {
 	if summaryMessageID == "" {
 		return s.List(ctx, sessionID)
+	}
+	if err := s.migrateReviews(ctx, sessionID); err != nil {
+		return nil, err
 	}
 	dbMessages, err := s.q.ListMessagesBySessionFromSummary(ctx, db.ListMessagesBySessionFromSummaryParams{
 		SessionID: sessionID,

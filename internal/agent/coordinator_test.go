@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/message"
+
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
@@ -823,3 +825,5 @@ func TestCoordinatorSetMainAgent(t *testing.T) {
 		assert.ErrorIs(t, err, errMainAgentNotFound)
 	})
 }
+
+func (m *mockSessionAgent) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }

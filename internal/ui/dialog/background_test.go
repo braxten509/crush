@@ -79,3 +79,35 @@ func TestSubAgentWithoutEffort(t *testing.T) {
 	require.Contains(t, i.info(), "claude/haiku · ")
 	require.NotContains(t, i.info(), "haiku/")
 }
+
+func TestEnterOpensSelectedSubagentChat(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	tasks := []agent.Task{
+		{ID: "t1", SessionID: "parent", ChildID: "child-1", Status: agent.TaskRunning},
+		{ID: "t2", SessionID: "parent", ChildID: "child-2", Status: agent.TaskRunning},
+	}
+	com := &common.Common{Styles: &sty}
+	b := NewSubAgents(com, tasks, "t2")
+	action := b.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Equal(t, ActionViewSubAgent{Task: tasks[1]}, action)
+	require.Len(t, b.items, 2, "opening a conversation must not stop the task")
+	b.SetItems(nil, nil, "")
+	require.Nil(t, b.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	processes := NewBackground(com, []agent.Process{{PID: 42}})
+	require.Nil(t, processes.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+}
+
+func TestManagedBackgroundJobsKeepDistinctSelection(t *testing.T) {
+	sty := styles.CharmtonePantera()
+	com := &common.Common{Styles: &sty}
+	jobs := []agent.Process{{JobID: "001", Command: "first", Started: time.Now()}, {JobID: "002", Command: "second", Started: time.Now()}}
+	dialog := NewBackground(com, jobs)
+	dialog.list.SetSelected(1)
+	require.Equal(t, "job:002", dialog.list.SelectedItem().(*BackgroundItem).ID())
+	dialog.SetItems(nil, []agent.Process{jobs[1], jobs[0]}, "")
+	selected := dialog.list.SelectedItem().(*BackgroundItem)
+	require.Equal(t, "job:002", selected.ID())
+	require.Contains(t, selected.info(), "job 002")
+	require.NotContains(t, selected.info(), "pid 0")
+}

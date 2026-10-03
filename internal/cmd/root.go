@@ -144,7 +144,11 @@ crush --continue
 		)
 		go ws.Subscribe(program)
 
-		if _, err := program.Run(); err != nil {
+		showScrollMarker := sync.OnceFunc(hideKonsoleScrollMarker(env, os.Stdout, term.IsTerminal(os.Stdout.Fd())))
+		defer showScrollMarker()
+		_, err = program.Run()
+		showScrollMarker()
+		if err != nil {
 			event.Error(err)
 			slog.Error("TUI run error", "error", err)
 			return errors.New("Crush crashed. If metrics are enabled, we were notified about it. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/charmbracelet/crush/issues/new?template=bug.yml") //nolint:staticcheck

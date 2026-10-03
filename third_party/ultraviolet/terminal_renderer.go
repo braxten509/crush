@@ -141,6 +141,7 @@ type TerminalRenderer struct {
 	flags            tFlag        // terminal writer flags.
 	method           ansi.Method  // the width method used to measure cell width
 	term             string       // the terminal type
+	konsole          bool         // running in Konsole (no hard scrolling)
 	clear            bool         // whether to force clear the screen
 	caps             capabilities // terminal control sequence capabilities
 	atPhantom        bool         // whether the cursor is out of bounds and at a phantom cell
@@ -168,6 +169,7 @@ func NewTerminalRenderer(w io.Writer, env []string) (s *TerminalRenderer) {
 	s.profile = colorprofile.Detect(w, env)
 	s.buf = new(bytes.Buffer)
 	s.term = Environ(env).Getenv("TERM")
+	s.konsole = Environ(env).Getenv("KONSOLE_VERSION") != ""
 	s.caps = xtermCaps(s.term)
 	s.cur = cursor{Cell: EmptyCell, Position: Pos(-1, -1)} // start at -1 to force a move
 	s.saved = s.cur
@@ -187,9 +189,11 @@ func (s *TerminalRenderer) SetColorProfile(profile colorprofile.Profile) {
 	s.profile = profile
 }
 
-// SetScrollOptim sets whether to use hard scroll optimizations.
+// SetScrollOptim sets whether to use hard scroll optimizations. Konsole
+// never uses them: it marks every line a program scrolls with a bar in its
+// left margin ("highlight scrolled lines"), which lands beside redrawn rows.
 func (s *TerminalRenderer) SetScrollOptim(v bool) {
-	if v {
+	if v && !s.konsole {
 		s.flags.Set(tScrollOptim)
 	} else {
 		s.flags.Reset(tScrollOptim)

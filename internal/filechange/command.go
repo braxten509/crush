@@ -91,18 +91,28 @@ func (r *CommandReview) Finish() *Review {
 	// Multiple subprocesses and shell redirections may touch the same file.
 	// Keep its earliest before image and read its final state exactly once.
 	earliest := map[string]Change{}
-	for _, change := range r.changes {
+	for _, change := range mergeChanges(slices.Clone(r.changes)) {
 		if previous, ok := earliest[change.Path]; !ok || change.Order < previous.Order {
 			earliest[change.Path] = change
 		}
 	}
 	changes := make([]Change, 0, len(earliest))
 	for path, change := range earliest {
+		if change.Transfer != nil && change.Transfer.Baseline == nil && change.After != nil && (change.After.Omitted == "Copied content" || change.After.Omitted == "Generated build artifact") {
+			changes = append(changes, change)
+			continue
+		}
+		baseline := change.ImportedState()
 		if info, err := os.Lstat(path); err == nil {
 			state := r.store.read(path, info).state
 			change.After = &state
 		} else if os.IsNotExist(err) {
 			change.After = nil
+		}
+		if change.Transfer != nil && change.Transfer.Baseline == nil && baseline != nil && change.After != nil && *baseline != *change.After {
+			transfer := *change.Transfer
+			transfer.Baseline = baseline
+			change.Transfer = &transfer
 		}
 		changes = append(changes, change)
 	}

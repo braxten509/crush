@@ -3,11 +3,10 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/diffreview"
 )
@@ -17,40 +16,68 @@ import (
 func (g *ToolGroupItem) Changes() []diffreview.File {
 	var key strings.Builder
 	for _, c := range g.children {
+		result, ok := c.(interface{ Result() *message.ToolResult })
+		if !ok || result.Result() == nil {
+			continue
+		}
 		fmt.Fprintf(&key, "%s:%d;", c.ID(), c.Version())
 	}
 	if k := key.String(); k == g.changesKey {
 		return g.changes
 	}
 	g.changesKey = key.String()
+	g.changes = BuildReviewChanges(g.ReviewInputs())
+	g.storedSummary = g.computeStoredReviewSummary()
+	return g.changes
+}
+
+// BuildReviewChanges prepares a review off the UI thread.
+func BuildReviewChanges(inputs []ReviewInput) []diffreview.File {
 	var edits []diffreview.Edit
-	for _, c := range g.children {
-		t, ok := c.(ToolMessageItem)
-		if !ok {
-			continue
-		}
-		r, ok := t.(interface{ Result() *message.ToolResult })
-		if !ok || r.Result() == nil {
-			continue
-		}
-		if review := r.Result().Review; review != nil {
+	var unavailable []diffreview.File
+	for _, input := range inputs {
+		if review := input.Result.Review; review != nil {
+			if review.Summary != nil {
+				continue
+			}
+			var commandInput struct {
+				Command string `json:"command"`
+			}
+			if input.Call.Name == tools.BashToolName {
+				_ = json.Unmarshal([]byte(input.Call.Input), &commandInput)
+			}
+			kind := filechange.CommandTransferKind(commandInput.Command)
 			for _, change := range review.Changes {
 				if ignoredReviewPath(change.Path, review.Root) {
 					continue
+				}
+				if change.Transfer == nil && kind != "" && change.Before == nil && change.After != nil {
+					change.Transfer = &filechange.Transfer{Kind: kind}
 				}
 				edits = append(edits, diffreview.Edit{Path: change.Path, Snapshot: &change})
 			}
 			continue
 		}
-		if r.Result().IsError {
+		if input.Result.IsError {
 			continue
 		}
-		if e, ok := toolEdit(t.ToolCall(), r.Result()); ok && !ignoredReviewPath(e.Path, "") {
+		var metadata struct {
+			Omitted string `json:"review_omitted"`
+		}
+		_ = json.Unmarshal([]byte(input.Result.Metadata), &metadata)
+		if metadata.Omitted != "" {
+			var params tools.EditParams
+			_ = json.Unmarshal([]byte(input.Call.Input), &params)
+			if params.FilePath != "" && !ignoredReviewPath(params.FilePath, "") {
+				unavailable = append(unavailable, diffreview.File{Path: params.FilePath, Lines: []diffreview.Line{{Text: metadata.Omitted}}})
+			}
+			continue
+		}
+		if e, ok := toolEdit(input.Call, &input.Result); ok && !ignoredReviewPath(e.Path, "") {
 			edits = append(edits, e)
 		}
 	}
-	g.changes = diffreview.Build(edits)
-	return g.changes
+	return append(diffreview.Build(edits), unavailable...)
 }
 
 // toolEdit reads the change a file tool made from its result metadata.
@@ -122,88 +149,4 @@ func actionCount(n int) string {
 	return fmt.Sprintf("%d actions", n)
 }
 
-// Filter at presentation time so old saved tool results follow the same rules
-// as new ones. Never read or enumerate the filesystem to decide visibility.
-func ignoredReviewPath(path, root string) bool {
-	if root != "" && !filepath.IsAbs(path) {
-		path = filepath.Join(root, path)
-	}
-	path = filepath.Clean(path)
-	home, _ := os.UserHomeDir()
-	if hiddenFolderPath(path, home) || agentToolPath(path) {
-		return true
-	}
-	cache, _ := os.UserCacheDir()
-	configuration, _ := os.UserConfigDir()
-	// Devices and kernel files (/dev/tty, /sys/fs/cgroup/...) are written by
-	// the programs a command starts; they are never edits.
-	excluded := []string{os.TempDir(), cache, configuration, "/tmp", "/var/tmp", "/dev", "/proc", "/sys"}
-	// Application data and state are noise too, including shared agent memory
-	// and sessions.
-	for _, location := range []struct{ variable, fallback string }{
-		{"XDG_DATA_HOME", "share"},
-		{"XDG_STATE_HOME", "state"},
-	} {
-		directory := os.Getenv(location.variable)
-		if !filepath.IsAbs(directory) && home != "" {
-			directory = filepath.Join(home, ".local", location.fallback)
-		}
-		if filepath.IsAbs(directory) {
-			excluded = append(excluded, directory)
-		}
-	}
-	for _, directory := range excluded {
-		if directory == "" {
-			continue
-		}
-		directory = filepath.Clean(directory)
-		if path == directory || strings.HasPrefix(path, directory+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
-}
-
-// Instruction files the user reads and edits stay visible even inside an
-// agent's folder.
-var instructionFiles = map[string]bool{
-	"AGENTS.md": true, "CLAUDE.md": true, "CLAUDE.local.md": true, "CRUSH.md": true, "GEMINI.md": true,
-}
-
-// hiddenFolderPath reports a path inside any folder whose name starts with a
-// dot (.git, .claude-flow, .github, ...). Dot files themselves (.gitignore,
-// .env) stay visible, and so does ~/.local/bin, which holds user-written tools.
-func hiddenFolderPath(path, home string) bool {
-	if instructionFiles[filepath.Base(path)] {
-		return false
-	}
-	if home != "" {
-		tools := filepath.Join(home, ".local", "bin")
-		if path == tools || strings.HasPrefix(path, tools+string(filepath.Separator)) {
-			return false
-		}
-	}
-	folders := strings.Split(filepath.Dir(path), string(filepath.Separator))
-	for _, folder := range folders {
-		if strings.HasPrefix(folder, ".") && folder != "." && folder != ".." {
-			return true
-		}
-	}
-	return false
-}
-
-// agentToolPath reports state that agent tooling keeps outside dot folders:
-// agent databases, skill lockfiles and swarm runtimes.
-func agentToolPath(path string) bool {
-	if instructionFiles[filepath.Base(path)] {
-		return false
-	}
-	for _, component := range strings.Split(path, string(filepath.Separator)) {
-		name := strings.ToLower(component)
-		if name == "skills-lock.json" || strings.HasPrefix(name, "agentdb.") ||
-			strings.HasPrefix(name, "claude-flow") || strings.HasPrefix(name, "ruflo") {
-			return true
-		}
-	}
-	return false
-}
+func ignoredReviewPath(path, root string) bool { return filechange.HiddenReviewPath(path, root) }

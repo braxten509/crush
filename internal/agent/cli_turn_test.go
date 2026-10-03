@@ -53,7 +53,7 @@ func TestCLISteer(t *testing.T) {
 	require.NoError(t, err)
 
 	var steps int
-	s := &cliSteps{ctx: t.Context(), a: sa, sessionID: sess.ID, sc: fantasy.AgentStreamCall{
+	s := &cliSteps{running: toolRunningForSteer(), ctx: t.Context(), a: sa, sessionID: sess.ID, sc: fantasy.AgentStreamCall{
 		PrepareStep: func(ctx context.Context, _ fantasy.PrepareStepFunctionOptions) (context.Context, fantasy.PrepareStepResult, error) {
 			return ctx, fantasy.PrepareStepResult{}, nil
 		},
@@ -107,23 +107,26 @@ func TestCLISteerPreservesQueuedImages(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
 	sa := NewSessionAgent(SessionAgentOptions{Sessions: env.sessions, Messages: env.messages}).(*sessionAgent)
-	s := &cliSteps{ctx: t.Context(), a: sa, sessionID: "images"}
+	s := &cliSteps{running: toolRunningForSteer(), ctx: t.Context(), a: sa, sessionID: "images"}
 	imageCall := SessionAgentCall{SessionID: "images", Prompt: "look", Attachments: []message.Attachment{{MimeType: "image/png", Content: []byte("image bytes")}}}
 	sa.enqueueCall(SessionAgentCall{SessionID: "images", Prompt: "before"})
 	sa.enqueueCall(imageCall)
 	sa.enqueueCall(SessionAgentCall{SessionID: "images", Prompt: "after"})
-	require.Equal(t, "before", s.steer())
+	require.Empty(t, s.steer(), "a text-only driver must preserve the complete image batch")
 	require.Empty(t, s.steer())
-	require.Equal(t, []string{"look", "after"}, sa.QueuedPromptsList("images"))
+	require.Equal(t, []string{"before", "look", "after"}, sa.QueuedPromptsList("images"))
 	queued, _ := sa.drainQueueForStep("images")
-	require.Equal(t, imageCall, queued[0])
+	// Enqueue stamps internal ordering metadata; user input stays unchanged.
+	original := queued[1]
+	original.queueOrder = 0
+	require.Equal(t, imageCall, original)
 }
 
 func TestCLICompactionAfterTools(t *testing.T) {
 	t.Parallel()
 	var statuses []bool
 	var steps int
-	s := &cliSteps{
+	s := &cliSteps{running: toolRunningForSteer(),
 		ctx: t.Context(), open: true, tools: 1,
 		onCompacting: func(active bool) error { statuses = append(statuses, active); return nil },
 		sc: fantasy.AgentStreamCall{
@@ -148,7 +151,7 @@ func TestCLISteerImagesWithoutBlockingFollowingText(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
 	sa := NewSessionAgent(SessionAgentOptions{Sessions: env.sessions, Messages: env.messages}).(*sessionAgent)
-	s := &cliSteps{ctx: t.Context(), a: sa, sessionID: "image-steering"}
+	s := &cliSteps{running: toolRunningForSteer(), ctx: t.Context(), a: sa, sessionID: "image-steering"}
 	image := message.Attachment{MimeType: "image/png", FileName: "screen.png", Content: []byte("image bytes")}
 	sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "look at this", Attachments: []message.Attachment{image}})
 	sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "also check the model"})

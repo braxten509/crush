@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/chat"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -59,6 +60,9 @@ const resizeSettleDuration = 120 * time.Millisecond
 // more than a frame or so, even on slow-to-render items.
 const warmBatchSize = 25
 
+// warmStepBudget caps how long one warming step may render.
+const warmStepBudget = 8 * time.Millisecond
+
 // chatWarmMsg drives one incremental cache-warming step. The first one is
 // delayed until the resize settles; the rest fire immediately, one per
 // batch, so warming spreads across frames instead of blocking.
@@ -98,9 +102,18 @@ type Chat struct {
 	flat    []chat.MessageItem
 	groupOf map[string]*chat.ToolGroupItem
 	folded  map[chat.MessageItem]bool
+	// hiddenInfo holds info rows left out because they would label
+	// nothing, so callers still find them by ID.
+	hiddenInfo map[string]chat.MessageItem
 	// agentBusy is passed to groups so the live one keeps a status
 	// between steps.
 	agentBusy bool
+	// waitingItem is a display-only Working row until an assistant message
+	// arrives. It never enters flat, history, or the persisted transcript.
+	waitingItem    chat.MessageItem
+	waitingFor     string
+	awaitingReply  bool
+	inputConfirmed bool
 	// canBackground is passed to groups: whether Ctrl+B can move the
 	// agent's running command to the background.
 	canBackground bool
@@ -377,6 +390,17 @@ func (m *Chat) BeginResize() tea.Cmd {
 	return chatWarmCmd(m.resizeSettleSeq, resizeSettleDuration)
 }
 
+// BeginWarm starts warming the cache right away, like a settled resize:
+// draws skip the full-height scan and the scrollbar until every message has
+// been rendered once. Used after a session load, whose first scroll would
+// otherwise render the whole history at once.
+func (m *Chat) BeginWarm() tea.Cmd {
+	m.resizing = true
+	m.resizeSettleSeq++
+	m.warmNext = 0
+	return chatWarmCmd(m.resizeSettleSeq, 0)
+}
+
 // WarmStep renders the next batch of messages into the width cache and
 // returns a command to continue warming plus whether warming finished. On
 // completion the resize suppression is cleared so the next draw recomputes
@@ -386,7 +410,16 @@ func (m *Chat) WarmStep(seq int) (cmd tea.Cmd, done bool) {
 	if seq != m.resizeSettleSeq {
 		return nil, false
 	}
-	m.warmNext = m.list.Prewarm(m.warmNext, warmBatchSize)
+	// A batch stops early once it used its time budget: a few large
+	// messages (long diffs, big markdown) must not stall one frame.
+	deadline := time.Now().Add(warmStepBudget)
+	end := min(m.warmNext+warmBatchSize, m.list.Len())
+	for m.warmNext < end {
+		m.warmNext = m.list.Prewarm(m.warmNext, 1)
+		if time.Now().After(deadline) {
+			break
+		}
+	}
 	if m.warmNext >= m.list.Len() {
 		m.resizing = false
 		return nil, true
@@ -417,6 +450,12 @@ func (m *Chat) SetSize(width, height int) {
 	if wasFollowing {
 		m.ScrollToBottom()
 	}
+}
+
+// ListWidth returns the width of the chat's rows, which leaves out the
+// scrollbar's column when the content overflows.
+func (m *Chat) ListWidth() int {
+	return m.list.Width()
 }
 
 // Len returns the number of items in the chat list.
@@ -454,6 +493,15 @@ func (m *Chat) InvalidateVisibleRenderCaches() {
 func (m *Chat) SetMessages(msgs ...chat.MessageItem) tea.Cmd {
 	m.scrollbarVisible = false // Reset scrollbar visibility on new session load
 	m.flat = slices.Clone(msgs)
+	if m.awaitingReply && !slices.ContainsFunc(m.flat, func(item chat.MessageItem) bool {
+		user, ok := item.(*chat.UserMessageItem)
+		return ok && submissionKey(user) == m.waitingFor
+	}) {
+		m.awaitingReply = false
+		m.inputConfirmed = false
+		m.waitingItem = nil
+		m.waitingFor = ""
+	}
 	m.groupOf = nil
 	m.regroup()
 	m.ScrollToBottom()
@@ -467,6 +515,87 @@ func (m *Chat) AppendMessages(msgs ...chat.MessageItem) {
 	}
 	m.flat = append(m.flat, msgs...)
 	m.regroup()
+}
+
+// InsertRelatedMessages keeps late rows beside their original assistant/tool
+// step, rather than placing old-turn updates beneath newer user submissions.
+func (m *Chat) InsertRelatedMessages(messageID string, before bool, msgs ...chat.MessageItem) {
+	if len(msgs) == 0 {
+		return
+	}
+	first, last := -1, -1
+	for i, item := range m.flat {
+		related := item.ID() == messageID || item.ID() == chat.AssistantInfoID(messageID)
+		if tool, ok := item.(chat.ToolMessageItem); ok && tool.MessageID() == messageID {
+			related = true
+		}
+		if related {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	if first < 0 {
+		m.AppendMessages(msgs...)
+		return
+	}
+	position := last + 1
+	if before {
+		position = first
+	} else if _, tools := msgs[0].(chat.ToolMessageItem); tools {
+		for i, item := range m.flat {
+			if item.ID() == chat.AssistantInfoID(messageID) {
+				position = i
+				break
+			}
+		}
+	}
+	m.flat = slices.Insert(m.flat, position, msgs...)
+	m.regroup()
+}
+
+func submissionKey(user *chat.UserMessageItem) string {
+	if id := user.SubmissionID(); id != "" {
+		return id
+	}
+	return user.ID()
+}
+
+func (m *Chat) BeginInput(id string) {
+	if m.waitingFor != id {
+		m.waitingItem = nil
+	}
+	m.waitingFor = id
+	m.awaitingReply = true
+	m.inputConfirmed = false
+}
+
+func (m *Chat) ConfirmInput(id string) {
+	if m.awaitingReply && m.waitingFor == id {
+		m.inputConfirmed = true
+	}
+}
+
+// Adopt the displayed Working item into the real response so confirmation
+// and handoff preserve its animation phase as well as its screen position.
+func (m *Chat) AcceptResponse(msg *message.Message, items []chat.MessageItem) []chat.MessageItem {
+	if !m.awaitingReply || !m.inputConfirmed {
+		return items
+	}
+	for i, item := range items {
+		if _, ok := item.(*chat.AssistantMessageItem); ok && m.waitingItem != nil {
+			if waiting, ok := m.waitingItem.(*chat.AssistantMessageItem); ok {
+				waiting.SetMessage(msg)
+				items[i] = waiting
+			}
+		}
+	}
+	m.awaitingReply = false
+	m.inputConfirmed = false
+	m.waitingItem = nil
+	m.waitingFor = ""
+	return items
 }
 
 // Refold regroups the chat if item changed whether it folds into a status
@@ -487,6 +616,7 @@ func (m *Chat) regroup() {
 
 	items := make([]list.Item, 0, len(m.flat))
 	m.idInxMap = make(map[string]int, len(m.flat))
+	m.hiddenInfo = make(map[string]chat.MessageItem)
 	groupOf := make(map[string]*chat.ToolGroupItem)
 	m.folded = make(map[chat.MessageItem]bool, len(m.flat))
 	owner := make(map[list.Item]int, len(m.flat))
@@ -539,10 +669,55 @@ func (m *Chat) regroup() {
 			j = i + 1
 		}
 		for _, it := range m.flat[i:j] {
+			if _, info := it.(*chat.AssistantInfoItem); info {
+				var prev list.Item
+				if len(items) > 0 {
+					prev = items[len(items)-1]
+				}
+				if chat.InfoLabelsNothing(prev) {
+					m.hiddenInfo[it.ID()] = it
+					continue
+				}
+			}
 			place(it, len(items))
 			items = append(items, it)
 		}
 		i = j
+	}
+	if m.agentBusy && len(m.flat) > 0 {
+		user, _ := m.flat[len(m.flat)-1].(*chat.UserMessageItem)
+		if m.awaitingReply {
+			user = nil
+			spinning := false
+			if animatable, ok := m.flat[len(m.flat)-1].(chat.Animatable); ok {
+				spinning = animatable.Spinning()
+			}
+			if !spinning {
+				for i := len(m.flat) - 1; i >= 0; i-- {
+					if candidate, ok := m.flat[i].(*chat.UserMessageItem); ok && submissionKey(candidate) == m.waitingFor {
+						user = candidate
+						break
+					}
+				}
+			}
+		}
+		if user != nil {
+			if m.waitingItem == nil || m.waitingFor != submissionKey(user) {
+				m.waitingFor = submissionKey(user)
+				m.waitingItem = chat.NewAssistantMessageItem(m.com.Styles, &message.Message{
+					ID: "waiting:" + m.waitingFor, Role: message.Assistant,
+				})
+			}
+			owner[m.waitingItem] = len(items)
+			items = append(items, m.waitingItem)
+		} else if !m.awaitingReply {
+			m.waitingItem, m.waitingFor = nil, ""
+		}
+	} else {
+		m.waitingItem = nil
+		if !m.awaitingReply {
+			m.waitingFor = ""
+		}
 	}
 	m.groupOf = groupOf
 	for g := range used {
@@ -586,8 +761,12 @@ func (m *Chat) UpdateNestedToolIDs(containerID string) {
 // animTickMsg is the shared animation clock. One tick advances every
 // visible spinner by a frame; there is one live clock at a time regardless
 // of how many items are animating. gen is the clock generation the tick
-// was armed for.
-type animTickMsg struct{ gen uint64 }
+// was armed for. chat is the chat that armed it, so a second chat (the
+// sub-agent view) keeps its own clock; nil means the main chat.
+type animTickMsg struct {
+	gen  uint64
+	chat *Chat
+}
 
 // hasVisibleAnimation reports whether any item in the viewport is spinning.
 func (m *Chat) hasVisibleAnimation() bool {
@@ -610,7 +789,11 @@ const animClockLostAfter = 2 * time.Second
 
 // SetAgentBusy tells status groups whether the agent is still working.
 func (m *Chat) SetAgentBusy(busy bool) {
+	changed := m.agentBusy != busy
 	m.agentBusy = busy
+	if changed {
+		m.regroup()
+	}
 	for _, g := range m.groupOf {
 		g.SetBusy(busy)
 	}
@@ -670,7 +853,7 @@ func (m *Chat) armAnimClock() tea.Cmd {
 	m.animGen++
 	gen := m.animGen
 	return tea.Tick(anim.FrameInterval(), func(time.Time) tea.Msg {
-		return animTickMsg{gen: gen}
+		return animTickMsg{gen: gen, chat: m}
 	})
 }
 
@@ -1022,6 +1205,9 @@ func (m *Chat) ClearMessages() {
 	m.scrollbarVisible = false
 	m.list.SetItems()
 	m.ClearMouse()
+	// Nothing is left to warm; end any warming so the scrollbar returns.
+	m.resizing = false
+	m.resizeSettleSeq++
 }
 
 // RemoveMessage removes a message from the chat list by its ID.
@@ -1034,11 +1220,53 @@ func (m *Chat) RemoveMessage(id string) {
 	m.regroup()
 }
 
+// ReplaceMessage confirms a pending item without moving it in the timeline.
+func (m *Chat) ReplaceMessage(id string, items ...chat.MessageItem) bool {
+	i := slices.IndexFunc(m.flat, func(it chat.MessageItem) bool { return it.ID() == id })
+	if i < 0 {
+		return false
+	}
+	m.flat = slices.Concat(m.flat[:i], items, m.flat[i+1:])
+	m.regroup()
+	return true
+}
+
+// CancelRunning gives immediate feedback without changing saved messages.
+func (m *Chat) CancelRunning(continuing bool) []string {
+	var ids []string
+	for _, item := range m.flat {
+		switch item := item.(type) {
+		case chat.ToolMessageItem:
+			// Finished on ToolCall means its arguments finished streaming.
+			// Execution is only finished once the result has arrived.
+			if result, ok := item.(interface{ Result() *message.ToolResult }); ok && result.Result() != nil {
+				continue
+			}
+			if !item.Finished() && item.Status() != chat.ToolStatusCanceled {
+				item.SetStatus(chat.ToolStatusCanceled)
+				ids = append(ids, item.MessageID())
+			}
+		case *chat.AssistantMessageItem:
+			if id := item.Cancel(); id != "" {
+				ids = append(ids, id)
+			}
+		case *chat.ShellItem:
+			item.Cancel()
+		}
+	}
+	m.SetAgentBusy(continuing)
+	m.regroup()
+	return ids
+}
+
 // MessageItem returns the message item with the given ID, or nil if not
 // found. Steps folded into a status group are returned themselves.
 func (m *Chat) MessageItem(id string) chat.MessageItem {
 	idx, ok := m.idInxMap[id]
 	if !ok {
+		if hidden, ok := m.hiddenInfo[id]; ok {
+			return hidden
+		}
 		return nil
 	}
 	item, ok := m.list.ItemAt(idx).(chat.MessageItem)
@@ -1325,7 +1553,7 @@ func (m *Chat) HighlightContent() string {
 		return ""
 	}
 
-	var sb strings.Builder
+	var selections []string
 	for i := startItemIdx; i <= endItemIdx; i++ {
 		item := m.list.ItemAt(i)
 		if hi, ok := item.(list.Highlightable); ok {
@@ -1337,19 +1565,25 @@ func (m *Chat) HighlightContent() string {
 			} else {
 				rendered = item.Render(listWidth)
 			}
-			sb.WriteString(list.HighlightContent(
+			area := uv.Rect(0, 0, listWidth, lipgloss.Height(rendered))
+			if source, ok := item.(list.CopySource); ok {
+				if text, matched := list.HighlightSource(source.CopySource(), rendered, area, startLine, startCol, endLine, endCol); matched {
+					selections = append(selections, text)
+					continue
+				}
+			}
+			selections = append(selections, strings.TrimSuffix(list.HighlightContent(
 				rendered,
-				uv.Rect(0, 0, listWidth, lipgloss.Height(rendered)),
+				area,
 				startLine,
 				startCol,
 				endLine,
 				endCol,
-			))
-			sb.WriteString(strings.Repeat("\n", m.list.Gap()))
+			), "\n"))
 		}
 	}
 
-	return strings.TrimSpace(sb.String())
+	return strings.Join(selections, strings.Repeat("\n", m.list.Gap()+1))
 }
 
 // ClearMouse clears the current mouse interaction state.
@@ -1440,6 +1674,15 @@ func (m *Chat) getHighlightRange() (startItemIdx, startLine, startCol, endItemId
 	return startItemIdx, startLine, startCol, endItemIdx, endLine, endCol
 }
 
+// rawTop is how many rendered rows sit above an item's raw content, such
+// as a band's top padding row.
+func rawTop(item list.Item) int {
+	if padded, ok := item.(interface{ RawTop() int }); ok {
+		return padded.RawTop()
+	}
+	return 0
+}
+
 // selectWord selects the word at the given position within an item.
 func (m *Chat) selectWord(itemIdx, x, itemY int) {
 	item := m.list.ItemAt(itemIdx)
@@ -1456,7 +1699,8 @@ func (m *Chat) selectWord(itemIdx, x, itemY int) {
 	}
 
 	lines := strings.Split(rendered, "\n")
-	if itemY < 0 || itemY >= len(lines) {
+	row := itemY - rawTop(item)
+	if row < 0 || row >= len(lines) {
 		return
 	}
 
@@ -1465,7 +1709,7 @@ func (m *Chat) selectWord(itemIdx, x, itemY int) {
 	offset := chat.MessageLeftPaddingTotal
 	contentX := max(x-offset, 0)
 
-	line := ansi.Strip(lines[itemY])
+	line := ansi.Strip(lines[row])
 	startCol, endCol := findWordBoundaries(line, contentX)
 	if startCol == endCol {
 		// No word found at position, fallback to single click behavior
@@ -1506,14 +1750,15 @@ func (m *Chat) selectLine(itemIdx, itemY int) {
 	}
 
 	lines := strings.Split(rendered, "\n")
-	if itemY < 0 || itemY >= len(lines) {
+	row := itemY - rawTop(item)
+	if row < 0 || row >= len(lines) {
 		return
 	}
 
 	// Get line length (stripped of ANSI codes) and account for padding.
 	// SetHighlight will subtract the offset, so we need to add it here.
 	offset := chat.MessageLeftPaddingTotal
-	lineLen := ansi.StringWidth(lines[itemY])
+	lineLen := ansi.StringWidth(lines[row])
 
 	// Set selection to the entire line.
 	// Keep mouseDown true so HandleMouseUp triggers the copy.

@@ -53,7 +53,9 @@ cat >/dev/null
 			require.NoError(t, json.Unmarshal(data, &request))
 			require.Equal(t, "turn/start", request.Method)
 			require.Len(t, request.Params.Input, 3)
-			require.Equal(t, "What is in these images?", request.Params.Input[0]["text"])
+			text := request.Params.Input[0]["text"].(string)
+			require.Equal(t, "What is in these images?", withoutImagePaths(text))
+			require.Contains(t, text, filepath.Join(os.Getenv("XDG_CACHE_HOME"), "crush", "attachments"))
 			for _, part := range request.Params.Input[1:] {
 				require.Equal(t, "image", part["type"])
 				require.Equal(t, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png), part["url"])

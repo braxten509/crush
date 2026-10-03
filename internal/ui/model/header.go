@@ -15,11 +15,9 @@ import (
 )
 
 const (
-	headerDiag           = "╱"
-	minHeaderDiags       = 3
-	leftPadding          = 1
-	rightPadding         = 1
-	diagToDetailsSpacing = 1 // space between diagonal pattern and details section
+	headerGap    = 3 // cells between the name and the details
+	leftPadding  = 1
+	rightPadding = 1
 )
 
 type header struct {
@@ -30,6 +28,7 @@ type header struct {
 	com     *common.Common
 	width   int
 	compact bool
+	frame   logoFrame
 }
 
 // newHeader creates a new header model.
@@ -73,14 +72,16 @@ func (h *header) drawHeader(
 	width int,
 	lspErrorCount int,
 	hyperCredits *int,
+	frame logoFrame,
 ) {
 	t := h.com.Styles
-	if width != h.width || compact != h.compact {
-		h.logo = renderLogo(h.com.Styles, compact, h.com.IsHyper(), width)
+	if width != h.width || compact != h.compact || frame != h.frame || h.logo == "" {
+		h.logo = renderLogo(h.com.Styles, compact, h.com.IsHyper(), width, frame)
 	}
 
 	h.width = width
 	h.compact = compact
+	h.frame = frame
 
 	if !compact || session == nil {
 		uv.NewStyledString(h.logo).Draw(scr, area)
@@ -94,7 +95,7 @@ func (h *header) drawHeader(
 	var b strings.Builder
 	b.WriteString(h.compactLogo)
 
-	availDetailWidth := width - leftPadding - rightPadding - lipgloss.Width(b.String()) - minHeaderDiags - diagToDetailsSpacing
+	availDetailWidth := width - leftPadding - rightPadding - lipgloss.Width(b.String()) - (headerGap - 1)
 	details := renderHeaderDetails(
 		h.com,
 		session,
@@ -104,20 +105,8 @@ func (h *header) drawHeader(
 		hyperCredits,
 	)
 
-	remainingWidth := width -
-		lipgloss.Width(b.String()) -
-		lipgloss.Width(details) -
-		leftPadding -
-		rightPadding -
-		diagToDetailsSpacing
-
-	if remainingWidth > 0 {
-		b.WriteString(t.Header.Diagonals.Render(
-			strings.Repeat(headerDiag, max(minHeaderDiags, remainingWidth)),
-		))
-		b.WriteString(" ")
-	}
-
+	// Details follow the name after a quiet gap, with no fill between.
+	b.WriteString(strings.Repeat(" ", headerGap-1))
 	b.WriteString(details)
 
 	view := uv.NewStyledString(

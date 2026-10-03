@@ -63,6 +63,7 @@ echo '{"method":"item/started","params":{"item":{"type":"userMessage","id":"u2",
 echo '{"method":"turn/completed","params":{"turn":{"id":"tu","status":"completed"}}}'
 cat >/dev/null
 `)
+	events = withoutActivity(events)
 	require.Equal(t, []EventType{EventSession, EventUserMessage}, types(events))
 	require.Equal(t, "PINEAPPLE", events[1].Text)
 }

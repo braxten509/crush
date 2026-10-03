@@ -247,7 +247,7 @@ func (m *UI) currentFrameKey() (key frameKey, ok bool) {
 	if !scrollOnly {
 		m.frames.reset()
 	}
-	if !m.frameCacheable() {
+	if m.subagentView != nil || !m.frameCacheable() {
 		return frameKey{}, false
 	}
 	return m.frameKeyNow()

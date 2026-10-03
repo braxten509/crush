@@ -259,12 +259,12 @@ func TestSubAgentProcessesAreNotBackground(t *testing.T) {
 	require.Empty(t, BackgroundProcesses())
 }
 
-func TestYoungProcessesAreNotBackground(t *testing.T) {
+func TestYoungDetachedProcessesAreBackground(t *testing.T) {
 	h := registerTestHub(t)
 	backgroundMinAge = time.Hour
 	t.Cleanup(func() { backgroundMinAge = tools.ForegroundWaitLimit })
 	startDetached(t, h, t.Name())
-	require.Empty(t, BackgroundProcesses(), "a command younger than the limit is a helper, not background work")
+	require.Len(t, BackgroundProcesses(), 1, "an orphaned command is background work even before the age limit")
 	backgroundMinAge = 0
 	require.Len(t, BackgroundProcesses(), 1, "once it is old enough it is listed")
 }

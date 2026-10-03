@@ -1055,6 +1055,10 @@ func (a *AssistantMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 // it can fold into a tool status group.
 func (a *AssistantMessageItem) onlyThinking() bool {
 	m := a.message
+	// A cancelled step that called tools shows no "Canceled" banner (its
+	// tools report the interruption), so it has nothing of its own to show
+	// either; standing alone it would leave a blank row.
+	canceledBanner := m.FinishReason() == message.FinishReasonCanceled && len(m.ToolCalls()) == 0
 	return strings.TrimSpace(m.Content().Text) == "" && !m.IsErrorLike() &&
-		m.FinishReason() != message.FinishReasonCanceled && !m.IsSummaryMessage && !m.IsCompacting && !a.planAgent
+		!canceledBanner && !m.IsSummaryMessage && !m.IsCompacting && !a.planAgent
 }

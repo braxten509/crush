@@ -21,12 +21,19 @@ import (
 const choiceListMaxWidth = 120
 
 // questionIconPrompt returns the themed question icon based on
-// focus state. Shared by all question component types.
+// focus state, with a space before the tag so it doesn't touch the
+// window edge. Shared by all question component types.
 func questionIconPrompt(sty *styles.Styles, focused bool) string {
+	return " " + questionBadge(sty, focused)
+}
+
+// questionBadge is the question icon without the leading space, for views
+// that indent it themselves.
+func questionBadge(sty *styles.Styles, focused bool) string {
 	if focused {
-		return sty.Editor.PromptQuestionIconFocused.Render()
+		return sty.Editor.PromptQuestionIconFocused.Render() + " "
 	}
-	return sty.Editor.PromptQuestionIconBlurred.Render()
+	return sty.Editor.PromptQuestionIconBlurred.Render() + " "
 }
 
 // questionDescription renders a question's markdown description in the
@@ -34,7 +41,7 @@ func questionIconPrompt(sty *styles.Styles, focused bool) string {
 // to fit width. Shared by all question component types.
 func questionDescription(sty *styles.Styles, text string, width int) string {
 	w := max(1, width-2)
-	r := common.MarkdownRenderer(sty, w)
+	r := common.QuestionMarkdownRenderer(sty, w)
 	mu := common.LockMarkdownRenderer(r)
 	mu.Lock()
 	out, err := r.Render(text)
@@ -253,6 +260,7 @@ type contentLine struct {
 	text       string
 	fillInRow  bool
 	noteRow    bool
+	band       bool // paint the composer band behind the row, after the gutter bar
 	cursorItem bool // belongs to the currently selected item
 	choiceIdx  int  // zero-based choice index, or -1 if not a choice row
 }
@@ -303,8 +311,8 @@ func drawStyledText(scr uv.Screen, area uv.Rectangle, text string) int {
 // bottom padding as real content rather than a phantom offset.
 func (c *choiceList) buildLines(innerWidth int, fillInPrefix string, itemFn choiceItemRenderer) []contentLine {
 	bodyStyle := c.Styles.Editor.QuestionBody
-	barActive := c.Styles.Editor.QuestionCursorBar.Render("┃ ")
-	const barInactive = "  "
+	barActive := answerBar(c.Styles, true)
+	barInactive := answerBar(c.Styles, false)
 
 	var lines []contentLine
 	push := func(text string, flags ...bool) {
@@ -387,7 +395,7 @@ func (c *choiceList) buildLines(innerWidth int, fillInPrefix string, itemFn choi
 		fillBar = barActive
 	}
 	linesBeforeFillIn := len(lines)
-	c.drawFillIn(&lines, innerWidth, fillBar, barInactive, fillInPrefix, c.isFillIn(), false)
+	c.drawFillIn(&lines, innerWidth, fillBar, fillInPrefix, c.isFillIn(), false)
 
 	// Record fill-in row range for wheel-scroll bounds checking.
 	c.fillInTop = -1
@@ -432,7 +440,7 @@ func (c *choiceList) height(width int) int {
 		width = c.lastWidth
 	}
 	innerWidth := min(width-4, choiceListMaxWidth)
-	return len(c.buildLines(innerWidth, "> ", func(int, question.Choice, bool, int) string {
+	return len(c.buildLines(innerWidth, " ", func(int, question.Choice, bool, int) string {
 		return "x" // single-line placeholder; only count matters
 	}))
 }
@@ -492,10 +500,12 @@ func (c *choiceList) drawContent(scr uv.Screen, area uv.Rectangle, fillInPrefix 
 	innerNarrow := min(contentWidth-1-4, choiceListMaxWidth)
 	innerWide := min(contentWidth-4, choiceListMaxWidth)
 
-	lines := c.buildLines(innerWide, fillInPrefix, itemFn)
+	inner := innerWide
+	lines := c.buildLines(inner, fillInPrefix, itemFn)
 	overflow := viewport > 0 && len(lines) > viewport
 	if overflow && innerNarrow != innerWide {
-		lines = c.buildLines(innerNarrow, fillInPrefix, itemFn)
+		inner = innerNarrow
+		lines = c.buildLines(inner, fillInPrefix, itemFn)
 	}
 
 	if overflow {
@@ -517,15 +527,17 @@ func (c *choiceList) drawContent(scr uv.Screen, area uv.Rectangle, fillInPrefix 
 		if ln.text != "" {
 			uv.NewStyledString(ln.text).Draw(scr, image.Rect(area.Min.X, y, area.Min.X+contentWidth, y+1))
 		}
+		if ln.band {
+			c.paintBand(scr, image.Rect(area.Min.X+questionBarWidth, y, area.Min.X+inner, y+1))
+		}
 		if ln.fillInRow {
-			fillPrefix := c.Styles.Editor.QuestionBody.Render("> ")
-			if tc := c.fillInCursor(screenRow, area.Min.X, lipgloss.Width(fillPrefix)); tc != nil {
+			if tc := c.fillInCursor(screenRow, lipgloss.Width(fillInPrefix)); tc != nil {
 				cur = tc
 			}
 		}
 		if ln.noteRow {
 			const notePrefix = "> "
-			if tc := c.noteCursor(screenRow, area.Min.X, lipgloss.Width(notePrefix)); tc != nil {
+			if tc := c.noteCursor(screenRow, lipgloss.Width(notePrefix)); tc != nil {
 				cur = tc
 			}
 		}
@@ -558,6 +570,24 @@ func (c *choiceList) drawContent(scr uv.Screen, area uv.Rectangle, fillInPrefix 
 	c.buildChoiceCompositor(lines, area, contentWidth)
 
 	return cur
+}
+
+// paintBand gives the composer band color to the cells of r the text
+// left without a background.
+func (c *choiceList) paintBand(scr uv.Screen, r uv.Rectangle) {
+	band := answerBand(c.Styles)
+	for x := r.Min.X; x < r.Max.X; x++ {
+		cell := scr.CellAt(x, r.Min.Y)
+		if cell == nil {
+			fill := uv.EmptyCell
+			fill.Style.Bg = band
+			scr.SetCell(x, r.Min.Y, &fill)
+		} else if cell.Style.Bg == nil {
+			filled := *cell
+			filled.Style.Bg = band
+			scr.SetCell(x, r.Min.Y, &filled)
+		}
+	}
 }
 
 // buildChoiceCompositor creates hit layers for each visible choice

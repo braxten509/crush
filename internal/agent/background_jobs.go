@@ -78,6 +78,7 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 		tool = tools.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "")
 		input = tools.BashParams{Command: params.Command, WorkingDir: params.WorkingDir, Description: params.Name, RunInBackground: true}
 	}
+	tool = guardedTool{tool}
 	if configured := h.c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(configured) > 0 {
 		tool = newHookedTool(tool, hooks.NewRunner(configured, h.c.cfg.WorkingDir(), h.c.cfg.WorkingDir()))
 	}

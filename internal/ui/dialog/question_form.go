@@ -536,7 +536,7 @@ func (f *QuestionForm) CollapsedHelp() string { return "answer questions" }
 // batches it shows the active question text and answered count;
 // for single questions it shows just the question text.
 func (f *QuestionForm) DrawCollapsed(scr uv.Screen, area uv.Rectangle) {
-	icon := f.Styles.Editor.PromptQuestionIconBlurred.Render()
+	icon := questionIconPrompt(f.Styles, false)
 	iconWidth := lipgloss.Width(icon)
 	textStyle := f.Styles.Messages.AssistantInfoModel
 	countStyle := f.Styles.Messages.AssistantInfoProvider

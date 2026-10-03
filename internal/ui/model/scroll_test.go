@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/stretchr/testify/require"
 )
@@ -55,9 +54,6 @@ func TestScrollbarDragEndsWhenReleaseGoesToOverlay(t *testing.T) {
 	for name, open := range map[string]func(u *UI){
 		"dialog": func(u *UI) {
 			u.dialog.OpenDialog(dialog.NewPermissions(u.com, permission.PermissionRequest{ID: "p1", ToolCallID: "t1", ToolName: "bash"}))
-		},
-		"secure entry": func(u *UI) {
-			u.Update(&secureentry.Request{Spec: secureentry.Spec{File: "/dummy/keys.env", Label: "Test key"}})
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

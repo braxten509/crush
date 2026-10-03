@@ -250,7 +250,9 @@ func TestPlanHandoffChoiceQuestionBadgeFollowsFocus(t *testing.T) {
 	requirePlanHandoffColorEqual(t,
 		sty.Editor.PromptQuestionIconFocused.GetForeground(),
 		focused.CellAt(planHandoffIndent, 0).Style.Fg)
-	require.Nil(t, focused.CellAt(planHandoffIndent, 0).Style.Bg, "the mark has no chip")
+	requirePlanHandoffColorEqual(t,
+		sty.Editor.PromptQuestionIconFocused.GetBackground(),
+		focused.CellAt(planHandoffIndent, 0).Style.Bg)
 
 	p.SetFocused(false)
 	blurred := uv.NewScreenBuffer(80, p.Height(80))
@@ -261,7 +263,9 @@ func TestPlanHandoffChoiceQuestionBadgeFollowsFocus(t *testing.T) {
 	requirePlanHandoffColorEqual(t,
 		sty.Editor.PromptQuestionIconBlurred.GetForeground(),
 		blurred.CellAt(planHandoffIndent, 0).Style.Fg)
-	require.Nil(t, blurred.CellAt(planHandoffIndent, 0).Style.Bg, "the mark has no chip")
+	requirePlanHandoffColorEqual(t,
+		sty.Editor.PromptQuestionIconBlurred.GetBackground(),
+		blurred.CellAt(planHandoffIndent, 0).Style.Bg)
 }
 
 // When the chat has focus the handoff must keep its focused layout — the

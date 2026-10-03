@@ -1,7 +1,6 @@
 package secureentry
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,20 +19,13 @@ func template(t *testing.T, contents string) string {
 
 func TestSequentialEntriesStayLocal(t *testing.T) {
 	path := template(t, "FIRST=%s\nSECOND=%s\n")
-	requests := make(chan *Request, 1)
-	detach := Attach(func(r *Request) { requests <- r })
-	defer detach()
 	for _, value := range []string{"dummy-one-$HOME-`cmd`", "dummy-two"} {
-		result, err := Open("session", Spec{File: path, Occurrence: 1})
+		target, err := Prepare(Spec{File: path, Occurrence: 1})
 		require.NoError(t, err)
-		req := <-requests
-		require.NoError(t, req.Save([]byte(value)))
-		encoded, err := json.Marshal(req)
-		require.NoError(t, err)
-		require.NotContains(t, string(encoded), value)
-		require.NotContains(t, fmt.Sprintf("%+v", req), value)
-		req.Finish(true)
-		require.Equal(t, "saved", <-result)
+		require.NoError(t, target.Save([]byte(value)))
+		require.NotContains(t, fmt.Sprintf("%+v", target), value)
+		target.Close()
+		require.ErrorIs(t, target.Save([]byte(value)), ErrClosed)
 	}
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -44,26 +36,6 @@ func TestSequentialEntriesStayLocal(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Dir(path))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-}
-
-func TestCancelAndUnavailable(t *testing.T) {
-	path := template(t, "KEY=%s\n")
-	_, err := Open("session", Spec{File: path, Occurrence: 1})
-	require.ErrorContains(t, err, "local Crush terminal")
-	requests := make(chan *Request, 1)
-	detach := Attach(func(r *Request) { requests <- r })
-	defer detach()
-	result, err := Open("session", Spec{File: path, Occurrence: 1})
-	require.NoError(t, err)
-	req := <-requests
-	_, err = Open("other", Spec{File: path, Occurrence: 1})
-	require.ErrorContains(t, err, "already open")
-	req.Finish(false)
-	req.Finish(true)
-	require.Equal(t, "cancelled", <-result)
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Equal(t, "KEY=%s\n", string(data))
 }
 
 func TestSaveRefusesChangesAndSymlinks(t *testing.T) {

@@ -113,6 +113,10 @@ type taskHub struct {
 	userStopped map[string]bool
 	// asking is set while questions from `crush ask` are open.
 	asking bool
+	// closing is set once Crush shuts down; tasks it cuts off stay saved.
+	closing bool
+	// resumeOnce starts the tasks an earlier Crush left unfinished.
+	resumeOnce sync.Once
 	// sessionRuns owns non-interactive runs and their follow-up producers.
 	sessionRuns      map[string]*sessionRun
 	backgroundOwners map[string]string
@@ -305,10 +309,13 @@ func (h *taskHub) handle(data []byte) TaskReply {
 		return h.background(req)
 	}
 	if req.SecureEntry != nil {
-		if err := h.secureEntry(req); err != nil {
+		// `crush secure-entry` is shorthand for a one-question form, so the
+		// secret is typed into the same inline form as every other question.
+		ask, err := secureEntryAsk(*req.SecureEntry)
+		if err != nil {
 			return TaskReply{Error: err.Error()}
 		}
-		return TaskReply{}
+		req.Ask, req.SecureEntry = ask, nil
 	}
 	if req.Ask != nil {
 		if err := h.ask(req); err != nil {
@@ -393,13 +400,38 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	fp, err := h.c.buildProvider(*provider, selected, true)
+	sub, m, err := h.subAgent(ctx, *provider, model, selected)
 	if err != nil {
 		return nil, err
 	}
-	lm, err := fp.LanguageModel(ctx, model.ID)
+
+	name := cmp.Or(strings.TrimSpace(req.Name), firstLine(prompt, 40))
+	child, err := h.c.sessions.CreateTaskSession(ctx, uuid.NewString(), req.Session, name)
 	if err != nil {
 		return nil, err
+	}
+	if !config.IsCLIProviderType(provider.Type) {
+		h.c.permissions.AutoApproveSession(child.ID)
+	}
+
+	t := &Task{
+		SessionID: req.Session, ChildID: child.ID, Name: name,
+		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, Status: TaskRunning, Started: time.Now(),
+	}
+	started = true
+	snapshot := h.start(ctx, release, t, sub, m, *provider, subAgentPreamble+prompt)
+	return &snapshot, nil
+}
+
+// subAgent builds the agent a task runs on.
+func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel) (SessionAgent, Model, error) {
+	fp, err := h.c.buildProvider(provider, selected, true)
+	if err != nil {
+		return nil, Model{}, err
+	}
+	lm, err := fp.LanguageModel(ctx, model.ID)
+	if err != nil {
+		return nil, Model{}, err
 	}
 	// Sub-agents work on their own, like Claude Code's, but within what
 	// Crush's YOLO mode allows.
@@ -433,59 +465,55 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		agentCfg := h.c.cfg.Config().Agents[config.AgentTask]
 		nativeTools, err := h.c.buildTools(ctx, agentCfg, true)
 		if err != nil {
-			return nil, err
+			return nil, Model{}, err
 		}
 		sub.SetTools(nativeTools)
 		p, err := taskPrompt(agentprompt.WithWorkingDir(h.c.cfg.WorkingDir()))
 		if err != nil {
-			return nil, err
+			return nil, Model{}, err
 		}
 		text, err := p.Build(ctx, lm.Provider(), model.ID, h.c.cfg)
 		if err != nil {
-			return nil, err
+			return nil, Model{}, err
 		}
 		sub.SetSystemPrompt(text)
 	}
+	return sub, m, nil
+}
 
-	name := cmp.Or(strings.TrimSpace(req.Name), firstLine(prompt, 40))
-	child, err := h.c.sessions.CreateTaskSession(ctx, uuid.NewString(), req.Session, name)
-	if err != nil {
-		return nil, err
-	}
-	if !config.IsCLIProviderType(provider.Type) {
-		h.c.permissions.AutoApproveSession(child.ID)
-	}
-
+// start runs a task in the background and returns its first snapshot. A
+// task without an ID gets the next one. release is called once the task's
+// result is delivered.
+func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub SessionAgent, m Model, provider config.ProviderConfig, prompt string) Task {
 	h.mu.Lock()
-	h.seq++
-	t := &Task{
-		ID: fmt.Sprintf("t%d", h.seq), SessionID: req.Session, ChildID: child.ID, Name: name,
-		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, Status: TaskRunning, Started: time.Now(),
+	if t.ID == "" {
+		h.seq++
+		t.ID = fmt.Sprintf("t%d", h.seq)
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	h.cancels[t.ID] = cancel
 	h.tasks[t.ID] = t
-	if run := h.sessionRuns[req.Session]; run != nil {
-		h.sessionRuns[child.ID] = run
+	if run := h.sessionRuns[t.SessionID]; run != nil {
+		h.sessionRuns[t.ChildID] = run
 	}
 	snapshot := *t
 	h.mu.Unlock()
+	h.remember(snapshot, provider.ID)
 	h.publish(snapshot)
 
-	started = true
 	go func() {
 		defer release()
 		defer cancel()
 		result, err := sub.Run(runCtx, SessionAgentCall{
-			SessionID:       child.ID,
-			Prompt:          subAgentPreamble + prompt,
-			MaxOutputTokens: model.DefaultMaxTokens,
+			SessionID:       t.ChildID,
+			Prompt:          prompt,
+			MaxOutputTokens: m.CatwalkCfg.DefaultMaxTokens,
 			NonInteractive:  true,
-			ProviderOptions: getProviderOptions(m, *provider),
+			ProviderOptions: getProviderOptions(m, provider),
 		})
 		h.finish(ctx, t.ID, subAgentOutput(result), err)
 	}()
-	return &snapshot, nil
+	return snapshot
 }
 
 // taskModel is the model a sub-agent runs on, tuned as its request asks:
@@ -760,17 +788,21 @@ func (h *taskHub) stop(sessionID, id string) (*Task, error) {
 }
 
 // stopAll ends every task as Crush shuts down, and the request directory
-// with them.
+// with them. Running tasks stay saved, so the next Crush resumes them.
 func (h *taskHub) stopAll() {
 	_ = os.RemoveAll(h.dir)
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.closing = true
+	var interrupted []string
 	for id, t := range h.tasks {
 		if t.Status == TaskRunning {
 			t.Status = TaskStopped
 			h.cancels[id]()
+			interrupted = append(interrupted, t.ChildID)
 		}
 	}
+	h.markInterrupted(interrupted)
 	for _, run := range h.sessionRuns {
 		run.cancel()
 	}
@@ -791,8 +823,12 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	t.Ended = time.Now()
 	delete(h.cancels, id)
 	snapshot := *t
+	closing := h.closing
 	h.mu.Unlock()
 	h.publish(snapshot)
+	if !closing {
+		h.forget(snapshot.ChildID)
+	}
 
 	if err := h.c.updateParentSessionCost(ctx, snapshot.ChildID, snapshot.SessionID); err != nil {
 		slog.Warn("Failed to add task cost to its parent session", "task", id, "error", err)
@@ -913,8 +949,9 @@ When you also have other questions, put the secrets in the same %[1]s ask form a
 That JSON is metadata only: never include a value. placeholder defaults to %%s and occurrence to 1, counted in the file as you prepared it. Give every secret in one file its own placeholder (or occurrence). Values are written only when the user submits the whole form; the answers message has the ordinary answers plus each secure entry as only saved or cancelled.
 For secrets alone, run:
   %[1]s secure-entry --file /absolute/path/to/file --label "Service API key"
-Only metadata is passed to that command. It opens a masked local Crush dialog, writes the value directly to the file with 0600 permissions, and returns only saved/cancelled as a <%[3]s> named "Secure entry". End your turn after opening it. Never read, print, diff, attach, commit, or send the populated file to tools/models. The program itself reads and edits the file locally.
-For multiple keys, prepare ALL placeholders before collecting any key, then open one dialog at a time for the SAME file. By default each replaces the first remaining %%s. Use --placeholder UNIQUE_MARKER or --occurrence N to select another slot; unique markers are best for multiple keys. Replacement is literal, not printf or a shell expansion. Prepare valid quoting for the intended file format. Existing keys must never be read by you to edit another slot. Secure entry is local-terminal only, not available through the phone or server clients.
+That is shorthand for a one-question form with a secure_entry question: same form, same "Questions" result with only saved/cancelled. End your turn after opening it. Never read, print, diff, attach, commit, or send the populated file to tools/models. The program itself reads and edits the file locally.
+For multiple keys, prepare ALL placeholders before collecting any key, then ask for them together as several secure_entry questions in one form. By default each replaces the first remaining %%s. Use unique placeholders (or occurrence) to select a slot; unique markers are best. Replacement is literal, not printf or a shell expansion. Prepare valid quoting for the intended file format. Existing keys must never be read by you to edit another slot. Secure entry is local-terminal only, not available through the phone or server clients.
+Keep secrets in a secrets folder such as ~/.config/secrets. Crush blocks tool calls that read secrets folders, so when a task needs a secret, write a small helper program that reads the file itself and never prints it.
 </crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName)
 }
 
@@ -934,30 +971,19 @@ func firstLine(s string, n int) string {
 	return s
 }
 
-// secureEntry sends metadata to the local TUI and receives only a fixed status.
-func (h *taskHub) secureEntry(req TaskRequest) error {
-	ctx, release := h.reserveFollowUp(req.Session)
-	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {
-		release()
-		return errors.New("unknown session")
+// secureEntryAsk turns `crush secure-entry` flags into the input of a
+// one-question form, so the secret goes through the same inline form as
+// secure_entry questions from `crush ask`.
+func secureEntryAsk(spec secureentry.Spec) (json.RawMessage, error) {
+	label := cmp.Or(strings.TrimSpace(spec.Label), "Secret")
+	item := secureAskItem{
+		Type:        string(question.TypeSecureEntry),
+		Label:       label,
+		Question:    "Enter the " + label,
+		Description: "Typed into a masked field and saved straight into a local file. The agent never sees it.",
+		File:        spec.File,
+		Placeholder: spec.Placeholder,
+		Occurrence:  spec.Occurrence,
 	}
-	result, err := secureentry.Open(req.Session, *req.SecureEntry)
-	if err != nil {
-		release()
-		return err
-	}
-	go func() {
-		defer release()
-		var status string
-		select {
-		case status = <-result:
-		case <-ctx.Done():
-			return
-		}
-		msg := fmt.Sprintf("<%s>\n<name>Secure entry</name>\n<status>%s</status>\n<result>Secure entry %s. No value is returned. Do not read or print the destination file.</result>\n</%s>", TaskNotificationTag, status, status, TaskNotificationTag)
-		if _, err := h.c.Run(ctx, req.Session, msg); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Error("Failed to deliver secure entry status")
-		}
-	}()
-	return nil
+	return json.Marshal(map[string][]secureAskItem{"questions": {item}})
 }

@@ -10,6 +10,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,6 +28,9 @@ printf '%s\n' "$line" > requests.jsonl
 echo '{"id":"1","result":{}}'
 read -r line
 printf '%s\n' "$line" >> requests.jsonl
+read -r line
+printf '%s\n' "$line" >> requests.jsonl
+echo '{"id":"hooks","result":{"data":[]}}'
 read -r line
 printf '%s\n' "$line" >> requests.jsonl
 echo '{"id":"2","result":{"thread":{"id":"th"}}}'
@@ -55,11 +59,13 @@ cat >/dev/null
 					require.Contains(t, string(args), fmt.Sprintf("model_auto_compact_token_limit=%d", limit))
 					require.NotContains(t, string(args), "model_auto_compact_token_limit=160000")
 					require.NotContains(t, string(args), "model_context_window=")
+					require.Contains(t, string(args), codexGuardHook())
 					data, err := os.ReadFile(filepath.Join(dir, "requests.jsonl"))
 					require.NoError(t, err)
 					lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-					require.Len(t, lines, 4)
-					for _, index := range []int{2, 3} {
+					require.Len(t, lines, 5)
+					require.Contains(t, lines[2], `"method":"hooks/list"`)
+					for _, index := range []int{3, 4} {
 						var request struct {
 							Method string         `json:"method"`
 							Params map[string]any `json:"params"`
@@ -70,7 +76,7 @@ cat >/dev/null
 						} else {
 							require.Equal(t, tier, request.Params["serviceTier"])
 						}
-						if index == 2 {
+						if index == 3 {
 							method := "thread/start"
 							if resume != "" && !ephemeral {
 								method = "thread/resume"
@@ -102,4 +108,29 @@ cat >/dev/null
 			})
 		}
 	}
+}
+
+// Codex skips new hooks until they're trusted; Crush trusts only its own
+// secrets guard, by the hash Codex reports.
+func TestCodexGuardTrust(t *testing.T) {
+	t.Parallel()
+	list := func(source, command, status string) json.RawMessage {
+		data, err := json.Marshal(map[string]any{"data": []any{map[string]any{"hooks": []any{map[string]any{
+			"key": "/<session-flags>/config.toml:pre_tool_use:0:0", "command": command, "source": source,
+			"currentHash": "sha256:abc", "trustStatus": status,
+		}}}}})
+		require.NoError(t, err)
+		return data
+	}
+	trust := codexGuardTrust(list("sessionFlags", secretguard.HookCommand(), "untrusted"))
+	require.NotNil(t, trust)
+	require.Equal(t, "config/value/write", trust["method"])
+	params := trust["params"].(map[string]any)
+	require.Equal(t, `hooks.state."/<session-flags>/config.toml:pre_tool_use:0:0".trusted_hash`, params["keyPath"])
+	require.Equal(t, "sha256:abc", params["value"])
+
+	require.Nil(t, codexGuardTrust(list("sessionFlags", secretguard.HookCommand(), "trusted")))
+	require.Nil(t, codexGuardTrust(list("sessionFlags", "some other hook", "untrusted")))
+	require.Nil(t, codexGuardTrust(list("user", secretguard.HookCommand(), "untrusted")))
+	require.Nil(t, codexGuardTrust(nil))
 }

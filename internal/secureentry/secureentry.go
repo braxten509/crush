@@ -24,92 +24,17 @@ type Spec struct {
 	Occurrence  int    `json:"occurrence"`
 }
 
-// Request contains no file contents or entered value.
-type Request struct {
-	Spec
-	Session string
-	target  *Target
-	done    chan string
-	once    sync.Once
-}
-
-func (r *Request) String() string { return "secure-entry request" }
-
-func (r *Request) abort() { r.Finish(false) }
-
-// Save writes locally and returns only a fixed, non-secret error.
-func (r *Request) Save(value []byte) error { return r.target.Save(value) }
-
-// Finish resolves the request with a fixed status, never arbitrary text.
-func (r *Request) Finish(saved bool) {
-	r.once.Do(func() {
-		r.target.Close()
-		status := StatusCancelled
-		if saved {
-			status = StatusSaved
-		}
-		r.done <- status
-	})
-}
-
 // The only statuses that ever leave secure entry.
 const (
 	StatusSaved     = "saved"
 	StatusCancelled = "cancelled"
 )
 
-// broker holds the single open secure entry: a dialog or a question form.
+// broker holds the single open secure question form.
 var broker struct {
 	sync.Mutex
-	deliver     func(*Request)
 	deliverForm func(*Form)
-	pending     interface{ abort() }
-}
-
-// Attach connects only the local TUI, bypassing shared app/remote events.
-func Attach(deliver func(*Request)) func() {
-	broker.Lock()
-	broker.deliver = deliver
-	broker.Unlock()
-	return func() {
-		broker.Lock()
-		broker.deliver = nil
-		pending := broker.pending
-		broker.Unlock()
-		if pending != nil {
-			pending.abort()
-		}
-	}
-}
-
-// Open reserves the single secure dialog. It fails without a local TUI.
-func Open(session string, spec Spec) (<-chan string, error) {
-	broker.Lock()
-	defer broker.Unlock()
-	if broker.deliver == nil {
-		return nil, errors.New("secure entry requires the local Crush terminal")
-	}
-	if broker.pending != nil {
-		return nil, errors.New("a secure entry is already open")
-	}
-	target, err := Prepare(spec)
-	if err != nil {
-		return nil, err
-	}
-	r := &Request{Spec: target.spec, Session: session, target: target, done: make(chan string, 1)}
-	broker.pending = r
-	result := make(chan string, 1)
-	go func() {
-		status := <-r.done
-		broker.Lock()
-		if pending, ok := broker.pending.(*Request); ok && pending == r {
-			broker.pending = nil
-		}
-		broker.Unlock()
-		result <- status
-	}()
-	go broker.deliver(r)
-	return result, nil
+	pending     *Form
 }
 
 // Target retains only a fingerprint and offset, never the template contents.

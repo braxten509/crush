@@ -30,6 +30,8 @@ var (
 	mdCache      = map[int]*glamour.TermRenderer{}
 	quietMDCache = map[int]*glamour.TermRenderer{}
 	planMDCache  = map[int]*glamour.TermRenderer{}
+	// questionMDCache holds QuestionMarkdownRenderer's renderers.
+	questionMDCache = map[int]*glamour.TermRenderer{}
 )
 
 // MarkdownRenderer returns a glamour [glamour.TermRenderer] configured with
@@ -97,6 +99,24 @@ func PlanMarkdownRenderer(sty *styles.Styles, width int) *glamour.TermRenderer {
 	return r
 }
 
+// QuestionMarkdownRenderer returns a glamour [glamour.TermRenderer] for
+// question descriptions: reply markdown with dimmed body text. Same
+// caching and concurrency contract as [MarkdownRenderer].
+func QuestionMarkdownRenderer(sty *styles.Styles, width int) *glamour.TermRenderer {
+	mdCacheMu.Lock()
+	defer mdCacheMu.Unlock()
+	if r, ok := questionMDCache[width]; ok {
+		return r
+	}
+	r, _ := glamour.NewTermRenderer(
+		glamour.WithStyles(sty.QuestionMarkdown),
+		glamour.WithWordWrap(width),
+		glamour.WithChromaFormatter(formatterName),
+	)
+	questionMDCache[width] = r
+	return r
+}
+
 // InvalidateMarkdownRendererCache drops every cached renderer
 // AND every per-renderer mutex in a single atomic critical
 // section so the two maps cannot disagree mid-toggle. Call this
@@ -118,6 +138,7 @@ func InvalidateMarkdownRendererCache() {
 	mdCache = map[int]*glamour.TermRenderer{}
 	quietMDCache = map[int]*glamour.TermRenderer{}
 	planMDCache = map[int]*glamour.TermRenderer{}
+	questionMDCache = map[int]*glamour.TermRenderer{}
 	rendererLocks = map[*glamour.TermRenderer]*sync.Mutex{}
 }
 

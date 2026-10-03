@@ -2,6 +2,7 @@ package dialog
 
 import (
 	"image"
+	"image/color"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -10,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // newQuestionTextarea creates a configured textarea for question
@@ -52,12 +54,26 @@ type questionEditor struct {
 	navDown key.Binding
 }
 
+// fillInMinHeight and fillInMaxHeight bound the fill-in textarea.
+const (
+	fillInMinHeight = 1
+	fillInMaxHeight = 4
+)
+
+// questionBarWidth is the width of the "┃ " gutter bar in front of every
+// choice-list row.
+const questionBarWidth = 2
+
 // newQuestionEditor creates a questionEditor with configured
 // fill-in and note textareas.
 func newQuestionEditor(sty *styles.Styles) questionEditor {
+	fillIn := newQuestionTextarea(sty, "Something else?", 500)
+	fillIn.MinHeight = fillInMinHeight
+	fillIn.MaxHeight = fillInMaxHeight
+	fillIn.SetHeight(fillInMinHeight)
 	return questionEditor{
 		Styles:     sty,
-		fillIn:     newQuestionTextarea(sty, "Something else?", 500),
+		fillIn:     fillIn,
 		noteEditor: newQuestionTextarea(sty, "Add a note...", 300),
 		notes:      make(map[string]string),
 		keyNote:    key.NewBinding(key.WithKeys("alt+n"), key.WithHelp("alt+n", "note")),
@@ -130,38 +146,75 @@ func (e *questionEditor) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	return nil
 }
 
-// drawFillIn appends fill-in rows to lines. When focused, renders
-// the live textarea; otherwise shows saved text or placeholder.
-// styleFilled controls whether non-empty fill-in text gets the
-// selected (pink) style. Pass true for single-choice where the
-// fill-in IS the answer; false for multi-choice where it's supplementary.
-func (e *questionEditor) drawFillIn(lines *[]contentLine, innerWidth int, bar, barInactive, fillPrefix string, isActive bool, styleFilled bool) {
-	bodyStyle := e.Styles.Editor.QuestionBody
+// drawFillIn appends fill-in rows to lines. The fill-in is a thin answer
+// box (see answerPad), drawn whether or not it is being edited, so the
+// form keeps its height when typing starts. When focused, it renders the
+// live textarea; otherwise the saved text or the placeholder. styleFilled
+// controls whether non-empty fill-in text gets the selected (pink)
+// style. Pass true for single-choice where the fill-in IS the answer;
+// false for multi-choice where it's supplementary.
+func (e *questionEditor) drawFillIn(lines *[]contentLine, innerWidth int, bar, fillPrefix string, isActive bool, styleFilled bool) {
 	prefixWidth := lipgloss.Width(fillPrefix)
+	boxWidth := innerWidth - questionBarWidth
+	textWidth := boxWidth - prefixWidth - 1 // one cell of padding on the right
+	editing := isActive && e.fillIn.Focused()
 
-	if isActive && e.fillIn.Focused() {
-		e.fillIn.SetWidth(innerWidth - 2 - prefixWidth)
-		indent := strings.Repeat(" ", prefixWidth)
-		for j, tl := range strings.Split(e.fillIn.View(), "\n") {
-			text := bar + fillPrefix + tl
-			if j > 0 {
-				text = barInactive + indent + tl
-			}
-			*lines = append(*lines, contentLine{text: text, fillInRow: j == 0, cursorItem: true, choiceIdx: -1})
-		}
-		return
-	}
-
-	val := strings.TrimSpace(e.fillIn.Value())
-	if val != "" {
-		rendered := e.Styles.Editor.QuestionUnselected.Render(val)
+	var rows []string
+	if editing {
+		e.fillIn.SetWidth(textWidth)
+		rows = strings.Split(e.fillIn.View(), "\n")
+	} else {
+		style := e.Styles.Editor.QuestionUnselected
 		if styleFilled {
-			rendered = e.Styles.Editor.QuestionSelected.Render(val)
+			style = e.Styles.Editor.QuestionSelected
 		}
-		*lines = append(*lines, contentLine{text: bar + fillPrefix + rendered, cursorItem: isActive, choiceIdx: -1})
-		return
+		text := e.Styles.Editor.QuestionBody.Render("Something else?")
+		if val := strings.TrimSpace(e.fillIn.Value()); val != "" {
+			text = style.Render(ansi.Wrap(val, textWidth, ""))
+		}
+		rows = strings.Split(text, "\n")
+		for len(rows) < fillInMinHeight {
+			rows = append(rows, "")
+		}
 	}
-	*lines = append(*lines, contentLine{text: bar + fillPrefix + bodyStyle.Render("Something else?"), cursorItem: isActive, choiceIdx: -1})
+
+	*lines = append(*lines, contentLine{text: bar + answerPad(e.Styles, boxWidth, true), cursorItem: isActive, choiceIdx: -1})
+	indent := strings.Repeat(" ", prefixWidth)
+	for j, row := range rows {
+		prefix := fillPrefix
+		if j > 0 {
+			prefix = indent
+		}
+		*lines = append(*lines, contentLine{text: bar + prefix + row, band: true, fillInRow: editing && j == 0, cursorItem: isActive, choiceIdx: -1})
+	}
+	*lines = append(*lines, contentLine{text: bar + answerPad(e.Styles, boxWidth, false), cursorItem: isActive, choiceIdx: -1})
+}
+
+// answerBand is the background of an answer box: the composer's band
+// color.
+func answerBand(sty *styles.Styles) color.Color {
+	return sty.Editor.Textarea.Focused.Base.GetBackground()
+}
+
+// answerPad returns a half-row of padding, width cells wide, for the top
+// (above the text) or bottom of an answer box. Half blocks in the band
+// color make the box thinner than the composer's full blank rows, so a
+// question's answer field doesn't read as the chat box.
+func answerPad(sty *styles.Styles, width int, top bool) string {
+	block := "▀"
+	if top {
+		block = "▄"
+	}
+	return lipgloss.NewStyle().Foreground(answerBand(sty)).Render(strings.Repeat(block, max(0, width)))
+}
+
+// answerBar is the gutter bar beside an answer box, lit while the box is
+// the active item.
+func answerBar(sty *styles.Styles, active bool) string {
+	if active {
+		return sty.Editor.QuestionCursorBar.Render("┃ ")
+	}
+	return strings.Repeat(" ", questionBarWidth)
 }
 
 // drawNote appends note rows to lines for the given key. When the
@@ -174,7 +227,7 @@ func (e *questionEditor) drawNote(lines *[]contentLine, innerWidth int, bar, bar
 
 	if isEditing && e.noteEditor.Focused() {
 		prefixWidth := lipgloss.Width(notePrefix)
-		e.noteEditor.SetWidth(innerWidth - 2 - prefixWidth)
+		e.noteEditor.SetWidth(innerWidth - questionBarWidth - prefixWidth)
 		indent := strings.Repeat(" ", prefixWidth)
 		for j, tl := range strings.Split(e.noteEditor.View(), "\n") {
 			text := bar + notePrefix + tl
@@ -194,33 +247,33 @@ func (e *questionEditor) drawNote(lines *[]contentLine, innerWidth int, bar, bar
 	}
 }
 
-// fillInCursor returns the hardware cursor position for the fill-in
-// textarea when it's focused. areaMinX is the left edge of the
-// content area; prefixWidth is the visual width of the "> " prompt.
-func (e *questionEditor) fillInCursor(screenRow, areaMinX, prefixWidth int) *tea.Cursor {
+// fillInCursor returns the cursor position, relative to the content
+// area, for the fill-in textarea when it's focused. screenRow is the
+// row of its first line; prefixWidth is the width of the prompt between
+// the gutter bar and the text.
+func (e *questionEditor) fillInCursor(screenRow, prefixWidth int) *tea.Cursor {
 	if !e.fillIn.Focused() {
 		return nil
 	}
-	tc := e.fillIn.Cursor()
-	if tc == nil {
-		return nil
-	}
-	tc.X += areaMinX + 1 + prefixWidth
-	tc.Y += screenRow
-	return tc
+	return textareaCursor(e.fillIn.Cursor(), screenRow, prefixWidth)
 }
 
-// noteCursor returns the hardware cursor position for the note
-// editor when it's focused.
-func (e *questionEditor) noteCursor(screenRow, areaMinX, prefixWidth int) *tea.Cursor {
+// noteCursor returns the cursor position for the note editor when it's
+// focused, like fillInCursor.
+func (e *questionEditor) noteCursor(screenRow, prefixWidth int) *tea.Cursor {
 	if !e.noteEditor.Focused() {
 		return nil
 	}
-	tc := e.noteEditor.Cursor()
+	return textareaCursor(e.noteEditor.Cursor(), screenRow, prefixWidth)
+}
+
+// textareaCursor moves a textarea's cursor past the gutter bar and the
+// prompt to where its text is drawn.
+func textareaCursor(tc *tea.Cursor, screenRow, prefixWidth int) *tea.Cursor {
 	if tc == nil {
 		return nil
 	}
-	tc.X += areaMinX + 1 + prefixWidth
+	tc.X += questionBarWidth + prefixWidth
 	tc.Y += screenRow
 	return tc
 }

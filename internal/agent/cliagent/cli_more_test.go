@@ -4,10 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,15 +125,16 @@ cat >/dev/null
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	guard := `"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":` + strconv.Quote(secretguard.HookCommand()) + `,"timeout":10}]}]}`
 	for _, tc := range []struct {
 		tier      string
 		ultracode bool
 		settings  string
 	}{
-		{"", false, ""},
-		{"fast", false, `{"fastMode":true}`},
-		{"", true, `{"ultracode":true}`},
-		{"fast", true, `{"fastMode":true,"ultracode":true}`},
+		{"", false, `{` + guard + `}`},
+		{"fast", false, `{"fastMode":true,` + guard + `}`},
+		{"", true, `{"ultracode":true,` + guard + `}`},
+		{"fast", true, `{"fastMode":true,"ultracode":true,` + guard + `}`},
 	} {
 		model := &Model{Kind: config.TypeClaudeCode, ID: "opus", Dir: dir, ServiceTier: tc.tier, Ultracode: tc.ultracode}
 		require.NoError(t, model.Run(t.Context(), Turn{Prompt: "hi", NoTools: true, Emit: func(Event) error { return nil }}))
@@ -139,10 +142,6 @@ cat >/dev/null
 		require.NoError(t, err)
 		args := strings.Split(strings.TrimSpace(string(data)), "\n")
 		i := slices.Index(args, "--settings")
-		if tc.settings == "" {
-			require.Equal(t, -1, i)
-			continue
-		}
 		require.Greater(t, i, -1)
 		require.JSONEq(t, tc.settings, args[i+1])
 	}

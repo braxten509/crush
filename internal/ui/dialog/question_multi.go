@@ -213,10 +213,8 @@ func (d *MultiChoice) HandleMouseClick(x, y int) (bool, bool) {
 // Draw renders the multi-choice question directly to screen.
 // Returns the cursor position relative to area, or nil.
 func (d *MultiChoice) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
-	fillPrefix := d.Styles.Editor.QuestionBody.Render("> ")
-	if strings.TrimSpace(d.fillIn.Value()) != "" {
-		fillPrefix = d.Styles.Editor.QuestionSelected.Render("> ")
-	}
+	// One cell of padding inside the answer box, before the text.
+	const fillPrefix = " "
 
 	unselectedHeader := d.Styles.Editor.QuestionUnselected
 	selectedStyle := d.Styles.Editor.QuestionSelected

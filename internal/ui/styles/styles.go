@@ -108,6 +108,8 @@ type Styles struct {
 	Markdown      ansi.StyleConfig
 	QuietMarkdown ansi.StyleConfig
 	PlanMarkdown  ansi.StyleConfig
+	// QuestionMarkdown renders question descriptions, dimmed.
+	QuestionMarkdown ansi.StyleConfig
 
 	// Inputs
 	TextInput textinput.Styles
@@ -711,6 +713,7 @@ func (s *Styles) Clone() Styles {
 	clone := *s
 	clone.Markdown = cloneStyleConfig(s.Markdown)
 	clone.QuietMarkdown = cloneStyleConfig(s.QuietMarkdown)
+	clone.QuestionMarkdown = cloneStyleConfig(s.QuestionMarkdown)
 	return clone
 }
 

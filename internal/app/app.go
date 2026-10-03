@@ -926,11 +926,12 @@ func (app *App) Subscribe(program *tea.Program) {
 	})
 	defer app.tuiWG.Done()
 
-	detachSecureEntry := secureentry.Attach(func(r *secureentry.Request) { program.Send(r) })
-	defer detachSecureEntry()
 	detachSecureForms := secureentry.AttachForms(func(form *secureentry.Form) { program.Send(form) })
 	defer detachSecureForms()
 	events := app.events.Subscribe(tuiCtx)
+	// Now that the TUI hears task events, resume the sub-agents an earlier
+	// Crush left unfinished.
+	agent.ResumeInterruptedTasks()
 	for {
 		select {
 		case <-tuiCtx.Done():

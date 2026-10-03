@@ -185,14 +185,14 @@ func TestMultiChoiceToggleAdoptsHover(t *testing.T) {
 // where only layout (not label content) matters.
 func placeholderItem(int, question.Choice, bool, int) string { return "x" }
 
-// fillInRowText builds the choice list and returns the first fill-in
-// row's rendered text.
+// fillInRowText builds the choice list and returns the rendered text of
+// the fill-in's first text row, below its blank band row.
 func fillInRowText(t *testing.T, d *SingleChoice, prefix string) string {
 	t.Helper()
 	lines := d.buildLines(40, prefix, placeholderItem)
 	require.GreaterOrEqual(t, d.fillInTop, 0)
-	require.Less(t, d.fillInTop, len(lines))
-	return lines[d.fillInTop].text
+	require.Less(t, d.fillInTop+1, len(lines))
+	return lines[d.fillInTop+1].text
 }
 
 // TestFillInPrefixIsThreadedThrough verifies the prompt string a

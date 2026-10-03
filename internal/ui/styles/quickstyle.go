@@ -469,6 +469,12 @@ func quickStyle(o quickStyleOpts) Styles {
 	planMD.CodeBlock.Color = hex(o.fgBase)
 	s.PlanMarkdown = planMD
 
+	// QuestionMarkdown is the reply markdown with dimmed body text, for a
+	// question's description, so it reads as secondary to the question.
+	questionMD := s.Markdown
+	questionMD.Document.Color = hex(o.fgMoreSubtle)
+	s.QuestionMarkdown = questionMD
+
 	// QuietMarkdown style - muted colors on subtle background for thinking content.
 	plainBg := hex(o.bgLeastVisible)
 	plainFg := hex(o.fgMoreSubtle)
@@ -862,12 +868,11 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Editor.PromptBangIconBlurred = promptMark(o.fgBase, "!")
 	s.Editor.PromptBangDotsFocused = promptRest
 	s.Editor.PromptBangDotsBlurred = promptRest
-	// Question forms replace the composer. Their "?" sits in the same
-	// 2-cell column as the composer's mark, as plain colored text: a chip
-	// background made it read as a button and pushed the title out of the
-	// text column.
-	s.Editor.PromptQuestionIconFocused = lipgloss.NewStyle().Foreground(o.primary).Bold(true).SetString("? ")
-	s.Editor.PromptQuestionIconBlurred = lipgloss.NewStyle().Foreground(o.fgBase).Bold(true).SetString("? ")
+	// Question forms replace the composer. Their "?" sits on a colored
+	// tag, as in the original Crush, so an open question stands out from
+	// the chat around it.
+	s.Editor.PromptQuestionIconFocused = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.primary).Bold(true).SetString(" ? ")
+	s.Editor.PromptQuestionIconBlurred = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.bgLessVisible).Bold(true).SetString(" ? ")
 	s.Editor.QuestionSelected = lipgloss.NewStyle().Foreground(o.secondary).Bold(true)
 	s.Editor.QuestionUnselected = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Editor.QuestionBody = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)

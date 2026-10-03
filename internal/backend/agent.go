@@ -159,7 +159,11 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID string, interactive
 	}
 
 	if interactive {
-		return ws.InitCoderAgent(ctx)
+		if err := ws.InitCoderAgent(ctx); err != nil {
+			return err
+		}
+		agent.ResumeInterruptedTasks()
+		return nil
 	}
 	return ws.InitCoderAgentNonInteractive(ctx)
 }

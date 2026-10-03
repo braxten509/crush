@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/secretguard"
 )
 
 // Claude Code's stream-json protocol, as used by its Agent SDKs: Messages
@@ -263,18 +264,20 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 		args = append(args, "--effort", key.effort)
 	}
 	// Claude Code has no flags for these; headless runs opt in through
-	// settings.
-	settings := map[string]bool{}
+	// settings. Its hooks from other settings files still run beside
+	// Crush's secrets guard.
+	settings := map[string]any{"hooks": map[string]any{"PreToolUse": []any{map[string]any{
+		"matcher": "*",
+		"hooks":   []any{map[string]any{"type": "command", "command": secretguard.HookCommand(), "timeout": 10}},
+	}}}}
 	if key.fast {
 		settings["fastMode"] = true
 	}
 	if key.ultracode {
 		settings["ultracode"] = true
 	}
-	if len(settings) > 0 {
-		b, _ := json.Marshal(settings)
-		args = append(args, "--settings", string(b))
-	}
+	b, _ := json.Marshal(settings)
+	args = append(args, "--settings", string(b))
 	if t.Resume != "" {
 		args = append(args, "--resume", t.Resume)
 	}

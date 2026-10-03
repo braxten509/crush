@@ -47,15 +47,17 @@ func (m *UI) appendPendingPrompt(sessionID, content string, attachments []messag
 // when an interrupt sends them now.
 func (m *UI) releaseHeldPrompts() {
 	released := false
-	for i := range m.pendingPrompts {
-		pending := &m.pendingPrompts[i]
+	for _, pending := range m.pendingPrompts {
 		if pending.SessionID != m.currentSessionID() || !m.heldPrompts[pending.ID] {
 			continue
 		}
 		delete(m.heldPrompts, pending.ID)
 		m.chat.BeginInput(pending.ID)
 		m.lastUserMessageTime = time.Now().Unix()
-		m.chat.AppendMessages(chat.ExtractMessageItems(m.com.Styles, pending, nil, m.com.Workspace.WorkingDir())...)
+		// The chat item keeps its own copy: an item pointing into
+		// pendingPrompts would change ID once the saved copy removes its
+		// entry, so the saved copy could not replace it.
+		m.chat.AppendMessages(chat.ExtractMessageItems(m.com.Styles, &pending, nil, m.com.Workspace.WorkingDir())...)
 		released = true
 	}
 	if released {

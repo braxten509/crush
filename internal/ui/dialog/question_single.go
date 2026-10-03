@@ -198,14 +198,8 @@ func (d *SingleChoice) HandleMouseClick(x, y int) (bool, bool) {
 // Draw renders the single-choice question directly to screen.
 // Returns the cursor position relative to area, or nil.
 func (d *SingleChoice) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
-	// The fill-in prompt goes pink when the fill-in is the selected
-	// item, mirroring how a selected choice's label is styled. This
-	// lets the pink prompt carry the selection so the gutter bar
-	// doesn't have to stay lit for it.
-	fillPrefix := d.Styles.Editor.QuestionBody.Render("> ")
-	if d.isFillIn() {
-		fillPrefix = d.Styles.Editor.QuestionSelected.Render("> ")
-	}
+	// One cell of padding inside the answer box, before the text.
+	const fillPrefix = " "
 
 	unselectedHeader := d.Styles.Editor.QuestionUnselected
 	selectedStyle := d.Styles.Editor.QuestionSelected

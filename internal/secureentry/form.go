@@ -91,8 +91,6 @@ var errChanged = errors.New("destination changed; cancel and ask again")
 
 func (*Form) String() string { return "secure question form" }
 
-func (f *Form) abort() { f.Cancel() }
-
 // AttachForms connects the local TUI for secure question forms.
 func AttachForms(deliver func(*Form)) func() {
 	broker.Lock()
@@ -103,8 +101,8 @@ func AttachForms(deliver func(*Form)) func() {
 		broker.deliverForm = nil
 		pending := broker.pending
 		broker.Unlock()
-		if form, ok := pending.(*Form); ok {
-			form.Cancel()
+		if pending != nil {
+			pending.Cancel()
 		}
 	}
 }
@@ -372,7 +370,7 @@ func (f *Form) finishLocked(answers []question.Answer, cancelled bool) {
 	}
 	f.closeFiles()
 	broker.Lock()
-	if pending, ok := broker.pending.(*Form); ok && pending == f {
+	if broker.pending == f {
 		broker.pending = nil
 	}
 	broker.Unlock()

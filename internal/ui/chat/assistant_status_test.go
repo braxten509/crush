@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/message"
@@ -100,4 +101,27 @@ func TestCompactionShowsOnlyStatus(t *testing.T) {
 			require.Empty(t, item.CopySource())
 		}
 	}
+}
+
+// A step cancelled after calling tools has nothing of its own to show (its
+// tools report the interruption), so it folds into their group instead of
+// leaving a blank row. One cancelled before doing anything keeps its
+// "Canceled" banner.
+func TestCanceledToolStepFolds(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	withTools := &message.Message{ID: "tools", Role: message.Assistant, Parts: []message.ContentPart{
+		message.ToolCall{ID: "call", Name: "bash", Input: "{}", Finished: true},
+		message.Finish{Reason: message.FinishReasonCanceled},
+	}}
+	item := NewAssistantMessageItem(&sty, withTools)
+	require.Empty(t, strings.TrimSpace(ansi.Strip(item.Render(80))), "nothing of its own to show")
+	require.True(t, Foldable(item))
+
+	bare := &message.Message{ID: "bare", Role: message.Assistant, Parts: []message.ContentPart{
+		message.Finish{Reason: message.FinishReasonCanceled},
+	}}
+	item = NewAssistantMessageItem(&sty, bare)
+	require.Contains(t, ansi.Strip(item.Render(80)), "Canceled")
+	require.False(t, Foldable(item))
 }

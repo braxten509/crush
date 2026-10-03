@@ -297,9 +297,6 @@ func (m *UI) drawSubagentView(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	button := t.ComposerFooter.Accent.Underline(v.returnFocused).Render("← Return to parent")
 	button += t.ComposerFooter.Text.Render("  esc")
 	uv.NewStyledString(ansi.Truncate(button, back.Dx(), "…")).Draw(scr, back)
-	if m.secureDialog != nil {
-		return m.secureDialog.Draw(scr, area)
-	}
 	if m.dialog.HasDialogs() {
 		return m.dialog.Draw(scr, area)
 	}

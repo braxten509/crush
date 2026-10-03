@@ -294,7 +294,6 @@ type UI struct {
 	keyenh tea.KeyboardEnhancementsMsg
 
 	dialog       *dialog.Overlay
-	secureDialog *dialog.SecureEntry
 	status       *Status
 
 	// bangMode tracks whether the editor is in bang (!) shell mode.
@@ -888,34 +887,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case *secureentry.Form:
 		return m, m.openSecureQuestionForm(typed)
-	case *secureentry.Request:
-		if m.secureDialog != nil {
-			return m, func() tea.Msg { typed.Finish(false); return nil }
-		}
-		m.secureDialog = dialog.NewSecureEntry(m.com, typed)
-		return m, nil
-	case dialog.SecureEntrySaved:
-		if m.secureDialog != nil && m.secureDialog.Saved(typed) {
-			m.secureDialog = nil
-			return m, func() tea.Msg { typed.Request.Finish(true); return nil }
-		}
-		return m, nil
-	case dialog.SecureEntryPaste:
-		if m.secureDialog == nil {
-			clear(typed.Value)
-			return m, nil
-		}
-	}
-	if m.secureDialog != nil {
-		switch msg.(type) {
-		case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.PasteMsg, dialog.SecureEntryPaste,
-			tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseMotionMsg, tea.MouseWheelMsg:
-			done, cmd := m.secureDialog.Handle(msg)
-			if done {
-				m.secureDialog = nil
-			}
-			return m, cmd
-		}
 	}
 	if form, ok := m.activeInline.(*dialog.QuestionForm); ok && form.HasSecureEntry() && form.SecureEntryActive() && (m.focus != uiFocusEditor || m.dialog.HasDialogs()) {
 		switch typed := msg.(type) {
@@ -3799,10 +3770,6 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			Min: image.Pt(4, 1),
 			Max: image.Pt(8, 3),
 		})
-	}
-
-	if m.secureDialog != nil {
-		return m.secureDialog.Draw(scr, scr.Bounds())
 	}
 
 	// This needs to come last to overlay on top of everything. We always pass

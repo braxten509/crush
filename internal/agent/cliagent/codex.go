@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/charmbracelet/crush/internal/version"
 	"mvdan.cc/sh/v3/shell"
 )
@@ -100,7 +101,48 @@ const (
 	codexInitID   = "1"
 	codexThreadID = "2"
 	codexTurnID   = "3"
+	// Listing hooks and trusting Crush's secrets guard, between
+	// initializing and starting the thread.
+	codexHooksID = "hooks"
+	codexTrustID = "hooks-trust"
 )
+
+// codexGuardHook adds Crush's secrets guard as a PreToolUse hook through a
+// session flag, which Codex reads like its config.toml.
+func codexGuardHook() string {
+	return fmt.Sprintf(`hooks.PreToolUse=[{matcher=".*",hooks=[{type="command",command=%s,timeout=10,statusMessage="Checking secrets"}]}]`, strconv.Quote(secretguard.HookCommand()))
+}
+
+// codexGuardTrust returns the request that trusts Crush's secrets guard, or
+// nil when it is trusted already. Codex skips new hooks until they are
+// trusted, and it records trust by the hook's hash, so only this exact
+// command is trusted.
+func codexGuardTrust(result json.RawMessage) map[string]any {
+	var res struct {
+		Data []struct {
+			Hooks []struct {
+				Key         string `json:"key"`
+				Command     string `json:"command"`
+				Source      string `json:"source"`
+				CurrentHash string `json:"currentHash"`
+				TrustStatus string `json:"trustStatus"`
+			} `json:"hooks"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(result, &res)
+	for _, d := range res.Data {
+		for _, h := range d.Hooks {
+			if h.Source == "sessionFlags" && h.Command == secretguard.HookCommand() && h.TrustStatus != "trusted" && h.CurrentHash != "" {
+				return map[string]any{"id": codexTrustID, "method": "config/value/write", "params": map[string]any{
+					"keyPath":       fmt.Sprintf("hooks.state.%s.trusted_hash", strconv.Quote(h.Key)),
+					"value":         h.CurrentHash,
+					"mergeStrategy": "replace",
+				}}
+			}
+		}
+	}
+	return nil
+}
 
 // codexKey is what a live Codex process's thread was started with; a turn
 // that needs anything else starts a new one.
@@ -229,7 +271,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	} else {
 		// Crush hands every CLI the shared memory; Codex's own stays off.
 		var err error
-		args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0"}
+		args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0", "-c", codexGuardHook()}
 		if m.AutoCompactTokenLimit > 0 {
 			args = append(args, "-c", fmt.Sprintf("model_auto_compact_token_limit=%d", m.AutoCompactTokenLimit))
 		}
@@ -293,6 +335,19 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			params["serviceTier"] = m.ServiceTier
 		}
 		_ = p.send(map[string]any{"id": codexTurnID, "method": "turn/start", "params": params})
+	}
+	startThread := func() {
+		params := map[string]any{"cwd": m.Dir, "model": m.ID, "approvalPolicy": approval, "sandbox": sandbox}
+		if m.ServiceTier != "" {
+			params["serviceTier"] = m.ServiceTier
+		}
+		method := "thread/start"
+		if t.Resume != "" {
+			method, params["threadId"] = "thread/resume", t.Resume
+		} else if t.NoTools {
+			params["ephemeral"] = true
+		}
+		_ = p.send(map[string]any{"id": codexThreadID, "method": method, "params": params})
 	}
 	if live != nil {
 		if err := t.Emit(Event{Type: EventSession, Session: threadID}); err != nil {
@@ -408,6 +463,18 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			startTurn([]any{map[string]any{"type": "text", "text": codexCtrlB(sessions), "text_elements": []any{}}})
 			continue
 		}
+		if msg.Method == "" && (id == codexHooksID || id == codexTrustID) {
+			// A Codex without hooks still runs; Crush's own checks remain.
+			if msg.Error != nil {
+				slog.Warn("Codex did not take Crush's secrets guard", "error", msg.Error.Message)
+			}
+			if trust := codexGuardTrust(msg.Result); id == codexHooksID && msg.Error == nil && trust != nil {
+				_ = p.send(trust)
+			} else {
+				startThread()
+			}
+			continue
+		}
 		if msg.Method == "" {
 			if strings.HasPrefix(id, "steer-") {
 				// A steer that missed the turn is never confirmed, so it
@@ -426,17 +493,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			switch id {
 			case codexInitID:
 				_ = p.send(map[string]any{"method": "initialized"})
-				params := map[string]any{"cwd": m.Dir, "model": m.ID, "approvalPolicy": approval, "sandbox": sandbox}
-				if m.ServiceTier != "" {
-					params["serviceTier"] = m.ServiceTier
-				}
-				method := "thread/start"
-				if t.Resume != "" {
-					method, params["threadId"] = "thread/resume", t.Resume
-				} else if t.NoTools {
-					params["ephemeral"] = true
-				}
-				_ = p.send(map[string]any{"id": codexThreadID, "method": method, "params": params})
+				_ = p.send(map[string]any{"id": codexHooksID, "method": "hooks/list", "params": map[string]any{"cwds": []string{m.Dir}}})
 			case codexThreadID:
 				var res struct {
 					Thread struct {

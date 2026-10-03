@@ -12,9 +12,10 @@ import (
 
 var secureEntryCmd = &cobra.Command{
 	Use:   "secure-entry --file PATH",
-	Short: "Open a local masked dialog that writes a secret directly into a file",
-	Long: `Open a local masked dialog. The file must already contain a literal placeholder (default %s).
-One occurrence is replaced per dialog. No entered value is returned to the agent,
+	Short: "Ask for one secret in the question form and write it directly into a file",
+	Long: `Show a masked field in Crush's question form, like a one-question "crush ask" with a
+secure_entry question. The file must already contain a literal placeholder (default %s).
+One occurrence is replaced per entry. No entered value is returned to the agent,
 written to request files, or sent through question, chat, or remote APIs.
 Replacement is literal; prepare the surrounding file format beforehand.
 The destination is saved with owner-only permissions (0600).
@@ -45,7 +46,7 @@ programs running as your user from later reading the saved file.`,
 		if reply.Error != "" {
 			return errors.New(reply.Error)
 		}
-		cmd.Println("Secure entry is open in the local Crush terminal. End your turn; only saved/cancelled status will return as a Secure entry task result. Never read or print the destination file after entry.")
+		cmd.Println("The secure entry is open in the Crush question form. End your turn; only its saved/cancelled status returns, as a task result named \"Questions\". Never read or print the destination file after entry.")
 		return nil
 	},
 }

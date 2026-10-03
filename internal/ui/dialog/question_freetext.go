@@ -36,10 +36,9 @@ type FreeText struct {
 // freeTextMinEditorHeight and freeTextMaxEditorHeight bound the
 // answer textarea. It starts at the minimum and, when the form has
 // taller sibling tabs, grows at draw time to fill the shared form
-// height, capped at the maximum. With the blank band row above it,
-// the minimum makes the same 3-row band as the composer.
+// height, capped at the maximum.
 const (
-	freeTextMinEditorHeight = 2
+	freeTextMinEditorHeight = 1
 	freeTextMaxEditorHeight = 6
 )
 
@@ -126,7 +125,7 @@ func (d *FreeText) Height(width int) int {
 		h += strings.Count(questionDescription(d.Styles, d.Request.Description, w), "\n") + 1
 		h++ // blank
 	}
-	h++                          // blank band row above the answer
+	h += 2                       // the answer box's top and bottom padding
 	h += freeTextMinEditorHeight // textarea (minimum; grows to fill at draw time)
 	h++                          // trailing blank for bottom padding
 	return h
@@ -143,14 +142,11 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	d.lastWidth = area.Dx()
 	viewport := area.Dy()
 
-	// The answer field is drawn like the composer: a full-width band
-	// with the "›" mark in the 2-cell gutter and the text after it.
-	mark, rest := d.Styles.Editor.PromptNormalIconBlurred.Render(), d.Styles.Editor.PromptNormalBlurred.Render()
-	if d.focused {
-		mark, rest = d.Styles.Editor.PromptNormalIconFocused.Render(), d.Styles.Editor.PromptNormalFocused.Render()
-	}
-	prefixWidth := lipgloss.Width(mark)
-	band := d.Styles.Editor.Textarea.Focused.Base.GetBackground()
+	// The answer field is a thin box beside the gutter bar (see
+	// answerPad), with one cell of padding before the text.
+	bar := answerBar(d.Styles, d.focused)
+	const textLeft = questionBarWidth + 1
+	band := answerBand(d.Styles)
 	iconPrompt := questionIconPrompt(d.Styles, d.focused)
 	iconWidth := lipgloss.Width(iconPrompt)
 
@@ -159,7 +155,7 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	type ftLine struct {
 		text    string
 		cursorX int
-		band    bool // paint the answer band across the whole row
+		band    bool // paint the answer band from the box's left edge
 	}
 
 	// build renders the full content (header, description, textarea)
@@ -186,25 +182,23 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 		// Grow the textarea to fill the form height, bounded by the
 		// min and max editor heights.
-		lines = append(lines, ftLine{cursorX: -1, band: true}) // blank band row
+		boxWidth := contentWidth - questionBarWidth
+		lines = append(lines, ftLine{text: bar + answerPad(d.Styles, boxWidth, true), cursorX: -1})
 		headerLines := len(lines)
-		fill := viewport - headerLines - 1 // -1 for trailing padding
+		fill := viewport - headerLines - 2 // -2 for the box's bottom padding and the trailing blank
 		available := min(freeTextMaxEditorHeight, max(freeTextMinEditorHeight, fill))
 		d.editor.SetHeight(available)
-		d.editor.SetWidth(contentWidth - 2 - prefixWidth)
+		d.editor.SetWidth(boxWidth - 2) // a cell of padding on each side
 		tc := d.editor.Cursor()
 		for j, ln := range strings.Split(d.editor.View(), "\n") {
-			text := rest + ln
-			if j == 0 {
-				text = mark + ln
-			}
 			cursorX := -1
 			if tc != nil && tc.Y == j {
 				cursorRow = len(lines)
-				cursorX = tc.X + prefixWidth
+				cursorX = tc.X + textLeft
 			}
-			lines = append(lines, ftLine{text: text, cursorX: cursorX, band: true})
+			lines = append(lines, ftLine{text: bar + " " + ln, cursorX: cursorX, band: true})
 		}
+		lines = append(lines, ftLine{text: bar + answerPad(d.Styles, boxWidth, false), cursorX: -1})
 		lines = append(lines, ftLine{cursorX: -1}) // trailing bottom padding, matches Height()
 		return lines, cursorRow
 	}
@@ -248,7 +242,7 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		if ln.band {
 			// Cells the text left bare (padding, the empty rows, the
 			// right edge) take the band color too.
-			for x := area.Min.X; x < area.Max.X; x++ {
+			for x := area.Min.X + questionBarWidth; x < area.Min.X+contentWidth; x++ {
 				cell := scr.CellAt(x, y)
 				if cell == nil {
 					fill := uv.EmptyCell

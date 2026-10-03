@@ -223,14 +223,14 @@ func (p *PlanHandoffInline) Height(width int) int {
 	if !p.editing {
 		return p.choiceLayout(width).height
 	}
-	iconPrompt := questionIconPrompt(p.com.Styles, p.focused)
+	iconPrompt := questionBadge(p.com.Styles, p.focused)
 	return sectionHeight(planHandoffFeedbackPrompt, max(1, width-planHandoffIndent-lipgloss.Width(iconPrompt))) +
 		1 + p.editor.Height() + 1
 }
 
 func (p *PlanHandoffInline) choiceLayout(width int) planHandoffChoiceLayout {
 	width = max(1, width)
-	iconPrompt := questionIconPrompt(p.com.Styles, p.focused)
+	iconPrompt := questionBadge(p.com.Styles, p.focused)
 	iconWidth := lipgloss.Width(iconPrompt)
 	question := iconPrompt + p.com.Styles.Editor.QuestionUnselected.Render(
 		ansi.Wrap(planHandoffQuestion, max(1, width-planHandoffIndent-iconWidth), ""),
@@ -309,7 +309,7 @@ func (p *PlanHandoffInline) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 func (p *PlanHandoffInline) drawEditor(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	y := area.Min.Y
-	iconPrompt := questionIconPrompt(p.com.Styles, p.focused)
+	iconPrompt := questionBadge(p.com.Styles, p.focused)
 	iconWidth := lipgloss.Width(iconPrompt)
 	blockX := area.Min.X + planHandoffIndent
 	questionText := p.com.Styles.Editor.QuestionUnselected.Render(

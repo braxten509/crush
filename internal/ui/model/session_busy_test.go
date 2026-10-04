@@ -111,6 +111,8 @@ func (w *countingWorkspace) ListUserMessages(context.Context, string) ([]message
 
 func (w *countingWorkspace) WorkingDir() string { return "" }
 
+func (w *countingWorkspace) GitBranch() string { return "" }
+
 func (w *countingWorkspace) LSPStart(context.Context, string) {}
 
 func (w *countingWorkspace) Config() *config.Config { return nil }

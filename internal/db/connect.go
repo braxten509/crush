@@ -160,7 +160,9 @@ func Connect(ctx context.Context, dataDir string, opts ...ConnectOption) (*sql.D
 		return nil, fmt.Errorf("failed to initialize goose: %w", err)
 	}
 
-	if err := goose.Up(conn, "migrations"); err != nil {
+	// An upstream merge can add migrations dated before fork migrations
+	// already applied to saved chats. Apply those missing upgrades too.
+	if err := goose.UpContext(ctx, conn, "migrations", goose.WithAllowMissing()); err != nil {
 		conn.Close()
 		releaseLock()
 		slog.Error("Failed to apply migrations", "error", err)

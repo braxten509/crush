@@ -233,6 +233,9 @@ type UI struct {
 	remotePresence remote.Presence
 	remotePhones   []string
 	remoteStarting bool
+	// remoteQuiet: the share was asked for by the phone's launcher, so it
+	// starts without opening the Remote Control dialog over the new window.
+	remoteQuiet bool
 
 	// relaunchDir is set when the user opens another project; the caller
 	// restarts Crush there after the program exits.
@@ -667,6 +670,16 @@ func (m *UI) Init() tea.Cmd {
 	// Prime the memoized LSP state off-thread.
 	if cmd := m.requestLSPRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+	// Opened from the phone (crush remote launcher): share this window at once.
+	// The variable is cleared so nothing started from here inherits it.
+	if id := os.Getenv(remote.LaunchEnv); id != "" {
+		_ = os.Unsetenv(remote.LaunchEnv)
+		remote.SetLaunchID(id)
+		m.remoteQuiet = true
+		if cmd := m.openRemote(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 	// load initial session if specified
 	initialSession := m.loadInitialSession()

@@ -214,7 +214,11 @@ func (s *Server) routes() http.Handler {
 type peerKey struct{}
 
 // guard lets only the owner's tailnet devices in.
-func (s *Server) guard(next http.Handler) http.Handler {
+func (s *Server) guard(next http.Handler) http.Handler { return guardWith(s.gate, next) }
+
+// guardWith refuses browser actions and anything from outside the owner's
+// own tailnet devices (g), for the shares and the launcher alike.
+func guardWith(g *gate, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
 			// The native phone client sends JSON without an Origin. There is
@@ -230,7 +234,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 				return
 			}
 		}
-		p, err := s.gate.check(r.Context(), r.RemoteAddr)
+		p, err := g.check(r.Context(), r.RemoteAddr)
 		if err != nil {
 			slog.Warn("Remote request refused", "from", r.RemoteAddr, "error", err)
 			http.Error(w, "forbidden", http.StatusForbidden)

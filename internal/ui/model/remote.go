@@ -63,7 +63,10 @@ func (m *UI) handleRemoteStarted(msg remoteStartedMsg) tea.Cmd {
 	m.remotePhones = nil
 	m.syncRemotePresence()
 	m.status.SetRemote(true)
-	m.openRemoteDialog()
+	if !m.remoteQuiet {
+		m.openRemoteDialog()
+	}
+	m.remoteQuiet = false
 	return m.waitRemote()
 }
 

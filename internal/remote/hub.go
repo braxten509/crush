@@ -536,6 +536,9 @@ type Share struct {
 	Model    string `json:"model,omitempty"`
 	Focused  bool   `json:"focused"`
 	Phones   int    `json:"phones"`
+	// Launch is the id the phone gave when it started this window from the
+	// launcher, so it can open the share it asked for.
+	Launch string `json:"launch,omitempty"`
 }
 
 type statusView struct {
@@ -731,6 +734,7 @@ func (h *hub) shareLocked() Share {
 		Session: cur,
 		Focused: h.presence.Focused,
 		Phones:  len(h.clients),
+		Launch:  LaunchID(),
 	}
 	if cur != "" {
 		s.Title = h.sess.Title

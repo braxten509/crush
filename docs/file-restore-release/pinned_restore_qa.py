@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Reopen the saved fixture chat and exercise restore/undo without model calls."""
 import json
+import fcntl
 import os
 import pathlib
 import shlex
@@ -40,6 +41,10 @@ def tree():
     send('/tree')
     wait_for(lambda: 'Session tree' in screen())
 
+# This saved chat and named fixture are shared by review workers.
+fixture_lock = (BASE / 'pinned-restore-qa.lock').open('a')
+fcntl.flock(fixture_lock, fcntl.LOCK_EX)
+
 config = BASE / 'native-config/crush.json'
 settings = json.loads(config.read_text())
 assert settings.get('options', {}).get('notifications') == 'disabled'
@@ -58,6 +63,19 @@ try:
     started = True
     wait_for(lambda: 'esc' in screen().lower() or 'Tree fixture' in screen())
     time.sleep(1)
+    # Every tree selection first asks about a summary. Its title remains
+    # visible while that question is open, so wait for the question itself.
+    tree()
+    keys(*(['Down'] * 20))
+    keys('Enter')
+    wait_for(lambda: 'Carry a summary' in screen())
+    keys('Enter')
+    wait_for(lambda: 'Restore files?' in screen() or 'Branch switched.' in screen())
+    if 'Restore files?' in screen():
+        keys('Right', 'Enter')  # Chat only; the fixture already holds tip bytes.
+        wait_for(lambda: 'Branch switched.' in screen())
+    wait_for(lambda: 'FILE_RESTORE_FIXTURE_REPLY' in screen())
+    time.sleep(.5)
     tree()
     keys(*(['Up'] * 20))
     keys('Enter')

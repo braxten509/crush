@@ -193,6 +193,15 @@ select the populated fixture chat and skip an unchanged branch switch (which
 correctly has no restore dialog). Its named detached terminal and disposable
 file were removed in `finally`. No new live-model call was needed.
 
+The repeatability follow-up passed twice consecutively in `056`
+(`pinned-repeat-check.txt`). The driver returns to the saved tip before testing
+restore, waits for the summary question instead of waiting for its still-visible
+tree title to disappear, and handles a tip switch without a restore dialog.
+A fixture lock serializes review workers using this saved chat. Earlier driver
+runs `052`/`053` timed out on the incorrect title check; both cleaned up. The
+fixture-occupied check also correctly refused an overlapping run. These were
+driver failures; the successful repeat runs used the same final executable.
+
 Platform runtime coverage is Linux only. Windows locking tests are present
 and compile, but were not executed on Windows. Directory descriptors prevent
 symlink redirection; they do not provide an atomic compare-and-swap against

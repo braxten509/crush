@@ -16,6 +16,9 @@ var (
 	// ldflags) it is derived from the executable's modification time, which
 	// changes on every recompilation.
 	BuildID = ""
+	// SourceDir is the fork checkout the build came from. The self-updater
+	// merges new upstream releases there.
+	SourceDir = ""
 )
 
 // A user may install crush using `go install github.com/charmbracelet/crush@latest`.

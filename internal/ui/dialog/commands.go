@@ -571,6 +571,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "sub_agents", "Sub-agents", "", ActionOpenDialog{SubAgentsID}).WithAliases("agents", "tasks", "stop"),
 		NewCommandItem(c.com.Styles, "remote", "Remote Control", "", ActionOpenDialog{RemoteID}).WithAliases("rc", "phone"),
 		NewCommandItem(c.com.Styles, "update_clis", "Update Agent CLIs", "", ActionCheckCLIUpdates{}).WithAliases("upgrade", "version"),
+		NewCommandItem(c.com.Styles, "update_crush", "Update Crush", "", ActionSelfUpdate{}).WithAliases("upgrade", "upstream", "release"),
 		NewCommandItem(c.com.Styles, "skills", "Skills", "", ActionOpenDialog{SkillsID}).WithAliases("install skills", "enable skills", "disable skills"),
 	)
 

@@ -30,10 +30,23 @@ type cliUpdatesInstalledMsg struct {
 	errs      []error
 }
 
-// cliUpdatePrompt is an open CLI update form and the updates it offers.
+// cliUpdatePrompt is an open update form (agent CLIs or Crush itself) and
+// the updates it offers.
 type cliUpdatePrompt struct {
 	form    *dialog.QuestionForm
 	updates []cliupdate.Update
+	// moved reports the offer in the status bar when a question takes the
+	// form's place. Unset for CLI updates.
+	moved func() tea.Cmd
+}
+
+// movePromptToStatus is called when an agent's question replaces the open
+// update form, so the offer moves to the status bar instead of vanishing.
+func (m *UI) movePromptToStatus() tea.Cmd {
+	if p := m.cliUpdatePrompt; p.moved != nil {
+		return p.moved()
+	}
+	return m.showCLIUpdatesAvailable(m.cliUpdatePrompt.updates)
 }
 
 // checkCLIUpdates looks for newer releases of the installed agent CLIs.

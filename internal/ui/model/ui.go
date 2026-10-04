@@ -48,6 +48,7 @@ import (
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/secureentry"
+	"github.com/charmbracelet/crush/internal/selfupdate"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/stringext"
@@ -342,6 +343,8 @@ type UI struct {
 	// cliUpdatePrompt is the CLI update form last opened, so agent
 	// questions don't mistake it for one of theirs.
 	cliUpdatePrompt *cliUpdatePrompt
+	// selfUpdateRunning is set while a Crush update merges, builds and tests.
+	selfUpdateRunning bool
 	// inlineCursor stores the cursor from the last inline editor
 	// Draw call, used by the cursor positioning logic below.
 	inlineCursor *tea.Cursor
@@ -647,7 +650,7 @@ func (m *UI) Init() tea.Cmd {
 	}
 	// load the user commands async
 	m.logoShineStart = time.Now()
-	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs(), m.checkCLIUpdates(false), m.logoShineTick())
+	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs(), m.checkCLIUpdates(false), m.checkSelfUpdate(false), m.logoShineTick())
 	// Prime the memoized LSP state off-thread.
 	if cmd := m.requestLSPRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -1644,6 +1647,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, clearInfoMsgCmd(ttl))
 	case app.UpdateAvailableMsg:
+		if selfupdate.Dir() != "" {
+			// Fork builds get the self-update offer instead.
+			break
+		}
 		text := fmt.Sprintf("Crush update available: v%s → v%s.", msg.CurrentVersion, msg.LatestVersion)
 		if msg.IsDevelopment {
 			text = fmt.Sprintf("This is a development version of Crush. The latest version is v%s.", msg.LatestVersion)
@@ -1657,6 +1664,12 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, clearInfoMsgCmd(ttl))
 	case cliUpdatesMsg:
 		cmds = append(cmds, m.handleCLIUpdates(msg))
+	case selfUpdateMsg:
+		cmds = append(cmds, m.handleSelfUpdate(msg))
+	case selfUpdateBuiltMsg:
+		cmds = append(cmds, m.handleSelfUpdateBuilt(msg))
+	case selfUpdateInstalledMsg:
+		cmds = append(cmds, m.handleSelfUpdateInstalled(msg))
 	case cliUpdatesInstalledMsg:
 		cmds = append(cmds, m.handleCLIUpdatesInstalled(msg))
 	case workspace.ConnectionEvent:
@@ -2304,6 +2317,9 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionCheckCLIUpdates:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.checkCLIUpdates(true))
+	case dialog.ActionSelfUpdate:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.checkSelfUpdate(true))
 	case dialog.ActionCustomizeComposer:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openComposerFooterForm()
@@ -5903,7 +5919,7 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 	if m.cliUpdatePromptOpen() {
 		// The question takes the editor; the CLI update offer moves to
 		// the status bar instead of vanishing.
-		cmd = m.showCLIUpdatesAvailable(m.cliUpdatePrompt.updates)
+		cmd = m.movePromptToStatus()
 		m.activeInline = nil
 	}
 	// Close any existing question form first to prevent stacking.

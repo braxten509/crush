@@ -27,7 +27,7 @@ func (m *UI) openSecureQuestionForm(form *secureentry.Form) tea.Cmd {
 	}
 	var cmd tea.Cmd
 	if m.cliUpdatePromptOpen() {
-		cmd = m.showCLIUpdatesAvailable(m.cliUpdatePrompt.updates)
+		cmd = m.movePromptToStatus()
 		m.activeInline = nil
 	}
 	m.dropQuestionForm()

@@ -65,6 +65,7 @@ type (
 	ActionToggleComposerFocusOnly     struct{}
 	ActionCustomizeComposer           struct{}
 	ActionCheckCLIUpdates             struct{}
+	ActionSelfUpdate                  struct{}
 	ActionToggleMouseSupport          struct{}
 	ActionSwitchTheme                 struct {
 		Theme string

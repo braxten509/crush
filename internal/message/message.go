@@ -251,16 +251,14 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 }
 
 func (s *service) DeleteSessionMessages(ctx context.Context, sessionID string) error {
-	messages, err := s.List(ctx, sessionID)
+	// Session deletion is intentionally across all branches, not just the view.
+	rows, err := s.q.ListMessagesBySession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
-	for _, message := range messages {
-		if message.SessionID == sessionID {
-			err = s.Delete(ctx, message.ID)
-			if err != nil {
-				return err
-			}
+	for _, row := range rows {
+		if err := s.Delete(ctx, row.ID); err != nil {
+			return err
 		}
 	}
 	return nil

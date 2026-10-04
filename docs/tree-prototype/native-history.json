@@ -1,0 +1,18 @@
+[
+  [
+    "ROOT: remember the word amber. Reply OK only. No tools."
+  ],
+  [
+    "ROOT: remember the word amber. Reply OK only. No tools.",
+    "OLD: remember violet. Reply OK only. No tools."
+  ],
+  [
+    "ROOT: remember the word amber. Reply OK only. No tools.",
+    "NEW: remember cobalt. Reply OK only. No tools."
+  ],
+  [
+    "ROOT: remember the word amber. Reply OK only. No tools.",
+    "OLD: remember violet. Reply OK only. No tools.",
+    "RETURN: reply OK only. No tools."
+  ]
+]

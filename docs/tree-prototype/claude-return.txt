@@ -1,0 +1,36 @@
+
+
+› ROOT: remember amber. Reply OK only. Do not use tools.
+
+
+• OK
+
+  ◇ Claude Haiku via Claude Code in 10s
+
+
+› OLD: remember violet. Reply OK only. Do not use tools.
+
+
+• OK
+
+  ◇ Claude Haiku via Claude Code in 3s
+
+
+› RETURN: no tools. List only the color words I asked you to remember earlier.
+
+
+• Amber and violet.
+
+  ◇ Claude Haiku via Claude Code in 4s
+
+
+
+
+
+
+
+› Go crazy
+
+
+[usage footer omitted]
+  YOLO MODE

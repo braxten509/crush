@@ -1,0 +1,36 @@
+
+
+› ROOT: remember the word amber. Reply OK only. No tools.
+
+
+• TREE_FIXTURE_REPLY
+
+  ◇ Tree fixture via╭────────────────────────────────────────────────────────────────────╮
+                    │ Session tree ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+                    │                                                                    │
+› OLD: remember viol│ > Search branches                                                  │
+                    │                                                                    │
+                    │   user: ROOT: remember the word amber. Reply OK only. No tools.    │
+• TREE_FIXTURE_REPLY│     assistant: TREE_FIXTURE_REPLY                                  │
+                    │       user: OLD: remember violet. Reply OK only. No tools.         │
+  ◇ Tree fixture via│         assistant: [original] TREE_FIXTURE_REPLY                   │
+                    │           user: RETURN: reply OK only. No tools.                   │
+                    │ *           assistant: TREE_FIXTURE_REPLY                          │
+› RETURN: reply OK o│     user: NEW: remember cobalt. Reply OK only. No tools.           │
+                    │       assistant: TREE_FIXTURE_REPLY                                │
+                    │                                                                    │
+• TREE_FIXTURE_REPLY│                                                                    │
+                    │                                                                    │
+  ◇ Tree fixture via│                                                                    │
+                    │                                                                    │
+                    │ Files stay as they are. Continue after selected entry.             │
+                    │                                                                    │
+                    │ ↑↓ choose  enter jump  ctrl+r bookmark  esc close                  │
+                    │                                                                    │
+                    ╰────────────────────────────────────────────────────────────────────╯
+
+› Go crazy
+
+
+  Tree fixture · 9.74k/400k tokens · Context 98% left
+  YOLO MODE

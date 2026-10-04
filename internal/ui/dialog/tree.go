@@ -66,7 +66,6 @@ func (d *Tree) rebuild() {
 	walk("", 0)
 	d.list.SetItems(items...)
 	d.list.SetSelected(selected)
-	d.list.ScrollToSelected()
 }
 func (d *Tree) HandleMsg(msg tea.Msg) Action {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
@@ -104,9 +103,10 @@ func (d *Tree) HandleMsg(msg tea.Msg) Action {
 			return nil
 		}
 	}
+	previous := d.input.Value()
 	var cmd tea.Cmd
 	d.input, cmd = d.input.Update(msg)
-	if d.labeling == "" {
+	if d.labeling == "" && d.input.Value() != previous {
 		d.list.SetFilter(d.input.Value())
 		d.list.SetSelected(0)
 		d.list.ScrollToSelected()
@@ -119,13 +119,17 @@ func (d *Tree) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	height := max(0, min(defaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	inner := max(0, width-t.Dialog.View.GetHorizontalFrameSize())
 	d.input.SetWidth(dialogInputTextWidth(t, d.input, inner))
-	sizeDialogList(t, d.list, inner, max(0, height-2))
+	listHeight, totalHeight, _ := sizeDialogList(t, d.list, inner, max(0, height-2))
+	if totalHeight <= listHeight {
+		d.list.ScrollToTop()
+	}
+	d.list.ScrollToSelected()
 	rc := NewRenderContext(t, width)
 	rc.Title = "Session tree"
 	rc.AddPart(t.Dialog.InputPrompt.Render(d.input.View()))
 	rc.AddPart(t.Dialog.List.Height(d.list.Height()).Render(d.list.Render()))
-	rc.AddPart(t.Dialog.List.Render("Files stay as they are. Continue after selected entry."))
-	rc.AddPart(t.Dialog.List.Render("↑↓ choose  enter jump  ctrl+r bookmark  esc close"))
+	rc.AddPart(t.Dialog.List.Render(" Files stay as they are. Continue after selected entry."))
+	rc.AddPart(t.Dialog.List.Render(" ↑↓ choose  enter jump  ctrl+r bookmark  esc close"))
 	cur := InputCursor(t, d.input.Cursor())
 	DrawCenterCursor(scr, area, rc.Render(), cur)
 	return cur

@@ -3,7 +3,7 @@
  │                                    │
  │ > Search text or bookmarks         │
  │                                    │
- │   Start of chat (before first me…  │
+ │ * Start of chat (before first me…  │
  │                                    │
 ›│Files on disk stay unchanged.       │
  │↑↓ choose  enter jump  ←→ fold  t…  │

@@ -33,3 +33,15 @@ common-ancestor boundaries, transactional note insertion, root selection,
 clone/fork copies, preview limits, fold/filter behavior, prompt selection,
 and SQLite paths with `#` or `?`. The existing full suite also covers CLI
 handoffs, queue safety, reviews and five-prompt diff retention.
+
+The main home database (`~/.crush/crush.db`, about 858 MiB) was also backed up
+with SQLite and migrated only in a scratch directory. It contained **27,851
+messages across 199 sessions**. All message fields and every ancestry path
+matched before and after. Its saved-chat terminal content matched (the live
+account footer was excluded), and SQLite integrity passed. Message-field hash:
+`f54442f50530e781f07e30aa6f890844e5af1c13afbedf02fa708c63d1a7e996`.
+
+Final merged checks: tracked job `01C` ran the full suite on `cli-agents`, and
+job `01D` built the release there; both succeeded. Jobs `01B` and `021` verified
+the small and large database copies. Earlier failing checks were corrected
+before these final runs; the SQLite `#` path regression is covered explicitly.

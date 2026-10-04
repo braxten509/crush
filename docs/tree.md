@@ -142,10 +142,11 @@ Claude Code Haiku verifies fresh CLI handoffs and summaries using tiny prompts.
 Pi was not logged in or changed.
 
 Migration is tested on a SQLite backup of the real project database, never by
-opening the original with a test binary. The copy has 82 messages in two chats.
-All message bytes and ancestry order are unchanged, the old and new terminal
-chat displays match, SQLite integrity passes, and the installed older binary
-refuses the upgraded copy before it can load a chat.
+opening the original with a test binary. Both the project database (82 messages in two chats) and the main home database
+(27,851 messages across 199 chats) were copied and checked. Every message and
+ancestry order stayed unchanged; saved-chat displays matched and SQLite
+integrity passed. The installed older binary also refused the upgraded
+project copy before loading a chat.
 
 Research and earlier prototype evidence remain in `docs/tree-prototype/`.
 Final release evidence is recorded in `docs/tree-release/`.

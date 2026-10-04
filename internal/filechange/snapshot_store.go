@@ -8,20 +8,21 @@ import (
 // A command and all its subprocesses share one preview allocation budget.
 // Immutable content is interned so repeated baselines retain one copy.
 type snapshotStore struct {
-	mutex     sync.Mutex
-	remaining int
-	text      map[string]string
+	mutex            sync.Mutex
+	remaining        int
+	restoreRemaining int
+	text             map[string]string
 }
 
 func newSnapshotStore() *snapshotStore {
-	return &snapshotStore{remaining: maxTextTotal, text: map[string]string{}}
+	return &snapshotStore{remaining: maxTextTotal, restoreRemaining: MaxRestoreTotal, text: map[string]string{}}
 }
 
 func (s *snapshotStore) read(path string, info fs.FileInfo) entry {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	budget := maxTextSize
-	value := readEntry(path, info, &budget)
+	value := readEntry(path, info, &budget, &s.restoreRemaining)
 	if value.state.Content == "" {
 		return value
 	}

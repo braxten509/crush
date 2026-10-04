@@ -2,16 +2,16 @@
   "home": {
     "fingerprints": {
       "messages": {
-        "count": 28449,
-        "sha256": "70740230f8bf5dd81672e57d5d5e987a819ca9e9eb7353c2b8413a152af9087c"
+        "count": 28785,
+        "sha256": "95c1ad10921804d3f84503601c86da262b03cdaeaf5dda391c251bd617447e41"
       },
       "tree_nodes": {
-        "count": 28449,
-        "sha256": "1fbddf197a736682ff2c181c26d82aad8875aad6cc64529c3c070c1bd33a9c25"
+        "count": 28785,
+        "sha256": "f9749296a4c1045dfb998da7865cfeefaa4c4e9a830c5d1e3a7684d546de7da4"
       },
       "tree_heads": {
-        "count": 201,
-        "sha256": "e64456a514490fdc34bd58fdd06619d0223319f7095bcde4905bc46651024f4a"
+        "count": 203,
+        "sha256": "a863506e16fe924870939a9aeb1fbf1cb20810d8c8e549f7b556c39383eb93b9"
       }
     },
     "transcript_matches": true,
@@ -19,21 +19,21 @@
     "integrity": "ok",
     "excluded_comparison_field": "messages.updated_at (normal legacy review bookkeeping)",
     "legacy_review_normalization_matches_installed": true,
-    "original_message_count": 28449
+    "original_message_count": 28785
   },
   "forecaster": {
     "fingerprints": {
       "messages": {
-        "count": 20966,
-        "sha256": "9e023527f7dda3dc55d51f76833efc6bd8957d444b9c4917e8286c397f6a7609"
+        "count": 21110,
+        "sha256": "c38a1f4bd0c7231971d1d9831656da146533b058a015c1b4f52790e603da14ea"
       },
       "tree_nodes": {
-        "count": 20966,
-        "sha256": "739127d0de64ecd79a69786498284e9bea56d55581a15f4a38fdbbbf17353b71"
+        "count": 21110,
+        "sha256": "4379c6e94f8f5d62af04ce002e6822d8d2523735c3f296c145f46fb1d6ca1fb7"
       },
       "tree_heads": {
-        "count": 294,
-        "sha256": "81ac654b63d1fe79f4ea04804280bc70e70f1f5b3267d4af1a80a2bba0666f4b"
+        "count": 296,
+        "sha256": "29e5aeea4bb3e56ab80e153898dffeb6dc70ab8ed37a12e059e84d15c977b1be"
       }
     },
     "transcript_matches": true,
@@ -41,6 +41,6 @@
     "integrity": "ok",
     "excluded_comparison_field": "messages.updated_at (normal legacy review bookkeeping)",
     "legacy_review_normalization_matches_installed": true,
-    "original_message_count": 20966
+    "original_message_count": 21110
   }
 }

@@ -92,11 +92,19 @@ The action buttons stay in place, including in narrow terminals.
 A jump backward restores the state before the changes being left behind.
 A jump across branches first undoes changes to their common ancestor, then
 reapplies the target branch through the selected point. Forking uses the
-point **before** the selected user prompt. Full contents and permissions are
+point **before** the selected user prompt. Available full contents and permissions are
 saved independently of the five-prompt diff drawer, before its text is bounded.
 The same hidden-path rules apply: no hidden folders, `/tmp`, caches, or
 protected secure-entry paths. Only files already named by the tracker are
-captured; starting a chat never scans its working folder.
+captured; starting a chat never scans its working folder. Preview runs in the
+background and shows **Checking files…**. Applying and undoing also run off the
+UI thread. Git repository/HEAD lookups are shared by files in the same folder
+within each preview.
+
+File history is best effort. A failed file save logs a warning and leaves an
+unavailable version with a reason in the preview. It cannot stop a tool reply
+from being saved, prevent startup, or report a successful chat deletion as a
+failure. Failed restores themselves still report errors and keep any saved undo.
 
 Before a write, Crush compares the current contents and permissions with the
 last recorded state on the branch being left. It **skips conflicts** and lists
@@ -115,12 +123,28 @@ checks. It survives restarting Crush. A fork's undo belongs to the new chat.
 If a filesystem or database error interrupts a restore, the saved undo remains
 available; a multi-file filesystem change cannot be one SQLite transaction.
 
-The limit is **10 MB per file** and **2 GB of compressed objects per project**.
+The limits are **10 MB per file**, **64 MB of full snapshot bytes per
+checkpoint** (both before and after), and **2 GB of compressed objects per
+project**. The checkpoint remainder says **not saved: too many changes at
+once**. Long-lived trackers keep digests, not full restore payloads. Before
+images awaiting their first edit spill to private scratch files; a completed
+review hands its bytes to durable storage once. Later checkpoints reuse the
+saved digest. The existing bounded text diff cache remains separate.
+
+New copies, checkouts and generated build products are recorded from their
+file metadata, without reading their contents. Their backward action is a
+delete (with the usual conflict check and undo snapshot). Reapplying them
+across branches is unavailable unless a later edit captured their contents.
+An explicit later edit reads its before image normally.
 Larger files are marked **Too large to restore**. When the project budget is
 full, the oldest chats lose saved versions first. Their file rows remain with
 a clear budget notice in the preview. Chat copies retain their own references
 to shared objects. Deleting a chat removes its index rows; unused objects are
-collected after deletion, on the next capture, and on startup. Versions are
+collected after deletion and in throttled background maintenance at startup
+and roughly once a minute. Capture does not scan all objects or run the budget
+query for each tool result. The compressed budget is enforced by that
+maintenance, so new captures can temporarily exceed it until the next pass.
+Versions are
 otherwise retained while the chat exists. Versions from before this feature
 was enabled are not reconstructed from expired or partial diffs.
 
@@ -128,7 +152,9 @@ Restore affects tracked regular files only. It does not undo outside edits,
 databases, installed packages, network effects, or Git commits. The preview
 states these limits. When the project's Git HEAD differs from the selected
 conversation point, it warns that restored files will be uncommitted changes.
-Git is used only for read-only HEAD/repository identification. Restore never
+Undo records the HEAD at the actual restore, so it warns only if Git has
+moved since then. Ordinary message points share HEAD lookups for up to one
+second. Git is used only for read-only HEAD/repository identification. Restore never
 uses stash, checkout, reset, clean, or another Git write command.
 
 ## Saved diffs
@@ -146,6 +172,11 @@ The tree adds `tree_nodes`, `tree_heads`, and `tree_branch_summaries`.
 File restore adds `file_history_changes`, `file_history_objects`,
 `file_history_points`, and `file_history_undo`, plus compressed objects under
 `<data directory>/file-history/objects/<digest prefix>/<sha256>`.
+A shared filesystem lock protects writing a blob and publishing its history
+or undo reference from collection by another Crush process. This protects
+storage shared by two windows; the existing one-writer navigation restriction
+still applies. Directory creation checks every parent before creating it;
+on Unix it uses directory handles that refuse symbolic links.
 Existing messages retain their shape. No generated sqlc files are edited.
 The first migration links older messages by creation time and SQLite insertion
 order; tied timestamps keep their original order. Insert/delete triggers

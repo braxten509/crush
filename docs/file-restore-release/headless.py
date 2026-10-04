@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 
-BASE = pathlib.Path.home() / '.cache/crush-test/file-restore-qa'
+BASE = pathlib.Path(os.environ.get('FILE_RESTORE_QA_DIR', str(pathlib.Path.home() / '.cache/crush-test/file-restore-qa')))
 REPO = pathlib.Path(__file__).resolve().parents[2]
 OUT = REPO / 'docs/file-restore-release'
 BIN = '/tmp/crush-file-restore'

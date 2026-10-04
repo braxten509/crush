@@ -100,9 +100,19 @@ type App struct {
 func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr *skills.Manager) (*App, error) {
 	q := db.New(conn)
 	versions := filehistory.New(conn, store.Config().Options.DataDirectory, store.WorkingDir())
-	if err := versions.Maintain(ctx); err != nil {
-		return nil, err
-	}
+	versions.ScheduleMaintenance(ctx)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				versions.ScheduleMaintenance(ctx)
+			}
+		}
+	}()
 	sessions := session.NewService(q, conn, versions.Maintain)
 	messages := message.NewService(q, message.WithFileHistory(versions))
 	files := history.NewService(q, conn)

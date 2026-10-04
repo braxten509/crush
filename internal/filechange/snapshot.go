@@ -26,9 +26,11 @@ import (
 // Bound previews of the files editing tools identify. Files without a text
 // preview still produce a visible change summary.
 const (
-	MaxRestoreSize = 10 << 20
-	maxTextSize    = 1 << 20
-	maxTextTotal   = 64 << 20
+	MaxRestoreSize      = 10 << 20
+	MaxRestoreTotal     = 64 << 20
+	RestoreBudgetReason = "not saved: too many changes at once"
+	maxTextSize         = 1 << 20
+	maxTextTotal        = 64 << 20
 )
 
 // State distinguishes a missing file from an empty file. Nil means missing.
@@ -37,13 +39,14 @@ const (
 type State struct {
 	// RestoreData is a transient, binary-safe full snapshot. Message storage removes
 	// it from reviews after writing the durable content-addressed history.
-	RestoreData    string `json:"restore_data,omitempty"`
-	RestoreOmitted string `json:"restore_omitted,omitempty"`
-	Content        string `json:"content,omitempty"`
-	Digest         string `json:"digest,omitempty"`
-	Size           int64  `json:"size"`
-	Mode           uint32 `json:"mode"`
-	Omitted        string `json:"omitted,omitempty"`
+	RestoreDigestOnly bool   `json:"restore_digest_only,omitempty"`
+	RestoreData       string `json:"restore_data,omitempty"`
+	RestoreOmitted    string `json:"restore_omitted,omitempty"`
+	Content           string `json:"content,omitempty"`
+	Digest            string `json:"digest,omitempty"`
+	Size              int64  `json:"size"`
+	Mode              uint32 `json:"mode"`
+	Omitted           string `json:"omitted,omitempty"`
 }
 
 type Change struct {
@@ -84,18 +87,20 @@ type ReviewSummary struct {
 
 type entry struct {
 	state      State
+	restore    *restorePayload
 	info       fs.FileInfo
 	changeTime int64
 }
 
 type Tracker struct {
-	root     string
-	exclude  []string
-	files    map[string]entry
-	extra    map[string]bool
-	order    int64
-	store    *snapshotStore
-	imported bool
+	root             string
+	exclude          []string
+	files            map[string]entry
+	restoreRemaining int
+	extra            map[string]bool
+	order            int64
+	store            *snapshotStore
+	imported         bool
 }
 
 func New(ctx context.Context, root string, exclude ...string) (*Tracker, error) {
@@ -110,7 +115,7 @@ func New(ctx context.Context, root string, exclude ...string) (*Tracker, error) 
 	if err != nil {
 		return nil, err
 	}
-	t := &Tracker{root: root, files: map[string]entry{}, extra: map[string]bool{}}
+	t := &Tracker{root: root, files: map[string]entry{}, extra: map[string]bool{}, restoreRemaining: MaxRestoreTotal}
 	for _, path := range exclude {
 		if path == "" {
 			continue
@@ -153,7 +158,22 @@ func (t *Tracker) Track(path string) {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != path {
 		t.Track(resolved)
 	}
-	if t.Contains(path) || t.excluded(path) {
+	if t.excluded(path) {
+		return
+	}
+	if t.Contains(path) {
+		previous, ok := t.files[path]
+		if !ok || !strings.HasPrefix(previous.state.Digest, "stat:") {
+			return
+		}
+		// An explicit later edit needs the copied/generated baseline now.
+		if info, err := os.Lstat(path); err == nil && info.Mode().IsRegular() {
+			budget := maxTextTotal
+			for _, value := range t.files {
+				budget -= len(value.state.Content)
+			}
+			t.files[path] = t.readEntry(path, info, &budget)
+		}
 		return
 	}
 	info, err := os.Lstat(path)
@@ -185,6 +205,7 @@ func (t *Tracker) Checkpoint(ctx context.Context) (*Review, error) {
 		return nil, err
 	}
 	review := &Review{Root: t.root}
+	restoreBudget := MaxRestoreTotal
 	t.order = max(t.order+1, time.Now().UnixNano())
 	paths := make(map[string]bool, len(next)+len(t.files))
 	for path := range next {
@@ -200,22 +221,39 @@ func (t *Tracker) Checkpoint(ctx context.Context) (*Review, error) {
 		}
 		before, had := t.files[path]
 		after, has := next[path]
-		if had && has && before.state == after.state {
+		if had && has && sameEntryState(before.state, after.state) {
 			continue
 		}
 		change := Change{Path: path, Order: t.order}
 		if had {
-			state := before.state
+			state := before.reviewState(&restoreBudget)
 			change.Before = &state
 		}
 		if has {
-			state := after.state
+			state := after.reviewState(&restoreBudget)
 			change.After = &state
 		}
 		review.Changes = append(review.Changes, change)
 	}
 	slices.SortFunc(review.Changes, func(a, b Change) int { return strings.Compare(a.Path, b.Path) })
+	// Only handed-off versions can switch to the durable digest. Unchanged
+	// baselines keep their small spill-file handle until their first edit.
+	for _, change := range review.Changes {
+		value, ok := next[change.Path]
+		if ok && value.restore != nil && change.After != nil && change.After.RestoreData != "" {
+			value.restore = nil
+			value.state.RestoreDigestOnly = true
+			next[change.Path] = value
+		}
+	}
 	t.files = next
+	t.restoreRemaining = MaxRestoreTotal
+	for _, value := range next {
+		if value.restore != nil {
+			t.restoreRemaining -= int(value.state.Size)
+		}
+	}
+
 	return review, nil
 }
 
@@ -234,8 +272,10 @@ func (t *Tracker) scan(ctx context.Context) (map[string]entry, error) {
 			if !t.imported {
 				reason = "Generated build artifact"
 			}
-			value := t.readEntry(path, info, &budget)
-			value.state.Content, value.state.Omitted = "", reason
+			value := entry{info: info, changeTime: changeTime(info), state: State{
+				Size: info.Size(), Mode: uint32(info.Mode()), Digest: StatDigest(info),
+				Omitted: reason, RestoreOmitted: "Copied or generated contents were not saved",
+			}}
 			next[path] = value
 			return
 		}
@@ -272,10 +312,13 @@ func (t *Tracker) scan(ctx context.Context) (map[string]entry, error) {
 }
 
 func (t *Tracker) readEntry(path string, info fs.FileInfo, budget *int) entry {
+	var value entry
 	if t.store != nil {
-		return t.store.read(path, info)
+		value = t.store.read(path, info)
+	} else {
+		value = readEntry(path, info, budget, &t.restoreRemaining)
 	}
-	return readEntry(path, info, budget)
+	return spillRestore(value)
 }
 
 func (t *Tracker) excluded(path string) bool {
@@ -301,15 +344,19 @@ func within(path, root string) bool {
 	return path == root || strings.HasPrefix(path, strings.TrimRight(root, string(filepath.Separator))+string(filepath.Separator))
 }
 
-func readEntry(path string, info fs.FileInfo, budget *int) entry {
+func readEntry(path string, info fs.FileInfo, budget *int, restoreBudget ...*int) entry {
 	var captured entry
-	if !secureentry.ReviewFile(path, func() { captured = readReviewEntry(path, info, budget) }) {
+	if !secureentry.ReviewFile(path, func() { captured = readReviewEntry(path, info, budget, restoreBudget...) }) {
 		return entry{info: info, state: State{Omitted: "Secure entry destination"}}
 	}
 	return captured
 }
 
-func readReviewEntry(path string, info fs.FileInfo, budget *int) entry {
+func readReviewEntry(path string, info fs.FileInfo, budget *int, restoreBudget ...*int) entry {
+	remaining := MaxRestoreTotal
+	if len(restoreBudget) > 0 {
+		remaining = *restoreBudget[0]
+	}
 	e := entry{info: info, changeTime: changeTime(info), state: State{Size: info.Size(), Mode: uint32(info.Mode())}}
 	// Capture only visible, regular files. The same immutable bytes travel through
 	// shell/CLI metadata, including binary files, before the review gets bounded.
@@ -319,13 +366,22 @@ func readReviewEntry(path string, info fs.FileInfo, budget *int) entry {
 			e.state.RestoreOmitted = "Symbolic links and special files cannot be restored"
 		case info.Size() > MaxRestoreSize:
 			e.state.RestoreOmitted = "Too large to restore (over 10 MB)"
+		case info.Size() > int64(remaining):
+			e.state.RestoreOmitted = RestoreBudgetReason
 		default:
 			f, err := os.Open(path)
 			if err == nil {
 				data, readErr := io.ReadAll(io.LimitReader(f, MaxRestoreSize+1))
 				f.Close()
 				if readErr == nil && len(data) <= MaxRestoreSize {
-					e.state.RestoreData = base64.StdEncoding.EncodeToString(data)
+					if len(data) > remaining {
+						e.state.RestoreOmitted = RestoreBudgetReason
+					} else {
+						e.state.RestoreData = base64.StdEncoding.EncodeToString(data)
+						if len(restoreBudget) > 0 {
+							*restoreBudget[0] -= len(data)
+						}
+					}
 				} else {
 					e.state.RestoreOmitted = "Full file contents could not be saved"
 				}
@@ -336,7 +392,7 @@ func readReviewEntry(path string, info fs.FileInfo, budget *int) entry {
 	}
 	// A metadata signature lets very large files be reviewed without reading
 	// multi-gigabyte build products on every agent turn.
-	e.state.Digest = fmt.Sprintf("stat:%d:%d:%d", info.Size(), info.ModTime().UnixNano(), e.changeTime)
+	e.state.Digest = StatDigest(info)
 	switch {
 	case info.Mode()&fs.ModeSymlink != 0:
 		target, err := os.Readlink(path)
@@ -390,4 +446,14 @@ func readReviewEntry(path string, info fs.FileInfo, budget *int) entry {
 func digest(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// StatDigest identifies untouched copied/generated files without reading them.
+func StatDigest(info fs.FileInfo) string {
+	return fmt.Sprintf("stat:%d:%d:%d", info.Size(), info.ModTime().UnixNano(), changeTime(info))
+}
+func sameEntryState(a, b State) bool {
+	a.RestoreData, b.RestoreData = "", ""
+	a.RestoreDigestOnly, b.RestoreDigestOnly = false, false
+	return a == b
 }

@@ -1038,6 +1038,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.invalidateBusyCaches()
 		m.invalidatePromptQueue()
 		cmds = append(cmds, m.dispatchBusyRefresh(), m.dispatchPromptQueueRefresh())
+	case filePreviewMsg:
+		cmds = append(cmds, m.finishFilePreview(msg))
+	case fileUndoMsg:
+		cmds = append(cmds, m.finishFileUndo(msg))
 	case treeFinishedMsg:
 		cmds = append(cmds, m.finishTree(msg))
 	case loadSessionMsg, sessionLoadFailedMsg, sessionLoadTickMsg, openSessionMsg:

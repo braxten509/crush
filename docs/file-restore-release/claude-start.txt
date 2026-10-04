@@ -28,5 +28,5 @@
 › Go crazy
 
 
-  Claude Haiku · 33.92k/400k tokens · Context 92% left
+  Claude Haiku · 34.97k/400k tokens · Context 91% left
   YOLO MODE

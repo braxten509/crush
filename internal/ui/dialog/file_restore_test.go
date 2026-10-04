@@ -41,3 +41,30 @@ func TestFileRestoreChoicesAndNarrowViewport(t *testing.T) {
 		require.Contains(t, rendered.String(), "Cancel")
 	}
 }
+
+func TestCheckingFilesStateIsStableAndBlocksActions(t *testing.T) {
+	style := styles.CharmtonePantera()
+	com := &common.Common{Styles: &style}
+	canceled := false
+	d := NewFileRestoreBusy(com, "Checking files…", func() { canceled = true })
+	require.Nil(t, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	require.Nil(t, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyRight}))
+	for _, size := range []image.Point{{40, 12}, {80, 24}, {120, 40}} {
+		screen := uv.NewScreenBuffer(size.X, size.Y)
+		d.Draw(screen, image.Rect(0, 0, size.X, size.Y))
+		var rendered strings.Builder
+		for y := 0; y < size.Y; y++ {
+			for x := 0; x < size.X; x++ {
+				if cell := screen.CellAt(x, y); cell != nil {
+					rendered.WriteString(cell.Content)
+				}
+			}
+		}
+		require.Contains(t, rendered.String(), "Checking files…")
+		require.Contains(t, rendered.String(), "esc cancel")
+	}
+	require.Equal(t, ActionClose{}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape}))
+	require.True(t, canceled)
+	applying := NewFileRestoreBusy(com, "Restoring files…", nil)
+	require.Nil(t, applying.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape}))
+}

@@ -3,6 +3,7 @@ package message
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/charmbracelet/crush/internal/filehistory"
 )
@@ -16,18 +17,17 @@ type FileHistoryService interface {
 }
 
 func (s *service) FileHistory() *filehistory.Store { return s.fileHistory }
-func (s *service) captureFiles(ctx context.Context, id, sessionID string, parts []ContentPart) error {
+func (s *service) captureFiles(ctx context.Context, id, sessionID string, parts []ContentPart) {
 	if s.fileHistory == nil {
-		return nil
+		return
 	}
 	for _, part := range parts {
 		if result, ok := part.(ToolResult); ok {
 			if err := s.fileHistory.Capture(ctx, sessionID, id, result.ToolCallID, result.Review); err != nil {
-				return err
+				slog.Warn("Could not capture file history", "message", id, "error", err)
 			}
 		}
 	}
-	return nil
 }
 
 type restoreContextKey struct{}

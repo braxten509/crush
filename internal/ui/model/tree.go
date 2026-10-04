@@ -134,6 +134,9 @@ func (m *UI) navigateTree(action dialog.ActionTreeNavigate, approved ...*filehis
 	if d, ok := m.dialog.Dialog(dialog.TreeID).(*dialog.Tree); ok {
 		d.Working(cancel)
 	}
+	if !action.Summary {
+		m.dialog.OpenDialog(dialog.NewFileRestoreBusy(m.com, "Restoring files…", nil))
+	}
 	return func() tea.Msg {
 		defer cancel()
 		var request *message.FileRestoreRequest
@@ -150,6 +153,7 @@ func (m *UI) navigateTree(action dialog.ActionTreeNavigate, approved ...*filehis
 	}
 }
 func (m *UI) finishTree(result treeFinishedMsg) tea.Cmd {
+	m.dialog.CloseDialog(dialog.FileRestoreID)
 	if d, ok := m.dialog.Dialog(dialog.TreeID).(*dialog.Tree); ok {
 		d.Finish()
 	}
@@ -178,25 +182,27 @@ func (m *UI) copyTree(target string, fork bool, approved ...*filehistory.Plan) t
 			return cmd
 		}
 	}
-	ctx := context.Background()
-	var request *message.FileRestoreRequest
-	if len(approved) > 0 && approved[0] != nil {
-		request = &message.FileRestoreRequest{Plan: approved[0]}
-		ctx = message.WithFileRestore(ctx, request)
+	id := m.session.ID
+	m.dialog.OpenDialog(dialog.NewFileRestoreBusy(m.com, "Restoring files…", nil))
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		var request *message.FileRestoreRequest
+		if len(approved) > 0 && approved[0] != nil {
+			request = &message.FileRestoreRequest{Plan: approved[0]}
+			ctx = message.WithFileRestore(ctx, request)
+		}
+		copiedID, prompt, err := manager.CopyTree(ctx, id, target, fork)
+		notice := "Branch copied to a new chat. Files on disk are unchanged."
+		if request != nil {
+			notice = "Branch copied to a new chat. " + request.Result.Notice()
+		}
+		editID := ""
+		if fork {
+			editID = target
+		}
+		return treeFinishedMsg{sessionID: copiedID, prompt: prompt, editID: editID, notice: notice, err: err}
 	}
-	id, prompt, err := manager.CopyTree(ctx, m.session.ID, target, fork)
-	if err != nil {
-		return util.ReportError(err)
-	}
-	m.dialog.CloseDialog(dialog.TreeID)
-	if fork {
-		m.treeComposer(target, prompt)
-	}
-	notice := "Branch copied to a new chat. Files on disk are unchanged."
-	if request != nil {
-		notice = "Branch copied to a new chat. " + request.Result.Notice()
-	}
-	return tea.Batch(m.resetPlanModeState(), m.loadSession(id), util.ReportInfo(notice))
 }
 func (m *UI) cloneTree() tea.Cmd {
 	if err := m.treeReady(); err != nil {

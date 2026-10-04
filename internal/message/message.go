@@ -205,12 +205,10 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 	id := uuid.New().String()
 	if s.fileHistory != nil {
 		if err := s.fileHistory.RecordPoint(ctx, sessionID, id); err != nil {
-			return Message{}, err
+			slog.Warn("Could not record file history point", "error", err)
 		}
 	}
-	if err := s.captureFiles(ctx, id, sessionID, params.Parts); err != nil {
-		return Message{}, err
-	}
+	s.captureFiles(ctx, id, sessionID, params.Parts)
 	var payload []byte
 	storage, separate := s.q.(reviewStorage)
 	if separate {
@@ -466,9 +464,7 @@ func (s *service) flushOne(ctx context.Context, id string, syncCaller bool) erro
 // write performs the unguarded SQL write + UpdatedAt stamp. Caller
 // owns publishing.
 func (s *service) write(ctx context.Context, msg Message) (Message, error) {
-	if err := s.captureFiles(ctx, msg.ID, msg.SessionID, msg.Parts); err != nil {
-		return Message{}, err
-	}
+	s.captureFiles(ctx, msg.ID, msg.SessionID, msg.Parts)
 	var payload []byte
 	storage, separate := s.q.(reviewStorage)
 	if separate {

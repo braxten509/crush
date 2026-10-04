@@ -1,6 +1,8 @@
 package session
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/db"
@@ -142,4 +144,19 @@ func TestEstimatedUsageStateCanBeClearedByExplicitSave(t *testing.T) {
 	refetched, err := sessions.Get(t.Context(), created.ID)
 	require.NoError(t, err)
 	require.False(t, refetched.EstimatedUsage)
+}
+
+func TestDeleteSucceedsWhenHistoryCleanupFails(t *testing.T) {
+	directory := t.TempDir()
+	conn, err := db.Connect(t.Context(), directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Release(directory) })
+	called := false
+	sessions := NewService(db.New(conn), conn, func(context.Context) error { called = true; return errors.New("disk unavailable") })
+	chat, err := sessions.Create(t.Context(), "test")
+	require.NoError(t, err)
+	require.NoError(t, sessions.Delete(t.Context(), chat.ID))
+	require.True(t, called)
+	_, err = sessions.Get(t.Context(), chat.ID)
+	require.Error(t, err)
 }

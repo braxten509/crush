@@ -98,7 +98,7 @@ func (r *CommandReview) Finish() *Review {
 	}
 	changes := make([]Change, 0, len(earliest))
 	for path, change := range earliest {
-		if change.Transfer != nil && change.Transfer.Baseline == nil && change.After != nil && (change.After.Omitted == "Copied content" || change.After.Omitted == "Generated build artifact") {
+		if change.Before == nil && change.After != nil && (change.Transfer == nil || change.Transfer.Baseline == nil) && (change.After.Omitted == "Copied content" || change.After.Omitted == "Generated build artifact") {
 			changes = append(changes, change)
 			continue
 		}

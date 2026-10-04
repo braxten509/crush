@@ -13,12 +13,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/charmbracelet/crush/internal/lock"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/secureentry"
@@ -36,11 +39,17 @@ type State struct {
 }
 
 type Store struct {
-	db        *sql.DB
-	directory string
-	root      string
-	mutex     sync.Mutex
-	Budget    int64
+	db                   *sql.DB
+	directory            string
+	root                 string
+	mutex                sync.Mutex
+	Budget               int64
+	maintenanceMutex     sync.Mutex
+	nextMaintenance      time.Time
+	maintenanceRunning   bool
+	pointMutex           sync.Mutex
+	pointAt              time.Time
+	pointRoot, pointHead string
 }
 
 func New(conn *sql.DB, directory string, root ...string) *Store {
@@ -131,6 +140,18 @@ func (s *Store) state(ctx context.Context, original *filechange.State) (State, e
 	if result.Reason != "" {
 		return result, nil
 	}
+	if original.RestoreDigestOnly {
+		path, err := s.objectPath(original.Digest)
+		if err == nil {
+			_, err = os.Stat(path)
+		}
+		if err == nil {
+			result.Saved = true
+			return result, nil
+		}
+		result.Reason = "Full contents were not saved for this version"
+		return result, nil
+	}
 	var data []byte
 	var err error
 	if original.RestoreData != "" {
@@ -148,8 +169,12 @@ func (s *Store) state(ctx context.Context, original *filechange.State) (State, e
 		result.Reason = "Too large to restore (over 10 MB)"
 		return result, nil
 	}
-	result.Digest, err = s.put(ctx, data)
+	result.Digest = hash(data)
+	_, err = s.put(ctx, data)
 	result.Saved = err == nil
+	if err != nil {
+		result.Reason = "File history unavailable: " + err.Error()
+	}
 	return result, err
 }
 
@@ -161,7 +186,14 @@ func (s *Store) Capture(ctx context.Context, sessionID, messageID, toolID string
 	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	release, lockErr := s.lock(ctx)
+	if lockErr == nil {
+		defer release()
+	} else {
+		slog.Warn("File history lock unavailable", "error", lockErr)
+	}
 	heads := map[string]string{}
+	remaining := filechange.MaxRestoreTotal
 	for _, change := range review.Changes {
 		path := change.Path
 		if !filepath.IsAbs(path) {
@@ -178,26 +210,40 @@ func (s *Store) Capture(ctx context.Context, sessionID, messageID, toolID string
 		if existing != 0 {
 			continue
 		}
-		before, err := s.state(ctx, change.Before)
-		if err != nil {
-			return err
+		capture := func(original *filechange.State) State {
+			if original == nil {
+				return State{}
+			}
+			copy := *original
+			if lockErr != nil {
+				copy.RestoreOmitted = "File history unavailable: " + lockErr.Error()
+			}
+			if copy.Size > int64(remaining) {
+				copy.RestoreOmitted = filechange.RestoreBudgetReason
+			} else {
+				remaining -= int(copy.Size)
+			}
+			value, err := s.state(ctx, &copy)
+			if err != nil {
+				slog.Warn("Could not save file version", "path", path, "error", err)
+				value.Reason = "File history unavailable: " + err.Error()
+			}
+			return value
 		}
-		after, err := s.state(ctx, change.After)
-		if err != nil {
-			return err
-		}
+		before := capture(change.Before)
+		after := capture(change.After)
 		dir := filepath.Dir(path)
 		head, ok := heads[dir]
 		if !ok {
 			head = gitHead(ctx, dir)
 			heads[dir] = head
 		}
-		_, err = s.db.ExecContext(ctx, `INSERT INTO file_history_changes(message_id,session_id,tool_id,path,capture_order,before_state,after_state,git_head) VALUES(?,?,?,?,?,?,?,?)`, messageID, sessionID, toolID, path, change.Order, encode(before), encode(after), head)
+		_, err := s.db.ExecContext(ctx, `INSERT INTO file_history_changes(message_id,session_id,tool_id,path,capture_order,before_state,after_state,git_head) VALUES(?,?,?,?,?,?,?,?)`, messageID, sessionID, toolID, path, change.Order, encode(before), encode(after), head)
 		if err != nil {
 			return err
 		}
 	}
-	return s.maintain(ctx, "")
+	return nil
 }
 func gitHead(ctx context.Context, directory string) string {
 	cmd := exec.CommandContext(ctx, "git", "-C", directory, "rev-parse", "HEAD")
@@ -213,7 +259,37 @@ func gitHead(ctx context.Context, directory string) string {
 func (s *Store) Maintain(ctx context.Context) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	release, err := s.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
 	return s.maintain(ctx, "")
+}
+
+// The lock lives beside the object folder, so all processes sharing the data
+// directory serialize publishing references with collection and eviction.
+func (s *Store) lock(ctx context.Context) (func(), error) {
+	return lock.File(ctx, filepath.Join(filepath.Dir(filepath.Dir(s.directory)), "file-history.lock"))
+}
+
+// ScheduleMaintenance is best effort, throttled and never waits on the caller.
+// The application's lifetime context cancels outstanding maintenance on exit.
+func (s *Store) ScheduleMaintenance(ctx context.Context) {
+	s.maintenanceMutex.Lock()
+	if s.maintenanceRunning || time.Now().Before(s.nextMaintenance) {
+		s.maintenanceMutex.Unlock()
+		return
+	}
+	s.maintenanceRunning = true
+	s.nextMaintenance = time.Now().Add(time.Minute)
+	s.maintenanceMutex.Unlock()
+	go func() {
+		defer func() { s.maintenanceMutex.Lock(); s.maintenanceRunning = false; s.maintenanceMutex.Unlock() }()
+		if err := s.Maintain(ctx); err != nil {
+			slog.Warn("File history maintenance failed", "error", err)
+		}
+	}()
 }
 func (s *Store) maintain(ctx context.Context, keepUndo string) error {
 	if err := s.gc(ctx); err != nil {
@@ -323,8 +399,14 @@ func (s *Store) RecordPoint(ctx context.Context, sessionID, messageID string) er
 	if s.root == "" {
 		return nil
 	}
-	root := gitRoot(ctx, s.root)
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO file_history_points(message_id,session_id,git_root,git_head) VALUES(?,?,?,?)`, messageID, sessionID, root, gitHead(ctx, s.root))
+	s.pointMutex.Lock()
+	defer s.pointMutex.Unlock()
+	if time.Since(s.pointAt) >= time.Second {
+		s.pointRoot, s.pointHead = gitRoot(ctx, s.root), gitHead(ctx, s.root)
+		s.pointAt = time.Now()
+	}
+	root := s.pointRoot
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO file_history_points(message_id,session_id,git_root,git_head) VALUES(?,?,?,?)`, messageID, sessionID, root, s.pointHead)
 	return err
 }
 func gitRoot(ctx context.Context, directory string) string {

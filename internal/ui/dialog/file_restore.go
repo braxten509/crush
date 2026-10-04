@@ -3,6 +3,7 @@ package dialog
 import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"context"
 	"fmt"
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -25,13 +26,25 @@ type FileRestore struct {
 	next           Action
 	choice, offset int
 	maximumOffset  int
+	working        string
+	cancel         context.CancelFunc
 }
 
 func NewFileRestore(com *common.Common, plan *filehistory.Plan, next Action) *FileRestore {
 	return &FileRestore{com: com, plan: plan, next: next}
 }
+func NewFileRestoreBusy(com *common.Common, text string, cancel context.CancelFunc) *FileRestore {
+	return &FileRestore{com: com, working: text, cancel: cancel}
+}
 func (*FileRestore) ID() string { return FileRestoreID }
 func (d *FileRestore) HandleMsg(msg tea.Msg) Action {
+	if d.working != "" {
+		if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" && d.cancel != nil {
+			d.cancel()
+			return ActionClose{}
+		}
+		return nil
+	}
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		switch k.String() {
 		case "esc":
@@ -57,6 +70,17 @@ func (d *FileRestore) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := d.com.Styles
 	width := max(0, min(94, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	inner := max(1, width-t.Dialog.View.GetHorizontalFrameSize()-t.Dialog.List.GetHorizontalFrameSize())
+	if d.working != "" {
+		rc := NewRenderContext(t, width)
+		rc.Title = d.working
+		hint := "Please wait."
+		if d.cancel != nil {
+			hint = "esc cancel"
+		}
+		rc.AddPart(t.Dialog.List.Height(2).Render(hint))
+		DrawCenterCursor(scr, area, rc.Render(), nil)
+		return nil
+	}
 	var lines []string
 	for _, e := range d.plan.Entries {
 		status := ""

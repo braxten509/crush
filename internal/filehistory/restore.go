@@ -28,6 +28,7 @@ type Entry struct {
 	Dels        int    `json:"dels"`
 	Conflict    string `json:"conflict,omitempty"`
 	Unavailable string `json:"unavailable,omitempty"`
+	Head        string `json:"git_head,omitempty"`
 	GitMoved    bool   `json:"git_moved,omitempty"`
 }
 type Plan struct {
@@ -204,14 +205,15 @@ func (s *Store) Preview(ctx context.Context, id, target string) (*Plan, error) {
 	if pointErr != nil && !errors.Is(pointErr, sql.ErrNoRows) {
 		return nil, pointErr
 	}
+	git := newGitCache(ctx)
 	for _, e := range entries {
-		if pointRoot != "" && gitRoot(ctx, filepath.Dir(e.Path)) == pointRoot {
+		if pointRoot != "" && git.get(filepath.Dir(e.Path)).root == pointRoot {
 			heads[e.Path] = pointHead
 		}
-		if same(e.Before, e.After) {
+		if same(e.Before, e.After) && e.Before.Reason == "" && e.After.Reason == "" {
 			continue
 		}
-		s.describe(ctx, e, heads[e.Path])
+		s.describe(e, heads[e.Path], git.get(filepath.Dir(e.Path)).head)
 		plan.Entries = append(plan.Entries, *e)
 	}
 	slices.SortFunc(plan.Entries, func(a, b Entry) int { return strings.Compare(a.Path, b.Path) })
@@ -244,7 +246,7 @@ func safePath(path string) error {
 	}
 	return nil
 }
-func currentState(path string) (State, []byte, error) {
+func currentState(path string, expected ...State) (State, []byte, error) {
 	if err := safePath(path); err != nil {
 		return State{}, nil, err
 	}
@@ -270,9 +272,13 @@ func currentState(path string) (State, []byte, error) {
 	if len(data) > filechange.MaxRestoreSize {
 		return State{}, nil, errors.New("Too large to restore (over 10 MB)")
 	}
-	return State{Exists: true, Digest: hash(data), Mode: uint32(info.Mode())}, data, nil
+	value := State{Exists: true, Digest: hash(data), Mode: uint32(info.Mode())}
+	if len(expected) > 0 && strings.HasPrefix(expected[0].Digest, "stat:") {
+		value.Digest = filechange.StatDigest(info)
+	}
+	return value, data, nil
 }
-func (s *Store) describe(ctx context.Context, e *Entry, head string) {
+func (s *Store) describe(e *Entry, head, currentHead string) {
 	e.Action = "restore"
 	if !e.After.Exists {
 		e.Action = "delete"
@@ -285,16 +291,16 @@ func (s *Store) describe(ctx context.Context, e *Entry, head string) {
 			e.Unavailable = "Full contents were not saved"
 		}
 	}
-	if e.Before.Reason != "" {
+	if e.Before.Reason != "" && (e.After.Exists || !strings.HasPrefix(e.Before.Digest, "stat:")) {
 		e.Unavailable = e.Before.Reason
 	}
-	state, _, err := currentState(e.Path)
+	state, _, err := currentState(e.Path, e.Before)
 	if err != nil {
 		e.Conflict = err.Error()
 	} else if !same(state, e.Before) {
 		e.Conflict = "Changed outside this branch; will skip"
 	}
-	e.GitMoved = gitHead(ctx, filepath.Dir(e.Path)) != head
+	e.GitMoved = head != "" && currentHead != head
 	var before, after []byte
 	if e.Before.Exists && e.Before.Saved {
 		before, err = s.read(e.Before.Digest)
@@ -327,10 +333,11 @@ func (s *Store) UndoPreview(ctx context.Context, id string) (*Plan, error) {
 	if err = json.Unmarshal([]byte(data), &plan.Entries); err != nil {
 		return nil, err
 	}
+	git := newGitCache(ctx)
 	for i := range plan.Entries {
 		e := &plan.Entries[i]
 		e.Before, e.After = e.After, e.Before
-		s.describe(ctx, e, "")
+		s.describe(e, e.Head, git.get(filepath.Dir(e.Path)).head)
 	}
 	return plan, nil
 }
@@ -342,6 +349,12 @@ func (s *Store) Apply(ctx context.Context, plan *Plan) (Result, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	var result Result
+	release, err := s.lock(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer release()
+	git := newGitCache(ctx)
 	if plan.UndoID == "" {
 		var revision int64
 		var source string
@@ -358,7 +371,7 @@ func (s *Store) Apply(ctx context.Context, plan *Plan) (Result, error) {
 			result.Skipped = append(result.Skipped, e.Path)
 			continue
 		}
-		current, data, err := currentState(e.Path)
+		current, data, err := currentState(e.Path, e.Before)
 		if err != nil || !same(current, e.Before) {
 			result.Skipped = append(result.Skipped, e.Path)
 			continue
@@ -376,6 +389,7 @@ func (s *Store) Apply(ctx context.Context, plan *Plan) (Result, error) {
 			current.Saved = true
 		}
 		e.Before = current
+		e.Head = git.get(filepath.Dir(e.Path)).head
 		entries = append(entries, e)
 	}
 	if len(entries) == 0 {
@@ -394,7 +408,7 @@ func (s *Store) Apply(ctx context.Context, plan *Plan) (Result, error) {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		now, _, err := currentState(e.Path)
+		now, _, err := currentState(e.Path, e.Before)
 		if err != nil || !same(now, e.Before) {
 			result.Skipped = append(result.Skipped, e.Path)
 			continue
@@ -403,10 +417,10 @@ func (s *Store) Apply(ctx context.Context, plan *Plan) (Result, error) {
 			var data []byte
 			data, err = s.read(e.After.Digest)
 			if err == nil {
-				err = os.MkdirAll(filepath.Dir(e.Path), 0755)
+				err = safePath(e.Path)
 			}
 			if err == nil {
-				err = safePath(e.Path)
+				err = safeParents(e.Path)
 			}
 			if err == nil {
 				err = atomicWrite(e.Path, data, os.FileMode(e.After.Mode))
@@ -429,4 +443,20 @@ func (s *Store) Apply(ctx context.Context, plan *Plan) (Result, error) {
 func (s *Store) MoveUndo(ctx context.Context, undoID, sessionID string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE file_history_undo SET session_id=? WHERE id=?`, sessionID, undoID)
 	return err
+}
+
+type gitState struct{ root, head string }
+type gitCache struct {
+	ctx         context.Context
+	directories map[string]gitState
+}
+
+func newGitCache(ctx context.Context) *gitCache { return &gitCache{ctx, map[string]gitState{}} }
+func (g *gitCache) get(directory string) gitState {
+	if value, ok := g.directories[directory]; ok {
+		return value
+	}
+	value := gitState{gitRoot(g.ctx, directory), gitHead(g.ctx, directory)}
+	g.directories[directory] = value
+	return value
 }

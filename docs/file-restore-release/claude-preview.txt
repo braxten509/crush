@@ -14,7 +14,7 @@
    │Conflicted and unavailable files are skipped.                                               │
    │Only tracked files change. Other edits, databases, installed packages, network effects and  │
    │Git commits are not undone.                                                                 │
-   │Git HEAD moved: restored files will be uncommitted changes.                                 │
+   │You can undo this restore from the command palette.                                         │
    │                                                                                            │
    │[Restore files]   Chat only    Cancel                                                       │
    │                                                                                            │
@@ -28,5 +28,5 @@
 › Go crazy
 
 
-  Claude Haiku · 33.92k/400k tokens · Context 92% left · 5h 16% left · Weekly 96% left
-  OKAY!  Branch switched. Files on disk are unchanged.
+  Claude Haiku · ~34.97k/400k tokens · Context ~91% left · 5h 10% left · Weekly 96% left
+  YOLO MODE

@@ -51,3 +51,41 @@ func TestFileHistoryPrecedesReviewBoundingAndOutlivesPruning(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before, string(content))
 }
+
+func TestHistoryFailureDoesNotLoseCreatedOrUpdatedToolResult(t *testing.T) {
+	data := t.TempDir()
+	conn, err := db.Connect(t.Context(), data)
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Release(data) })
+	q := db.New(conn)
+	_, err = q.CreateSession(t.Context(), db.CreateSessionParams{ID: "chat", Title: "test"})
+	require.NoError(t, err)
+	root, err := os.MkdirTemp(".", "restore-failure-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(root) })
+	require.NoError(t, os.WriteFile(filepath.Join(data, "file-history"), []byte("blocked"), 0600))
+	versions := filehistory.New(conn, data, root)
+	svc := NewService(q, WithFileHistory(versions))
+	review := &filechange.Review{Root: root, Changes: []filechange.Change{{Path: filepath.Join(root, "file"), Before: &filechange.State{Content: "old", Mode: 0644, Size: 3}, After: &filechange.State{Content: "new", Mode: 0644, Size: 3}}}}
+	created, err := svc.Create(t.Context(), "chat", CreateMessageParams{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "call", Content: "tool succeeded", Review: review}}})
+	require.NoError(t, err)
+	loaded, err := svc.Get(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.Equal(t, "tool succeeded", loaded.ToolResults()[0].Content)
+	loaded.Parts = []ContentPart{ToolResult{ToolCallID: "next", Content: "updated tool", Review: review}}
+	_, err = svc.(*service).write(t.Context(), loaded)
+	require.NoError(t, err)
+	loaded, err = svc.Get(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.Equal(t, "updated tool", loaded.ToolResults()[0].Content)
+	plan, err := versions.Preview(t.Context(), "chat", "")
+	require.NoError(t, err)
+	require.Contains(t, plan.Entries[0].Unavailable, "File history unavailable")
+	// Even a broken optional point table must not stop ordinary messages.
+	_, err = conn.Exec(`ALTER TABLE file_history_points RENAME TO broken_points`)
+	require.NoError(t, err)
+	_, err = svc.Create(t.Context(), "chat", CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: "still works"}}})
+	require.NoError(t, err)
+}

@@ -173,7 +173,7 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	event.SessionDeleted()
 	for _, cleanup := range s.fileHistoryCleanup {
 		if err := cleanup(ctx); err != nil {
-			return err
+			slog.Warn("File history cleanup failed after chat deletion", "error", err)
 		}
 	}
 	return nil

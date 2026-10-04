@@ -5,7 +5,7 @@
   tools.
 
 
-  ▸ ● 2 actions · edited claude.txt +1 −1 | £!f Thinking..
+  ▸ ● 2 actions · edited claude.txt +1 −1 | ^D= Thinking...
 
 
 
@@ -28,5 +28,5 @@
 › Go crazy
 
 
-  Claude Haiku · 0/400k tokens · Context 100% left · 5h 18% left · Weekly 97% left
+  Claude Haiku · 0/400k tokens · Context 100% left · 5h 9% left · Weekly 96% left
   YOLO MODE

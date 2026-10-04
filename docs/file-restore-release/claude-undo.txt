@@ -28,5 +28,5 @@
 › Go crazy
 
 
-  Claude Haiku · 33.92k/400k tokens · Context 92% left · 5h 16% left · Weekly 96% left
+  Claude Haiku · ~34.97k/400k tokens · Context ~91% left · 5h 10% left · Weekly 96% left
   OKAY!  Restored 1 files. Use Undo Last File Restore in the command palette to put them back.

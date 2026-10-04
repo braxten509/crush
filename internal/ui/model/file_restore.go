@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
+	"time"
 )
 
 func (m *UI) previewFiles(target string, fork bool, next dialog.Action) (bool, tea.Cmd) {
@@ -14,15 +15,15 @@ func (m *UI) previewFiles(target string, fork bool, next dialog.Action) (bool, t
 	if !ok {
 		return false, nil
 	}
-	plan, err := manager.PreviewFiles(context.Background(), m.session.ID, target, fork)
-	if err != nil {
-		return true, util.ReportError(err)
+	id := m.session.ID
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	busy := dialog.NewFileRestoreBusy(m.com, "Checking files…", cancel)
+	m.dialog.OpenDialog(busy)
+	return true, func() tea.Msg {
+		defer cancel()
+		plan, err := manager.PreviewFiles(ctx, id, target, fork)
+		return filePreviewMsg{busy, id, plan, next, err}
 	}
-	if len(plan.Entries) == 0 {
-		return false, nil
-	}
-	m.dialog.OpenDialog(dialog.NewFileRestore(m.com, plan, next))
-	return true, nil
 }
 func (m *UI) previewUndoFiles() tea.Cmd {
 	if err := m.treeReady(); err != nil {
@@ -32,13 +33,16 @@ func (m *UI) previewUndoFiles() tea.Cmd {
 	if !ok {
 		return util.ReportInfo("File restore needs a local workspace.")
 	}
-	plan, err := manager.PreviewUndoFiles(context.Background(), m.session.ID)
-	if err != nil {
-		return util.ReportError(err)
-	}
+	id := m.session.ID
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	busy := dialog.NewFileRestoreBusy(m.com, "Checking files…", cancel)
 	m.dialog.CloseDialog(dialog.CommandsID)
-	m.dialog.OpenDialog(dialog.NewFileRestore(m.com, plan, nil))
-	return nil
+	m.dialog.OpenDialog(busy)
+	return func() tea.Msg {
+		defer cancel()
+		plan, err := manager.PreviewUndoFiles(ctx, id)
+		return filePreviewMsg{busy, id, plan, nil, err}
+	}
 }
 func (m *UI) chooseFileRestore(action dialog.ActionFileRestore) tea.Cmd {
 	if err := m.treeReady(); err != nil {
@@ -65,11 +69,56 @@ func (m *UI) chooseFileRestore(action dialog.ActionFileRestore) tea.Cmd {
 	if !ok {
 		return util.ReportInfo("File restore needs a local workspace.")
 	}
+	m.dialog.OpenDialog(dialog.NewFileRestoreBusy(m.com, "Restoring files…", nil))
 	return func() tea.Msg {
-		result, err := manager.UndoFiles(context.Background(), plan)
-		if err != nil {
-			return util.ReportError(err)()
-		}
-		return util.ReportInfo(result.Notice())()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		result, err := manager.UndoFiles(ctx, plan)
+		return fileUndoMsg{result, err}
 	}
+}
+
+type filePreviewMsg struct {
+	busy      *dialog.FileRestore
+	sessionID string
+	plan      *filehistory.Plan
+	next      dialog.Action
+	err       error
+}
+type fileUndoMsg struct {
+	result filehistory.Result
+	err    error
+}
+
+func (m *UI) finishFilePreview(result filePreviewMsg) tea.Cmd {
+	if m.dialog.Dialog(dialog.FileRestoreID) != result.busy {
+		return nil
+	}
+	m.dialog.CloseDialog(dialog.FileRestoreID)
+	if m.session == nil || m.session.ID != result.sessionID {
+		return nil
+	}
+	if result.err != nil {
+		return util.ReportError(result.err)
+	}
+	if err := m.treeReady(); err != nil {
+		return util.ReportError(err)
+	}
+	if len(result.plan.Entries) == 0 && result.next != nil {
+		switch action := result.next.(type) {
+		case dialog.ActionTreeNavigate:
+			return m.navigateTree(action, nil)
+		case dialog.ActionTreeCopy:
+			return m.copyTree(action.MessageID, action.Fork, nil)
+		}
+	}
+	m.dialog.OpenDialog(dialog.NewFileRestore(m.com, result.plan, result.next))
+	return nil
+}
+func (m *UI) finishFileUndo(result fileUndoMsg) tea.Cmd {
+	m.dialog.CloseDialog(dialog.FileRestoreID)
+	if result.err != nil {
+		return util.ReportError(result.err)
+	}
+	return util.ReportInfo(result.result.Notice())
 }

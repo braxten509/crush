@@ -4,12 +4,14 @@ import hashlib
 import json
 import os
 import pathlib
+import re
+import re
 import shlex
 import sqlite3
 import subprocess
 import time
 
-BASE = pathlib.Path.home() / '.cache/crush-test/file-restore-qa'
+BASE = pathlib.Path(os.environ.get('FILE_RESTORE_QA_DIR', str(pathlib.Path.home() / '.cache/crush-test/file-restore-qa')))
 OUT = pathlib.Path(__file__).resolve().parent
 SOURCES = {'home': pathlib.Path.home()/'.crush/crush.db', 'forecaster': pathlib.Path.home()/'Documents/forecaster-ui-public/.crush/crush.db'}
 
@@ -85,9 +87,13 @@ for kind,source in SOURCES.items():
     # Account/footer line may show live usage/model naming differences; the
     # visible transcript and saved-chat list occupy everything above the footer.
     transcript_same=baseline[0].splitlines()[:-3]==candidate[0].splitlines()[:-3]
-    sessions_same=baseline[1].splitlines()[:-3]==candidate[1].splitlines()[:-3]
+    # Sequential captures naturally show different relative ages. Match the
+    # complete list after replacing only its right-aligned age field.
+    def stable_sessions(screen):
+        return [re.sub(r'\s+(?:\d+ (?:second|minute|hour|day|week|month|year)s? ago|just now)(\s+│)', r' <age>\1', line) for line in screen.splitlines()[:-3]]
+    sessions_same=stable_sessions(baseline[1])==stable_sessions(candidate[1])
     assert transcript_same,kind+' transcript changed'
     assert sessions_same,kind+' saved-chat list changed'
-    results[kind]={'fingerprints':new,'transcript_matches':transcript_same,'saved_chats_match':sessions_same,'integrity':'ok','excluded_comparison_field':'messages.updated_at (normal legacy review bookkeeping)', 'legacy_review_normalization_matches_installed':True, 'original_message_count':old['messages']['count'] }
+    results[kind]={'fingerprints':new,'transcript_matches':transcript_same,'saved_chats_match':sessions_same,'saved_chat_relative_ages_normalized':True,'integrity':'ok','excluded_comparison_field':'messages.updated_at (normal legacy review bookkeeping)', 'legacy_review_normalization_matches_installed':True, 'original_message_count':old['messages']['count'] }
     print(kind+': every message/tree row unchanged, old chat and saved-chat list match, integrity ok')
 (OUT/'database-checks.json').write_text(json.dumps(results,indent=2)+'\n')

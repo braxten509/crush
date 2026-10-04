@@ -1,16 +1,17 @@
 
 
-› Write the fixture file now.
+› Read and write the fixture file now.
 
 
   ▸ ✓ 2 actions╭────────────────────────────────────────────────────────────────────╮
-               │ Fork · choose a prompt to edit in a new chat ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+               │ Session tree · default ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
 • FILE_RESTORE_│                                                                    │
                │ > Search text or bookmarks                                         │
   ◇╭────────────────────────────────────────────────────────────────────────────────────────────╮
    │ Restore files? · 1 file ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
-   │restore  +1 -1                                                                              │
-   │/home/braxtenchenay/dev/crush-file-restore/restore-qa-fixture/native.txt                    │
+   │restore  +0 -0 · SKIP: File history unavailable: mkdir /home/braxtenchenay/.cache/crush-test│
+   │/file-restore-review-qa/storage-failure-data/file-history: not a directory                  │
+   │/home/braxtenchenay/dev/crush-file-restore/restore-qa-fixture/native.txt			│
    │Conflicted and unavailable files are skipped.                                               │
    │Only tracked files change. Other edits, databases, installed packages, network effects and  │
    │Git commits are not undone.                                                                 │
@@ -21,12 +22,11 @@
    │↑↓ scroll  ←→ choose  enter confirm  esc cancel                                             │
    │                                                                                            │
    ╰────────────────────────────────────────────────────────────────────────────────────────────╯
-               │↑↓ choose  enter jump  ←→ fold  tab filter                          │
-               │ctrl+e edit  ctrl+r label  alt+↑↓ branch  esc close                 │
+               │←→ choose  enter confirm  esc back · File preview follows.          │
                │                                                                    │
                ╰────────────────────────────────────────────────────────────────────╯
 › Go crazy
 
 
-  Tree fixture · 9.96k/400k tokens · Context 98% left
-  OKAY!  Branch switched. Files on disk are unchanged.
+  Tree fixture · ~9.96k/400k tokens · Context ~98% left
+  YOLO MODE

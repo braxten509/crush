@@ -1,0 +1,11 @@
+Status: completed
+
+final binary: 80x24 and 40x12 previews retain all actions; live edit restore/undo passed
+
+Running as unit: run-p2742371-i6840190.service
+          Finished with result: success
+Main processes terminated with: code=exited, status=0/SUCCESS
+               Service runtime: 5.744s
+             CPU time consumed: 114ms
+                   Memory peak: 13.4M (swap: 0B)
+

@@ -108,6 +108,13 @@ type MouseSelectableEditor interface {
 	HandleMouseRelease(x, y int) (handled bool, cmd tea.Cmd)
 }
 
+// ReleaseDoneEditor is implemented by selectable inline editors that run
+// their click action on mouse release. TakeReleaseDone reports, once, that
+// such a click finished the editor, so the UI closes it.
+type ReleaseDoneEditor interface {
+	TakeReleaseDone() bool
+}
+
 // PasteableEditor is an optional interface for inline editors
 // that contain text areas and can receive paste events. The UI
 // type-asserts for this before routing tea.PasteMsg.

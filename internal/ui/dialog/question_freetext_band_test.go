@@ -61,9 +61,10 @@ func TestFreeTextAnswerBox(t *testing.T) {
 	cur := d.Draw(scr, image.Rect(0, 0, width, h))
 
 	lines := strings.Split(ansi.Strip(scr.Render()), "\n")
-	require.True(t, strings.HasPrefix(lines[0], "  ?  What would you like to learn?"), lines[0])
-	require.Nil(t, scr.CellAt(0, 0).Style.Bg, "a space before the tag")
-	require.NotNil(t, scr.CellAt(2, 0).Style.Bg, "the ? sits on a tag")
+	require.True(t, strings.HasPrefix(lines[0], "   ?  What would you like to learn?"), lines[0])
+	require.Nil(t, scr.CellAt(1, 0).Style.Bg, "the gutter before the tag")
+	require.NotNil(t, scr.CellAt(2, 0).Style.Bg, "the tag starts in the text column")
+	require.Equal(t, "?", scr.CellAt(3, 0).Content, "the ? sits on a tag")
 	require.True(t, strings.HasPrefix(lines[2], "  Name a topic."), "description in the text column: %q", lines[2])
 
 	requireAnswerBox(t, sty, scr, 4, width)

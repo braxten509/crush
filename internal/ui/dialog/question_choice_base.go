@@ -21,10 +21,11 @@ import (
 const choiceListMaxWidth = 120
 
 // questionIconPrompt returns the themed question icon based on
-// focus state, with a space before the tag so it doesn't touch the
-// window edge. Shared by all question component types.
+// focus state, indented past the 2-cell gutter so the tag lines up
+// with the text column below it (descriptions, choices, answer boxes).
+// Shared by all question component types.
 func questionIconPrompt(sty *styles.Styles, focused bool) string {
-	return " " + questionBadge(sty, focused)
+	return strings.Repeat(" ", questionBarWidth) + questionBadge(sty, focused)
 }
 
 // questionBadge is the question icon without the leading space, for views
@@ -37,7 +38,7 @@ func questionBadge(sty *styles.Styles, focused bool) string {
 }
 
 // questionDescription renders a question's markdown description in the
-// text column, two cells in under the title (past the "?" mark), wrapped
+// text column, two cells in (past the gutter, under the "?" tag), wrapped
 // to fit width. Shared by all question component types.
 func questionDescription(sty *styles.Styles, text string, width int) string {
 	w := max(1, width-2)

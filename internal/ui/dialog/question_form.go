@@ -75,6 +75,10 @@ type QuestionForm struct {
 	// resolves the request itself. nil for ordinary forms.
 	secure    *secureentry.Form
 	dismissed bool
+
+	// sel holds mouse text selection and link clicks over the drawn form.
+	sel         formSelection
+	releaseDone bool // a click run on mouse release finished the form
 }
 
 var _ CollapsibleInlineEditor = (*QuestionForm)(nil)
@@ -291,6 +295,7 @@ func (f *QuestionForm) clearSecrets() {
 // HandleKey routes keys to the active tab. Returns true when the
 // entire batch is submitted.
 func (f *QuestionForm) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	f.sel.clear()
 	// Tab navigation works on all tabs including confirm. A secure field
 	// types [ and ] (secrets contain them); ctrl+left/right still switch.
 	typesBracket := msg.Text == "[" || msg.Text == "]"
@@ -342,6 +347,8 @@ func (f *QuestionForm) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 // HandleWheel scrolls the active choice list vertically, or delegates
 // to the active question if it supports wheel scrolling.
 func (f *QuestionForm) HandleWheel(deltaX, deltaY float64) {
+	// Scrolling moves the text out from under the highlight.
+	f.sel.clear()
 	if f.isConfirmTab() {
 		if deltaY < 0 && f.confirmComp.scrollOffset > 0 {
 			f.confirmComp.scrollOffset--
@@ -361,6 +368,7 @@ func (f *QuestionForm) HandleWheel(deltaX, deltaY float64) {
 // switchTab moves focus to the given tab index, wrapping around.
 // Snapshots the current question's response before leaving.
 func (f *QuestionForm) switchTab(idx int) {
+	f.sel.clear()
 	totalTabs := len(f.labels)
 	if totalTabs == 0 {
 		return
@@ -536,6 +544,9 @@ func (f *QuestionForm) CollapsedHelp() string { return "answer questions" }
 // batches it shows the active question text and answered count;
 // for single questions it shows just the question text.
 func (f *QuestionForm) DrawCollapsed(scr uv.Screen, area uv.Rectangle) {
+	// The full form isn't on screen, so there is nothing to select.
+	f.sel.clear()
+	f.sel.area = image.Rectangle{}
 	icon := questionIconPrompt(f.Styles, false)
 	iconWidth := lipgloss.Width(icon)
 	textStyle := f.Styles.Messages.AssistantInfoModel
@@ -600,10 +611,18 @@ func (f *QuestionForm) getQuestionText(idx int) string {
 	return ""
 }
 
-// Draw renders the tab bar and the active tab content. When
+// Draw renders the tab bar and the active tab content, then records
+// the drawn cells for mouse selection and paints any highlight.
+func (f *QuestionForm) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
+	cur := f.drawForm(scr, area)
+	f.sel.capture(scr, area, f.Styles.TextSelection)
+	return cur
+}
+
+// drawForm renders the tab bar and the active tab content. When
 // showTabs is false (single question), renders content directly
 // without tab chrome.
-func (f *QuestionForm) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
+func (f *QuestionForm) drawForm(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	contentY := area.Min.Y
 
 	if f.showTabs {

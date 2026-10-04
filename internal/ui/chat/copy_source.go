@@ -18,7 +18,16 @@ func (a *AssistantMessageItem) CopySource() []string {
 	if a.message.IsCompacting || a.message.IsSummaryMessage {
 		return nil
 	}
-	source := []byte(common.StripPlanMarkers(a.message.Content().Text))
+	return markdownCopyBlocks(a.message.Content().Text)
+}
+
+// CopyText returns the visible message text without Markdown delimiters.
+func (a *AssistantMessageItem) CopyText() string {
+	return strings.Join(markdownCopyBlocks(a.message.Content().Text), "\n\n")
+}
+
+func markdownCopyBlocks(content string) []string {
+	source := []byte(common.StripPlanMarkers(content))
 	document := goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser().Parse(text.NewReader(source))
 	var blocks []string
 	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -65,8 +74,6 @@ func copyInlineSource(block ast.Node, source []byte) string {
 			if entering {
 				out.Write(node.Value)
 			}
-		case *ast.CodeSpan:
-			out.WriteByte('`')
 		case *ast.AutoLink:
 			if entering {
 				out.Write(node.Label(source))

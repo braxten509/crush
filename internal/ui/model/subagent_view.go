@@ -107,6 +107,7 @@ func (m *UI) handleSubagentView(msg tea.Msg) (tea.Cmd, bool) {
 		if v != nil && msg.view == v {
 			if click, ok := msg.msg.(DelayedClickMsg); ok {
 				v.chat.HandleDelayedClick(click)
+				return m.takeChatLink(v.chat), true
 			}
 		}
 		return nil, true
@@ -222,7 +223,7 @@ func (m *UI) handleSubagentView(msg tea.Msg) (tea.Cmd, bool) {
 	case tea.MouseClickMsg:
 		if msg.Button == uv.MouseLeft && image.Pt(msg.X, msg.Y).In(back) {
 			m.closeSubagentView()
-		} else if image.Pt(msg.X, msg.Y).In(main) {
+		} else if msg.Button == uv.MouseLeft && image.Pt(msg.X, msg.Y).In(main) {
 			v.returnFocused = false
 			if handled, cmd := v.chat.HandleScrollbarPress(msg.X-main.Min.X, msg.Y-main.Min.Y); handled {
 				return cmd, true
@@ -242,7 +243,7 @@ func (m *UI) handleSubagentView(msg tea.Msg) (tea.Cmd, bool) {
 	case tea.MouseReleaseMsg:
 		v.chat.HandleScrollbarRelease()
 		v.chat.HandleMouseUp(msg.X-main.Min.X, msg.Y-main.Min.Y)
-		return nil, true
+		return m.takeChatLink(v.chat), true
 	}
 	return nil, false
 }

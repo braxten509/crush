@@ -1295,11 +1295,14 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case copyChatHighlightMsg:
 		cmds = append(cmds, m.copyChatHighlight())
+	case dialog.OpenLinkMsg:
+		cmds = append(cmds, openChatLink(msg.URL, m.com.Workspace.WorkingDir()))
 	case reviewLoadedMsg:
 		cmds = append(cmds, m.applyReview(msg))
 	case DelayedClickMsg:
 		// Handle delayed single-click action (e.g., expansion).
 		m.chat.HandleDelayedClick(msg)
+		cmds = append(cmds, m.takeChatLink(m.chat))
 		if g := m.chat.TakeChangesRequest(); g != nil {
 			cmds = append(cmds, m.openReview(g))
 		}
@@ -1321,15 +1324,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if clickable, ok := m.activeInline.(dialog.MouseClickableEditor); ok {
 				if done, handled := clickable.HandleMouseClick(msg.X, msg.Y); handled {
 					if done {
-						prev := m.activeInline
-						m.activeInline = nil
-						m.textarea.Focus()
-						m.updateLayoutAndSize()
-						if cod, ok := prev.(dialog.CmdOnDone); ok {
-							if c := cod.PendingCmd(); c != nil {
-								cmds = append(cmds, c)
-							}
-						}
+						cmds = append(cmds, m.closeDoneInline())
 					}
 					return m, tea.Batch(cmds...)
 				}
@@ -1370,7 +1365,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Batch(cmds...)
 				}
 			}
-			if !image.Pt(msg.X, msg.Y).In(m.layout.sidebar) {
+			if msg.Button == uv.MouseLeft && image.Pt(msg.X, msg.Y).In(m.layout.main) {
 				if handled, cmd := m.chat.HandleMouseDown(x, y); handled {
 					m.lastClickTime = time.Now()
 					if cmd != nil {
@@ -1456,6 +1451,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if cmd != nil {
 						cmds = append(cmds, cmd)
 					}
+					if rd, ok := m.activeInline.(dialog.ReleaseDoneEditor); ok && rd.TakeReleaseDone() {
+						cmds = append(cmds, m.closeDoneInline())
+					}
 					return m, tea.Batch(cmds...)
 				}
 			}
@@ -1479,7 +1477,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Adjust for chat area position
 			x -= m.layout.main.Min.X
 			y -= m.layout.main.Min.Y
-			if m.chat.HandleMouseUp(x, y) && m.chat.HasHighlight() {
+			released := m.chat.HandleMouseUp(x, y)
+			cmds = append(cmds, m.takeChatLink(m.chat))
+			if released && m.chat.HasHighlight() {
 				cmds = append(cmds, tea.Tick(doubleClickThreshold, func(t time.Time) tea.Msg {
 					if time.Since(m.lastClickTime) >= doubleClickThreshold {
 						return copyChatHighlightMsg{}
@@ -4373,6 +4373,19 @@ func (m *UI) handleTextareaHeightChange(prevHeight int) tea.Cmd {
 // the textarea height changed as a result.
 func (m *UI) updateTextarea(msg tea.Msg) tea.Cmd {
 	return m.updateTextareaWithPrevHeight(msg, m.textarea.Height())
+}
+
+// closeDoneInline closes an inline editor a mouse click finished and
+// returns the command it left to run, if any.
+func (m *UI) closeDoneInline() tea.Cmd {
+	prev := m.activeInline
+	m.activeInline = nil
+	m.textarea.Focus()
+	m.updateLayoutAndSize()
+	if cod, ok := prev.(dialog.CmdOnDone); ok {
+		return cod.PendingCmd()
+	}
+	return nil
 }
 
 // forwardMouseToTextarea forwards a mouse event to the textarea with

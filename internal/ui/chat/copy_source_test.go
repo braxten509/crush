@@ -128,8 +128,8 @@ func TestCopyCodeInHeavilyFormattedReply(t *testing.T) {
 }
 
 // Inline code renders without backticks or padding; a copy of the reply must
-// still restore them from the message source.
-func TestCopyAssistantInlineCodeKeepsBackticks(t *testing.T) {
+// contain only the visible text.
+func TestCopyAssistantInlineCodeOmitsHiddenBackticks(t *testing.T) {
 	source := "Started a wait (PID `1438360`) with `sleep 10` and `nohup`."
 	for _, width := range []int{20, 40, 100} {
 		item, rendered := copyAssistant(t, source, width)
@@ -137,11 +137,10 @@ func TestCopyAssistantInlineCodeKeepsBackticks(t *testing.T) {
 		area := uv.Rect(0, 0, width, lipgloss.Height(rendered))
 		got, ok := list.HighlightSource(item.CopySource(), rendered, area, 0, 0, -1, -1)
 		require.True(t, ok, "rendered: %s", ansi.Strip(rendered))
-		require.Equal(t, source, got, "width %d", width)
+		require.Equal(t, "Started a wait (PID 1438360) with sleep 10 and nohup.", got, "width %d", width)
 	}
 
-	// Selecting just the code text takes its backticks; selecting inside it
-	// does not invent any.
+	// Selecting the whole inline code or part of it copies only visible text.
 	item, rendered := copyAssistant(t, source, 100)
 	area := uv.Rect(0, 0, 100, lipgloss.Height(rendered))
 	for y, line := range strings.Split(ansi.Strip(rendered), "\n") {
@@ -152,11 +151,29 @@ func TestCopyAssistantInlineCodeKeepsBackticks(t *testing.T) {
 		col := ansi.StringWidth(line[:x])
 		got, ok := list.HighlightSource(item.CopySource(), rendered, area, y, col, y, col+7)
 		require.True(t, ok)
-		require.Equal(t, "`1438360`", got)
+		require.Equal(t, "1438360", got)
 		got, ok = list.HighlightSource(item.CopySource(), rendered, area, y, col+1, y, col+6)
 		require.True(t, ok)
 		require.Equal(t, "43836", got)
 		return
 	}
 	t.Fatal("code text not rendered")
+}
+
+func TestCopyAssistantPlainTextPreservesLiteralBackticks(t *testing.T) {
+	for _, tt := range []struct{ source, want string }{
+		{"Send **mail** to `no-reply@accounts.google.com`.", "Send mail to no-reply@accounts.google.com."},
+		{"Use ``a`b`` here.", "Use a`b here."},
+		{"Keep \\`literal\\` marks.", "Keep `literal` marks."},
+		{"```sh\necho `date`\n```", "echo `date`\n"},
+	} {
+		for _, width := range []int{20, 80} {
+			item, rendered := copyAssistant(t, tt.source, width)
+			require.Equal(t, tt.want, item.CopyText())
+			got, ok := list.HighlightSource(item.CopySource(), rendered,
+				uv.Rect(0, 0, width, lipgloss.Height(rendered)), 0, 0, -1, -1)
+			require.True(t, ok, "source: %s", tt.source)
+			require.Equal(t, tt.want, got)
+		}
+	}
 }

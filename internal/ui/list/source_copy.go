@@ -103,17 +103,6 @@ func HighlightSource(blocks []string, rendered string, area image.Rectangle, sta
 				mapping[visibleAt+i] = sourceAt + i
 			}
 			visibleAt += len(compact)
-		} else if hidden, kept := withoutBackticks(compact); len(kept) > 0 {
-			// Inline code renders without its backticks, so prose blocks
-			// match only once those are set aside. They stay unmapped and
-			// still land in the copy wherever they sit inside the selection.
-			if at := strings.Index(visible.String()[visibleAt:], hidden); at >= 0 {
-				visibleAt += at
-				for i, at := range kept {
-					mapping[visibleAt+i] = sourceAt + at
-				}
-				visibleAt += len(hidden)
-			}
 		}
 		sourceAt += len(compact)
 	}
@@ -150,38 +139,7 @@ func HighlightSource(blocks []string, rendered string, area image.Rectangle, sta
 	if first < 0 {
 		return "", true
 	}
-	// A selection that reaches the edge of an inline code span takes the
-	// span's hidden backtick too, so a copied codespan stays a codespan.
-	mapped := make(map[int]bool, len(mapping))
-	for _, at := range mapping {
-		if at >= 0 {
-			mapped[offsets[at].start] = true
-		}
-	}
-	for first > 0 && source[first-1] == '`' && !mapped[first-1] {
-		first--
-	}
-	for last < len(source) && source[last] == '`' && !mapped[last] {
-		last++
-	}
 	return source[first:last], true
-}
-
-// withoutBackticks drops the backticks from compact text and returns, for
-// each byte of the result, its position in the original.
-func withoutBackticks(compact string) (string, []int) {
-	if !strings.Contains(compact, "`") {
-		return "", nil
-	}
-	var out strings.Builder
-	kept := make([]int, 0, len(compact))
-	for i := range len(compact) {
-		if compact[i] != '`' {
-			out.WriteByte(compact[i])
-			kept = append(kept, i)
-		}
-	}
-	return out.String(), kept
 }
 
 func selectedCell(cell copyCell, startLine, startCol, endLine, endCol int) bool {

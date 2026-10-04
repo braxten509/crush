@@ -1045,7 +1045,7 @@ func (a *AssistantMessageItem) HandleMouseClick(btn ansi.MouseButton, x, y int) 
 // HandleKeyEvent implements KeyEventHandler.
 func (a *AssistantMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	if k := key.String(); k == "c" || k == "y" {
-		text := a.message.Content().Text
+		text := a.CopyText()
 		return true, common.CopyToClipboard(text, "Message copied to clipboard")
 	}
 	return false, nil

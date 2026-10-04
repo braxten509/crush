@@ -154,6 +154,9 @@ type Chat struct {
 
 	// Pending single click action (delayed to detect double-click)
 	pendingClickID int // Incremented on each click to invalidate old pending clicks
+	openLink       string
+	heldLinkClick  *DelayedClickMsg
+	linkDragged    bool
 
 	// follow is a flag to indicate whether the view should auto-scroll to
 	// bottom on new messages.
@@ -1334,6 +1337,9 @@ func (m *Chat) HandleMouseDown(x, y int) (bool, tea.Cmd) {
 		return false, nil
 	}
 
+	m.heldLinkClick = nil
+	m.linkDragged = false
+
 	// Increment pending click ID to invalidate any previous pending clicks.
 	m.pendingClickID++
 	clickID := m.pendingClickID
@@ -1412,8 +1418,28 @@ func (m *Chat) HandleDelayedClick(msg DelayedClickMsg) bool {
 		return false
 	}
 
-	// Execute the click action (e.g., expansion).
+	// Use the rendered cells, so wrapped labels, Unicode and hidden targets
+	// all have exactly the same hit area as the text the user sees.
+	if msg.ItemIdx != m.list.Selected() {
+		return false
+	}
 	selectedItem := m.list.SelectedItem()
+	if selectedItem == nil {
+		return false
+	}
+	if destination := m.itemLinkAt(selectedItem, msg.X, msg.Y); destination != "" {
+		if m.linkDragged {
+			return false
+		}
+		if m.mouseDown {
+			m.heldLinkClick = &msg
+		} else {
+			m.openLink = destination
+		}
+		return true
+	}
+
+	// Execute the click action (e.g., expansion).
 	if clickable, ok := selectedItem.(list.MouseClickable); ok {
 		handled := clickable.HandleMouseClick(ansi.MouseButton1, msg.X, msg.Y)
 		// Toggle expansion only when the item signalled it handled the
@@ -1513,7 +1539,16 @@ func (m *Chat) HandleMouseUp(x, y int) bool {
 		return false
 	}
 
+	// A release elsewhere is a selection, even if no motion event arrived.
+	idx, itemY := m.list.ItemIndexAtPosition(x, y)
+	if idx != m.mouseDownItem || x != m.mouseDownX || itemY != m.mouseDownY {
+		m.linkDragged = true
+	}
 	m.mouseDown = false
+	if held := m.heldLinkClick; held != nil {
+		m.heldLinkClick = nil
+		m.HandleDelayedClick(*held)
+	}
 	return true
 }
 
@@ -1532,6 +1567,9 @@ func (m *Chat) HandleMouseDrag(x, y int) bool {
 		return false
 	}
 
+	if itemIdx != m.mouseDownItem || x != m.mouseDownX || itemY != m.mouseDownY {
+		m.linkDragged = true
+	}
 	m.mouseDragItem = itemIdx
 	m.mouseDragX = x
 	m.mouseDragY = itemY
@@ -1821,4 +1859,25 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// itemLinkAt includes the visible prefix and preserves links spanning rows.
+func (m *Chat) itemLinkAt(item list.Item, x, y int) string {
+	if x < 0 || x >= m.list.Width() || y < 0 {
+		return ""
+	}
+	rendered := item.Render(m.list.Width())
+	lines := strings.Split(rendered, "\n")
+	if y >= len(lines) {
+		return ""
+	}
+	buf := uv.NewScreenBuffer(m.list.Width(), len(lines))
+	if m.drawCache != nil {
+		buf.Method = m.drawCache.method
+	}
+	uv.NewStyledString(rendered).Draw(buf, buf.Bounds())
+	if cell := buf.CellAt(x, y); cell != nil {
+		return cell.Link.URL
+	}
+	return ""
 }

@@ -37,6 +37,17 @@ let an agent or a person run it by hand:
 			fmt.Fprintf(cmd.OutOrStdout(), "Installed Crush %s. Restart Crush to use it.\n", installed)
 			return pushErr
 		}
+		if args[0] == "build" {
+			tag, err := selfupdate.MergedTag(ctx, dir)
+			if err != nil {
+				return err
+			}
+			if err := selfupdate.Build(ctx, dir, tag, os.Stderr); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Built %s and every test passed. It is ready to install.\n", tag)
+			return nil
+		}
 		release, err := selfupdate.Check(ctx, dir)
 		if err != nil {
 			return err
@@ -57,11 +68,6 @@ let an agent or a person run it by hand:
 				return fmt.Errorf("merging %s clashes in: %v", release.Tag, clashes)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Merged %s.\n", release.Tag)
-		case "build":
-			if err := selfupdate.Build(ctx, dir, release.Tag, os.Stderr); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Built %s and every test passed. It is ready to install.\n", release.Tag)
 		default:
 			return fmt.Errorf("unknown step %q", args[0])
 		}

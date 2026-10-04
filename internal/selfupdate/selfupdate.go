@@ -88,6 +88,12 @@ func currentBase(ctx context.Context, dir string) (string, error) {
 	if base, _, ok := strings.Cut(version.Version, "-local"); ok && strings.HasPrefix(base, "v") {
 		return base, nil
 	}
+	return MergedTag(ctx, dir)
+}
+
+// MergedTag identifies the stable release already in the checkout. Building
+// a resolved merge must not depend on GitHub or the running binary's version.
+func MergedTag(ctx context.Context, dir string) (string, error) {
 	out, err := git(ctx, dir, "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "--exclude", "*-*", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("cannot tell which release the fork is on: %w", err)
@@ -108,7 +114,7 @@ func Merge(ctx context.Context, dir, tag string) (clashes []string, err error) {
 		return nil, ErrDirty
 	}
 	// Start from the fork's latest published state.
-	if _, err := git(ctx, dir, "pull", "--rebase=merges", "--quiet"); err != nil {
+	if _, err := git(ctx, dir, "pull", "--ff-only", "--quiet"); err != nil {
 		return nil, fmt.Errorf("cannot update the checkout from GitHub: %w", err)
 	}
 	if _, err := git(ctx, dir, "fetch", "--quiet", "--no-tags", "origin", "tag", tag); err != nil {

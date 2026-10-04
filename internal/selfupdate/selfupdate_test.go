@@ -106,6 +106,38 @@ func TestMergeNeverTouchesUnsavedWork(t *testing.T) {
 	require.Equal(t, "unsaved\n", string(data))
 }
 
+func TestMergedTagUsesStableCheckoutRelease(t *testing.T) {
+	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
+	_, err := Merge(t.Context(), checkout, "v1.1.0")
+	require.NoError(t, err)
+	gitIn(t, checkout, "tag", "v9.0.0-rc.1")
+	tag, err := MergedTag(t.Context(), checkout)
+	require.NoError(t, err)
+	require.Equal(t, "v1.1.0", tag)
+}
+
+func TestMergeRefusesToRewriteDivergedHistory(t *testing.T) {
+	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
+	root := filepath.Dir(checkout)
+	publisher := filepath.Join(root, "publisher")
+	gitIn(t, root, "clone", "-q", filepath.Join(root, "fork.git"), publisher)
+	write(t, publisher, "published.txt", "published work\n")
+	gitIn(t, publisher, "add", ".")
+	gitIn(t, publisher, "commit", "-qm", "published work")
+	gitIn(t, publisher, "push", "-q")
+
+	write(t, checkout, "local.txt", "local work\n")
+	gitIn(t, checkout, "add", ".")
+	gitIn(t, checkout, "commit", "-qm", "local work")
+	head := gitIn(t, checkout, "rev-parse", "HEAD")
+	_, err := Merge(t.Context(), checkout, "v1.1.0")
+	require.ErrorContains(t, err, "cannot update the checkout")
+	require.Equal(t, head, gitIn(t, checkout, "rev-parse", "HEAD"))
+	require.Empty(t, gitIn(t, checkout, "status", "--porcelain"))
+	require.FileExists(t, filepath.Join(checkout, "local.txt"))
+	require.NoFileExists(t, filepath.Join(checkout, "published.txt"))
+}
+
 func TestFixPromptNamesTheWork(t *testing.T) {
 	prompt := FixPrompt("v1.1.0", []string{"a.go", "b.go"}, "")
 	require.Contains(t, prompt, "clashes in: a.go, b.go")

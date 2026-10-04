@@ -1070,6 +1070,13 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mcpStateChangedMsg:
 		m.mcpStates = msg.states
+		if dia := m.dialog.Dialog(dialog.MCPTogglesID); dia != nil {
+			if toggles, ok := dia.(*dialog.MCPToggles); ok {
+				for name, info := range msg.states {
+					toggles.SetItemStatus(name, mcpStatusText(info))
+				}
+			}
+		}
 		// Auto-open the MCP auth dialog if any servers need authentication.
 		if cmd := m.openMCPAuthDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2595,6 +2602,8 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionDisableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.disableDockerMCP)
+	case dialog.ActionToggleMCP:
+		cmds = append(cmds, m.applyMCPToggle(msg))
 	case dialog.ActionInitializeProject:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -3847,15 +3856,15 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 // mouseMode determines the Bubble Tea mouse reporting mode to request for
 // the current frame. When mouse support is disabled via configuration, no
 // mouse mode is requested so the terminal emulator (or tmux) can handle
-// text selection, copy/paste, and scrolling natively. Inline editors need
-// motion events even without a button pressed (e.g. for hover/drag), so
-// they use MouseModeAllMotion; everything else only needs click/drag
-// tracking via MouseModeCellMotion.
-func mouseMode(enabled, inlineActive bool) tea.MouseMode {
+// text selection, copy/paste, and scrolling natively. Inline editors and
+// hoverable dialogs need motion events even without a button pressed (e.g.
+// for hover/drag), so they use MouseModeAllMotion; everything else only
+// needs click/drag tracking via MouseModeCellMotion.
+func mouseMode(enabled, wantsMotion bool) tea.MouseMode {
 	switch {
 	case !enabled:
 		return tea.MouseModeNone
-	case inlineActive:
+	case wantsMotion:
 		return tea.MouseModeAllMotion
 	default:
 		return tea.MouseModeCellMotion
@@ -3883,7 +3892,7 @@ func (m *UI) view() tea.View {
 	if !m.isTransparent {
 		v.BackgroundColor = m.viewBackground()
 	}
-	v.MouseMode = mouseMode(m.mouseEnabled, m.activeInline != nil)
+	v.MouseMode = mouseMode(m.mouseEnabled, m.activeInline != nil || m.dialog.HandlesHover())
 	v.ReportFocus = m.caps.ReportFocusEvents
 	v.WindowTitle = "crush " + home.Short(m.com.Workspace.WorkingDir())
 
@@ -5777,6 +5786,10 @@ func (m *UI) openDialog(id string) tea.Cmd {
 			break
 		}
 		m.dialog.OpenDialog(projectsDialog)
+	case dialog.MCPTogglesID:
+		if cmd := m.openMCPTogglesDialog(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case dialog.FilePickerID:
 		if cmd := m.openFilesDialog(); cmd != nil {
 			cmds = append(cmds, cmd)

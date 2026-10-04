@@ -182,17 +182,36 @@ func filterToolsForChannel(agentTools []fantasy.AgentTool, channel string, state
 	}
 	filtered := make([]fantasy.AgentTool, 0, len(agentTools))
 	for _, agentTool := range agentTools {
-		mcpTool, ok := agentTool.(interface{ MCP() string })
+		mcpName, ok := toolMCPName(agentTool)
 		if !ok {
 			filtered = append(filtered, agentTool)
 			continue
 		}
-		state, found := states[mcpTool.MCP()]
-		if !found || !state.Channel || channel == mcpTool.MCP() {
+		state, found := states[mcpName]
+		if !found || !state.Channel || channel == mcpName {
 			filtered = append(filtered, agentTool)
 		}
 	}
 	return filtered
+}
+
+// toolMCPName looks through safety wrappers without removing them from the
+// tool list. Both channel routing and repository toggles need the server name.
+func toolMCPName(tool fantasy.AgentTool) (string, bool) {
+	for {
+		switch wrapped := tool.(type) {
+		case guardedTool:
+			tool = wrapped.AgentTool
+		case *hookedTool:
+			tool = wrapped.inner
+		default:
+			mcpTool, ok := tool.(interface{ MCP() string })
+			if !ok {
+				return "", false
+			}
+			return mcpTool.MCP(), true
+		}
+	}
 }
 
 type SessionAgent interface {
@@ -1306,8 +1325,13 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				prepared.Messages[i].ProviderOptions = nil
 			}
 
-			// Use latest tools (updated by SetTools when MCP tools change).
-			prepared.Tools = filterToolsForChannel(a.tools.Copy(), call.Channel, mcp.GetStates())
+			// Use latest tools (updated by SetTools when MCP tools
+			// change), filtered for the session's channel and minus MCP
+			// servers disabled for this repository.
+			prepared.Tools = a.filterDisabledMCPTools(
+				callContext,
+				filterToolsForChannel(a.tools.Copy(), call.Channel, mcp.GetStates()),
+			)
 
 			// Prompts queued during the turn join it at the next tool
 			// boundary: every step after the first follows tool results.
@@ -2128,6 +2152,36 @@ func filesAsParts(files []fantasy.FilePart) []fantasy.MessagePart {
 		parts = append(parts, f)
 	}
 	return parts
+}
+
+// filterDisabledMCPTools removes tools from MCP servers disabled via the
+// "Toggle MCPs" dialog. The override set is repository-scoped and shared
+// by every session in the repository, including sub-agent sessions.
+// Connections are process-global and left untouched; only the tool list
+// changes.
+func (a *sessionAgent) filterDisabledMCPTools(ctx context.Context, toolList []fantasy.AgentTool) []fantasy.AgentTool {
+	disabledServers, err := a.sessions.MCPDisabledServers(ctx)
+	if err != nil {
+		slog.Error("Failed to list disabled MCP servers", "error", err)
+		return toolList
+	}
+	if len(disabledServers) == 0 {
+		return toolList
+	}
+	disabled := make(map[string]struct{}, len(disabledServers))
+	for _, name := range disabledServers {
+		disabled[name] = struct{}{}
+	}
+	filtered := make([]fantasy.AgentTool, 0, len(toolList))
+	for _, t := range toolList {
+		if mcpName, ok := toolMCPName(t); ok {
+			if _, off := disabled[mcpName]; off {
+				continue
+			}
+		}
+		filtered = append(filtered, t)
+	}
+	return filtered
 }
 
 // filterFileParts removes fantasy.FilePart entries from a slice of message

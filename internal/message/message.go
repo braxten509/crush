@@ -575,6 +575,9 @@ func (s *service) List(ctx context.Context, sessionID string) ([]Message, error)
 		return nil, err
 	}
 	dbMessages, err := s.q.ListMessagesBySession(ctx, sessionID)
+	if err == nil {
+		dbMessages, err = s.activeTree(ctx, sessionID, dbMessages)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -589,47 +592,30 @@ func (s *service) List(ctx context.Context, sessionID string) ([]Message, error)
 }
 
 func (s *service) ListFromSummary(ctx context.Context, sessionID, summaryMessageID string) ([]Message, error) {
-	if summaryMessageID == "" {
-		return s.List(ctx, sessionID)
-	}
-	if err := s.migrateReviews(ctx, sessionID); err != nil {
-		return nil, err
-	}
-	dbMessages, err := s.q.ListMessagesBySessionFromSummary(ctx, db.ListMessagesBySessionFromSummaryParams{
-		SessionID: sessionID,
-		ID:        summaryMessageID,
-	})
+	messages, err := s.List(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	// No rows means the summary message is gone; fall back to the whole
-	// session rather than sending nothing.
-	if len(dbMessages) == 0 {
-		return s.List(ctx, sessionID)
-	}
-	messages := make([]Message, len(dbMessages))
-	for i, dbMessage := range dbMessages {
-		messages[i], err = s.fromDBItem(dbMessage)
-		if err != nil {
-			return nil, err
+	for i, msg := range messages {
+		if msg.ID == summaryMessageID {
+			return messages[i:], nil
 		}
 	}
 	return messages, nil
 }
 
 func (s *service) ListUserMessages(ctx context.Context, sessionID string) ([]Message, error) {
-	dbMessages, err := s.q.ListUserMessagesBySession(ctx, sessionID)
+	messages, err := s.List(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	messages := make([]Message, len(dbMessages))
-	for i, dbMessage := range dbMessages {
-		messages[i], err = s.fromDBItem(dbMessage)
-		if err != nil {
-			return nil, err
+	var users []Message
+	for i := len(messages) - 1; i >= 0 && len(users) < 200; i-- {
+		if messages[i].Role == User {
+			users = append(users, messages[i])
 		}
 	}
-	return messages, nil
+	return users, nil
 }
 
 func (s *service) ListAllUserMessages(ctx context.Context) ([]Message, error) {
@@ -648,11 +634,16 @@ func (s *service) ListAllUserMessages(ctx context.Context) ([]Message, error) {
 }
 
 func (s *service) GetLastAssistantMessage(ctx context.Context, sessionID string) (Message, error) {
-	dbMessage, err := s.q.GetLastAssistantMessageBySession(ctx, sessionID)
+	messages, err := s.List(ctx, sessionID)
 	if err != nil {
 		return Message{}, err
 	}
-	return s.fromDBItem(dbMessage)
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == Assistant && !messages[i].IsSummaryMessage {
+			return messages[i], nil
+		}
+	}
+	return Message{}, sql.ErrNoRows
 }
 
 func (s *service) fromDBItem(item db.Message) (Message, error) {

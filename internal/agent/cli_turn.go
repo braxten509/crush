@@ -60,7 +60,10 @@ func cliPromptWithAttachments(prompt string, attachments []message.Attachment) (
 // permissions and rendering work exactly as they do for API models.
 func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string, onCompacting func(bool) error, onActivity func() error) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
 	return func(ctx context.Context, sc fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
-		link := m.Links.Get(call.SessionID, m.Kind)
+		link, err := a.treeCLILink(ctx, m, call.SessionID)
+		if err != nil {
+			return nil, err
+		}
 		prompt, err := cliPromptWithAttachments(call.Prompt, call.Attachments)
 		if err != nil {
 			return nil, err
@@ -150,7 +153,10 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 // whole transcript into a fresh request. It returns nil, nil when the CLI
 // has no session to summarize from.
 func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sessionID, effort string, history []message.Message, prompt string, summary *message.Message) (*fantasy.AgentResult, error) {
-	link := m.Links.Get(sessionID, m.Kind)
+	link, err := a.treeCLILink(ctx, m, sessionID)
+	if err != nil {
+		return nil, err
+	}
 	if link.Native == "" {
 		return nil, nil
 	}
@@ -160,7 +166,7 @@ func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sess
 		return nil, nil
 	}
 	var total, last fantasy.Usage
-	err := m.Run(ctx, cliagent.Turn{SessionID: sessionID, Prompt: text, Resume: resume, Effort: effort, Emit: func(e cliagent.Event) error {
+	err = m.Run(ctx, cliagent.Turn{SessionID: sessionID, Prompt: text, Resume: resume, Effort: effort, Emit: func(e cliagent.Event) error {
 		switch e.Type {
 		case cliagent.EventText:
 			summary.AppendContent(e.Text)
@@ -191,6 +197,14 @@ func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessi
 		return
 	}
 	link := cliagent.Link{Native: native, Through: msgs[len(msgs)-1].ID, Tasks: tasks, TaskInstructionsHash: taskInstructionsHash, SharedInstructions: true}
+	if tree, ok := a.messages.(message.TreeService); ok {
+		revision, err := tree.TreeRevision(ctx, sessionID)
+		if err != nil {
+			slog.Error("Failed to read tree revision", "error", err)
+			return
+		}
+		link.TreeRevision = revision
+	}
 	if err := m.Links.Set(sessionID, m.Kind, link); err != nil {
 		slog.Error("Failed to save agent CLI session link", "error", err)
 	}

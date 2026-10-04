@@ -289,7 +289,8 @@ func flattenPrompt(prompt fantasy.Prompt) string {
 
 // Link ties a Crush session to a CLI's native session.
 type Link struct {
-	Native string `json:"native"`
+	TreeRevision int64  `json:"tree_revision,omitempty"`
+	Native       string `json:"native"`
 	// Through is the last Crush message the native session has seen.
 	// Anything after it happened elsewhere and is handed over on resume.
 	Through string `json:"through"`

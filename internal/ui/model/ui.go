@@ -2240,6 +2240,10 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		}
 	case dialog.ActionViewSubAgent:
 		cmds = append(cmds, m.openSubagentView(msg.Task))
+	case dialog.ActionTreeJump:
+		cmds = append(cmds, m.jumpTree(msg.MessageID))
+	case dialog.ActionTreeLabel:
+		cmds = append(cmds, m.labelTree(msg))
 	case dialog.ActionSelectSession:
 		m.dialog.CloseDialog(dialog.SessionsID)
 		cmds = append(cmds, m.openSession(msg.Session))
@@ -5732,6 +5736,8 @@ func (m *UI) setReasoningEffort(effort string, ultracode *bool) (tea.Cmd, error)
 func (m *UI) openDialog(id string) tea.Cmd {
 	var cmds []tea.Cmd
 	switch id {
+	case dialog.TreeID:
+		return m.openTreeDialog()
 	case dialog.SessionsID:
 		if cmd := m.openSessionsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)

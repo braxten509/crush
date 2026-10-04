@@ -1,5 +1,18 @@
 # File restore review evidence
 
+## Independent final review
+
+The parent reviewer re-read the capture ownership and pinned filesystem target
+changes. The original sequential-action regression now passes unchanged and
+is retained in `internal/filechange/review_session_budget_test.go`.
+Tracked job `058` ran fresh (uncached) filechange, filehistory, message, and
+UI model tests successfully. Job `059` rebuilt the executable from this source
+and independently reran the saved-fixture terminal check: restore recovered
+the original bytes, undo recovered the edited bytes, and cleanup passed.
+No remaining blocking findings were identified in this review. Ordinary
+concurrent leaf writes and Windows runtime coverage retain the limitations
+documented below. Nothing was installed or pushed during review.
+
 Implemented on `file-restore`, starting at `70c21d14`. Not installed or pushed.
 The test executable is `/tmp/crush-file-restore`.
 

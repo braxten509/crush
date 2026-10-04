@@ -128,16 +128,28 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 		h.mu.Unlock()
 		response.Content = fmt.Sprintf("Started background job %s. Use crush bg --output %s to read output or crush bg --stop %s to stop it. Crush will report completion; keep working without waiting.", job.ID, job.ID, job.ID)
 		transferred = true
+		h.rememberJob(job, req.Session)
 		go func() {
 			defer release()
 			defer func() { h.mu.Lock(); delete(h.backgroundShells, callID); h.mu.Unlock() }()
 			if !job.WaitContext(ctx) {
 				return
 			}
+			closing := func() bool { h.mu.Lock(); defer h.mu.Unlock(); return h.closing }
+			if closing() {
+				// Shutdown killed the job; the next Crush reports it.
+				h.interruptJob(job)
+				return
+			}
 			notice := backgroundJobNotification(job, options.DataDirectory)
 			if _, err := h.c.Run(ctx, req.Session, notice); err != nil {
 				slog.Error("Background job notification failed", "job", job.ID, "error", err)
+				if closing() {
+					h.interruptJob(job)
+					return
+				}
 			}
+			h.forgetJob(job.ID)
 		}()
 	}
 	return TaskReply{Background: &response}

@@ -46,8 +46,9 @@ type savedTask struct {
 }
 
 // ResumeInterruptedTasks starts again the tasks an earlier Crush in each
-// project was running when it quit or crashed. Callers run it once the UI
-// listens for task events, so resumed tasks show up like new ones.
+// project was running when it quit or crashed, and tells each agent which of
+// its background jobs that Crush cut off. Callers run it once the UI listens
+// for task events, so resumed tasks show up like new ones.
 func ResumeInterruptedTasks() {
 	hubsMu.Lock()
 	pending := slices.Clone(hubs)
@@ -60,6 +61,12 @@ func ResumeInterruptedTasks() {
 // savedTasksPath is where this hub saves its running tasks, or "" when it
 // doesn't: non-interactive runs end with their tasks.
 func (h *taskHub) savedTasksPath() string {
+	return h.savedDataPath(savedTasksFile)
+}
+
+// savedDataPath is where this hub saves the named file of running work, or
+// "" when it doesn't: non-interactive runs end with their work.
+func (h *taskHub) savedDataPath(name string) string {
 	if h.c == nil || h.c.cfg == nil || !h.c.interactive {
 		return ""
 	}
@@ -67,7 +74,7 @@ func (h *taskHub) savedTasksPath() string {
 	if dir == "" {
 		return ""
 	}
-	return filepath.Join(dir, savedTasksFile)
+	return filepath.Join(dir, name)
 }
 
 // editSaved changes the saved tasks under a lock shared by every Crush in
@@ -76,11 +83,14 @@ func (h *taskHub) editSaved(edit func([]savedTask) []savedTask) error {
 	return editTaskFile(h.savedTasksPath(), edit)
 }
 
-// editTaskFile changes a list of tasks saved at path under a lock shared by
-// every Crush in the project. An empty path saves nothing.
-func editTaskFile(path string, edit func([]savedTask) []savedTask) error {
+// editTaskFile changes a list saved at path under a lock shared by every
+// Crush in the project. An empty path saves nothing.
+func editTaskFile[T any](path string, edit func([]T) []T) error {
 	if path == "" {
 		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -90,7 +100,7 @@ func editTaskFile(path string, edit func([]savedTask) []savedTask) error {
 	}
 	defer release()
 
-	var saved []savedTask
+	var saved []T
 	data, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -98,7 +108,7 @@ func editTaskFile(path string, edit func([]savedTask) []savedTask) error {
 		return err
 	default:
 		if err := json.Unmarshal(data, &saved); err != nil {
-			slog.Warn("Discarding unreadable saved sub-agents", "path", path, "error", err)
+			slog.Warn("Discarding an unreadable saved list", "path", path, "error", err)
 			saved = nil
 		}
 	}
@@ -191,7 +201,6 @@ func (h *taskHub) resumeInterrupted(ctx context.Context) {
 	claimed, err := h.claimInterrupted()
 	if err != nil {
 		slog.Warn("Failed to read interrupted sub-agents", "error", err)
-		return
 	}
 	for _, s := range claimed {
 		if err := h.resume(ctx, s); err != nil {
@@ -201,6 +210,7 @@ func (h *taskHub) resumeInterrupted(ctx context.Context) {
 		}
 		slog.Info("Resumed an interrupted sub-agent", "task", s.ID, "name", s.Name)
 	}
+	h.reportInterruptedJobs(ctx)
 }
 
 // resume runs a saved task again on its child session.

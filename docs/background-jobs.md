@@ -12,6 +12,8 @@ A single command argument is a shell script. Multiple arguments are quoted indiv
 
 Crush uses its normal shell tool, including permission checks, configured hooks, command restrictions, and file-change reviews. Jobs keep running when the caller's turn ends. Running jobs appear in the background-process list; stopping one there cancels the whole shell script. Crush sends the owning conversation a completion message with output and the exit status. Other conversations cannot read or stop it through `crush bg`.
 
+Jobs run inside Crush, so quitting or a crash ends them. Interactive Crush saves each running job in the project's data directory (`background-jobs.json`) until its completion reaches the conversation. The next Crush in that project sends each owning conversation one message listing the jobs that were cut off, with their commands and last output, so the agent checks on them and starts again whatever still needs to run instead of waiting for a completion that will never come. Jobs older than 24 hours are dropped instead of reported.
+
 Up to 50 jobs can run at once. Finished jobs keep their output for eight hours (the oldest are dropped past 200) but never count toward that limit.
 
 Commands that finish during the initial shell check return their result directly. For jobs that continue running, the returned ID works with `--output` and `--stop`. Completed output uses the existing shell manager's retention policy. Give commands an appropriate timeout if they might hang. For builds launched through a service manager, keep its waiting client inside the tracked job, for example `crush bg -- 'systemd-run --user --wait --pipe --collect timeout 600 go test ./...'`.

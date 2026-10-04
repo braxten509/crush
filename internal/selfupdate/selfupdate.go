@@ -403,3 +403,11 @@ func Fix(ctx context.Context, dir, tag string, clashes []string, failure string,
 func LogPath() string {
 	return filepath.Join(filepath.Dir(statePath()), "update.log")
 }
+
+// CreateLog starts a new update log, creating its folder when needed.
+func CreateLog() (*os.File, error) {
+	if _, err := updateDir(); err != nil {
+		return nil, err
+	}
+	return os.Create(LogPath())
+}

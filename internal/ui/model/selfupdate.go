@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -150,7 +149,7 @@ func (m *UI) startSelfUpdate(release *selfupdate.Release) tea.Cmd {
 	m.status.SetInfoMsg(util.InfoMsg{Type: util.InfoTypeUpdate, Msg: fmt.Sprintf("Updating Crush to %s in the background: merging, building and testing…", release.Tag), TTL: time.Hour})
 	return func() tea.Msg {
 		ctx := context.Background()
-		log, err := os.Create(selfupdate.LogPath())
+		log, err := selfupdate.CreateLog()
 		if err != nil {
 			return selfUpdateBuiltMsg{release: release, err: err}
 		}

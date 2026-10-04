@@ -114,3 +114,11 @@ func TestFixPromptNamesTheWork(t *testing.T) {
 	prompt = FixPrompt("v1.1.0", nil, "--- FAIL: TestX")
 	require.Contains(t, prompt, "--- FAIL: TestX")
 }
+
+func TestCreateLogMakesItsFolder(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "fresh"))
+	log, err := CreateLog()
+	require.NoError(t, err, "the first update ever must not fail on a missing folder")
+	require.NoError(t, log.Close())
+	require.FileExists(t, LogPath())
+}

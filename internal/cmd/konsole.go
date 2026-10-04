@@ -12,9 +12,13 @@ import (
 // so the mark left by the shell starting Crush stayed beside the bottom row
 // for the whole session. Konsole's OSC 50 profile sequence switches it off
 // for this tab only, without touching the saved profile.
+//
+// Konsole also leaves the pixels that don't fill a whole row below the last
+// one, so the space under Crush's bottom row changed by up to a row as the
+// window was resized. Centering the text area splits them above and below.
 const (
-	konsoleHideScrollMarker = "\x1b]50;HighlightScrolledLines=false\a"
-	konsoleShowScrollMarker = "\x1b]50;HighlightScrolledLines=true\a"
+	konsoleHideScrollMarker = "\x1b]50;HighlightScrolledLines=false\a\x1b]50;TerminalCenter=true\a"
+	konsoleShowScrollMarker = "\x1b]50;HighlightScrolledLines=true\a\x1b]50;TerminalCenter=false\a"
 )
 
 // hideKonsoleScrollMarker switches Konsole's scroll mark off while Crush

@@ -122,11 +122,10 @@ func TestCompactChatHasNoHeaderBar(t *testing.T) {
 	require.Equal(t, top, u.layout.sessionDetails.Min.Y, "ctrl+d details open from the top")
 }
 
-func TestLastRowStaysBlankUnderTheModeBadge(t *testing.T) {
+func TestModeBadgeSitsOnTheLastRow(t *testing.T) {
 	t.Parallel()
 
 	u := newTestUI()
 	u.updateLayoutAndSize()
-	require.Equal(t, u.height-2, u.layout.status.Min.Y, "the badge row sits above the last row")
-	require.LessOrEqual(t, u.layout.status.Max.Y, u.height-1, "nothing is laid out on the last row")
+	require.Equal(t, u.height-1, u.layout.status.Min.Y, "no blank row below the badge")
 }

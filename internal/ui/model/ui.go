@@ -4437,10 +4437,8 @@ func (m *UI) updateSize() {
 // generateLayout calculates the layout rectangles for all UI components based
 // on the current UI state and terminal dimensions.
 func (m *UI) generateLayout(w, h int) uiLayout {
-	// The screen area we're working with. The last row always stays blank,
-	// so the mode badge never sits on the window's edge (a terminal's
-	// leftover pixels below the last row vary as the window is resized).
-	area := image.Rect(0, 0, w, max(0, h-1))
+	// The screen area we're working with
+	area := image.Rect(0, 0, w, h)
 
 	// The help height: the short hint row is hidden, so the status bar only
 	// takes rows when the full help (ctrl+g) is open. Badges and

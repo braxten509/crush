@@ -147,7 +147,10 @@ crush --continue
 
 		showScrollMarker := sync.OnceFunc(hideKonsoleScrollMarker(env, os.Stdout, term.IsTerminal(os.Stdout.Fd())))
 		defer showScrollMarker()
+		watchCtx, stopWatching := context.WithCancel(cmd.Context())
+		go ui.WatchTerminalBackground(watchCtx, model, program.Send)
 		_, err = program.Run()
+		stopWatching()
 		showScrollMarker()
 		if err != nil {
 			event.Error(err)

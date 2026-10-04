@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -245,6 +246,18 @@ type UI struct {
 	layout uiLayout
 
 	isTransparent bool
+	// resendBackground flips to make the renderer send the background
+	// color again after the terminal dropped it.
+	resendBackground bool
+	// backgroundResends counts resends the terminal hasn't taken yet.
+	backgroundResends int
+	// watchBackground tells [WatchTerminalBackground] whether to check.
+	watchBackground atomic.Bool
+	// quietFrame lets the next View reuse lastView: set for messages that
+	// can't change the screen (background checks).
+	quietFrame   bool
+	lastView     tea.View
+	haveLastView bool
 
 	// mouseEnabled controls whether Bubble Tea mouse reporting is active.
 	// When false, the terminal emulator (or tmux) handles text selection,
@@ -298,8 +311,8 @@ type UI struct {
 	keyMap KeyMap
 	keyenh tea.KeyboardEnhancementsMsg
 
-	dialog       *dialog.Overlay
-	status       *Status
+	dialog *dialog.Overlay
+	status *Status
 
 	// bangMode tracks whether the editor is in bang (!) shell mode.
 	bangMode     bool
@@ -937,6 +950,12 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateNotificationBackend()
 	case tea.FocusMsg:
 		m.notifyWindowFocused = true
+		if !m.isTransparent {
+			cmds = append(cmds, tea.RequestBackgroundColor)
+		}
+	case tea.BackgroundColorMsg:
+		m.handleTerminalBackground(msg)
+
 	case tea.BlurMsg:
 		m.notifyWindowFocused = false
 	case remoteStartedMsg:
@@ -2307,11 +2326,10 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 			}
 			m.isTransparent = newValue
 
-			status := "disabled"
 			if newValue {
-				status = "enabled"
+				return util.NewInfoMsg("Using the terminal's background")
 			}
-			return util.NewInfoMsg("Transparent background " + status)
+			return util.NewInfoMsg("Using Crush's background")
 		})
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionCheckCLIUpdates:
@@ -3844,13 +3862,26 @@ func mouseMode(enabled, inlineActive bool) tea.MouseMode {
 	}
 }
 
-// View renders the UI model's view.
+// View renders the UI model's view. A background check changes nothing on
+// screen, so it reuses the last frame instead of drawing one.
 func (m *UI) View() tea.View {
+	if m.quietFrame && m.haveLastView {
+		m.quietFrame = false
+		return m.lastView
+	}
+	m.quietFrame = false
+	m.lastView = m.view()
+	m.haveLastView = true
+	return m.lastView
+}
+
+func (m *UI) view() tea.View {
 	var v tea.View
 	v.AltScreen = true
 	v.KeyboardEnhancements.ReportEventTypes = true
+	m.watchBackground.Store(!m.isTransparent)
 	if !m.isTransparent {
-		v.BackgroundColor = m.com.Styles.Background
+		v.BackgroundColor = m.viewBackground()
 	}
 	v.MouseMode = mouseMode(m.mouseEnabled, m.activeInline != nil)
 	v.ReportFocus = m.caps.ReportFocusEvents
@@ -4406,8 +4437,10 @@ func (m *UI) updateSize() {
 // generateLayout calculates the layout rectangles for all UI components based
 // on the current UI state and terminal dimensions.
 func (m *UI) generateLayout(w, h int) uiLayout {
-	// The screen area we're working with
-	area := image.Rect(0, 0, w, h)
+	// The screen area we're working with. The last row always stays blank,
+	// so the mode badge never sits on the window's edge (a terminal's
+	// leftover pixels below the last row vary as the window is resized).
+	area := image.Rect(0, 0, w, max(0, h-1))
 
 	// The help height: the short hint row is hidden, so the status bar only
 	// takes rows when the full help (ctrl+g) is open. Badges and

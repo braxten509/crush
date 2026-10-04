@@ -35,8 +35,19 @@ func NewFilter() *Filter {
 // message to the model. Returning nil drops noisy samples at the input
 // boundary, which is early enough to keep later key presses from waiting
 // behind a mouse flood in the update queue.
-func (f *Filter) Filter(_ tea.Model, msg tea.Msg) tea.Msg {
+func (f *Filter) Filter(model tea.Model, msg tea.Msg) tea.Msg {
+	if ui, ok := model.(*UI); ok && isBackgroundQuery(msg) {
+		// Bubble Tea sends the query, then redraws; skip the redraw.
+		ui.quietFrame = true
+		return msg
+	}
 	switch typed := msg.(type) {
+	case tea.BackgroundColorMsg:
+		// Background checks run many times a second; only a lost color
+		// may wake the model (and redraw).
+		if ui, ok := model.(*UI); ok && !ui.keepBackgroundReply(typed) {
+			return nil
+		}
 	case tea.MouseWheelMsg:
 		mouse := typed.Mouse()
 		dx, dy := wheelDeltas(mouse)

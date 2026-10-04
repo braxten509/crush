@@ -576,11 +576,12 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	)
 
 	// Add transparent background toggle.
-	transparentLabel := "Disable Background Color"
+	// Crush's theme background, or the terminal's own (transparent).
+	transparentLabel := "Use Terminal Background"
 	if cfg != nil && cfg.Options != nil && cfg.Options.TUI.IsTransparent() {
-		transparentLabel = "Enable Background Color"
+		transparentLabel = "Use Crush Background"
 	}
-	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_transparent", transparentLabel, "", ActionToggleTransparentBackground{}))
+	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_transparent", transparentLabel, "", ActionToggleTransparentBackground{}).WithAliases("background", "color", "transparent", "theme"))
 
 	// Add the composer-only focus toggle.
 	focusLabel := "Keep Focus on Composer"

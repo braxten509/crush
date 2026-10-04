@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"errors"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/message"
@@ -62,6 +63,9 @@ func (m *UI) applyReview(msg reviewLoadedMsg) tea.Cmd {
 	}
 	m.dialog.CloseDialog(dialog.ChangesID)
 	if msg.err != nil {
+		if errors.Is(msg.err, message.ErrReviewExpired) {
+			return util.ReportInfo("This saved diff has expired. Full diffs are kept for the latest five prompts; the chat is still here.")
+		}
 		return util.ReportError(msg.err)
 	}
 	m.dialog.OpenDialog(dialog.NewChanges(m.com, msg.title, msg.files))

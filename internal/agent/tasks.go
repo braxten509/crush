@@ -72,6 +72,7 @@ type Task struct {
 	Status    TaskStatus `json:"status"`
 	Started   time.Time  `json:"started"`
 	Ended     time.Time  `json:"ended"`
+	Delivered bool       `json:"delivered,omitempty"`
 }
 
 // TaskRequest is what `crush spawn` writes; TaskReply is Crush's answer.
@@ -834,6 +835,9 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 		slog.Warn("Failed to add task cost to its parent session", "task", id, "error", err)
 	}
 	if !tellParent {
+		h.mu.Lock()
+		t.Delivered = true
+		h.mu.Unlock()
 		return
 	}
 	switch {
@@ -842,9 +846,15 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	case err != nil:
 		output = "Error: " + err.Error()
 	}
-	if _, err := h.c.Run(ctx, snapshot.SessionID, taskNotification(snapshot, output)); err != nil && !errors.Is(err, context.Canceled) {
-		slog.Error("Failed to hand a task result to its session", "task", id, "error", err)
+	if _, err := h.c.Run(ctx, snapshot.SessionID, taskNotification(snapshot, output)); err != nil {
+		if !errors.Is(err, context.Canceled) {
+			slog.Error("Failed to hand a task result to its session", "task", id, "error", err)
+		}
+		return
 	}
+	h.mu.Lock()
+	t.Delivered = true
+	h.mu.Unlock()
 }
 
 // hasRunning reports whether any sub-agent of the session is still running.

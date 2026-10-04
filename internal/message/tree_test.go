@@ -2,6 +2,7 @@ package message
 
 import (
 	"github.com/stretchr/testify/require"
+	"strings"
 	"testing"
 )
 
@@ -78,4 +79,68 @@ func TestTreeFailedSummaryDeletionPreservesChildren(t *testing.T) {
 	require.Len(t, msgs, 2)
 	require.Equal(t, root.ID, msgs[0].ID)
 	require.Equal(t, child.ID, msgs[1].ID)
+}
+
+func TestTreeRootCloneForkAndBoundedPreviews(t *testing.T) {
+	svc, id := newTestService(t)
+	ctx := t.Context()
+	tree := svc.(TreeService)
+	root, err := svc.Create(ctx, id, CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: "root"}}})
+	require.NoError(t, err)
+	reply, err := svc.Create(ctx, id, CreateMessageParams{Role: Assistant, Parts: []ContentPart{TextContent{Text: strings.Repeat("x", 10000)}}})
+	require.NoError(t, err)
+	prompt, err := svc.Create(ctx, id, CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: "edit me"}}})
+	require.NoError(t, err)
+	clone, _, err := tree.CopyTree(ctx, id, prompt.ID, false)
+	require.NoError(t, err)
+	copied, err := svc.List(ctx, clone)
+	require.NoError(t, err)
+	require.Len(t, copied, 3)
+	require.NotEqual(t, root.ID, copied[0].ID)
+	fork, draft, err := tree.CopyTree(ctx, id, prompt.ID, true)
+	require.NoError(t, err)
+	require.Equal(t, "edit me", draft)
+	copied, err = svc.List(ctx, fork)
+	require.NoError(t, err)
+	require.Len(t, copied, 2)
+	require.Equal(t, reply.Content(), copied[1].Content())
+	previews, err := tree.Tree(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, previews[1].Message.Content().Text, 240)
+	original, err := svc.List(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, original, 3)
+	require.NoError(t, tree.SwitchTree(ctx, id, ""))
+	empty, err := svc.List(ctx, id)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	next, err := svc.Create(ctx, id, CreateMessageParams{Role: User})
+	require.NoError(t, err)
+	empty, err = svc.List(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, empty, 1)
+	require.Equal(t, next.ID, empty[0].ID)
+	require.NoError(t, tree.SwitchTree(ctx, id, prompt.ID))
+	original, err = svc.List(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, original, 3)
+}
+
+func TestTreeNoteFailureIsAtomic(t *testing.T) {
+	svc, id := newTestService(t)
+	ctx := t.Context()
+	tree := svc.(TreeService)
+	root, err := svc.Create(ctx, id, CreateMessageParams{Role: User})
+	require.NoError(t, err)
+	require.Error(t, tree.SwitchTreeNote(ctx, id, "missing", "summary", "test", "test"))
+	msgs, err := svc.List(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, root.ID, msgs[0].ID)
+	require.NoError(t, tree.SwitchTreeNote(ctx, id, "", "summary", "test", "test"))
+	msgs, err = svc.List(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, "summary", msgs[0].Content().Text)
+	require.False(t, msgs[0].IsSummaryMessage, "branch notes must not hide destination ancestry")
 }

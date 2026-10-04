@@ -12,7 +12,7 @@ import (
 
 func openDBReadOnly(dbPath string) (*sql.DB, error) {
 	dsn := fmt.Sprintf("file:%s?mode=ro&_txlock=immediate", dbPath)
-	db, err := driver.Open(dsn, nil)
+	db, err := driver.Open(dsn, registerTreeReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -26,6 +26,9 @@ func openDB(dbPath string) (*sql.DB, error) {
 	// is required for the ncruces driver to parse query parameters.
 	dsn := fmt.Sprintf("file:%s?_txlock=immediate", dbPath)
 	db, err := driver.Open(dsn, func(c *sqlite3.Conn) error {
+		if err := registerTreeReader(c); err != nil {
+			return err
+		}
 		// Set pragmas for better performance via _pragma query params.
 		// Format: PRAGMA name = value;
 		for name, value := range pragmas {
@@ -40,4 +43,8 @@ func openDB(dbPath string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+func registerTreeReader(c *sqlite3.Conn) error {
+	return c.CreateFunction("Upgrade Crush: this database uses session trees", 0, sqlite3.DETERMINISTIC, func(ctx sqlite3.Context, args ...sqlite3.Value) { ctx.ResultInt(1) })
 }

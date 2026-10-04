@@ -1,6 +1,10 @@
 package agent
 
 import (
+	"charm.land/fantasy"
+	"context"
+	"errors"
+	"fmt"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
@@ -68,4 +72,68 @@ func TestTreeSwitchRejectsAcceptedAndQueuedWork(t *testing.T) {
 	require.ErrorContains(t, c.SwitchTree(ctx, sess.ID, root.ID), "wait")
 	sa.messageQueue.Del(sess.ID)
 	require.NoError(t, c.SwitchTree(ctx, sess.ID, root.ID))
+}
+
+// Captures the actual model request, including cancellation and failed requests.
+type treeSummaryModel struct {
+	finishStreamModel
+	prompt  string
+	failure error
+	cancel  context.CancelFunc
+}
+
+func (m *treeSummaryModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
+	m.prompt = fmt.Sprintf("%v", call.Prompt)
+	if m.cancel != nil {
+		m.cancel()
+	}
+	if m.failure != nil {
+		return nil, m.failure
+	}
+	return m.finishStreamModel.Generate(ctx, call)
+}
+func TestTreeSummaryOptInCommonAncestorAndFailure(t *testing.T) {
+	env := testEnv(t)
+	ctx := t.Context()
+	sess, err := env.sessions.Create(ctx, "summary")
+	require.NoError(t, err)
+	create := func(text string) message.Message {
+		m, e := env.messages.Create(ctx, sess.ID, message.CreateMessageParams{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: text}}})
+		require.NoError(t, e)
+		return m
+	}
+	root := create("SHARED_ROOT")
+	old := create("OLD_BRANCH")
+	tree := env.messages.(message.TreeService)
+	require.NoError(t, tree.SwitchTree(ctx, sess.ID, root.ID))
+	other := create("DESTINATION")
+	require.NoError(t, tree.SwitchTree(ctx, sess.ID, old.ID))
+	model := &treeSummaryModel{finishStreamModel: finishStreamModel{text: "The old branch found amber."}}
+	sa := testSessionAgent(env, model, &finishStreamModel{text: "title"}, "system").(*sessionAgent)
+	c := &coordinator{mainAgent: sa, messages: env.messages}
+	require.NoError(t, c.NavigateTree(ctx, sess.ID, other.ID, false))
+	require.Empty(t, model.prompt)
+	require.NoError(t, tree.SwitchTree(ctx, sess.ID, old.ID))
+	require.NoError(t, c.NavigateTree(ctx, sess.ID, other.ID, true))
+	require.Contains(t, model.prompt, "OLD_BRANCH")
+	require.NotContains(t, model.prompt, "SHARED_ROOT")
+	require.NotContains(t, model.prompt, "DESTINATION")
+	path, err := env.messages.List(ctx, sess.ID)
+	require.NoError(t, err)
+	require.Len(t, path, 3)
+	require.Equal(t, other.ID, path[1].ID)
+	require.Contains(t, path[2].Content().Text, "found amber")
+	require.NoError(t, tree.SwitchTree(ctx, sess.ID, old.ID))
+	model.failure = errors.New("provider failed")
+	require.ErrorContains(t, c.NavigateTree(ctx, sess.ID, other.ID, true), "provider failed")
+	path, err = env.messages.List(ctx, sess.ID)
+	require.NoError(t, err)
+	require.Equal(t, old.ID, path[len(path)-1].ID)
+	model.failure = nil
+	cancelCtx, cancel := context.WithCancel(ctx)
+	model.cancel = cancel
+	require.Error(t, c.NavigateTree(cancelCtx, sess.ID, other.ID, true))
+	path, err = env.messages.List(ctx, sess.ID)
+	require.NoError(t, err)
+	require.Equal(t, old.ID, path[len(path)-1].ID)
 }

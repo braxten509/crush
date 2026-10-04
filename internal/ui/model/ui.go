@@ -1038,6 +1038,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.invalidateBusyCaches()
 		m.invalidatePromptQueue()
 		cmds = append(cmds, m.dispatchBusyRefresh(), m.dispatchPromptQueueRefresh())
+	case treeFinishedMsg:
+		cmds = append(cmds, m.finishTree(msg))
 	case loadSessionMsg, sessionLoadFailedMsg, sessionLoadTickMsg, openSessionMsg:
 		cmds = append(cmds, m.handleSessionLoadMsg(msg)...)
 
@@ -2241,7 +2243,16 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionViewSubAgent:
 		cmds = append(cmds, m.openSubagentView(msg.Task))
 	case dialog.ActionTreeJump:
-		cmds = append(cmds, m.jumpTree(msg.MessageID))
+		cmds = append(cmds, m.confirmTree(msg.MessageID, ""))
+	case dialog.ActionTreeEdit:
+		cmds = append(cmds, m.editTree(msg.MessageID))
+	case dialog.ActionTreeNavigate:
+		cmds = append(cmds, m.navigateTree(msg))
+	case dialog.ActionTreeCopy:
+		cmds = append(cmds, m.copyTree(msg.MessageID, msg.Fork))
+	case dialog.ActionTreeClone:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.cloneTree())
 	case dialog.ActionTreeLabel:
 		cmds = append(cmds, m.labelTree(msg))
 	case dialog.ActionSelectSession:
@@ -5738,6 +5749,12 @@ func (m *UI) openDialog(id string) tea.Cmd {
 	switch id {
 	case dialog.TreeID:
 		return m.openTreeDialog()
+	case dialog.ForkID:
+		cmd := m.openTreeDialog()
+		if d, ok := m.dialog.Dialog(dialog.TreeID).(*dialog.Tree); ok {
+			d.SetFork()
+		}
+		return cmd
 	case dialog.SessionsID:
 		if cmd := m.openSessionsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)

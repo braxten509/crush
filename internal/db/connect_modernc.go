@@ -4,10 +4,11 @@ package db
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"net/url"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 func openDBReadOnly(dbPath string) (*sql.DB, error) {
@@ -43,4 +44,9 @@ func openDB(dbPath string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// The migration version view deliberately cannot be read by old binaries.
+func init() {
+	sqlite.MustRegisterDeterministicScalarFunction("Upgrade Crush: this database uses session trees", 0, func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) { return int64(1), nil })
 }

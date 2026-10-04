@@ -572,9 +572,12 @@ func (s *service) List(ctx context.Context, sessionID string) ([]Message, error)
 	if err := s.migrateReviews(ctx, sessionID); err != nil {
 		return nil, err
 	}
-	dbMessages, err := s.q.ListMessagesBySession(ctx, sessionID)
-	if err == nil {
-		dbMessages, err = s.activeTree(ctx, sessionID, dbMessages)
+	var dbMessages []db.Message
+	var err error
+	if tree, ok := s.q.(treeStorage); ok {
+		dbMessages, err = tree.ListTreeMessages(ctx, sessionID)
+	} else {
+		dbMessages, err = s.q.ListMessagesBySession(ctx, sessionID)
 	}
 	if err != nil {
 		return nil, err

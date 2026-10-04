@@ -29,6 +29,10 @@ crush spawn --cli claude --model opus --effort max --fast --name "Compose a tune
 Write the song.
 EOF
 
+crush spawn --continue t2 <<'EOF'
+Also check the error paths you skipped.
+EOF
+
 crush spawn --stop t2`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -38,6 +42,7 @@ crush spawn --stop t2`,
 		}
 		req := agent.TaskRequest{Session: session}
 		req.Stop, _ = cmd.Flags().GetString("stop")
+		req.Continue, _ = cmd.Flags().GetString("continue")
 		if req.Stop == "" {
 			req.CLI, _ = cmd.Flags().GetString("cli")
 			req.Model, _ = cmd.Flags().GetString("model")
@@ -53,7 +58,7 @@ crush spawn --stop t2`,
 				}
 				req.Prompt = string(data)
 			}
-			if req.CLI == "" {
+			if req.CLI == "" && req.Continue == "" {
 				return errors.New("--cli is required")
 			}
 			if strings.TrimSpace(req.Prompt) == "" {
@@ -73,6 +78,10 @@ crush spawn --stop t2`,
 			cmd.Printf("Stopped task %s (%s).\n", t.ID, t.Name)
 			return nil
 		}
+		verb := "Started"
+		if req.Continue != "" {
+			verb = "Continued"
+		}
 		tuning := ""
 		if t.Effort != "" {
 			tuning += ", effort " + t.Effort
@@ -80,8 +89,8 @@ crush spawn --stop t2`,
 		if t.Fast {
 			tuning += ", fast"
 		}
-		cmd.Printf("Started task %s (%s) on %s/%s%s. It runs in the background; its result will arrive as a <%s> message when it finishes. Don't wait for it.\n",
-			t.ID, t.Name, t.CLI, t.Model, tuning, agent.TaskNotificationTag)
+		cmd.Printf("%s task %s (%s) on %s/%s%s. It runs in the background; its result will arrive as a <%s> message when it finishes. Don't wait for it.\n",
+			verb, t.ID, t.Name, t.CLI, t.Model, tuning, agent.TaskNotificationTag)
 		return nil
 	},
 }
@@ -93,6 +102,7 @@ func init() {
 	spawnCmd.Flags().Bool("fast", false, "Run in fast mode (claude and codex only)")
 	spawnCmd.Flags().String("name", "", "Short title shown in Crush")
 	spawnCmd.Flags().String("stop", "", "Stop the task with this ID instead")
+	spawnCmd.Flags().String("continue", "", "Send the prompt as a follow-up to this finished task; it keeps its conversation")
 	rootCmd.AddCommand(spawnCmd)
 }
 

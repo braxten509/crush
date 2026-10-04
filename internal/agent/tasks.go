@@ -88,6 +88,8 @@ type TaskRequest struct {
 	Name   string `json:"name,omitempty"`
 	Prompt string `json:"prompt,omitempty"`
 	Stop   string `json:"stop,omitempty"`
+	// Continue sends Prompt as a follow-up to this finished task.
+	Continue string `json:"continue,omitempty"`
 	// Ask holds question tool input from `crush ask`.
 	Ask         json.RawMessage    `json:"ask,omitempty"`
 	SecureEntry *secureentry.Spec  `json:"secure_entry,omitempty"`
@@ -328,6 +330,8 @@ func (h *taskHub) handle(data []byte) TaskReply {
 	var err error
 	if req.Stop != "" {
 		t, err = h.stop(req.Session, req.Stop)
+	} else if req.Continue != "" {
+		t, err = h.continueTask(req)
 	} else {
 		t, err = h.spawn(req)
 	}
@@ -415,6 +419,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		h.c.permissions.AutoApproveSession(child.ID)
 	}
 
+	h.skipUsedIDs(req.Session)
 	t := &Task{
 		SessionID: req.Session, ChildID: child.ID, Name: name,
 		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, Status: TaskRunning, Started: time.Now(),
@@ -936,6 +941,11 @@ Providers and models (the first model is the default), with their effort levels:
 %[2]s
 --effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode where supported (Claude Code, Codex, and Abacus OpenAI priority models). Abacus effort levels depend on the chosen model; recent Claude models accept low, medium, high, xhigh, max.
 Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there. Stop one with: %[1]s spawn --stop <task-id>
+To give a finished sub-agent more work or corrections, continue it instead of starting a new one; it keeps its conversation and remembers its earlier work, and it shows in Crush as the same sub-agent:
+  %[1]s spawn --continue <task-id> <<'EOF'
+  <follow-up>
+  EOF
+Task IDs keep working after Crush restarts. Never start, resume or continue an agent CLI yourself (claude, codex, grok, opencode, agy) through bg, systemd-run, scripts or its own resume flags: Crush shows those as plain background processes and cannot report their results.
 
 Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Run longer waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).
 Always run tests (test suites, test scripts, builds run to test) in the background, never in the foreground, using %[1]s bg -- 'timeout 600 <command>' for agent CLIs. This registers the job with Crush, makes it visible, and delivers a completion message. Use %[1]s bg --output <job-id> for output or %[1]s bg --stop <job-id> to stop it. Do not use nohup or a bare trailing ampersand for tracked jobs. Native API agents can use the bash tool's run_in_background option. Give every test command a time limit so a hung test ends on its own (for example "timeout 600 <command>", or the runner's own flag like "go test -timeout 10m"). Keep working while they run; check their output when you need the results instead of blocking on them, and if your tool tells you when a background command finishes, you can end your turn and continue then.

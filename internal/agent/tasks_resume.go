@@ -73,7 +73,12 @@ func (h *taskHub) savedTasksPath() string {
 // editSaved changes the saved tasks under a lock shared by every Crush in
 // the project.
 func (h *taskHub) editSaved(edit func([]savedTask) []savedTask) error {
-	path := h.savedTasksPath()
+	return editTaskFile(h.savedTasksPath(), edit)
+}
+
+// editTaskFile changes a list of tasks saved at path under a lock shared by
+// every Crush in the project. An empty path saves nothing.
+func editTaskFile(path string, edit func([]savedTask) []savedTask) error {
 	if path == "" {
 		return nil
 	}
@@ -115,15 +120,17 @@ func (h *taskHub) editSaved(edit func([]savedTask) []savedTask) error {
 	return os.Rename(tmp, path)
 }
 
-// remember saves a running task.
+// remember saves a running task, and lists it so it can be continued later.
 func (h *taskHub) remember(t Task, providerID string) {
+	entry := savedTask{Task: t, Provider: providerID, Owner: os.Getpid()}
 	err := h.editSaved(func(saved []savedTask) []savedTask {
 		saved = slices.DeleteFunc(saved, func(s savedTask) bool { return s.ChildID == t.ChildID })
-		return append(saved, savedTask{Task: t, Provider: providerID, Owner: os.Getpid()})
+		return append(saved, entry)
 	})
 	if err != nil {
 		slog.Warn("Failed to save a running sub-agent", "task", t.ID, "error", err)
 	}
+	h.recordHistory(entry)
 }
 
 // forget drops a task that ended.

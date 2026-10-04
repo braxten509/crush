@@ -103,7 +103,9 @@ last recorded state on the branch being left. It **skips conflicts** and lists
 the skipped paths in the completion notice. It also checks again after the
 preview, so a newer outside edit is not silently overwritten. Symbolic links
 and special files are unavailable, and a new symbolic link in a path is a
-conflict. Regular files are written through a temporary file and atomic
+conflict. If Codex reports a deletion only after the file is gone and no
+tracker captured its original permissions, that deletion is also marked
+unavailable instead of guessing its mode. Regular files are written through a temporary file and atomic
 rename. Deletions remove only the named regular file, never a folder.
 
 Before changing any files, Crush saves their current contents as a durable

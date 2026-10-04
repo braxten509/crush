@@ -1,0 +1,46 @@
+{
+  "home": {
+    "fingerprints": {
+      "messages": {
+        "count": 28449,
+        "sha256": "70740230f8bf5dd81672e57d5d5e987a819ca9e9eb7353c2b8413a152af9087c"
+      },
+      "tree_nodes": {
+        "count": 28449,
+        "sha256": "1fbddf197a736682ff2c181c26d82aad8875aad6cc64529c3c070c1bd33a9c25"
+      },
+      "tree_heads": {
+        "count": 201,
+        "sha256": "e64456a514490fdc34bd58fdd06619d0223319f7095bcde4905bc46651024f4a"
+      }
+    },
+    "transcript_matches": true,
+    "saved_chats_match": true,
+    "integrity": "ok",
+    "excluded_comparison_field": "messages.updated_at (normal legacy review bookkeeping)",
+    "legacy_review_normalization_matches_installed": true,
+    "original_message_count": 28449
+  },
+  "forecaster": {
+    "fingerprints": {
+      "messages": {
+        "count": 20966,
+        "sha256": "9e023527f7dda3dc55d51f76833efc6bd8957d444b9c4917e8286c397f6a7609"
+      },
+      "tree_nodes": {
+        "count": 20966,
+        "sha256": "739127d0de64ecd79a69786498284e9bea56d55581a15f4a38fdbbbf17353b71"
+      },
+      "tree_heads": {
+        "count": 294,
+        "sha256": "81ac654b63d1fe79f4ea04804280bc70e70f1f5b3267d4af1a80a2bba0666f4b"
+      }
+    },
+    "transcript_matches": true,
+    "saved_chats_match": true,
+    "integrity": "ok",
+    "excluded_comparison_field": "messages.updated_at (normal legacy review bookkeeping)",
+    "legacy_review_normalization_matches_installed": true,
+    "original_message_count": 20966
+  }
+}

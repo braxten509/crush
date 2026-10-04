@@ -1,0 +1,12 @@
+ ╭────────────────────────────────────╮
+ │ Restore files? · 1 file ╱╱╱╱╱╱╱╱╱╱ │
+ │restore  +1 -1                      │
+ │/home/braxtenchenay/dev/crush-file-r│
+ │                                    │
+›│[Restore files]                     │
+ │ Chat only                          │
+ │ Cancel                             │
+ │                                    │
+ │↑↓ scroll  ←→ choose  enter confirm…│
+ │                                    │
+ ╰────────────────────────────────────╯

@@ -39,13 +39,13 @@ def keys(name, *keys):
 def capture(name, filename):
     (OUT / filename).write_text(screen(name))
 
-def start(kind):
+def start(kind, resume=False):
     name = 'crush-file-restore-' + kind
     data = BASE / (kind + '-data')
     data.mkdir(exist_ok=True)
     (data / 'init').touch()
     env = ['env', 'CRUSH_GLOBAL_CONFIG=' + str(BASE / (kind + '-config')), 'CRUSH_GLOBAL_DATA=' + str(BASE / (kind + '-global'))]
-    command = shlex.join(env + [BIN, '-D', str(data), '-c', str(BASE / 'project')])
+    command = shlex.join(env + [BIN, '-D', str(data), '-c', str(BASE / 'project')] + (['--continue'] if resume else []))
     tmux('new-session', '-d', '-s', name, '-x', '100', '-y', '32', command)
     wait_for(lambda: 'esc' in screen(name).lower() or 'What' in screen(name) or 'Haiku' in screen(name) or 'Tree fixture' in screen(name))
     capture(name, kind + '-start.txt')
@@ -106,6 +106,72 @@ elif phase in ('native-restore', 'claude-restore'):
     wait_for(lambda: path.read_text() == changed)
     capture(name, kind + '-undo.txt')
     print(kind + ': edited -> preview -> restored original -> undo returned edited file')
+elif phase == 'claude-final':
+    name='crush-file-restore-claude'
+    tmux('kill-session','-t',name)
+    start('claude',resume=True)
+    path=REPO/'restore-qa-fixture/claude.txt'
+    send(name,'/tree');wait_for(lambda:'Session tree' in screen(name))
+    keys(name,*(['Down']*20));keys(name,'Enter');keys(name,'Enter')
+    wait_for(lambda:'Restore files?' in screen(name));keys(name,'Right','Enter')
+    wait_for(lambda:'Restore files?' not in screen(name))
+    jump_root(name);capture(name,'claude-preview.txt')
+    keys(name,'Enter');wait_for(lambda:path.read_text()=='claude before\n');capture(name,'claude-restored.txt')
+    undo(name);wait_for(lambda:path.read_text()=='claude after\n');capture(name,'claude-undo.txt')
+    print('claude: final binary reopened saved live edit, restored original and undid restore')
+elif phase == 'preview-sizes':
+    name='crush-file-restore-claude'
+    tmux('kill-session','-t',name);start('claude',resume=True)
+    send(name,'/tree');wait_for(lambda:'Session tree' in screen(name))
+    keys(name,*(['Down']*20));keys(name,'Enter');keys(name,'Enter')
+    wait_for(lambda:'Restore files?' in screen(name));keys(name,'Right','Enter')
+    wait_for(lambda:'Restore files?' not in screen(name))
+    jump_root(name)
+    for width,height in [(80,24),(40,12)]:
+        tmux('resize-window','-t',name,'-x',str(width),'-y',str(height));time.sleep(.5)
+        rendered=screen(name)
+        assert all(label in rendered for label in ['Restore files','Chat only','Cancel'])
+        capture(name,f'preview-{width}x{height}.txt')
+    tmux('resize-window','-t',name,'-x','100','-y','32');time.sleep(.3)
+    keys(name,'Enter')
+    path=REPO/'restore-qa-fixture/claude.txt'
+    wait_for(lambda:path.read_text()=='claude before\n')
+    undo(name);wait_for(lambda:path.read_text()=='claude after\n')
+    print('final binary: 80x24 and 40x12 previews retain all actions; live edit restore/undo passed')
+elif phase == 'native-fork-clone':
+    name='crush-file-restore-native'
+    tmux('kill-session','-t',name)
+    start('native',resume=True)
+    path=REPO/'restore-qa-fixture/native.txt'
+    assert path.read_text()=='fixture after\n'
+    send(name,'/tree')
+    wait_for(lambda:'Session tree' in screen(name))
+    keys(name,*(['Down']*20));keys(name,'Enter');keys(name,'Enter')
+    wait_for(lambda:'Restore files?' in screen(name))
+    capture(name,'native-conflict-and-chat-only.txt')
+    keys(name,'Right','Enter')
+    wait_for(lambda:'Restore files?' not in screen(name))
+    assert path.read_text()=='fixture after\n'
+    send(name,'/fork')
+    wait_for(lambda:'Fork ·' in screen(name))
+    keys(name,*(['Up']*20));keys(name,'Enter')
+    wait_for(lambda:'Restore files?' in screen(name))
+    capture(name,'native-fork-preview.txt')
+    keys(name,'Escape')
+    assert path.read_text()=='fixture after\n'
+    # Escape canceled just the restore preview, leaving the prompt picker.
+    keys(name,'Enter');wait_for(lambda:'Restore files?' in screen(name))
+    keys(name,'Enter')
+    wait_for(lambda:path.read_text()=='fixture before\n')
+    capture(name,'native-fork-restored.txt')
+    undo(name)
+    wait_for(lambda:path.read_text()=='fixture after\n')
+    capture(name,'native-fork-undo.txt')
+    keys(name,'C-p');time.sleep(.5);send(name,'Clone Current Branch')
+    wait_for(lambda:len(sql('native','select id from sessions where parent_session_id is null'))==3)
+    assert path.read_text()=='fixture after\n'
+    capture(name,'native-clone.txt')
+    print('native: conflict preview, Chat only, Cancel, fork restore, undo in new chat, clone leaves files unchanged')
 elif phase == 'capture':
     print(screen(sys.argv[2]))
 else:

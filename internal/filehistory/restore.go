@@ -159,6 +159,17 @@ func (s *Store) Preview(ctx context.Context, id, target string) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A target-only path may already have a shared ancestor version. Its
+	// first target-side Before can include an outside edit, so compare against
+	// the last state actually recorded on the current path when one exists.
+	shared, err := s.records(ctx, left[:common])
+	if err != nil {
+		return nil, err
+	}
+	currentStates := map[string]State{}
+	for _, r := range shared {
+		currentStates[r.Path] = r.After
+	}
 	entries := map[string]*Entry{}
 	heads := map[string]string{}
 	for i := len(undo) - 1; i >= 0; i-- {
@@ -174,7 +185,11 @@ func (s *Store) Preview(ctx context.Context, id, target string) (*Plan, error) {
 	for _, r := range redo {
 		e := entries[r.Path]
 		if e == nil {
-			e = &Entry{Path: r.Path, Before: r.Before}
+			expected := r.Before
+			if current, ok := currentStates[r.Path]; ok {
+				expected = current
+			}
+			e = &Entry{Path: r.Path, Before: expected}
 			entries[r.Path] = e
 		}
 		e.After = r.After

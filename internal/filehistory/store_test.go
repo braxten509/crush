@@ -263,3 +263,25 @@ func TestNewMessageInvalidatesApprovedPreview(t *testing.T) {
 	require.ErrorContains(t, err, "chat moved")
 	require.Equal(t, "after", contents(t, p))
 }
+
+func TestTargetOnlyPathChecksCurrentAncestry(t *testing.T) {
+	f := setup(t)
+	p := filepath.Join(f.root, "file")
+	other := filepath.Join(f.root, "other")
+	f.change(t, "root", p, state("original"), state("shared"))
+	// An outside edit was captured as the target tool's before image, but it
+	// never happened on the current branch. The shared recorded state governs.
+	f.change(t, "target", p, state("outside on target"), state("target edit"))
+	require.NoError(t, f.q.SwitchTree(t.Context(), "chat", "root"))
+	f.change(t, "current", other, nil, state("other"))
+	f.write(t, p, "shared")
+	f.write(t, other, "other")
+	plan, err := f.store.Preview(t.Context(), "chat", "target")
+	require.NoError(t, err)
+	for _, entry := range plan.Entries {
+		require.Empty(t, entry.Conflict)
+	}
+	_, err = f.store.Apply(t.Context(), plan)
+	require.NoError(t, err)
+	require.Equal(t, "target edit", contents(t, p))
+}

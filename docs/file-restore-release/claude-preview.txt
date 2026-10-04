@@ -1,0 +1,32 @@
+
+
+› Use the Edit tool once to replace "claude before" with "claude after" in
+  /home/braxtenchenay/dev/crush-file-restore/restore-qa-fixture/claude.txt. Then say done. No other
+  tools.
+               ╭────────────────────────────────────────────────────────────────────╮
+               │ Session tree · default ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+  ▸ ✓ 2 actions│                                                                    │
+               │ > Search text or bookmarks                                         │
+• D╭────────────────────────────────────────────────────────────────────────────────────────────╮
+   │ Restore files? · 1 file ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+  ◇│restore  +1 -1                                                                              │
+   │/home/braxtenchenay/dev/crush-file-restore/restore-qa-fixture/claude.txt                    │
+   │Conflicted and unavailable files are skipped.                                               │
+   │Only tracked files change. Other edits, databases, installed packages, network effects and  │
+   │Git commits are not undone.                                                                 │
+   │Git HEAD moved: restored files will be uncommitted changes.                                 │
+   │                                                                                            │
+   │[Restore files]   Chat only    Cancel                                                       │
+   │                                                                                            │
+   │↑↓ scroll  ←→ choose  enter confirm  esc cancel                                             │
+   │                                                                                            │
+   ╰────────────────────────────────────────────────────────────────────────────────────────────╯
+               │[No summary]   Add summary                                          │
+               │←→ choose  enter confirm  esc back · File preview follows.          │
+               │                                                                    │
+               ╰────────────────────────────────────────────────────────────────────╯
+› Go crazy
+
+
+  Claude Haiku · 33.92k/400k tokens · Context 92% left · 5h 16% left · Weekly 96% left
+  OKAY!  Branch switched. Files on disk are unchanged.

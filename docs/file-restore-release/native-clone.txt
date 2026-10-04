@@ -1,0 +1,32 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+› Write the fixture file now.
+
+
+  Tree fixture · 0/400k tokens · Context 100% left
+  OKAY!  Branch copied to a new chat. Files on disk are unchanged.

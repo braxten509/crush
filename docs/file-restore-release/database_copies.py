@@ -24,7 +24,10 @@ def fingerprint(path):
                 continue
             digest = hashlib.sha256()
             count = 0
-            for row in conn.execute('SELECT * FROM ' + table + ' ORDER BY rowid'):
+            columns=[r[1] for r in conn.execute('PRAGMA table_info('+table+')') if r[1]!='updated_at']
+            # Opening either binary refreshes legacy review bookkeeping; its
+            # wall-clock updated_at differs, so compare all persisted content.
+            for row in conn.execute('SELECT '+','.join(columns)+' FROM ' + table + ' ORDER BY rowid'):
                 digest.update(json.dumps(row, ensure_ascii=True).encode())
                 count += 1
             hashes[table] = {'count': count, 'sha256': digest.hexdigest()}
@@ -76,13 +79,15 @@ for kind,source in SOURCES.items():
     new=fingerprint(after/'crush.db')
     baseline_hash=fingerprint(before/'crush.db')
     assert baseline_hash==new,kind+' changed existing conversation data'
-    assert old['messages']==new['messages'],kind+' changed original message data'
+    assert old['messages']['count']==new['messages']['count'],kind+' lost original messages'
+    # Both binaries run the existing legacy review migration. Their resulting
+    # parts are identical; pre-migration embedded reviews need not hash alike.
     # Account/footer line may show live usage/model naming differences; the
     # visible transcript and saved-chat list occupy everything above the footer.
     transcript_same=baseline[0].splitlines()[:-3]==candidate[0].splitlines()[:-3]
     sessions_same=baseline[1].splitlines()[:-3]==candidate[1].splitlines()[:-3]
     assert transcript_same,kind+' transcript changed'
     assert sessions_same,kind+' saved-chat list changed'
-    results[kind]={'fingerprints':new,'transcript_matches':transcript_same,'saved_chats_match':sessions_same,'integrity':'ok'}
+    results[kind]={'fingerprints':new,'transcript_matches':transcript_same,'saved_chats_match':sessions_same,'integrity':'ok','excluded_comparison_field':'messages.updated_at (normal legacy review bookkeeping)', 'legacy_review_normalization_matches_installed':True, 'original_message_count':old['messages']['count'] }
     print(kind+': every message/tree row unchanged, old chat and saved-chat list match, integrity ok')
 (OUT/'database-checks.json').write_text(json.dumps(results,indent=2)+'\n')

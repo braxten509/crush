@@ -1,0 +1,24 @@
+
+     ╭────────────────────────────────────────────────────────────────────╮
+› Use│ Session tree · default ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+  /ho│                                                                    │ Then
+  say│ > Search text or bookmarks                                         │
+ ╭────────────────────────────────────────────────────────────────────────────╮
+ │ Restore files? · 1 file ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+ │restore  +1 -1                                                              │
+ │/home/braxtenchenay/dev/crush-file-restore/restore-qa-fixture/claude.txt    │
+•│Conflicted and unavailable files are skipped.                               │
+ │Only tracked files change. Other edits, databases, installed packages,      │
+ │network effects and Git commits are not undone.                             │
+ │Git HEAD moved: restored files will be uncommitted changes.                 │
+ │                                                                            │
+ │[Restore files]   Chat only    Cancel                                       │
+ │                                                                            │
+ │↑↓ scroll  ←→ choose  enter confirm  esc cancel                             │
+ │                                                                            │
+›╰────────────────────────────────────────────────────────────────────────────╯
+     │[No summary]   Add summary                                          │
+     │←→ choose  enter confirm  esc back · File preview follows.          │
+  Cla│                                                                    │ly
+  96%╰────────────────────────────────────────────────────────────────────╯
+  OKAY!  Branch switched. Files on disk are unchanged.

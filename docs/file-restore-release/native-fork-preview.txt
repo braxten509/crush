@@ -1,0 +1,32 @@
+
+
+› Write the fixture file now.
+
+
+  ▸ ✓ 1 action ╭────────────────────────────────────────────────────────────────────╮
+               │ Fork · choose a prompt to edit in a new chat ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+• FILE_RESTORE_│                                                                    │
+               │ > Search text or bookmarks                                         │
+  ◇╭────────────────────────────────────────────────────────────────────────────────────────────╮
+   │ Restore files? · 1 file ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+   │restore  +1 -1                                                                              │
+› R│/home/braxtenchenay/dev/crush-file-restore/restore-qa-fixture/native.txt                    │
+   │Conflicted and unavailable files are skipped.                                               │
+   │Only tracked files change. Other edits, databases, installed packages, network effects and  │
+  ▸│Git commits are not undone.                                                                 │
+   │Git HEAD moved: restored files will be uncommitted changes.                                 │
+• F│                                                                                            │
+   │[Restore files]   Chat only    Cancel                                                       │
+  ◇│                                                                                            │
+   │↑↓ scroll  ←→ choose  enter confirm  esc cancel                                             │
+   │                                                                                            │
+   ╰────────────────────────────────────────────────────────────────────────────────────────────╯
+               │↑↓ choose  enter jump  ←→ fold  tab filter                          │
+               │ctrl+e edit  ctrl+r label  alt+↑↓ branch  esc close                 │
+               │                                                                    │
+               ╰────────────────────────────────────────────────────────────────────╯
+› Go crazy
+
+
+  Tree fixture · 10.09k/400k tokens · Context 97% left
+  OKAY!  Branch switched. Files on disk are unchanged.

@@ -835,6 +835,12 @@ func codexChangeMetadata(dir string, c codexChange) string {
 	change := filechange.Change{Path: path, Order: time.Now().UnixNano()}
 	if c.Kind.Type != "add" {
 		change.Before = &filechange.State{Content: before, Size: int64(len(before)), Mode: mode}
+		if c.Kind.Type == "delete" {
+			// The late deletion report has text but no original permissions. A
+			// timely tracker snapshot takes precedence; otherwise never invent a
+			// 0644 restore for a file that may have been executable or private.
+			change.Before.RestoreOmitted = "Original permissions were not recorded for this deletion"
+		}
 	}
 	if c.Kind.Type != "delete" {
 		change.After = &filechange.State{Content: after, Size: int64(len(after)), Mode: mode}

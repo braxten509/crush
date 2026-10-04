@@ -1,0 +1,32 @@
+
+
+› Write the fixture file now.
+
+
+  ▸ ✓ 1 action · edited native.txt +1 −1
+
+• FILE_RESTORE_FIXTURE_REPLY
+
+  ◇ Tree fixture via Tree fixture in 0s
+
+
+› Read the fixture file, then write the edit.
+
+
+  ▸ ✓ 1 action
+
+• FILE_RESTORE_FIXTURE_REPLY
+
+  ◇ Tree fixture via Tree fixture in 0s
+
+
+
+
+
+
+
+› Go crazy
+
+
+  Tree fixture · ~10.09k/400k tokens · Context ~97% left
+  YOLO MODE

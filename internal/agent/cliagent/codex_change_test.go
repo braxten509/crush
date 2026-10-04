@@ -72,3 +72,13 @@ func TestReversePatchUsesPositionsAndFinalNewline(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "first\nsecond\nthird\n", before)
 }
+
+func TestCodexLateDeletionDoesNotInventPermissions(t *testing.T) {
+	change := codexChange{Path: filepath.Join(t.TempDir(), "deleted"), Diff: "original\n"}
+	change.Kind.Type = "delete"
+	_, review := filechange.TakeReview(codexChangeMetadata("", change))
+	require.NotNil(t, review)
+	require.Equal(t, "original\n", review.Changes[0].Before.Content)
+	require.NotEmpty(t, review.Changes[0].Before.RestoreOmitted)
+	require.Nil(t, review.Changes[0].After)
+}

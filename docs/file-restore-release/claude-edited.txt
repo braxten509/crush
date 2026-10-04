@@ -1,0 +1,32 @@
+
+
+› Use the Edit tool once to replace "claude before" with "claude after" in
+  /home/braxtenchenay/dev/crush-file-restore/restore-qa-fixture/claude.txt. Then say done. No other
+  tools.
+
+
+  ▸ ● 2 actions · edited claude.txt +1 −1 | £!f Thinking..
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+› Go crazy
+
+
+  Claude Haiku · 0/400k tokens · Context 100% left · 5h 18% left · Weekly 97% left
+  YOLO MODE

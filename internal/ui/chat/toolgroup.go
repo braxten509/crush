@@ -59,11 +59,14 @@ type ToolGroupItem struct {
 	// changes caches [ToolGroupItem.Changes] for changesKey. changesCols
 	// covers the action-count label which opens the review; changesRequested
 	// records a click on that label.
-	changesKey       string
-	storedSummary    string
-	changes          []diffreview.File
-	changesCols      [2]int
-	changesRequested bool
+	changesKey    string
+	storedSummary string
+	// Line counts saved with the summaries, shown even after diffs expire.
+	storedAdds, storedDels int
+	storedCounted          bool
+	changes                []diffreview.File
+	changesCols            [2]int
+	changesRequested       bool
 }
 
 // backgroundHintAfter is how long a command runs before the group offers
@@ -508,6 +511,10 @@ func (g *ToolGroupItem) header(width int) string {
 	}
 	if storedSummary != "" {
 		line += g.sty.Tool.ParamKey.Render(" · " + storedSummary)
+		if g.storedCounted {
+			line += " " + g.sty.Tool.ChangesAdd.Render(fmt.Sprintf("+%d", g.storedAdds)) + " " +
+				g.sty.Tool.ChangesDel.Render(fmt.Sprintf("−%d", g.storedDels))
+		}
 	}
 	if storedSummary == "" && len(edited) > 0 && (status == "" || len(changes) > 0) {
 		line += g.sty.Tool.ParamKey.Render(" · ")

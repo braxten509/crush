@@ -159,3 +159,43 @@ func TestLegacyReviewMigrationPreservesOutputAndClassifiesClone(t *testing.T) {
 	_, err = svc.LoadReview(context.Background(), "legacy")
 	require.NoError(t, err)
 }
+
+func TestSummaryKeepsLineCountsAfterDiffsExpire(t *testing.T) {
+	svc, sessionID := newTestService(t, WithDebounce(0))
+	result := fixtureReview()
+	result.Review.Changes[0].After.Content = "after\nmore\n"
+	msg, err := svc.Create(t.Context(), sessionID, CreateMessageParams{Role: Tool, Parts: []ContentPart{result}})
+	require.NoError(t, err)
+	summary := msg.ToolResults()[0].Review.Summary
+	require.True(t, summary.Counted)
+	require.Equal(t, [2]int{2, 1}, [2]int{summary.Adds, summary.Dels})
+
+	edit, err := json.Marshal(map[string]string{"old_content": "a\nb\n", "new_content": "a\nc\nd\n"})
+	require.NoError(t, err)
+	msg, err = svc.Create(t.Context(), sessionID, CreateMessageParams{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "edit", Name: "edit", Metadata: string(edit)}}})
+	require.NoError(t, err)
+	summary = msg.ToolResults()[0].Review.Summary
+	require.Equal(t, [2]int{2, 1}, [2]int{summary.Adds, summary.Dels})
+}
+
+func TestOlderSummariesGetLineCountsWhileDiffsRemain(t *testing.T) {
+	svc, sessionID := newTestService(t, WithDebounce(0))
+	s := svc.(*service)
+	msg, err := svc.Create(t.Context(), sessionID, CreateMessageParams{Role: Tool, Parts: []ContentPart{fixtureReview()}})
+	require.NoError(t, err)
+	// Strip the counts, as summaries saved before they existed look.
+	row, err := s.q.GetMessage(t.Context(), msg.ID)
+	require.NoError(t, err)
+	old := strings.Replace(row.Parts, `,"adds":1,"dels":1,"counted":true`, "", 1)
+	require.NotEqual(t, row.Parts, old)
+	storage := s.q.(reviewStorage)
+	payload, err := storage.GetMessageReview(t.Context(), msg.ID)
+	require.NoError(t, err)
+	require.NoError(t, storage.MigrateMessageReview(t.Context(), msg.ID, row.Parts, old, payload))
+
+	msgs, err := svc.List(t.Context(), sessionID)
+	require.NoError(t, err)
+	summary := msgs[0].ToolResults()[0].Review.Summary
+	require.True(t, summary.Counted)
+	require.Equal(t, [2]int{1, 1}, [2]int{summary.Adds, summary.Dels})
+}

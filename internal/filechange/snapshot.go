@@ -70,6 +70,10 @@ type ReviewSummary struct {
 	Checkouts int      `json:"checkouts,omitempty"`
 	Moved     int      `json:"moved,omitempty"`
 	Generated int      `json:"generated,omitempty"`
+	// Line counts outlive the saved diff, so the chat can always show them.
+	Adds    int  `json:"adds,omitempty"`
+	Dels    int  `json:"dels,omitempty"`
+	Counted bool `json:"counted,omitempty"`
 }
 
 type entry struct {

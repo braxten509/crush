@@ -40,6 +40,7 @@ func (g *ToolGroupItem) StoredReviewSummary() string {
 
 func (g *ToolGroupItem) computeStoredReviewSummary() string {
 	files, copied, checkouts, moved, generated := 0, 0, 0, 0, 0
+	g.storedAdds, g.storedDels, g.storedCounted = 0, 0, false
 	var names []string
 	for _, input := range g.ReviewInputs() {
 		review := input.Result.Review
@@ -59,6 +60,11 @@ func (g *ToolGroupItem) computeStoredReviewSummary() string {
 			}
 		}
 		files += summary.Files
+		if summary.Counted {
+			g.storedAdds += summary.Adds
+			g.storedDels += summary.Dels
+			g.storedCounted = true
+		}
 		copied += summary.Copied
 		checkouts += summary.Checkouts
 		moved += summary.Moved

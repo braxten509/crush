@@ -132,6 +132,26 @@ func (q *Queries) LegacyReviewMessages(ctx context.Context, sessionID string) ([
 	return ids, rows.Err()
 }
 
+// UncountedReviewMessages lists messages whose saved summaries lack line
+// counts while their diffs still exist to count from.
+func (q *Queries) UncountedReviewMessages(ctx context.Context, sessionID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, `SELECT m.id FROM messages m JOIN message_review_details r ON r.message_id = m.id
+ WHERE m.session_id = ? AND instr(m.parts, '"summary":{') > 0 AND instr(m.parts, '"counted":true') = 0 ORDER BY m.rowid`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (q *Queries) ReviewCommands(ctx context.Context, sessionID string) (map[string]string, error) {
 	rows, err := q.db.QueryContext(ctx, `SELECT json_extract(p.value, '$.data.id'), json_extract(p.value, '$.data.input')
  FROM messages m, json_each(m.parts) p WHERE m.session_id = ? AND m.role = 'assistant'

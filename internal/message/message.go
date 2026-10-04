@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -571,6 +572,9 @@ func (s *service) Get(ctx context.Context, id string) (Message, error) {
 func (s *service) List(ctx context.Context, sessionID string) ([]Message, error) {
 	if err := s.migrateReviews(ctx, sessionID); err != nil {
 		return nil, err
+	}
+	if err := s.countReviews(ctx, sessionID); err != nil {
+		slog.Warn("Could not add line counts to saved reviews", "session", sessionID, "error", err)
 	}
 	var dbMessages []db.Message
 	var err error

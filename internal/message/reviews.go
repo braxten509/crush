@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/filechange"
+	"github.com/charmbracelet/crush/internal/ui/diffreview"
 )
 
 const reviewTextBudget = 2 << 20
@@ -56,6 +57,8 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 			continue
 		}
 		summary := &filechange.ReviewSummary{}
+		summary.Adds, summary.Dels = countLines(result.Review, metadata)
+		summary.Counted = true
 		detail := reviewDetail{Metadata: result.Metadata}
 		if result.Review != nil {
 			review := *result.Review
@@ -147,6 +150,39 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 	return compact, compressed.Bytes(), nil
 }
 
+// countLines totals the lines a result added and removed, by the same rules
+// as the review drawer. It runs before large previews are dropped.
+func countLines(review *filechange.Review, metadata map[string]json.RawMessage) (adds, dels int) {
+	var edits []diffreview.Edit
+	if review != nil {
+		for _, change := range review.Changes {
+			if !filechange.HiddenReviewPath(change.Path, review.Root) {
+				edits = append(edits, diffreview.Edit{Path: change.Path, Snapshot: &change})
+			}
+		}
+		return diffreview.Stats(diffreview.Build(edits))
+	}
+	var counts struct {
+		Additions int `json:"additions"`
+		Removals  int `json:"removals"`
+	}
+	if raw, err := json.Marshal(metadata); err == nil {
+		_ = json.Unmarshal(raw, &counts)
+	}
+	if counts.Additions+counts.Removals > 0 {
+		return counts.Additions, counts.Removals
+	}
+	var before, after, diff string
+	_ = json.Unmarshal(metadata["old_content"], &before)
+	_ = json.Unmarshal(metadata["new_content"], &after)
+	_ = json.Unmarshal(metadata["diff"], &diff)
+	edit := diffreview.Edit{Path: "file", Before: before, After: after, Full: true}
+	if before == "" && after == "" {
+		edit.Unified = diff
+	}
+	return diffreview.Stats(diffreview.Build([]diffreview.Edit{edit}))
+}
+
 func boundedReviewState(state *filechange.State, budget *int) *filechange.State {
 	if state == nil {
 		return nil
@@ -188,13 +224,8 @@ func (s *service) LoadReview(ctx context.Context, id string) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	r, err := gzip.NewReader(bytes.NewReader(payload))
+	details, err := decodeReviewDetails(payload)
 	if err != nil {
-		return Message{}, err
-	}
-	defer r.Close()
-	var details map[string]reviewDetail
-	if err := json.NewDecoder(io.LimitReader(r, reviewPayloadLimit+1)).Decode(&details); err != nil {
 		return Message{}, err
 	}
 	for i, part := range msg.Parts {
@@ -206,6 +237,90 @@ func (s *service) LoadReview(ctx context.Context, id string) (Message, error) {
 		}
 	}
 	return msg, nil
+}
+
+// reviewCountStorage finds saved reviews whose summaries predate line counts.
+type reviewCountStorage interface {
+	UncountedReviewMessages(context.Context, string) ([]string, error)
+	GetMessageReview(context.Context, string) ([]byte, error)
+	MigrateMessageReview(context.Context, string, string, string, []byte) error
+}
+
+// countReviews adds line counts to older summaries while their diffs are
+// still saved, so the chat can show them after the diffs expire.
+func (s *service) countReviews(ctx context.Context, sessionID string) error {
+	storage, ok := s.q.(reviewCountStorage)
+	if !ok {
+		return nil
+	}
+	s.reviewMu.Lock()
+	defer s.reviewMu.Unlock()
+	ids, err := storage.UncountedReviewMessages(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		row, err := s.q.GetMessage(ctx, id)
+		if err != nil {
+			return err
+		}
+		msg, err := s.fromDBItem(row)
+		if err != nil {
+			return err
+		}
+		payload, err := storage.GetMessageReview(ctx, id)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		details, err := decodeReviewDetails(payload)
+		if err != nil {
+			continue
+		}
+		for i, part := range msg.Parts {
+			result, ok := part.(ToolResult)
+			if !ok || result.Review == nil || result.Review.Summary == nil || result.Review.Summary.Counted {
+				continue
+			}
+			detail, ok := details[result.ToolCallID]
+			if !ok {
+				continue
+			}
+			var metadata map[string]json.RawMessage
+			_ = json.Unmarshal([]byte(detail.Metadata), &metadata)
+			review := *result.Review
+			summary := *review.Summary
+			summary.Adds, summary.Dels = countLines(detail.Review, metadata)
+			summary.Counted = true
+			review.Summary = &summary
+			result.Review = &review
+			msg.Parts[i] = result
+		}
+		encoded, err := marshalParts(msg.Parts)
+		if err != nil {
+			return err
+		}
+		if string(encoded) == row.Parts {
+			continue
+		}
+		if err := storage.MigrateMessageReview(ctx, id, row.Parts, string(encoded), payload); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func decodeReviewDetails(payload []byte) (map[string]reviewDetail, error) {
+	r, err := gzip.NewReader(bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	var details map[string]reviewDetail
+	err = json.NewDecoder(io.LimitReader(r, reviewPayloadLimit+1)).Decode(&details)
+	return details, err
 }
 
 // migrateReviews handles one old result at a time instead of decoding a whole

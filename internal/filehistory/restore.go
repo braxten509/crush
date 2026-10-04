@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -247,36 +246,15 @@ func safePath(path string) error {
 	return nil
 }
 func currentState(path string, expected ...State) (State, []byte, error) {
-	if err := safePath(path); err != nil {
-		return State{}, nil, err
-	}
-	info, err := os.Lstat(path)
+	target, err := openRestoreTarget(path, false)
 	if os.IsNotExist(err) {
 		return State{}, nil, nil
 	}
 	if err != nil {
 		return State{}, nil, err
 	}
-	if info.Size() > filechange.MaxRestoreSize {
-		return State{}, nil, errors.New("Too large to restore (over 10 MB)")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return State{}, nil, err
-	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, filechange.MaxRestoreSize+1))
-	if err != nil {
-		return State{}, nil, err
-	}
-	if len(data) > filechange.MaxRestoreSize {
-		return State{}, nil, errors.New("Too large to restore (over 10 MB)")
-	}
-	value := State{Exists: true, Digest: hash(data), Mode: uint32(info.Mode())}
-	if len(expected) > 0 && strings.HasPrefix(expected[0].Digest, "stat:") {
-		value.Digest = filechange.StatDigest(info)
-	}
-	return value, data, nil
+	defer target.close()
+	return target.current(expected...)
 }
 func (s *Store) describe(e *Entry, head, currentHead string) {
 	e.Action = "restore"
@@ -408,8 +386,15 @@ func (s *Store) Apply(ctx context.Context, plan *Plan) (Result, error) {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		now, _, err := currentState(e.Path, e.Before)
+		// Keep the validated parent through recheck, temp creation and commit.
+		target, err := openRestoreTarget(e.Path, e.After.Exists)
+		if err != nil {
+			result.Skipped = append(result.Skipped, e.Path)
+			continue
+		}
+		now, _, err := target.current(e.Before)
 		if err != nil || !same(now, e.Before) {
+			target.close()
 			result.Skipped = append(result.Skipped, e.Path)
 			continue
 		}
@@ -417,19 +402,15 @@ func (s *Store) Apply(ctx context.Context, plan *Plan) (Result, error) {
 			var data []byte
 			data, err = s.read(e.After.Digest)
 			if err == nil {
-				err = safePath(e.Path)
-			}
-			if err == nil {
-				err = safeParents(e.Path)
-			}
-			if err == nil {
-				err = atomicWrite(e.Path, data, os.FileMode(e.After.Mode))
+				err = target.replace(data, os.FileMode(e.After.Mode), e.Before)
 			}
 		} else {
-			err = os.Remove(e.Path)
-			if os.IsNotExist(err) {
-				err = nil
-			}
+			err = target.delete(e.Before)
+		}
+		target.close()
+		if errors.Is(err, errRestoreChanged) {
+			result.Skipped = append(result.Skipped, e.Path)
+			continue
 		}
 		if err != nil {
 			return result, fmt.Errorf("could not restore %s (undo snapshot saved): %w", e.Path, err)

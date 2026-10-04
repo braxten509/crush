@@ -22,6 +22,8 @@ type CommandReview struct {
 	directAt map[string]int64
 	changes  []Change
 	store    *snapshotStore
+	finished *Review
+	done     bool
 }
 
 func WithCommandReview(ctx context.Context, root string, exclude ...string) (context.Context, *CommandReview) {
@@ -42,6 +44,9 @@ func BeforeOpen(ctx context.Context, path string, flags int) {
 	}
 	report.mutex.Lock()
 	defer report.mutex.Unlock()
+	if report.done {
+		return
+	}
 	if report.direct == nil {
 		report.direct, _ = New(context.Background(), report.root, report.exclude...)
 		if report.direct != nil {
@@ -77,6 +82,18 @@ func StartCommand(ctx context.Context, cmd *exec.Cmd) (*ProcessReview, error) {
 func (r *CommandReview) Finish() *Review {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+	if r.done {
+		return r.finished
+	}
+	r.done = true
+	defer func() {
+		// The report's private pool includes completed subprocess trackers and the
+		// finalization reader (nil owner). Closing the pool also prevents a
+		// detached child from allocating again after the shell has returned.
+		r.store.releaseAll()
+		r.direct = nil
+		r.changes = nil
+	}()
 	if r.direct != nil {
 		if direct, err := r.direct.Checkpoint(context.Background()); err == nil {
 			for _, change := range direct.Changes {
@@ -97,6 +114,7 @@ func (r *CommandReview) Finish() *Review {
 		}
 	}
 	changes := make([]Change, 0, len(earliest))
+	restoreBudget := MaxRestoreTotal
 	for path, change := range earliest {
 		if change.Before == nil && change.After != nil && (change.Transfer == nil || change.Transfer.Baseline == nil) && (change.After.Omitted == "Copied content" || change.After.Omitted == "Generated build artifact") {
 			changes = append(changes, change)
@@ -104,7 +122,8 @@ func (r *CommandReview) Finish() *Review {
 		}
 		baseline := change.ImportedState()
 		if info, err := os.Lstat(path); err == nil {
-			state := r.store.read(path, info).state
+			value := r.store.read(nil, path, info)
+			state := value.reviewState(&restoreBudget)
 			change.After = &state
 		} else if os.IsNotExist(err) {
 			change.After = nil
@@ -117,5 +136,6 @@ func (r *CommandReview) Finish() *Review {
 		changes = append(changes, change)
 	}
 	slices.SortFunc(changes, func(a, b Change) int { return strings.Compare(a.Path, b.Path) })
-	return &Review{Root: r.root, Changes: changes}
+	r.finished = &Review{Root: r.root, Changes: changes}
+	return r.finished
 }

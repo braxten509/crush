@@ -1,0 +1,11 @@
+Status: completed
+
+ok  	github.com/charmbracelet/crush/internal/filechange	1.390s
+ok  	github.com/charmbracelet/crush/internal/filehistory	3.794s
+
+Running as unit: run-p2791249-i6958219.service; invocation ID: fd48e07a0ca64c019c16615f9d1872bd
+          Finished with result: success
+Main processes terminated with: code=exited, status=0/SUCCESS
+               Service runtime: 6.751s
+             CPU time consumed: 7.193s
+                   Memory peak: 400.5M (swap: 0B)

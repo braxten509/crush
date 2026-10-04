@@ -132,3 +132,70 @@ and sustained multi-gigabyte tool batches were not tested.
 Cleanup passed: all six possible named test terminals were absent, the fixture
 unit was inactive, and both disposable files were removed. The copied private
 databases remain only in the scratch directory for reviewer inspection.
+
+## Follow-up capture ownership and pinned restore targets
+
+Completed-action capacity is returned to the shared capture pool by owner,
+not by resetting its counter. Overlapping invocations and commands reported
+late retain their reservations. Unchanged captures can share one reservation;
+it is released only after the last owner finishes. Native shell subprocesses
+retain their reservations until their combined report is finalized. Finalizing
+reuses captured bytes, loads spilled restore payloads, and is idempotent.
+Preview text from failed restore captures remains charged to its live owners.
+Finishing a native report also closes its pool: a detached child that outlives
+the shell cannot allocate again from released capacity or append to a finished
+report. A dedicated regression covers this case.
+
+Restore now keeps the validated directory handle through reading, temporary
+file creation, rename, and unlink. Unix uses descriptor-relative operations
+with `O_NOFOLLOW`. Windows holds all checked ancestor handles without delete
+or write sharing, rejects reparse points by handle, and deletes through a
+checked file handle. Missing parents are created beneath the retained ancestor.
+A second content check immediately precedes replacement/deletion.
+
+Deterministic fixtures replace the selected parent with a symlink after its
+handle is opened. Reads, replacements, deletion, and recreation stay in the
+original directory; outside contents and directories remain untouched. Other
+tests cover late reports, overlapping baselines, shared ownership, native
+redirects/subprocesses, imported baselines, repeated Finish, changed leaf
+contents, and leaf symlinks. The parent's original sequential-action regression
+was preserved unchanged.
+
+Follow-up checks (all through tracked `crush bg`, timeout and `systemd-run` with
+an explicit working directory; no pipeline hides the command's exit status):
+
+- `044`: full `go test ./...` passed (`ownership-full-go-test.txt`).
+- `045`: selected capture/restore tests passed under `-race`
+  (`ownership-race-test.txt`).
+- `046`: file-history test binaries compiled for Windows, macOS and FreeBSD;
+  the Linux executable rebuilt successfully (`pinned-portable-builds.txt`).
+- `04A`: the file-history package compiled for OpenBSD, NetBSD and Android
+  (`pinned-bsd-android-builds.txt`).
+- `050`: the full Go suite, detached-child race regression, and final Linux
+  rebuild passed after the close guard was added (`ownership-final-checks.txt`).
+- `04C`: affected packages passed after closing native reports against late
+  detached children (`review-focused.txt`).
+- `04D`: final full `go test ./...` passed (`review-full-go-test.txt`).
+- `04E`: final selected races passed three repetitions (`review-race.txt`).
+- `049`: Windows file-history tests compiled (`review-windows-compile.txt`).
+  This is a compile check, not a Windows runtime result.
+
+The final suite/race log pipelines used Bash `set -eu -o pipefail`; tracked
+systemd jobs reported exit status zero. No test command's exit was replaced
+by the exit status of `tee`.
+
+The focused headless restore/undo passed in `051` on the final rebuilt binary
+(`/tmp/crush-file-restore-final`): reopening the saved native fixture chat,
+restoring its original bytes, then undoing recovered the edited bytes.
+`pinned_restore_qa.py`, `pinned-headless-check.txt`, `pinned-restored.txt`, and
+`pinned-undo.txt` record the driver and evidence. The driver was corrected to
+select the populated fixture chat and skip an unchanged branch switch (which
+correctly has no restore dialog). Its named detached terminal and disposable
+file were removed in `finally`. No new live-model call was needed.
+
+Platform runtime coverage is Linux only. Windows locking tests are present
+and compile, but were not executed on Windows. Directory descriptors prevent
+symlink redirection; they do not provide an atomic compare-and-swap against
+an ordinary writer that changes a leaf after the last content check. On Unix,
+if the original parent itself is renamed, restore operates on that retained
+original directory. No installation or push was performed.

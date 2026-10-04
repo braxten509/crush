@@ -314,7 +314,7 @@ func (t *Tracker) scan(ctx context.Context) (map[string]entry, error) {
 func (t *Tracker) readEntry(path string, info fs.FileInfo, budget *int) entry {
 	var value entry
 	if t.store != nil {
-		value = t.store.read(path, info)
+		value = t.store.read(t, path, info)
 	} else {
 		value = readEntry(path, info, budget, &t.restoreRemaining)
 	}

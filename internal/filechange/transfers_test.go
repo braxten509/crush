@@ -47,11 +47,12 @@ func TestNativeCommandReportPreservesImportedBaseline(t *testing.T) {
 		{Path: path, After: base, Transfer: &Transfer{Kind: "copy"}},
 	}}
 	require.NoError(t, os.WriteFile(path, []byte("edited\n"), 0o600))
+	original := report.changes[0]
 	review := report.Finish()
 	require.Len(t, review.Changes, 1)
 	require.Equal(t, "copied\n", review.Changes[0].ImportedState().Content)
 	require.Equal(t, "edited\n", review.Changes[0].After.Content)
-	require.Nil(t, report.changes[0].Transfer.Baseline, "saved reports stay immutable")
+	require.Nil(t, original.Transfer.Baseline, "saved reports stay immutable")
 }
 
 func TestCloneAndEditWithinSameReportedCommand(t *testing.T) {

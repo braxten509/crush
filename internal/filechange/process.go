@@ -206,7 +206,16 @@ func (p *ProcessReview) End(id string) *Review {
 		return 0
 	})
 	review := &Review{Root: p.root}
+	// Keep every capture charged until all subprocess checkpoints are assembled.
+	// Native shell reports own these captures until their final combined review.
+	var owners []*Tracker
+	defer func() {
+		if p.report == nil {
+			p.store.release(owners...)
+		}
+	}()
 	for _, record := range records {
+		owners = append(owners, record.tracker)
 		changes, err := record.tracker.Checkpoint(context.Background())
 		if err != nil {
 			continue
@@ -285,7 +294,9 @@ func (p *ProcessReview) Wait(cmd *exec.Cmd) error {
 	if p != nil && p.report != nil {
 		if review := p.End("command"); review != nil {
 			p.report.mutex.Lock()
-			p.report.changes = append(p.report.changes, review.Changes...)
+			if !p.report.done {
+				p.report.changes = append(p.report.changes, review.Changes...)
+			}
 			p.report.mutex.Unlock()
 		}
 	}

@@ -1,0 +1,8 @@
+Status: completed
+
+Running as unit: run-p2827806-i7046123.service; invocation ID: d3c3b4e17b9b45a5be11feb6e22bf532
+          Finished with result: success
+Main processes terminated with: code=exited, status=0/SUCCESS
+               Service runtime: 9.891s
+             CPU time consumed: 1min 11.445s
+                   Memory peak: 698.4M (swap: 0B)

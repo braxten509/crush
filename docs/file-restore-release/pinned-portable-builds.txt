@@ -1,0 +1,8 @@
+Status: completed
+
+Running as unit: run-p2797677-i6990211.service
+          Finished with result: success
+Main processes terminated with: code=exited, status=0/SUCCESS
+               Service runtime: 51.878s
+             CPU time consumed: 4min 36.060s
+                   Memory peak: 1.1G (swap: 72.4M)

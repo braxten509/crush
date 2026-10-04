@@ -24,6 +24,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/event"
+	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/format"
 	"github.com/charmbracelet/crush/internal/herdr"
@@ -98,8 +99,12 @@ type App struct {
 // skills.NewManager + skills.DiscoverFromConfig).
 func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr *skills.Manager) (*App, error) {
 	q := db.New(conn)
-	sessions := session.NewService(q, conn)
-	messages := message.NewService(q)
+	versions := filehistory.New(conn, store.Config().Options.DataDirectory, store.WorkingDir())
+	if err := versions.Maintain(ctx); err != nil {
+		return nil, err
+	}
+	sessions := session.NewService(q, conn, versions.Maintain)
+	messages := message.NewService(q, message.WithFileHistory(versions))
 	files := history.NewService(q, conn)
 	cfg := store.Config()
 	skipPermissionsRequests := store.Overrides().SkipPermissionRequests

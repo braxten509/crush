@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -107,16 +108,22 @@ func (m *UI) editTree(target string) tea.Cmd {
 type treeFinishedMsg struct {
 	sessionID, prompt string
 	editID            string
+	notice            string
 	err               error
 }
 
-func (m *UI) navigateTree(action dialog.ActionTreeNavigate) tea.Cmd {
+func (m *UI) navigateTree(action dialog.ActionTreeNavigate, approved ...*filehistory.Plan) tea.Cmd {
 	if err := m.treeReady(); err != nil {
 		return util.ReportError(err)
 	}
 	manager, ok := m.com.Workspace.(workspace.TreeManagement)
 	if !ok {
 		return util.ReportInfo("Session trees need a local workspace.")
+	}
+	if len(approved) == 0 {
+		if shown, cmd := m.previewFiles(action.MessageID, false, action); shown {
+			return cmd
+		}
 	}
 	id := m.session.ID
 	editID := ""
@@ -129,8 +136,17 @@ func (m *UI) navigateTree(action dialog.ActionTreeNavigate) tea.Cmd {
 	}
 	return func() tea.Msg {
 		defer cancel()
+		var request *message.FileRestoreRequest
+		if len(approved) > 0 && approved[0] != nil {
+			request = &message.FileRestoreRequest{Plan: approved[0]}
+			ctx = message.WithFileRestore(ctx, request)
+		}
 		err := manager.NavigateTree(ctx, id, action.MessageID, action.Summary)
-		return treeFinishedMsg{sessionID: id, prompt: action.Prompt, editID: editID, err: err}
+		notice := "Branch switched. Files on disk are unchanged."
+		if request != nil {
+			notice = "Branch switched. " + request.Result.Notice()
+		}
+		return treeFinishedMsg{sessionID: id, prompt: action.Prompt, editID: editID, err: err, notice: notice}
 	}
 }
 func (m *UI) finishTree(result treeFinishedMsg) tea.Cmd {
@@ -147,9 +163,9 @@ func (m *UI) finishTree(result treeFinishedMsg) tea.Cmd {
 	if result.editID != "" {
 		m.treeComposer(result.editID, result.prompt)
 	}
-	return tea.Batch(m.resetPlanModeState(), m.loadSession(result.sessionID), util.ReportInfo("Branch switched. Files on disk are unchanged."))
+	return tea.Batch(m.resetPlanModeState(), m.loadSession(result.sessionID), util.ReportInfo(result.notice))
 }
-func (m *UI) copyTree(target string, fork bool) tea.Cmd {
+func (m *UI) copyTree(target string, fork bool, approved ...*filehistory.Plan) tea.Cmd {
 	if err := m.treeReady(); err != nil {
 		return util.ReportError(err)
 	}
@@ -157,7 +173,18 @@ func (m *UI) copyTree(target string, fork bool) tea.Cmd {
 	if !ok {
 		return util.ReportInfo("Session trees need a local workspace.")
 	}
-	id, prompt, err := manager.CopyTree(context.Background(), m.session.ID, target, fork)
+	if fork && len(approved) == 0 {
+		if shown, cmd := m.previewFiles(target, true, dialog.ActionTreeCopy{MessageID: target, Fork: true}); shown {
+			return cmd
+		}
+	}
+	ctx := context.Background()
+	var request *message.FileRestoreRequest
+	if len(approved) > 0 && approved[0] != nil {
+		request = &message.FileRestoreRequest{Plan: approved[0]}
+		ctx = message.WithFileRestore(ctx, request)
+	}
+	id, prompt, err := manager.CopyTree(ctx, m.session.ID, target, fork)
 	if err != nil {
 		return util.ReportError(err)
 	}
@@ -165,7 +192,11 @@ func (m *UI) copyTree(target string, fork bool) tea.Cmd {
 	if fork {
 		m.treeComposer(target, prompt)
 	}
-	return tea.Batch(m.resetPlanModeState(), m.loadSession(id), util.ReportInfo("Branch copied to a new chat. Files on disk are unchanged."))
+	notice := "Branch copied to a new chat. Files on disk are unchanged."
+	if request != nil {
+		notice = "Branch copied to a new chat. " + request.Result.Notice()
+	}
+	return tea.Batch(m.resetPlanModeState(), m.loadSession(id), util.ReportInfo(notice))
 }
 func (m *UI) cloneTree() tea.Cmd {
 	if err := m.treeReady(); err != nil {

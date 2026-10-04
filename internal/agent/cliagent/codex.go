@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/diff"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/charmbracelet/crush/internal/version"
@@ -826,61 +827,105 @@ func codexChangeMetadata(dir string, c codexChange) string {
 		}
 	}
 	_, adds, dels := diff.GenerateDiff(before, after, path)
-	return marshal(tools.EditResponseMetadata{Additions: adds, Removals: dels, OldContent: before, NewContent: after})
+	metadata := marshal(tools.EditResponseMetadata{Additions: adds, Removals: dels, OldContent: before, NewContent: after})
+	mode := uint32(0644)
+	if info, err := os.Stat(path); err == nil {
+		mode = uint32(info.Mode())
+	}
+	change := filechange.Change{Path: path, Order: time.Now().UnixNano()}
+	if c.Kind.Type != "add" {
+		change.Before = &filechange.State{Content: before, Size: int64(len(before)), Mode: mode}
+	}
+	if c.Kind.Type != "delete" {
+		change.After = &filechange.State{Content: after, Size: int64(len(after)), Mode: mode}
+	}
+	return filechange.WithReview(metadata, &filechange.Review{Root: dir, Changes: []filechange.Change{change}})
 }
 
 // reversePatch undoes a unified diff's hunks on the patched text, in order.
 func reversePatch(patched, patch string) (string, bool) {
-	type hunk struct{ oldLines, newLines []string }
+	type hunk struct {
+		oldLines, newLines     []string
+		at, oldCount, newCount int
+	}
+	header := regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
 	var hunks []hunk
-	var cur *hunk
-	for _, line := range strings.Split(strings.TrimRight(patch, "\n"), "\n") {
-		switch {
-		case strings.HasPrefix(line, "@@"):
-			hunks = append(hunks, hunk{})
-			cur = &hunks[len(hunks)-1]
-		case cur == nil, strings.HasPrefix(line, `\`):
-		case strings.HasPrefix(line, "-"):
-			cur.oldLines = append(cur.oldLines, line[1:])
-		case strings.HasPrefix(line, "+"):
-			cur.newLines = append(cur.newLines, line[1:])
+	var current *hunk
+	previous := byte(0)
+	for _, line := range strings.Split(strings.TrimSuffix(patch, "\n"), "\n") {
+		if strings.HasPrefix(line, "@@") {
+			match := header.FindStringSubmatch(line)
+			if match == nil {
+				return "", false
+			}
+			at, _ := strconv.Atoi(match[3])
+			oldCount, newCount := 1, 1
+			if match[2] != "" {
+				oldCount, _ = strconv.Atoi(match[2])
+			}
+			if match[4] != "" {
+				newCount, _ = strconv.Atoi(match[4])
+			}
+			if newCount > 0 {
+				at--
+			}
+			hunks = append(hunks, hunk{at: at, oldCount: oldCount, newCount: newCount})
+			current = &hunks[len(hunks)-1]
+			previous = 0
+			continue
+		}
+		if current == nil {
+			continue
+		}
+		if strings.HasPrefix(line, `\ No newline at end of file`) {
+			if (previous == '-' || previous == ' ') && len(current.oldLines) > 0 {
+				n := len(current.oldLines) - 1
+				current.oldLines[n] = strings.TrimSuffix(current.oldLines[n], "\n")
+			}
+			if (previous == '+' || previous == ' ') && len(current.newLines) > 0 {
+				n := len(current.newLines) - 1
+				current.newLines[n] = strings.TrimSuffix(current.newLines[n], "\n")
+			}
+			continue
+		}
+		if line == "" {
+			return "", false
+		}
+		previous = line[0]
+		switch previous {
+		case '-':
+			current.oldLines = append(current.oldLines, line[1:]+"\n")
+		case '+':
+			current.newLines = append(current.newLines, line[1:]+"\n")
+		case ' ':
+			current.oldLines = append(current.oldLines, line[1:]+"\n")
+			current.newLines = append(current.newLines, line[1:]+"\n")
 		default:
-			line = strings.TrimPrefix(line, " ")
-			cur.oldLines = append(cur.oldLines, line)
-			cur.newLines = append(cur.newLines, line)
+			return "", false
 		}
 	}
 	if len(hunks) == 0 {
 		return "", false
 	}
-	trailing := strings.HasSuffix(patched, "\n")
-	lines := strings.Split(strings.TrimSuffix(patched, "\n"), "\n")
-	if patched == "" {
-		lines = nil
+	lines := strings.SplitAfter(patched, "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
 	}
-	var out []string
-	pos := 0
+	var output strings.Builder
+	position := 0
 	for _, h := range hunks {
-		at := -1
-		for i := pos; i+len(h.newLines) <= len(lines); i++ {
-			if slices.Equal(lines[i:i+len(h.newLines)], h.newLines) {
-				at = i
-				break
-			}
-		}
-		if at < 0 {
+		if len(h.oldLines) != h.oldCount || len(h.newLines) != h.newCount || h.at < position || h.at+len(h.newLines) > len(lines) {
 			return "", false
 		}
-		out = append(out, lines[pos:at]...)
-		out = append(out, h.oldLines...)
-		pos = at + len(h.newLines)
+		if !slices.Equal(lines[h.at:h.at+len(h.newLines)], h.newLines) {
+			return "", false
+		}
+		output.WriteString(strings.Join(lines[position:h.at], ""))
+		output.WriteString(strings.Join(h.oldLines, ""))
+		position = h.at + len(h.newLines)
 	}
-	out = append(out, lines[pos:]...)
-	before := strings.Join(out, "\n")
-	if trailing && len(out) > 0 {
-		before += "\n"
-	}
-	return before, true
+	output.WriteString(strings.Join(lines[position:], ""))
+	return output.String(), true
 }
 
 // splitDiff rebuilds the before and after text of a unified diff's hunks,

@@ -58,7 +58,7 @@ func (s *service) SwitchTree(ctx context.Context, id, target string) error {
 	if err := s.FlushAll(ctx); err != nil {
 		return err
 	}
-	return storage.SwitchTree(ctx, id, target)
+	return s.restoreFiles(ctx, func() error { return storage.SwitchTree(ctx, id, target) })
 }
 func (s *service) LabelTree(ctx context.Context, id, target, label string) error {
 	storage, ok := s.q.(treeStorage)
@@ -112,7 +112,9 @@ func (s *service) SwitchTreeNote(ctx context.Context, id, target string, summary
 	if err != nil {
 		return err
 	}
-	return storage.SwitchTreeNote(ctx, id, target, &db.TreeNote{FromID: summary.FromID, AncestorID: summary.AncestorID, Message: db.CreateMessageParams{ID: uuid.NewString(), SessionID: id, Role: string(Assistant), Parts: string(parts), Model: sql.NullString{String: summary.Model, Valid: summary.Model != ""}, Provider: sql.NullString{String: summary.Provider, Valid: summary.Provider != ""}}})
+	return s.restoreFiles(ctx, func() error {
+		return storage.SwitchTreeNote(ctx, id, target, &db.TreeNote{FromID: summary.FromID, AncestorID: summary.AncestorID, Message: db.CreateMessageParams{ID: uuid.NewString(), SessionID: id, Role: string(Assistant), Parts: string(parts), Model: sql.NullString{String: summary.Model, Valid: summary.Model != ""}, Provider: sql.NullString{String: summary.Provider, Valid: summary.Provider != ""}}})
+	})
 }
 func (s *service) CopyTree(ctx context.Context, id, target string, fork bool) (string, string, error) {
 	storage, ok := s.q.(treeStorage)
@@ -145,8 +147,13 @@ func (s *service) CopyTree(ctx context.Context, id, target string, fork bool) (s
 		}
 	}
 	newID := uuid.NewString()
-	if err := storage.CopyTree(ctx, id, target, newID); err != nil {
+	if err := s.restoreFiles(ctx, func() error { return storage.CopyTree(ctx, id, target, newID) }); err != nil {
 		return "", "", err
+	}
+	if request, _ := ctx.Value(restoreContextKey{}).(*FileRestoreRequest); request != nil && request.Result.UndoID != "" {
+		if err := s.fileHistory.MoveUndo(ctx, request.Result.UndoID, newID); err != nil {
+			return newID, prompt, err
+		}
 	}
 	return newID, prompt, nil
 }

@@ -3,9 +3,11 @@
 Local release: `v0.97.1-local.20261003-tree`.
 
 A tree keeps several conversation paths in one chat. Switching changes the
-messages shown to you and sent to the model. **Files on disk stay unchanged.**
-The selector, confirmation, and completion notice all say so. There is no
-file restore action.
+messages shown to you and sent to the model. If tracked files would change,
+Crush shows a **file restore preview** after the summary choice. Choose
+**Restore files**, **Chat only**, or **Cancel**. Nothing is restored without
+that choice. If there are no recorded file changes, navigation needs no extra
+step. `/fork` offers the same preview; `/clone` always leaves files alone.
 
 ## Commands and keys
 
@@ -80,6 +82,53 @@ The files sidebar and lifetime spending still describe the whole chat. Todos
 clear and plan mode resets on a jump, avoiding stale branch instructions.
 Branch-local todo snapshots are not implemented.
 
+## File restore
+
+The preview lists each path, its restore/delete/recreate action, and added and
+removed line counts. It marks conflicts and unavailable versions. The list
+and explanatory text scroll with Up/Down; Left/Right or Tab selects a button.
+The action buttons stay in place, including in narrow terminals.
+
+A jump backward restores the state before the changes being left behind.
+A jump across branches first undoes changes to their common ancestor, then
+reapplies the target branch through the selected point. Forking uses the
+point **before** the selected user prompt. Full contents and permissions are
+saved independently of the five-prompt diff drawer, before its text is bounded.
+The same hidden-path rules apply: no hidden folders, `/tmp`, caches, or
+protected secure-entry paths. Only files already named by the tracker are
+captured; starting a chat never scans its working folder.
+
+Before a write, Crush compares the current contents and permissions with the
+last recorded state on the branch being left. It **skips conflicts** and lists
+the skipped paths in the completion notice. It also checks again after the
+preview, so a newer outside edit is not silently overwritten. Symbolic links
+and special files are unavailable, and a new symbolic link in a path is a
+conflict. Regular files are written through a temporary file and atomic
+rename. Deletions remove only the named regular file, never a folder.
+
+Before changing any files, Crush saves their current contents as a durable
+undo snapshot. The completion notice points to **Undo Last File Restore** in
+the command palette. Undo shows its own preview and uses the same conflict
+checks. It survives restarting Crush. A fork's undo belongs to the new chat.
+If a filesystem or database error interrupts a restore, the saved undo remains
+available; a multi-file filesystem change cannot be one SQLite transaction.
+
+The limit is **10 MB per file** and **2 GB of compressed objects per project**.
+Larger files are marked **Too large to restore**. When the project budget is
+full, the oldest chats lose saved versions first. Their file rows remain with
+a clear budget notice in the preview. Chat copies retain their own references
+to shared objects. Deleting a chat removes its index rows; unused objects are
+collected after deletion, on the next capture, and on startup. Versions are
+otherwise retained while the chat exists. Versions from before this feature
+was enabled are not reconstructed from expired or partial diffs.
+
+Restore affects tracked regular files only. It does not undo outside edits,
+databases, installed packages, network effects, or Git commits. The preview
+states these limits. When the project's Git HEAD differs from the selected
+conversation point, it warns that restored files will be uncommitted changes.
+Git is used only for read-only HEAD/repository identification. Restore never
+uses stash, checkout, reset, clean, or another Git write command.
+
 ## Saved diffs
 
 The existing retention policy is unchanged: the latest **five real prompts**
@@ -91,7 +140,10 @@ when their full diffs expire.
 
 ## Storage, speed, and older binaries
 
-The feature adds `tree_nodes`, `tree_heads`, and `tree_branch_summaries`.
+The tree adds `tree_nodes`, `tree_heads`, and `tree_branch_summaries`.
+File restore adds `file_history_changes`, `file_history_objects`,
+`file_history_points`, and `file_history_undo`, plus compressed objects under
+`<data directory>/file-history/objects/<digest prefix>/<sha256>`.
 Existing messages retain their shape. No generated sqlc files are edited.
 The first migration links older messages by creation time and SQLite insertion
 order; tied timestamps keep their original order. Insert/delete triggers

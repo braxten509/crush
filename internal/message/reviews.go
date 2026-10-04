@@ -188,6 +188,7 @@ func boundedReviewState(state *filechange.State, budget *int) *filechange.State 
 		return nil
 	}
 	copy := *state
+	copy.RestoreData = ""
 	if len(copy.Content) > *budget {
 		copy.Content, copy.Omitted = "", "Preview exceeds the saved diff size limit"
 	} else {

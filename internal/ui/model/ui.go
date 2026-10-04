@@ -2242,6 +2242,10 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		}
 	case dialog.ActionViewSubAgent:
 		cmds = append(cmds, m.openSubagentView(msg.Task))
+	case dialog.ActionUndoFiles:
+		cmds = append(cmds, m.previewUndoFiles())
+	case dialog.ActionFileRestore:
+		cmds = append(cmds, m.chooseFileRestore(msg))
 	case dialog.ActionTreeJump:
 		cmds = append(cmds, m.confirmTree(msg.MessageID, ""))
 	case dialog.ActionTreeEdit:

@@ -1,11 +1,12 @@
 // Package filechange records local filesystem changes independently of Git.
 // Only files identified by tools or their actual mutations are inspected;
-// directories are never inventoried. Snapshots are for review, never for restoring files.
+// directories are never inventoried. Full versions are captured before review limits apply.
 package filechange
 
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -25,19 +26,24 @@ import (
 // Bound previews of the files editing tools identify. Files without a text
 // preview still produce a visible change summary.
 const (
-	maxTextSize  = 1 << 20
-	maxTextTotal = 64 << 20
+	MaxRestoreSize = 10 << 20
+	maxTextSize    = 1 << 20
+	maxTextTotal   = 64 << 20
 )
 
 // State distinguishes a missing file from an empty file. Nil means missing.
 // Omitted explains why Content is unavailable (binary, oversized, unreadable,
 // or outside the text budget). Digest identifies content independently of mtime.
 type State struct {
-	Content string `json:"content,omitempty"`
-	Digest  string `json:"digest,omitempty"`
-	Size    int64  `json:"size"`
-	Mode    uint32 `json:"mode"`
-	Omitted string `json:"omitted,omitempty"`
+	// RestoreData is a transient, binary-safe full snapshot. Message storage removes
+	// it from reviews after writing the durable content-addressed history.
+	RestoreData    string `json:"restore_data,omitempty"`
+	RestoreOmitted string `json:"restore_omitted,omitempty"`
+	Content        string `json:"content,omitempty"`
+	Digest         string `json:"digest,omitempty"`
+	Size           int64  `json:"size"`
+	Mode           uint32 `json:"mode"`
+	Omitted        string `json:"omitted,omitempty"`
 }
 
 type Change struct {
@@ -228,7 +234,9 @@ func (t *Tracker) scan(ctx context.Context) (map[string]entry, error) {
 			if !t.imported {
 				reason = "Generated build artifact"
 			}
-			next[path] = entry{info: info, changeTime: changeTime(info), state: State{Size: info.Size(), Mode: uint32(info.Mode()), Omitted: reason}}
+			value := t.readEntry(path, info, &budget)
+			value.state.Content, value.state.Omitted = "", reason
+			next[path] = value
 			return
 		}
 		if known && os.SameFile(previous.info, info) && previous.info.Size() == info.Size() &&
@@ -303,6 +311,29 @@ func readEntry(path string, info fs.FileInfo, budget *int) entry {
 
 func readReviewEntry(path string, info fs.FileInfo, budget *int) entry {
 	e := entry{info: info, changeTime: changeTime(info), state: State{Size: info.Size(), Mode: uint32(info.Mode())}}
+	// Capture only visible, regular files. The same immutable bytes travel through
+	// shell/CLI metadata, including binary files, before the review gets bounded.
+	if !HiddenReviewPath(path, "") {
+		switch {
+		case !info.Mode().IsRegular():
+			e.state.RestoreOmitted = "Symbolic links and special files cannot be restored"
+		case info.Size() > MaxRestoreSize:
+			e.state.RestoreOmitted = "Too large to restore (over 10 MB)"
+		default:
+			f, err := os.Open(path)
+			if err == nil {
+				data, readErr := io.ReadAll(io.LimitReader(f, MaxRestoreSize+1))
+				f.Close()
+				if readErr == nil && len(data) <= MaxRestoreSize {
+					e.state.RestoreData = base64.StdEncoding.EncodeToString(data)
+				} else {
+					e.state.RestoreOmitted = "Full file contents could not be saved"
+				}
+			} else {
+				e.state.RestoreOmitted = "Full file contents could not be read"
+			}
+		}
+	}
 	// A metadata signature lets very large files be reviewed without reading
 	// multi-gigabyte build products on every agent turn.
 	e.state.Digest = fmt.Sprintf("stat:%d:%d:%d", info.Size(), info.ModTime().UnixNano(), e.changeTime)
@@ -320,6 +351,9 @@ func readReviewEntry(path string, info fs.FileInfo, budget *int) entry {
 		e.state.Omitted = "Special file (" + info.Mode().Type().String() + ")"
 		return e
 	case info.Size() > maxTextSize:
+		if data, err := base64.StdEncoding.DecodeString(e.state.RestoreData); err == nil && e.state.RestoreData != "" {
+			e.state.Digest = digest(data)
+		}
 		e.state.Omitted = "File exceeds " + strconv.Itoa(maxTextSize) + " byte text preview limit"
 		return e
 	}

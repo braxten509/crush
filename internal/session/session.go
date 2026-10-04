@@ -88,8 +88,9 @@ type Service interface {
 
 type service struct {
 	*pubsub.Broker[Session]
-	db *sql.DB
-	q  *db.Queries
+	db                 *sql.DB
+	q                  *db.Queries
+	fileHistoryCleanup []func(context.Context) error
 
 	// Estimated usage stays in memory so fetch-modify-save paths (e.g.,
 	// updating todos or parent-session cost) do not rebuild a session from
@@ -170,6 +171,11 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	s.clearEstimatedUsageState(dbSession.ID)
 	s.Publish(pubsub.DeletedEvent, session)
 	event.SessionDeleted()
+	for _, cleanup := range s.fileHistoryCleanup {
+		if err := cleanup(ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -399,13 +405,14 @@ func (s *service) MCPServersEnabled(ctx context.Context) ([]string, error) {
 	return s.q.ListMCPEnabledServers(ctx)
 }
 
-func NewService(q *db.Queries, conn *sql.DB) Service {
+func NewService(q *db.Queries, conn *sql.DB, cleanup ...func(context.Context) error) Service {
 	broker := pubsub.NewBroker[Session]()
 	return &service{
-		Broker:         broker,
-		db:             conn,
-		q:              q,
-		estimatedUsage: make(map[string]bool),
+		Broker:             broker,
+		fileHistoryCleanup: cleanup,
+		db:                 conn,
+		q:                  q,
+		estimatedUsage:     make(map[string]bool),
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/google/uuid"
 )
@@ -139,9 +140,10 @@ type service struct {
 	q        db.Querier
 	debounce time.Duration
 
-	mu       sync.Mutex
-	pending  map[string]*pendingState
-	reviewMu sync.Mutex
+	mu          sync.Mutex
+	pending     map[string]*pendingState
+	reviewMu    sync.Mutex
+	fileHistory *filehistory.Store
 }
 
 // ServiceOption configures a [Service] at construction.
@@ -201,6 +203,14 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 		})
 	}
 	id := uuid.New().String()
+	if s.fileHistory != nil {
+		if err := s.fileHistory.RecordPoint(ctx, sessionID, id); err != nil {
+			return Message{}, err
+		}
+	}
+	if err := s.captureFiles(ctx, id, sessionID, params.Parts); err != nil {
+		return Message{}, err
+	}
 	var payload []byte
 	storage, separate := s.q.(reviewStorage)
 	if separate {
@@ -456,6 +466,9 @@ func (s *service) flushOne(ctx context.Context, id string, syncCaller bool) erro
 // write performs the unguarded SQL write + UpdatedAt stamp. Caller
 // owns publishing.
 func (s *service) write(ctx context.Context, msg Message) (Message, error) {
+	if err := s.captureFiles(ctx, msg.ID, msg.SessionID, msg.Parts); err != nil {
+		return Message{}, err
+	}
 	var payload []byte
 	storage, separate := s.q.(reviewStorage)
 	if separate {

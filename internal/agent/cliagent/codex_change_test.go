@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,4 +39,36 @@ func TestCodexChangeMetadataDoesNotDependOnReadTiming(t *testing.T) {
 	meta = tools.EditResponseMetadata{}
 	require.NoError(t, json.Unmarshal([]byte(codexChangeMetadata(dir, update)), &meta))
 	require.Equal(t, tools.EditResponseMetadata{Additions: 1, Removals: 1, OldContent: "1\n2\n3\n", NewContent: "1\nTWO\n3\n"}, meta)
+}
+
+func TestCodexReversedPatchCarriesFullRestoreStates(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file")
+	require.NoError(t, os.WriteFile(path, []byte("one\nCHANGED\nthree\n"), 0750))
+	change := codexChange{Path: path, Diff: "@@ -1,3 +1,3 @@\n one\n-two\n+CHANGED\n three\n"}
+	change.Kind.Type = "update"
+	_, review := filechange.TakeReview(codexChangeMetadata(dir, change))
+	require.NotNil(t, review)
+	require.Len(t, review.Changes, 1)
+	require.Equal(t, "one\ntwo\nthree\n", review.Changes[0].Before.Content)
+	require.Equal(t, "one\nCHANGED\nthree\n", review.Changes[0].After.Content)
+	require.EqualValues(t, 0750, review.Changes[0].Before.Mode)
+	change.Kind.Type = "add"
+	_, review = filechange.TakeReview(codexChangeMetadata(dir, change))
+	require.Nil(t, review.Changes[0].Before)
+}
+
+func TestReversePatchUsesPositionsAndFinalNewline(t *testing.T) {
+	before, ok := reversePatch("same\nsame\n", "@@ -2 +2 @@\n-old\n+same\n")
+	require.True(t, ok)
+	require.Equal(t, "same\nold\n", before)
+	before, ok = reversePatch("new\n", "@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new\n")
+	require.True(t, ok)
+	require.Equal(t, "old", before)
+	before, ok = reversePatch("new", "@@ -1 +1 @@\n-old\n+new\n\\ No newline at end of file\n")
+	require.True(t, ok)
+	require.Equal(t, "old\n", before)
+	before, ok = reversePatch("first\nthird\n", "@@ -2 +1,0 @@\n-second\n")
+	require.True(t, ok)
+	require.Equal(t, "first\nsecond\nthird\n", before)
 }

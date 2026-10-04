@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/diff"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -576,6 +577,8 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		s.content = append(s.content, tc)
 		return s.sc.OnToolCall(tc)
 	case cliagent.EventToolResult:
+		metadata, reportedReview := filechange.TakeReview(e.Metadata)
+		e.Metadata = metadata
 		s.setToolRunning(e.ID, false)
 		var out fantasy.ToolResultOutputContent = fantasy.ToolResultOutputContentText{Text: e.Output}
 		if e.IsError {
@@ -621,6 +624,7 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 				s.known[view.FilePath] = view.Content
 			}
 		}
+		e.Metadata = filechange.WithReview(e.Metadata, reportedReview)
 		tr := fantasy.ToolResultContent{ToolCallID: e.ID, ToolName: e.Name, Result: out, ClientMetadata: e.Metadata}
 		s.content = append(s.content, tr)
 		return s.sc.OnToolResult(tr)

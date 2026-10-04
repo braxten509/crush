@@ -303,16 +303,20 @@ func (d *Tree) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc.Title = ansi.Truncate(rc.Title, max(0, inner-2), "…")
 	rc.AddPart(t.Dialog.InputPrompt.Render(d.input.View()))
 	rc.AddPart(t.Dialog.List.Height(d.list.Height()).Render(d.list.Render()))
-	lines := []string{"Files on disk stay unchanged.", "↑↓ choose  enter jump  ←→ fold  tab filter", "ctrl+e edit  ctrl+r label  alt+↑↓ branch  esc close"}
+	lines := []string{"File changes are previewed before a jump.", "↑↓ choose  enter jump  ←→ fold  tab filter", "ctrl+e edit  ctrl+r label  alt+↑↓ branch  esc close"}
 	if d.confirming {
 		choice := "[No summary]   Add summary"
 		if d.summary {
 			choice = " No summary   [Add summary]"
 		}
-		lines = []string{"Carry a summary of the branch you are leaving?", choice, "←→ choose  enter confirm  esc back · Files stay unchanged."}
+		lines = []string{"Carry a summary of the branch you are leaving?", choice, "←→ choose  enter confirm  esc back · File preview follows."}
 	}
 	if d.cancel != nil {
-		lines = []string{"Writing branch summary…", "Your old branch stays selected until it succeeds.", "esc cancel · Files stay unchanged."}
+		status := "Switching branch…"
+		if d.summary {
+			status = "Writing branch summary…"
+		}
+		lines = []string{status, "Your old branch stays selected until it succeeds.", "esc cancel · Files wait until the summary succeeds."}
 	}
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, max(0, inner-2), "…")

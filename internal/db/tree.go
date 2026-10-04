@@ -227,6 +227,12 @@ func (q *Queries) CopyTree(ctx context.Context, source, target, newID string) er
 		if err != nil {
 			return err
 		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO file_history_points(message_id,session_id,git_root,git_head) SELECT ?,?,git_root,git_head FROM file_history_points WHERE message_id=?`, newMessageID, newID, id); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO file_history_changes(message_id,session_id,tool_id,path,capture_order,before_state,after_state,git_head) SELECT ?,?,tool_id,path,capture_order,before_state,after_state,git_head FROM file_history_changes WHERE message_id=?`, newMessageID, newID, id); err != nil {
+			return err
+		}
 		if _, err = tx.ExecContext(ctx, `UPDATE tree_nodes SET label=(SELECT label FROM tree_nodes WHERE message_id=?) WHERE message_id=?`, id, newMessageID); err != nil {
 			return err
 		}

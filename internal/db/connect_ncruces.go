@@ -5,13 +5,19 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
+	"path/filepath"
 
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
 )
 
 func openDBReadOnly(dbPath string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("file:%s?mode=ro&_txlock=immediate", dbPath)
+	absolute, err := filepath.Abs(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	dsn := (&url.URL{Scheme: "file", Path: absolute, RawQuery: "mode=ro&_txlock=immediate"}).String()
 	db, err := driver.Open(dsn, registerTreeReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -24,7 +30,11 @@ func openDB(dbPath string) (*sql.DB, error) {
 	// Use BEGIN IMMEDIATE so writers acquire the reserved lock up front,
 	// preventing deferred-to-writer upgrade deadlocks. The "file:" prefix
 	// is required for the ncruces driver to parse query parameters.
-	dsn := fmt.Sprintf("file:%s?_txlock=immediate", dbPath)
+	absolute, err := filepath.Abs(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	dsn := (&url.URL{Scheme: "file", Path: absolute, RawQuery: "_txlock=immediate"}).String()
 	db, err := driver.Open(dsn, func(c *sqlite3.Conn) error {
 		if err := registerTreeReader(c); err != nil {
 			return err

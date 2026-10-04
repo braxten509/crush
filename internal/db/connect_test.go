@@ -208,3 +208,23 @@ func TestConnect_ServerPathFailsWhenDataDirLocked(t *testing.T) {
 	require.Error(t, err, "server-path Connect must refuse to open a locked data dir")
 	require.ErrorIs(t, err, ErrDataDirLocked)
 }
+
+func TestConnectEscapesDatabasePaths(t *testing.T) {
+	base := t.TempDir()
+	for _, name := range []string{"chat#one", "chat#two", "chat?three"} {
+		dir := filepath.Join(base, name)
+		conn, err := Connect(t.Context(), dir)
+		require.NoError(t, err)
+		var path string
+		var sequence int
+		var schema string
+		require.NoError(t, conn.QueryRow(`PRAGMA database_list`).Scan(&sequence, &schema, &path))
+		require.Equal(t, filepath.Join(dir, "crush.db"), path)
+		require.NoError(t, Release(dir))
+		ro, err := ConnectReadOnly(t.Context(), filepath.Join(dir, "crush.db"))
+		require.NoError(t, err)
+		require.NoError(t, ro.QueryRow(`PRAGMA database_list`).Scan(&sequence, &schema, &path))
+		require.Equal(t, filepath.Join(dir, "crush.db"), path)
+		require.NoError(t, ro.Close())
+	}
+}

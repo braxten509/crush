@@ -1,0 +1,24 @@
+
+     ╭────────────────────────────────────────────────────────────────────╮
+     │ Session tree · default ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱ │
+     │                                                                    │
+     │ > Search text or bookmarks                                         │
+     │                                                                    │
+     │ * Start of chat (before first message)                             │
+     │   − user: ROOT_AMBER                                               │
+     │   − assistant: TREE_FIXTURE_REPLY                                  │
+     │     − user: FORK_EDITEDOLD_VIOLET                                  │
+     │       assistant: TREE_FIXTURE_REPLY                                │
+     │     − user: EDIT_BRANCH_BLUE                                       │
+     │       assistant: TREE_FIXTURE_REPLY                                │
+     │                                                                    │
+     │                                                                    │
+     │                                                                    │
+     │                                                                    │
+     │                                                                    │
+     │Files on disk stay unchanged.                                       │
+› Go │↑↓ choose  enter jump  ←→ fold  tab filter                          │
+     │ctrl+e edit  ctrl+r label  alt+↑↓ branch  esc close                 │
+     │                                                                    │
+  Tre╰────────────────────────────────────────────────────────────────────╯
+  YOLO MODE

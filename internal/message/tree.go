@@ -15,7 +15,7 @@ type TreeService interface {
 	SwitchTree(context.Context, string, string) error
 	LabelTree(context.Context, string, string, string) error
 	TreeRevision(context.Context, string) (int64, error)
-	SwitchTreeNote(context.Context, string, string, string, string, string) error
+	SwitchTreeNote(context.Context, string, string, BranchSummary) error
 	CopyTree(context.Context, string, string, bool) (string, string, error)
 }
 type TreeEntry struct {
@@ -23,7 +23,7 @@ type TreeEntry struct {
 	Message Message
 }
 type treeStorage interface {
-	SwitchTreeNote(context.Context, string, string, *db.CreateMessageParams) error
+	SwitchTreeNote(context.Context, string, string, *db.TreeNote) error
 	CopyTree(context.Context, string, string, string) error
 	TreeNodes(context.Context, string) ([]db.TreeNode, error)
 	TreePreviews(context.Context, string) ([]db.TreePreview, error)
@@ -96,7 +96,9 @@ func (s *service) activeTree(ctx context.Context, id string, rows []db.Message) 
 	return active, nil
 }
 
-func (s *service) SwitchTreeNote(ctx context.Context, id, target, text, model, provider string) error {
+type BranchSummary struct{ Text, Model, Provider, FromID, AncestorID string }
+
+func (s *service) SwitchTreeNote(ctx context.Context, id, target string, summary BranchSummary) error {
 	storage, ok := s.q.(treeStorage)
 	if !ok {
 		return errors.New("tree storage unavailable")
@@ -104,13 +106,13 @@ func (s *service) SwitchTreeNote(ctx context.Context, id, target, text, model, p
 	if err := s.FlushAll(ctx); err != nil {
 		return err
 	}
-	m := Message{Parts: []ContentPart{TextContent{Text: text}}}
-	m.AddFinish(FinishReasonEndTurn, "", "")
+	m := Message{Parts: []ContentPart{TextContent{Text: summary.Text}}}
+	m.AddFinish(FinishReasonBranchSummary, "", "")
 	parts, err := marshalParts(m.Parts)
 	if err != nil {
 		return err
 	}
-	return storage.SwitchTreeNote(ctx, id, target, &db.CreateMessageParams{ID: uuid.NewString(), SessionID: id, Role: string(Assistant), Parts: string(parts), Model: sql.NullString{String: model, Valid: model != ""}, Provider: sql.NullString{String: provider, Valid: provider != ""}})
+	return storage.SwitchTreeNote(ctx, id, target, &db.TreeNote{FromID: summary.FromID, AncestorID: summary.AncestorID, Message: db.CreateMessageParams{ID: uuid.NewString(), SessionID: id, Role: string(Assistant), Parts: string(parts), Model: sql.NullString{String: summary.Model, Valid: summary.Model != ""}, Provider: sql.NullString{String: summary.Provider, Valid: summary.Provider != ""}}})
 }
 func (s *service) CopyTree(ctx context.Context, id, target string, fork bool) (string, string, error) {
 	storage, ok := s.q.(treeStorage)

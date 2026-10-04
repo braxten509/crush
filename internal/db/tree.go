@@ -71,8 +71,13 @@ func (q *Queries) SwitchTree(ctx context.Context, sessionID, messageID string) e
 	return q.SwitchTreeNote(ctx, sessionID, messageID, nil)
 }
 
+type TreeNote struct {
+	Message            CreateMessageParams
+	FromID, AncestorID string
+}
+
 // A note and the new cursor commit together; failure leaves the old path intact.
-func (q *Queries) SwitchTreeNote(ctx context.Context, sessionID, messageID string, note *CreateMessageParams) error {
+func (q *Queries) SwitchTreeNote(ctx context.Context, sessionID, messageID string, note *TreeNote) error {
 	conn, ok := q.db.(*sql.DB)
 	if !ok {
 		return fmt.Errorf("tree switching requires a database connection")
@@ -89,11 +94,14 @@ func (q *Queries) SwitchTreeNote(ctx context.Context, sessionID, messageID strin
 	if messageID != "" && exists != 1 {
 		return fmt.Errorf("tree entry does not belong to this session")
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE tree_heads SET message_id=?,revision=revision+1 WHERE session_id=?`, sql.NullString{String: messageID, Valid: messageID != ""}, sessionID); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO tree_heads(session_id,message_id,revision) VALUES(?,?,1) ON CONFLICT(session_id) DO UPDATE SET message_id=excluded.message_id,revision=tree_heads.revision+1`, sessionID, sql.NullString{String: messageID, Valid: messageID != ""}); err != nil {
 		return err
 	}
 	if note != nil {
-		if _, err = New(tx).CreateMessage(ctx, *note); err != nil {
+		if _, err = New(tx).CreateMessage(ctx, note.Message); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO tree_branch_summaries(message_id,from_id,ancestor_id) VALUES(?,?,?)`, note.Message.ID, note.FromID, note.AncestorID); err != nil {
 			return err
 		}
 	}
@@ -220,6 +228,9 @@ func (q *Queries) CopyTree(ctx context.Context, source, target, newID string) er
 			return err
 		}
 		if _, err = tx.ExecContext(ctx, `UPDATE tree_nodes SET label=(SELECT label FROM tree_nodes WHERE message_id=?) WHERE message_id=?`, id, newMessageID); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO tree_branch_summaries(message_id,from_id,ancestor_id) SELECT ?,from_id,ancestor_id FROM tree_branch_summaries WHERE message_id=?`, newMessageID, id); err != nil {
 			return err
 		}
 	}

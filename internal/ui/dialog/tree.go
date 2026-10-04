@@ -85,7 +85,14 @@ func (d *Tree) rebuild() {
 	var items []list.FilterableItem
 	selected := 0
 	if !d.Fork {
-		items = append(items, NewCommandItem(d.com.Styles, treeRootID, "  Start of chat (before first message)", "", ActionTreeJump{""}))
+		marker := "* "
+		for _, entry := range d.entries {
+			if entry.Active {
+				marker = "  "
+				break
+			}
+		}
+		items = append(items, NewCommandItem(d.com.Styles, treeRootID, marker+"Start of chat (before first message)", "", ActionTreeJump{""}))
 	}
 	// Iterative traversal keeps very deep, linear histories off the Go stack.
 	type row struct {
@@ -307,9 +314,10 @@ func (d *Tree) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	if d.cancel != nil {
 		lines = []string{"Writing branch summary…", "Your old branch stays selected until it succeeds.", "esc cancel · Files stay unchanged."}
 	}
-	for _, line := range lines {
-		rc.AddPart(t.Dialog.List.Render(ansi.Truncate(line, max(0, inner-2), "…")))
+	for i, line := range lines {
+		lines[i] = ansi.Truncate(line, max(0, inner-2), "…")
 	}
+	rc.AddPart(t.Dialog.List.Render(strings.Join(lines, "\n")))
 	cur := InputCursor(t, d.input.Cursor())
 	DrawCenterCursor(scr, area, rc.Render(), cur)
 	return cur

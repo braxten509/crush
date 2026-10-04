@@ -34,11 +34,13 @@ const mediaLoadFailedPlaceholder = "[Image data could not be loaded]"
 type FinishReason string
 
 const (
-	FinishReasonEndTurn   FinishReason = "end_turn"
-	FinishReasonMaxTokens FinishReason = "max_tokens"
-	FinishReasonToolUse   FinishReason = "tool_use"
-	FinishReasonCanceled  FinishReason = "canceled"
-	FinishReasonError     FinishReason = "error"
+	FinishReasonEndTurn FinishReason = "end_turn"
+	// Branch summaries are notes, not timed replies to the last user prompt.
+	FinishReasonBranchSummary FinishReason = "branch_summary"
+	FinishReasonMaxTokens     FinishReason = "max_tokens"
+	FinishReasonToolUse       FinishReason = "tool_use"
+	FinishReasonCanceled      FinishReason = "canceled"
+	FinishReasonError         FinishReason = "error"
 	// FinishReasonContentFilter is a provider safety/refusal stop
 	// (Anthropic stop_reason=refusal, OpenAI content_filter, etc.).
 	// The TUI renders this as a REFUSED banner rather than a silent

@@ -1,0 +1,12 @@
+ ╭────────────────────────────────────╮
+ │ Session tree · default ╱╱╱╱╱╱╱╱╱╱╱ │
+ │                                    │
+ │ > Search text or bookmarks         │
+ │                                    │
+ │   Start of chat (before first me…  │
+ │                                    │
+›│Files on disk stay unchanged.       │
+ │↑↓ choose  enter jump  ←→ fold  t…  │
+ │ctrl+e edit  ctrl+r label  alt+↑↓…  │
+ │                                    │
+ ╰────────────────────────────────────╯

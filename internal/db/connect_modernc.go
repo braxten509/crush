@@ -7,6 +7,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
+	"path/filepath"
 
 	"modernc.org/sqlite"
 )
@@ -17,7 +18,11 @@ func openDBReadOnly(dbPath string) (*sql.DB, error) {
 	params.Set("_txlock", "immediate")
 	params.Set("mode", "ro")
 
-	dsn := fmt.Sprintf("file:%s?%s", dbPath, params.Encode())
+	absolute, err := filepath.Abs(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	dsn := (&url.URL{Scheme: "file", Path: absolute, RawQuery: params.Encode()}).String()
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -37,7 +42,11 @@ func openDB(dbPath string) (*sql.DB, error) {
 	// preventing deferred-to-writer upgrade deadlocks.
 	params.Set("_txlock", "immediate")
 
-	dsn := fmt.Sprintf("file:%s?%s", dbPath, params.Encode())
+	absolute, err := filepath.Abs(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	dsn := (&url.URL{Scheme: "file", Path: absolute, RawQuery: params.Encode()}).String()
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)

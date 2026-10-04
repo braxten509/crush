@@ -208,3 +208,12 @@ symlink redirection; they do not provide an atomic compare-and-swap against
 an ordinary writer that changes a leaf after the last content check. On Unix,
 if the original parent itself is renamed, restore operates on that retained
 original directory. No installation or push was performed.
+
+The repeatable headless driver also passed in `057`
+(`review-headless-repeat.txt`). It first selects the populated chat's tip,
+handles the summary prompt while the tree panel remains open, then restores
+from the root and undoes the restore. A fixture lock prevents two drivers
+from using the same detached terminal at once. Earlier repeat attempts
+(`052`, `053`) timed out on driver assumptions about the selected point and
+panel visibility; the corrected driver passes with the cursor left at the
+root by a previous run. The terminal and disposable file were removed.

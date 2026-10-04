@@ -17,6 +17,9 @@ import (
 const (
 	// MaxBackgroundJobs is the maximum number of concurrent background jobs allowed
 	MaxBackgroundJobs = 50
+	// MaxRetainedCompletedJobs bounds how many finished jobs keep their output
+	// before the oldest ones are dropped early.
+	MaxRetainedCompletedJobs = 200
 	// CompletedJobRetentionMinutes is how long to keep completed jobs before auto-cleanup (8 hours)
 	CompletedJobRetentionMinutes = 8 * 60
 )
@@ -91,9 +94,11 @@ func GetBackgroundShellManager() *BackgroundShellManager {
 
 // Start creates and starts a new background shell with the given command.
 func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, blockFuncs []BlockFunc, command string, description string, extraEnv ...string) (*BackgroundShell, error) {
-	// Check job limit
-	if m.shells.Len() >= MaxBackgroundJobs {
-		return nil, fmt.Errorf("maximum number of background jobs (%d) reached. Please terminate or wait for some jobs to complete", MaxBackgroundJobs)
+	// Only running jobs count toward the limit. Finished jobs are kept for
+	// their output, but must never block new work.
+	m.Cleanup()
+	if running := m.running(); running >= MaxBackgroundJobs {
+		return nil, fmt.Errorf("maximum number of running background jobs (%d) reached. Please stop or wait for some jobs to complete", MaxBackgroundJobs)
 	}
 
 	id := fmt.Sprintf("%03X", idCounter.Add(1))
@@ -193,11 +198,37 @@ func (m *BackgroundShellManager) Cleanup() int {
 		}
 	}
 
+	// Past the retention cap, drop the oldest finished jobs first.
+	var completed []*BackgroundShell
+	for shell := range m.shells.Seq() {
+		if shell.completedAt.Load() > 0 && !slices.Contains(toRemove, shell.ID) {
+			completed = append(completed, shell)
+		}
+	}
+	if extra := len(completed) - MaxRetainedCompletedJobs; extra > 0 {
+		slices.SortFunc(completed, func(a, b *BackgroundShell) int {
+			return int(a.completedAt.Load() - b.completedAt.Load())
+		})
+		for _, shell := range completed[:extra] {
+			toRemove = append(toRemove, shell.ID)
+		}
+	}
+
 	for _, id := range toRemove {
 		m.Remove(id)
 	}
 
 	return len(toRemove)
+}
+
+func (m *BackgroundShellManager) running() int {
+	count := 0
+	for shell := range m.shells.Seq() {
+		if !shell.IsDone() {
+			count++
+		}
+	}
+	return count
 }
 
 // KillAll terminates all background shells. The provided context bounds how

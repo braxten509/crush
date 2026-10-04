@@ -18,19 +18,23 @@ func fixtureReview() ToolResult {
 		Review: &filechange.Review{Root: "/workspace", Changes: []filechange.Change{{Path: "/workspace/main.go", Before: &filechange.State{Content: "before\n"}, After: &filechange.State{Content: "after\n"}}}}}
 }
 
-func TestParentReplyRetentionAlsoExpiresOldSubagentDiffs(t *testing.T) {
+func TestParentPromptRetentionAlsoExpiresOldSubagentDiffs(t *testing.T) {
 	svc, parentID := newTestService(t)
 	s := svc.(*service)
-	_, err := svc.Create(t.Context(), parentID, CreateMessageParams{Role: Assistant, Parts: []ContentPart{TextContent{Text: "First reply"}, Finish{Reason: FinishReasonEndTurn}}})
+	_, err := svc.Create(t.Context(), parentID, CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: "First prompt"}}})
 	require.NoError(t, err)
 	_, err = s.q.CreateSession(t.Context(), db.CreateSessionParams{ID: "child", ParentSessionID: sql.NullString{String: parentID, Valid: true}, Title: "Child"})
 	require.NoError(t, err)
 	child, err := svc.Create(t.Context(), "child", CreateMessageParams{Role: Tool, Parts: []ContentPart{fixtureReview()}})
 	require.NoError(t, err)
-	for range 5 {
-		_, err := svc.Create(t.Context(), parentID, CreateMessageParams{Role: Assistant, Parts: []ContentPart{TextContent{Text: "Later reply"}, Finish{Reason: FinishReasonEndTurn}}})
+	for range 4 {
+		_, err := svc.Create(t.Context(), parentID, CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: "Later prompt"}}})
 		require.NoError(t, err)
 	}
+	_, err = svc.LoadReview(t.Context(), child.ID)
+	require.NoError(t, err, "the child ran during one of the latest five prompts")
+	_, err = svc.Create(t.Context(), parentID, CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: "Sixth prompt"}}})
+	require.NoError(t, err)
 	_, err = svc.LoadReview(t.Context(), child.ID)
 	require.ErrorIs(t, err, ErrReviewExpired)
 	msgs, err := svc.List(t.Context(), "child")
@@ -51,11 +55,13 @@ func TestOversizedEditMetadataCannotBecomeAFakeDeletion(t *testing.T) {
 	require.Contains(t, full.ToolResults()[0].Metadata, "review_omitted")
 }
 
-func TestReviewRetentionKeepsFiveRepliesAndAllCommands(t *testing.T) {
+func TestReviewRetentionKeepsFivePromptsAndAllCommands(t *testing.T) {
 	svc, sessionID := newTestService(t, WithDebounce(0))
 	var tools []Message
 	for i := range 7 {
-		_, err := svc.Create(t.Context(), sessionID, CreateMessageParams{Role: Assistant, Parts: []ContentPart{
+		_, err := svc.Create(t.Context(), sessionID, CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: fmt.Sprintf("prompt %d", i)}}})
+		require.NoError(t, err)
+		_, err = svc.Create(t.Context(), sessionID, CreateMessageParams{Role: Assistant, Parts: []ContentPart{
 			TextContent{Text: fmt.Sprintf("reply %d", i)}, ToolCall{ID: "call", Name: "bash", Input: `{"command":"echo visible"}`, Finished: true}, Finish{Reason: FinishReasonEndTurn},
 		}})
 		require.NoError(t, err)
@@ -74,8 +80,11 @@ func TestReviewRetentionKeepsFiveRepliesAndAllCommands(t *testing.T) {
 	}
 	msgs, err := svc.List(t.Context(), sessionID)
 	require.NoError(t, err)
-	require.Len(t, msgs, 14)
+	require.Len(t, msgs, 21)
 	for _, msg := range msgs {
+		if msg.Role == User {
+			continue
+		}
 		if msg.Role == Tool {
 			result := msg.ToolResults()[0]
 			require.Equal(t, "command output stays visible", result.Content)
@@ -91,6 +100,23 @@ func TestReviewRetentionKeepsFiveRepliesAndAllCommands(t *testing.T) {
 	require.NoError(t, svc.Update(t.Context(), old))
 	_, err = svc.LoadReview(t.Context(), old.ID)
 	require.Error(t, err)
+}
+
+func TestProgressTextAndTaskResultsDoNotExpireDiffs(t *testing.T) {
+	svc, sessionID := newTestService(t, WithDebounce(0))
+	_, err := svc.Create(t.Context(), sessionID, CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: "one long request"}}})
+	require.NoError(t, err)
+	tool, err := svc.Create(t.Context(), sessionID, CreateMessageParams{Role: Tool, Parts: []ContentPart{fixtureReview()}})
+	require.NoError(t, err)
+	for i := range 12 {
+		_, err := svc.Create(t.Context(), sessionID, CreateMessageParams{Role: Assistant, Parts: []ContentPart{TextContent{Text: fmt.Sprintf("progress %d", i)}, Finish{Reason: FinishReasonEndTurn}}})
+		require.NoError(t, err)
+		_, err = svc.Create(t.Context(), sessionID, CreateMessageParams{Role: User, Parts: []ContentPart{TextContent{Text: fmt.Sprintf("<crush-task-result>\n<name>job %d</name>\n</crush-task-result>", i)}}})
+		require.NoError(t, err)
+	}
+	full, err := svc.LoadReview(t.Context(), tool.ID)
+	require.NoError(t, err)
+	require.Equal(t, "after\n", full.ToolResults()[0].Review.Changes[0].After.Content)
 }
 
 func TestReviewListStaysSmallAndDetailPayloadIsBounded(t *testing.T) {

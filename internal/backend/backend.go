@@ -435,6 +435,7 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	if err != nil {
 		return nil, proto.Workspace{}, fmt.Errorf("failed to connect to database: %w", err)
 	}
+	db.PruneIdleReviewsInBackground(b.ctx, conn)
 
 	// Discover skills once per workspace, before app.New. The backend
 	// hosts multiple workspaces concurrently, so the manager is

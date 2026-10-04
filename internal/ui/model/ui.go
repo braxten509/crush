@@ -94,14 +94,18 @@ const hyperCreditsPollInterval = 60 * time.Second
 const TextareaMaxHeight = 15
 
 // editorHeightMargin is the vertical margin added to the textarea height to
-// account for the blank row that always separates the chat from the
-// composer, the attachments row (top padding on the composer band when
-// empty), the band's bottom padding and the bottom margin.
+// account for the row that separates the chat from the composer (it holds
+// the attachments, right on top of the band), the band's top and bottom
+// padding and the bottom margin.
 const editorHeightMargin = 4
 
 // editorTextTop is how many rows of the editor area sit above the text: the
-// blank separator row and the attachments row.
+// attachments row and the band's top padding.
 const editorTextTop = 2
+
+// editorAttachmentsRow is the editor row that shows the attachments, directly
+// above the composer band. It is blank without attachments.
+const editorAttachmentsRow = 0
 
 // TextareaMinHeight is the minimum height of the prompt textarea: one
 // row, between the composer band's padding rows. It grows as lines are typed.
@@ -1302,9 +1306,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Check if the click landed on an attachment's remove button.
-		// The attachment chips are rendered on the row above the
-		// textarea, after the separator row.
-		if m.activeInline == nil && msg.Button == uv.MouseLeft && len(m.attachments.List()) > 0 && msg.Y == m.layout.editor.Min.Y+editorTextTop-1 {
+		// The attachment chips sit right above the composer band.
+		if m.activeInline == nil && msg.Button == uv.MouseLeft && len(m.attachments.List()) > 0 && msg.Y == m.layout.editor.Min.Y+editorAttachmentsRow {
 			relX := msg.X - m.layout.editor.Min.X
 			if m.attachments.HandleClick(relX) {
 				return m, tea.Batch(cmds...)
@@ -3690,9 +3693,7 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		}
 
 	case uiChat:
-		if m.isCompact {
-			m.drawHeader(scr, layout.header)
-		} else {
+		if !m.isCompact {
 			m.drawSidebar(scr, layout.sidebar)
 		}
 
@@ -4514,35 +4515,27 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 			editorHeight += usageHeight
 			// Layout
 			//
-			// compact-header
-			// ------
 			// main
 			// ------
 			// editor
 			// ------
 			// help
-			const compactHeaderHeight = 1
-			var headerRect, mainRect image.Rectangle
-			layout.Vertical(
-				layout.Len(compactHeaderHeight),
-				layout.Fill(1),
-			).Split(appRect).Assign(&headerRect, &mainRect)
-			detailsHeight := min(sessionDetailsMaxHeight, area.Dy()-1) // One row for the header
+			//
+			// There is no header bar: ctrl+d opens the session details
+			// over the top of the chat.
+			mainRect := appRect
+			detailsHeight := min(sessionDetailsMaxHeight, area.Dy())
 			var sessionDetailsArea image.Rectangle
 			layout.Vertical(
 				layout.Len(detailsHeight),
 				layout.Fill(1),
 			).Split(appRect).Assign(&sessionDetailsArea, new(image.Rectangle))
 			uiLayout.sessionDetails = sessionDetailsArea
-			uiLayout.sessionDetails.Min.Y += compactHeaderHeight // adjust for header
-			// Add one line gap between header and main content
-			mainRect.Min.Y += 1
 			var editorRect image.Rectangle
 			layout.Vertical(
 				layout.Len(mainRect.Dy()-editorHeight),
 				layout.Fill(1),
 			).Split(mainRect).Assign(&mainRect, &editorRect)
-			uiLayout.header = headerRect
 			pillsHeight := m.pillsAreaHeight()
 			if pillsHeight > 0 {
 				pillsHeight = min(pillsHeight, mainRect.Dy())
@@ -5097,11 +5090,10 @@ func (m *UI) randomizePlaceholders() {
 	m.readyPlaceholder = readyPlaceholders[rand.Intn(len(readyPlaceholders))]
 }
 
-// renderEditorView renders the editor on its band, after a blank row that
-// keeps it apart from the chat: the attachments row (or a blank row of
-// padding) above the text, the text, a row of padding below,
-// then the margin before the status line. Every band row is filled to the
-// text's full width.
+// renderEditorView renders the attachments row (blank without attachments,
+// keeping the composer apart from the chat), then the editor on its band:
+// a row of padding, the text, a row of padding, then the margin before the
+// status line. Every band row is filled to the text's full width.
 func (m *UI) renderEditorView(width int) string {
 	var attachmentsView string
 	if len(m.attachments.List()) > 0 {
@@ -5117,7 +5109,7 @@ func (m *UI) renderEditorView(width int) string {
 		bg = m.com.Styles.Editor.Textarea.Blurred.Base.GetBackground()
 	}
 	band := make([]string, 0, len(rows)+3)
-	band = append(band, "", common.OnBand(attachmentsView, bandWidth, bg))
+	band = append(band, attachmentsView, common.OnBand("", bandWidth, bg))
 	for _, row := range rows {
 		band = append(band, common.OnBand(row, bandWidth, bg))
 	}

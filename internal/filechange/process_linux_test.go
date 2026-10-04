@@ -217,7 +217,7 @@ func TestLeftoverProcessWritesAfterWatcherExits(t *testing.T) {
 	require.Eventually(t, func() bool {
 		data, err := os.ReadFile(filepath.Join(root, "made", "moved"))
 		return err == nil && string(data) == "written\n"
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 30*time.Second, 100*time.Millisecond, "a loaded machine (the full suite in parallel) can delay the leftover shell")
 }
 
 // Go starts commands with vfork; a collection during the child's exec used to

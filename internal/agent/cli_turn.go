@@ -572,8 +572,20 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		}
 		if edit, ok := s.edits[e.ID]; ok && !e.IsError {
 			after, _ := os.ReadFile(edit[0])
-			if old, ok := s.known[edit[0]]; ok && edit[1] == string(after) {
-				edit[1] = old
+			if edit[1] == string(after) {
+				// The CLI wrote the file before Crush read its "before" copy.
+				var reported tools.EditResponseMetadata
+				_ = json.Unmarshal([]byte(e.Metadata), &reported)
+				switch old, known := s.known[edit[0]]; {
+				case reported.Additions+reported.Removals > 0 && reported.NewContent == string(after):
+					edit[1] = reported.OldContent // a full-file diff from the CLI itself
+				case known:
+					edit[1] = old
+				case e.Name == tools.WriteToolName && e.Metadata == "":
+					// Writing over an existing file needs a read first, which
+					// would be known, so this file was new.
+					edit[1] = ""
+				}
 			}
 			s.known[edit[0]] = string(after)
 			s.m.RecordEdit(s.ctx, s.sessionID, edit[0], edit[1])

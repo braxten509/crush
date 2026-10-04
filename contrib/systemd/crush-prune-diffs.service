@@ -1,0 +1,8 @@
+[Unit]
+Description=Delete Crush's saved diffs of chats unused for three days
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/crush prune-diffs
+Nice=10
+IOSchedulingClass=idle

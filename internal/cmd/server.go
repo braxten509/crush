@@ -28,6 +28,7 @@ var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Start the Crush server",
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		defer recordCrashes()()
 		dataDir, err := cmd.Flags().GetString("data-dir")
 		if err != nil {
 			return fmt.Errorf("failed to get data directory: %v", err)

@@ -239,7 +239,7 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 	if err != nil {
 		return Message{}, err
 	}
-	if separate && message.Role == Assistant && message.IsFinished() && message.Content().Text != "" {
+	if separate && message.Role == User {
 		if err := storage.PruneMessageReviews(ctx, sessionID); err != nil {
 			return Message{}, err
 		}
@@ -491,11 +491,6 @@ func (s *service) write(ctx context.Context, msg Message) (Message, error) {
 	}
 	if err != nil {
 		return Message{}, err
-	}
-	if separate && msg.Role == Assistant && msg.IsFinished() && msg.Content().Text != "" {
-		if err := storage.PruneMessageReviews(ctx, msg.SessionID); err != nil {
-			return Message{}, err
-		}
 	}
 	return msg, nil
 }

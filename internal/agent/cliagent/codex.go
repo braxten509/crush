@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -19,6 +20,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/charmbracelet/crush/internal/version"
@@ -695,8 +697,16 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 				if failed {
 					out = "Patch " + item.Status
 				}
-				for i := range changes[item.ID] {
-					if err = emitResult(item.ID+"#"+strconv.Itoa(i), out, failed); err != nil {
+				for i, c := range changes[item.ID] {
+					callID := item.ID + "#" + strconv.Itoa(i)
+					if failed {
+						err = emitResult(callID, out, true)
+					} else {
+						// Codex has usually written the file before Crush reads
+						// its "before" copy, so rebuild it from the patch.
+						err = t.Emit(Event{Type: EventToolResult, ID: callID, Name: calls[callID][0], Output: out, Metadata: codexChangeMetadata(m.Dir, c)})
+					}
+					if err != nil {
 						break
 					}
 				}
@@ -783,6 +793,94 @@ func codexChangeTool(c codexChange) (string, string) {
 	}
 	oldText, newText := splitDiff(c.Diff)
 	return tools.EditToolName, marshal(tools.EditParams{FilePath: c.Path, OldString: oldText, NewString: newText})
+}
+
+// codexChangeMetadata describes a finished change with the whole file before
+// and after it. The after text is read from disk; the before text comes from
+// undoing the reported patch, so it does not depend on when Crush looked at
+// the file. It returns "" when the patch no longer matches the file.
+func codexChangeMetadata(dir string, c codexChange) string {
+	path := c.Path
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	var before, after string
+	switch c.Kind.Type {
+	case "add":
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+		after = string(data)
+	case "delete":
+		before = c.Diff
+	default:
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+		after = string(data)
+		var ok bool
+		if before, ok = reversePatch(after, c.Diff); !ok {
+			return ""
+		}
+	}
+	_, adds, dels := diff.GenerateDiff(before, after, path)
+	return marshal(tools.EditResponseMetadata{Additions: adds, Removals: dels, OldContent: before, NewContent: after})
+}
+
+// reversePatch undoes a unified diff's hunks on the patched text, in order.
+func reversePatch(patched, patch string) (string, bool) {
+	type hunk struct{ oldLines, newLines []string }
+	var hunks []hunk
+	var cur *hunk
+	for _, line := range strings.Split(strings.TrimRight(patch, "\n"), "\n") {
+		switch {
+		case strings.HasPrefix(line, "@@"):
+			hunks = append(hunks, hunk{})
+			cur = &hunks[len(hunks)-1]
+		case cur == nil, strings.HasPrefix(line, `\`):
+		case strings.HasPrefix(line, "-"):
+			cur.oldLines = append(cur.oldLines, line[1:])
+		case strings.HasPrefix(line, "+"):
+			cur.newLines = append(cur.newLines, line[1:])
+		default:
+			line = strings.TrimPrefix(line, " ")
+			cur.oldLines = append(cur.oldLines, line)
+			cur.newLines = append(cur.newLines, line)
+		}
+	}
+	if len(hunks) == 0 {
+		return "", false
+	}
+	trailing := strings.HasSuffix(patched, "\n")
+	lines := strings.Split(strings.TrimSuffix(patched, "\n"), "\n")
+	if patched == "" {
+		lines = nil
+	}
+	var out []string
+	pos := 0
+	for _, h := range hunks {
+		at := -1
+		for i := pos; i+len(h.newLines) <= len(lines); i++ {
+			if slices.Equal(lines[i:i+len(h.newLines)], h.newLines) {
+				at = i
+				break
+			}
+		}
+		if at < 0 {
+			return "", false
+		}
+		out = append(out, lines[pos:at]...)
+		out = append(out, h.oldLines...)
+		pos = at + len(h.newLines)
+	}
+	out = append(out, lines[pos:]...)
+	before := strings.Join(out, "\n")
+	if trailing && len(out) > 0 {
+		before += "\n"
+	}
+	return before, true
 }
 
 // splitDiff rebuilds the before and after text of a unified diff's hunks,

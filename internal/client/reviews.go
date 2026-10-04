@@ -16,7 +16,7 @@ func (c *Client) LoadMessageReview(ctx context.Context, workspaceID, sessionID, 
 	}
 	defer rsp.Body.Close()
 	if rsp.StatusCode != http.StatusOK {
-		return proto.Message{}, fmt.Errorf("diff details are unavailable (only the latest five replies are retained)")
+		return proto.Message{}, fmt.Errorf("diff details are unavailable (only the latest five prompts keep them)")
 	}
 	var msg proto.Message
 	err = json.NewDecoder(rsp.Body).Decode(&msg)

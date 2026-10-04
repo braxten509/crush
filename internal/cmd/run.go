@@ -70,6 +70,7 @@ crush run --continue "Follow up on your last response"
 
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer recordCrashes()()
 		var (
 			quiet, _           = cmd.Flags().GetBool("quiet")
 			verbose, _         = cmd.Flags().GetBool("verbose")

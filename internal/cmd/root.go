@@ -111,6 +111,7 @@ crush --session {session-id}
 crush --continue
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer recordCrashes()()
 		sessionID, _ := cmd.Flags().GetString("session")
 		continueLast, _ := cmd.Flags().GetBool("continue")
 
@@ -333,6 +334,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if err != nil {
 		return nil, nil, err
 	}
+	db.PruneIdleReviewsInBackground(ctx, conn)
 
 	logFile := filepath.Join(cfg.Options.DataDirectory, "logs", "crush.log")
 	crushlog.Setup(logFile, debug)

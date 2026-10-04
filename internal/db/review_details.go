@@ -3,6 +3,9 @@ package db
 import (
 	"context"
 	"database/sql"
+	"log/slog"
+	"os"
+	"time"
 )
 
 // Review operations use the same transaction as their message. A saved
@@ -22,12 +25,14 @@ func (q *Queries) reviewTransaction(ctx context.Context, fn func(*Queries) error
 	return fn(q)
 }
 
-// Reply order uses rowid: timestamps only have one-second precision.
+// Diffs are kept for the latest five user prompts. Agent progress text and
+// task-result notices do not count, so a long turn keeps all of its diffs.
+// Order uses rowid: timestamps only have one-second precision.
 const reviewCutoff = `COALESCE((SELECT rowid FROM messages
- WHERE session_id = ? AND role = 'assistant' AND is_summary_message = 0
- AND EXISTS (SELECT 1 FROM json_each(parts) p
+ WHERE session_id = ? AND role = 'user'
+ AND NOT EXISTS (SELECT 1 FROM json_each(parts) p
    WHERE json_extract(p.value, '$.type') = 'text'
-   AND trim(COALESCE(json_extract(p.value, '$.data.text'), '')) <> '')
+   AND instr(ltrim(COALESCE(json_extract(p.value, '$.data.text'), '')), '<crush-task-result>') = 1)
  ORDER BY rowid DESC LIMIT 1 OFFSET 4), 0)`
 
 func (q *Queries) putReview(ctx context.Context, id string, payload []byte) error {
@@ -162,4 +167,61 @@ func (q *Queries) MigrateMessageReview(ctx context.Context, id, original, compac
 func (q *Queries) FinishReviewMigration(ctx context.Context, sessionID string) error {
 	_, err := q.db.ExecContext(ctx, `INSERT OR IGNORE INTO message_review_migrations(session_id) VALUES (?)`, sessionID)
 	return err
+}
+
+// ReviewIdleDays is how long a chat keeps its saved diffs without being used.
+const ReviewIdleDays = 3
+
+// PruneIdleReviews deletes saved diffs of chats (a top-level session and its
+// sub-agents) that have not been used since before the cutoff. Messages and
+// their short summaries stay.
+func PruneIdleReviews(ctx context.Context, conn *sql.DB, cutoff time.Time) (int64, error) {
+	result, err := conn.ExecContext(ctx, `WITH RECURSIVE family(id, root, depth) AS (
+ SELECT id, id, 0 FROM sessions
+ WHERE parent_session_id IS NULL OR parent_session_id = ''
+ OR parent_session_id NOT IN (SELECT id FROM sessions)
+ UNION ALL SELECT s.id, f.root, f.depth + 1 FROM sessions s JOIN family f ON s.parent_session_id = f.id WHERE f.depth < 64),
+ used(root, last) AS (SELECT f.root, MAX(s.updated_at) FROM family f JOIN sessions s ON s.id = f.id GROUP BY f.root)
+ DELETE FROM message_review_details WHERE message_id IN
+ (SELECT m.id FROM messages m JOIN family f ON m.session_id = f.id JOIN used u ON u.root = f.root WHERE u.last < ?)`, cutoff.Unix())
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// PruneIdleReviewsInBackground prunes the open database without delaying
+// startup.
+func PruneIdleReviewsInBackground(ctx context.Context, conn *sql.DB) {
+	go func() {
+		removed, err := PruneIdleReviews(ctx, conn, time.Now().AddDate(0, 0, -ReviewIdleDays))
+		if err != nil {
+			slog.Warn("Cannot prune saved diffs of idle chats", "error", err)
+		} else if removed > 0 {
+			slog.Info("Pruned saved diffs of idle chats", "removed", removed)
+		}
+	}()
+}
+
+// PruneIdleReviewsAt opens the database file of another project and prunes
+// it. Missing databases and databases without saved diffs are skipped.
+func PruneIdleReviewsAt(ctx context.Context, dbPath string, cutoff time.Time) (int64, error) {
+	if _, err := os.Stat(dbPath); err != nil {
+		return 0, nil
+	}
+	conn, err := openDB(dbPath)
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Close()
+	conn.SetMaxOpenConns(1)
+	var table string
+	err = conn.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'message_review_details'`).Scan(&table)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return PruneIdleReviews(ctx, conn, cutoff)
 }

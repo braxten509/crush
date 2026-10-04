@@ -17,7 +17,7 @@ import (
 const reviewTextBudget = 2 << 20
 const reviewPayloadLimit = 16 << 20
 
-var ErrReviewExpired = errors.New("diff details are no longer saved (only the latest five replies are retained)")
+var ErrReviewExpired = errors.New("diff details are no longer saved (only the latest five prompts keep them)")
 
 type reviewStorage interface {
 	CreateMessageWithReview(context.Context, db.CreateMessageParams, []byte) (db.Message, error)
@@ -36,7 +36,7 @@ type reviewDetail struct {
 }
 
 // separateReviews keeps the transcript small. Only the review drawer reads
-// the compressed detail payload, and old drawers expire after five replies.
+// the compressed detail payload, and old drawers expire after five user prompts.
 func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, []byte, error) {
 	compact := slices.Clone(parts)
 	details := map[string]reviewDetail{}

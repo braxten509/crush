@@ -10,6 +10,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -42,6 +45,9 @@ type Choice struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
 	Description string `json:"description,omitempty"`
+	// Image is an optional absolute path to a PNG or JPEG sketch of the
+	// choice, shown in the form while the choice is under the cursor.
+	Image string `json:"image,omitempty"`
 }
 
 // Question is a single question definition within a Request.
@@ -145,6 +151,15 @@ func (q Question) Validate() error {
 			}
 			if len(c.Description) > MaxChoiceDescriptionLength {
 				return fmt.Errorf("%s: choice %d description exceeds %d characters (got %d)", label, i+1, MaxChoiceDescriptionLength, len(c.Description))
+			}
+			if c.Image != "" {
+				ext := strings.ToLower(filepath.Ext(c.Image))
+				if !filepath.IsAbs(c.Image) || (ext != ".png" && ext != ".jpg" && ext != ".jpeg") {
+					return fmt.Errorf("%s: choice %d (%s) image must be an absolute path to a .png or .jpg file", label, i+1, c.ID)
+				}
+				if _, err := os.Stat(c.Image); err != nil {
+					return fmt.Errorf("%s: choice %d (%s) image can't be read: %v", label, i+1, c.ID, err)
+				}
 			}
 		}
 	default:

@@ -237,6 +237,9 @@ type QuestionChoice struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
 	Description string `json:"description,omitempty"`
+	// Image is an absolute path to a sketch of the choice on the
+	// machine running Crush.
+	Image string `json:"image,omitempty"`
 }
 
 // QuestionAnswer is the wire format for answering a batch

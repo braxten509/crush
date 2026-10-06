@@ -5,16 +5,17 @@ import (
 	"strings"
 )
 
-// TransferSummary describes imported files without calling their contents edits.
+// TransferSummary describes imported and deleted files without calling
+// them edits.
 func TransferSummary(files []File) string {
-	counts := map[string]int{}
+	counts := map[string]int{"removed": Removed(files)}
 	for _, file := range files {
 		counts[file.Transfer]++
 	}
 	var parts []string
-	for _, kind := range []string{"checkout", "copy", "move", "generated"} {
+	for _, kind := range []string{"checkout", "copy", "move", "generated", "removed"} {
 		if n := counts[kind]; n > 0 {
-			label := map[string]string{"checkout": "copied checkout:", "copy": "copied", "move": "moved", "generated": "generated"}[kind]
+			label := map[string]string{"checkout": "copied checkout:", "copy": "copied", "move": "moved", "generated": "generated", "removed": "removed"}[kind]
 			noun := "files"
 			if n == 1 {
 				noun = "file"
@@ -25,8 +26,12 @@ func TransferSummary(files []File) string {
 	return strings.Join(parts, " · ")
 }
 
-// HasEdits distinguishes an imported file from an authored content change.
+// HasEdits distinguishes an imported or deleted file from an authored
+// content change.
 func (f File) HasEdits() bool {
+	if f.Kind == Deleted {
+		return false
+	}
 	return f.Transfer == "" || f.Adds != 0 || f.Dels != 0 || len(f.Lines) > 1
 }
 

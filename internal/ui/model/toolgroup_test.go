@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -65,4 +66,34 @@ func TestChatGroupRerendersAfterEmptyStepRemoved(t *testing.T) {
 
 	require.Nil(t, u.chat.MessageItem("step"))
 	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "Thinking")
+}
+
+// Only the end of the chat shows a live status. A step still marked as
+// compacting with newer steps after it shows its text, and the live group
+// at the end reports the compaction instead of "Thinking".
+func TestChatShowsOneLiveStatus(t *testing.T) {
+	u := newFrameTestUI(t)
+	msg := &message.Message{ID: "step", Role: message.Assistant, IsCompacting: true}
+	msg.AppendContent("All bridge tests pass so far.")
+	step := chat.NewAssistantMessageItem(u.com.Styles, msg).(*chat.AssistantMessageItem)
+	tc := message.ToolCall{ID: "t1", Name: "bash", Input: `{"command":"ls"}`, Finished: true}
+	done := chat.NewToolMessageItem(u.com.Styles, "next", tc, &message.ToolResult{ToolCallID: tc.ID, Content: "ok"}, false, "")
+	u.chat.SetAgentBusy(true)
+	u.chat.SetMessages(step, done)
+
+	out := ansi.Strip(u.chat.list.Render())
+	require.Equal(t, 1, strings.Count(out, "Compacting conversation"), out)
+	require.NotContains(t, out, "Thinking")
+	require.Contains(t, out, "All bridge tests pass so far.")
+	g, ok := u.chat.list.ItemAt(u.chat.Len() - 1).(*chat.ToolGroupItem)
+	require.True(t, ok)
+	require.Contains(t, ansi.Strip(g.Render(100)), "Compacting conversation")
+
+	// Compaction ends: the group goes back to "Thinking".
+	msg.IsCompacting = false
+	step.SetMessage(msg)
+	u.chat.Refold(step)
+	out = ansi.Strip(u.chat.list.Render())
+	require.NotContains(t, out, "Compacting conversation")
+	require.Equal(t, 1, strings.Count(out, "Thinking"), out)
 }

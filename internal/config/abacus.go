@@ -39,7 +39,7 @@ func AbacusProviderForModel(provider ProviderConfig, model catwalk.Model) Provid
 }
 
 func SupportsFastMode(provider ProviderConfig, model catwalk.Model) bool {
-	if provider.Type == TypeCodexCLI {
+	if provider.Type == TypeClaudeCode || provider.Type == TypeCodexCLI {
 		return true
 	}
 	return provider.ID == AbacusProviderID && AbacusAPIFormat(model) == "responses" &&

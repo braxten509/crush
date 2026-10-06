@@ -40,6 +40,9 @@ type ToolGroupItem struct {
 	// busy is whether the agent is still working, so a live group keeps
 	// a status between steps (a tool finished, the next hasn't started).
 	busy bool
+	// compactingEarlier says an earlier, superseded step is compacting, so
+	// the live group reports that between steps instead of "Thinking".
+	compactingEarlier bool
 	// Line where each shown child starts in the expanded render, for
 	// routing clicks to it.
 	childLines []int
@@ -164,6 +167,15 @@ func (g *ToolGroupItem) SetLive(live bool) {
 func (g *ToolGroupItem) SetBusy(busy bool) {
 	if g.busy != busy {
 		g.busy = busy
+		g.Bump()
+	}
+}
+
+// SetCompactingEarlier sets whether an earlier, superseded step is
+// compacting the conversation.
+func (g *ToolGroupItem) SetCompactingEarlier(compacting bool) {
+	if g.compactingEarlier != compacting {
+		g.compactingEarlier = compacting
 		g.Bump()
 	}
 }
@@ -312,6 +324,9 @@ func (g *ToolGroupItem) status() string {
 		}
 	}
 	if g.busy {
+		if g.compactingEarlier {
+			return "Compacting conversation"
+		}
 		// The last step is done but the agent isn't: the model is
 		// working out what to do next.
 		return "Thinking"
@@ -516,7 +531,8 @@ func (g *ToolGroupItem) header(width int) string {
 				g.sty.Tool.ChangesDel.Render(fmt.Sprintf("−%d", g.storedDels))
 		}
 	}
-	if storedSummary == "" && len(edited) > 0 && (status == "" || len(changes) > 0) {
+	counted := diffreview.AnyCounted(changes)
+	if storedSummary == "" && len(edited) > 0 && (status == "" || counted) {
 		line += g.sty.Tool.ParamKey.Render(" · ")
 		if len(edited) > 0 && status == "" {
 			// One name at most, the latest file; the rest are a count.
@@ -525,11 +541,11 @@ func (g *ToolGroupItem) header(width int) string {
 				files += fmt.Sprintf(" and %d more", len(edited)-1)
 			}
 			line += g.sty.Tool.ParamKey.Render("edited " + files)
-			if len(changes) > 0 {
+			if counted {
 				line += " "
 			}
 		}
-		if len(changes) > 0 {
+		if counted {
 			adds, dels := diffreview.Stats(changes)
 			line += g.sty.Tool.ChangesAdd.Render(fmt.Sprintf("+%d", adds)) + " " +
 				g.sty.Tool.ChangesDel.Render(fmt.Sprintf("−%d", dels))

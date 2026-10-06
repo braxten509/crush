@@ -89,6 +89,13 @@ type choiceList struct {
 	keyUp    key.Binding
 	keyDown  key.Binding
 	keyClose key.Binding
+
+	// preview draws the choices' sketches; previewCols is the widest a
+	// sketch may be at the current width.
+	preview     *previewer
+	previewCols int
+	previewTop  int               // index of the sketch area's first row, or -1
+	placement   *PreviewPlacement // where the sketch sits after the last draw
 }
 
 // numberKeyIndex returns the zero-based choice index for a number
@@ -112,6 +119,8 @@ func newChoiceList(sty *styles.Styles, req question.Question) choiceList {
 		questionEditor: newQuestionEditor(sty),
 		Request:        req,
 		hoveredChoice:  -1,
+		preview:        newPreviewer(nil),
+		previewTop:     -1,
 		hoverX:         -1,
 		hoverY:         -1,
 		fillInTop:      -1,
@@ -414,6 +423,13 @@ func (c *choiceList) buildLines(innerWidth int, fillInPrefix string, itemFn choi
 		lines[i].choiceIdx = fillInIdx
 	}
 
+	// The current choice's sketch, when the choices have them.
+	c.previewTop = -1
+	if c.hasImages() {
+		c.previewTop = len(lines)
+		lines = append(lines, c.previewLines()...)
+	}
+
 	// Trailing blank line for bottom padding.
 	push("")
 
@@ -441,6 +457,7 @@ func (c *choiceList) height(width int) int {
 		width = c.lastWidth
 	}
 	innerWidth := min(width-4, choiceListMaxWidth)
+	c.previewCols = previewMaxCols(width)
 	return len(c.buildLines(innerWidth, " ", func(int, question.Choice, bool, int) string {
 		return "x" // single-line placeholder; only count matters
 	}))
@@ -489,6 +506,7 @@ func (c *choiceList) iconPrompt() string {
 // hardware cursor position, or nil.
 func (c *choiceList) drawContent(scr uv.Screen, area uv.Rectangle, fillInPrefix string, itemFn choiceItemRenderer) *tea.Cursor {
 	c.lastWidth = area.Dx()
+	c.previewCols = previewMaxCols(area.Dx())
 	viewport := area.Dy()
 
 	// Build lines at the wide width first (matching height(),
@@ -515,6 +533,7 @@ func (c *choiceList) drawContent(scr uv.Screen, area uv.Rectangle, fillInPrefix 
 	c.lastLines = lines
 	c.lastViewport = viewport
 	c.clampScroll(lines, viewport)
+	c.placePreview(area, c.previewTop)
 
 	// Blit the visible window.
 	var cur *tea.Cursor

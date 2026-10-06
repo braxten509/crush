@@ -68,6 +68,32 @@ type File struct {
 	Lines      []Line
 	Adds, Dels int
 	Transfer   string
+	// Omitted marks a file whose text wasn't compared (too large, or not
+	// text), so it has no line counts.
+	Omitted bool
+}
+
+// Counted reports whether the file's line counts mean anything: its text
+// was compared and it still exists. A deleted file counts as one removed
+// file, not as removed lines.
+func (f File) Counted() bool {
+	return !f.Omitted && f.Kind != Deleted
+}
+
+// AnyCounted reports whether any of files has line counts to show.
+func AnyCounted(files []File) bool {
+	return slices.ContainsFunc(files, File.Counted)
+}
+
+// Removed counts the deleted files.
+func Removed(files []File) int {
+	n := 0
+	for _, f := range files {
+		if f.Kind == Deleted {
+			n++
+		}
+	}
+	return n
 }
 
 // Edit is one tool call's change to a file. Full edits carry the whole file
@@ -216,6 +242,7 @@ func fromSnapshot(change filechange.Change) (File, bool) {
 		}
 	}
 	if omitted != "" {
+		f.Omitted = true
 		note(fmt.Sprintf("%s; %d → %d bytes", omitted, oldSize, newSize))
 	} else if content, ok := fromContent(change.Path, oldText, newText, true); ok {
 		f.Lines = append(f.Lines, content.Lines...)
@@ -230,9 +257,12 @@ func specialFile(state *filechange.State) bool {
 	return state != nil && strings.HasPrefix(state.Omitted, "Special file")
 }
 
-// Stats sums the added and removed lines of files.
+// Stats sums the added and removed lines of the files that have counts.
 func Stats(files []File) (adds, dels int) {
 	for _, f := range files {
+		if !f.Counted() {
+			continue
+		}
 		adds += f.Adds
 		dels += f.Dels
 	}

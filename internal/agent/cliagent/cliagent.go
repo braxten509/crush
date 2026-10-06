@@ -129,6 +129,8 @@ type Model struct {
 	// YOLO mode allows. The CLI's bypass modes stay off so every call
 	// still comes to Crush.
 	Guarded bool
+	// ReadOnly runs a sub-agent where it can't change the project's files.
+	ReadOnly bool
 	// Env is added to the CLI process environment on every turn.
 	Env []string
 }

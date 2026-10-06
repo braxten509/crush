@@ -381,6 +381,7 @@ func questionsToProto(qs []question.Question) []proto.QuestionItem {
 				ID:          c.ID,
 				Label:       c.Label,
 				Description: c.Description,
+				Image:       c.Image,
 			}
 		}
 		out[i] = proto.QuestionItem{

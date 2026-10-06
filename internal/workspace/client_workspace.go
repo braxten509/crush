@@ -1500,6 +1500,7 @@ func protoQuestionsToDomain(qs []proto.QuestionItem) []question.Question {
 				ID:          c.ID,
 				Label:       c.Label,
 				Description: c.Description,
+				Image:       c.Image,
 			}
 		}
 		out[i] = question.Question{

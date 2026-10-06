@@ -345,6 +345,8 @@ type UI struct {
 
 	// caps hold different terminal capabilities that we query for.
 	caps common.Capabilities
+	// previewPlaced is the question form sketch on screen, if any.
+	previewPlaced *dialog.PreviewPlacement
 
 	// Editor components
 	textarea textarea.Model
@@ -893,6 +895,47 @@ func (m *UI) loadMCPrompts() tea.Msg {
 
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(dialog.PreviewReadyMsg); ok {
+		m.invalidateFrames()
+	}
+	model, cmd := m.update(msg)
+	return model, tea.Batch(cmd, m.syncPreview())
+}
+
+// syncPreview keeps a question form's choice sketch on screen in step
+// with the form: placed over its blank area as of the last draw, moved
+// when that changes, and removed once the form closes or something
+// covers it.
+func (m *UI) syncPreview() tea.Cmd {
+	var want *dialog.PreviewPlacement
+	var load tea.Cmd
+	form, ok := m.activeInline.(*dialog.QuestionForm)
+	if ok && !m.dialog.HasDialogs() && m.state == uiChat {
+		want, load = form.PreviewState()
+	}
+	// Look again once the next frame is drawn: the form may have moved, or
+	// a just-opened form shows where its sketch goes.
+	recheck := tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return dialog.PreviewReadyMsg{} })
+	if equalPlacement(want, m.previewPlaced) {
+		if ok && form.PreviewWaiting() {
+			return tea.Batch(load, recheck)
+		}
+		return load
+	}
+	old := m.previewPlaced
+	m.previewPlaced = want
+	_, tmux := m.caps.Env.LookupEnv("TMUX")
+	return tea.Batch(load, dialog.PreviewPlacementCmd(old, want, tmux), recheck)
+}
+
+func equalPlacement(a, b *dialog.PreviewPlacement) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// A release ends a scrollbar drag wherever it goes, so a dialog or the
 	// secure entry opening mid-drag can't leave the drag stuck on.
 	var endedScrollbarDrag bool
@@ -6027,6 +6070,7 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 	m.dropQuestionForm()
 
 	form := dialog.NewQuestionForm(m.com.Styles, batch)
+	form.SetImageCapabilities(&m.caps)
 	form.OnAnswer = func(responses []question.Answer) {
 		m.com.Workspace.QuestionAnswer(responses)
 	}

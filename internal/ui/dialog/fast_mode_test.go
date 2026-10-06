@@ -23,23 +23,27 @@ func TestFastModeCommand(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		kind  catwalk.Type
+		model string
 		tier  string
 		title string
 	}{
-		{config.TypeCodexCLI, "", "Enable FAST Mode"},
-		{config.TypeCodexCLI, "fast", "Disable FAST Mode"},
-		{config.TypeCodexCLI, "default", "Enable FAST Mode"},
-		{config.TypeClaudeCode, "fast", ""},
+		{config.TypeCodexCLI, "gpt-6.1-sol", "", "Enable FAST Mode"},
+		{config.TypeCodexCLI, "gpt-6.1-sol", "fast", "Disable FAST Mode"},
+		{config.TypeCodexCLI, "gpt-6.1-sol", "default", "Enable FAST Mode"},
+		{config.TypeClaudeCode, "opus", "", "Enable FAST Mode"},
+		{config.TypeClaudeCode, "opus", "fast", "Disable FAST Mode"},
+		{config.TypeClaudeCode, "opus", "default", "Enable FAST Mode"},
+		{config.TypeGrokCLI, "grok-4.7", "fast", ""},
 	} {
 		t.Run(string(tc.kind)+"/"+tc.tier, func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.Config{
 				Agents: map[string]config.Agent{config.AgentCoder: {Model: config.SelectedModelTypeLarge}},
 				Models: map[config.SelectedModelType]config.SelectedModel{
-					config.SelectedModelTypeLarge: {Provider: "cli", Model: "m", ServiceTier: tc.tier},
+					config.SelectedModelTypeLarge: {Provider: "cli", Model: tc.model, ServiceTier: tc.tier},
 				},
 				Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
-					"cli": {Type: tc.kind, Models: []catwalk.Model{{ID: "m"}}},
+					"cli": {Type: tc.kind, Models: []catwalk.Model{{ID: tc.model}}},
 				}),
 			}
 			sty := styles.CharmtonePantera()

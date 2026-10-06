@@ -264,12 +264,13 @@ func (c *ConfirmComponent) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		y := area.Min.Y + screenRow
 		if ln.buttons {
 			// Build compositor for button hit detection.
-			c.compositor = common.ButtonHitCompositor(c.Styles, confirmButtonOpts, " ", area.Min.X, y)
+			buttonsX := area.Min.X + questionBarWidth
+			c.compositor = common.ButtonHitCompositor(c.Styles, confirmButtonOpts, " ", buttonsX, y)
 			hoveredBtn := common.HitButtonIndex(c.compositor, c.hoverX, c.hoverY)
 			confirmButtonOpts[0].Hovered = hoveredBtn == 0
 			confirmButtonOpts[1].Hovered = hoveredBtn == 1
 			buttons := common.ButtonGroup(c.Styles, confirmButtonOpts, " ")
-			drawStyledText(scr, image.Rect(area.Min.X, y, area.Min.X+contentWidth, y+1), buttons)
+			drawStyledText(scr, image.Rect(buttonsX, y, area.Min.X+contentWidth, y+1), buttons)
 		} else if ln.text != "" {
 			drawStyledText(scr, image.Rect(area.Min.X, y, area.Min.X+contentWidth, y+1), ln.text)
 		}

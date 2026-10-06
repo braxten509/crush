@@ -152,3 +152,32 @@ func TestSnapshotSpecialFilesAreNotChanges(t *testing.T) {
 	files := Build([]Edit{{Path: "/dev/tty", Snapshot: &filechange.Change{Path: "/dev/tty", Before: tty("1"), After: tty("2")}}})
 	require.Empty(t, files, "a terminal whose timestamp moved is not an edit")
 }
+
+// A deleted file counts as a removed file, and files whose text wasn't
+// compared have no line counts, rather than "+0 −0".
+func TestRemovedAndUncomparedFilesHaveNoLineCounts(t *testing.T) {
+	t.Parallel()
+	big := func(digest string, size int64) *filechange.State {
+		return &filechange.State{Digest: digest, Size: size, Mode: 0o755, Omitted: "File exceeds 1048576 byte text preview limit"}
+	}
+	files := Build([]Edit{
+		{Path: "/w/crush-readonly.new", Snapshot: &filechange.Change{Path: "/w/crush-readonly.new", Before: big("new", 136414586)}},
+		{Path: "/w/crush", Snapshot: &filechange.Change{Path: "/w/crush", Before: big("old", 136422753), After: big("new", 136414586)}},
+	})
+	require.Len(t, files, 2)
+	require.Equal(t, Deleted, files[0].Kind)
+	require.False(t, files[0].HasEdits(), "a deleted file isn't an edit")
+	require.False(t, files[1].Counted(), "a file too large to compare has no line counts")
+	require.False(t, AnyCounted(files))
+	require.Equal(t, 1, Removed(files))
+	require.Equal(t, "removed 1 file · 1 file edited", Summary(files))
+
+	// A deleted text file is one removed file, not its lines.
+	text := Build([]Edit{
+		{Path: "/w/a.go", Snapshot: &filechange.Change{Path: "/w/a.go", Before: &filechange.State{Content: "one\ntwo\n", Mode: 0o644}}},
+		{Path: "/w/b.go", Snapshot: &filechange.Change{Path: "/w/b.go", Before: &filechange.State{Content: "x\n", Mode: 0o644}, After: &filechange.State{Content: "y\n", Mode: 0o644}}},
+	})
+	adds, dels := Stats(text)
+	require.Equal(t, [2]int{1, 1}, [2]int{adds, dels})
+	require.Equal(t, "removed 1 file · 1 file edited", Summary(text))
+}

@@ -260,6 +260,9 @@ func (i *BackgroundItem) info() string {
 		if i.task.Effort != "" {
 			model += "/" + i.task.Effort
 		}
+		if i.task.ReadOnly {
+			model += " · read-only"
+		}
 		return fmt.Sprintf("%s/%s · %s", i.task.CLI, model, since(i.task.Started))
 	}
 	if i.proc.JobID != "" {

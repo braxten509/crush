@@ -252,7 +252,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	// Crush's permission prompts replace Codex's own; the sandbox still
 	// applies. YOLO mode lifts both, matching Crush's own tools.
 	approval, sandbox := "on-request", "workspace-write"
-	if t.NoTools {
+	if t.NoTools || m.ReadOnly {
 		approval, sandbox = "never", "read-only"
 	} else if m.autoApproved(t.SessionID) {
 		approval, sandbox = "never", "danger-full-access"

@@ -198,6 +198,14 @@ type AssistantMessageItem struct {
 	// plan-ready marker lands.
 	planAgent bool
 
+	// superseded marks a step with something newer after it in the chat.
+	// Only the end of the chat says what the agent is doing now, so a
+	// superseded step shows no live status of its own.
+	superseded bool
+	// compactingEarlier says an earlier, superseded step is compacting,
+	// so this live step reports that instead of "Thinking".
+	compactingEarlier bool
+
 	// Incremental FNV-64a hash of the thinking text. Avoids
 	// re-hashing the entire accumulated text on every streaming
 	// tick. thinkingHashSample holds a short prefix of the hashed
@@ -590,6 +598,29 @@ func (a *AssistantMessageItem) contentKey() (uint64, uint64) {
 // SetPlanAgent flags this item as plan-agent output (or clears the
 // flag). The flag scopes plan-card rendering to plan mode; the plan
 // start marker decides which message is the plan.
+// SetSuperseded sets whether something newer follows this step in the chat.
+func (a *AssistantMessageItem) SetSuperseded(superseded bool) {
+	if a.superseded != superseded {
+		a.superseded = superseded
+		a.Bump()
+	}
+}
+
+// SetCompactingEarlier sets whether an earlier, superseded step is
+// compacting the conversation.
+func (a *AssistantMessageItem) SetCompactingEarlier(compacting bool) {
+	if a.compactingEarlier != compacting {
+		a.compactingEarlier = compacting
+		a.Bump()
+	}
+}
+
+// Compacting reports whether this unfinished step is compacting the
+// conversation.
+func (a *AssistantMessageItem) Compacting() bool {
+	return a.message.IsCompacting && !a.message.IsFinished()
+}
+
 func (a *AssistantMessageItem) SetPlanAgent(plan bool) {
 	if a.planAgent == plan {
 		return
@@ -832,7 +863,7 @@ func (a *AssistantMessageItem) activityStatus(now time.Time) string {
 	if !a.isSpinning() {
 		return ""
 	}
-	if a.message.IsSummaryMessage || a.message.IsCompacting {
+	if a.message.IsSummaryMessage || a.message.IsCompacting || a.compactingEarlier {
 		return "Compacting conversation"
 	}
 	if a.message.Activity == "thinking" || a.message.IsThinking() {
@@ -894,7 +925,7 @@ func (a *AssistantMessageItem) isSpinning() bool {
 	// Commentary can be followed by a long wait for the next provider event.
 	// Keep status visible until the step finishes or hands off to tools,
 	// whose own status takes over.
-	return !a.message.IsFinished() && len(a.message.ToolCalls()) == 0
+	return !a.superseded && !a.message.IsFinished() && len(a.message.ToolCalls()) == 0
 }
 
 // SetMessage is used to update the underlying message. Only the

@@ -79,6 +79,11 @@ type ReviewSummary struct {
 	Checkouts int      `json:"checkouts,omitempty"`
 	Moved     int      `json:"moved,omitempty"`
 	Generated int      `json:"generated,omitempty"`
+	// Removed counts deleted files, which have no line counts.
+	Removed int `json:"removed,omitempty"`
+	// NoLines marks changes with no comparable text (deleted, too large
+	// or not text), so there are no line counts to show.
+	NoLines bool `json:"no_lines,omitempty"`
 	// Line counts outlive the saved diff, so the chat can always show them.
 	Adds    int  `json:"adds,omitempty"`
 	Dels    int  `json:"dels,omitempty"`

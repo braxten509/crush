@@ -974,7 +974,7 @@ func (c *Config) ValidateFastMode(provider, modelID string) error {
 	if !ok || model == nil {
 		return fmt.Errorf("model %q not found for provider %q", modelID, provider)
 	}
-	if providerConfig.Type == TypeClaudeCode || SupportsFastMode(providerConfig, *model) {
+	if SupportsFastMode(providerConfig, *model) {
 		return nil
 	}
 	return fmt.Errorf("model %q has no fast mode; only Claude Code, Codex and Abacus OpenAI priority models do", modelID)

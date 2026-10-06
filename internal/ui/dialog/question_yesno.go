@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // YesNo is an inline yes/no confirmation component. For open-ended
@@ -133,17 +132,7 @@ func (d *YesNo) Height(width int) int {
 	h := sectionHeight(d.Request.Text, w-lipgloss.Width(iconPrompt)) // question
 	h++                                                              // blank
 	if d.Request.Description != "" {
-		r := common.MarkdownRenderer(d.Styles, w)
-		mu := common.LockMarkdownRenderer(r)
-		mu.Lock()
-		out, err := r.Render(d.Request.Description)
-		mu.Unlock()
-		if err == nil {
-			out = strings.TrimSuffix(out, "\n")
-			h += strings.Count(out, "\n") + 1
-		} else {
-			h += sectionHeight(d.Request.Description, w)
-		}
+		h += strings.Count(questionDescription(d.Styles, d.Request.Description, w), "\n") + 1
 		h++ // blank
 	}
 	h++ // buttons
@@ -165,27 +154,19 @@ func (d *YesNo) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	d.lastWidth = area.Dx()
 	y := area.Min.Y
 
-	// Draw question header.
+	// Draw question header. Wrapped lines start under the first word.
 	iconPrompt := questionIconPrompt(d.Styles, d.focused)
+	iconWidth := lipgloss.Width(iconPrompt)
 	qText := iconPrompt + d.Styles.Editor.QuestionUnselected.Render(
-		ansi.Wrap(d.Request.Text, area.Dx()-lipgloss.Width(iconPrompt), ""),
+		wrapIndent(d.Request.Text, area.Dx()-iconWidth, strings.Repeat(" ", iconWidth)),
 	)
 	y += drawStyledText(scr, image.Rect(area.Min.X, y, area.Max.X, area.Max.Y), qText)
 	y++ // blank
 
-	// Draw optional description.
+	// Draw optional description in the text column, under the "?" tag.
 	if d.Request.Description != "" {
-		r := common.MarkdownRenderer(d.Styles, area.Dx())
-		mu := common.LockMarkdownRenderer(r)
-		mu.Lock()
-		desc, err := r.Render(d.Request.Description)
-		mu.Unlock()
-		if err == nil {
-			desc = strings.TrimSuffix(desc, "\n")
-			y += drawStyledText(scr, image.Rect(area.Min.X, y, area.Max.X, area.Max.Y), desc)
-		} else {
-			y += drawStyledText(scr, image.Rect(area.Min.X, y, area.Max.X, area.Max.Y), d.Request.Description)
-		}
+		desc := questionDescription(d.Styles, d.Request.Description, area.Dx())
+		y += drawStyledText(scr, image.Rect(area.Min.X, y, area.Max.X, area.Max.Y), desc)
 		y++ // blank
 	}
 
@@ -194,12 +175,13 @@ func (d *YesNo) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		{Text: "Yes", Selected: !d.selectedNo, Padding: 3, UnderlineIndex: 0},
 		{Text: "No", Selected: d.selectedNo, Padding: 3, UnderlineIndex: 0},
 	}
-	d.compositor = common.ButtonHitCompositor(d.Styles, buttonOptsList, " ", area.Min.X, y)
+	buttonsX := area.Min.X + questionBarWidth
+	d.compositor = common.ButtonHitCompositor(d.Styles, buttonOptsList, " ", buttonsX, y)
 	hoveredBtn := common.HitButtonIndex(d.compositor, d.hoverX, d.hoverY)
 	buttonOptsList[0].Hovered = hoveredBtn == 0
 	buttonOptsList[1].Hovered = hoveredBtn == 1
 	buttons := common.ButtonGroup(d.Styles, buttonOptsList, " ")
-	y += drawStyledText(scr, image.Rect(area.Min.X, y, area.Max.X, area.Max.Y), buttons)
+	y += drawStyledText(scr, image.Rect(buttonsX, y, area.Max.X, area.Max.Y), buttons)
 
 	// Draw note editor or saved note.
 	cur, _ := d.drawStandaloneNote(scr, area, y, "_question")

@@ -67,7 +67,7 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 		args = append(args, "--conversation", t.Resume)
 	}
 	name := agyBin()
-	if m.Guarded && !t.NoTools {
+	if m.Guarded && !m.ReadOnly && !t.NoTools {
 		// AGY runs every command without asking and can't hand them to
 		// Crush, and its own sandbox falls back to running on the host.
 		// Codex's sandbox keeps it to the project (plus its own state and
@@ -85,7 +85,7 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 		}, args...)
 		name = "codex"
 	}
-	p, err := startReviewProc(m.Dir, t.Env, !t.NoTools, name, args...)
+	p, err := m.startTurnProc(t.NoTools, t.Env, name, args...)
 	if err != nil {
 		return err
 	}

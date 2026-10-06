@@ -57,8 +57,7 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 			continue
 		}
 		summary := &filechange.ReviewSummary{}
-		summary.Adds, summary.Dels = countLines(result.Review, metadata)
-		summary.Counted = true
+		countLines(summary, result.Review, metadata)
 		detail := reviewDetail{Metadata: result.Metadata}
 		if result.Review != nil {
 			review := *result.Review
@@ -68,7 +67,8 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 				if visible {
 					summary.Files++
 				}
-				if visible && len(summary.Paths) < 3 {
+				deleted := change.Before != nil && change.After == nil
+				if visible && !deleted && len(summary.Paths) < 3 {
 					summary.Paths = append(summary.Paths, change.Path)
 				}
 				if visible && change.Transfer != nil {
@@ -150,18 +150,28 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 	return compact, compressed.Bytes(), nil
 }
 
-// countLines totals the lines a result added and removed, by the same rules
-// as the review drawer. It runs before large previews are dropped.
-func countLines(review *filechange.Review, metadata map[string]json.RawMessage) (adds, dels int) {
-	var edits []diffreview.Edit
+// countLines totals the lines a result added and removed, and the files it
+// deleted, by the same rules as the review drawer. It runs before large
+// previews are dropped.
+func countLines(summary *filechange.ReviewSummary, review *filechange.Review, metadata map[string]json.RawMessage) {
+	summary.Counted = true
 	if review != nil {
+		var edits []diffreview.Edit
 		for _, change := range review.Changes {
 			if !filechange.HiddenReviewPath(change.Path, review.Root) {
 				edits = append(edits, diffreview.Edit{Path: change.Path, Snapshot: &change})
 			}
 		}
-		return diffreview.Stats(diffreview.Build(edits))
+		files := diffreview.Build(edits)
+		summary.Adds, summary.Dels = diffreview.Stats(files)
+		summary.Removed = diffreview.Removed(files)
+		summary.NoLines = len(files) > 0 && !diffreview.AnyCounted(files)
+		return
 	}
+	summary.Adds, summary.Dels = metadataLines(metadata)
+}
+
+func metadataLines(metadata map[string]json.RawMessage) (adds, dels int) {
 	var counts struct {
 		Additions int `json:"additions"`
 		Removals  int `json:"removals"`
@@ -293,8 +303,7 @@ func (s *service) countReviews(ctx context.Context, sessionID string) error {
 			_ = json.Unmarshal([]byte(detail.Metadata), &metadata)
 			review := *result.Review
 			summary := *review.Summary
-			summary.Adds, summary.Dels = countLines(detail.Review, metadata)
-			summary.Counted = true
+			countLines(&summary, detail.Review, metadata)
 			review.Summary = &summary
 			result.Review = &review
 			msg.Parts[i] = result

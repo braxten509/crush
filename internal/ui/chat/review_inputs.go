@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -39,7 +40,7 @@ func (g *ToolGroupItem) StoredReviewSummary() string {
 }
 
 func (g *ToolGroupItem) computeStoredReviewSummary() string {
-	files, copied, checkouts, moved, generated := 0, 0, 0, 0, 0
+	files, copied, checkouts, moved, generated, removed := 0, 0, 0, 0, 0, 0
 	g.storedAdds, g.storedDels, g.storedCounted = 0, 0, false
 	var names []string
 	for _, input := range g.ReviewInputs() {
@@ -60,7 +61,7 @@ func (g *ToolGroupItem) computeStoredReviewSummary() string {
 			}
 		}
 		files += summary.Files
-		if summary.Counted {
+		if summary.Counted && !summary.NoLines {
 			g.storedAdds += summary.Adds
 			g.storedDels += summary.Dels
 			g.storedCounted = true
@@ -69,10 +70,10 @@ func (g *ToolGroupItem) computeStoredReviewSummary() string {
 		checkouts += summary.Checkouts
 		moved += summary.Moved
 		generated += summary.Generated
+		removed += summary.Removed
 		for _, path := range paths {
-			if len(names) < 3 {
-				names = append(names, filepath.Base(path))
-			}
+			// Each file once, at its latest edit.
+			names = append(slices.DeleteFunc(names, func(n string) bool { return n == path }), path)
 		}
 	}
 	var labels []string
@@ -85,14 +86,20 @@ func (g *ToolGroupItem) computeStoredReviewSummary() string {
 	for _, group := range []struct {
 		label string
 		count int
-	}{{"copied checkout:", checkouts}, {"copied", copied}, {"moved", moved}, {"generated", generated}} {
+	}{{"copied checkout:", checkouts}, {"copied", copied}, {"moved", moved}, {"generated", generated}, {"removed", removed}} {
 		if group.count > 0 {
 			labels = append(labels, fmt.Sprintf("%s %d %s", group.label, group.count, noun(group.count)))
 		}
 	}
-	if changed := files - copied - checkouts - moved - generated; changed > 0 {
-		if len(names) > 0 && files <= 3 {
-			labels = append(labels, "edited "+strings.Join(names, ", "))
+	if changed := files - copied - checkouts - moved - generated - removed; changed > 0 {
+		if len(names) > 0 {
+			// One name at most, the latest file; the rest are a count, as
+			// in the live header.
+			label := "edited " + filepath.Base(names[len(names)-1])
+			if more := len(names) - 1; more > 0 {
+				label += fmt.Sprintf(" and %d more", more)
+			}
+			labels = append(labels, label)
 		} else {
 			labels = append(labels, fmt.Sprintf("%d %s changed", changed, noun(changed)))
 		}

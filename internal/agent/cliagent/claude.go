@@ -316,7 +316,7 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	// Crush supplies the shared memory index and rules through Instructions.
 	env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1", "CLAUDE_CODE_DISABLE_ORG_MEMORY=1")
 	env = append(env, "CLAUDE_CODE_DISABLE_CLAUDE_MDS=1")
-	p, err := startReviewProc(m.Dir, env, !t.NoTools, "claude", args...)
+	p, err := m.startTurnProc(t.NoTools, env, "claude", args...)
 	if err != nil {
 		return nil, err
 	}

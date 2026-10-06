@@ -245,3 +245,49 @@ func TestToolGroupChangesNameEachFileOnce(t *testing.T) {
 	require.NotContains(t, header, "more")
 	require.Equal(t, 1, strings.Count(header, "a.go"), header)
 }
+
+// Saved summaries name one file at most, the latest, like the live header.
+func TestToolGroupStoredSummaryNamesOneFile(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	var children []MessageItem
+	for i, paths := range [][]string{{"/w/app-map.md", "/w/page-identifiers.mjs"}, {"/w/app-map.md", "/w/page-identifiers.test.mjs"}} {
+		id := string(rune('a' + i))
+		tc := message.ToolCall{ID: id, Name: "bash", Finished: true}
+		result := &message.ToolResult{ToolCallID: id, Name: "bash", Review: &filechange.Review{ID: id, Summary: &filechange.ReviewSummary{Files: len(paths), Paths: paths, Adds: 2, Counted: true}}}
+		children = append(children, NewToolMessageItem(&sty, "m", tc, result, false, ""))
+	}
+	g := NewToolGroupItem(&sty)
+	g.SetChildren(children)
+	require.Equal(t, "edited page-identifiers.test.mjs and 2 more", g.StoredReviewSummary())
+}
+
+// Deleted files show as a count of removed files; files too large to
+// compare show no "+0 −0".
+func TestToolGroupHeaderCountsRemovedFiles(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	big := func(digest string) *filechange.State {
+		return &filechange.State{Digest: digest, Size: 2 << 20, Mode: 0o755, Omitted: "File exceeds 1048576 byte text preview limit"}
+	}
+	tc := message.ToolCall{ID: "mv", Name: "bash", Input: `{"command":"mv crush.new crush"}`, Finished: true}
+	result := &message.ToolResult{ToolCallID: tc.ID, Name: tc.Name, Content: "ok", Review: &filechange.Review{Root: "/w", Changes: []filechange.Change{
+		{Path: "/w/crush.new", Before: big("new")},
+		{Path: "/w/crush", Before: big("old"), After: big("new")},
+	}}}
+	g := NewToolGroupItem(&sty)
+	g.SetChildren([]MessageItem{NewToolMessageItem(&sty, "m", tc, result, false, "")})
+	header := ansi.Strip(g.header(120))
+	require.Contains(t, header, "removed 1 file")
+	require.Contains(t, header, "edited crush")
+	require.NotContains(t, header, "crush.new")
+	require.NotContains(t, header, "+0")
+
+	// The saved summary says the same after the chat reloads.
+	saved := *result
+	saved.Review = &filechange.Review{Summary: &filechange.ReviewSummary{Files: 2, Removed: 1, Paths: []string{"/w/crush"}, Counted: true, NoLines: true}}
+	g = NewToolGroupItem(&sty)
+	g.SetChildren([]MessageItem{NewToolMessageItem(&sty, "m", tc, &saved, false, "")})
+	require.Equal(t, "removed 1 file · edited crush", g.StoredReviewSummary())
+	require.NotContains(t, ansi.Strip(g.header(120)), "+0")
+}

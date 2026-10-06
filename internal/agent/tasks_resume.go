@@ -239,7 +239,7 @@ func (h *taskHub) resume(ctx context.Context, s savedTask) error {
 			return err
 		}
 	}
-	sub, m, err := h.subAgent(ctx, provider, model, selected)
+	sub, m, err := h.subAgent(ctx, provider, model, selected, s.ReadOnly)
 	if err != nil {
 		return err
 	}

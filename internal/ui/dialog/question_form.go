@@ -544,6 +544,12 @@ func (f *QuestionForm) CollapsedHelp() string { return "answer questions" }
 // batches it shows the active question text and answered count;
 // for single questions it shows just the question text.
 func (f *QuestionForm) DrawCollapsed(scr uv.Screen, area uv.Rectangle) {
+	// Folded away, the form has no room for a sketch.
+	for _, q := range f.questions {
+		if cl, ok := q.(interface{ clearPlacement() }); ok {
+			cl.clearPlacement()
+		}
+	}
 	// The full form isn't on screen, so there is nothing to select.
 	f.sel.clear()
 	f.sel.area = image.Rectangle{}

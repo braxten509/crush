@@ -61,14 +61,17 @@ const (
 
 // Task is a sub-agent running in the background for a session.
 type Task struct {
-	ID        string     `json:"id"`
-	SessionID string     `json:"session_id"`
-	ChildID   string     `json:"child_id"`
-	Name      string     `json:"name"`
-	CLI       string     `json:"cli"`
-	Model     string     `json:"model"`
-	Effort    string     `json:"effort,omitempty"`
-	Fast      bool       `json:"fast,omitempty"`
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	ChildID   string `json:"child_id"`
+	Name      string `json:"name"`
+	CLI       string `json:"cli"`
+	Model     string `json:"model"`
+	Effort    string `json:"effort,omitempty"`
+	Fast      bool   `json:"fast,omitempty"`
+	// ReadOnly runs the sub-agent where it can't change the project's
+	// files. Follow-ups keep it.
+	ReadOnly  bool       `json:"read_only,omitempty"`
 	Status    TaskStatus `json:"status"`
 	Started   time.Time  `json:"started"`
 	Ended     time.Time  `json:"ended"`
@@ -84,10 +87,12 @@ type TaskRequest struct {
 	// keeps the model's default.
 	Effort string `json:"effort,omitempty"`
 	// Fast runs Claude or Codex in its fast mode.
-	Fast   bool   `json:"fast,omitempty"`
-	Name   string `json:"name,omitempty"`
-	Prompt string `json:"prompt,omitempty"`
-	Stop   string `json:"stop,omitempty"`
+	Fast bool `json:"fast,omitempty"`
+	// ReadOnly runs the sub-agent where it can't change files.
+	ReadOnly bool   `json:"read_only,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Prompt   string `json:"prompt,omitempty"`
+	Stop     string `json:"stop,omitempty"`
 	// Continue sends Prompt as a follow-up to this finished task.
 	Continue string `json:"continue,omitempty"`
 	// Ask holds question tool input from `crush ask`.
@@ -405,7 +410,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	sub, m, err := h.subAgent(ctx, *provider, model, selected)
+	sub, m, err := h.subAgent(ctx, *provider, model, selected, req.ReadOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -422,15 +427,15 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	h.skipUsedIDs(req.Session)
 	t := &Task{
 		SessionID: req.Session, ChildID: child.ID, Name: name,
-		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, Status: TaskRunning, Started: time.Now(),
+		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, ReadOnly: req.ReadOnly, Status: TaskRunning, Started: time.Now(),
 	}
 	started = true
-	snapshot := h.start(ctx, release, t, sub, m, *provider, subAgentPreamble+prompt)
+	snapshot := h.start(ctx, release, t, sub, m, *provider, subAgentPrompt(prompt, req.ReadOnly))
 	return &snapshot, nil
 }
 
 // subAgent builds the agent a task runs on.
-func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel) (SessionAgent, Model, error) {
+func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly bool) (SessionAgent, Model, error) {
 	fp, err := h.c.buildProvider(provider, selected, true)
 	if err != nil {
 		return nil, Model{}, err
@@ -443,9 +448,14 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 	// Crush's YOLO mode allows.
 	if cm, ok := lm.(*cliagent.Model); ok {
 		cm.Guarded = true
+		cm.ReadOnly = readOnly
 		// Marks what it starts, so leftovers show up as background
 		// processes. Without a session it can't spawn sub-agents itself.
-		cm.Env = []string{TasksDirEnv + "=" + h.dir}
+		// A read-only one isn't told where Crush is: Crush runs its
+		// background jobs outside the read-only sandbox.
+		if !readOnly {
+			cm.Env = []string{TasksDirEnv + "=" + h.dir}
+		}
 	}
 	m := Model{Model: lm, CatwalkCfg: model, ModelCfg: selected, FlatRate: provider.FlatRate}
 	var subTasks *taskHub
@@ -544,6 +554,20 @@ func taskModel(provider config.ProviderConfig, model catwalk.Model, req TaskRequ
 	}
 	return selected, nil
 }
+
+// subAgentPrompt is a new sub-agent's first prompt.
+func subAgentPrompt(prompt string, readOnly bool) string {
+	if readOnly {
+		return subAgentPreamble + readOnlyPreamble + prompt
+	}
+	return subAgentPreamble + prompt
+}
+
+// readOnlyPreamble tells a read-only sub-agent where it stands, so it
+// doesn't spend its turn fighting the sandbox.
+const readOnlyPreamble = `You are read-only: you can read anything and run commands, but nothing can change this project's files (writes fail with a read-only file system error). Don't try to work around that. Where a change is needed, describe it in your report instead.
+
+`
 
 const subAgentPreamble = `You are a sub-agent that another AI agent started in the background from Crush. Do the task below on your own; nobody can answer questions while you work. Never ask the user anything (no "crush ask", no question tools): settle small details yourself. If the task says to check with the user first, or an open question would change the work substantially, don't guess: stop before that part and end with the questions (and the options you see) in your final report, so the agent that started you can answer them or ask the user. You end as soon as you stop replying, so finish what you start instead of leaving it running in the background. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Crush refuses a "sleep" longer than 10 seconds in the foreground; to wait for something, loop on a check (until <check>; do sleep 2; done). When you're done, end with a concise report of what you did and found: that final message is all the other agent will see.
 
@@ -933,13 +957,13 @@ func (h *taskHub) instructions() string {
 You are running inside Crush, which can run sub-agents for you in the background, like Claude Code's background agents. Each sub-agent uses the chosen provider (an agent CLI or the Abacus API) in this same directory. It does not see this conversation, so give it a complete, self-contained task.
 
 Start one with your shell tool. It returns right away with a task ID:
-  %[1]s spawn --cli <cli> [--model <model>] [--effort <level>] [--fast] --name "<short title>" <<'EOF'
+  %[1]s spawn --cli <cli> [--model <model>] [--effort <level>] [--fast] [--read-only] --name "<short title>" <<'EOF'
   <task>
   EOF
 
 Providers and models (the first model is the default), with their effort levels:
 %[2]s
---effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode where supported (Claude Code, Codex, and Abacus OpenAI priority models). Abacus effort levels depend on the chosen model; recent Claude models accept low, medium, high, xhigh, max.
+--effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode where supported (Claude Code, Codex, and Abacus OpenAI priority models). Abacus effort levels depend on the chosen model; recent Claude models accept low, medium, high, xhigh, max. --read-only runs the sub-agent where it can't change the project's files; use it for reviews, critiques and anything else that must only look. Run every review or second opinion from another model as a sub-agent like this, never through another tool or script that starts an agent CLI.
 Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there. Stop one with: %[1]s spawn --stop <task-id>
 To give a finished sub-agent more work or corrections, continue it instead of starting a new one; it keeps its conversation and remembers its earlier work, and it shows in Crush as the same sub-agent:
   %[1]s spawn --continue <task-id> <<'EOF'
@@ -959,7 +983,7 @@ The user answers questions in Crush's question form, not in chat. Whenever you n
   {"questions":[{"type":"single_choice","label":"<tab label, 3 words max>","question":"<one line>","description":"<why it matters, required>","choices":[{"id":"a","label":"<choice>"},{"id":"b","label":"<choice>"}]}]}
   EOF
 
-Types: single_choice and multi_choice (2-5 choices, each with an id and label, optional short description; the form adds a type-your-own answer and notes on its own, so never add an "Other" choice), yes_no (only for accept/reject), free_text, secure_entry (a masked secret field; see crush_secure_entry). Every question needs a description. Ask up to %[4]d at once; several show as tabs with a review step before submitting. Then end your turn with at most one short line saying the questions are open: the answers arrive as a <%[3]s> message named %[5]q. Only one set of questions can be open at a time. Sub-agents can't ask the user. When you hand one work that needs the user's input, ask the user first and put the answers in its task. When a sub-agent's result comes back with questions, answer them yourself when you can, and ask the user only what you can't settle.
+Types: single_choice and multi_choice (2-5 choices, each with an id and label, optional short description and optional "image": an absolute path to a PNG sketch the form shows for the choice under the cursor, as the design-preview skill makes; the form adds a type-your-own answer and notes on its own, so never add an "Other" choice), yes_no (only for accept/reject), free_text, secure_entry (a masked secret field; see crush_secure_entry). Every question needs a description. Ask up to %[4]d at once; several show as tabs with a review step before submitting. Then end your turn with at most one short line saying the questions are open: the answers arrive as a <%[3]s> message named %[5]q. Only one set of questions can be open at a time. Sub-agents can't ask the user. When you hand one work that needs the user's input, ask the user first and put the answers in its task. When a sub-agent's result comes back with questions, answer them yourself when you can, and ask the user only what you can't settle.
 </crush_questions>
 
 <crush_secure_entry>

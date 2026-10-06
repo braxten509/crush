@@ -606,7 +606,10 @@ func (m *Chat) AcceptResponse(msg *message.Message, items []chat.MessageItem) []
 func (m *Chat) Refold(item chat.MessageItem) {
 	if f, ok := m.folded[item]; ok && f != chat.Foldable(item) {
 		m.regroup()
+		return
 	}
+	// A step can start or stop compacting without changing its fold.
+	m.markLiveStatus()
 }
 
 // regroup rebuilds the list from flat, folding each run of tool calls into
@@ -741,6 +744,42 @@ func (m *Chat) regroup() {
 		newSel = m.list.Selected()
 	}
 	m.list.ReplaceItems(items, newOff, offLine, newSel)
+	m.markLiveStatus()
+}
+
+// markLiveStatus keeps a single live status line, at the end of the chat:
+// steps with something newer after them show none of their own. If one of
+// them is still compacting, the live item at the end says so instead of
+// "Thinking".
+func (m *Chat) markLiveStatus() {
+	last := m.list.Len() - 1
+	for last >= 0 {
+		if _, info := m.list.ItemAt(last).(*chat.AssistantInfoItem); !info {
+			break
+		}
+		last--
+	}
+	compacting := false
+	for i := range m.list.Len() {
+		if a, ok := m.list.ItemAt(i).(*chat.AssistantMessageItem); ok {
+			a.SetSuperseded(i < last)
+			compacting = compacting || (i < last && a.Compacting())
+		}
+	}
+	// Steps inside groups take their status from the group.
+	for _, it := range m.flat {
+		if a, ok := it.(*chat.AssistantMessageItem); ok && m.groupOf[a.ID()] != nil {
+			a.SetSuperseded(false)
+		}
+	}
+	for i := range m.list.Len() {
+		switch it := m.list.ItemAt(i).(type) {
+		case *chat.AssistantMessageItem:
+			it.SetCompactingEarlier(i == last && compacting)
+		case *chat.ToolGroupItem:
+			it.SetCompactingEarlier(i == last && compacting)
+		}
+	}
 }
 
 // UpdateNestedToolIDs updates the ID map for nested tools within a container.

@@ -79,7 +79,7 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 			}
 		}
 	}
-	p, err := startReviewProc(m.Dir, t.Env, !t.NoTools, name, args...)
+	p, err := m.startTurnProc(t.NoTools, t.Env, name, args...)
 	if err != nil {
 		return err
 	}

@@ -279,9 +279,12 @@ func (c *Changes) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	closeBtn := bg.Foreground(p.text2).Render("✕")
 	gap := max(1, width-1-2-lipgloss.Width(title)-3)
 	line(y+1, bg.Render("  ")+title+bg.Render(strings.Repeat(" ", gap))+closeBtn)
-	sub := bg.Foreground(p.text3).Render(c.title+" · "+countNoun(len(c.files), "file")+" · ") +
-		bg.Foreground(p.addText).Render(fmt.Sprintf("+%d", adds)) + bg.Render(" ") +
-		bg.Foreground(p.delText).Render(fmt.Sprintf("−%d", dels))
+	sub := bg.Foreground(p.text3).Render(c.title + " · " + countNoun(len(c.files), "file"))
+	if diffreview.AnyCounted(c.files) {
+		sub += bg.Foreground(p.text3).Render(" · ") +
+			bg.Foreground(p.addText).Render(fmt.Sprintf("+%d", adds)) + bg.Render(" ") +
+			bg.Foreground(p.delText).Render(fmt.Sprintf("−%d", dels))
+	}
 	line(y+2, bg.Render("  ")+sub)
 	line(y+3, bg.Foreground(p.line).Render(strings.Repeat("─", width-1)))
 
@@ -347,8 +350,11 @@ func (c *Changes) layout(width int) {
 	adds, dels := diffreview.Stats(c.files)
 
 	// "2 files changed +12 −3"
-	add(bg.Foreground(p.text).Bold(true).Render(diffreview.Summary(c.files))+bg.Render("  ")+
-		c.stat(bg, adds, dels), -1, -1, false)
+	summary := bg.Foreground(p.text).Bold(true).Render(diffreview.Summary(c.files))
+	if diffreview.AnyCounted(c.files) {
+		summary += bg.Render("  ") + c.stat(bg, adds, dels)
+	}
+	add(summary, -1, -1, false)
 	add("", -1, -1, false)
 
 	// The file list.
@@ -358,7 +364,7 @@ func (c *Changes) layout(width int) {
 	for i, f := range c.files {
 		dot := bg.Foreground(c.kindColor(f.Kind)).Render("■")
 		stat := c.stat(bg, f.Adds, f.Dels)
-		if !f.HasEdits() {
+		if !f.HasEdits() || !f.Counted() {
 			stat = bg.Foreground(p.text3).Render(f.Kind.String())
 		}
 		room := inner - 2 - 2 - lipgloss.Width(stat) - 2
@@ -410,7 +416,11 @@ func (c *Changes) fileHead(f diffreview.File, i, inner int) string {
 	left := hb.Foreground(p.text3).Render(" "+chev+" ") +
 		lipgloss.NewStyle().Background(badgeBg).Foreground(badgeFg).Bold(true).Render(" "+f.Kind.String()+" ") +
 		hb.Render(" ")
-	stat := c.stat(hb, f.Adds, f.Dels) + hb.Render(" ")
+	// The badge already says what happened to a file without counts.
+	stat := hb.Render(" ")
+	if f.Counted() {
+		stat = c.stat(hb, f.Adds, f.Dels) + stat
+	}
 	room := inner - lipgloss.Width(left) - lipgloss.Width(stat) - 1
 	path := hb.Foreground(p.text).Bold(true).Render(truncateLeft(c.shortPath(f.Path), room))
 	gap := max(1, inner-lipgloss.Width(left)-lipgloss.Width(path)-lipgloss.Width(stat))

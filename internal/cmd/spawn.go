@@ -25,6 +25,10 @@ The prompt comes from the argument or stdin. Crush reports the result back to th
 Review internal/auth for bugs and report what you find.
 EOF
 
+crush spawn --cli claude --model opus --read-only --name "Review the design" <<'EOF'
+Critique the new page-identifier code; don't change it.
+EOF
+
 crush spawn --cli claude --model opus --effort max --fast --name "Compose a tune" <<'EOF'
 Write the song.
 EOF
@@ -48,6 +52,7 @@ crush spawn --stop t2`,
 			req.Model, _ = cmd.Flags().GetString("model")
 			req.Effort, _ = cmd.Flags().GetString("effort")
 			req.Fast, _ = cmd.Flags().GetBool("fast")
+			req.ReadOnly, _ = cmd.Flags().GetBool("read-only")
 			req.Name, _ = cmd.Flags().GetString("name")
 			if len(args) > 0 {
 				req.Prompt = args[0]
@@ -89,6 +94,9 @@ crush spawn --stop t2`,
 		if t.Fast {
 			tuning += ", fast"
 		}
+		if t.ReadOnly {
+			tuning += ", read-only"
+		}
 		cmd.Printf("%s task %s (%s) on %s/%s%s. It runs in the background; its result will arrive as a <%s> message when it finishes. Don't wait for it.\n",
 			verb, t.ID, t.Name, t.CLI, t.Model, tuning, agent.TaskNotificationTag)
 		return nil
@@ -100,6 +108,7 @@ func init() {
 	spawnCmd.Flags().String("model", "", "Model to use (defaults to the CLI's first model)")
 	spawnCmd.Flags().String("effort", "", "Reasoning effort, one of the model's levels (like low, medium, high, xhigh, max)")
 	spawnCmd.Flags().Bool("fast", false, "Run in fast mode (claude and codex only)")
+	spawnCmd.Flags().Bool("read-only", false, "Run where it can't change the project's files, as for reviews; follow-ups stay read-only")
 	spawnCmd.Flags().String("name", "", "Short title shown in Crush")
 	spawnCmd.Flags().String("stop", "", "Stop the task with this ID instead")
 	spawnCmd.Flags().String("continue", "", "Send the prompt as a follow-up to this finished task; it keeps its conversation")

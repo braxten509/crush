@@ -48,6 +48,7 @@ func HasIncompleteTodos(todos []Todo) bool {
 }
 
 type Session struct {
+	ContextBudget    ContextBudget
 	ID               string
 	ParentSessionID  string
 	Title            string
@@ -61,6 +62,15 @@ type Session struct {
 	Channel          string
 	CreatedAt        int64
 	UpdatedAt        int64
+}
+
+// ContextBudget is the native agent's compaction boundary, scoped to the
+// selected provider/model. Zero tokens means the agent has not reported it.
+type ContextBudget struct {
+	Provider  string
+	Model     string
+	Tokens    int64
+	Estimated bool
 }
 
 type Service interface {
@@ -228,6 +238,17 @@ func (s *service) Save(ctx context.Context, session Session) (Session, error) {
 		return Session{}, err
 	}
 	estimatedUsage := session.EstimatedUsage
+	budget := session.ContextBudget
+	if budget.Provider != "" {
+		_, err = s.db.ExecContext(ctx, `INSERT INTO session_context_budgets
+			(session_id, provider, model, token_limit, estimated) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(session_id) DO UPDATE SET provider=excluded.provider,
+			model=excluded.model, token_limit=excluded.token_limit, estimated=excluded.estimated`,
+			session.ID, budget.Provider, budget.Model, budget.Tokens, budget.Estimated)
+		if err != nil {
+			return Session{}, err
+		}
+	}
 	s.setEstimatedUsageState(session.ID, estimatedUsage)
 	session = s.fromDBItem(dbSession)
 	session.EstimatedUsage = estimatedUsage
@@ -328,11 +349,19 @@ func (s *service) clearEstimatedUsageState(sessionID string) {
 }
 
 func (s *service) fromDBItem(item db.Session) Session {
+	var budget ContextBudget
+	errBudget := s.db.QueryRow(`SELECT provider, model, token_limit, estimated
+		FROM session_context_budgets WHERE session_id = ?`, item.ID).
+		Scan(&budget.Provider, &budget.Model, &budget.Tokens, &budget.Estimated)
+	if errBudget != nil && errBudget != sql.ErrNoRows {
+		slog.Error("Failed to read context budget", "error", errBudget, "session_id", item.ID)
+	}
 	todos, err := unmarshalTodos(item.Todos.String)
 	if err != nil {
 		slog.Error("Failed to unmarshal todos", "session_id", item.ID, "error", err)
 	}
 	return Session{
+		ContextBudget:    budget,
 		ID:               item.ID,
 		ParentSessionID:  item.ParentSessionID.String,
 		Title:            item.Title,

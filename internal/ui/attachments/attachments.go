@@ -126,6 +126,23 @@ type Renderer struct {
 	// bounds stores the X-coordinate ranges of each chip's remove
 	// button from the most recent Render call, for mouse hit-testing.
 	bounds []chipBounds
+	images []imageBounds
+}
+
+type imageBounds struct {
+	start, end int
+	attachment message.Attachment
+}
+
+// ImageAt returns the original image for a visible chip, excluding remove.
+func (r *Renderer) ImageAt(x int) *message.Attachment {
+	for _, bounds := range r.images {
+		if x >= bounds.start && x < bounds.end {
+			attachment := bounds.attachment
+			return &attachment
+		}
+	}
+	return nil
 }
 
 // chipBounds holds the rendered strings and the X-coordinate range of
@@ -144,6 +161,7 @@ type chipBounds struct {
 func (r *Renderer) Render(attachments []message.Attachment, deleting, showRemove bool, width int) string {
 	var chips []string
 	r.bounds = r.bounds[:0]
+	r.images = r.images[:0]
 
 	removeStr := r.removeStyle.String()
 	// Only reserve width for the remove button when it will be drawn.
@@ -176,6 +194,9 @@ func (r *Renderer) Render(attachments []message.Attachment, deleting, showRemove
 
 		chips = append(chips, iconStr, nameStr)
 		chipW := lipgloss.Width(iconStr) + lipgloss.Width(nameStr)
+		if att.IsImage() && !deleting {
+			r.images = append(r.images, imageBounds{offset, offset + chipW - nameStyle.GetHorizontalMargins(), att})
+		}
 
 		switch {
 		case deleting:

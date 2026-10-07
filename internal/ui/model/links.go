@@ -1,7 +1,10 @@
 package model
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"image"
+	"mime"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -9,6 +12,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
@@ -75,10 +79,63 @@ func openChatLink(destination, workingDir string) tea.Cmd {
 }
 
 func (m *UI) takeChatLink(c *Chat) tea.Cmd {
+	if c.openImage != nil {
+		attachment := *c.openImage
+		c.openImage = nil
+		return func() tea.Msg { return openImageMsg{attachment} }
+	}
 	destination := c.openLink
 	c.openLink = ""
 	if destination == "" {
 		return nil
 	}
 	return openChatLink(destination, m.com.Workspace.WorkingDir())
+}
+
+type openImageMsg struct{ Attachment message.Attachment }
+type imagePress struct {
+	attachment message.Attachment
+	at         image.Point
+	dragged    bool
+}
+
+// imageFile preserves the image the user actually sent, even if its source
+// has since changed or came from the clipboard. No work happens at render.
+func imageFile(attachment message.Attachment) (string, error) {
+	if len(attachment.Content) == 0 {
+		if attachment.FilePath != "" {
+			return attachment.FilePath, nil
+		}
+		return attachment.FileName, nil
+	}
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	extension := ".png"
+	if extensions, _ := mime.ExtensionsByType(attachment.MimeType); len(extensions) > 0 {
+		extension = extensions[0]
+	}
+	directory := filepath.Join(cache, "crush", "image-viewer")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return "", err
+	}
+	path := filepath.Join(directory, fmt.Sprintf("%x%s", sha256.Sum256(attachment.Content), extension))
+	if err := os.WriteFile(path, attachment.Content, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func openAttachmentImage(attachment message.Attachment, workingDir string) tea.Cmd {
+	return func() tea.Msg {
+		path, err := imageFile(attachment)
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(workingDir, path)
+		}
+		return openChatLink((&url.URL{Scheme: "file", Path: path}).String(), workingDir)()
+	}
 }

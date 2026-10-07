@@ -45,16 +45,17 @@ var ErrResume = errors.New("native session could not be resumed")
 type EventType int
 
 const (
-	EventText        EventType = iota // Text
-	EventReasoning                    // Text
-	EventToolStart                    // ID, Name
-	EventToolCall                     // ID, Name, Input
-	EventToolResult                   // ID, Name, Output, Metadata, IsError
-	EventUsage                        // Usage (per model request)
-	EventSession                      // Session (native session ID)
-	EventUserMessage                  // Text (a steered message the CLI took in)
-	EventCompacting                   // Compacting (native context compaction status)
-	EventActivity                     // Provider event received, without content.
+	EventText          EventType = iota // Text
+	EventReasoning                      // Text
+	EventToolStart                      // ID, Name
+	EventToolCall                       // ID, Name, Input
+	EventToolResult                     // ID, Name, Output, Metadata, IsError
+	EventUsage                          // Usage (per model request)
+	EventSession                        // Session (native session ID)
+	EventUserMessage                    // Text (a steered message the CLI took in)
+	EventCompacting                     // Compacting (native context compaction status)
+	EventActivity                       // Provider event received, without content.
+	EventContextBudget                  // Native compaction boundary, not the full model window.
 )
 
 // TextBreak is sent as text when a new text block starts. It separates two
@@ -65,17 +66,19 @@ const TextBreak = "\n\n"
 // already translated to Crush's own tools where one matches, so the UI can
 // use its native renderers.
 type Event struct {
-	Compacting bool
-	Type       EventType
-	Text       string
-	ID         string
-	Name       string
-	Input      string
-	Output     string
-	Metadata   string
-	IsError    bool
-	Usage      fantasy.Usage
-	Session    string
+	ContextLimit     int64
+	ContextEstimated bool
+	Compacting       bool
+	Type             EventType
+	Text             string
+	ID               string
+	Name             string
+	Input            string
+	Output           string
+	Metadata         string
+	IsError          bool
+	Usage            fantasy.Usage
+	Session          string
 }
 
 // Turn is one user prompt sent to a CLI.
@@ -114,10 +117,9 @@ type Turn struct {
 // Model is a CLI-backed model. It implements [fantasy.LanguageModel] for
 // one-shot text requests; full agent turns go through [Model.Run].
 type Model struct {
-	Kind                  catwalk.Type
-	ID                    string
-	ServiceTier           string
-	AutoCompactTokenLimit int64
+	Kind        catwalk.Type
+	ID          string
+	ServiceTier string
 	// Ultracode turns on Claude Code's Ultracode.
 	Ultracode bool
 	Dir       string
@@ -137,29 +139,24 @@ type Model struct {
 
 // NewProvider returns a [fantasy.Provider] whose models run through the
 // agent CLI of the given kind.
-func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string, ultracode bool, autoCompactTokenLimit ...int64) fantasy.Provider {
-	limit := config.DefaultAutoCompactTokenLimit
-	if len(autoCompactTokenLimit) > 0 && autoCompactTokenLimit[0] > 0 {
-		limit = autoCompactTokenLimit[0]
-	}
-	return &provider{autoCompactTokenLimit: limit, kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, ultracode: ultracode, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
+func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string, ultracode bool) fantasy.Provider {
+	return &provider{kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, ultracode: ultracode, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
 }
 
 type provider struct {
-	autoCompactTokenLimit int64
-	kind                  catwalk.Type
-	serviceTier           string
-	ultracode             bool
-	dir                   string
-	perms                 permission.Service
-	files                 history.Service
-	links                 *Links
+	kind        catwalk.Type
+	serviceTier string
+	ultracode   bool
+	dir         string
+	perms       permission.Service
+	files       history.Service
+	links       *Links
 }
 
 func (p *provider) Name() string { return string(p.kind) }
 
 func (p *provider) LanguageModel(_ context.Context, modelID string) (fantasy.LanguageModel, error) {
-	return &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, AutoCompactTokenLimit: p.autoCompactTokenLimit, Ultracode: p.ultracode, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
+	return &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, Ultracode: p.ultracode, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
 }
 
 // Run executes one turn, emitting events until the CLI finishes it.

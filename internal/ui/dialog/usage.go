@@ -117,9 +117,14 @@ func (d *Usage) body() string {
 		if data.Estimated {
 			label += " (estimated)"
 		}
-		lines = append(lines, t.ComposerFooter.Model.Render(label),
-			fmt.Sprintf("%s / %s tokens before compaction", humanize.Comma(data.Context), humanize.Comma(data.CompactAt)),
-			fmt.Sprintf("%s tokens remaining", humanize.Comma(max(int64(0), data.CompactAt-data.Context))), "")
+		lines = append(lines, t.ComposerFooter.Model.Render(label))
+		if data.CompactAt > 0 {
+			lines = append(lines,
+				fmt.Sprintf("%s / %s tokens before compaction", humanize.Comma(data.Context), humanize.Comma(data.CompactAt)),
+				fmt.Sprintf("%s tokens remaining", humanize.Comma(max(int64(0), data.CompactAt-data.Context))), "")
+		} else {
+			lines = append(lines, fmt.Sprintf("%s tokens used", humanize.Comma(data.Context)), "Compaction limit not reported", "")
+		}
 	}
 	switch {
 	case data.Refreshing:

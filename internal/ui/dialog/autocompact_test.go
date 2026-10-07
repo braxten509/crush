@@ -25,7 +25,7 @@ func TestAutocompactGlobalDialog(t *testing.T) {
 		scr := uv.NewScreenBuffer(width, 18)
 		cursor := d.Draw(scr, scr.Bounds())
 		out := ansi.Strip(scr.Render())
-		require.Contains(t, out, "Autocompact")
+		require.Contains(t, out, "Fallback compaction")
 		require.Contains(t, out, "275000")
 		require.NotNil(t, cursor)
 		require.Less(t, cursor.X, width)
@@ -39,7 +39,7 @@ func TestAutocompactGlobalDialog(t *testing.T) {
 		}
 	}
 	require.NotNil(t, command)
-	require.Equal(t, "Autocompact", command.title)
+	require.Equal(t, "Fallback compaction", command.title)
 	require.Equal(t, ActionOpenDialog{AutocompactID}, command.Action())
 	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
 	for _, bad := range []string{"", "zero", "-1", "999", "1.5", "999999999999999999999"} {

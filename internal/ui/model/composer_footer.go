@@ -29,7 +29,7 @@ func (m *UI) compactUsage(width int) string {
 	}
 	// Indented so the stats start in the composer's text column.
 	footer := renderFooterItems(m.com.Styles, m.footerItems(), m.selectedLargeModel(), m.session,
-		m.compactionLimit(), m.selectedCLILimits(), width-footerIndent)
+		m.compactionLimit(m.selectedLargeModel(), m.session), m.selectedCLILimits(), width-footerIndent)
 	if footer == "" {
 		return ""
 	}
@@ -126,11 +126,30 @@ func (m *UI) openComposerFooterForm() {
 	m.updateLayoutAndSize()
 }
 
-func (m *UI) compactionLimit() int64 {
-	if cfg := m.com.Config(); cfg != nil {
-		return cfg.Options.GetAutoCompactTokenLimit()
+func (m *UI) compactionLimit(model *workspace.AgentModel, sess *session.Session) int64 {
+	fallback := config.DefaultAutoCompactTokenLimit
+	var kind catwalk.Type
+	if model != nil {
+		kind = catwalk.Type(model.ModelCfg.Provider)
 	}
-	return config.DefaultAutoCompactTokenLimit
+	if cfg := m.com.Config(); cfg != nil {
+		fallback = cfg.Options.GetAutoCompactTokenLimit()
+		if model != nil && cfg.Providers != nil {
+			if provider, ok := cfg.Providers.Get(model.ModelCfg.Provider); ok {
+				kind = provider.Type
+			}
+		}
+	}
+	if config.NativeCompaction(kind) {
+		if sess != nil && sess.ContextBudget.Provider == string(kind) && sess.ContextBudget.Model == model.ModelCfg.Model {
+			return sess.ContextBudget.Tokens
+		}
+		return 0 // Missing native telemetry is not a fallback compaction policy.
+	}
+	if model != nil {
+		return config.FallbackCompactionLimit(int64(model.CatwalkCfg.ContextWindow), fallback)
+	}
+	return fallback
 }
 
 // subagentFooter resolves the child's model without changing the parent model.
@@ -162,10 +181,11 @@ func (m *UI) subagentFooter(width int) string {
 				}
 			}
 			limits = cliagent.Limits(p.Type, v.task.Model)
+			model.ModelCfg.Provider = p.ID
 			break
 		}
 	}
-	return renderFooterItems(m.com.Styles, m.footerItems(), &model, v.session, m.compactionLimit(), limits, width)
+	return renderFooterItems(m.com.Styles, m.footerItems(), &model, v.session, m.compactionLimit(&model, v.session), limits, width)
 }
 
 // renderComposerFooter renders the default stats.
@@ -212,18 +232,33 @@ func renderFooterItems(t *styles.Styles, items []string, model *workspace.AgentM
 			fields = append(fields, field)
 		}
 	}
-	if sess != nil && limit > 0 {
+	if sess != nil {
 		used := max(int64(0), sess.PromptTokens+sess.CompletionTokens)
 		prefix := ""
 		if sess.EstimatedUsage {
 			prefix = "~"
 		}
 		if show(footerTokens) {
-			fields = append(fields, s.Tokens.Render(fmt.Sprintf("%s%s/%s tokens", prefix, footerTokenCount(used), footerTokenCount(limit))))
+			text := prefix + footerTokenCount(used)
+			if limit > 0 {
+				limitPrefix := ""
+				if sess.ContextBudget.Estimated && sess.ContextBudget.Tokens == limit {
+					limitPrefix = "~"
+				}
+				text += "/" + limitPrefix + footerTokenCount(limit)
+			}
+			fields = append(fields, s.Tokens.Render(text+" tokens"))
 		}
 		if show(footerContext) {
-			left := max(0, min(100, 100-float64(used)*100/float64(limit)))
-			fields = append(fields, s.Context.Render(fmt.Sprintf("Context %s%.0f%% left", prefix, left)))
+			text := "Context unknown"
+			if limit > 0 {
+				if sess.ContextBudget.Estimated && sess.ContextBudget.Tokens == limit {
+					prefix = "~"
+				}
+				left := max(0, min(100, 100-float64(used)*100/float64(limit)))
+				text = fmt.Sprintf("Context %s%.0f%% left", prefix, left)
+			}
+			fields = append(fields, s.Context.Render(text))
 		}
 	}
 	for _, limit := range limits {

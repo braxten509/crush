@@ -20,6 +20,9 @@ import (
 // JSON-RPC over stdio with session/new|load, session/prompt, streamed
 // session/update notifications and session/request_permission requests.
 type acpUpdate struct {
+	Meta struct {
+		AutoCompactThreshold int64 `json:"autoCompactThreshold"`
+	} `json:"_meta"`
 	SessionUpdate string          `json:"sessionUpdate"`
 	Content       json.RawMessage `json:"content"`
 	ToolCallID    string          `json:"toolCallId"`
@@ -292,6 +295,11 @@ func acpFinish(name string, result json.RawMessage, emit func(Event) error) erro
 }
 
 func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) error) error {
+	if u.Meta.AutoCompactThreshold > 0 {
+		if err := emit(Event{Type: EventContextBudget, ContextLimit: u.Meta.AutoCompactThreshold}); err != nil {
+			return err
+		}
+	}
 	switch u.SessionUpdate {
 	case "agent_message_chunk":
 		if c := acpText(u.Content); c != "" {

@@ -369,6 +369,7 @@ type UI struct {
 
 	// Attachment list
 	attachments *attachments.Attachments
+	imagePress  *imagePress
 
 	readyPlaceholder   string
 	workingPlaceholder string
@@ -1353,6 +1354,8 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.copyChatHighlight())
 	case dialog.OpenLinkMsg:
 		cmds = append(cmds, openChatLink(msg.URL, m.com.Workspace.WorkingDir()))
+	case openImageMsg:
+		cmds = append(cmds, openAttachmentImage(msg.Attachment, m.com.Workspace.WorkingDir()))
 	case reviewLoadedMsg:
 		cmds = append(cmds, m.applyReview(msg))
 	case DelayedClickMsg:
@@ -1363,6 +1366,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.openReview(g))
 		}
 	case tea.MouseClickMsg:
+		m.imagePress = nil
 		// Pass mouse events to dialogs first if any are open.
 		if m.dialog.HasDialogs() {
 			if cmd := m.handleDialogMsg(msg); cmd != nil {
@@ -1396,6 +1400,10 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.activeInline == nil && msg.Button == uv.MouseLeft && len(m.attachments.List()) > 0 && msg.Y == m.layout.editor.Min.Y+editorAttachmentsRow {
 			relX := msg.X - m.layout.editor.Min.X
 			if m.attachments.HandleClick(relX) {
+				return m, tea.Batch(cmds...)
+			}
+			if attachment := m.attachments.Renderer().ImageAt(relX); attachment != nil {
+				m.imagePress = &imagePress{attachment: *attachment, at: image.Pt(msg.X, msg.Y)}
 				return m, tea.Batch(cmds...)
 			}
 		}
@@ -1432,6 +1440,9 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMotionMsg:
+		if m.imagePress != nil && image.Pt(msg.X, msg.Y) != m.imagePress.at {
+			m.imagePress.dragged = true
+		}
 		// Pass mouse events to dialogs first if any are open.
 		if m.dialog.HasDialogs() {
 			m.dialog.Update(msg)
@@ -1495,6 +1506,13 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseReleaseMsg:
+		if press := m.imagePress; press != nil {
+			m.imagePress = nil
+			if msg.Button == uv.MouseLeft && !press.dragged && image.Pt(msg.X, msg.Y) == press.at && m.activeInline == nil && !m.dialog.HasDialogs() {
+				cmds = append(cmds, func() tea.Msg { return openImageMsg{press.attachment} })
+			}
+			return m, tea.Batch(cmds...)
+		}
 		// Pass mouse events to dialogs first if any are open.
 		if m.dialog.HasDialogs() {
 			m.dialog.Update(msg)

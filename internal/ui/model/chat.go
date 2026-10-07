@@ -155,6 +155,7 @@ type Chat struct {
 	// Pending single click action (delayed to detect double-click)
 	pendingClickID int // Incremented on each click to invalidate old pending clicks
 	openLink       string
+	openImage      *message.Attachment
 	heldLinkClick  *DelayedClickMsg
 	linkDragged    bool
 
@@ -1465,6 +1466,21 @@ func (m *Chat) HandleDelayedClick(msg DelayedClickMsg) bool {
 	selectedItem := m.list.SelectedItem()
 	if selectedItem == nil {
 		return false
+	}
+	if item, ok := selectedItem.(interface {
+		ImageAt(int, int, int) *message.Attachment
+	}); ok {
+		if attachment := item.ImageAt(msg.X, msg.Y, m.list.Width()); attachment != nil {
+			if m.linkDragged {
+				return false
+			}
+			if m.mouseDown {
+				m.heldLinkClick = &msg
+			} else {
+				m.openImage = attachment
+			}
+			return true
+		}
 	}
 	if destination := m.itemLinkAt(selectedItem, msg.X, msg.Y); destination != "" {
 		if m.linkDragged {

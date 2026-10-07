@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 // cliPromptWithAttachments carries non-image binary files through native
@@ -505,6 +506,19 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		s.native = e.Session
 	case cliagent.EventUsage:
 		s.usage = e.Usage
+	case cliagent.EventContextBudget:
+		current, err := s.a.sessions.Get(s.ctx, s.sessionID)
+		if err != nil {
+			return err
+		}
+		budget := session.ContextBudget{Provider: string(s.m.Kind), Model: s.m.ID,
+			Tokens: e.ContextLimit, Estimated: e.ContextEstimated}
+		if current.ContextBudget == budget {
+			return nil
+		}
+		current.ContextBudget = budget
+		_, err = s.a.sessions.Save(s.ctx, current)
+		return err
 	case cliagent.EventUserMessage:
 		calls := s.takeSteered(e.Text)
 		if len(calls) == 0 {

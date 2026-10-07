@@ -54,11 +54,6 @@ import (
 
 const (
 	DefaultSessionName = "Untitled Session"
-
-	// Constants for auto-summarization thresholds
-	largeContextWindowThreshold = 200_000
-	largeContextWindowBuffer    = 20_000
-	smallContextWindowRatio     = 0.2
 )
 
 var userAgent = fmt.Sprintf("Charm-Crush/%s (https://charm.land/crush)", version.Version)
@@ -1561,26 +1556,16 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		},
 		StopWhen: []fantasy.StopCondition{
 			func(_ []fantasy.StepResult) bool {
-				cw := int64(largeModel.CatwalkCfg.ContextWindow)
-				// If context window is unknown (0), skip auto-summarize
-				// to avoid immediately truncating custom/local models.
-				if cw == 0 {
+				if isCLI && config.NativeCompaction(cliModel.Kind) {
 					return false
 				}
+				cw := int64(largeModel.CatwalkCfg.ContextWindow)
 				tokens := currentSession.CompletionTokens + currentSession.PromptTokens
-				remaining := cw - tokens
-				var threshold int64
-				if cw > largeContextWindowThreshold {
-					threshold = largeContextWindowBuffer
-				} else {
-					threshold = int64(float64(cw) * smallContextWindowRatio)
+				limit := config.DefaultAutoCompactTokenLimit
+				if a.cfg != nil {
+					limit = a.cfg.Config().Options.GetAutoCompactTokenLimit()
 				}
-				limitReached := false
-				// Codex applies the configured threshold during its native turn.
-				if a.cfg != nil && (!isCLI || cliModel.Kind != config.TypeCodexCLI) {
-					limitReached = tokens >= a.cfg.Config().Options.GetAutoCompactTokenLimit()
-				}
-				if (remaining <= threshold || limitReached) && !a.disableAutoSummarize {
+				if tokens >= config.FallbackCompactionLimit(cw, limit) && !a.disableAutoSummarize {
 					shouldSummarize = true
 					return true
 				}

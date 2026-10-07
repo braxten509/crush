@@ -294,7 +294,9 @@ func (c *choiceList) previewLines() []contentLine {
 // cut to the visible rows.
 func (c *choiceList) placePreview(area image.Rectangle, top int) {
 	c.placement = nil
-	if !c.preview.kitty || top < 0 {
+	c.previewBounds = image.Rectangle{}
+	c.previewPath = ""
+	if top < 0 {
 		return
 	}
 	i := c.previewChoice()
@@ -307,6 +309,15 @@ func (c *choiceList) placePreview(area image.Rectangle, top int) {
 		return
 	}
 	first := top + 1 - c.scrollOffset // the area's blank row comes first
+	// Block images can be clipped; Kitty images are shown only in full.
+	if !c.preview.kitty || first >= 0 && first+rows <= area.Dy() {
+		c.previewBounds = image.Rect(area.Min.X+previewIndent, area.Min.Y+first,
+			area.Min.X+previewIndent+cols, area.Min.Y+first+rows).Intersect(area)
+		c.previewPath = path
+	}
+	if !c.preview.kitty {
+		return
+	}
 	if first < 0 || first+rows > area.Dy() {
 		return
 	}

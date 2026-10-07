@@ -83,7 +83,8 @@ type codexParams struct {
 	Delta      string    `json:"delta"`
 	Command    string    `json:"command"`
 	TokenUsage *struct {
-		Last struct {
+		ModelContextWindow int64 `json:"modelContextWindow"`
+		Last               struct {
 			InputTokens       int64 `json:"inputTokens"`
 			CachedInputTokens int64 `json:"cachedInputTokens"`
 			OutputTokens      int64 `json:"outputTokens"`
@@ -151,7 +152,6 @@ func codexGuardTrust(result json.RawMessage) map[string]any {
 // that needs anything else starts a new one.
 type codexKey struct {
 	dir, model, tier, approval, sandbox string
-	autoCompactTokenLimit               int64
 }
 
 // codexLive is a Codex process kept open between the turns of one Crush
@@ -257,7 +257,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	} else if m.autoApproved(t.SessionID) {
 		approval, sandbox = "never", "danger-full-access"
 	}
-	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: approval, sandbox: sandbox, autoCompactTokenLimit: m.AutoCompactTokenLimit}
+	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: approval, sandbox: sandbox}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *codexLive
@@ -275,15 +275,26 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		// Crush hands every CLI the shared memory; Codex's own stays off.
 		var err error
 		args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0", "-c", codexGuardHook()}
-		if m.AutoCompactTokenLimit > 0 {
-			args = append(args, "-c", fmt.Sprintf("model_auto_compact_token_limit=%d", m.AutoCompactTokenLimit))
-		}
 		if p, err = startReviewProc(m.Dir, t.Env, !t.NoTools, "codex", args...); err != nil {
 			return err
 		}
 		lines = p.readLines()
 	}
 	t.Emit = p.reviewEvents(t.Emit)
+	var contextSettings codexContextSettings
+	catalogWindow, catalogLimit, effectivePercent := codexCatalogContext(m.ID)
+	var reportedWindow int64
+	contextRequested := false
+	reportContext := func() error {
+		if t.NoTools {
+			return nil
+		}
+		event := codexContextBudget(contextSettings, catalogWindow, catalogLimit, reportedWindow, effectivePercent)
+		if event.ContextLimit <= 0 {
+			return nil
+		}
+		return t.Emit(event)
+	}
 	compacting := false
 	lastActivity := time.Time{}
 	finished := false
@@ -444,6 +455,20 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		}
 
 		// Responses to our requests.
+		if msg.Method == "" && id == "crush-context-config" {
+			if msg.Error == nil {
+				var res struct {
+					Config codexContextSettings `json:"config"`
+				}
+				if json.Unmarshal(msg.Result, &res) == nil {
+					contextSettings = res.Config
+				}
+			}
+			if err := reportContext(); err != nil {
+				return err
+			}
+			continue
+		}
 		if msg.Method == "" && id == "ctrl-b-list" {
 			var res struct {
 				Data []struct {
@@ -550,6 +575,16 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			output[params.ItemID].WriteString(params.Delta)
 		case "thread/tokenUsage/updated":
 			if u := params.TokenUsage; u != nil {
+				if u.ModelContextWindow > 0 {
+					reportedWindow = u.ModelContextWindow
+					if !t.NoTools && !contextRequested {
+						contextRequested = true
+						_ = p.send(map[string]any{"id": "crush-context-config", "method": "config/read", "params": map[string]any{"cwd": m.Dir, "includeLayers": false}})
+					}
+				}
+				if err := reportContext(); err != nil {
+					return err
+				}
 				err = t.Emit(Event{Type: EventUsage, Usage: fantasy.Usage{
 					InputTokens:     u.Last.InputTokens - u.Last.CachedInputTokens,
 					OutputTokens:    u.Last.OutputTokens,

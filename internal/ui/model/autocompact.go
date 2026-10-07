@@ -26,7 +26,7 @@ func (m *UI) openAutocompactDialog() tea.Cmd {
 
 func (m *UI) setAutocompact(tokens int64) tea.Cmd {
 	if m.isAgentBusy() {
-		return util.ReportWarn("Agent is busy, please wait before saving Autocompact")
+		return util.ReportWarn("Agent is busy, please wait before saving fallback compaction")
 	}
 	cfg := m.com.Config()
 	if cfg == nil {
@@ -47,6 +47,6 @@ func (m *UI) saveAutocompactCmd(tokens int64) tea.Cmd {
 		if err := m.com.Workspace.UpdateAgentModel(context.Background()); err != nil {
 			return util.ReportError(err)()
 		}
-		return util.NewInfoMsg(fmt.Sprintf("Global Autocompact set to %d tokens", tokens))
+		return util.NewInfoMsg(fmt.Sprintf("Fallback compaction set to %d tokens", tokens))
 	}
 }

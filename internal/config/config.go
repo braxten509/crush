@@ -469,7 +469,7 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 }
 
 type Options struct {
-	AutoCompactTokenLimit   int64       `json:"auto_compact_token_limit,omitempty" jsonschema:"description=Global automatic compaction threshold in tokens; defaults to 400000,minimum=1000"`
+	AutoCompactTokenLimit   int64       `json:"auto_compact_token_limit,omitempty" jsonschema:"description=Fallback compaction threshold for models without native compaction; defaults to 400000,minimum=1000"`
 	ContextPaths            []string    `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
 	DisableInstructionFiles bool        `json:"disable_instruction_files,omitempty" jsonschema:"description=Use shared Crush instructions and memory instead of personal and project instruction files"`
 	GlobalContextPaths      []string    `json:"global_context_paths,omitempty" jsonschema:"description=Paths to files containing global context information for the AI,default=~/.config/crush/CRUSH.md,default=~/.config/AGENTS.md"`

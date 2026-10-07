@@ -2,7 +2,6 @@ package cliagent
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,11 +41,7 @@ cat >/dev/null
 `
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755))
 				t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-				limit := int64(400000)
-				if resume != "" {
-					limit = 240000
-				}
-				provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, tier, false, limit)
+				provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, tier, false)
 				model, err := provider.LanguageModel(t.Context(), "gpt-6-astra")
 				require.NoError(t, err)
 				require.NoError(t, model.(*Model).Run(t.Context(), Turn{
@@ -56,7 +51,7 @@ cat >/dev/null
 					t.Helper()
 					args, err := os.ReadFile(filepath.Join(dir, "args.txt"))
 					require.NoError(t, err)
-					require.Contains(t, string(args), fmt.Sprintf("model_auto_compact_token_limit=%d", limit))
+					require.NotContains(t, string(args), "model_auto_compact_token_limit=")
 					require.NotContains(t, string(args), "model_auto_compact_token_limit=160000")
 					require.NotContains(t, string(args), "model_context_window=")
 					require.Contains(t, string(args), codexGuardHook())

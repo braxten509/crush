@@ -462,7 +462,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "switch_session", "Sessions", "ctrl+s", ActionOpenDialog{SessionsID}),
 		NewCommandItem(c.com.Styles, "switch_model", "Switch Model", "ctrl+l", ActionOpenDialog{ModelsID}),
 		NewCommandItem(c.com.Styles, "usage", "Usage", "", ActionOpenDialog{UsageID}),
-		NewCommandItem(c.com.Styles, "autocompact", "Autocompact", "", ActionOpenDialog{AutocompactID}),
+		NewCommandItem(c.com.Styles, "autocompact", "Fallback compaction", "", ActionOpenDialog{AutocompactID}),
 	}
 
 	// Only show compact command if there's an active session

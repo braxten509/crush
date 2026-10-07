@@ -3,6 +3,7 @@ package dialog
 import (
 	"fmt"
 	"image"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -92,10 +93,12 @@ type choiceList struct {
 
 	// preview draws the choices' sketches; previewCols is the widest a
 	// sketch may be at the current width.
-	preview     *previewer
-	previewCols int
-	previewTop  int               // index of the sketch area's first row, or -1
-	placement   *PreviewPlacement // where the sketch sits after the last draw
+	preview       *previewer
+	previewCols   int
+	previewTop    int               // index of the sketch area's first row, or -1
+	placement     *PreviewPlacement // where the sketch sits after the last draw
+	previewBounds image.Rectangle
+	previewPath   string
 }
 
 // numberKeyIndex returns the zero-based choice index for a number
@@ -564,6 +567,16 @@ func (c *choiceList) drawContent(scr uv.Screen, area uv.Rectangle, fillInPrefix 
 	}
 
 	// Clamp cursor to visible area to prevent overflow.
+	for y := c.previewBounds.Min.Y; y < c.previewBounds.Max.Y; y++ {
+		for x := c.previewBounds.Min.X; x < c.previewBounds.Max.X; x++ {
+			cell := uv.EmptyCell
+			if existing := scr.CellAt(x, y); existing != nil {
+				cell = *existing
+			}
+			cell.Link.URL = (&url.URL{Scheme: "file", Path: c.previewPath}).String()
+			scr.SetCell(x, y, &cell)
+		}
+	}
 	if cur != nil {
 		if cur.Y < 0 {
 			cur.Y = 0

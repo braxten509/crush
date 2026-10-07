@@ -44,7 +44,6 @@ import (
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
-	"golang.org/x/sync/errgroup"
 
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/azure"
@@ -171,7 +170,7 @@ type coordinator struct {
 	activeSkills []*skills.Skill // Post-filter: active skills only.
 	skillTracker *skills.Tracker
 
-	readyWg errgroup.Group
+	readyWg readyGroup
 }
 
 // CoordinatorOptions holds the dependencies for NewCoordinator. Using a
@@ -394,7 +393,8 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	return result, err
 }
 
-func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
+func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (result *fantasy.AgentResult, err error) {
+	defer c.recoverTurn(ctx, sessionID, &err)
 	if err := c.readyWg.Wait(); err != nil {
 		return nil, err
 	}
@@ -1520,7 +1520,7 @@ func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model con
 	}
 
 	if config.IsCLIProviderType(providerCfg.Type) {
-		return cliagent.NewProvider(providerCfg.Type, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.permissions, c.history, model.ServiceTier, model.Ultracode, c.cfg.Config().Options.GetAutoCompactTokenLimit()), nil
+		return cliagent.NewProvider(providerCfg.Type, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.permissions, c.history, model.ServiceTier, model.Ultracode), nil
 	}
 
 	switch providerCfg.Type {

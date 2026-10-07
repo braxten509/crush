@@ -22,20 +22,22 @@ import (
 // API stream events wrapped in session events, plus control requests for
 // tool permissions. See `claude --help` (--input-format/--output-format).
 type claudeLine struct {
-	Type      string                 `json:"type"`
-	Subtype   string                 `json:"subtype"`
-	Status    string                 `json:"status"`
-	SessionID string                 `json:"session_id"`
-	Usage     *claudeUsage           `json:"usage"`
-	Event     *claudeEvent           `json:"event"`
-	Message   *claudeMessage         `json:"message"`
-	RequestID string                 `json:"request_id"`
-	Request   *claudeRequest         `json:"request"`
-	IsError   bool                   `json:"is_error"`
-	Result    string                 `json:"result"`
-	Errors    []string               `json:"errors"`
-	Origin    *struct{ Kind string } `json:"origin"`
-	IsReplay  bool                   `json:"isReplay"`
+	ClaudeCodeVersion string                 `json:"claude_code_version"`
+	Type              string                 `json:"type"`
+	Subtype           string                 `json:"subtype"`
+	Status            string                 `json:"status"`
+	SessionID         string                 `json:"session_id"`
+	Usage             *claudeUsage           `json:"usage"`
+	Event             *claudeEvent           `json:"event"`
+	Message           *claudeMessage         `json:"message"`
+	RequestID         string                 `json:"request_id"`
+	Response          json.RawMessage        `json:"response"`
+	Request           *claudeRequest         `json:"request"`
+	IsError           bool                   `json:"is_error"`
+	Result            string                 `json:"result"`
+	Errors            []string               `json:"errors"`
+	Origin            *struct{ Kind string } `json:"origin"`
+	IsReplay          bool                   `json:"isReplay"`
 	// Indexes into Message.Content, supplied by Claude Code for user-facing
 	// narration carried in thinking blocks. Unlisted blocks are reasoning.
 	NarrationBlockIndexes []int `json:"narration_block_indexes"`
@@ -421,6 +423,16 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 		return t.Emit(Event{Type: kind, Text: text})
 	}
 	recordUsage := claudeUsageRecorder(t.Emit)
+	lastContextRequest := time.Time{}
+	contextSupported := false
+	requestContext := func() {
+		if t.NoTools || !contextSupported || time.Since(lastContextRequest) < 30*time.Second {
+			return
+		}
+		lastContextRequest = time.Now()
+		_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-context",
+			"request": map[string]any{"subtype": "get_context_usage", "detail": "summary"}})
+	}
 	started := false
 	// Armed while waiting on steered messages after a result; Claude
 	// doesn't echo every message it's given, and an unconfirmed one must
@@ -472,6 +484,12 @@ read:
 			continue
 		}
 		switch line.Type {
+		case "control_response":
+			if event, ok := claudeContextBudget(line.Response); ok {
+				if err := t.Emit(event); err != nil {
+					return err
+				}
+			}
 		case "system":
 			if line.Subtype == "status" || line.Subtype == "compact_boundary" {
 				if err := t.Emit(Event{Type: EventCompacting, Compacting: line.Status == "compacting"}); err != nil {
@@ -487,6 +505,8 @@ read:
 			}
 			// Claude reports this again for each prompt a live process takes.
 			if line.Subtype == "init" && line.SessionID != "" {
+				contextSupported = line.ClaudeCodeVersion != ""
+				requestContext()
 				started = true
 				live.native = line.SessionID
 				if err := t.Emit(Event{Type: EventSession, Session: line.SessionID}); err != nil {
@@ -513,6 +533,7 @@ read:
 			}
 
 		case "assistant":
+			requestContext()
 			steerWait = nil
 			if err := recordUsage(line); err != nil {
 				return err

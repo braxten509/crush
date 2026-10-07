@@ -111,7 +111,11 @@ crush --session {session-id}
 crush --continue
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer recordCrashes()()
+		if code, guarded := runCrashGuarded(); guarded {
+			os.Exit(code)
+		}
+		crashFile, crashDone := recordCrashes()
+		defer crashDone()
 		sessionID, _ := cmd.Flags().GetString("session")
 		continueLast, _ := cmd.Flags().GetBool("continue")
 
@@ -149,7 +153,9 @@ crush --continue
 		defer showScrollMarker()
 		watchCtx, stopWatching := context.WithCancel(cmd.Context())
 		go ui.WatchTerminalBackground(watchCtx, model, program.Send)
+		restoreStderr := quietStderr(crashFile)
 		_, err = program.Run()
+		restoreStderr()
 		stopWatching()
 		showScrollMarker()
 		if err != nil {

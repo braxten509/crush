@@ -82,7 +82,7 @@ func (d *Autocompact) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	width := max(0, min(52, area.Dx()))
 	inner := max(0, width-t.Dialog.View.GetHorizontalFrameSize())
 	d.input.SetWidth(dialogInputTextWidth(t, d.input, inner))
-	title := common.DialogTitle(t, t.Dialog.TitleText.Render("Autocompact"), max(0, inner-t.Dialog.Title.GetHorizontalFrameSize()), t.Dialog.TitleGradFromColor, t.Dialog.TitleGradToColor)
+	title := common.DialogTitle(t, t.Dialog.TitleText.Render("Fallback compaction"), max(0, inner-t.Dialog.Title.GetHorizontalFrameSize()), t.Dialog.TitleGradFromColor, t.Dialog.TitleGradToColor)
 	parts := []string{t.Dialog.Title.Render(title), t.Dialog.InputPrompt.Render(d.input.View())}
 	if d.errorText != "" {
 		parts = append(parts, t.Dialog.TitleError.Width(inner).Render(d.errorText))

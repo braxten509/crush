@@ -52,8 +52,10 @@ func TestSubagentFooterUsesChildModelSettings(t *testing.T) {
 	u := newLoadTestUI(t, ws)
 	u.agentModel = workspace.AgentModel{CatwalkCfg: catwalk.Model{Name: "Parent model"}}
 	u.subagentView = &subagentView{
-		task:    agent.Task{CLI: "codex", Model: "child-model", Effort: "high", Fast: true},
-		session: &session.Session{PromptTokens: 68000},
+		task: agent.Task{CLI: "codex", Model: "child-model", Effort: "high", Fast: true},
+		session: &session.Session{PromptTokens: 68000, ContextBudget: session.ContextBudget{
+			Provider: string(config.TypeCodexCLI), Model: "child-model", Tokens: 400000,
+		}},
 	}
 	view := ansi.Strip(u.subagentFooter(120))
 	require.Equal(t, "GPT-6-Astra high fast · 68k/400k tokens · Context 83% left", view)

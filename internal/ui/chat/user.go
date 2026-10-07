@@ -234,6 +234,8 @@ func (m *UserMessageItem) renderAttachments(width int) string {
 	var attachments []message.Attachment
 	for _, at := range m.message.BinaryContent() {
 		attachments = append(attachments, message.Attachment{
+			FilePath: at.Path,
+			Content:  at.Data,
 			FileName: at.Path,
 			MimeType: at.MIMEType,
 		})
@@ -241,6 +243,19 @@ func (m *UserMessageItem) renderAttachments(width int) string {
 	// This message is already posted, so the attachment can't be removed;
 	// don't render the remove button.
 	return m.attachments.Render(attachments, false, false, width)
+}
+
+// ImageAt uses the same chip bounds as drawing. Attachments are the final
+// raw row, with the usual two-cell message prefix and band padding.
+func (m *UserMessageItem) ImageAt(x, y, width int) *message.Attachment {
+	raw := m.RawRender(width)
+	if len(m.message.BinaryContent()) == 0 || y != m.RawTop()+strings.Count(raw, "\n") {
+		return nil
+	}
+	// Renderers are shared across chat items; a cache hit above does not
+	// refresh their bounds. Rebuild this message's chips before hit-testing.
+	m.renderAttachments(cappedMessageWidth(width))
+	return m.attachments.ImageAt(x - 2)
 }
 
 // HandleKeyEvent implements KeyEventHandler.

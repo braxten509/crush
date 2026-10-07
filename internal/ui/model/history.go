@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
@@ -37,7 +38,13 @@ func (m *UI) loadPromptHistory() tea.Cmd {
 
 		texts := make([]string, 0, len(messages))
 		for _, msg := range messages {
-			if text := msg.Content().Text; text != "" {
+			// Skip prompts Crush wrote itself: hidden continuations and
+			// <crush-task-result> answers from sub-agents, questions and jobs.
+			content := msg.Content()
+			if content.Hidden || strings.HasPrefix(strings.TrimSpace(content.Text), "<"+agent.TaskNotificationTag+">") {
+				continue
+			}
+			if text := content.Text; text != "" {
 				texts = append(texts, text)
 			}
 			for _, sc := range msg.ShellCommands() {

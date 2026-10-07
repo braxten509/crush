@@ -7,6 +7,7 @@ on:
 
 jobs:
   check:
+    if: github.repository == 'charmbracelet/crush'
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}

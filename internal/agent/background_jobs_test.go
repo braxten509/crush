@@ -162,7 +162,8 @@ func TestBackgroundJobPersistsLateFileReview(t *testing.T) {
 	require.NoError(t, err)
 	h := c.tasks
 	h.dir = t.TempDir()
-	directory := t.TempDir()
+	directory, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "sleep 2; printf changed > output.txt", WorkingDir: directory}})
 	require.Empty(t, response.Error)
 	require.NotNil(t, response.Background)

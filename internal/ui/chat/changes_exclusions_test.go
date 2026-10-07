@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/filechange"
@@ -20,7 +22,9 @@ func TestReviewExcludesAgentAndApplicationFiles(t *testing.T) {
 		require.True(t, ignoredReviewPath("/home/reviewer/"+directory+"/settings.json", ""))
 		require.False(t, ignoredReviewPath(directory[1:]+"/main.go", "/workspace"))
 	}
-	for _, path := range []string{"/settings/app/config", "/app-data/agent-memory/note.md", "/app-state/prompter/prompt.md"} {
+	configuration, err := os.UserConfigDir()
+	require.NoError(t, err)
+	for _, path := range []string{filepath.Join(configuration, "app", "config"), "/app-data/agent-memory/note.md", "/app-state/prompter/prompt.md"} {
 		require.True(t, ignoredReviewPath(path, ""), path)
 	}
 	for _, path := range []string{"/workspace/.env", "/workspace/.gitignore", "/workspace/config/settings.json", "/home/reviewer/.local/bin/helper", "/app-data-source/main.go"} {

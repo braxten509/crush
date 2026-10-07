@@ -446,6 +446,9 @@ echo '{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}'
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	// Keep the attachment cache and fake CLI's state inside the test directory.
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
+	t.Setenv("HOME", dir)
+	cache, err := os.UserCacheDir()
+	require.NoError(t, err)
 	provider := cliagent.NewProvider(config.TypeGrokCLI, dir, dir, nil, nil, "", false)
 	model, err := provider.LanguageModel(t.Context(), "fixture")
 	require.NoError(t, err)
@@ -493,7 +496,7 @@ echo '{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}'
 				continue
 			}
 			sum := sha256.Sum256(attachment.Content)
-			path := filepath.Join(dir, "cache", "crush", "attachments", fmt.Sprintf("%x.png", sum[:16]))
+			path := filepath.Join(cache, "crush", "attachments", fmt.Sprintf("%x.png", sum[:16]))
 			position := strings.Index(prompt, path)
 			require.Greater(t, position, previous, "image paths retain their original order")
 			previous = position
@@ -522,6 +525,7 @@ echo '{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}'
 }
 
 func TestQueueBatchNativeBinaryAttachmentsKeepBytesAndOrder(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	files := []message.Attachment{{MimeType: "application/pdf", FileName: "one.pdf", Content: []byte{0, 1, 255}}, {MimeType: "application/octet-stream", FileName: "two.bin", Content: []byte{8, 9, 0}}}
 	text, err := cliPromptWithAttachments("read these", files)

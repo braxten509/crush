@@ -15,9 +15,12 @@ import (
 )
 
 // drawSelectForm draws a one-question form and returns its plain rows.
-func drawSelectForm(t *testing.T, f *QuestionForm) (uv.ScreenBuffer, []string) {
+func drawSelectForm(t *testing.T, f *QuestionForm, widths ...int) (uv.ScreenBuffer, []string) {
 	t.Helper()
-	const width = 80
+	width := 80
+	if len(widths) > 0 {
+		width = widths[0]
+	}
 	h := f.Height(width)
 	scr := uv.NewScreenBuffer(width, h)
 	f.Draw(scr, image.Rect(0, 0, width, h))
@@ -87,7 +90,6 @@ func TestQuestionFormDragSelectsText(t *testing.T) {
 	f.sel.clear()
 }
 
-
 // A press and release in place is still a normal click.
 func TestQuestionFormClickStillPicks(t *testing.T) {
 	t.Parallel()
@@ -114,7 +116,8 @@ func TestQuestionFormClickOpensLinks(t *testing.T) {
 		{"Image: " + file + " (5 screens).", "prototype.png", file},
 	} {
 		f := newSelectForm(tc.desc)
-		_, lines := drawSelectForm(t, f)
+		// This test exercises unwrapped links; macOS temp paths are long.
+		_, lines := drawSelectForm(t, f, max(80, len(tc.desc)+10))
 		x, y := rowOf(t, lines, tc.click)
 		require.True(t, f.HandleMouseDown(x+1, y))
 		handled, cmd := f.HandleMouseRelease(x+1, y)

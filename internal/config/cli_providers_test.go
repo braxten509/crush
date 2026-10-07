@@ -70,7 +70,7 @@ func TestListModels(t *testing.T) {
 
 func TestCodexImageCapabilities(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateModelCache(t)
 	script := `#!/bin/sh
 read -r line
 read -r line

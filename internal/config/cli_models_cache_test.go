@@ -17,7 +17,7 @@ import (
 )
 
 func TestConfiguredCLIProviderUsesDiscoveredModels(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateModelCache(t)
 	file := cliModelCachePath()
 	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o700))
 	cache := map[string][]catwalk.Model{
@@ -54,7 +54,7 @@ func TestConfiguredCLIProviderUsesDiscoveredModels(t *testing.T) {
 }
 
 func TestConcurrentCLIModelRefreshesPublishCompleteJSON(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateModelCache(t)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), nil, 0o700))
 	file := cliModelCachePath()
@@ -102,7 +102,7 @@ func TestConcurrentCLIModelRefreshesPublishCompleteJSON(t *testing.T) {
 }
 
 func TestCLIModelRefreshUsesSuppliedPATH(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateModelCache(t)
 	dir := t.TempDir()
 	script := `#!/bin/sh
 read -r line
@@ -118,4 +118,13 @@ echo '{"id":2,"result":{"data":[{"id":"selected-path-model"}]}}'
 	models := cachedModels(string(TypeCodexCLI))
 	require.Len(t, models, 1)
 	require.Equal(t, "selected-path-model", models[0].ID)
+}
+
+// isolateModelCache covers both XDG systems and macOS's HOME-based cache.
+func isolateModelCache(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
+	t.Setenv("LocalAppData", filepath.Join(dir, "cache"))
 }

@@ -65,11 +65,11 @@ func TestFileReviewCLIEndToEnd(t *testing.T) {
 read -r _; read -r _
 printf 'after\n' > changed.txt
 printf 'unrelated\n' > unreported.txt
-echo '{"type":"system","subtype":"init","session_id":"file-review-test"}'
-echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"edit","name":"Edit","input":{"file_path":"changed.txt","old_string":"before\n","new_string":"after\n"}}]}}'
-echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"edit","content":"Applied"}]}}'
-echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Finished fixture."}]}}'
-echo '{"type":"result","subtype":"success"}'
+printf '%s\n' '{"type":"system","subtype":"init","session_id":"file-review-test"}'
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"edit","name":"Edit","input":{"file_path":"changed.txt","old_string":"before\n","new_string":"after\n"}}]}}'
+printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"edit","content":"Applied"}]}}'
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"Finished fixture."}]}}'
+printf '%s\n' '{"type":"result","subtype":"success"}'
 `
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))

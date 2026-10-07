@@ -224,19 +224,6 @@ func noMinAge(t *testing.T) {
 	t.Cleanup(func() { backgroundMinAge = old })
 }
 
-func registerTestHub(t *testing.T) *taskHub {
-	h := &taskHub{dir: t.TempDir()}
-	hubsMu.Lock()
-	hubs = append(hubs, h)
-	hubsMu.Unlock()
-	t.Cleanup(func() {
-		hubsMu.Lock()
-		hubs = slices.DeleteFunc(hubs, func(x *taskHub) bool { return x == h })
-		hubsMu.Unlock()
-	})
-	return h
-}
-
 // startDetached starts a command in a session of its own under a stand-in
 // CLI, like Codex runs commands and hooks.
 func startDetached(t *testing.T, h *taskHub, session string) {

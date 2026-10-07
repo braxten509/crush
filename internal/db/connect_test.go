@@ -210,7 +210,8 @@ func TestConnect_ServerPathFailsWhenDataDirLocked(t *testing.T) {
 }
 
 func TestConnectEscapesDatabasePaths(t *testing.T) {
-	base := t.TempDir()
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 	for _, name := range []string{"chat#one", "chat#two", "chat?three"} {
 		dir := filepath.Join(base, name)
 		conn, err := Connect(t.Context(), dir)

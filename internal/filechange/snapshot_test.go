@@ -46,7 +46,8 @@ func TestExplicitFileChangesWithoutGit(t *testing.T) {
 		tracker.Track(name)
 	}
 	cmd := exec.CommandContext(t.Context(), "sh", "-c", `
-sed -i 's/before/after/' edit.txt
+sed 's/before/after/' edit.txt > edited.txt
+mv edited.txt edit.txt
 mv old.txt new.txt
 rm gone.txt empty.txt
 printf 'created\n' > created.txt
@@ -228,4 +229,41 @@ func TestOnlyExplicitFilesAreReviewed(t *testing.T) {
 	require.Len(t, review.Changes, 1)
 	require.Equal(t, filepath.Join(root, "named.txt"), review.Changes[0].Path)
 	require.Len(t, tracker.files, 1)
+}
+
+func TestDirectoryAliasesProduceOneReviewAndKeepSymlinkEdits(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires symlinks")
+	}
+	t.Parallel()
+	root := t.TempDir()
+	actual := filepath.Join(root, "actual")
+	alias := filepath.Join(root, "alias")
+	require.NoError(t, os.Mkdir(actual, 0o755))
+	require.NoError(t, os.Symlink(actual, alias))
+	tracker, err := New(t.Context(), alias)
+	require.NoError(t, err)
+	// Track before the parent directory even exists, then encounter the
+	// same file through its physical path (as a syscall observer does).
+	tracker.Track(filepath.Join(alias, "new", "file.txt"))
+	tracker.Track(filepath.Join(actual, "new", "file.txt"))
+	put(t, actual, "new/file.txt", "created")
+	review, err := tracker.Checkpoint(t.Context())
+	require.NoError(t, err)
+	require.Len(t, review.Changes, 1)
+	require.Equal(t, filepath.Join(actual, "new", "file.txt"), review.Changes[0].Path)
+	require.Nil(t, review.Changes[0].Before)
+	require.Equal(t, "created", review.Changes[0].After.Content)
+	require.True(t, tracker.Contains(filepath.Join(alias, "new", "file.txt")))
+	// Preserve the final symlink, including its own target-string changes.
+	link := filepath.Join(actual, "link")
+	require.NoError(t, os.Symlink("missing-one", link))
+	tracker.Track(filepath.Join(alias, "link"))
+	require.NoError(t, os.Remove(link))
+	require.NoError(t, os.Symlink("missing-two", link))
+	review, err = tracker.Checkpoint(t.Context())
+	require.NoError(t, err)
+	require.Len(t, review.Changes, 1)
+	require.Equal(t, "missing-one", review.Changes[0].Before.Content)
+	require.Equal(t, "missing-two", review.Changes[0].After.Content)
 }

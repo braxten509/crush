@@ -144,7 +144,7 @@ func (t *Tracker) Contains(path string) bool {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(t.root, path)
 	}
-	path = filepath.Clean(path)
+	path = canonicalParent(path)
 	return !t.excluded(path) && t.extra[path]
 }
 
@@ -157,7 +157,7 @@ func (t *Tracker) Track(path string) {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(t.root, path)
 	}
-	path = filepath.Clean(path)
+	path = canonicalParent(path)
 	// An explicitly edited file may be reached through a workspace symlink.
 	// Inventory its target as well, without following other directory links.
 	if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != path {
@@ -461,4 +461,22 @@ func sameEntryState(a, b State) bool {
 	a.RestoreData, b.RestoreData = "", ""
 	a.RestoreDigestOnly, b.RestoreDigestOnly = false, false
 	return a == b
+}
+
+// canonicalParent resolves directory aliases, including missing descendants,
+// without following the final component: a symlink itself can be edited.
+func canonicalParent(path string) string {
+	path = filepath.Clean(path)
+	parent, suffix := filepath.Dir(path), filepath.Base(path)
+	for {
+		if resolved, err := filepath.EvalSymlinks(parent); err == nil {
+			return filepath.Join(resolved, suffix)
+		}
+		next := filepath.Dir(parent)
+		if next == parent {
+			return path
+		}
+		suffix = filepath.Join(filepath.Base(parent), suffix)
+		parent = next
+	}
 }

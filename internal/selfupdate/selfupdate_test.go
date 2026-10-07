@@ -51,6 +51,8 @@ func forkFixture(t *testing.T, forkContent string) (checkout string) {
 	gitIn(t, checkout, "remote", "rename", "origin", "fork")
 	gitIn(t, checkout, "remote", "add", "origin", upstream)
 	gitIn(t, checkout, "branch", "-q", "--set-upstream-to=fork/main")
+	// Route the real upstream URL to this local release fixture.
+	gitIn(t, checkout, "config", "url."+upstream+".insteadOf", upstreamURL)
 	write(t, checkout, "app.txt", forkContent)
 	gitIn(t, checkout, "commit", "-qam", "fork change")
 	gitIn(t, checkout, "push", "-q", "fork", "main")
@@ -153,4 +155,24 @@ func TestCreateLogMakesItsFolder(t *testing.T) {
 	require.NoError(t, err, "the first update ever must not fail on a missing folder")
 	require.NoError(t, log.Close())
 	require.FileExists(t, LogPath())
+}
+
+func TestMergeWithOriginPointingToFork(t *testing.T) {
+	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
+	gitIn(t, checkout, "remote", "remove", "origin")
+	gitIn(t, checkout, "remote", "rename", "fork", "origin")
+	clashes, err := Merge(t.Context(), checkout, "v1.1.0")
+	require.NoError(t, err)
+	require.Empty(t, clashes)
+	require.Equal(t, "origin/main", gitIn(t, checkout, "rev-parse", "--abbrev-ref", "@{upstream}"))
+	require.FileExists(t, filepath.Join(checkout, "new.txt"))
+	// Publishing still goes to the fork, not to the release source.
+	gitIn(t, checkout, "push", "-q")
+	require.Equal(t, gitIn(t, checkout, "rev-parse", "HEAD"), gitIn(t, filepath.Join(filepath.Dir(checkout), "fork.git"), "rev-parse", "main"))
+	require.NotEqual(t, gitIn(t, checkout, "rev-parse", "HEAD"), gitIn(t, filepath.Join(filepath.Dir(checkout), "upstream"), "rev-parse", "main"))
+}
+
+func TestTestCommandWithoutSystemdOrGNUTimeout(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	require.Equal(t, []string{"go", "test", "./..."}, testCommand(t.TempDir()))
 }

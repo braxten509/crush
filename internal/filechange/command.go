@@ -42,6 +42,7 @@ func BeforeOpen(ctx context.Context, path string, flags int) {
 	if report == nil || flags&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC) == 0 {
 		return
 	}
+	path = canonicalParent(path)
 	report.mutex.Lock()
 	defer report.mutex.Unlock()
 	if report.done {

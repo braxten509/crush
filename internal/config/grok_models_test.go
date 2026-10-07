@@ -44,7 +44,7 @@ func TestGrokModelCapabilities(t *testing.T) {
 func TestGrokDiscoveryAndCacheKeepEffortControls(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateModelCache(t)
 	arguments := filepath.Join(dir, "arguments")
 	t.Setenv("GROK_TEST_ARGUMENTS", arguments)
 	write := func(output string) {

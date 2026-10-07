@@ -33,6 +33,7 @@ func (p *ProcessReview) moving(record *invocation, source, destination string) {
 	if record == nil || record.tracker == nil {
 		return
 	}
+	source, destination = canonicalParent(source), canonicalParent(destination)
 	entry, ok := record.tracker.files[source]
 	if !ok || !entry.info.Mode().IsRegular() {
 		return

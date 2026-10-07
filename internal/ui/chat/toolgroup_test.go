@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -182,7 +184,11 @@ func TestIgnoredReviewPaths(t *testing.T) {
 	t.Setenv("TMPDIR", "/scratch/runtime")
 	t.Setenv("XDG_CACHE_HOME", "/custom/cache")
 	t.Setenv("XDG_CONFIG_HOME", "/custom/config")
-	for _, path := range []string{"/tmp/a", "/var/tmp/a", "/workspace/tmp/main.go", "/dev/shm/a", "/scratch/runtime/a", "/custom/cache/a", ".cache/a", "/work/.cache/a", "/custom/config/go/telemetry/local/count", "/custom/config/app/settings.json"} {
+	cache, err := os.UserCacheDir()
+	require.NoError(t, err)
+	configuration, err := os.UserConfigDir()
+	require.NoError(t, err)
+	for _, path := range []string{"/tmp/a", "/var/tmp/a", "/workspace/tmp/main.go", "/dev/shm/a", "/scratch/runtime/a", filepath.Join(cache, "a"), ".cache/a", "/work/.cache/a", filepath.Join(configuration, "go", "telemetry", "local", "count"), filepath.Join(configuration, "app", "settings.json")} {
 		require.True(t, ignoredReviewPath(path, ""), path)
 	}
 	for _, path := range []string{"/tmp-source/main.go", "/workspace/cache.go", "/custom/cache-source/main.go", "/custom/config-source/main.go", "/home/user/Desktop/hello.txt"} {

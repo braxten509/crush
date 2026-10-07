@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -133,6 +134,9 @@ func types(events []Event) []EventType {
 }
 
 func TestCodexNestedShellReview(t *testing.T) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skip("requires the Linux amd64 syscall observer; other platforms do not trace arbitrary shell writes")
+	}
 	outside := t.TempDir()
 	command := fmt.Sprintf("python3 - <<'PY'\nfrom pathlib import Path\nPath(%q).write_text('hello\\n')\nPY", filepath.Join(outside, "hello.txt"))
 	commandJSON, err := json.Marshal(command)

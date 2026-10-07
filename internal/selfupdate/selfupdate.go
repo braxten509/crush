@@ -24,6 +24,8 @@ import (
 
 const module = "module github.com/charmbracelet/crush"
 
+const upstreamURL = "https://github.com/charmbracelet/crush.git"
+
 // ErrDirty means the checkout has unsaved changes, which an update must
 // never touch.
 var ErrDirty = errors.New("the Crush checkout has uncommitted changes")
@@ -117,7 +119,7 @@ func Merge(ctx context.Context, dir, tag string) (clashes []string, err error) {
 	if _, err := git(ctx, dir, "pull", "--ff-only", "--quiet"); err != nil {
 		return nil, fmt.Errorf("cannot update the checkout from GitHub: %w", err)
 	}
-	if _, err := git(ctx, dir, "fetch", "--quiet", "--no-tags", "origin", "tag", tag); err != nil {
+	if _, err := git(ctx, dir, "fetch", "--quiet", "--no-tags", upstreamURL, "tag", tag); err != nil {
 		return nil, fmt.Errorf("cannot download %s: %w", tag, err)
 	}
 	if _, err := git(ctx, dir, "merge-base", "--is-ancestor", tag, "HEAD"); err == nil {
@@ -186,7 +188,9 @@ func Build(ctx context.Context, dir, tag string, log io.Writer) error {
 		return fmt.Errorf("the build failed: %w", err)
 	}
 	fmt.Fprintln(log, "Running the tests…")
-	if err := run(ctx, dir, log, testCommand(dir)...); err != nil {
+	testCtx, cancel := context.WithTimeout(ctx, 25*time.Minute)
+	defer cancel()
+	if err := run(testCtx, dir, log, testCommand(dir)...); err != nil {
 		return fmt.Errorf("tests failed: %w", err)
 	}
 	return saveState(state{Tag: tag, Version: ver, Head: head, Binary: binary, BuiltAt: time.Now()})
@@ -196,11 +200,11 @@ func Build(ctx context.Context, dir, tag string, log io.Writer) error {
 // Crush's file watcher refuses nested watchers, so tests that start one fail
 // inside a command Crush is watching.
 func testCommand(dir string) []string {
-	test := []string{"timeout", "1500", "go", "test", "./..."}
+	test := []string{"go", "test", "./..."}
 	if _, err := exec.LookPath("systemd-run"); err != nil {
 		return test
 	}
-	cmd := []string{"systemd-run", "--user", "--wait", "--pipe", "--collect", "--quiet", "-p", "WorkingDirectory=" + dir}
+	cmd := []string{"systemd-run", "--user", "--wait", "--pipe", "--collect", "--quiet", "-p", "RuntimeMaxSec=1500", "-p", "WorkingDirectory=" + dir}
 	for _, name := range []string{"PATH", "HOME", "GOPATH", "GOCACHE", "GOMODCACHE", "GOFLAGS"} {
 		if value, ok := os.LookupEnv(name); ok {
 			cmd = append(cmd, "-E", name+"="+value)

@@ -148,6 +148,7 @@ func (p *ProcessReview) before(record *invocation, path string) {
 	if record == nil || path == "" || !filepath.IsAbs(path) || strings.HasSuffix(path, " (deleted)") {
 		return
 	}
+	path = canonicalParent(path)
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	if call := record.call(); call != nil && call.ended {

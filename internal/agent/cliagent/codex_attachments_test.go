@@ -55,7 +55,9 @@ cat >/dev/null
 			require.Len(t, request.Params.Input, 3)
 			text := request.Params.Input[0]["text"].(string)
 			require.Equal(t, "What is in these images?", withoutImagePaths(text))
-			require.Contains(t, text, filepath.Join(os.Getenv("XDG_CACHE_HOME"), "crush", "attachments"))
+			cache, err := os.UserCacheDir()
+			require.NoError(t, err)
+			require.Contains(t, text, filepath.Join(cache, "crush", "attachments"))
 			for _, part := range request.Params.Input[1:] {
 				require.Equal(t, "image", part["type"])
 				require.Equal(t, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png), part["url"])

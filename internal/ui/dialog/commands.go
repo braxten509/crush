@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/cpuaffinity"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -610,6 +611,15 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		mouseLabel = "Enable Mouse"
 	}
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_mouse", mouseLabel, "", ActionToggleMouseSupport{}))
+
+	// Keep AI work on part of the CPU so the desktop stays smooth.
+	if cpuaffinity.Supported() {
+		cpuLabel := "Run AI Work on CPU Half 2"
+		if cfg != nil && cfg.Options != nil && cfg.Options.AgentCPUsEnabled {
+			cpuLabel = "Let AI Work Use Whole CPU"
+		}
+		commands = append(commands, NewCommandItem(c.com.Styles, "toggle_agent_cpus", cpuLabel, "", ActionToggleAgentCPUs{}).WithAliases("cpu", "cores", "stutter"))
+	}
 
 	commands = append(
 		commands,

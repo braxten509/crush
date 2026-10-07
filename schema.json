@@ -513,7 +513,7 @@
         "auto_compact_token_limit": {
           "type": "integer",
           "minimum": 1000,
-          "description": "Global automatic compaction threshold in tokens; defaults to 400000"
+          "description": "Fallback compaction threshold for models without native compaction; defaults to 400000"
         },
         "context_paths": {
           "items": {
@@ -660,6 +660,18 @@
             120,
             300,
             0
+          ]
+        },
+        "agent_cpus_enabled": {
+          "type": "boolean",
+          "description": "Run Crush and everything it starts (agents, sub-agents, background jobs, dev servers) on only some CPUs so the rest stay free for the desktop. Linux only",
+          "default": false
+        },
+        "agent_cpus": {
+          "type": "string",
+          "description": "CPU list used by agent_cpus_enabled. Empty picks the last group of CPUs sharing a cache (or the upper half of the cores)",
+          "examples": [
+            "6-11,18-23"
           ]
         }
       },
@@ -941,6 +953,12 @@
           ],
           "description": "Exit banner style after quitting Crush",
           "default": "default"
+        },
+        "composer_footer": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "composer_focus_only": {
           "type": "boolean",

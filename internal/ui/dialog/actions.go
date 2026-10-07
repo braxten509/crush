@@ -67,6 +67,7 @@ type (
 	ActionCheckCLIUpdates             struct{}
 	ActionSelfUpdate                  struct{}
 	ActionToggleMouseSupport          struct{}
+	ActionToggleAgentCPUs             struct{}
 	ActionSwitchTheme                 struct {
 		Theme string
 	}

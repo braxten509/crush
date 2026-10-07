@@ -37,6 +37,7 @@ import (
 	"github.com/charmbracelet/crush/internal/clipboard"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/cpuaffinity"
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
@@ -2445,6 +2446,27 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionCustomizeComposer:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openComposerFooterForm()
+	case dialog.ActionToggleAgentCPUs:
+		cfg := m.com.Config()
+		newValue := cfg == nil || cfg.Options == nil || !cfg.Options.AgentCPUsEnabled
+		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.agent_cpus_enabled", newValue); err != nil {
+			cmds = append(cmds, util.ReportError(err))
+		} else if newValue {
+			cpus := ""
+			if cfg != nil && cfg.Options != nil {
+				cpus = cfg.Options.AgentCPUs
+			}
+			if list, err := cpuaffinity.Apply(cpus); err != nil {
+				cmds = append(cmds, util.ReportError(err))
+			} else {
+				cmds = append(cmds, util.ReportInfo("AI work now runs on CPUs "+list))
+			}
+		} else if err := cpuaffinity.Reset(); err != nil {
+			cmds = append(cmds, util.ReportError(err))
+		} else {
+			cmds = append(cmds, util.ReportInfo("AI work can use the whole CPU again"))
+		}
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleComposerFocusOnly:
 		newValue := !m.composerFocusOnly()
 		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.composer_focus_only", newValue); err != nil {

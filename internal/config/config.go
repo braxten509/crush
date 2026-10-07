@@ -494,6 +494,10 @@ type Options struct {
 	Notifications             string       `json:"notifications,omitempty" jsonschema:"description=Notification style to use. Options: auto (default)\\, native\\, osc\\, bell\\, disabled. Auto selects based on environment: native for local sessions\\, osc for SSH (with automatic OSC 99/777 detection).,enum=auto,enum=native,enum=osc,enum=bell,enum=disabled,default=auto"`
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=crush-config"`
 	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity\\, so slow but active streams are never killed. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
+	// AgentCPUsEnabled keeps Crush and everything it starts on AgentCPUs so
+	// the other CPUs stay free for the desktop. See the cpuaffinity package.
+	AgentCPUsEnabled bool   `json:"agent_cpus_enabled,omitempty" jsonschema:"description=Run Crush and everything it starts (agents\\, sub-agents\\, background jobs\\, dev servers) on only some CPUs so the rest stay free for the desktop. Linux only,default=false"`
+	AgentCPUs        string `json:"agent_cpus,omitempty" jsonschema:"description=CPU list used by agent_cpus_enabled. Empty picks the last group of CPUs sharing a cache (or the upper half of the cores),example=6-11\\,18-23"`
 }
 
 // DefaultRequestTimeout bounds each LLM API request when the user has not

@@ -524,8 +524,13 @@ func TestLongSessionLoadKeepsUIThreadShort(t *testing.T) {
 	t.Logf("new: dispatch %v, background load %v, UI-thread apply + first frame %v", dispatch, background, apply)
 	t.Logf("new: warm-up %d steps, slowest step + frame %v, first scroll after warm-up %v", steps, slowest, firstScroll)
 
-	require.Less(t, dispatch, 20*time.Millisecond)
-	require.Less(t, apply, 250*time.Millisecond)
-	require.Less(t, slowest, 100*time.Millisecond)
-	require.Less(t, apply, syncPath/2, "the UI thread must do much less than before")
+	// Race instrumentation changes rendering costs substantially. Keep the
+	// concurrency and completion checks above in both runs, and measure the
+	// production latency budget only in an uninstrumented build.
+	if !raceEnabled {
+		require.Less(t, dispatch, 20*time.Millisecond)
+		require.Less(t, apply, 250*time.Millisecond)
+		require.Less(t, slowest, 100*time.Millisecond)
+		require.Less(t, apply, syncPath/2, "the UI thread must do much less than before")
+	}
 }

@@ -202,18 +202,31 @@ open('done', 'w').write('ok')"`
 // without the keeper its filtered calls would fail with ENOSYS.
 func TestLeftoverProcessWritesAfterWatcherExits(t *testing.T) {
 	if root := os.Getenv("CRUSH_KEEPER_TEST_ROOT"); root != "" {
-		cmd := exec.Command("/bin/sh", "-c", "(sleep 1; mkdir made; echo written > made/file; mv made/file made/moved) >/dev/null 2>&1 &")
+		output, err := os.Create(filepath.Join(root, "leftover.log"))
+		require.NoError(t, err)
+		defer output.Close()
+		// The parent releases the shell only after this watcher process exits.
+		// A fixed sleep can finish too early, especially in a race build.
+		cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", "(while [ ! -e proceed ]; do sleep 0.01; done; mkdir made && echo written > made/file && mv made/file made/moved) &")
 		cmd.Dir = root
+		cmd.Stdout, cmd.Stderr = output, output
 		monitor, err := StartProcess(cmd, root)
 		require.NoError(t, err)
 		require.NoError(t, monitor.Wait(cmd))
-		return // the test process exits while the background shell sleeps
+		return // the test process exits while the background shell waits
 	}
 	root := t.TempDir()
-	child := exec.Command(os.Args[0], "-test.run=^TestLeftoverProcessWritesAfterWatcherExits$", "-test.count=1")
+	t.Cleanup(func() {
+		if t.Failed() {
+			output, _ := os.ReadFile(filepath.Join(root, "leftover.log"))
+			t.Logf("Leftover shell output: %s", output)
+		}
+	})
+	child := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestLeftoverProcessWritesAfterWatcherExits$", "-test.count=1")
 	child.Env = append(os.Environ(), "CRUSH_KEEPER_TEST_ROOT="+root)
 	output, err := child.CombinedOutput()
 	require.NoError(t, err, string(output))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "proceed"), nil, 0o600))
 	require.Eventually(t, func() bool {
 		data, err := os.ReadFile(filepath.Join(root, "made", "moved"))
 		return err == nil && string(data) == "written\n"

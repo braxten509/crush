@@ -50,6 +50,10 @@ CI builds and tests the fork on macOS and Linux. The fork skips upstream-only
 release, snapshot, nightly and generated-file publishing jobs, which depend on
 Charm's credentials or private runners.
 
+The Linux file watcher keeps syscall replies in its surviving helper, so a
+background command can continue even if Crush exits midway through a review.
+CI repeatedly exercises watcher shutdown in addition to the full test suite.
+
 The Linux amd64 syscall tracer is still required for reviewing arbitrary writes
 made by external shell processes. The test for that feature is explicitly
 skipped on other platforms; this does not add equivalent macOS tracing.

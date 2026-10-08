@@ -29,7 +29,9 @@ func startObservedProcess(cmd *exec.Cmd, review *ProcessReview) error {
 	if cmd.Err != nil {
 		return cmd.Start()
 	}
-	startKeeper()
+	if !startKeeper() {
+		return cmd.Start()
+	}
 	address := goSyscallAddress()
 	type outcome struct {
 		filtered bool
@@ -43,8 +45,13 @@ func startObservedProcess(cmd *exec.Cmd, review *ProcessReview) error {
 			result <- outcome{}
 			return
 		}
-		handOffToKeeper(listener)
-		watch := &watcher{listener: listener, review: review, crush: os.Getpid(), processes: map[int]process{}}
+		relay, err := handOffToKeeper(listener)
+		unix.Close(listener)
+		if err != nil {
+			result <- outcome{filtered: true, err: fmt.Errorf("cannot hand off file watcher: %w", err)}
+			return
+		}
+		watch := &watcher{relay: relay, review: review, crush: os.Getpid(), processes: map[int]process{}}
 		if review.observeRoot {
 			watch.rootRecord = review.executed(nil, cmd.Args)
 		}
@@ -262,7 +269,7 @@ type process struct {
 
 // watcher answers one filter's paused calls. Only its goroutine touches it.
 type watcher struct {
-	listener   int
+	relay      int
 	review     *ProcessReview
 	crush      int
 	root       int
@@ -273,7 +280,7 @@ type watcher struct {
 }
 
 func (w *watcher) serve() {
-	defer unix.Close(w.listener)
+	defer unix.Close(w.relay)
 	defer func() {
 		for id := range w.threads {
 			w.dropThread(id)
@@ -281,15 +288,13 @@ func (w *watcher) serve() {
 	}()
 	var notification seccompNotification
 	for {
-		received, done := receive(w.listener, &notification)
-		if done {
+		if !readPacket(w.relay, notificationBytes(&notification)) {
 			return
 		}
-		if !received {
-			continue
-		}
 		w.handle(&notification)
-		continueCall(w.listener, notification.ID)
+		if err := unix.Send(w.relay, []byte{1}, unix.MSG_NOSIGNAL); err != nil {
+			return
+		}
 	}
 }
 
@@ -496,10 +501,10 @@ func mutationPaths(t tracee, number uint64, args [6]uint64) []string {
 	return nil
 }
 
-// The keeper is a small copy of Crush that holds every filter's listener. If
-// Crush quits or crashes, programs a command left running (build daemons, dev
-// servers) would otherwise get ENOSYS from every filtered call; the keeper
-// lets their calls run until none is left.
+// The keeper owns every filter's listener and waits for Crush to review each
+// notification before replying. If Crush exits mid-review, the keeper still
+// owns that notification and can release the paused call. Merely sharing the
+// listener loses notifications already received by a watcher that exits.
 const keeperArgument = "__crush-file-watch-keeper"
 
 var (
@@ -514,7 +519,7 @@ func init() {
 	}
 }
 
-func startKeeper() {
+func startKeeper() bool {
 	keeperOnce.Do(func() {
 		pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 		if err != nil {
@@ -533,69 +538,98 @@ func startKeeper() {
 		go func() { _ = cmd.Wait() }()
 		keeperSocket = pair[0]
 	})
+	return keeperSocket >= 0
 }
 
-func handOffToKeeper(listener int) {
-	if keeperSocket >= 0 {
-		_ = unix.Sendmsg(keeperSocket, []byte{0}, unix.UnixRights(listener), nil, 0)
+// handOffToKeeper gives the keeper both the listener and one end of a private
+// relay. The watcher retains the other end to review notifications and reply.
+func handOffToKeeper(listener int) (int, error) {
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return -1, err
+	}
+	defer unix.Close(pair[1])
+	if err := unix.Sendmsg(keeperSocket, []byte{0}, unix.UnixRights(listener, pair[1]), nil, unix.MSG_NOSIGNAL); err != nil {
+		unix.Close(pair[0])
+		return -1, err
+	}
+	return pair[0], nil
+}
+
+// Both processes run the same binary and architecture, so the relay uses the
+// kernel notification's native layout without a second encoding.
+func notificationBytes(notification *seccompNotification) []byte {
+	return unsafe.Slice((*byte)(unsafe.Pointer(notification)), int(unsafe.Sizeof(*notification)))
+}
+
+func readPacket(socket int, packet []byte) bool {
+	for {
+		n, err := unix.Read(socket, packet)
+		if err == unix.EINTR {
+			continue
+		}
+		return err == nil && n == len(packet)
 	}
 }
 
-// keep holds listeners while Crush runs, and answers them once it is gone.
+// keep receives filters until Crush exits, then waits for their descendants.
 func keep(socket int) {
-	crushRunning := true
-	var listeners []int
-	for crushRunning || len(listeners) > 0 {
-		descriptors := []unix.PollFd{}
-		if crushRunning {
-			descriptors = append(descriptors, unix.PollFd{Fd: int32(socket), Events: unix.POLLIN})
+	var active sync.WaitGroup
+	defer active.Wait()
+	defer unix.Close(socket)
+	for {
+		message, control := make([]byte, 1), make([]byte, unix.CmsgSpace(8))
+		n, controlLength, _, _, err := unix.Recvmsg(socket, message, control, unix.MSG_CMSG_CLOEXEC)
+		if err == unix.EINTR {
+			continue
 		}
-		for _, listener := range listeners {
-			events := int16(0) // only hang-ups while Crush answers
-			if !crushRunning {
-				events = unix.POLLIN
-			}
-			descriptors = append(descriptors, unix.PollFd{Fd: int32(listener), Events: events})
-		}
-		if _, err := unix.Poll(descriptors, -1); err != nil {
-			if err == unix.EINTR {
-				continue
-			}
+		if err != nil || (n == 0 && controlLength == 0) {
 			return
 		}
-		var added []int
-		if crushRunning {
-			if descriptors[0].Revents != 0 {
-				message, control := make([]byte, 1), make([]byte, unix.CmsgSpace(4*8))
-				n, controlLength, _, _, err := unix.Recvmsg(socket, message, control, 0)
-				if err != nil || (n == 0 && controlLength == 0) {
-					crushRunning = false
-					unix.Close(socket)
-				} else if messages, err := unix.ParseSocketControlMessage(control[:controlLength]); err == nil {
-					for _, m := range messages {
-						if fds, err := unix.ParseUnixRights(&m); err == nil {
-							added = append(added, fds...)
-						}
-					}
-				}
-			}
-			descriptors = descriptors[1:]
+		messages, err := unix.ParseSocketControlMessage(control[:controlLength])
+		if err != nil {
+			continue
 		}
-		var open []int
-		for index, listener := range listeners {
-			revents := descriptors[index].Revents
-			if revents&unix.POLLIN != 0 && !crushRunning {
-				var notification seccompNotification
-				if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(listener), unix.SECCOMP_IOCTL_NOTIF_RECV, uintptr(unsafe.Pointer(&notification))); errno == 0 {
-					continueCall(listener, notification.ID)
-				}
-			}
-			if revents&(unix.POLLHUP|unix.POLLERR|unix.POLLNVAL) != 0 && revents&unix.POLLIN == 0 {
-				unix.Close(listener)
+		for _, message := range messages {
+			fds, err := unix.ParseUnixRights(&message)
+			if err != nil {
 				continue
 			}
-			open = append(open, listener)
+			if len(fds) != 2 {
+				for _, fd := range fds {
+					unix.Close(fd)
+				}
+				continue
+			}
+			active.Go(func() { keepListener(fds[0], fds[1]) })
 		}
-		listeners = append(open, added...)
+	}
+}
+
+func keepListener(listener, relay int) {
+	defer unix.Close(listener)
+	defer func() {
+		if relay >= 0 {
+			unix.Close(relay)
+		}
+	}()
+	var notification seccompNotification
+	for {
+		received, done := receive(listener, &notification)
+		if done {
+			return
+		}
+		if !received {
+			continue
+		}
+		if relay >= 0 {
+			err := unix.Send(relay, notificationBytes(&notification), unix.MSG_NOSIGNAL)
+			if err != nil || !readPacket(relay, make([]byte, 1)) {
+				unix.Close(relay)
+				relay = -1
+			}
+		}
+		// A missing reply means Crush exited; the call must still be released.
+		continueCall(listener, notification.ID)
 	}
 }

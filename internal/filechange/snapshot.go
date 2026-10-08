@@ -63,6 +63,7 @@ type Change struct {
 // A non-nil review also records coverage when no files changed, preventing
 // legacy edit metadata from inventing a diff for an unsuccessful/no-op edit.
 type Review struct {
+	Deletions bool           `json:"deletions,omitempty"`
 	Root      string         `json:"root"`
 	Changes   []Change       `json:"changes,omitempty"`
 	ID        string         `json:"id,omitempty"`
@@ -73,6 +74,7 @@ type Review struct {
 // ReviewSummary is small enough to keep in a transcript. File contents and
 // the complete file list are fetched only when the review is opened.
 type ReviewSummary struct {
+	Deletions bool     `json:"deletions,omitempty"`
 	Files     int      `json:"files"`
 	Paths     []string `json:"paths,omitempty"`
 	Copied    int      `json:"copied,omitempty"`
@@ -99,8 +101,10 @@ type entry struct {
 
 type Tracker struct {
 	root             string
+	repository       string
 	exclude          []string
 	files            map[string]entry
+	textBytes        int
 	restoreRemaining int
 	extra            map[string]bool
 	order            int64
@@ -120,7 +124,7 @@ func New(ctx context.Context, root string, exclude ...string) (*Tracker, error) 
 	if err != nil {
 		return nil, err
 	}
-	t := &Tracker{root: root, files: map[string]entry{}, extra: map[string]bool{}, restoreRemaining: MaxRestoreTotal}
+	t := &Tracker{root: root, repository: RepositoryRoot(root), files: map[string]entry{}, extra: map[string]bool{}, restoreRemaining: MaxRestoreTotal}
 	for _, path := range exclude {
 		if path == "" {
 			continue
@@ -173,11 +177,8 @@ func (t *Tracker) Track(path string) {
 		}
 		// An explicit later edit needs the copied/generated baseline now.
 		if info, err := os.Lstat(path); err == nil && info.Mode().IsRegular() {
-			budget := maxTextTotal
-			for _, value := range t.files {
-				budget -= len(value.state.Content)
-			}
-			t.files[path] = t.readEntry(path, info, &budget)
+			budget := maxTextTotal - t.textBytes + len(previous.state.Content)
+			t.setEntry(path, t.readEntry(path, info, &budget))
 		}
 		return
 	}
@@ -195,11 +196,14 @@ func (t *Tracker) Track(path string) {
 	if err != nil {
 		return
 	}
-	budget := maxTextTotal
-	for _, e := range t.files {
-		budget -= len(e.state.Content)
-	}
-	t.files[path] = t.readEntry(path, info, &budget)
+	budget := maxTextTotal - t.textBytes
+	t.setEntry(path, t.readEntry(path, info, &budget))
+}
+
+// Keep budget accounting constant-time as a command touches more files.
+func (t *Tracker) setEntry(path string, value entry) {
+	t.textBytes += len(value.state.Content) - len(t.files[path].state.Content)
+	t.files[path] = value
 }
 
 // Checkpoint advances the baseline only after a completed scan. Previously
@@ -226,6 +230,10 @@ func (t *Tracker) Checkpoint(ctx context.Context) (*Review, error) {
 		}
 		before, had := t.files[path]
 		after, has := next[path]
+		if had && !has {
+			review.Deletions = true
+			continue
+		}
 		if had && has && sameEntryState(before.state, after.state) {
 			continue
 		}
@@ -252,8 +260,10 @@ func (t *Tracker) Checkpoint(ctx context.Context) (*Review, error) {
 		}
 	}
 	t.files = next
+	t.textBytes = 0
 	t.restoreRemaining = MaxRestoreTotal
 	for _, value := range next {
+		t.textBytes += len(value.state.Content)
 		if value.restore != nil {
 			t.restoreRemaining -= int(value.state.Size)
 		}
@@ -264,12 +274,9 @@ func (t *Tracker) Checkpoint(ctx context.Context) (*Review, error) {
 
 func (t *Tracker) scan(ctx context.Context) (map[string]entry, error) {
 	next := make(map[string]entry, len(t.files))
-	budget := maxTextTotal
 	// Reserve already captured text first so traversal order cannot evict the
 	// before image of an unchanged file when a new file consumes the budget.
-	for _, previous := range t.files {
-		budget -= len(previous.state.Content)
-	}
+	budget := maxTextTotal - t.textBytes
 	visit := func(path string, info fs.FileInfo) {
 		previous, known := t.files[path]
 		if !known && (t.imported || generatedArtifact(path)) {
@@ -327,6 +334,9 @@ func (t *Tracker) readEntry(path string, info fs.FileInfo, budget *int) entry {
 }
 
 func (t *Tracker) excluded(path string) bool {
+	if t.repository == "" || !within(path, t.repository) {
+		return true
+	}
 	if secureentry.Sensitive(path) {
 		return true
 	}
@@ -363,6 +373,15 @@ func readReviewEntry(path string, info fs.FileInfo, budget *int, restoreBudget .
 		remaining = *restoreBudget[0]
 	}
 	e := entry{info: info, changeTime: changeTime(info), state: State{Size: info.Size(), Mode: uint32(info.Mode())}}
+	// Hidden paths still carry metadata for mutation and move attribution, but
+	// their contents will never be displayed or restored. Do not read and hash
+	// every dependency during a cache cleanup just to discard that text later.
+	if HiddenReviewPath(path, "") {
+		e.state.Digest = StatDigest(info)
+		e.state.Omitted = "Hidden from file review"
+		e.state.RestoreOmitted = "Hidden from file review"
+		return e
+	}
 	// Capture only visible, regular files. The same immutable bytes travel through
 	// shell/CLI metadata, including binary files, before the review gets bounded.
 	if !HiddenReviewPath(path, "") {

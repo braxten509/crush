@@ -5,6 +5,7 @@ package tools
 import (
 	"charm.land/fantasy"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/message"
@@ -20,7 +21,7 @@ import (
 )
 
 func TestNativeBashReviewsScriptsAndRedirections(t *testing.T) {
-	root := t.TempDir()
+	root := visibleReviewRoot(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "existing"), []byte("before\n"), 0600))
 	command := `printf 'first\n' > created
 python3 - <<'PY'
@@ -44,7 +45,7 @@ printf 'last\n' >> created`
 func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
 	for _, manual := range []bool{false, true} {
 		t.Run(map[bool]string{false: "explicit", true: "manual"}[manual], func(t *testing.T) {
-			root := t.TempDir()
+			root := visibleReviewRoot(t)
 			conn, err := db.Connect(t.Context(), t.TempDir())
 			require.NoError(t, err)
 			defer conn.Close()
@@ -107,7 +108,28 @@ func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
 			output, err := NewJobOutputTool(t.TempDir()).Run(t.Context(), fantasy.ToolCall{ID: "job", Name: JobOutputToolName, Input: string(input)})
 			require.NoError(t, err)
 			_, outputReview := filechange.TakeReview(output.Metadata)
+			require.NotNil(t, outputReview)
+			require.Len(t, outputReview.Changes, 1)
+			// Persistence removes the restore payload from displayed reviews;
+			// the completed job still owns the full immutable file version.
+			restored, err := base64.StdEncoding.DecodeString(outputReview.Changes[0].After.RestoreData)
+			require.NoError(t, err)
+			require.Equal(t, "late change", string(restored))
+			require.Empty(t, review.Changes[0].After.RestoreData)
+			outputReview.Changes[0].After.RestoreData = ""
 			require.Equal(t, review, outputReview)
 		})
 	}
+}
+
+// Review fixtures live outside hidden temporary/cache folders so these tests
+// exercise the source-file previews that users can actually see.
+func visibleReviewRoot(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp(".", "review-fixture-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(root) })
+	return root
 }

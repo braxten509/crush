@@ -16,7 +16,7 @@ import (
 // directory scan would still block chat even if it returned only named files.
 func TestReviewNeverOpensUnreportedFilesOrDirectories(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, "named.txt", "before")
 	put(t, root, "unrelated.txt", "private")
 	put(t, root, "dependencies/unrelated.txt", "private")

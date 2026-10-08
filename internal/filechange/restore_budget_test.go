@@ -9,8 +9,9 @@ import (
 	"testing"
 )
 
-func visibleRestoreRoot(t *testing.T) string {
+func visibleRestoreRoot(t testing.TB) string {
 	t.Helper()
+	// Source-review fixtures must live outside the hidden temporary/cache paths.
 	root, err := os.MkdirTemp(".", "restore-budget-")
 	require.NoError(t, err)
 	root, err = filepath.Abs(root)

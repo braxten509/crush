@@ -47,7 +47,7 @@ func TestReviewOverlappingAndLateActionsKeepReservations(t *testing.T) {
 			if late {
 				p.Begin("pending", "writer pending")
 			}
-			require.NoError(t, os.Remove(pendingPath))
+			require.NoError(t, os.WriteFile(pendingPath, []byte("changed"), 0600))
 			review = p.End("pending")
 			require.NotEmpty(t, review.Changes[0].Before.RestoreData)
 			require.Equal(t, 12, p.store.restoreRemaining)
@@ -72,7 +72,7 @@ func TestSharedBaselineReleasedOnlyAfterLastOwner(t *testing.T) {
 	require.Equal(t, 4, p.store.restoreRemaining)
 	require.Nil(t, p.End("a")) // unchanged, but b still owns its before image
 	require.Equal(t, 4, p.store.restoreRemaining)
-	require.NoError(t, os.Remove(path))
+	require.NoError(t, os.WriteFile(path, []byte("changed"), 0600))
 	review := p.End("b")
 	require.NotEmpty(t, review.Changes[0].Before.RestoreData)
 	require.Equal(t, 12, p.store.restoreRemaining)

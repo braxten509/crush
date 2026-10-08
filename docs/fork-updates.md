@@ -83,8 +83,12 @@ draws it through Charm's terminal emulator. Inside it, sessions use ordinary
 keyboard input: the emulator does not support the Kitty keyboard protocol, so
 Shift+Enter is sent as Ctrl+J (Crush's other new-line key), typed characters
 are sent as text (so Shift, Caps Lock and other keyboard layouts work), shortcuts that
-need that protocol fall back to their alternatives, and pictures in question
-forms show as colored blocks. Copying
+need that protocol fall back to their alternatives. When the real terminal
+shows Kitty graphics, the list says so to each session, tells it the
+character size in pixels, and passes its pictures on: question-form pictures
+are put in the session's part of the screen, taken down while another
+session or one of the list's boxes is shown, and put back after. Other
+terminals show pictures as colored characters. Copying
 and window-focus changes are passed through, so clipboard copies and
 finished-work notifications still work. Closing a session asks its Crush to
 exit and kills what is left in its terminal after five seconds.

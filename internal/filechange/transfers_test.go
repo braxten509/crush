@@ -40,7 +40,7 @@ func TestTransferDoesNotDuplicateUnchangedSnapshot(t *testing.T) {
 }
 
 func TestNativeCommandReportPreservesImportedBaseline(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	path := filepath.Join(root, "file")
 	base := &State{Content: "copied\n", Mode: 0o600}
 	report := &CommandReview{root: root, store: newSnapshotStore(), changes: []Change{
@@ -56,7 +56,7 @@ func TestNativeCommandReportPreservesImportedBaseline(t *testing.T) {
 }
 
 func TestCloneAndEditWithinSameReportedCommand(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	p := newProcessReview(root, nil)
 	p.Begin("shell", "run-fixture")
 	wrapper := p.executed(nil, []string{"sh", "-c", "run-fixture"})
@@ -78,7 +78,7 @@ func TestCloneAndEditWithinSameReportedCommand(t *testing.T) {
 }
 
 func TestCopyOverExistingFileRemainsAnEdit(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	path := filepath.Join(root, "file.txt")
 	require.NoError(t, os.WriteFile(path, []byte("old\n"), 0o600))
 	p := newProcessReview(root, nil)

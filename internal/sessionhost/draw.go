@@ -3,6 +3,7 @@ package sessionhost
 import (
 	"image"
 	"image/color"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -14,14 +15,21 @@ import (
 	"github.com/charmbracelet/x/vt"
 )
 
-// The list's rows: a header, "+ New session", a blank row, then one block
-// per session (four lines and a gap) and the key hint on the last row. The
-// strip has the same first three rows, then two lines and a gap per
-// session.
+// The list's rows: a header with ‹, a new-session button, a blank row, then one block per
+// session (two lines and a gap) and the key hint on the last row. The strip
+// has ›, +, a blank row, then two lines and a gap per session.
 const (
-	firstSessionRow  = 3
-	listBlockHeight  = 5
+	listFirstRow     = 3
+	stripFirstRow    = 3
+	listBlockHeight  = 3
 	stripBlockHeight = 3
+)
+
+// The new-session button and header's ‹ in the open list.
+const (
+	newSessionColumn = 1
+	newSessionRow    = 1
+	toggleColumn     = listWidth - 3
 )
 
 // sideRow is what a spot in the list or strip does when clicked.
@@ -52,10 +60,18 @@ func (h *Host) palette() palette {
 	}
 }
 
+// firstRow is the row the first session starts on.
+func (h *Host) firstRow() int {
+	if h.listOpen() {
+		return listFirstRow
+	}
+	return stripFirstRow
+}
+
 // visibleRange returns the sessions that fit, keeping the shown one in
 // view.
 func (h *Host) visibleRange(block int) (first, count int) {
-	count = max((h.height-firstSessionRow-1)/block, 1)
+	count = max((h.height-h.firstRow()-1)/block, 1)
 	if h.active >= count {
 		first = h.active - count + 1
 	}
@@ -69,14 +85,19 @@ func (h *Host) rowAt(x, y int) sideRow {
 	if open {
 		block = listBlockHeight
 	}
+	top := h.firstRow()
 	switch {
+	case open && y == 0:
+		r.toggle = x >= toggleColumn-1
+	case open && y == newSessionRow:
+		r.newSession = x >= newSessionColumn && x < listWidth-2
 	case y == 0:
-		r.toggle = !open || x >= listWidth-4
-	case y == 1:
+		r.toggle = true
+	case !open && y == 1:
 		r.newSession = true
-	case y >= firstSessionRow:
+	case y >= top:
 		first, count := h.visibleRange(block)
-		k, line := (y-firstSessionRow)/block, (y-firstSessionRow)%block
+		k, line := (y-top)/block, (y-top)%block
 		if k < count && line < block-1 {
 			r.session = first + k
 			r.close = open && line == 0 && x >= listWidth-5 && x <= listWidth-2
@@ -116,9 +137,12 @@ func (h *Host) View() tea.View {
 		s.emu.Draw(canvas, area)
 		v.WindowTitle = "crush · " + sessionTitle(s.snapshot())
 	}
-	if h.confirm != nil {
+	switch {
+	case h.confirm != nil:
 		h.drawConfirm(canvas, area, p)
-	} else if s != nil {
+	case h.picker != nil:
+		v.Cursor = h.drawPicker(canvas, area, p)
+	case s != nil:
 		if visible, shape, blink := s.cursorState(); visible {
 			pos := s.emu.CursorPosition()
 			c := tea.NewCursor(pos.X+side, pos.Y)
@@ -164,25 +188,25 @@ func sessionTitle(st Status) string {
 	return st.Title
 }
 
-// sessionState returns the words and color that say what s is doing.
-func (h *Host) sessionState(s *session, p palette) (label string, mark string, c color.Color) {
+// sessionState returns the mark and color that say what s is doing.
+func (h *Host) sessionState(s *session, p palette) (mark string, c color.Color) {
 	s.mu.Lock()
 	stopping := s.stopped
 	s.mu.Unlock()
 	st := s.snapshot()
 	switch {
 	case stopping:
-		return "Closing…", "×", p.muted
+		return "×", p.muted
 	case st.State == StateWaiting:
-		return "! Needs you", "!", p.waiting
+		return "!", p.waiting
 	case st.State == StateWorking:
-		return "● Working", "●", p.working
+		return "●", p.working
 	case s.unread:
-		return "✓ Finished", "✓", p.accent
+		return "✓", p.accent
 	case st.State == StateReady:
-		return "Ready", "○", p.muted
+		return "○", p.muted
 	}
-	return "Starting…", "·", p.muted
+	return "·", p.muted
 }
 
 func (h *Host) drawList(scr uv.Screen, p palette) {
@@ -192,23 +216,27 @@ func (h *Host) drawList(scr uv.Screen, p palette) {
 	muted := base.Foreground(p.muted)
 	accent := base.Foreground(p.accent)
 
-	header := spread(base, text.Render(" Sessions")+muted.Render("  "+strconv.Itoa(len(h.sessions))), accent.Render("‹ "), inner)
+	header := spread(base, text.Bold(true).Render(" Sessions")+muted.Render(" ["+strconv.Itoa(len(h.sessions))+"]"),
+		accent.Render("‹")+base.Render(" "), inner)
 	draw(scr, 0, 0, inner, header)
-	draw(scr, 0, 1, inner, accent.Render(" + New session"))
+	buttonWidth := inner - 2
+	button := h.styles.Button.Blurred.Foreground(p.accent).Width(buttonWidth).Render(" + New session")
+	draw(scr, newSessionColumn, newSessionRow, buttonWidth, button)
 
 	first, count := h.visibleRange(listBlockHeight)
 	for k := range count {
 		i := first + k
-		h.drawListBlock(scr, i, firstSessionRow+k*listBlockHeight, inner, p)
+		h.drawListBlock(scr, i, listFirstRow+k*listBlockHeight, inner, p)
 	}
 
-	hint := muted.Render(" alt+s hide · alt+w close")
-	draw(scr, 0, h.height-1, inner, hint)
+	draw(scr, 0, h.height-1, inner, muted.Render(" alt+n new · alt+s hide"))
 	if h.notice != "" {
 		draw(scr, 0, h.height-2, inner, base.Foreground(p.waiting).Render(" "+h.notice))
 	}
 }
 
+// drawListBlock draws session i as two lines: its mark and title, then its
+// folder's name.
 func (h *Host) drawListBlock(scr uv.Screen, i, y, width int, p palette) {
 	s := h.sessions[i]
 	st := s.snapshot()
@@ -226,26 +254,17 @@ func (h *Host) drawListBlock(scr uv.Screen, i, y, width int, p palette) {
 	if shown || i == h.hover {
 		closeMark = base.Foreground(p.text).Render("× ")
 	}
-	label, _, labelColor := h.sessionState(s, p)
-	right := ""
-	switch {
-	case shown:
-		right = "Viewing"
-	case s.unread:
-		right = "Unread"
-	}
-	dir := st.Dir
-	if dir != "" {
-		dir = home.Short(dir)
+	mark, markColor := h.sessionState(s, p)
+	folder := ""
+	if st.Dir != "" {
+		folder = filepath.Base(home.Short(filepath.Clean(st.Dir)))
 	}
 	lines := []string{
-		spread(base, base.Foreground(p.text).Bold(true).Render(sessionTitle(st)), closeMark, width-2),
-		spread(base, base.Foreground(p.muted).Render(dir), "", width-2),
-		spread(base, base.Foreground(p.subtle).Render(st.Model), "", width-2),
-		spread(base, base.Foreground(labelColor).Render(label), base.Foreground(p.muted).Render(right+" "), width-2),
+		spread(base, base.Foreground(markColor).Render(mark)+base.Render(" ")+base.Foreground(p.text).Bold(true).Render(sessionTitle(st)), closeMark, width-1),
+		spread(base, base.Render("  ")+base.Foreground(p.muted).Render(folder), "", width-1),
 	}
 	for n, line := range lines {
-		draw(scr, 0, y+n, width, bar+base.Render(" ")+line)
+		draw(scr, 0, y+n, width, bar+line)
 	}
 }
 
@@ -259,7 +278,7 @@ func (h *Host) drawStrip(scr uv.Screen, p palette) {
 	for k := range count {
 		i := first + k
 		s := h.sessions[i]
-		y := firstSessionRow + k*stripBlockHeight
+		y := stripFirstRow + k*stripBlockHeight
 		bg := p.bg
 		if i == h.active {
 			bg = p.selected
@@ -269,7 +288,7 @@ func (h *Host) drawStrip(scr uv.Screen, p palette) {
 		if i == h.active {
 			bar = row.Foreground(p.accent).Render("▌")
 		}
-		_, mark, c := h.sessionState(s, p)
+		mark, c := h.sessionState(s, p)
 		number := strconv.Itoa(i + 1)
 		draw(scr, 0, y, inner, bar+row.Foreground(c).Render(mark)+row.Render(" "))
 		draw(scr, 0, y+1, inner, bar+row.Foreground(p.text).Render(ansi.Truncate(number, 2, ""))+row.Render(strings.Repeat(" ", max(2-len(number), 0))))
@@ -352,4 +371,128 @@ func (h *Host) clickConfirm(x, y int) {
 	case pt.In(keepButton):
 		h.answerClose(false)
 	}
+}
+
+// The new-session box's lines inside its border: the title, the typed path,
+// the matches, "Recent", the recent folders, a line for problems and the
+// key hint. Its size stays the same while typing.
+const (
+	pickerInputLine  = 1
+	pickerMatchLine  = 2
+	pickerRecentHead = pickerMatchLine + pickerRows
+	pickerRecentLine = pickerRecentHead + 1
+	pickerErrLine    = pickerRecentLine + pickerRows
+	pickerHintLine   = pickerErrLine + 1
+	pickerLines      = pickerHintLine + 1
+)
+
+// pickerBox returns where the new-session box goes over area, and the part
+// inside its border and padding.
+func pickerBox(area image.Rectangle) (box, inner image.Rectangle) {
+	width := min(72, area.Dx()-2)
+	height := pickerLines + 2
+	x := area.Min.X + (area.Dx()-width)/2
+	y := area.Min.Y + max(min(3, area.Dy()-height), 0)
+	box = image.Rect(x, y, x+width, y+height)
+	return box, image.Rect(x+2, y+1, x+width-2, y+1+pickerLines)
+}
+
+// pickerRowAt returns the row of the box's rows at screen line y, or -1.
+func (h *Host) pickerRowAt(inner image.Rectangle, x, y int) int {
+	if x < inner.Min.X || x >= inner.Max.X {
+		return -1
+	}
+	line := y - inner.Min.Y
+	pk := h.picker
+	switch {
+	case line >= pickerMatchLine && line < pickerMatchLine+len(pk.matches):
+		return line - pickerMatchLine
+	case line >= pickerRecentLine && line < pickerRecentLine+len(pk.recent):
+		return len(pk.matches) + line - pickerRecentLine
+	}
+	return -1
+}
+
+// drawPicker draws the new-session box and returns the cursor for its
+// typed path.
+func (h *Host) drawPicker(scr uv.Screen, area image.Rectangle, p palette) *tea.Cursor {
+	pk := h.picker
+	box, inner := pickerBox(area)
+	base := lipgloss.NewStyle().Background(p.bg)
+	frame := base.Border(lipgloss.RoundedBorder()).BorderForeground(p.accent).BorderBackground(p.bg).
+		Width(box.Dx()).Height(box.Dy())
+	uv.NewStyledString(frame.Render("")).Draw(scr, box)
+
+	w := inner.Dx()
+	line := func(n int, text string) {
+		draw(scr, inner.Min.X, inner.Min.Y+n, w, text)
+	}
+	line(0, base.Foreground(p.text).Bold(true).Render("New session in…"))
+
+	// The typed path, scrolled so the cursor stays in view.
+	field := base.Background(p.selected).Foreground(p.text)
+	room := max(w-2, 1)
+	start := max(pk.cursor-room+1, 0)
+	shown := string(pk.input[start:min(len(pk.input), start+room)])
+	line(pickerInputLine, field.Render(" "+shown+strings.Repeat(" ", max(room-ansi.StringWidth(shown), 0))+" "))
+	cursorX := inner.Min.X + 1 + ansi.StringWidth(string(pk.input[start:pk.cursor]))
+
+	picked := lipgloss.NewStyle().
+		Background(h.styles.Button.Focused.GetBackground()).
+		Foreground(h.styles.Button.Focused.GetForeground())
+	row := func(n, i int, dir string) {
+		style := base.Foreground(p.text)
+		if i == pk.sel {
+			style = picked
+		}
+		text := " ▸ " + keepEnd(home.Short(dir), w-3)
+		line(n, style.Render(text+strings.Repeat(" ", max(w-ansi.StringWidth(text), 0))))
+	}
+	for i, dir := range pk.matches {
+		row(pickerMatchLine+i, i, dir)
+	}
+	if len(pk.recent) > 0 {
+		line(pickerRecentHead, base.Foreground(p.muted).Render("Recent"))
+	}
+	for i, dir := range pk.recent {
+		row(pickerRecentLine+i, len(pk.matches)+i, dir)
+	}
+	if pk.err != "" {
+		line(pickerErrLine, base.Foreground(p.waiting).Render(keepEnd(pk.err, w)))
+	}
+	line(pickerHintLine, base.Foreground(p.muted).Render("↑↓ pick · tab open folder · enter start · esc cancel"))
+
+	c := tea.NewCursor(cursorX, inner.Min.Y+pickerInputLine)
+	c.Shape = tea.CursorBar
+	return c
+}
+
+// keepEnd cuts text to width cells from the front, since a path's last
+// folders say the most.
+func keepEnd(text string, width int) string {
+	over := ansi.StringWidth(text) - width
+	if over <= 0 {
+		return text
+	}
+	return "…" + ansi.TruncateLeft(text, over+1, "")
+}
+
+// clickPicker picks the clicked row, starts in it when it was already
+// picked, and closes the box on a click outside it.
+func (h *Host) clickPicker(x, y int) {
+	box, inner := pickerBox(h.sessionArea())
+	if !image.Pt(x, y).In(box) {
+		h.picker = nil
+		return
+	}
+	i := h.pickerRowAt(inner, x, y)
+	if i < 0 {
+		return
+	}
+	if i == h.picker.sel {
+		h.startPicked()
+		return
+	}
+	h.picker.sel = i
+	h.picker.err = ""
 }

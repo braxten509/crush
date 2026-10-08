@@ -22,6 +22,7 @@ type turnFileReview struct {
 	cli       bool
 	trackers  map[string]*filechange.Tracker
 	results   map[string]string
+	paths     map[string]string
 	messages  message.Service
 	sessionID string
 }
@@ -52,6 +53,12 @@ func (a *sessionAgent) startFileReview(ctx context.Context, sessionID string) *t
 
 func (r *turnFileReview) track(id, name, input string) {
 	path := cliagent.EditedFile(name, input)
+	if path != "" {
+		if r.paths == nil {
+			r.paths = map[string]string{}
+		}
+		r.paths[id] = path
+	}
 	if r.root == "" || path == "" {
 		return
 	}
@@ -91,8 +98,21 @@ func (r *turnFileReview) save(ctx context.Context, result message.ToolResult) er
 	review := r.checkpoint(ctx, result.ToolCallID)
 	// Some CLIs report a file tool after it has executed. An empty snapshot
 	// in that case must not hide the edit metadata the CLI supplied.
-	if review != nil && (!r.cli || len(review.Changes) > 0) {
+	if review != nil && (!r.cli || len(review.Changes) > 0 || review.Deletions) {
+		if result.Review != nil {
+			review.Deletions = review.Deletions || result.Review.Deletions
+		}
 		result.Review = review
+	}
+	result.Review = filechange.ScopeReview(result.Review, r.root)
+	if path := r.paths[result.ToolCallID]; path != "" && !filechange.InRepository(filechange.RepositoryRoot(r.root), r.root, path) {
+		result.Metadata = filechange.WithoutDetails(result.Metadata)
+		if result.Review == nil {
+			result.Review = &filechange.Review{Root: r.root}
+		}
+	}
+	if result.Review != nil && len(result.Review.Changes) == 0 {
+		result.Metadata = filechange.WithoutDetails(result.Metadata)
 	}
 	result.Review = withoutSensitiveChanges(result.Review)
 	msg, err := r.messages.Create(ctx, r.sessionID, message.CreateMessageParams{
@@ -121,7 +141,7 @@ func (r *turnFileReview) finish(ctx context.Context) {
 
 func (r *turnFileReview) finishTool(ctx context.Context, id, resultID string) {
 	review := r.checkpoint(ctx, id)
-	if review == nil || len(review.Changes) == 0 {
+	if review == nil || len(review.Changes) == 0 && !review.Deletions {
 		return
 	}
 	msg, err := r.messages.Get(ctx, resultID)
@@ -134,8 +154,9 @@ func (r *turnFileReview) finishTool(ctx context.Context, id, resultID string) {
 			merged := *review
 			if result.Review != nil {
 				merged.Changes = append(slices.Clone(result.Review.Changes), review.Changes...)
+				merged.Deletions = merged.Deletions || result.Review.Deletions
 			}
-			result.Review = withoutSensitiveChanges(&merged)
+			result.Review = withoutSensitiveChanges(filechange.ScopeReview(&merged, r.root))
 			msg.Parts[i] = result
 			break
 		}
@@ -161,7 +182,7 @@ func withoutSensitiveChanges(review *filechange.Review) *filechange.Review {
 		}
 	}
 	// A review left with nothing to show would still be listed as an edit.
-	if len(filtered.Changes) == 0 && len(review.Changes) > 0 {
+	if len(filtered.Changes) == 0 && len(review.Changes) > 0 && !filtered.Deletions {
 		return nil
 	}
 	return &filtered

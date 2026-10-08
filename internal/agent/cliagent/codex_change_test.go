@@ -24,7 +24,7 @@ func TestReversePatchRestoresEveryHunk(t *testing.T) {
 
 func TestCodexChangeMetadataDoesNotDependOnReadTiming(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
+	dir := visibleReviewRoot(t)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\ny\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "old.txt"), []byte("1\nTWO\n3\n"), 0o644))
 	var meta tools.EditResponseMetadata
@@ -42,7 +42,7 @@ func TestCodexChangeMetadataDoesNotDependOnReadTiming(t *testing.T) {
 }
 
 func TestCodexReversedPatchCarriesFullRestoreStates(t *testing.T) {
-	dir := t.TempDir()
+	dir := visibleReviewRoot(t)
 	path := filepath.Join(dir, "file")
 	require.NoError(t, os.WriteFile(path, []byte("one\nCHANGED\nthree\n"), 0750))
 	change := codexChange{Path: path, Diff: "@@ -1,3 +1,3 @@\n one\n-two\n+CHANGED\n three\n"}
@@ -73,12 +73,22 @@ func TestReversePatchUsesPositionsAndFinalNewline(t *testing.T) {
 	require.Equal(t, "first\nsecond\nthird\n", before)
 }
 
-func TestCodexLateDeletionDoesNotInventPermissions(t *testing.T) {
+func TestCodexConfirmedDeletionCarriesOnlyAFlag(t *testing.T) {
 	change := codexChange{Path: filepath.Join(t.TempDir(), "deleted"), Diff: "original\n"}
 	change.Kind.Type = "delete"
 	_, review := filechange.TakeReview(codexChangeMetadata("", change))
 	require.NotNil(t, review)
-	require.Equal(t, "original\n", review.Changes[0].Before.Content)
-	require.NotEmpty(t, review.Changes[0].Before.RestoreOmitted)
-	require.Nil(t, review.Changes[0].After)
+	require.True(t, review.Deletions)
+	require.Empty(t, review.Changes)
+}
+
+func TestDeleteToolKeepsPermissionPathButSkipsSnapshot(t *testing.T) {
+	change := codexChange{Path: "source.txt", Diff: "old text"}
+	change.Kind.Type = "delete"
+	name, input := codexChangeTool(change)
+	require.Equal(t, tools.EditToolName, name)
+	var params tools.EditParams
+	require.NoError(t, json.Unmarshal([]byte(input), &params))
+	require.Equal(t, "source.txt", params.FilePath)
+	require.Empty(t, EditedFile(name, input))
 }

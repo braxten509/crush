@@ -297,3 +297,25 @@ func TestToolGroupHeaderCountsRemovedFiles(t *testing.T) {
 	require.Equal(t, "removed 1 file · edited crush", g.StoredReviewSummary())
 	require.NotContains(t, ansi.Strip(g.header(120)), "+0")
 }
+
+func TestDeletionFlagShowsOnePlainStatusWithoutDiffLink(t *testing.T) {
+	for _, saved := range []bool{false, true} {
+		sty := styles.CharmtonePantera()
+		g := NewToolGroupItem(&sty)
+		var children []MessageItem
+		for _, id := range []string{"first", "second"} {
+			review := &filechange.Review{Deletions: true}
+			if saved {
+				review = &filechange.Review{Summary: &filechange.ReviewSummary{Deletions: true}}
+			}
+			call := message.ToolCall{ID: id, Name: "edit", Input: `{"file_path":"gone.txt","delete_file":true}`, Finished: true}
+			children = append(children, NewToolMessageItem(&sty, "message", call, &message.ToolResult{ToolCallID: id, Name: "bash", Content: "done", Review: review}, false, ""))
+		}
+		g.SetChildren(children)
+		header := ansi.Strip(g.header(120))
+		require.Equal(t, 1, strings.Count(header, "Some files were deleted"), header)
+		require.Empty(t, g.Changes())
+		require.NotContains(t, header, "edited")
+		require.Equal(t, [2]int{}, g.changesCols)
+	}
+}

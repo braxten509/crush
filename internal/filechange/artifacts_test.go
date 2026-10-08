@@ -12,7 +12,7 @@ func TestGeneratedArtifactsDoNotReadSourceFilesAsBuildOutput(t *testing.T) {
 	require.True(t, generatedArtifact("/project/build/classes/Main.class"))
 	require.False(t, generatedArtifact("/project/src/build/helpers.go"))
 	require.False(t, generatedArtifact("/project/reference.jar"))
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	p := newProcessReview(root, nil)
 	p.Begin("build", "compiler")
 	record := p.executed(nil, []string{"compiler"})

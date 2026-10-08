@@ -32,7 +32,7 @@ func collect(t *testing.T, kind string, resume string) ([]Event, error) {
 	m := &Model{Kind: map[string]catwalk.Type{
 		"claude": config.TypeClaudeCode, "codex": config.TypeCodexCLI, "grok": config.TypeGrokCLI,
 		"opencode": config.TypeOpenCodeCLI, "agy": config.TypeAGYCLI,
-	}[kind], ID: "m", Dir: t.TempDir()}
+	}[kind], ID: "m", Dir: visibleReviewRoot(t)}
 	err := m.Run(context.Background(), Turn{Prompt: "hi", Resume: resume, Emit: func(e Event) error {
 		events = append(events, e)
 		return nil
@@ -137,7 +137,7 @@ func TestCodexNestedShellReview(t *testing.T) {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("requires the Linux amd64 syscall observer; other platforms do not trace arbitrary shell writes")
 	}
-	outside := t.TempDir()
+	outside := visibleReviewRoot(t)
 	command := fmt.Sprintf("python3 - <<'PY'\nfrom pathlib import Path\nPath(%q).write_text('hello\\n')\nPY", filepath.Join(outside, "hello.txt"))
 	commandJSON, err := json.Marshal(command)
 	require.NoError(t, err)
@@ -176,4 +176,16 @@ sys.stdin.read()
 		found = true
 	}
 	require.True(t, found)
+}
+
+// Review fixtures live outside hidden temporary/cache folders so these tests
+// exercise the source-file previews that users can actually see.
+func visibleReviewRoot(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp(".", "review-fixture-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(root) })
+	return root
 }

@@ -29,6 +29,9 @@ func startObservedProcess(cmd *exec.Cmd, review *ProcessReview) error {
 	if cmd.Err != nil {
 		return cmd.Start()
 	}
+	if RepositoryRoot(review.root) == "" {
+		return cmd.Start()
+	}
 	if !startKeeper() {
 		return cmd.Start()
 	}
@@ -148,7 +151,7 @@ func probeSyscallAddress() uint64 {
 // Calls that always notify. Opens and mmap notify only with write flags.
 var mutationCalls = []uint32{
 	unix.SYS_OPENAT2,
-	unix.SYS_CREAT, unix.SYS_TRUNCATE, unix.SYS_FTRUNCATE, unix.SYS_UNLINK, unix.SYS_UNLINKAT,
+	unix.SYS_CREAT, unix.SYS_TRUNCATE, unix.SYS_FTRUNCATE,
 	unix.SYS_CHMOD, unix.SYS_FCHMOD, unix.SYS_FCHMODAT, unix.SYS_FCHMODAT2,
 	unix.SYS_RENAME, unix.SYS_RENAMEAT, unix.SYS_RENAMEAT2,
 	unix.SYS_LINK, unix.SYS_LINKAT, unix.SYS_SYMLINK, unix.SYS_SYMLINKAT,

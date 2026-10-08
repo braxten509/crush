@@ -12,6 +12,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/diff"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/fsext"
@@ -139,26 +140,29 @@ func NewWriteTool(
 				return fantasy.ToolResponse{}, fmt.Errorf("error writing file: %w", err)
 			}
 
-			// Check if file exists in history
-			file, err := files.GetByPathAndSession(ctx, filePath, sessionID)
-			if err != nil {
-				_, err = files.Create(ctx, sessionID, filePath, oldContent)
+			if filechange.InRepository(filechange.RepositoryRoot(workingDir), workingDir, filePath) {
+				// Check if file exists in history
+				file, err := files.GetByPathAndSession(ctx, filePath, sessionID)
 				if err != nil {
-					// Log error but don't fail the operation
-					return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
+					_, err = files.Create(ctx, sessionID, filePath, oldContent)
+					if err != nil {
+						// Log error but don't fail the operation
+						return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
+					}
 				}
-			}
-			if file.Content != oldContent {
-				// User manually changed the content; store an intermediate version
-				_, err = files.CreateVersion(ctx, sessionID, filePath, oldContent)
+				if file.Content != oldContent {
+					// User manually changed the content; store an intermediate version
+					_, err = files.CreateVersion(ctx, sessionID, filePath, oldContent)
+					if err != nil {
+						slog.Error("Error creating file history version", "error", err)
+					}
+				}
+				// Store the new version
+				_, err = files.CreateVersion(ctx, sessionID, filePath, params.Content)
 				if err != nil {
 					slog.Error("Error creating file history version", "error", err)
 				}
-			}
-			// Store the new version
-			_, err = files.CreateVersion(ctx, sessionID, filePath, params.Content)
-			if err != nil {
-				slog.Error("Error creating file history version", "error", err)
+
 			}
 
 			filetracker.RecordRead(ctx, sessionID, filePath)

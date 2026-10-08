@@ -62,8 +62,9 @@ type ToolGroupItem struct {
 	// changes caches [ToolGroupItem.Changes] for changesKey. changesCols
 	// covers the action-count label which opens the review; changesRequested
 	// records a click on that label.
-	changesKey    string
-	storedSummary string
+	changesKey      string
+	storedSummary   string
+	storedDeletions bool
 	// Line counts saved with the summaries, shown even after diffs expire.
 	storedAdds, storedDels int
 	storedCounted          bool
@@ -521,6 +522,9 @@ func (g *ToolGroupItem) header(width int) string {
 			edited = append(edited, filepath.Base(change.Path))
 		}
 	}
+	if g.storedDeletions {
+		line += g.sty.Tool.ParamKey.Render(" · Some files were deleted")
+	}
 	if summary := diffreview.TransferSummary(changes); summary != "" {
 		line += g.sty.Tool.ParamKey.Render(" · " + summary)
 	}
@@ -598,6 +602,13 @@ func isMovedToBackground(t ToolMessageItem) bool {
 
 // editedFile returns the file a file-changing tool touched, or "".
 func editedFile(t ToolMessageItem) string {
+	if result, ok := t.(interface{ Result() *message.ToolResult }); ok && result.Result() != nil {
+		if review := result.Result().Review; review != nil {
+			if review.Summary != nil && review.Summary.Files == 0 || review.Summary == nil && len(review.Changes) == 0 {
+				return ""
+			}
+		}
+	}
 	tc := t.ToolCall()
 	switch tc.Name {
 	case tools.EditToolName, tools.MultiEditToolName, tools.WriteToolName:
@@ -605,8 +616,12 @@ func editedFile(t ToolMessageItem) string {
 		return ""
 	}
 	var p struct {
-		FilePath string `json:"file_path"`
+		FilePath   string `json:"file_path"`
+		DeleteFile bool   `json:"delete_file"`
 	}
 	_ = json.Unmarshal([]byte(tc.Input), &p)
+	if p.DeleteFile {
+		return ""
+	}
 	return p.FilePath
 }

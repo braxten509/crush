@@ -11,7 +11,7 @@ import (
 )
 
 func TestTrackSkipsDevicesAndKernelFiles(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	tracker, err := New(t.Context(), root)
 	require.NoError(t, err)
 	skipped := []string{"/dev/null", "/dev/tty", "/proc/self/oom_score_adj", "/sys/kernel/mm/transparent_hugepage/enabled"}

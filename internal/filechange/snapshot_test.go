@@ -33,7 +33,7 @@ func TestExplicitFileChangesWithoutGit(t *testing.T) {
 		t.Skip("requires a POSIX shell")
 	}
 	t.Parallel()
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, "edit.txt", "before\n")
 	put(t, root, "gone.txt", "deleted\n")
 	put(t, root, "old.txt", "moved\n")
@@ -61,14 +61,14 @@ exit 7`)
 	review, err := tracker.Checkpoint(t.Context())
 	require.NoError(t, err)
 	changes := byPath(review)
-	require.Len(t, changes, 9)
+	require.Len(t, changes, 6)
+	require.True(t, review.Deletions)
 	require.Equal(t, "before\n", changes["edit.txt"].Before.Content)
 	require.Equal(t, "after\n", changes["edit.txt"].After.Content)
 	require.EqualValues(t, 0o755, changes["edit.txt"].After.Mode)
-	require.Nil(t, changes["gone.txt"].After)
-	require.Nil(t, changes["empty.txt"].After)
-	require.NotNil(t, changes["empty.txt"].Before)
-	require.Nil(t, changes["old.txt"].After)
+	require.NotContains(t, changes, "gone.txt")
+	require.NotContains(t, changes, "empty.txt")
+	require.NotContains(t, changes, "old.txt")
 	require.Nil(t, changes["new.txt"].Before)
 	require.Equal(t, "moved\n", changes["new.txt"].After.Content)
 	require.NotNil(t, changes["new-empty.txt"].After)
@@ -90,7 +90,7 @@ exit 7`)
 
 func TestIgnoredBookkeepingAndBinaryChanges(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, ".git/index", "git metadata")
 	put(t, root, "runtime/state.db", "crush data")
 	put(t, root, "runtime-source.txt", "not excluded")
@@ -119,7 +119,7 @@ func TestIgnoredBookkeepingAndBinaryChanges(t *testing.T) {
 
 func TestCancelledScanKeepsBaseline(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, "file", "original")
 	tracker, err := New(t.Context(), root)
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestExplicitExternalFileAndSymlinks(t *testing.T) {
 		t.Skip("requires symlinks")
 	}
 	t.Parallel()
-	root, outside := t.TempDir(), t.TempDir()
+	root, outside := visibleRestoreRoot(t), visibleRestoreRoot(t)
 	put(t, outside, "outside.txt", "before")
 	put(t, outside, "not-tracked.txt", "private fixture")
 	require.NoError(t, os.Symlink(outside, filepath.Join(root, "link")))
@@ -170,7 +170,7 @@ func TestRestoredMtimeDoesNotHideEdits(t *testing.T) {
 		t.Skip("ctime support is platform-specific")
 	}
 	t.Parallel()
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, "file", "before")
 	info, err := os.Stat(filepath.Join(root, "file"))
 	require.NoError(t, err)
@@ -207,7 +207,7 @@ func BenchmarkCheckpointUnchanged(b *testing.B) {
 // Starting in a home folder must not discover its projects, caches or files.
 func TestOnlyExplicitFilesAreReviewed(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, "named.txt", "before")
 	put(t, root, "unrelated.txt", "unrelated")
 	put(t, root, "subfolder/hidden.txt", "hidden")
@@ -236,7 +236,7 @@ func TestDirectoryAliasesProduceOneReviewAndKeepSymlinkEdits(t *testing.T) {
 		t.Skip("requires symlinks")
 	}
 	t.Parallel()
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	actual := filepath.Join(root, "actual")
 	alias := filepath.Join(root, "alias")
 	require.NoError(t, os.Mkdir(actual, 0o755))

@@ -4,6 +4,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/sessionhost"
 	"github.com/charmbracelet/x/term"
@@ -39,6 +40,20 @@ func runSessionHost(cmd *cobra.Command) error {
 		NewArgs:   func(dir string) []string { return relaunchArgs(cmd, dir) },
 		Dir:       cwd,
 		// Each session gets its own crash guard and report.
-		Env: sessionhost.ChildEnviron(os.Environ(), crashReportEnv),
+		Env:    sessionhost.ChildEnviron(os.Environ(), crashReportEnv),
+		Recent: recentFolders,
 	})
+}
+
+// recentFolders lists the folders Crush was used in, the latest first.
+func recentFolders() []string {
+	list, err := projects.List()
+	if err != nil {
+		return nil
+	}
+	dirs := make([]string, 0, len(list))
+	for _, p := range list {
+		dirs = append(dirs, p.Path)
+	}
+	return dirs
 }

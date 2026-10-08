@@ -14,7 +14,7 @@ import (
 )
 
 func TestBackgroundJobOutputIncludesCompletedReview(t *testing.T) {
-	root := t.TempDir()
+	root := visibleReviewRoot(t)
 	ctx := context.WithValue(t.Context(), SessionIDContextKey, "background-output-review")
 	response := runBashTool(t, newBashToolForTest(root), ctx, BashParams{
 		Command: `sleep 2; printf 'late change' > late.txt`, RunInBackground: true,

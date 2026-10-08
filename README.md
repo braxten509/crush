@@ -37,15 +37,24 @@ each session as it would a separate terminal window.
 
 | Action | How |
 |---|---|
-| New session (in the shown session's folder) | Click **+ New session** |
+| New session | Click **+** at the top of the list, or press **Alt+N** |
 | Switch | Click a session, or press **Alt+1** to **Alt+9** |
 | Shrink the list to a strip, or open it again | **Alt+S**, or click **‹** / **›** |
 | Close a session | **Alt+W**, or click the **×** on its row |
 
+A new session first asks for its folder. The box starts at the shown
+session's folder; type a path (`~` is your home folder, a relative path starts
+from the shown folder) and matching folders show below it, with the folders
+you used Crush in lately under **Recent**. Arrows or a click pick a folder, Tab
+goes into it, Enter starts the session there and Esc cancels. Hidden folders
+show once you type the dot.
+
 Closing always asks first. It ends only that session; the chat stays saved and
 can be reopened with `crush --session` or the session picker. Closing the last
-session, or quitting it from inside, quits Crush. The strip shows one mark per
-session: ● working, ! needs you, ✓ finished while hidden, ○ ready. Crush
+session, or quitting it from inside, quits Crush. Each session shows a mark
+and its title, then its folder's name. The marks, in the list and the strip
+alike: ● working, ! needs you,
+✓ finished while hidden, ○ ready. Crush
 remembers whether the list was open, in `~/.local/state/crush/session-list.json`
 (or under `$XDG_STATE_HOME`). Terminals narrower than 80 columns show the
 strip.

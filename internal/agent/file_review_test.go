@@ -22,6 +22,7 @@ import (
 func TestSecureEntryExcludedFromLateAndFutureReviews(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
+	env.workingDir = visibleReviewRoot(t)
 	sess, err := env.sessions.Create(t.Context(), "secure entry review")
 	require.NoError(t, err)
 	path := filepath.Join(env.workingDir, "credentials.env")
@@ -60,6 +61,7 @@ func TestFileReviewCLIEndToEnd(t *testing.T) {
 		t.Skip("requires POSIX shell")
 	}
 	env := testEnv(t)
+	env.workingDir = visibleReviewRoot(t)
 	bin := t.TempDir()
 	script := `#!/bin/sh
 read -r _; read -r _
@@ -108,11 +110,12 @@ printf '%s\n' '{"type":"result","subtype":"success"}'
 func TestFileReviewPersistsFailedAndLateChanges(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)
+	root := visibleReviewRoot(t)
 	session, err := env.sessions.Create(t.Context(), "review")
 	require.NoError(t, err)
-	path := filepath.Join(env.workingDir, "file.txt")
+	path := filepath.Join(root, "file.txt")
 	require.NoError(t, os.WriteFile(path, []byte("original\n"), 0o644))
-	r := &turnFileReview{root: env.workingDir, messages: env.messages, sessionID: session.ID,
+	r := &turnFileReview{root: root, messages: env.messages, sessionID: session.ID,
 		trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
 	r.track("edit-1", "edit", `{"file_path":"file.txt"}`)
 	// A tool which changed the file before reporting its events, then failed.
@@ -179,4 +182,40 @@ func TestFileReviewIgnoresNonEditingTools(t *testing.T) {
 	for _, msg := range msgs {
 		require.Nil(t, msg.ToolResults()[0].Review)
 	}
+}
+
+// Review fixtures live outside hidden temporary/cache folders so these tests
+// exercise the source-file previews that users can actually see.
+func visibleReviewRoot(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp(".", "review-fixture-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(root) })
+	return root
+}
+
+func TestOutsideRepositoryToolMetadataIsNotRecorded(t *testing.T) {
+	env := testEnv(t)
+	root := visibleReviewRoot(t)
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0700))
+	outside := t.TempDir()
+	path := filepath.Join(outside, "outside.txt")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0600))
+	session, err := env.sessions.Create(t.Context(), "scoped review")
+	require.NoError(t, err)
+	review := &turnFileReview{root: root, cli: true, messages: env.messages, sessionID: session.ID, trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
+	input, _ := json.Marshal(map[string]string{"file_path": path})
+	review.track("edit", "edit", string(input))
+	require.NoError(t, os.WriteFile(path, []byte("after"), 0600))
+	require.NoError(t, review.save(t.Context(), message.ToolResult{ToolCallID: "edit", Name: "edit", Metadata: `{"old_content":"before","new_content":"after","additions":1,"removals":1}`}))
+	messages, err := loadFileReviewMessages(env.messages, t.Context(), session.ID)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	result := messages[0].ToolResults()[0]
+	require.NotContains(t, result.Metadata, "old_content")
+	require.NotContains(t, result.Metadata, "new_content")
+	require.NotNil(t, result.Review)
+	require.Empty(t, result.Review.Changes)
 }

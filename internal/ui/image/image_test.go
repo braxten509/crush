@@ -44,3 +44,21 @@ func TestResetIdempotent(t *testing.T) {
 
 	require.Equal(t, 0, length)
 }
+
+// Not parallel: the other tests clear the shared cache.
+func TestBlocksArePaintedOnce(t *testing.T) {
+	key := imageKey{id: "painted-once", cols: 4, rows: 2}
+	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	cachedMutex.Lock()
+	cachedImages[key] = cachedImage{img: img, cols: 4, rows: 2}
+	cachedMutex.Unlock()
+	t.Cleanup(ResetCache)
+
+	first := EncodingBlocks.Render(key.id, key.cols, key.rows)
+	require.NotEmpty(t, first)
+	cachedMutex.RLock()
+	kept := cachedImages[key].blocks
+	cachedMutex.RUnlock()
+	require.Equal(t, first, kept, "the painted picture is kept")
+	require.Equal(t, first, EncodingBlocks.Render(key.id, key.cols, key.rows))
+}

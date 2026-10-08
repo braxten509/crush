@@ -41,14 +41,20 @@ func (g *ToolGroupItem) StoredReviewSummary() string {
 
 func (g *ToolGroupItem) computeStoredReviewSummary() string {
 	files, copied, checkouts, moved, generated, removed := 0, 0, 0, 0, 0, 0
+	g.storedDeletions = false
 	g.storedAdds, g.storedDels, g.storedCounted = 0, 0, false
 	var names []string
 	for _, input := range g.ReviewInputs() {
 		review := input.Result.Review
-		if review == nil || review.Summary == nil {
+		if review == nil {
+			continue
+		}
+		g.storedDeletions = g.storedDeletions || review.Deletions
+		if review.Summary == nil {
 			continue
 		}
 		summary := review.Summary
+		g.storedDeletions = g.storedDeletions || summary.Deletions
 		paths := summary.Paths
 		if len(paths) == 0 {
 			var params tools.EditParams

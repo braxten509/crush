@@ -1498,8 +1498,11 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Skip chat edge-scrolling when an inline editor is
 			// active to prevent accidental scrolling while hovering
-			// over question forms or other inline components.
-			if m.activeInline == nil || m.focus != uiFocusEditor {
+			// over question forms or other inline components. It is for
+			// dragging a selection, so a move with no button held (sent
+			// while something asks for every move) never scrolls: that
+			// would leave the newest messages out of view.
+			if msg.Button != tea.MouseNone && (m.activeInline == nil || m.focus != uiFocusEditor) {
 				if msg.Y <= 0 {
 					m.chat.ScrollBy(-1)
 					if !m.chat.SelectedItemInView() {

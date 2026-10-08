@@ -13,7 +13,7 @@ import (
 )
 
 func TestObservedCloneAndFollowingEdit(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, "source/file.txt", "original\n")
 	source := filepath.Join(root, "source")
 	for _, args := range [][]string{
@@ -39,7 +39,7 @@ func TestObservedCloneAndFollowingEdit(t *testing.T) {
 }
 
 func TestObservedBulkCopyAndFollowingEdit(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	for index := range 12 {
 		put(t, root, fmt.Sprintf("source/%d.txt", index), "original\n")
 	}
@@ -59,7 +59,7 @@ func TestObservedBulkCopyAndFollowingEdit(t *testing.T) {
 }
 
 func TestObservedRenameAndFollowingEdit(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, "source", "original\n")
 	review, err := runObserved(t, root, `python3 - <<'PY'
 from pathlib import Path

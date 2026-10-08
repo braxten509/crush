@@ -13,6 +13,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/diff"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/fsext"
@@ -165,18 +166,21 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 	}
 
-	// File can't be in the history so we create a new file history
-	_, err = edit.files.Create(edit.ctx, sessionID, filePath, "")
-	if err != nil {
-		// Log error but don't fail the operation
-		return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
-	}
+	if filechange.InRepository(filechange.RepositoryRoot(edit.workingDir), edit.workingDir, filePath) {
+		// File can't be in the history so we create a new file history
+		_, err = edit.files.Create(edit.ctx, sessionID, filePath, "")
+		if err != nil {
+			// Log error but don't fail the operation
+			return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
+		}
 
-	// Add the new content to the file history
-	_, err = edit.files.CreateVersion(edit.ctx, sessionID, filePath, content)
-	if err != nil {
-		// Log error but don't fail the operation
-		slog.Error("Error creating file history version", "error", err)
+		// Add the new content to the file history
+		_, err = edit.files.CreateVersion(edit.ctx, sessionID, filePath, content)
+		if err != nil {
+			// Log error but don't fail the operation
+			slog.Error("Error creating file history version", "error", err)
+		}
+
 	}
 
 	edit.filetracker.RecordRead(edit.ctx, sessionID, filePath)
@@ -248,21 +252,24 @@ func commitFileChange(edit editContext, sessionID, filePath, oldContent, newCont
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
-	file, err := edit.files.GetByPathAndSession(edit.ctx, filePath, sessionID)
-	if err != nil {
-		_, err = edit.files.Create(edit.ctx, sessionID, filePath, oldContent)
+	if filechange.InRepository(filechange.RepositoryRoot(edit.workingDir), edit.workingDir, filePath) {
+		file, err := edit.files.GetByPathAndSession(edit.ctx, filePath, sessionID)
 		if err != nil {
-			return fmt.Errorf("error creating file history: %w", err)
+			_, err = edit.files.Create(edit.ctx, sessionID, filePath, oldContent)
+			if err != nil {
+				return fmt.Errorf("error creating file history: %w", err)
+			}
 		}
-	}
-	if file.Content != oldContent {
-		// User manually changed the content; store an intermediate version.
-		if _, err := edit.files.CreateVersion(edit.ctx, sessionID, filePath, oldContent); err != nil {
+		if file.Content != oldContent {
+			// User manually changed the content; store an intermediate version.
+			if _, err := edit.files.CreateVersion(edit.ctx, sessionID, filePath, oldContent); err != nil {
+				slog.Error("Error creating file history version", "error", err)
+			}
+		}
+		if _, err := edit.files.CreateVersion(edit.ctx, sessionID, filePath, newContent); err != nil {
 			slog.Error("Error creating file history version", "error", err)
 		}
-	}
-	if _, err := edit.files.CreateVersion(edit.ctx, sessionID, filePath, newContent); err != nil {
-		slog.Error("Error creating file history version", "error", err)
+
 	}
 
 	edit.filetracker.RecordRead(edit.ctx, sessionID, filePath)

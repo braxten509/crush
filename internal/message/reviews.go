@@ -49,7 +49,7 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 		}
 		var metadata map[string]json.RawMessage
 		_ = json.Unmarshal([]byte(result.Metadata), &metadata)
-		hasDiff := result.Review != nil && len(result.Review.Changes) > 0
+		hasDiff := result.Review != nil && (len(result.Review.Changes) > 0 || result.Review.Deletions)
 		for _, key := range []string{"old_content", "new_content", "diff"} {
 			hasDiff = hasDiff || len(metadata[key]) > 0
 		}
@@ -57,6 +57,9 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 			continue
 		}
 		summary := &filechange.ReviewSummary{}
+		if result.Review != nil {
+			summary.Deletions = result.Review.Deletions
+		}
 		countLines(summary, result.Review, metadata)
 		detail := reviewDetail{Metadata: result.Metadata}
 		if result.Review != nil {

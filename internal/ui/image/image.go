@@ -61,6 +61,10 @@ type CellSize struct {
 type cachedImage struct {
 	img        image.Image
 	cols, rows int
+	// blocks is img painted in colored blocks, kept once painted: matching
+	// glyphs to the picture is slow, and a question form draws its picture
+	// on every frame, mouse movements included.
+	blocks string
 }
 
 var (
@@ -203,6 +207,9 @@ func (e Encoding) Render(id string, cols, rows int) string {
 
 	switch e {
 	case EncodingBlocks:
+		if cached.blocks != "" {
+			return cached.blocks
+		}
 		canvas := paintbrush.New()
 		canvas.SetImage(img)
 		canvas.SetWidth(cols)
@@ -236,7 +243,14 @@ func (e Encoding) Render(id string, cols, rows int) string {
 			'◪': .9,
 		}
 		canvas.Paint()
-		return strings.TrimSpace(canvas.GetResult())
+		blocks := strings.TrimSpace(canvas.GetResult())
+		cachedMutex.Lock()
+		if c, ok := cachedImages[key]; ok && c.img == img {
+			c.blocks = blocks
+			cachedImages[key] = c
+		}
+		cachedMutex.Unlock()
+		return blocks
 	case EncodingKitty:
 		// Build Kitty graphics unicode place holders
 		var fg color.Color

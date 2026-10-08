@@ -11,6 +11,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/diff"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/fsext"
@@ -218,15 +219,18 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 	}
 
-	// Update file history
-	_, err = edit.files.Create(edit.ctx, sessionID, params.FilePath, "")
-	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
-	}
+	if filechange.InRepository(filechange.RepositoryRoot(edit.workingDir), edit.workingDir, params.FilePath) {
+		// Update file history
+		_, err = edit.files.Create(edit.ctx, sessionID, params.FilePath, "")
+		if err != nil {
+			return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
+		}
 
-	_, err = edit.files.CreateVersion(edit.ctx, sessionID, params.FilePath, currentContent)
-	if err != nil {
-		slog.Error("Error creating file history version", "error", err)
+		_, err = edit.files.CreateVersion(edit.ctx, sessionID, params.FilePath, currentContent)
+		if err != nil {
+			slog.Error("Error creating file history version", "error", err)
+		}
+
 	}
 
 	edit.filetracker.RecordRead(edit.ctx, sessionID, params.FilePath)

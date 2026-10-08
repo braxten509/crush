@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/permission"
 )
 
@@ -253,6 +254,12 @@ func spawnLine(line string) (delim string, ok bool) {
 
 // EditedFile returns the file a Crush edit or write call changes, if any.
 func EditedFile(name, input string) string {
+	var operation struct {
+		DeleteFile bool `json:"delete_file"`
+	}
+	if json.Unmarshal([]byte(input), &operation) == nil && operation.DeleteFile {
+		return ""
+	}
 	if name != tools.EditToolName && name != tools.MultiEditToolName && name != tools.WriteToolName {
 		return ""
 	}
@@ -266,7 +273,7 @@ func EditedFile(name, input string) string {
 // RecordEdit adds a CLI's change to a file to the session's file history,
 // as Crush's own edit tools do, so it shows under modified files.
 func (m *Model) RecordEdit(ctx context.Context, sessionID, path, before string) {
-	if m.Files == nil {
+	if m.Files == nil || !filechange.InRepository(filechange.RepositoryRoot(m.Dir), m.Dir, path) {
 		return
 	}
 	after, err := os.ReadFile(path)

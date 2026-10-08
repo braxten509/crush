@@ -16,12 +16,13 @@ import (
 )
 
 // Exercise the real CLI protocol, persistence and the action-group diff. The
-// shell computes a filename outside the workspace, like the Desktop example.
+// shell computes a filename in a sibling folder of the same Git repository.
 func TestShellFileReviewCLIEndToEnd(t *testing.T) {
 	for _, late := range []bool{false, true} {
 		t.Run(fmt.Sprintf("late=%v", late), func(t *testing.T) {
 			env := testEnv(t)
-			bin, outside := t.TempDir(), t.TempDir()
+			env.workingDir = visibleReviewRoot(t)
+			bin, outside := t.TempDir(), visibleReviewRoot(t)
 			require.NoError(t, os.WriteFile(filepath.Join(outside, "hello.txt"), []byte("existing\n"), 0600))
 			command := fmt.Sprintf(`python3 - <<'PY'
 from pathlib import Path

@@ -15,7 +15,7 @@ func TestIdenticalShellCommandsKeepSeparateOccurrences(t *testing.T) {
 	for _, late := range []bool{false, true} {
 		for _, reverse := range []bool{false, true} {
 			t.Run(fmt.Sprintf("late=%t/reverse=%t", late, reverse), func(t *testing.T) {
-				root := t.TempDir()
+				root := visibleRestoreRoot(t)
 				p := newProcessReview(root, nil)
 				if !late {
 					p.Begin("first", "python3 script.py")
@@ -85,7 +85,7 @@ func retainedPreviewBytes(p *ProcessReview) int {
 }
 
 func TestProcessSnapshotsShareBudgetAcrossInvocations(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	p := newProcessReview(root, nil)
 	for index := range maxTextTotal/maxTextSize + 2 {
 		path := filepath.Join(root, fmt.Sprintf("file-%d.txt", index))
@@ -98,7 +98,7 @@ func TestProcessSnapshotsShareBudgetAcrossInvocations(t *testing.T) {
 }
 
 func TestProcessSnapshotsReuseDuplicateBaselines(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	path := filepath.Join(root, "large.txt")
 	require.NoError(t, os.WriteFile(path, []byte(strings.Repeat("x", maxTextSize)), 0600))
 	p := newProcessReview(root, nil)
@@ -109,7 +109,7 @@ func TestProcessSnapshotsReuseDuplicateBaselines(t *testing.T) {
 }
 
 func TestLateShellReportsKeepReadOnlyOccurrenceSeparate(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	p := newProcessReview(root, nil)
 	p.executed(nil, []string{"python3", "script.py"})
 	writer := p.executed(nil, []string{"python3", "script.py"})

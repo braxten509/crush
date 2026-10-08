@@ -199,3 +199,20 @@ func TestOlderSummariesGetLineCountsWhileDiffsRemain(t *testing.T) {
 	require.True(t, summary.Counted)
 	require.Equal(t, [2]int{1, 1}, [2]int{summary.Adds, summary.Dels})
 }
+
+func TestDeletionFlagSurvivesStorageWithoutFileDetails(t *testing.T) {
+	svc, sessionID := newTestService(t)
+	msg, err := svc.Create(t.Context(), sessionID, CreateMessageParams{Role: Tool, Parts: []ContentPart{
+		ToolResult{ToolCallID: "delete", Name: "edit", Review: &filechange.Review{Deletions: true}},
+	}})
+	require.NoError(t, err)
+	saved, err := svc.List(t.Context(), sessionID)
+	require.NoError(t, err)
+	require.Len(t, saved, 1)
+	require.True(t, saved[0].ToolResults()[0].Review.Summary.Deletions)
+	require.Empty(t, saved[0].ToolResults()[0].Review.Summary.Paths)
+	full, err := svc.LoadReview(t.Context(), msg.ID)
+	require.NoError(t, err)
+	require.True(t, full.ToolResults()[0].Review.Deletions)
+	require.Empty(t, full.ToolResults()[0].Review.Changes)
+}

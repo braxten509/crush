@@ -12,7 +12,7 @@ import (
 
 func TestSnapshotsExcludeLateSecureEntry(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	path := filepath.Join(root, "credentials.env")
 	require.NoError(t, os.WriteFile(path, []byte("KEY=%s"), 0o600))
 	tracker, err := New(t.Context(), root)

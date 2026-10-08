@@ -828,6 +828,12 @@ func codexChangeTool(c codexChange) (string, string) {
 		return tools.WriteToolName, marshal(tools.WriteParams{FilePath: c.Path, Content: c.Diff})
 	}
 	oldText, newText := splitDiff(c.Diff)
+	if c.Kind.Type == "delete" {
+		return tools.EditToolName, marshal(struct {
+			tools.EditParams
+			DeleteFile bool `json:"delete_file"`
+		}{tools.EditParams{FilePath: c.Path, OldString: oldText, NewString: newText}, true})
+	}
 	return tools.EditToolName, marshal(tools.EditParams{FilePath: c.Path, OldString: oldText, NewString: newText})
 }
 
@@ -836,6 +842,12 @@ func codexChangeTool(c codexChange) (string, string) {
 // undoing the reported patch, so it does not depend on when Crush looked at
 // the file. It returns "" when the patch no longer matches the file.
 func codexChangeMetadata(dir string, c codexChange) string {
+	if c.Kind.Type == "delete" {
+		return filechange.WithReview("", &filechange.Review{Root: dir, Deletions: true})
+	}
+	if !filechange.InRepository(filechange.RepositoryRoot(dir), dir, c.Path) {
+		return filechange.WithReview("", &filechange.Review{Root: dir})
+	}
 	path := c.Path
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(dir, path)
@@ -848,8 +860,6 @@ func codexChangeMetadata(dir string, c codexChange) string {
 			return ""
 		}
 		after = string(data)
-	case "delete":
-		before = c.Diff
 	default:
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -870,16 +880,8 @@ func codexChangeMetadata(dir string, c codexChange) string {
 	change := filechange.Change{Path: path, Order: time.Now().UnixNano()}
 	if c.Kind.Type != "add" {
 		change.Before = &filechange.State{Content: before, Size: int64(len(before)), Mode: mode}
-		if c.Kind.Type == "delete" {
-			// The late deletion report has text but no original permissions. A
-			// timely tracker snapshot takes precedence; otherwise never invent a
-			// 0644 restore for a file that may have been executable or private.
-			change.Before.RestoreOmitted = "Original permissions were not recorded for this deletion"
-		}
 	}
-	if c.Kind.Type != "delete" {
-		change.After = &filechange.State{Content: after, Size: int64(len(after)), Mode: mode}
-	}
+	change.After = &filechange.State{Content: after, Size: int64(len(after)), Mode: mode}
 	return filechange.WithReview(metadata, &filechange.Review{Root: dir, Changes: []filechange.Change{change}})
 }
 

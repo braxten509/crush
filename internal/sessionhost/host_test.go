@@ -1,6 +1,7 @@
 package sessionhost
 
 import (
+	"image"
 	"os"
 	"path/filepath"
 	"slices"
@@ -89,29 +90,37 @@ func TestNarrowTerminalShowsStripWithoutChangingSetting(t *testing.T) {
 
 func TestRowAt(t *testing.T) {
 	h := newTestHost(t, 120, 30, Status{Title: "One"}, Status{Title: "Two"})
-	require.True(t, h.rowAt(listWidth-3, 0).toggle)
+	require.True(t, h.rowAt(toggleColumn, 0).toggle)
+	for x := 1; x < listWidth-2; x++ {
+		require.True(t, h.rowAt(x, newSessionRow).newSession)
+		require.False(t, h.rowAt(x, newSessionRow).toggle)
+		require.Equal(t, -1, h.rowAt(x, newSessionRow).session)
+	}
+	require.False(t, h.rowAt(0, newSessionRow).newSession)
+	require.False(t, h.rowAt(listWidth-2, newSessionRow).newSession)
+	require.False(t, h.rowAt(newSessionColumn, 2).newSession)
 	require.False(t, h.rowAt(2, 0).toggle)
-	require.True(t, h.rowAt(3, 1).newSession)
-	require.Equal(t, -1, h.rowAt(3, 2).session)
+	require.False(t, h.rowAt(2, 0).newSession)
+	require.Equal(t, -1, h.rowAt(3, 1).session)
 
-	r := h.rowAt(5, firstSessionRow)
+	r := h.rowAt(5, listFirstRow)
 	require.Equal(t, 0, r.session)
 	require.False(t, r.close)
-	require.True(t, h.rowAt(listWidth-3, firstSessionRow).close)
-	require.Equal(t, 0, h.rowAt(5, firstSessionRow+3).session)
-	require.Equal(t, -1, h.rowAt(5, firstSessionRow+4).session, "the gap between sessions")
-	require.Equal(t, 1, h.rowAt(5, firstSessionRow+listBlockHeight).session)
+	require.True(t, h.rowAt(listWidth-3, listFirstRow).close)
+	require.Equal(t, 0, h.rowAt(5, listFirstRow+1).session)
+	require.Equal(t, -1, h.rowAt(5, listFirstRow+2).session, "the gap between sessions")
+	require.Equal(t, 1, h.rowAt(5, listFirstRow+listBlockHeight).session)
 
 	press(h, "alt+s")
 	require.True(t, h.rowAt(1, 0).toggle)
 	require.True(t, h.rowAt(1, 1).newSession)
-	require.Equal(t, 1, h.rowAt(1, firstSessionRow+stripBlockHeight+1).session)
-	require.False(t, h.rowAt(1, firstSessionRow).close, "the strip closes with alt+w only")
+	require.Equal(t, 1, h.rowAt(1, stripFirstRow+stripBlockHeight+1).session)
+	require.False(t, h.rowAt(1, stripFirstRow).close, "the strip closes with alt+w only")
 }
 
 func TestClickSwitchesSession(t *testing.T) {
 	h := newTestHost(t, 120, 30, Status{Title: "One"}, Status{Title: "Two"})
-	h.Update(tea.MouseClickMsg{X: 5, Y: firstSessionRow + listBlockHeight, Button: tea.MouseLeft})
+	h.Update(tea.MouseClickMsg{X: 5, Y: listFirstRow + listBlockHeight, Button: tea.MouseLeft})
 	require.Equal(t, 1, h.active)
 	require.True(t, h.sessions[1].visible.Load())
 	require.False(t, h.sessions[0].visible.Load())
@@ -142,11 +151,11 @@ func TestClosingAlwaysAsks(t *testing.T) {
 	press(h, "enter")
 	require.False(t, h.sessions[0].stopped, "Keep was selected")
 
-	h.Update(tea.MouseClickMsg{X: listWidth - 3, Y: firstSessionRow, Button: tea.MouseLeft})
+	h.Update(tea.MouseClickMsg{X: listWidth - 3, Y: listFirstRow, Button: tea.MouseLeft})
 	require.NotNil(t, h.confirm, "the × asks too")
 	press(h, "enter")
 	require.True(t, h.sessions[0].stopped)
-	require.Contains(t, screenText(h), "Closing…")
+	require.Contains(t, screenText(h), "× Ready one", "a closing session shows ×")
 }
 
 func TestCloseBoxSaysWhatTheSessionIsDoing(t *testing.T) {
@@ -193,8 +202,7 @@ func TestFinishedWhileHiddenIsUnreadUntilShown(t *testing.T) {
 	other.status.State = StateReady
 	h.statusChanged(other.id)
 	require.True(t, other.unread)
-	require.Contains(t, screenText(h), "✓ Finished")
-	require.Contains(t, screenText(h), "Unread")
+	require.Contains(t, screenText(h), "✓ Other")
 
 	press(h, "alt+2")
 	require.False(t, other.unread)
@@ -224,7 +232,7 @@ func TestStripShowsOneMarkPerSession(t *testing.T) {
 	press(h, "alt+s")
 	lines := strings.Split(screenText(h), "\n")
 	var marks []string
-	for _, line := range lines[firstSessionRow:] {
+	for _, line := range lines[stripFirstRow:] {
 		if cell := strings.Trim(ansi.Cut(line, 0, stripWidth-1), " ▌"); cell != "" && !strings.ContainsAny(cell, "0123456789") {
 			marks = append(marks, cell)
 		}
@@ -237,10 +245,16 @@ func TestListShowsSessionDetails(t *testing.T) {
 	h := newTestHost(t, 120, 30,
 		Status{Title: "Remote setup", Dir: filepath.Join(home, "dev", "crush"), Model: "GPT-6.1 Sol · High", State: StateWorking},
 		Status{Title: "Inbox cleanup", State: StateWaiting},
+		Status{Title: "Notes", Dir: filepath.Join(home, "notes"), Model: "Opus · High", State: StateReady},
 	)
 	text := screenText(h)
-	for _, want := range []string{"Sessions  2", "+ New session", "Remote setup", "~/dev/crush", "GPT-6.1 Sol · High", "● Working", "Viewing", "Inbox cleanup", "! Needs you", "alt+s hide · alt+w close"} {
+	for _, want := range []string{"Sessions [3]", "+ New session", "‹", "● Remote setup", "  crush", "! Inbox cleanup",
+		"○ Notes", "  notes", "alt+n new · alt+s hide"} {
 		require.Contains(t, text, want)
+	}
+	// Only the folder's name shows below the title: no model, no words.
+	for _, gone := range []string{"GPT-6.1 Sol", "Opus", "~/dev/crush", "Working", "Needs you", "Viewing", "Ready"} {
+		require.NotContains(t, text, gone)
 	}
 	for _, line := range strings.Split(text, "\n") {
 		require.LessOrEqual(t, ansi.StringWidth(line), 120)
@@ -361,4 +375,201 @@ func TestTypedTextReachesSession(t *testing.T) {
 			require.Equal(t, tc.want, <-got)
 		})
 	}
+}
+
+// The emulator would pass every mouse move on; the host passes only the
+// ones Crush asked for: none, moves with a button held, or every move.
+func TestSessionGetsOnlyTheMouseMovesItAskedFor(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "One"})
+	s := h.sessions[0]
+	input := make(chan string, 16)
+	go func() {
+		buf := make([]byte, 64)
+		for {
+			n, err := s.emu.Read(buf)
+			if err != nil {
+				return
+			}
+			input <- string(buf[:n])
+		}
+	}()
+	t.Cleanup(func() { _ = s.emu.Close() })
+	none := func(why string) {
+		t.Helper()
+		select {
+		case got := <-input:
+			t.Fatalf("%s, but the session got %q", why, got)
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	some := func(why string) {
+		t.Helper()
+		select {
+		case <-input:
+		case <-time.After(2 * time.Second):
+			t.Fatal(why)
+		}
+	}
+	move := tea.MouseMotionMsg{X: 50, Y: 0}
+	drag := tea.MouseMotionMsg{X: 50, Y: 0, Button: tea.MouseLeft}
+
+	_, err := s.emu.Write([]byte(ansi.SetModeMouseButtonEvent + ansi.SetModeMouseExtSgr))
+	require.NoError(t, err)
+	h.Update(move)
+	none("a move with no button held isn't asked for")
+	h.Update(drag)
+	some("a drag is asked for")
+
+	_, err = s.emu.Write([]byte(ansi.SetModeMouseAnyEvent))
+	require.NoError(t, err)
+	h.Update(move)
+	some("every move is asked for")
+}
+
+// inputs returns everything the session's Crush reads, as it comes.
+func inputs(t *testing.T, s *session) <-chan string {
+	t.Helper()
+	got := make(chan string, 16)
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			n, err := s.emu.Read(buf)
+			if err != nil {
+				return
+			}
+			got <- string(buf[:n])
+		}
+	}()
+	t.Cleanup(func() { _ = s.emu.Close() })
+	return got
+}
+
+func nextInput(t *testing.T, in <-chan string) string {
+	t.Helper()
+	select {
+	case text := <-in:
+		return text
+	case <-time.After(2 * time.Second):
+		t.Fatal("the session got no input")
+		return ""
+	}
+}
+
+func noInput(t *testing.T, in <-chan string) {
+	t.Helper()
+	select {
+	case text := <-in:
+		t.Fatalf("the session got %q", text)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+const pictureQuestion = "\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\"
+
+func TestPictureQuestionAnsweredOnlyWhenTheTerminalShowsPictures(t *testing.T) {
+	s := newSession(1, 40, 10, nil, nil)
+	in := inputs(t, s)
+	_, err := s.emu.Write([]byte(pictureQuestion))
+	require.NoError(t, err)
+	noInput(t, in)
+
+	s.kitty.Store(true)
+	_, err = s.emu.Write([]byte(pictureQuestion))
+	require.NoError(t, err)
+	require.Equal(t, "\x1b_Gi=31;OK\x1b\\", nextInput(t, in))
+}
+
+// placePicture is what Crush writes to put picture id at a cell: move the
+// cursor there, then send the picture in two parts.
+func placePicture(id string, col, row int) string {
+	return ansi.CursorPosition(col+1, row+1) +
+		"\x1b_Ga=T,f=100,i=" + id + ",c=4,r=2,C=1,q=2,m=1;AAAA\x1b\\\x1b_Gm=0;BBBB\x1b\\"
+}
+
+func TestSessionNotesWherePicturesGo(t *testing.T) {
+	s := newSession(1, 40, 10, nil, nil)
+	t.Cleanup(func() { _ = s.emu.Close() })
+	s.kitty.Store(true)
+	_, err := s.emu.Write([]byte(placePicture("7", 4, 2) + "\x1b_Ga=T,U=1,i=9,q=2;CCCC\x1b\\" + "\x1b_Ga=d,d=I,i=7,q=2\x1b\\"))
+	require.NoError(t, err)
+	require.True(t, s.pictured.Load())
+	cmds := s.pictures
+	require.Len(t, cmds, 4)
+	require.True(t, cmds[0].place && cmds[0].first)
+	require.Equal(t, "7", cmds[0].id)
+	require.Equal(t, image.Pt(4, 2), cmds[0].at)
+	require.True(t, cmds[1].place && !cmds[1].first, "the second part goes with the first")
+	require.Equal(t, image.Pt(4, 2), cmds[1].at)
+	require.False(t, cmds[2].place, "a placeholder picture has no place of its own")
+	require.True(t, cmds[3].remove)
+	require.Equal(t, "7", cmds[3].id)
+}
+
+// pictureOutput runs msg through the host and returns what it wrote to the
+// real terminal.
+func pictureOutput(h *Host, msg tea.Msg) string {
+	h.update(msg)
+	h.syncPictures()
+	return h.takeRaw()
+}
+
+func TestPicturesFollowTheShownSession(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "One"}, Status{Title: "Two"})
+	pictureOutput(h, nil)
+	one, two := h.sessions[0], h.sessions[1]
+	place := func(id string) []pictureCmd {
+		return []pictureCmd{
+			{seq: "<" + id + "-1>", place: true, first: true, id: id, at: image.Pt(4, 2)},
+			{seq: "<" + id + "-2>", place: true, id: id, at: image.Pt(4, 2)},
+		}
+	}
+	at := ansi.SaveCursor + ansi.CursorPosition(4+listWidth+1, 3)
+	shown := at + "<7-1>" + ansi.RestoreCursor + at + "<7-2>" + ansi.RestoreCursor
+	gone := ansi.KittyGraphics(nil, "a=d", "d=i", "i=7", "q=2")
+
+	require.Equal(t, shown, pictureOutput(h, picturesMsg{id: one.id, cmds: place("7")}),
+		"placed past the list")
+	require.Empty(t, pictureOutput(h, picturesMsg{id: two.id, cmds: place("8")}),
+		"a hidden session's picture waits")
+	require.Equal(t, "<9>", pictureOutput(h, picturesMsg{id: two.id, cmds: []pictureCmd{{seq: "<9>"}}}),
+		"a placeholder picture goes out right away")
+
+	out := pictureOutput(h, tea.KeyPressMsg(tea.Key{Code: '2', Mod: tea.ModAlt}))
+	require.True(t, strings.HasPrefix(out, gone), "switching takes the old picture down")
+	require.Contains(t, out, "<8-1>", "and puts the new session's up")
+
+	pictureOutput(h, tea.KeyPressMsg(tea.Key{Code: '1', Mod: tea.ModAlt}))
+	require.Equal(t, gone, pictureOutput(h, tea.KeyPressMsg(tea.Key{Code: 'n', Mod: tea.ModAlt})),
+		"the new-session box covers it")
+	require.Equal(t, shown, pictureOutput(h, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape})),
+		"and it comes back after")
+
+	out = pictureOutput(h, tea.KeyPressMsg(tea.Key{Code: 's', Mod: tea.ModAlt}))
+	require.Contains(t, out, gone)
+	require.Contains(t, out, ansi.CursorPosition(4+stripWidth+1, 3)+"<7-1>", "moved with the narrower list")
+
+	require.Equal(t, ansi.KittyGraphics(nil, "a=d", "d=I", "i=7", "q=2"),
+		pictureOutput(h, picturesMsg{id: one.id, cmds: []pictureCmd{{seq: ansi.KittyGraphics(nil, "a=d", "d=I", "i=7", "q=2"), remove: true, id: "7"}}}))
+	require.Empty(t, one.placed, "a removed picture isn't put back")
+}
+
+func TestHostSharesPictureSupportAndCellSize(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "One"}, Status{Title: "Two"})
+	h.Update(uv.KittyGraphicsEvent{})
+	h.Update(uv.PixelSizeEvent{Width: 1200, Height: 600})
+	for _, s := range h.sessions {
+		require.True(t, s.kitty.Load())
+		require.EqualValues(t, 10, s.cellWidth.Load())
+		require.EqualValues(t, 20, s.cellHeight.Load())
+	}
+}
+
+func TestSessionLearnsItsSizeInPixels(t *testing.T) {
+	s := newSession(1, 40, 10, nil, nil)
+	t.Cleanup(func() { _ = s.emu.Close() })
+	s.cellWidth.Store(9)
+	s.cellHeight.Store(18)
+	_, err := s.emu.Write([]byte("\x1b[14t"))
+	require.NoError(t, err)
+	require.Equal(t, "\x1b[4;180;360t", readInput(t, s))
 }

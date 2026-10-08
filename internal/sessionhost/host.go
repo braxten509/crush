@@ -5,12 +5,14 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -39,6 +41,9 @@ type Options struct {
 	Dir string
 	// Env is the environment sessions start with.
 	Env []string
+	// Recent returns folders Crush was used in, the latest first, for the
+	// new-session box. It may be nil.
+	Recent func() []string
 }
 
 type colorWaitMsg struct{}
@@ -63,8 +68,20 @@ type Host struct {
 	theme  string
 	styles styles.Styles
 
+	// kitty: the real terminal shows Kitty graphics. pixelWidth and
+	// pixelHeight are its size in pixels, when it said.
+	kitty                   bool
+	pixelWidth, pixelHeight int
+	// shownPictures is the session whose pictures are on screen, placed
+	// for a list picturesSide wide.
+	shownPictures *session
+	picturesSide  int
+	// raw is what to write to the real terminal after this update.
+	raw strings.Builder
+
 	hover   int // hovered list row; -1 for none
 	confirm *confirmClose
+	picker  *picker // the open new-session box, if any
 	// capture: a mouse button went down over the session, so its motion
 	// and release go there even when the pointer leaves it.
 	capture bool
@@ -94,31 +111,50 @@ func New(opts Options) *Host {
 // SetSend sets how sessions deliver messages to the program.
 func (h *Host) SetSend(send func(tea.Msg)) { h.send = send }
 
+// pictureQuery asks the terminal whether it shows Kitty graphics, and its
+// size in pixels. Asked before the colors, its answers come first, so they
+// are known when the first session starts.
+var pictureQuery = ansi.KittyGraphics([]byte("AAAA"), "i=31", "s=1", "v=1", "a=q", "t=d", "f=24") +
+	ansi.WindowOp(14)
+
 func (h *Host) Init() tea.Cmd {
-	return tea.Batch(
-		tea.RequestBackgroundColor,
-		tea.RequestForegroundColor,
-		tea.Tick(colorWait, func(time.Time) tea.Msg { return colorWaitMsg{} }),
+	return tea.Sequence(
+		tea.Raw(pictureQuery),
+		tea.Batch(
+			tea.RequestBackgroundColor,
+			tea.RequestForegroundColor,
+			tea.Tick(colorWait, func(time.Time) tea.Msg { return colorWaitMsg{} }),
+		),
 	)
 }
 
 func (h *Host) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmd := h.update(msg)
+	h.syncPictures()
+	if raw := h.takeRaw(); raw != "" {
+		cmd = tea.Batch(cmd, tea.Raw(raw))
+	}
+	return h, cmd
+}
+
+func (h *Host) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		h.width, h.height = msg.Width, msg.Height
 		w, ht := h.sessionSize()
 		for _, s := range h.sessions {
 			s.resize(w, ht)
+			h.shareCellSize(s)
 		}
-		return h, h.maybeStart()
+		return h.maybeStart()
 	case tea.BackgroundColorMsg:
 		h.bg, h.colorsKnown = msg.Color, true
-		return h, h.maybeStart()
+		return h.maybeStart()
 	case tea.ForegroundColorMsg:
 		h.fg = msg.Color
 	case colorWaitMsg:
 		h.waited = true
-		return h, h.maybeStart()
+		return h.maybeStart()
 	case outputMsg:
 		if s := h.byID(msg.id); s != nil {
 			s.dirty.Store(false)
@@ -126,17 +162,33 @@ func (h *Host) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusMsg:
 		h.statusChanged(msg.id)
 	case exitedMsg:
-		return h, h.removeSession(msg.id)
+		return h.removeSession(msg.id)
 	case tea.KeyPressMsg:
-		return h, h.handleKey(msg)
+		return h.handleKey(msg)
 	case tea.PasteMsg:
-		if s := h.current(); s != nil && h.confirm == nil {
+		if h.picker != nil {
+			h.picker.insert(msg.Content)
+		} else if s := h.current(); s != nil && h.confirm == nil {
 			s.emu.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
 		h.handleMouse(msg)
 	case clipboardMsg:
-		return h, tea.SetClipboard(msg.text)
+		return tea.SetClipboard(msg.text)
+	case picturesMsg:
+		if s := h.byID(msg.id); s != nil {
+			h.takePictures(s, msg.cmds)
+		}
+	case uv.KittyGraphicsEvent:
+		h.kitty = true
+		for _, s := range h.sessions {
+			s.kitty.Store(true)
+		}
+	case uv.PixelSizeEvent:
+		h.pixelWidth, h.pixelHeight = msg.Width, msg.Height
+		for _, s := range h.sessions {
+			h.shareCellSize(s)
+		}
 	case tea.FocusMsg:
 		h.blurred = false
 		if s := h.current(); s != nil {
@@ -148,7 +200,7 @@ func (h *Host) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.setFocus(false)
 		}
 	}
-	return h, nil
+	return nil
 }
 
 // maybeStart starts the first session once the window size is known and
@@ -170,7 +222,10 @@ func (h *Host) startSession(dir string, args []string) error {
 	w, ht := h.sessionSize()
 	h.nextID++
 	l := launch{exe: h.opts.Exe, args: args, dir: dir, env: h.opts.Env}
-	s, err := startSession(h.nextID, l, w, ht, h.fg, h.bg, h.send)
+	s, err := startSession(h.nextID, l, w, ht, h.fg, h.bg, h.send, func(s *session) {
+		s.kitty.Store(h.kitty)
+		h.shareCellSize(s)
+	})
 	if err != nil {
 		return err
 	}
@@ -179,19 +234,53 @@ func (h *Host) startSession(dir string, args []string) error {
 	return nil
 }
 
-// newSession starts a session in the folder of the one being viewed.
-func (h *Host) newSession() {
+// openPicker opens the new-session box at the folder of the session being
+// viewed.
+func (h *Host) openPicker() {
+	if h.confirm != nil {
+		return
+	}
 	dir := h.opts.Dir
 	if s := h.current(); s != nil {
 		if d := s.snapshot().Dir; d != "" {
 			dir = d
 		}
 	}
+	var recent []string
+	if h.opts.Recent != nil {
+		recent = h.opts.Recent()
+	}
+	h.picker = newPicker(dir, recent)
+	h.hover = -1
+}
+
+// startPicked starts a session in the folder chosen in the new-session box,
+// or says in the box why it can't.
+func (h *Host) startPicked() {
+	dir, ok := h.picker.choice()
+	if !ok {
+		return
+	}
+	h.picker = nil
+	h.newSession(dir)
+}
+
+// newSession starts a session in dir.
+func (h *Host) newSession(dir string) {
 	h.notice = ""
 	if err := h.startSession(dir, h.opts.NewArgs(dir)); err != nil {
 		slog.Error("Could not start a Crush session", "error", err)
 		h.notice = "Couldn't start a session."
 	}
+}
+
+// shareCellSize tells s the real terminal's character size in pixels.
+func (h *Host) shareCellSize(s *session) {
+	if h.pixelWidth <= 0 || h.pixelHeight <= 0 || h.width <= 0 || h.height <= 0 {
+		return
+	}
+	s.cellWidth.Store(int32(h.pixelWidth / h.width))
+	s.cellHeight.Store(int32(h.pixelHeight / h.height))
 }
 
 func (h *Host) show(i int) {
@@ -342,7 +431,14 @@ func (h *Host) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
+	if h.picker != nil {
+		h.pickerKey(msg)
+		return nil
+	}
 	switch key := msg.String(); key {
+	case "alt+n":
+		h.openPicker()
+		return nil
 	case "alt+s":
 		h.toggleList()
 		return nil
@@ -362,6 +458,42 @@ func (h *Host) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func (h *Host) pickerKey(msg tea.KeyPressMsg) {
+	p := h.picker
+	switch msg.String() {
+	case "esc":
+		h.picker = nil
+	case "enter":
+		h.startPicked()
+	case "up", "shift+tab", "ctrl+p":
+		p.move(-1)
+	case "down", "ctrl+n":
+		p.move(1)
+	case "tab":
+		p.complete()
+	case "left":
+		p.cursor = max(p.cursor-1, 0)
+	case "right":
+		p.cursor = min(p.cursor+1, len(p.input))
+	case "home", "ctrl+a":
+		p.cursor = 0
+	case "end", "ctrl+e":
+		p.cursor = len(p.input)
+	case "backspace":
+		p.backspace()
+	case "delete", "ctrl+d":
+		p.deleteForward()
+	case "ctrl+w", "alt+backspace":
+		p.deleteWord()
+	case "ctrl+u":
+		p.setInput("")
+	default:
+		if text, _ := sessionInput(msg); text != "" && !strings.HasPrefix(text, "\x1b") {
+			p.insert(text)
+		}
+	}
 }
 
 // sessionInput returns what to send a session for a key press: the text
@@ -395,6 +527,12 @@ func (h *Host) handleMouse(msg tea.MouseMsg) {
 	if h.confirm != nil {
 		if click, ok := msg.(tea.MouseClickMsg); ok && click.Button == tea.MouseLeft {
 			h.clickConfirm(m.X, m.Y)
+		}
+		return
+	}
+	if h.picker != nil {
+		if click, ok := msg.(tea.MouseClickMsg); ok && click.Button == tea.MouseLeft {
+			h.clickPicker(m.X, m.Y)
 		}
 		return
 	}
@@ -433,7 +571,9 @@ func (h *Host) forwardMouse(msg tea.MouseMsg, side int) {
 		h.capture = false
 		s.emu.SendMouse(uv.MouseReleaseEvent(m))
 	case tea.MouseMotionMsg:
-		s.emu.SendMouse(uv.MouseMotionEvent(m))
+		if s.wantsMotion(m.Button != uv.MouseNone) {
+			s.emu.SendMouse(uv.MouseMotionEvent(m))
+		}
 	case tea.MouseWheelMsg:
 		s.emu.SendMouse(uv.MouseWheelEvent(m))
 	}
@@ -445,7 +585,7 @@ func (h *Host) clickSide(x, y int) {
 	case r.toggle:
 		h.toggleList()
 	case r.newSession:
-		h.newSession()
+		h.openPicker()
 	case r.session >= 0 && r.close:
 		h.askClose(r.session)
 	case r.session >= 0:

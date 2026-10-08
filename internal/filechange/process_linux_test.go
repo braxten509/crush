@@ -47,7 +47,7 @@ func runObservedScript(t *testing.T, root, command, script string) (*Review, err
 }
 
 func TestShellReviewDynamicPathsOutsideWorkspace(t *testing.T) {
-	root, outside := t.TempDir(), t.TempDir()
+	root, outside := visibleRestoreRoot(t), visibleRestoreRoot(t)
 	put(t, outside, "hello.txt", "existing\n")
 	program := fmt.Sprintf(`import pathlib
 root = pathlib.Path(%q)
@@ -71,7 +71,7 @@ for index in range(1000):
 }
 
 func TestShellReviewCapturesOverwriteRenameDeleteAndPartialFailure(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	for _, name := range []string{"overwrite", "rename", "delete", "unrelated"} {
 		put(t, root, name, "before\n")
 	}
@@ -86,12 +86,12 @@ PY`
 	require.Error(t, err)
 	require.NotNil(t, review)
 	changes := byPath(review)
-	require.Len(t, changes, 4)
+	require.Len(t, changes, 2)
 	require.Equal(t, "before\n", changes["overwrite"].Before.Content)
 	require.Equal(t, "after\n", changes["overwrite"].After.Content)
-	require.Nil(t, changes["rename"].After)
+	require.NotContains(t, changes, "rename")
 	require.Nil(t, changes["renamed"].Before)
-	require.Nil(t, changes["delete"].After)
+	require.NotContains(t, changes, "delete")
 }
 
 // Claude Code runs each call as `eval '<quoted command>'` inside a wrapper
@@ -99,7 +99,7 @@ PY`
 func TestShellReviewMatchesCommandQuotedInsideWrapper(t *testing.T) {
 	for name, escape := range map[string]string{"claude": `'"'"'`, "posix": `'\''`} {
 		t.Run(name, func(t *testing.T) {
-			root, outside := t.TempDir(), t.TempDir()
+			root, outside := visibleRestoreRoot(t), visibleRestoreRoot(t)
 			target := filepath.Join(outside, "Secure entries.txt")
 			command := fmt.Sprintf(`ls -d %q && [ -e %q ] || echo "it's here" > %q`, outside, target, target)
 			quoted := "'" + strings.ReplaceAll(command, "'", escape) + "'"
@@ -114,7 +114,7 @@ func TestShellReviewMatchesCommandQuotedInsideWrapper(t *testing.T) {
 }
 
 func TestShellReviewIgnoresWrapperOfAnotherCommand(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", `read -r _; /bin/sh -c "eval 'printf x > other'"`)
@@ -131,13 +131,13 @@ func TestShellReviewIgnoresWrapperOfAnotherCommand(t *testing.T) {
 }
 
 func TestWritesToDevicesAreNotEdits(t *testing.T) {
-	review, err := runObserved(t, t.TempDir(), "printf x > /dev/null; printf y > /dev/stderr")
+	review, err := runObserved(t, visibleRestoreRoot(t), "printf x > /dev/null; printf y > /dev/stderr")
 	require.NoError(t, err)
 	require.Nil(t, review)
 }
 
 func TestReadOnlyShellHasNoReview(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	put(t, root, "read.txt", "unchanged\n")
 	review, err := runObserved(t, root, "cat read.txt")
 	require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestShellReviewsKeepParallelProcessesSeparate(t *testing.T) {
 	for index := range 6 {
 		t.Run(fmt.Sprint(index), func(t *testing.T) {
 			t.Parallel()
-			review, err := runObserved(t, t.TempDir(), fmt.Sprintf("printf 'result-%d' > result", index))
+			review, err := runObserved(t, visibleRestoreRoot(t), fmt.Sprintf("printf 'result-%d' > result", index))
 			require.NoError(t, err)
 			require.NotNil(t, review)
 			require.Len(t, review.Changes, 1)
@@ -170,7 +170,7 @@ func TestShellReviewsKeepParallelProcessesSeparate(t *testing.T) {
 func TestShellReviewPreservesExitStatus(t *testing.T) {
 	for _, code := range []int{0, 3, 17} {
 		t.Run(fmt.Sprint(code), func(t *testing.T) {
-			_, err := runObserved(t, t.TempDir(), fmt.Sprintf("exit %d", code))
+			_, err := runObserved(t, visibleRestoreRoot(t), fmt.Sprintf("exit %d", code))
 			if code == 0 {
 				require.NoError(t, err)
 			} else {
@@ -183,7 +183,7 @@ func TestShellReviewPreservesExitStatus(t *testing.T) {
 }
 
 func TestObservedCommandRunsAtFullSpeed(t *testing.T) {
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	// 400k system calls took ~7 s when every call stopped the command.
 	command := `python3 -c "import os
 fd = os.open('/dev/null', os.O_WRONLY)
@@ -215,7 +215,7 @@ func TestLeftoverProcessWritesAfterWatcherExits(t *testing.T) {
 		require.NoError(t, monitor.Wait(cmd))
 		return // the test process exits while the background shell waits
 	}
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	t.Cleanup(func() {
 		if t.Failed() {
 			output, _ := os.ReadFile(filepath.Join(root, "leftover.log"))
@@ -252,7 +252,7 @@ func TestStartingCommandsDuringGarbageCollection(t *testing.T) {
 	go func() {
 		defer close(done)
 		for index := range 40 {
-			root := t.TempDir()
+			root := visibleRestoreRoot(t)
 			review, err := runObserved(t, root, fmt.Sprintf("printf %d > out", index))
 			if err != nil || review == nil || len(review.Changes) != 1 {
 				t.Errorf("command %d: review %v, err %v", index, review, err)
@@ -273,7 +273,7 @@ func TestObservedCommandCanUsePtrace(t *testing.T) {
 	if _, err := exec.LookPath("strace"); err != nil {
 		t.Skip("strace not installed")
 	}
-	root := t.TempDir()
+	root := visibleRestoreRoot(t)
 	review, err := runObserved(t, root, "strace -f -o trace.log sh -c 'echo traced > out'")
 	require.NoError(t, err)
 	require.NotNil(t, review)

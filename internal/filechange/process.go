@@ -164,6 +164,9 @@ func (p *ProcessReview) before(record *invocation, path string) {
 		record.tracker = tracker
 		record.captured = map[string]int64{}
 	}
+	if record.tracker.excluded(path) {
+		return
+	}
 	if !record.tracker.Contains(path) {
 		record.tracker.Track(path)
 		record.captured[path] = time.Now().UnixNano()
@@ -217,10 +220,21 @@ func (p *ProcessReview) End(id string) *Review {
 	}()
 	for _, record := range records {
 		owners = append(owners, record.tracker)
+		// A confirmed move removes the old path without deleting its file.
+		// Its baseline already belongs to the destination's move record.
+		for destination, source := range record.moves {
+			if source.movedTo(destination) {
+				previous := record.tracker.files[source.path]
+				record.tracker.textBytes -= len(previous.state.Content)
+				delete(record.tracker.files, source.path)
+				delete(record.tracker.extra, source.path)
+			}
+		}
 		changes, err := record.tracker.Checkpoint(context.Background())
 		if err != nil {
 			continue
 		}
+		review.Deletions = review.Deletions || changes.Deletions
 		for _, change := range changes.Changes {
 			change.Order = record.captured[change.Path]
 			if kind := transferKind(record.args); kind != "" && change.Before == nil && change.After != nil {
@@ -237,7 +251,7 @@ func (p *ProcessReview) End(id string) *Review {
 		record.tracker = nil
 		record.captured = nil
 	}
-	if len(review.Changes) == 0 {
+	if len(review.Changes) == 0 && !review.Deletions {
 		return nil
 	}
 	review.Changes = mergeChanges(review.Changes)
@@ -297,6 +311,7 @@ func (p *ProcessReview) Wait(cmd *exec.Cmd) error {
 			p.report.mutex.Lock()
 			if !p.report.done {
 				p.report.changes = append(p.report.changes, review.Changes...)
+				p.report.deletions = p.report.deletions || review.Deletions
 			}
 			p.report.mutex.Unlock()
 		}

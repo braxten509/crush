@@ -197,13 +197,13 @@ func newLaunchID() string {
 // RunLauncher serves the launcher until ctx ends. It waits for Tailscale to
 // come up on this computer, so it can start with the session.
 func RunLauncher(ctx context.Context, passwordFile string, command LaunchCommand) error {
-	api := newLocalAPI(localAPISocket)
+	api := newSystemAPI()
 	var me self
 	for {
 		c, cancel := context.WithTimeout(ctx, 5*time.Second)
 		got, err := api.self(c)
 		cancel()
-		if err == nil && got.Online && got.IPv4.IsValid() {
+		if err == nil && got.Online && got.IPv4.IsValid() && got.User > 0 {
 			me = got
 			break
 		}

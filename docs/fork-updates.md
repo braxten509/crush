@@ -57,6 +57,37 @@ CI repeatedly exercises watcher shutdown in addition to the full test suite.
 The Linux amd64 syscall tracer is still required for reviewing arbitrary writes
 made by external shell processes. The test for that feature is explicitly
 skipped on other platforms; this does not add equivalent macOS tracing.
-Tailscale remote access, platform-specific terminal launching, CPU affinity,
-and detached-process cleanup have not been redesigned in this change. Native
-Windows support is outside this validation scope.
+`/remote` offers guided Tailscale setup on macOS and Linux. Linux uses the local
+Tailscale service socket; macOS uses the official CLI, including the copy inside
+Tailscale.app when it is not on PATH. Both paths verify the caller's Tailscale
+account before serving the existing Pocket Agents protocol. Setup never
+changes access rules, disables incoming-connection protection, or resets
+existing Tailscale preferences. If the phone cannot connect after sharing is
+on, check that both devices use the same account and that the Tailscale access
+rules and computer firewall permit the connection. Tailnet Lock, if enabled,
+may require signing the computer from a trusted device.
+
+The Linux installer supports the distributions supported by Tailscale's
+official installer. Starting an existing Linux service supports systemd and
+OpenRC; other service managers need a manual service start. The macOS installer
+may require administrator approval, approval of its system extension, and a
+restart as directed by Tailscale. These OS prompts cannot be approved by Crush.
+
+The separate `crush remote launcher` feature still defaults to Konsole; opening
+new windows from the phone on other desktops requires `CRUSH_LAUNCH_COMMAND`.
+Guided `/remote` setup shares an already-running window and does not install
+that launcher service.
+
+The session list runs each session in a hidden terminal on macOS and Linux and
+draws it through Charm's terminal emulator. Inside it, sessions use ordinary
+keyboard input: the emulator does not support the Kitty keyboard protocol, so
+Shift+Enter is sent as Ctrl+J (Crush's other new-line key), typed characters
+are sent as text (so Shift, Caps Lock and other keyboard layouts work), shortcuts that
+need that protocol fall back to their alternatives, and pictures in question
+forms show as colored blocks. Copying
+and window-focus changes are passed through, so clipboard copies and
+finished-work notifications still work. Closing a session asks its Crush to
+exit and kills what is left in its terminal after five seconds.
+
+CPU affinity and detached-process cleanup remain
+platform-specific. Native Windows support is outside this validation scope.

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -17,7 +19,7 @@ import (
 // The remote server is reachable over Tailscale only: it listens on this
 // machine's tailnet address, and every request must come from a device
 // signed in to the same Tailscale account. Both facts come from the local
-// tailscaled over its LocalAPI socket.
+// tailscaled over its LocalAPI socket or the official macOS CLI.
 
 const localAPISocket = "/var/run/tailscale/tailscaled.sock"
 
@@ -35,6 +37,98 @@ func isTailnetAddr(a netip.Addr) bool {
 // localAPI talks to the local tailscaled.
 type localAPI struct {
 	client *http.Client
+}
+
+type tailnetAPI interface {
+	status(context.Context) (tailnetStatus, error)
+	self(context.Context) (self, error)
+	whois(context.Context, string) (peer, error)
+}
+
+// macOS GUI variants expose LocalAPI through their CLI, rather than the
+// Linux Unix socket. Never substitute an unauthenticated network API.
+func newSystemAPI() tailnetAPI {
+	if runtime.GOOS == "darwin" {
+		return cliAPI{}
+	}
+	return newLocalAPI(localAPISocket)
+}
+
+type tailnetStatus struct {
+	BackendState string
+	Self         struct {
+		HostName     string
+		TailscaleIPs []netip.Addr
+		UserID       int64
+		Online       bool
+	}
+}
+
+func (st tailnetStatus) self() self {
+	out := self{Host: st.Self.HostName, User: st.Self.UserID, Online: st.BackendState == "Running"}
+	for _, ip := range st.Self.TailscaleIPs {
+		if ip.Is4() && isTailnetAddr(ip) {
+			out.IPv4 = ip
+			break
+		}
+	}
+	return out
+}
+
+type whoisResponse struct {
+	Node        struct{ ComputedName, Name string }
+	UserProfile struct{ ID int64 }
+}
+
+func (w whoisResponse) peer() (peer, error) {
+	if w.UserProfile.ID <= 0 {
+		return peer{}, errors.New("Tailscale did not identify an owning account")
+	}
+	name := w.Node.ComputedName
+	if name == "" {
+		name = w.Node.Name
+	}
+	return peer{User: w.UserProfile.ID, Name: name}, nil
+}
+
+type cliAPI struct{ path string }
+
+func (c cliAPI) get(ctx context.Context, target any, args ...string) error {
+	path := c.path
+	if path == "" {
+		var err error
+		path, err = tailscaleExecutable(runtime.GOOS, exec.LookPath)
+		if err != nil {
+			return err
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	data, err := exec.CommandContext(ctx, path, args...).Output()
+	// Do not put command output in errors: status may include a login URL.
+	if err != nil {
+		return fmt.Errorf("Tailscale could not answer: %w", err)
+	}
+	return json.Unmarshal(data, target)
+}
+
+func (c cliAPI) status(ctx context.Context) (tailnetStatus, error) {
+	var st tailnetStatus
+	err := c.get(ctx, &st, "status", "--json")
+	return st, err
+}
+
+func (c cliAPI) self(ctx context.Context) (self, error) {
+	st, err := c.status(ctx)
+	return st.self(), err
+}
+
+func (c cliAPI) whois(ctx context.Context, addr string) (peer, error) {
+	var w whoisResponse
+	if err := c.get(ctx, &w, "whois", "--json", addr); err != nil {
+		return peer{}, err
+	}
+	return w.peer()
 }
 
 func newLocalAPI(socket string) *localAPI {
@@ -74,25 +168,14 @@ type self struct {
 }
 
 func (l *localAPI) self(ctx context.Context) (self, error) {
-	var st struct {
-		BackendState string
-		Self         struct {
-			HostName     string
-			TailscaleIPs []netip.Addr
-			UserID       int64
-		}
-	}
-	if err := l.get(ctx, "/localapi/v0/status", &st); err != nil {
-		return self{}, err
-	}
-	out := self{Host: st.Self.HostName, User: st.Self.UserID, Online: st.BackendState == "Running"}
-	for _, ip := range st.Self.TailscaleIPs {
-		if ip.Is4() {
-			out.IPv4 = ip
-			break
-		}
-	}
-	return out, nil
+	st, err := l.status(ctx)
+	return st.self(), err
+}
+
+func (l *localAPI) status(ctx context.Context) (tailnetStatus, error) {
+	var st tailnetStatus
+	err := l.get(ctx, "/localapi/v0/status", &st)
+	return st, err
 }
 
 // peer is who is on the other end of a tailnet connection.
@@ -102,23 +185,11 @@ type peer struct {
 }
 
 func (l *localAPI) whois(ctx context.Context, addr string) (peer, error) {
-	var w struct {
-		Node struct {
-			ComputedName string
-			Name         string
-		}
-		UserProfile struct {
-			ID int64
-		}
-	}
+	var w whoisResponse
 	if err := l.get(ctx, "/localapi/v0/whois?addr="+url.QueryEscape(addr), &w); err != nil {
 		return peer{}, err
 	}
-	name := w.Node.ComputedName
-	if name == "" {
-		name = w.Node.Name
-	}
-	return peer{User: w.UserProfile.ID, Name: name}, nil
+	return w.peer()
 }
 
 // gate admits only devices of this machine's own Tailscale user. Answers

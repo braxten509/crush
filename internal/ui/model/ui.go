@@ -52,6 +52,7 @@ import (
 	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/selfupdate"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/sessionhost"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/crush/internal/ui/attachments"
@@ -230,13 +231,23 @@ type UI struct {
 	continueLastSession bool
 
 	// remote is the window's Remote Control share, nil while off.
-	remote         *remote.Server
-	remotePresence remote.Presence
-	remotePhones   []string
-	remoteStarting bool
+	remote            *remote.Server
+	remotePresence    remote.Presence
+	remotePhones      []string
+	remoteStarting    bool
+	remoteGeneration  uint64
+	remoteSetupCancel context.CancelFunc
+	remoteSetupBusy   bool
+	remoteSetupInfo   remote.SetupInfo
 	// remoteQuiet: the share was asked for by the phone's launcher, so it
 	// starts without opening the Remote Control dialog over the new window.
 	remoteQuiet bool
+
+	// inSessionHost: this Crush is one session in the session list, and
+	// reports its state there; see session_host.go.
+	inSessionHost  bool
+	lastHostStatus sessionhost.Status
+	hostStatusSent bool
 
 	// relaunchDir is set when the user opens another project; the caller
 	// restarts Crush there after the program exits.
@@ -584,6 +595,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	header := newHeader(com)
 
 	ui := &UI{
+		inSessionHost:       sessionhost.InHost(),
 		com:                 com,
 		dialog:              dialog.NewOverlay(),
 		keyMap:              keyMap,
@@ -901,7 +913,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.invalidateFrames()
 	}
 	model, cmd := m.update(msg)
-	return model, tea.Batch(cmd, m.syncPreview())
+	return model, tea.Batch(cmd, m.syncPreview(), m.hostStatus())
 }
 
 // syncPreview keeps a question form's choice sketch on screen in step
@@ -1018,6 +1030,10 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notifyWindowFocused = false
 	case remoteStartedMsg:
 		cmds = append(cmds, m.handleRemoteStarted(msg))
+	case remoteSetupPollMsg:
+		cmds = append(cmds, m.handleRemoteSetupPoll(msg))
+	case remoteSetupFinishedMsg:
+		cmds = append(cmds, m.handleRemoteSetupFinished(msg))
 	case remoteActionMsg:
 		cmds = append(cmds, m.handleRemoteAction(msg.action))
 	case remotePhonesMsg:
@@ -2715,6 +2731,10 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		cmds = append(cmds, tea.Quit)
 	case dialog.ActionRemoteOff:
 		cmds = append(cmds, m.stopRemote())
+	case dialog.ActionRemoteSetup:
+		cmds = append(cmds, m.runRemoteSetup(msg.Action))
+	case dialog.ActionRemoteSetupClose:
+		m.closeRemoteSetup()
 	case dialog.ActionEnableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.enableDockerMCP)

@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/remote"
@@ -24,6 +25,23 @@ func remotePasswordFile() string {
 var remoteCmd = &cobra.Command{
 	Use:   "remote",
 	Short: "Let the Pocket Agents phone app open new Crush windows here",
+}
+
+var remoteSetupCmd = &cobra.Command{
+	Use:   "setup [install|start|connect]",
+	Short: "Set up Tailscale for Pocket Agents (also offered by /remote)",
+	Long: `Install Tailscale from its official source, start it, or sign in using a
+link and QR code. The install action adds software to this computer and may
+ask for administrator approval. Existing Tailscale settings are preserved.
+Run /remote in Crush for guided setup and to share the current window.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
+		return remote.RunSetupAction(ctx, args[0], cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	},
 }
 
 var remotePasswordCmd = &cobra.Command{
@@ -92,6 +110,6 @@ Konsole command (a shell command line; $CRUSH_EXE is this Crush).`,
 }
 
 func init() {
-	remoteCmd.AddCommand(remotePasswordCmd, remoteLauncherCmd)
+	remoteCmd.AddCommand(remotePasswordCmd, remoteLauncherCmd, remoteSetupCmd)
 	rootCmd.AddCommand(remoteCmd)
 }

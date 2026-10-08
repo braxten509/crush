@@ -111,15 +111,27 @@ type Server struct {
 
 // Start shares the window. It fails when Tailscale isn't running here.
 func Start(src Source) (*Server, error) {
-	api := newLocalAPI(localAPISocket)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	return StartContext(context.Background(), src)
+}
+
+// StartContext lets a dismissed setup cancel discovery before sharing starts.
+func StartContext(ctx context.Context, src Source) (*Server, error) {
+	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	info := CheckSetup(ctx)
+	if info.State != SetupReady {
+		return nil, &SetupError{Info: info}
+	}
+	api := newSystemAPI()
 	me, err := api.self(ctx)
-	cancel()
 	if err != nil {
 		return nil, fmt.Errorf("can't reach Tailscale on this computer: %w", err)
 	}
-	if !me.Online || !me.IPv4.IsValid() {
+	if !me.Online || !me.IPv4.IsValid() || me.User <= 0 {
 		return nil, errors.New("Tailscale is not connected on this computer")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return start(src, me, api.whois, func() (net.Listener, error) { return listenTailnet(me.IPv4) })
 }

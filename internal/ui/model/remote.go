@@ -2,10 +2,14 @@ package model
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"net"
+	"os"
+	"os/exec"
 	"slices"
 	"strconv"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
@@ -23,8 +27,14 @@ import (
 
 type (
 	remoteStartedMsg struct {
-		server *remote.Server
-		err    error
+		server     *remote.Server
+		err        error
+		generation uint64
+	}
+	remoteSetupPollMsg     struct{ generation uint64 }
+	remoteSetupFinishedMsg struct {
+		generation uint64
+		err        error
 	}
 	remoteActionMsg struct{ action *remote.Action }
 	remotePhonesMsg struct{}
@@ -38,26 +48,73 @@ func (m *UI) openRemote() tea.Cmd {
 		m.openRemoteDialog()
 		return nil
 	}
+	if m.dialog.ContainsDialog(dialog.RemoteSetupID) {
+		m.dialog.BringToFront(dialog.RemoteSetupID)
+		return nil
+	}
 	if m.remoteStarting {
+		return nil
+	}
+	_, ok := m.com.Workspace.(*workspace.AppWorkspace)
+	if !ok {
+		return util.ReportWarn("Remote Control needs Crush running in this terminal, not as a client")
+	}
+	m.remoteGeneration++
+	if !m.remoteQuiet {
+		m.dialog.OpenDialog(dialog.NewRemoteSetup(m.com))
+	}
+	return m.checkRemoteSetup()
+}
+
+func (m *UI) checkRemoteSetup() tea.Cmd {
+	if m.remoteStarting || m.remoteSetupBusy {
 		return nil
 	}
 	ws, ok := m.com.Workspace.(*workspace.AppWorkspace)
 	if !ok {
-		return util.ReportWarn("Remote Control needs Crush running in this terminal, not as a client")
+		return nil
 	}
 	m.remoteStarting = true
+	generation := m.remoteGeneration
+	ctx, cancel := context.WithCancel(context.Background())
+	m.remoteSetupCancel = cancel
 	src := remote.NewSource(ws)
 	return func() tea.Msg {
-		s, err := remote.Start(src)
-		return remoteStartedMsg{server: s, err: err}
+		defer cancel()
+		s, err := remote.StartContext(ctx, src)
+		return remoteStartedMsg{server: s, err: err, generation: generation}
 	}
 }
 
 func (m *UI) handleRemoteStarted(msg remoteStartedMsg) tea.Cmd {
-	m.remoteStarting = false
-	if msg.err != nil {
-		return util.ReportError(errors.New("Remote Control: " + msg.err.Error()))
+	if msg.generation != m.remoteGeneration || (!m.remoteQuiet && !m.dialog.ContainsDialog(dialog.RemoteSetupID)) {
+		if msg.server != nil {
+			return func() tea.Msg { msg.server.Stop(); return nil }
+		}
+		return nil
 	}
+	m.remoteStarting = false
+	m.remoteSetupCancel = nil
+	if msg.err != nil {
+		if m.remoteQuiet {
+			m.remoteQuiet = false
+			return util.ReportError(errors.New("Remote Control: " + msg.err.Error()))
+		}
+		info := remote.SetupInfo{Title: "Sharing could not start", Detail: msg.err.Error() + ". Choose Check again to retry."}
+		var setupErr *remote.SetupError
+		if errors.As(msg.err, &setupErr) {
+			info = setupErr.Info
+		}
+		m.remoteSetupInfo = info
+		if d, ok := m.dialog.Dialog(dialog.RemoteSetupID).(*dialog.RemoteSetup); ok {
+			d.SetInfo(info)
+		}
+		if setupErr != nil && info.State != remote.SetupUnsupported {
+			return m.pollRemoteSetup()
+		}
+		return nil
+	}
+	m.dialog.CloseDialog(dialog.RemoteSetupID)
 	m.remote = msg.server
 	m.remotePresence = remote.Presence{}
 	m.remotePhones = nil
@@ -68,6 +125,75 @@ func (m *UI) handleRemoteStarted(msg remoteStartedMsg) tea.Cmd {
 	}
 	m.remoteQuiet = false
 	return m.waitRemote()
+}
+
+func (m *UI) pollRemoteSetup() tea.Cmd {
+	generation := m.remoteGeneration
+	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return remoteSetupPollMsg{generation} })
+}
+
+func (m *UI) handleRemoteSetupPoll(msg remoteSetupPollMsg) tea.Cmd {
+	if msg.generation != m.remoteGeneration || !m.dialog.ContainsDialog(dialog.RemoteSetupID) {
+		return nil
+	}
+	return m.checkRemoteSetup()
+}
+
+func (m *UI) closeRemoteSetup() {
+	m.remoteGeneration++
+	if m.remoteSetupCancel != nil {
+		m.remoteSetupCancel()
+		m.remoteSetupCancel = nil
+	}
+	m.remoteStarting = false
+	m.remoteSetupBusy = false
+	m.remoteQuiet = false
+	m.dialog.CloseDialog(dialog.RemoteSetupID)
+}
+
+func (m *UI) runRemoteSetup(action string) tea.Cmd {
+	if !m.dialog.ContainsDialog(dialog.RemoteSetupID) || m.remoteSetupBusy {
+		return nil
+	}
+	if action == "check" {
+		return m.checkRemoteSetup()
+	}
+	// Only the action currently shown in the local dialog is authorized.
+	if action == "" || action != m.remoteSetupInfo.Action {
+		return nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return util.ReportError(err)
+	}
+	if m.remoteSetupCancel != nil {
+		m.remoteSetupCancel()
+		m.remoteSetupCancel = nil
+	}
+	m.remoteGeneration++
+	generation := m.remoteGeneration
+	m.remoteStarting, m.remoteSetupBusy = false, true
+	// Suspend the TUI so system password prompts and Tailscale's QR code
+	// reach the owner directly. No output is captured in a chat or log.
+	cmd := exec.Command(exe, "remote", "setup", action)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg { return remoteSetupFinishedMsg{generation, err} })
+}
+
+func (m *UI) handleRemoteSetupFinished(msg remoteSetupFinishedMsg) tea.Cmd {
+	if msg.generation != m.remoteGeneration || !m.dialog.ContainsDialog(dialog.RemoteSetupID) {
+		return nil
+	}
+	m.remoteSetupBusy = false
+	if msg.err != nil {
+		info := m.remoteSetupInfo
+		info.Title = "Setup did not finish"
+		info.Detail = "The step was cancelled or failed. You can retry it, choose Check again if you finished elsewhere, or cancel setup."
+		if d, ok := m.dialog.Dialog(dialog.RemoteSetupID).(*dialog.RemoteSetup); ok {
+			d.SetInfo(info)
+		}
+		return nil
+	}
+	return m.checkRemoteSetup()
 }
 
 func (m *UI) openRemoteDialog() {
@@ -85,6 +211,7 @@ func (m *UI) openRemoteDialog() {
 
 // stopRemote turns the share off and disconnects the phones.
 func (m *UI) stopRemote() tea.Cmd {
+	m.closeRemoteSetup()
 	m.dialog.CloseDialog(dialog.RemoteID)
 	if m.remote == nil {
 		return nil

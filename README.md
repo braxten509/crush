@@ -18,10 +18,69 @@ The `cli-agents` branch has been merged into `main`. Native builds, ordinary
 tests, and race checks run on both platforms, but some platform-specific
 features still need work before there is full feature parity.
 
+Intentional macOS support is limited to **Apple Silicon Macs**. Intel Macs
+may work, but this fork does not target, test, or provide fixes specifically
+for them.
+
 See [Updating this fork](docs/fork-updates.md) for source-checkout setup,
 updater requirements, and current platform limits. The upstream badges and
 package-manager installation instructions in this README refer to Charm's
 distribution.
+
+### Several sessions in one terminal
+
+Plain `crush` opens a session list on the left. Each session is a separate
+Crush with its own chat, model, folder, running work and questions; the list
+shows the chosen one beside it, and the others keep working. Every Crush
+feature works inside a session, including `/remote`, so Pocket Agents sees
+each session as it would a separate terminal window.
+
+| Action | How |
+|---|---|
+| New session (in the shown session's folder) | Click **+ New session** |
+| Switch | Click a session, or press **Alt+1** to **Alt+9** |
+| Shrink the list to a strip, or open it again | **Alt+S**, or click **‹** / **›** |
+| Close a session | **Alt+W**, or click the **×** on its row |
+
+Closing always asks first. It ends only that session; the chat stays saved and
+can be reopened with `crush --session` or the session picker. Closing the last
+session, or quitting it from inside, quits Crush. The strip shows one mark per
+session: ● working, ! needs you, ✓ finished while hidden, ○ ready. Crush
+remembers whether the list was open, in `~/.local/state/crush/session-list.json`
+(or under `$XDG_STATE_HOME`). Terminals narrower than 80 columns show the
+strip.
+
+Each session is a full Crush process, so memory use grows with every open
+session. `crush --single` shows one session without the list, as before.
+Windows opened by the Pocket Agents launcher stay single sessions.
+
+### Pocket Agents remote setup
+
+Remote access uses **Pocket Agents over private Tailscale connections**. There
+is no web client, Cloudflare connection, or public Funnel endpoint.
+
+Run `/remote` in Crush on macOS or Linux. If Tailscale is ready, the current
+window is shared immediately. Otherwise, Crush offers the next setup step:
+install Tailscale, start it, sign in using a link and QR code, or approve the
+computer. Installation and connection changes happen only after you select
+the corresponding button. Passwords are entered directly into system prompts.
+Crush checks again automatically and starts sharing once Tailscale is ready.
+Cancel closes setup without starting a share; it does not uninstall Tailscale
+or undo an installation or login you already completed.
+
+Use the same Tailscale account in Pocket Agents and on the computer, then open
+Pocket Agents' **PC** tab. Only devices belonging to that account are accepted;
+Tailscale network rules and Crush's existing tool permissions still apply.
+Computers signed in using device tags rather than a personal account are not
+supported. The computer must be awake, connected, and running Crush.
+
+Linux installation uses Tailscale's official distribution-aware installer;
+starting an existing service supports systemd and OpenRC. macOS installation
+uses Tailscale's official signed package, checked by Gatekeeper, and opens the
+app for any macOS permission prompts. Existing installations are reused.
+Setup does not reset DNS, routes, firewall settings, or your Tailscale account.
+The same actions are available as `crush remote setup install`, `start`, or
+`connect` for terminal troubleshooting. See [platform limits](docs/fork-updates.md#platform-checks-and-limits).
 
 ### Remaining design decisions
 
@@ -32,7 +91,6 @@ not approved requirements or a claim that these features are implemented.
 | --- | --- |
 | **File-change review coverage** | Review edits within explicitly approved project folders, including shell-written files, and clearly report coverage limits. Decide whether exact interception of arbitrary writes outside those folders is required. Folder watching and before/after snapshots do not provide the same guarantees as intercepting writes, especially with concurrent edits. |
 | **Job lifetime and cancellation** | Let explicitly backgrounded jobs continue in a per-user service when a terminal closes or a remote client disconnects. Reopening Crush reconnects to them. Cancel stops the selected job and its descendants. Restarting Crush does not automatically rerun interrupted commands. |
-| **Remote client and authentication** | Provide a mobile-friendly web client through Cloudflare Tunnel and Access, restricted to the owner's identity with MFA. Start with a hostname per computer, such as `crush-mac.psbhr.com` and `crush-linux.psbhr.com`. Choose the login identity/provider and whether the existing phone app also needs support. These hostnames and the Cloudflare connection are proposals, not configured services. |
 | **Switching between computers** | Keep sessions, working files, and credentials on their originating computer. Other devices remotely control that host. Synchronizing session data or moving running work between computers would be a separate feature with its own conflict and credential-handling decisions. |
 | **Resource controls** | Offer common normal and lower-resource settings based on concurrency and process priority. Retain CPU-core pinning as an additional Linux capability. macOS controls must describe their actual behavior rather than promise an equivalent hard CPU limit. |
 | **Installation and updates** | Publish tested binaries from this repository with verified downloads and rollback, while retaining source builds for development. Updates should be explicitly initiated and avoid interrupting active jobs. Decide on artifact verification/signing and the restart or deferred-update behavior. |
@@ -42,11 +100,8 @@ implementation needs investigation; one option is an Endpoint Security helper,
 which requires an [Apple-granted entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.endpoint-security.client).
 Project-scoped review should not be presented as equivalent system-wide coverage.
 
-Remote access currently uses Tailscale. A Cloudflare implementation must configure
-[Access-token validation](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/)
-at the tunnel or application and preserve Crush's tool permissions: signing in
-does not automatically approve commands. A background service also does not make
-an asleep computer available; always-on remote work needs an awake host.
+Signing in does not automatically approve commands. A background service also
+does not make an asleep computer available; always-on remote work needs an awake host.
 
 Resolve file-review guarantees and job lifetime first, since they shape remote
 session behavior. Terminal-launch adapters, macOS process discovery and cleanup,

@@ -65,6 +65,7 @@ func init() {
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	rootCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	rootCmd.MarkFlagsMutuallyExclusive("session", "continue")
+	rootCmd.Flags().Bool("single", false, "Show one session in this terminal, without the session list")
 
 	rootCmd.AddCommand(
 		runCmd,
@@ -110,6 +111,9 @@ crush --session {session-id}
 
 # Continue the most recent session
 crush --continue
+
+# Show one session, without the session list
+crush --single
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if code, guarded := runCrashGuarded(); guarded {
@@ -117,6 +121,9 @@ crush --continue
 		}
 		crashFile, crashDone := recordCrashes()
 		defer crashDone()
+		if useSessionHost(cmd) {
+			return runSessionHost(cmd)
+		}
 		sessionID, _ := cmd.Flags().GetString("session")
 		continueLast, _ := cmd.Flags().GetBool("continue")
 

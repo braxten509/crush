@@ -11,6 +11,47 @@
 
 <p align="center"><img width="800" alt="Crush Demo" src="https://github.com/user-attachments/assets/58280caf-851b-470a-b6f7-d5c4ea8a1968" /></p>
 
+## This fork: macOS and Linux
+
+This fork is maintained on `main` in one repository for both macOS and Linux.
+The `cli-agents` branch has been merged into `main`. Native builds, ordinary
+tests, and race checks run on both platforms, but some platform-specific
+features still need work before there is full feature parity.
+
+See [Updating this fork](docs/fork-updates.md) for source-checkout setup,
+updater requirements, and current platform limits. The upstream badges and
+package-manager installation instructions in this README refer to Charm's
+distribution.
+
+### Remaining design decisions
+
+The following decisions are **open**. The recommendations are proposed defaults,
+not approved requirements or a claim that these features are implemented.
+
+| Decision | Proposed default and tradeoff |
+| --- | --- |
+| **File-change review coverage** | Review edits within explicitly approved project folders, including shell-written files, and clearly report coverage limits. Decide whether exact interception of arbitrary writes outside those folders is required. Folder watching and before/after snapshots do not provide the same guarantees as intercepting writes, especially with concurrent edits. |
+| **Job lifetime and cancellation** | Let explicitly backgrounded jobs continue in a per-user service when a terminal closes or a remote client disconnects. Reopening Crush reconnects to them. Cancel stops the selected job and its descendants. Restarting Crush does not automatically rerun interrupted commands. |
+| **Remote client and authentication** | Provide a mobile-friendly web client through Cloudflare Tunnel and Access, restricted to the owner's identity with MFA. Start with a hostname per computer, such as `crush-mac.psbhr.com` and `crush-linux.psbhr.com`. Choose the login identity/provider and whether the existing phone app also needs support. These hostnames and the Cloudflare connection are proposals, not configured services. |
+| **Switching between computers** | Keep sessions, working files, and credentials on their originating computer. Other devices remotely control that host. Synchronizing session data or moving running work between computers would be a separate feature with its own conflict and credential-handling decisions. |
+| **Resource controls** | Offer common normal and lower-resource settings based on concurrency and process priority. Retain CPU-core pinning as an additional Linux capability. macOS controls must describe their actual behavior rather than promise an equivalent hard CPU limit. |
+| **Installation and updates** | Publish tested binaries from this repository with verified downloads and rollback, while retaining source builds for development. Updates should be explicitly initiated and avoid interrupting active jobs. Decide on artifact verification/signing and the restart or deferred-update behavior. |
+
+The current low-level syscall tracer supports Linux x86-64 only. A deeper macOS
+implementation needs investigation; one option is an Endpoint Security helper,
+which requires an [Apple-granted entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.endpoint-security.client).
+Project-scoped review should not be presented as equivalent system-wide coverage.
+
+Remote access currently uses Tailscale. A Cloudflare implementation must configure
+[Access-token validation](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/)
+at the tunnel or application and preserve Crush's tool permissions: signing in
+does not automatically approve commands. A background service also does not make
+an asleep computer available; always-on remote work needs an awake host.
+
+Resolve file-review guarantees and job lifetime first, since they shape remote
+session behavior. Terminal-launch adapters, macOS process discovery and cleanup,
+and platform regression tests can then be implemented within this same repository.
+
 ## Features
 
 - **Multi-Model:** choose from a wide range of LLMs or add your own via OpenAI- or Anthropic-compatible APIs

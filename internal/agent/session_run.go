@@ -251,7 +251,8 @@ func (h *taskHub) reserveFollowUp(sessionID string) (context.Context, func()) {
 		if r.reserve() {
 			return r.ctx, func() { r.release(nil) }
 		}
-		return r.ctx, func() {}
+		// A completed run may still be awaiting removal from the map. New
+		// requests are independent of it and must not inherit its cancellation.
 	}
 	return context.Background(), func() {}
 }

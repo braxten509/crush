@@ -71,6 +71,33 @@ func TestBackgroundJobRoundTripAndCompletion(t *testing.T) {
 		t.Fatal("completion notification missing")
 	}
 	output = h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{OutputID: job.ID}})
+	require.Empty(t, output.Error)
+	require.NotNil(t, output.Background)
+	require.Contains(t, output.Background.Content, "finished")
+}
+
+func TestBackgroundOutputAfterCompletedSessionRun(t *testing.T) {
+	c := sessionRunTestCoordinator(t, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		return fakeSessionReply(call, "received"), nil
+	})
+	session, err := c.sessions.Create(t.Context(), "completed run")
+	require.NoError(t, err)
+	manager := shell.GetBackgroundShellManager()
+	job, err := manager.Start(t.Context(), t.TempDir(), nil, "printf finished", "completed job")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = manager.Remove(job.ID) })
+	require.True(t, job.WaitContext(t.Context()))
+	h := c.tasks
+	h.backgroundOwners = map[string]string{job.ID: session.ID}
+	// Reproduce the interval between the run completing and its removal from
+	// the hub: a new output request must not inherit the expired run context.
+	run := newSessionRun(t.Context(), session.ID)
+	run.release(nil)
+	run.cancel()
+	h.sessionRuns = map[string]*sessionRun{session.ID: run}
+	output := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{OutputID: job.ID}})
+	require.Empty(t, output.Error)
+	require.NotNil(t, output.Background)
 	require.Contains(t, output.Background.Content, "finished")
 }
 

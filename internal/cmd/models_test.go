@@ -8,6 +8,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,4 +35,19 @@ func TestPrintModelsJSON(t *testing.T) {
 	require.NoError(t, printModelsJSON(&out, cfg, "grok"))
 	require.NoError(t, json.Unmarshal(out.Bytes(), &list))
 	require.Len(t, list, 1)
+}
+
+func TestPrintModelsJSONUsesSubscriptionCatalog(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
+		"xai":    {ID: "xai", OAuthToken: &oauth.Token{}, Models: []catwalk.Model{{ID: "api-only"}}, GrokModels: []catwalk.Model{{ID: "grok-plan", Name: "Grok Plan"}}},
+		"openai": {ID: "openai", OAuthToken: &oauth.Token{}, Models: []catwalk.Model{{ID: "api-only"}}, ChatGPTModels: []catwalk.Model{{ID: "chatgpt-plan", Name: "ChatGPT Plan"}}},
+	})}
+	var out bytes.Buffer
+	require.NoError(t, printModelsJSON(&out, cfg, ""))
+	var list []modelInfo
+	require.NoError(t, json.Unmarshal(out.Bytes(), &list))
+	require.Len(t, list, 2)
+	require.Equal(t, "chatgpt-plan", list[0].Model)
+	require.Equal(t, "grok-plan", list[1].Model)
 }

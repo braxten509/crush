@@ -21,6 +21,7 @@ const managedJobEnv = "CRUSH_MANAGED_BACKGROUND_JOB"
 
 // BackgroundRequest uses the same shell tools and policies as native agents.
 type BackgroundRequest struct {
+	Service    bool   `json:"service,omitempty"`
 	Command    string `json:"command,omitempty"`
 	WorkingDir string `json:"working_dir,omitempty"`
 	Name       string `json:"name,omitempty"`
@@ -52,6 +53,9 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 	}
 	if operations != 1 {
 		return fail(fmt.Errorf("provide exactly one command, output ID, or stop ID"))
+	}
+	if params.Service && strings.TrimSpace(params.Command) == "" {
+		return fail(fmt.Errorf("service requires a command to start"))
 	}
 	options := h.c.cfg.Config().Options
 	var tool fantasy.AgentTool
@@ -118,20 +122,33 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 		for old := range h.backgroundOwners {
 			if _, exists := shell.GetBackgroundShellManager().Get(old); !exists {
 				delete(h.backgroundOwners, old)
+				delete(h.backgroundServices, old)
 			}
 		}
 		h.backgroundOwners[job.ID] = req.Session
+		if h.backgroundServices == nil {
+			h.backgroundServices = make(map[string]bool)
+		}
+		h.backgroundServices[job.ID] = params.Service
 		if h.backgroundShells == nil {
 			h.backgroundShells = make(map[string]*shell.BackgroundShell)
 		}
 		h.backgroundShells[callID] = job
 		h.mu.Unlock()
 		response.Content = fmt.Sprintf("Started background job %s. Use crush bg --output %s to read output or crush bg --stop %s to stop it. Crush will report completion; keep working without waiting.", job.ID, job.ID, job.ID)
+		if params.Service {
+			response.Content += " This is a service; it will not delay completion notifications."
+		}
 		transferred = true
-		h.rememberJob(job, req.Session)
+		h.rememberJob(job, req.Session, params.Service)
 		go func() {
 			defer release()
-			defer func() { h.mu.Lock(); delete(h.backgroundShells, callID); h.mu.Unlock() }()
+			defer func() {
+				h.mu.Lock()
+				delete(h.backgroundShells, callID)
+				delete(h.backgroundServices, job.ID)
+				h.mu.Unlock()
+			}()
 			if !job.WaitContext(ctx) {
 				return
 			}

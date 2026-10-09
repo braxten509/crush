@@ -18,7 +18,7 @@ runs every test and installs it. The TUI offers this at startup; these steps
 let an agent or a person run it by hand:
 
   check    show whether a newer stable release exists
-  merge    merge it into the checkout (lists clashing files)
+  merge    commit local changes, then merge the update (lists clashing files)
   build    build the merged checkout and run every test
   install  install the tested build and upload the merge to GitHub`,
 	Args:      cobra.ExactArgs(1),

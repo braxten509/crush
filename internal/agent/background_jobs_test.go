@@ -241,3 +241,36 @@ func TestManagedJobsAreVisibleWithoutMarkedChildProcesses(t *testing.T) {
 	}
 	require.True(t, found, "managed jobs must not depend on process-table discovery")
 }
+
+func TestBackgroundServiceRemainsTrackedWithoutBlockingCompletion(t *testing.T) {
+	h, _, savedPath := savingJobHub(t)
+	sess, err := h.c.sessions.Create(t.Context(), "service")
+	require.NoError(t, err)
+	response := h.background(TaskRequest{Session: sess.ID, Background: &BackgroundRequest{
+		Command: "sleep 30", WorkingDir: t.TempDir(), Name: "service", Service: true,
+	}})
+	require.Empty(t, response.Error)
+	require.NotNil(t, response.Background)
+	require.False(t, response.Background.IsError)
+	var meta tools.BashResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(response.Background.Metadata), &meta))
+	job, ok := shell.GetBackgroundShellManager().Get(meta.ShellID)
+	require.True(t, ok)
+	t.Cleanup(func() {
+		_ = shell.GetBackgroundShellManager().Kill(job.ID)
+		_ = shell.GetBackgroundShellManager().Remove(job.ID)
+	})
+	require.False(t, job.IsDone())
+	require.False(t, h.hasRunning(sess.ID), "services must not hold back a finish ding")
+	saved := readSavedJobs(t, savedPath)
+	require.Len(t, saved, 1)
+	require.True(t, saved[0].Service)
+	require.Contains(t, interruptedJobsNotification(saved), "crush bg --service")
+	output := h.background(TaskRequest{Session: sess.ID, Background: &BackgroundRequest{OutputID: job.ID}})
+	require.Empty(t, output.Error)
+	require.Contains(t, output.Background.Content, "Status: running")
+	stop := h.background(TaskRequest{Session: sess.ID, Background: &BackgroundRequest{StopID: job.ID}})
+	require.Empty(t, stop.Error)
+	require.False(t, stop.Background.IsError)
+	require.True(t, job.WaitContext(t.Context()))
+}

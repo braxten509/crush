@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,8 +27,8 @@ const module = "module github.com/charmbracelet/crush"
 
 const upstreamURL = "https://github.com/charmbracelet/crush.git"
 
-// ErrDirty means the checkout has unsaved changes, which an update must
-// never touch.
+// ErrDirty means changes remain after the update saved the checkout, or
+// new changes arrived before the build. They must not enter an unrecorded build.
 var ErrDirty = errors.New("the Crush checkout has uncommitted changes")
 
 // Release is a stable upstream release newer than the running fork.
@@ -105,22 +106,42 @@ func MergedTag(ctx context.Context, dir string) (string, error) {
 
 // Merge brings the release into the checkout's current branch. It returns
 // the files that clash; the merge is then left in progress for an agent to
-// finish. A release that is already merged is not merged again.
+// finish. Local changes are committed first. A release that is already merged
+// is not merged again.
 func Merge(ctx context.Context, dir, tag string) (clashes []string, err error) {
 	if MergeInProgress(ctx, dir) {
 		return unmerged(ctx, dir), nil
 	}
+	if err := requireForkRemote(ctx, dir); err != nil {
+		return nil, err
+	}
 	if status, err := git(ctx, dir, "status", "--porcelain"); err != nil {
 		return nil, err
 	} else if status != "" {
-		return nil, ErrDirty
+		if _, err := git(ctx, dir, "add", "-A"); err != nil {
+			return nil, fmt.Errorf("cannot save local changes before updating: %w", err)
+		}
+		if _, err := git(ctx, dir, "commit", "-m", "Save local changes before updating Crush to "+tag); err != nil {
+			return nil, fmt.Errorf("cannot commit local changes before updating: %w", err)
+		}
+		if status, err := git(ctx, dir, "status", "--porcelain"); err != nil {
+			return nil, err
+		} else if status != "" {
+			return nil, ErrDirty
+		}
 	}
-	// Start from the fork's latest published state.
-	if _, err := git(ctx, dir, "pull", "--ff-only", "--quiet"); err != nil {
-		return nil, fmt.Errorf("cannot update the checkout from GitHub: %w", err)
-	}
+	// Fetch the release first so an agent can finish both merges if bringing
+	// in the fork's published changes needs conflict resolution.
 	if _, err := git(ctx, dir, "fetch", "--quiet", "--no-tags", upstreamURL, "tag", tag); err != nil {
 		return nil, fmt.Errorf("cannot download %s: %w", tag, err)
+	}
+	// A saved local commit and new published commits may both exist. An
+	// ordinary merge preserves both histories without rebasing either one.
+	if _, err := git(ctx, dir, "pull", "--no-rebase", "--no-edit", "--ff", "--quiet"); err != nil {
+		if clashes := unmerged(ctx, dir); len(clashes) > 0 {
+			return clashes, nil
+		}
+		return nil, fmt.Errorf("cannot update the checkout from GitHub: %w", err)
 	}
 	if _, err := git(ctx, dir, "merge-base", "--is-ancestor", tag, "HEAD"); err == nil {
 		return nil, nil
@@ -132,6 +153,35 @@ func Merge(ctx context.Context, dir, tag string) (clashes []string, err error) {
 		return nil, err
 	}
 	return nil, nil
+}
+
+// requireForkRemote prevents the fork sync from pulling unreleased upstream
+// changes when the checkout accidentally tracks Charm's main branch.
+func requireForkRemote(ctx context.Context, dir string) error {
+	branch, err := git(ctx, dir, "branch", "--show-current")
+	if err != nil {
+		return err
+	}
+	remote, err := git(ctx, dir, "config", "--get", "branch."+branch+".remote")
+	if err != nil {
+		return fmt.Errorf("cannot identify the fork's tracked remote: %w", err)
+	}
+	if remote == "." {
+		return nil
+	}
+	rawURL, err := git(ctx, dir, "config", "--get", "remote."+remote+".url")
+	if err != nil {
+		return err
+	}
+	if strings.HasPrefix(rawURL, "git@github.com:") {
+		rawURL = "ssh://git@github.com/" + strings.TrimPrefix(rawURL, "git@github.com:")
+	}
+	parsed, err := url.Parse(rawURL)
+	if err == nil && strings.EqualFold(parsed.Hostname(), "github.com") &&
+		strings.EqualFold(strings.TrimSuffix(strings.TrimRight(parsed.Path, "/"), ".git"), "/charmbracelet/crush") {
+		return errors.New("this branch tracks the official Crush repository; set its tracked remote to your fork before updating")
+	}
+	return nil
 }
 
 // MergeInProgress reports whether a merge waits for its clashes to be fixed.
@@ -224,6 +274,9 @@ func Staged(ctx context.Context, dir, tag string) string {
 	if err != nil || head != s.Head {
 		return ""
 	}
+	if status, err := git(ctx, dir, "status", "--porcelain"); err != nil || status != "" {
+		return ""
+	}
 	if _, err := os.Stat(s.Binary); err != nil {
 		return ""
 	}
@@ -239,7 +292,7 @@ func Install(ctx context.Context, dir string) (installed string, pushErr, err er
 		return "", nil, errors.New("there is no tested build to install")
 	}
 	if Staged(ctx, dir, s.Tag) == "" {
-		return "", nil, errors.New("the checkout changed after the tested build; build it again")
+		return "", nil, errors.New("the checkout changed after the tested build; commit the new changes, then build again")
 	}
 	target, err := installedBinary()
 	if err != nil {
@@ -285,8 +338,8 @@ func FixPrompt(tag string, clashes []string, failure string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "This checkout is a fork of Crush. It is being updated to upstream's stable release %s so the fork gets upstream's changes while keeping every fork feature.\n\n", tag)
 	if len(clashes) > 0 {
-		fmt.Fprintf(&b, "`git merge %s` stopped with clashes in: %s.\n\n", tag, strings.Join(clashes, ", "))
-		b.WriteString("1. Resolve every clash so both the fork's behavior and upstream's change survive. Read both sides and the surrounding code; never drop a fork feature. Then `git add` the files and `git commit --no-edit` to finish the merge.\n")
+		fmt.Fprintf(&b, "The update to %s stopped with a merge in progress and clashes in: %s.\n\n", tag, strings.Join(clashes, ", "))
+		b.WriteString("1. Resolve every clash so both the fork's behavior and upstream's change survive. Read both sides and the surrounding code; never drop a fork feature. Then `git add` the files and `git commit --no-edit` to finish the merge. The pending merge may be the fork sync rather than the release itself. If the requested release tag is not yet an ancestor of HEAD, merge that tag with an ordinary `git merge --no-ff --no-edit`, resolve any further clashes, and commit them before building.\n")
 	} else {
 		fmt.Fprintf(&b, "The merge is done, but `crush self-update build` failed:\n\n```\n%s\n```\n\n", lastLines(failure, 60))
 		b.WriteString("1. Find the cause and fix it, keeping both the fork's behavior and upstream's change. Commit the fixes.\n")

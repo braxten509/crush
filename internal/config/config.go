@@ -168,6 +168,19 @@ type ProviderConfig struct {
 	GrokModels []catwalk.Model `json:"grok_models,omitempty" jsonschema:"-"`
 }
 
+// AvailableModels returns the catalog served by the provider's active credentials.
+func (p ProviderConfig) AvailableModels() []catwalk.Model {
+	if p.OAuthToken != nil {
+		switch catwalk.InferenceProvider(p.ID) {
+		case catwalk.InferenceProviderOpenAI:
+			return p.ChatGPTModels
+		case catwalk.InferenceProviderXAI:
+			return p.GrokModels
+		}
+	}
+	return p.Models
+}
+
 // ToProvider converts the [ProviderConfig] to a [catwalk.Provider].
 func (c *ProviderConfig) ToProvider() catwalk.Provider {
 	// Convert config provider to provider.Provider format

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"runtime"
+	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -22,6 +23,10 @@ const (
 // terminal bell support. Platforms without a sound player silently skip it.
 func PlaySound(sound Sound) tea.Cmd {
 	return func() tea.Msg {
+		// Tests execute UI command trees too; never play audio on the host.
+		if testing.Testing() {
+			return nil
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		playSound(ctx, runtime.GOOS, sound, func(ctx context.Context, name string, args ...string) error {

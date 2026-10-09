@@ -48,7 +48,7 @@ func step(t *testing.T, m authModel, msg tea.Msg) authModel {
 // paste field up, ready for key or paste messages.
 func waitingModel(t *testing.T) authModel {
 	t.Helper()
-	m := newAuthModel(PlatformGrok, func() flow { return fakeCodeEntryFlow{} })
+	m := newTestAuthModel(PlatformGrok, func() flow { return fakeCodeEntryFlow{} })
 	m = step(t, m, authReadyMsg{
 		flow: fakeCodeEntryFlow{},
 		url:  "https://auth.example/authorize",
@@ -69,7 +69,7 @@ func TestAuthTUIPasteFieldShowsForCodeEntryFlows(t *testing.T) {
 }
 
 func TestAuthTUIPasteFieldHiddenForDeviceFlows(t *testing.T) {
-	m := newAuthModel(PlatformCopilot, func() flow { return &copilotFlow{} })
+	m := newTestAuthModel(PlatformCopilot, func() flow { return &copilotFlow{} })
 	m = step(t, m, authReadyMsg{
 		flow:     &copilotFlow{},
 		url:      "https://example/verify",
@@ -149,4 +149,21 @@ func TestGrokFlowCompleteWithCodeWithoutBrowserFlow(t *testing.T) {
 	f := &grokFlow{deviceCode: "dc", expiresIn: 60}
 	_, err := f.CompleteWithCode(context.Background(), "some-code")
 	require.ErrorContains(t, err, "no browser flow")
+}
+
+// Test auth flows record browser requests without touching the user's desktop.
+func newTestAuthModel(platform string, newFlow func() flow) authModel {
+	m := newAuthModel(platform, newFlow)
+	m.openURL = func(string) error { return nil }
+	return m
+}
+
+func TestAuthTUIReportsBrowserFailure(t *testing.T) {
+	m := newTestAuthModel(PlatformGrok, func() flow { return fakeCodeEntryFlow{} })
+	var opened string
+	m.openURL = func(url string) error { opened = url; return errors.New("browser unavailable") }
+	m = step(t, m, authReadyMsg{flow: fakeCodeEntryFlow{}, url: "https://auth.example/authorize"})
+	require.Equal(t, "https://auth.example/authorize", opened)
+	require.True(t, m.browserFailed)
+	require.True(t, m.codeEntry)
 }

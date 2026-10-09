@@ -377,10 +377,11 @@ func (m *UI) remoteSelectModel(providerID, modelID string) (tea.Cmd, error) {
 	if !ok || pc.Disable {
 		return nil, errors.New("that CLI is not set up on the computer")
 	}
+	models := pc.AvailableModels()
 	var model *catwalk.Model
-	for i := range pc.Models {
-		if pc.Models[i].ID == modelID {
-			model = &pc.Models[i]
+	for i := range models {
+		if models[i].ID == modelID {
+			model = &models[i]
 			break
 		}
 	}
@@ -392,7 +393,7 @@ func (m *UI) remoteSelectModel(providerID, modelID string) (tea.Cmd, error) {
 			ID:     catwalk.InferenceProvider(pc.ID),
 			Name:   cmp.Or(pc.Name, pc.ID),
 			Type:   pc.Type,
-			Models: pc.Models,
+			Models: models,
 		},
 		Model: config.SelectedModel{
 			Model:           model.ID,

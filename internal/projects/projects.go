@@ -117,7 +117,7 @@ func MarkSaved(workingDir string) error {
 			return Save(list)
 		}
 	}
-	list.Projects = append(list.Projects, Project{Path: workingDir, LastAccessed: time.Now().UTC(), Saved: true})
+	list.Projects = slices.Insert(list.Projects, 0, Project{Path: workingDir, LastAccessed: time.Now().UTC(), Saved: true})
 	return Save(list)
 }
 
@@ -136,7 +136,7 @@ func Unsave(workingDir string) error {
 	return nil
 }
 
-// SavedList returns user-saved projects sorted by last accessed.
+// SavedList returns user-saved projects in recency order.
 func SavedList() ([]Project, error) {
 	all, err := List()
 	if err != nil {

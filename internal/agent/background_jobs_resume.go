@@ -29,6 +29,7 @@ const (
 )
 
 type savedJob struct {
+	Service    bool      `json:"service,omitempty"`
 	ID         string    `json:"id"`
 	SessionID  string    `json:"session_id"`
 	Name       string    `json:"name,omitempty"`
@@ -55,10 +56,10 @@ func ownJob(id string) func(savedJob) bool {
 }
 
 // rememberJob saves a running job of the session.
-func (h *taskHub) rememberJob(job *shell.BackgroundShell, sessionID string) {
+func (h *taskHub) rememberJob(job *shell.BackgroundShell, sessionID string, service bool) {
 	entry := savedJob{
 		ID: job.ID, SessionID: sessionID, Name: job.Description, Command: job.Command,
-		WorkingDir: job.WorkingDir, Started: job.Started, Owner: os.Getpid(),
+		WorkingDir: job.WorkingDir, Started: job.Started, Owner: os.Getpid(), Service: service,
 	}
 	err := h.editSavedJobs(func(saved []savedJob) []savedJob {
 		return append(slices.DeleteFunc(saved, ownJob(job.ID)), entry)
@@ -168,6 +169,9 @@ func interruptedJobsNotification(jobs []savedJob) string {
 			b.WriteString(", ended when Crush stopped unexpectedly")
 		} else {
 			fmt.Fprintf(&b, ", ended when Crush closed at %s", s.Interrupted.Local().Format("15:04"))
+		}
+		if s.Service {
+			fmt.Fprint(&b, "\n  Long-running service; use crush bg --service if restarting it.")
 		}
 		if s.WorkingDir != "" {
 			fmt.Fprintf(&b, "\n  Directory: %s", s.WorkingDir)

@@ -98,7 +98,7 @@ func (m *UI) handleSelfUpdate(msg selfUpdateMsg) tea.Cmd {
 	}
 	return m.openSelfUpdateForm("crush-update",
 		fmt.Sprintf("Update Crush to %s?", release.Tag),
-		fmt.Sprintf("Upstream released %s (you have %s). Your changes stay: Crush merges it into %s, builds it and runs every test in the background. If files clash or tests fail, an AI agent fixes them. You're asked again before anything is installed. Saying No skips this version.", release.Tag, release.Current, release.Dir),
+		fmt.Sprintf("Upstream released %s (you have %s). Crush first saves any uncommitted changes in a commit, then brings the update into %s, builds it and runs every test in the background. If files clash or tests fail, an AI agent fixes them. You're asked again before anything is installed. Saying No skips this version.", release.Tag, release.Current, release.Dir),
 		func() tea.Cmd { return m.startSelfUpdate(release) },
 		func() tea.Cmd {
 			cliupdate.Decline(declinedCrush(release.Tag))
@@ -146,7 +146,7 @@ func (m *UI) openSelfUpdateForm(id, text, description string, yes, no func() tea
 // handing clashes and failures to an AI agent.
 func (m *UI) startSelfUpdate(release *selfupdate.Release) tea.Cmd {
 	m.selfUpdateRunning = true
-	m.status.SetInfoMsg(util.InfoMsg{Type: util.InfoTypeUpdate, Msg: fmt.Sprintf("Updating Crush to %s in the background: merging, building and testing…", release.Tag), TTL: time.Hour})
+	m.status.SetInfoMsg(util.InfoMsg{Type: util.InfoTypeUpdate, Msg: fmt.Sprintf("Updating Crush to %s in the background: saving changes, merging, building and testing…", release.Tag), TTL: time.Hour})
 	return func() tea.Msg {
 		ctx := context.Background()
 		log, err := selfupdate.CreateLog()

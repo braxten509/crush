@@ -20,9 +20,11 @@ func TestBackgroundCommandTransportsQuotedArguments(t *testing.T) {
 		args    []string
 		command string
 		output  string
+		service bool
 	}{
 		{name: "script", args: []string{"--", "sleep 2; echo done"}, command: "sleep 2; echo done"},
 		{name: "arguments", args: []string{"--", "printf", "%s", "$(not-a-command); literal"}, command: "printf %s '$(not-a-command); literal'"},
+		{name: "service", args: []string{"--service", "--", "npm run dev"}, command: "npm run dev", service: true},
 		{name: "output", args: []string{"--output", "001"}, output: "001"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -70,6 +72,7 @@ func TestBackgroundCommandTransportsQuotedArguments(t *testing.T) {
 			require.NotNil(t, request.Background)
 			require.Equal(t, test.command, request.Background.Command)
 			require.Equal(t, test.output, request.Background.OutputID)
+			require.Equal(t, test.service, request.Background.Service)
 			require.True(t, filepath.IsAbs(request.Background.WorkingDir))
 			require.Contains(t, output.String(), "job accepted")
 		})
@@ -82,4 +85,12 @@ func TestBackgroundCommandRejectsAmbiguousOperation(t *testing.T) {
 	cmd := newBackgroundCommand()
 	cmd.SetArgs([]string{"--output", "001", "--", "echo hi"})
 	require.ErrorContains(t, cmd.Execute(), "exactly one")
+}
+
+func TestBackgroundServiceFlagRequiresCommand(t *testing.T) {
+	t.Setenv(agent.TasksDirEnv, t.TempDir())
+	t.Setenv(agent.TasksSessionEnv, "owner")
+	cmd := newBackgroundCommand()
+	cmd.SetArgs([]string{"--service", "--output", "001"})
+	require.ErrorContains(t, cmd.Execute(), "requires a command")
 }

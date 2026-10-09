@@ -33,10 +33,25 @@ func (m *UI) handleAgentFinished(msg agentFinishedMsg) tea.Cmd {
 		m.turnOutcome = tea.ProgramStateDone
 	}
 	return tea.Batch(
-		m.playNotificationSound(notification.SoundComplete),
-		m.sendNotification(notification.Notification{
+		m.guardCompletionAlert(n.SessionID, m.playNotificationSound(notification.SoundComplete)),
+		m.guardCompletionAlert(n.SessionID, m.sendNotification(notification.Notification{
 			Title:   "Crush is waiting...",
 			Message: fmt.Sprintf("Agent's turn completed in \"%s\"", n.SessionTitle),
-		}),
+		})),
 	)
+}
+
+// guardCompletionAlert checks again when the command executes: a new turn can
+// start after the completion event was checked but before its sound is played.
+func (m *UI) guardCompletionAlert(sessionID string, alert tea.Cmd) tea.Cmd {
+	if alert == nil {
+		return nil
+	}
+	ws := m.com.Workspace
+	return func() tea.Msg {
+		if ws.AgentIsSessionBusy(sessionID) || ws.AgentQueuedPrompts(sessionID) > 0 {
+			return nil
+		}
+		return alert()
+	}
 }

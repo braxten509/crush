@@ -16,7 +16,7 @@ func newBackgroundCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "bg [flags] -- command [arguments...]",
 		Short:   "Run a tracked background command inside a Crush session",
-		Example: "crush bg -- 'timeout 600 go test ./...'\ncrush bg --output 001\ncrush bg --stop 001",
+		Example: "crush bg -- 'timeout 600 go test ./...'\ncrush bg --service -- 'npm run dev'\ncrush bg --output 001\ncrush bg --stop 001",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			directory, session := os.Getenv(agent.TasksDirEnv), os.Getenv(agent.TasksSessionEnv)
 			if directory == "" || session == "" {
@@ -24,6 +24,7 @@ func newBackgroundCommand() *cobra.Command {
 			}
 			request := agent.BackgroundRequest{}
 			request.Name, _ = cmd.Flags().GetString("name")
+			request.Service, _ = cmd.Flags().GetBool("service")
 			request.OutputID, _ = cmd.Flags().GetString("output")
 			request.StopID, _ = cmd.Flags().GetString("stop")
 			if len(args) == 1 {
@@ -48,6 +49,9 @@ func newBackgroundCommand() *cobra.Command {
 			if operations != 1 {
 				return errors.New("provide exactly one command, --output ID, or --stop ID")
 			}
+			if request.Service && strings.TrimSpace(request.Command) == "" {
+				return errors.New("--service requires a command to start")
+			}
 			var err error
 			request.WorkingDir, err = os.Getwd()
 			if err != nil {
@@ -71,6 +75,7 @@ func newBackgroundCommand() *cobra.Command {
 			return err
 		},
 	}
+	cmd.Flags().Bool("service", false, "Keep this long-running service from delaying finish notifications")
 	cmd.Flags().String("name", "", "Short description of the job")
 	cmd.Flags().String("output", "", "Read output from a job")
 	cmd.Flags().String("stop", "", "Stop a job")

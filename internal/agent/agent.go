@@ -159,9 +159,6 @@ type SessionAgentCall struct {
 	// is rewritten and no longer carries the element, so the reply
 	// target is not lost when a long channel turn is summarized.
 	channelMeta map[string]string
-	// notificationPrompt retains the original turn's origin when auto-
-	// summarization rewrites Prompt for a continuation of the same work.
-	notificationPrompt *string
 }
 
 // filterToolsForChannel scopes the tool list for a turn. A channel-originated
@@ -899,23 +896,15 @@ func (a *sessionAgent) publishRunComplete(ctx context.Context, call SessionAgent
 }
 
 // notifySessionFinished runs after the final message flush. Only a normal,
-// nonempty main-session answer can finish the user's work, and child
-// sessions never generate completion alerts. Follow-ups nobody typed (a
-// sub-agent's result, answers from `crush ask`, a CLI's reply after a
-// background task) only ding once none of the session's sub-agents is
-// still running.
-// A model turn is not a completed session while another prompt is queued,
-// accepted for dispatch, interrupting, or already running.
+// nonempty main-session answer can finish the user's work. Child sessions
+// and turns with running helpers or background commands never generate a
+// completion alert. Queued, accepted, interrupting, and active turns also
+// keep the session unfinished.
 func (a *sessionAgent) notifySessionFinished(call SessionAgentCall, sess session.Session, assistant *message.Message, finished ...*activeCancel) {
 	if a.notify == nil || a.isSubAgent || sess.ParentSessionID != "" || call.NonInteractive {
 		return
 	}
-	prompt := call.Prompt
-	if call.notificationPrompt != nil {
-		prompt = *call.notificationPrompt
-	}
-	_, _, followUp := ParseTaskNotification(strings.TrimSpace(prompt))
-	if (followUp || call.CLIContinue) && a.tasks.hasRunning(call.SessionID) {
+	if a.tasks.hasRunning(call.SessionID) {
 		return
 	}
 	if assistant == nil || assistant.Role != message.Assistant || assistant.IsSummaryMessage || assistant.IsCompacting || assistant.FinishReason() != message.FinishReasonEndTurn {
@@ -977,10 +966,6 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	}()
 	if err := ValidateCall(call); err != nil {
 		return nil, err
-	}
-	if call.notificationPrompt == nil {
-		prompt := call.Prompt
-		call.notificationPrompt = &prompt
 	}
 
 	if call.Channel != "" && call.channelMeta == nil {

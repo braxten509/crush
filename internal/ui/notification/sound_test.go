@@ -3,6 +3,8 @@ package notification
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,4 +59,18 @@ func TestPlaySoundCancelled(t *testing.T) {
 		t.Fatal("cancelled playback must not start a player")
 		return nil
 	})
+}
+
+func TestSoundCommandsStaySilentDuringTests(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "played")
+	for _, name := range []string{"canberra-gtk-play", "pw-play", "paplay", "afplay"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\necho played > \"$CRUSH_TEST_SOUND_MARKER\"\n"), 0o755))
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("CRUSH_TEST_SOUND_MARKER", marker)
+	for _, sound := range []Sound{SoundQuestion, SoundComplete} {
+		require.Nil(t, PlaySound(sound)())
+	}
+	require.NoFileExists(t, marker, "UI tests must never run a real sound player")
 }

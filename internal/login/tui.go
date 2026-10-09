@@ -74,6 +74,7 @@ func (m *authModel) updateAuthKeymap() {
 
 // authModel is the Bubble Tea model for the OAuth authorization flow.
 type authModel struct {
+	openURL  func(string) error
 	platform string
 	newFlow  func() flow
 	flow     flow
@@ -135,6 +136,7 @@ func newAuthModel(platform string, newFlow func() flow) authModel {
 	s := spinner.New(spinner.WithSpinner(spinner.Dot))
 	s.Style = lipgloss.NewStyle().Foreground(charmtone.Julep)
 	m := authModel{
+		openURL:  browser.OpenURL,
 		platform: platform,
 		newFlow:  newFlow,
 		state:    authStateIntro,
@@ -182,8 +184,8 @@ func (m authModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.flow = msg.flow
 		m.verificationURL = msg.url
 		m.userCode = msg.userCode
-		if !m.browserFailed {
-			m.browserFailed = browser.OpenURL(msg.url) != nil
+		if !m.browserFailed && m.openURL != nil {
+			m.browserFailed = m.openURL(msg.url) != nil
 		}
 		m.state = authStateWaiting
 		m.updateAuthKeymap()

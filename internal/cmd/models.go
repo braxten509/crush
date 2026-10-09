@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2/tree"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/mattn/go-isatty"
@@ -73,15 +72,7 @@ crush models --json`,
 			// credential. Signed in with ChatGPT or Grok, only the
 			// models the subscription grants are usable; an API key
 			// lists the regular catalog.
-			var models []catwalk.Model
-			switch {
-			case providerID == string(catwalk.InferenceProviderOpenAI) && provider.OAuthToken != nil:
-				models = provider.ChatGPTModels
-			case providerID == string(catwalk.InferenceProviderXAI) && provider.OAuthToken != nil:
-				models = provider.GrokModels
-			default:
-				models = provider.Models
-			}
+			models := provider.AvailableModels()
 
 			for _, model := range models {
 				if term != "" {
@@ -197,10 +188,7 @@ func printModelsJSON(w io.Writer, cfg *config.Config, term string) error {
 		if provider.Disable {
 			continue
 		}
-		models := provider.Models
-		if providerID == string(catwalk.InferenceProviderOpenAI) && provider.OAuthToken != nil {
-			models = provider.ChatGPTModels
-		}
+		models := provider.AvailableModels()
 		for _, model := range models {
 			if term != "" && !slices.ContainsFunc([]string{provider.ID, provider.Name, model.ID, model.Name}, func(s string) bool {
 				return strings.Contains(strings.ToLower(s), term)

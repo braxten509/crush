@@ -5,6 +5,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestRegisterAndList(t *testing.T) {
@@ -245,4 +247,14 @@ func TestSavedSurvivesRegister(t *testing.T) {
 	if all, _ := List(); len(all) != 2 {
 		t.Fatalf("unsave should keep history, got %+v", all)
 	}
+}
+
+func TestNewSavedProjectComesFirst(t *testing.T) {
+	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(t.TempDir(), "crush"))
+	require.NoError(t, MarkSaved("/older"))
+	require.NoError(t, MarkSaved("/newer"))
+	saved, err := SavedList()
+	require.NoError(t, err)
+	require.Len(t, saved, 2)
+	require.Equal(t, "/newer", saved[0].Path)
 }

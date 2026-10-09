@@ -3,6 +3,8 @@ package model
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/notification"
@@ -56,6 +58,30 @@ func TestCompletionSoundChecksFreshSessionState(t *testing.T) {
 			} else {
 				require.Nil(t, msg, "a stale completion must not schedule sound or a desktop notification")
 			}
+		})
+	}
+}
+
+func TestCompletionAlertChecksStateBeforePlaying(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		busy      bool
+		queued    []string
+		wantAlert bool
+	}{
+		{name: "finished", wantAlert: true},
+		{name: "new turn", busy: true},
+		{name: "queued turn", queued: []string{"next"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ws := &countingWorkspace{ready: true}
+			u := newBusyUI(ws)
+			played := false
+			cmd := u.guardCompletionAlert("s1", func() tea.Msg { played = true; return nil })
+			require.Zero(t, ws.syncProbes(), "checks must run outside the UI loop")
+			ws.agentBusy, ws.queued = test.busy, test.queued
+			cmd()
+			require.Equal(t, test.wantAlert, played)
 		})
 	}
 }

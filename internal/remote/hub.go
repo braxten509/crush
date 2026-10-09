@@ -798,11 +798,12 @@ func (h *hub) clisLocked() []cliView {
 		return out
 	}
 	for id, p := range cfg.Providers.Seq2() {
-		if p.Disable || len(p.Models) == 0 {
+		models := p.AvailableModels()
+		if p.Disable || len(models) == 0 {
 			continue
 		}
 		cv := cliView{Provider: id, Name: cmp.Or(p.Name, id)}
-		for _, m := range p.Models {
+		for _, m := range models {
 			if m.ID == "" {
 				continue
 			}

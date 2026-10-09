@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
 )
 
@@ -78,6 +79,8 @@ func TestCompletionNotificationRequiresUserWork(t *testing.T) {
 		child      bool
 		subAgent   bool
 		running    bool // a sub-agent of the session is still running
+		background bool // a background command in this session is still running
+		service    bool
 		text       string
 		reason     fantasy.FinishReason
 		reasoning  string
@@ -85,7 +88,10 @@ func TestCompletionNotificationRequiresUserWork(t *testing.T) {
 		wantNotify bool
 	}{
 		{name: "user reply", text: "done", wantNotify: true},
-		{name: "user reply while a sub-agent runs", running: true, text: "done", wantNotify: true},
+		{name: "user reply while a sub-agent runs", running: true, text: "done"},
+		{name: "user reply while a background command runs", background: true, text: "done"},
+		{name: "user reply while a service runs", background: true, service: true, text: "done", wantNotify: true},
+		{name: "task result while a background command runs", background: true, call: SessionAgentCall{Prompt: taskNotification(Task{Name: "worker", Status: TaskDone}, "done")}, text: "done"},
 		{name: "plan handoff", call: SessionAgentCall{HiddenUserMessage: true}, text: "done", wantNotify: true},
 		{name: "unprompted CLI reply", call: SessionAgentCall{CLIContinue: true, HiddenUserMessage: true}, text: "done", wantNotify: true},
 		{name: "unprompted CLI reply while a sub-agent runs", call: SessionAgentCall{CLIContinue: true, HiddenUserMessage: true}, running: true, text: "done"},
@@ -127,6 +133,14 @@ func TestCompletionNotificationRequiresUserWork(t *testing.T) {
 			}
 			if test.running {
 				agent.tasks = &taskHub{dir: t.TempDir(), tasks: map[string]*Task{"t1": {SessionID: sess.ID, Status: TaskRunning}}}
+			}
+			if test.background {
+				agent.tasks = &taskHub{
+					dir:                t.TempDir(),
+					backgroundShells:   map[string]*shell.BackgroundShell{"call": {ID: "job"}},
+					backgroundOwners:   map[string]string{"job": sess.ID},
+					backgroundServices: map[string]bool{"job": test.service},
+				}
 			}
 			call := test.call
 			call.SessionID = sess.ID
@@ -411,4 +425,32 @@ func TestCompletionNotificationTitleAndSummary(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, sess.SummaryMessageID)
 	requireNoCompletionNotification(t, events)
+}
+
+func TestCompletionNotificationWaitsForBackgroundWork(t *testing.T) {
+	t.Parallel()
+	agent, env := newStreamTestAgent(t)
+	broker := pubsub.NewBroker[notify.Notification]()
+	t.Cleanup(broker.Shutdown)
+	agent.notify = broker
+	events := broker.Subscribe(t.Context())
+	sess, err := env.sessions.Create(t.Context(), "session")
+	require.NoError(t, err)
+	agent.tasks = &taskHub{
+		dir:              t.TempDir(),
+		backgroundShells: map[string]*shell.BackgroundShell{"call": {ID: "job"}},
+		backgroundOwners: map[string]string{"job": sess.ID},
+	}
+	_, err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "user request"})
+	require.NoError(t, err)
+	requireNoCompletionNotification(t, events)
+	agent.tasks.mu.Lock()
+	delete(agent.tasks.backgroundShells, "call")
+	// Work in a different session must not silence this session's completion.
+	agent.tasks.backgroundShells["other"] = &shell.BackgroundShell{ID: "other"}
+	agent.tasks.backgroundOwners["other"] = "another session"
+	agent.tasks.mu.Unlock()
+	_, err = agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: taskNotification(Task{Name: "background", Status: TaskDone}, "done")})
+	require.NoError(t, err)
+	requireCompletionNotification(t, events, sess.ID)
 }

@@ -73,6 +73,7 @@ func (h *header) drawHeader(
 	lspErrorCount int,
 	hyperCredits *int,
 	frame logoFrame,
+	gitBranch string,
 ) {
 	t := h.com.Styles
 	if width != h.width || compact != h.compact || frame != h.frame || h.logo == "" {
@@ -103,6 +104,7 @@ func (h *header) drawHeader(
 		detailsOpen,
 		availDetailWidth,
 		hyperCredits,
+		gitBranch,
 	)
 
 	// Details follow the name after a quiet gap, with no fill between.
@@ -123,6 +125,7 @@ func renderHeaderDetails(
 	detailsOpen bool,
 	availWidth int,
 	hyperCredits *int,
+	gitBranch string,
 ) string {
 	t := com.Styles
 
@@ -164,15 +167,14 @@ func renderHeaderDetails(
 	workingDir := com.Workspace.WorkingDir()
 	cwd := t.Header.WorkingDir.Render(fsext.DirTrim(fsext.PrettyPath(workingDir), dirTrimLimit))
 
-	branch := com.Workspace.GitBranch()
-	if branch != "" {
+	if gitBranch != "" {
 		// Reserve space for the dot separator between branch and path and
 		// at least some of the path.
 		branchSep := t.Header.Separator.Render(" • ")
 		metadataWidth := lipgloss.Width(metadata)
 		maxBranchWidth := max(0, availWidth-metadataWidth-lipgloss.Width(cwd)-lipgloss.Width(branchSep))
 		if maxBranchWidth > 0 {
-			truncBranch := ansi.Truncate(branch, maxBranchWidth, "…")
+			truncBranch := ansi.Truncate(gitBranch, maxBranchWidth, "…")
 			cwd = t.Header.GitBranch.Render(truncBranch) + branchSep + cwd
 		}
 	}

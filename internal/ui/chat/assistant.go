@@ -287,6 +287,16 @@ func (a *AssistantMessageItem) Spinning() bool {
 	return a.isSpinning()
 }
 
+// restyleAnim implements [animRestyler].
+func (a *AssistantMessageItem) restyleAnim() {
+	a.anim.SetColors(
+		a.sty.WorkingLabelColor,
+		a.sty.WorkingGradFromColor,
+		a.sty.WorkingGradToColor,
+		a.sty.WorkingTimerColor,
+	)
+}
+
 // Advance implements [Animatable].
 func (a *AssistantMessageItem) Advance() bool {
 	a.syncActivity(time.Now())

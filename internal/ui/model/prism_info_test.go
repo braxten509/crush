@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -19,9 +20,9 @@ type prismWorkspace struct {
 	workspace.Workspace
 }
 
-func (w *prismWorkspace) Config() *config.Config { return &config.Config{} }
-func (w *prismWorkspace) WorkingDir() string     { return "/" }
-func (w *prismWorkspace) GitBranch() string      { return "" }
+func (w *prismWorkspace) Config() *config.Config                    { return &config.Config{} }
+func (w *prismWorkspace) WorkingDir() string                        { return "/" }
+func (w *prismWorkspace) GitBranch(context.Context) (string, error) { return "", nil }
 
 func newPrismTestUI() *UI {
 	com := common.DefaultCommon(&prismWorkspace{})

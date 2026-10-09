@@ -30,6 +30,7 @@ func (m *UI) handleAgentFinished(msg agentFinishedMsg) tea.Cmd {
 	n := msg.notification
 	if m.hasSession() && m.session.ID == n.SessionID {
 		common.StopTurn()
+		m.turnOutcome = tea.ProgramStateDone
 	}
 	return tea.Batch(
 		m.playNotificationSound(notification.SoundComplete),

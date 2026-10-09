@@ -1,4 +1,4 @@
-package session
+package sessioncatalog
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/projects"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,7 +61,7 @@ func TestCatalogListsAllFoldersAndDiscardsOnlyAbandonedEmptyChats(t *testing.T) 
 	entries, err := first.List(t.Context(), "selected-empty")
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
-	byID := map[string]Session{}
+	byID := map[string]session.Session{}
 	for _, entry := range entries {
 		byID[entry.ID] = entry
 	}
@@ -81,8 +82,8 @@ func TestCatalogChangesStayInTheOriginalDatabase(t *testing.T) {
 	stamp := time.Now().Unix()
 	catalogChat(t, a, "same-id", "", "user", `[]`, stamp)
 	catalogChat(t, b, "same-id", "", "user", `[]`, stamp)
-	target := Session{ID: "same-id", Title: "renamed", Directory: second.Directory, DataDirectory: second.DataDirectory}
-	require.NotEqual(t, (Session{ID: "same-id", DataDirectory: first.DataDirectory}).CatalogID(), target.CatalogID())
+	target := session.Session{ID: "same-id", Title: "renamed", Directory: second.Directory, DataDirectory: second.DataDirectory}
+	require.NotEqual(t, (session.Session{ID: "same-id", DataDirectory: first.DataDirectory}).CatalogID(), target.CatalogID())
 	require.NoError(t, first.Change(t.Context(), target, false))
 	var title string
 	require.NoError(t, a.QueryRow("SELECT title FROM sessions WHERE id='same-id'").Scan(&title))

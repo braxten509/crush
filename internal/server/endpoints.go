@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/charmbracelet/crush/internal/apigen"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 // endpoints is the single source of truth for the v1 API: every entry
@@ -111,6 +112,11 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			SSE().
 			Fails(400, 404, 500).
 			Handle(c.handleGetWorkspaceEvents),
+
+		apigen.Get("/v1/workspaces/{id}/saved-sessions").
+			Summary("List saved chats across projects").Tags("sessions").PathParam("id", "Workspace ID").Responds([]session.Session{}).Fails(404, 500).Handle(c.handleSavedSessions),
+		apigen.Post("/v1/workspaces/{id}/saved-sessions").
+			Summary("Rename or delete a saved chat").Tags("sessions").PathParam("id", "Workspace ID").Responds(struct{}{}).Fails(400, 404, 500).Handle(c.handleSavedSessions),
 
 		apigen.Get("/v1/workspaces/{id}/sessions").
 			Summary("List sessions").

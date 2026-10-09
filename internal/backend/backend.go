@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/app"
@@ -20,6 +21,7 @@ import (
 	"github.com/charmbracelet/crush/internal/cpuaffinity"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -433,6 +435,11 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 		return nil, proto.Workspace{}, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
+	if !testing.Testing() {
+		if err := projects.Register(args.Path, cfg.Config().Options.DataDirectory); err != nil {
+			slog.Warn("Failed to register project", "error", err)
+		}
+	}
 	conn, err := db.Connect(b.ctx, cfg.Config().Options.DataDirectory, db.WithDataDirLock(true))
 	if err != nil {
 		return nil, proto.Workspace{}, fmt.Errorf("failed to connect to database: %w", err)

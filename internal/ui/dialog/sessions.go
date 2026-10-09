@@ -69,14 +69,20 @@ func NewSessions(com *common.Common, selectedSessionID string) (*Session, error)
 	s := new(Session)
 	s.sessionsMode = sessionsModeNormal
 	s.com = com
-	sessions, err := com.Workspace.ListSessions(context.TODO())
+	var sessions []session.Session
+	var err error
+	if catalog, ok := com.Workspace.(session.CatalogWorkspace); ok {
+		sessions, err = catalog.ListSavedSessions(context.TODO(), selectedSessionID)
+	} else {
+		sessions, err = com.Workspace.ListSessions(context.TODO())
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	s.sessions = sessions
 	for i, sess := range sessions {
-		if sess.ID == selectedSessionID {
+		if sess.ID == selectedSessionID && (sess.Directory == "" || sess.Directory == com.Workspace.WorkingDir()) {
 			s.selectedSessionInx = i
 			break
 		}
@@ -396,18 +402,30 @@ func (s *Session) confirmDeleteSession() Action {
 	}
 
 	s.removeSession(sessionItem.ID())
-	return ActionCmd{s.deleteSessionCmd(sessionItem.ID())}
+	return ActionCmd{s.deleteSavedSessionCmd(sessionItem.Session)}
 }
 
 func (s *Session) removeSession(id string) {
 	var newSessions []session.Session
 	for _, sess := range s.sessions {
-		if sess.ID == id {
+		if sess.CatalogID() == id {
 			continue
 		}
 		newSessions = append(newSessions, sess)
 	}
 	s.sessions = newSessions
+}
+
+func (s *Session) deleteSavedSessionCmd(target session.Session) tea.Cmd {
+	if catalog, ok := s.com.Workspace.(session.CatalogWorkspace); ok && target.DataDirectory != "" {
+		return func() tea.Msg {
+			if err := catalog.ChangeSavedSession(context.Background(), target, true); err != nil {
+				return util.NewErrorMsg(err)
+			}
+			return nil
+		}
+	}
+	return s.deleteSessionCmd(target.ID)
 }
 
 func (s *Session) deleteSessionCmd(id string) tea.Cmd {
@@ -439,16 +457,24 @@ func (s *Session) confirmRenameSession() Action {
 
 func (s *Session) updateSession(session session.Session) {
 	for existingID, sess := range s.sessions {
-		if sess.ID == session.ID {
+		if sess.CatalogID() == session.CatalogID() {
 			s.sessions[existingID] = session
 			break
 		}
 	}
 }
 
-func (s *Session) updateSessionCmd(session session.Session) tea.Cmd {
+func (s *Session) updateSessionCmd(target session.Session) tea.Cmd {
+	if catalog, ok := s.com.Workspace.(session.CatalogWorkspace); ok && target.DataDirectory != "" {
+		return func() tea.Msg {
+			if err := catalog.ChangeSavedSession(context.Background(), target, false); err != nil {
+				return util.NewErrorMsg(err)
+			}
+			return nil
+		}
+	}
 	return func() tea.Msg {
-		_, err := s.com.Workspace.SaveSession(context.TODO(), session)
+		_, err := s.com.Workspace.SaveSession(context.TODO(), target)
 		if err != nil {
 			return util.NewErrorMsg(err)
 		}
@@ -466,7 +492,7 @@ func (s *Session) isCurrentSessionBusy() bool {
 		return false
 	}
 
-	return s.com.Workspace.AgentIsSessionBusy(sessionItem.ID())
+	return s.com.Workspace.AgentIsSessionBusy(sessionItem.Session.ID)
 }
 
 // ShortHelp implements [help.KeyMap].

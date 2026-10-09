@@ -210,3 +210,5 @@ require (
 replace github.com/charmbracelet/ultraviolet => ./third_party/ultraviolet
 
 replace github.com/jordanella/go-ansi-paintbrush => ./third_party/go-ansi-paintbrush
+
+replace github.com/charmbracelet/x/vt => ./third_party/vt

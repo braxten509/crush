@@ -220,7 +220,7 @@ func (h *Host) drawList(scr uv.Screen, p palette) {
 		accent.Render("‹")+base.Render(" "), inner)
 	draw(scr, 0, 0, inner, header)
 	buttonWidth := inner - 2
-	button := h.styles.Button.Blurred.Background(p.bg).Foreground(p.accent).Width(buttonWidth).Render(" + New session")
+	button := h.styles.Button.Blurred.Background(p.bg).Foreground(p.accent).Width(buttonWidth).Render("+ New session")
 	draw(scr, newSessionColumn, newSessionRow, buttonWidth, button)
 
 	first, count := h.visibleRange(listBlockHeight)

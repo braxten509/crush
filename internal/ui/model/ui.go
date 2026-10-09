@@ -269,7 +269,9 @@ type UI struct {
 
 	// relaunchDir is set when the user opens another project; the caller
 	// restarts Crush there after the program exits.
-	relaunchDir string
+	relaunchDir       string
+	relaunchSessionID string
+	relaunchDataDir   string
 
 	lastUserMessageTime int64
 
@@ -5399,6 +5401,8 @@ func (m *UI) CurrentSession() *session.Session {
 }
 
 // RelaunchDir returns the project directory to restart Crush in, if any.
+func (m *UI) RelaunchSession() (string, string) { return m.relaunchSessionID, m.relaunchDataDir }
+
 func (m *UI) RelaunchDir() string {
 	return m.relaunchDir
 }
@@ -6534,6 +6538,7 @@ func (m *UI) newSession() tea.Cmd {
 		return nil
 	}
 
+	draftID := m.session.ID
 	planCmd := m.resetPlanModeState()
 	m.session = nil
 	// A session still opening must not replace the new chat when it lands.
@@ -6556,6 +6561,7 @@ func (m *UI) newSession() tea.Cmd {
 	m.historyReset()
 	agenttools.ResetCache()
 	return tea.Batch(
+		m.discardEmptySession(draftID),
 		planCmd,
 		abandonCmd,
 		func() tea.Msg {

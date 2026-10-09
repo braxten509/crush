@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -70,7 +71,7 @@ func (s *SessionItem) Filter() string {
 
 // ID returns the unique identifier of the session.
 func (s *SessionItem) ID() string {
-	return s.Session.ID
+	return s.Session.CatalogID()
 }
 
 // SetMatch sets the fuzzy match for the session item.
@@ -107,7 +108,11 @@ func (s *SessionItem) Cursor() *tea.Cursor {
 
 // InfoText returns the secondary text shown on the right of the item.
 func (s *SessionItem) InfoText() string {
-	return humanize.Time(time.Unix(s.UpdatedAt, 0))
+	when := humanize.Time(time.Unix(s.UpdatedAt, 0))
+	if s.Directory != "" {
+		return home.Short(s.Directory) + " · " + when
+	}
+	return when
 }
 
 // SetHideInfo controls whether the timestamp info column is shown. The

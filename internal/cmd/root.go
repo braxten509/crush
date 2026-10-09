@@ -171,15 +171,30 @@ crush --single
 			slog.Error("TUI run error", "error", err)
 			return errors.New("Crush crashed. If metrics are enabled, we were notified about it. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/charmbracelet/crush/issues/new?template=bug.yml") //nolint:staticcheck
 		}
+		if draft := model.CurrentSession(); draft != nil && !ws.AgentIsSessionBusy(draft.ID) {
+			if cleaner, ok := ws.(session.EmptySessionWorkspace); ok {
+				if err := cleaner.DiscardEmptySession(context.Background(), draft.ID); err != nil {
+					slog.Warn("Could not discard empty chat", "error", err)
+				}
+			}
+		}
 		if dir := model.RelaunchDir(); dir != "" {
 			cleanup()
-			return relaunch(dir, relaunchArgs(cmd, dir))
+			args := relaunchArgs(cmd, dir)
+			if id, data := model.RelaunchSession(); id != "" {
+				args = append(args, "--session", id, "--data-dir", data)
+			}
+			launchDir := dir
+			if _, remote := ws.(*workspace.ClientWorkspace); remote {
+				launchDir, _ = os.Getwd()
+			}
+			return relaunch(launchDir, args)
 		}
 		var banner config.ExitBanner
 		if cfg := com.Config(); cfg != nil {
 			banner = cfg.Options.TUI.ExitBanner
 		}
-		printSessionResume(model, banner)
+		printSessionResume(model, banner, ws)
 		return nil
 	},
 }
@@ -201,9 +216,17 @@ var heartbit = lipgloss.NewStyle().Foreground(charmtone.Dolly).SetString(`
 // printSessionResume prints the exit banner after the TUI exits, including the
 // session title and the hint to resume it with `crush -s <id>`. The banner
 // style decides how much of that is shown; see config.ExitBanner.
-func printSessionResume(model *ui.UI, banner config.ExitBanner) {
+func printSessionResume(model *ui.UI, banner config.ExitBanner, ws workspace.Workspace) {
 	tw, _, _ := term.GetSize(os.Stdout.Fd())
-	body := exitbanner.Render(banner, model.CurrentSession(), tw)
+	saved := model.CurrentSession()
+	if saved != nil {
+		if fresh, err := ws.GetSession(context.Background(), saved.ID); err == nil {
+			saved = &fresh
+		} else {
+			saved = nil
+		}
+	}
+	body := exitbanner.Render(banner, saved, tw)
 	if body == "" {
 		return
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -80,6 +81,19 @@ func sessionLoadTick(seq uint64) tea.Cmd {
 
 // openSession loads s and names it in the loading indicator.
 func (m *UI) openSession(s session.Session) tea.Cmd {
+	if s.Directory != "" && (s.Directory != m.com.Workspace.WorkingDir() || s.DataDirectory != m.com.Config().Options.DataDirectory) {
+		if m.isAgentBusy() {
+			return util.ReportWarn("Agent is busy, please wait before switching folders...")
+		}
+		if _, remote := m.com.Workspace.(*workspace.ClientWorkspace); !remote {
+			if info, err := os.Stat(s.Directory); err != nil || !info.IsDir() {
+				return util.ReportWarn("That chat's folder is no longer available: " + s.Directory)
+			}
+		}
+		m.relaunchDir, m.relaunchSessionID, m.relaunchDataDir = s.Directory, s.ID, s.DataDirectory
+		return tea.Quit
+	}
+
 	cmd := m.loadSession(s.ID)
 	m.sessionLoad.title = s.Title
 	return cmd
@@ -580,4 +594,17 @@ func (m *UI) sessionLoadingView(width int) string {
 	}
 	avail := max(0, width-3-lipgloss.Width(elapsed))
 	return " " + icon + " " + t.Pills.HelpKey.Render(ansi.Truncate(label, avail, "…")) + t.Pills.HelpText.Render(elapsed)
+}
+
+func (m *UI) discardEmptySession(id string) tea.Cmd {
+	cleaner, ok := m.com.Workspace.(session.EmptySessionWorkspace)
+	if !ok || id == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		if err := cleaner.DiscardEmptySession(context.Background(), id); err != nil {
+			return util.NewErrorMsg(err)
+		}
+		return nil
+	}
 }

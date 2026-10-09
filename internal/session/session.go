@@ -49,6 +49,9 @@ func HasIncompleteTodos(todos []Todo) bool {
 }
 
 type Session struct {
+	// Directory and DataDirectory identify a saved chat in the all-project catalog.
+	Directory        string `json:",omitempty"`
+	DataDirectory    string `json:",omitempty"`
 	ContextBudget    ContextBudget
 	ID               string
 	ParentSessionID  string

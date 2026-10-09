@@ -573,3 +573,21 @@ func TestSessionLearnsItsSizeInPixels(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "\x1b[4;180;360t", readInput(t, s))
 }
+
+func TestNewSessionPlusSharesTheHeadingColumn(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "One"})
+	scr := uv.NewScreenBuffer(120, 30)
+	h.drawList(scr, h.palette())
+	heading, plus := -1, -1
+	for x := 0; x < listWidth; x++ {
+		if c := scr.CellAt(x, 0); c != nil && c.Content == "S" {
+			heading = x
+		}
+		if c := scr.CellAt(x, newSessionRow); c != nil && c.Content == "+" {
+			plus = x
+		}
+	}
+	require.NotEqual(t, -1, heading)
+	require.Equal(t, heading, plus)
+	require.True(t, h.rowAt(plus, newSessionRow).newSession, "the aligned icon remains clickable")
+}

@@ -24,6 +24,7 @@ type acpUpdate struct {
 		AutoCompactThreshold int64 `json:"autoCompactThreshold"`
 	} `json:"_meta"`
 	SessionUpdate string          `json:"sessionUpdate"`
+	Size          int64           `json:"size"` // usage_update: the model's context window
 	Content       json.RawMessage `json:"content"`
 	ToolCallID    string          `json:"toolCallId"`
 	Title         string          `json:"title"`
@@ -258,6 +259,11 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 				}
 			}
 			boundary = false
+		}
+		if name == "opencode" && params.Update.SessionUpdate == "usage_update" && params.Update.Size > 0 {
+			if err := t.Emit(openCodeContextBudget(params.Update.Size)); err != nil {
+				return err
+			}
 		}
 		if err := acpHandleUpdate(params.Update, calls, t.Emit); err != nil {
 			return err

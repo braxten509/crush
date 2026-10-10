@@ -230,9 +230,9 @@ func managedBackgroundProcesses() []Process {
 	var processes []Process
 	for _, hub := range hubs {
 		hub.mu.Lock()
-		for _, job := range hub.backgroundShells {
+		for marker, job := range hub.backgroundShells {
 			if !job.IsDone() {
-				processes = append(processes, Process{JobID: job.ID, Command: job.Command, Started: job.Started})
+				processes = append(processes, Process{JobID: job.ID, Command: job.Command, Started: job.Started, marker: marker})
 			}
 		}
 		hub.mu.Unlock()

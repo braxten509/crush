@@ -13,6 +13,7 @@ const DefaultScrollbackSize = 10000
 type Scrollback struct {
 	lines    []uv.Line
 	maxLines int
+	total    uint64 // All appended rows, including evicted and cleared rows.
 }
 
 // NewScrollback creates a new scrollback buffer with the given maximum number of lines.
@@ -52,6 +53,7 @@ func (s *Scrollback) Push(line uv.Line) {
 		s.lines = slices.Delete(s.lines, 0, 1)
 	}
 	s.lines = append(s.lines, cloned)
+	s.total++
 }
 
 // PushN adds n lines from the buffer starting at line y to the scrollback.

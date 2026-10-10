@@ -145,11 +145,11 @@ func TestHostRunsRealSessions(t *testing.T) {
 	// Alt+S shrinks the list to the strip and back.
 	s.press("\x1bs")
 	strip := s.waitFor(" › ", 5*time.Second)
-	require.NotContains(t, strip, "alt+n new")
+	require.NotContains(t, strip, "+ Session")
 	time.Sleep(500 * time.Millisecond)
 	s.snapshot("2-strip")
 	s.press("\x1bs")
-	s.waitFor("alt+n new", 5*time.Second)
+	s.waitFor("+ Session", 5*time.Second)
 
 	// A second session in a folder picked in the new-session box, then
 	// closing it through the Close/Keep box.

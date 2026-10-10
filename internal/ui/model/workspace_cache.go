@@ -160,9 +160,9 @@ func (m *UI) dispatchBusyRefresh() tea.Cmd {
 		st := busyStateMsg{gen: gen}
 		if ws.AgentIsReady() {
 			st.ready = true
-			if sessionID == "" {
-				st.agentBusy = ws.AgentIsBusy()
-			} else {
+			// A new chat has no request of its own. Work in another
+			// session must not block its model or effort selection.
+			if sessionID != "" {
 				st.agentBusy = ws.AgentIsSessionBusy(sessionID)
 			}
 			st.model = ws.AgentModel()

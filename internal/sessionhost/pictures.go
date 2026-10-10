@@ -19,7 +19,11 @@ func (h *Host) picturesOn() *session {
 	if h.confirm != nil || h.picker != nil {
 		return nil
 	}
-	return h.current()
+	s := h.current()
+	if s != nil && s.kind == terminalSession && s.scrollOffset > 0 && !s.emu.IsAltScreen() {
+		return nil
+	}
+	return s
 }
 
 // takePictures follows a session's Kitty graphics commands and passes on

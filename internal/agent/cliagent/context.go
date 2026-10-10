@@ -91,3 +91,14 @@ func codexContextBudget(settings codexContextSettings, catalogWindow, catalogLim
 	}
 	return Event{Type: EventContextBudget, ContextLimit: max(0, limit), ContextEstimated: true}
 }
+
+// openCodeOutputReserve is OpenCode's default output token cap, which it
+// keeps free below the context window before compacting.
+const openCodeOutputReserve = 32_000
+
+// OpenCode reports only the context window. It compacts at the window minus
+// the model's output cap (at most 32k); that cap and the user's compaction
+// settings aren't reported, so the limit is estimated.
+func openCodeContextBudget(window int64) Event {
+	return Event{Type: EventContextBudget, ContextLimit: max(0, window-openCodeOutputReserve), ContextEstimated: true}
+}

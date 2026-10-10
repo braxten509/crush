@@ -76,6 +76,9 @@ type Task struct {
 	Started   time.Time  `json:"started"`
 	Ended     time.Time  `json:"ended"`
 	Delivered bool       `json:"delivered,omitempty"`
+	// delivering covers the handoff to the parent, including work before
+	// Run accepts it. Unlike Delivered, it clears even if delivery fails.
+	delivering bool
 }
 
 // TaskRequest is what `crush spawn` writes; TaskReply is Crush's answer.
@@ -203,6 +206,24 @@ func SessionTasks(sessionID string) []Task {
 	}
 	slices.SortFunc(out, func(a, b Task) int { return a.Started.Compare(b.Started) })
 	return out
+}
+
+// SessionHasUnfinishedWork keeps the UI waiting through helper result
+// delivery as well as execution. This is deliberately broader than the
+// notification gate: a parent's final response can ding before its caller
+// records that delivery finished. Services do not hold the UI waiting.
+func SessionHasUnfinishedWork(sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	hubsMu.Lock()
+	defer hubsMu.Unlock()
+	for _, h := range hubs {
+		if h.hasBackgroundWork(sessionID, true) {
+			return true
+		}
+	}
+	return false
 }
 
 // env is added to the CLI process of a session that may spawn tasks.
@@ -852,10 +873,16 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 		t.Status = TaskDone
 	}
 	t.Ended = time.Now()
+	t.delivering = tellParent
 	delete(h.cancels, id)
 	snapshot := *t
 	closing := h.closing
 	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		t.delivering = false
+		h.mu.Unlock()
+	}()
 	h.publish(snapshot)
 	if !closing {
 		h.forget(snapshot.ChildID)
@@ -891,18 +918,22 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 // belonging to this session is still running. Explicit services stay visible
 // and manageable but do not hold back completion notifications.
 func (h *taskHub) hasRunning(sessionID string) bool {
+	return h.hasBackgroundWork(sessionID, false)
+}
+
+func (h *taskHub) hasBackgroundWork(sessionID string, includeDelivery bool) bool {
 	if h == nil {
 		return false
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, t := range h.tasks {
-		if t.SessionID == sessionID && t.Status == TaskRunning {
+		if t.SessionID == sessionID && (t.Status == TaskRunning || includeDelivery && t.delivering) {
 			return true
 		}
 	}
 	for _, job := range h.backgroundShells {
-		if h.backgroundOwners[job.ID] == sessionID && !h.backgroundServices[job.ID] && !job.IsDone() {
+		if h.backgroundOwners[job.ID] == sessionID && !h.backgroundServices[job.ID] && (includeDelivery || !job.IsDone()) {
 			return true
 		}
 	}

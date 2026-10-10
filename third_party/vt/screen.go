@@ -226,7 +226,11 @@ func (s *Screen) SaveCursor() {
 // RestoreCursor restores the cursor.
 func (s *Screen) RestoreCursor() {
 	old := s.cur.Position
-	s.cur = s.saved
+	// Like xterm, saving doesn't include whether the cursor shows or its
+	// shape, so restoring keeps them.
+	saved := s.saved
+	saved.Style, saved.Steady, saved.Hidden = s.cur.Style, s.cur.Steady, s.cur.Hidden
+	s.cur = saved
 
 	if s.cb.CursorPosition != nil && (old.X != s.cur.X || old.Y != s.cur.Y) {
 		s.cb.CursorPosition(old, s.cur.Position)

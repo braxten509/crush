@@ -43,3 +43,15 @@ func TestHostStatusRidesOnUpdate(t *testing.T) {
 	require.NotNil(t, cmd)
 	require.True(t, m.hostStatusSent)
 }
+
+func TestHostStatusReportsBackgroundPreference(t *testing.T) {
+	t.Parallel()
+	m := newBusyUI(&countingWorkspace{ready: true})
+	m.inSessionHost = true
+	require.NotNil(t, m.hostStatus())
+	require.False(t, m.lastHostStatus.UseTerminalBackground)
+	m.isTransparent = true
+	require.NotNil(t, m.hostStatus())
+	require.True(t, m.lastHostStatus.UseTerminalBackground)
+	require.Nil(t, m.hostStatus())
+}

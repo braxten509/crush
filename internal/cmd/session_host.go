@@ -40,8 +40,10 @@ func runSessionHost(cmd *cobra.Command) error {
 		NewArgs:   func(dir string) []string { return relaunchArgs(cmd, dir) },
 		Dir:       cwd,
 		// Each session gets its own crash guard and report.
-		Env:    sessionhost.ChildEnviron(os.Environ(), crashReportEnv),
-		Recent: recentFolders,
+		Env:      sessionhost.ChildEnviron(os.Environ(), crashReportEnv),
+		Shell:    os.Getenv("SHELL"),
+		ShellEnv: sessionhost.TerminalEnviron(os.Environ(), crashReportEnv),
+		Recent:   recentFolders,
 	})
 }
 

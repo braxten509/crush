@@ -2,6 +2,7 @@ package vt
 
 import (
 	"image/color"
+	"slices"
 	"sync"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -27,6 +28,11 @@ func (se *SafeEmulator) Write(data []byte) (int, error) {
 	se.mu.Lock()
 	defer se.mu.Unlock()
 	return se.Emulator.Write(data)
+}
+
+// WriteString writes a string to the emulator in a concurrency-safe manner.
+func (se *SafeEmulator) WriteString(s string) (int, error) {
+	return se.Write([]byte(s))
 }
 
 // Read reads data from the emulator in a concurrency-safe manner.
@@ -55,11 +61,14 @@ func (se *SafeEmulator) SetCell(x, y int, cell *uv.Cell) {
 	se.Emulator.SetCell(x, y, cell)
 }
 
-// CellAt retrieves a cell from the emulator in a concurrency-safe manner.
+// CellAt retrieves a copy of a cell in a concurrency-safe manner.
 func (se *SafeEmulator) CellAt(x, y int) *uv.Cell {
 	se.mu.RLock()
 	defer se.mu.RUnlock()
-	return se.Emulator.CellAt(x, y)
+	if cell := se.Emulator.CellAt(x, y); cell != nil {
+		return cell.Clone()
+	}
+	return nil
 }
 
 // SendKey sends a key event to the emulator in a concurrency-safe manner.
@@ -102,6 +111,20 @@ func (se *SafeEmulator) SetBackgroundColor(color color.Color) {
 	se.mu.Lock()
 	defer se.mu.Unlock()
 	se.Emulator.SetBackgroundColor(color)
+}
+
+// SetDefaultForegroundColor sets the default foreground color safely.
+func (se *SafeEmulator) SetDefaultForegroundColor(c color.Color) {
+	se.mu.Lock()
+	defer se.mu.Unlock()
+	se.Emulator.SetDefaultForegroundColor(c)
+}
+
+// SetDefaultBackgroundColor sets the default background color safely.
+func (se *SafeEmulator) SetDefaultBackgroundColor(c color.Color) {
+	se.mu.Lock()
+	defer se.mu.Unlock()
+	se.Emulator.SetDefaultBackgroundColor(c)
 }
 
 // SetCursorColor sets the cursor color in a concurrency-safe manner.
@@ -181,11 +204,34 @@ func (se *SafeEmulator) Draw(s uv.Screen, a uv.Rectangle) {
 	se.Emulator.Draw(s, a)
 }
 
-// Scrollback returns the scrollback buffer in a concurrency-safe manner.
+// DrawViewport draws live content and history while holding the read lock.
+func (se *SafeEmulator) DrawViewport(s uv.Screen, a uv.Rectangle, offset int) {
+	se.mu.RLock()
+	defer se.mu.RUnlock()
+	se.Emulator.DrawViewport(s, a, offset)
+}
+
+// MouseReporting reports whether mouse tracking is requested safely.
+func (se *SafeEmulator) MouseReporting() bool {
+	se.mu.RLock()
+	defer se.mu.RUnlock()
+	return se.Emulator.MouseReporting()
+}
+
+// Scrollback returns a snapshot of the scrollback buffer safely. Mutating the
+// snapshot does not affect the emulator.
 func (se *SafeEmulator) Scrollback() *Scrollback {
 	se.mu.RLock()
 	defer se.mu.RUnlock()
-	return se.Emulator.Scrollback()
+	sb := se.Emulator.Scrollback()
+	if sb == nil {
+		return nil
+	}
+	copy := &Scrollback{maxLines: sb.maxLines, total: sb.total, lines: make([]uv.Line, len(sb.lines))}
+	for y, line := range sb.lines {
+		copy.lines[y] = slices.Clone(line)
+	}
+	return copy
 }
 
 // ScrollbackLen returns the number of lines in the scrollback buffer in a concurrency-safe manner.
@@ -195,11 +241,21 @@ func (se *SafeEmulator) ScrollbackLen() int {
 	return se.Emulator.ScrollbackLen()
 }
 
-// ScrollbackCellAt returns a cell from the scrollback buffer in a concurrency-safe manner.
+// ScrollbackState snapshots history length and appended rows under one lock.
+func (se *SafeEmulator) ScrollbackState() (length int, total uint64) {
+	se.mu.RLock()
+	defer se.mu.RUnlock()
+	return se.Emulator.ScrollbackState()
+}
+
+// ScrollbackCellAt returns a copy of a history cell safely.
 func (se *SafeEmulator) ScrollbackCellAt(x, y int) *uv.Cell {
 	se.mu.RLock()
 	defer se.mu.RUnlock()
-	return se.Emulator.ScrollbackCellAt(x, y)
+	if cell := se.Emulator.ScrollbackCellAt(x, y); cell != nil {
+		return cell.Clone()
+	}
+	return nil
 }
 
 // SetScrollbackSize sets the scrollback buffer size in a concurrency-safe manner.

@@ -59,9 +59,8 @@ type Emulator struct {
 	// tabstop is the list of tab stops.
 	tabstops *uv.TabStops
 
-	// I/O pipes.
-	pr *io.PipeReader
-	pw *io.PipeWriter
+	// Queued input, independent of the process's read speed.
+	input *inputBuffer
 
 	// The GL and GR character set identifiers.
 	gl, gr  int
@@ -99,7 +98,7 @@ func NewEmulator(w, h int) *Emulator {
 		HandlePm:  t.handlePm,
 		HandleSos: t.handleSos,
 	})
-	t.pr, t.pw = io.Pipe()
+	t.input = newInputBuffer()
 	t.resetModes()
 	t.tabstops = uv.DefaultTabStops(w)
 	t.registerDefaultHandlers()
@@ -169,28 +168,60 @@ func (e *Emulator) WidthMethod() uv.WidthMethod {
 
 // Draw implements the [uv.Drawable] interface.
 func (e *Emulator) Draw(scr uv.Screen, area uv.Rectangle) {
+	e.DrawViewport(scr, area, 0)
+}
+
+// DrawViewport draws the screen offset lines above the live screen, combining
+// main-screen scrollback and live rows. Offset is clamped to the available
+// history and ignored in the alternate screen. Cells are copied before drawing.
+func (e *Emulator) DrawViewport(scr uv.Screen, area uv.Rectangle, offset int) {
+	clip := area.Intersect(scr.Bounds())
 	bg := uv.EmptyCell
+	bg.Style.Fg = e.ForegroundColor()
 	bg.Style.Bg = e.BackgroundColor()
-	screen.FillArea(scr, &bg, area)
-	for y := range e.Touched() {
-		if y < 0 || y >= e.Height() {
+	screen.FillArea(scr, &bg, clip)
+	history := 0
+	if !e.IsAltScreen() {
+		history = e.ScrollbackLen()
+	}
+	offset = min(max(offset, 0), history)
+	width := min(e.Width(), area.Dx())
+	for y := 0; y < min(e.Height(), area.Dy()); y++ {
+		dy := y + area.Min.Y
+		if dy < clip.Min.Y || dy >= clip.Max.Y {
 			continue
 		}
-		for x := 0; x < e.Width(); {
+		row := history - offset + y
+		for x := 0; x < width; {
 			w := 1
-			cell := e.CellAt(x, y)
+			var cell *uv.Cell
+			if row < history {
+				cell = e.ScrollbackCellAt(x, row)
+			} else {
+				cell = e.CellAt(x, row-history)
+			}
 			if cell != nil {
 				cell = cell.Clone()
 				if cell.Width > 1 {
 					w = cell.Width
 				}
-				if cell.Style.Bg == nil && e.bgColor != nil {
-					cell.Style.Bg = e.bgColor
+				if cell.Style.Bg == nil {
+					cell.Style.Bg = bg.Style.Bg
 				}
-				if cell.Style.Fg == nil && e.fgColor != nil {
-					cell.Style.Fg = e.fgColor
+				if cell.Style.Fg == nil {
+					cell.Style.Fg = bg.Style.Fg
 				}
-				scr.SetCell(x+area.Min.X, y+area.Min.Y, cell)
+				dx := x + area.Min.X
+				if dx >= clip.Min.X && dx+w <= clip.Max.X && x+w <= width {
+					scr.SetCell(dx, dy, cell)
+				} else if w > 1 {
+					// A partial wide glyph is drawn as styled blanks rather than
+					// crossing the viewport boundary or losing its colors.
+					cell.Empty()
+					for column := max(dx, clip.Min.X); column < min(dx+w, clip.Max.X, area.Min.X+width); column++ {
+						scr.SetCell(column, dy, cell.Clone())
+					}
+				}
 			}
 			x += w
 		}
@@ -243,17 +274,13 @@ func (e *Emulator) Resize(width int, height int) {
 	e.setCursor(x, y)
 
 	if e.isModeSet(ansi.ModeInBandResize) {
-		_, _ = io.WriteString(e.pw, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
+		_, _ = io.WriteString(e.input, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
 	}
 }
 
 // Read reads data from the terminal input buffer.
 func (e *Emulator) Read(p []byte) (n int, err error) {
-	if e.closed.Load() {
-		return 0, io.EOF
-	}
-
-	return e.pr.Read(p) //nolint:wrapcheck
+	return e.input.Read(p) //nolint:wrapcheck
 }
 
 // Close closes the terminal.
@@ -261,7 +288,7 @@ func (e *Emulator) Close() error {
 	if e.closed.Swap(true) {
 		return nil
 	}
-	return e.pw.CloseWithError(io.EOF) //nolint:wrapcheck
+	return e.input.Close() //nolint:wrapcheck
 }
 
 // Write writes data to the terminal output buffer.
@@ -288,10 +315,10 @@ func (e *Emulator) WriteString(s string) (n int, err error) {
 	return e.Write([]byte(s))
 }
 
-// InputPipe returns the terminal's input pipe.
-// This can be used to send input to the terminal.
+// InputPipe returns a writer that queues terminal input without waiting for a
+// reader. Writes copy their input and fail with io.ErrClosedPipe after Close.
 func (e *Emulator) InputPipe() io.Writer {
-	return e.pw
+	return e.input
 }
 
 // Paste pastes text into the terminal.
@@ -299,16 +326,16 @@ func (e *Emulator) InputPipe() io.Writer {
 // appropriate escape sequences.
 func (e *Emulator) Paste(text string) {
 	if e.isModeSet(ansi.ModeBracketedPaste) {
-		_, _ = io.WriteString(e.pw, ansi.BracketedPasteStart)
-		defer io.WriteString(e.pw, ansi.BracketedPasteEnd) //nolint:errcheck
+		_, _ = e.input.writeStrings(ansi.BracketedPasteStart, text, ansi.BracketedPasteEnd)
+		return
 	}
 
-	_, _ = io.WriteString(e.pw, text)
+	_, _ = io.WriteString(e.input, text)
 }
 
 // SendText sends arbitrary text to the terminal.
 func (e *Emulator) SendText(text string) {
-	_, _ = io.WriteString(e.pw, text)
+	_, _ = io.WriteString(e.input, text)
 }
 
 // SendKeys sends multiple keys to the terminal.
@@ -318,9 +345,8 @@ func (e *Emulator) SendKeys(keys ...uv.KeyEvent) {
 	}
 }
 
-// ForegroundColor returns the terminal's foreground color. This returns nil if
-// the foreground color is not set which means the outer terminal color is
-// used.
+// ForegroundColor returns the terminal's effective foreground color, using the
+// default when no program override is set.
 func (e *Emulator) ForegroundColor() color.Color {
 	if e.fgColor == nil {
 		return e.defaultFg
@@ -328,11 +354,9 @@ func (e *Emulator) ForegroundColor() color.Color {
 	return e.fgColor
 }
 
-// SetForegroundColor sets the terminal's foreground color.
+// SetForegroundColor sets the terminal's foreground color. Nil resets the
+// program override so that current and future default colors are used.
 func (e *Emulator) SetForegroundColor(c color.Color) {
-	if c == nil {
-		c = e.defaultFg
-	}
 	e.fgColor = c
 	if e.cb.ForegroundColor != nil {
 		e.cb.ForegroundColor(c)
@@ -347,9 +371,8 @@ func (e *Emulator) SetDefaultForegroundColor(c color.Color) {
 	e.defaultFg = c
 }
 
-// BackgroundColor returns the terminal's background color. This returns nil if
-// the background color is not set which means the outer terminal color is
-// used.
+// BackgroundColor returns the terminal's effective background color, using the
+// default when no program override is set.
 func (e *Emulator) BackgroundColor() color.Color {
 	if e.bgColor == nil {
 		return e.defaultBg
@@ -357,11 +380,9 @@ func (e *Emulator) BackgroundColor() color.Color {
 	return e.bgColor
 }
 
-// SetBackgroundColor sets the terminal's background color.
+// SetBackgroundColor sets the terminal's background color. Nil resets the
+// program override so that current and future default colors are used.
 func (e *Emulator) SetBackgroundColor(c color.Color) {
-	if c == nil {
-		c = e.defaultBg
-	}
 	e.bgColor = c
 	if e.cb.BackgroundColor != nil {
 		e.cb.BackgroundColor(c)
@@ -456,6 +477,17 @@ func (e *Emulator) ScrollbackLen() int {
 		return 0
 	}
 	return sb.Len()
+}
+
+// ScrollbackState returns the current main-screen history length and total
+// appended rows. Total remains unchanged by clears and eviction, so hosts can
+// keep a history viewport anchored even when the buffer is at capacity.
+func (e *Emulator) ScrollbackState() (length int, total uint64) {
+	sb := e.Scrollback()
+	if sb == nil {
+		return 0, 0
+	}
+	return sb.Len(), sb.total
 }
 
 // ScrollbackCellAt returns the cell at the given position in the scrollback buffer.

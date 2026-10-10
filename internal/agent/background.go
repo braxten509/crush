@@ -24,6 +24,9 @@ type Process struct {
 	JobID   string // Managed shell jobs need no operating-system child process.
 	Command string
 	Started time.Time
+	// marker is a managed job's environment marker, which its processes
+	// carry.
+	marker string
 }
 
 // proc is one process from the process table.

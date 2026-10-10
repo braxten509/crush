@@ -35,12 +35,15 @@ type Options struct {
 	// was started with.
 	FirstArgs []string
 	// NewArgs returns the arguments of a session started with
-	// "+ New session" in dir.
+	// "+ Session" in dir.
 	NewArgs func(dir string) []string
 	// Dir is the folder the first session starts in.
 	Dir string
 	// Env is the environment sessions start with.
 	Env []string
+	// Shell and ShellEnv start a user's normal interactive terminal.
+	Shell    string
+	ShellEnv []string
 	// Recent returns folders Crush was used in, the latest first, for the
 	// new-session box. It may be nil.
 	Recent func() []string
@@ -56,6 +59,7 @@ type Host struct {
 	prefs     prefs
 
 	sessions []*session
+	closing  map[int]*session
 	active   int
 	nextID   int
 
@@ -67,6 +71,12 @@ type Host struct {
 
 	theme  string
 	styles styles.Styles
+	// useTerminalBackground follows the last shown chat's background setting.
+	useTerminalBackground bool
+	appearanceSource      int // last shown chat, including later status updates
+
+	activityFrame   int
+	activityTicking bool
 
 	// kitty: the real terminal shows Kitty graphics. pixelWidth and
 	// pixelHeight are its size in pixels, when it said.
@@ -79,9 +89,12 @@ type Host struct {
 	// raw is what to write to the real terminal after this update.
 	raw strings.Builder
 
-	hover   int // hovered list row; -1 for none
-	confirm *confirmClose
-	picker  *picker // the open new-session box, if any
+	hover int // hovered list row; -1 for none
+	// pickedServer is the port of the server picked in the list, which
+	// takes the keys until let go; 0 for none.
+	pickedServer int
+	confirm      *confirmClose
+	picker       *picker // the open new-session box, if any
 	// capture: a mouse button went down over the session, so its motion
 	// and release go there even when the pointer leaves it.
 	capture bool
@@ -130,6 +143,7 @@ func (h *Host) Init() tea.Cmd {
 
 func (h *Host) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := h.update(msg)
+	cmd = tea.Batch(cmd, h.tickActivity())
 	h.syncPictures()
 	if raw := h.takeRaw(); raw != "" {
 		cmd = tea.Batch(cmd, tea.Raw(raw))
@@ -149,6 +163,7 @@ func (h *Host) update(msg tea.Msg) tea.Cmd {
 		return h.maybeStart()
 	case tea.BackgroundColorMsg:
 		h.bg, h.colorsKnown = msg.Color, true
+		h.refreshTerminalColors()
 		return h.maybeStart()
 	case tea.ForegroundColorMsg:
 		h.fg = msg.Color
@@ -158,9 +173,18 @@ func (h *Host) update(msg tea.Msg) tea.Cmd {
 	case outputMsg:
 		if s := h.byID(msg.id); s != nil {
 			s.dirty.Store(false)
+			s.refreshScrollback()
 		}
 	case statusMsg:
 		h.statusChanged(msg.id)
+	case activityTickMsg:
+		h.activityTicking = false
+		h.activityFrame = 0
+		at := msg.Time
+		if at.IsZero() {
+			at = time.Now()
+		}
+		return h.tickActivityAt(at)
 	case exitedMsg:
 		return h.removeSession(msg.id)
 	case tea.KeyPressMsg:
@@ -169,6 +193,7 @@ func (h *Host) update(msg tea.Msg) tea.Cmd {
 		if h.picker != nil {
 			h.picker.insert(msg.Content)
 		} else if s := h.current(); s != nil && h.confirm == nil {
+			s.scrollOffset = 0
 			s.emu.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
@@ -237,12 +262,16 @@ func (h *Host) startSession(dir string, args []string) error {
 // openPicker opens the new-session box at the folder of the session being
 // viewed.
 func (h *Host) openPicker() {
+	h.openPickerFor(chatSession)
+}
+
+func (h *Host) openPickerFor(kind sessionKind) {
 	if h.confirm != nil {
 		return
 	}
 	dir := h.opts.Dir
 	if s := h.current(); s != nil {
-		if d := s.snapshot().Dir; d != "" {
+		if d := s.workingDir(); d != "" {
 			dir = d
 		}
 	}
@@ -251,6 +280,7 @@ func (h *Host) openPicker() {
 		recent = h.opts.Recent()
 	}
 	h.picker = newPicker(dir, recent)
+	h.picker.kind = kind
 	h.hover = -1
 }
 
@@ -261,8 +291,13 @@ func (h *Host) startPicked() {
 	if !ok {
 		return
 	}
+	kind := h.picker.kind
 	h.picker = nil
-	h.newSession(dir)
+	if kind == terminalSession {
+		h.newTerminal(dir)
+	} else {
+		h.newSession(dir)
+	}
 }
 
 // newSession starts a session in dir.
@@ -297,7 +332,11 @@ func (h *Host) show(i int) {
 	s.setFocus(!h.blurred)
 	s.dirty.Store(false)
 	s.unread = false
-	h.applyTheme(s.snapshot().Theme)
+	s.refreshScrollback()
+	if s.kind == chatSession {
+		h.appearanceSource = s.id
+		h.applyAppearance(s.snapshot())
+	}
 }
 
 func (h *Host) current() *session {
@@ -322,7 +361,7 @@ func (h *Host) statusChanged(id int) {
 		return
 	}
 	st := s.snapshot()
-	working := st.State == StateWorking
+	working := st.State == StateWorking || st.State == StateBackground
 	// Work that ends while another session is shown waits as "finished"
 	// until the user looks.
 	if s.working && !working && st.State == StateReady && s != h.current() {
@@ -332,8 +371,9 @@ func (h *Host) statusChanged(id int) {
 		s.unread = false
 	}
 	s.working = working
-	if s == h.current() {
-		h.applyTheme(st.Theme)
+	current := h.current()
+	if s.kind == chatSession && (s == current || current != nil && current.kind == terminalSession && s.id == h.appearanceSource) {
+		h.applyAppearance(st)
 	}
 }
 
@@ -343,11 +383,16 @@ func (h *Host) applyTheme(name string) {
 	}
 	h.theme = name
 	h.styles = styles.ThemeFromConfig(name)
+	h.refreshTerminalColors()
 }
 
 func (h *Host) removeSession(id int) tea.Cmd {
 	i := slices.IndexFunc(h.sessions, func(s *session) bool { return s.id == id })
 	if i < 0 {
+		delete(h.closing, id)
+		if len(h.sessions) == 0 && len(h.closing) == 0 {
+			return tea.Quit
+		}
 		return nil
 	}
 	h.sessions[i].visible.Store(false)
@@ -357,7 +402,10 @@ func (h *Host) removeSession(id int) tea.Cmd {
 	}
 	h.hover = -1
 	if len(h.sessions) == 0 {
-		return tea.Quit
+		if len(h.closing) == 0 {
+			return tea.Quit
+		}
+		return nil
 	}
 	switch {
 	case i < h.active:
@@ -414,6 +462,13 @@ func (h *Host) answerClose(close bool) {
 	}
 	if s := h.byID(c.id); s != nil {
 		s.stop()
+		if s.kind == terminalSession {
+			if h.closing == nil {
+				h.closing = make(map[int]*session)
+			}
+			h.closing[s.id] = s
+			h.removeSession(s.id)
+		}
 	}
 }
 
@@ -435,9 +490,15 @@ func (h *Host) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		h.pickerKey(msg)
 		return nil
 	}
+	if h.serverKey(msg.String()) {
+		return nil
+	}
 	switch key := msg.String(); key {
 	case "alt+n":
 		h.openPicker()
+		return nil
+	case "alt+t":
+		h.openPickerFor(terminalSession)
 		return nil
 	case "alt+s":
 		h.toggleList()
@@ -451,6 +512,10 @@ func (h *Host) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	if s := h.current(); s != nil {
+		if s.terminalKey(msg) {
+			return nil
+		}
+		s.scrollOffset = 0
 		if text, key := sessionInput(msg); text != "" {
 			s.emu.SendText(text)
 		} else {
@@ -536,6 +601,9 @@ func (h *Host) handleMouse(msg tea.MouseMsg) {
 		}
 		return
 	}
+	if _, ok := msg.(tea.MouseClickMsg); ok && (m.X >= side || h.rowAt(m.X, m.Y).server == 0) {
+		h.pickedServer = 0
+	}
 	if m.X >= side || h.capture {
 		h.forwardMouse(msg, side)
 		return
@@ -563,6 +631,9 @@ func (h *Host) forwardMouse(msg tea.MouseMsg, side int) {
 	m := uv.Mouse(msg.Mouse())
 	m.X = max(m.X-side, 0)
 	h.hover = -1
+	if s.terminalMouse(msg) {
+		return
+	}
 	switch msg.(type) {
 	case tea.MouseClickMsg:
 		h.capture = true
@@ -586,6 +657,18 @@ func (h *Host) clickSide(x, y int) {
 		h.toggleList()
 	case r.newSession:
 		h.openPicker()
+	case r.newTerminal:
+		h.openPickerFor(terminalSession)
+	case r.stopServer:
+		if server, ok := h.picked(); ok {
+			h.stopServer(server)
+		}
+	case r.server != 0 && r.server == h.pickedServer:
+		if server, ok := h.picked(); ok {
+			openLink(server.url())
+		}
+	case r.server != 0:
+		h.pickedServer = r.server
 	case r.session >= 0 && r.close:
 		h.askClose(r.session)
 	case r.session >= 0:

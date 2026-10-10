@@ -47,3 +47,11 @@ func TestCodexContextRespectsNativeSettingsAndWindow(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenCodeContextBudgetKeepsOutputReserve(t *testing.T) {
+	result := openCodeContextBudget(1_000_000)
+	require.Equal(t, EventContextBudget, result.Type)
+	require.EqualValues(t, 968_000, result.ContextLimit)
+	require.True(t, result.ContextEstimated)
+	require.Zero(t, openCodeContextBudget(10_000).ContextLimit)
+}

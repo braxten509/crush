@@ -15,29 +15,43 @@ import (
 	"github.com/charmbracelet/x/vt"
 )
 
-// The list's rows: a header with ‹, a new-session button, a blank row, then one block per
-// session (two lines and a gap) and the key hint on the last row. The strip
-// has ›, +, a blank row, then two lines and a gap per session.
+// The list's rows: a header with ‹, session actions, a blank row, then one
+// block per session (two lines and a gap); at the bottom, a notice row and
+// the servers. The strip has ›, a blank row, + and >_, a blank row, then two
+// lines and a gap per session.
 const (
 	listFirstRow     = 3
-	stripFirstRow    = 3
+	stripFirstRow    = 5
+	stripNewRow      = 2
+	stripTerminalRow = 3
 	listBlockHeight  = 3
 	stripBlockHeight = 3
+	// listGapRows: a gap and the notice row below the list's chats.
+	listGapRows = 2
+	// sideFooterRows are kept free below the strip's chats.
+	sideFooterRows = 3
 )
 
 // The new-session button and header's ‹ in the open list.
 const (
-	newSessionColumn = 1
-	newSessionRow    = 1
-	toggleColumn     = listWidth - 3
+	newSessionColumn  = 1
+	newSessionRow     = 1
+	newSessionLabel   = "+ Session"
+	newTerminalLabel  = "+ Terminal"
+	newTerminalColumn = newSessionColumn + len(newSessionLabel) + len(" | ")
+	newTerminalEnd    = newTerminalColumn + len(newTerminalLabel)
+	toggleColumn      = listWidth - 3
 )
 
 // sideRow is what a spot in the list or strip does when clicked.
 type sideRow struct {
-	toggle     bool
-	newSession bool
-	close      bool
-	session    int // -1 when not on a session
+	toggle      bool
+	newSession  bool
+	newTerminal bool
+	close       bool
+	session     int // -1 when not on a session
+	server      int // the port of the server row; 0 when not on one
+	stopServer  bool
 }
 
 type palette struct {
@@ -46,8 +60,12 @@ type palette struct {
 
 func (h *Host) palette() palette {
 	s := h.styles
+	background := s.Background
+	if h.useTerminalBackground && h.bg != nil {
+		background = h.bg
+	}
 	return palette{
-		bg:      s.Background,
+		bg:      background,
 		text:    s.Header.Wrapper.GetForeground(),
 		muted:   s.Sidebar.WorkingDir.GetForeground(),
 		subtle:  s.ModelInfo.Reasoning.GetForeground(),
@@ -71,7 +89,10 @@ func (h *Host) firstRow() int {
 // visibleRange returns the sessions that fit, keeping the shown one in
 // view.
 func (h *Host) visibleRange(block int) (first, count int) {
-	count = max((h.height-h.firstRow()-1)/block, 1)
+	count = max((h.height-h.firstRow()-h.footerRows())/block, 0)
+	if count == 0 {
+		return 0, 0
+	}
 	if h.active >= count {
 		first = h.active - count + 1
 	}
@@ -86,14 +107,22 @@ func (h *Host) rowAt(x, y int) sideRow {
 		block = listBlockHeight
 	}
 	top := h.firstRow()
+	if shown, first := h.shownServers(); y >= first && y < first+len(shown) {
+		r.server = shown[y-first].port
+		r.stopServer = r.server == h.pickedServer && x >= listWidth-5 && x <= listWidth-2
+		return r
+	}
 	switch {
+	case !open && y == stripTerminalRow:
+		r.newTerminal = x >= 1 && x < h.sideWidth()-1
 	case open && y == 0:
 		r.toggle = x >= toggleColumn-1
 	case open && y == newSessionRow:
-		r.newSession = x >= newSessionColumn && x < listWidth-2
+		r.newSession = x >= newSessionColumn && x < newTerminalColumn-len(" | ")
+		r.newTerminal = x >= newTerminalColumn && x < newTerminalEnd
 	case y == 0:
 		r.toggle = true
-	case !open && y == 1:
+	case !open && y == stripNewRow:
 		r.newSession = true
 	case y >= top:
 		first, count := h.visibleRange(block)
@@ -112,7 +141,11 @@ func (h *Host) View() tea.View {
 	v.MouseMode = tea.MouseModeAllMotion
 	v.ReportFocus = true
 	p := h.palette()
-	v.BackgroundColor = p.bg
+	// Capture the terminal's original default before setting Crush's color;
+	// otherwise the first color query can read back our own replacement.
+	if h.colorsKnown || h.waited {
+		v.BackgroundColor = p.bg
+	}
 	if h.width <= 0 || h.height <= 0 {
 		return v
 	}
@@ -134,7 +167,11 @@ func (h *Host) View() tea.View {
 	area := h.sessionArea()
 	s := h.current()
 	if s != nil {
-		s.emu.Draw(canvas, area)
+		if s.kind == terminalSession {
+			s.emu.DrawViewport(canvas, area, s.scrollOffset)
+		} else {
+			s.emu.Draw(canvas, area)
+		}
 		v.WindowTitle = "crush · " + sessionTitle(s.snapshot())
 	}
 	switch {
@@ -143,7 +180,7 @@ func (h *Host) View() tea.View {
 	case h.picker != nil:
 		v.Cursor = h.drawPicker(canvas, area, p)
 	case s != nil:
-		if visible, shape, blink := s.cursorState(); visible {
+		if visible, shape, blink := s.cursorState(); visible && (s.scrollOffset == 0 || s.emu.IsAltScreen()) {
 			pos := s.emu.CursorPosition()
 			c := tea.NewCursor(pos.X+side, pos.Y)
 			c.Shape, c.Blink = cursorShape(shape), blink
@@ -197,10 +234,14 @@ func (h *Host) sessionState(s *session, p palette) (mark string, c color.Color) 
 	switch {
 	case stopping:
 		return "×", p.muted
+	case s.kind == terminalSession:
+		return "›", p.accent
 	case st.State == StateWaiting:
 		return "!", p.waiting
 	case st.State == StateWorking:
-		return "●", p.working
+		return "●", h.activityColor(p.working, p.bg)
+	case st.State == StateBackground:
+		return "●", h.activityColor(p.muted, p.bg)
 	case s.unread:
 		return "✓", p.accent
 	case st.State == StateReady:
@@ -219,9 +260,8 @@ func (h *Host) drawList(scr uv.Screen, p palette) {
 	header := spread(base, text.Bold(true).Render(" Sessions")+muted.Render(" ["+strconv.Itoa(len(h.sessions))+"]"),
 		accent.Render("‹")+base.Render(" "), inner)
 	draw(scr, 0, 0, inner, header)
-	buttonWidth := inner - 2
-	button := h.styles.Button.Blurred.Background(p.bg).Foreground(p.accent).Width(buttonWidth).Render("+ New session")
-	draw(scr, newSessionColumn, newSessionRow, buttonWidth, button)
+	controls := accent.Render(newSessionLabel) + muted.Render(" | ") + accent.Render(newTerminalLabel)
+	draw(scr, newSessionColumn, newSessionRow, inner-newSessionColumn, controls)
 
 	first, count := h.visibleRange(listBlockHeight)
 	for k := range count {
@@ -229,10 +269,37 @@ func (h *Host) drawList(scr uv.Screen, p palette) {
 		h.drawListBlock(scr, i, listFirstRow+k*listBlockHeight, inner, p)
 	}
 
-	draw(scr, 0, h.height-1, inner, muted.Render(" alt+n new · alt+s hide"))
+	shown, top := h.shownServers()
 	if h.notice != "" {
-		draw(scr, 0, h.height-2, inner, base.Foreground(p.waiting).Render(" "+h.notice))
+		y := h.height - 1
+		if len(shown) > 0 {
+			y = top - 1
+		}
+		draw(scr, 0, y, inner, base.Foreground(p.waiting).Render(" "+h.notice))
 	}
+	picked, isPicked := h.picked()
+	for k, server := range shown {
+		h.drawServer(scr, server, top+k, inner, isPicked && server == picked, p)
+	}
+	if isPicked {
+		draw(scr, 0, h.height-1, inner, muted.Render(serverHint))
+	}
+}
+
+// drawServer draws a server's row: its link, and × while it is picked.
+func (h *Host) drawServer(scr uv.Screen, server hostServer, y, width int, picked bool, p palette) {
+	bg := p.bg
+	if picked {
+		bg = p.selected
+	}
+	base := lipgloss.NewStyle().Background(bg)
+	bar, closeMark := base.Render(" "), ""
+	if picked {
+		bar = base.Foreground(p.accent).Render("▌")
+		closeMark = base.Foreground(p.text).Render("× ")
+	}
+	link := base.Foreground(p.accent).Hyperlink(server.url()).Render("↗ localhost:" + strconv.Itoa(server.port))
+	draw(scr, 0, y, width, bar+spread(base, link, closeMark, width-1))
 }
 
 // drawListBlock draws session i as two lines: its mark and title, then its
@@ -273,7 +340,8 @@ func (h *Host) drawStrip(scr uv.Screen, p palette) {
 	base := lipgloss.NewStyle().Background(p.bg)
 	accent := base.Foreground(p.accent)
 	draw(scr, 0, 0, inner, accent.Render(" › "))
-	draw(scr, 0, 1, inner, accent.Render(" + "))
+	draw(scr, 0, stripNewRow, inner, accent.Render(" + "))
+	draw(scr, 0, stripTerminalRow, inner, accent.Render(" >_"))
 	first, count := h.visibleRange(stripBlockHeight)
 	for k := range count {
 		i := first + k
@@ -302,6 +370,8 @@ func confirmDetail(st Status) string {
 	switch st.State {
 	case StateWorking:
 		detail = "It is still working. "
+	case StateBackground:
+		detail = "It is waiting for background work. "
 	case StateWaiting:
 		detail = "It is waiting for your answer. "
 	}
@@ -332,7 +402,7 @@ func (h *Host) drawConfirm(scr uv.Screen, area image.Rectangle, p palette) {
 		return
 	}
 	st := s.snapshot()
-	detail := confirmDetail(st)
+	detail := s.closeDetail()
 	box, closeButton, keepButton := h.confirmBox(area, detail)
 	inner := box.Dx() - 4
 	base := lipgloss.NewStyle().Background(p.bg)
@@ -363,7 +433,7 @@ func (h *Host) clickConfirm(x, y int) {
 	if s == nil {
 		return
 	}
-	_, closeButton, keepButton := h.confirmBox(h.sessionArea(), confirmDetail(s.snapshot()))
+	_, closeButton, keepButton := h.confirmBox(h.sessionArea(), s.closeDetail())
 	pt := image.Pt(x, y)
 	switch {
 	case pt.In(closeButton):
@@ -427,7 +497,11 @@ func (h *Host) drawPicker(scr uv.Screen, area image.Rectangle, p palette) *tea.C
 	line := func(n int, text string) {
 		draw(scr, inner.Min.X, inner.Min.Y+n, w, text)
 	}
-	line(0, base.Foreground(p.text).Bold(true).Render("New session in…"))
+	title := "New session in…"
+	if pk.kind == terminalSession {
+		title = "New terminal in…"
+	}
+	line(0, base.Foreground(p.text).Bold(true).Render(title))
 
 	// The typed path, scrolled so the cursor stays in view.
 	field := base.Background(p.selected).Foreground(p.text)

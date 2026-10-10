@@ -692,7 +692,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		}
 
 		// Do we fully support VT220?
-		_, _ = io.WriteString(e.pw, ansi.PrimaryDeviceAttributes(
+		_, _ = io.WriteString(e.input, ansi.PrimaryDeviceAttributes(
 			62, // VT220
 			1,  // 132 columns
 			6,  // Selective Erase
@@ -709,7 +709,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		}
 
 		// Do we fully support VT220?
-		_, _ = io.WriteString(e.pw, ansi.SecondaryDeviceAttributes(
+		_, _ = io.WriteString(e.input, ansi.SecondaryDeviceAttributes(
 			1,  // VT220
 			10, // Version 1.0
 			0,  // ROM Cartridge is always zero
@@ -803,10 +803,10 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		case 5: // Operating Status
 			// We're always ready ;)
 			// See: https://vt100.net/docs/vt510-rm/DSR-OS.html
-			_, _ = io.WriteString(e.pw, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
+			_, _ = io.WriteString(e.input, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
 		case 6: // Cursor Position Report [ansi.CPR]
 			x, y := e.scr.CursorPosition()
-			_, _ = io.WriteString(e.pw, ansi.CursorPositionReport(y+1, x+1))
+			_, _ = io.WriteString(e.input, ansi.CursorPositionReport(y+1, x+1))
 		default:
 			return false
 		}
@@ -823,7 +823,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		switch n {
 		case 6: // Extended Cursor Position Report [ansi.DECXCPR]
 			x, y := e.scr.CursorPosition()
-			_, _ = io.WriteString(e.pw, ansi.ExtendedCursorPositionReport(y+1, x+1, 0)) // We don't support page numbers //nolint:errcheck
+			_, _ = io.WriteString(e.input, ansi.ExtendedCursorPositionReport(y+1, x+1, 0)) // We don't support page numbers //nolint:errcheck
 		default:
 			return false
 		}

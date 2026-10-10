@@ -1,7 +1,10 @@
 package vt
 
 import (
+	"sync"
 	"testing"
+
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 func TestScrollback(t *testing.T) {
@@ -163,4 +166,114 @@ func TestScrollback(t *testing.T) {
 			t.Errorf("expected empty scrollback after ED 3, got %d", e.ScrollbackLen())
 		}
 	})
+}
+
+func TestScrollbackStateAtCapacityAndAfterClear(t *testing.T) {
+	e := NewSafeEmulator(4, 1)
+	t.Cleanup(func() { _ = e.Close() })
+	e.SetScrollbackSize(2)
+	_, _ = e.WriteString("A\r\nB\r\nC")
+	length, total := e.ScrollbackState()
+	if length != 2 || total != 2 {
+		t.Fatalf("initial state = (%d, %d), want (2, 2)", length, total)
+	}
+	snapshot := e.Scrollback()
+	destination := uv.NewScreenBuffer(4, 1)
+	offset := 1
+	e.DrawViewport(destination, destination.Bounds(), offset)
+	if got := destination.CellAt(0, 0).Content; got != "B" {
+		t.Fatalf("initial viewed row = %q, want B", got)
+	}
+	_, _ = e.WriteString("\r\nD")
+	newLength, newTotal := e.ScrollbackState()
+	if newLength != 2 || newTotal != 3 {
+		t.Fatalf("state after eviction = (%d, %d), want (2, 3)", newLength, newTotal)
+	}
+	offset = min(offset+int(newTotal-total), newLength)
+	e.DrawViewport(destination, destination.Bounds(), offset)
+	if got := destination.CellAt(0, 0).Content; got != "B" {
+		t.Errorf("anchored row after eviction = %q, want B", got)
+	}
+	if snapshot.Len() != 2 || snapshot.total != 2 || snapshot.CellAt(0, 0).Content != "A" {
+		t.Error("later output changed the saved history snapshot")
+	}
+	snapshot.Clear()
+	snapshot.Push(uv.Line{{Content: "private", Width: 1}})
+	if snapshot.total != 3 {
+		t.Error("snapshot did not preserve its appended-row counter")
+	}
+	if gotLength, gotTotal := e.ScrollbackState(); gotLength != 2 || gotTotal != 3 {
+		t.Error("snapshot mutation changed emulator state")
+	}
+	e.ClearScrollback()
+	if gotLength, gotTotal := e.ScrollbackState(); gotLength != 0 || gotTotal != 3 {
+		t.Errorf("state after clear = (%d, %d), want (0, 3)", gotLength, gotTotal)
+	}
+	_, _ = e.WriteString("\r\nE\r\nF")
+	if gotLength, gotTotal := e.ScrollbackState(); gotLength != 2 || gotTotal != 5 {
+		t.Errorf("state after further output = (%d, %d), want (2, 5)", gotLength, gotTotal)
+	}
+	e.SetScrollbackSize(1)
+	if gotLength, gotTotal := e.ScrollbackState(); gotLength != 1 || gotTotal != 5 {
+		t.Errorf("state after reducing capacity = (%d, %d), want (1, 5)", gotLength, gotTotal)
+	}
+	_, _ = e.WriteString("\x1b[?1049hALT\r\n")
+	if gotLength, gotTotal := e.ScrollbackState(); gotLength != 1 || gotTotal != 5 {
+		t.Error("alternate-screen output changed main history state")
+	}
+}
+
+func TestScrollbackCountsOnlyAppendedRows(t *testing.T) {
+	var missing *Scrollback
+	missing.Push(nil) // No history exists, so no row can be appended.
+	sb := &Scrollback{maxLines: 0}
+	sb.Push(nil)
+	if sb.total != 0 {
+		t.Error("disabled history counted a row")
+	}
+	sb = NewScrollback(2)
+	sb.Push(nil) // Blank rows still represent actual scrolling.
+	sb.Push(nil)
+	sb.Push(nil)
+	if sb.Len() != 2 || sb.total != 3 {
+		t.Errorf("blank history state = (%d, %d), want (2, 3)", sb.Len(), sb.total)
+	}
+	sb.Clear()
+	if sb.total != 3 {
+		t.Error("clear reset total appended rows")
+	}
+}
+
+func TestSafeScrollbackStateConcurrentSnapshots(t *testing.T) {
+	e := NewSafeEmulator(4, 1)
+	t.Cleanup(func() { _ = e.Close() })
+	e.SetScrollbackSize(3)
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		for i := 0; i < 200; i++ {
+			_, _ = e.WriteString("X\r\n")
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		for i := 0; i < 200; i++ {
+			length, total := e.ScrollbackState()
+			if length != int(min(total, 3)) {
+				t.Errorf("inconsistent state snapshot (%d, %d)", length, total)
+			}
+			snapshot := e.Scrollback()
+			if snapshot.Len() != int(min(snapshot.total, 3)) {
+				t.Errorf("inconsistent history snapshot (%d, %d)", snapshot.Len(), snapshot.total)
+			}
+			if cell := snapshot.CellAt(0, 0); cell != nil {
+				cell.Content = "private"
+			}
+		}
+	}()
+	workers.Wait()
+	if length, total := e.ScrollbackState(); length != 3 || total != 200 {
+		t.Errorf("final state = (%d, %d), want (3, 200)", length, total)
+	}
 }

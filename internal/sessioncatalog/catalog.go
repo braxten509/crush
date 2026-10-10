@@ -37,14 +37,12 @@ func catalogPath(path string) string {
 	return full
 }
 
-// List omits drafts with no user message. Old abandoned drafts are discarded;
+// List returns only chats from the current workspace, omitting drafts with no
+// user message. Old abandoned drafts are discarded;
 // the selected chat and recently created drafts are protected while a first
 // message may be in flight. The DELETE rechecks message existence atomically.
 func (c Catalog) List(ctx context.Context, selected string) ([]session.Session, error) {
-	locations, err := c.locations()
-	if err != nil {
-		return nil, err
-	}
+	locations := []projects.Project{{Path: c.Directory, DataDir: c.DataDirectory}}
 	result := []session.Session{}
 	seen := map[string]bool{}
 	for _, project := range locations {

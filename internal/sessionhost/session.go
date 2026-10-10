@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -67,10 +68,11 @@ const outputDrain = 2 * time.Second
 
 // session is one Crush process in its own hidden terminal.
 type session struct {
-	id  int
-	emu *vt.SafeEmulator
-	tty *os.File
-	cmd *exec.Cmd
+	id   int
+	kind sessionKind
+	emu  *vt.SafeEmulator
+	tty  *os.File
+	cmd  *exec.Cmd
 
 	// visible is set while the host shows this session, so only its output
 	// asks for a new frame. dirty holds back repeat requests until the host
@@ -115,7 +117,11 @@ type session struct {
 
 	// Kept by the host's update loop only.
 	unread  bool // finished work the user hasn't looked at yet
-	working bool // last reported state was working
+	working bool // last reported state was working or waiting for helpers
+	// Terminal history position; owned by the host update loop.
+	scrollOffset    int
+	scrollbackLen   int
+	scrollbackTotal uint64
 	// placed are the pictures this session put on screen, by id, to take
 	// down and put back.
 	placed map[string]*placedPicture
@@ -139,8 +145,9 @@ func newSession(id, width, height int, fg, bg color.Color) *session {
 			s.shape, s.blink = style, blink
 			s.mu.Unlock()
 		},
-		EnableMode:  func(mode ansi.Mode) { s.setMode(mode, true) },
-		DisableMode: func(mode ansi.Mode) { s.setMode(mode, false) },
+		EnableMode:       func(mode ansi.Mode) { s.setMode(mode, true) },
+		DisableMode:      func(mode ansi.Mode) { s.setMode(mode, false) },
+		WorkingDirectory: s.setWorkingDir,
 	})
 	// Copying in Crush writes OSC 52, which the emulator would keep to
 	// itself; pass it on to the real terminal.
@@ -161,6 +168,9 @@ func newSession(id, width, height int, fg, bg color.Color) *session {
 	emu.RegisterApcHandler(s.handleGraphics)
 	emu.RegisterCsiHandler(ansi.Command(0, 0, 't'), s.handleWindowOp)
 	emu.RegisterOscHandler(statusOSC, func(data []byte) bool {
+		if s.kind == terminalSession {
+			return true
+		}
 		if st, ok := parseStatus(data); ok {
 			s.mu.Lock()
 			s.status = st
@@ -380,6 +390,15 @@ func (s *session) stop() {
 	s.mu.Unlock()
 	if s.exited.Load() || s.cmd == nil || s.cmd.Process == nil {
 		return
+	}
+	if s.kind == terminalSession && s.tty != nil {
+		// Closing the PTY gives the shell and foreground job the same
+		// hangup as closing a normal terminal window.
+		_ = s.tty.Close()
+		// The close waits for the output loop's read, and interactive
+		// shells ignore SIGTERM, so hang the shell up directly. It passes
+		// the hangup on to its jobs.
+		_ = s.cmd.Process.Signal(syscall.SIGHUP)
 	}
 	terminate(s.cmd.Process)
 	time.AfterFunc(stopGrace, func() {

@@ -28,6 +28,7 @@ func newTestHost(t *testing.T, width, height int, statuses ...Status) *Host {
 		s.status = st
 		h.sessions = append(h.sessions, s)
 	}
+	h.nextID = len(statuses)
 	h.show(0)
 	return h
 }
@@ -91,13 +92,17 @@ func TestNarrowTerminalShowsStripWithoutChangingSetting(t *testing.T) {
 func TestRowAt(t *testing.T) {
 	h := newTestHost(t, 120, 30, Status{Title: "One"}, Status{Title: "Two"})
 	require.True(t, h.rowAt(toggleColumn, 0).toggle)
-	for x := 1; x < listWidth-2; x++ {
+	for x := newSessionColumn; x < newSessionColumn+len(newSessionLabel); x++ {
 		require.True(t, h.rowAt(x, newSessionRow).newSession)
 		require.False(t, h.rowAt(x, newSessionRow).toggle)
 		require.Equal(t, -1, h.rowAt(x, newSessionRow).session)
 	}
+	for x := newTerminalColumn; x < newTerminalEnd; x++ {
+		require.True(t, h.rowAt(x, newSessionRow).newTerminal)
+	}
 	require.False(t, h.rowAt(0, newSessionRow).newSession)
-	require.False(t, h.rowAt(listWidth-2, newSessionRow).newSession)
+	require.False(t, h.rowAt(newSessionColumn+len(newSessionLabel), newSessionRow).newSession, "the separator is not clickable")
+	require.False(t, h.rowAt(newTerminalEnd, newSessionRow).newTerminal)
 	require.False(t, h.rowAt(newSessionColumn, 2).newSession)
 	require.False(t, h.rowAt(2, 0).toggle)
 	require.False(t, h.rowAt(2, 0).newSession)
@@ -113,7 +118,10 @@ func TestRowAt(t *testing.T) {
 
 	press(h, "alt+s")
 	require.True(t, h.rowAt(1, 0).toggle)
-	require.True(t, h.rowAt(1, 1).newSession)
+	require.False(t, h.rowAt(1, 1).newSession, "a blank row sits under ›")
+	require.True(t, h.rowAt(1, stripNewRow).newSession)
+	require.True(t, h.rowAt(1, stripTerminalRow).newTerminal)
+	require.Equal(t, -1, h.rowAt(1, stripFirstRow-1).session, "a blank row sits above the first session")
 	require.Equal(t, 1, h.rowAt(1, stripFirstRow+stripBlockHeight+1).session)
 	require.False(t, h.rowAt(1, stripFirstRow).close, "the strip closes with alt+w only")
 }
@@ -156,6 +164,54 @@ func TestClosingAlwaysAsks(t *testing.T) {
 	press(h, "enter")
 	require.True(t, h.sessions[0].stopped)
 	require.Contains(t, screenText(h), "× Ready one", "a closing session shows ×")
+}
+
+func TestClosingTerminalHidesItBeforeItsProcessExits(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "Chat"}, Status{Title: "Shell"})
+	chat := h.sessions[0]
+	terminal := h.sessions[1]
+	terminal.kind = terminalSession
+	h.show(1)
+
+	press(h, "alt+w")
+	press(h, "enter")
+
+	require.Len(t, h.sessions, 1)
+	require.Same(t, chat, h.sessions[0])
+	require.True(t, terminal.stopped)
+	require.False(t, terminal.visible.Load())
+	require.Same(t, terminal, h.closing[terminal.id], "the process stays tracked while it shuts down")
+	require.NotContains(t, screenText(h), "Shell")
+
+	h.update(exitedMsg{id: terminal.id})
+	require.Empty(t, h.closing)
+}
+
+func TestClosingLastTerminalWaitsForProcessExitBeforeQuitting(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "Terminal"})
+	terminal := h.sessions[0]
+	terminal.kind = terminalSession
+
+	press(h, "alt+w")
+	press(h, "enter")
+	require.Empty(t, h.sessions, "the terminal disappears immediately")
+	require.Same(t, terminal, h.closing[terminal.id])
+
+	cmd := h.update(exitedMsg{id: terminal.id})
+	require.NotNil(t, cmd, "the host quits after the closing process exits")
+}
+
+func TestStopAllStopsClosingTerminal(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "Terminal"})
+	terminal := h.sessions[0]
+	terminal.kind = terminalSession
+	terminal.exited.Store(true)
+	h.closing = map[int]*session{terminal.id: terminal}
+	h.sessions = nil
+
+	h.stopAll()
+
+	require.True(t, terminal.stopped)
 }
 
 func TestCloseBoxSaysWhatTheSessionIsDoing(t *testing.T) {
@@ -232,7 +288,7 @@ func TestStripShowsOneMarkPerSession(t *testing.T) {
 	press(h, "alt+s")
 	lines := strings.Split(screenText(h), "\n")
 	var marks []string
-	for _, line := range lines[stripFirstRow:] {
+	for _, line := range lines[stripFirstRow : h.height-sideFooterRows] {
 		if cell := strings.Trim(ansi.Cut(line, 0, stripWidth-1), " ▌"); cell != "" && !strings.ContainsAny(cell, "0123456789") {
 			marks = append(marks, cell)
 		}
@@ -248,10 +304,11 @@ func TestListShowsSessionDetails(t *testing.T) {
 		Status{Title: "Notes", Dir: filepath.Join(home, "notes"), Model: "Opus · High", State: StateReady},
 	)
 	text := screenText(h)
-	for _, want := range []string{"Sessions [3]", "+ New session", "‹", "● Remote setup", "  crush", "! Inbox cleanup",
-		"○ Notes", "  notes", "alt+n new · alt+s hide"} {
+	for _, want := range []string{"Sessions [3]", "+ Session | + Terminal", "‹", "● Remote setup", "  crush", "! Inbox cleanup",
+		"○ Notes", "  notes"} {
 		require.Contains(t, text, want)
 	}
+	require.NotContains(t, text, "alt+s hide", "the list has no key hint")
 	// Only the folder's name shows below the title: no model, no words.
 	for _, gone := range []string{"GPT-6.1 Sol", "Opus", "~/dev/crush", "Working", "Needs you", "Viewing", "Ready"} {
 		require.NotContains(t, text, gone)
@@ -583,7 +640,7 @@ func TestNewSessionPlusSharesTheHeadingColumn(t *testing.T) {
 		if c := scr.CellAt(x, 0); c != nil && c.Content == "S" {
 			heading = x
 		}
-		if c := scr.CellAt(x, newSessionRow); c != nil && c.Content == "+" {
+		if c := scr.CellAt(x, newSessionRow); c != nil && c.Content == "+" && plus == -1 {
 			plus = x
 		}
 	}

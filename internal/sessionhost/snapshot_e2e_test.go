@@ -9,13 +9,43 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/vt"
+	"github.com/stretchr/testify/require"
 )
 
 // snapshotDirEnv names a folder for HTML pictures of the end-to-end
 // screens, for checking colors and alignment by eye.
 const snapshotDirEnv = "CRUSH_HOST_E2E_SNAPSHOTS"
+
+func TestActivitySnapshots(t *testing.T) {
+	if os.Getenv(snapshotDirEnv) == "" {
+		t.Skip("set CRUSH_HOST_E2E_SNAPSHOTS to save rendered activity frames")
+	}
+	for _, width := range []int{120, 60} {
+		h := newTestHost(t, width, 21,
+			Status{Title: "Working on the app", Dir: "/projects/app", State: StateWorking},
+			Status{Title: "Waiting for a review", Dir: "/projects/crush", State: StateBackground},
+			Status{Title: "Finished chat", Dir: "/projects/notes", State: StateReady},
+			Status{Title: "Needs your answer", State: StateWaiting},
+			Status{Title: "Unread answer", State: StateReady},
+		)
+		h.sessions[4].unread = true
+		h.applyTheme("graphite")
+		for frame := range activityFrames {
+			h.activityFrame = frame
+			emu := vt.NewSafeEmulator(width, h.height)
+			emu.SetDefaultForegroundColor(h.palette().text)
+			emu.SetDefaultBackgroundColor(h.palette().bg)
+			_, err := emu.Write([]byte(strings.ReplaceAll(h.View().Content, "\n", "\r\n")))
+			require.NoError(t, err)
+			s := screen{t: t, emu: emu}
+			s.snapshot(fmt.Sprintf("activity-%d-%02d", width, frame))
+		}
+	}
+}
 
 func (s *screen) snapshot(name string) {
 	dir := os.Getenv(snapshotDirEnv)

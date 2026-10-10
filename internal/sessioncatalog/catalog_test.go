@@ -43,12 +43,13 @@ func catalogExists(t *testing.T, conn *sql.DB, id string) bool {
 	require.NoError(t, conn.QueryRowContext(t.Context(), "SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?)", id).Scan(&exists))
 	return exists
 }
-func TestCatalogListsAllFoldersAndDiscardsOnlyAbandonedEmptyChats(t *testing.T) {
+func TestCatalogListsCurrentFolderAndDiscardsOnlyItsAbandonedEmptyChats(t *testing.T) {
 	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(t.TempDir(), "data"))
 	first, a := catalogFixture(t)
 	second, b := catalogFixture(t)
 	old := time.Now().Add(-time.Hour).Unix()
 	catalogChat(t, a, "text", "", "user", `[{"type":"text","text":"hello"}]`, old)
+	catalogChat(t, a, "newer-text", "", "user", `[{"type":"text","text":"newer"}]`, old+3)
 	catalogChat(t, b, "attachment", "", "user", `[{"type":"binary","mime_type":"image/png"}]`, old+1)
 	catalogChat(t, a, "empty", "", "", "", old)
 	catalogChat(t, b, "assistant-only", "", "assistant", `[{"type":"text","text":"draft"}]`, old)
@@ -65,15 +66,25 @@ func TestCatalogListsAllFoldersAndDiscardsOnlyAbandonedEmptyChats(t *testing.T) 
 	for _, entry := range entries {
 		byID[entry.ID] = entry
 	}
-	require.Equal(t, second.Directory, byID["attachment"].Directory)
-	require.Equal(t, second.DataDirectory, byID["attachment"].DataDirectory)
+	require.NotContains(t, byID, "attachment")
+	require.Equal(t, first.Directory, byID["newer-text"].Directory)
+	require.Equal(t, first.DataDirectory, byID["text"].DataDirectory)
 	require.Equal(t, first.Directory, byID["text"].Directory)
 	require.GreaterOrEqual(t, entries[0].UpdatedAt, entries[1].UpdatedAt)
 	require.False(t, catalogExists(t, a, "empty"))
-	require.False(t, catalogExists(t, b, "assistant-only"))
+	require.True(t, catalogExists(t, b, "assistant-only"))
 	require.True(t, catalogExists(t, a, "selected-empty"))
 	require.True(t, catalogExists(t, b, "recent-empty"))
 	require.True(t, catalogExists(t, b, "child"))
+
+	entries, err = second.List(t.Context(), "")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, "attachment", entries[0].ID)
+	require.Equal(t, second.Directory, entries[0].Directory)
+	require.Equal(t, second.DataDirectory, entries[0].DataDirectory)
+	require.False(t, catalogExists(t, b, "assistant-only"))
+	require.True(t, catalogExists(t, a, "selected-empty"))
 }
 func TestCatalogChangesStayInTheOriginalDatabase(t *testing.T) {
 	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(t.TempDir(), "data"))

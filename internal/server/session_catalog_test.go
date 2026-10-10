@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSavedSessionEndpointsUseEveryRegisteredServerFolder(t *testing.T) {
+func TestSavedSessionEndpointsListOnlyCurrentServerFolder(t *testing.T) {
 	h := newRealCreateHarness(t)
 	h.backend.SetCreateGrace(time.Hour)
 	first := h.postWorkspace(t, proto.Workspace{Path: t.TempDir(), DataDir: t.TempDir(), ClientID: uuid.NewString()})
@@ -40,14 +40,23 @@ func TestSavedSessionEndpointsUseEveryRegisteredServerFolder(t *testing.T) {
 	var entries []session.Session
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&entries))
 	response.Body.Close()
-	require.Len(t, entries, 2)
-	var foreign session.Session
-	for _, entry := range entries {
-		require.Equal(t, "Saved chat", entry.Title)
-		if entry.Directory == second.Path {
-			foreign = entry
-		}
-	}
+	require.Len(t, entries, 1)
+	require.Equal(t, "Saved chat", entries[0].Title)
+	require.Equal(t, first.Path, entries[0].Directory)
+	require.Equal(t, first.DataDir, entries[0].DataDirectory)
+
+	req, err = http.NewRequestWithContext(t.Context(), http.MethodGet, h.httpSrv.URL+"/v1/workspaces/"+second.ID+"/saved-sessions", nil)
+	require.NoError(t, err)
+	response, err = h.httpSrv.Client().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&entries))
+	response.Body.Close()
+	require.Len(t, entries, 1)
+	require.Equal(t, "Saved chat", entries[0].Title)
+	require.Equal(t, second.Path, entries[0].Directory)
+	require.Equal(t, second.DataDir, entries[0].DataDirectory)
+	foreign := entries[0]
 	require.NotEmpty(t, foreign.ID)
 	foreign.Title = "Renamed in its original folder"
 	data, err := json.Marshal(session.CatalogChange{Session: foreign})

@@ -57,6 +57,28 @@ type MouseWheel = uv.MouseWheelEvent
 // MouseMotion represents a mouse motion event.
 type MouseMotion = uv.MouseMotionEvent
 
+// MouseReporting reports whether any supported mouse tracking mode is enabled.
+// Encoding modes alone do not request mouse events.
+func (e *Emulator) MouseReporting() bool {
+	return e.mouseMode() != nil
+}
+
+func (e *Emulator) mouseMode() ansi.Mode {
+	var mode ansi.Mode
+	for _, m := range []ansi.DECMode{
+		ansi.ModeMouseX10,
+		ansi.ModeMouseNormal,
+		ansi.ModeMouseHighlight,
+		ansi.ModeMouseButtonEvent,
+		ansi.ModeMouseAnyEvent,
+	} {
+		if e.isModeSet(m) {
+			mode = m
+		}
+	}
+	return mode
+}
+
 // SendMouse sends a mouse event to the terminal. This can be any kind of mouse
 // events such as [MouseClick], [MouseRelease], [MouseWheel], or [MouseMotion].
 func (e *Emulator) SendMouse(m Mouse) {
@@ -64,20 +86,8 @@ func (e *Emulator) SendMouse(m Mouse) {
 	// [SgrPixelExtMouseMode].
 	var (
 		enc  ansi.Mode
-		mode ansi.Mode
+		mode = e.mouseMode()
 	)
-
-	for _, m := range []ansi.DECMode{
-		ansi.ModeMouseX10,         // Button press
-		ansi.ModeMouseNormal,      // Button press/release
-		ansi.ModeMouseHighlight,   // Button press/release/hilight
-		ansi.ModeMouseButtonEvent, // Button press/release/cell motion
-		ansi.ModeMouseAnyEvent,    // Button press/release/all motion
-	} {
-		if e.isModeSet(m) {
-			mode = m
-		}
-	}
 
 	if mode == nil {
 		return
@@ -108,8 +118,8 @@ func (e *Emulator) SendMouse(m Mouse) {
 	// XXX: Support [ansi.Utf8ExtMouseMode], [ansi.UrxvtExtMouseMode], and
 	// [ansi.SgrPixelExtMouseMode].
 	case nil: // X10 mouse encoding
-		_, _ = io.WriteString(e.pw, ansi.MouseX10(b, mouse.X, mouse.Y))
+		_, _ = io.WriteString(e.input, ansi.MouseX10(b, mouse.X, mouse.Y))
 	case ansi.ModeMouseExtSgr: // SGR mouse encoding
-		_, _ = io.WriteString(e.pw, ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease))
+		_, _ = io.WriteString(e.input, ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease))
 	}
 }

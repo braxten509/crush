@@ -25,8 +25,12 @@ const (
 type (
 	// taskTickMsg turns the spinner and expires completed sub-agents after their linger period.
 	taskTickMsg struct{}
-	// bgProcsMsg carries a fresh list of background processes.
-	bgProcsMsg struct{ procs []agent.Process }
+	// bgProcsMsg carries a fresh list of background processes. Inside the
+	// session list, servers among them are shown there instead.
+	bgProcsMsg struct {
+		procs   []agent.Process
+		servers []agent.Server
+	}
 )
 
 // taskSpinner is the half circle that turns while sub-agents run.
@@ -112,13 +116,19 @@ func (m *UI) handleTaskTick() tea.Cmd {
 
 // pollBgProcs lists the background processes off the update loop.
 func (m *UI) pollBgProcs() tea.Cmd {
+	inHost := m.inSessionHost
 	return tea.Tick(bgProcsRefresh, func(time.Time) tea.Msg {
-		return bgProcsMsg{procs: agent.BackgroundProcesses()}
+		procs := agent.BackgroundProcesses()
+		if !inHost {
+			return bgProcsMsg{procs: procs}
+		}
+		servers, rest := agent.FindServers(procs)
+		return bgProcsMsg{procs: rest, servers: servers}
 	})
 }
 
-func (m *UI) handleBgProcs(procs []agent.Process) tea.Cmd {
-	m.bgProcs = procs
+func (m *UI) handleBgProcs(msg bgProcsMsg) tea.Cmd {
+	m.bgProcs, m.hostServers = msg.procs, msg.servers
 	m.relayoutTasks()
 	m.refreshBackgroundDialog()
 	return m.pollBgProcs()

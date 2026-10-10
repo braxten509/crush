@@ -323,9 +323,12 @@ type UI struct {
 	// tasks are the background sub-agents seen this run, by ID, and
 	// bgProcs the processes the agents left running. They share a row
 	// under the editor, which Down selects (tasksFocused, taskSel).
-	tasks        map[string]agent.Task
-	taskTicking  bool
-	bgProcs      []agent.Process
+	tasks       map[string]agent.Task
+	taskTicking bool
+	bgProcs     []agent.Process
+	// hostServers are background processes listening on a port, which the
+	// session list shows in place of the row.
+	hostServers  []agent.Server
 	tasksFocused bool
 	taskSel      int
 	frameDirty   bool
@@ -1065,6 +1068,10 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.ModeReportMsg:
 		m.updateNotificationBackend()
 	case uv.UnknownOscEvent:
+		if port, ok := sessionhost.ParseStopServer(string(msg)); ok && m.inSessionHost {
+			cmds = append(cmds, m.stopHostServer(port))
+			break
+		}
 		m.updateNotificationBackend()
 	case tea.FocusMsg:
 		m.notifyWindowFocused = true
@@ -1387,7 +1394,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case bgProcsMsg:
-		cmds = append(cmds, m.handleBgProcs(msg.procs))
+		cmds = append(cmds, m.handleBgProcs(msg))
 	case logoShineMsg:
 		cmds = append(cmds, m.handleLogoShine())
 	case pubsub.Event[question.Notification]:
@@ -6541,6 +6548,8 @@ func (m *UI) newSession() tea.Cmd {
 	draftID := m.session.ID
 	planCmd := m.resetPlanModeState()
 	m.session = nil
+	m.agentBusyCache.set(false)
+	m.chat.SetAgentBusy(false)
 	// A session still opening must not replace the new chat when it lands.
 	abandonCmd := m.abandonSessionLoad()
 	m.sidebarOffset = 0

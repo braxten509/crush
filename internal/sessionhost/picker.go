@@ -16,6 +16,7 @@ const pickerRows = 5
 // picker is the box "+ New session" opens to choose the session's folder:
 // a typed path, folders matching it, and folders Crush was used in lately.
 type picker struct {
+	kind sessionKind
 	// base is the folder a relative path starts from: the shown session's.
 	base   string
 	input  []rune

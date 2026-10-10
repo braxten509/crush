@@ -18,12 +18,14 @@ type Terminal interface {
 	CursorColor() color.Color
 	CursorPosition() uv.Position
 	Draw(scr uv.Screen, area uv.Rectangle)
+	DrawViewport(scr uv.Screen, area uv.Rectangle, offset int)
 	Focus()
 	ForegroundColor() color.Color
 	Height() int
 	IndexedColor(i int) color.Color
 	InputPipe() io.Writer
 	IsAltScreen() bool
+	MouseReporting() bool
 	Paste(text string)
 	Read(p []byte) (n int, err error)
 	RegisterApcHandler(handler ApcHandler)
@@ -38,6 +40,7 @@ type Terminal interface {
 	Scrollback() *Scrollback
 	ScrollbackCellAt(x, y int) *uv.Cell
 	ScrollbackLen() int
+	ScrollbackState() (length int, total uint64)
 	SendKey(k uv.KeyEvent)
 	SendKeys(keys ...uv.KeyEvent)
 	SendMouse(m Mouse)

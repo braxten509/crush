@@ -884,8 +884,10 @@ func (app *App) subscribe[T any](
 	name string,
 	subscriber func(context.Context) <-chan pubsub.Event[T],
 ) {
+	// Subscribe before returning, so no event published right after setup
+	// is lost while the goroutine is still waiting to run.
+	subCh := subscriber(ctx)
 	app.serviceEventsWG.Go(func() {
-		subCh := subscriber(ctx)
 		for {
 			select {
 			case event, ok := <-subCh:
@@ -914,8 +916,10 @@ func (app *App) subscribeMustDeliver[T any](
 	name string,
 	subscriber func(context.Context) <-chan pubsub.Event[T],
 ) {
+	// Subscribe before returning, so no event published right after setup
+	// is lost while the goroutine is still waiting to run.
+	subCh := subscriber(ctx)
 	app.serviceEventsWG.Go(func() {
-		subCh := subscriber(ctx)
 		for {
 			select {
 			case event, ok := <-subCh:

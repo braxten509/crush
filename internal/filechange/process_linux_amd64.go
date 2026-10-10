@@ -250,15 +250,17 @@ func continueCall(listener int, id uint64) {
 	_, _, _ = unix.Syscall(unix.SYS_IOCTL, uintptr(listener), unix.SECCOMP_IOCTL_NOTIF_SEND, uintptr(unsafe.Pointer(&response)))
 }
 
-// receive waits for the next paused call. It reports false once no process
-// uses the filter any more.
+// receive waits for the next paused call. It reports done once no process
+// uses the filter any more. The kernel also reports POLLERR when a signal
+// interrupts its wait for the filter's lock; that is only a retry; closing the
+// listener then would fail every later filtered call with ENOSYS.
 func receive(listener int, notification *seccompNotification) (received, done bool) {
 	descriptors := []unix.PollFd{{Fd: int32(listener), Events: unix.POLLIN}}
 	if _, err := unix.Poll(descriptors, -1); err != nil {
 		return false, err != unix.EINTR
 	}
 	if descriptors[0].Revents&unix.POLLIN == 0 {
-		return false, descriptors[0].Revents&(unix.POLLHUP|unix.POLLERR|unix.POLLNVAL) != 0
+		return false, descriptors[0].Revents&(unix.POLLHUP|unix.POLLNVAL) != 0
 	}
 	*notification = seccompNotification{}
 	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(listener), unix.SECCOMP_IOCTL_NOTIF_RECV, uintptr(unsafe.Pointer(notification)))

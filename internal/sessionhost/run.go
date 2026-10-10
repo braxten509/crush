@@ -20,6 +20,7 @@ func Run(ctx context.Context, opts Options) error {
 	h := New(opts)
 	p := tea.NewProgram(h, tea.WithContext(ctx), tea.WithEnvironment(os.Environ()))
 	h.SetSend(p.Send)
+	QuitOnHangup(p.Quit)
 	_, err := p.Run()
 	h.stopAll()
 	if h.startErr != nil {

@@ -6,14 +6,19 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-const crashGuardChildEnv = "CRUSH_CRASH_GUARD_TEST_CHILD"
+const (
+	crashGuardChildEnv = "CRUSH_CRASH_GUARD_TEST_CHILD"
+	crashGuardReadyEnv = "CRUSH_CRASH_GUARD_TEST_READY"
+)
 
 // TestCrashGuardChild is the child the guard runs in the tests below.
 func TestCrashGuardChild(t *testing.T) {
@@ -32,6 +37,13 @@ func TestCrashGuardChild(t *testing.T) {
 	case "exit":
 		done()
 		os.Exit(3)
+	case "hangup":
+		hangup := make(chan os.Signal, 1)
+		signal.Notify(hangup, syscall.SIGHUP)
+		require.NoError(t, os.WriteFile(os.Getenv(crashGuardReadyEnv), nil, 0o600))
+		<-hangup
+		done()
+		os.Exit(4)
 	}
 }
 
@@ -72,4 +84,21 @@ func TestCrashGuardLeavesNormalExitAlone(t *testing.T) {
 	require.Empty(t, out.String())
 	require.Empty(t, errOut.String())
 	require.NoFileExists(t, report)
+}
+
+// In the session list's hidden terminals the guard leads the session, so a
+// hangup reaches only the guard; the child must get it too, or it keeps
+// running with no window.
+func TestCrashGuardPassesHangupOn(t *testing.T) {
+	report := filepath.Join(t.TempDir(), "crash.log")
+	ready := filepath.Join(t.TempDir(), "ready")
+	child := exec.Command(os.Args[0], "-test.run=^TestCrashGuardChild$")
+	child.Env = append(os.Environ(), crashGuardChildEnv+"=hangup", crashGuardReadyEnv+"="+ready, crashReportEnv+"="+report, "XDG_STATE_HOME="+t.TempDir())
+	go func() {
+		require.Eventually(t, func() bool { _, err := os.Stat(ready); return err == nil }, 10*time.Second, 10*time.Millisecond)
+		_ = syscall.Kill(os.Getpid(), syscall.SIGHUP)
+	}()
+	code, started := superviseChild(child, report, func() {}, &bytes.Buffer{}, &bytes.Buffer{})
+	require.True(t, started)
+	require.Equal(t, 4, code)
 }

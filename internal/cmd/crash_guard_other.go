@@ -63,8 +63,11 @@ func runCrashGuarded() (exitCode int, guarded bool) {
 // notice to errOut. It reports false only when child could not start.
 func superviseChild(child *exec.Cmd, report string, restore func(), out, errOut io.Writer) (exitCode int, started bool) {
 	// The child shares the terminal's process group, so terminal signals
-	// reach it directly; the guard catches them only to outlive it, and
-	// passes SIGTERM on. Catching, unlike ignoring, isn't inherited.
+	// usually reach it directly; the guard catches them only to outlive it,
+	// and passes SIGTERM and SIGHUP on. A hangup reaches only the guard when
+	// it leads the session, as in the session list's hidden terminals, and
+	// the child would keep running with no window. Catching, unlike
+	// ignoring, isn't inherited.
 	signals := make(chan os.Signal, 4)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGTERM)
 	defer signal.Stop(signals)
@@ -73,7 +76,7 @@ func superviseChild(child *exec.Cmd, report string, restore func(), out, errOut 
 	}
 	go func() {
 		for sig := range signals {
-			if sig == syscall.SIGTERM {
+			if sig == syscall.SIGTERM || sig == syscall.SIGHUP {
 				_ = child.Process.Signal(sig)
 			}
 		}

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -133,6 +134,8 @@ type taskHub struct {
 	backgroundOwners   map[string]string
 	backgroundServices map[string]bool
 	backgroundShells   map[string]*shell.BackgroundShell
+	// reaper is the write end of the reaper's pipe; see startReaper.
+	reaper *os.File
 }
 
 func newTaskHub(c *coordinator, events pubsub.Publisher[Task]) *taskHub {
@@ -153,6 +156,11 @@ func newTaskHub(c *coordinator, events pubsub.Publisher[Task]) *taskHub {
 		return nil
 	}
 	h := &taskHub{c: c, dir: dir, root: root, events: events, cancels: map[string]context.CancelFunc{}, tasks: map[string]*Task{}, userStopped: map[string]bool{}}
+	if !testing.Testing() {
+		if h.reaper, err = startReaper(TasksDirEnv + "=" + dir); err != nil {
+			slog.Warn("Processes may outlive a crash: no reaper", "error", err)
+		}
+	}
 	go h.watch()
 	go h.watchDetached()
 	hubsMu.Lock()

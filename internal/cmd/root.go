@@ -37,6 +37,7 @@ import (
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/sessionhost"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/exitbanner"
@@ -156,6 +157,7 @@ crush --single
 			tea.WithFilter(inputFilter.Filter),
 		)
 		go ws.Subscribe(program)
+		sessionhost.QuitOnHangup(program.Quit)
 
 		showScrollMarker := sync.OnceFunc(hideKonsoleScrollMarker(env, os.Stdout, term.IsTerminal(os.Stdout.Fd())))
 		defer showScrollMarker()

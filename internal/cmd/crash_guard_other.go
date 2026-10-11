@@ -126,7 +126,9 @@ func quietStderr(file *os.File) (restore func()) {
 	if file == nil || !term.IsTerminal(os.Stderr.Fd()) {
 		return func() {}
 	}
-	saved, err := unix.Dup(int(os.Stderr.Fd()))
+	// Close-on-exec, or every program Crush starts inherits the terminal
+	// and one that outlives Crush keeps the session list's tab open.
+	saved, err := unix.FcntlInt(os.Stderr.Fd(), unix.F_DUPFD_CLOEXEC, 0)
 	if err != nil {
 		return func() {}
 	}

@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -116,7 +117,10 @@ type confirmClose struct {
 // New returns a host. send delivers messages to the running program; set
 // it with SetSend before the program starts.
 func New(opts Options) *Host {
-	h := &Host{opts: opts, hover: -1, styles: styles.ThemeFromConfig("")}
+	// Start in the saved theme so the window never shows the default
+	// before the first chat reports its own.
+	theme := config.SavedTheme()
+	h := &Host{opts: opts, hover: -1, theme: theme, styles: styles.ThemeFromConfig(theme)}
 	if path, err := prefsPath(); err == nil {
 		h.prefsPath = path
 		h.prefs = loadPrefs(path)

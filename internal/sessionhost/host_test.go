@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
@@ -58,6 +59,20 @@ func press(h *Host, key string) {
 		}
 	}
 	h.Update(tea.KeyPressMsg(k))
+}
+
+func TestHostStartsWithSavedTheme(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CRUSH_GLOBAL_CONFIG", t.TempDir())
+	t.Setenv("CRUSH_GLOBAL_DATA", data)
+	require.NoError(t, os.WriteFile(filepath.Join(data, "crush.json"),
+		[]byte(`{"options":{"tui":{"active_theme":"graphite"}}}`), 0o600))
+
+	h := New(Options{})
+	require.Equal(t, "graphite", h.theme)
+	require.Equal(t, styles.ThemeFromConfig("graphite").Background, h.styles.Background,
+		"the list draws in the saved theme before any chat reports one")
 }
 
 func TestPrefsMissingFileMeansOpen(t *testing.T) {

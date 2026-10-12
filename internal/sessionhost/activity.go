@@ -6,8 +6,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// spinnerFrames is the mark of a busy chat, one frame per tick.
-var spinnerFrames = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+// spinnerFrames is the mark of a busy chat, one frame per tick: four dots
+// chasing round all four rows of a braille cell, as tall as a capital.
+var spinnerFrames = [...]string{"⠹", "⢸", "⣰", "⣤", "⣆", "⡇", "⠏", "⠛"}
 
 const (
 	activityInterval = 100 * time.Millisecond

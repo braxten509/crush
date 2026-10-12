@@ -1211,7 +1211,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Attachments.Text = attachmentIconStyle.SetString(TextIcon)
 	s.Attachments.Skill = attachmentIconStyle.SetString(SkillIcon)
 	s.Attachments.Normal = base.Padding(0, 1).Background(o.fgMoreSubtle).Foreground(o.fgBase)
-	s.Attachments.KeptIcon = base.Foreground(o.bgBase).Background(o.plan).Padding(0, 1).SetString(SkillIcon + " on")
+	s.Attachments.KeptIcon = base.Foreground(o.bgBase).Background(o.plan).Padding(0, 1).SetString("on")
 	s.Attachments.KeptName = base.Padding(0, 1).Background(o.planMoreSubtle).Foreground(o.fgBase)
 	s.Attachments.KeptDot = base.Foreground(o.plan).SetString("●")
 	s.Attachments.KeptText = base.Foreground(o.plan)

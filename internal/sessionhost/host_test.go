@@ -308,7 +308,7 @@ func TestStripShowsOneMarkPerSession(t *testing.T) {
 			marks = append(marks, cell)
 		}
 	}
-	require.Equal(t, []string{h.activityMark(), "!", "○"}, marks)
+	require.Equal(t, []string{h.activityMark(), "!", "⠶"}, marks)
 }
 
 func TestListShowsSessionDetails(t *testing.T) {
@@ -320,7 +320,7 @@ func TestListShowsSessionDetails(t *testing.T) {
 	)
 	text := screenText(h)
 	for _, want := range []string{"Sessions [3]", "+ Session | + Terminal", "‹", h.activityMark() + " Remote setup", "  crush", "! Inbox cleanup",
-		"○ Notes", "  notes"} {
+		"⠶ Notes", "  notes"} {
 		require.Contains(t, text, want)
 	}
 	require.NotContains(t, text, "alt+s hide", "the list has no key hint")
@@ -652,7 +652,7 @@ func TestNewSessionPlusSharesTheMarkColumn(t *testing.T) {
 	h.drawList(scr, h.palette())
 	mark, plus := -1, -1
 	for x := 0; x < listWidth; x++ {
-		if c := scr.CellAt(x, listFirstRow); c != nil && c.Content == "○" {
+		if c := scr.CellAt(x, listFirstRow); c != nil && c.Content == "⠶" {
 			mark = x
 		}
 		if c := scr.CellAt(x, newSessionRow); c != nil && c.Content == "+" && plus == -1 {

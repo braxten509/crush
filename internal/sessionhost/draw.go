@@ -279,7 +279,7 @@ func (h *Host) sessionState(s *session, p palette) (mark string, c color.Color) 
 	case s.unread:
 		return "✓", p.accent
 	case st.State == StateReady:
-		return "○", p.muted
+		return idleMark, p.muted
 	}
 	return "·", p.muted
 }

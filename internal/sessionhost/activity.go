@@ -10,6 +10,9 @@ import (
 // chasing round all four rows of a braille cell, as tall as a capital.
 var spinnerFrames = [...]string{"⠹", "⢸", "⣰", "⣤", "⣆", "⡇", "⠏", "⠛"}
 
+// idleMark is the mark of an idle chat: the spinner's dots at rest.
+const idleMark = "⠶"
+
 const (
 	activityInterval = 100 * time.Millisecond
 	activityFrames   = len(spinnerFrames)

@@ -28,7 +28,7 @@ func TestBackgroundWaitDoesNotLookFinished(t *testing.T) {
 	require.True(t, other.unread, "completion after a background wait still needs the unread mark")
 	require.Contains(t, screenText(h), "✓ Other")
 	h.show(1)
-	require.Contains(t, screenText(h), "○ Other")
+	require.Contains(t, screenText(h), "⠶ Other")
 }
 
 func TestActivitySpinnerKeepsColorsAndTextInPlace(t *testing.T) {
@@ -62,7 +62,7 @@ func TestActivitySpinnerKeepsColorsAndTextInPlace(t *testing.T) {
 			require.Equal(t, mark, background, "every spinner turns together")
 			require.Equal(t, h.palette().muted, c)
 			ready, _ := h.sessionState(h.sessions[2], h.palette())
-			require.Equal(t, "○", ready)
+			require.Equal(t, "⠶", ready)
 			require.Equal(t, before, columns(), "titles never move")
 		}
 		require.Len(t, seen, activityFrames, "the spinner shows every frame")

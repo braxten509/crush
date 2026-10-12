@@ -24,7 +24,7 @@ func TestHostRunsNormalTerminalTab(t *testing.T) {
 	t.Setenv("PS1", "TERM> ")
 	s := startScreen(t, binary, 140, 40)
 	s.waitFor("Sessions [1]", 20*time.Second)
-	s.waitFor("○ ", 30*time.Second)
+	s.waitFor("⠶ ", 30*time.Second)
 	dir := filepath.Join(s.project, "chosen folder")
 	require.NoError(t, os.Mkdir(dir, 0o700))
 	x, y := newTerminalColumn+1, newSessionRow+1
@@ -67,7 +67,7 @@ func TestTerminalKeepsOriginalBackgroundWhenCrushColorIsOff(t *testing.T) {
 	s := startScreenWith(t, t.TempDir(), binary, 140, 40, func(emu *vt.SafeEmulator) {
 		emu.SetDefaultBackgroundColor(background)
 	})
-	s.waitFor("○ ", 30*time.Second)
+	s.waitFor("⠶ ", 30*time.Second)
 	s.press("\x1bt")
 	s.waitFor("New terminal in…", 5*time.Second)
 	s.press("\r")
@@ -91,7 +91,7 @@ func TestNewTabsKeepTheThemeWhileStarting(t *testing.T) {
 	t.Setenv("ENV", "")
 	t.Setenv("PS1", "TERM> ")
 	s := startScreen(t, binary, 140, 40)
-	s.waitFor("○ ", 30*time.Second)
+	s.waitFor("⠶ ", 30*time.Second)
 	time.Sleep(time.Second)
 	want := s.emu.BackgroundColor()
 	steady := func(what string) {

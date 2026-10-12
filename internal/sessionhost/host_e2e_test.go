@@ -137,7 +137,7 @@ func TestHostRunsRealSessions(t *testing.T) {
 
 	s.waitFor("Sessions [1]", 20*time.Second)
 	// The session drew itself beside the list and reported its state.
-	first := s.waitFor("○ ", 30*time.Second)
+	first := s.waitFor("⠶ ", 30*time.Second)
 	t.Logf("Started:\n%s", first)
 	time.Sleep(time.Second)
 	s.snapshot("1-one-session")

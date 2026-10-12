@@ -43,6 +43,7 @@ func TestNativeAgentReceivesSharedInstructionsAndTaskEnvironment(t *testing.T) {
 	encoded, err := json.Marshal(probe.prompt)
 	require.NoError(t, err)
 	require.Contains(t, string(encoded), "crush_instruction_sources")
+	require.Contains(t, string(encoded), "crush_work_checks")
 	require.Contains(t, string(encoded), "crush_questions")
 	require.Contains(t, string(encoded), "crush_secure_entry")
 	require.Equal(t, sa.tasks.env(sess.ID), probe.env)

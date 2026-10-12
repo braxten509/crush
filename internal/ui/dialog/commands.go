@@ -585,6 +585,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "update_clis", "Update Agent CLIs", "", ActionCheckCLIUpdates{}).WithAliases("upgrade", "version"),
 		NewCommandItem(c.com.Styles, "update_crush", "Update Crush", "", ActionSelfUpdate{}).WithAliases("upgrade", "upstream", "release"),
 		NewCommandItem(c.com.Styles, "skills", "Skills", "", ActionOpenDialog{SkillsID}).WithAliases("install skills", "enable skills", "disable skills"),
+		NewCommandItem(c.com.Styles, "kept_skills", "Skills for this chat", "", ActionOpenDialog{KeptSkillsID}).WithAliases("keep skills on", "remind skills every message", "bring skills back after compression"),
 	)
 
 	// Add transparent background toggle.

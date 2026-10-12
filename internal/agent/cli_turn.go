@@ -61,6 +61,17 @@ func cliPromptWithAttachments(prompt string, attachments []message.Attachment) (
 // native turn would (one step per model response), so messages, usage,
 // permissions and rendering work exactly as they do for API models.
 func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string, onCompacting func(bool) error, onActivity func() error) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
+	showCompacting := onCompacting
+	onCompacting = func(active bool) error {
+		if active {
+			// The CLI is about to forget details: resend kept skills in full.
+			forgetKeptSkillsSent(call.SessionID)
+		}
+		if showCompacting == nil {
+			return nil
+		}
+		return showCompacting(active)
+	}
 	return func(ctx context.Context, sc fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
 		link, err := a.treeCLILink(ctx, m, call.SessionID)
 		if err != nil {
@@ -76,6 +87,10 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		skillPolicy := currentNativeSkillPolicy(a.cfg)
 		if skillPolicy != "" {
 			text = skillPolicy + "\n\n" + text
+		}
+		turnedOff := func() []session.KeptSkill { return a.sessionTurnedOffSkills(ctx, call.SessionID) }
+		if kept := cliKeptSkillsText(call.SessionID, string(m.Kind), a.sessionKeptSkills(ctx, call.SessionID, true), turnedOff, resume == ""); kept != "" {
+			text = kept + "\n\n" + text
 		}
 		env := slices.Clone(m.Env)
 		var instructions, taskInstructionsHash string

@@ -2,6 +2,7 @@ package sessionhost
 
 import (
 	"image"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,7 +26,7 @@ func newTestHost(t *testing.T, width, height int, statuses ...Status) *Host {
 	h.width, h.height = width, height
 	for i, st := range statuses {
 		s := newSession(i+1, 10, 5, nil, nil)
-		s.status = st
+		s.status, s.reported = st, true
 		h.sessions = append(h.sessions, s)
 	}
 	h.nextID = len(statuses)
@@ -103,10 +104,9 @@ func TestRowAt(t *testing.T) {
 	require.False(t, h.rowAt(0, newSessionRow).newSession)
 	require.False(t, h.rowAt(newSessionColumn+len(newSessionLabel), newSessionRow).newSession, "the separator is not clickable")
 	require.False(t, h.rowAt(newTerminalEnd, newSessionRow).newTerminal)
-	require.False(t, h.rowAt(newSessionColumn, 2).newSession)
-	require.False(t, h.rowAt(2, 0).toggle)
-	require.False(t, h.rowAt(2, 0).newSession)
-	require.Equal(t, -1, h.rowAt(3, 1).session)
+	require.False(t, h.rowAt(newSessionColumn, 1).newSession)
+	require.False(t, h.rowAt(newSessionColumn, listFirstRow-1).newSession, "the group line is not clickable")
+	require.Equal(t, -1, h.rowAt(3, listFirstRow-1).session)
 
 	r := h.rowAt(5, listFirstRow)
 	require.Equal(t, 0, r.session)
@@ -293,7 +293,7 @@ func TestStripShowsOneMarkPerSession(t *testing.T) {
 			marks = append(marks, cell)
 		}
 	}
-	require.Equal(t, []string{"●", "!", "○"}, marks)
+	require.Equal(t, []string{h.activityMark(), "!", "○"}, marks)
 }
 
 func TestListShowsSessionDetails(t *testing.T) {
@@ -304,7 +304,7 @@ func TestListShowsSessionDetails(t *testing.T) {
 		Status{Title: "Notes", Dir: filepath.Join(home, "notes"), Model: "Opus · High", State: StateReady},
 	)
 	text := screenText(h)
-	for _, want := range []string{"Sessions [3]", "+ Session | + Terminal", "‹", "● Remote setup", "  crush", "! Inbox cleanup",
+	for _, want := range []string{"Sessions [3]", "+ Session | + Terminal", "‹", h.activityMark() + " Remote setup", "  crush", "! Inbox cleanup",
 		"○ Notes", "  notes"} {
 		require.Contains(t, text, want)
 	}
@@ -631,20 +631,136 @@ func TestSessionLearnsItsSizeInPixels(t *testing.T) {
 	require.Equal(t, "\x1b[4;180;360t", readInput(t, s))
 }
 
-func TestNewSessionPlusSharesTheHeadingColumn(t *testing.T) {
-	h := newTestHost(t, 120, 30, Status{Title: "One"})
+func TestNewSessionPlusSharesTheMarkColumn(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "One", State: StateReady})
 	scr := uv.NewScreenBuffer(120, 30)
 	h.drawList(scr, h.palette())
-	heading, plus := -1, -1
+	mark, plus := -1, -1
 	for x := 0; x < listWidth; x++ {
-		if c := scr.CellAt(x, 0); c != nil && c.Content == "S" {
-			heading = x
+		if c := scr.CellAt(x, listFirstRow); c != nil && c.Content == "○" {
+			mark = x
 		}
 		if c := scr.CellAt(x, newSessionRow); c != nil && c.Content == "+" && plus == -1 {
 			plus = x
 		}
 	}
-	require.NotEqual(t, -1, heading)
-	require.Equal(t, heading, plus)
+	require.NotEqual(t, -1, mark)
+	require.Equal(t, mark, plus)
 	require.True(t, h.rowAt(plus, newSessionRow).newSession, "the aligned icon remains clickable")
+}
+
+func TestListGroupsChatsAboveTerminals(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "Chat one"}, Status{Title: "Shell"})
+	h.sessions[1].kind = terminalSession
+	s := newSession(9, 10, 5, nil, nil)
+	s.status = Status{Title: "Chat two"}
+	h.addSession(s)
+	require.Equal(t, 1, h.active, "a chat opened after a terminal still goes above it")
+	var titles []string
+	for _, s := range h.sessions {
+		titles = append(titles, s.status.Title)
+	}
+	require.Equal(t, []string{"Chat one", "Chat two", "Shell"}, titles)
+
+	lines := strings.Split(screenText(h), "\n")
+	require.Contains(t, lines[newSessionRow], "+ Session | + Terminal")
+	require.Contains(t, lines[newSessionRow], "‹")
+	require.Contains(t, lines[listFirstRow-1], "─ Sessions [2] ─")
+	gap := listFirstRow + 2*listBlockHeight - 1
+	require.Contains(t, lines[gap], "─ Terminals [1] ─")
+	require.Equal(t, -1, h.rowAt(5, gap).session)
+	require.Equal(t, 2, h.rowAt(5, gap+1).session)
+	require.True(t, h.rowAt(toggleColumn, newSessionRow).toggle)
+	require.True(t, h.rowAt(newSessionColumn, newSessionRow).newSession)
+
+	press(h, "alt+s")
+	lines = strings.Split(screenText(h), "\n")
+	require.Contains(t, lines[stripFirstRow+2*stripBlockHeight-1], "─", "the folded list has a plain line")
+	require.NotContains(t, lines[stripFirstRow+stripBlockHeight-1], "─")
+
+	only := newTestHost(t, 120, 30, Status{Title: "Shell"})
+	only.sessions[0].kind = terminalSession
+	text := screenText(only)
+	require.Contains(t, text, "Terminals [1]")
+	require.NotContains(t, text, "Sessions [", "an empty group hides its line")
+}
+
+func TestStartingChatKeepsTheCurrentTheme(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "One", Theme: "graphite"})
+	require.Equal(t, "graphite", h.theme)
+	s := newSession(9, 10, 5, nil, nil)
+	t.Cleanup(func() { _ = s.emu.Close() })
+	go func() { _, _ = io.Copy(io.Discard, s.emu) }()
+	h.addSession(s)
+	require.Equal(t, s, h.current())
+	require.Equal(t, "graphite", h.theme, "a chat that hasn't reported yet keeps the theme")
+
+	_, err := s.emu.Write([]byte(Status{Title: "Two"}.Sequence()))
+	require.NoError(t, err)
+	h.Update(statusMsg{id: s.id})
+	require.Empty(t, h.theme, "its own theme applies once it reports")
+}
+
+func TestTabsMoveWithinTheirGroup(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "A"}, Status{Title: "B"}, Status{Title: "C"}, Status{Title: "T"})
+	h.sessions[3].kind = terminalSession
+	order := func() string {
+		var titles []string
+		for _, s := range h.sessions {
+			titles = append(titles, s.status.Title)
+		}
+		return strings.Join(titles, "")
+	}
+	down := tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModAlt | tea.ModShift}
+	up := tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt | tea.ModShift}
+
+	h.show(0)
+	h.Update(down)
+	require.Equal(t, "BACT", order())
+	require.Equal(t, "A", h.current().status.Title, "the moved tab stays open")
+	h.Update(down)
+	h.Update(down)
+	require.Equal(t, "BCAT", order(), "a chat stops above the terminals")
+	press(h, "alt+1")
+	require.Equal(t, "B", h.current().status.Title, "Alt+number follows the new order")
+	h.show(3)
+	h.Update(up)
+	require.Equal(t, "BCAT", order(), "a terminal stays among terminals")
+
+	// Drag C, the second row, to the top: it slides along as the mouse moves.
+	row := func(i int) int { return listFirstRow + i*listBlockHeight }
+	h.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 5, Y: row(1)})
+	require.Equal(t, "C", h.current().status.Title)
+	h.Update(tea.MouseMotionMsg{Button: tea.MouseLeft, X: 5, Y: row(0)})
+	require.Equal(t, "CBAT", order())
+	h.Update(tea.MouseMotionMsg{Button: tea.MouseLeft, X: 5, Y: row(3)})
+	require.Equal(t, "BACT", order(), "dragging past the group's end stops at it")
+	h.Update(tea.MouseMotionMsg{Button: tea.MouseLeft, X: listWidth + 20, Y: row(1)})
+	require.Equal(t, "BCAT", order(), "the drag keeps going outside the list")
+	h.Update(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: 5, Y: row(1)})
+	h.Update(tea.MouseMotionMsg{X: 5, Y: row(0)})
+	require.Equal(t, "BCAT", order(), "letting go ends the drag")
+
+	h.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 5, Y: row(2)})
+	h.Update(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: 5, Y: row(2)})
+	require.Equal(t, "BCAT", order(), "a click only opens the tab")
+	require.Equal(t, "A", h.current().status.Title)
+}
+
+func TestCollapseButtonIsTripleArrow(t *testing.T) {
+	h := newTestHost(t, 120, 30, Status{Title: "One"})
+	line := strings.Split(screenText(h), "\n")[newSessionRow]
+	at := strings.Index(line, "‹‹‹")
+	require.NotEqual(t, -1, at)
+	col := ansi.StringWidth(line[:at])
+	require.Equal(t, toggleColumn, col)
+	for x := col; x < col+3; x++ {
+		require.True(t, h.rowAt(x, newSessionRow).toggle)
+	}
+	require.False(t, h.rowAt(newTerminalEnd-1, newSessionRow).toggle, "+ Terminal stays clickable")
+	scr := uv.NewScreenBuffer(120, 30)
+	h.drawList(scr, h.palette())
+	for x := col; x < col+3; x++ {
+		require.NotZero(t, scr.CellAt(x, newSessionRow).Style.Attrs&uv.AttrBold, "the arrows are bold")
+	}
 }

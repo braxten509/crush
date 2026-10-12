@@ -129,6 +129,9 @@ type Workspace interface {
 	// mode it informs the server's per-client presence map so other
 	// observers can compute attached-client counts per session.
 	SetCurrentSession(ctx context.Context, sessionID string) error
+	// SetKeptSkill turns a skill on or off for a whole session: while on,
+	// every turn reminds the agent of it.
+	SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error)
 
 	// Messages
 	ListMessages(ctx context.Context, sessionID string) ([]message.Message, error)

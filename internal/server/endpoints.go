@@ -395,6 +395,16 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionPromptClear),
 
+		apigen.Post("/v1/workspaces/{id}/sessions/{sid}/kept-skills").
+			Summary("Turn a skill on or off for a whole session").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Accepts(proto.SetKeptSkillRequest{}).
+			Responds(proto.Session{}).
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspaceSessionKeptSkill),
+
 		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/interrupt").
 			Summary("Interrupt the active run and send the next queued prompt").
 			Tags("agent").

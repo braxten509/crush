@@ -445,3 +445,24 @@ func (c *Client) GetMCPPrompt(ctx context.Context, id, clientID, promptID string
 	}
 	return result.Prompt, nil
 }
+
+// SetKeptSkill turns a skill on or off for a whole session.
+func (c *Client) SetKeptSkill(ctx context.Context, id, sessionID string, skill proto.KeptSkill, on bool) (*proto.Session, error) {
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/sessions/%s/kept-skills", id, sessionID), nil, jsonBody(proto.SetKeptSkillRequest{
+		ID:   skill.ID,
+		Name: skill.Name,
+		On:   on,
+	}), http.Header{"Content-Type": []string{"application/json"}})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set kept skill: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to set kept skill: status code %d", rsp.StatusCode)
+	}
+	var sess proto.Session
+	if err := json.NewDecoder(rsp.Body).Decode(&sess); err != nil {
+		return nil, fmt.Errorf("failed to decode session: %w", err)
+	}
+	return &sess, nil
+}

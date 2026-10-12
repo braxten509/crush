@@ -410,6 +410,9 @@ type UI struct {
 	// Attachment list
 	attachments *attachments.Attachments
 	imagePress  *imagePress
+	// pendingKeptSkills are skills turned on before the chat exists. They
+	// are saved to the chat when the first message creates it.
+	pendingKeptSkills []session.KeptSkill
 
 	readyPlaceholder   string
 	workingPlaceholder string
@@ -708,6 +711,8 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	ui.isTransparent = opts.TUI.IsTransparent()
 	// enable mouse support (default on)
 	ui.mouseEnabled = opts.TUI.Mouse == nil || *opts.TUI.Mouse
+
+	ui.attachments.SetKeptSource(ui.keptSkillChips)
 
 	return ui
 }
@@ -1193,6 +1198,23 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
 
+	case keptSkillsListMsg:
+		if msg.err != nil {
+			cmds = append(cmds, util.ReportError(msg.err))
+			break
+		}
+		if !m.dialog.ContainsDialog(dialog.KeptSkillsID) {
+			m.dialog.OpenDialog(dialog.NewKeptSkills(m.com, m.keptSkillItems(msg.entries)))
+		}
+	case keptSkillsChangedMsg:
+		if msg.err != nil {
+			cmds = append(cmds, util.ReportError(msg.err))
+			break
+		}
+		if m.session != nil && m.session.ID == msg.session.ID {
+			m.session.KeptSkills = msg.session.KeptSkills
+			m.invalidateFrames()
+		}
 	case userCommandsLoadedMsg:
 		m.customCommands = msg.Commands
 		dia := m.dialog.Dialog(dialog.CommandsID)
@@ -1471,9 +1493,10 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Check if the click landed on an attachment's remove button.
 		// The attachment chips sit right above the composer band.
-		if m.activeInline == nil && msg.Button == uv.MouseLeft && len(m.attachments.List()) > 0 && msg.Y == m.layout.editor.Min.Y+editorAttachmentsRow {
+		if m.activeInline == nil && msg.Button == uv.MouseLeft && m.attachments.Count() > 0 && msg.Y == m.layout.editor.Min.Y+editorAttachmentsRow {
 			relX := msg.X - m.layout.editor.Min.X
 			if m.attachments.HandleClick(relX) {
+				cmds = append(cmds, m.turnOffRemovedKeptSkills())
 				return m, tea.Batch(cmds...)
 			}
 			if attachment := m.attachments.Renderer().ImageAt(relX); attachment != nil {
@@ -1926,6 +1949,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// at this point this can only handle [message.Attachment] message, and we
 	// should return all cmds anyway.
 	if m.attachments.Update(msg) {
+		cmds = append(cmds, m.turnOffRemovedKeptSkills())
 		m.invalidateFrames()
 	}
 	// Any update may have put a spinner on screen (new message, tool update,
@@ -2916,6 +2940,8 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionAttachSkill:
 		m.dialog.CloseFrontDialog()
 		cmds = append(cmds, m.attachSkill(msg.ID, msg.Name))
+	case dialog.ActionToggleKeptSkill:
+		cmds = append(cmds, m.setKeptSkill(session.KeptSkill{ID: msg.ID, Name: msg.Name}, msg.On))
 	case dialog.ActionRunMCPPrompt:
 		if len(msg.Arguments) > 0 && msg.Args == nil {
 			m.dialog.CloseFrontDialog()
@@ -3569,6 +3595,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			}
 
 			if ok := m.attachments.Update(msg); ok {
+				cmds = append(cmds, m.turnOffRemovedKeptSkills())
 				return tea.Batch(cmds...)
 			}
 
@@ -4344,7 +4371,7 @@ func (m *UI) FullHelp() [][]key.Binding {
 	k := &m.keyMap
 	help := k.Help
 	help.SetHelp("ctrl+g", "less")
-	hasAttachments := len(m.attachments.List()) > 0
+	hasAttachments := m.attachments.Count() > 0
 	hasSession := m.hasSession()
 	commands := k.Commands
 	if m.focus == uiFocusEditor && m.textarea.Value() == "" {
@@ -5449,7 +5476,7 @@ func (m *UI) randomizePlaceholders() {
 // status line. Every band row is filled to the text's full width.
 func (m *UI) renderEditorView(width int) string {
 	var attachmentsView string
-	if len(m.attachments.List()) > 0 {
+	if m.attachments.Count() > 0 {
 		attachmentsView = m.attachments.Render(width)
 	}
 	rows := strings.Split(m.textarea.View(), "\n")
@@ -5566,6 +5593,99 @@ func (m *UI) attachSkill(skillID, name string) tea.Cmd {
 	}
 }
 
+// keptSkillsChangedMsg carries the chat after a kept skill was turned on
+// or off.
+type keptSkillsChangedMsg struct {
+	session session.Session
+	err     error
+}
+
+// keptSkills is the chat's kept skills, or the pending ones before the chat
+// exists.
+func (m *UI) keptSkills() []session.KeptSkill {
+	if m.hasSession() {
+		return m.session.KeptSkills
+	}
+	return m.pendingKeptSkills
+}
+
+// keptSkillChips lists the kept skills for the attachment row.
+func (m *UI) keptSkillChips() []attachments.Kept {
+	kept := m.keptSkills()
+	chips := make([]attachments.Kept, 0, len(kept))
+	for _, skill := range kept {
+		chips = append(chips, attachments.Kept{ID: skill.ID, Name: skill.Name})
+	}
+	return chips
+}
+
+// keptSkillsListMsg carries the skill list for the "Skills for this chat"
+// dialog.
+type keptSkillsListMsg struct {
+	entries []skills.CatalogEntry
+	err     error
+}
+
+// openKeptSkillsDialog loads the skills off the UI goroutine, then opens the
+// "Skills for this chat" dialog.
+func (m *UI) openKeptSkillsDialog() tea.Cmd {
+	if m.dialog.ContainsDialog(dialog.KeptSkillsID) {
+		m.dialog.BringToFront(dialog.KeptSkillsID)
+		return nil
+	}
+	ws := m.com.Workspace
+	return func() tea.Msg {
+		entries, err := ws.ListSkills(context.Background())
+		return keptSkillsListMsg{entries: entries, err: err}
+	}
+}
+
+// keptSkillItems lists every skill, sorted by name, marking the ones that
+// are on for this chat.
+func (m *UI) keptSkillItems(entries []skills.CatalogEntry) []dialog.KeptSkillItem {
+	on := make(map[string]bool)
+	for _, kept := range m.keptSkills() {
+		on[kept.ID] = true
+	}
+	items := make([]dialog.KeptSkillItem, 0, len(entries))
+	for _, entry := range entries {
+		items = append(items, dialog.KeptSkillItem{ID: entry.ID, Name: entry.Name, On: on[entry.ID]})
+	}
+	slices.SortStableFunc(items, func(a, b dialog.KeptSkillItem) int {
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+	return items
+}
+
+func (m *UI) setKeptSkill(skill session.KeptSkill, on bool) tea.Cmd {
+	m.invalidateFrames()
+	if !m.hasSession() {
+		m.pendingKeptSkills = slices.DeleteFunc(m.pendingKeptSkills, func(k session.KeptSkill) bool { return k.ID == skill.ID })
+		if on {
+			m.pendingKeptSkills = append(m.pendingKeptSkills, skill)
+		}
+		return nil
+	}
+	ws, sessionID := m.com.Workspace, m.session.ID
+	return func() tea.Msg {
+		sess, err := ws.SetKeptSkill(context.Background(), sessionID, skill, on)
+		return keptSkillsChangedMsg{session: sess, err: err}
+	}
+}
+
+// turnOffRemovedKeptSkills turns off the kept skills whose chips the user
+// removed.
+func (m *UI) turnOffRemovedKeptSkills() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, id := range m.attachments.TakeRemovedKept() {
+		if dia, ok := m.dialog.Dialog(dialog.KeptSkillsID).(*dialog.KeptSkills); ok {
+			dia.SetOn(id, false)
+		}
+		cmds = append(cmds, m.setKeptSkill(session.KeptSkill{ID: id}, false))
+	}
+	return tea.Batch(cmds...)
+}
+
 // openThemeNewDialog opens the new theme naming dialog. The new theme
 // inherits its palette from the currently active theme.
 func (m *UI) openThemeNewDialog() {
@@ -5646,10 +5766,15 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 
 	var cmds []tea.Cmd
 	priorSessionID := m.currentSessionID()
+	var pendingKept []session.KeptSkill
+	if !m.hasSession() {
+		pendingKept = m.pendingKeptSkills
+	}
 	loadCmd, err := m.ensureSession()
 	if err != nil {
 		return util.ReportError(err)
 	}
+	m.pendingKeptSkills = nil
 	if loadCmd != nil {
 		cmds = append(cmds, loadCmd)
 	}
@@ -5699,6 +5824,13 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 		// through SSE-derived events, not this return value.
 		if err := runCtx.Err(); err != nil {
 			return agentRunSubmittedMsg{submissionID: submissionID, dispatchID: dispatchID, err: err}
+		}
+		// Save skills turned on before the chat existed first, so the
+		// first turn already follows them.
+		for _, skill := range pendingKept {
+			if _, err := ws.SetKeptSkill(runCtx, sessionID, skill, true); err != nil {
+				slog.Warn("Failed to keep skill on for new chat", "skill", skill.Name, "error", err)
+			}
 		}
 		err := ws.AgentRun(runCtx, sessionID, content, attachments...)
 		return agentRunSubmittedMsg{submissionID: submissionID, dispatchID: dispatchID, err: err}
@@ -6086,6 +6218,10 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		m.dialog.OpenDialog(projectsDialog)
 	case dialog.MCPTogglesID:
 		if cmd := m.openMCPTogglesDialog(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case dialog.KeptSkillsID:
+		if cmd := m.openKeptSkillsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case dialog.FilePickerID:

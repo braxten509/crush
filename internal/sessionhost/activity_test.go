@@ -1,11 +1,12 @@
 package sessionhost
 
 import (
-	"image/color"
+	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +18,7 @@ func TestBackgroundWaitDoesNotLookFinished(t *testing.T) {
 		h.statusChanged(other.id)
 		require.False(t, other.unread, "unfinished background work must not show the completion check")
 		mark, c := h.sessionState(other, h.palette())
-		require.Equal(t, "●", mark)
+		require.Contains(t, spinnerFrames[:], mark)
 		if state == StateBackground {
 			require.Equal(t, h.palette().muted, c)
 		}
@@ -30,7 +31,7 @@ func TestBackgroundWaitDoesNotLookFinished(t *testing.T) {
 	require.Contains(t, screenText(h), "○ Other")
 }
 
-func TestActivityPulseKeepsDotsAndTextInPlace(t *testing.T) {
+func TestActivitySpinnerKeepsColorsAndTextInPlace(t *testing.T) {
 	for _, width := range []int{120, 60} {
 		h := newTestHost(t, width, 30,
 			Status{Title: "Working", State: StateWorking},
@@ -38,25 +39,33 @@ func TestActivityPulseKeepsDotsAndTextInPlace(t *testing.T) {
 			Status{Title: "Ready", State: StateReady},
 		)
 		h.applyTheme("graphite")
-		text := screenText(h)
-		colors := map[color.RGBA]bool{}
-		backgroundColors := map[color.RGBA]bool{}
-		_, firstColor := h.sessionState(h.sessions[0], h.palette())
+		columns := func() []int {
+			var at []int
+			for _, line := range strings.Split(screenText(h), "\n") {
+				for _, title := range []string{"Working", "Background", "Ready"} {
+					if i := strings.Index(line, title); i >= 0 {
+						at = append(at, ansi.StringWidth(line[:i]))
+					}
+				}
+			}
+			return at
+		}
+		before := columns()
+		seen := map[string]bool{}
 		for frame := 1; frame <= activityFrames; frame++ {
 			_, cmd := h.Update(activityTickMsg{time.Unix(0, int64(frame)*int64(activityInterval))})
 			require.NotNil(t, cmd)
 			mark, c := h.sessionState(h.sessions[0], h.palette())
-			require.Equal(t, "●", mark)
-			colors[color.RGBAModel.Convert(c).(color.RGBA)] = true
-			mark, c = h.sessionState(h.sessions[1], h.palette())
-			require.Equal(t, "●", mark)
-			backgroundColors[color.RGBAModel.Convert(c).(color.RGBA)] = true
-			require.Equal(t, text, screenText(h), "only the activity dot colors may change")
+			require.Equal(t, h.palette().working, c, "the spinner keeps full color")
+			seen[mark] = true
+			background, c := h.sessionState(h.sessions[1], h.palette())
+			require.Equal(t, mark, background, "every spinner turns together")
+			require.Equal(t, h.palette().muted, c)
+			ready, _ := h.sessionState(h.sessions[2], h.palette())
+			require.Equal(t, "○", ready)
+			require.Equal(t, before, columns(), "titles never move")
 		}
-		require.Greater(t, len(colors), 2, "working must visibly pulse, not just blink on and off")
-		require.Greater(t, len(backgroundColors), 2, "background work must pulse too")
-		_, lastColor := h.sessionState(h.sessions[0], h.palette())
-		require.Equal(t, firstColor, lastColor, "the pulse loops without a jump")
+		require.Len(t, seen, activityFrames, "the spinner shows every frame")
 	}
 }
 
@@ -96,26 +105,20 @@ func TestActivityClockRunsOnlyForVisibleWorkingSessions(t *testing.T) {
 	require.Nil(t, cmd, "a closing session must not keep animating")
 }
 
-func TestActivityDotsJoinTheSamePulse(t *testing.T) {
+func TestActivitySpinnersJoinTheSameFrame(t *testing.T) {
 	h := newTestHost(t, 120, 30,
 		Status{State: StateWorking},
 		Status{State: StateReady},
 	)
-	h.applyTheme("graphite")
 	for frame := 1; frame <= activityFrames/2; frame++ {
 		h.Update(activityTickMsg{time.Unix(0, int64(frame)*int64(activityInterval))})
 	}
 	h.sessions[1].status.State = StateBackground
 	h.Update(statusMsg{id: 2})
-	_, joinedColor := h.sessionState(h.sessions[1], h.palette())
-	require.NotEqual(t, h.palette().muted, joinedColor, "a later dot joins at the current dim phase")
-	for frame := activityFrames/2 + 1; frame <= activityFrames; frame++ {
-		h.Update(activityTickMsg{time.Unix(0, int64(frame)*int64(activityInterval))})
-	}
-	_, workingColor := h.sessionState(h.sessions[0], h.palette())
-	_, backgroundColor := h.sessionState(h.sessions[1], h.palette())
-	require.Equal(t, h.palette().working, workingColor)
-	require.Equal(t, h.palette().muted, backgroundColor, "both reach full brightness on the same frame")
+	working, _ := h.sessionState(h.sessions[0], h.palette())
+	joined, _ := h.sessionState(h.sessions[1], h.palette())
+	require.Equal(t, working, joined, "a later spinner joins at the current frame")
+	require.NotEqual(t, spinnerFrames[0], joined)
 }
 
 func TestActivityClockMatchesAcrossWindows(t *testing.T) {

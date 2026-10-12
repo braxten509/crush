@@ -98,7 +98,10 @@ type Host struct {
 	// capture: a mouse button went down over the session, so its motion
 	// and release go there even when the pointer leaves it.
 	capture bool
-	notice  string // why a new session couldn't start
+	// dragging: the shown tab was pressed in the list and moves with the
+	// mouse until the button is let go.
+	dragging bool
+	notice   string // why a new session couldn't start
 	// blurred: the real terminal window lost focus.
 	blurred bool
 	// startErr is why the first session couldn't start.
@@ -197,7 +200,7 @@ func (h *Host) update(msg tea.Msg) tea.Cmd {
 			s.emu.Paste(msg.Content)
 		}
 	case tea.MouseMsg:
-		h.handleMouse(msg)
+		return h.handleMouse(msg)
 	case clipboardMsg:
 		return tea.SetClipboard(msg.text)
 	case picturesMsg:
@@ -254,9 +257,21 @@ func (h *Host) startSession(dir string, args []string) error {
 	if err != nil {
 		return err
 	}
-	h.sessions = append(h.sessions, s)
-	h.show(len(h.sessions) - 1)
+	h.addSession(s)
 	return nil
+}
+
+// addSession lists s and shows it. Chats go after the other chats, above
+// the terminals.
+func (h *Host) addSession(s *session) {
+	i := len(h.sessions)
+	if s.kind == chatSession {
+		for i > 0 && h.sessions[i-1].kind == terminalSession {
+			i--
+		}
+	}
+	h.sessions = slices.Insert(h.sessions, i, s)
+	h.show(i)
 }
 
 // openPicker opens the new-session box at the folder of the session being
@@ -335,7 +350,11 @@ func (h *Host) show(i int) {
 	s.refreshScrollback()
 	if s.kind == chatSession {
 		h.appearanceSource = s.id
-		h.applyAppearance(s.snapshot())
+		// A chat that is still starting keeps the current theme until it
+		// reports its own, rather than showing the default for a moment.
+		if st, ok := s.reportedStatus(); ok {
+			h.applyAppearance(st)
+		}
 	}
 }
 
@@ -506,6 +525,12 @@ func (h *Host) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "alt+w":
 		h.askClose(h.active)
 		return nil
+	case "alt+shift+up":
+		h.moveActive(h.active - 1)
+		return nil
+	case "alt+shift+down":
+		h.moveActive(h.active + 1)
+		return nil
 	case "alt+1", "alt+2", "alt+3", "alt+4", "alt+5", "alt+6", "alt+7", "alt+8", "alt+9":
 		n, _ := strconv.Atoi(key[len("alt+"):])
 		h.show(n - 1)
@@ -515,6 +540,7 @@ func (h *Host) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if s.terminalKey(msg) {
 			return nil
 		}
+		s.clearSelection()
 		s.scrollOffset = 0
 		if text, key := sessionInput(msg); text != "" {
 			s.emu.SendText(text)
@@ -586,27 +612,41 @@ func sessionInput(msg tea.KeyPressMsg) (string, uv.KeyPressEvent) {
 	return "", key
 }
 
-func (h *Host) handleMouse(msg tea.MouseMsg) {
+func (h *Host) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	m := msg.Mouse()
 	side := h.sideWidth()
 	if h.confirm != nil {
 		if click, ok := msg.(tea.MouseClickMsg); ok && click.Button == tea.MouseLeft {
 			h.clickConfirm(m.X, m.Y)
 		}
-		return
+		return nil
 	}
 	if h.picker != nil {
 		if click, ok := msg.(tea.MouseClickMsg); ok && click.Button == tea.MouseLeft {
 			h.clickPicker(m.X, m.Y)
 		}
-		return
+		return nil
+	}
+	if h.dragging {
+		switch msg.(type) {
+		case tea.MouseMotionMsg:
+			if m.Button == tea.MouseLeft {
+				h.dragTo(m.Y)
+				return nil
+			}
+			h.dragging = false
+		case tea.MouseReleaseMsg:
+			h.dragging = false
+			return nil
+		default:
+			h.dragging = false
+		}
 	}
 	if _, ok := msg.(tea.MouseClickMsg); ok && (m.X >= side || h.rowAt(m.X, m.Y).server == 0) {
 		h.pickedServer = 0
 	}
 	if m.X >= side || h.capture {
-		h.forwardMouse(msg, side)
-		return
+		return h.forwardMouse(msg, side)
 	}
 	switch msg := msg.(type) {
 	case tea.MouseMotionMsg:
@@ -619,20 +659,26 @@ func (h *Host) handleMouse(msg tea.MouseMsg) {
 		// The list has no scrolling of its own; the shown session is kept
 		// in view instead.
 	}
+	return nil
 }
 
 // forwardMouse passes a mouse event over the session on to it, moved into
 // its own coordinates.
-func (h *Host) forwardMouse(msg tea.MouseMsg, side int) {
+func (h *Host) forwardMouse(msg tea.MouseMsg, side int) tea.Cmd {
 	s := h.current()
 	if s == nil {
-		return
+		return nil
 	}
 	m := uv.Mouse(msg.Mouse())
 	m.X = max(m.X-side, 0)
 	h.hover = -1
 	if s.terminalMouse(msg) {
-		return
+		return nil
+	}
+	if cmd, ok := s.terminalSelect(msg, m.X, m.Y); ok {
+		_, released := msg.(tea.MouseReleaseMsg)
+		h.capture = !released
+		return cmd
 	}
 	switch msg.(type) {
 	case tea.MouseClickMsg:
@@ -648,6 +694,7 @@ func (h *Host) forwardMouse(msg tea.MouseMsg, side int) {
 	case tea.MouseWheelMsg:
 		s.emu.SendMouse(uv.MouseWheelEvent(m))
 	}
+	return nil
 }
 
 func (h *Host) clickSide(x, y int) {
@@ -673,5 +720,46 @@ func (h *Host) clickSide(x, y int) {
 		h.askClose(r.session)
 	case r.session >= 0:
 		h.show(r.session)
+		h.dragging = true
 	}
+}
+
+// dragTo moves the shown tab to the list row at y, inside its group.
+func (h *Host) dragTo(y int) {
+	block := stripBlockHeight
+	if h.listOpen() {
+		block = listBlockHeight
+	}
+	first, _ := h.visibleRange(block)
+	to := first - 1
+	if y >= h.firstRow() {
+		to = first + (y-h.firstRow())/block
+	}
+	h.moveActive(to)
+}
+
+// moveActive moves the shown tab to place to, kept inside its group:
+// chats come first, then terminals.
+func (h *Host) moveActive(to int) {
+	s := h.current()
+	if s == nil {
+		return
+	}
+	chats := 0
+	for _, other := range h.sessions {
+		if other.kind == chatSession {
+			chats++
+		}
+	}
+	first, last := 0, chats-1
+	if s.kind == terminalSession {
+		first, last = chats, len(h.sessions)-1
+	}
+	to = min(max(to, first), last)
+	if to == h.active {
+		return
+	}
+	h.sessions = slices.Insert(slices.Delete(h.sessions, h.active, h.active+1), to, s)
+	h.active = to
+	h.hover = -1
 }

@@ -1,22 +1,23 @@
 package sessionhost
 
 import (
-	"image/color"
-	"math"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
 
+// spinnerFrames is the mark of a busy chat, one frame per tick.
+var spinnerFrames = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 const (
 	activityInterval = 100 * time.Millisecond
-	activityFrames   = 16
+	activityFrames   = len(spinnerFrames)
 )
 
 type activityTickMsg struct{ time.Time }
 
-// tickActivity keeps all glowing dots on the same wall-clock rhythm,
-// including dots that start later or belong to another Crush window.
+// tickActivity keeps all spinners on the same wall-clock rhythm,
+// including ones that start later or belong to another Crush window.
 func (h *Host) tickActivity() tea.Cmd {
 	return h.tickActivityAt(time.Now())
 }
@@ -51,17 +52,8 @@ func (h *Host) hasVisibleActivity() bool {
 	return false
 }
 
-// activityColor gives both working colors the same brightness curve.
-// The filled circles never disappear or shift the titles.
-func (h *Host) activityColor(foreground, background color.Color) color.Color {
-	if h.activityFrame == 0 {
-		return foreground
-	}
-	amount := 0.85 + 0.15*math.Cos(2*math.Pi*float64(h.activityFrame)/activityFrames)
-	r, g, b, _ := foreground.RGBA()
-	br, bg, bb, _ := background.RGBA()
-	blend := func(fg, bg uint32) uint8 {
-		return uint8(math.Round((float64(bg) + (float64(fg)-float64(bg))*amount) / 257))
-	}
-	return color.RGBA{R: blend(r, br), G: blend(g, bg), B: blend(b, bb), A: 255}
+// activityMark is the spinner frame every busy chat shows now. It is one
+// cell wide like the other marks, so titles never shift.
+func (h *Host) activityMark() string {
+	return spinnerFrames[h.activityFrame%activityFrames]
 }

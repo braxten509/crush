@@ -216,6 +216,7 @@ func sessionToProto(s session.Session) proto.Session {
 		Cost:             s.Cost,
 		Todos:            todosToProto(s.Todos),
 		Channel:          s.Channel,
+		KeptSkills:       keptSkillsToProto(s.KeptSkills),
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
 	}
@@ -394,6 +395,17 @@ func questionsToProto(qs []question.Question) []proto.QuestionItem {
 			Description: q.Description,
 			Choices:     choices,
 		}
+	}
+	return out
+}
+
+func keptSkillsToProto(kept []session.KeptSkill) []proto.KeptSkill {
+	if len(kept) == 0 {
+		return nil
+	}
+	out := make([]proto.KeptSkill, len(kept))
+	for i, skill := range kept {
+		out[i] = proto.KeptSkill{ID: skill.ID, Name: skill.Name}
 	}
 	return out
 }

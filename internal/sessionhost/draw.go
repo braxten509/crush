@@ -15,9 +15,10 @@ import (
 	"github.com/charmbracelet/x/vt"
 )
 
-// The list's rows: a header with ‹, session actions, a blank row, then one
-// block per session (two lines and a gap); at the bottom, a notice row and
-// the servers. The strip has ›, a blank row, + and >_, a blank row, then two
+// The list's rows: session actions with ‹, a blank row, the first group's
+// line, then one block per session (two lines and a gap; a new group's line
+// takes the gap before it); at the bottom, a notice row and the servers.
+// Chats come before terminals. The strip has ›, a blank row, + and >_, a blank row, then two
 // lines and a gap per session.
 const (
 	listFirstRow     = 3
@@ -32,15 +33,16 @@ const (
 	sideFooterRows = 3
 )
 
-// The new-session button and header's ‹ in the open list.
+// The open list's top row: new-session buttons, and ‹‹‹ to fold the list.
 const (
 	newSessionColumn  = 1
-	newSessionRow     = 1
+	newSessionRow     = 0
 	newSessionLabel   = "+ Session"
 	newTerminalLabel  = "+ Terminal"
+	collapseLabel     = "‹‹‹"
 	newTerminalColumn = newSessionColumn + len(newSessionLabel) + len(" | ")
 	newTerminalEnd    = newTerminalColumn + len(newTerminalLabel)
-	toggleColumn      = listWidth - 3
+	toggleColumn      = listWidth - 5 // where ‹‹‹ starts
 )
 
 // sideRow is what a spot in the list or strip does when clicked.
@@ -115,8 +117,8 @@ func (h *Host) rowAt(x, y int) sideRow {
 	switch {
 	case !open && y == stripTerminalRow:
 		r.newTerminal = x >= 1 && x < h.sideWidth()-1
-	case open && y == 0:
-		r.toggle = x >= toggleColumn-1
+	case open && y == newSessionRow && x >= toggleColumn-1:
+		r.toggle = true
 	case open && y == newSessionRow:
 		r.newSession = x >= newSessionColumn && x < newTerminalColumn-len(" | ")
 		r.newTerminal = x >= newTerminalColumn && x < newTerminalEnd
@@ -169,6 +171,7 @@ func (h *Host) View() tea.View {
 	if s != nil {
 		if s.kind == terminalSession {
 			s.emu.DrawViewport(canvas, area, s.scrollOffset)
+			h.drawSelection(canvas, area, s)
 		} else {
 			s.emu.Draw(canvas, area)
 		}
@@ -189,6 +192,37 @@ func (h *Host) View() tea.View {
 	}
 	v.Content = strings.ReplaceAll(canvas.Render(), "\r\n", "\n")
 	return v
+}
+
+// drawSelection colors the marked text of terminal s, drawn in area.
+func (h *Host) drawSelection(scr uv.Screen, area image.Rectangle, s *session) {
+	start, end, ok := s.selection()
+	if !ok {
+		return
+	}
+	fg, bg := h.styles.TextSelection.GetForeground(), h.styles.TextSelection.GetBackground()
+	for y := range min(s.emu.Height(), area.Dy()) {
+		line := s.textAt(0, y).line
+		if line < start.line || line > end.line {
+			continue
+		}
+		first, last := 0, s.emu.Width()-1
+		if line == start.line {
+			first = start.col
+		}
+		if line == end.line {
+			last = end.col
+		}
+		for x := first; x <= min(last, area.Dx()-1); x++ {
+			cell := scr.CellAt(area.Min.X+x, area.Min.Y+y)
+			if cell == nil {
+				continue
+			}
+			cell = cell.Clone()
+			cell.Style.Fg, cell.Style.Bg = fg, bg
+			scr.SetCell(area.Min.X+x, area.Min.Y+y, cell)
+		}
+	}
 }
 
 func cursorShape(s vt.CursorStyle) tea.CursorShape {
@@ -239,9 +273,9 @@ func (h *Host) sessionState(s *session, p palette) (mark string, c color.Color) 
 	case st.State == StateWaiting:
 		return "!", p.waiting
 	case st.State == StateWorking:
-		return "●", h.activityColor(p.working, p.bg)
+		return h.activityMark(), p.working
 	case st.State == StateBackground:
-		return "●", h.activityColor(p.muted, p.bg)
+		return h.activityMark(), p.muted
 	case s.unread:
 		return "✓", p.accent
 	case st.State == StateReady:
@@ -253,20 +287,21 @@ func (h *Host) sessionState(s *session, p palette) (mark string, c color.Color) 
 func (h *Host) drawList(scr uv.Screen, p palette) {
 	inner := listWidth - 1
 	base := lipgloss.NewStyle().Background(p.bg)
-	text := base.Foreground(p.text)
 	muted := base.Foreground(p.muted)
 	accent := base.Foreground(p.accent)
 
-	header := spread(base, text.Bold(true).Render(" Sessions")+muted.Render(" ["+strconv.Itoa(len(h.sessions))+"]"),
-		accent.Render("‹")+base.Render(" "), inner)
-	draw(scr, 0, 0, inner, header)
-	controls := accent.Render(newSessionLabel) + muted.Render(" | ") + accent.Render(newTerminalLabel)
-	draw(scr, newSessionColumn, newSessionRow, inner-newSessionColumn, controls)
+	controls := base.Render(strings.Repeat(" ", newSessionColumn)) + accent.Bold(true).Render(newSessionLabel) +
+		muted.Render(" | ") + accent.Bold(true).Render(newTerminalLabel)
+	draw(scr, 0, newSessionRow, inner, spread(base, controls, accent.Bold(true).Render(collapseLabel)+base.Render(" "), inner))
 
 	first, count := h.visibleRange(listBlockHeight)
 	for k := range count {
 		i := first + k
-		h.drawListBlock(scr, i, listFirstRow+k*listBlockHeight, inner, p)
+		y := listFirstRow + k*listBlockHeight
+		if h.groupStarts(i, first) {
+			h.drawGroupLine(scr, y-1, inner, h.sessions[i].kind, p)
+		}
+		h.drawListBlock(scr, i, y, inner, p)
 	}
 
 	shown, top := h.shownServers()
@@ -335,6 +370,33 @@ func (h *Host) drawListBlock(scr uv.Screen, i, y, width int, p palette) {
 	}
 }
 
+// groupStarts reports whether session i, shown after first, starts its
+// group's part of the list and so gets the group's line above it.
+func (h *Host) groupStarts(i, first int) bool {
+	return i == first || h.sessions[i].kind != h.sessions[i-1].kind
+}
+
+// drawGroupLine draws the colored line that names the group of kind, with
+// how many sessions it has.
+func (h *Host) drawGroupLine(scr uv.Screen, y, width int, kind sessionKind, p palette) {
+	name, n := "Sessions", 0
+	if kind == terminalSession {
+		name = "Terminals"
+	}
+	for _, s := range h.sessions {
+		if s.kind == kind {
+			n++
+		}
+	}
+	base := lipgloss.NewStyle().Background(p.bg)
+	accent := base.Foreground(p.accent)
+	label := accent.Render(" "+name) + base.Foreground(p.muted).Render(" ["+strconv.Itoa(n)+"] ")
+	room := max(width-2-lipgloss.Width(label), 0)
+	left := room / 2
+	draw(scr, 0, y, width, base.Render(" ")+accent.Render(strings.Repeat("─", left))+label+
+		accent.Render(strings.Repeat("─", room-left))+base.Render(" "))
+}
+
 func (h *Host) drawStrip(scr uv.Screen, p palette) {
 	inner := stripWidth - 1
 	base := lipgloss.NewStyle().Background(p.bg)
@@ -355,6 +417,9 @@ func (h *Host) drawStrip(scr uv.Screen, p palette) {
 		bar := row.Render(" ")
 		if i == h.active {
 			bar = row.Foreground(p.accent).Render("▌")
+		}
+		if i > first && h.groupStarts(i, first) {
+			draw(scr, 0, y-1, inner, base.Foreground(p.accent).Render(strings.Repeat("─", inner)))
 		}
 		mark, c := h.sessionState(s, p)
 		number := strconv.Itoa(i + 1)

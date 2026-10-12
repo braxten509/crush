@@ -64,8 +64,18 @@ type Session struct {
 	Cost             float64
 	Todos            []Todo
 	Channel          string
-	CreatedAt        int64
-	UpdatedAt        int64
+	// KeptSkills stay on for this chat: every turn reminds the agent of them
+	// until the user turns them off.
+	KeptSkills []KeptSkill
+	CreatedAt  int64
+	UpdatedAt  int64
+}
+
+// KeptSkill is a skill the user turned on for a whole chat. ID is the skill's
+// catalog ID (its SKILL.md path or builtin ID).
+type KeptSkill struct {
+	ID   string
+	Name string
 }
 
 // ContextBudget is the native agent's compaction boundary, scoped to the
@@ -93,6 +103,11 @@ type Service interface {
 	MCPDisabledServers(ctx context.Context) ([]string, error)
 	SetMCPServerDisabled(ctx context.Context, name string, disabled bool) error
 	MCPServersEnabled(ctx context.Context) ([]string, error)
+	// SetKeptSkill turns a skill on or off for a whole chat.
+	SetKeptSkill(ctx context.Context, sessionID string, skill KeptSkill, on bool) (Session, error)
+	// TurnedOffSkills lists the skills that were on in a chat and are now
+	// off.
+	TurnedOffSkills(ctx context.Context, sessionID string) ([]KeptSkill, error)
 
 	// Agent tool session management
 	CreateAgentToolSessionID(messageID, toolCallID string) string
@@ -360,6 +375,10 @@ func (s *service) fromDBItem(item db.Session) Session {
 	if errBudget != nil && errBudget != sql.ErrNoRows {
 		slog.Error("Failed to read context budget", "error", errBudget, "session_id", item.ID)
 	}
+	kept, errKept := s.keptSkills(item.ID)
+	if errKept != nil {
+		slog.Error("Failed to read kept skills", "error", errKept, "session_id", item.ID)
+	}
 	todos, err := unmarshalTodos(item.Todos.String)
 	if err != nil {
 		slog.Error("Failed to unmarshal todos", "session_id", item.ID, "error", err)
@@ -376,9 +395,61 @@ func (s *service) fromDBItem(item db.Session) Session {
 		Cost:             item.Cost,
 		Todos:            todos,
 		Channel:          item.Channel.String,
+		KeptSkills:       kept,
 		CreatedAt:        item.CreatedAt,
 		UpdatedAt:        item.UpdatedAt,
 	}
+}
+
+func (s *service) keptSkills(sessionID string) ([]KeptSkill, error) {
+	return s.keptSkillsWhere(context.Background(), sessionID, false)
+}
+
+// TurnedOffSkills lists the skills that were on in a chat and are now off.
+func (s *service) TurnedOffSkills(ctx context.Context, sessionID string) ([]KeptSkill, error) {
+	return s.keptSkillsWhere(ctx, sessionID, true)
+}
+
+func (s *service) keptSkillsWhere(ctx context.Context, sessionID string, turnedOff bool) ([]KeptSkill, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT skill_id, name FROM session_kept_skills
+		WHERE session_id = ? AND turned_off = ? ORDER BY position`, sessionID, turnedOff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var kept []KeptSkill
+	for rows.Next() {
+		var skill KeptSkill
+		if err := rows.Scan(&skill.ID, &skill.Name); err != nil {
+			return nil, err
+		}
+		kept = append(kept, skill)
+	}
+	return kept, rows.Err()
+}
+
+// SetKeptSkill turns a skill on or off for a whole chat and publishes the
+// updated session so every client shows the change.
+func (s *service) SetKeptSkill(ctx context.Context, sessionID string, skill KeptSkill, on bool) (Session, error) {
+	var err error
+	if on {
+		_, err = s.db.ExecContext(ctx, `INSERT INTO session_kept_skills (session_id, skill_id, name, position)
+			VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM session_kept_skills WHERE session_id = ?))
+			ON CONFLICT(session_id, skill_id) DO UPDATE SET name = excluded.name, turned_off = 0`,
+			sessionID, skill.ID, skill.Name, sessionID)
+	} else {
+		_, err = s.db.ExecContext(ctx, `UPDATE session_kept_skills SET turned_off = 1 WHERE session_id = ? AND skill_id = ?`,
+			sessionID, skill.ID)
+	}
+	if err != nil {
+		return Session{}, err
+	}
+	updated, err := s.Get(ctx, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	s.Publish(pubsub.UpdatedEvent, updated)
+	return updated, nil
 }
 
 func marshalTodos(todos []Todo) (string, error) {

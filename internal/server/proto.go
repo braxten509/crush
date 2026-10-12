@@ -843,3 +843,25 @@ func jsonError(w http.ResponseWriter, status int, message string) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(proto.Error{Message: message})
 }
+
+// handlePostWorkspaceSessionKeptSkill turns a skill on or off for a whole session.
+func (c *controllerV1) handlePostWorkspaceSessionKeptSkill(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sid := r.PathValue("sid")
+	var req proto.SetKeptSkillRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.server.logError(r, "Failed to decode request", "error", err)
+		jsonError(w, http.StatusBadRequest, "failed to decode request")
+		return
+	}
+	if req.ID == "" {
+		jsonError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+	sess, err := c.backend.SetKeptSkill(r.Context(), id, sid, session.KeptSkill{ID: req.ID, Name: req.Name}, req.On)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, sessionToProto(sess))
+}

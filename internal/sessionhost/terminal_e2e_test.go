@@ -27,12 +27,12 @@ func TestHostRunsNormalTerminalTab(t *testing.T) {
 	s.waitFor("○ ", 30*time.Second)
 	dir := filepath.Join(s.project, "chosen folder")
 	require.NoError(t, os.Mkdir(dir, 0o700))
-	row := 40 - sideFooterRows + 1
-	s.press(fmt.Sprintf("\x1b[<0;4;%dM\x1b[<0;4;%dm", row, row))
+	x, y := newTerminalColumn+1, newSessionRow+1
+	s.press(fmt.Sprintf("\x1b[<0;%d;%dM\x1b[<0;%d;%dm", x, y, x, y))
 	s.waitFor("New terminal in…", 5*time.Second)
 	s.snapshot("terminal-1-folder-chooser")
 	s.press("chosen folder\r")
-	s.waitFor("Sessions [2]", 10*time.Second)
+	s.waitFor("Terminals [1]", 10*time.Second)
 	s.waitFor("TERM>", 10*time.Second)
 	s.press("printf 'HERE:%s\\n' \"$PWD\"\r")
 	s.waitFor("HERE:"+dir, 5*time.Second)
@@ -77,4 +77,34 @@ func TestTerminalKeepsOriginalBackgroundWhenCrushColorIsOff(t *testing.T) {
 	require.NotNil(t, cell)
 	require.Equal(t, background, color.RGBAModel.Convert(cell.Style.Bg))
 	s.snapshot("terminal-5-original-background")
+}
+
+func TestNewTabsKeepTheThemeWhileStarting(t *testing.T) {
+	binary := os.Getenv(e2eBinaryEnv)
+	if binary == "" {
+		t.Skipf("set %s to a built Crush to run this test", e2eBinaryEnv)
+	}
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "crush.json"), []byte(`{"options":{"notifications":"disabled","tui":{"active_theme":"graphite"}}}`), 0o600))
+	t.Setenv("CRUSH_GLOBAL_CONFIG", configDir)
+	t.Setenv("SHELL", "/bin/sh")
+	t.Setenv("ENV", "")
+	t.Setenv("PS1", "TERM> ")
+	s := startScreen(t, binary, 140, 40)
+	s.waitFor("○ ", 30*time.Second)
+	time.Sleep(time.Second)
+	want := s.emu.BackgroundColor()
+	steady := func(what string) {
+		for start := time.Now(); time.Since(start) < 4*time.Second; time.Sleep(10 * time.Millisecond) {
+			require.Equal(t, want, s.emu.BackgroundColor(), "%s changed the theme after %s", what, time.Since(start))
+		}
+	}
+	s.press("\x1bt")
+	s.waitFor("New terminal in…", 5*time.Second)
+	s.press("\r")
+	steady("a new terminal")
+	s.press("\x1bn")
+	s.waitFor("New session in…", 5*time.Second)
+	s.press("\r")
+	steady("a new chat")
 }

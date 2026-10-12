@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/clipboard"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -52,8 +54,7 @@ func (h *Host) startTerminal(dir string) error {
 	if err != nil {
 		return fmt.Errorf("open %s: %w", shell, err)
 	}
-	h.sessions = append(h.sessions, s)
-	h.show(len(h.sessions) - 1)
+	h.addSession(s)
 	return nil
 }
 
@@ -184,4 +185,140 @@ func (s *session) terminalMouse(msg tea.MouseMsg) bool {
 		s.scrollTerminal(lines)
 	}
 	return true
+}
+
+// textPos is a cell of a terminal's text. line counts every line the
+// terminal ever had, history included, so a mark stays on its text while
+// new output pushes lines into history.
+type textPos struct{ line, col int }
+
+func (a textPos) before(b textPos) bool {
+	return a.line < b.line || (a.line == b.line && a.col < b.col)
+}
+
+// history returns how many lines of history the terminal keeps, and how
+// many lines went before the oldest of them. A full-screen app's screen
+// has none.
+func (s *session) history() (kept, dropped int) {
+	if s.emu.IsAltScreen() {
+		return 0, 0
+	}
+	n, total := s.emu.ScrollbackState()
+	return n, int(total) - n
+}
+
+// textAt returns the text position under the cell x, y of the shown view,
+// kept inside it.
+func (s *session) textAt(x, y int) textPos {
+	kept, dropped := s.history()
+	x = min(max(x, 0), s.emu.Width()-1)
+	y = min(max(y, 0), s.emu.Height()-1)
+	return textPos{line: dropped + kept - min(s.scrollOffset, kept) + y, col: x}
+}
+
+// cellAt returns the cell at col of a text line, or nil when that line is
+// no longer kept.
+func (s *session) cellAt(col, line int) *uv.Cell {
+	kept, dropped := s.history()
+	row := line - dropped
+	switch {
+	case row < 0:
+		return nil
+	case row < kept:
+		return s.emu.ScrollbackCellAt(col, row)
+	case row-kept < s.emu.Height():
+		return s.emu.CellAt(col, row-kept)
+	}
+	return nil
+}
+
+// selection returns the marked text's first and last cells, in order.
+func (s *session) selection() (start, end textPos, ok bool) {
+	if !s.selected || s.selAlt != s.emu.IsAltScreen() {
+		return start, end, false
+	}
+	start, end = s.selAnchor, s.selHead
+	if end.before(start) {
+		start, end = end, start
+	}
+	return start, end, true
+}
+
+func (s *session) clearSelection() {
+	s.selecting, s.selected = false, false
+}
+
+// selectedText returns the marked text, each line without trailing spaces.
+func (s *session) selectedText() string {
+	start, end, ok := s.selection()
+	if !ok {
+		return ""
+	}
+	var lines []string
+	for line := start.line; line <= end.line; line++ {
+		first, last := 0, s.emu.Width()-1
+		if line == start.line {
+			first = start.col
+		}
+		if line == end.line {
+			last = end.col
+		}
+		var b strings.Builder
+		for col := first; col <= last; {
+			cell := s.cellAt(col, line)
+			if cell == nil || cell.Content == "" {
+				b.WriteByte(' ')
+				col++
+				continue
+			}
+			b.WriteString(cell.Content)
+			col += max(cell.Width, 1)
+		}
+		lines = append(lines, strings.TrimRight(b.String(), " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// terminalSelect marks text in a terminal as the left button drags over
+// it, and copies it on release. A program that asked for the mouse gets
+// it, unless Shift is held. ok reports that the event was used.
+func (s *session) terminalSelect(msg tea.MouseMsg, x, y int) (cmd tea.Cmd, ok bool) {
+	if s.kind != terminalSession {
+		return nil, false
+	}
+	m := msg.Mouse()
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		s.clearSelection()
+		if m.Button != tea.MouseLeft || (s.emu.MouseReporting() && m.Mod&tea.ModShift == 0) {
+			return nil, false
+		}
+		s.selecting, s.selAlt = true, s.emu.IsAltScreen()
+		s.selAnchor = s.textAt(x, y)
+		s.selHead = s.selAnchor
+		return nil, true
+	case tea.MouseMotionMsg, tea.MouseReleaseMsg:
+		if !s.selecting {
+			return nil, false
+		}
+		s.selHead = s.textAt(x, y)
+		s.selected = s.selected || s.selHead != s.selAnchor
+		if _, released := msg.(tea.MouseReleaseMsg); released {
+			s.selecting = false
+			if text := s.selectedText(); text != "" {
+				return copyText(text), true
+			}
+		}
+		return nil, true
+	}
+	return nil, false
+}
+
+// copyText puts text on the system clipboard, then asks the real terminal
+// to as well, for when there is no system clipboard to write.
+func copyText(text string) tea.Cmd {
+	return tea.Sequence(func() tea.Msg {
+		_ = clipboard.WriteText(text)
+		return nil
+	}, tea.SetClipboard(text))
 }

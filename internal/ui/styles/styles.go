@@ -700,10 +700,18 @@ func (s *Styles) ChromaTheme() chroma.StyleEntries {
 // passed to the attachments renderer as a unit so adding a style does not
 // mean touching every construction site.
 type AttachmentStyles struct {
-	Normal   lipgloss.Style
-	Image    lipgloss.Style
-	Text     lipgloss.Style
-	Skill    lipgloss.Style
+	Normal lipgloss.Style
+	Image  lipgloss.Style
+	Text   lipgloss.Style
+	Skill  lipgloss.Style
+	// KeptIcon and KeptName draw a skill kept on for the whole chat. They
+	// use the plan colors so they stand apart from one-off attachments.
+	KeptIcon lipgloss.Style
+	KeptName lipgloss.Style
+	// KeptDot and KeptText mark a skill that is on in the "Skills for
+	// this chat" list.
+	KeptDot  lipgloss.Style
+	KeptText lipgloss.Style
 	Remove   lipgloss.Style
 	Deleting lipgloss.Style
 	More     lipgloss.Style // "N more…" hint for chips that didn't fit

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -644,4 +646,71 @@ func TestImageClicksFollowVisibleChips(t *testing.T) {
 			require.Nil(t, r.ImageAt(0), "removed attachments must not leave clickable images")
 		}
 	}
+}
+
+func TestKeptChipsComeFirstWithTheirOwnStyle(t *testing.T) {
+	t.Parallel()
+
+	r := newTestRenderer()
+	m := New(r, Keymap{})
+	m.SetKeptSource(func() []Kept { return []Kept{{ID: "/a/SKILL.md", Name: "alpha"}} })
+	m.list = []message.Attachment{{FileName: "notes.txt"}}
+
+	require.Equal(t, 2, m.Count())
+	out := ansi.Strip(m.Render(120))
+	keptIcon := ansi.Strip(r.styles.KeptIcon.String())
+	require.Contains(t, keptIcon, "on")
+	require.Less(t, strings.Index(out, keptIcon), strings.Index(out, "alpha"))
+	require.Less(t, strings.Index(out, "alpha"), strings.Index(out, "notes.txt"))
+	require.Len(t, r.bounds, 2, "kept and normal chips each get a remove button")
+
+	// Sending clears normal attachments but not kept skills.
+	m.Reset()
+	require.Equal(t, 1, m.Count())
+	require.Contains(t, ansi.Strip(m.Render(120)), "alpha")
+}
+
+func TestRemovingKeptChipQueuesItsID(t *testing.T) {
+	t.Parallel()
+
+	r := newTestRenderer()
+	m := New(r, Keymap{})
+	m.SetKeptSource(func() []Kept { return []Kept{{ID: "/a/SKILL.md", Name: "alpha"}} })
+	m.list = []message.Attachment{{FileName: "notes.txt"}}
+	_ = m.Render(120)
+
+	require.True(t, m.HandleClick(r.bounds[0].startX))
+	require.Equal(t, []string{"/a/SKILL.md"}, m.TakeRemovedKept())
+	require.Empty(t, m.TakeRemovedKept(), "each removal is reported once")
+	require.Len(t, m.list, 1, "the normal attachment stays")
+
+	_ = m.Render(120)
+	require.True(t, m.HandleClick(r.bounds[1].startX))
+	require.Empty(t, m.list)
+	require.Empty(t, m.TakeRemovedKept())
+}
+
+func TestDeleteModeCoversKeptChips(t *testing.T) {
+	t.Parallel()
+
+	km := Keymap{
+		DeleteMode: key.NewBinding(key.WithKeys("ctrl+r")),
+		DeleteAll:  key.NewBinding(key.WithKeys("r")),
+		Escape:     key.NewBinding(key.WithKeys("esc")),
+	}
+	kept := []Kept{{ID: "/a/SKILL.md", Name: "alpha"}}
+	m := New(newTestRenderer(), km)
+	m.SetKeptSource(func() []Kept { return kept })
+
+	// Delete mode opens even when only kept skills are shown.
+	require.True(t, m.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}))
+	require.True(t, m.Deleting())
+	require.True(t, m.Update(tea.KeyPressMsg{Code: '0', Text: "0"}))
+	require.Equal(t, []string{"/a/SKILL.md"}, m.TakeRemovedKept())
+
+	m.list = []message.Attachment{{FileName: "notes.txt"}}
+	require.True(t, m.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}))
+	require.True(t, m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"}))
+	require.Empty(t, m.list)
+	require.Equal(t, []string{"/a/SKILL.md"}, m.TakeRemovedKept())
 }

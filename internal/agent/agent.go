@@ -1192,6 +1192,12 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		agentTools[len(agentTools)-1].SetProviderOptions(a.getCacheControlOptions())
 	}
 
+	if _, isCLI := largeModel.Model.(*cliagent.Model); !isCLI {
+		if kept := apiKeptSkillsText(a.sessionKeptSkills(ctx, call.SessionID, false)); kept != "" {
+			systemPrompt += "\n\n" + kept
+		}
+	}
+
 	agent := fantasy.NewAgent(
 		largeModel.Model,
 		fantasy.WithSystemPrompt(systemPrompt),
@@ -1752,6 +1758,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	if a.IsSessionBusy(sessionID) {
 		return ErrSessionBusy
 	}
+	// A summary replaces the agent's memory: resend kept skills in full.
+	defer forgetKeptSkillsSent(sessionID)
 
 	// Copy mutable fields under lock to avoid races with SetModels.
 	largeModel := a.largeModel.Get()

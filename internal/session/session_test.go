@@ -160,3 +160,66 @@ func TestDeleteSucceedsWhenHistoryCleanupFails(t *testing.T) {
 	_, err = sessions.Get(t.Context(), chat.ID)
 	require.Error(t, err)
 }
+
+func TestKeptSkillsPersistInOrder(t *testing.T) {
+	// Not parallel: parallel tests' db.ResetPool closes every pooled
+	// database, including this one.
+	dataDir := t.TempDir()
+	t.Cleanup(func() {
+		require.NoError(t, db.Release(dataDir))
+		db.ResetPool()
+	})
+
+	conn, err := db.Connect(t.Context(), dataDir)
+	require.NoError(t, err)
+	sessions := NewService(db.New(conn), conn)
+
+	created, err := sessions.Create(t.Context(), "test")
+	require.NoError(t, err)
+	require.Empty(t, created.KeptSkills)
+
+	alpha := KeptSkill{ID: "/skills/alpha/SKILL.md", Name: "alpha"}
+	beta := KeptSkill{ID: "/skills/beta/SKILL.md", Name: "beta"}
+	updated, err := sessions.SetKeptSkill(t.Context(), created.ID, alpha, true)
+	require.NoError(t, err)
+	require.Equal(t, []KeptSkill{alpha}, updated.KeptSkills)
+
+	_, err = sessions.SetKeptSkill(t.Context(), created.ID, beta, true)
+	require.NoError(t, err)
+	// Turning a skill on again keeps its place and takes the new name.
+	alpha.Name = "alpha renamed"
+	_, err = sessions.SetKeptSkill(t.Context(), created.ID, alpha, true)
+	require.NoError(t, err)
+
+	fetched, err := sessions.Get(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.Equal(t, []KeptSkill{alpha, beta}, fetched.KeptSkills)
+
+	updated, err = sessions.SetKeptSkill(t.Context(), created.ID, KeptSkill{ID: alpha.ID}, false)
+	require.NoError(t, err)
+	require.Equal(t, []KeptSkill{beta}, updated.KeptSkills)
+	off, err := sessions.TurnedOffSkills(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.Equal(t, []KeptSkill{alpha}, off, "a turned-off skill is remembered as off")
+
+	// Turning it back on takes it off the turned-off list.
+	_, err = sessions.SetKeptSkill(t.Context(), created.ID, alpha, true)
+	require.NoError(t, err)
+	off, err = sessions.TurnedOffSkills(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.Empty(t, off)
+	updated, err = sessions.SetKeptSkill(t.Context(), created.ID, KeptSkill{ID: alpha.ID}, false)
+	require.NoError(t, err)
+	require.Equal(t, []KeptSkill{beta}, updated.KeptSkills)
+
+	// Turning off a skill that is not on is harmless.
+	_, err = sessions.SetKeptSkill(t.Context(), created.ID, alpha, false)
+	require.NoError(t, err)
+
+	// Kept skills belong to their own chat.
+	other, err := sessions.Create(t.Context(), "other")
+	require.NoError(t, err)
+	fetchedOther, err := sessions.Get(t.Context(), other.ID)
+	require.NoError(t, err)
+	require.Empty(t, fetchedOther.KeptSkills)
+}

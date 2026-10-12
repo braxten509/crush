@@ -105,13 +105,15 @@ type session struct {
 	// Only the emulator's callbacks use it.
 	placing *pictureCmd
 
-	mu      sync.Mutex
-	status  Status
-	cursor  bool
-	shape   vt.CursorStyle
-	blink   bool
-	stopped bool
-	clip    string // text Crush last copied, for the real clipboard
+	mu     sync.Mutex
+	status Status
+	// reported: Crush has sent a status, so its theme is known.
+	reported bool
+	cursor   bool
+	shape    vt.CursorStyle
+	blink    bool
+	stopped  bool
+	clip     string // text Crush last copied, for the real clipboard
 	// pictures are Kitty graphics commands not yet passed on.
 	pictures []pictureCmd
 
@@ -122,6 +124,11 @@ type session struct {
 	scrollOffset    int
 	scrollbackLen   int
 	scrollbackTotal uint64
+	// Text marked by dragging in a terminal, from anchor to head; see
+	// textPos. selecting: the button is still down. selAlt: marked on the
+	// full-screen app's screen, whose lines don't count history.
+	selecting, selected, selAlt bool
+	selAnchor, selHead          textPos
 	// placed are the pictures this session put on screen, by id, to take
 	// down and put back.
 	placed map[string]*placedPicture
@@ -174,6 +181,7 @@ func newSession(id, width, height int, fg, bg color.Color) *session {
 		if st, ok := parseStatus(data); ok {
 			s.mu.Lock()
 			s.status = st
+			s.reported = true
 			s.mu.Unlock()
 			s.changed.Store(true)
 		}
@@ -362,8 +370,16 @@ func (s *session) setFocus(focused bool) {
 }
 
 func (s *session) resize(width, height int) {
+	s.clearSelection()
 	s.emu.Resize(width, height)
 	_ = pty.Setsize(s.tty, winsize(width, height))
+}
+
+// reportedStatus returns the status Crush sent, if it has sent one yet.
+func (s *session) reportedStatus() (Status, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.status, s.reported
 }
 
 func (s *session) snapshot() Status {

@@ -194,3 +194,12 @@ func (b *Backend) ListAllUserMessages(ctx context.Context, workspaceID string) (
 
 	return ws.Messages.ListAllUserMessages(ctx)
 }
+
+// SetKeptSkill turns a skill on or off for a whole session.
+func (b *Backend) SetKeptSkill(ctx context.Context, workspaceID, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return ws.Sessions.SetKeptSkill(ctx, sessionID, skill, on)
+}

@@ -1325,6 +1325,7 @@ func protoToSession(s proto.Session) session.Session {
 		Cost:             s.Cost,
 		Todos:            protoToTodos(s.Todos),
 		Channel:          s.Channel,
+		KeptSkills:       protoToKeptSkills(s.KeptSkills),
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
 	}
@@ -1456,6 +1457,7 @@ func sessionToProto(s session.Session) proto.Session {
 		Cost:             s.Cost,
 		Todos:            todosToProto(s.Todos),
 		Channel:          s.Channel,
+		KeptSkills:       keptSkillsToProto(s.KeptSkills),
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
 	}
@@ -1523,4 +1525,34 @@ func protoQuestionsToDomain(qs []proto.QuestionItem) []question.Question {
 		}
 	}
 	return out
+}
+
+func keptSkillsToProto(kept []session.KeptSkill) []proto.KeptSkill {
+	if len(kept) == 0 {
+		return nil
+	}
+	out := make([]proto.KeptSkill, len(kept))
+	for i, skill := range kept {
+		out[i] = proto.KeptSkill{ID: skill.ID, Name: skill.Name}
+	}
+	return out
+}
+
+func protoToKeptSkills(kept []proto.KeptSkill) []session.KeptSkill {
+	if len(kept) == 0 {
+		return nil
+	}
+	out := make([]session.KeptSkill, len(kept))
+	for i, skill := range kept {
+		out[i] = session.KeptSkill{ID: skill.ID, Name: skill.Name}
+	}
+	return out
+}
+
+func (w *ClientWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {
+	sess, err := w.client.SetKeptSkill(ctx, w.workspaceID(), sessionID, proto.KeptSkill{ID: skill.ID, Name: skill.Name}, on)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return protoToSession(*sess), nil
 }

@@ -218,3 +218,54 @@ func TestTerminalHistoryStaysPutWhenTheBufferIsFull(t *testing.T) {
 	h.Update(outputMsg{id: s.id})
 	require.Zero(t, s.scrollOffset, "cleared history returns to the live screen")
 }
+
+func TestTerminalDragSelectsAndCopiesText(t *testing.T) {
+	h := newTestHost(t, 80, 3, Status{Title: "Terminal"})
+	s := h.current()
+	go func() { _, _ = io.Copy(io.Discard, s.emu) }()
+	t.Cleanup(func() { _ = s.emu.Close() })
+	s.kind = terminalSession
+	s.emu.Resize(20, 3)
+	s.emu.Write([]byte("alpha\r\nbravo\r\ncharlie\r\ndelta"))
+	s.scrollTerminal(1)
+	side := h.sideWidth()
+
+	// From "p" in alpha, still in history, to "v" in bravo on the live screen.
+	h.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: side + 2, Y: 0})
+	h.Update(tea.MouseMotionMsg{Button: tea.MouseLeft, X: side + 3, Y: 1})
+	_, cmd := h.Update(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: side + 3, Y: 1})
+	require.NotNil(t, cmd, "letting go copies the marked text")
+	require.Equal(t, "pha\nbrav", s.selectedText())
+
+	marked := func(x, y int) bool {
+		scr := uv.NewScreenBuffer(20, 3)
+		s.emu.DrawViewport(scr, scr.Bounds(), s.scrollOffset)
+		h.drawSelection(scr, scr.Bounds(), s)
+		return scr.CellAt(x, y).Style.Bg == h.styles.TextSelection.GetBackground()
+	}
+	require.False(t, marked(1, 0))
+	require.True(t, marked(2, 0))
+	require.True(t, marked(3, 1))
+	require.False(t, marked(4, 1))
+
+	s.emu.Write([]byte("\r\necho"))
+	h.Update(outputMsg{id: s.id})
+	require.Equal(t, "pha\nbrav", s.selectedText(), "the mark stays on its text as new lines arrive")
+
+	key(h, 'x')
+	require.Empty(t, s.selectedText(), "typing clears the mark")
+
+	// A program that asked for the mouse gets plain drags; Shift marks text.
+	s.emu.Write([]byte("\x1b[?1002h\x1b[?1006h"))
+	h.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: side, Y: 2})
+	_, cmd = h.Update(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: side + 3, Y: 2})
+	require.Nil(t, cmd, "nothing is copied")
+	require.Empty(t, s.selectedText())
+	h.Update(tea.MouseClickMsg{Button: tea.MouseLeft, Mod: tea.ModShift, X: side, Y: 2})
+	_, cmd = h.Update(tea.MouseReleaseMsg{Button: tea.MouseLeft, Mod: tea.ModShift, X: side + 3, Y: 2})
+	require.NotNil(t, cmd)
+	require.Equal(t, "echo", s.selectedText())
+
+	h.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: side + 1, Y: 2})
+	require.Empty(t, s.selectedText(), "a click clears the mark")
+}

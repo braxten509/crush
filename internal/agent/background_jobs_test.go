@@ -76,6 +76,55 @@ func TestBackgroundJobRoundTripAndCompletion(t *testing.T) {
 	require.Contains(t, output.Background.Content, "finished")
 }
 
+// Between a job's exit and its result reaching the agent, a turn that ends
+// (a progress check-in, say) must not ding as if all work were done.
+func TestBackgroundJobResultHandoffHoldsCompletionAlert(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	delivered := make(chan struct{}, 1)
+	c := sessionRunTestCoordinator(t, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		delivered <- struct{}{}
+		return fakeSessionReply(call, "received"), nil
+	})
+	session, err := c.sessions.Create(ctx, "handoff test")
+	require.NoError(t, err)
+	h := c.tasks
+	h.dir = t.TempDir()
+	// Hold the result's turn before it starts, inside the handoff gap.
+	hold := make(chan struct{})
+	c.readyWg.Go(func() error { <-hold; return nil })
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			close(hold)
+		}
+	})
+	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "sleep 2", WorkingDir: t.TempDir()}})
+	require.Empty(t, response.Error)
+	var meta tools.BashResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(response.Background.Metadata), &meta))
+	job, ok := shell.GetBackgroundShellManager().Get(meta.ShellID)
+	require.True(t, ok)
+	t.Cleanup(func() { _ = shell.GetBackgroundShellManager().Remove(job.ID) })
+	require.True(t, job.WaitContext(ctx))
+
+	agent := c.mainAgent.(*sessionRunFakeAgent).SessionAgent.(*sessionAgent)
+	holdsAlert := func() bool {
+		accepted, _ := agent.acceptedRuns.Get(session.ID)
+		return h.hasRunning(session.ID) || accepted > 0
+	}
+	require.Never(t, func() bool { return !holdsAlert() }, 300*time.Millisecond, 5*time.Millisecond, "the job's result has not reached the agent yet")
+
+	released = true
+	close(hold)
+	select {
+	case <-delivered:
+	case <-ctx.Done():
+		t.Fatal("job result was not delivered")
+	}
+	require.Eventually(t, func() bool { return !holdsAlert() }, 5*time.Second, 10*time.Millisecond, "after delivery the final ding is allowed")
+}
+
 func TestBackgroundOutputAfterCompletedSessionRun(t *testing.T) {
 	c := sessionRunTestCoordinator(t, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
 		return fakeSessionReply(call, "received"), nil

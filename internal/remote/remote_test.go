@@ -18,6 +18,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
@@ -169,6 +170,36 @@ func TestStopTellsThePhones(t *testing.T) {
 	require.Equal(t, "snapshot", string(events.next(t)["type"]))
 	env.srv.Stop()
 	events.until(t, "stopped")
+}
+
+// A turn that ends while helpers or background jobs still run (a progress
+// check-in, say) must not tell the phone the chat finished: it would beep.
+func TestDoneWaitsForRunningWork(t *testing.T) {
+	t.Parallel()
+
+	env := newTestEnv(t, phoneAddr)
+	env.src.setChat("s1", "Chat")
+	env.srv.SetPresence(Presence{SessionID: "s1"})
+
+	events := env.streamPath("/v1/events?lite=1")
+	require.Equal(t, "snapshot", string(events.next(t)["type"]))
+
+	env.src.setWorking(true)
+	env.src.publish(pubsub.Event[notify.RunComplete]{Payload: notify.RunComplete{SessionID: "s1", Text: "Still going: 40%."}})
+	env.src.setPermission(&permission.PermissionRequest{ID: "p1", SessionID: "s1", ToolName: "bash"})
+	for {
+		ev := events.next(t)
+		require.NotEqual(t, "done", string(ev["type"]), "work is still running")
+		if string(ev["type"]) == "permission" {
+			break
+		}
+	}
+
+	env.src.setWorking(false)
+	env.src.publish(pubsub.Event[notify.RunComplete]{Payload: notify.RunComplete{SessionID: "s1", Text: "All done."}})
+	var done doneView
+	require.NoError(t, json.Unmarshal(events.until(t, "done")["data"], &done))
+	require.Equal(t, "All done.", done.Text)
 }
 
 func TestActionsGoThroughTheTUI(t *testing.T) {
@@ -390,6 +421,7 @@ type fakeSource struct {
 	answers  [][]question.Answer
 	tasks    []agent.Task
 	stopped  []string
+	working  bool
 }
 
 func newFakeSource() *fakeSource {
@@ -528,6 +560,18 @@ func (f *fakeSource) Tasks(string) []agent.Task {
 }
 
 func (f *fakeSource) Processes() []agent.Process { return nil }
+
+func (f *fakeSource) HasRunningWork(string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.working
+}
+
+func (f *fakeSource) setWorking(working bool) {
+	f.mu.Lock()
+	f.working = working
+	f.mu.Unlock()
+}
 
 func (f *fakeSource) StopTask(id string) error {
 	f.mu.Lock()

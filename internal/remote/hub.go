@@ -204,6 +204,11 @@ func (h *hub) apply(ev any) bool {
 	case pubsub.Event[notify.RunComplete]:
 		if e.Payload.SessionID == cur {
 			h.stale = true
+			// A turn that ends while work still runs (a progress check-in,
+			// say) is not the end: the phone would beep for nothing.
+			if h.src.HasRunningWork(cur) {
+				return true
+			}
 			h.broadcastLocked(event("done", doneView{
 				Text:      clipText(e.Payload.Text, 400),
 				Error:     e.Payload.Error,

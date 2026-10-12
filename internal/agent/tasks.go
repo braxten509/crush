@@ -80,6 +80,10 @@ type Task struct {
 	// delivering covers the handoff to the parent, including work before
 	// Run accepts it. Unlike Delivered, it clears even if delivery fails.
 	delivering bool
+	// awaitingHandoff covers only the gap before the result's turn is
+	// accepted, so a turn ending in that gap doesn't ding as if all work
+	// were done. The result's own turn may still ding.
+	awaitingHandoff bool
 }
 
 // TaskRequest is what `crush spawn` writes; TaskReply is Crush's answer.
@@ -134,6 +138,9 @@ type taskHub struct {
 	backgroundOwners   map[string]string
 	backgroundServices map[string]bool
 	backgroundShells   map[string]*shell.BackgroundShell
+	// jobHandoffs marks jobs (by call ID, not services) whose result has
+	// not been handed to the agent yet.
+	jobHandoffs map[string]bool
 	// reaper is the write end of the reaper's pipe; see startReaper.
 	reaper *os.File
 }
@@ -228,6 +235,23 @@ func SessionHasUnfinishedWork(sessionID string) bool {
 	defer hubsMu.Unlock()
 	for _, h := range hubs {
 		if h.hasBackgroundWork(sessionID, true) {
+			return true
+		}
+	}
+	return false
+}
+
+// SessionHasRunningWork is the completion-alert gate: sub-agents or
+// background jobs (not services) still running, or ended with their result
+// not yet handed to the agent.
+func SessionHasRunningWork(sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	hubsMu.Lock()
+	defer hubsMu.Unlock()
+	for _, h := range hubs {
+		if h.hasRunning(sessionID) {
 			return true
 		}
 	}
@@ -887,6 +911,7 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	}
 	t.Ended = time.Now()
 	t.delivering = tellParent
+	t.awaitingHandoff = tellParent
 	delete(h.cancels, id)
 	snapshot := *t
 	closing := h.closing
@@ -894,6 +919,7 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	defer func() {
 		h.mu.Lock()
 		t.delivering = false
+		t.awaitingHandoff = false
 		h.mu.Unlock()
 	}()
 	h.publish(snapshot)
@@ -916,7 +942,9 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	case err != nil:
 		output = "Error: " + err.Error()
 	}
-	if _, err := h.c.Run(ctx, snapshot.SessionID, taskNotification(snapshot, output)); err != nil {
+	accept := h.acceptHandoff(snapshot.SessionID, func() { t.awaitingHandoff = false })
+	defer accept.Close()
+	if _, err := h.c.RunAccepted(ctx, accept, snapshot.SessionID, taskNotification(snapshot, output)); err != nil {
 		if !errors.Is(err, context.Canceled) {
 			slog.Error("Failed to hand a task result to its session", "task", id, "error", err)
 		}
@@ -941,16 +969,27 @@ func (h *taskHub) hasBackgroundWork(sessionID string, includeDelivery bool) bool
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, t := range h.tasks {
-		if t.SessionID == sessionID && (t.Status == TaskRunning || includeDelivery && t.delivering) {
+		if t.SessionID == sessionID && (t.Status == TaskRunning || t.awaitingHandoff || includeDelivery && t.delivering) {
 			return true
 		}
 	}
-	for _, job := range h.backgroundShells {
-		if h.backgroundOwners[job.ID] == sessionID && !h.backgroundServices[job.ID] && (includeDelivery || !job.IsDone()) {
+	for callID, job := range h.backgroundShells {
+		if h.backgroundOwners[job.ID] == sessionID && !h.backgroundServices[job.ID] && (includeDelivery || !job.IsDone() || h.jobHandoffs[callID]) {
 			return true
 		}
 	}
 	return false
+}
+
+// acceptHandoff reserves the result's turn with the agent before clearing
+// the caller's awaiting-handoff mark, so a completion alert sees one or the
+// other the whole time. The caller closes the reservation.
+func (h *taskHub) acceptHandoff(sessionID string, clear func()) *AcceptedRun {
+	accept := h.c.BeginAccepted(sessionID)
+	h.mu.Lock()
+	clear()
+	h.mu.Unlock()
+	return accept
 }
 
 func (h *taskHub) publish(t Task) {

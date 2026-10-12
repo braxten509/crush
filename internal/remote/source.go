@@ -41,6 +41,9 @@ type Source interface {
 
 	Tasks(sessionID string) []agent.Task
 	Processes() []agent.Process
+	// HasRunningWork reports sub-agents or background jobs (not services)
+	// still running for the session; their results bring more turns.
+	HasRunningWork(sessionID string) bool
 	StopTask(id string) error
 	KillProcess(pid int) error
 	Limits(kind catwalk.Type, model string) []cliagent.Limit
@@ -89,8 +92,11 @@ func (a appSource) QuestionCancelRequest(id, sessionID string) bool {
 
 func (a appSource) Tasks(sessionID string) []agent.Task { return agent.SessionTasks(sessionID) }
 func (a appSource) Processes() []agent.Process          { return agent.BackgroundProcesses() }
-func (a appSource) StopTask(id string) error            { return agent.StopTask(id) }
-func (a appSource) KillProcess(pid int) error           { return agent.KillProcess(pid) }
+func (a appSource) HasRunningWork(sessionID string) bool {
+	return agent.SessionHasRunningWork(sessionID)
+}
+func (a appSource) StopTask(id string) error  { return agent.StopTask(id) }
+func (a appSource) KillProcess(pid int) error { return agent.KillProcess(pid) }
 
 func (a appSource) Limits(kind catwalk.Type, model string) []cliagent.Limit {
 	return cliagent.Limits(kind, model)

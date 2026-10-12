@@ -116,6 +116,7 @@ func testTaskResultHandoff(t *testing.T, deliveryError error) {
 		t.Fatal("helper did not finish")
 	}
 	require.True(t, SessionHasUnfinishedWork(parent.ID), "the gray state must survive the gap before parent delivery")
+	require.True(t, h.hasRunning(parent.ID), "no completion ding before the result reaches the parent")
 	require.Empty(t, parentCalled)
 	close(deliver)
 	select {

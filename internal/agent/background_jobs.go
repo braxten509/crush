@@ -134,6 +134,12 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 			h.backgroundShells = make(map[string]*shell.BackgroundShell)
 		}
 		h.backgroundShells[callID] = job
+		if !params.Service {
+			if h.jobHandoffs == nil {
+				h.jobHandoffs = make(map[string]bool)
+			}
+			h.jobHandoffs[callID] = true
+		}
 		h.mu.Unlock()
 		response.Content = fmt.Sprintf("Started background job %s. Use crush bg --output %s to read output or crush bg --stop %s to stop it. Crush will report completion; keep working without waiting.", job.ID, job.ID, job.ID)
 		if params.Service {
@@ -147,6 +153,7 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 				h.mu.Lock()
 				delete(h.backgroundShells, callID)
 				delete(h.backgroundServices, job.ID)
+				delete(h.jobHandoffs, callID)
 				h.mu.Unlock()
 			}()
 			done := make(chan struct{})
@@ -167,7 +174,10 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 				return
 			}
 			notice := backgroundJobNotification(job, options.DataDirectory)
-			if _, err := h.c.Run(ctx, req.Session, notice); err != nil {
+			accept := h.acceptHandoff(req.Session, func() { delete(h.jobHandoffs, callID) })
+			_, err := h.c.RunAccepted(ctx, accept, req.Session, notice)
+			accept.Close()
+			if err != nil {
 				slog.Error("Background job notification failed", "job", job.ID, "error", err)
 				if closing() {
 					h.interruptJob(job)

@@ -413,7 +413,7 @@ func (g *ToolGroupItem) HandleMouseClick(btn ansi.MouseButton, x, y int) bool {
 
 // RawRender implements MessageItem.
 func (g *ToolGroupItem) RawRender(width int) string {
-	inner := width - MessageLeftPaddingTotal
+	inner := messageInnerWidth(width)
 	var sb strings.Builder
 	sb.WriteString(g.header(inner))
 	if g.BackgroundHint() {

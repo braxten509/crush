@@ -337,7 +337,7 @@ func (t *baseToolMessageItem) Advance() bool {
 
 // RawRender implements [MessageItem].
 func (t *baseToolMessageItem) RawRender(width int) string {
-	toolItemWidth := width - MessageLeftPaddingTotal
+	toolItemWidth := messageInnerWidth(width)
 	if t.hasCappedWidth {
 		toolItemWidth = cappedMessageWidth(width)
 	}

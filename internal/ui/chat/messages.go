@@ -20,6 +20,16 @@ import (
 // padding. We also cap the width so text is readable to the maxTextWidth(120).
 const MessageLeftPaddingTotal = 2
 
+// MessageRightPadding keeps the last column free of text, next to the
+// scrollbar. Bands (the user's message) still fill it.
+const MessageRightPadding = 1
+
+// messageInnerWidth is the room for an item's content between the left
+// marks and the right padding.
+func messageInnerWidth(width int) int {
+	return max(0, width-MessageLeftPaddingTotal-MessageRightPadding)
+}
+
 // maxTextWidth is the maximum width text messages can be
 const maxTextWidth = 120
 
@@ -344,7 +354,7 @@ func (a *AssistantInfoItem) ID() string {
 
 // RawRender implements MessageItem.
 func (a *AssistantInfoItem) RawRender(width int) string {
-	innerWidth := max(0, width-MessageLeftPaddingTotal)
+	innerWidth := messageInnerWidth(width)
 	content, _, ok := a.getCachedRender(innerWidth)
 	if !ok {
 		content = a.renderContent(innerWidth)
@@ -417,7 +427,7 @@ func (a *AssistantInfoItem) renderContent(width int) string {
 
 // cappedMessageWidth returns the maximum width for message content for readability.
 func cappedMessageWidth(availableWidth int) int {
-	return min(availableWidth-MessageLeftPaddingTotal, maxTextWidth)
+	return min(messageInnerWidth(availableWidth), maxTextWidth)
 }
 
 // prismSavingsSuffix returns the styled Prism savings suffix for the

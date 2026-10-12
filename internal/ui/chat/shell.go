@@ -150,7 +150,7 @@ func (s *ShellItem) Advance() bool {
 }
 
 func (s *ShellItem) Render(width int) string {
-	innerWidth := max(0, width-MessageLeftPaddingTotal)
+	innerWidth := messageInnerWidth(width)
 	content := s.RawRender(innerWidth)
 
 	var prefix string

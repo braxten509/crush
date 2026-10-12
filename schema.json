@@ -652,6 +652,12 @@
           "type": "array",
           "description": "List of skill names to disable and hide from the agent"
         },
+        "check_in_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minutes between automatic progress check-ins Crush sends the agent while its background jobs and sub-agents run (services excluded). 0 turns them off.",
+          "default": 2
+        },
         "request_timeout": {
           "type": "integer",
           "description": "Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity, so slow but active streams are never killed. 0 disables it, negative values are invalid.",
@@ -958,7 +964,8 @@
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Stats shown under the composer: model, settings, tokens, context, limit_5h, limit_weekly, limit_other, resets. Unset shows all but resets"
         },
         "composer_focus_only": {
           "type": "boolean",

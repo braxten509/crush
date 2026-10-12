@@ -149,7 +149,15 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 				delete(h.backgroundServices, job.ID)
 				h.mu.Unlock()
 			}()
-			if !job.WaitContext(ctx) {
+			done := make(chan struct{})
+			if !params.Service {
+				go h.runCheckIns(ctx, req.Session, done, func(elapsed time.Duration) string {
+					return backgroundJobCheckIn(job, elapsed)
+				})
+			}
+			waited := job.WaitContext(ctx)
+			close(done)
+			if !waited {
 				return
 			}
 			closing := func() bool { h.mu.Lock(); defer h.mu.Unlock(); return h.closing }

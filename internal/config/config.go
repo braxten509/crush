@@ -370,7 +370,7 @@ type TUIOptions struct {
 	ExitBanner  ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Crush,enum=default,enum=compact,enum=none,default=default"`
 	// ComposerFooter lists the stats shown under the composer, in a fixed
 	// order; unset shows the defaults. See the Customize Composer command.
-	ComposerFooter []string `json:"composer_footer,omitempty" jsonschema:"description=Stats shown under the composer: model\, settings\, tokens\, context\, limit_5h\, limit_weekly\, limit_other\, resets. Unset shows all but resets"`
+	ComposerFooter []string `json:"composer_footer,omitempty" jsonschema:"description=Stats shown under the composer: model\\, settings\\, tokens\\, context\\, limit_5h\\, limit_weekly\\, limit_other\\, resets. Unset shows all but resets"`
 	// ComposerFocusOnly keeps keyboard focus on the composer.
 	ComposerFocusOnly bool `json:"composer_focus_only,omitempty" jsonschema:"description=Keep keyboard focus on the composer: Tab doesn't move focus and clicking the chat or sidebar doesn't take it. The chat still works with the mouse,default=false"`
 }
@@ -511,11 +511,30 @@ type Options struct {
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
 	Notifications             string       `json:"notifications,omitempty" jsonschema:"description=Notification style to use. Options: auto (default)\\, native\\, osc\\, bell\\, disabled. Auto selects based on environment: native for local sessions\\, osc for SSH (with automatic OSC 99/777 detection).,enum=auto,enum=native,enum=osc,enum=bell,enum=disabled,default=auto"`
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=crush-config"`
+	CheckInMinutes            *int         `json:"check_in_minutes,omitempty" jsonschema:"description=Minutes between automatic progress check-ins Crush sends the agent while its background jobs and sub-agents run (services excluded). 0 turns them off.,default=2,minimum=0"`
 	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity\\, so slow but active streams are never killed. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
 	// AgentCPUsEnabled keeps Crush and everything it starts on AgentCPUs so
 	// the other CPUs stay free for the desktop. See the cpuaffinity package.
 	AgentCPUsEnabled bool   `json:"agent_cpus_enabled,omitempty" jsonschema:"description=Run Crush and everything it starts (agents\\, sub-agents\\, background jobs\\, dev servers) on only some CPUs so the rest stay free for the desktop. Linux only,default=false"`
 	AgentCPUs        string `json:"agent_cpus,omitempty" jsonschema:"description=CPU list used by agent_cpus_enabled. Empty picks the last group of CPUs sharing a cache (or the upper half of the cores),example=6-11\\,18-23"`
+}
+
+// DefaultCheckInInterval is how often Crush wakes the agent with a progress
+// check-in while background work runs, unless options.check_in_minutes says
+// otherwise.
+const DefaultCheckInInterval = 2 * time.Minute
+
+// GetCheckInInterval returns the time between progress check-ins, or zero
+// when they are off. The nil receiver and the unset field both mean
+// DefaultCheckInInterval.
+func (o *Options) GetCheckInInterval() time.Duration {
+	if o == nil || o.CheckInMinutes == nil {
+		return DefaultCheckInInterval
+	}
+	if *o.CheckInMinutes <= 0 {
+		return 0
+	}
+	return time.Duration(*o.CheckInMinutes) * time.Minute
 }
 
 // DefaultRequestTimeout bounds each LLM API request when the user has not

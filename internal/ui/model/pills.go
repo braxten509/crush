@@ -120,6 +120,9 @@ func queueList(queueItems []string, t *styles.Styles, width int) string {
 		text := item
 		if name, status, ok := agent.ParseTaskNotification(item); ok {
 			text = "Result of task " + name
+			if status == string(agent.TaskRunning) {
+				text = "Progress of " + name
+			}
 			if name == agent.AskName && (status == agent.AskAnswered || status == agent.AskCancelled) {
 				text = "Your answers to the questions"
 			}

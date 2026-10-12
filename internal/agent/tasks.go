@@ -550,6 +550,10 @@ func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub Sessio
 	go func() {
 		defer release()
 		defer cancel()
+		done := make(chan struct{})
+		go h.runCheckIns(runCtx, snapshot.SessionID, done, func(elapsed time.Duration) string {
+			return h.subAgentCheckIn(runCtx, snapshot, elapsed)
+		})
 		result, err := sub.Run(runCtx, SessionAgentCall{
 			SessionID:       t.ChildID,
 			Prompt:          prompt,
@@ -557,6 +561,7 @@ func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub Sessio
 			NonInteractive:  true,
 			ProviderOptions: getProviderOptions(m, provider),
 		})
+		close(done)
 		h.finish(ctx, t.ID, subAgentOutput(result), err)
 	}()
 	return snapshot
@@ -1011,7 +1016,7 @@ Start one with your shell tool. It returns right away with a task ID:
 Providers and models (the first model is the default), with their effort levels:
 %[2]s
 --effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode where supported (Claude Code, Codex, and Abacus OpenAI priority models). Abacus effort levels depend on the chosen model; recent Claude models accept low, medium, high, xhigh, max. --read-only runs the sub-agent where it can't change the project's files; use it for reviews, critiques and anything else that must only look. Run every review or second opinion from another model as a sub-agent like this, never through another tool or script that starts an agent CLI.
-Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there. Stop one with: %[1]s spawn --stop <task-id>
+Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there.%[6]s Stop one with: %[1]s spawn --stop <task-id>
 To give a finished sub-agent more work or corrections, continue it instead of starting a new one; it keeps its conversation and remembers its earlier work, and it shows in Crush as the same sub-agent:
   %[1]s spawn --continue <task-id> <<'EOF'
   <follow-up>
@@ -1044,7 +1049,7 @@ For secrets alone, run:
 That is shorthand for a one-question form with a secure_entry question: same form, same "Questions" result with only saved/cancelled. End your turn after opening it. Never read, print, diff, attach, commit, or send the populated file to tools/models. The program itself reads and edits the file locally.
 For multiple keys, prepare ALL placeholders before collecting any key, then ask for them together as several secure_entry questions in one form. By default each replaces the first remaining %%s. Use unique placeholders (or occurrence) to select a slot; unique markers are best. Replacement is literal, not printf or a shell expansion. Prepare valid quoting for the intended file format. Existing keys must never be read by you to edit another slot. Secure entry is local-terminal only, not available through the phone or server clients.
 Keep secrets in a secrets folder such as ~/.config/secrets. Crush blocks tool calls that read secrets folders, so when a task needs a secret, write a small helper program that reads the file itself and never prints it.
-</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName)
+</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName, h.checkInInstructions())
 }
 
 func modelIDs(models []catwalk.Model) []string {

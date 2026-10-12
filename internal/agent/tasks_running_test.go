@@ -8,6 +8,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
 )
@@ -144,4 +145,41 @@ func TestSessionStaysUnfinishedAfterBackgroundJobExits(t *testing.T) {
 	require.False(t, h.hasRunning(t.Name()), "delivery does not block the parent's final ding")
 	delete(h.backgroundShells, "call")
 	require.False(t, SessionHasUnfinishedWork(t.Name()))
+}
+
+// An open `crush ask` form must not ding "finished" on top of the question
+// sound: the answers bring another turn, and that one may ding.
+func TestOpenQuestionsHoldCompletionAlert(t *testing.T) {
+	prompts := make(chan string, 1)
+	var h *taskHub
+	c := sessionRunTestCoordinator(t, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		require.False(t, h.hasRunning(call.SessionID), "the answers' own turn may still ding")
+		prompts <- call.Prompt
+		return fakeSessionReply(call, "answers received"), nil
+	})
+	h = c.tasks
+	c.interactive = true
+	questions := question.NewService()
+	c.questions = questions
+	sess, err := c.sessions.Create(t.Context(), "session")
+	require.NoError(t, err)
+	require.False(t, h.hasRunning(sess.ID))
+
+	require.NoError(t, h.ask(TaskRequest{Session: sess.ID, Ask: []byte(`{"questions":[{"type":"free_text","question":"Name?","description":"d"}]}`)}))
+	var r question.Request
+	require.Eventually(t, func() bool {
+		var ok bool
+		r, ok = questions.Pending()
+		return ok
+	}, 5*time.Second, 10*time.Millisecond)
+	require.True(t, h.hasRunning(sess.ID), "the form is open")
+	require.False(t, h.hasRunning("other"))
+
+	require.True(t, questions.AnswerRequest(r.ID, sess.ID, []question.Answer{{QuestionID: r.Questions[0].ID, FillInText: "Ada"}}))
+	select {
+	case <-prompts:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the answers never reached the session")
+	}
+	require.Eventually(t, func() bool { return !h.hasRunning(sess.ID) }, 5*time.Second, 10*time.Millisecond)
 }

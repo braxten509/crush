@@ -129,6 +129,9 @@ type taskHub struct {
 	userStopped map[string]bool
 	// asking is set while questions from `crush ask` are open.
 	asking bool
+	// askSession is the session whose questions are open or whose answers
+	// have not been handed to it yet; it holds back completion alerts.
+	askSession string
 	// closing is set once Crush shuts down; tasks it cuts off stay saved.
 	closing bool
 	// resumeOnce starts the tasks an earlier Crush left unfinished.
@@ -675,6 +678,7 @@ func (h *taskHub) ask(req TaskRequest) error {
 		}
 	}
 	h.asking = true
+	h.askSession = req.Session
 	started = true
 	go func() {
 		defer release()
@@ -720,7 +724,13 @@ func (h *taskHub) ask(req TaskRequest) error {
 		}
 		msg := fmt.Sprintf("<%s>\n<name>%s</name>\n<status>%s</status>\n<result>\n%s\n</result>\n</%s>",
 			TaskNotificationTag, AskName, status, out, TaskNotificationTag)
-		if _, err := h.c.Run(ctx, req.Session, msg); err != nil && !errors.Is(err, context.Canceled) {
+		accept := h.acceptHandoff(req.Session, func() {
+			if h.askSession == req.Session {
+				h.askSession = ""
+			}
+		})
+		defer accept.Close()
+		if _, err := h.c.RunAccepted(ctx, accept, req.Session, msg); err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("Failed to hand answers to their session", "error", err)
 		}
 	}()
@@ -968,6 +978,9 @@ func (h *taskHub) hasBackgroundWork(sessionID string, includeDelivery bool) bool
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.askSession != "" && h.askSession == sessionID {
+		return true
+	}
 	for _, t := range h.tasks {
 		if t.SessionID == sessionID && (t.Status == TaskRunning || t.awaitingHandoff || includeDelivery && t.delivering) {
 			return true

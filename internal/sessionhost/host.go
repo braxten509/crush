@@ -734,9 +734,12 @@ func (h *Host) dragTo(y int) {
 	if h.listOpen() {
 		block = listBlockHeight
 	}
-	first, _ := h.visibleRange(block)
+	first, count := h.visibleRange(block)
 	to := first - 1
-	if y >= h.firstRow() {
+	switch {
+	case h.listOpen():
+		to = first + h.listBlockAt(y, first, count)
+	case y >= h.firstRow():
 		to = first + (y-h.firstRow())/block
 	}
 	h.moveActive(to)

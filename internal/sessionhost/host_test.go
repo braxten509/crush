@@ -681,10 +681,15 @@ func TestListGroupsChatsAboveTerminals(t *testing.T) {
 	require.Contains(t, lines[newSessionRow], "+ Session | + Terminal")
 	require.Contains(t, lines[newSessionRow], "‹")
 	require.Contains(t, lines[listFirstRow-1], "─ Sessions [2] ─")
-	gap := listFirstRow + 2*listBlockHeight - 1
+	blank := listFirstRow + 2*listBlockHeight - 1
+	require.Empty(t, strings.TrimSpace(ansi.Cut(lines[blank], 0, listWidth-1)), "a blank row sits above the Terminals line")
+	gap := blank + 1
 	require.Contains(t, lines[gap], "─ Terminals [1] ─")
+	require.Equal(t, -1, h.rowAt(5, blank).session)
 	require.Equal(t, -1, h.rowAt(5, gap).session)
 	require.Equal(t, 2, h.rowAt(5, gap+1).session)
+	require.Contains(t, lines[gap+1], "Shell")
+	require.Equal(t, 2, h.rowAt(5, gap+2).session)
 	require.True(t, h.rowAt(toggleColumn, newSessionRow).toggle)
 	require.True(t, h.rowAt(newSessionColumn, newSessionRow).newSession)
 
@@ -762,20 +767,21 @@ func TestTabsMoveWithinTheirGroup(t *testing.T) {
 	require.Equal(t, "A", h.current().status.Title)
 }
 
-func TestCollapseButtonIsTripleArrow(t *testing.T) {
+func TestCollapseButtonIsDoubleArrow(t *testing.T) {
 	h := newTestHost(t, 120, 30, Status{Title: "One"})
 	line := strings.Split(screenText(h), "\n")[newSessionRow]
-	at := strings.Index(line, "‹‹‹")
+	require.NotContains(t, line, "‹‹‹")
+	at := strings.Index(line, "‹‹")
 	require.NotEqual(t, -1, at)
 	col := ansi.StringWidth(line[:at])
 	require.Equal(t, toggleColumn, col)
-	for x := col; x < col+3; x++ {
+	for x := col; x < col+2; x++ {
 		require.True(t, h.rowAt(x, newSessionRow).toggle)
 	}
 	require.False(t, h.rowAt(newTerminalEnd-1, newSessionRow).toggle, "+ Terminal stays clickable")
 	scr := uv.NewScreenBuffer(120, 30)
 	h.drawList(scr, h.palette())
-	for x := col; x < col+3; x++ {
+	for x := col; x < col+2; x++ {
 		require.NotZero(t, scr.CellAt(x, newSessionRow).Style.Attrs&uv.AttrBold, "the arrows are bold")
 	}
 }

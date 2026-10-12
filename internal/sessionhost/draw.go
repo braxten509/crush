@@ -17,7 +17,8 @@ import (
 
 // The list's rows: session actions with ‹, a blank row, the first group's
 // line, then one block per session (two lines and a gap; a new group's line
-// takes the gap before it); at the bottom, a notice row and the servers.
+// takes the gap before it, with one more blank row above); at the bottom, a
+// notice row and the servers.
 // Chats come before terminals. The strip has ›, a blank row, + and >_, a blank row, then two
 // lines and a gap per session.
 const (
@@ -31,6 +32,8 @@ const (
 	listGapRows = 2
 	// sideFooterRows are kept free below the strip's chats.
 	sideFooterRows = 3
+	// groupGapRows is the blank row above each group line but the first.
+	groupGapRows = 1
 )
 
 // The open list's top row: new-session buttons, and ‹‹‹ to fold the list.
@@ -39,10 +42,10 @@ const (
 	newSessionRow     = 0
 	newSessionLabel   = "+ Session"
 	newTerminalLabel  = "+ Terminal"
-	collapseLabel     = "‹‹‹"
+	collapseLabel     = "‹‹"
 	newTerminalColumn = newSessionColumn + len(newSessionLabel) + len(" | ")
 	newTerminalEnd    = newTerminalColumn + len(newTerminalLabel)
-	toggleColumn      = listWidth - 5 // where ‹‹‹ starts
+	toggleColumn      = listWidth - 4 // where ‹‹ starts
 )
 
 // sideRow is what a spot in the list or strip does when clicked.
@@ -91,7 +94,11 @@ func (h *Host) firstRow() int {
 // visibleRange returns the sessions that fit, keeping the shown one in
 // view.
 func (h *Host) visibleRange(block int) (first, count int) {
-	count = max((h.height-h.firstRow()-h.footerRows())/block, 0)
+	room := h.height - h.firstRow() - h.footerRows()
+	if h.listOpen() && h.hasBothGroups() {
+		room -= groupGapRows
+	}
+	count = max(room/block, 0)
 	if count == 0 {
 		return 0, 0
 	}
@@ -129,7 +136,11 @@ func (h *Host) rowAt(x, y int) sideRow {
 	case y >= top:
 		first, count := h.visibleRange(block)
 		k, line := (y-top)/block, (y-top)%block
-		if k < count && line < block-1 {
+		if open {
+			k = h.listBlockAt(y, first, count)
+			line = y - h.listTop(first, k)
+		}
+		if k >= 0 && k < count && line < block-1 {
 			r.session = first + k
 			r.close = open && line == 0 && x >= listWidth-5 && x <= listWidth-2
 		}
@@ -297,7 +308,7 @@ func (h *Host) drawList(scr uv.Screen, p palette) {
 	first, count := h.visibleRange(listBlockHeight)
 	for k := range count {
 		i := first + k
-		y := listFirstRow + k*listBlockHeight
+		y := h.listTop(first, k)
 		if h.groupStarts(i, first) {
 			h.drawGroupLine(scr, y-1, inner, h.sessions[i].kind, p)
 		}
@@ -368,6 +379,40 @@ func (h *Host) drawListBlock(scr uv.Screen, i, y, width int, p palette) {
 	for n, line := range lines {
 		draw(scr, 0, y+n, width, bar+line)
 	}
+}
+
+// listTop is the row the open list's k-th shown session (first+k) starts
+// on: each group after the first adds a blank row above its line.
+func (h *Host) listTop(first, k int) int {
+	y := listFirstRow + k*listBlockHeight
+	for i := first + 1; i <= first+k; i++ {
+		if h.sessions[i].kind != h.sessions[i-1].kind {
+			y += groupGapRows
+		}
+	}
+	return y
+}
+
+// listBlockAt returns which of the open list's count shown sessions has
+// row y in its block, gap rows included; -1 above the first.
+func (h *Host) listBlockAt(y, first, count int) int {
+	k := -1
+	for j := range count {
+		if y >= h.listTop(first, j) {
+			k = j
+		}
+	}
+	return k
+}
+
+// hasBothGroups reports whether chats and terminals are both open.
+func (h *Host) hasBothGroups() bool {
+	for i := 1; i < len(h.sessions); i++ {
+		if h.sessions[i].kind != h.sessions[0].kind {
+			return true
+		}
+	}
+	return false
 }
 
 // groupStarts reports whether session i, shown after first, starts its

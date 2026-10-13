@@ -209,7 +209,9 @@ three layers:
   `CharmtonePantera`) calls `quickStyle` with its palette, then applies
   theme-specific overrides as needed.
 - **`styles.go`**: Defines the `Styles` struct and its documentation —
-  the shape of what `quickStyle` produces.
+  the shape of what `quickStyle` produces. Its style groups are named
+  types declared by area in `styles_chat.go`, `styles_chrome.go`,
+  `styles_dialog.go` and `styles_editor.go`.
 
 **Adding theme-specific overrides**: When a style genuinely needs a
 color that doesn't fit the token model (e.g. the bang prompt uses

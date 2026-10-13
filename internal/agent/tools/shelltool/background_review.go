@@ -1,4 +1,4 @@
-package tools
+package shelltool
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/shell"
 )
@@ -14,10 +15,10 @@ import (
 // result even when the turn has ended and nobody calls job_output.
 // Call only after the originating tool result has been persisted.
 func PersistBackgroundReview(ctx context.Context, messages message.Service, sessionID string, result message.ToolResult) {
-	if result.Name != BashToolName {
+	if result.Name != tools.BashToolName {
 		return
 	}
-	var metadata BashResponseMetadata
+	var metadata tools.BashResponseMetadata
 	if json.Unmarshal([]byte(result.Metadata), &metadata) != nil || !metadata.Background || metadata.ShellID == "" {
 		return
 	}

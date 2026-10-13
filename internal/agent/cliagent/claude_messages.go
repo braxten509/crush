@@ -9,7 +9,7 @@ import (
 
 	"charm.land/fantasy"
 
-	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -112,7 +112,7 @@ func claudeControl(ctx context.Context, m *Model, t Turn, p *proc, line claudeLi
 	}
 	msg := "The user denied this tool call."
 	if sleepRefused(name, input) {
-		msg = tools.SleepRefusal
+		msg = shelltool.SleepRefusal
 	}
 	respond(map[string]any{"behavior": "deny", "message": msg})
 }

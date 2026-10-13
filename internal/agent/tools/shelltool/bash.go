@@ -1,4 +1,4 @@
-package tools
+package shelltool
 
 import (
 	"bytes"
@@ -13,49 +13,16 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/fantasy"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/google/uuid"
 
-	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/shell"
-)
-
-type BashParams struct {
-	Description         string `json:"description" description:"A brief description of what the command does, try to keep it under 30 characters or so"`
-	Command             string `json:"command" description:"The command to execute"`
-	WorkingDir          string `json:"working_dir,omitempty" description:"The working directory to execute the command in (defaults to current directory)"`
-	RunInBackground     bool   `json:"run_in_background,omitempty" description:"Set to true (boolean) to run this command in the background. Use job_output to read the output later."`
-	AutoBackgroundAfter int    `json:"auto_background_after,omitempty" description:"Seconds to wait before automatically moving the command to a background job (default: 60)"`
-}
-
-type BashPermissionsParams struct {
-	Description         string `json:"description"`
-	Command             string `json:"command"`
-	WorkingDir          string `json:"working_dir"`
-	RunInBackground     bool   `json:"run_in_background"`
-	AutoBackgroundAfter int    `json:"auto_background_after"`
-}
-
-type BashResponseMetadata struct {
-	StartTime        int64  `json:"start_time"`
-	EndTime          int64  `json:"end_time"`
-	Output           string `json:"output"`
-	Description      string `json:"description"`
-	WorkingDirectory string `json:"working_directory"`
-	Background       bool   `json:"background,omitempty"`
-	ShellID          string `json:"shell_id,omitempty"`
-}
-
-const (
-	BashToolName = "bash"
-
-	DefaultAutoBackgroundAfter = 60 // Commands taking longer automatically become background jobs
-	MaxOutputLength            = 30000
-	BashNoOutput               = "no output"
 )
 
 //go:embed bash.md.tpl
@@ -153,11 +120,11 @@ func bashDescription(attribution *config.Attribution, modelID string) string {
 	var out bytes.Buffer
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
 		BannedCommands:  bannedCommandsStr,
-		MaxOutputLength: MaxOutputLength,
+		MaxOutputLength: tools.MaxOutputLength,
 		Attribution:     *attribution,
 		ModelID:         modelID,
-		RgAvailable:     GetRg() != "",
-		GhAvailable:     GHAvailable,
+		RgAvailable:     tools.GetRg() != "",
+		GhAvailable:     tools.GHAvailable,
 	}); err != nil {
 		// this should never happen.
 		panic("failed to execute bash description template: " + err.Error())
@@ -199,7 +166,7 @@ func blockFuncs() []shell.BlockFunc {
 
 // NewBashTool returns the bash tool. jobStarted, when set, is told about
 // the jobs its calls leave running in the background.
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, jobStarted JobStarted) fantasy.AgentTool {
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, jobStarted tools.JobStarted) fantasy.AgentTool {
 	t := &bashTool{
 		permissions: permissions,
 		workingDir:  workingDir,
@@ -207,7 +174,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 		jobStarted:  jobStarted,
 	}
 	return fantasy.NewAgentTool(
-		BashToolName,
+		tools.BashToolName,
 		string(bashDescription(attribution, modelID)),
 		t.run,
 	)
@@ -218,12 +185,12 @@ type bashTool struct {
 	permissions permission.Service
 	workingDir  string
 	spillDir    string
-	jobStarted  JobStarted
+	jobStarted  tools.JobStarted
 }
 
 // bashRun is one command the bash tool is running.
 type bashRun struct {
-	params    BashParams
+	params    tools.BashParams
 	sessionID string
 	marker    string
 	shellEnv  []string
@@ -231,7 +198,7 @@ type bashRun struct {
 	startTime time.Time
 }
 
-func (t *bashTool) run(ctx context.Context, params BashParams, call fantasy.ToolCall) (toolResponse fantasy.ToolResponse, resultErr error) {
+func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantasy.ToolCall) (toolResponse fantasy.ToolResponse, resultErr error) {
 	if params.Command == "" {
 		return fantasy.NewTextErrorResponse("missing command"), nil
 	}
@@ -240,10 +207,10 @@ func (t *bashTool) run(ctx context.Context, params BashParams, call fantasy.Tool
 	execWorkingDir := cmp.Or(params.WorkingDir, t.workingDir)
 	isSafeReadOnly := isSafeReadOnlyCommand(params.Command)
 
-	sessionID := GetSessionFromContext(ctx)
-	shellEnv := GetContextValue(ctx, ShellEnvContextKey, []string(nil))
+	sessionID := tools.GetSessionFromContext(ctx)
+	shellEnv := tools.GetContextValue(ctx, tools.ShellEnvContextKey, []string(nil))
 	marker := uuid.NewString()
-	shellEnv = append(append([]string(nil), shellEnv...), NativeShellEnv+"="+marker)
+	shellEnv = append(append([]string(nil), shellEnv...), tools.NativeShellEnv+"="+marker)
 	if sessionID == "" {
 		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for executing shell command")
 	}
@@ -254,17 +221,17 @@ func (t *bashTool) run(ctx context.Context, params BashParams, call fantasy.Tool
 				SessionID:   sessionID,
 				Path:        execWorkingDir,
 				ToolCallID:  call.ID,
-				ToolName:    BashToolName,
+				ToolName:    tools.BashToolName,
 				Action:      "execute",
 				Description: fmt.Sprintf("Execute command: %s", params.Command),
-				Params:      BashPermissionsParams(params),
+				Params:      tools.BashPermissionsParams(params),
 			},
 		)
 		if err != nil {
 			return fantasy.ToolResponse{}, err
 		}
 		if !p {
-			return NewPermissionDeniedResponse(), nil
+			return tools.NewPermissionDeniedResponse(), nil
 		}
 	}
 
@@ -366,13 +333,13 @@ func (t *bashTool) runInForeground(ctx context.Context, r *bashRun) (fantasy.Too
 
 	// Wait for either completion, auto-background threshold, or context cancellation
 	backgroundSignal := make(chan struct{}, 1)
-	unregisterBackground := RegisterShellBackground(r.sessionID, r.marker, backgroundSignal)
+	unregisterBackground := tools.RegisterShellBackground(r.sessionID, r.marker, backgroundSignal)
 	defer unregisterBackground()
 	manuallyBackgrounded := false
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	autoBackgroundAfter := max(int(ForegroundWaitLimit/time.Second)+1, cmp.Or(r.params.AutoBackgroundAfter, DefaultAutoBackgroundAfter))
+	autoBackgroundAfter := max(int(ForegroundWaitLimit/time.Second)+1, cmp.Or(r.params.AutoBackgroundAfter, tools.DefaultAutoBackgroundAfter))
 	autoBackgroundThreshold := time.Duration(autoBackgroundAfter) * time.Second
 	timeout := time.After(autoBackgroundThreshold)
 
@@ -435,7 +402,7 @@ func (t *bashTool) completed(r *bashRun, bgShell *shell.BackgroundShell, stdout,
 
 	stdout = formatOutput(stdout, stderr, execErr, t.spillDir)
 
-	metadata := BashResponseMetadata{
+	metadata := tools.BashResponseMetadata{
 		StartTime:        r.startTime.UnixMilli(),
 		EndTime:          time.Now().UnixMilli(),
 		Output:           stdout,
@@ -444,15 +411,15 @@ func (t *bashTool) completed(r *bashRun, bgShell *shell.BackgroundShell, stdout,
 		WorkingDirectory: bgShell.WorkingDir,
 	}
 	if stdout == "" {
-		return fantasy.WithResponseMetadata(fantasy.NewTextResponse(BashNoOutput), metadata), nil
+		return fantasy.WithResponseMetadata(fantasy.NewTextResponse(tools.BashNoOutput), metadata), nil
 	}
 	stdout += fmt.Sprintf("\n\n<cwd>%s</cwd>", normalizeWorkingDir(bgShell.WorkingDir))
 	return fantasy.WithResponseMetadata(fantasy.NewTextResponse(stdout), metadata), nil
 }
 
 // jobMetadata describes a command left running as a job.
-func (r *bashRun) jobMetadata(bgShell *shell.BackgroundShell) BashResponseMetadata {
-	return BashResponseMetadata{
+func (r *bashRun) jobMetadata(bgShell *shell.BackgroundShell) tools.BashResponseMetadata {
+	return tools.BashResponseMetadata{
 		StartTime:        r.startTime.UnixMilli(),
 		EndTime:          time.Now().UnixMilli(),
 		Description:      r.params.Description,
@@ -507,11 +474,11 @@ func formatOutput(stdout, stderr string, execErr error, spillDir string) string 
 // dropped middle is written in full to a file under spillDir so the agent
 // can read it back rather than losing it for good.
 func TruncateOutput(content, spillDir string) string {
-	if ansi.StringWidth(content) <= MaxOutputLength {
+	if ansi.StringWidth(content) <= tools.MaxOutputLength {
 		return content
 	}
 
-	halfLength := MaxOutputLength / 2
+	halfLength := tools.MaxOutputLength / 2
 	start := ansi.Truncate(content, halfLength, "")
 	end := ansi.TruncateLeft(content, ansi.StringWidth(content)-halfLength, "")
 

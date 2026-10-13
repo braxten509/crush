@@ -1,6 +1,6 @@
 //go:build linux && amd64
 
-package tools
+package shelltool
 
 import (
 	"context"
@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+	"github.com/stretchr/testify/require"
+
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
-
-	"github.com/charmbracelet/crush/internal/filechange"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNativeBashReviewsScriptsAndRedirections(t *testing.T) {
@@ -31,7 +32,7 @@ Path('existing').write_text('after\n')
 Path('created').write_text('second\n')
 PY
 printf 'last\n' >> created`
-	response := runBashTool(t, newBashToolForTest(root), context.WithValue(t.Context(), SessionIDContextKey, "native-review"), BashParams{Command: command})
+	response := runBashTool(t, newBashToolForTest(root), context.WithValue(t.Context(), tools.SessionIDContextKey, "native-review"), tools.BashParams{Command: command})
 	require.False(t, response.IsError, response.Content)
 	_, review := filechange.TakeReview(response.Metadata)
 	require.NotNil(t, review)
@@ -55,26 +56,26 @@ func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
 			sess, err := sessions.Create(t.Context(), "background review")
 			require.NoError(t, err)
 			messages := message.NewService(queries)
-			turnCtx, cancelTurn := context.WithCancel(context.WithValue(t.Context(), SessionIDContextKey, sess.ID))
+			turnCtx, cancelTurn := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, sess.ID))
 			defer cancelTurn()
 			tool := newBashToolForTest(root)
 			command := `python3 -c 'import time,pathlib; time.sleep(2); pathlib.Path("late.txt").write_text("late change")'`
-			input, err := json.Marshal(BashParams{Command: command, RunInBackground: !manual})
+			input, err := json.Marshal(tools.BashParams{Command: command, RunInBackground: !manual})
 			require.NoError(t, err)
 			responses := make(chan fantasy.ToolResponse, 1)
 			errors := make(chan error, 1)
 			go func() {
-				response, err := tool.Run(turnCtx, fantasy.ToolCall{ID: "bash-origin", Name: BashToolName, Input: string(input)})
+				response, err := tool.Run(turnCtx, fantasy.ToolCall{ID: "bash-origin", Name: tools.BashToolName, Input: string(input)})
 				responses <- response
 				errors <- err
 			}()
 			if manual {
-				require.Eventually(t, func() bool { return BackgroundShell(sess.ID) }, time.Second, 10*time.Millisecond)
+				require.Eventually(t, func() bool { return tools.BackgroundShell(sess.ID) }, time.Second, 10*time.Millisecond)
 			}
 			response := <-responses
 			require.NoError(t, <-errors)
 			require.False(t, response.IsError, response.Content)
-			var meta BashResponseMetadata
+			var meta tools.BashResponseMetadata
 			require.NoError(t, json.Unmarshal([]byte(response.Metadata), &meta))
 			require.True(t, meta.Background)
 			require.NotEmpty(t, meta.ShellID)
@@ -82,7 +83,7 @@ func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
 			require.True(t, ok)
 			defer shell.GetBackgroundShellManager().Remove(meta.ShellID)
 			metadata, initialReview := filechange.TakeReview(response.Metadata)
-			result := message.ToolResult{ToolCallID: "bash-origin", Name: BashToolName, Content: response.Content, Metadata: metadata, Review: initialReview}
+			result := message.ToolResult{ToolCallID: "bash-origin", Name: tools.BashToolName, Content: response.Content, Metadata: metadata, Review: initialReview}
 			saved, err := messages.Create(turnCtx, sess.ID, message.CreateMessageParams{Role: message.Tool, Parts: []message.ContentPart{result}})
 			require.NoError(t, err)
 			PersistBackgroundReview(turnCtx, messages, sess.ID, result)
@@ -104,9 +105,9 @@ func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
 			require.Equal(t, filepath.Join(root, "late.txt"), review.Changes[0].Path)
 			require.Nil(t, review.Changes[0].Before)
 			require.Equal(t, "late change", review.Changes[0].After.Content)
-			input, err = json.Marshal(JobOutputParams{ShellID: meta.ShellID, Wait: true})
+			input, err = json.Marshal(tools.JobOutputParams{ShellID: meta.ShellID, Wait: true})
 			require.NoError(t, err)
-			output, err := NewJobOutputTool(t.TempDir()).Run(t.Context(), fantasy.ToolCall{ID: "job", Name: JobOutputToolName, Input: string(input)})
+			output, err := NewJobOutputTool(t.TempDir()).Run(t.Context(), fantasy.ToolCall{ID: "job", Name: tools.JobOutputToolName, Input: string(input)})
 			require.NoError(t, err)
 			_, outputReview := filechange.TakeReview(output.Metadata)
 			require.NotNil(t, outputReview)

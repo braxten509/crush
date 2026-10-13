@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/permission"
 )
@@ -123,7 +124,7 @@ func (m *Model) approve(ctx context.Context, sessionID, callID, name, input stri
 		return false
 	}
 	if m.Guarded {
-		if name == tools.BashToolName && tools.CommandBlocked(str("command")) {
+		if name == tools.BashToolName && shelltool.CommandBlocked(str("command")) {
 			slog.Info("Blocked a sub-agent command", "command", str("command"))
 			return false
 		}
@@ -174,7 +175,7 @@ func (m *Model) approve(ctx context.Context, sessionID, callID, name, input stri
 // with a long foreground sleep, which Crush refuses as its own shell does.
 func sleepRefused(name, input string) bool {
 	var in struct{ Command string }
-	return name == tools.BashToolName && json.Unmarshal([]byte(input), &in) == nil && tools.LeadingSleep(in.Command)
+	return name == tools.BashToolName && json.Unmarshal([]byte(input), &in) == nil && shelltool.LeadingSleep(in.Command)
 }
 
 // IsSpawnCommand reports whether a shell command only runs `crush spawn`,

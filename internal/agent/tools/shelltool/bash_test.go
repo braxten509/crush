@@ -1,4 +1,4 @@
-package tools
+package shelltool
 
 import (
 	"context"
@@ -9,29 +9,31 @@ import (
 	"unicode/utf8"
 
 	"charm.land/fantasy"
+	"github.com/stretchr/testify/require"
+
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/shell"
-	"github.com/stretchr/testify/require"
 )
 
 func TestBashCtrlBLeavesCommandRunning(t *testing.T) {
 	tool := newBashToolForTest(t.TempDir())
-	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), SessionIDContextKey, "background-test"))
+	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, "background-test"))
 	defer cancel()
 	finished := make(chan fantasy.ToolResponse, 1)
 	go func() {
-		finished <- runBashTool(t, tool, ctx, BashParams{Command: "sleep 3 && echo survived", Description: "background test"})
+		finished <- runBashTool(t, tool, ctx, tools.BashParams{Command: "sleep 3 && echo survived", Description: "background test"})
 	}()
-	require.Eventually(t, func() bool { return BackgroundShell("background-test") }, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return tools.BackgroundShell("background-test") }, time.Second, 10*time.Millisecond)
 	var response fantasy.ToolResponse
 	select {
 	case response = <-finished:
 	case <-time.After(time.Second):
 		t.Fatal("Ctrl+B did not release the foreground call")
 	}
-	var metadata BashResponseMetadata
+	var metadata tools.BashResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(response.Metadata), &metadata))
 	require.True(t, metadata.Background)
 	require.NotEmpty(t, metadata.ShellID)
@@ -43,7 +45,7 @@ func TestBashCtrlBLeavesCommandRunning(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, stdout, "survived")
 	require.NoError(t, shell.GetBackgroundShellManager().Remove(metadata.ShellID))
-	require.False(t, BackgroundShell("background-test"))
+	require.False(t, tools.BackgroundShell("background-test"))
 }
 
 type mockBashPermissionService struct {
@@ -77,15 +79,15 @@ func (m *mockBashPermissionService) SubscribeNotifications(ctx context.Context) 
 func TestBashTool_DefaultAutoBackgroundThreshold(t *testing.T) {
 	workingDir := t.TempDir()
 	tool := newBashToolForTest(workingDir)
-	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	ctx := context.WithValue(context.Background(), tools.SessionIDContextKey, "test-session")
 
-	resp := runBashTool(t, tool, ctx, BashParams{
+	resp := runBashTool(t, tool, ctx, tools.BashParams{
 		Description: "default threshold",
 		Command:     "echo done",
 	})
 
 	require.False(t, resp.IsError)
-	var meta BashResponseMetadata
+	var meta tools.BashResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
 	require.False(t, meta.Background)
 	require.Empty(t, meta.ShellID)
@@ -103,14 +105,14 @@ func TestBashTool_WaitBackgroundThreshold(t *testing.T) {
 	} {
 		t.Run(tt.command, func(t *testing.T) {
 			tool := newBashToolForTest(t.TempDir())
-			ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
-			resp := runBashTool(t, tool, ctx, BashParams{
+			ctx := context.WithValue(context.Background(), tools.SessionIDContextKey, "test-session")
+			resp := runBashTool(t, tool, ctx, tools.BashParams{
 				Description:         "wait threshold",
 				Command:             tt.command,
 				AutoBackgroundAfter: 1,
 			})
 			require.False(t, resp.IsError)
-			var meta BashResponseMetadata
+			var meta tools.BashResponseMetadata
 			require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
 			if meta.ShellID != "" {
 				t.Cleanup(func() { _ = shell.GetBackgroundShellManager().Kill(meta.ShellID) })
@@ -176,10 +178,10 @@ func newBashToolWithRecordingPerms(workingDir string, allow bool) (fantasy.Agent
 func TestBashTool_ChainedCommandsRequirePermission(t *testing.T) {
 	workingDir := t.TempDir()
 	tool, perms := newBashToolWithRecordingPerms(workingDir, true)
-	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	ctx := context.WithValue(context.Background(), tools.SessionIDContextKey, "test-session")
 
 	// ls && echo should trigger permission check.
-	resp := runBashTool(t, tool, ctx, BashParams{
+	resp := runBashTool(t, tool, ctx, tools.BashParams{
 		Description: "chained ls",
 		Command:     "ls && echo done",
 	})
@@ -189,7 +191,7 @@ func TestBashTool_ChainedCommandsRequirePermission(t *testing.T) {
 
 	// Plain ls should NOT trigger permission check.
 	perms.requestCount = 0
-	resp = runBashTool(t, tool, ctx, BashParams{
+	resp = runBashTool(t, tool, ctx, tools.BashParams{
 		Description: "plain ls",
 		Command:     "ls -la",
 	})
@@ -201,9 +203,9 @@ func TestBashTool_ChainedCommandsRequirePermission(t *testing.T) {
 func TestBashTool_ChainedCommandsDenied(t *testing.T) {
 	workingDir := t.TempDir()
 	tool, perms := newBashToolWithRecordingPerms(workingDir, false)
-	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	ctx := context.WithValue(context.Background(), tools.SessionIDContextKey, "test-session")
 
-	resp := runBashTool(t, tool, ctx, BashParams{
+	resp := runBashTool(t, tool, ctx, tools.BashParams{
 		Description: "chained ls denied",
 		Command:     "ls && rm -rf /",
 	})
@@ -212,7 +214,7 @@ func TestBashTool_ChainedCommandsDenied(t *testing.T) {
 	require.Contains(t, resp.Content, "User denied permission")
 }
 
-func runBashTool(t *testing.T, tool fantasy.AgentTool, ctx context.Context, params BashParams) fantasy.ToolResponse {
+func runBashTool(t *testing.T, tool fantasy.AgentTool, ctx context.Context, params tools.BashParams) fantasy.ToolResponse {
 	t.Helper()
 
 	input, err := json.Marshal(params)
@@ -220,7 +222,7 @@ func runBashTool(t *testing.T, tool fantasy.AgentTool, ctx context.Context, para
 
 	call := fantasy.ToolCall{
 		ID:    "test-call",
-		Name:  BashToolName,
+		Name:  tools.BashToolName,
 		Input: string(input),
 	}
 
@@ -233,7 +235,7 @@ func TestTruncateOutputValidUTF8(t *testing.T) {
 	t.Parallel()
 	// CJK characters are 2 cells wide; this string is far wider than
 	// MaxOutputLength so TruncateOutput must truncate it.
-	content := strings.Repeat("你好世界", MaxOutputLength)
+	content := strings.Repeat("你好世界", tools.MaxOutputLength)
 
 	out := TruncateOutput(content, t.TempDir())
 	require.True(t, utf8.ValidString(out), "truncated output must stay valid UTF-8")
@@ -249,7 +251,7 @@ func TestTruncateOutputShortContent(t *testing.T) {
 func TestTruncateOutputEmoji(t *testing.T) {
 	t.Parallel()
 	// Emoji with ZWJ sequences should not be split.
-	content := strings.Repeat("👨‍👩‍👧‍👦", MaxOutputLength)
+	content := strings.Repeat("👨‍👩‍👧‍👦", tools.MaxOutputLength)
 
 	out := TruncateOutput(content, t.TempDir())
 	require.True(t, utf8.ValidString(out), "truncated output must stay valid UTF-8")

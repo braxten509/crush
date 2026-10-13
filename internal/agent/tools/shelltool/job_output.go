@@ -1,4 +1,4 @@
-package tools
+package shelltool
 
 import (
 	"context"
@@ -7,35 +7,20 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
+
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/shell"
-)
-
-const (
-	JobOutputToolName = "job_output"
 )
 
 //go:embed job_output.md
 var jobOutputDescription string
 
-type JobOutputParams struct {
-	ShellID string `json:"shell_id" description:"The ID of the background shell to retrieve output from"`
-	Wait    bool   `json:"wait" description:"If true, block until the background shell completes before returning output"`
-}
-
-type JobOutputResponseMetadata struct {
-	ShellID          string `json:"shell_id"`
-	Command          string `json:"command"`
-	Description      string `json:"description"`
-	Done             bool   `json:"done"`
-	WorkingDirectory string `json:"working_directory"`
-}
-
 func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
-		JobOutputToolName,
+		tools.JobOutputToolName,
 		jobOutputDescription,
-		func(ctx context.Context, params JobOutputParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params tools.JobOutputParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if params.ShellID == "" {
 				return fantasy.NewTextErrorResponse("missing shell_id"), nil
 			}
@@ -74,7 +59,7 @@ func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 			output := strings.Join(outputParts, "\n")
 			output = TruncateOutput(output, spillDir)
 
-			metadata := JobOutputResponseMetadata{
+			metadata := tools.JobOutputResponseMetadata{
 				ShellID:          params.ShellID,
 				Command:          bgShell.Command,
 				Description:      bgShell.Description,
@@ -83,7 +68,7 @@ func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 			}
 
 			if output == "" {
-				output = BashNoOutput
+				output = tools.BashNoOutput
 			}
 
 			result := fmt.Sprintf("Status: %s\n\n%s", status, output)

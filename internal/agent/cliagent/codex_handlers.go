@@ -13,6 +13,7 @@ import (
 	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
 )
 
@@ -221,7 +222,7 @@ func (r *codexRun) handleItemStarted(item codexItem) (err error) {
 	// Its item stays open until it exits.
 	if item.Type != "userMessage" {
 		for id, started := range r.openCmds {
-			if time.Since(started) <= tools.ForegroundWaitLimit {
+			if time.Since(started) <= shelltool.ForegroundWaitLimit {
 				continue
 			}
 			delete(r.openCmds, id)

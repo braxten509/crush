@@ -14,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 )
@@ -231,7 +232,7 @@ func (t *turn) onToolResult(result fantasy.ToolResultContent) error {
 	if err := t.fileReview.save(t.ctx, toolResult); err != nil {
 		return err
 	}
-	tools.PersistBackgroundReview(t.ctx, t.a.messages, t.call.SessionID, toolResult)
+	shelltool.PersistBackgroundReview(t.ctx, t.a.messages, t.call.SessionID, toolResult)
 	return nil
 }
 

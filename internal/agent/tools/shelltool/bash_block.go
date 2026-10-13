@@ -1,4 +1,4 @@
-package tools
+package shelltool
 
 import (
 	"path/filepath"

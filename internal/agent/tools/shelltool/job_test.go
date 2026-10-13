@@ -1,4 +1,4 @@
-package tools
+package shelltool
 
 import (
 	"context"
@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
+
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 func TestBackgroundShell_Integration(t *testing.T) {

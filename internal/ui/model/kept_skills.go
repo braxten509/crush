@@ -20,8 +20,9 @@ import (
 // The name parameter is used as a fallback when the server does not
 // return one.
 func (m *UI) attachSkill(skillID, name string) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
-		content, result, err := m.com.Workspace.ReadSkill(context.Background(), skillID)
+		content, result, err := ws.ReadSkill(context.Background(), skillID)
 		if err != nil {
 			return util.NewErrorMsg(err)
 		}

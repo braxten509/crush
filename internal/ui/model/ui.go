@@ -576,8 +576,9 @@ func (m *UI) Init() tea.Cmd {
 	// whose catalog is missing (the fetch at login failed, or the
 	// credentials predate it) refills lazily, so the models dialog shows
 	// the subscription section as soon as it is opened.
+	ws := m.com.Workspace
 	cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
-		_ = m.com.Workspace.UpdateAgentModel(context.TODO())
+		_ = ws.UpdateAgentModel(context.TODO())
 		return nil
 	}))
 	// Prime the memoized busy/permission state off-thread.

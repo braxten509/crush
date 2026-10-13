@@ -30,8 +30,9 @@ func isAuthTimeout(err error) bool {
 // provided context. The dialog owns the context and cancels it if the
 // user closes the dialog.
 func (m *UI) authenticateMCP(ctx context.Context, name string) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
-		if err := m.com.Workspace.MCPAuthenticate(ctx, name); err != nil {
+		if err := ws.MCPAuthenticate(ctx, name); err != nil {
 			if isAuthTimeout(err) {
 				return dialog.ActionMCPAuthErrored{Name: name, Error: fmt.Errorf("authentication timed out")}
 			}

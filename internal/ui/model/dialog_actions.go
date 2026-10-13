@@ -374,10 +374,10 @@ func (m *UI) handlePaletteAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionEnableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
-		cmds = append(cmds, m.enableDockerMCP)
+		cmds = append(cmds, enableDockerMCP(m.com.Workspace))
 	case dialog.ActionDisableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
-		cmds = append(cmds, m.disableDockerMCP)
+		cmds = append(cmds, disableDockerMCP(m.com.Workspace))
 	case mcpservers.ActionToggleMCP:
 		cmds = append(cmds, m.applyMCPToggle(msg))
 	case dialog.ActionSaveProject:

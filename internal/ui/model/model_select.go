@@ -25,10 +25,11 @@ import (
 // refresh fails, the selection resumes with ReAuthenticate set so the
 // OAuth dialog opens.
 func (m *UI) refreshHyperAndRetrySelect(msg dialog.ActionSelectModel) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		if err := m.com.Workspace.RefreshOAuthToken(ctx, config.ScopeGlobal, "hyper"); err != nil {
+		if err := ws.RefreshOAuthToken(ctx, config.ScopeGlobal, "hyper"); err != nil {
 			slog.Warn("Hyper OAuth refresh failed, requesting re-auth", "error", err)
 			msg.ReAuthenticate = true
 		}

@@ -99,8 +99,9 @@ func (m *UI) handleChannelMessage(ev mcp.Event) tea.Cmd {
 	sessionID := m.session.ID
 	channel := ev.Name
 	content := ev.ChannelMessage
+	ws := m.com.Workspace
 	runCmd := func() tea.Msg {
-		if err := m.com.Workspace.AgentRunChannel(context.Background(), channel, sessionID, content); err != nil {
+		if err := ws.AgentRunChannel(context.Background(), channel, sessionID, content); err != nil {
 			slog.Debug("Failed to inject channel message", "error", err, "session", sessionID)
 		}
 		return nil

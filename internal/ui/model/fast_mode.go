@@ -33,11 +33,12 @@ func (m *UI) toggleFastMode() tea.Cmd {
 	} else {
 		selected.ServiceTier = "fast"
 	}
+	ws := m.com.Workspace
 	return m.updateAgentModelCmd(func() tea.Msg {
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, selected); err != nil {
+		if err := ws.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, selected); err != nil {
 			return util.ReportError(err)()
 		}
-		if err := m.com.Workspace.UpdateAgentModel(context.Background()); err != nil {
+		if err := ws.UpdateAgentModel(context.Background()); err != nil {
 			return util.ReportError(err)()
 		}
 		return util.NewInfoMsg("FAST mode " + status)
@@ -63,11 +64,12 @@ func (m *UI) toggleUltracode() tea.Cmd {
 	}
 	selected := cfg.Models[agentCfg.Model]
 	selected.Ultracode = !selected.Ultracode
+	ws := m.com.Workspace
 	return m.updateAgentModelCmd(func() tea.Msg {
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, selected); err != nil {
+		if err := ws.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, selected); err != nil {
 			return util.ReportError(err)()
 		}
-		if err := m.com.Workspace.UpdateAgentModel(context.Background()); err != nil {
+		if err := ws.UpdateAgentModel(context.Background()); err != nil {
 			return util.ReportError(err)()
 		}
 		return util.NewInfoMsg("Ultracode " + onOff(selected.Ultracode))

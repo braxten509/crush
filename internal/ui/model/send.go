@@ -215,9 +215,10 @@ func (m *UI) runShellCommandInternal(command string, isFirstMessage bool) tea.Cm
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.bangCancel = cancel
+	ws := m.com.Workspace
 
 	cmds = append(cmds, func() tea.Msg {
-		resp, err := m.com.Workspace.AgentRunShellCommand(ctx, sessionID, command, contentWidth, onProgress, isFirstMessage)
+		resp, err := ws.AgentRunShellCommand(ctx, sessionID, command, contentWidth, onProgress, isFirstMessage)
 		close(streamCh)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			return util.InfoMsg{
@@ -326,8 +327,9 @@ func (m *UI) clearPromptQueue() {
 
 // summarizeSession compacts the session into a summary.
 func (m *UI) summarizeSession(sessionID string) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
-		err := m.com.Workspace.AgentSummarize(context.Background(), sessionID)
+		err := ws.AgentSummarize(context.Background(), sessionID)
 		if err != nil {
 			return util.ReportError(err)()
 		}

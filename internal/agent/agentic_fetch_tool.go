@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/webtool"
 	"github.com/charmbracelet/crush/internal/permission"
 )
 
@@ -146,7 +147,7 @@ func agenticFetchPrompt(ctx context.Context, client *http.Client, params tools.A
 	}
 
 	// URL mode: fetch the URL content first.
-	content, err := tools.FetchURLAndConvert(ctx, client, params.URL)
+	content, err := webtool.FetchURLAndConvert(ctx, client, params.URL)
 	if err != nil {
 		return "", fmt.Sprintf("Failed to fetch URL: %s", err)
 	}
@@ -198,14 +199,14 @@ func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Cli
 		return nil, errors.New("small model provider not configured")
 	}
 
-	webFetchTool := tools.NewWebFetchTool(tmpDir, client)
-	webSearchTool := tools.NewWebSearchTool(client)
+	webFetchTool := webtool.NewWebFetchTool(tmpDir, client)
+	webSearchTool := webtool.NewWebSearchTool(client)
 	fetchTools := []fantasy.AgentTool{
 		webFetchTool,
 		webSearchTool,
 		tools.NewGlobTool(tmpDir, c.cfg.Config().Tools.Glob),
 		tools.NewGrepTool(tmpDir, c.cfg.Config().Tools.Grep),
-		tools.NewSourcegraphTool(client),
+		webtool.NewSourcegraphTool(client),
 		tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, nil, tmpDir),
 	}
 

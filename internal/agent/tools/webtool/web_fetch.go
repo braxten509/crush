@@ -1,4 +1,4 @@
-package tools
+package webtool
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+
+	"github.com/charmbracelet/crush/internal/agent/tools"
 )
 
 //go:embed web_fetch.md.tpl
@@ -36,9 +38,9 @@ func NewWebFetchTool(workingDir string, client *http.Client) fantasy.AgentTool {
 	}
 
 	return fantasy.NewParallelAgentTool(
-		WebFetchToolName,
-		RenderToolDescription(webFetchDescriptionTpl),
-		func(ctx context.Context, params WebFetchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		tools.WebFetchToolName,
+		tools.RenderToolDescription(webFetchDescriptionTpl),
+		func(ctx context.Context, params tools.WebFetchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if params.URL == "" {
 				return fantasy.NewTextErrorResponse("url is required"), nil
 			}
@@ -48,7 +50,7 @@ func NewWebFetchTool(workingDir string, client *http.Client) fantasy.AgentTool {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to fetch URL: %s", err)), nil
 			}
 
-			hasLargeContent := len(content) > LargeContentThreshold
+			hasLargeContent := len(content) > tools.LargeContentThreshold
 			var result strings.Builder
 
 			if hasLargeContent {

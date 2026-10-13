@@ -1,4 +1,4 @@
-package tools
+package webtool
 
 import (
 	"context"
@@ -14,12 +14,9 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/charmbracelet/crush/internal/permission"
-)
 
-const (
-	FetchToolName = "fetch"
-	MaxFetchSize  = 100 * 1024 // 100KB
+	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/permission"
 )
 
 //go:embed fetch.md.tpl
@@ -36,9 +33,9 @@ type fetchDescriptionData struct {
 }
 
 func fetchDescription() string {
-	return RenderTemplate(fetchDescriptionTpl, fetchDescriptionData{
-		GhAvailable:    GHAvailable,
-		MaxFetchSizeKB: MaxFetchSize / 1024,
+	return tools.RenderTemplate(fetchDescriptionTpl, fetchDescriptionData{
+		GhAvailable:    tools.GHAvailable,
+		MaxFetchSizeKB: tools.MaxFetchSize / 1024,
 	})
 }
 
@@ -57,7 +54,7 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 
 	t := &fetchTool{permissions: permissions, workingDir: workingDir, client: client}
 	return fantasy.NewParallelAgentTool(
-		FetchToolName,
+		tools.FetchToolName,
 		fetchDescription(),
 		t.run,
 	)
@@ -70,7 +67,7 @@ type fetchTool struct {
 	client      *http.Client
 }
 
-func (t *fetchTool) run(ctx context.Context, params FetchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+func (t *fetchTool) run(ctx context.Context, params tools.FetchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 	if params.URL == "" {
 		return fantasy.NewTextErrorResponse("URL parameter is required"), nil
 	}
@@ -84,7 +81,7 @@ func (t *fetchTool) run(ctx context.Context, params FetchParams, call fantasy.To
 		return fantasy.NewTextErrorResponse("URL must start with http:// or https://"), nil
 	}
 
-	sessionID := GetSessionFromContext(ctx)
+	sessionID := tools.GetSessionFromContext(ctx)
 	if sessionID == "" {
 		return fantasy.ToolResponse{}, errors.New("session ID is required for fetching a URL")
 	}
@@ -95,23 +92,23 @@ func (t *fetchTool) run(ctx context.Context, params FetchParams, call fantasy.To
 			SessionID:   sessionID,
 			Path:        t.workingDir,
 			ToolCallID:  call.ID,
-			ToolName:    FetchToolName,
+			ToolName:    tools.FetchToolName,
 			Action:      "fetch",
 			Description: fmt.Sprintf("Fetch content from URL: %s", params.URL),
-			Params:      FetchPermissionsParams(params),
+			Params:      tools.FetchPermissionsParams(params),
 		},
 	)
 	if err != nil {
 		return fantasy.ToolResponse{}, err
 	}
 	if !p {
-		return NewPermissionDeniedResponse(), nil
+		return tools.NewPermissionDeniedResponse(), nil
 	}
 	return t.fetch(ctx, params, format)
 }
 
 // fetch requests the URL and returns its content in the given format.
-func (t *fetchTool) fetch(ctx context.Context, params FetchParams, format string) (fantasy.ToolResponse, error) {
+func (t *fetchTool) fetch(ctx context.Context, params tools.FetchParams, format string) (fantasy.ToolResponse, error) {
 	// maxFetchTimeoutSeconds is the maximum allowed timeout for fetch requests (2 minutes)
 	const maxFetchTimeoutSeconds = 120
 
@@ -143,7 +140,7 @@ func (t *fetchTool) fetch(ctx context.Context, params FetchParams, format string
 		return fantasy.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d", resp.StatusCode)), nil
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxFetchSize))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, tools.MaxFetchSize))
 	if err != nil {
 		return fantasy.NewTextErrorResponse("Failed to read response body: " + err.Error()), nil
 	}
@@ -161,9 +158,9 @@ func (t *fetchTool) fetch(ctx context.Context, params FetchParams, format string
 		return fantasy.NewTextErrorResponse(errMsg), nil
 	}
 	// truncate content if it exceeds max read size
-	if int64(len(content)) >= MaxFetchSize {
-		content = content[:MaxFetchSize]
-		content += fmt.Sprintf("\n\n[Content truncated to %d bytes]", MaxFetchSize)
+	if int64(len(content)) >= tools.MaxFetchSize {
+		content = content[:tools.MaxFetchSize]
+		content += fmt.Sprintf("\n\n[Content truncated to %d bytes]", tools.MaxFetchSize)
 	}
 
 	return fantasy.NewTextResponse(content), nil

@@ -48,3 +48,36 @@ type FetchPermissionsParams struct {
 	Format  string `json:"format"`
 	Timeout int    `json:"timeout,omitempty"`
 }
+
+const (
+	FetchToolName = "fetch"
+	MaxFetchSize  = 100 * 1024 // 100KB
+)
+
+type DownloadParams struct {
+	URL      string `json:"url" description:"The URL to download from"`
+	FilePath string `json:"file_path" description:"The local file path where the downloaded content should be saved"`
+	Timeout  int    `json:"timeout,omitempty" description:"Optional timeout in seconds (max 600)"`
+}
+
+type DownloadPermissionsParams struct {
+	URL      string `json:"url"`
+	FilePath string `json:"file_path"`
+	Timeout  int    `json:"timeout,omitempty"`
+}
+
+const DownloadToolName = "download"
+
+type SourcegraphParams struct {
+	Query         string `json:"query" description:"The Sourcegraph search query"`
+	Count         int    `json:"count,omitempty" description:"Optional number of results to return (default: 10, max: 20)"`
+	ContextWindow int    `json:"context_window,omitempty" description:"The context around the match to return (default: 10 lines)"`
+	Timeout       int    `json:"timeout,omitempty" description:"Optional timeout in seconds (max 120)"`
+}
+
+type SourcegraphResponseMetadata struct {
+	NumberOfMatches int  `json:"number_of_matches"`
+	Truncated       bool `json:"truncated"`
+}
+
+const SourcegraphToolName = "sourcegraph"

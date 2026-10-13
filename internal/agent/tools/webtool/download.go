@@ -1,4 +1,4 @@
-package tools
+package webtool
 
 import (
 	"cmp"
@@ -14,23 +14,11 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/permission"
 )
-
-type DownloadParams struct {
-	URL      string `json:"url" description:"The URL to download from"`
-	FilePath string `json:"file_path" description:"The local file path where the downloaded content should be saved"`
-	Timeout  int    `json:"timeout,omitempty" description:"Optional timeout in seconds (max 600)"`
-}
-
-type DownloadPermissionsParams struct {
-	URL      string `json:"url"`
-	FilePath string `json:"file_path"`
-	Timeout  int    `json:"timeout,omitempty"`
-}
-
-const DownloadToolName = "download"
 
 //go:embed download.md.tpl
 var downloadDescriptionTmpl []byte
@@ -45,7 +33,7 @@ type downloadDescriptionData struct {
 }
 
 func downloadDescription() string {
-	return RenderTemplate(downloadDescriptionTpl, downloadDescriptionData{
+	return tools.RenderTemplate(downloadDescriptionTpl, downloadDescriptionData{
 		MaxDownloadTimeout: 600,
 	})
 }
@@ -63,9 +51,9 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 		}
 	}
 	return fantasy.NewParallelAgentTool(
-		DownloadToolName,
+		tools.DownloadToolName,
 		downloadDescription(),
-		func(ctx context.Context, params DownloadParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params tools.DownloadParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if params.URL == "" {
 				return fantasy.NewTextErrorResponse("URL parameter is required"), nil
 			}
@@ -82,7 +70,7 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 			relPath, _ := filepath.Rel(workingDir, filePath)
 			relPath = filepath.ToSlash(cmp.Or(relPath, filePath))
 
-			sessionID := GetSessionFromContext(ctx)
+			sessionID := tools.GetSessionFromContext(ctx)
 			if sessionID == "" {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for downloading files")
 			}
@@ -92,17 +80,17 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 				permission.CreatePermissionRequest{
 					SessionID:   sessionID,
 					Path:        filePath,
-					ToolName:    DownloadToolName,
+					ToolName:    tools.DownloadToolName,
 					Action:      "download",
 					Description: fmt.Sprintf("Download file from URL: %s to %s", params.URL, filePath),
-					Params:      DownloadPermissionsParams(params),
+					Params:      tools.DownloadPermissionsParams(params),
 				},
 			)
 			if err != nil {
 				return fantasy.ToolResponse{}, err
 			}
 			if !p {
-				return NewPermissionDeniedResponse(), nil
+				return tools.NewPermissionDeniedResponse(), nil
 			}
 
 			// Handle timeout with context

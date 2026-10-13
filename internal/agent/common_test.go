@@ -14,6 +14,7 @@ import (
 	"charm.land/x/vcr"
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/webtool"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/db"
@@ -168,14 +169,14 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 
 	allTools := []fantasy.AgentTool{
 		tools.NewBashTool(env.permissions, env.workingDir, cfg.Config().Options.DataDirectory, cfg.Config().Options.Attribution, modelName, reportStartedJob),
-		tools.NewDownloadTool(env.permissions, env.workingDir, r.GetDefaultClient()),
+		webtool.NewDownloadTool(env.permissions, env.workingDir, r.GetDefaultClient()),
 		tools.NewEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
 		tools.NewMultiEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
-		tools.NewFetchTool(env.permissions, env.workingDir, r.GetDefaultClient()),
+		webtool.NewFetchTool(env.permissions, env.workingDir, r.GetDefaultClient()),
 		tools.NewGlobTool(env.workingDir, cfg.Config().Tools.Glob),
 		tools.NewGrepTool(env.workingDir, cfg.Config().Tools.Grep),
 		tools.NewLsTool(env.permissions, env.workingDir, cfg.Config().Tools.Ls),
-		tools.NewSourcegraphTool(r.GetDefaultClient()),
+		webtool.NewSourcegraphTool(r.GetDefaultClient()),
 		tools.NewViewTool(nil, env.permissions, *env.filetracker, nil, env.workingDir),
 		tools.NewWriteTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
 	}

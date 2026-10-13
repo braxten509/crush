@@ -1,4 +1,4 @@
-package tools
+package webtool
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+
+	"github.com/charmbracelet/crush/internal/agent/tools"
 )
 
 //go:embed web_search.md.tpl
@@ -34,9 +36,9 @@ func NewWebSearchTool(client *http.Client) fantasy.AgentTool {
 	}
 
 	return fantasy.NewParallelAgentTool(
-		WebSearchToolName,
-		RenderToolDescription(webSearchDescriptionTpl),
-		func(ctx context.Context, params WebSearchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		tools.WebSearchToolName,
+		tools.RenderToolDescription(webSearchDescriptionTpl),
+		func(ctx context.Context, params tools.WebSearchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if params.Query == "" {
 				return fantasy.NewTextErrorResponse("query is required"), nil
 			}

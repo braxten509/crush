@@ -1,4 +1,4 @@
-package tools
+package webtool
 
 import (
 	"bytes"
@@ -13,21 +13,9 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+
+	"github.com/charmbracelet/crush/internal/agent/tools"
 )
-
-type SourcegraphParams struct {
-	Query         string `json:"query" description:"The Sourcegraph search query"`
-	Count         int    `json:"count,omitempty" description:"Optional number of results to return (default: 10, max: 20)"`
-	ContextWindow int    `json:"context_window,omitempty" description:"The context around the match to return (default: 10 lines)"`
-	Timeout       int    `json:"timeout,omitempty" description:"Optional timeout in seconds (max 120)"`
-}
-
-type SourcegraphResponseMetadata struct {
-	NumberOfMatches int  `json:"number_of_matches"`
-	Truncated       bool `json:"truncated"`
-}
-
-const SourcegraphToolName = "sourcegraph"
 
 //go:embed sourcegraph.md.tpl
 var sourcegraphDescriptionTmpl []byte
@@ -42,7 +30,7 @@ type sourcegraphDescriptionData struct {
 }
 
 func sourcegraphDescription() string {
-	return RenderTemplate(sourcegraphDescriptionTpl, sourcegraphDescriptionData{
+	return tools.RenderTemplate(sourcegraphDescriptionTpl, sourcegraphDescriptionData{
 		MaxResults: 20,
 	})
 }
@@ -60,9 +48,9 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 		}
 	}
 	return fantasy.NewParallelAgentTool(
-		SourcegraphToolName,
+		tools.SourcegraphToolName,
 		sourcegraphDescription(),
-		func(ctx context.Context, params SourcegraphParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params tools.SourcegraphParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if params.Query == "" {
 				return fantasy.NewTextErrorResponse("Query parameter is required"), nil
 			}

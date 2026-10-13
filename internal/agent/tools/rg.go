@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/log"
 )
 
-var getRg = sync.OnceValue(func() string {
+var GetRg = sync.OnceValue(func() string {
 	if testing.Testing() {
 		return ""
 	}
@@ -27,7 +27,7 @@ var getRg = sync.OnceValue(func() string {
 })
 
 func getRgCmd(ctx context.Context, globPattern string) *exec.Cmd {
-	name := getRg()
+	name := GetRg()
 	if name == "" {
 		return nil
 	}
@@ -47,7 +47,7 @@ func getRgCmd(ctx context.Context, globPattern string) *exec.Cmd {
 }
 
 func getRgSearchCmd(ctx context.Context, pattern, path, include string) *exec.Cmd {
-	name := getRg()
+	name := GetRg()
 	if name == "" {
 		return nil
 	}

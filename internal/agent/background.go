@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/procs"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/shell"
 )
 
@@ -99,7 +100,7 @@ func hubMarkers() []string {
 
 // backgroundMinAge is how long a CLI's process must have run before it can
 // be background work; a variable so tests can shorten it.
-var backgroundMinAge = tools.ForegroundWaitLimit
+var backgroundMinAge = shelltool.ForegroundWaitLimit
 
 // BackgroundProcesses lists what the main agents' CLIs left running.
 // Sub-agents' processes are left out (sub-agents are listed on their own),

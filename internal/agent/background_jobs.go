@@ -10,6 +10,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
@@ -72,14 +73,14 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 			return fail(fmt.Errorf("no background job %q in this session", id))
 		}
 		if params.StopID != "" {
-			tool = tools.NewJobKillTool()
+			tool = shelltool.NewJobKillTool()
 			input = tools.JobKillParams{ShellID: id}
 		} else {
-			tool = tools.NewJobOutputTool(options.DataDirectory)
+			tool = shelltool.NewJobOutputTool(options.DataDirectory)
 			input = tools.JobOutputParams{ShellID: id}
 		}
 	} else {
-		tool = tools.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "", reportStartedJob)
+		tool = shelltool.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "", reportStartedJob)
 		input = tools.BashParams{Command: params.Command, WorkingDir: params.WorkingDir, Description: params.Name, RunInBackground: true}
 	}
 	tool = guardedTool{tool}
@@ -253,7 +254,7 @@ func backgroundJobNotification(job *shell.BackgroundShell, spillDir string) stri
 	if err != nil {
 		output += "\n" + err.Error()
 	}
-	output = tools.TruncateOutput(output, spillDir)
+	output = shelltool.TruncateOutput(output, spillDir)
 	return taskResult{Name: BackgroundProcessName, Status: status, Body: fmt.Sprintf("Job %s (%s) ended with exit code %d.\n%s", job.ID, job.Description, shell.ExitCode(err), output)}.String()
 }
 
@@ -275,7 +276,7 @@ func (h *taskHub) recordBackgroundTool(ctx context.Context, sessionID string, ca
 		slog.Error("Cannot record background result", "error", err)
 		return
 	}
-	tools.PersistBackgroundReview(ctx, h.c.messages, sessionID, result)
+	shelltool.PersistBackgroundReview(ctx, h.c.messages, sessionID, result)
 }
 
 func managedBackgroundJob(marker string) *shell.BackgroundShell {

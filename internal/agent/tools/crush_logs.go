@@ -33,7 +33,7 @@ type crushLogsDescriptionData struct {
 }
 
 func crushLogsDescription() string {
-	return renderTemplate(crushLogsDescriptionTpl, crushLogsDescriptionData{
+	return RenderTemplate(crushLogsDescriptionTpl, crushLogsDescriptionData{
 		DefaultLines: defaultLogLines,
 		MaxLines:     maxLogLines,
 	})

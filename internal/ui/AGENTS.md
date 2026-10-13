@@ -6,9 +6,13 @@
   or state.
 - Keep things simple; do not overcomplicate.
 - Create files if needed to separate logic; do not nest models.
-- Never do IO or expensive work in `Update`; always use a `tea.Cmd`.
+- Never do IO or expensive work in `Update`; always use a `tea.Cmd`. That
+  includes every `Workspace` call that can block (config writes, preference
+  and API key saves, permission answers, agent rebuilds — each is an HTTP
+  round-trip in client/server mode) and local file reads and writes (theme
+  files, attachments).
 - Never change the model state inside of a command. Use messages and update
-  the state in the main `Update` loop.
+  the state in the main `Update` loop. See "Commands" below.
 - Use the `github.com/charmbracelet/x/ansi` package for any string
   manipulation that might involve ANSI codes. Do not manipulate ANSI strings
   at byte level! Some useful functions:
@@ -23,50 +27,158 @@
 
 The UI uses a **hybrid rendering** approach:
 
-1. **Screen-based (Ultraviolet)**: The top-level `UI` model creates a
-   `uv.ScreenBuffer`, and components draw into sub-regions using
-   `uv.NewStyledString(str).Draw(scr, rect)`. Layout is rectangle-based via
-   a `uiLayout` struct with fields like `layout.header`, `layout.main`,
-   `layout.editor`, `layout.sidebar`, `layout.pills`, `layout.status`.
+1. **Screen-based (Ultraviolet)**: The top-level `UI` model draws into a
+   `uv.Screen` (`UI.Draw` in `model/draw.go`), and components draw into
+   sub-regions using `uv.NewStyledString(str).Draw(scr, rect)`. Layout is
+   rectangle-based via the `uiLayout` struct in `model/layout.go`
+   (`layout.header`, `layout.main`, `layout.pills`, `layout.editor`,
+   `layout.usage`, `layout.tasks`, `layout.sidebar`, `layout.status`,
+   `layout.sessionDetails`).
 2. **String-based**: Sub-components like `list.List` and `completions` render
    to strings, which are painted onto the screen buffer.
-3. **`View()`** creates the screen buffer, calls `Draw()`, then
-   `canvas.Render()` flattens it to a string for Bubble Tea.
+3. **`View()`** renders the frame, reusing the last view when nothing that
+   affects it changed (`frameState` / `frameCache` in `model/framecache.go`).
 
 ### Main Model (`model/ui.go`)
 
-The `UI` struct is the top-level Bubble Tea model. Key fields:
+The `UI` struct is the only Bubble Tea model. Key fields:
 
 - `width`, `height` — terminal dimensions
 - `layout uiLayout` — computed layout rectangles
 - `state uiState` — `uiOnboarding | uiInitialize | uiLanding | uiChat`
-- `focus uiFocusState` — `uiFocusNone | uiFocusEditor | uiFocusMain`
+- `focus uiFocusState` — `uiFocusNone | uiFocusEditor | uiFocusMain |
+  uiFocusSidebar`
 - `chat *Chat` — wraps `list.List` for the message view
-- `textarea textarea.Model` — the input editor
+- `composer` (embedded) — the prompt editor (`textarea`, bang mode, history,
+  placeholders)
+- `activeInline dialog.InlineEditor` — an inline editor (question form, plan
+  handoff, ...) that replaces the textarea
 - `dialog *dialog.Overlay` — stacked dialog system
-- `completions`, `attachments` — sub-components
+- `attachments`, `mention` — sub-components
 
-Keep most logic and state here. This is where:
+Most methods on `UI` are split into files per concern (`session.go`,
+`sidebar.go`, `tasks.go`, `remote.go`, `lsp.go`, `mcp.go`, ...). State that
+belongs together lives in small component structs held by `UI`:
 
-- Message routing happens (giant `switch msg.(type)` in `Update`)
-- Focus and UI state is managed
-- Layout calculations are performed
-- Dialogs are orchestrated
+| Component            | File               | Holds                                              |
+| -------------------- | ------------------ | -------------------------------------------------- |
+| `composer`           | `composer.go`      | textarea, bang mode, prompt history, placeholders  |
+| `promptQueue`        | `prompt_queue.go`  | queued, pending and recalled prompts               |
+| `frameState`         | `framecache.go`    | per-update frame memoization and the last view     |
+| `remoteShare`        | `remote.go`        | the Remote Control server and its setup            |
+| `themeController`    | `theme.go`         | applied theme key, user choice, preview backup     |
+| `asyncProbe[T]`      | `async_probe.go`   | memoized LSP / MCP state fetched off `Update`      |
+| `sidebarPane`        | `sidebar.go`       | sidebar logo, virtual scroll and scrollbar         |
+| `taskRow`            | `tasks.go`         | background sub-agent / process row and selection   |
+| `mentionCompletions` | `mention.go`       | the `@` mention popup                              |
+
+Others with their own type: `Chat` (`chat.go` and `chat_*.go`), `Status`
+(`status.go`), `header` (`header.go`) and `subagentView`
+(`subagent_view.go`).
+
+### Update Flow (`model/update*.go`)
+
+`UI.Update` calls `update` (`model/update.go`), which:
+
+1. Gives the message to the secure entry (`handleSecureEntryMsg`) and the
+   sub-agent view (`handleSubagentView`) first.
+2. Calls `routeMsg`, which sends input to its owner (keys to
+   `handleKeyPressMsg`, pastes to `routePaste`, mouse to `handleMouse*`),
+   then tries the per-concern handlers in order: `handleTerminalMsg`,
+   `handleWorkspaceEvent`, `handleRemoteMsg`, `handleAgentMsg`,
+   `handleSessionMsg`, `handleUIMsg`, `handleTickMsg`. Each returns
+   `ok == false` for messages it does not handle. Anything left goes to the
+   open dialogs, if any.
+3. Runs `finishUpdate` (placeholder, stale-state refresh backstop,
+   attachments, animation clock, frame bookkeeping) unless the handler ended
+   the update early (`flowReturn` / `flowReplace`).
+
+The handlers live in `update_ui.go` (terminal, Remote Control, UI and tick
+messages), `update_workspace.go` (workspace pub/sub events),
+`update_agent.go` (agent, model, shell and probe results) and
+`update_session.go` (session, history and command loading). Dialog actions
+are handled in `dialog_actions.go`: `handleDialogAction` tries the
+per-concern action handlers in turn (theme, palette toggles, palette,
+sessions, tree, remote, models, prompts) and falls back to
+`handleGenericDialogAction`.
+
+### Input Ownership
+
+Key presses go to exactly one owner, computed by `inputOwner()` /
+`paneOwner()` in `model/keypress.go`, in this precedence:
+
+1. secure entry (a secret is held while something else has the keys)
+2. sub-agent view (shown over the chat, no dialog open)
+3. dialog (any dialog open)
+4. inline editor (has the keys)
+5. task row (selected)
+6. onboarding (only quit works) / project initialization prompt
+7. by focus: completions popup or editor, chat, sidebar
+8. global keys
+
+The quit key works everywhere but over the quit dialog, Tab toggles an
+inline editor's focus, and while the agent runs the cancel and interrupt
+keys beat the editor and the chat. Mouse and paste have their own routes in
+`model/mouse.go`: clicks go to dialogs first, then an inline editor, the
+composer and the chat; a paste goes to a focused inline editor first (even
+over a dialog), then to the dialogs and the editor.
+
+### Focus
+
+Every focus change goes through `setFocus` (`model/focus.go`). It records
+`m.focus` and keeps the textarea and chat focus in step; the
+`keepChatFocus`, `keepTextareaFocus` and `focusRecordOnly` options leave one
+or both alone. `openInline` replaces the textarea with an inline editor and
+focuses it.
+
+### Commands
+
+A `tea.Cmd` runs on another goroutine, so its closure must not read or
+write the model (`m`, `m.com`, dialog fields): capture what it needs into
+locals first and return a message, then apply the result in `Update`.
+
+- `doThen(work, then)` (`model/config_write.go`) runs `work` off the Update
+  goroutine and delivers a `workDoneMsg`; `then` runs on the Update
+  goroutine with the error, so it may change UI state. `writeConfigField`
+  and `savePreferredModel` build on it.
+- Keep optimistic UI changes (closing a dialog, switching layout) where the
+  user expects them at once, and report a failed write when it lands.
+- Results that may arrive out of order carry a sequence or generation
+  number (theme previews, busy probes) and are dropped when stale.
+- Workspace state shown every frame (busy, YOLO, agent model, LSP, MCP,
+  prompt queue) is memoized and refreshed off `Update`
+  (`model/workspace_cache.go`, `asyncProbe`); read the memoized values in
+  `Update` and `Draw`, never the workspace.
+- Tests in `model/cmd_state_test.go` and `model/offloop_test.go` run
+  commands on another goroutine under `-race` to pin this.
+
+### Chat View (`model/chat.go`)
+
+The `Chat` struct wraps a `list.List` with an ID-to-index map, mouse
+tracking (drag, double/triple click), animation management, and a `follow`
+flag for auto-scroll. It bridges screen-based and string-based rendering:
+`Chat.Draw` renders the list to a string and paints it, with a scrollbar
+when needed.
+
+Individual chat items in `chat/` should be simple renderers that cache their
+output and invalidate when data changes (see `cachedMessageItem` in
+`chat/messages.go`).
 
 ### Centralized Message Handling
 
-The `UI` model is the **sole Bubble Tea model**. Sub-components (`Chat`,
-`List`, `Attachments`, `Completions`, etc.) do not participate in the
-standard Elm architecture message loop. They are stateful structs with
-imperative methods that the main model calls directly:
+Sub-components (`Chat`, `List`, `Attachments`, `Completions`, etc.) do not
+participate in the standard Elm architecture message loop. They are
+stateful structs with imperative methods that the main model calls
+directly:
 
 - **`Chat`** and **`List`** have no `Update` method at all. The main model
   calls targeted methods like `HandleMouseDown()`, `ScrollBy()`,
-  `SetMessages()`, `Animate()`.
+  `SetMessages()`, `EnsureAnimating()`.
 - **`Attachments`** and **`Completions`** have non-standard `Update`
   signatures (e.g., returning `bool` for "consumed") that act as guards, not
   as full Bubble Tea models.
-- **Sidebar** is not its own model: it's a `drawSidebar()` method on `UI`.
+- **Sidebar** is drawn by `drawSidebar()` on `UI`; its scroll state is the
+  `sidebarPane` component.
 
 When writing new components, follow this pattern:
 
@@ -75,22 +187,6 @@ When writing new components, follow this pattern:
 - Handle rendering via `Render(width int) string` or
   `Draw(scr uv.Screen, area uv.Rectangle)`.
 - Let the main `UI.Update()` decide when and how to call into the component.
-
-### Chat View (`model/chat.go`)
-
-The `Chat` struct wraps a `list.List` with an ID-to-index map, mouse
-tracking (drag, double/triple click), animation management, and a `follow`
-flag for auto-scroll. It bridges screen-based and string-based rendering:
-
-```go
-func (m *Chat) Draw(scr uv.Screen, area uv.Rectangle) {
-    uv.NewStyledString(m.list.Render()).Draw(scr, area)
-}
-```
-
-Individual chat items in `chat/` should be simple renderers that cache their
-output and invalidate when data changes (see `cachedMessageItem` in
-`chat/messages.go`).
 
 ## Key Patterns
 
@@ -135,21 +231,30 @@ the MCP and generic items. Tools with the usual layout (spinner, header of
 parameters, early states, body) describe it with a `standardTool` in
 `chat/tool_standard.go`. Renderers live in:
 
-| File                  | Tools rendered                                 |
-| --------------------- | ---------------------------------------------- |
-| `chat/bash.go`        | Bash, JobOutput, JobKill                       |
-| `chat/file.go`        | View, Write, Edit, MultiEdit, Download         |
-| `chat/search.go`      | Glob, Grep, LS, Sourcegraph                    |
-| `chat/fetch.go`       | Fetch, WebFetch, WebSearch                     |
-| `chat/agent.go`       | Agent, AgenticFetch                            |
-| `chat/diagnostics.go` | Diagnostics                                    |
-| `chat/references.go`  | References                                     |
-| `chat/lsp_restart.go` | LSPRestart                                     |
-| `chat/todos.go`       | Todos                                          |
-| `chat/mcp.go`         | MCP tools (`mcp_` prefix)                      |
-| `chat/generic.go`     | Fallback for unrecognized tools                |
-| `chat/assistant.go`   | Assistant messages (thinking, content, errors) |
-| `chat/user.go`        | User messages (input + attachments)            |
+| File                     | Tools rendered                                 |
+| ------------------------ | ---------------------------------------------- |
+| `chat/bash.go`           | Bash, JobOutput, JobKill                       |
+| `chat/file.go`           | View, Write, Edit, MultiEdit, Download         |
+| `chat/search.go`         | Glob, Grep, LS, Sourcegraph                    |
+| `chat/fetch.go`          | Fetch, WebFetch, WebSearch                     |
+| `chat/agent.go`          | Agent, AgenticFetch                            |
+| `chat/diagnostics.go`    | Diagnostics                                    |
+| `chat/references.go`     | References                                     |
+| `chat/definition.go`     | Definition                                     |
+| `chat/rename.go`         | Rename                                         |
+| `chat/replace_symbol.go` | ReplaceSymbol                                  |
+| `chat/call_hierarchy.go` | CallHierarchy                                  |
+| `chat/symbols.go`        | Symbols                                        |
+| `chat/lsp_restart.go`    | LSPRestart                                     |
+| `chat/todos.go`          | Todos                                          |
+| `chat/question.go`       | Question                                       |
+| `chat/mcp.go`            | MCP tools (`mcp_` prefix)                      |
+| `chat/docker_mcp.go`     | Docker MCP tools                               |
+| `chat/generic.go`        | Fallback for unrecognized tools                |
+| `chat/toolgroup.go`      | Groups of consecutive tool calls               |
+| `chat/assistant.go`      | Assistant messages (thinking, content, errors) |
+| `chat/user.go`           | User messages (input + attachments)            |
+| `chat/shell.go`          | Bang-mode shell command results                |
 
 ### Styling
 
@@ -166,6 +271,10 @@ parameters, early states, body) describe it with a `standardTool` in
 - Dialogs draw last and overlay everything else.
 - Use `RenderContext` from `dialog/common.go` for consistent layout (title
   gradients, width, gap, cursor offset helpers).
+- A dialog does its I/O in commands too. A command's result that only the
+  dialog needs is a private message type it handles in `HandleMsg` (the
+  overlay forwards unclaimed messages to the front dialog); see
+  `apiKeySavedMsg` in `dialog/auth/api_key_input.go`.
 
 #### Dialog rendering rules
 
@@ -199,20 +308,23 @@ box width — border and padding live *inside* it.
 
 ### Shared Context
 
-The `common.Common` struct holds `*app.App` and `*styles.Styles`. Thread it
-through all components that need access to app state or styles.
+The `common.Common` struct holds the `workspace.Workspace` and
+`*styles.Styles`. Thread it through all components that need access to app
+state or styles.
 
 ## File Organization
 
-- `model/` — Main UI model and major sub-models (chat, sidebar, header,
-  status, pills, session, onboarding, keys, etc.)
+- `model/` — Main UI model, its components and per-concern files (see
+  above)
 - `chat/` — Chat message item types and tool renderers
 - `dialog/` — The `Dialog` interface, `Overlay`, actions, dialog IDs
-  (`ids.go`) and the smaller dialogs (commands, filepicker, reasoning,
-  quit, ...). Larger dialogs live in subpackages that import it:
+  (`ids.go`), the shared `CommandItem` list item, the command palette and
+  the smaller dialogs (file picker, reasoning, quit, tree, ...). Larger
+  dialogs live in subpackages that import it:
   - `dialog/auth` — auth method, API key, OAuth flows, AWS SSO
   - `dialog/models`, `dialog/sessions`, `dialog/theme`,
-    `dialog/permissions`, `dialog/mcpservers`, `dialog/remotecontrol`
+    `dialog/permissions`, `dialog/mcpservers`, `dialog/remotecontrol`,
+    `dialog/skillbrowser`
   - `dialog/questionform` — inline question forms and plan handoff
   - `dialog/internal/kit` — shared layout, help and list-item helpers;
     `dialog/internal/kittest` — shared test helpers
@@ -248,6 +360,6 @@ through all components that need access to app state or styles.
     call `TotalHeight` per frame during a resize — the chat suppresses the
     scrollbar mid-drag and warms the cache incrementally (`list.Prewarm`)
     on settle instead.
-- Dialog messages are intercepted first in `Update` before other routing.
-- Focus state determines key event routing: `uiFocusEditor` sends keys to
-  the textarea, `uiFocusMain` sends them to the chat list.
+- Input routing follows `inputOwner()`, not ad hoc checks: add a new
+  owner there rather than testing `HasDialogs()` or `activeInline` in a
+  key handler.

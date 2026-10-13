@@ -715,8 +715,3 @@ func quickStyleChat(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.St
 	// Text selection.
 	s.TextSelection = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.primary)
 }
-
-// withMarkdownBackground returns a copy of cfg with bg applied to every style
-// primitive that does not already set its own background, so glamour paints an
-// uninterrupted background under all rendered text. Primitives that carry an
-// intentional background of their own (e.g. H1, inline code) keep it.

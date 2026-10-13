@@ -1,4 +1,4 @@
-package config
+package providers
 
 import (
 	"context"
@@ -11,31 +11,36 @@ import (
 	"charm.land/catwalk/pkg/embedded"
 )
 
-type catwalkClient interface {
+// CatwalkClient fetches the provider catalog from Catwalk.
+type CatwalkClient interface {
 	GetProviders(context.Context, string) ([]catwalk.Provider, error)
 }
 
-var _ syncer[[]catwalk.Provider] = (*catwalkSync)(nil)
+var _ syncer[[]catwalk.Provider] = (*CatwalkSync)(nil)
 
-type catwalkSync struct {
+// CatwalkSync fetches the Catwalk catalog once per process, falling back
+// to the cached or embedded catalog when the fetch fails.
+type CatwalkSync struct {
 	once       sync.Once
 	result     []catwalk.Provider
 	err        error
-	cache      cache[[]catwalk.Provider]
-	client     catwalkClient
+	cache      Cache[[]catwalk.Provider]
+	client     CatwalkClient
 	autoupdate bool
 	init       atomic.Bool
 	updated    atomic.Bool
 }
 
-func (s *catwalkSync) Init(client catwalkClient, path string, autoupdate bool) {
+// Init configures the syncer. It must be called before Get.
+func (s *CatwalkSync) Init(client CatwalkClient, path string, autoupdate bool) {
 	s.client = client
-	s.cache = newCache[[]catwalk.Provider](path)
+	s.cache = NewCache[[]catwalk.Provider](path)
 	s.autoupdate = autoupdate
 	s.init.Store(true)
 }
 
-func (s *catwalkSync) Get(ctx context.Context) ([]catwalk.Provider, error) {
+// Get returns the catalog, fetching it on the first call.
+func (s *CatwalkSync) Get(ctx context.Context) ([]catwalk.Provider, error) {
 	if !s.init.Load() {
 		panic("called Get before Init")
 	}
@@ -103,6 +108,6 @@ func (s *catwalkSync) Get(ctx context.Context) ([]catwalk.Provider, error) {
 // stays false for the whole process when auto-update is disabled, which
 // makes it the signal for refreshing catalogs that shadow Catwalk's,
 // such as the ChatGPT model catalog.
-func (s *catwalkSync) Updated() bool {
+func (s *CatwalkSync) Updated() bool {
 	return s.updated.Load()
 }

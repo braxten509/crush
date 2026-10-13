@@ -7,6 +7,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	hyperp "github.com/charmbracelet/crush/internal/agent/hyper"
+	"github.com/charmbracelet/crush/internal/config/providers"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/oauth/copilot"
 	"github.com/charmbracelet/crush/internal/oauth/grok"
@@ -22,9 +23,9 @@ func (s *ConfigStore) RefetchHyperProvider(ctx context.Context) error {
 	// not the stale snapshot captured at startup. The syncer's original
 	// client closes over the startup config and would send an expired
 	// token after OAuth re-authentication.
-	freshClient := realHyperClient{
-		baseURL:    hyperp.BaseURL(),
-		resolveKey: func() string { return ResolveHyperAPIKey(s.Config()) },
+	freshClient := providers.HyperAPIClient{
+		BaseURL:    hyperp.BaseURL(),
+		ResolveKey: func() string { return ResolveHyperAPIKey(s.Config()) },
 	}
 	hyperSyncer.SetClient(freshClient)
 

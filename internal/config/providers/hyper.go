@@ -1,4 +1,4 @@
-package config
+package providers
 
 import (
 	"context"
@@ -16,36 +16,42 @@ import (
 	xetag "github.com/charmbracelet/x/etag"
 )
 
-type hyperClient interface {
+// HyperClient fetches the Charm Hyper provider.
+type HyperClient interface {
 	Get(context.Context, string) (catwalk.Provider, error)
 }
 
-var _ syncer[catwalk.Provider] = (*hyperSync)(nil)
+var _ syncer[catwalk.Provider] = (*HyperSync)(nil)
 
-type hyperSync struct {
+// HyperSync fetches the Hyper provider once per process (or again on
+// Refetch), falling back to the cached or embedded provider when the
+// fetch fails.
+type HyperSync struct {
 	once       sync.Once
 	result     catwalk.Provider
 	err        error
-	cache      cache[catwalk.Provider]
-	client     hyperClient
+	cache      Cache[catwalk.Provider]
+	client     HyperClient
 	autoupdate bool
 	init       atomic.Bool
 }
 
-func (s *hyperSync) Init(client hyperClient, path string, autoupdate bool) {
+// Init configures the syncer. It must be called before Get.
+func (s *HyperSync) Init(client HyperClient, path string, autoupdate bool) {
 	s.client = client
-	s.cache = newCache[catwalk.Provider](path)
+	s.cache = NewCache[catwalk.Provider](path)
 	s.autoupdate = autoupdate
 	s.init.Store(true)
 }
 
 // SetClient replaces the HTTP client used for fetching. This is used
 // before Refetch to ensure the latest credentials are used.
-func (s *hyperSync) SetClient(client hyperClient) {
+func (s *HyperSync) SetClient(client HyperClient) {
 	s.client = client
 }
 
-func (s *hyperSync) Get(ctx context.Context) (catwalk.Provider, error) {
+// Get returns the provider, fetching it on the first call.
+func (s *HyperSync) Get(ctx context.Context) (catwalk.Provider, error) {
 	if !s.init.Load() {
 		panic("called Get before Init")
 	}
@@ -60,7 +66,7 @@ func (s *hyperSync) Get(ctx context.Context) (catwalk.Provider, error) {
 
 // Refetch resets the memoized result and re-fetches the Hyper provider.
 // Must not be called concurrently with Get.
-func (s *hyperSync) Refetch(ctx context.Context) (catwalk.Provider, error) {
+func (s *HyperSync) Refetch(ctx context.Context) (catwalk.Provider, error) {
 	if !s.init.Load() {
 		panic("called Refetch before Init")
 	}
@@ -73,7 +79,7 @@ func (s *hyperSync) Refetch(ctx context.Context) (catwalk.Provider, error) {
 
 // fetch performs the actual Hyper provider fetch. It is called from both
 // Get (via sync.Once) and Refetch (after resetting sync.Once).
-func (s *hyperSync) fetch(ctx context.Context) {
+func (s *HyperSync) fetch(ctx context.Context) {
 	s.err = nil
 	if !s.autoupdate {
 		slog.Info("Using embedded Hyper provider")
@@ -117,20 +123,25 @@ func (s *hyperSync) fetch(ctx context.Context) {
 	s.err = s.cache.Store(result)
 }
 
-var _ hyperClient = realHyperClient{}
+var _ HyperClient = HyperAPIClient{}
 
-type realHyperClient struct {
-	baseURL      string
-	resolveKey   func() string
-	refreshToken func(context.Context) error
+// HyperAPIClient fetches the Hyper provider from the Hyper API.
+type HyperAPIClient struct {
+	// BaseURL is the Hyper API base URL.
+	BaseURL string
+	// ResolveKey returns the API key to send, or "" to send none.
+	ResolveKey func() string
+	// RefreshToken, when set, refreshes the token after a 401 so the
+	// request can be retried once.
+	RefreshToken func(context.Context) error
 }
 
-// Get implements hyperClient.
-func (r realHyperClient) Get(ctx context.Context, etag string) (catwalk.Provider, error) {
+// Get implements HyperClient.
+func (r HyperAPIClient) Get(ctx context.Context, etag string) (catwalk.Provider, error) {
 	result, err := r.doGet(ctx, etag)
-	if err != nil && isHTTPUnauthorized(err) && r.refreshToken != nil {
+	if err != nil && isHTTPUnauthorized(err) && r.RefreshToken != nil {
 		slog.Info("Received 401 fetching Hyper provider, refreshing token and retrying")
-		if refreshErr := r.refreshToken(ctx); refreshErr != nil {
+		if refreshErr := r.RefreshToken(ctx); refreshErr != nil {
 			slog.Warn("Failed to refresh Hyper token", "error", refreshErr)
 			return result, err
 		}
@@ -139,19 +150,19 @@ func (r realHyperClient) Get(ctx context.Context, etag string) (catwalk.Provider
 	return result, err
 }
 
-func (r realHyperClient) doGet(ctx context.Context, etag string) (catwalk.Provider, error) {
+func (r HyperAPIClient) doGet(ctx context.Context, etag string) (catwalk.Provider, error) {
 	var result catwalk.Provider
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		r.baseURL+"/api/v1/provider",
+		r.BaseURL+"/api/v1/provider",
 		nil,
 	)
 	if err != nil {
 		return result, fmt.Errorf("could not create request: %w", err)
 	}
 	xetag.Request(req, etag)
-	if apiKey := r.resolveKey(); apiKey != "" {
+	if apiKey := r.ResolveKey(); apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 

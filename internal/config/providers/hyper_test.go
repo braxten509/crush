@@ -1,4 +1,4 @@
-package config
+package providers
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func (m *mockHyperClient) Get(ctx context.Context, etag string) (catwalk.Provide
 func TestHyperSync_Init(t *testing.T) {
 	t.Parallel()
 
-	syncer := &hyperSync{}
+	syncer := &HyperSync{}
 	client := &mockHyperClient{}
 	path := "/tmp/hyper.json"
 
@@ -42,7 +42,7 @@ func TestHyperSync_Init(t *testing.T) {
 func TestHyperSync_GetPanicIfNotInit(t *testing.T) {
 	t.Parallel()
 
-	syncer := &hyperSync{}
+	syncer := &HyperSync{}
 	require.Panics(t, func() {
 		_, _ = syncer.Get(t.Context())
 	})
@@ -51,7 +51,7 @@ func TestHyperSync_GetPanicIfNotInit(t *testing.T) {
 func TestHyperSync_GetFreshProvider(t *testing.T) {
 	t.Parallel()
 
-	syncer := &hyperSync{}
+	syncer := &HyperSync{}
 	client := &mockHyperClient{
 		provider: catwalk.Provider{
 			Name: "Hyper",
@@ -91,7 +91,7 @@ func TestHyperSync_GetNotModifiedUsesCached(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	syncer := &hyperSync{}
+	syncer := &HyperSync{}
 	client := &mockHyperClient{
 		err: catwalk.ErrNotModified,
 	}
@@ -110,7 +110,7 @@ func TestHyperSync_GetClientError(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := tmpDir + "/hyper.json"
 
-	syncer := &hyperSync{}
+	syncer := &HyperSync{}
 	client := &mockHyperClient{
 		err: errors.New("network error"),
 	}
@@ -129,7 +129,7 @@ func TestHyperSync_GetEmptyCache(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := tmpDir + "/hyper.json"
 
-	syncer := &hyperSync{}
+	syncer := &HyperSync{}
 	client := &mockHyperClient{
 		provider: catwalk.Provider{
 			Name: "Fresh Hyper",
@@ -150,7 +150,7 @@ func TestHyperSync_GetEmptyCache(t *testing.T) {
 func TestHyperSync_GetCalledMultipleTimesUsesOnce(t *testing.T) {
 	t.Parallel()
 
-	syncer := &hyperSync{}
+	syncer := &HyperSync{}
 	client := &mockHyperClient{
 		provider: catwalk.Provider{
 			Name: "Hyper",
@@ -188,7 +188,7 @@ func TestHyperSync_GetCacheStoreError(t *testing.T) {
 	// Try to create cache in a subdirectory under the blocking file.
 	path := blockingFile + "/subdir/hyper.json"
 
-	syncer := &hyperSync{}
+	syncer := &HyperSync{}
 	client := &mockHyperClient{
 		provider: catwalk.Provider{
 			Name: "Hyper",
@@ -231,10 +231,10 @@ func TestRealHyperClient_RetryOn401(t *testing.T) {
 	defer server.Close()
 
 	refreshCalled := false
-	client := realHyperClient{
-		baseURL:      server.URL,
-		resolveKey:   func() string { return "test-key" },
-		refreshToken: func(ctx context.Context) error { refreshCalled = true; return nil },
+	client := HyperAPIClient{
+		BaseURL:      server.URL,
+		ResolveKey:   func() string { return "test-key" },
+		RefreshToken: func(ctx context.Context) error { refreshCalled = true; return nil },
 	}
 
 	provider, err := client.Get(t.Context(), "")
@@ -254,9 +254,9 @@ func TestRealHyperClient_NoRetryWithoutRefresher(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := realHyperClient{
-		baseURL:    server.URL,
-		resolveKey: func() string { return "test-key" },
+	client := HyperAPIClient{
+		BaseURL:    server.URL,
+		ResolveKey: func() string { return "test-key" },
 	}
 
 	_, err := client.Get(t.Context(), "")
@@ -274,10 +274,10 @@ func TestRealHyperClient_RefreshFailureReturnsOriginalError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := realHyperClient{
-		baseURL:      server.URL,
-		resolveKey:   func() string { return "test-key" },
-		refreshToken: func(ctx context.Context) error { return errors.New("refresh failed") },
+	client := HyperAPIClient{
+		BaseURL:      server.URL,
+		ResolveKey:   func() string { return "test-key" },
+		RefreshToken: func(ctx context.Context) error { return errors.New("refresh failed") },
 	}
 
 	_, err := client.Get(t.Context(), "")
@@ -303,10 +303,10 @@ func TestRealHyperClient_SuccessWithoutRetry(t *testing.T) {
 	defer server.Close()
 
 	refreshCalled := false
-	client := realHyperClient{
-		baseURL:      server.URL,
-		resolveKey:   func() string { return "test-key" },
-		refreshToken: func(ctx context.Context) error { refreshCalled = true; return nil },
+	client := HyperAPIClient{
+		BaseURL:      server.URL,
+		ResolveKey:   func() string { return "test-key" },
+		RefreshToken: func(ctx context.Context) error { refreshCalled = true; return nil },
 	}
 
 	provider, err := client.Get(t.Context(), "")

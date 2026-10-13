@@ -95,188 +95,223 @@ func NewViewTool(
 	workingDir string,
 	skillsPaths ...string,
 ) fantasy.AgentTool {
+	t := &viewTool{
+		lspManager:   lspManager,
+		permissions:  permissions,
+		filetracker:  filetracker,
+		skillTracker: skillTracker,
+		workingDir:   workingDir,
+		skillsPaths:  skillsPaths,
+	}
 	return fantasy.NewAgentTool(
 		ViewToolName,
 		viewDescription(),
-		func(ctx context.Context, params ViewParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			if params.FilePath == "" {
-				return fantasy.NewTextErrorResponse("file_path is required"), nil
-			}
-
-			// Handle builtin skill files (crush: prefix).
-			if strings.HasPrefix(params.FilePath, skills.BuiltinPrefix) {
-				resp, err := readBuiltinFile(params, skillTracker)
-				return resp, err
-			}
-
-			// Handle relative paths
-			filePath := fsext.SmartJoin(workingDir, params.FilePath)
-
-			// Check if file is outside working directory and request permission if needed
-			absWorkingDir, err := filepath.Abs(workingDir)
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error resolving working directory: %w", err)
-			}
-
-			absFilePath, err := filepath.Abs(filePath)
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error resolving file path: %w", err)
-			}
-
-			relPath, err := filepath.Rel(absWorkingDir, absFilePath)
-			isOutsideWorkDir := err != nil || strings.HasPrefix(relPath, "..")
-			isSkillFile := isInSkillsPath(absFilePath, skillsPaths)
-
-			sessionID := GetSessionFromContext(ctx)
-			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for accessing files outside working directory")
-			}
-
-			// Request permission for files outside working directory, unless it's a skill file.
-			if isOutsideWorkDir && !isSkillFile {
-				granted, permReqErr := permissions.Request(
-					ctx,
-					permission.CreatePermissionRequest{
-						SessionID:   sessionID,
-						Path:        absFilePath,
-						ToolCallID:  call.ID,
-						ToolName:    ViewToolName,
-						Action:      "read",
-						Description: fmt.Sprintf("Read file outside working directory: %s", absFilePath),
-						Params:      ViewPermissionsParams(params),
-					},
-				)
-				if permReqErr != nil {
-					return fantasy.ToolResponse{}, permReqErr
-				}
-				if !granted {
-					return NewPermissionDeniedResponse(), nil
-				}
-			}
-
-			// Check if file exists
-			fileInfo, err := os.Stat(filePath)
-			if err != nil {
-				if os.IsNotExist(err) {
-					// Try to offer suggestions for similarly named files
-					dir := filepath.Dir(filePath)
-					base := filepath.Base(filePath)
-
-					dirEntries, dirErr := os.ReadDir(dir)
-					if dirErr == nil {
-						var suggestions []string
-						for _, entry := range dirEntries {
-							if strings.Contains(strings.ToLower(entry.Name()), strings.ToLower(base)) ||
-								strings.Contains(strings.ToLower(base), strings.ToLower(entry.Name())) {
-								suggestions = append(suggestions, filepath.Join(dir, entry.Name()))
-								if len(suggestions) >= 3 {
-									break
-								}
-							}
-						}
-
-						if len(suggestions) > 0 {
-							return fantasy.NewTextErrorResponse(fmt.Sprintf("File not found: %s\n\nDid you mean one of these?\n%s",
-								filePath, strings.Join(suggestions, "\n"))), nil
-						}
-					}
-
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("File not found: %s", filePath)), nil
-				}
-				return fantasy.ToolResponse{}, fmt.Errorf("error accessing file: %w", err)
-			}
-
-			// Check if it's a directory
-			if fileInfo.IsDir() {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("Path is a directory, not a file: %s", filePath)), nil
-			}
-
-			// Set default limit if not provided (no limit for SKILL.md files)
-			if params.Limit <= 0 {
-				if isSkillFile {
-					params.Limit = 1000000 // Effectively no limit for skill files
-				} else {
-					params.Limit = DefaultReadLimit
-				}
-			}
-
-			isSupportedImage, mimeType := getImageMimeType(filePath)
-			if isSupportedImage {
-				if fileInfo.Size() > MaxViewSize {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("Image file is too large (%d bytes). Maximum size is %d bytes",
-						fileInfo.Size(), MaxViewSize)), nil
-				}
-				if !GetSupportsImagesFromContext(ctx) {
-					modelName := GetModelNameFromContext(ctx)
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("This model (%s) does not support image data.", modelName)), nil
-				}
-
-				imageData, readErr := os.ReadFile(filePath)
-				if readErr != nil {
-					return fantasy.ToolResponse{}, fmt.Errorf("error reading image file: %w", readErr)
-				}
-
-				// Some tools save files with a mismatched extension
-				// (e.g. pinchtab writes JPEG bytes to a .png file).
-				// Providers like Anthropic strictly validate the
-				// media type against the base64 magic bytes and 400
-				// on mismatch, so prefer the sniffed type whenever
-				// it identifies a supported image format.
-				mimeType = sniffImageMimeType(imageData, mimeType)
-
-				return fantasy.NewImageResponse(imageData, mimeType), nil
-			}
-
-			// Read the file content
-			maxContentSize := MaxViewSize
-			if isSkillFile {
-				maxContentSize = 0
-			}
-			content, hasMore, err := readTextFile(filePath, params.Offset, params.Limit, maxContentSize)
-			if err != nil {
-				var tooLarge contentTooLargeError
-				if errors.As(err, &tooLarge) {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("Content section is too large (%d bytes). Maximum size is %d bytes",
-						tooLarge.Size, tooLarge.Max)), nil
-				}
-				return fantasy.ToolResponse{}, fmt.Errorf("error reading file: %w", err)
-			}
-			if !utf8.ValidString(content) {
-				return fantasy.NewTextErrorResponse("File content is not valid UTF-8"), nil
-			}
-
-			openInLSPs(ctx, lspManager, filePath)
-			waitForLSPDiagnostics(ctx, lspManager, filePath, 300*time.Millisecond)
-			output := "<file>\n"
-			output += addLineNumbers(content, params.Offset+1)
-
-			if hasMore {
-				output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
-					params.Offset+len(strings.Split(content, "\n")))
-			}
-			output += "\n</file>\n"
-			output += getDiagnostics(filePath, lspManager)
-			filetracker.RecordRead(ctx, sessionID, filePath)
-
-			meta := ViewResponseMetadata{
-				FilePath: filePath,
-				Content:  content,
-			}
-			if isSkillFile {
-				if skill, err := skills.Parse(filePath); err == nil {
-					meta.ResourceType = ViewResourceSkill
-					meta.ResourceName = skill.Name
-					meta.ResourceDescription = skill.Description
-					skillTracker.MarkLoaded(skill.Name)
-				}
-			}
-
-			return fantasy.WithResponseMetadata(
-				fantasy.NewTextResponse(output),
-				meta,
-			), nil
-		},
+		t.run,
 	)
+}
+
+// viewTool holds what the view tool needs to read a file.
+type viewTool struct {
+	lspManager   *lsp.Manager
+	permissions  permission.Service
+	filetracker  filetracker.Service
+	skillTracker *skills.Tracker
+	workingDir   string
+	skillsPaths  []string
+}
+
+func (t *viewTool) run(ctx context.Context, params ViewParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+	if params.FilePath == "" {
+		return fantasy.NewTextErrorResponse("file_path is required"), nil
+	}
+
+	// Handle builtin skill files (crush: prefix).
+	if strings.HasPrefix(params.FilePath, skills.BuiltinPrefix) {
+		resp, err := readBuiltinFile(params, t.skillTracker)
+		return resp, err
+	}
+
+	// Handle relative paths
+	filePath := fsext.SmartJoin(t.workingDir, params.FilePath)
+
+	// Check if file is outside working directory and request permission if needed
+	absWorkingDir, err := filepath.Abs(t.workingDir)
+	if err != nil {
+		return fantasy.ToolResponse{}, fmt.Errorf("error resolving working directory: %w", err)
+	}
+
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return fantasy.ToolResponse{}, fmt.Errorf("error resolving file path: %w", err)
+	}
+
+	relPath, err := filepath.Rel(absWorkingDir, absFilePath)
+	isOutsideWorkDir := err != nil || strings.HasPrefix(relPath, "..")
+	isSkillFile := isInSkillsPath(absFilePath, t.skillsPaths)
+
+	sessionID := GetSessionFromContext(ctx)
+	if sessionID == "" {
+		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for accessing files outside working directory")
+	}
+
+	// Request permission for files outside working directory, unless it's a skill file.
+	if isOutsideWorkDir && !isSkillFile {
+		granted, permReqErr := t.permissions.Request(
+			ctx,
+			permission.CreatePermissionRequest{
+				SessionID:   sessionID,
+				Path:        absFilePath,
+				ToolCallID:  call.ID,
+				ToolName:    ViewToolName,
+				Action:      "read",
+				Description: fmt.Sprintf("Read file outside working directory: %s", absFilePath),
+				Params:      ViewPermissionsParams(params),
+			},
+		)
+		if permReqErr != nil {
+			return fantasy.ToolResponse{}, permReqErr
+		}
+		if !granted {
+			return NewPermissionDeniedResponse(), nil
+		}
+	}
+
+	// Check if file exists
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fileNotFoundResponse(filePath), nil
+		}
+		return fantasy.ToolResponse{}, fmt.Errorf("error accessing file: %w", err)
+	}
+
+	// Check if it's a directory
+	if fileInfo.IsDir() {
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Path is a directory, not a file: %s", filePath)), nil
+	}
+
+	// Set default limit if not provided (no limit for SKILL.md files)
+	if params.Limit <= 0 {
+		if isSkillFile {
+			params.Limit = 1000000 // Effectively no limit for skill files
+		} else {
+			params.Limit = DefaultReadLimit
+		}
+	}
+
+	isSupportedImage, mimeType := getImageMimeType(filePath)
+	if isSupportedImage {
+		return viewImage(ctx, filePath, fileInfo.Size(), mimeType)
+	}
+	return t.viewText(ctx, params, sessionID, filePath, isSkillFile)
+}
+
+// fileNotFoundResponse reports a missing file, suggesting similarly named
+// files in the same directory.
+func fileNotFoundResponse(filePath string) fantasy.ToolResponse {
+	// Try to offer suggestions for similarly named files
+	dir := filepath.Dir(filePath)
+	base := filepath.Base(filePath)
+
+	dirEntries, dirErr := os.ReadDir(dir)
+	if dirErr == nil {
+		var suggestions []string
+		for _, entry := range dirEntries {
+			if strings.Contains(strings.ToLower(entry.Name()), strings.ToLower(base)) ||
+				strings.Contains(strings.ToLower(base), strings.ToLower(entry.Name())) {
+				suggestions = append(suggestions, filepath.Join(dir, entry.Name()))
+				if len(suggestions) >= 3 {
+					break
+				}
+			}
+		}
+
+		if len(suggestions) > 0 {
+			return fantasy.NewTextErrorResponse(fmt.Sprintf("File not found: %s\n\nDid you mean one of these?\n%s",
+				filePath, strings.Join(suggestions, "\n")))
+		}
+	}
+
+	return fantasy.NewTextErrorResponse(fmt.Sprintf("File not found: %s", filePath))
+}
+
+// viewImage returns an image file for models that accept images.
+func viewImage(ctx context.Context, filePath string, size int64, mimeType string) (fantasy.ToolResponse, error) {
+	if size > MaxViewSize {
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Image file is too large (%d bytes). Maximum size is %d bytes",
+			size, MaxViewSize)), nil
+	}
+	if !GetSupportsImagesFromContext(ctx) {
+		modelName := GetModelNameFromContext(ctx)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("This model (%s) does not support image data.", modelName)), nil
+	}
+
+	imageData, readErr := os.ReadFile(filePath)
+	if readErr != nil {
+		return fantasy.ToolResponse{}, fmt.Errorf("error reading image file: %w", readErr)
+	}
+
+	// Some tools save files with a mismatched extension
+	// (e.g. pinchtab writes JPEG bytes to a .png file).
+	// Providers like Anthropic strictly validate the
+	// media type against the base64 magic bytes and 400
+	// on mismatch, so prefer the sniffed type whenever
+	// it identifies a supported image format.
+	mimeType = sniffImageMimeType(imageData, mimeType)
+
+	return fantasy.NewImageResponse(imageData, mimeType), nil
+}
+
+// viewText returns a text file's lines with line numbers and diagnostics.
+func (t *viewTool) viewText(ctx context.Context, params ViewParams, sessionID, filePath string, isSkillFile bool) (fantasy.ToolResponse, error) {
+	// Read the file content
+	maxContentSize := MaxViewSize
+	if isSkillFile {
+		maxContentSize = 0
+	}
+	content, hasMore, err := readTextFile(filePath, params.Offset, params.Limit, maxContentSize)
+	if err != nil {
+		var tooLarge contentTooLargeError
+		if errors.As(err, &tooLarge) {
+			return fantasy.NewTextErrorResponse(fmt.Sprintf("Content section is too large (%d bytes). Maximum size is %d bytes",
+				tooLarge.Size, tooLarge.Max)), nil
+		}
+		return fantasy.ToolResponse{}, fmt.Errorf("error reading file: %w", err)
+	}
+	if !utf8.ValidString(content) {
+		return fantasy.NewTextErrorResponse("File content is not valid UTF-8"), nil
+	}
+
+	openInLSPs(ctx, t.lspManager, filePath)
+	waitForLSPDiagnostics(ctx, t.lspManager, filePath, 300*time.Millisecond)
+	output := "<file>\n"
+	output += addLineNumbers(content, params.Offset+1)
+
+	if hasMore {
+		output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
+			params.Offset+len(strings.Split(content, "\n")))
+	}
+	output += "\n</file>\n"
+	output += getDiagnostics(filePath, t.lspManager)
+	t.filetracker.RecordRead(ctx, sessionID, filePath)
+
+	meta := ViewResponseMetadata{
+		FilePath: filePath,
+		Content:  content,
+	}
+	if isSkillFile {
+		if skill, err := skills.Parse(filePath); err == nil {
+			meta.ResourceType = ViewResourceSkill
+			meta.ResourceName = skill.Name
+			meta.ResourceDescription = skill.Description
+			t.skillTracker.MarkLoaded(skill.Name)
+		}
+	}
+
+	return fantasy.WithResponseMetadata(
+		fantasy.NewTextResponse(output),
+		meta,
+	), nil
 }
 
 func addLineNumbers(content string, startLine int) string {

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"charm.land/fantasy"
+
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 )
 

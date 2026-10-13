@@ -12,5 +12,13 @@ func TestMain(m *testing.M) {
 	if dir, err := filepath.EvalSymlinks(os.TempDir()); err == nil {
 		os.Setenv("TMPDIR", dir)
 	}
-	os.Exit(m.Run())
+	// Spilled restore copies stay out of the user's real cache folder.
+	cache, err := os.MkdirTemp("", "filechange-cache-")
+	if err != nil {
+		panic(err)
+	}
+	stagingBase = func() (string, error) { return cache, nil }
+	code := m.Run()
+	os.RemoveAll(cache)
+	os.Exit(code)
 }

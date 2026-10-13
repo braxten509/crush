@@ -436,25 +436,13 @@ type UI struct {
 	// skills
 	skillStates []*skills.SkillState
 
-	// sidebarLogo keeps a cached version of the sidebar sidebarLogo.
-	sidebarLogo string
-
 	// logoFrame is the wordmark's animation frame; see logoshine.go.
 	// logoShineStart times its cycles.
 	logoFrame      logoFrame
 	logoShineStart time.Time
 
-	// Sidebar scroll state for virtual scrolling.
-	sidebarOffset           int  // current scroll offset in lines
-	sidebarScrollable       bool // true when sidebar content exceeds available height
-	sidebarScrollbarVisible bool
-	sidebarScrollbarSeq     int    // sequence number for auto-hide timer
-	sidebarMaxOffsetVal     int    // max scroll offset, computed in updateSidebarScrollState
-	sidebarContent          string // cached rendered sidebar content
-	sidebarTotalLines       int    // total lines in sidebarContent
-	sidebarContentHeight    int    // available height for sidebar content
-	sidebarContentWidth     int    // available width for sidebar content
-	sidebarDrawLogo         string // logo to render (may differ from sidebarLogo for short heights)
+	// sidebar is the chat sidebar's logo and scroll state; see sidebar.go.
+	sidebar sidebarPane
 
 	// Notification state
 	notifyBackend       notification.Backend
@@ -1658,14 +1646,10 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A focused sidebar gets the wheel; with composer_focus_only
 			// (where it can't be focused) the wheel scrolls it while
 			// the pointer is over it.
-			overSidebar := image.Pt(msg.Mouse.X, msg.Mouse.Y).In(m.layout.sidebar) && m.sidebarScrollable
+			overSidebar := image.Pt(msg.Mouse.X, msg.Mouse.Y).In(m.layout.sidebar) && m.sidebar.scrollable
 			if m.focus == uiFocusSidebar || (overSidebar && m.composerFocusOnly()) {
-				lines := int(msg.DeltaY)
-				if lines != 0 {
-					m.sidebarOffset = max(0, min(m.sidebarOffset+lines, m.sidebarMaxOffsetVal))
-					m.sidebarScrollbarSeq++
-					m.sidebarScrollbarVisible = true
-					cmds = append(cmds, sidebarScrollbarHideCmd(m.sidebarScrollbarSeq))
+				if cmd := m.sidebar.wheel(int(msg.DeltaY)); cmd != nil {
+					cmds = append(cmds, cmd)
 				}
 				break
 			}
@@ -1705,9 +1689,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case sidebarScrollbarHideMsg:
-		if msg.seq == m.sidebarScrollbarSeq && m.focus != uiFocusSidebar {
-			m.sidebarScrollbarVisible = false
-		}
+		m.sidebar.hideScrollbar(msg.seq, m.focus == uiFocusSidebar)
 	case spinner.TickMsg:
 		if m.dialog.HasDialogs() {
 			// route to dialog
@@ -2117,7 +2099,7 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 	switch {
 	case m.state != uiChat:
 		return nil
-	case m.focus != uiFocusSidebar && image.Pt(msg.X, msg.Y).In(m.layout.sidebar) && m.sidebarScrollable && !m.composerFocusOnly():
+	case m.focus != uiFocusSidebar && image.Pt(msg.X, msg.Y).In(m.layout.sidebar) && m.sidebar.scrollable && !m.composerFocusOnly():
 		m.focus = uiFocusSidebar
 		m.textarea.Blur()
 		m.chat.Blur()
@@ -2130,7 +2112,7 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 			cmd = m.textarea.Focus()
 			m.chat.Blur()
 		}
-		m.sidebarScrollbarVisible = false
+		m.sidebar.scrollbarVisible = false
 	case m.focus != uiFocusMain && image.Pt(msg.X, msg.Y).In(m.layout.main) && !m.composerFocusOnly():
 		// With composer_focus_only the chat still handles the click
 		// (selection, expanding groups) without taking focus.
@@ -2141,7 +2123,7 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 			m.textarea.Blur()
 			m.chat.Focus()
 		}
-		m.sidebarScrollbarVisible = false
+		m.sidebar.scrollbarVisible = false
 	}
 	return cmd
 }
@@ -3568,11 +3550,11 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 			case key.Matches(msg, m.keyMap.Tab):
 				m.focus = uiFocusEditor
-				m.sidebarScrollbarVisible = false
+				m.sidebar.scrollbarVisible = false
 				cmds = append(cmds, m.textarea.Focus())
 				m.chat.Blur()
 			case key.Matches(msg, m.keyMap.Chat.FocusSidebar):
-				if m.state == uiChat && !m.isCompact && m.hasSession() && m.sidebarScrollable {
+				if m.state == uiChat && !m.isCompact && m.hasSession() && m.sidebar.scrollable {
 					m.focus = uiFocusSidebar
 					m.chat.Blur()
 				}
@@ -3644,27 +3626,20 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			}
 			switch {
 			case key.Matches(msg, m.keyMap.Chat.Up):
-				m.sidebarOffset = max(0, m.sidebarOffset-4)
-				m.sidebarScrollbarSeq++
+				m.sidebar.scrollUp()
 			case key.Matches(msg, m.keyMap.Chat.Down):
-				maxOffset := m.sidebarMaxOffsetVal
-				if m.sidebarOffset < maxOffset {
-					m.sidebarOffset = min(m.sidebarOffset+4, maxOffset)
-					m.sidebarScrollbarSeq++
-				}
+				m.sidebar.scrollDown()
 			case key.Matches(msg, m.keyMap.Chat.Home):
-				m.sidebarOffset = 0
-				m.sidebarScrollbarSeq++
+				m.sidebar.scrollToTop()
 			case key.Matches(msg, m.keyMap.Chat.End):
-				m.sidebarOffset = m.sidebarMaxOffsetVal
-				m.sidebarScrollbarSeq++
+				m.sidebar.scrollToBottom()
 			case key.Matches(msg, m.keyMap.Chat.FocusChat):
 				m.focus = uiFocusMain
-				m.sidebarScrollbarVisible = false
+				m.sidebar.scrollbarVisible = false
 				m.chat.Focus()
 			case key.Matches(msg, m.keyMap.Tab):
 				m.focus = uiFocusEditor
-				m.sidebarScrollbarVisible = false
+				m.sidebar.scrollbarVisible = false
 				cmds = append(cmds, m.textarea.Focus())
 				m.chat.Blur()
 			default:
@@ -4306,7 +4281,7 @@ func (m *UI) toggleCompactMode() tea.Cmd {
 	if m.forceCompactMode && m.focus == uiFocusSidebar {
 		// The sidebar is going away, so focus the editor again to keep key
 		// events routed somewhere useful.
-		m.sidebarScrollbarVisible = false
+		m.sidebar.scrollbarVisible = false
 		if m.activeInline != nil {
 			m.focusActiveInline(uiFocusEditor)
 		} else {
@@ -5245,7 +5220,7 @@ func (m *UI) renderEditorView(width int) string {
 
 // cacheSidebarLogo renders and caches the sidebar logo at the specified width.
 func (m *UI) cacheSidebarLogo(width int) {
-	m.sidebarLogo = renderLogo(m.com.Styles, true, m.com.IsHyper(), width, m.logoFrame)
+	m.sidebar.logo = renderLogo(m.com.Styles, true, m.com.IsHyper(), width, m.logoFrame)
 }
 
 // applyThemeForProvider swaps the active theme to the one associated with
@@ -6449,7 +6424,7 @@ func (m *UI) newSession() tea.Cmd {
 	m.chat.SetAgentBusy(false)
 	// A session still opening must not replace the new chat when it lands.
 	abandonCmd := m.abandonSessionLoad()
-	m.sidebarOffset = 0
+	m.sidebar.offset = 0
 	m.sessionFiles = nil
 	m.sessionFileReads = nil
 	m.setState(uiLanding, uiFocusEditor)

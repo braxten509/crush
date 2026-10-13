@@ -294,7 +294,7 @@ func (m *UI) applyLoadedSession(msg loadSessionMsg) []tea.Cmd {
 	}
 	m.setState(uiChat, m.focus)
 	m.session = sess
-	m.sidebarOffset = 0
+	m.sidebar.offset = 0
 	m.sessionFiles = msg.files
 	// Session switch: the memoized busy state and queued prompts
 	// belong to the previous session. Drop them and re-fetch

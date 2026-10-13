@@ -176,7 +176,7 @@ func (m *UI) updateSidebarScrollState() {
 
 	title := t.Sidebar.SessionTitle.Width(contentWidth).MaxHeight(2).Render(m.session.Title)
 	cwd := common.PrettyPathWithBranch(t, m.com.Workspace.WorkingDir(), m.gitBranch, contentWidth)
-	sidebarLogo := m.sidebarLogo
+	sidebarLogo := m.sidebar.logo
 	if height < logoHeightBreakpoint {
 		sidebarLogo = lipgloss.JoinVertical(lipgloss.Left, logo.SmallRender(m.com.Styles, contentWidth, logo.Opts{
 			Hyper: m.com.IsHyper(),
@@ -215,25 +215,13 @@ func (m *UI) updateSidebarScrollState() {
 		skillsSection,
 	)
 
-	totalLines := strings.Count(content, "\n") + 1
-	m.sidebarContent = content
-	m.sidebarTotalLines = totalLines
-	m.sidebarContentWidth = contentWidth
-	m.sidebarContentHeight = contentHeight
-	m.sidebarDrawLogo = sidebarLogo
-	m.sidebarScrollable = totalLines > contentHeight
-	m.sidebarMaxOffsetVal = max(0, totalLines-contentHeight)
+	m.sidebar.setContent(content, sidebarLogo, contentWidth, contentHeight)
 
 	// If the sidebar is focused but no longer scrollable (e.g. after a
 	// resize), return focus to the chat.
-	if m.focus == uiFocusSidebar && !m.sidebarScrollable {
+	if m.focus == uiFocusSidebar && !m.sidebar.scrollable {
 		m.focus = uiFocusMain
 		m.chat.Focus()
-	}
-
-	// Clamp sidebarOffset.
-	if m.sidebarOffset > m.sidebarMaxOffsetVal {
-		m.sidebarOffset = m.sidebarMaxOffsetVal
 	}
 }
 
@@ -244,11 +232,106 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 	if m.session == nil {
 		return
 	}
+	m.sidebar.draw(scr, area, m.com.Styles, m.focus == uiFocusSidebar)
+}
 
-	sidebarLogo := m.sidebarDrawLogo
-	contentWidth := m.sidebarContentWidth
-	contentHeight := m.sidebarContentHeight
-	totalLines := m.sidebarTotalLines
+// sidebarPane is the chat sidebar: a fixed logo over session details that
+// scroll virtually, with a scrollbar that hides itself unless the sidebar is
+// focused. Its content is rendered in the update path (see
+// updateSidebarScrollState) and only sliced when drawing.
+type sidebarPane struct {
+	// logo is the cached sidebar logo at the sidebar's width.
+	logo string
+	// drawLogo is the logo to render (may differ from logo for short
+	// heights).
+	drawLogo string
+
+	// content is the rendered, scrollable content; totalLines its line
+	// count, and contentWidth and contentHeight the area it shows in.
+	content       string
+	totalLines    int
+	contentWidth  int
+	contentHeight int
+
+	// offset is the scroll offset in lines, at most maxOffset.
+	offset    int
+	maxOffset int
+	// scrollable is true when the content exceeds the available height.
+	scrollable bool
+
+	scrollbarVisible bool
+	// scrollbarSeq is the sequence number for the auto-hide timer.
+	scrollbarSeq int
+}
+
+// sidebarKeyScroll is how many lines the scroll keys move the sidebar.
+const sidebarKeyScroll = 4
+
+// setContent stores freshly rendered content and recomputes the scroll
+// state, keeping the offset in range.
+func (s *sidebarPane) setContent(content, drawLogo string, contentWidth, contentHeight int) {
+	totalLines := strings.Count(content, "\n") + 1
+	s.content = content
+	s.totalLines = totalLines
+	s.contentWidth = contentWidth
+	s.contentHeight = contentHeight
+	s.drawLogo = drawLogo
+	s.scrollable = totalLines > contentHeight
+	s.maxOffset = max(0, totalLines-contentHeight)
+	s.offset = min(s.offset, s.maxOffset)
+}
+
+// wheel scrolls by lines and shows the scrollbar, returning the command that
+// hides it again.
+func (s *sidebarPane) wheel(lines int) tea.Cmd {
+	if lines == 0 {
+		return nil
+	}
+	s.offset = max(0, min(s.offset+lines, s.maxOffset))
+	s.scrollbarSeq++
+	s.scrollbarVisible = true
+	return sidebarScrollbarHideCmd(s.scrollbarSeq)
+}
+
+// scrollUp, scrollDown, scrollToTop and scrollToBottom are the focused
+// sidebar's scroll keys.
+func (s *sidebarPane) scrollUp() {
+	s.offset = max(0, s.offset-sidebarKeyScroll)
+	s.scrollbarSeq++
+}
+
+func (s *sidebarPane) scrollDown() {
+	if s.offset < s.maxOffset {
+		s.offset = min(s.offset+sidebarKeyScroll, s.maxOffset)
+		s.scrollbarSeq++
+	}
+}
+
+func (s *sidebarPane) scrollToTop() {
+	s.offset = 0
+	s.scrollbarSeq++
+}
+
+func (s *sidebarPane) scrollToBottom() {
+	s.offset = s.maxOffset
+	s.scrollbarSeq++
+}
+
+// hideScrollbar hides the scrollbar when seq is the latest auto-hide timer
+// and the sidebar isn't focused.
+func (s *sidebarPane) hideScrollbar(seq int, focused bool) {
+	if seq == s.scrollbarSeq && !focused {
+		s.scrollbarVisible = false
+	}
+}
+
+// draw renders the fixed logo, the visible slice of the content and, while
+// scrolling or focused, the scrollbar.
+func (s *sidebarPane) draw(scr uv.Screen, area uv.Rectangle, sty *styles.Styles, focused bool) {
+	sidebarLogo := s.drawLogo
+	contentWidth := s.contentWidth
+	contentHeight := s.contentHeight
+	totalLines := s.totalLines
 
 	var logoRect, contentRect image.Rectangle
 	layout.Vertical(
@@ -257,14 +340,14 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 	).Split(area).Assign(&logoRect, &contentRect)
 
 	// Slice visible lines.
-	end := min(m.sidebarOffset+contentHeight, totalLines)
-	lines := strings.Split(m.sidebarContent, "\n")
-	visibleLines := lines[m.sidebarOffset:end]
+	end := min(s.offset+contentHeight, totalLines)
+	lines := strings.Split(s.content, "\n")
+	visibleLines := lines[s.offset:end]
 	visibleStr := strings.Join(visibleLines, "\n")
 
 	// Determine scrollbar visibility: always visible when focused, otherwise
 	// auto-hide.
-	scrollbarVisible := totalLines > contentHeight && (m.sidebarScrollbarVisible || m.focus == uiFocusSidebar)
+	scrollbarVisible := totalLines > contentHeight && (s.scrollbarVisible || focused)
 
 	// Draw the fixed logo.
 	uv.NewStyledString(
@@ -284,7 +367,7 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 
 	// Draw scrollbar in the reserved column.
 	if scrollbarVisible {
-		scrollbar := common.Scrollbar(m.com.Styles, contentHeight, totalLines, contentHeight, m.sidebarOffset)
+		scrollbar := common.Scrollbar(sty, contentHeight, totalLines, contentHeight, s.offset)
 		if scrollbar != "" {
 			scrollbarArea := image.Rectangle{
 				Min: image.Point{X: area.Max.X - 1, Y: contentRect.Min.Y},

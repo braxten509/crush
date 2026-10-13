@@ -49,7 +49,7 @@ func (m *UI) logoShineTick() tea.Cmd {
 // before a chat, or the sidebar beside one.
 func (m *UI) logoVisible() bool {
 	if m.state == uiChat {
-		return !m.isCompact && m.sidebarDrawLogo == m.sidebarLogo
+		return !m.isCompact && m.sidebar.drawLogo == m.sidebar.logo
 	}
 	return true
 }
@@ -63,10 +63,10 @@ func (m *UI) handleLogoShine() tea.Cmd {
 		m.logoFrame = frame
 		if m.state == uiChat && !m.isCompact {
 			// A short sidebar draws the small logo instead; keep it.
-			big := m.sidebarDrawLogo == m.sidebarLogo
+			big := m.sidebar.drawLogo == m.sidebar.logo
 			m.cacheSidebarLogo(m.layout.sidebar.Dx())
 			if big {
-				m.sidebarDrawLogo = m.sidebarLogo
+				m.sidebar.drawLogo = m.sidebar.logo
 			}
 		}
 	}

@@ -506,7 +506,7 @@ func TestComposerFocusOnlySetting(t *testing.T) {
 		u.layout.main = image.Rect(0, 0, 60, 10)
 		u.layout.sidebar = image.Rect(60, 0, 80, 10)
 		u.layout.editor = image.Rect(0, 10, 60, 14)
-		u.sidebarScrollable = true
+		u.sidebar.scrollable = true
 		u.handleClickFocus(tea.MouseClickMsg{X: 1, Y: 11})
 		require.Equal(t, uiFocusEditor, u.focus, "clicking the composer focuses it")
 		u.handleClickFocus(tea.MouseClickMsg{X: 5, Y: 3})

@@ -48,51 +48,9 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 				return fantasy.ToolResponse{}, fmt.Errorf("failed to get session: %w", err)
 			}
 
-			isNew := len(currentSession.Todos) == 0
-			oldStatusByContent := make(map[string]session.TodoStatus)
-			for _, todo := range currentSession.Todos {
-				oldStatusByContent[todo.Content] = todo.Status
-			}
-
-			for _, item := range params.Todos {
-				switch item.Status {
-				case "pending", "in_progress", "completed":
-				default:
-					return fantasy.ToolResponse{}, fmt.Errorf("invalid status %q for todo %q", item.Status, item.Content)
-				}
-			}
-
-			todos := make([]session.Todo, len(params.Todos))
-			var justCompleted []string
-			var justStarted string
-			completedCount := 0
-
-			for i, item := range params.Todos {
-				todos[i] = session.Todo{
-					Content:    item.Content,
-					Status:     session.TodoStatus(item.Status),
-					ActiveForm: item.ActiveForm,
-				}
-
-				newStatus := session.TodoStatus(item.Status)
-				oldStatus, existed := oldStatusByContent[item.Content]
-
-				if newStatus == session.TodoStatusCompleted {
-					completedCount++
-					if existed && oldStatus != session.TodoStatusCompleted {
-						justCompleted = append(justCompleted, item.Content)
-					}
-				}
-
-				if newStatus == session.TodoStatusInProgress {
-					if !existed || oldStatus != session.TodoStatusInProgress {
-						if item.ActiveForm != "" {
-							justStarted = item.ActiveForm
-						} else {
-							justStarted = item.Content
-						}
-					}
-				}
+			todos, metadata, err := UpdateTodos(currentSession.Todos, params.Todos)
+			if err != nil {
+				return fantasy.ToolResponse{}, err
 			}
 
 			currentSession.Todos = todos
@@ -116,20 +74,53 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 			}
 
 			response += fmt.Sprintf("Status: %d pending, %d in progress, %d completed\n",
-				pendingCount, inProgressCount, completedCount)
+				pendingCount, inProgressCount, metadata.Completed)
 
 			response += "Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable."
-
-			metadata := TodosResponseMetadata{
-				IsNew:         isNew,
-				Todos:         todos,
-				JustCompleted: justCompleted,
-				JustStarted:   justStarted,
-				Completed:     completedCount,
-				Total:         len(todos),
-			}
 
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 		},
 	)
+}
+
+// UpdateTodos checks a new to-do list against the old one and returns it with
+// what changed, for the todos tool and for agent CLIs' own to-do lists.
+func UpdateTodos(old []session.Todo, items []TodoItem) ([]session.Todo, TodosResponseMetadata, error) {
+	for _, item := range items {
+		switch item.Status {
+		case "pending", "in_progress", "completed":
+		default:
+			return nil, TodosResponseMetadata{}, fmt.Errorf("invalid status %q for todo %q", item.Status, item.Content)
+		}
+	}
+	oldStatusByContent := make(map[string]session.TodoStatus)
+	for _, todo := range old {
+		oldStatusByContent[todo.Content] = todo.Status
+	}
+	todos := make([]session.Todo, len(items))
+	meta := TodosResponseMetadata{IsNew: len(old) == 0, Total: len(items)}
+	for i, item := range items {
+		todos[i] = session.Todo{
+			Content:    item.Content,
+			Status:     session.TodoStatus(item.Status),
+			ActiveForm: item.ActiveForm,
+		}
+		newStatus := session.TodoStatus(item.Status)
+		oldStatus, existed := oldStatusByContent[item.Content]
+		if newStatus == session.TodoStatusCompleted {
+			meta.Completed++
+			if existed && oldStatus != session.TodoStatusCompleted {
+				meta.JustCompleted = append(meta.JustCompleted, item.Content)
+			}
+		}
+		if newStatus == session.TodoStatusInProgress && (!existed || oldStatus != session.TodoStatusInProgress) {
+			if item.ActiveForm != "" {
+				meta.JustStarted = item.ActiveForm
+			} else {
+				meta.JustStarted = item.Content
+			}
+		}
+	}
+	meta.Todos = todos
+	return todos, meta, nil
 }

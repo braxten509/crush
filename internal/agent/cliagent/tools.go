@@ -45,6 +45,10 @@ func claudeTool(name string, raw json.RawMessage) (string, string) {
 		return tools.WebFetchToolName, string(raw)
 	case "WebSearch":
 		return tools.WebSearchToolName, string(raw)
+	case "TodoWrite":
+		if input, ok := todoListInput(raw); ok {
+			return tools.TodosToolName, input
+		}
 	}
 	if rest, ok := strings.CutPrefix(name, "mcp__"); ok {
 		return "mcp_" + strings.Replace(rest, "__", "_", 1), string(raw)

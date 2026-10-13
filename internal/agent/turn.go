@@ -296,6 +296,13 @@ func (t *turn) publishOutcome(retErr *error) {
 func (t *turn) run() (*fantasy.AgentResult, error) {
 	a := t.a
 	agentTools, systemPrompt := t.buildSystemPrompt()
+	if note := a.handOverTodos(t.ctx, t.call.SessionID, t.largeModel.ModelCfg.Provider, t.largeModel.ModelCfg.Model); note != "" {
+		if t.isCLI {
+			t.call.todoHandover = note
+		} else {
+			systemPrompt += "\n\n" + note
+		}
+	}
 	agent := fantasy.NewAgent(
 		t.largeModel.Model,
 		fantasy.WithSystemPrompt(systemPrompt),

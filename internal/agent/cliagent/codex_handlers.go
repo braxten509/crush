@@ -147,6 +147,14 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 		}
 		_ = json.Unmarshal(msg.Params, &up)
 		setLimits(config.TypeCodexCLI, up.RateLimits.limits())
+	case "turn/plan/updated":
+		var up struct {
+			Plan any `json:"plan"`
+		}
+		_ = json.Unmarshal(msg.Params, &up)
+		if input, ok := todoInput(up.Plan); ok {
+			err = r.t.Emit(Event{Type: EventTodos, Input: input})
+		}
 	case "turn/completed":
 		return r.handleTurnCompleted(params)
 	case "thread/compacted":

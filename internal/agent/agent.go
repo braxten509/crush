@@ -50,6 +50,9 @@ type SessionAgentCall struct {
 	// onQueuedInput transfers confirmed native steering into this turn's
 	// completion ownership. Unconfirmed input remains owned by the queue.
 	onQueuedInput func([]SessionAgentCall)
+	// todoHandover is the last model's to-do list, handed to an agent CLI
+	// with the prompt after a model switch cleared it.
+	todoHandover string
 
 	SessionID     string
 	SubmissionID  string

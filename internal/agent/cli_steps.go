@@ -64,6 +64,9 @@ type cliSteps struct {
 	// tool's result: the next tool boundary.
 	runningMu sync.Mutex
 	running   map[string]bool
+
+	// todoMeta is what each to-do tool call changed, shown with its result.
+	todoMeta map[string]string
 }
 
 // setToolRunning records a tool call starting or returning. A start wakes
@@ -295,6 +298,9 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		s.usage = e.Usage
 	case cliagent.EventContextBudget:
 		return s.handleContextBudget(e)
+	case cliagent.EventTodos:
+		_, err := s.saveTodos(e.Input)
+		return err
 	case cliagent.EventUserMessage:
 		return s.handleUserMessage(e)
 	case cliagent.EventReasoning:
@@ -419,6 +425,18 @@ func (s *cliSteps) handleToolCall(e cliagent.Event) error {
 		s.inputs = map[string]string{}
 	}
 	s.inputs[e.ID] = e.Input
+	if e.Name == tools.TodosToolName {
+		meta, err := s.saveTodos(e.Input)
+		if err != nil {
+			return err
+		}
+		if meta != "" {
+			if s.todoMeta == nil {
+				s.todoMeta = map[string]string{}
+			}
+			s.todoMeta[e.ID] = meta
+		}
+	}
 	tc := fantasy.ToolCallContent{ToolCallID: e.ID, ToolName: e.Name, Input: e.Input}
 	s.content = append(s.content, tc)
 	return s.sc.OnToolCall(tc)
@@ -439,6 +457,9 @@ func (s *cliSteps) handleToolResult(e cliagent.Event) error {
 	}
 	if edit, ok := s.edits[e.ID]; ok && !e.IsError {
 		e.Metadata = s.editMetadata(e, edit)
+	}
+	if meta, ok := s.todoMeta[e.ID]; ok && !e.IsError {
+		e.Metadata = meta
 	}
 	if e.Name == tools.ViewToolName && !e.IsError && !strings.Contains(s.inputs[e.ID], `"offset"`) && !strings.Contains(s.inputs[e.ID], `"limit"`) {
 		var view tools.ViewResponseMetadata
@@ -518,4 +539,31 @@ func appendText(content fantasy.ResponseContent, delta string) fantasy.ResponseC
 		}
 	}
 	return append(content, fantasy.TextContent{Text: delta})
+}
+
+// saveTodos makes the CLI's own to-do list the chat's, the one the todos
+// tool keeps for API models, and returns what changed for the chat to show.
+// A list Crush can't read is left alone.
+func (s *cliSteps) saveTodos(input string) (string, error) {
+	var params tools.TodosParams
+	if json.Unmarshal([]byte(input), &params) != nil {
+		return "", nil
+	}
+	current, err := s.a.sessions.Get(s.ctx, s.sessionID)
+	if err != nil {
+		return "", err
+	}
+	todos, meta, err := tools.UpdateTodos(current.Todos, params.Todos)
+	if err != nil {
+		slog.Debug("Ignoring a CLI to-do list Crush can't read", "error", err)
+		return "", nil
+	}
+	if !slices.Equal(current.Todos, todos) {
+		current.Todos = todos
+		if _, err := s.a.sessions.Save(s.ctx, current); err != nil {
+			return "", err
+		}
+	}
+	data, _ := json.Marshal(meta)
+	return string(data), nil
 }

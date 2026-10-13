@@ -76,6 +76,9 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			return nil, err
 		}
 		text, resume := cliHandoff(history, link, prompt)
+		if call.todoHandover != "" {
+			text = call.todoHandover + "\n\n" + text
+		}
 		// Refresh even resumed CLI sessions: their native skill catalogs and
 		// kept system prompts may predate a /skills toggle or installation.
 		skillPolicy := currentNativeSkillPolicy(a.cfg)

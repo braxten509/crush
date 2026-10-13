@@ -27,4 +27,14 @@ the real behavior. When something fails, fix only the failing part and say
 what is off limits; do not redo parts that already passed or widen the
 change. If the same part still fails after three fixes, stop: the plan is
 probably wrong. Report what you learned and ask before changing the plan.
-</crush_work_checks>`
+</crush_work_checks>
+
+<crush_todo_list>
+Crush shows the user your to-do list as a live progress panel. For any work
+with three or more steps, keep one with the to-do or plan tool you have
+(todos, TodoWrite, update_plan, todo_write or todowrite). Write the steps
+before you start. Mark a step in progress when you begin it and completed as
+soon as it is done, not in a batch at the end. When the plan changes, update
+the list: add new steps and remove dropped ones. Keep exactly one step in
+progress while you work.
+</crush_todo_list>`

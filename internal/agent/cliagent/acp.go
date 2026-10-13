@@ -25,7 +25,8 @@ type acpUpdate struct {
 		AutoCompactThreshold int64 `json:"autoCompactThreshold"`
 	} `json:"_meta"`
 	SessionUpdate string          `json:"sessionUpdate"`
-	Size          int64           `json:"size"` // usage_update: the model's context window
+	Entries       any             `json:"entries"` // plan: the agent's steps
+	Size          int64           `json:"size"`    // usage_update: the model's context window
 	Content       json.RawMessage `json:"content"`
 	ToolCallID    string          `json:"toolCallId"`
 	Title         string          `json:"title"`
@@ -350,6 +351,10 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 		}
 	}
 	switch u.SessionUpdate {
+	case "plan":
+		if input, ok := todoInput(u.Entries); ok {
+			return emit(Event{Type: EventTodos, Input: input})
+		}
 	case "agent_message_chunk":
 		if c := acpText(u.Content); c != "" {
 			return emit(Event{Type: EventText, Text: c})
@@ -428,6 +433,9 @@ func acpTool2Crush(tc *acpTool) (string, string) {
 			}
 		}
 		return ""
+	}
+	if input, ok := todoInput(tc.input["todos"]); ok {
+		return tools.TodosToolName, input
 	}
 	path := in("file_path", "filePath", "target_file", "path", "absolute_path")
 	switch tc.kind {

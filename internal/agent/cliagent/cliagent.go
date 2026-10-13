@@ -44,6 +44,7 @@ const (
 	EventCompacting                     // Compacting (native context compaction status)
 	EventActivity                       // Provider event received, without content.
 	EventContextBudget                  // Native compaction boundary, not the full model window.
+	EventTodos                          // Input (the CLI's plan as Crush todos tool input)
 )
 
 // TextBreak is sent as text when a new text block starts. It separates two

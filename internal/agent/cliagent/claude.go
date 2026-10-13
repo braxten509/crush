@@ -243,6 +243,10 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	// Crush supplies the shared memory index and rules through Instructions.
 	env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1", "CLAUDE_CODE_DISABLE_ORG_MEMORY=1")
 	env = append(env, "CLAUDE_CODE_DISABLE_CLAUDE_MDS=1")
+	// Claude leaves its to-do list out for newer models unless asked; Crush
+	// shows it as the chat's to-do list. TodoWrite, which sends the whole
+	// list each time, rather than the step-by-step Task tools.
+	env = append(env, "CLAUDE_CODE_ENABLE_TODO_TOOLS=1", "CLAUDE_CODE_ENABLE_TASKS=0")
 	p, err := m.startTurnProc(t.NoTools, env, "claude", args...)
 	if err != nil {
 		return nil, err

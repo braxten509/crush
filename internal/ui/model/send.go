@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/message"
@@ -25,10 +24,8 @@ func (m *UI) isAgentBusy() bool {
 	if m.bangCancel != nil {
 		return true
 	}
-	for _, submission := range m.submittingPrompts {
-		if submission.sessionID == m.currentSessionID() {
-			return true
-		}
+	if m.queue.submittingFor(m.currentSessionID()) {
+		return true
 	}
 	return m.agentBusyCache.val
 }
@@ -103,7 +100,7 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 	})
 
 	// Capture session ID to avoid race with main goroutine updating m.session.
-	queued := priorSessionID != "" && priorSessionID == sessionID && (m.isAgentBusy() || m.interruptInFlight[sessionID])
+	queued := priorSessionID != "" && priorSessionID == sessionID && (m.isAgentBusy() || m.queue.interruptInFlight[sessionID])
 	submissionID := ""
 	if !hidden {
 		submissionID = m.appendPendingPrompt(sessionID, content, attachments, queued)
@@ -113,7 +110,7 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 	if hidden {
 		runCtx = message.WithHiddenUserMessage(runCtx)
 	}
-	dispatchID := m.trackPromptSubmission(submissionID, sessionID, cancelSubmission, queued)
+	dispatchID := m.queue.track(submissionID, sessionID, cancelSubmission, queued)
 	// Optimistically mark the agent busy: the prompt we are about to submit
 	// either starts a run or is enqueued behind one. This keeps esc pressed
 	// right after enter routing to cancelAgent instead of reading a stale
@@ -127,7 +124,7 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 		m.chat.ScrollToBottom()
 	}
 	m.busyFetchGen++
-	m.invalidatePromptQueue()
+	m.queue.invalidate()
 	cmds = append(cmds, func() tea.Msg {
 		defer cancelSubmission()
 		// AgentRun is fire-and-forget: it returns once the prompt has
@@ -248,24 +245,24 @@ func (m *UI) interruptAgent() tea.Cmd {
 	if !m.hasSession() || !m.agentReady {
 		return nil
 	}
-	if m.interruptInFlight[m.currentSessionID()] {
+	if m.queue.interruptInFlight[m.currentSessionID()] {
 		return nil
 	}
-	if m.interruptInFlight == nil {
-		m.interruptInFlight = make(map[string]bool)
+	if m.queue.interruptInFlight == nil {
+		m.queue.interruptInFlight = make(map[string]bool)
 	}
-	m.interruptInFlight[m.currentSessionID()] = true
+	m.queue.interruptInFlight[m.currentSessionID()] = true
 	cancelled := make(map[string]bool)
 	var cancelSubmissions []context.CancelFunc
-	for id, submission := range m.submittingPrompts {
+	for id, submission := range m.queue.submitting {
 		if submission.sessionID == m.currentSessionID() && !submission.queued {
 			cancelSubmissions = append(cancelSubmissions, submission.cancel)
-			delete(m.submittingPrompts, id)
+			delete(m.queue.submitting, id)
 			cancelled[id] = true
 		}
 	}
-	continuing := m.promptQueue > 0
-	for _, pending := range m.pendingPrompts {
+	continuing := m.queue.count > 0
+	for _, pending := range m.queue.pending {
 		if pending.SessionID == m.currentSessionID() && !cancelled[pending.ID] {
 			continuing = true
 		}
@@ -274,11 +271,11 @@ func (m *UI) interruptAgent() tea.Cmd {
 		m.bangCancel()
 		m.bangCancel = nil
 	}
-	if m.canceledMessages == nil {
-		m.canceledMessages = make(map[string]struct{})
+	if m.queue.canceled == nil {
+		m.queue.canceled = make(map[string]struct{})
 	}
 	for _, id := range m.chat.CancelRunning(continuing) {
-		m.canceledMessages[id] = struct{}{}
+		m.queue.canceled[id] = struct{}{}
 	}
 	if continuing {
 		m.releaseHeldPrompts()
@@ -320,12 +317,10 @@ func (m *UI) cancelAgent() tea.Cmd {
 // clearPromptQueue drops the prompts queued behind the running turn.
 func (m *UI) clearPromptQueue() {
 	m.com.Workspace.AgentClearQueue(m.session.ID)
-	m.promptQueue = 0
-	m.promptQueueItems = nil
-	m.promptQueueCheckedAt = time.Now()
+	m.queue.clear()
 	// Bump the queue generation so a fetch started before this clear
 	// cannot land and repopulate the pill we just emptied.
-	m.invalidatePromptQueue()
+	m.queue.invalidate()
 	m.updateLayoutAndSize()
 }
 

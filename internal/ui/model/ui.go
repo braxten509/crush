@@ -359,31 +359,9 @@ type UI struct {
 	pillsExpanded      bool
 	pillsAutoExpanded  bool
 	focusedPillSection pillSection
-	// promptQueue / promptQueueItems mirror the session's queued prompts.
-	// They are event-driven with a TTL backstop, fetched off-thread by
-	// dispatchPromptQueueRefresh (see workspace_cache.go); promptQueue is
-	// always len(promptQueueItems).
-	promptQueue          int
-	promptQueueItems     []string
-	promptQueueEntries   []message.QueuedPromptSummary
-	promptQueueCheckedAt time.Time
-	promptQueueInFlight  bool
-	// promptQueueGen is bumped by every queue state transition; an
-	// in-flight fetch captures it at dispatch and its result is discarded
-	// if the generation has moved on (see workspace_cache.go).
-	promptQueueGen       uint64
-	promptRecallInFlight bool
-	// Keep recalled drafts scoped to their chat if a recall races a switch.
-	recalledDrafts       map[string][]message.QueuedPrompt
-	pendingPrompts       []message.Message
-	submittingPrompts    map[string]promptSubmission
-	interruptInFlight    map[string]bool
-	confirmedQueueCopies map[string]message.Message
-	failedRecalls        map[string]bool
-	canceledMessages     map[string]struct{}
-	// heldPrompts are pending prompts sent mid-turn. They wait in the
-	// queue list and join the chat only when their turn starts.
-	heldPrompts map[string]bool
+	// queue is the prompts sent but not answered yet: queued behind the
+	// running turn, being submitted, recalled or held; see prompt_queue.go.
+	queue promptQueue
 	// agentBusyCache / yoloCache memoize the workspace busy and permission
 	// probes (synchronous HTTP round-trips in client/server mode). Reads
 	// never probe; refreshes happen off-thread (see workspace_cache.go).
@@ -398,7 +376,7 @@ type UI struct {
 	agentReady bool
 	agentModel workspace.AgentModel
 	// busyFetchGen is bumped by every busy/permission state transition;
-	// like promptQueueGen it lets a stale in-flight probe result be
+	// like queue.gen it lets a stale in-flight probe result be
 	// discarded and re-fetched instead of clobbering newer state.
 	busyFetchGen uint64
 	pillsView    string

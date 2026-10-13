@@ -57,7 +57,7 @@ func (m *UI) treeReady() error {
 	if m.isAgentBusy() {
 		return fmt.Errorf("wait for the reply to finish")
 	}
-	if len(m.pendingPrompts) > 0 {
+	if len(m.queue.pending) > 0 {
 		return fmt.Errorf("wait for pending prompts, or recall them first")
 	}
 	return nil

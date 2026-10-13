@@ -32,7 +32,7 @@ func (h helpBindings) running() []key.Binding {
 		return nil
 	}
 	cancel := h.k.Chat.Cancel
-	if h.m.promptQueue == 0 {
+	if h.m.queue.count == 0 {
 		return []key.Binding{cancel}
 	}
 	cancel.SetHelp("esc", "interrupt, send queued")
@@ -47,7 +47,7 @@ func (h helpBindings) backgroundCommand() bool {
 
 // pillSections reports whether the pill section keys apply.
 func (h helpBindings) pillSections() bool {
-	return h.m.pillsExpanded && hasIncompleteTodos(h.m.session.Todos) && h.m.promptQueue > 0
+	return h.m.pillsExpanded && hasIncompleteTodos(h.m.session.Todos) && h.m.queue.count > 0
 }
 
 // editor is the focused editor's keys.

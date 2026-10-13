@@ -136,13 +136,6 @@ func (m *UI) invalidateBusyCaches() {
 	m.busyFetchGen++
 }
 
-// invalidatePromptQueue bumps the prompt-queue generation so any in-flight
-// queue fetch result is discarded when it lands (and re-fetched) instead of
-// overwriting newer optimistic or cleared queue state.
-func (m *UI) invalidatePromptQueue() {
-	m.promptQueueGen++
-}
-
 // dispatchBusyRefresh returns a command that probes the workspace busy and
 // permission state off the Update goroutine, delivering a busyStateMsg. It
 // returns nil while a probe is already in flight. The closure captures only
@@ -246,26 +239,26 @@ func (m *UI) applyBusyState(msg busyStateMsg) []tea.Cmd {
 // nil while a fetch is already in flight. With no active session the queue
 // is simply cleared.
 func (m *UI) dispatchPromptQueueRefresh() tea.Cmd {
-	if m.promptQueueInFlight || m.com == nil || m.com.Workspace == nil {
+	if m.queue.inFlight || m.com == nil || m.com.Workspace == nil {
 		return nil
 	}
 	if !m.hasSession() {
-		m.promptQueueItems = nil
-		m.promptQueueCheckedAt = time.Now()
+		m.queue.items = nil
+		m.queue.checkedAt = time.Now()
 		// Bump the generation so any in-flight fetch scoped to the
 		// now-departed session is discarded rather than repopulating the
 		// queue.
-		m.invalidatePromptQueue()
-		if m.promptQueue != 0 {
-			m.promptQueue = 0
+		m.queue.invalidate()
+		if m.queue.count != 0 {
+			m.queue.count = 0
 			m.updateLayoutAndSize()
 		}
 		return nil
 	}
-	m.promptQueueInFlight = true
+	m.queue.inFlight = true
 	ws := m.com.Workspace
 	sessionID := m.session.ID
-	gen := m.promptQueueGen
+	gen := m.queue.gen
 	return func() tea.Msg {
 		msg := promptQueueMsg{forSession: sessionID, gen: gen}
 		if ws.AgentIsReady() {
@@ -287,8 +280,8 @@ func (m *UI) dispatchPromptQueueRefresh() tea.Cmd {
 // applyPromptQueue stores an off-thread queue fetch and re-layouts when the
 // count changed. Runs on the Update goroutine.
 func (m *UI) applyPromptQueue(msg promptQueueMsg) []tea.Cmd {
-	m.promptQueueInFlight = false
-	if msg.forSession != m.currentSessionID() || msg.gen != m.promptQueueGen {
+	m.queue.inFlight = false
+	if msg.forSession != m.currentSessionID() || msg.gen != m.queue.gen {
 		// The fetch raced a session switch or a newer queue transition
 		// (submit, clear, invalidation). Discard the stale result and
 		// re-fetch so newer state is not clobbered and the authoritative
@@ -298,20 +291,20 @@ func (m *UI) applyPromptQueue(msg promptQueueMsg) []tea.Cmd {
 		}
 		return nil
 	}
-	m.promptQueueCheckedAt = time.Now()
+	m.queue.checkedAt = time.Now()
 	previousVisible := m.visiblePromptQueueCount()
 	// The new authoritative snapshot replaces the old queue against which
 	// these confirmed timeline copies were matched.
-	for id, copy := range m.confirmedQueueCopies {
+	for id, copy := range m.queue.confirmedCopies {
 		if copy.SessionID == msg.forSession {
-			delete(m.confirmedQueueCopies, id)
+			delete(m.queue.confirmedCopies, id)
 		}
 	}
-	itemsChanged := !slices.Equal(m.promptQueueItems, msg.prompts) || !slices.Equal(m.promptQueueEntries, msg.entries)
-	countChanged := len(msg.prompts) != m.promptQueue
-	m.promptQueueItems = msg.prompts
-	m.promptQueueEntries = msg.entries
-	m.promptQueue = len(msg.prompts)
+	itemsChanged := !slices.Equal(m.queue.items, msg.prompts) || !slices.Equal(m.queue.entries, msg.entries)
+	countChanged := len(msg.prompts) != m.queue.count
+	m.queue.items = msg.prompts
+	m.queue.entries = msg.entries
+	m.queue.count = len(msg.prompts)
 	if countChanged || previousVisible != m.visiblePromptQueueCount() {
 		m.updateLayoutAndSize()
 	} else if itemsChanged {
@@ -334,7 +327,7 @@ func (m *UI) staleWorkspaceRefreshCmds() []tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	}
-	if m.hasSession() && time.Since(m.promptQueueCheckedAt) >= promptQueueTTL {
+	if m.hasSession() && time.Since(m.queue.checkedAt) >= promptQueueTTL {
 		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}

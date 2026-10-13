@@ -113,7 +113,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 		}
 	case message.Assistant:
 		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil, m.com.Workspace.WorkingDir())
-		if _, cancelled := m.canceledMessages[msg.ID]; !cancelled && msg.FinishReason() != message.FinishReasonCanceled {
+		if _, cancelled := m.queue.canceled[msg.ID]; !cancelled && msg.FinishReason() != message.FinishReasonCanceled {
 			items = m.chat.AcceptResponse(&msg, items)
 		}
 		m.setMessagePlanFlags(items)
@@ -167,7 +167,7 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 	}
 
 	shouldRenderAssistant := chat.ShouldRenderAssistantMessage(&msg)
-	_, interrupted := m.canceledMessages[msg.ID]
+	_, interrupted := m.queue.canceled[msg.ID]
 	hiddenInterruptedStep := interrupted && existingItem == nil && msg.Content().Text == "" && len(msg.ToolCalls()) > 0
 	if hiddenInterruptedStep {
 		shouldRenderAssistant = false

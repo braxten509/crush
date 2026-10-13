@@ -46,7 +46,7 @@ func TestHelpBindings(t *testing.T) {
 					setBusy(u)
 				}
 				if queued {
-					u.promptQueue = 2
+					u.queue.count = 2
 				}
 				if hasSession {
 					u.session = &session.Session{ID: "s1", Todos: []session.Todo{{Content: "x", Status: session.TodoStatusPending}}}

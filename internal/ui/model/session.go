@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	agenttools "github.com/charmbracelet/crush/internal/agent/tools"
 
@@ -389,11 +388,9 @@ func (m *UI) newSession() tea.Cmd {
 	m.chat.ClearMessages()
 	m.pillsExpanded = false
 	m.pillsAutoExpanded = false
-	m.promptQueue = 0
-	m.promptQueueItems = nil
-	m.promptQueueCheckedAt = time.Now()
+	m.queue.clear()
 	m.invalidateBusyCaches()
-	m.invalidatePromptQueue()
+	m.queue.invalidate()
 	m.pillsView = ""
 	m.historyReset()
 	agenttools.ResetCache()

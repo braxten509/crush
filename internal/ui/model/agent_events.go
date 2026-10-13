@@ -177,7 +177,7 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 	// can re-probe. Drop the memoized busy state and re-fetch it and the
 	// prompt queue off-thread.
 	m.invalidateBusyCaches()
-	m.invalidatePromptQueue()
+	m.queue.invalidate()
 	if cmd := m.dispatchBusyRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}

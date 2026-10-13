@@ -196,7 +196,7 @@ func (m *UI) handleRunKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if key.Matches(msg, m.keyMap.Chat.Cancel) && !m.editorWantsEsc() && m.isAgentBusy() {
 		return m.cancelAgent(), true
 	}
-	if key.Matches(msg, m.keyMap.Chat.Interrupt) && (m.isAgentBusy() || m.interruptInFlight[m.currentSessionID()]) {
+	if key.Matches(msg, m.keyMap.Chat.Interrupt) && (m.isAgentBusy() || m.queue.interruptInFlight[m.currentSessionID()]) {
 		return m.interruptAgent(), true
 	}
 	return nil, false

@@ -67,10 +67,10 @@ func (m *UI) handleHistoryUp(msg tea.Msg) tea.Cmd {
 	prevHeight := m.textarea.Height()
 	// Navigate to older history entry from cursor position (0,0).
 	if m.textarea.Length() == 0 || m.isAtEditorStart() {
-		if !m.bangMode && len(m.recalledDrafts[m.currentSessionID()]) > 0 {
+		if !m.bangMode && len(m.queue.recalledDrafts[m.currentSessionID()]) > 0 {
 			return m.restoreRecalledDrafts()
 		}
-		if !m.bangMode && m.hasSession() && m.agentReady && (m.isAgentBusy() || m.promptQueue > 0 || m.failedRecalls[m.currentSessionID()]) {
+		if !m.bangMode && m.hasSession() && m.agentReady && (m.isAgentBusy() || m.queue.count > 0 || m.queue.failedRecalls[m.currentSessionID()]) {
 			return m.recallQueuedPrompt()
 		}
 		return m.historyUpFromStart(prevHeight)
@@ -104,10 +104,10 @@ type queuedPromptRecalledMsg struct {
 }
 
 func (m *UI) recallQueuedPrompt() tea.Cmd {
-	if m.promptRecallInFlight {
+	if m.queue.recallInFlight {
 		return nil
 	}
-	m.promptRecallInFlight = true
+	m.queue.recallInFlight = true
 	ws, sessionID, draft := m.com.Workspace, m.currentSessionID(), m.textarea.Value()
 	historyIndex := m.promptHistory.index
 	return func() tea.Msg {
@@ -119,27 +119,24 @@ func (m *UI) recallQueuedPrompt() tea.Cmd {
 }
 
 func (m *UI) applyRecalledPrompt(msg queuedPromptRecalledMsg) tea.Cmd {
-	m.promptRecallInFlight = false
+	m.queue.recallInFlight = false
 	if msg.err != nil {
-		if m.failedRecalls == nil {
-			m.failedRecalls = make(map[string]bool)
+		if m.queue.failedRecalls == nil {
+			m.queue.failedRecalls = make(map[string]bool)
 		}
-		m.failedRecalls[msg.sessionID] = true
+		m.queue.failedRecalls[msg.sessionID] = true
 		return util.ReportError(msg.err)
 	}
-	delete(m.failedRecalls, msg.sessionID)
+	delete(m.queue.failedRecalls, msg.sessionID)
 	if msg.prompt != nil {
 		m.finishPendingPrompt(msg.prompt.SubmissionID, false)
-		if m.recalledDrafts == nil {
-			m.recalledDrafts = make(map[string][]message.QueuedPrompt)
-		}
-		m.recalledDrafts[msg.sessionID] = append(m.recalledDrafts[msg.sessionID], *msg.prompt)
+		m.queue.recallDraft(msg.sessionID, *msg.prompt)
 	}
 	if msg.sessionID != m.currentSessionID() {
 		return nil
 	}
-	m.invalidatePromptQueue()
-	m.promptQueueCheckedAt = time.Time{}
+	m.queue.invalidate()
+	m.queue.checkedAt = time.Time{}
 	m.invalidateBusyCaches()
 	cmds := []tea.Cmd{m.dispatchPromptQueueRefresh(), m.dispatchBusyRefresh()}
 	if msg.prompt != nil {
@@ -156,11 +153,11 @@ func (m *UI) applyRecalledPrompt(msg queuedPromptRecalledMsg) tea.Cmd {
 }
 
 func (m *UI) restoreRecalledDrafts() tea.Cmd {
-	drafts := m.recalledDrafts[m.currentSessionID()]
+	drafts := m.queue.recalledDrafts[m.currentSessionID()]
 	if len(drafts) == 0 || m.bangMode {
 		return nil
 	}
-	delete(m.recalledDrafts, m.currentSessionID())
+	delete(m.queue.recalledDrafts, m.currentSessionID())
 	prevHeight := m.textarea.Height()
 	text := m.textarea.Value()
 	for _, draft := range drafts {

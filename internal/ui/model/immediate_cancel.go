@@ -6,7 +6,7 @@ type agentInterruptedMsg struct{ sessionID string }
 
 // Buffered stream events must not make an interrupted action look active again.
 func (m *UI) applyImmediateCancel(msg message.Message) message.Message {
-	return withImmediateCancel(m.canceledMessages, msg)
+	return withImmediateCancel(m.queue.canceled, msg)
 }
 
 // withImmediateCancel is applyImmediateCancel against a given set, so a

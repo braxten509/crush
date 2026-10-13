@@ -109,7 +109,7 @@ func setBusy(u *UI) {
 }
 
 func interrupting(u *UI) bool {
-	return u.interruptInFlight[u.currentSessionID()]
+	return u.queue.interruptInFlight[u.currentSessionID()]
 }
 
 func TestRoutingQuitKeyBeatsDialogsAndInline(t *testing.T) {

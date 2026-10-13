@@ -416,12 +416,12 @@ func (m *UI) handleAgentMsg(msg tea.Msg) (tea.Cmd, bool) {
 		if id == "" {
 			id = m.currentSessionID()
 		}
-		delete(m.interruptInFlight, id)
+		delete(m.queue.interruptInFlight, id)
 		if id != m.currentSessionID() {
 			break
 		}
 		m.invalidateBusyCaches()
-		m.invalidatePromptQueue()
+		m.queue.invalidate()
 		cmds = append(cmds, m.dispatchBusyRefresh(), m.dispatchPromptQueueRefresh())
 	case modeSwitchedMsg:
 		m.modeSwitching = false
@@ -809,7 +809,7 @@ func (m *UI) handleMessageEvent(msg pubsub.Event[message.Message]) []tea.Cmd {
 		// trigger this: during streaming that would put workspace
 		// probes on every token.
 		m.invalidateBusyCaches()
-		m.invalidatePromptQueue()
+		m.queue.invalidate()
 		if cmd := m.dispatchBusyRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -844,9 +844,9 @@ func (m *UI) handleRunSubmitted(msg agentRunSubmittedMsg) []tea.Cmd {
 	if id == "" {
 		id = msg.submissionID
 	}
-	if submission, ok := m.submittingPrompts[id]; ok {
+	if submission, ok := m.queue.submitting[id]; ok {
 		submission.cancel()
-		delete(m.submittingPrompts, id)
+		delete(m.queue.submitting, id)
 	}
 	if msg.err != nil {
 		if errors.Is(msg.err, context.Canceled) {
@@ -861,7 +861,7 @@ func (m *UI) handleRunSubmitted(msg agentRunSubmittedMsg) []tea.Cmd {
 	// authoritative busy/queue state to confirm the optimistic values
 	// sendMessage wrote.
 	m.invalidateBusyCaches()
-	m.invalidatePromptQueue()
+	m.queue.invalidate()
 	if cmd := m.dispatchBusyRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}

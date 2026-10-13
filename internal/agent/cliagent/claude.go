@@ -260,6 +260,46 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	return &claudeLive{liveProc: liveProc[claudeKey]{p: p, lines: p.readLines(), key: key}}, nil
 }
 
+// claudeRun is one turn of a Claude Code process.
+type claudeRun struct {
+	ctx  context.Context
+	m    *Model
+	t    Turn
+	p    *proc
+	live *claudeLive
+	ctl  *claudeTurn
+	// finished is set once the turn ended normally, so the process may be
+	// kept.
+	finished bool
+	// promptTaken is set once Claude took in this turn's prompt. Results
+	// before it end a reply it started on its own; the prompt's own result
+	// may carry a background notice's origin when one was folded into it.
+	promptTaken bool
+	started     bool
+
+	// Claude takes messages written mid-turn in at its next tool result, or
+	// runs them right after the turn if it was already answering.
+	sent      steered
+	stopSteer func()
+	// steerWait is armed while waiting on steered messages after a result;
+	// Claude doesn't echo every message it's given, and an unconfirmed one
+	// must not hold the turn open forever. Crush runs it next instead.
+	steerWait <-chan time.Time
+	// interrupted counts results since the turn was interrupted.
+	interrupted int
+
+	// calls holds the Crush tool name and input per tool_use ID, for
+	// results and approvals.
+	calls map[string][2]string
+	// Classification arrives with the completed assistant block, after its
+	// thinking deltas. Hold those deltas so narration never enters reasoning.
+	thinking    strings.Builder
+	recordUsage func(claudeLine) error
+
+	lastContextRequest time.Time
+	contextSupported   bool
+}
+
 func runClaude(ctx context.Context, m *Model, t Turn) error {
 	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID)}
 	// A sub-agent runs one turn, so its process isn't kept for more.
@@ -280,97 +320,39 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	}
 	p := live.p
 	t.Emit = p.reviewEvents(t.Emit)
-	finished := false
-	ctl := &claudeTurn{p: p}
+	r := &claudeRun{ctx: ctx, m: m, t: t, p: p, live: live, ctl: &claudeTurn{p: p}, calls: map[string][2]string{}}
 	if t.SessionID != "" && !t.NoTools {
 		defer onBackground(t.SessionID, func() bool {
-			ctl.ctrlB.Store(true)
+			r.ctl.ctrlB.Store(true)
 			return p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b", "request": map[string]any{"subtype": "background_tasks"}}) == nil
 		})()
 	}
 	defer func() {
-		if finished && keep && live.native != "" {
+		if r.finished && keep && live.native != "" {
 			keepClaude(t.SessionID, live)
 		} else {
 			p.finish()
 		}
 	}()
-	interrupt := func() {
-		_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-interrupt", "request": map[string]any{"subtype": "interrupt"}})
-	}
-	stop := p.watchCancel(ctx, interrupt)
+	stop := p.watchCancel(ctx, r.interrupt)
 	defer stop()
 
 	pending := live.pending
 	live.pending = nil
-	// Results before Claude takes in this prompt end a reply it started on
-	// its own; the prompt's own result may carry a background notice's
-	// origin when one was folded into it.
-	promptTaken := t.Continue
+	r.promptTaken = t.Continue
 	if t.Continue {
 		if len(pending) == 0 {
-			finished = true
+			r.finished = true
 			return nil // already shown by another turn
 		}
 	} else {
 		_ = p.send(claudePrompt(withSavedImagePaths(t.Prompt, t.Attachments), t.Attachments))
 	}
 
-	// Claude takes messages written mid-turn in at its next tool result, or
-	// runs them right after the turn if it was already answering.
-	var sent steered
-	startSteer := func() func() {
-		return pollSteerInput(t, func() bool { return true }, func(text string, attachments []message.Attachment) {
-			sent.add(text)
-			prompt := claudePrompt(withSavedImagePaths(text, attachments), attachments)
-			// Explicitly fold this input in at the next tool boundary. Claude's
-			// default priority can be "later", which waits for the whole turn.
-			prompt["priority"] = "next"
-			if p.send(prompt) != nil {
-				sent.take(text)
-			}
-		})
-	}
-	stopSteer := startSteer()
-	defer func() { stopSteer() }()
+	r.stopSteer = r.startSteer()
+	defer func() { r.stopSteer() }()
 
-	// Crush tool name and input per tool_use ID, for results and approvals.
-	calls := map[string][2]string{}
-	// Classification arrives with the completed assistant block, after its
-	// thinking deltas. Hold those deltas so narration never enters reasoning.
-	var thinking strings.Builder
-	flushThinking := func(narration bool) error {
-		text := thinking.String()
-		thinking.Reset()
-		if text == "" {
-			return nil
-		}
-		kind := EventReasoning
-		if narration {
-			kind = EventText
-			if err := t.Emit(Event{Type: EventText, Text: TextBreak}); err != nil {
-				return err
-			}
-		}
-		return t.Emit(Event{Type: kind, Text: text})
-	}
-	recordUsage := claudeUsageRecorder(t.Emit)
-	lastContextRequest := time.Time{}
-	contextSupported := false
-	requestContext := func() {
-		if t.NoTools || !contextSupported || time.Since(lastContextRequest) < 30*time.Second {
-			return
-		}
-		lastContextRequest = time.Now()
-		_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-context",
-			"request": map[string]any{"subtype": "get_context_usage", "detail": "summary"}})
-	}
-	started := false
-	// Armed while waiting on steered messages after a result; Claude
-	// doesn't echo every message it's given, and an unconfirmed one must
-	// not hold the turn open forever. Crush runs it next instead.
-	var steerWait <-chan time.Time
-	interrupted := 0 // results since the turn was interrupted
+	r.recordUsage = claudeUsageRecorder(r.t.Emit)
 read:
 	for {
 		var raw []byte
@@ -378,13 +360,13 @@ read:
 			raw, pending = pending[0], pending[1:]
 		} else {
 			select {
-			case r, ok := <-live.lines:
+			case line, ok := <-live.lines:
 				if !ok {
 					break read
 				}
-				raw = r
-			case <-steerWait:
-				finished = true
+				raw = line
+			case <-r.steerWait:
+				r.finished = true
 				return nil
 			}
 		}
@@ -396,184 +378,263 @@ read:
 		if line.ParentToolUseID != "" {
 			continue // a sub-agent's own steps; its result comes as a tool result
 		}
+		var done bool
+		var err error
 		if ctx.Err() != nil {
-			// Interrupted. Claude runs messages steered in but not yet
-			// taken right after, so that turn is stopped too. The process
-			// is then kept: exiting would stop its background tasks.
-			stopSteer()
-			switch {
-			case line.Type == "user" && line.IsReplay:
-				sent.take(withoutImagePaths(claudeUserText(line.Message)))
-			case line.Type == "system" && line.Subtype == "init" && interrupted > 0:
-				interrupt()
-			case line.Type == "result":
-				interrupted++
-				if sent.pending() == 0 || interrupted > 1 {
-					finished = true
-					return ctx.Err()
-				}
-			}
-			continue
+			done, err = r.handleInterrupted(line)
+		} else {
+			done, err = r.handleLine(line, raw)
 		}
-		switch line.Type {
-		case "control_response":
-			if event, ok := claudeContextBudget(line.Response); ok {
-				if err := t.Emit(event); err != nil {
-					return err
-				}
-			}
-		case "system":
-			if line.Subtype == "status" || line.Subtype == "compact_boundary" {
-				if err := t.Emit(Event{Type: EventCompacting, Compacting: line.Status == "compacting"}); err != nil {
-					return err
-				}
-			}
-			// Only a started task can be backgrounded; asking earlier
-			// finds nothing.
-			if line.Subtype == "task_started" && line.ToolUseID != "" && !line.IsBackgrounded {
-				if ctl.ctrlB.Swap(false) {
-					_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b-" + line.ToolUseID, "request": map[string]any{"subtype": "background_tasks", "tool_use_id": line.ToolUseID}})
-				}
-			}
-			// Claude reports this again for each prompt a live process takes.
-			if line.Subtype == "init" && line.SessionID != "" {
-				contextSupported = line.ClaudeCodeVersion != ""
-				requestContext()
-				started = true
-				live.native = line.SessionID
-				if err := t.Emit(Event{Type: EventSession, Session: line.SessionID}); err != nil {
-					return err
-				}
-			}
-
-		case "rate_limit_event":
-			setLimits(config.TypeClaudeCode, claudeRateLimit(raw))
-
-		case "stream_event":
-			if ev := line.Event; ev != nil && (ev.Type == "message_start" || ev.Type == "content_block_start" || ev.Type == "content_block_delta") {
-				steerWait = nil
-			}
-			if err := recordUsage(line); err != nil {
-				return err
-			}
-			if ev := line.Event; ev != nil && ev.Type == "content_block_delta" && ev.Delta.Type == "thinking_delta" {
-				thinking.WriteString(ev.Delta.Thinking)
-				continue
-			}
-			if err := claudeStreamEvent(line.Event, t.Emit); err != nil {
-				return err
-			}
-
-		case "assistant":
-			requestContext()
-			steerWait = nil
-			if err := recordUsage(line); err != nil {
-				return err
-			}
-			for index, b := range claudeBlocks(line.Message) {
-				if b.Type == "thinking" {
-					thinking.Reset()
-					thinking.WriteString(b.Thinking)
-					if err := flushThinking(slices.Contains(line.NarrationBlockIndexes, index)); err != nil {
-						return err
-					}
-					continue
-				}
-				if b.Type != "tool_use" {
-					continue
-				}
-				name, input := claudeTool(b.Name, b.Input)
-				calls[b.ID] = [2]string{name, input}
-				if err := t.Emit(Event{Type: EventToolCall, ID: b.ID, Name: name, Input: input}); err != nil {
-					return err
-				}
-			}
-
-		case "user":
-			if line.IsReplay {
-				if text := withoutImagePaths(claudeUserText(line.Message)); sent.take(text) {
-					steerWait = nil
-					if err := t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
-						return err
-					}
-				} else {
-					promptTaken = true
-				}
-				continue
-			}
-			for _, b := range claudeBlocks(line.Message) {
-				if b.Type != "tool_result" {
-					continue
-				}
-				call := calls[b.ToolUseID]
-				ctl.ctrlB.Store(false) // the command it was for is done
-				out := claudeResultText(b.Content)
-				meta := ""
-				if !b.IsError {
-					meta = resultMetadata(call[0], call[1], out)
-					var res struct {
-						BackgroundTaskID string `json:"backgroundTaskId"`
-					}
-					if json.Unmarshal(line.ToolUseResult, &res) == nil && res.BackgroundTaskID != "" {
-						meta = markBackground(call[0], meta)
-					}
-				}
-				if err := t.Emit(Event{Type: EventToolResult, ID: b.ToolUseID, Name: call[0], Output: out, Metadata: meta, IsError: b.IsError}); err != nil {
-					return err
-				}
-			}
-
-		case "control_request":
-			go claudeControl(ctx, m, t, p, line)
-
-		case "result":
-			if err := flushThinking(false); err != nil {
-				return err
-			}
-			// A background task finishing reports its own result outside
-			// the prompt; it does not end this turn.
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			notice := line.Origin != nil && line.Origin.Kind == "task-notification"
-			if !promptTaken && notice {
-				continue // a reply Claude started on its own before this prompt
-			}
-			promptTaken = true
-			if err := recordUsage(line); err != nil {
-				return err
-			}
-			if line.IsError || (line.Subtype != "" && line.Subtype != "success") {
-				msg := line.Result
-				if msg == "" {
-					msg = strings.Join(line.Errors, "; ")
-				}
-				return errors.New(strings.TrimSpace("Claude Code: " + msg))
-			}
-			// A message steered in as the model finished runs as a
-			// follow-up; wait for that one too.
-			stopSteer()
-			if sent.pending() > 0 {
-				// The follow-up is still part of this Crush turn. Keep
-				// forwarding new prompts while Claude works on it.
-				stopSteer = startSteer()
-				steerWait = time.After(steerEchoTimeout)
-				continue
-			}
-			finished = true
-			return nil
+		if done || err != nil {
+			return err
 		}
 	}
-	if err := flushThinking(false); err != nil {
+	if err := r.flushThinking(false); err != nil {
 		return err
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if fresh && !started && t.Resume != "" {
+	if fresh && !r.started && t.Resume != "" {
 		return ErrResume
 	}
 	return exitError("claude", p)
+}
+
+func (r *claudeRun) interrupt() {
+	_ = r.p.send(map[string]any{"type": "control_request", "request_id": "crush-interrupt", "request": map[string]any{"subtype": "interrupt"}})
+}
+
+// startSteer forwards prompts queued mid-turn to Claude until the returned
+// func stops it.
+func (r *claudeRun) startSteer() func() {
+	return pollSteerInput(r.t, func() bool { return true }, func(text string, attachments []message.Attachment) {
+		r.sent.add(text)
+		prompt := claudePrompt(withSavedImagePaths(text, attachments), attachments)
+		// Explicitly fold this input in at the next tool boundary. Claude's
+		// default priority can be "later", which waits for the whole turn.
+		prompt["priority"] = "next"
+		if r.p.send(prompt) != nil {
+			r.sent.take(text)
+		}
+	})
+}
+
+// flushThinking emits the held thinking, as narration or as reasoning.
+func (r *claudeRun) flushThinking(narration bool) error {
+	text := r.thinking.String()
+	r.thinking.Reset()
+	if text == "" {
+		return nil
+	}
+	kind := EventReasoning
+	if narration {
+		kind = EventText
+		if err := r.t.Emit(Event{Type: EventText, Text: TextBreak}); err != nil {
+			return err
+		}
+	}
+	return r.t.Emit(Event{Type: kind, Text: text})
+}
+
+func (r *claudeRun) requestContext() {
+	if r.t.NoTools || !r.contextSupported || time.Since(r.lastContextRequest) < 30*time.Second {
+		return
+	}
+	r.lastContextRequest = time.Now()
+	_ = r.p.send(map[string]any{
+		"type": "control_request", "request_id": "crush-context",
+		"request": map[string]any{"subtype": "get_context_usage", "detail": "summary"},
+	})
+}
+
+// handleInterrupted winds an interrupted turn down. Claude runs messages
+// steered in but not yet taken right after, so that turn is stopped too.
+// The process is then kept: exiting would stop its background tasks.
+func (r *claudeRun) handleInterrupted(line claudeLine) (done bool, err error) {
+	r.stopSteer()
+	switch {
+	case line.Type == "user" && line.IsReplay:
+		r.sent.take(withoutImagePaths(claudeUserText(line.Message)))
+	case line.Type == "system" && line.Subtype == "init" && r.interrupted > 0:
+		r.interrupt()
+	case line.Type == "result":
+		r.interrupted++
+		if r.sent.pending() == 0 || r.interrupted > 1 {
+			r.finished = true
+			return true, r.ctx.Err()
+		}
+	}
+	return false, nil
+}
+
+// handleLine handles one line of Claude's output. done reports that the
+// turn ended, with err.
+func (r *claudeRun) handleLine(line claudeLine, raw []byte) (done bool, err error) {
+	switch line.Type {
+	case "control_response":
+		if event, ok := claudeContextBudget(line.Response); ok {
+			err = r.t.Emit(event)
+		}
+	case "system":
+		err = r.handleSystem(line)
+	case "rate_limit_event":
+		setLimits(config.TypeClaudeCode, claudeRateLimit(raw))
+	case "stream_event":
+		err = r.handleStreamEvent(line)
+	case "assistant":
+		err = r.handleAssistant(line)
+	case "user":
+		err = r.handleUser(line)
+	case "control_request":
+		go claudeControl(r.ctx, r.m, r.t, r.p, line)
+	case "result":
+		return r.handleResult(line)
+	}
+	return err != nil, err
+}
+
+func (r *claudeRun) handleSystem(line claudeLine) error {
+	if line.Subtype == "status" || line.Subtype == "compact_boundary" {
+		if err := r.t.Emit(Event{Type: EventCompacting, Compacting: line.Status == "compacting"}); err != nil {
+			return err
+		}
+	}
+	// Only a started task can be backgrounded; asking earlier
+	// finds nothing.
+	if line.Subtype == "task_started" && line.ToolUseID != "" && !line.IsBackgrounded {
+		if r.ctl.ctrlB.Swap(false) {
+			_ = r.p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b-" + line.ToolUseID, "request": map[string]any{"subtype": "background_tasks", "tool_use_id": line.ToolUseID}})
+		}
+	}
+	// Claude reports this again for each prompt a live process takes.
+	if line.Subtype == "init" && line.SessionID != "" {
+		r.contextSupported = line.ClaudeCodeVersion != ""
+		r.requestContext()
+		r.started = true
+		r.live.native = line.SessionID
+		if err := r.t.Emit(Event{Type: EventSession, Session: line.SessionID}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *claudeRun) handleStreamEvent(line claudeLine) error {
+	if ev := line.Event; ev != nil && (ev.Type == "message_start" || ev.Type == "content_block_start" || ev.Type == "content_block_delta") {
+		r.steerWait = nil
+	}
+	if err := r.recordUsage(line); err != nil {
+		return err
+	}
+	if ev := line.Event; ev != nil && ev.Type == "content_block_delta" && ev.Delta.Type == "thinking_delta" {
+		r.thinking.WriteString(ev.Delta.Thinking)
+		return nil
+	}
+	return claudeStreamEvent(line.Event, r.t.Emit)
+}
+
+func (r *claudeRun) handleAssistant(line claudeLine) error {
+	r.requestContext()
+	r.steerWait = nil
+	if err := r.recordUsage(line); err != nil {
+		return err
+	}
+	for index, b := range claudeBlocks(line.Message) {
+		if b.Type == "thinking" {
+			r.thinking.Reset()
+			r.thinking.WriteString(b.Thinking)
+			if err := r.flushThinking(slices.Contains(line.NarrationBlockIndexes, index)); err != nil {
+				return err
+			}
+			continue
+		}
+		if b.Type != "tool_use" {
+			continue
+		}
+		name, input := claudeTool(b.Name, b.Input)
+		r.calls[b.ID] = [2]string{name, input}
+		if err := r.t.Emit(Event{Type: EventToolCall, ID: b.ID, Name: name, Input: input}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *claudeRun) handleUser(line claudeLine) error {
+	if line.IsReplay {
+		if text := withoutImagePaths(claudeUserText(line.Message)); r.sent.take(text) {
+			r.steerWait = nil
+			if err := r.t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
+				return err
+			}
+		} else {
+			r.promptTaken = true
+		}
+		return nil
+	}
+	for _, b := range claudeBlocks(line.Message) {
+		if b.Type != "tool_result" {
+			continue
+		}
+		call := r.calls[b.ToolUseID]
+		r.ctl.ctrlB.Store(false) // the command it was for is done
+		out := claudeResultText(b.Content)
+		meta := ""
+		if !b.IsError {
+			meta = resultMetadata(call[0], call[1], out)
+			var res struct {
+				BackgroundTaskID string `json:"backgroundTaskId"`
+			}
+			if json.Unmarshal(line.ToolUseResult, &res) == nil && res.BackgroundTaskID != "" {
+				meta = markBackground(call[0], meta)
+			}
+		}
+		if err := r.t.Emit(Event{Type: EventToolResult, ID: b.ToolUseID, Name: call[0], Output: out, Metadata: meta, IsError: b.IsError}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// handleResult ends the turn on its result, unless a message steered in
+// as the model finished still has to run.
+func (r *claudeRun) handleResult(line claudeLine) (done bool, err error) {
+	if err := r.flushThinking(false); err != nil {
+		return true, err
+	}
+	// A background task finishing reports its own result outside
+	// the prompt; it does not end this turn.
+	if r.ctx.Err() != nil {
+		return true, r.ctx.Err()
+	}
+	notice := line.Origin != nil && line.Origin.Kind == "task-notification"
+	if !r.promptTaken && notice {
+		return false, nil // a reply Claude started on its own before this prompt
+	}
+	r.promptTaken = true
+	if err := r.recordUsage(line); err != nil {
+		return true, err
+	}
+	if line.IsError || (line.Subtype != "" && line.Subtype != "success") {
+		msg := line.Result
+		if msg == "" {
+			msg = strings.Join(line.Errors, "; ")
+		}
+		return true, errors.New(strings.TrimSpace("Claude Code: " + msg))
+	}
+	// A message steered in as the model finished runs as a
+	// follow-up; wait for that one too.
+	r.stopSteer()
+	if r.sent.pending() > 0 {
+		// The follow-up is still part of this Crush turn. Keep
+		// forwarding new prompts while Claude works on it.
+		r.stopSteer = r.startSteer()
+		r.steerWait = time.After(steerEchoTimeout)
+		return false, nil
+	}
+	r.finished = true
+	return true, nil
 }
 
 // steerEchoTimeout is how long a finished turn waits for Claude to start on

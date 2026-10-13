@@ -13,7 +13,48 @@ import (
 	"github.com/charmbracelet/crush/internal/hooks"
 )
 
+// buildTools builds the tool set of an agent: the built-in tools it is
+// allowed, then the MCP tools it is allowed, sorted by name, guarded and
+// wrapped with the PreToolUse hooks.
 func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubAgent bool) ([]fantasy.AgentTool, error) {
+	allTools, err := c.subAgentTools(ctx, agent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build hook runner if PreToolUse hooks are configured.
+	var hookRunner *hooks.Runner
+	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
+		hookRunner = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
+
+	allTools = append(allTools, c.builtinTools(agent, isSubAgent)...)
+
+	var filteredTools []fantasy.AgentTool
+	for _, tool := range allTools {
+		if slices.Contains(agent.AllowedTools, tool.Info().Name) {
+			filteredTools = append(filteredTools, tool)
+		}
+	}
+	filteredTools = append(filteredTools, c.allowedMCPTools(agent)...)
+	slices.SortFunc(filteredTools, func(a, b fantasy.AgentTool) int {
+		return strings.Compare(a.Info().Name, b.Info().Name)
+	})
+
+	// Wrap tools with hook interception for the top-level agent only.
+	// Sub-agents (the `agent` task tool, `agentic_fetch`, etc.) run
+	// without hook interception to avoid firing the user's hook N times
+	// per delegated turn. The top-level invocation of the sub-agent tool
+	// itself is still wrapped from the coder's side.
+	// The secrets guard sits under the hooks and covers sub-agents too.
+	filteredTools = wrapToolsWithHooks(guardTools(filteredTools), hookRunner, isSubAgent)
+
+	return filteredTools, nil
+}
+
+// subAgentTools builds the tools that delegate to a sub-agent, when the
+// agent is allowed them.
+func (c *coordinator) subAgentTools(ctx context.Context, agent config.Agent) ([]fantasy.AgentTool, error) {
 	var allTools []fantasy.AgentTool
 	if slices.Contains(agent.AllowedTools, AgentToolName) {
 		agentTool, err := c.agentTool(ctx)
@@ -30,7 +71,11 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		}
 		allTools = append(allTools, agenticFetchTool)
 	}
+	return allTools, nil
+}
 
+// builtinTools builds every built-in tool the agent could be allowed.
+func (c *coordinator) builtinTools(agent config.Agent, isSubAgent bool) []fantasy.AgentTool {
 	// Get the model name for the agent
 	modelID := ""
 	if modelCfg, ok := c.cfg.Config().Models[agent.Model]; ok {
@@ -41,14 +86,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 
 	logFile := filepath.Join(c.cfg.Config().Options.DataDirectory, "logs", "crush.log")
 
-	// Build hook runner if PreToolUse hooks are configured.
-	var hookRunner *hooks.Runner
-	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
-		hookRunner = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
-	}
-
-	allTools = append(
-		allTools,
+	allTools := []fantasy.AgentTool{
 		tools.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, modelID),
 		tools.NewCrushInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
 		tools.NewCrushLogsTool(logFile),
@@ -65,7 +103,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		tools.NewTodosTool(c.sessions),
 		tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...),
 		tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
-	)
+	}
 
 	// Question tool is interactive-only and not available to sub-agents.
 	if !isSubAgent && c.interactive {
@@ -94,18 +132,16 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 			tools.NewReadMCPResourceTool(c.cfg, c.permissions),
 		)
 	}
+	return allTools
+}
 
-	var filteredTools []fantasy.AgentTool
-	for _, tool := range allTools {
-		if slices.Contains(agent.AllowedTools, tool.Info().Name) {
-			filteredTools = append(filteredTools, tool)
-		}
-	}
-
+// allowedMCPTools returns the registered MCP tools the agent may use.
+func (c *coordinator) allowedMCPTools(agent config.Agent) []fantasy.AgentTool {
+	var allowed []fantasy.AgentTool
 	for _, tool := range tools.GetMCPTools(c.permissions, c.cfg, c.cfg.WorkingDir()) {
 		if agent.AllowedMCP == nil {
 			// No MCP restrictions
-			filteredTools = append(filteredTools, tool)
+			allowed = append(allowed, tool)
 			continue
 		}
 		if len(agent.AllowedMCP) == 0 {
@@ -119,23 +155,11 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 				continue
 			}
 			if len(tools) == 0 || slices.Contains(tools, tool.MCPToolName()) {
-				filteredTools = append(filteredTools, tool)
+				allowed = append(allowed, tool)
 				break
 			}
 			slog.Debug("MCP not allowed", "tool", tool.Name(), "agent", agent.Name)
 		}
 	}
-	slices.SortFunc(filteredTools, func(a, b fantasy.AgentTool) int {
-		return strings.Compare(a.Info().Name, b.Info().Name)
-	})
-
-	// Wrap tools with hook interception for the top-level agent only.
-	// Sub-agents (the `agent` task tool, `agentic_fetch`, etc.) run
-	// without hook interception to avoid firing the user's hook N times
-	// per delegated turn. The top-level invocation of the sub-agent tool
-	// itself is still wrapped from the coder's side.
-	// The secrets guard sits under the hooks and covers sub-agents too.
-	filteredTools = wrapToolsWithHooks(guardTools(filteredTools), hookRunner, isSubAgent)
-
-	return filteredTools, nil
+	return allowed
 }

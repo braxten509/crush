@@ -258,8 +258,10 @@ parameters, early states, body) describe it with a `standardTool` in
 
 ### Styling
 
-- All styles are defined in `styles/styles.go` (massive `Styles` struct with
-  nested groups for Header, Pills, Dialog, Help, etc.).
+- All styles are defined in the `Styles` struct in `styles/styles.go`. Its
+  groups (`HeaderStyles`, `PillsStyles`, `DialogStyles`, `ToolStyles`, etc.)
+  are declared by area in `styles/styles_chat.go`, `styles_chrome.go`,
+  `styles_dialog.go` and `styles_editor.go`.
 - Access styles via `*common.Common` passed to components.
 - Use semantic color fields rather than hardcoded colors.
 

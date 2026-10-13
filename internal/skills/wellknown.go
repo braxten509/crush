@@ -16,6 +16,26 @@ import (
 	"strings"
 )
 
+// wellKnownSchemaV2 is the discovery schema whose entries point at a single
+// digest-checked artifact.
+const wellKnownSchemaV2 = "https://schemas.agentskills.io/discovery/0.2.0/schema.json"
+
+// wellKnownIndex is a publisher's /.well-known skills index.
+type wellKnownIndex struct {
+	Schema string           `json:"$schema"`
+	Skills []wellKnownEntry `json:"skills"`
+}
+
+// wellKnownEntry is one skill in a well-known index: a list of files for
+// the original format, or an artifact URL and digest for v2.
+type wellKnownEntry struct {
+	Name   string   `json:"name"`
+	Files  []string `json:"files"`
+	Type   string   `json:"type"`
+	URL    string   `json:"url"`
+	Digest string   `json:"digest"`
+}
+
 // Domain publishers in skills.sh use the same well-known discovery formats
 // as its CLI, including supporting files and digest-checked v2 artifacts.
 func (d *Directory) installWellKnown(ctx context.Context, host, name, root string) (*Skill, error) {
@@ -28,16 +48,7 @@ func (d *Directory) installWellKnown(ctx context.Context, host, name, root strin
 			}
 			continue
 		}
-		var index struct {
-			Schema string `json:"$schema"`
-			Skills []struct {
-				Name   string   `json:"name"`
-				Files  []string `json:"files"`
-				Type   string   `json:"type"`
-				URL    string   `json:"url"`
-				Digest string   `json:"digest"`
-			} `json:"skills"`
-		}
+		var index wellKnownIndex
 		if err := json.Unmarshal(data, &index); err != nil {
 			continue
 		}
@@ -45,75 +56,87 @@ func (d *Directory) installWellKnown(ctx context.Context, host, name, root strin
 			if entry.Name != name {
 				continue
 			}
-			if index.Schema == "https://schemas.agentskills.io/discovery/0.2.0/schema.json" {
-				indexURL, _ := url.Parse(base + "index.json")
-				artifactURL, err := indexURL.Parse(entry.URL)
-				if err != nil || artifactURL.Scheme != "https" || artifactURL.User != nil {
-					return nil, fmt.Errorf("invalid skill artifact URL")
-				}
-				artifact, err := d.get(ctx, artifactURL.String(), 32<<20)
-				if err != nil {
-					return nil, err
-				}
-				digest := sha256.Sum256(artifact)
-				if entry.Digest != "sha256:"+hex.EncodeToString(digest[:]) {
-					return nil, fmt.Errorf("skill artifact digest mismatch")
-				}
-				if entry.Type == "skill-md" {
-					archive, err := filesArchive(map[string][]byte{SkillFileName: artifact})
-					if err != nil {
-						return nil, err
-					}
-					return installArchive(ctx, archive, name, root)
-				}
-				if entry.Type == "archive" {
-					if len(artifact) >= 2 && artifact[0] == 0x1f && artifact[1] == 0x8b {
-						artifact, err = tarToZip(ctx, artifact)
-						if err != nil {
-							return nil, err
-						}
-					}
-					return installArchive(ctx, artifact, name, root)
-				}
-				return nil, fmt.Errorf("unsupported skill artifact type")
+			if index.Schema == wellKnownSchemaV2 {
+				return d.installWellKnownArtifact(ctx, base, entry, name, root)
 			}
 			if index.Schema != "" {
 				return nil, fmt.Errorf("unsupported skill discovery schema")
 			}
-			if len(entry.Files) == 0 || len(entry.Files) > 2000 {
-				return nil, fmt.Errorf("invalid skill file list")
-			}
-			files := make(map[string][]byte)
-			var total int
-			for _, rel := range entry.Files {
-				if !fsSafePath(rel) {
-					return nil, fmt.Errorf("unsafe skill file: %s", rel)
-				}
-				if _, exists := files[rel]; exists {
-					return nil, fmt.Errorf("duplicate skill file: %s", rel)
-				}
-				parts := strings.Split(rel, "/")
-				for i := range parts {
-					parts[i] = url.PathEscape(parts[i])
-				}
-				content, err := d.get(ctx, base+url.PathEscape(name)+"/"+strings.Join(parts, "/"), 16<<20)
-				if err != nil {
-					return nil, err
-				}
-				total += len(content)
-				if total > 64<<20 {
-					return nil, fmt.Errorf("skill exceeds installation size limit")
-				}
-				files[rel] = content
-			}
-			archive, err := filesArchive(files)
-			if err != nil {
-				return nil, err
-			}
-			return installArchive(ctx, archive, name, root)
+			return d.installWellKnownFiles(ctx, base, entry, name, root)
 		}
 	}
 	return nil, fmt.Errorf("%s was not found in %s's published skills", name, host)
+}
+
+// installWellKnownArtifact installs a v2 entry: a lone SKILL.md or a zip or
+// gzipped tar archive, fetched over HTTPS and checked against its digest.
+func (d *Directory) installWellKnownArtifact(ctx context.Context, base string, entry wellKnownEntry, name, root string) (*Skill, error) {
+	indexURL, _ := url.Parse(base + "index.json")
+	artifactURL, err := indexURL.Parse(entry.URL)
+	if err != nil || artifactURL.Scheme != "https" || artifactURL.User != nil {
+		return nil, fmt.Errorf("invalid skill artifact URL")
+	}
+	artifact, err := d.get(ctx, artifactURL.String(), 32<<20)
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(artifact)
+	if entry.Digest != "sha256:"+hex.EncodeToString(digest[:]) {
+		return nil, fmt.Errorf("skill artifact digest mismatch")
+	}
+	switch entry.Type {
+	case "skill-md":
+		archive, err := filesArchive(map[string][]byte{SkillFileName: artifact})
+		if err != nil {
+			return nil, err
+		}
+		return installArchive(ctx, archive, name, root)
+	case "archive":
+		if len(artifact) >= 2 && artifact[0] == 0x1f && artifact[1] == 0x8b {
+			artifact, err = tarToZip(ctx, artifact)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return installArchive(ctx, artifact, name, root)
+	}
+	return nil, fmt.Errorf("unsupported skill artifact type")
+}
+
+// installWellKnownFiles installs an entry of the original format by
+// fetching each listed file from the skill's directory under base.
+func (d *Directory) installWellKnownFiles(ctx context.Context, base string, entry wellKnownEntry, name, root string) (*Skill, error) {
+	if len(entry.Files) == 0 || len(entry.Files) > 2000 {
+		return nil, fmt.Errorf("invalid skill file list")
+	}
+	files := make(map[string][]byte)
+	var total int
+	for _, rel := range entry.Files {
+		if !fsSafePath(rel) {
+			return nil, fmt.Errorf("unsafe skill file: %s", rel)
+		}
+		if _, exists := files[rel]; exists {
+			return nil, fmt.Errorf("duplicate skill file: %s", rel)
+		}
+		parts := strings.Split(rel, "/")
+		for i := range parts {
+			parts[i] = url.PathEscape(parts[i])
+		}
+		content, err := d.get(ctx, base+url.PathEscape(name)+"/"+strings.Join(parts, "/"), 16<<20)
+		if err != nil {
+			return nil, err
+		}
+		total += len(content)
+		if total > 64<<20 {
+			return nil, fmt.Errorf("skill exceeds installation size limit")
+		}
+		files[rel] = content
+	}
+	archive, err := filesArchive(files)
+	if err != nil {
+		return nil, err
+	}
+	return installArchive(ctx, archive, name, root)
 }
 
 func filesArchive(files map[string][]byte) ([]byte, error) {

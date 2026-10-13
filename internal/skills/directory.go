@@ -127,15 +127,30 @@ func installArchive(ctx context.Context, data []byte, name, root string) (*Skill
 	if err != nil {
 		return nil, fmt.Errorf("read skill archive: %w", err)
 	}
-	var candidates []string
-	var manifestBytes uint64
-	manifestCount := 0
 	if len(archive.File) > 20000 {
 		return nil, fmt.Errorf("skill repository contains too many files")
 	}
+	prefix, err := findSkillPrefix(ctx, archive, name)
+	if err != nil {
+		return nil, err
+	}
+	files, modes, err := collectSkillFiles(ctx, archive, prefix)
+	if err != nil {
+		return nil, err
+	}
+	return writeSkill(ctx, files, modes, name, root)
+}
+
+// findSkillPrefix returns the archive directory ("" for the root, else
+// ending in "/") holding the manifest of the skill called name. Manifest
+// discovery is bounded in count and size.
+func findSkillPrefix(ctx context.Context, archive *zip.Reader, name string) (string, error) {
+	var candidates []string
+	var manifestBytes uint64
+	manifestCount := 0
 	for _, file := range archive.File {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return "", err
 		}
 		if path.Base(file.Name) != SkillFileName || file.Mode()&os.ModeSymlink != 0 {
 			continue
@@ -143,11 +158,11 @@ func installArchive(ctx context.Context, data []byte, name, root string) (*Skill
 		manifestCount++
 		manifestBytes += file.UncompressedSize64
 		if manifestCount > 1000 || manifestBytes > 16<<20 {
-			return nil, fmt.Errorf("skill repository exceeds manifest discovery limit")
+			return "", fmt.Errorf("skill repository exceeds manifest discovery limit")
 		}
 		content, err := readArchiveFile(file, 1<<20)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		skill, err := ParseContent(content)
 		if err == nil && skill.Name == name {
@@ -159,7 +174,7 @@ func installArchive(ctx context.Context, data []byte, name, root string) (*Skill
 		}
 	}
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("%s was not found in the repository", name)
+		return "", fmt.Errorf("%s was not found in the repository", name)
 	}
 	slices.Sort(candidates)
 	// Repositories can ship multiple agent-specific variants. Prefer the
@@ -173,37 +188,51 @@ func installArchive(ctx context.Context, data []byte, name, root string) (*Skill
 			}
 		}
 	}
+	return prefix, nil
+}
+
+// collectSkillFiles reads every regular file under prefix, keyed by its
+// path relative to prefix, with its mode reduced to 0644 plus execute bits.
+// Unsafe paths, duplicates and oversized skills are rejected.
+func collectSkillFiles(ctx context.Context, archive *zip.Reader, prefix string) (map[string][]byte, map[string]os.FileMode, error) {
 	files := make(map[string][]byte)
 	modes := make(map[string]os.FileMode)
 	var total int64
 	for _, file := range archive.File {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !strings.HasPrefix(file.Name, prefix) || file.FileInfo().IsDir() {
 			continue
 		}
 		rel := strings.TrimPrefix(file.Name, prefix)
 		if !fsSafePath(rel) || !file.Mode().IsRegular() {
-			return nil, fmt.Errorf("unsafe skill file: %s", rel)
+			return nil, nil, fmt.Errorf("unsafe skill file: %s", rel)
 		}
 		if _, exists := files[rel]; exists {
-			return nil, fmt.Errorf("duplicate skill file: %s", rel)
+			return nil, nil, fmt.Errorf("duplicate skill file: %s", rel)
 		}
 		if file.UncompressedSize64 > 16<<20 || uint64(total)+file.UncompressedSize64 > 64<<20 || len(files) >= 2000 {
-			return nil, fmt.Errorf("skill exceeds installation size limit")
+			return nil, nil, fmt.Errorf("skill exceeds installation size limit")
 		}
 		content, err := readArchiveFile(file, 16<<20)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		total += int64(len(content))
 		if total > 64<<20 || len(files) >= 2000 {
-			return nil, fmt.Errorf("skill exceeds installation size limit")
+			return nil, nil, fmt.Errorf("skill exceeds installation size limit")
 		}
 		files[rel] = content
 		modes[rel] = 0o644 | file.Mode().Perm()&0o111
 	}
+	return files, modes, nil
+}
+
+// writeSkill validates the collected skill and installs it as root/name.
+// The files are staged outside root and published in one step, under the
+// skills lock, so a partial or concurrent install is never loaded.
+func writeSkill(ctx context.Context, files map[string][]byte, modes map[string]os.FileMode, name, root string) (*Skill, error) {
 	skill, err := ParseContent(files[SkillFileName])
 	if err != nil {
 		return nil, err

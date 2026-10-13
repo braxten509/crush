@@ -1,0 +1,1139 @@
+=== mcp-find {"query":"github","limit":5,"verbose":true} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m          [38;2;96;95;107mServer number 0[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-1[m          [38;2;96;95;107mServer number 1[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-2[m          [38;2;96;95;107mServer number 2[m  [m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m                                        [38;2;96;95;107mServer number 0[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-1[m                                        [38;2;96;95;107mServer number 1[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-2[m                                        [38;2;96;95;107mServer number 2[m                                [m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m          [38;2;96;95;107mServer number 0[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-1[m          [38;2;96;95;107mServer number 1[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-2[m          [38;2;96;95;107mServer number 2[m  [m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m                                        [38;2;96;95;107mServer number 0[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-1[m                                        [38;2;96;95;107mServer number 1[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-2[m                                        [38;2;96;95;107mServer number 2[m                                [m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mgithub[m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+
+
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"github","limit":5,"verbose":true} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"github"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m          [38;2;96;95;107mServer number 0[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-1[m          [38;2;96;95;107mServer number 1[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-2[m          [38;2;96;95;107mServer number 2[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-3[m          [38;2;96;95;107mServer number 3[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-4[m          [38;2;96;95;107mServer number 4[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-5[m          [38;2;96;95;107mServer number 5[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-6[m          [38;2;96;95;107mServer number 6[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-7[m          [38;2;96;95;107mServer number 7[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-8[m          [38;2;96;95;107mServer number 8[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-9[m          [38;2;96;95;107mServer number 9[m  [m
+  [38;2;236;235;240m[38;2;96;95;107m... and 2 more[m[m                     
+
+=== mcp-find {"query":"github"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m                                        [38;2;96;95;107mServer number 0[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-1[m                                        [38;2;96;95;107mServer number 1[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-2[m                                        [38;2;96;95;107mServer number 2[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-3[m                                        [38;2;96;95;107mServer number 3[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-4[m                                        [38;2;96;95;107mServer number 4[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-5[m                                        [38;2;96;95;107mServer number 5[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-6[m                                        [38;2;96;95;107mServer number 6[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-7[m                                        [38;2;96;95;107mServer number 7[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-8[m                                        [38;2;96;95;107mServer number 8[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-9[m                                        [38;2;96;95;107mServer number 9[m                                [m
+  [38;2;236;235;240m[38;2;96;95;107m... and 2 more[m[m                                                                                 
+
+=== mcp-find {"query":"github"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m          [38;2;96;95;107mServer number 0[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-1[m          [38;2;96;95;107mServer number 1[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-2[m          [38;2;96;95;107mServer number 2[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-3[m          [38;2;96;95;107mServer number 3[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-4[m          [38;2;96;95;107mServer number 4[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-5[m          [38;2;96;95;107mServer number 5[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-6[m          [38;2;96;95;107mServer number 6[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-7[m          [38;2;96;95;107mServer number 7[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-8[m          [38;2;96;95;107mServer number 8[m  [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-9[m          [38;2;96;95;107mServer number 9[m  [m
+  [38;2;236;235;240m[38;2;96;95;107m... and 2 more[m[m                     
+
+=== mcp-find {"query":"github"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m                                        [38;2;96;95;107mServer number 0[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-1[m                                        [38;2;96;95;107mServer number 1[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-2[m                                        [38;2;96;95;107mServer number 2[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-3[m                                        [38;2;96;95;107mServer number 3[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-4[m                                        [38;2;96;95;107mServer number 4[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-5[m                                        [38;2;96;95;107mServer number 5[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-6[m                                        [38;2;96;95;107mServer number 6[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-7[m                                        [38;2;96;95;107mServer number 7[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-8[m                                        [38;2;96;95;107mServer number 8[m                                [m
+  [38;2;236;235;240m[38;2;236;235;240mserver-9[m                                        [38;2;96;95;107mServer number 9[m                                [m
+  [38;2;236;235;240m[38;2;96;95;107m... and 2 more[m[m                                                                                 
+
+=== mcp-find {"query":"github"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mgithub[m
+
+=== mcp-find {"query":"github"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mgithub[m
+
+=== mcp-find {"query":"github"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+
+
+=== mcp-find {"query":"github"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+
+
+=== mcp-find {"query":"github"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"github"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"github"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"github"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"github"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"github"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"none"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[38;2;96;95;107mNo MCP servers found.[m
+
+=== mcp-find {"query":"none"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[38;2;96;95;107mNo MCP servers found.[m
+
+=== mcp-find {"query":"none"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[38;2;96;95;107mNo MCP servers found.[m
+
+=== mcp-find {"query":"none"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[38;2;96;95;107mNo MCP servers found.[m
+
+=== mcp-find {"query":"none"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mnone[m
+
+=== mcp-find {"query":"none"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mnone[m
+
+=== mcp-find {"query":"none"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+
+
+=== mcp-find {"query":"none"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+
+
+=== mcp-find {"query":"none"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"none"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"none"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"none"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"none"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"none"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mnone[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"bad"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[38;2;133;131;146;48;2;45;44;54m not json output[m[48;2;45;44;54m                   [m
+
+=== mcp-find {"query":"bad"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[38;2;133;131;146;48;2;45;44;54m not json output[m[48;2;45;44;54m                                                                               [m
+
+=== mcp-find {"query":"bad"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[38;2;133;131;146;48;2;45;44;54m not json output[m[48;2;45;44;54m                   [m
+
+=== mcp-find {"query":"bad"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[38;2;133;131;146;48;2;45;44;54m not json output[m[48;2;45;44;54m                                                                               [m
+
+=== mcp-find {"query":"bad"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mbad[m
+
+=== mcp-find {"query":"bad"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mbad[m
+
+=== mcp-find {"query":"bad"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+
+
+=== mcp-find {"query":"bad"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+
+
+=== mcp-find {"query":"bad"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"bad"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"bad"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"bad"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"bad"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"bad"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mbad[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"empty"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+
+
+=== mcp-find {"query":"empty"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+
+
+=== mcp-find {"query":"empty"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+
+
+=== mcp-find {"query":"empty"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+
+
+=== mcp-find {"query":"empty"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mempty[m
+
+=== mcp-find {"query":"empty"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mempty[m
+
+=== mcp-find {"query":"empty"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+
+
+=== mcp-find {"query":"empty"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+
+
+=== mcp-find {"query":"empty"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"empty"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":"empty"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"empty"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":"empty"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":"empty"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mempty[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":42} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m          [38;2;96;95;107mServer number 0[m  [m
+
+=== mcp-find {"query":42} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m                                        [38;2;96;95;107mServer number 0[m                                [m
+
+=== mcp-find {"query":42} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m          [38;2;96;95;107mServer number 0[m  [m
+
+=== mcp-find {"query":42} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+  [38;2;236;235;240m[38;2;236;235;240mserver-0[m                                        [38;2;96;95;107mServer number 0[m                                [m
+
+=== mcp-find {"query":42} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107m{"query":42}[m
+
+=== mcp-find {"query":42} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107m{"query":42}[m
+
+=== mcp-find {"query":42} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+
+
+=== mcp-find {"query":42} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+
+
+=== mcp-find {"query":42} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":42} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-find {"query":42} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":42} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-find {"query":42} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-find {"query":42} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107m{"query":42}[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                             [m[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                                                                                         [m[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                             [m[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                                                                                         [m[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: add[m [38;2;96;95;107mgithub[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: add[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-add {"name":"github","activate":true,"config":{"a":1}} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-add {"name":7} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                             [m[m
+
+=== mcp-add {"name":7} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                                                                                         [m[m
+
+=== mcp-add {"name":7} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                             [m[m
+
+=== mcp-add {"name":7} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                                                                                         [m[m
+
+=== mcp-add {"name":7} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: add[m [38;2;96;95;107m{"name":7}[m
+
+=== mcp-add {"name":7} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: add[m [38;2;96;95;107m{"name":7}[m
+
+=== mcp-add {"name":7} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+=== mcp-add {"name":7} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+=== mcp-add {"name":7} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-add {"name":7} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-add {"name":7} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-add {"name":7} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-add {"name":7} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-add {"name":7} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107m{"name":7}[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-remove {"name":"github","force":false} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m removed[m[48;2;45;44;54m                           [m[m
+
+=== mcp-remove {"name":"github","force":false} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m removed[m[48;2;45;44;54m                                                                                       [m[m
+
+=== mcp-remove {"name":"github","force":false} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m removed[m[48;2;45;44;54m                           [m[m
+
+=== mcp-remove {"name":"github","force":false} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m removed[m[48;2;45;44;54m                                                                                       [m[m
+
+=== mcp-remove {"name":"github","force":false} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: remove[m [38;2;96;95;107mgithub[m
+
+=== mcp-remove {"name":"github","force":false} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: remove[m [38;2;96;95;107mgithub (force=false)[m
+
+=== mcp-remove {"name":"github","force":false} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub[m
+
+=== mcp-remove {"name":"github","force":false} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+
+=== mcp-remove {"name":"github","force":false} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-remove {"name":"github","force":false} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-remove {"name":"github","force":false} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-remove {"name":"github","force":false} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-remove {"name":"github","force":false} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-remove {"name":"github","force":false} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m line one[m[48;2;45;44;54m                          [m[m
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m line two[m[48;2;45;44;54m                          [m[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m line one[m[48;2;45;44;54m                                                                                      [m[m
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m line two[m[48;2;45;44;54m                                                                                      [m[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m line one[m[48;2;45;44;54m                          [m[m
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m line two[m[48;2;45;44;54m                          [m[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m line one[m[48;2;45;44;54m                                                                                      [m[m
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m line two[m[48;2;45;44;54m                                                                                      [m[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107msearch[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107msearch[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec {"name":"search","arguments":{"q":"x"}} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107msearch[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-config-set {"server":"github","key":"token"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m set[m[48;2;45;44;54m                               [m[m
+
+=== mcp-config-set {"server":"github","key":"token"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m set[m[48;2;45;44;54m                                                                                           [m[m
+
+=== mcp-config-set {"server":"github","key":"token"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m set[m[48;2;45;44;54m                               [m[m
+
+=== mcp-config-set {"server":"github","key":"token"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m set[m[48;2;45;44;54m                                                                                           [m[m
+
+=== mcp-config-set {"server":"github","key":"token"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: config-set[m [38;2;96;95;107mgithub[m
+
+=== mcp-config-set {"server":"github","key":"token"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: config-set[m [38;2;96;95;107mgithub[m
+
+=== mcp-config-set {"server":"github","key":"token"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+=== mcp-config-set {"server":"github","key":"token"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+=== mcp-config-set {"server":"github","key":"token"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-config-set {"server":"github","key":"token"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-config-set {"server":"github","key":"token"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-config-set {"server":"github","key":"token"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-config-set {"server":"github","key":"token"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-config-set {"server":"github","key":"token"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mConfig Set[m [38;2;96;95;107mgithub[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== code-mode {"script":"print(1)"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"…[m
+
+  [38;2;236;235;240m  [38;2;236;235;240m[48;2;32;31;38m [m[38;2;133;131;146;48;2;32;31;38m1[m[48;2;32;31;38m [m[48;2;32;31;38m  [m[38;2;236;235;240;48;2;32;31;38m[38;2;0;255;178m[48;2;32;31;38m1[0m[m[48;2;32;31;38m                             [m[m[m
+
+=== code-mode {"script":"print(1)"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"print(1)"}[m
+
+  [38;2;236;235;240m  [38;2;236;235;240m[48;2;32;31;38m [m[38;2;133;131;146;48;2;32;31;38m1[m[48;2;32;31;38m [m[48;2;32;31;38m  [m[38;2;236;235;240;48;2;32;31;38m[38;2;0;255;178m[48;2;32;31;38m1[0m[m[48;2;32;31;38m                                                                                         [m[m[m
+
+=== code-mode {"script":"print(1)"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"p[m
+[38;2;96;95;107mrint(1)"}[m   
+
+  [38;2;236;235;240m  [38;2;236;235;240m[48;2;32;31;38m [m[38;2;133;131;146;48;2;32;31;38m1[m[48;2;32;31;38m [m[48;2;32;31;38m  [m[38;2;236;235;240;48;2;32;31;38m[38;2;0;255;178m[48;2;32;31;38m1[0m[m[48;2;32;31;38m                             [m[m[m
+
+=== code-mode {"script":"print(1)"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"print(1)"}[m
+
+  [38;2;236;235;240m  [38;2;236;235;240m[48;2;32;31;38m [m[38;2;133;131;146;48;2;32;31;38m1[m[48;2;32;31;38m [m[48;2;32;31;38m  [m[38;2;236;235;240;48;2;32;31;38m[38;2;0;255;178m[48;2;32;31;38m1[0m[m[48;2;32;31;38m                                                                                         [m[m[m
+
+=== code-mode {"script":"print(1)"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: code-mode[m [38;2;96;95;107m{"script":"p…[m
+
+=== code-mode {"script":"print(1)"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: code-mode[m [38;2;96;95;107m{"script":"print(1)"}[m
+
+=== code-mode {"script":"print(1)"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"…[m
+
+=== code-mode {"script":"print(1)"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"print(1)"}[m
+
+=== code-mode {"script":"print(1)"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"…[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== code-mode {"script":"print(1)"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"print(1)"}[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== code-mode {"script":"print(1)"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"…[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== code-mode {"script":"print(1)"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"print(1)"}[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== code-mode {"script":"print(1)"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"…[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== code-mode {"script":"print(1)"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mCode Mode[m [38;2;96;95;107m{"script":"print(1)"}[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== list_tools {} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m a[m[48;2;45;44;54m                                 [m[m
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m b[m[48;2;45;44;54m                                 [m[m
+
+=== list_tools {} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m a[m[48;2;45;44;54m                                                                                             [m[m
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m b[m[48;2;45;44;54m                                                                                             [m[m
+
+=== list_tools {} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m a[m[48;2;45;44;54m                                 [m[m
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m b[m[48;2;45;44;54m                                 [m[m
+
+=== list_tools {} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m a[m[48;2;45;44;54m                                                                                             [m[m
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m b[m[48;2;45;44;54m                                                                                             [m[m
+
+=== list_tools {} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: list tools[m [38;2;96;95;107m{}[m
+
+=== list_tools {} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: list tools[m [38;2;96;95;107m{}[m
+
+=== list_tools {} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+=== list_tools {} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+=== list_tools {} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== list_tools {} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== list_tools {} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== list_tools {} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== list_tools {} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== list_tools {} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mList Tools[m [38;2;96;95;107m{}[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec not json success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m ran[m[48;2;45;44;54m                               [m[m
+
+=== mcp-exec not json success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m ran[m[48;2;45;44;54m                                                                                           [m[m
+
+=== mcp-exec not json expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m ran[m[48;2;45;44;54m                               [m[m
+
+=== mcp-exec not json expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m ran[m[48;2;45;44;54m                                                                                           [m[m
+
+=== mcp-exec not json compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107mnot json[m
+
+=== mcp-exec not json compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107mnot json[m
+
+=== mcp-exec not json no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+=== mcp-exec not json no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+=== mcp-exec not json running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec not json running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec not json canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec not json canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec not json error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec not json error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mnot json[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec {"name":"shot"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+
+  [38;2;236;235;240m[38;2;0;255;178mLoaded Image[m [38;2;18;199;143m→[m [38;2;236;235;240mimage/png[m [38;2;133;131;146m30 B[m[m
+
+=== mcp-exec {"name":"shot"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+
+  [38;2;236;235;240m[38;2;0;255;178mLoaded Image[m [38;2;18;199;143m→[m [38;2;236;235;240mimage/png[m [38;2;133;131;146m30 B[m[m
+
+=== mcp-exec {"name":"shot"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+
+  [38;2;236;235;240m[38;2;0;255;178mLoaded Image[m [38;2;18;199;143m→[m [38;2;236;235;240mimage/png[m [38;2;133;131;146m30 B[m[m
+
+=== mcp-exec {"name":"shot"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+
+  [38;2;236;235;240m[38;2;0;255;178mLoaded Image[m [38;2;18;199;143m→[m [38;2;236;235;240mimage/png[m [38;2;133;131;146m30 B[m[m
+
+=== mcp-exec {"name":"shot"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107mshot[m
+
+=== mcp-exec {"name":"shot"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107mshot[m
+
+=== mcp-exec {"name":"shot"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+=== mcp-exec {"name":"shot"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+=== mcp-exec {"name":"shot"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec {"name":"shot"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec {"name":"shot"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec {"name":"shot"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec {"name":"shot"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec {"name":"shot"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec {"name":"shot"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m with image[m[48;2;45;44;54m                        [m[m
+
+  [38;2;236;235;240m[38;2;0;255;178mLoaded Image[m [38;2;18;199;143m→[m [38;2;236;235;240mimage/png[m [38;2;133;131;146m30 B[m[m
+
+=== mcp-exec {"name":"shot"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m with image[m[48;2;45;44;54m                                                                                    [m[m
+
+  [38;2;236;235;240m[38;2;0;255;178mLoaded Image[m [38;2;18;199;143m→[m [38;2;236;235;240mimage/png[m [38;2;133;131;146m30 B[m[m
+
+=== mcp-exec {"name":"shot"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m with image[m[48;2;45;44;54m                        [m[m
+
+  [38;2;236;235;240m[38;2;0;255;178mLoaded Image[m [38;2;18;199;143m→[m [38;2;236;235;240mimage/png[m [38;2;133;131;146m30 B[m[m
+
+=== mcp-exec {"name":"shot"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+  [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m with image[m[48;2;45;44;54m                                                                                    [m[m
+
+  [38;2;236;235;240m[38;2;0;255;178mLoaded Image[m [38;2;18;199;143m→[m [38;2;236;235;240mimage/png[m [38;2;133;131;146m30 B[m[m
+
+=== mcp-exec {"name":"shot"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107mshot[m
+
+=== mcp-exec {"name":"shot"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107mshot[m
+
+=== mcp-exec {"name":"shot"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+=== mcp-exec {"name":"shot"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+=== mcp-exec {"name":"shot"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec {"name":"shot"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec {"name":"shot"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec {"name":"shot"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec {"name":"shot"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec {"name":"shot"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mshot[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec {"name":"blob"} success @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+=== mcp-exec {"name":"blob"} success @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+=== mcp-exec {"name":"blob"} expanded @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+=== mcp-exec {"name":"blob"} expanded @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+=== mcp-exec {"name":"blob"} compact @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107mblob[m
+
+=== mcp-exec {"name":"blob"} compact @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: exec[m [38;2;96;95;107mblob[m
+
+=== mcp-exec {"name":"blob"} no result @40
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+=== mcp-exec {"name":"blob"} no result @100
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+=== mcp-exec {"name":"blob"} running @40
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec {"name":"blob"} running @100
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+[38;2;96;95;107mWaiting for tool response...[m
+
+=== mcp-exec {"name":"blob"} canceled @40
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec {"name":"blob"} canceled @100
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+[38;2;96;95;107mCanceled.[m
+
+=== mcp-exec {"name":"blob"} error @40
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+
+=== mcp-exec {"name":"blob"} error @100
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mExec[m [38;2;96;95;107mblob[m
+
+[48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
+

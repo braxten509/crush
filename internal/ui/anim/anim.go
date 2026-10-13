@@ -203,137 +203,155 @@ func (a *Anim) buildFrames() {
 
 	// Check cache first
 	cacheKey := settingsHash(opts)
-	cached, exists := animCacheMap.Get(cacheKey)
-
-	if exists {
-		// Use cached values
-		a.width = cached.width
-		a.labelWidth = cached.labelWidth
-		a.label = csync.NewSliceFrom(cached.label)
-		a.ellipsisFrames = csync.NewSliceFrom(cached.ellipsisFrames)
-		a.initialFrames = cached.initialFrames
-		a.cyclingFrames = cached.cyclingFrames
+	if cached, exists := animCacheMap.Get(cacheKey); exists {
+		a.useCache(cached)
 	} else {
-		// Generate new values and cache them
-		a.labelWidth = lipgloss.Width(opts.Label)
+		a.generateFrames(opts, cacheKey)
+	}
+	a.scheduleBirths(cacheKey)
+}
 
-		// Total width of anim, in cells. When NoScramble is set there
-		// are no cycling chars so the label gap is unnecessary.
-		a.width = a.cyclingCharWidth
-		if opts.Label != "" {
-			if a.cyclingCharWidth > 0 {
-				a.width += labelGapWidth
-			}
-			a.width += lipgloss.Width(opts.Label)
+// useCache adopts frames built earlier for the same settings.
+func (a *Anim) useCache(cached *animCache) {
+	a.width = cached.width
+	a.labelWidth = cached.labelWidth
+	a.label = csync.NewSliceFrom(cached.label)
+	a.ellipsisFrames = csync.NewSliceFrom(cached.ellipsisFrames)
+	a.initialFrames = cached.initialFrames
+	a.cyclingFrames = cached.cyclingFrames
+}
+
+// generateFrames measures the animation, pre-renders its label and frames,
+// and caches the result under cacheKey.
+func (a *Anim) generateFrames(opts Settings, cacheKey string) {
+	a.labelWidth = lipgloss.Width(opts.Label)
+
+	// Total width of anim, in cells. When NoScramble is set there
+	// are no cycling chars so the label gap is unnecessary.
+	a.width = a.cyclingCharWidth
+	if opts.Label != "" {
+		if a.cyclingCharWidth > 0 {
+			a.width += labelGapWidth
 		}
-
-		// Render the label
-		a.renderLabel(opts.Label)
-
-		// Pre-generate gradient.
-		var ramp []color.Color
-		numFrames := prerenderedFrames
-		if opts.CycleColors {
-			ramp = makeGradientRamp(a.width*3, opts.GradColorA, opts.GradColorB, opts.GradColorA, opts.GradColorB)
-			numFrames = a.width * 2
-		} else {
-			ramp = makeGradientRamp(a.width, opts.GradColorA, opts.GradColorB)
-		}
-
-		// Pre-render initial characters.
-		a.initialFrames = make([][]string, numFrames)
-		offset := 0
-		for i := range a.initialFrames {
-			a.initialFrames[i] = make([]string, a.width+labelGapWidth+a.labelWidth)
-			for j := range a.initialFrames[i] {
-				if j+offset >= len(ramp) {
-					continue // skip if we run out of colors
-				}
-
-				var c color.Color
-				if j <= a.cyclingCharWidth {
-					c = ramp[j+offset]
-				} else {
-					c = opts.LabelColor
-				}
-
-				// Also prerender the initial character with Lip Gloss to avoid
-				// processing in the render loop.
-				a.initialFrames[i][j] = lipgloss.NewStyle().
-					Foreground(c).
-					Render(string(initialChar))
-			}
-			if opts.CycleColors {
-				offset++
-			}
-		}
-
-		// Prerender scrambled rune frames for the animation. Seed
-		// the rune picker off the settings hash so cyclingFrames is
-		// a pure function of Settings: two processes with identical
-		// Settings populate the cache with the same glyphs, which
-		// keeps any cross-process golden-file comparison stable.
-		seed := xxh3.HashString(cacheKey)
-		rng := rand.New(rand.NewPCG(seed, ^seed))
-		a.cyclingFrames = make([][]string, numFrames)
-		offset = 0
-		for i := range a.cyclingFrames {
-			a.cyclingFrames[i] = make([]string, a.width)
-			for j := range a.cyclingFrames[i] {
-				if j+offset >= len(ramp) {
-					continue // skip if we run out of colors
-				}
-
-				// Also prerender the color with Lip Gloss here to avoid processing
-				// in the render loop.
-				r := availableRunes[rng.IntN(len(availableRunes))]
-				a.cyclingFrames[i][j] = lipgloss.NewStyle().
-					Foreground(ramp[j+offset]).
-					Render(string(r))
-			}
-			if opts.CycleColors {
-				offset++
-			}
-		}
-
-		// Cache the results
-		labelSlice := make([]string, a.label.Len())
-		for i, v := range a.label.Seq2() {
-			labelSlice[i] = v
-		}
-		ellipsisSlice := make([]string, a.ellipsisFrames.Len())
-		for i, v := range a.ellipsisFrames.Seq2() {
-			ellipsisSlice[i] = v
-		}
-		cached = &animCache{
-			initialFrames:  a.initialFrames,
-			cyclingFrames:  a.cyclingFrames,
-			width:          a.width,
-			labelWidth:     a.labelWidth,
-			label:          labelSlice,
-			ellipsisFrames: ellipsisSlice,
-		}
-		animCacheMap.Set(cacheKey, cached)
+		a.width += lipgloss.Width(opts.Label)
 	}
 
-	// Assign a deterministic birth step to each column for a
-	// staggered entrance effect. The schedule is seeded off the
-	// spinner id and the settings hash, so two spinners with the
-	// same role and identity stagger identically (this is what
-	// keeps Render() byte-equal across cache hits and across
-	// processes for the same Settings+ID) while spinners with
-	// different ids — distinct assistant messages, different tool
-	// calls, "Thinking" vs "Generating" labels — fade in with
-	// different patterns instead of marching in lock-step.
-	// A rebuild only for new colors keeps the existing schedule so
-	// an in-flight fade-in is not disturbed.
-	if len(a.birthSteps) != a.width {
-		birthSeed := xxh3.HashString(a.id + "|" + cacheKey)
-		birthRng := rand.New(rand.NewPCG(birthSeed, ^birthSeed))
-		a.birthSteps = make([]int, a.width)
-		for i := range a.birthSteps {
-			a.birthSteps[i] = birthRng.IntN(maxBirthSteps)
+	// Render the label
+	a.renderLabel(opts.Label)
+
+	// Pre-generate gradient.
+	var ramp []color.Color
+	numFrames := prerenderedFrames
+	if opts.CycleColors {
+		ramp = makeGradientRamp(a.width*3, opts.GradColorA, opts.GradColorB, opts.GradColorA, opts.GradColorB)
+		numFrames = a.width * 2
+	} else {
+		ramp = makeGradientRamp(a.width, opts.GradColorA, opts.GradColorB)
+	}
+
+	a.initialFrames = a.renderInitialFrames(opts, ramp, numFrames)
+	a.cyclingFrames = a.renderCyclingFrames(opts, ramp, numFrames, xxh3.HashString(cacheKey))
+
+	// Cache the results
+	labelSlice := make([]string, a.label.Len())
+	for i, v := range a.label.Seq2() {
+		labelSlice[i] = v
+	}
+	ellipsisSlice := make([]string, a.ellipsisFrames.Len())
+	for i, v := range a.ellipsisFrames.Seq2() {
+		ellipsisSlice[i] = v
+	}
+	animCacheMap.Set(cacheKey, &animCache{
+		initialFrames:  a.initialFrames,
+		cyclingFrames:  a.cyclingFrames,
+		width:          a.width,
+		labelWidth:     a.labelWidth,
+		label:          labelSlice,
+		ellipsisFrames: ellipsisSlice,
+	})
+}
+
+// renderInitialFrames pre-renders the initial character for every column,
+// colored along the gradient ramp (and shifted per frame when cycling
+// colors), so the render loop does no styling.
+func (a *Anim) renderInitialFrames(opts Settings, ramp []color.Color, numFrames int) [][]string {
+	frames := make([][]string, numFrames)
+	offset := 0
+	for i := range frames {
+		frames[i] = make([]string, a.width+labelGapWidth+a.labelWidth)
+		for j := range frames[i] {
+			if j+offset >= len(ramp) {
+				continue // skip if we run out of colors
+			}
+
+			var c color.Color
+			if j <= a.cyclingCharWidth {
+				c = ramp[j+offset]
+			} else {
+				c = opts.LabelColor
+			}
+
+			// Also prerender the initial character with Lip Gloss to avoid
+			// processing in the render loop.
+			frames[i][j] = lipgloss.NewStyle().
+				Foreground(c).
+				Render(string(initialChar))
 		}
+		if opts.CycleColors {
+			offset++
+		}
+	}
+	return frames
+}
+
+// renderCyclingFrames prerenders scrambled rune frames for the animation.
+// The rune picker is seeded off the settings hash so the frames are a pure
+// function of Settings: two processes with identical Settings populate the
+// cache with the same glyphs, which keeps any cross-process golden-file
+// comparison stable.
+func (a *Anim) renderCyclingFrames(opts Settings, ramp []color.Color, numFrames int, seed uint64) [][]string {
+	rng := rand.New(rand.NewPCG(seed, ^seed))
+	frames := make([][]string, numFrames)
+	offset := 0
+	for i := range frames {
+		frames[i] = make([]string, a.width)
+		for j := range frames[i] {
+			if j+offset >= len(ramp) {
+				continue // skip if we run out of colors
+			}
+
+			// Also prerender the color with Lip Gloss here to avoid processing
+			// in the render loop.
+			r := availableRunes[rng.IntN(len(availableRunes))]
+			frames[i][j] = lipgloss.NewStyle().
+				Foreground(ramp[j+offset]).
+				Render(string(r))
+		}
+		if opts.CycleColors {
+			offset++
+		}
+	}
+	return frames
+}
+
+// scheduleBirths assigns a deterministic birth step to each column for a
+// staggered entrance effect. The schedule is seeded off the spinner id and
+// the settings hash, so two spinners with the same role and identity
+// stagger identically (this is what keeps Render() byte-equal across cache
+// hits and across processes for the same Settings+ID) while spinners with
+// different ids — distinct assistant messages, different tool calls,
+// "Thinking" vs "Generating" labels — fade in with different patterns
+// instead of marching in lock-step. A rebuild only for new colors keeps the
+// existing schedule so an in-flight fade-in is not disturbed.
+func (a *Anim) scheduleBirths(cacheKey string) {
+	if len(a.birthSteps) == a.width {
+		return
+	}
+	birthSeed := xxh3.HashString(a.id + "|" + cacheKey)
+	birthRng := rand.New(rand.NewPCG(birthSeed, ^birthSeed))
+	a.birthSteps = make([]int, a.width)
+	for i := range a.birthSteps {
+		a.birthSteps[i] = birthRng.IntN(maxBirthSteps)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/anim"
@@ -202,88 +201,6 @@ func newBaseToolMessageItem(
 	})
 
 	return t
-}
-
-// NewToolMessageItem creates a new [ToolMessageItem] based on the tool call name.
-//
-// It returns a specific tool message item type if implemented, otherwise it
-// returns a generic tool message item. The messageID is the ID of the assistant
-// message containing this tool call.
-func NewToolMessageItem(
-	sty *styles.Styles,
-	messageID string,
-	toolCall message.ToolCall,
-	result *message.ToolResult,
-	canceled bool,
-	workingDir string,
-) ToolMessageItem {
-	var item ToolMessageItem
-	switch toolCall.Name {
-	case tools.BashToolName:
-		item = NewBashToolMessageItem(sty, toolCall, result, canceled, workingDir)
-	case tools.JobOutputToolName:
-		item = NewJobOutputToolMessageItem(sty, toolCall, result, canceled)
-	case tools.JobKillToolName:
-		item = NewJobKillToolMessageItem(sty, toolCall, result, canceled)
-	case tools.ViewToolName:
-		item = NewViewToolMessageItem(sty, toolCall, result, canceled)
-	case tools.WriteToolName:
-		item = NewWriteToolMessageItem(sty, toolCall, result, canceled)
-	case tools.EditToolName:
-		item = NewEditToolMessageItem(sty, toolCall, result, canceled)
-	case tools.MultiEditToolName:
-		item = NewMultiEditToolMessageItem(sty, toolCall, result, canceled)
-	case tools.GlobToolName:
-		item = NewGlobToolMessageItem(sty, toolCall, result, canceled)
-	case tools.GrepToolName:
-		item = NewGrepToolMessageItem(sty, toolCall, result, canceled)
-	case tools.LSToolName:
-		item = NewLSToolMessageItem(sty, toolCall, result, canceled)
-	case tools.DownloadToolName:
-		item = NewDownloadToolMessageItem(sty, toolCall, result, canceled)
-	case tools.FetchToolName:
-		item = NewFetchToolMessageItem(sty, toolCall, result, canceled)
-	case tools.SourcegraphToolName:
-		item = NewSourcegraphToolMessageItem(sty, toolCall, result, canceled)
-	case tools.DiagnosticsToolName:
-		item = NewDiagnosticsToolMessageItem(sty, toolCall, result, canceled)
-	case agent.AgentToolName:
-		item = NewAgentToolMessageItem(sty, toolCall, result, canceled)
-	case tools.AgenticFetchToolName:
-		item = NewAgenticFetchToolMessageItem(sty, toolCall, result, canceled)
-	case tools.WebFetchToolName:
-		item = NewWebFetchToolMessageItem(sty, toolCall, result, canceled)
-	case tools.WebSearchToolName:
-		item = NewWebSearchToolMessageItem(sty, toolCall, result, canceled)
-	case tools.TodosToolName:
-		item = NewTodosToolMessageItem(sty, toolCall, result, canceled)
-	case tools.QuestionToolName:
-		item = NewQuestionToolMessageItem(sty, toolCall, result, canceled)
-	case tools.ReferencesToolName:
-		item = NewReferencesToolMessageItem(sty, toolCall, result, canceled)
-	case tools.DefinitionToolName:
-		item = NewDefinitionToolMessageItem(sty, toolCall, result, canceled)
-	case tools.RenameToolName:
-		item = NewRenameToolMessageItem(sty, toolCall, result, canceled)
-	case tools.ReplaceSymbolToolName:
-		item = NewReplaceSymbolToolMessageItem(sty, toolCall, result, canceled)
-	case tools.CallHierarchyToolName:
-		item = NewCallHierarchyToolMessageItem(sty, toolCall, result, canceled)
-	case tools.SymbolsToolName:
-		item = NewSymbolsToolMessageItem(sty, toolCall, result, canceled)
-	case tools.LSPRestartToolName:
-		item = NewLSPRestartToolMessageItem(sty, toolCall, result, canceled)
-	default:
-		if IsDockerMCPTool(toolCall.Name) {
-			item = NewDockerMCPToolMessageItem(sty, toolCall, result, canceled)
-		} else if strings.HasPrefix(toolCall.Name, "mcp_") {
-			item = NewMCPToolMessageItem(sty, toolCall, result, canceled)
-		} else {
-			item = NewGenericToolMessageItem(sty, toolCall, result, canceled)
-		}
-	}
-	item.SetMessageID(messageID)
-	return item
 }
 
 // SetCompact implements the Compactable interface.

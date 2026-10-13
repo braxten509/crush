@@ -2,6 +2,7 @@ package sessionhost
 
 import (
 	"image"
+	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -26,21 +27,37 @@ func (h *Host) picturesOn() *session {
 	return s
 }
 
+// screenPictures is what the host has put on the real terminal with Kitty
+// graphics, and what it still has to write there.
+type screenPictures struct {
+	// shown is the session whose pictures are on screen, placed for a list
+	// side wide.
+	shown *session
+	side  int
+	// raw is what to write to the real terminal after this update.
+	raw strings.Builder
+}
+
 // takePictures follows a session's Kitty graphics commands and passes on
 // what belongs on screen now.
 func (h *Host) takePictures(s *session, cmds []pictureCmd) {
-	on := s == h.shownPictures && h.picturesSide == h.sideWidth()
+	h.pictures.take(s, cmds, h.sideWidth())
+}
+
+// take follows a session's Kitty graphics commands for a list side wide.
+func (p *screenPictures) take(s *session, cmds []pictureCmd, side int) {
+	on := s == p.shown && p.side == side
 	for _, c := range cmds {
 		switch {
 		case c.place:
-			p := s.placed[c.id]
-			if p == nil || c.first {
-				p = &placedPicture{at: c.at}
-				s.placed[c.id] = p
+			placed := s.placed[c.id]
+			if placed == nil || c.first {
+				placed = &placedPicture{at: c.at}
+				s.placed[c.id] = placed
 			}
-			p.seqs = append(p.seqs, c.seq)
+			placed.seqs = append(placed.seqs, c.seq)
 			if on {
-				h.raw.WriteString(h.placeAt(c.seq, c.at))
+				p.raw.WriteString(placeAt(c.seq, c.at, side))
 			}
 		case c.remove:
 			if c.id == "" {
@@ -49,49 +66,55 @@ func (h *Host) takePictures(s *session, cmds []pictureCmd) {
 				delete(s.placed, c.id)
 			}
 			if on {
-				h.raw.WriteString(c.seq)
+				p.raw.WriteString(c.seq)
 			}
 		default:
 			// Pictures sent without a place (placeholder ones) can go
 			// out whether or not the session is shown.
-			h.raw.WriteString(c.seq)
+			p.raw.WriteString(c.seq)
 		}
 	}
 }
 
 // placeAt wraps a command that puts a picture at the cursor so it lands at
-// the session's cell at, leaving the real cursor where it was.
-func (h *Host) placeAt(seq string, at image.Point) string {
-	return ansi.SaveCursor + ansi.CursorPosition(at.X+h.sideWidth()+1, at.Y+1) + seq + ansi.RestoreCursor
+// the session's cell at, right of a list side wide, leaving the real cursor
+// where it was.
+func placeAt(seq string, at image.Point, side int) string {
+	return ansi.SaveCursor + ansi.CursorPosition(at.X+side+1, at.Y+1) + seq + ansi.RestoreCursor
 }
 
 // syncPictures puts on screen the pictures of the session that should show
 // them, and takes down those of a session that no longer should, or that
 // moved because the list changed width.
 func (h *Host) syncPictures() {
-	want, side := h.picturesOn(), h.sideWidth()
-	if want == h.shownPictures && side == h.picturesSide {
+	h.pictures.sync(h.picturesOn(), h.sideWidth())
+}
+
+// sync shows want's pictures right of a list side wide, taking down the
+// ones shown before when they differ.
+func (p *screenPictures) sync(want *session, side int) {
+	if want == p.shown && side == p.side {
 		return
 	}
-	if old := h.shownPictures; old != nil {
+	if old := p.shown; old != nil {
 		for id := range old.placed {
-			h.raw.WriteString(ansi.KittyGraphics(nil, "a=d", "d=i", "i="+id, "q=2"))
+			p.raw.WriteString(ansi.KittyGraphics(nil, "a=d", "d=i", "i="+id, "q=2"))
 		}
 	}
-	h.shownPictures, h.picturesSide = want, side
+	p.shown, p.side = want, side
 	if want == nil {
 		return
 	}
-	for _, p := range want.placed {
-		for _, seq := range p.seqs {
-			h.raw.WriteString(h.placeAt(seq, p.at))
+	for _, placed := range want.placed {
+		for _, seq := range placed.seqs {
+			p.raw.WriteString(placeAt(seq, placed.at, side))
 		}
 	}
 }
 
 // takeRaw returns what is waiting to be written to the real terminal.
-func (h *Host) takeRaw() string {
-	out := h.raw.String()
-	h.raw.Reset()
+func (p *screenPictures) takeRaw() string {
+	out := p.raw.String()
+	p.raw.Reset()
 	return out
 }

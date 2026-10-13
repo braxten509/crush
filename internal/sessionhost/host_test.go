@@ -582,7 +582,7 @@ func TestSessionNotesWherePicturesGo(t *testing.T) {
 func pictureOutput(h *Host, msg tea.Msg) string {
 	h.update(msg)
 	h.syncPictures()
-	return h.takeRaw()
+	return h.pictures.takeRaw()
 }
 
 func TestPicturesFollowTheShownSession(t *testing.T) {

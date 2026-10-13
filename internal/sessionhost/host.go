@@ -4,7 +4,6 @@ import (
 	"image/color"
 	"log/slog"
 	"slices"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -81,12 +80,8 @@ type Host struct {
 	// pixelHeight are its size in pixels, when it said.
 	kitty                   bool
 	pixelWidth, pixelHeight int
-	// shownPictures is the session whose pictures are on screen, placed
-	// for a list picturesSide wide.
-	shownPictures *session
-	picturesSide  int
-	// raw is what to write to the real terminal after this update.
-	raw strings.Builder
+	// pictures tracks the Kitty graphics placed on the real terminal.
+	pictures screenPictures
 
 	hover int // hovered list row; -1 for none
 	// pickedServer is the port of the server picked in the list, which
@@ -150,7 +145,7 @@ func (h *Host) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := h.update(msg)
 	cmd = tea.Batch(cmd, h.tickActivity())
 	h.syncPictures()
-	if raw := h.takeRaw(); raw != "" {
+	if raw := h.pictures.takeRaw(); raw != "" {
 		cmd = tea.Batch(cmd, tea.Raw(raw))
 	}
 	return h, cmd

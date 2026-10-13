@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/ui/chat"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -44,7 +45,9 @@ func TestSubagentViewPreservesParentAndReturns(t *testing.T) {
 			u.handleSubagentView(tea.PasteMsg{Content: "must not reach parent"})
 			require.Equal(t, "Unsent parent draft", u.textarea.Value())
 			for _, width := range []int{140, 80, 40} {
+				// A resize reaches the parent's layout, as in the app.
 				u.width = width
+				u.updateLayoutAndSize()
 				scr := uv.NewScreenBuffer(width, 24)
 				u.Draw(scr, scr.Bounds())
 				out := ansi.Strip(scr.Render())
@@ -125,4 +128,84 @@ func TestCompactUsageShowsConfiguredCompactionTokens(t *testing.T) {
 	ws.cfg.Options = nil
 	u.isCompact = true
 	require.Contains(t, ansi.Strip(u.compactUsage(80)), "/400k tokens")
+}
+
+// A running sub-agent whose last step is done is still working out its next
+// one, so its status group shows "Thinking" like the main chat does.
+func TestSubagentViewShowsThinkingWhileRunning(t *testing.T) {
+	t.Parallel()
+	ws := newLoadWorkspace()
+	u := newLoadTestUI(t, ws)
+	call := message.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"ls"}`, Finished: true}
+	asst := message.Message{ID: "a1", SessionID: "child", Role: message.Assistant}
+	asst.AddToolCall(call)
+	asst.AddFinish(message.FinishReasonToolUse, "", "")
+	tool := message.Message{ID: "r1", SessionID: "child", Role: message.Tool}
+	tool.AddToolResult(message.ToolResult{ToolCallID: "c1", Content: "ok"})
+	ws.transcripts["child"] = []message.Message{asst, tool}
+	task := agent.Task{ID: "t1", SessionID: u.session.ID, ChildID: "child", Name: "Review", Status: agent.TaskRunning}
+	u.handleSubagentView(u.openSubagentView(task)())
+	draw := func() string {
+		scr := uv.NewScreenBuffer(100, 24)
+		u.Draw(scr, scr.Bounds())
+		return ansi.Strip(scr.Render())
+	}
+	require.Contains(t, draw(), "Thinking", "a running sub-agent between steps shows it is working")
+
+	task.Status = agent.TaskDone
+	cmd, _ := u.handleSubagentView(pubsub.Event[agent.Task]{Type: pubsub.UpdatedEvent, Payload: task})
+	u.handleSubagentView(cmd())
+	u.handleSubagentView(u.loadSubagentView()())
+	require.NotContains(t, draw(), "Thinking", "a finished sub-agent stops")
+}
+
+// Opening a sub-agent looks like the main chat: the chat sits in the same
+// spot, a read-only composer band holds its name, and the way back sits on
+// the bottom row.
+func TestSubagentViewMatchesMainChatLayout(t *testing.T) {
+	t.Parallel()
+	for _, width := range []int{100, 160} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			ws := newLoadWorkspace()
+			u := newLoadTestUI(t, ws)
+			prompt := "Review the packaging work"
+			for _, sid := range []string{"old", "child"} {
+				msg := message.Message{ID: sid + "-u", SessionID: sid, Role: message.User}
+				msg.AppendContent(prompt)
+				ws.transcripts[sid] = []message.Message{msg}
+			}
+			u.chat.SetMessages(chat.ExtractMessageItems(u.com.Styles, &ws.transcripts["old"][0], nil, "")...)
+			u.width, u.height = width, 30
+			u.updateLayoutAndSize()
+			draw := func() []string {
+				scr := uv.NewScreenBuffer(width, 30)
+				u.Draw(scr, scr.Bounds())
+				return strings.Split(ansi.Strip(scr.Render()), "\n")
+			}
+			find := func(rows []string, text string) (int, int) {
+				for y, row := range rows {
+					if x := strings.Index(row, text); x >= 0 {
+						return y, ansi.StringWidth(row[:x])
+					}
+				}
+				t.Fatalf("%q not drawn:\n%s", text, strings.Join(rows, "\n"))
+				return 0, 0
+			}
+			mainY, mainX := find(draw(), prompt)
+
+			task := agent.Task{ID: "t1", SessionID: u.session.ID, ChildID: "child", Name: "Gemini review", Status: agent.TaskRunning, Model: "gemini-flash"}
+			u.handleSubagentView(u.openSubagentView(task)())
+			rows := draw()
+			subY, subX := find(rows, prompt)
+			require.Equal(t, mainX, subX, "the sub-agent's chat starts in the main chat's column")
+			require.Equal(t, mainY, subY, "the sub-agent's chat starts on the main chat's row")
+			require.NotContains(t, strings.Join(rows, "\n"), "Sub-agent:", "no title row above the chat")
+			find(rows, "Gemini review · running")
+			find(rows, "read only")
+			require.Contains(t, rows[len(rows)-1], "Return to parent", "the way back is on the bottom row")
+			_, _, back := u.subagentViewAreas(uv.Rect(0, 0, width, 30))
+			require.Equal(t, len(rows)-1, back.Min.Y)
+			t.Logf("%d columns:\n%s", width, strings.Join(rows, "\n"))
+		})
+	}
 }

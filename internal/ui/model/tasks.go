@@ -183,6 +183,12 @@ func (m *UI) handleTaskRowKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 }
 
 func (m *UI) renderTasks(width int) string {
+	return m.renderTaskLine(width, true)
+}
+
+// renderTaskLine draws the task row; withHint adds the keys that manage it,
+// which only work from the main chat.
+func (m *UI) renderTaskLine(width int, withHint bool) string {
 	tasks := m.visibleTasks()
 	t := m.com.Styles
 	items := make([]string, 0, 2)
@@ -226,7 +232,10 @@ func (m *UI) renderTasks(width int) string {
 	default:
 		hint = "enter list · ←/→ select · ↑ back"
 	}
-	line := " " + strings.Join(items, " ") + "  " + t.Pills.HelpText.Render(hint)
+	line := " " + strings.Join(items, " ")
+	if withHint {
+		line += "  " + t.Pills.HelpText.Render(hint)
+	}
 	return ansi.Truncate(line, width, "…")
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"slices"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -135,6 +136,9 @@ func (m *UI) handleSubagentView(msg tea.Msg) (tea.Cmd, bool) {
 		// Reuse tool groups so expanding one survives incoming chunks.
 		v.chat.flat = slices.Clone(msg.prepared.items)
 		v.chat.regroup()
+		// Between steps a running sub-agent is still thinking, as in the
+		// main chat.
+		v.chat.SetAgentBusy(v.task.Status == agent.TaskRunning)
 		if first || follow {
 			v.chat.ScrollToBottom()
 		} else {
@@ -265,38 +269,88 @@ func (m *UI) handleSubagentAnimTick(msg animTickMsg) tea.Cmd {
 	return cmd
 }
 
+// subagentViewLayout puts the sub-agent's chat, read-only composer and
+// footer exactly where the main chat puts its own, so opening one looks like
+// the main chat.
+type subagentViewLayout struct {
+	main, composer, usage, tasks, sidebar, back uv.Rectangle
+}
+
+func (m *UI) subagentViewLayout(area uv.Rectangle) subagentViewLayout {
+	l := m.generateLayout(area.Dx(), area.Dy())
+	main := l.main
+	if l.pills.Dy() > 0 {
+		// The parent's to-do pills aren't the sub-agent's; its chat takes
+		// their rows.
+		main.Max.Y = max(main.Max.Y, l.pills.Max.Y-1)
+	}
+	back := l.status
+	back.Min.X = l.editor.Min.X + footerIndent
+	back.Max.X = min(back.Max.X, back.Min.X+lipgloss.Width(subagentBackLabel))
+	return subagentViewLayout{main: main, composer: l.editor, usage: l.usage, tasks: l.tasks, sidebar: l.sidebar, back: back}
+}
+
+const subagentBackLabel = "← Return to parent  esc"
+
 func (m *UI) subagentViewAreas(area uv.Rectangle) (main, composer, back uv.Rectangle) {
-	inner := image.Rect(area.Min.X+1, area.Min.Y+1, max(area.Min.X+1, area.Max.X-1), max(area.Min.Y+1, area.Max.Y-1))
-	back = inner
-	back.Min.Y = max(inner.Min.Y, inner.Max.Y-1)
-	composer = inner
-	composer.Max.Y = max(inner.Min.Y, back.Min.Y-1)
-	footerHeight := lipgloss.Height(m.subagentFooter(inner.Dx()))
-	composer.Min.Y = max(inner.Min.Y, composer.Max.Y-1-footerHeight)
-	main = inner
-	main.Min.Y = min(inner.Max.Y, inner.Min.Y+2)
-	main.Max.Y = max(main.Min.Y, composer.Min.Y-1)
-	return main, composer, back
+	l := m.subagentViewLayout(area)
+	return l.main, l.composer, l.back
+}
+
+// subagentComposer is the read-only stand-in for the composer: the same band
+// as the main chat's, holding the sub-agent's name and state.
+func (m *UI) subagentComposer(height, width int) string {
+	v, t := m.subagentView, m.com.Styles
+	label := v.task.Name + " · " + string(v.task.Status)
+	if !m.isCompact && v.task.Model != "" {
+		// The sidebar shows the parent's model, so name the sub-agent's here.
+		label += " · " + v.task.Model
+	}
+	label += " · read only"
+	bg := t.Editor.Textarea.Blurred.Base.GetBackground()
+	// An attachments row above and a margin row below, as in renderEditorView.
+	lines := []string{""}
+	for i := range max(3, height-2) {
+		line := ""
+		if i == 1 {
+			line = ansi.Truncate(t.Editor.PromptNormalIconBlurred.Render()+t.Editor.Textarea.Blurred.Placeholder.Render(label), width, "…")
+		}
+		lines = append(lines, common.OnBand(line, width, bg))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *UI) drawSubagentView(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	v, t := m.subagentView, m.com.Styles
 	screen.Clear(scr)
-	main, composer, back := m.subagentViewAreas(area)
-	title := "Sub-agent: " + v.task.Name + " · " + string(v.task.Status)
-	uv.NewStyledString(t.Pills.TodoLabel.Render(ansi.Truncate(title, main.Dx(), "…"))).Draw(scr, image.Rect(main.Min.X, area.Min.Y+1, main.Max.X, area.Min.Y+2))
-	v.chat.SetSize(main.Dx(), main.Dy())
-	if v.session == nil {
-		uv.NewStyledString(t.Pills.HelpText.Render("Opening conversation…")).Draw(scr, main)
-	} else {
-		v.chat.Draw(scr, main)
+	l := m.subagentViewLayout(area)
+	if !m.isCompact && l.sidebar.Dx() > 0 {
+		m.drawSidebar(scr, l.sidebar)
 	}
-	label := t.Pills.HelpText.Render("Viewing sub-agent · read only")
-	uv.NewStyledString(ansi.Truncate(label, composer.Dx(), "…")).Draw(scr, composer)
-	composer.Min.Y++
-	uv.NewStyledString(m.subagentFooter(composer.Dx())).Draw(scr, composer)
+	v.chat.SetSize(l.main.Dx(), l.main.Dy())
+	if v.session == nil {
+		uv.NewStyledString(t.Pills.HelpText.Render("Opening conversation…")).Draw(scr, l.main)
+	} else {
+		v.chat.Draw(scr, l.main)
+	}
+	width := l.composer.Dx()
+	if w := v.chat.ListWidth(); w > 0 {
+		// The band ends where the sent messages' bands do.
+		width = min(width, w)
+	}
+	uv.NewStyledString(m.subagentComposer(l.composer.Dy(), width)).Draw(scr, l.composer)
+	if l.usage.Dy() > 0 {
+		pad := strings.Repeat(" ", footerIndent)
+		footer := pad + strings.ReplaceAll(m.subagentFooter(l.usage.Dx()-footerIndent), "\n", "\n"+pad)
+		uv.NewStyledString(footer).Draw(scr, l.usage)
+	}
+	if l.tasks.Dy() > 0 {
+		uv.NewStyledString(m.renderTaskLine(l.tasks.Dx(), false)).Draw(scr, l.tasks)
+	}
 	button := t.ComposerFooter.Accent.Underline(v.returnFocused).Render("← Return to parent")
 	button += t.ComposerFooter.Text.Render("  esc")
+	back := l.back
+	back.Max.X = l.composer.Max.X
 	uv.NewStyledString(ansi.Truncate(button, back.Dx(), "…")).Draw(scr, back)
 	if m.dialog.HasDialogs() {
 		return m.dialog.Draw(scr, area)

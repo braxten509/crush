@@ -58,7 +58,7 @@ func clientCalls() map[string]func(context.Context, *Client) error {
 			return c.SendMessage(ctx, ws, sid, "", "", "hi")
 		},
 		"RunShellCommand": func(ctx context.Context, c *Client) error {
-			_, err := c.RunShellCommand(ctx, ws, sid, "ls", 80)
+			_, err := c.RunShellCommand(ctx, ws, sid, "ls", 80, false)
 			return err
 		},
 		"GetAgentSessionInfo": func(ctx context.Context, c *Client) error {

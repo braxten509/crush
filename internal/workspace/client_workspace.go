@@ -238,8 +238,10 @@ func (w *ClientWorkspace) AgentRunChannel(ctx context.Context, channel, sessionI
 	return w.client.SendMessage(ctx, w.workspaceID(), sessionID, "", channel, prompt, attachments...)
 }
 
-func (w *ClientWorkspace) AgentRunShellCommand(ctx context.Context, sessionID, command string, termWidth int, _ func(string), _ bool) (proto.ShellCommandResponse, error) {
-	return w.client.RunShellCommand(ctx, w.workspaceID(), sessionID, command, termWidth)
+// AgentRunShellCommand runs a user shell command on the server. Output is
+// not streamed in client mode, so onProgress is unused.
+func (w *ClientWorkspace) AgentRunShellCommand(ctx context.Context, sessionID, command string, termWidth int, _ func(string), isFirstMessage bool) (proto.ShellCommandResponse, error) {
+	return w.client.RunShellCommand(ctx, w.workspaceID(), sessionID, command, termWidth, isFirstMessage)
 }
 
 func (w *ClientWorkspace) AgentCancel(sessionID string) {
@@ -654,20 +656,7 @@ func (w *ClientWorkspace) RefreshMCPTools(ctx context.Context, name string) {
 }
 
 func (w *ClientWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
-	contents, err := w.client.ReadMCPResource(ctx, w.workspaceID(), name, uri)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]MCPResourceContents, len(contents))
-	for i, c := range contents {
-		result[i] = MCPResourceContents{
-			URI:      c.URI,
-			MIMEType: c.MIMEType,
-			Text:     c.Text,
-			Blob:     c.Blob,
-		}
-	}
-	return result, nil
+	return w.client.ReadMCPResource(ctx, w.workspaceID(), name, uri)
 }
 
 func (w *ClientWorkspace) ListMCPPrompts(ctx context.Context) ([]commands.MCPPrompt, error) {

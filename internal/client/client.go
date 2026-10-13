@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,17 +12,22 @@ import (
 	"net/url"
 	stdpath "path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/google/uuid"
 )
 
 // DummyHost is used to satisfy the http.Client's requirement for a URL.
 const DummyHost = "api.crush.localhost"
+
+// apiPrefix is the path prefix of every v1 endpoint.
+const apiPrefix = "/v1"
 
 // Client represents an RPC client connected to a Crush server.
 type Client struct {
@@ -109,16 +115,8 @@ func (c *Client) Health(ctx context.Context) error {
 
 // VersionInfo retrieves the server's version information.
 func (c *Client) VersionInfo(ctx context.Context) (*proto.VersionInfo, error) {
-	var vi proto.VersionInfo
-	rsp, err := c.get(ctx, "version", nil, nil)
+	vi, err := newCall(c, rpc.Version, "get server version", "server version").get(ctx)
 	if err != nil {
-		return nil, err
-	}
-	defer rsp.Body.Close()
-	if err := checkStatus(rsp); err != nil {
-		return nil, fmt.Errorf("failed to get server version: %w", err)
-	}
-	if err := json.NewDecoder(rsp.Body).Decode(&vi); err != nil {
 		return nil, err
 	}
 	return &vi, nil
@@ -134,7 +132,7 @@ func (c *Client) VersionInfo(ctx context.Context) (*proto.VersionInfo, error) {
 // [ErrUnsupported]; it must be left running, since the shutdown request
 // it does understand is unconditional and would take its sessions down.
 func (c *Client) ShutdownServerIfIdle(ctx context.Context) error {
-	rsp, err := c.post(ctx, "/control", nil, jsonBody(proto.ServerControl{
+	rsp, err := c.post(ctx, strings.TrimPrefix(rpc.Control.Path, apiPrefix), nil, jsonBody(proto.ServerControl{
 		Command: proto.ServerControlShutdownIfIdle,
 	}), nil)
 	if err != nil {
@@ -167,7 +165,7 @@ func (c *Client) ShutdownServerIfIdle(ctx context.Context) error {
 // New servers apply the same idleness check to this command as they do
 // to [ServerControlShutdownIfIdle], so it is never more dangerous.
 func (c *Client) ShutdownServer(ctx context.Context) error {
-	rsp, err := c.post(ctx, "/control", nil, jsonBody(proto.ServerControl{
+	rsp, err := c.post(ctx, strings.TrimPrefix(rpc.Control.Path, apiPrefix), nil, jsonBody(proto.ServerControl{
 		Command: proto.ServerControlShutdown,
 	}), nil)
 	if err != nil {
@@ -194,18 +192,11 @@ func (c *Client) ShutdownServer(ctx context.Context) error {
 // Servers predating the endpoint answer 404, reported as
 // [ErrUnsupported] so callers can fall back to releasing by workspace ID.
 func (c *Client) RetireClient(ctx context.Context) error {
-	rsp, err := c.delete(ctx, "/clients/"+c.clientID, nil, nil)
-	if err != nil {
-		return err
+	_, err := newCall(c, rpc.RetireClient, "retire client", "").at(c.clientID).get(ctx)
+	if errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("%w: %w", ErrUnsupported, err)
 	}
-	defer rsp.Body.Close()
-	if err := checkStatus(rsp); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return fmt.Errorf("%w: %w", ErrUnsupported, err)
-		}
-		return fmt.Errorf("failed to retire client: %w", err)
-	}
-	return nil
+	return err
 }
 
 // Dial opens a connection to the server using the same scheme-aware
@@ -251,7 +242,7 @@ func (c *Client) put(ctx context.Context, path string, query url.Values, body io
 
 func (c *Client) sendReq(ctx context.Context, method, path string, query url.Values, body io.Reader, headers http.Header) (*http.Response, error) {
 	url := (&url.URL{
-		Path:     stdpath.Join("/v1", path),
+		Path:     stdpath.Join(apiPrefix, path),
 		RawQuery: query.Encode(),
 	}).String()
 	req, err := c.buildReq(ctx, method, url, body, headers)
@@ -288,4 +279,12 @@ func (c *Client) buildReq(ctx context.Context, method, url string, body io.Reade
 	}
 
 	return r, nil
+}
+
+// jsonBody encodes v as a JSON request body.
+func jsonBody(v any) *bytes.Buffer {
+	b := new(bytes.Buffer)
+	m, _ := json.Marshal(v)
+	b.Write(m)
+	return b
 }

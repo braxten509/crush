@@ -70,7 +70,7 @@ func newTestUI() *UI {
 		com:      com,
 		status:   NewStatus(com, nil),
 		chat:     NewChat(com, config.ScrollbarDefault),
-		textarea: ta,
+		composer: composer{textarea: ta},
 		state:    uiChat,
 		focus:    uiFocusEditor,
 		width:    140,

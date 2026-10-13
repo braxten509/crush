@@ -5,7 +5,6 @@ import (
 	"context"
 	"image"
 	"log/slog"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"slices"
@@ -441,11 +440,6 @@ func (m *UI) completionsPosition() image.Point {
 	}
 }
 
-// textareaWord returns the current word at the cursor position.
-func (m *UI) textareaWord() string {
-	return m.textarea.Word()
-}
-
 // isWhitespace returns true if the byte is a whitespace character.
 func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
@@ -465,11 +459,4 @@ var workingPlaceholders = [...]string{
 	"Prrrrrrrr...",
 	"Processing...",
 	"Thinking...",
-}
-
-// randomizePlaceholders selects random placeholder text for the textarea's
-// ready and working states.
-func (m *UI) randomizePlaceholders() {
-	m.workingPlaceholder = workingPlaceholders[rand.Intn(len(workingPlaceholders))]
-	m.readyPlaceholder = readyPlaceholders[rand.Intn(len(readyPlaceholders))]
 }

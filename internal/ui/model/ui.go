@@ -234,10 +234,6 @@ type UI struct {
 	dialog *dialog.Overlay
 	status *Status
 
-	// bangMode tracks whether the editor is in bang (!) shell mode.
-	bangMode     bool
-	bangWasEmpty bool // true when bang prompt became empty on last keystroke
-
 	// pendingBangCommand holds a shell command that was issued before
 	// the session finished loading. The loadSessionMsg handler creates
 	// the pending UI item and starts execution once the chat list is
@@ -270,13 +266,8 @@ type UI struct {
 	// previewPlaced is the question form sketch on screen, if any.
 	previewPlaced *dialog.PreviewPlacement
 
-	// Editor components
-	textarea textarea.Model
-
-	// textareaMouseSelecting tracks whether a mouse selection gesture is
-	// currently in progress within the textarea (left button held after a
-	// click inside the textarea region).
-	textareaMouseSelecting bool
+	// composer is the prompt editor; see composer.go.
+	composer
 
 	// Active inline editor replaces the textarea when non-nil.
 	activeInline dialog.InlineEditor
@@ -295,9 +286,6 @@ type UI struct {
 	// pendingKeptSkills are skills turned on before the chat exists. They
 	// are saved to the chat when the first message creates it.
 	pendingKeptSkills []session.KeptSkill
-
-	readyPlaceholder   string
-	workingPlaceholder string
 
 	// mention is the @ mention completions popup; see mention.go.
 	mention mentionCompletions
@@ -401,13 +389,6 @@ type UI struct {
 	// locally and a request in client/server mode, so renders take it from
 	// here rather than asking the workspace per frame.
 	gitBranch string
-
-	// Prompt history for up/down navigation through previous messages.
-	promptHistory struct {
-		messages []string
-		index    int
-		draft    string
-	}
 }
 
 // New creates a new instance of the [UI] model.
@@ -470,7 +451,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		com:                 com,
 		dialog:              dialog.NewOverlay(),
 		keyMap:              keyMap,
-		textarea:            ta,
+		composer:            composer{textarea: ta},
 		chat:                ch,
 		header:              header,
 		attachments:         attachments,

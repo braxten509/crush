@@ -218,14 +218,6 @@ func (m *UI) handleHistoryEscape(msg tea.Msg) tea.Cmd {
 	return m.updateTextarea(msg)
 }
 
-// updateHistoryDraft updates history state when text is modified.
-func (m *UI) updateHistoryDraft(oldValue string) {
-	if m.textarea.Value() != oldValue {
-		m.promptHistory.draft = m.textarea.Value()
-		m.promptHistory.index = -1
-	}
-}
-
 // syncBangModeFromTextarea engages or disengages bang mode based on
 // whether the current textarea value starts with "!". The "!" prefix
 // is stripped when entering bang mode and re-added when leaving it so
@@ -287,29 +279,4 @@ func (m *UI) historyNext() bool {
 	m.textarea.InsertString(m.promptHistory.messages[nextIndex])
 	m.syncBangModeFromTextarea()
 	return true
-}
-
-// historyReset resets the history, but does not clear the message
-// it just sets the current draft to empty and the position in the history.
-func (m *UI) historyReset() {
-	m.promptHistory.index = -1
-	m.promptHistory.draft = ""
-}
-
-// isAtEditorStart returns true if we are at the 0 line and 0 col in the textarea.
-func (m *UI) isAtEditorStart() bool {
-	return m.textarea.Line() == 0 && m.textarea.LineInfo().ColumnOffset == 0
-}
-
-// isAtEditorEnd returns true if we are in the last line and the last column in the textarea.
-func (m *UI) isAtEditorEnd() bool {
-	lineCount := m.textarea.LineCount()
-	if lineCount == 0 {
-		return true
-	}
-	if m.textarea.Line() != lineCount-1 {
-		return false
-	}
-	info := m.textarea.LineInfo()
-	return info.CharOffset >= info.CharWidth-1 || info.CharWidth == 0
 }

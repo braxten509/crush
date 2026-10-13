@@ -16,25 +16,47 @@ The module path is `github.com/charmbracelet/crush`.
 ```
 main.go                            CLI entry point (cobra via internal/cmd)
 internal/
-  app/app.go                       Top-level wiring: DB, config, agents, LSP, MCP, events
+  app/                             Top-level wiring: DB, config, agents, LSP, MCP, events
+    noninteractive.go              In-process backend for `crush run`
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
+  noninteractive/                  Shared `crush run` flow and model-string resolution
+  serverctl/                       Spawning, health-checking and replacing the server
+  stats/                           Usage statistics gathering and merging
   config/
-    config.go                      Config struct, context file paths, agent definitions
-    load.go                        crushrc and crush.json loading and validation
-    provider.go                    Provider configuration and model resolution
-  shellconfig/                      Bash-powered config format (crushrc builtins)
+    config.go                      Config struct and context file paths
+    pipeline.go                    One load pipeline shared by Load and reloads
+    provider_setup.go              Provider configuration phases and credential gates
+    store*.go                      ConfigStore: persistence, OAuth, staleness
+    resolve/                       Variable resolution ($VAR, $(cmd)) for config values
+    providers/                     Catwalk/Hyper catalog syncers and connection tests
+  shellconfig/                     Bash-powered config format (crushrc builtins)
   agent/
     agent.go                       SessionAgent: runs LLM conversations per session
-    coordinator.go                 Coordinator: manages named agents ("coder", "task")
+    turn*.go                       One Run: system prompt, history, stream callbacks
+    scheduler.go                   Per-session prompt queue and dispatch
+    coordinator*.go                Coordinator: manages named agents ("coder", "task")
+    toolset.go                     Builds each agent's tool set
     hooked_tool.go                 Decorator that runs PreToolUse hooks before tool execution
     prompts.go                     Loads Go-template system prompts
     templates/                     System prompt templates (coder.md.tpl, task.md.tpl, etc.)
-    tools/                         All built-in tools (bash, edit, view, grep, glob, etc.)
+    providers/                     Provider construction, options and model decorators
+    cliagent/                      External agent CLIs (Claude Code, Codex, ACP)
+    tools/                         Built-in tools (edit, view, grep, glob, lsp_*, etc.)
+      shelltool/                   bash, job_output, job_kill
+      webtool/                     fetch, web_fetch, web_search, download, sourcegraph
       mcp/                         MCP client integration
   hooks/                           Hook engine: runs user shell commands on hook events
     hooks.go                       Decision types, aggregation logic, event constants
     runner.go                      Parallel hook execution, timeout, dedup
     input.go                       Stdin payload builder, env vars, stdout parsing (Crush + Claude Code compat)
+  workspace/                       Workspace interface (split into service slices) with
+                                   in-process (AppWorkspace) and client implementations
+  backend/                         Server-side workspaces; ops*.go hold the operation
+                                   bodies shared with AppWorkspace
+  rpc/                             Typed route descriptors shared by server and client
+  server/                          HTTP API (routes built from rpc descriptors, docs)
+  client/                          HTTP client (calls built from rpc descriptors)
+  proto/                           Wire types and domain<->wire conversions
   session/session.go               Session CRUD backed by SQLite
   message/                         Message model and content types
   db/                              SQLite via sqlc, with migrations
@@ -42,13 +64,17 @@ internal/
     migrations/                    Schema migrations
   lsp/                             LSP client manager, auto-discovery, on-demand startup
   ui/                              Bubble Tea v2 TUI (see internal/ui/AGENTS.md)
+    sessionhost/                   Terminal session multiplexer UI
   permission/                      Tool permission checking and allow-lists
   skills/                          Skill file discovery and loading
   shell/                           Bash command execution with background job support
   event/                           Telemetry (PostHog)
   pubsub/                          Internal pub/sub for cross-component messaging
-  filetracker/                     Tracks files touched per session
-  history/                         Prompt history
+  filetracker/                     Tracks file reads per session
+  filechange/                      Records filesystem changes for file review
+  diffreview/                      Turns recorded changes into per-file review hunks
+  filehistory/                     Retains file versions for review and restore
+  history/                         Per-session file versions backed by SQLite
 ```
 
 ### Key Dependency Roles
@@ -142,6 +168,29 @@ internal/
   - This is enforced by `task lint:log` which runs as part of `task lint`.
 - **Comments**: End comments in periods unless comments are at the end of the
   line.
+
+## Code Organization
+
+These are soft budgets, not lint rules. Exceed them only for declarative
+tables (route lists, key maps, style tokens).
+
+- **Files**: keep non-test files under ~700 lines; split by concern
+  (`update_agent.go`, `store_oauth.go`), not one type per file.
+- **Functions**: keep under ~120 lines. Long tool constructors build a small
+  struct holding their dependencies and hand its `run` method to fantasy.
+- **Packages**: when a package passes ~25 non-test files, look for a
+  cohesive subpackage (see `ui/dialog/*`, `agent/providers`,
+  `agent/tools/{shelltool,webtool}`). Shared unexported helpers go in an
+  `internal/` subpackage (`ui/dialog/internal/kit`).
+- **Interfaces**: define them where they are consumed and keep them small;
+  `workspace.Workspace` embeds per-domain service slices.
+- **Layering**: non-UI packages must not import `internal/ui/...`.
+- **Client/server**: add an operation by declaring an `rpc.Op` in
+  `internal/rpc`, its body in `backend/ops*.go`, a server route, a client
+  call, and the `Workspace` method. Domain<->wire conversions live in
+  `internal/proto`.
+- **Moves**: keep pure file/package moves in their own commits and add them
+  to `.git-blame-ignore-revs`.
 
 ## Testing with Mock Providers
 

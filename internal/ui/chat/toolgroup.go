@@ -178,7 +178,6 @@ func (g *ToolGroupItem) SetCompactingEarlier(compacting bool) {
 	}
 }
 
-// Child returns the step with the given ID, or nil.
 // SetCanBackground says whether Ctrl+B can move the agent's running command
 // to the background.
 func (g *ToolGroupItem) SetCanBackground(can bool) {
@@ -226,6 +225,7 @@ func (g *ToolGroupItem) Backgrounded() {
 	g.Bump()
 }
 
+// Child returns the step with the given ID, or nil.
 func (g *ToolGroupItem) Child(id string) MessageItem {
 	for _, c := range g.children {
 		if c.ID() == id {

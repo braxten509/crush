@@ -11,12 +11,14 @@ import (
 	"slices"
 
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/diffreview"
 	"github.com/charmbracelet/crush/internal/filechange"
-	"github.com/charmbracelet/crush/internal/ui/diffreview"
 )
 
-const reviewTextBudget = 2 << 20
-const reviewPayloadLimit = 16 << 20
+const (
+	reviewTextBudget   = 2 << 20
+	reviewPayloadLimit = 16 << 20
+)
 
 var ErrReviewExpired = errors.New("diff details are no longer saved (only the latest five prompts keep them)")
 

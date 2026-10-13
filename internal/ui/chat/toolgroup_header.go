@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/diffreview"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/ui/diffreview"
 	"github.com/charmbracelet/x/ansi"
 )
 

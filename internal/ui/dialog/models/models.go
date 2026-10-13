@@ -1,4 +1,6 @@
-package dialog
+// Package models holds the model selection dialog and its grouped,
+// filterable list.
+package models
 
 import (
 	"cmp"
@@ -13,6 +15,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -68,9 +71,6 @@ const (
 	smallModelInputPlaceholder      = "Choose a model for small, simple tasks"
 )
 
-// ModelsID is the identifier for the model selection dialog.
-const ModelsID = "models"
-
 const defaultModelsDialogMaxWidth = 73
 
 // Models represents a model selection dialog.
@@ -95,7 +95,7 @@ type Models struct {
 	help  help.Model
 }
 
-var _ Dialog = (*Models)(nil)
+var _ dialog.Dialog = (*Models)(nil)
 
 // NewModels creates a new Models dialog.
 func NewModels(com *common.Common, isOnboarding bool) (*Models, error) {
@@ -142,7 +142,7 @@ func NewModels(com *common.Common, isOnboarding bool) (*Models, error) {
 		key.WithKeys("up", "ctrl+p"),
 		key.WithHelp("↑", "previous item"),
 	)
-	m.keyMap.Close = CloseKey
+	m.keyMap.Close = dialog.CloseKey
 
 	// A stale catalog must not keep this dialog from opening: it is the
 	// only way for the user to choose a model.
@@ -164,16 +164,16 @@ func NewModels(com *common.Common, isOnboarding bool) (*Models, error) {
 
 // ID implements Dialog.
 func (m *Models) ID() string {
-	return ModelsID
+	return dialog.ModelsID
 }
 
 // HandleMsg implements Dialog.
-func (m *Models) HandleMsg(msg tea.Msg) Action {
+func (m *Models) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keyMap.Close):
-			return ActionClose{}
+			return dialog.ActionClose{}
 		case key.Matches(msg, m.keyMap.Previous):
 			m.list.Focus()
 			if m.list.IsSelectedFirst() {
@@ -203,7 +203,7 @@ func (m *Models) HandleMsg(msg tea.Msg) Action {
 
 			isEdit := key.Matches(msg, m.keyMap.Edit)
 
-			return ActionSelectModel{
+			return dialog.ActionSelectModel{
 				Provider:       modelItem.prov,
 				Model:          modelItem.SelectedModel(),
 				ModelType:      modelItem.SelectedModelType(),
@@ -232,7 +232,7 @@ func (m *Models) HandleMsg(msg tea.Msg) Action {
 				m.list.SelectFirst()
 				m.list.ScrollToTop()
 			}
-			return ActionCmd{cmd}
+			return dialog.ActionCmd{Cmd: cmd}
 		}
 	}
 	return nil
@@ -240,7 +240,7 @@ func (m *Models) HandleMsg(msg tea.Msg) Action {
 
 // Cursor returns the cursor for the dialog.
 func (m *Models) Cursor() *tea.Cursor {
-	return InputCursor(m.com.Styles, m.input.Cursor())
+	return dialog.InputCursor(m.com.Styles, m.input.Cursor())
 }
 
 // modelTypeRadioView returns the radio view for model type selection.
@@ -273,7 +273,7 @@ func (m *Models) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	listHeight, listTotalHeight, _ := kit.SizeDialogList(t, m.list, innerWidth, height)
 
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "Switch Model"
 	rc.TitleInfo = m.modelTypeRadioView()
 
@@ -299,10 +299,10 @@ func (m *Models) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		rc.IsOnboarding = true
 		view := rc.Render()
 		cur = kit.AdjustOnboardingInputCursor(t, cur)
-		DrawOnboardingCursor(scr, area, view, cur)
+		dialog.DrawOnboardingCursor(scr, area, view, cur)
 	} else {
 		view := rc.Render()
-		DrawCenterCursor(scr, area, view, cur)
+		dialog.DrawCenterCursor(scr, area, view, cur)
 	}
 	return cur
 }

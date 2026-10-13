@@ -60,6 +60,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/models"
 	"github.com/charmbracelet/crush/internal/ui/dialog/theme"
 	"github.com/charmbracelet/crush/internal/ui/dialog/auth"
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
@@ -6297,7 +6298,7 @@ func (m *UI) openModelsDialog() tea.Cmd {
 	}
 
 	isOnboarding := m.state == uiOnboarding
-	modelsDialog, err := dialog.NewModels(m.com, isOnboarding)
+	modelsDialog, err := models.NewModels(m.com, isOnboarding)
 	if err != nil {
 		return util.ReportError(err)
 	}

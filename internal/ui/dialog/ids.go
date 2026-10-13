@@ -24,4 +24,7 @@ const (
 
 	// ThemeNewID is the identifier for the new theme dialog.
 	ThemeNewID = "theme_new"
+
+	// ModelsID is the identifier for the model selection dialog.
+	ModelsID = "models"
 )

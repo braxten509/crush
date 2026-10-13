@@ -1,4 +1,4 @@
-package dialog
+package models
 
 import (
 	"charm.land/catwalk/pkg/catwalk"

@@ -3,8 +3,6 @@ package agent
 import (
 	"cmp"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,7 +15,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/lock"
+	"github.com/charmbracelet/crush/internal/jsonfile"
 )
 
 // Interrupted sub-agents. An interactive Crush saves each running task in
@@ -89,45 +87,10 @@ func editTaskFile[T any](path string, edit func([]T) []T) error {
 	if path == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	release, err := lock.File(ctx, path+".lock")
-	if err != nil {
-		return err
-	}
-	defer release()
-
-	var saved []T
-	data, err := os.ReadFile(path)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-	case err != nil:
-		return err
-	default:
-		if err := json.Unmarshal(data, &saved); err != nil {
-			slog.Warn("Discarding an unreadable saved list", "path", path, "error", err)
-			saved = nil
-		}
-	}
-	saved = edit(saved)
-	if len(saved) == 0 {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-	out, err := json.MarshalIndent(saved, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, out, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return jsonfile.Update(path, func(saved *[]T) bool {
+		*saved = edit(*saved)
+		return true
+	})
 }
 
 // remember saves a running task, and lists it so it can be continued later.

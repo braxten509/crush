@@ -32,6 +32,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/history"
+	"github.com/charmbracelet/crush/internal/jsonfile"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"mvdan.cc/sh/v3/shell"
@@ -302,48 +303,27 @@ type Link struct {
 	SharedInstructions bool `json:"shared_instructions,omitempty"`
 }
 
-// Links persists [Link]s per Crush session and CLI.
+// Links persists [Link]s per Crush session and CLI, in one file every
+// Crush in the project shares.
 // ponytail: one small JSON file rewritten per turn; a DB table if it grows.
 type Links struct {
 	path string
 }
 
-// linksMu serializes read/modify/write across providers sharing a file.
-var linksMu sync.Mutex
-
-func (l *Links) load() map[string]Link {
-	links := map[string]Link{}
-	if data, err := os.ReadFile(l.path); err == nil {
-		_ = json.Unmarshal(data, &links)
-	}
-	return links
-}
-
 // Get returns the link for a session and CLI, or the zero Link.
 func (l *Links) Get(sessionID string, kind catwalk.Type) Link {
-	linksMu.Lock()
-	defer linksMu.Unlock()
-	return l.load()[sessionID+"/"+string(kind)]
+	return jsonfile.Read[map[string]Link](l.path)[sessionID+"/"+string(kind)]
 }
 
 // Set stores the link for a session and CLI.
 func (l *Links) Set(sessionID string, kind catwalk.Type, link Link) error {
-	linksMu.Lock()
-	defer linksMu.Unlock()
-	links := l.load()
-	links[sessionID+"/"+string(kind)] = link
-	data, err := json.Marshal(links)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
-		return err
-	}
-	tmp := l.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, l.path)
+	return jsonfile.Update(l.path, func(links *map[string]Link) bool {
+		if *links == nil {
+			*links = map[string]Link{}
+		}
+		(*links)[sessionID+"/"+string(kind)] = link
+		return true
+	})
 }
 
 // backgrounders holds, per Crush session, how its running turn moves the

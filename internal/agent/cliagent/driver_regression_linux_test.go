@@ -16,6 +16,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/jsonfile"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
@@ -174,7 +175,7 @@ func TestLinksSerializeSeparateProviders(t *testing.T) {
 		require.NoError(t, err)
 	}
 	links := &Links{path: filepath.Join(dir, "cli-sessions.json")}
-	require.Len(t, links.load(), count)
+	require.Len(t, jsonfile.Read[map[string]Link](links.path), count)
 	for i := range count {
 		require.Equal(t, strconv.Itoa(i), links.Get(strconv.Itoa(i), config.TypeCodexCLI).Native)
 	}

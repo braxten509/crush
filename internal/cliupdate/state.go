@@ -1,14 +1,12 @@
 package cliupdate
 
 import (
-	"context"
-	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/lock"
+	"github.com/charmbracelet/crush/internal/jsonfile"
 )
 
 // AutoCheckEvery spaces out the startup checks so opening many Crush windows
@@ -37,9 +35,7 @@ func loadState() state {
 func loadStateFile(p string) state {
 	var s state
 	if p != "" {
-		if data, err := os.ReadFile(p); err == nil {
-			_ = json.Unmarshal(data, &s)
-		}
+		s = jsonfile.Read[state](p)
 	}
 	if s.Declined == nil {
 		s.Declined = map[string]string{}
@@ -47,48 +43,18 @@ func loadStateFile(p string) state {
 	return s
 }
 
-func saveState(p string, s state) error {
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(p), filepath.Base(p)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), p)
-}
-
-// updateState holds a separate, persistent lock file across the entire
-// read-modify-write, including the atomic replacement of the state file.
+// updateState changes the saved state under a lock shared by every Crush.
 func updateState(change func(*state) bool) error {
 	p := statePath()
 	if p == "" {
 		return os.ErrNotExist
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	release, err := lock.File(ctx, p+".lock")
-	if err != nil {
-		return err
-	}
-	defer release()
-	s := loadStateFile(p)
-	if !change(&s) {
-		return nil
-	}
-	return saveState(p, s)
+	return jsonfile.Update(p, func(s *state) bool {
+		if s.Declined == nil {
+			s.Declined = map[string]string{}
+		}
+		return change(s)
+	})
 }
 
 // StartAutoCheck reports whether a startup check is due and, if so, records

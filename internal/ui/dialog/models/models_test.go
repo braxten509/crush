@@ -105,3 +105,51 @@ func TestSetProviderItems(t *testing.T) {
 	}
 	golden.RequireEqual(t, []byte(b.String()))
 }
+
+// TestWithConfiguredModelsLeavesCatalogAlone pins that configured model
+// names and extra models never write through into the catalog's models.
+func TestWithConfiguredModelsLeavesCatalogAlone(t *testing.T) {
+	t.Parallel()
+
+	catalogModels := make([]catwalk.Model, 1, 4)
+	catalogModels[0] = catwalk.Model{ID: "a", Name: "Catalog A"}
+	catalog := catwalk.Provider{ID: "p", Name: "P", Models: catalogModels}
+
+	got := withConfiguredModels(catalog, config.ProviderConfig{
+		Models: []catwalk.Model{{ID: "a", Name: "Configured A"}, {ID: "b"}},
+	})
+	require.Equal(t, []catwalk.Model{{ID: "a", Name: "Configured A"}, {ID: "b", Name: "b"}}, got.Models)
+	require.Equal(t, "Catalog A", catalog.Models[0].Name)
+	require.Equal(t, catwalk.Model{}, catalogModels[:2][1], "appending must not fill the catalog's spare capacity")
+}
+
+// TestSetProviderItemsKeepsCatalogNames pins that building the groups twice
+// shows catalog names again once the configured override is gone.
+func TestSetProviderItemsKeepsCatalogNames(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	cfg := &config.Config{
+		Options: &config.Options{DisableProviderAutoUpdate: true},
+		Models:  map[config.SelectedModelType]config.SelectedModel{},
+		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
+			"anthropic": {Models: []catwalk.Model{{ID: "claude-a", Name: "Renamed A"}}},
+		}),
+	}
+	sty := styles.CharmtonePantera()
+	m := &Models{
+		com:       &common.Common{Workspace: &modelsWorkspace{cfg: cfg, fields: map[string]any{}}, Styles: &sty},
+		list:      NewModelsList(&sty),
+		input:     textinput.New(),
+		modelType: ModelTypeLarge,
+		providers: []catwalk.Provider{
+			{ID: "anthropic", Name: "Anthropic", Models: []catwalk.Model{{ID: "claude-a", Name: "Claude A"}}},
+		},
+	}
+	require.NoError(t, m.setProviderItems())
+	require.Equal(t, "Claude A", m.providers[0].Models[0].Name)
+
+	cfg.Providers.Set("anthropic", config.ProviderConfig{})
+	require.NoError(t, m.setProviderItems())
+	require.Equal(t, "Claude A", m.list.groups[0].Items[0].model.Name)
+}

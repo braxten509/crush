@@ -52,6 +52,9 @@ const (
 	flowReplace
 )
 
+// update handles one message: the secure entry and the sub-agent view get
+// first pick, routeMsg hands it to its handler, and finishUpdate does the
+// work every update ends with unless the handler ended the update early.
 func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// A release ends a scrollbar drag wherever it goes, so a dialog or the
 	// secure entry opening mid-drag can't leave the drag stuck on.

@@ -1,4 +1,8 @@
-package config
+// Package fileutil reads and writes config and cache files safely when
+// several Crush processes share them: writes are atomic renames, and
+// reads and renames retry the transient failures Windows reports while
+// another handle is briefly open.
+package fileutil
 
 import (
 	"os"
@@ -8,10 +12,10 @@ import (
 // transientRetryBudget bounds how long a transient failure is retried.
 const transientRetryBudget = 2 * time.Second
 
-// readFile is os.ReadFile, retried while Windows briefly locks the file
+// ReadFile is os.ReadFile, retried while Windows briefly locks the file
 // (another writer's renameFile, antivirus, the search indexer). Read any
-// file written with atomicWriteFile through it.
-func readFile(path string) ([]byte, error) {
+// file written with AtomicWriteFile through it.
+func ReadFile(path string) ([]byte, error) {
 	var data []byte
 	err := retryTransient(func() (err error) {
 		data, err = os.ReadFile(path)

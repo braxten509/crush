@@ -1,4 +1,4 @@
-package config
+package providers
 
 import (
 	"context"
@@ -25,7 +25,7 @@ func (m *mockCatwalkClient) GetProviders(ctx context.Context, etag string) ([]ca
 func TestCatwalkSync_Init(t *testing.T) {
 	t.Parallel()
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{}
 	path := "/tmp/test.json"
 
@@ -40,7 +40,7 @@ func TestCatwalkSync_Init(t *testing.T) {
 func TestCatwalkSync_GetPanicIfNotInit(t *testing.T) {
 	t.Parallel()
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	require.Panics(t, func() {
 		_, _ = syncer.Get(t.Context())
 	})
@@ -49,7 +49,7 @@ func TestCatwalkSync_GetPanicIfNotInit(t *testing.T) {
 func TestCatwalkSync_GetWithAutoUpdateDisabled(t *testing.T) {
 	t.Parallel()
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{
 		providers: []catwalk.Provider{{Name: "should-not-be-used"}},
 	}
@@ -81,7 +81,7 @@ func TestCatwalkSync_GetWithAutoUpdateDisabledUsesCache(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{
 		providers: []catwalk.Provider{{Name: "should-not-be-used"}},
 	}
@@ -98,7 +98,7 @@ func TestCatwalkSync_GetWithAutoUpdateDisabledUsesCache(t *testing.T) {
 func TestCatwalkSync_GetFreshProviders(t *testing.T) {
 	t.Parallel()
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{
 		providers: []catwalk.Provider{
 			{Name: "Fresh Provider", ID: "fresh"},
@@ -134,7 +134,7 @@ func TestCatwalkSync_GetNotModifiedUsesCached(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{
 		err: catwalk.ErrNotModified,
 	}
@@ -162,7 +162,7 @@ func TestCatwalkSync_GetEmptyResultFallbackToCached(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{
 		providers: []catwalk.Provider{}, // Empty result.
 	}
@@ -188,7 +188,7 @@ func TestCatwalkSync_GetEmptyCacheDefaultsToEmbedded(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{
 		err: errors.New("network error"),
 	}
@@ -209,7 +209,7 @@ func TestCatwalkSync_GetClientError(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := tmpDir + "/providers.json"
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{
 		err: errors.New("network error"),
 	}
@@ -224,7 +224,7 @@ func TestCatwalkSync_GetClientError(t *testing.T) {
 func TestCatwalkSync_GetCalledMultipleTimesUsesOnce(t *testing.T) {
 	t.Parallel()
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &mockCatwalkClient{
 		providers: []catwalk.Provider{
 			{Name: "Provider", ID: "test"},
@@ -253,7 +253,7 @@ func TestCatwalkSync_Updated(t *testing.T) {
 	t.Run("fresh fetch marks the catalog updated", func(t *testing.T) {
 		t.Parallel()
 
-		syncer := &catwalkSync{}
+		syncer := &CatwalkSync{}
 		client := &mockCatwalkClient{
 			providers: []catwalk.Provider{{Name: "Fresh Provider", ID: "fresh"}},
 		}
@@ -270,7 +270,7 @@ func TestCatwalkSync_Updated(t *testing.T) {
 		path := t.TempDir() + "/providers.json"
 		require.NoError(t, os.WriteFile(path, []byte(`[{"name":"Cached","id":"cached"}]`), 0o644))
 
-		syncer := &catwalkSync{}
+		syncer := &CatwalkSync{}
 		syncer.Init(&mockCatwalkClient{err: catwalk.ErrNotModified}, path, true)
 
 		_, err := syncer.Get(t.Context())
@@ -281,7 +281,7 @@ func TestCatwalkSync_Updated(t *testing.T) {
 	t.Run("network error falls back without updating", func(t *testing.T) {
 		t.Parallel()
 
-		syncer := &catwalkSync{}
+		syncer := &CatwalkSync{}
 		syncer.Init(&mockCatwalkClient{err: errors.New("network error")}, t.TempDir()+"/providers.json", true)
 
 		_, err := syncer.Get(t.Context())
@@ -292,7 +292,7 @@ func TestCatwalkSync_Updated(t *testing.T) {
 	t.Run("auto update disabled never updates", func(t *testing.T) {
 		t.Parallel()
 
-		syncer := &catwalkSync{}
+		syncer := &CatwalkSync{}
 		syncer.Init(&mockCatwalkClient{
 			providers: []catwalk.Provider{{Name: "Fresh Provider", ID: "fresh"}},
 		}, t.TempDir()+"/providers.json", false)
@@ -305,7 +305,7 @@ func TestCatwalkSync_Updated(t *testing.T) {
 	t.Run("false before Get runs", func(t *testing.T) {
 		t.Parallel()
 
-		syncer := &catwalkSync{}
+		syncer := &CatwalkSync{}
 		syncer.Init(&mockCatwalkClient{}, t.TempDir()+"/providers.json", true)
 		require.False(t, syncer.Updated())
 	})

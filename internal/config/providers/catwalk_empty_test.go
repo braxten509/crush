@@ -1,4 +1,4 @@
-package config
+package providers
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func TestCatwalkSync_GetEmptyResultFromClient(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := tmpDir + "/providers.json"
 
-	syncer := &catwalkSync{}
+	syncer := &CatwalkSync{}
 	client := &emptyProviderClient{}
 
 	syncer.Init(client, path, true)

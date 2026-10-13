@@ -1,4 +1,4 @@
-package dialog
+package questionform
 
 import (
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -130,7 +131,7 @@ func newChoiceList(sty *styles.Styles, req question.Question) choiceList {
 		fillInBottom:   -1,
 		keyUp:          key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑", "up")),
 		keyDown:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓", "down")),
-		keyClose:       CloseKey,
+		keyClose:       dialog.CloseKey,
 	}
 }
 

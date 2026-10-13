@@ -1,4 +1,4 @@
-package dialog
+package questionform
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -73,7 +74,7 @@ func NewConfirmComponent(sty *styles.Styles, title, description string, labels [
 		keyYes:           key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yes")),
 		keyNo:            key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "no")),
 		keyEnter:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
-		keyClose:         CloseKey,
+		keyClose:         dialog.CloseKey,
 		keyUp:            key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑", "scroll")),
 		keyDown:          key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓", "scroll")),
 	}

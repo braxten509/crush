@@ -60,6 +60,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	fimage "github.com/charmbracelet/crush/internal/ui/image"
 	"github.com/charmbracelet/crush/internal/ui/logo"
 	"github.com/charmbracelet/crush/internal/ui/notification"
@@ -386,7 +387,7 @@ type UI struct {
 	// caps hold different terminal capabilities that we query for.
 	caps common.Capabilities
 	// previewPlaced is the question form sketch on screen, if any.
-	previewPlaced *dialog.PreviewPlacement
+	previewPlaced *questionform.PreviewPlacement
 
 	// Editor components
 	textarea textarea.Model
@@ -965,7 +966,7 @@ func (m *UI) loadMCPrompts() tea.Msg {
 
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if _, ok := msg.(dialog.PreviewReadyMsg); ok {
+	if _, ok := msg.(questionform.PreviewReadyMsg); ok {
 		m.invalidateFrames()
 	}
 	model, cmd := m.update(msg)
@@ -977,15 +978,15 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // when that changes, and removed once the form closes or something
 // covers it.
 func (m *UI) syncPreview() tea.Cmd {
-	var want *dialog.PreviewPlacement
+	var want *questionform.PreviewPlacement
 	var load tea.Cmd
-	form, ok := m.activeInline.(*dialog.QuestionForm)
+	form, ok := m.activeInline.(*questionform.QuestionForm)
 	if ok && !m.dialog.HasDialogs() && m.state == uiChat {
 		want, load = form.PreviewState()
 	}
 	// Look again once the next frame is drawn: the form may have moved, or
 	// a just-opened form shows where its sketch goes.
-	recheck := tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return dialog.PreviewReadyMsg{} })
+	recheck := tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return questionform.PreviewReadyMsg{} })
 	if equalPlacement(want, m.previewPlaced) {
 		if ok && form.PreviewWaiting() {
 			return tea.Batch(load, recheck)
@@ -995,10 +996,10 @@ func (m *UI) syncPreview() tea.Cmd {
 	old := m.previewPlaced
 	m.previewPlaced = want
 	_, tmux := m.caps.Env.LookupEnv("TMUX")
-	return tea.Batch(load, dialog.PreviewPlacementCmd(old, want, tmux), recheck)
+	return tea.Batch(load, questionform.PreviewPlacementCmd(old, want, tmux), recheck)
 }
 
-func equalPlacement(a, b *dialog.PreviewPlacement) bool {
+func equalPlacement(a, b *questionform.PreviewPlacement) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -1017,14 +1018,14 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// question answers, and remote presence handling entirely.
 	switch typed := msg.(type) {
 	case secureQuestionClosedMsg:
-		if form, ok := m.activeInline.(*dialog.QuestionForm); ok && form.OwnsSecureForm(typed.form) {
+		if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form.OwnsSecureForm(typed.form) {
 			m.dropQuestionForm()
 			m.textarea.Focus()
 			m.updateLayoutAndSize()
 		}
 		return m, nil
-	case dialog.SecureQuestionPaste:
-		if form, ok := m.activeInline.(*dialog.QuestionForm); ok {
+	case questionform.SecureQuestionPaste:
+		if form, ok := m.activeInline.(*questionform.QuestionForm); ok {
 			form.HandleSecurePaste(typed)
 		} else {
 			typed.Discard()
@@ -1034,7 +1035,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case *secureentry.Form:
 		return m, m.openSecureQuestionForm(typed)
 	}
-	if form, ok := m.activeInline.(*dialog.QuestionForm); ok && form.HasSecureEntry() && form.SecureEntryActive() && (m.focus != uiFocusEditor || m.dialog.HasDialogs()) {
+	if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form.HasSecureEntry() && form.SecureEntryActive() && (m.focus != uiFocusEditor || m.dialog.HasDialogs()) {
 		switch typed := msg.(type) {
 		case tea.PasteMsg:
 			return m, nil
@@ -1450,7 +1451,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case copyChatHighlightMsg:
 		cmds = append(cmds, m.copyChatHighlight())
-	case dialog.OpenLinkMsg:
+	case questionform.OpenLinkMsg:
 		cmds = append(cmds, openChatLink(msg.URL, m.com.Workspace.WorkingDir()))
 	case openImageMsg:
 		cmds = append(cmds, openAttachmentImage(msg.Attachment, m.com.Workspace.WorkingDir()))
@@ -6430,7 +6431,7 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 	// Close any existing question form first to prevent stacking.
 	m.dropQuestionForm()
 
-	form := dialog.NewQuestionForm(m.com.Styles, batch)
+	form := questionform.NewQuestionForm(m.com.Styles, batch)
 	form.SetImageCapabilities(&m.caps)
 	form.OnAnswer = func(responses []question.Answer) {
 		m.com.Workspace.QuestionAnswer(responses)
@@ -6452,7 +6453,7 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 // is stale regardless of BatchID. The CLI update form isn't one of
 // the service's questions, so it stays.
 func (m *UI) handleQuestionNotification(_ question.Notification) {
-	if form, ok := m.activeInline.(*dialog.QuestionForm); ok && !m.cliUpdatePromptOpen() && !form.HasSecureEntry() {
+	if form, ok := m.activeInline.(*questionform.QuestionForm); ok && !m.cliUpdatePromptOpen() && !form.HasSecureEntry() {
 		m.activeInline = nil
 		m.textarea.Focus()
 		m.updateLayoutAndSize()
@@ -6528,7 +6529,7 @@ func (m *UI) handlePlanHandoff(rc notify.RunComplete) tea.Cmd {
 		return nil
 	}
 	m.setPlanReadyPending(rc.SessionID)
-	if _, ok := m.activeInline.(*dialog.PlanHandoffInline); ok {
+	if _, ok := m.activeInline.(*questionform.PlanHandoffInline); ok {
 		return nil
 	}
 	m.openPlanHandoff()
@@ -6540,7 +6541,7 @@ func (m *UI) handlePlanHandoff(rc notify.RunComplete) tea.Cmd {
 // session, since plan mode is scoped to the session it was enabled in.
 func (m *UI) resetPlanModeState() tea.Cmd {
 	m.setPlanReadyPending("")
-	if _, ok := m.activeInline.(*dialog.PlanHandoffInline); ok {
+	if _, ok := m.activeInline.(*questionform.PlanHandoffInline); ok {
 		m.activeInline = nil
 		m.textarea.Focus()
 	}
@@ -6570,7 +6571,7 @@ func (m *UI) openPlanHandoff() {
 	if m.secureQuestionFormOpen() {
 		return
 	}
-	inline := dialog.NewPlanHandoffInline(m.com)
+	inline := questionform.NewPlanHandoffInline(m.com)
 	inline.OnConfirm = func(yolo bool) tea.Cmd {
 		if m.com.Workspace.PermissionSkipRequests() != yolo {
 			m.toggleYoloMode()

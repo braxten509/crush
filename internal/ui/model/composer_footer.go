@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -88,7 +88,7 @@ func (m *UI) openComposerFooterForm() {
 	if m.activeInline != nil {
 		return
 	}
-	form := dialog.NewQuestionForm(m.com.Styles, question.Request{
+	form := questionform.NewQuestionForm(m.com.Styles, question.Request{
 		ID: "composer-footer",
 		Questions: []question.Question{{
 			ID:          "items",

@@ -1,4 +1,6 @@
-package dialog
+// Package questionform implements the inline question forms that answer
+// agent questions in the composer area, plus the plan handoff prompt.
+package questionform
 
 import (
 	"errors"
@@ -12,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -21,7 +24,7 @@ import (
 // response. Used internally by QuestionForm to collect answers
 // from child components.
 type questionResponder interface {
-	InlineEditor
+	dialog.InlineEditor
 	Response() question.Answer
 	SetHover(x, y int)
 	HandleMouseClick(x, y int) (done bool, handled bool)
@@ -81,7 +84,7 @@ type QuestionForm struct {
 	releaseDone bool // a click run on mouse release finished the form
 }
 
-var _ CollapsibleInlineEditor = (*QuestionForm)(nil)
+var _ dialog.CollapsibleInlineEditor = (*QuestionForm)(nil)
 
 // NewQuestionForm creates a tabbed multi-question form from a
 // batch request. Each question is wrapped in its existing
@@ -181,7 +184,7 @@ func newQuestionForm(sty *styles.Styles, batch question.Request, secure *securee
 			key.WithKeys("]", "ctrl+right"),
 			key.WithHelp("]", "next tab"),
 		),
-		keyClose: CloseKey,
+		keyClose: dialog.CloseKey,
 	}
 
 	// Wire confirm callbacks.
@@ -922,7 +925,7 @@ func (f *QuestionForm) HandlePaste(msg tea.PasteMsg) tea.Cmd {
 		return nil
 	}
 	if f.activeIdx < f.numQuestions {
-		if p, ok := f.questions[f.activeIdx].(PasteableEditor); ok {
+		if p, ok := f.questions[f.activeIdx].(dialog.PasteableEditor); ok {
 			return p.HandlePaste(msg)
 		}
 	}

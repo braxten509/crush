@@ -1,4 +1,4 @@
-package dialog
+package questionform
 
 import (
 	"encoding/json"

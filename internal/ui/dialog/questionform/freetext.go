@@ -1,4 +1,4 @@
-package dialog
+package questionform
 
 import (
 	"image"
@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -56,7 +57,7 @@ func NewFreeText(sty *styles.Styles, req question.Question) *FreeText {
 		editor:     ta,
 		keyEnter:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
 		keyNewline: key.NewBinding(key.WithKeys("shift+enter", "ctrl+j"), key.WithHelp("shift+enter", "newline")),
-		keyClose:   CloseKey,
+		keyClose:   dialog.CloseKey,
 	}
 }
 

@@ -1,4 +1,4 @@
-package dialog
+package questionform
 
 import (
 	"image"
@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -64,8 +65,8 @@ type PlanHandoffInline struct {
 }
 
 var (
-	_ InlineEditor          = (*PlanHandoffInline)(nil)
-	_ ResizableInlineEditor = (*PlanHandoffInline)(nil)
+	_ dialog.InlineEditor          = (*PlanHandoffInline)(nil)
+	_ dialog.ResizableInlineEditor = (*PlanHandoffInline)(nil)
 )
 
 const (
@@ -126,7 +127,7 @@ func NewPlanHandoffInline(com *common.Common) *PlanHandoffInline {
 			key.WithKeys("n", "N"),
 			key.WithHelp("n", "revise plan"),
 		),
-		keyClose: CloseKey,
+		keyClose: dialog.CloseKey,
 	}
 }
 
@@ -169,7 +170,7 @@ func (p *PlanHandoffInline) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, p.keyClose):
-		return false, func() tea.Msg { return CollapseInlineMsg{} }
+		return false, func() tea.Msg { return dialog.CollapseInlineMsg{} }
 	case key.Matches(msg, p.keyNo):
 		return false, p.startEditing()
 	case key.Matches(msg, p.keyLeftRight):

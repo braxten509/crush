@@ -3,6 +3,7 @@ package model
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 )
 
 // programStatusApp is the stable program name reported to the terminal.
@@ -36,6 +37,6 @@ func (m *UI) programStatus() *tea.ProgramStatus {
 }
 
 func (m *UI) hasPendingQuestion() bool {
-	_, ok := m.activeInline.(*dialog.QuestionForm)
+	_, ok := m.activeInline.(*questionform.QuestionForm)
 	return ok
 }

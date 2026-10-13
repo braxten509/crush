@@ -1,4 +1,4 @@
-package dialog
+package questionform
 
 import (
 	"image"
@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -45,7 +46,7 @@ func NewYesNo(sty *styles.Styles, req question.Question) *YesNo {
 		keyEnter:       key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
 		keyYes:         key.NewBinding(key.WithKeys("y", "Y"), key.WithHelp("y", "yes")),
 		keyNo:          key.NewBinding(key.WithKeys("n", "N"), key.WithHelp("n", "no")),
-		keyClose:       CloseKey,
+		keyClose:       dialog.CloseKey,
 	}
 }
 
@@ -61,7 +62,7 @@ func (d *YesNo) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	}
 
 	switch {
-	case key.Matches(msg, CloseKey):
+	case key.Matches(msg, dialog.CloseKey):
 		d.answer(question.Answer{QuestionID: d.Request.ID})
 		return true, nil
 	case key.Matches(msg, d.keyLeftRight):

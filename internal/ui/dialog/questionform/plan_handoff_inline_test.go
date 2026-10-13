@@ -1,4 +1,4 @@
-package dialog
+package questionform
 
 import (
 	"image"
@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -175,7 +176,7 @@ func TestPlanHandoffEscapeFromChoiceRequestsCollapse(t *testing.T) {
 	done, cmd := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	require.False(t, done)
 	require.NotNil(t, cmd)
-	_, ok := cmd().(CollapseInlineMsg)
+	_, ok := cmd().(dialog.CollapseInlineMsg)
 	require.True(t, ok)
 }
 

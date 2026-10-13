@@ -113,11 +113,13 @@ func (m *UI) openComposerFooterForm() {
 		if len(items) == 0 {
 			items = []string{footerNone}
 		}
-		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.composer_footer", items); err != nil {
-			return util.ReportError(err)
-		}
-		m.updateLayoutAndSize()
-		return util.ReportInfo("Composer updated")
+		return m.writeConfigField("options.tui.composer_footer", items, func(err error) tea.Cmd {
+			if err != nil {
+				return util.ReportError(err)
+			}
+			m.updateLayoutAndSize()
+			return util.ReportInfo("Composer updated")
+		})
 	}
 	m.openInline(form)
 	m.updateLayoutAndSize()

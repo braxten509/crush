@@ -1,16 +1,18 @@
 package model
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/skillbrowser"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestSubmittedMessageShowsWorkingBeforeDispatchAndHandsOff(t *testing.T) {
@@ -79,7 +81,7 @@ func (coveringDialog) Draw(uv.Screen, uv.Rectangle) *tea.Cursor { return nil }
 
 func TestSkillCompletionReachesPickerUnderAnotherDialog(t *testing.T) {
 	u, _ := newSubmissionUI()
-	picker := dialog.NewSkills(u.com, statusSkillManager{})
+	picker := skillbrowser.NewSkills(u.com, statusSkillManager{})
 	msg := picker.Load()()
 	u.dialog.OpenDialog(picker)
 	u.dialog.OpenDialog(coveringDialog{})
@@ -174,8 +176,10 @@ func TestSentMessagesAreNotRepeatedInQueueEvenWithIdenticalText(t *testing.T) {
 	u, _ := newSubmissionUI()
 	u.sendMessage("same")
 	id := u.queue.pending[0].ID
-	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.queue.gen,
-		prompts: []string{"same", "same"}, entries: []message.QueuedPromptSummary{{Prompt: "same", SubmissionID: id}, {Prompt: "same", SubmissionID: "different"}}})
+	u.applyPromptQueue(promptQueueMsg{
+		forSession: "s1", gen: u.queue.gen,
+		prompts: []string{"same", "same"}, entries: []message.QueuedPromptSummary{{Prompt: "same", SubmissionID: id}, {Prompt: "same", SubmissionID: "different"}},
+	})
 	require.Equal(t, 2, u.queue.count, "internal delivery state is preserved")
 	require.Equal(t, []string{"same"}, u.visiblePromptQueueItems(), "only the different submission stays in the queue panel")
 	confirmed := u.queue.pending[0].Clone()

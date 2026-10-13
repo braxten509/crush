@@ -378,8 +378,10 @@ func (m *UI) insertMCPResourceCompletion(item completions.ResourceCompletionValu
 	}
 	heightCmd := m.handleTextareaHeightChange(prevHeight)
 
+	ws := m.com.Workspace
+	supportsImages := m.currentModelSupportsImages()
 	resourceCmd := func() tea.Msg {
-		contents, err := m.com.Workspace.ReadMCPResource(
+		contents, err := ws.ReadMCPResource(
 			context.Background(),
 			item.MCPName,
 			item.URI,
@@ -411,7 +413,7 @@ func (m *UI) insertMCPResourceCompletion(item completions.ResourceCompletionValu
 			mimeType = "text/plain"
 		}
 
-		if !m.currentModelSupportsImages() && strings.HasPrefix(mimeType, "image/") {
+		if !supportsImages && strings.HasPrefix(mimeType, "image/") {
 			return util.NewWarnMsg("The current model does not support image attachments")
 		}
 

@@ -1,4 +1,4 @@
-package dialog
+package skillbrowser
 
 import (
 	"context"
@@ -6,10 +6,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/common"
-	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kittest"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -33,12 +32,13 @@ func TestSuccessfulSkillMutationStillRefreshesCommandsAfterListFailure(t *testin
 	d := NewSkills(&common.Common{Styles: &sty}, manager)
 	d.HandleMsg(d.Load()())
 	manager.listErr = errors.New("listing failed")
-	action := d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}).(ActionCmd)
+	action := d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}).(dialog.ActionCmd)
 	msg := action.Cmd().(SkillsResultMsg)
 	require.True(t, msg.Mutated)
 	require.Error(t, msg.Err)
 	require.IsType(t, ActionSkillsChanged{}, d.HandleMsg(msg))
 }
+
 func (s *skillManagementStub) SetSkillEnabled(_ context.Context, name string, enabled bool) error {
 	s.changes++
 	for i := range s.entries {
@@ -48,34 +48,33 @@ func (s *skillManagementStub) SetSkillEnabled(_ context.Context, name string, en
 	}
 	return nil
 }
+
 func (s *skillManagementStub) InstallSkill(context.Context, skills.DirectorySkill) error {
 	s.installed++
 	return nil
 }
 
-func TestSkillsCommandAndPersistedToggle(t *testing.T) {
+// TestSkillsPersistedToggle pins that toggling a skill persists off the
+// render loop and survives reopening the dialog. The palette entry that
+// opens the dialog is pinned by TestSkillsCommandOpensSkillsDialog in the
+// dialog package.
+func TestSkillsPersistedToggle(t *testing.T) {
 	sty := styles.CharmtonePantera()
-	com := &common.Common{Styles: &sty, Workspace: fastModeWorkspace{cfg: &config.Config{}}}
-	c, err := NewCommands(com, "", false, false, false, nil, nil)
-	require.NoError(t, err)
-	for _, r := range "skills" {
-		c.HandleMsg(kittest.KeyMsg(r))
-	}
-	require.Equal(t, ActionOpenDialog{SkillsID}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	com := &common.Common{Styles: &sty}
 	manager := &skillManagementStub{entries: []skills.InstalledSkill{{CatalogEntry: skills.CatalogEntry{ID: "example", Name: "example", Description: "An example"}, Enabled: true}}}
 	d := NewSkills(com, manager)
 	d.HandleMsg(d.Load()())
 	require.Len(t, d.list.FilteredItems(), 1)
-	require.Equal(t, "Enabled", d.list.SelectedItem().(*CommandItem).Shortcut())
-	action := d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}).(ActionCmd)
+	require.Equal(t, "Enabled", d.list.SelectedItem().(*dialog.CommandItem).Shortcut())
+	action := d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}).(dialog.ActionCmd)
 	require.Zero(t, manager.changes, "the render loop never persists settings synchronously")
 	require.True(t, d.busy)
 	require.Nil(t, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}), "repeat Enter cannot race a toggle")
 	require.IsType(t, ActionSkillsChanged{}, d.HandleMsg(action.Cmd()))
-	require.Equal(t, "Disabled", d.list.SelectedItem().(*CommandItem).Shortcut())
+	require.Equal(t, "Disabled", d.list.SelectedItem().(*dialog.CommandItem).Shortcut())
 	reopened := NewSkills(com, manager)
 	reopened.HandleMsg(reopened.Load()())
-	require.Equal(t, "Disabled", reopened.list.SelectedItem().(*CommandItem).Shortcut())
+	require.Equal(t, "Disabled", reopened.list.SelectedItem().(*dialog.CommandItem).Shortcut())
 }
 
 func TestSkillsSearchDoesNotInstallOldResultsAfterQueryChanges(t *testing.T) {
@@ -86,10 +85,10 @@ func TestSkillsSearchDoesNotInstallOldResultsAfterQueryChanges(t *testing.T) {
 	d.HandleMsg(SkillsResultMsg{Dialog: d, Operation: "search", Query: "react", Results: []skills.DirectorySkill{{ID: "owner/repo/example", Name: "example", Source: "owner/repo", SkillID: "example"}}})
 	d.input.SetValue("python")
 	action := d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	require.IsType(t, ActionCmd{}, action)
+	require.IsType(t, dialog.ActionCmd{}, action)
 	require.Equal(t, "Searching skills.sh…", d.status, "changed queries search before any install")
 	d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape})
-	require.ErrorIs(t, action.(ActionCmd).Cmd().(SkillsResultMsg).Err, context.Canceled)
+	require.ErrorIs(t, action.(dialog.ActionCmd).Cmd().(SkillsResultMsg).Err, context.Canceled)
 }
 
 func TestSkillsRenderingAtWideAndNarrowSizes(t *testing.T) {

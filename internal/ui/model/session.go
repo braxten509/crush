@@ -138,8 +138,9 @@ func (m *UI) loadSession(sessionID string) tea.Cmd {
 // for server-side presence tracking, not correctness-critical
 // state.
 func (m *UI) reportCurrentSession(sessionID string) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
-		if err := m.com.Workspace.SetCurrentSession(context.Background(), sessionID); err != nil {
+		if err := ws.SetCurrentSession(context.Background(), sessionID); err != nil {
 			slog.Debug("Failed to report current session", "session_id", sessionID, "error", err)
 		}
 		return nil
@@ -302,10 +303,11 @@ func (m *UI) startLSPs(paths []string) tea.Cmd {
 		return nil
 	}
 
+	ws := m.com.Workspace
 	return func() tea.Msg {
 		ctx := context.Background()
 		for _, path := range paths {
-			m.com.Workspace.LSPStart(ctx, path)
+			ws.LSPStart(ctx, path)
 		}
 		return nil
 	}
@@ -333,8 +335,9 @@ func (m *UI) loadInitialSession() tea.Cmd {
 	case m.initialSessionID != "":
 		return m.loadSession(m.initialSessionID)
 	case m.continueLastSession:
+		ws := m.com.Workspace
 		return func() tea.Msg {
-			sessions, err := m.com.Workspace.ListSessions(context.Background())
+			sessions, err := ws.ListSessions(context.Background())
 			if err != nil || len(sessions) == 0 {
 				return nil
 			}
@@ -394,12 +397,13 @@ func (m *UI) newSession() tea.Cmd {
 	m.pillsView = ""
 	m.historyReset()
 	agenttools.ResetCache()
+	ws := m.com.Workspace
 	return tea.Batch(
 		m.discardEmptySession(draftID),
 		planCmd,
 		abandonCmd,
 		func() tea.Msg {
-			m.com.Workspace.LSPStopAll(context.Background())
+			ws.LSPStopAll(context.Background())
 			return nil
 		},
 		func() tea.Msg {

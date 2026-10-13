@@ -12,13 +12,15 @@ import (
 
 // loadCustomCommands loads the custom commands asynchronously.
 func (m *UI) loadCustomCommands() tea.Cmd {
+	ws := m.com.Workspace
+	cfg := m.com.Config()
 	return func() tea.Msg {
-		customCommands, err := commands.LoadCustomCommands(m.com.Config())
+		customCommands, err := commands.LoadCustomCommands(cfg)
 		if err != nil {
 			slog.Error("Failed to load custom commands", "error", err)
 		}
 		// Append user-invocable skills as commands.
-		skillEntries, err := m.com.Workspace.ListSkills(context.Background())
+		skillEntries, err := ws.ListSkills(context.Background())
 		if err != nil {
 			slog.Error("Failed to load skill commands", "error", err)
 		}
@@ -27,22 +29,25 @@ func (m *UI) loadCustomCommands() tea.Cmd {
 	}
 }
 
-// loadMCPrompts loads the MCP prompts asynchronously.
-func (m *UI) loadMCPrompts() tea.Msg {
-	prompts, err := m.com.Workspace.ListMCPPrompts(context.Background())
-	if err != nil {
-		slog.Error("Failed to load MCP prompts", "error", err)
+// loadMCPrompts returns a command that loads the MCP prompts.
+func loadMCPrompts(ws workspace.Workspace) tea.Cmd {
+	return func() tea.Msg {
+		prompts, err := ws.ListMCPPrompts(context.Background())
+		if err != nil {
+			slog.Error("Failed to load MCP prompts", "error", err)
+		}
+		if prompts == nil {
+			// flag them as loaded even if there is none or an error
+			prompts = []commands.MCPPrompt{}
+		}
+		return mcpPromptsLoadedMsg{Prompts: prompts}
 	}
-	if prompts == nil {
-		// flag them as loaded even if there is none or an error
-		prompts = []commands.MCPPrompt{}
-	}
-	return mcpPromptsLoadedMsg{Prompts: prompts}
 }
 
 func (m *UI) runMCPPrompt(clientID, promptID string, arguments map[string]string) tea.Cmd {
+	ws := m.com.Workspace
 	load := func() tea.Msg {
-		prompt, err := m.com.Workspace.GetMCPPrompt(clientID, promptID, arguments)
+		prompt, err := ws.GetMCPPrompt(clientID, promptID, arguments)
 		if err != nil {
 			// TODO: make this better
 			return util.ReportError(err)()
@@ -72,13 +77,14 @@ func (m *UI) runMCPPrompt(clientID, promptID string, arguments map[string]string
 // payload, so a missed field cannot drift), the coordinator rebuilds to pick
 // up newly registered tools, and the MCP prompts reload.
 func (m *UI) handleStateChanged() []tea.Cmd {
+	ws := m.com.Workspace
 	return []tea.Cmd{
 		m.requestMCPRefresh(),
 		m.updateAgentModelCmd(func() tea.Msg {
-			m.com.Workspace.UpdateAgentModel(context.Background())
+			ws.UpdateAgentModel(context.Background())
 			return nil
 		}),
-		m.loadMCPrompts,
+		loadMCPrompts(ws),
 	}
 }
 
@@ -103,19 +109,26 @@ func handleMCPResourcesEvent(ws workspace.Workspace, name string) tea.Cmd {
 	}
 }
 
-func (m *UI) enableDockerMCP() tea.Msg {
-	ctx := context.Background()
-	if err := m.com.Workspace.EnableDockerMCP(ctx); err != nil {
-		return util.ReportError(err)()
-	}
+// enableDockerMCP returns a command that enables and starts the Docker MCP
+// server.
+func enableDockerMCP(ws workspace.Workspace) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		if err := ws.EnableDockerMCP(ctx); err != nil {
+			return util.ReportError(err)()
+		}
 
-	return util.NewInfoMsg("Docker MCP enabled and started successfully")
+		return util.NewInfoMsg("Docker MCP enabled and started successfully")
+	}
 }
 
-func (m *UI) disableDockerMCP() tea.Msg {
-	if err := m.com.Workspace.DisableDockerMCP(); err != nil {
-		return util.ReportError(err)()
-	}
+// disableDockerMCP returns a command that disables the Docker MCP server.
+func disableDockerMCP(ws workspace.Workspace) tea.Cmd {
+	return func() tea.Msg {
+		if err := ws.DisableDockerMCP(); err != nil {
+			return util.ReportError(err)()
+		}
 
-	return util.NewInfoMsg("Docker MCP disabled successfully")
+		return util.NewInfoMsg("Docker MCP disabled successfully")
+	}
 }

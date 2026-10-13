@@ -41,6 +41,8 @@ type APIKeyInput struct {
 
 	width int
 	state APIKeyInputState
+	// saving is set while the verified key is being saved.
+	saving bool
 
 	keyMap struct {
 		Submit key.Binding
@@ -106,9 +108,11 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) dialog.Action {
 		m.state = msg.State
 		switch m.state {
 		case APIKeyInputStateVerifying:
-			cmd := tea.Batch(m.spinner.Tick, m.verifyAPIKey)
+			cmd := tea.Batch(m.spinner.Tick, m.verifyAPIKey())
 			return dialog.ActionCmd{Cmd: cmd}
 		}
+	case apiKeySavedMsg:
+		return m.keySaved(msg.err)
 	case spinner.TickMsg:
 		switch m.state {
 		case APIKeyInputStateVerifying:
@@ -280,9 +284,10 @@ func (m *APIKeyInput) ShortHelp() []key.Binding {
 	}
 }
 
-func (m *APIKeyInput) verifyAPIKey() tea.Msg {
-	start := time.Now()
-
+// verifyAPIKey returns a command that tests the typed key against the
+// provider. It captures what it needs now, as it runs off the Update
+// goroutine.
+func (m *APIKeyInput) verifyAPIKey() tea.Cmd {
 	providerConfig := config.ProviderConfig{
 		ID:      string(m.provider.ID),
 		Name:    m.provider.Name,
@@ -290,23 +295,46 @@ func (m *APIKeyInput) verifyAPIKey() tea.Msg {
 		Type:    m.provider.Type,
 		BaseURL: m.provider.APIEndpoint,
 	}
-	err := providerConfig.TestConnection(m.com.Workspace.Resolver())
+	resolver := m.com.Workspace.Resolver()
+	return func() tea.Msg {
+		start := time.Now()
+		err := providerConfig.TestConnection(resolver)
 
-	// intentionally wait for at least 750ms to make sure the user sees the spinner
-	elapsed := time.Since(start)
-	minimum := 750 * time.Millisecond
-	if elapsed < minimum {
-		time.Sleep(minimum - elapsed)
-	}
+		// intentionally wait for at least 750ms to make sure the user sees the spinner
+		elapsed := time.Since(start)
+		minimum := 750 * time.Millisecond
+		if elapsed < minimum {
+			time.Sleep(minimum - elapsed)
+		}
 
-	if err == nil {
-		return ActionChangeAPIKeyState{APIKeyInputStateVerified}
+		if err == nil {
+			return ActionChangeAPIKeyState{APIKeyInputStateVerified}
+		}
+		return ActionChangeAPIKeyState{APIKeyInputStateError}
 	}
-	return ActionChangeAPIKeyState{APIKeyInputStateError}
 }
 
+// apiKeySavedMsg reports the outcome of saving the verified key.
+type apiKeySavedMsg struct{ err error }
+
+// saveKeyAndContinue saves the verified key off the Update goroutine (a
+// config write, or an HTTP round-trip in client/server mode); the model is
+// selected once it was saved.
 func (m *APIKeyInput) saveKeyAndContinue() dialog.Action {
-	err := m.com.Workspace.SetProviderAPIKey(config.ScopeGlobal, string(m.provider.ID), m.input.Value())
+	if m.saving {
+		return nil
+	}
+	m.saving = true
+	ws := m.com.Workspace
+	providerID, apiKey := string(m.provider.ID), m.input.Value()
+	return dialog.ActionCmd{Cmd: func() tea.Msg {
+		return apiKeySavedMsg{err: ws.SetProviderAPIKey(config.ScopeGlobal, providerID, apiKey)}
+	}}
+}
+
+// keySaved finishes saveKeyAndContinue once the save landed.
+func (m *APIKeyInput) keySaved(err error) dialog.Action {
+	m.saving = false
 	if err != nil {
 		return dialog.ActionCmd{Cmd: util.ReportError(fmt.Errorf("failed to save API key: %w", err))}
 	}

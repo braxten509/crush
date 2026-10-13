@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
+	"github.com/charmbracelet/crush/internal/workspace"
 )
 
 // refreshHyperAndRetrySelect returns a command that silently refreshes
@@ -24,10 +25,11 @@ import (
 // refresh fails, the selection resumes with ReAuthenticate set so the
 // OAuth dialog opens.
 func (m *UI) refreshHyperAndRetrySelect(msg dialog.ActionSelectModel) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		if err := m.com.Workspace.RefreshOAuthToken(ctx, config.ScopeGlobal, "hyper"); err != nil {
+		if err := ws.RefreshOAuthToken(ctx, config.ScopeGlobal, "hyper"); err != nil {
 			slog.Warn("Hyper OAuth refresh failed, requesting re-auth", "error", err)
 			msg.ReAuthenticate = true
 		}
@@ -73,34 +75,49 @@ func (m *UI) restoreModelFromSession(msgs []message.Message) tea.Cmd {
 		Provider: lastAssistant.Provider,
 		Model:    lastAssistant.Model,
 	}
-	if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeLarge, selectedModel); err != nil {
-		slog.Error("Failed to restore model from session", "error", err)
-		return nil
-	}
-
-	m.applyThemeForProvider(lastAssistant.Provider)
-
-	if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
-		smallModel := m.com.Workspace.GetDefaultSmallModel(lastAssistant.Provider)
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, smallModel); err != nil {
-			slog.Error("Failed to set small model during session restore", "error", err)
+	_, hasSmall := cfg.Models[config.SelectedModelTypeSmall]
+	ws := m.com.Workspace
+	// The preference writes run off the Update goroutine; the theme
+	// follows the provider and the coordinator rebuilds once they landed.
+	return savePreferredModel(ws, config.SelectedModelTypeLarge, selectedModel, !hasSmall, func(err, smallErr error) tea.Cmd {
+		if err != nil {
+			slog.Error("Failed to restore model from session", "error", err)
+			return nil
 		}
-	}
-
-	return m.updateAgentModelCmd(func() tea.Msg {
-		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
-			return util.ReportError(err)()
+		m.applyThemeForProvider(selectedModel.Provider)
+		if smallErr != nil {
+			slog.Error("Failed to set small model during session restore", "error", smallErr)
 		}
-		slog.Info("Restored model from session",
-			"provider", lastAssistant.Provider,
-			"model", lastAssistant.Model)
-		return nil
+		return m.updateAgentModelCmd(func() tea.Msg {
+			if err := ws.UpdateAgentModel(context.TODO()); err != nil {
+				return util.ReportError(err)()
+			}
+			slog.Info("Restored model from session",
+				"provider", selectedModel.Provider,
+				"model", selectedModel.Model)
+			return nil
+		})
 	})
+}
+
+// importCopilotAndRetrySelect returns a command that imports GitHub Copilot
+// tokens from VSCode, if available, and then resumes the model selection.
+func importCopilotAndRetrySelect(ws workspace.Workspace, msg dialog.ActionSelectModel) tea.Cmd {
+	return func() tea.Msg {
+		ws.ImportCopilot()
+		return copilotImportDoneMsg{action: msg}
+	}
 }
 
 // handleSelectModel performs the model selection after any provider
 // pre-checks (such as a silent Hyper OAuth refresh) have completed.
 func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
+	return m.selectModel(msg, false)
+}
+
+// selectModel performs the model selection. copilotImported is set once
+// the Copilot token import ran for this selection.
+func (m *UI) selectModel(msg dialog.ActionSelectModel, copilotImported bool) tea.Cmd {
 	var cmds []tea.Cmd
 
 	// we ignore dialogs with the oauth id as they need to be able to be dismissed
@@ -131,8 +148,10 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 	}
 
 	// Attempt to import GitHub Copilot tokens from VSCode if available.
-	if isCopilot && !isConfigured() && !msg.ReAuthenticate {
-		m.com.Workspace.ImportCopilot()
+	// The import reads and writes files, so it runs off the Update
+	// goroutine and the selection resumes once it finished.
+	if isCopilot && !isConfigured() && !msg.ReAuthenticate && !copilotImported {
+		return importCopilotAndRetrySelect(m.com.Workspace, msg)
 	}
 
 	// The OpenAI and xAI providers hold exactly one credential: an
@@ -190,40 +209,14 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 		}
 	}
 
-	if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
-		cmds = append(cmds, util.ReportError(err))
-	} else {
-		if msg.ModelType == config.SelectedModelTypeLarge {
-			// Swap the theme live based on the newly selected large
-			// model's provider. Skipped when the provider resolves to
-			// the already-active theme, which avoids a full markdown
-			// re-render of the transcript on every selection.
-			m.applyThemeForProvider(providerID)
-		}
-		if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
-			// Ensure small model is set is unset.
-			smallModel := m.com.Workspace.GetDefaultSmallModel(providerID)
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, smallModel); err != nil {
-				cmds = append(cmds, util.ReportError(err))
-			}
-		}
-	}
-
-	cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
-		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
-			return util.ReportError(err)()
-		}
-
-		var (
-			modelType = stringext.Capitalize(string(msg.ModelType))
-			modelName = msg.Model.Model
-		)
-		if catwalkModel := cfg.GetModel(msg.Model.Provider, msg.Model.Model); catwalkModel != nil && catwalkModel.Name != "" {
-			modelName = catwalkModel.Name
-		}
-		modelMsg := fmt.Sprintf("%s model changed to %s", modelType, modelName)
-
-		return util.NewInfoMsg(modelMsg)
+	// The dialogs close (and onboarding ends) at once; the preference
+	// writes run off the Update goroutine and finishModelSelection picks
+	// up once they landed.
+	_, hasSmall := cfg.Models[config.SelectedModelTypeSmall]
+	// Ensure the small model is set when it is unset.
+	fillSmall := !hasSmall && msg.ModelType != config.SelectedModelTypeSmall
+	cmds = append(cmds, savePreferredModel(m.com.Workspace, msg.ModelType, msg.Model, fillSmall, func(err, smallErr error) tea.Cmd {
+		return m.finishModelSelection(msg, isOnboarding, err, smallErr)
 	}))
 
 	m.dialog.CloseDialog(dialog.APIKeyInputID)
@@ -232,21 +225,74 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 
 	if isOnboarding {
 		m.setState(uiLanding, uiFocusEditor)
-		m.com.Config().SetupAgents()
-		if err := m.com.Workspace.InitCoderAgent(context.TODO()); err != nil {
+	}
+
+	return tea.Batch(cmds...)
+}
+
+// finishModelSelection runs on the Update goroutine once the preference
+// writes of a model selection landed: it reports their errors, swaps the
+// theme, finishes onboarding and rebuilds the coordinator's model.
+func (m *UI) finishModelSelection(msg dialog.ActionSelectModel, isOnboarding bool, err, smallErr error) tea.Cmd {
+	var cmds []tea.Cmd
+	if err != nil {
+		cmds = append(cmds, util.ReportError(err))
+	} else {
+		if msg.ModelType == config.SelectedModelTypeLarge {
+			// Swap the theme live based on the newly selected large
+			// model's provider. Skipped when the provider resolves to
+			// the already-active theme, which avoids a full markdown
+			// re-render of the transcript on every selection.
+			m.applyThemeForProvider(msg.Model.Provider)
+		}
+		if smallErr != nil {
+			cmds = append(cmds, util.ReportError(smallErr))
+		}
+	}
+
+	ws := m.com.Workspace
+	modelName := msg.Model.Model
+	if cfg := m.com.Config(); cfg != nil {
+		if catwalkModel := cfg.GetModel(msg.Model.Provider, msg.Model.Model); catwalkModel != nil && catwalkModel.Name != "" {
+			modelName = catwalkModel.Name
+		}
+	}
+	modelMsg := fmt.Sprintf("%s model changed to %s", stringext.Capitalize(string(msg.ModelType)), modelName)
+	updateModel := m.updateAgentModelCmd(func() tea.Msg {
+		if err := ws.UpdateAgentModel(context.TODO()); err != nil {
+			return util.ReportError(err)()
+		}
+		return util.NewInfoMsg(modelMsg)
+	})
+
+	if !isOnboarding {
+		cmds = append(cmds, updateModel)
+		if m.com.IsHyper() {
+			cmds = append(cmds, m.fetchHyperCredits())
+		}
+		return tea.Batch(cmds...)
+	}
+
+	// Onboarding: set the agents up for the selected model and start the
+	// coder before rebuilding its model.
+	m.com.Config().SetupAgents()
+	initCoder := doThen(func() error {
+		return ws.InitCoderAgent(context.TODO())
+	}, func(err error) tea.Cmd {
+		var cmds []tea.Cmd
+		if err != nil {
 			cmds = append(cmds, util.ReportError(err))
 		}
-		// The agent just came up: re-fetch the memoized ready/model state
-		// so the landing view shows the selected model without waiting for
-		// the TTL backstop.
+		// The agent just came up: re-fetch the memoized ready/model
+		// state so the landing view shows the selected model without
+		// waiting for the TTL backstop.
 		m.invalidateBusyCaches()
 		if cmd := m.dispatchBusyRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	} else if m.com.IsHyper() {
-		cmds = append(cmds, m.fetchHyperCredits())
-	}
-
+		return tea.Batch(cmds...)
+	})
+	cmds = append(cmds, tea.Sequence(initCoder, updateModel))
 	return tea.Batch(cmds...)
 }
 
@@ -351,30 +397,34 @@ func (m *UI) currentModelSupportsImages() bool {
 	return model != nil && model.SupportsImages
 }
 
-// toggleThinking flips thinking for models without reasoning levels.
+// toggleThinking flips thinking for models without reasoning levels. The
+// preference write and the coordinator rebuild run off the Update
+// goroutine.
 func (m *UI) toggleThinking() tea.Cmd {
+	cfg := m.com.Config()
+	if cfg == nil {
+		return m.updateAgentModelCmd(util.ReportError(errors.New("configuration not found")))
+	}
+
+	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	if !ok {
+		return m.updateAgentModelCmd(util.ReportError(errors.New("agent configuration not found")))
+	}
+
+	currentModel := cfg.Models[agentCfg.Model]
+	provider := cfg.GetProviderForModel(agentCfg.Model)
+	catalog := cfg.GetModelByType(agentCfg.Model)
+	if provider == nil || catalog == nil || !config.SupportsThinkingToggle(*provider, *catalog) {
+		return m.updateAgentModelCmd(util.ReportError(errors.New("selected model does not support a thinking toggle")))
+	}
+	currentModel.Think = !currentModel.Think
+	ws := m.com.Workspace
+	kind := agentCfg.Model
 	return m.updateAgentModelCmd(func() tea.Msg {
-		cfg := m.com.Config()
-		if cfg == nil {
-			return util.ReportError(errors.New("configuration not found"))()
-		}
-
-		agentCfg, ok := cfg.Agents[config.AgentCoder]
-		if !ok {
-			return util.ReportError(errors.New("agent configuration not found"))()
-		}
-
-		currentModel := cfg.Models[agentCfg.Model]
-		provider := cfg.GetProviderForModel(agentCfg.Model)
-		catalog := cfg.GetModelByType(agentCfg.Model)
-		if provider == nil || catalog == nil || !config.SupportsThinkingToggle(*provider, *catalog) {
-			return util.ReportError(errors.New("selected model does not support a thinking toggle"))()
-		}
-		currentModel.Think = !currentModel.Think
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
+		if err := ws.UpdatePreferredModel(config.ScopeGlobal, kind, currentModel); err != nil {
 			return util.ReportError(err)()
 		}
-		m.com.Workspace.UpdateAgentModel(context.TODO())
+		ws.UpdateAgentModel(context.TODO())
 		status := "disabled"
 		if currentModel.Think {
 			status = "enabled"
@@ -383,8 +433,11 @@ func (m *UI) toggleThinking() tea.Cmd {
 	})
 }
 
-// setReasoningEffort stores the effort for the coder's model.
-func (m *UI) setReasoningEffort(effort string, ultracode *bool) (tea.Cmd, error) {
+// setReasoningEffort validates and stores the effort for the coder's model.
+// A validation error returns at once. The preference write runs off the
+// Update goroutine; saved then runs on the Update goroutine with its error,
+// and a successful write rebuilds the coordinator's model.
+func (m *UI) setReasoningEffort(effort string, ultracode *bool, saved func(err error) tea.Cmd) (tea.Cmd, error) {
 	cfg := m.com.Config()
 	if cfg == nil {
 		return nil, errors.New("configuration not found")
@@ -405,12 +458,18 @@ func (m *UI) setReasoningEffort(effort string, ultracode *bool) (tea.Cmd, error)
 		currentModel.Ultracode = *ultracode
 		info += " · Ultracode " + onOff(*ultracode)
 	}
-	if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
-		return nil, err
-	}
-
-	return m.updateAgentModelCmd(func() tea.Msg {
-		m.com.Workspace.UpdateAgentModel(context.TODO())
-		return util.NewInfoMsg(info)
+	ws := m.com.Workspace
+	kind := agentCfg.Model
+	return doThen(func() error {
+		return ws.UpdatePreferredModel(config.ScopeGlobal, kind, currentModel)
+	}, func(err error) tea.Cmd {
+		done := saved(err)
+		if err != nil {
+			return done
+		}
+		return tea.Batch(done, m.updateAgentModelCmd(func() tea.Msg {
+			ws.UpdateAgentModel(context.TODO())
+			return util.NewInfoMsg(info)
+		}))
 	}), nil
 }

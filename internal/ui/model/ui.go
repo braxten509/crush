@@ -118,6 +118,13 @@ type (
 		action dialog.ActionSelectModel
 	}
 
+	// copilotImportDoneMsg is sent after the GitHub Copilot token import
+	// finishes. It carries the original model-selection action so the
+	// selection can be resumed.
+	copilotImportDoneMsg struct {
+		action dialog.ActionSelectModel
+	}
+
 	// copyChatHighlightMsg is sent to copy the current chat highlight to clipboard.
 	copyChatHighlightMsg struct{}
 
@@ -569,8 +576,9 @@ func (m *UI) Init() tea.Cmd {
 	// whose catalog is missing (the fetch at login failed, or the
 	// credentials predate it) refills lazily, so the models dialog shows
 	// the subscription section as soon as it is opened.
+	ws := m.com.Workspace
 	cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
-		_ = m.com.Workspace.UpdateAgentModel(context.TODO())
+		_ = ws.UpdateAgentModel(context.TODO())
 		return nil
 	}))
 	// Prime the memoized busy/permission state off-thread.

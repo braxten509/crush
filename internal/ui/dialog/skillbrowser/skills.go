@@ -1,4 +1,6 @@
-package dialog
+// Package skillbrowser holds the skills dialog: the installed skills, with
+// their enabled toggles, and a search of skills.sh to install from.
+package skillbrowser
 
 import (
 	"context"
@@ -13,13 +15,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
-
-const SkillsID = "skills"
 
 type SkillsResultMsg struct {
 	Dialog    *Skills
@@ -53,7 +54,7 @@ type Skills struct {
 	cancel    context.CancelFunc
 }
 
-var _ Dialog = (*Skills)(nil)
+var _ dialog.Dialog = (*Skills)(nil)
 
 func NewSkills(com *common.Common, manager skills.Management) *Skills {
 	d := &Skills{com: com, manager: manager, directory: skills.NewDirectory()}
@@ -69,7 +70,7 @@ func NewSkills(com *common.Common, manager skills.Management) *Skills {
 	return d
 }
 
-func (d *Skills) ID() string { return SkillsID }
+func (d *Skills) ID() string { return dialog.SkillsID }
 
 func (d *Skills) Load() tea.Cmd { return d.request("refresh", "", nil) }
 
@@ -77,26 +78,27 @@ func (d *Skills) request(operation, query string, work func(context.Context) err
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	d.cancel = cancel
 	d.busy = true
+	directory, manager := d.directory, d.manager
 	d.status = map[string]string{"refresh": "Loading installed skills…", "search": "Searching skills.sh…", "toggle": "Saving skill setting…", "install": "Installing skill…"}[operation]
 	return func() tea.Msg {
 		defer cancel()
 		msg := SkillsResultMsg{Dialog: d, Operation: operation, Query: query}
 		if operation == "search" {
-			msg.Results, msg.Err = d.directory.Search(ctx, query)
+			msg.Results, msg.Err = directory.Search(ctx, query)
 		} else {
 			if work != nil {
 				msg.Err = work(ctx)
 				msg.Mutated = msg.Err == nil
 			}
 			if msg.Err == nil {
-				msg.Entries, msg.Err = d.manager.ListInstalledSkills(ctx)
+				msg.Entries, msg.Err = manager.ListInstalledSkills(ctx)
 			}
 		}
 		return msg
 	}
 }
 
-func (d *Skills) HandleMsg(msg tea.Msg) Action {
+func (d *Skills) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case SkillsResultMsg:
 		if msg.Dialog != d {
@@ -131,7 +133,7 @@ func (d *Skills) HandleMsg(msg tea.Msg) Action {
 			if d.cancel != nil {
 				d.cancel()
 			}
-			return ActionClose{}
+			return dialog.ActionClose{}
 		case "tab", "shift+tab":
 			if d.browse {
 				d.query = d.input.Value()
@@ -155,7 +157,7 @@ func (d *Skills) HandleMsg(msg tea.Msg) Action {
 			d.list.ScrollToSelected()
 		case "ctrl+r":
 			if !d.busy {
-				return ActionCmd{d.Load()}
+				return dialog.ActionCmd{Cmd: d.Load()}
 			}
 		case "enter":
 			if d.busy {
@@ -167,9 +169,9 @@ func (d *Skills) HandleMsg(msg tea.Msg) Action {
 					d.status = "Type at least two characters to search skills.sh."
 					return nil
 				}
-				return ActionCmd{d.request("search", query, nil)}
+				return dialog.ActionCmd{Cmd: d.request("search", query, nil)}
 			}
-			item, ok := d.list.SelectedItem().(*CommandItem)
+			item, ok := d.list.SelectedItem().(*dialog.CommandItem)
 			if !ok {
 				return nil
 			}
@@ -183,14 +185,14 @@ func (d *Skills) HandleMsg(msg tea.Msg) Action {
 					d.status = "Already installed. Switch to Installed to enable or disable it."
 					return nil
 				}
-				return ActionCmd{d.request("install", "", func(ctx context.Context) error { return d.manager.InstallSkill(ctx, selected) })}
+				return dialog.ActionCmd{Cmd: d.request("install", "", func(ctx context.Context) error { return d.manager.InstallSkill(ctx, selected) })}
 			}
 			index := slices.IndexFunc(d.installed, func(s skills.InstalledSkill) bool { return s.ID == item.ID() })
 			if index < 0 {
 				return nil
 			}
 			selected := d.installed[index]
-			return ActionCmd{d.request("toggle", "", func(ctx context.Context) error {
+			return dialog.ActionCmd{Cmd: d.request("toggle", "", func(ctx context.Context) error {
 				return d.manager.SetSkillEnabled(ctx, selected.Name, !selected.Enabled)
 			})}
 		default:
@@ -204,7 +206,7 @@ func (d *Skills) HandleMsg(msg tea.Msg) Action {
 					d.list.ScrollToTop()
 				}
 			}
-			return ActionCmd{cmd}
+			return dialog.ActionCmd{Cmd: cmd}
 		}
 	}
 	return nil
@@ -221,7 +223,7 @@ func (d *Skills) isInstalled(s skills.DirectorySkill) bool {
 
 func (d *Skills) setItems() {
 	selected := ""
-	if item, ok := d.list.SelectedItem().(*CommandItem); ok {
+	if item, ok := d.list.SelectedItem().(*dialog.CommandItem); ok {
 		selected = item.ID()
 	}
 	var items []list.FilterableItem
@@ -231,7 +233,7 @@ func (d *Skills) setItems() {
 			if d.isInstalled(s) {
 				status = "Installed"
 			}
-			items = append(items, NewCommandItem(d.com.Styles, s.ID, plainSkillText(s.Name), status, nil).WithAliases(s.Source))
+			items = append(items, dialog.NewCommandItem(d.com.Styles, s.ID, plainSkillText(s.Name), status, nil).WithAliases(s.Source))
 		}
 	} else {
 		for _, s := range d.installed {
@@ -239,7 +241,7 @@ func (d *Skills) setItems() {
 			if s.Enabled {
 				status = "Enabled"
 			}
-			items = append(items, NewCommandItem(d.com.Styles, s.ID, plainSkillText(s.Name), status, nil).WithAliases(s.Description).WithMuted(!s.Enabled))
+			items = append(items, dialog.NewCommandItem(d.com.Styles, s.ID, plainSkillText(s.Name), status, nil).WithAliases(s.Description).WithMuted(!s.Enabled))
 		}
 	}
 	d.list.SetItems(items...)
@@ -248,7 +250,7 @@ func (d *Skills) setItems() {
 		filter = d.input.Value()
 	}
 	d.list.SetFilter(filter)
-	index := slices.IndexFunc(d.list.FilteredItems(), func(i list.Item) bool { return i.(*CommandItem).ID() == selected })
+	index := slices.IndexFunc(d.list.FilteredItems(), func(i list.Item) bool { return i.(*dialog.CommandItem).ID() == selected })
 	d.list.SetSelected(max(0, index))
 	d.list.ScrollToSelected()
 }
@@ -271,7 +273,7 @@ func (d *Skills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	offset := t.Dialog.Title.GetVerticalFrameSize() + kit.TitleContentHeight + t.Dialog.InputPrompt.GetVerticalFrameSize() + kit.InputContentHeight + t.Dialog.HelpView.GetVerticalFrameSize() + t.Dialog.View.GetVerticalFrameSize() + 3
 	d.input.SetWidth(kit.DialogInputTextWidth(t, d.input, innerWidth))
 	d.list.SetSize(innerWidth, max(0, height-offset))
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "Skills · Installed"
 	if d.browse {
 		rc.Title = "Skills · Browse skills.sh"
@@ -290,7 +292,7 @@ func (d *Skills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 	rc.AddPart(t.Dialog.List.Height(d.list.Height()).Render(view))
 	detail := ""
-	if item, ok := d.list.SelectedItem().(*CommandItem); ok {
+	if item, ok := d.list.SelectedItem().(*dialog.CommandItem); ok {
 		if d.browse {
 			for _, s := range d.results {
 				if s.ID == item.ID() {
@@ -311,8 +313,8 @@ func (d *Skills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc.AddPart(t.Dialog.SecondaryText.Width(innerWidth).Height(1).Render(ansi.Truncate(plainSkillText(detail), textWidth, "…")))
 	rc.AddPart(t.Dialog.SecondaryText.Width(innerWidth).Height(1).Render(ansi.Truncate(plainSkillText(d.status), textWidth, "…")))
 	rc.Help = kit.RenderDialogHelp(t, &d.help, d, innerWidth)
-	cur := InputCursor(t, d.input.Cursor())
-	DrawCenterCursor(scr, area, rc.Render(), cur)
+	cur := dialog.InputCursor(t, d.input.Cursor())
+	dialog.DrawCenterCursor(scr, area, rc.Render(), cur)
 	return cur
 }
 
@@ -326,6 +328,6 @@ func (d *Skills) ShortHelp() []key.Binding {
 			enter = "install"
 		}
 	}
-	return []key.Binding{key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", enter)), key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", tab)), CloseKey, key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose")), key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "refresh"))}
+	return []key.Binding{key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", enter)), key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", tab)), dialog.CloseKey, key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose")), key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "refresh"))}
 }
 func (d *Skills) FullHelp() [][]key.Binding { return [][]key.Binding{d.ShortHelp()} }

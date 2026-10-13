@@ -305,16 +305,23 @@ func TestCtrlBDoesNotToggleSidebar(t *testing.T) {
 	require.Equal(t, uiFocusSidebar, u.focus)
 	require.Empty(t, ws.compactCalls)
 
-	// The command palette action still hides and restores the sidebar.
-	u.handleDialogAction(dialog.ActionToggleCompactMode{})
+	// The command palette action still hides and restores the sidebar. The
+	// layout changes at once; the setting is saved when the command runs,
+	// off the Update goroutine.
+	cmd := u.handleDialogAction(dialog.ActionToggleCompactMode{})
 	require.True(t, u.forceCompactMode)
 	require.True(t, u.isCompact)
 	require.Equal(t, uiFocusEditor, u.focus)
+	require.Empty(t, ws.compactCalls, "the save must not run on the Update goroutine")
+	collectMsgs(cmd)
+	require.Equal(t, []bool{true}, ws.compactCalls)
 	u.handleKeyPressMsg(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 	require.True(t, u.isCompact)
 	require.Equal(t, []bool{true}, ws.compactCalls)
-	u.handleDialogAction(dialog.ActionToggleCompactMode{})
+	cmd = u.handleDialogAction(dialog.ActionToggleCompactMode{})
 	require.False(t, u.isCompact)
+	require.Equal(t, []bool{true}, ws.compactCalls)
+	collectMsgs(cmd)
 	require.Equal(t, []bool{true, false}, ws.compactCalls)
 
 	var shortHelp []string

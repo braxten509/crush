@@ -75,10 +75,11 @@ func (m *UI) setInputMode(target uiInputMode) tea.Cmd {
 	// so a failed switch never leaves the editor claiming a mode the
 	// server's active agent does not match.
 	m.modeSwitching = true
+	ws := m.com.Workspace
 	return func() tea.Msg {
-		err := m.com.Workspace.AgentSetMain(agentID)
+		err := ws.AgentSetMain(agentID)
 		if err == nil {
-			err = m.com.Workspace.UpdateAgentModel(context.Background())
+			err = ws.UpdateAgentModel(context.Background())
 		}
 		return modeSwitchedMsg{
 			mode: target,

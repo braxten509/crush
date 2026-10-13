@@ -142,7 +142,7 @@ func TestToggleTransparentBackgroundAppliesOnUpdate(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, true, v)
 
-	written, ok := findMsg[configWriteMsg](msgs)
+	written, ok := findMsg[workDoneMsg](msgs)
 	require.True(t, ok)
 	u.Update(written)
 	require.True(t, u.isTransparent)
@@ -154,7 +154,7 @@ func TestToggleTransparentBackgroundKeepsStateOnError(t *testing.T) {
 	u, ws := newCmdStateUI(t)
 	ws.setErr = os.ErrPermission
 	msgs := collectMsgs(u.handleDialogAction(dialog.ActionToggleTransparentBackground{}))
-	written, ok := findMsg[configWriteMsg](msgs)
+	written, ok := findMsg[workDoneMsg](msgs)
 	require.True(t, ok)
 	_, cmd := u.Update(written)
 	require.False(t, u.isTransparent)
@@ -311,7 +311,7 @@ func TestDialogConfigWritesRunOffLoop(t *testing.T) {
 			v, written := ws.set(tc.key)
 			require.True(t, written)
 			require.Equal(t, tc.value, v)
-			_, ok := findMsg[configWriteMsg](msgs)
+			_, ok := findMsg[workDoneMsg](msgs)
 			require.True(t, ok)
 		})
 	}
@@ -336,7 +336,7 @@ func TestComposerFocusOnlyMovesFocusAfterWrite(t *testing.T) {
 	msgs := collectMsgs(u.handleDialogAction(dialog.ActionToggleComposerFocusOnly{}))
 	require.Equal(t, uiFocusMain, u.focus, "focus waits for the write")
 
-	written, ok := findMsg[configWriteMsg](msgs)
+	written, ok := findMsg[workDoneMsg](msgs)
 	require.True(t, ok)
 	u.Update(written)
 	require.Equal(t, uiFocusEditor, u.focus)
@@ -349,7 +349,7 @@ func TestSwitchThemeWriteFailureKeepsPicker(t *testing.T) {
 	ws.setErr = os.ErrPermission
 	u.dialog.OpenDialog(idDialog{id: dialog.ThemeID})
 	msgs := collectMsgs(u.handleDialogAction(dialog.ActionSwitchTheme{Theme: "charmtone-panther"}))
-	written, ok := findMsg[configWriteMsg](msgs)
+	written, ok := findMsg[workDoneMsg](msgs)
 	require.True(t, ok)
 	u.Update(written)
 	require.True(t, u.dialog.ContainsDialog(dialog.ThemeID))

@@ -69,13 +69,19 @@ func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
 				switch setting {
 				case "model":
 					want.Model = "second"
-					m.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: want})
+					cmd := m.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: want})
+					// The preference is written when the command runs.
+					require.Equal(t, initial, ws.cfg.Models[config.SelectedModelTypeLarge])
+					runWorkDone(m, cmd)
 				case "effort":
 					want.ReasoningEffort = "high"
 					picker, err := dialog.NewReasoning(m.com)
 					require.NoError(t, err)
 					m.dialog.OpenDialog(picker)
-					m.handleDialogAction(dialog.ActionSelectReasoningEffort{Effort: want.ReasoningEffort})
+					cmd := m.handleDialogAction(dialog.ActionSelectReasoningEffort{Effort: want.ReasoningEffort})
+					// The picker waits for the write before it closes.
+					require.True(t, m.dialog.ContainsDialog(dialog.ReasoningID))
+					runWorkDone(m, cmd)
 					require.Equal(t, test.busy, m.dialog.ContainsDialog(dialog.ReasoningID))
 				}
 				if test.busy {

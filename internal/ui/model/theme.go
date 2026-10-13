@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/ui/dialog/theme"
-
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/theme"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
@@ -35,6 +35,23 @@ type themeController struct {
 	// preview stores the styles from before a theme preview so it can be
 	// reverted; nil while no preview is showing.
 	preview *styles.Styles
+
+	// previewSeq numbers preview loads, which run off the Update
+	// goroutine. Only the latest one is shown, and ending a preview drops
+	// any still in flight.
+	previewSeq int
+}
+
+// nextPreview starts a preview load and returns its number.
+func (t *themeController) nextPreview() int {
+	t.previewSeq++
+	return t.previewSeq
+}
+
+// isLatestPreview reports whether seq is the latest preview load and no
+// preview ended since it started.
+func (t *themeController) isLatestPreview(seq int) bool {
+	return seq == t.previewSeq
 }
 
 // swapForProvider reports whether selecting a model of providerID should
@@ -64,11 +81,13 @@ func (t *themeController) beginPreview(current *styles.Styles) {
 // endPreview drops the saved styles: what is applied now stays.
 func (t *themeController) endPreview() {
 	t.preview = nil
+	t.previewSeq++
 }
 
 // takePreview returns the saved styles, if a preview is showing, and ends
 // the preview.
 func (t *themeController) takePreview() (styles.Styles, bool) {
+	t.previewSeq++
 	if t.preview == nil {
 		return styles.Styles{}, false
 	}
@@ -84,16 +103,18 @@ func (m *UI) handleThemeAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 	case dialog.ActionSwitchTheme:
 		return m.switchTheme(msg.Theme), true
 	case dialog.ActionPreviewTheme:
-		if newStyles, err := styles.LoadTheme(msg.Theme); err == nil {
-			m.showThemePreview(newStyles)
-		}
+		name := msg.Theme
+		return m.loadThemePreview(func() (styles.Styles, error) {
+			return styles.LoadTheme(name)
+		}), true
 	case dialog.ActionRevertThemePreview:
 		m.revertThemePreview()
 		m.dialog.CloseDialog(dialog.ThemeID)
 	case dialog.ActionPreviewThemePalette:
-		if newStyles, err := styles.LoadPaletteTheme(msg.Base, msg.Palette); err == nil {
-			m.showThemePreview(newStyles)
-		}
+		base, palette := msg.Base, msg.Palette
+		return m.loadThemePreview(func() (styles.Styles, error) {
+			return styles.LoadPaletteTheme(base, palette)
+		}), true
 	case dialog.ActionSaveThemePalette:
 		return m.saveThemePalette(msg), true
 	case dialog.ActionEditTheme:
@@ -130,15 +151,43 @@ func (m *UI) revertThemePreview() {
 	}
 }
 
-// switchTheme makes themeName the active theme. The config write runs off
-// the Update goroutine; the theme is applied (and the picker closed) once it
-// succeeded, and a failed write drops any preview.
+// loadThemePreview loads a theme for preview off the Update goroutine (it
+// reads the user's theme files) and shows it once loaded, unless a newer
+// preview started or the preview ended meanwhile. A theme that fails to
+// load is not previewed.
+func (m *UI) loadThemePreview(load func() (styles.Styles, error)) tea.Cmd {
+	seq := m.theme.nextPreview()
+	var loaded styles.Styles
+	return doThen(func() error {
+		var err error
+		loaded, err = load()
+		return err
+	}, func(err error) tea.Cmd {
+		if err == nil && m.theme.isLatestPreview(seq) {
+			m.showThemePreview(loaded)
+		}
+		return nil
+	})
+}
+
+// switchTheme makes themeName the active theme. Loading the theme and the
+// config write run off the Update goroutine; the theme is applied (and the
+// picker closed) once both succeeded, and a failed write drops any preview.
 func (m *UI) switchTheme(themeName string) tea.Cmd {
-	newStyles, err := styles.LoadTheme(themeName)
-	if err != nil {
-		return util.ReportError(err)
-	}
-	return m.writeConfigField("options.tui.active_theme", themeName, func(err error) tea.Cmd {
+	ws := m.com.Workspace
+	var (
+		newStyles styles.Styles
+		loadErr   error
+	)
+	return doThen(func() error {
+		if newStyles, loadErr = styles.LoadTheme(themeName); loadErr != nil {
+			return loadErr
+		}
+		return ws.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", themeName)
+	}, func(err error) tea.Cmd {
+		if loadErr != nil {
+			return util.ReportError(loadErr)
+		}
 		if err != nil {
 			m.revertThemePreview()
 			return util.ReportError(err)
@@ -152,24 +201,14 @@ func (m *UI) switchTheme(themeName string) tea.Cmd {
 }
 
 // saveThemePalette stores the theme editor's palette and, when the theme is
-// the active one, applies it.
+// the active one, applies it. The file is written (and the theme reloaded)
+// off the Update goroutine.
 func (m *UI) saveThemePalette(msg dialog.ActionSaveThemePalette) tea.Cmd {
 	// The theme is stored under its own name; Base only identifies the
 	// built-in palette its colors are derived from.
 	themeName := msg.Name
 	if themeName == "" {
 		themeName = msg.Base
-	}
-
-	// Write the file before touching the UI so a failed save never
-	// leaves colors applied that did not reach disk.
-	savePath, err := styles.ThemePath(themeName)
-	if err != nil {
-		return util.ReportError(err)
-	}
-	tf := &styles.ThemeFile{Base: msg.Base, Palette: msg.Palette}
-	if err := styles.SaveThemeFile(savePath, tf); err != nil {
-		return util.ReportError(err)
 	}
 
 	// Only take over the whole UI when the saved theme is the active
@@ -181,71 +220,114 @@ func (m *UI) saveThemePalette(msg dialog.ActionSaveThemePalette) tea.Cmd {
 	if activeTheme == "" {
 		isActive = strings.EqualFold(themeName, defaultThemeName)
 	}
-	if isActive {
-		newStyles, err := styles.LoadTheme(themeName)
+
+	tf := &styles.ThemeFile{Base: msg.Base, Palette: msg.Palette}
+	var (
+		newStyles styles.Styles
+		loadErr   error
+	)
+	return doThen(func() error {
+		// Write the file before touching the UI so a failed save never
+		// leaves colors applied that did not reach disk.
+		savePath, err := styles.ThemePath(themeName)
+		if err != nil {
+			return err
+		}
+		if err := styles.SaveThemeFile(savePath, tf); err != nil {
+			return err
+		}
+		if isActive {
+			newStyles, loadErr = styles.LoadTheme(themeName)
+		}
+		return nil
+	}, func(err error) tea.Cmd {
 		if err != nil {
 			return util.ReportError(err)
 		}
-		m.applyTheme(newStyles)
-		m.theme.endPreview()
-	}
-	m.dialog.CloseDialog(dialog.ThemeEditorID)
-	if td, ok := m.dialog.Dialog(dialog.ThemeID).(*theme.Theme); ok {
-		td.RefreshThemes(themeName)
-	}
-	return util.ReportInfo("Theme saved")
+		if isActive {
+			if loadErr != nil {
+				return util.ReportError(loadErr)
+			}
+			m.applyTheme(newStyles)
+			m.theme.endPreview()
+		}
+		m.dialog.CloseDialog(dialog.ThemeEditorID)
+		if td, ok := m.dialog.Dialog(dialog.ThemeID).(*theme.Theme); ok {
+			td.RefreshThemes(themeName)
+		}
+		return util.ReportInfo("Theme saved")
+	})
 }
 
 // revertOverriddenTheme drops any user override layered on top of the
 // built-in theme name: the shadowing theme file and the config palette
-// entry.
+// entry. The file is removed (and the built-in reloaded) off the Update
+// goroutine.
 func (m *UI) revertOverriddenTheme(name string) tea.Cmd {
-	if path, err := styles.FindThemeFile(name); err == nil {
-		if err := os.Remove(path); err != nil {
-			return util.ReportError(fmt.Errorf("revert theme: %w", err))
-		}
-	}
 	// If the reverted theme is the active one, re-apply the pristine
 	// built-in so the change is visible immediately.
-	if strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), name) {
-		if newStyles, err := styles.LoadTheme(name); err == nil {
+	isActive := strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), name)
+	var (
+		newStyles styles.Styles
+		reloaded  bool
+	)
+	return doThen(func() error {
+		if path, err := styles.FindThemeFile(name); err == nil {
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("revert theme: %w", err)
+			}
+		}
+		if isActive {
+			var err error
+			newStyles, err = styles.LoadTheme(name)
+			reloaded = err == nil
+		}
+		return nil
+	}, func(err error) tea.Cmd {
+		if err != nil {
+			return util.ReportError(err)
+		}
+		if reloaded {
 			m.applyTheme(newStyles)
 		}
-	}
-	m.dialog.CloseDialog(dialog.ThemeID)
-	m.openThemeDialog()
-	return util.ReportInfo("Reverted " + name + " to its built-in colors")
+		m.dialog.CloseDialog(dialog.ThemeID)
+		m.openThemeDialog()
+		return util.ReportInfo("Reverted " + name + " to its built-in colors")
+	})
 }
 
 // createTheme saves a new theme named name with the palette of base and
-// makes it the active theme. The config write runs off the Update
-// goroutine; the editor opens once it succeeded.
+// makes it the active theme. The theme file and config writes run off the
+// Update goroutine; the editor opens once they succeeded.
 func (m *UI) createTheme(base, name string) tea.Cmd {
 	if base == "" {
 		base = defaultThemeName
 	}
-	exported, err := styles.ExportResolvedPalette(base)
-	if err != nil {
-		// Fall back to the default theme when the base theme is no
-		// longer resolvable (e.g. a user theme that was since deleted).
-		base = defaultThemeName
-		exported, err = styles.ExportResolvedPalette(base)
+	ws := m.com.Workspace
+	return doThen(func() error {
+		exported, err := styles.ExportResolvedPalette(base)
 		if err != nil {
-			return util.ReportError(err)
+			// Fall back to the default theme when the base theme is no
+			// longer resolvable (e.g. a user theme that was since
+			// deleted).
+			exported, err = styles.ExportResolvedPalette(defaultThemeName)
+			if err != nil {
+				return err
+			}
 		}
-	}
-	savePath, err := styles.ThemePath(name)
-	if err != nil {
-		return util.ReportError(err)
-	}
-	// ExportResolvedPalette already pins Base to the built-in root the
-	// palette was resolved from. Keep it so the new theme stays
-	// loadable even if a user theme used as the source is later
-	// deleted or renamed.
-	if err := styles.SaveThemeFile(savePath, exported); err != nil {
-		return util.ReportError(err)
-	}
-	return m.writeConfigField("options.tui.active_theme", name, func(err error) tea.Cmd {
+		savePath, err := styles.ThemePath(name)
+		if err != nil {
+			return err
+		}
+		// ExportResolvedPalette already pins Base to the built-in root
+		// the palette was resolved from. Keep it so the new theme stays
+		// loadable even if a user theme used as the source is later
+		// deleted or renamed.
+		if err := styles.SaveThemeFile(savePath, exported); err != nil {
+			return err
+		}
+		return ws.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", name)
+	}, func(err error) tea.Cmd {
 		if err != nil {
 			return util.ReportError(err)
 		}
@@ -257,58 +339,62 @@ func (m *UI) createTheme(base, name string) tea.Cmd {
 }
 
 // renameTheme renames a user theme. When it is the active theme, the config
-// follows off the Update goroutine, and a failed write undoes the rename.
+// follows, and a failed config write undoes the rename. Both run off the
+// Update goroutine.
 func (m *UI) renameTheme(oldName, newName string) tea.Cmd {
-	oldPath, newPath, err := styles.RenameThemeFile(oldName, newName)
-	if err != nil {
-		return util.ReportError(err)
-	}
-	renamed := func() tea.Cmd {
-		m.dialog.CloseDialog(dialog.ThemeID)
-		m.openThemeDialog()
-		return util.ReportInfo("Renamed theme " + oldName + " to " + newName)
-	}
 	cfg := m.com.Config()
-	if cfg == nil || cfg.Options == nil || cfg.Options.TUI == nil || !strings.EqualFold(cfg.Options.TUI.ActiveTheme, oldName) {
-		return renamed()
-	}
-	return m.writeConfigField("options.tui.active_theme", newName, func(err error) tea.Cmd {
-		if err != nil {
+	isActive := cfg != nil && cfg.Options != nil && cfg.Options.TUI != nil && strings.EqualFold(cfg.Options.TUI.ActiveTheme, oldName)
+	ws := m.com.Workspace
+	return doThen(func() error {
+		oldPath, newPath, err := styles.RenameThemeFile(oldName, newName)
+		if err != nil || !isActive {
+			return err
+		}
+		if err := ws.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", newName); err != nil {
 			if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
 				slog.Error("Failed to roll back theme rename", "error", rollbackErr)
 			}
+			return err
+		}
+		return nil
+	}, func(err error) tea.Cmd {
+		if err != nil {
 			return util.ReportError(err)
 		}
-		return renamed()
+		m.dialog.CloseDialog(dialog.ThemeID)
+		m.openThemeDialog()
+		return util.ReportInfo("Renamed theme " + oldName + " to " + newName)
 	})
 }
 
 // deleteTheme deletes a user theme. When it was the active theme, the
-// config falls back to the default theme off the Update goroutine, and the
-// default is applied once that succeeded.
+// config falls back to the default theme, which is applied once that
+// succeeded. The file and config writes run off the Update goroutine.
 func (m *UI) deleteTheme(name string) tea.Cmd {
-	if err := styles.DeleteThemeFile(name); err != nil {
-		return util.ReportError(err)
-	}
-	deleted := func() tea.Cmd {
+	isActive := strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), name)
+	ws := m.com.Workspace
+	var newStyles styles.Styles
+	return doThen(func() error {
+		if err := styles.DeleteThemeFile(name); err != nil || !isActive {
+			return err
+		}
+		if err := ws.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", defaultThemeName); err != nil {
+			return err
+		}
+		var err error
+		newStyles, err = styles.LoadTheme(defaultThemeName)
+		return err
+	}, func(err error) tea.Cmd {
+		if err != nil {
+			return util.ReportError(err)
+		}
+		if isActive {
+			m.applyTheme(newStyles)
+			m.theme.endPreview()
+		}
 		m.dialog.CloseDialog(dialog.ThemeID)
 		m.openThemeDialog()
 		return util.ReportInfo("Deleted theme " + name)
-	}
-	if !strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), name) {
-		return deleted()
-	}
-	return m.writeConfigField("options.tui.active_theme", defaultThemeName, func(err error) tea.Cmd {
-		if err != nil {
-			return util.ReportError(err)
-		}
-		newStyles, err := styles.LoadTheme(defaultThemeName)
-		if err != nil {
-			return util.ReportError(err)
-		}
-		m.applyTheme(newStyles)
-		m.theme.endPreview()
-		return deleted()
 	})
 }
 

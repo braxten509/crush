@@ -331,7 +331,7 @@ func (c *controllerV1) handleGetWorkspaceSessionHistory(w http.ResponseWriter, r
 		c.handleError(w, r, err)
 		return
 	}
-	jsonEncode(w, history)
+	jsonEncode(w, proto.FilesFromDomain(history))
 }
 
 // handleGetWorkspaceSessionMessages returns all messages for a session.
@@ -350,14 +350,17 @@ func (c *controllerV1) handleGetWorkspaceSessionMessages(w http.ResponseWriter, 
 func (c *controllerV1) handlePutWorkspaceSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	var sess session.Session
+	// Decode the wire type, not session.Session: the latter has no JSON
+	// tags, so snake_case fields such as prompt_tokens and
+	// summary_message_id would silently decode as zero and be persisted.
+	var sess proto.Session
 	if err := json.NewDecoder(r.Body).Decode(&sess); err != nil {
 		c.server.logError(r, "Failed to decode request", "error", err)
 		jsonError(w, http.StatusBadRequest, "failed to decode request")
 		return
 	}
 
-	saved, err := c.backend.SaveSession(r.Context(), id, sess)
+	saved, err := c.backend.SaveSession(r.Context(), id, proto.SessionToDomain(sess))
 	if err != nil {
 		c.handleError(w, r, err)
 		return

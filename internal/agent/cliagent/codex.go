@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -158,85 +157,16 @@ type codexKey struct {
 // session, so commands it moved to the background keep running and the
 // model can check on them, and follow-ups skip its startup.
 type codexLive struct {
-	p       *proc
-	lines   <-chan []byte
-	key     codexKey
-	thread  string
-	idle    chan struct{} // closed to end the between-turns drain
-	drained chan struct{}
-	dead    atomic.Bool
-	timer   *time.Timer
+	liveProc[codexKey]
+	thread string
 }
 
-var codexSessions = struct {
-	mu sync.Mutex
-	m  map[string]*codexLive
-}{m: map[string]*codexLive{}}
+func (l *codexLive) resumeID() string { return l.thread }
 
-// takeCodex hands over the session's live process if it can run this turn,
-// closing it otherwise.
-// ponytail: a turn with other settings closes it, stopping any commands it
+// codexSessions holds the live processes, one per Crush session.
+// ponytail: a turn with other settings closes one, stopping any commands it
 // moved to the background; so does [claudeIdle] without a turn.
-func takeCodex(sessionID string, key codexKey, resume string) *codexLive {
-	codexSessions.mu.Lock()
-	l := codexSessions.m[sessionID]
-	delete(codexSessions.m, sessionID)
-	codexSessions.mu.Unlock()
-	if l == nil {
-		return nil
-	}
-	l.timer.Stop()
-	close(l.idle)
-	<-l.drained
-	if l.dead.Load() || l.key != key || resume == "" || resume != l.thread {
-		l.p.finish()
-		return nil
-	}
-	return l
-}
-
-// keepCodex parks a process after a finished turn until the session's next
-// prompt, or closes it after [claudeIdle].
-func keepCodex(sessionID string, l *codexLive) {
-	l.idle, l.drained = make(chan struct{}), make(chan struct{})
-	go func() {
-		defer close(l.drained)
-		for {
-			select {
-			case <-l.idle:
-				return
-			case _, ok := <-l.lines:
-				if !ok {
-					l.dead.Store(true)
-					<-l.idle
-					return
-				}
-			}
-		}
-	}()
-	l.timer = time.AfterFunc(claudeIdle, func() {
-		codexSessions.mu.Lock()
-		if codexSessions.m[sessionID] != l {
-			codexSessions.mu.Unlock()
-			return
-		}
-		delete(codexSessions.m, sessionID)
-		codexSessions.mu.Unlock()
-		close(l.idle)
-		<-l.drained
-		l.p.finish()
-	})
-	codexSessions.mu.Lock()
-	old := codexSessions.m[sessionID]
-	codexSessions.m[sessionID] = l
-	codexSessions.mu.Unlock()
-	if old != nil {
-		old.timer.Stop()
-		close(old.idle)
-		<-old.drained
-		old.p.finish()
-	}
-}
+var codexSessions = newLivePool[codexKey, *codexLive]()
 
 // codexCtrlB is what Codex is told after Ctrl+B interrupted its turn; the
 // interrupt kept it from learning the commands' terminal sessions.
@@ -262,7 +192,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *codexLive
 	if keep {
-		live = takeCodex(t.SessionID, key, t.Resume)
+		live = codexSessions.take(t.SessionID, key, t.Resume)
 	}
 	var (
 		p        *proc
@@ -300,7 +230,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	finished := false
 	defer func() {
 		if finished && keep && threadID != "" {
-			keepCodex(t.SessionID, &codexLive{p: p, lines: lines, key: key, thread: threadID})
+			codexSessions.keep(t.SessionID, &codexLive{liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: threadID}, nil, nil)
 		} else {
 			p.finish()
 		}

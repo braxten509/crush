@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
@@ -299,13 +298,7 @@ func resolveWorkspaceSessionID(ctx context.Context, ws workspace.Workspace, id s
 		return session.Session{}, err
 	}
 
-	var matches []session.Session
-	for _, s := range sessions {
-		hash := session.HashID(s.ID)
-		if hash == id || strings.HasPrefix(hash, id) {
-			matches = append(matches, s)
-		}
-	}
+	matches := sessionsMatchingHash(sessions, id, func(s session.Session) string { return s.ID })
 
 	switch len(matches) {
 	case 0:

@@ -20,7 +20,6 @@ import (
 	"github.com/charmbracelet/crush/internal/noninteractive"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -548,13 +547,7 @@ func resolveSessionByID(ctx context.Context, c *client.Client, wsID, id string) 
 		return nil, err
 	}
 
-	var matches []proto.Session
-	for _, s := range sessions {
-		hash := session.HashID(s.ID)
-		if hash == id || strings.HasPrefix(hash, id) {
-			matches = append(matches, s)
-		}
-	}
+	matches := sessionsMatchingHash(sessions, id, func(s proto.Session) string { return s.ID })
 
 	switch len(matches) {
 	case 0:

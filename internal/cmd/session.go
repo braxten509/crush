@@ -213,6 +213,18 @@ type sessionMutationResult struct {
 	Renamed bool   `json:"renamed,omitempty"`
 }
 
+// sessionsMatchingHash returns the sessions whose hash ID (see
+// [session.HashID]) equals or starts with id. idOf returns a session's ID.
+func sessionsMatchingHash[S any](sessions []S, id string, idOf func(S) string) []S {
+	var matches []S
+	for _, s := range sessions {
+		if strings.HasPrefix(session.HashID(idOf(s)), id) {
+			matches = append(matches, s)
+		}
+	}
+	return matches
+}
+
 // resolveSessionID resolves a session ID that can be a UUID, full hash, or hash prefix.
 // Returns an error if the prefix is ambiguous (matches multiple sessions).
 func resolveSessionID(ctx context.Context, svc session.Service, id string) (session.Session, error) {
@@ -227,13 +239,7 @@ func resolveSessionID(ctx context.Context, svc session.Service, id string) (sess
 		return session.Session{}, err
 	}
 
-	var matches []session.Session
-	for _, s := range sessions {
-		hash := session.HashID(s.ID)
-		if hash == id || strings.HasPrefix(hash, id) {
-			matches = append(matches, s)
-		}
-	}
+	matches := sessionsMatchingHash(sessions, id, func(s session.Session) string { return s.ID })
 
 	if len(matches) == 0 {
 		return session.Session{}, fmt.Errorf("session not found: %s", id)

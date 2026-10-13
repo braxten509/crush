@@ -77,19 +77,20 @@ func (d *Skills) request(operation, query string, work func(context.Context) err
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	d.cancel = cancel
 	d.busy = true
+	directory, manager := d.directory, d.manager
 	d.status = map[string]string{"refresh": "Loading installed skills…", "search": "Searching skills.sh…", "toggle": "Saving skill setting…", "install": "Installing skill…"}[operation]
 	return func() tea.Msg {
 		defer cancel()
 		msg := SkillsResultMsg{Dialog: d, Operation: operation, Query: query}
 		if operation == "search" {
-			msg.Results, msg.Err = d.directory.Search(ctx, query)
+			msg.Results, msg.Err = directory.Search(ctx, query)
 		} else {
 			if work != nil {
 				msg.Err = work(ctx)
 				msg.Mutated = msg.Err == nil
 			}
 			if msg.Err == nil {
-				msg.Entries, msg.Err = d.manager.ListInstalledSkills(ctx)
+				msg.Entries, msg.Err = manager.ListInstalledSkills(ctx)
 			}
 		}
 		return msg

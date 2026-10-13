@@ -430,8 +430,9 @@ func (s *Session) deleteSavedSessionCmd(target session.Session) tea.Cmd {
 }
 
 func (s *Session) deleteSessionCmd(id string) tea.Cmd {
+	ws := s.com.Workspace
 	return func() tea.Msg {
-		err := s.com.Workspace.DeleteSession(context.TODO(), id)
+		err := ws.DeleteSession(context.TODO(), id)
 		if err != nil {
 			return util.NewErrorMsg(err)
 		}
@@ -474,8 +475,9 @@ func (s *Session) updateSessionCmd(target session.Session) tea.Cmd {
 			return nil
 		}
 	}
+	ws := s.com.Workspace
 	return func() tea.Msg {
-		_, err := s.com.Workspace.SaveSession(context.TODO(), target)
+		_, err := ws.SaveSession(context.TODO(), target)
 		if err != nil {
 			return util.NewErrorMsg(err)
 		}

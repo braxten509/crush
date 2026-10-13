@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
@@ -67,7 +66,7 @@ func NewEditTool(
 				return fantasy.NewTextErrorResponse("file_path is required"), nil
 			}
 
-			params.FilePath = filepathext.SmartJoin(workingDir, params.FilePath)
+			params.FilePath = fsext.SmartJoin(workingDir, params.FilePath)
 
 			var response fantasy.ToolResponse
 			var err error

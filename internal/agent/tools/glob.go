@@ -16,7 +16,6 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/fsext"
 )
 
@@ -100,7 +99,7 @@ func globFiles(ctx context.Context, pattern, searchPath string, limit int) ([]st
 	// start there instead of enumerating the entire tree and filtering.
 	// Patterns that begin with a wildcard (e.g. "**/foo.go") have no prefix
 	// and still walk from searchPath.
-	prefix, rest := filepathext.SplitGlobPrefix(pattern)
+	prefix, rest := fsext.SplitGlobPrefix(pattern)
 	walkRoot := searchPath
 	walkPattern := pattern
 	if prefix != "" {
@@ -151,7 +150,7 @@ func runRipgrep(cmd *exec.Cmd, searchRoot string, limit int) ([]string, error) {
 		if len(path) > 0 {
 			path = strings.TrimRight(path, "\x00")
 			if path != "" {
-				absPath := filepathext.SmartJoin(searchRoot, path)
+				absPath := fsext.SmartJoin(searchRoot, path)
 				if !fsext.SkipHidden(absPath) {
 					matches = append(matches, absPath)
 				}

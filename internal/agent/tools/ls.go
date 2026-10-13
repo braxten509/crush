@@ -12,7 +12,6 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/permission"
 )
@@ -81,7 +80,7 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("error expanding path: %v", err)), nil
 			}
 
-			searchPath = filepathext.SmartJoin(workingDir, searchPath)
+			searchPath = fsext.SmartJoin(workingDir, searchPath)
 
 			// Check if directory is outside working directory and request permission if needed
 			absWorkingDir, err := filepath.Abs(workingDir)

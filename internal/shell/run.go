@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/filechange"
-	"github.com/charmbracelet/crush/internal/filepathext"
+	"github.com/charmbracelet/crush/internal/fsext"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -192,7 +192,7 @@ func newRunner(cwd string, env []string, stdin io.Reader, stdout, stderr io.Writ
 		interp.Env(expand.ListEnviron(env...)),
 		interp.Dir(cwd),
 		interp.OpenHandler(func(ctx context.Context, path string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
-			filechange.BeforeOpen(ctx, filepathext.SmartJoin(interp.HandlerCtx(ctx).Dir, path), flag)
+			filechange.BeforeOpen(ctx, fsext.SmartJoin(interp.HandlerCtx(ctx).Dir, path), flag)
 			return interp.DefaultOpenHandler()(ctx, path, flag, perm)
 		}),
 		execHandlerOption(blockFuncs),

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
@@ -72,7 +71,7 @@ func NewMultiEditTool(
 				return fantasy.NewTextErrorResponse("at least one edit operation is required"), nil
 			}
 
-			params.FilePath = filepathext.SmartJoin(workingDir, params.FilePath)
+			params.FilePath = fsext.SmartJoin(workingDir, params.FilePath)
 
 			// Validate all edits before applying any
 			if err := validateEdits(params.Edits); err != nil {

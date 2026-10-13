@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/filepathext"
+	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/permission"
 )
 
@@ -78,7 +78,7 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 				return fantasy.NewTextErrorResponse("URL must start with http:// or https://"), nil
 			}
 
-			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
+			filePath := fsext.SmartJoin(workingDir, params.FilePath)
 			relPath, _ := filepath.Rel(workingDir, filePath)
 			relPath = filepath.ToSlash(cmp.Or(relPath, filePath))
 

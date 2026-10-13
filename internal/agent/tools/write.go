@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
+	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
 
 	"github.com/charmbracelet/crush/internal/lsp"
@@ -58,7 +58,7 @@ func NewWriteTool(
 				return fantasy.ToolResponse{}, fmt.Errorf("session_id is required")
 			}
 
-			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
+			filePath := fsext.SmartJoin(workingDir, params.FilePath)
 
 			fileInfo, err := os.Stat(filePath)
 			if err == nil {

@@ -1,4 +1,4 @@
-package filepathext
+package fsext
 
 import (
 	"testing"

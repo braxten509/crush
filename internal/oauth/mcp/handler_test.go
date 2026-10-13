@@ -342,6 +342,50 @@ func TestHasRefreshableToken(t *testing.T) {
 	}
 }
 
+func TestClientCredentials(t *testing.T) {
+	t.Parallel()
+	saved := &oauth.Token{Client: &oauth.OAuthClient{ClientID: "saved", ClientSecret: "saved-secret"}}
+	tests := []struct {
+		name          string
+		preregistered *oauth.OAuthClient
+		saved         *oauth.Token
+		wantID        string
+		wantSecret    string
+	}{
+		{name: "none"},
+		{name: "saved token without client", saved: &oauth.Token{AccessToken: "a"}},
+		{name: "saved client", saved: saved, wantID: "saved", wantSecret: "saved-secret"},
+		{name: "preregistered wins", preregistered: &oauth.OAuthClient{ClientID: "pre"}, saved: saved, wantID: "pre"},
+		{name: "empty preregistered falls back", preregistered: &oauth.OAuthClient{}, saved: saved, wantID: "saved", wantSecret: "saved-secret"},
+		{name: "preregistered with secret", preregistered: &oauth.OAuthClient{ClientID: "pre", ClientSecret: "s"}, wantID: "pre", wantSecret: "s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			creds := clientCredentials(tt.preregistered, tt.saved)
+			if tt.wantID == "" {
+				require.Nil(t, creds)
+				return
+			}
+			require.NotNil(t, creds)
+			require.Equal(t, tt.wantID, creds.ClientID)
+			if tt.wantSecret == "" {
+				require.Nil(t, creds.ClientSecretAuth)
+				return
+			}
+			require.NotNil(t, creds.ClientSecretAuth)
+			require.Equal(t, tt.wantSecret, creds.ClientSecretAuth.ClientSecret)
+		})
+	}
+}
+
+func TestResolveCallbackPortKeepsFixedPort(t *testing.T) {
+	t.Parallel()
+	port, err := resolveCallbackPort(4321)
+	require.NoError(t, err)
+	require.Equal(t, 4321, port)
+}
+
 // staticSource returns the same token every call, letting us assert the
 // saver fires only when the access token actually changes.
 type staticSource struct{ tok *oauth2.Token }

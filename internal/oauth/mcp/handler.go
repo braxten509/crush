@@ -116,33 +116,9 @@ func NewHandler(
 		fixedPort:  callbackPort,
 	}
 
-	// Resolve the redirect port without binding it. The listener is only
-	// opened when an authorization actually runs (see fetchAuthorizationCode),
-	// so a handler that restores a valid token never occupies the port and
-	// several Crush processes can share it; only the one doing a live login
-	// binds, and only for the duration of that login.
-	//
-	// A fixed port comes straight from config. Otherwise we probe for the
-	// first free candidate, just long enough to learn which is open. Either
-	// way the chosen port is baked into the redirect URI below and pinned on
-	// the receiver, so bindLocked always rebinds the SAME port. The probe is
-	// not a reservation — another process can take the port before the first
-	// real login — but a busy port then fails loudly rather than silently
-	// binding a port the redirect URI does not point at.
-	port := callbackPort
-	if port == 0 {
-		lc := &net.ListenConfig{}
-		for _, p := range callbackPorts {
-			probe, err := lc.Listen(context.Background(), "tcp", fmt.Sprintf("localhost:%d", p))
-			if err == nil {
-				_ = probe.Close()
-				port = p
-				break
-			}
-		}
-		if port == 0 {
-			return nil, errors.New("failed to start OAuth callback listener: all candidate ports in use")
-		}
+	port, err := resolveCallbackPort(callbackPort)
+	if err != nil {
+		return nil, err
 	}
 	receiver.fixedPort = port
 
@@ -157,91 +133,9 @@ func NewHandler(
 	}
 	receiver.handler = h
 
-	// newTokenSource is the SDK hook invoked once after a successful code
-	// exchange. The token it hands us is brand new, so persist it right
-	// away, then wrap the source so later refreshes persist on change. The
-	// resolved oauth2.Config carries the registered client ID and
-	// discovered endpoints, which we persist alongside the token so a
-	// later start can refresh without rediscovery.
-	newTokenSource := func(ctx context.Context, cfg *oauth2.Config, tok *oauth2.Token) (oauth2.TokenSource, error) {
-		h.persist(cfg, tok)
-		base := cfg.TokenSource(ctx, tok)
-		return NewSavingTokenSource(base, cfg, tok, func(c *oauth2.Config, t *oauth2.Token) {
-			h.persist(c, t)
-		}), nil
-	}
-
-	cfg := &auth.AuthorizationCodeHandlerConfig{
-		RedirectURL:              redirectURL,
-		AuthorizationCodeFetcher: receiver.fetchAuthorizationCode,
-		RequestRefreshToken:      true,
-		NewTokenSource:           newTokenSource,
-		// Some servers (e.g. Sentry) send the RFC 9207 iss parameter
-		// without advertising it in their metadata. Accept a matching
-		// unadvertised iss instead of failing the flow.
-		AcceptUnadvertisedIss: true,
-		// Use a metadata-fixing HTTP client so trailing-slash issuers in
-		// OAuth metadata responses don't trip the SDK's strict RFC 8414
-		// validation. Also rewrite internal-cluster redirects back to the
-		// external hostname so the flow works outside the cluster.
-		// Based on Bruno Krugel's fix from PR #3396.
-		Client: newOAuthMetadataClient(http.DefaultTransport, serverURL),
-		DynamicClientRegistrationConfig: &auth.DynamicClientRegistrationConfig{
-			Metadata: &oauthex.ClientRegistrationMetadata{
-				ClientName:   "Crush",
-				RedirectURIs: []string{redirectURL},
-				GrantTypes:   []string{"authorization_code", "refresh_token"},
-			},
-		},
-	}
-
-	// Restore a saved client registration as a pre-registered client so
-	// Use a pre-registered client so the SDK skips dynamic registration.
-	// An explicitly configured client (for servers that don't support DCR,
-	// like GitHub or Slack) takes precedence over one captured from a
-	// previous registration.
-	client := preregistered
-	if client == nil || client.ClientID == "" {
-		if savedToken != nil && savedToken.Client != nil {
-			client = savedToken.Client
-		}
-	}
-	if client != nil && client.ClientID != "" {
-		cfg.PreregisteredClient = &oauthex.ClientCredentials{
-			ClientID: client.ClientID,
-		}
-		if client.ClientSecret != "" {
-			cfg.PreregisteredClient.ClientSecretAuth = &oauthex.ClientSecretAuth{
-				ClientSecret: client.ClientSecret,
-			}
-		}
-	}
-
-	// Restore a saved token as the initial token source so the SDK uses
-	// it directly (and refreshes it) instead of triggering the browser
-	// flow. Seed the saver with the restored token so only a genuine
-	// refresh writes to disk; a plain restart causes no token churn.
-	if hasRefreshableToken(savedToken) {
-		restored := &oauth2.Token{
-			AccessToken:  savedToken.AccessToken,
-			RefreshToken: savedToken.RefreshToken,
-			Expiry:       time.Unix(savedToken.ExpiresAt, 0),
-		}
-		oc := &oauth2.Config{
-			ClientID:     savedToken.Client.ClientID,
-			ClientSecret: savedToken.Client.ClientSecret,
-			Endpoint: oauth2.Endpoint{
-				AuthURL:   savedToken.Client.AuthURL,
-				TokenURL:  savedToken.Client.TokenURL,
-				AuthStyle: oauth2.AuthStyle(savedToken.Client.AuthStyle),
-			},
-		}
-		base := oc.TokenSource(context.Background(), restored)
-		cfg.InitialTokenSource = NewSavingTokenSource(base, oc, restored, func(c *oauth2.Config, t *oauth2.Token) {
-			h.persist(c, t)
-		})
-		h.cachedToken = restored
-	}
+	cfg := h.authorizationConfig(redirectURL)
+	cfg.PreregisteredClient = clientCredentials(preregistered, savedToken)
+	h.restoreToken(cfg, savedToken)
 
 	inner, err := auth.NewAuthorizationCodeHandler(cfg)
 	if err != nil {
@@ -258,6 +152,131 @@ func NewHandler(
 	)
 
 	return h, nil
+}
+
+// resolveCallbackPort picks the redirect port without binding it. The
+// listener is only opened when an authorization actually runs (see
+// fetchAuthorizationCode), so a handler that restores a valid token never
+// occupies the port and several Crush processes can share it; only the one
+// doing a live login binds, and only for the duration of that login.
+//
+// A fixed port comes straight from config. Otherwise we probe for the
+// first free candidate, just long enough to learn which is open. Either
+// way the chosen port is baked into the redirect URI and pinned on the
+// receiver, so bindLocked always rebinds the SAME port. The probe is not a
+// reservation — another process can take the port before the first real
+// login — but a busy port then fails loudly rather than silently binding a
+// port the redirect URI does not point at.
+func resolveCallbackPort(callbackPort int) (int, error) {
+	if callbackPort != 0 {
+		return callbackPort, nil
+	}
+	lc := &net.ListenConfig{}
+	for _, p := range callbackPorts {
+		probe, err := lc.Listen(context.Background(), "tcp", fmt.Sprintf("localhost:%d", p))
+		if err == nil {
+			_ = probe.Close()
+			return p, nil
+		}
+	}
+	return 0, errors.New("failed to start OAuth callback listener: all candidate ports in use")
+}
+
+// authorizationConfig builds the SDK configuration for the authorization
+// code flow, redirecting to redirectURL.
+func (h *Handler) authorizationConfig(redirectURL string) *auth.AuthorizationCodeHandlerConfig {
+	// newTokenSource is the SDK hook invoked once after a successful code
+	// exchange. The token it hands us is brand new, so persist it right
+	// away, then wrap the source so later refreshes persist on change. The
+	// resolved oauth2.Config carries the registered client ID and
+	// discovered endpoints, which we persist alongside the token so a
+	// later start can refresh without rediscovery.
+	newTokenSource := func(ctx context.Context, cfg *oauth2.Config, tok *oauth2.Token) (oauth2.TokenSource, error) {
+		h.persist(cfg, tok)
+		base := cfg.TokenSource(ctx, tok)
+		return NewSavingTokenSource(base, cfg, tok, func(c *oauth2.Config, t *oauth2.Token) {
+			h.persist(c, t)
+		}), nil
+	}
+
+	return &auth.AuthorizationCodeHandlerConfig{
+		RedirectURL:              redirectURL,
+		AuthorizationCodeFetcher: h.receiver.fetchAuthorizationCode,
+		RequestRefreshToken:      true,
+		NewTokenSource:           newTokenSource,
+		// Some servers (e.g. Sentry) send the RFC 9207 iss parameter
+		// without advertising it in their metadata. Accept a matching
+		// unadvertised iss instead of failing the flow.
+		AcceptUnadvertisedIss: true,
+		// Use a metadata-fixing HTTP client so trailing-slash issuers in
+		// OAuth metadata responses don't trip the SDK's strict RFC 8414
+		// validation. Also rewrite internal-cluster redirects back to the
+		// external hostname so the flow works outside the cluster.
+		// Based on Bruno Krugel's fix from PR #3396.
+		Client: newOAuthMetadataClient(http.DefaultTransport, h.serverURL),
+		DynamicClientRegistrationConfig: &auth.DynamicClientRegistrationConfig{
+			Metadata: &oauthex.ClientRegistrationMetadata{
+				ClientName:   "Crush",
+				RedirectURIs: []string{redirectURL},
+				GrantTypes:   []string{"authorization_code", "refresh_token"},
+			},
+		},
+	}
+}
+
+// clientCredentials returns the pre-registered client the SDK should use
+// instead of dynamic registration, or nil to register dynamically. An
+// explicitly configured client (for servers that don't support DCR, like
+// GitHub or Slack) takes precedence over one captured from a previous
+// registration and restored from savedToken.
+func clientCredentials(preregistered *oauth.OAuthClient, savedToken *oauth.Token) *oauthex.ClientCredentials {
+	client := preregistered
+	if client == nil || client.ClientID == "" {
+		if savedToken != nil && savedToken.Client != nil {
+			client = savedToken.Client
+		}
+	}
+	if client == nil || client.ClientID == "" {
+		return nil
+	}
+	creds := &oauthex.ClientCredentials{
+		ClientID: client.ClientID,
+	}
+	if client.ClientSecret != "" {
+		creds.ClientSecretAuth = &oauthex.ClientSecretAuth{
+			ClientSecret: client.ClientSecret,
+		}
+	}
+	return creds
+}
+
+// restoreToken installs a saved token as the initial token source so the
+// SDK uses it directly (and refreshes it) instead of triggering the browser
+// flow. The saver is seeded with the restored token so only a genuine
+// refresh writes to disk; a plain restart causes no token churn.
+func (h *Handler) restoreToken(cfg *auth.AuthorizationCodeHandlerConfig, savedToken *oauth.Token) {
+	if !hasRefreshableToken(savedToken) {
+		return
+	}
+	restored := &oauth2.Token{
+		AccessToken:  savedToken.AccessToken,
+		RefreshToken: savedToken.RefreshToken,
+		Expiry:       time.Unix(savedToken.ExpiresAt, 0),
+	}
+	oc := &oauth2.Config{
+		ClientID:     savedToken.Client.ClientID,
+		ClientSecret: savedToken.Client.ClientSecret,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:   savedToken.Client.AuthURL,
+			TokenURL:  savedToken.Client.TokenURL,
+			AuthStyle: oauth2.AuthStyle(savedToken.Client.AuthStyle),
+		},
+	}
+	base := oc.TokenSource(context.Background(), restored)
+	cfg.InitialTokenSource = NewSavingTokenSource(base, oc, restored, func(c *oauth2.Config, t *oauth2.Token) {
+		h.persist(c, t)
+	})
+	h.cachedToken = restored
 }
 
 // hasRefreshableToken reports whether a saved token carries enough state

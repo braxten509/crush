@@ -34,11 +34,16 @@ func (m *UI) handleAgentFinished(msg agentFinishedMsg) tea.Cmd {
 	}
 	return tea.Batch(
 		m.guardCompletionAlert(n.SessionID, m.playNotificationSound(notification.SoundComplete)),
-		m.guardCompletionAlert(n.SessionID, m.sendNotification(notification.Notification{
-			Title:   "Crush is waiting...",
-			Message: fmt.Sprintf("Agent's turn completed in \"%s\"", n.SessionTitle),
-		})),
+		m.guardCompletionAlert(n.SessionID, m.sendNotification(finishedNotification(n.SessionTitle))),
 	)
+}
+
+// finishedNotification is the desktop notification for a finished turn.
+func finishedNotification(sessionTitle string) notification.Notification {
+	return notification.Notification{
+		Title:   "Crush finished",
+		Message: fmt.Sprintf("\"%s\" is done", sessionTitle),
+	}
 }
 
 // guardCompletionAlert checks again when the command executes: a new turn can

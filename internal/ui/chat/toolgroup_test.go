@@ -135,7 +135,7 @@ func TestToolGroupChanges(t *testing.T) {
 	require.Zero(t, files[1].Lines[0].Old, "replaced text has no place in the file")
 
 	header := ansi.Strip(g.header(120))
-	require.Contains(t, header, "3 actions · edited b.go and 1 more +3 −2", "one file name at most: the latest")
+	require.Contains(t, header, "3 actions · edited 2 files +3 −2", "several files of one kind are a count")
 
 	// Click the original action text, immediately after the success icon.
 	start := MessageLeftPaddingTotal + ansi.StringWidth(header[:strings.Index(header, "3 actions")])
@@ -252,8 +252,8 @@ func TestToolGroupChangesNameEachFileOnce(t *testing.T) {
 	require.Equal(t, 1, strings.Count(header, "a.go"), header)
 }
 
-// Saved summaries name one file at most, the latest, like the live header.
-func TestToolGroupStoredSummaryNamesOneFile(t *testing.T) {
+// Saved summaries count several edited files once each, like the live header.
+func TestToolGroupStoredSummaryCountsFiles(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
 	var children []MessageItem
@@ -265,11 +265,11 @@ func TestToolGroupStoredSummaryNamesOneFile(t *testing.T) {
 	}
 	g := NewToolGroupItem(&sty)
 	g.SetChildren(children)
-	require.Equal(t, "edited page-identifiers.test.mjs and 2 more", g.StoredReviewSummary())
+	require.Equal(t, "edited 3 files", g.StoredReviewSummary())
 }
 
-// Deleted files show as a count of removed files; files too large to
-// compare show no "+0 −0".
+// A removed file next to an edited one is a mix: a plain count. Files too
+// large to compare show no "+0 −0".
 func TestToolGroupHeaderCountsRemovedFiles(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
@@ -284,8 +284,7 @@ func TestToolGroupHeaderCountsRemovedFiles(t *testing.T) {
 	g := NewToolGroupItem(&sty)
 	g.SetChildren([]MessageItem{NewToolMessageItem(&sty, "m", tc, result, false, "")})
 	header := ansi.Strip(g.header(120))
-	require.Contains(t, header, "removed 1 file")
-	require.Contains(t, header, "edited crush")
+	require.Contains(t, header, "2 files changed")
 	require.NotContains(t, header, "crush.new")
 	require.NotContains(t, header, "+0")
 
@@ -294,7 +293,7 @@ func TestToolGroupHeaderCountsRemovedFiles(t *testing.T) {
 	saved.Review = &filechange.Review{Summary: &filechange.ReviewSummary{Files: 2, Removed: 1, Paths: []string{"/w/crush"}, Counted: true, NoLines: true}}
 	g = NewToolGroupItem(&sty)
 	g.SetChildren([]MessageItem{NewToolMessageItem(&sty, "m", tc, &saved, false, "")})
-	require.Equal(t, "removed 1 file · edited crush", g.StoredReviewSummary())
+	require.Equal(t, "2 files changed", g.StoredReviewSummary())
 	require.NotContains(t, ansi.Strip(g.header(120)), "+0")
 }
 

@@ -60,6 +60,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/sessions"
 	"github.com/charmbracelet/crush/internal/ui/dialog/models"
 	"github.com/charmbracelet/crush/internal/ui/dialog/theme"
 	"github.com/charmbracelet/crush/internal/ui/dialog/auth"
@@ -6377,7 +6378,7 @@ func (m *UI) openSessionsDialog() tea.Cmd {
 		selectedSessionID = m.session.ID
 	}
 
-	dialog, err := dialog.NewSessions(m.com, selectedSessionID)
+	dialog, err := sessions.NewSessions(m.com, selectedSessionID)
 	if err != nil {
 		return util.ReportError(err)
 	}

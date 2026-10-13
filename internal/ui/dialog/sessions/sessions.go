@@ -1,4 +1,6 @@
-package dialog
+// Package sessions holds the session switcher dialog, with inline rename
+// and delete.
+package sessions
 
 import (
 	"context"
@@ -13,14 +15,12 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 )
-
-// SessionsID is the identifier for the session selector dialog.
-const SessionsID = "session"
 
 const sessionDoubleClickThreshold = 400 * time.Millisecond
 
@@ -63,7 +63,7 @@ type Session struct {
 	}
 }
 
-var _ Dialog = (*Session)(nil)
+var _ dialog.Dialog = (*Session)(nil)
 
 // NewSessions creates a new Session dialog.
 func NewSessions(com *common.Common, selectedSessionID string) (*Session, error) {
@@ -143,18 +143,18 @@ func NewSessions(com *common.Common, selectedSessionID string) (*Session, error)
 		key.WithKeys("n", "esc"),
 		key.WithHelp("n", "cancel"),
 	)
-	s.keyMap.Close = CloseKey
+	s.keyMap.Close = dialog.CloseKey
 
 	return s, nil
 }
 
 // ID implements Dialog.
 func (s *Session) ID() string {
-	return SessionsID
+	return dialog.SessionsID
 }
 
 // HandleMsg implements Dialog.
-func (s *Session) HandleMsg(msg tea.Msg) Action {
+func (s *Session) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch s.sessionsMode {
@@ -189,13 +189,13 @@ func (s *Session) HandleMsg(msg tea.Msg) Action {
 		default:
 			switch {
 			case key.Matches(msg, s.keyMap.Close):
-				return ActionClose{}
+				return dialog.ActionClose{}
 			case key.Matches(msg, s.keyMap.Rename):
 				s.sessionsMode = sessionsModeUpdating
 				s.list.SetItems(sessionItems(s.com.Styles, sessionsModeUpdating, s.sessions...)...)
 			case key.Matches(msg, s.keyMap.Delete):
 				if s.isCurrentSessionBusy() {
-					return ActionCmd{util.ReportWarn("Agent is busy, please wait...")}
+					return dialog.ActionCmd{Cmd: util.ReportWarn("Agent is busy, please wait...")}
 				}
 				s.sessionsMode = sessionsModeDeleting
 				s.list.SetItems(sessionItems(s.com.Styles, sessionsModeDeleting, s.sessions...)...)
@@ -218,7 +218,7 @@ func (s *Session) HandleMsg(msg tea.Msg) Action {
 			case key.Matches(msg, s.keyMap.Select):
 				if item := s.list.SelectedItem(); item != nil {
 					sessionItem := item.(*SessionItem)
-					return ActionSelectSession{sessionItem.Session}
+					return dialog.ActionSelectSession{Session: sessionItem.Session}
 				}
 			default:
 				prevValue := s.input.Value()
@@ -230,7 +230,7 @@ func (s *Session) HandleMsg(msg tea.Msg) Action {
 					s.list.ScrollToTop()
 					s.list.SetSelected(0)
 				}
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 			}
 		}
 	case common.CoalescedWheelMsg:
@@ -244,7 +244,7 @@ func (s *Session) HandleMsg(msg tea.Msg) Action {
 	return nil
 }
 
-func (s *Session) handleMouseClick(msg tea.MouseClickMsg) Action {
+func (s *Session) handleMouseClick(msg tea.MouseClickMsg) dialog.Action {
 	if msg.Button != tea.MouseLeft || s.sessionsMode != sessionsModeNormal {
 		s.resetMouseClick()
 		return nil
@@ -265,7 +265,7 @@ func (s *Session) handleMouseClick(msg tea.MouseClickMsg) Action {
 	now := time.Now()
 	if s.lastClickID == sessionItem.ID() && now.Sub(s.lastClickTime) <= sessionDoubleClickThreshold {
 		s.resetMouseClick()
-		return ActionSelectSession{sessionItem.Session}
+		return dialog.ActionSelectSession{Session: sessionItem.Session}
 	}
 	s.lastClickTime = now
 	s.lastClickID = sessionItem.ID()
@@ -280,7 +280,7 @@ func (s *Session) resetMouseClick() {
 
 // Cursor returns the cursor position relative to the dialog.
 func (s *Session) Cursor() *tea.Cursor {
-	return InputCursor(s.com.Styles, s.input.Cursor())
+	return dialog.InputCursor(s.com.Styles, s.input.Cursor())
 }
 
 // Draw implements [Dialog].
@@ -305,7 +305,7 @@ func (s *Session) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	var cur *tea.Cursor
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "Sessions"
 	switch s.sessionsMode {
 	case sessionsModeDeleting:
@@ -341,7 +341,7 @@ func (s *Session) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	view := rc.Render()
 	s.updateSessionListArea(area, view, bodyView, rc.Help, rc.ViewStyle, t.Dialog.List, innerWidth, listHeight)
 
-	DrawCenterCursor(scr, area, view, cur)
+	dialog.DrawCenterCursor(scr, area, view, cur)
 	return cur
 }
 
@@ -395,7 +395,7 @@ func (s *Session) selectedSessionItem() *SessionItem {
 	return nil
 }
 
-func (s *Session) confirmDeleteSession() Action {
+func (s *Session) confirmDeleteSession() dialog.Action {
 	sessionItem := s.selectedSessionItem()
 	s.sessionsMode = sessionsModeNormal
 	if sessionItem == nil {
@@ -403,7 +403,7 @@ func (s *Session) confirmDeleteSession() Action {
 	}
 
 	s.removeSession(sessionItem.ID())
-	return ActionCmd{s.deleteSavedSessionCmd(sessionItem.Session)}
+	return dialog.ActionCmd{Cmd: s.deleteSavedSessionCmd(sessionItem.Session)}
 }
 
 func (s *Session) removeSession(id string) {
@@ -439,7 +439,7 @@ func (s *Session) deleteSessionCmd(id string) tea.Cmd {
 	}
 }
 
-func (s *Session) confirmRenameSession() Action {
+func (s *Session) confirmRenameSession() dialog.Action {
 	sessionItem := s.selectedSessionItem()
 	s.sessionsMode = sessionsModeNormal
 	if sessionItem == nil {
@@ -453,7 +453,7 @@ func (s *Session) confirmRenameSession() Action {
 	session := sessionItem.Session
 	session.Title = newTitle
 	s.updateSession(session)
-	return ActionCmd{s.updateSessionCmd(session)}
+	return dialog.ActionCmd{Cmd: s.updateSessionCmd(session)}
 }
 
 func (s *Session) updateSession(session session.Session) {

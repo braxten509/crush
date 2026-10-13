@@ -27,4 +27,7 @@ const (
 
 	// ModelsID is the identifier for the model selection dialog.
 	ModelsID = "models"
+
+	// SessionsID is the identifier for the session selector dialog.
+	SessionsID = "session"
 )

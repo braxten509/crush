@@ -1,4 +1,4 @@
-package dialog
+package sessions
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/workspace"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -33,12 +34,12 @@ func newSessionMouseDialog(t *testing.T, sessions []session.Session, selectedSes
 	t.Helper()
 
 	sty := styles.CharmtonePantera()
-	dialog, err := NewSessions(&common.Common{
+	dlg, err := NewSessions(&common.Common{
 		Workspace: &sessionMouseWorkspace{sessions: sessions},
 		Styles:    &sty,
 	}, selectedSessionID)
 	require.NoError(t, err)
-	return dialog
+	return dlg
 }
 
 func TestSessionMouseWheelScrollsListUnderPointer(t *testing.T) {
@@ -51,76 +52,76 @@ func TestSessionMouseWheelScrollsListUnderPointer(t *testing.T) {
 			Title: fmt.Sprintf("Session %02d", i),
 		}
 	}
-	dialog := newSessionMouseDialog(t, sessions, "s00")
+	dlg := newSessionMouseDialog(t, sessions, "s00")
 
 	scr := uv.NewScreenBuffer(80, 30)
-	dialog.Draw(scr, image.Rect(0, 0, 80, 30))
-	require.Zero(t, dialog.list.Offset())
+	dlg.Draw(scr, image.Rect(0, 0, 80, 30))
+	require.Zero(t, dlg.list.Offset())
 
-	dialog.HandleMsg(common.CoalescedWheelMsg{
+	dlg.HandleMsg(common.CoalescedWheelMsg{
 		Mouse:  tea.Mouse{X: 10, Y: 10},
 		DeltaY: 3,
 	})
-	require.Equal(t, 3, dialog.list.Offset())
-	require.Equal(t, "s00", dialog.selectedSessionItem().ID())
+	require.Equal(t, 3, dlg.list.Offset())
+	require.Equal(t, "s00", dlg.selectedSessionItem().ID())
 
 	// Rendering must preserve the offset chosen by the wheel event.
-	dialog.Draw(scr, image.Rect(0, 0, 80, 30))
-	require.Equal(t, 3, dialog.list.Offset())
+	dlg.Draw(scr, image.Rect(0, 0, 80, 30))
+	require.Equal(t, 3, dlg.list.Offset())
 
 	// Wheel movement outside the rendered list has no effect.
-	dialog.HandleMsg(common.CoalescedWheelMsg{
+	dlg.HandleMsg(common.CoalescedWheelMsg{
 		Mouse:  tea.Mouse{X: 0, Y: 0},
 		DeltaY: 3,
 	})
-	require.Equal(t, 3, dialog.list.Offset())
+	require.Equal(t, 3, dlg.list.Offset())
 }
 
 func TestSessionMouseClickHighlightsEntry(t *testing.T) {
 	t.Parallel()
 
-	dialog := newSessionMouseDialog(t, []session.Session{
+	dlg := newSessionMouseDialog(t, []session.Session{
 		{ID: "s1", Title: "First"},
 		{ID: "s2", Title: "Second"},
 		{ID: "s3", Title: "Third"},
 	}, "s1")
 	scr := uv.NewScreenBuffer(80, 30)
-	dialog.Draw(scr, image.Rect(0, 0, 80, 30))
-	listArea := dialog.sessionListArea()
+	dlg.Draw(scr, image.Rect(0, 0, 80, 30))
+	listArea := dlg.sessionListArea()
 	require.False(t, listArea.Empty())
 
-	action := dialog.HandleMsg(tea.MouseClickMsg(tea.Mouse{
+	action := dlg.HandleMsg(tea.MouseClickMsg(tea.Mouse{
 		X:      listArea.Min.X,
 		Y:      listArea.Min.Y + 1,
 		Button: tea.MouseLeft,
 	}))
 
 	require.Nil(t, action)
-	require.Equal(t, "s2", dialog.selectedSessionItem().ID())
+	require.Equal(t, "s2", dlg.selectedSessionItem().ID())
 }
 
 func TestSessionMouseDoubleClickOpensEntryLikeEnter(t *testing.T) {
 	t.Parallel()
 
-	dialog := newSessionMouseDialog(t, []session.Session{
+	dlg := newSessionMouseDialog(t, []session.Session{
 		{ID: "s1", Title: "First"},
 		{ID: "s2", Title: "Second"},
 	}, "s1")
 	scr := uv.NewScreenBuffer(80, 30)
-	dialog.Draw(scr, image.Rect(0, 0, 80, 30))
-	listArea := dialog.sessionListArea()
+	dlg.Draw(scr, image.Rect(0, 0, 80, 30))
+	listArea := dlg.sessionListArea()
 	click := tea.MouseClickMsg(tea.Mouse{
 		X:      listArea.Min.X,
 		Y:      listArea.Min.Y + 1,
 		Button: tea.MouseLeft,
 	})
 
-	require.Nil(t, dialog.HandleMsg(click))
-	enterAction := dialog.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	doubleClickAction := dialog.HandleMsg(click)
+	require.Nil(t, dlg.HandleMsg(click))
+	enterAction := dlg.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	doubleClickAction := dlg.HandleMsg(click)
 
 	require.Equal(t, enterAction, doubleClickAction)
-	selected, ok := doubleClickAction.(ActionSelectSession)
+	selected, ok := doubleClickAction.(dialog.ActionSelectSession)
 	require.True(t, ok)
 	require.Equal(t, "s2", selected.Session.ID)
 }
@@ -128,23 +129,23 @@ func TestSessionMouseDoubleClickOpensEntryLikeEnter(t *testing.T) {
 func TestSessionMouseDoubleClickExpires(t *testing.T) {
 	t.Parallel()
 
-	dialog := newSessionMouseDialog(t, []session.Session{
+	dlg := newSessionMouseDialog(t, []session.Session{
 		{ID: "s1", Title: "First"},
 		{ID: "s2", Title: "Second"},
 	}, "s1")
 	scr := uv.NewScreenBuffer(80, 30)
-	dialog.Draw(scr, image.Rect(0, 0, 80, 30))
-	listArea := dialog.sessionListArea()
+	dlg.Draw(scr, image.Rect(0, 0, 80, 30))
+	listArea := dlg.sessionListArea()
 	click := tea.MouseClickMsg(tea.Mouse{
 		X:      listArea.Min.X,
 		Y:      listArea.Min.Y + 1,
 		Button: tea.MouseLeft,
 	})
 
-	require.Nil(t, dialog.HandleMsg(click))
-	dialog.lastClickTime = time.Now().Add(-sessionDoubleClickThreshold - time.Millisecond)
-	require.Nil(t, dialog.HandleMsg(click))
-	require.Equal(t, "s2", dialog.selectedSessionItem().ID())
+	require.Nil(t, dlg.HandleMsg(click))
+	dlg.lastClickTime = time.Now().Add(-sessionDoubleClickThreshold - time.Millisecond)
+	require.Nil(t, dlg.HandleMsg(click))
+	require.Equal(t, "s2", dlg.selectedSessionItem().ID())
 }
 
 func TestSessionMouseClickSelectsFirstVisibleEntryAfterScroll(t *testing.T) {
@@ -157,24 +158,24 @@ func TestSessionMouseClickSelectsFirstVisibleEntryAfterScroll(t *testing.T) {
 			Title: fmt.Sprintf("Session %02d", i),
 		}
 	}
-	dialog := newSessionMouseDialog(t, sessions, "s00")
+	dlg := newSessionMouseDialog(t, sessions, "s00")
 	scr := uv.NewScreenBuffer(80, 30)
-	dialog.Draw(scr, image.Rect(0, 0, 80, 30))
-	listArea := dialog.sessionListArea()
-	dialog.HandleMsg(common.CoalescedWheelMsg{
+	dlg.Draw(scr, image.Rect(0, 0, 80, 30))
+	listArea := dlg.sessionListArea()
+	dlg.HandleMsg(common.CoalescedWheelMsg{
 		Mouse:  tea.Mouse{X: listArea.Min.X, Y: listArea.Min.Y},
 		DeltaY: 3,
 	})
-	require.Equal(t, 3, dialog.list.Offset())
+	require.Equal(t, 3, dlg.list.Offset())
 
-	action := dialog.HandleMsg(tea.MouseClickMsg(tea.Mouse{
+	action := dlg.HandleMsg(tea.MouseClickMsg(tea.Mouse{
 		X:      listArea.Min.X,
 		Y:      listArea.Min.Y,
 		Button: tea.MouseLeft,
 	}))
 
 	require.Nil(t, action)
-	require.Equal(t, "s03", dialog.selectedSessionItem().ID())
+	require.Equal(t, "s03", dlg.selectedSessionItem().ID())
 }
 
 func TestSessionMouseClickIgnoresUnsupportedClicks(t *testing.T) {
@@ -209,23 +210,23 @@ func TestSessionMouseClickIgnoresUnsupportedClicks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			dialog := newSessionMouseDialog(t, []session.Session{
+			dlg := newSessionMouseDialog(t, []session.Session{
 				{ID: "s1", Title: "First"},
 				{ID: "s2", Title: "Second"},
 			}, "s1")
 			scr := uv.NewScreenBuffer(80, 30)
-			dialog.Draw(scr, image.Rect(0, 0, 80, 30))
-			dialog.sessionsMode = tt.mode
-			point := tt.point(dialog.sessionListArea())
+			dlg.Draw(scr, image.Rect(0, 0, 80, 30))
+			dlg.sessionsMode = tt.mode
+			point := tt.point(dlg.sessionListArea())
 
-			action := dialog.HandleMsg(tea.MouseClickMsg(tea.Mouse{
+			action := dlg.HandleMsg(tea.MouseClickMsg(tea.Mouse{
 				X:      point.X,
 				Y:      point.Y,
 				Button: tt.button,
 			}))
 
 			require.Nil(t, action)
-			require.Equal(t, "s1", dialog.selectedSessionItem().ID())
+			require.Equal(t, "s1", dlg.selectedSessionItem().ID())
 		})
 	}
 }

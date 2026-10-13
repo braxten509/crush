@@ -42,7 +42,7 @@ type sourcegraphDescriptionData struct {
 }
 
 func sourcegraphDescription() string {
-	return renderTemplate(sourcegraphDescriptionTpl, sourcegraphDescriptionData{
+	return RenderTemplate(sourcegraphDescriptionTpl, sourcegraphDescriptionData{
 		MaxResults: 20,
 	})
 }

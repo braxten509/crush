@@ -38,7 +38,7 @@ type viewDescriptionData struct {
 }
 
 func viewDescription() string {
-	return renderTemplate(viewDescriptionTpl, viewDescriptionData{
+	return RenderTemplate(viewDescriptionTpl, viewDescriptionData{
 		DefaultReadLimit: DefaultReadLimit,
 		MaxViewSizeKB:    MaxViewSize / 1024,
 	})

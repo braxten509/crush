@@ -45,7 +45,7 @@ type downloadDescriptionData struct {
 }
 
 func downloadDescription() string {
-	return renderTemplate(downloadDescriptionTpl, downloadDescriptionData{
+	return RenderTemplate(downloadDescriptionTpl, downloadDescriptionData{
 		MaxDownloadTimeout: 600,
 	})
 }

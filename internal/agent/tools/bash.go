@@ -156,8 +156,8 @@ func bashDescription(attribution *config.Attribution, modelID string) string {
 		MaxOutputLength: MaxOutputLength,
 		Attribution:     *attribution,
 		ModelID:         modelID,
-		RgAvailable:     getRg() != "",
-		GhAvailable:     ghAvailable,
+		RgAvailable:     GetRg() != "",
+		GhAvailable:     GHAvailable,
 	}); err != nil {
 		// this should never happen.
 		panic("failed to execute bash description template: " + err.Error())
@@ -241,7 +241,7 @@ func (t *bashTool) run(ctx context.Context, params BashParams, call fantasy.Tool
 	isSafeReadOnly := isSafeReadOnlyCommand(params.Command)
 
 	sessionID := GetSessionFromContext(ctx)
-	shellEnv := getContextValue(ctx, ShellEnvContextKey, []string(nil))
+	shellEnv := GetContextValue(ctx, ShellEnvContextKey, []string(nil))
 	marker := uuid.NewString()
 	shellEnv = append(append([]string(nil), shellEnv...), NativeShellEnv+"="+marker)
 	if sessionID == "" {
@@ -340,7 +340,7 @@ func (t *bashTool) runInBackground(ctx context.Context, r *bashRun, movedSleep b
 	// Still running after fast-failure check - return as background job
 	metadata := r.jobMetadata(bgShell)
 	response := fmt.Sprintf("Background shell started with ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
-	if t.jobStarted.tell(ctx, r.sessionID, r.marker, bgShell) {
+	if t.jobStarted.Tell(ctx, r.sessionID, r.marker, bgShell) {
 		response += jobReportNote
 	}
 	if movedSleep {
@@ -366,7 +366,7 @@ func (t *bashTool) runInForeground(ctx context.Context, r *bashRun) (fantasy.Too
 
 	// Wait for either completion, auto-background threshold, or context cancellation
 	backgroundSignal := make(chan struct{}, 1)
-	unregisterBackground := registerShellBackground(r.sessionID, r.marker, backgroundSignal)
+	unregisterBackground := RegisterShellBackground(r.sessionID, r.marker, backgroundSignal)
 	defer unregisterBackground()
 	manuallyBackgrounded := false
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -418,7 +418,7 @@ waitLoop:
 	if manuallyBackgrounded {
 		response = fmt.Sprintf("Command moved to the background by the user.\n\nBackground shell ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
 	}
-	if t.jobStarted.tell(ctx, r.sessionID, r.marker, bgShell) {
+	if t.jobStarted.Tell(ctx, r.sessionID, r.marker, bgShell) {
 		response += jobReportNote
 	}
 	return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), true, nil

@@ -33,9 +33,9 @@ const (
 	ShellEnvContextKey shellEnvContextKey = "shell_env"
 )
 
-// getContextValue is a generic helper that retrieves a typed value from context.
+// GetContextValue is a generic helper that retrieves a typed value from context.
 // If the value is not found or has the wrong type, it returns the default value.
-func getContextValue[T any](ctx context.Context, key any, defaultValue T) T {
+func GetContextValue[T any](ctx context.Context, key any, defaultValue T) T {
 	value := ctx.Value(key)
 	if value == nil {
 		return defaultValue
@@ -48,27 +48,27 @@ func getContextValue[T any](ctx context.Context, key any, defaultValue T) T {
 
 // GetSessionFromContext retrieves the session ID from the context.
 func GetSessionFromContext(ctx context.Context) string {
-	return getContextValue(ctx, SessionIDContextKey, "")
+	return GetContextValue(ctx, SessionIDContextKey, "")
 }
 
 // GetChannelFromContext retrieves the channel that originated the current turn.
 func GetChannelFromContext(ctx context.Context) string {
-	return getContextValue(ctx, ChannelContextKey, "")
+	return GetContextValue(ctx, ChannelContextKey, "")
 }
 
 // GetMessageFromContext retrieves the message ID from the context.
 func GetMessageFromContext(ctx context.Context) string {
-	return getContextValue(ctx, MessageIDContextKey, "")
+	return GetContextValue(ctx, MessageIDContextKey, "")
 }
 
 // GetSupportsImagesFromContext retrieves whether the model supports images from the context.
 func GetSupportsImagesFromContext(ctx context.Context) bool {
-	return getContextValue(ctx, SupportsImagesContextKey, false)
+	return GetContextValue(ctx, SupportsImagesContextKey, false)
 }
 
 // GetModelNameFromContext retrieves the model name from the context.
 func GetModelNameFromContext(ctx context.Context) string {
-	return getContextValue(ctx, ModelNameContextKey, "")
+	return GetContextValue(ctx, ModelNameContextKey, "")
 }
 
 // NewPermissionDeniedResponse returns a tool response indicating the user
@@ -79,8 +79,8 @@ func NewPermissionDeniedResponse() fantasy.ToolResponse {
 	return resp
 }
 
-// ghAvailable indicates whether the `gh` CLI is available on PATH.
-var ghAvailable = func() bool {
+// GHAvailable indicates whether the `gh` CLI is available on PATH.
+var GHAvailable = func() bool {
 	if testing.Testing() {
 		return false
 	}
@@ -93,10 +93,10 @@ type toolDescriptionData struct {
 	GhAvailable bool
 }
 
-// renderToolDescription renders a tool description template with the given data.
-func renderToolDescription(tmpl *template.Template) string {
+// RenderToolDescription renders a tool description template with the given data.
+func RenderToolDescription(tmpl *template.Template) string {
 	data := toolDescriptionData{
-		GhAvailable: ghAvailable,
+		GhAvailable: GHAvailable,
 	}
 	var out bytes.Buffer
 	if err := tmpl.Execute(&out, data); err != nil {
@@ -105,8 +105,8 @@ func renderToolDescription(tmpl *template.Template) string {
 	return out.String()
 }
 
-// renderTemplate renders a Go template with the given data.
-func renderTemplate(tmpl *template.Template, data any) string {
+// RenderTemplate renders a Go template with the given data.
+func RenderTemplate(tmpl *template.Template, data any) string {
 	var out bytes.Buffer
 	if err := tmpl.Execute(&out, data); err != nil {
 		panic("failed to execute tool description template: " + err.Error())

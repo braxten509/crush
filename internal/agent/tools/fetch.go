@@ -36,8 +36,8 @@ type fetchDescriptionData struct {
 }
 
 func fetchDescription() string {
-	return renderTemplate(fetchDescriptionTpl, fetchDescriptionData{
-		GhAvailable:    ghAvailable,
+	return RenderTemplate(fetchDescriptionTpl, fetchDescriptionData{
+		GhAvailable:    GHAvailable,
 		MaxFetchSizeKB: MaxFetchSize / 1024,
 	})
 }

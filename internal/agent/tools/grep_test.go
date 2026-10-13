@@ -93,7 +93,7 @@ func TestGrepWithIgnoreFiles(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if name == "rg" && getRg() == "" {
+			if name == "rg" && GetRg() == "" {
 				t.Skip("rg is not in $PATH")
 			}
 
@@ -153,7 +153,7 @@ func TestSearchImplementations(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if name == "rg" && getRg() == "" {
+			if name == "rg" && GetRg() == "" {
 				t.Skip("rg is not in $PATH")
 			}
 
@@ -409,7 +409,7 @@ func TestMultipleMatchesPerFile(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if name == "rg" && getRg() == "" {
+			if name == "rg" && GetRg() == "" {
 				t.Skip("rg is not in $PATH")
 			}
 
@@ -441,7 +441,7 @@ func TestColumnMatch(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if name == "rg" && getRg() == "" {
+			if name == "rg" && GetRg() == "" {
 				t.Skip("rg is not in $PATH")
 			}
 

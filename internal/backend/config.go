@@ -201,12 +201,7 @@ func (b *Backend) ReadSkill(ctx context.Context, workspaceID, skillID string) ([
 	if err != nil {
 		return nil, proto.SkillReadResult{}, err
 	}
-	return content, proto.SkillReadResult{
-		Name:        result.Name,
-		Description: result.Description,
-		Source:      string(result.Source),
-		Builtin:     result.Builtin,
-	}, nil
+	return content, proto.SkillReadResultFromDomain(result), nil
 }
 
 // ListSkills returns the effective visible skills for a workspace.
@@ -218,18 +213,7 @@ func (b *Backend) ListSkills(workspaceID string) ([]proto.SkillInfo, error) {
 	mgr := ws.Skills
 	mgr.Refresh(skills.ConfigDiscovery(ws.Cfg))
 	entries := skills.Catalog(mgr.ActiveSkills(), mgr.ResolvedPaths(), mgr.WorkingDir())
-	result := make([]proto.SkillInfo, len(entries))
-	for i, entry := range entries {
-		result[i] = proto.SkillInfo{
-			ID:            entry.ID,
-			Name:          entry.Name,
-			Description:   entry.Description,
-			Label:         entry.Label,
-			Source:        string(entry.Source),
-			UserInvocable: entry.UserInvocable,
-		}
-	}
-	return result, nil
+	return proto.SkillInfosFromDomain(entries), nil
 }
 
 // EnableDockerMCP validates Docker MCP availability, stages the
@@ -330,27 +314,7 @@ func (b *Backend) ListMCPPrompts(workspaceID string) ([]proto.MCPPrompt, error) 
 	if err != nil {
 		return nil, err
 	}
-	result := make([]proto.MCPPrompt, len(prompts))
-	for i, prompt := range prompts {
-		arguments := make([]proto.MCPPromptArgument, len(prompt.Arguments))
-		for j, argument := range prompt.Arguments {
-			arguments[j] = proto.MCPPromptArgument{
-				ID:          argument.ID,
-				Title:       argument.Title,
-				Description: argument.Description,
-				Required:    argument.Required,
-			}
-		}
-		result[i] = proto.MCPPrompt{
-			ID:          prompt.ID,
-			Title:       prompt.Title,
-			Description: prompt.Description,
-			PromptID:    prompt.PromptID,
-			ClientID:    prompt.ClientID,
-			Arguments:   arguments,
-		}
-	}
-	return result, nil
+	return proto.MCPPromptsFromDomain(prompts), nil
 }
 
 // GetWorkingDir returns the working directory for a workspace.

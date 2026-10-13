@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/proto"
 )
 
 func (w *AppWorkspace) LoadMessageReview(ctx context.Context, sessionID, messageID string) (message.Message, error) {
@@ -23,5 +24,5 @@ func (w *ClientWorkspace) LoadMessageReview(ctx context.Context, sessionID, mess
 	if err != nil {
 		return message.Message{}, err
 	}
-	return protoToMessage(msg), nil
+	return proto.MessageToDomain(msg), nil
 }

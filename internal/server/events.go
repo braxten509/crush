@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -38,117 +37,59 @@ func wrapEvent(ev any) *pubsub.Payload {
 			},
 		})
 	case pubsub.Event[mcp.Event]:
-		pt := mcpEventTypeToProto(e.Payload.Type)
-		if pt == "" {
+		payload, ok := proto.MCPEventFromDomain(e.Payload)
+		if !ok {
 			// Unsupported MCP event type. Drop it instead of fabricating
 			// a state_changed event.
 			slog.Debug("Dropping unsupported MCP event type for SSE", "type", e.Payload.Type)
 			return nil
 		}
-		return envelope(pubsub.PayloadTypeMCPEvent, pubsub.Event[proto.MCPEvent]{
-			Type: e.Type,
-			Payload: proto.MCPEvent{
-				Type:           pt,
-				Name:           e.Payload.Name,
-				State:          proto.MCPState(e.Payload.State),
-				Error:          e.Payload.Error,
-				ToolCount:      e.Payload.Counts.Tools,
-				PromptCount:    e.Payload.Counts.Prompts,
-				ResourceCount:  e.Payload.Counts.Resources,
-				ChannelMessage: e.Payload.ChannelMessage,
-			},
-		})
+		return envelope(pubsub.PayloadTypeMCPEvent, pubsub.Event[proto.MCPEvent]{Type: e.Type, Payload: payload})
 	case pubsub.Event[permission.PermissionRequest]:
 		return envelope(pubsub.PayloadTypePermissionRequest, pubsub.Event[proto.PermissionRequest]{
-			Type: e.Type,
-			Payload: proto.PermissionRequest{
-				ID:          e.Payload.ID,
-				SessionID:   e.Payload.SessionID,
-				ToolCallID:  e.Payload.ToolCallID,
-				ToolName:    e.Payload.ToolName,
-				Description: e.Payload.Description,
-				Action:      e.Payload.Action,
-				Path:        e.Payload.Path,
-				Params:      e.Payload.Params,
-			},
+			Type:    e.Type,
+			Payload: proto.PermissionRequestFromDomain(e.Payload),
 		})
 	case pubsub.Event[permission.PermissionNotification]:
 		return envelope(pubsub.PayloadTypePermissionNotification, pubsub.Event[proto.PermissionNotification]{
-			Type: e.Type,
-			Payload: proto.PermissionNotification{
-				ToolCallID: e.Payload.ToolCallID,
-				Granted:    e.Payload.Granted,
-				Denied:     e.Payload.Denied,
-			},
+			Type:    e.Type,
+			Payload: proto.PermissionNotificationFromDomain(e.Payload),
 		})
 	case pubsub.Event[question.Request]:
 		slog.Info("Wrapping question batch event for SSE", "id", e.Payload.ID, "questions", len(e.Payload.Questions))
 		return envelope(pubsub.PayloadTypeQuestionRequest, pubsub.Event[proto.QuestionRequest]{
-			Type: e.Type,
-			Payload: proto.QuestionRequest{
-				ID:                 e.Payload.ID,
-				SessionID:          e.Payload.SessionID,
-				ToolCallID:         e.Payload.ToolCallID,
-				Questions:          questionsToProto(e.Payload.Questions),
-				ConfirmTitle:       e.Payload.ConfirmTitle,
-				ConfirmDescription: e.Payload.ConfirmDescription,
-			},
+			Type:    e.Type,
+			Payload: proto.QuestionRequestFromDomain(e.Payload),
 		})
 	case pubsub.Event[question.Notification]:
 		return envelope(pubsub.PayloadTypeQuestionNotification, pubsub.Event[proto.QuestionNotification]{
-			Type: e.Type,
-			Payload: proto.QuestionNotification{
-				BatchID: e.Payload.BatchID,
-			},
+			Type:    e.Type,
+			Payload: proto.QuestionNotification{BatchID: e.Payload.BatchID},
 		})
 	case pubsub.Event[message.Message]:
 		return envelope(pubsub.PayloadTypeMessage, pubsub.Event[proto.Message]{
 			Type:    e.Type,
-			Payload: messageToProto(e.Payload),
+			Payload: proto.MessageFromDomain(e.Payload),
 		})
 	case pubsub.Event[session.Session]:
 		return envelope(pubsub.PayloadTypeSession, pubsub.Event[proto.Session]{
 			Type:    e.Type,
-			Payload: sessionToProto(e.Payload),
+			Payload: proto.SessionFromDomain(e.Payload),
 		})
 	case pubsub.Event[history.File]:
 		return envelope(pubsub.PayloadTypeFile, pubsub.Event[proto.File]{
 			Type:    e.Type,
-			Payload: fileToProto(e.Payload),
+			Payload: proto.FileFromDomain(e.Payload),
 		})
 	case pubsub.Event[notify.Notification]:
-		payload := proto.AgentEvent{
-			SessionID:    e.Payload.SessionID,
-			SessionTitle: e.Payload.SessionTitle,
-			RunID:        e.Payload.RunID,
-			Type:         proto.AgentEventType(e.Payload.Type),
-			AWSSOCommand: e.Payload.AWSSOCommand,
-			AWSSOURL:     e.Payload.AWSSOURL,
-		}
-		// Carry any human-readable message across the wire; the client
-		// maps Error back into Notification.Message.
-		if e.Payload.Message != "" {
-			payload.Error = errors.New(e.Payload.Message)
-		}
-		if e.Payload.Type == notify.TypeAgentError {
-			payload.Type = proto.AgentEventTypeError
-		}
 		return envelope(pubsub.PayloadTypeAgentEvent, pubsub.Event[proto.AgentEvent]{
 			Type:    e.Type,
-			Payload: payload,
+			Payload: proto.AgentEventFromDomain(e.Payload),
 		})
 	case pubsub.Event[notify.RunComplete]:
 		return envelope(pubsub.PayloadTypeRunComplete, pubsub.Event[proto.RunComplete]{
-			Type: e.Type,
-			Payload: proto.RunComplete{
-				SubmissionID: e.Payload.SubmissionID,
-				SessionID:    e.Payload.SessionID,
-				RunID:        e.Payload.RunID,
-				MessageID:    e.Payload.MessageID,
-				Text:         e.Payload.Text,
-				Error:        e.Payload.Error,
-				Cancelled:    e.Payload.Cancelled,
-			},
+			Type:    e.Type,
+			Payload: proto.RunCompleteFromDomain(e.Payload),
 		})
 	case pubsub.Event[proto.ConfigChanged]:
 		return envelope(pubsub.PayloadTypeConfigChanged, e)
@@ -164,7 +105,7 @@ func wrapEvent(ev any) *pubsub.Payload {
 	case pubsub.Event[skills.Event]:
 		return envelope(pubsub.PayloadTypeSkillsEvent, pubsub.Event[proto.SkillsEvent]{
 			Type:    e.Type,
-			Payload: skillsEventToProto(e.Payload),
+			Payload: proto.SkillsEventFromDomain(e.Payload),
 		})
 	default:
 		slog.Warn("Unrecognized event type for SSE wrapping", "type", fmt.Sprintf("%T", ev))
@@ -182,43 +123,6 @@ func envelope(payloadType pubsub.PayloadType, inner any) *pubsub.Payload {
 	return &pubsub.Payload{
 		Type:    payloadType,
 		Payload: raw,
-	}
-}
-
-func mcpEventTypeToProto(t mcp.EventType) proto.MCPEventType {
-	switch t {
-	case mcp.EventStateChanged:
-		return proto.MCPEventStateChanged
-	case mcp.EventToolsListChanged:
-		return proto.MCPEventToolsListChanged
-	case mcp.EventPromptsListChanged:
-		return proto.MCPEventPromptsListChanged
-	case mcp.EventResourcesListChanged:
-		return proto.MCPEventResourcesListChanged
-	case mcp.EventChannelMessage:
-		return proto.MCPEventChannelMessage
-	default:
-		// Unsupported type. Return empty so callers can drop it rather
-		// than coercing to state_changed.
-		return ""
-	}
-}
-
-func sessionToProto(s session.Session) proto.Session {
-	return proto.Session{
-		ID:               s.ID,
-		ParentSessionID:  s.ParentSessionID,
-		Title:            s.Title,
-		SummaryMessageID: s.SummaryMessageID,
-		MessageCount:     s.MessageCount,
-		PromptTokens:     s.PromptTokens,
-		CompletionTokens: s.CompletionTokens,
-		Cost:             s.Cost,
-		Todos:            todosToProto(s.Todos),
-		Channel:          s.Channel,
-		KeptSkills:       keptSkillsToProto(s.KeptSkills),
-		CreatedAt:        s.CreatedAt,
-		UpdatedAt:        s.UpdatedAt,
 	}
 }
 
@@ -243,169 +147,4 @@ func attachedClients(ws *backend.Workspace, sessionID string) int {
 		return 0
 	}
 	return ws.AttachedClientsForSession(sessionID)
-}
-
-func todosToProto(todos []session.Todo) []proto.Todo {
-	if len(todos) == 0 {
-		return nil
-	}
-	out := make([]proto.Todo, len(todos))
-	for i, t := range todos {
-		out[i] = proto.Todo{
-			Content:    t.Content,
-			Status:     string(t.Status),
-			ActiveForm: t.ActiveForm,
-		}
-	}
-	return out
-}
-
-func fileToProto(f history.File) proto.File {
-	return proto.File{
-		ID:        f.ID,
-		SessionID: f.SessionID,
-		Path:      f.Path,
-		Content:   f.Content,
-		Version:   f.Version,
-		CreatedAt: f.CreatedAt,
-		UpdatedAt: f.UpdatedAt,
-	}
-}
-
-func messageToProto(m message.Message) proto.Message {
-	msg := proto.Message{
-		ActivityAt:              m.ActivityAt,
-		Activity:                m.Activity,
-		ID:                      m.ID,
-		SessionID:               m.SessionID,
-		Role:                    proto.MessageRole(m.Role),
-		Model:                   m.Model,
-		Provider:                m.Provider,
-		PrismModelID:            m.PrismModelID,
-		PrismModelName:          m.PrismModelName,
-		PrismHypercreditSavings: m.PrismHypercreditSavings,
-		PrismDollarSavings:      m.PrismDollarSavings,
-		CreatedAt:               m.CreatedAt,
-		UpdatedAt:               m.UpdatedAt,
-		IsSummaryMessage:        m.IsSummaryMessage,
-		IsCompacting:            m.IsCompacting,
-	}
-
-	for _, p := range m.Parts {
-		switch v := p.(type) {
-		case message.TextContent:
-			msg.Parts = append(msg.Parts, proto.TextContent{Text: v.Text, Hidden: v.Hidden, SubmissionID: v.SubmissionID})
-		case message.ReasoningContent:
-			msg.Parts = append(msg.Parts, proto.ReasoningContent{
-				Thinking:   v.Thinking,
-				Signature:  v.Signature,
-				StartedAt:  v.StartedAt,
-				FinishedAt: v.FinishedAt,
-			})
-		case message.ToolCall:
-			msg.Parts = append(msg.Parts, proto.ToolCall{
-				ID:       v.ID,
-				Name:     v.Name,
-				Input:    v.Input,
-				Finished: v.Finished,
-			})
-		case message.ToolResult:
-			msg.Parts = append(msg.Parts, proto.ToolResult{
-				Review:     v.Review,
-				ToolCallID: v.ToolCallID,
-				Name:       v.Name,
-				Content:    v.Content,
-				Data:       v.Data,
-				MIMEType:   v.MIMEType,
-				Metadata:   v.Metadata,
-				IsError:    v.IsError,
-			})
-		case message.Finish:
-			msg.Parts = append(msg.Parts, proto.Finish{
-				Reason:  proto.FinishReason(v.Reason),
-				Time:    v.Time,
-				Message: v.Message,
-				Details: v.Details,
-			})
-		case message.ImageURLContent:
-			msg.Parts = append(msg.Parts, proto.ImageURLContent{URL: v.URL, Detail: v.Detail})
-		case message.BinaryContent:
-			msg.Parts = append(msg.Parts, proto.BinaryContent{Path: v.Path, MIMEType: v.MIMEType, Data: v.Data})
-		case message.ShellCommand:
-			msg.Parts = append(msg.Parts, proto.ShellCommand{
-				Command:  v.Command,
-				Output:   v.Output,
-				ExitCode: v.ExitCode,
-			})
-		}
-	}
-
-	return msg
-}
-
-// skillsEventToProto converts a skills.Event into its wire form. Errors
-// are flattened to strings because error does not round-trip over JSON.
-func skillsEventToProto(e skills.Event) proto.SkillsEvent {
-	if len(e.States) == 0 {
-		return proto.SkillsEvent{}
-	}
-	out := proto.SkillsEvent{States: make([]proto.SkillState, len(e.States))}
-	for i, s := range e.States {
-		entry := proto.SkillState{
-			Name:  s.Name,
-			Path:  s.Path,
-			State: proto.SkillDiscoveryState(s.State),
-		}
-		if s.Err != nil {
-			entry.Error = s.Err.Error()
-		}
-		out.States[i] = entry
-	}
-	return out
-}
-
-func messagesToProto(msgs []message.Message) []proto.Message {
-	out := make([]proto.Message, len(msgs))
-	for i, m := range msgs {
-		out[i] = messageToProto(m)
-	}
-	return out
-}
-
-func questionsToProto(qs []question.Question) []proto.QuestionItem {
-	if len(qs) == 0 {
-		return nil
-	}
-	out := make([]proto.QuestionItem, len(qs))
-	for i, q := range qs {
-		choices := make([]proto.QuestionChoice, len(q.Choices))
-		for j, c := range q.Choices {
-			choices[j] = proto.QuestionChoice{
-				ID:          c.ID,
-				Label:       c.Label,
-				Description: c.Description,
-				Image:       c.Image,
-			}
-		}
-		out[i] = proto.QuestionItem{
-			ID:          q.ID,
-			Type:        string(q.Type),
-			Label:       q.Label,
-			Question:    q.Text,
-			Description: q.Description,
-			Choices:     choices,
-		}
-	}
-	return out
-}
-
-func keptSkillsToProto(kept []session.KeptSkill) []proto.KeptSkill {
-	if len(kept) == 0 {
-		return nil
-	}
-	out := make([]proto.KeptSkill, len(kept))
-	for i, skill := range kept {
-		out[i] = proto.KeptSkill{ID: skill.ID, Name: skill.Name, ByAgent: skill.ByAgent}
-	}
-	return out
 }

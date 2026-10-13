@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/proto"
 )
 
@@ -15,16 +14,7 @@ func (b *Backend) GrantPermission(workspaceID string, req proto.PermissionGrant)
 		return false, err
 	}
 
-	perm := permission.PermissionRequest{
-		ID:          req.Permission.ID,
-		SessionID:   req.Permission.SessionID,
-		ToolCallID:  req.Permission.ToolCallID,
-		ToolName:    req.Permission.ToolName,
-		Description: req.Permission.Description,
-		Action:      req.Permission.Action,
-		Params:      req.Permission.Params,
-		Path:        req.Permission.Path,
-	}
+	perm := proto.PermissionRequestToDomain(req.Permission)
 
 	switch req.Action {
 	case proto.PermissionAllow:

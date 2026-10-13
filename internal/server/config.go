@@ -423,21 +423,7 @@ func (c *controllerV1) handlePostWorkspaceMCPGetPrompt(w http.ResponseWriter, r 
 // handleGetWorkspaceMCPStates returns the state of all MCP clients.
 func (c *controllerV1) handleGetWorkspaceMCPStates(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	states := c.backend.MCPGetStates(id)
-	result := make(map[string]proto.MCPClientInfo, len(states))
-	for k, v := range states {
-		result[k] = proto.MCPClientInfo{
-			Name:          v.Name,
-			State:         proto.MCPState(v.State),
-			Error:         v.Error,
-			ToolCount:     v.Counts.Tools,
-			PromptCount:   v.Counts.Prompts,
-			ResourceCount: v.Counts.Resources,
-			ConnectedAt:   v.ConnectedAt,
-			Channel:       v.Channel,
-		}
-	}
-	jsonEncode(w, result)
+	jsonEncode(w, proto.MCPClientInfosFromDomain(c.backend.MCPGetStates(id)))
 }
 
 // handleGetWorkspaceMCPPendingAuth returns the MCP servers awaiting OAuth
@@ -449,11 +435,7 @@ func (c *controllerV1) handleGetWorkspaceMCPPendingAuth(w http.ResponseWriter, r
 		c.handleError(w, r, err)
 		return
 	}
-	result := make([]proto.MCPPendingAuthServer, len(pending))
-	for i, p := range pending {
-		result[i] = proto.MCPPendingAuthServer{Name: p.Name, URL: p.URL}
-	}
-	jsonEncode(w, result)
+	jsonEncode(w, proto.MCPPendingAuthFromDomain(pending))
 }
 
 // handleGetWorkspaceMCPAuthURL returns the current OAuth authorization URL

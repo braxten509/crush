@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // SendMessage validates and accepts a prompt for the workspace's agent,
@@ -183,74 +182,49 @@ func (b *Backend) UpdateAgent(ctx context.Context, workspaceID string) error {
 // run's queued prompts on the previous agent — the same protection the
 // TUI gives itself with its busy check before toggling input mode.
 func (b *Backend) SetMainAgent(workspaceID, agentID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return err
 	}
-
-	if ws.AgentCoordinator == nil {
-		return ErrAgentNotInitialized
-	}
-
-	if ws.AgentCoordinator.IsBusy() {
-		return ErrAgentBusy
-	}
-
-	return ws.AgentCoordinator.SetMainAgent(agentID)
+	return o.SetMainAgent(agentID)
 }
 
 // CancelSession cancels an ongoing agent operation for the given
 // session.
 func (b *Backend) CancelSession(workspaceID, sessionID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return err
 	}
-
-	if ws.AgentCoordinator != nil {
-		ws.AgentCoordinator.Cancel(sessionID)
-	}
+	o.CancelSession(sessionID)
 	return nil
 }
 
 // SummarizeSession triggers a session summarization.
 func (b *Backend) SummarizeSession(ctx context.Context, workspaceID, sessionID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return err
 	}
-
-	if ws.AgentCoordinator == nil {
-		return ErrAgentNotInitialized
-	}
-
-	return ws.AgentCoordinator.Summarize(ctx, sessionID)
+	return o.Summarize(ctx, sessionID)
 }
 
 // QueuedPrompts returns the number of queued prompts for the session.
 func (b *Backend) QueuedPrompts(workspaceID, sessionID string) (int, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return 0, err
 	}
-
-	if ws.AgentCoordinator == nil {
-		return 0, nil
-	}
-
-	return ws.AgentCoordinator.QueuedPrompts(sessionID), nil
+	return o.QueuedPrompts(sessionID), nil
 }
 
 // ClearQueue clears the prompt queue for the session.
 func (b *Backend) ClearQueue(workspaceID, sessionID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return err
 	}
-
-	if ws.AgentCoordinator != nil {
-		ws.AgentCoordinator.ClearQueue(sessionID)
-	}
+	o.ClearQueue(sessionID)
 	return nil
 }
 
@@ -277,18 +251,21 @@ func (b *Backend) recalledPrompt(workspaceID, sessionID, requestID string) *reta
 
 // RecallQueuedPrompt atomically withdraws a prompt and retains it until delivery.
 func (b *Backend) RecallQueuedPrompt(workspaceID, sessionID, requestID string) (*proto.AgentMessage, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	if ws.AgentCoordinator == nil {
+	if o.App.AgentCoordinator == nil {
 		return nil, ErrAgentNotInitialized
 	}
 	entry := b.recalledPrompt(workspaceID, sessionID, requestID)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 	if !entry.claimed {
-		prompt := ws.AgentCoordinator.RecallQueuedPrompt(sessionID)
+		prompt, err := o.RecallQueuedPrompt(sessionID)
+		if err != nil {
+			return nil, err
+		}
 		if prompt != nil {
 			entry.prompt = &proto.AgentMessage{SessionID: sessionID, Prompt: prompt.Prompt, Attachments: proto.AttachmentsFromMessage(prompt.Attachments), SubmissionID: prompt.SubmissionID}
 		}
@@ -311,40 +288,40 @@ func (b *Backend) AcknowledgeRecalledPrompt(workspaceID, sessionID, requestID st
 // Interrupt stops the active run for the session and lets the next queued
 // prompt run.
 func (b *Backend) Interrupt(workspaceID, sessionID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return err
 	}
-
-	if ws.AgentCoordinator != nil {
-		ws.AgentCoordinator.Interrupt(sessionID)
-	}
+	o.Interrupt(sessionID)
 	return nil
 }
 
 // QueuedPromptsList returns the list of queued prompt strings for a
 // session.
 func (b *Backend) QueuedPromptsList(workspaceID, sessionID string) ([]string, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return nil, err
 	}
+	return o.QueuedPromptsList(sessionID), nil
+}
 
-	if ws.AgentCoordinator == nil {
-		return nil, nil
+// QueuedPromptSummaries describes the prompts queued for a session.
+func (b *Backend) QueuedPromptSummaries(workspaceID, sessionID string) ([]message.QueuedPromptSummary, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return nil, err
 	}
-
-	return ws.AgentCoordinator.QueuedPromptsList(sessionID), nil
+	return o.QueuedPromptSummaries(sessionID), nil
 }
 
 // GetDefaultSmallModel returns the default small model for a provider.
 func (b *Backend) GetDefaultSmallModel(workspaceID, providerID string) (config.SelectedModel, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return config.SelectedModel{}, err
 	}
-
-	return ws.GetDefaultSmallModel(providerID), nil
+	return o.GetDefaultSmallModel(providerID), nil
 }
 
 // RunShellCommand runs a shell command in the workspace directory and
@@ -354,34 +331,12 @@ func (b *Backend) RunShellCommand(ctx context.Context, workspaceID string, req p
 	if err != nil {
 		return proto.ShellCommandResponse{}, err
 	}
-
-	// Oversized output spills into the workspace data directory. Tests
-	// build workspaces without a config store; those fall back to the
-	// system temp directory.
-	var dataDir string
-	if ws.Cfg != nil {
-		dataDir = ws.Cfg.Config().Options.DataDirectory
-	}
-
-	var persist shell.PersistFunc
-	if req.SessionID != "" {
-		persist = func(cmd, output string, exitCode int) error {
-			return shell.PersistOutput(ctx, ws.Messages, req.SessionID, cmd, output, exitCode, dataDir)
-		}
-	}
-
-	result, err := shell.RunAndPersist(ctx, shell.RunOptions{
-		Command:   req.Command,
-		Cwd:       ws.Path,
-		Env:       append(os.Environ(), ws.Env...),
-		TermWidth: req.TermWidth,
-	}, persist)
-	if err != nil {
-		return proto.ShellCommandResponse{}, err
-	}
-
-	return proto.ShellCommandResponse{
-		Output:   result.Output,
-		ExitCode: result.ExitCode,
-	}, nil
+	return ws.ops().RunShellCommand(ctx, ShellCommand{
+		SessionID:      req.SessionID,
+		Command:        req.Command,
+		Cwd:            ws.Path,
+		Env:            append(os.Environ(), ws.Env...),
+		TermWidth:      req.TermWidth,
+		IsFirstMessage: req.IsFirstMessage,
+	})
 }

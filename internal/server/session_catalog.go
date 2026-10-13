@@ -2,20 +2,15 @@ package server
 
 import (
 	"encoding/json"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/sessioncatalog"
 	"net/http"
+
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 func (c *controllerV1) handleSavedSessions(w http.ResponseWriter, r *http.Request) {
-	ws, err := c.backend.GetWorkspace(r.PathValue("id"))
-	if err != nil {
-		c.handleError(w, r, err)
-		return
-	}
-	catalog := sessioncatalog.Catalog{Directory: ws.Path, DataDirectory: ws.Cfg.Config().Options.DataDirectory}
+	id := r.PathValue("id")
 	if r.Method == http.MethodGet {
-		entries, err := catalog.List(r.Context(), r.URL.Query().Get("selected"))
+		entries, err := c.backend.ListSavedSessions(r.Context(), id, r.URL.Query().Get("selected"))
 		if err != nil {
 			c.handleError(w, r, err)
 			return
@@ -23,20 +18,16 @@ func (c *controllerV1) handleSavedSessions(w http.ResponseWriter, r *http.Reques
 		jsonEncode(w, entries)
 		return
 	}
+	if _, err := c.backend.GetWorkspace(id); err != nil {
+		c.handleError(w, r, err)
+		return
+	}
 	var change session.CatalogChange
 	if err := json.NewDecoder(r.Body).Decode(&change); err != nil {
 		http.Error(w, "invalid saved chat", http.StatusBadRequest)
 		return
 	}
-	if change.DiscardEmpty {
-		if err := catalog.DiscardEmpty(r.Context(), change.Session.ID); err != nil {
-			c.handleError(w, r, err)
-			return
-		}
-		jsonEncode(w, struct{}{})
-		return
-	}
-	if err := catalog.Change(r.Context(), change.Session, change.Remove); err != nil {
+	if err := c.backend.ChangeSavedSession(r.Context(), id, change); err != nil {
 		c.handleError(w, r, err)
 		return
 	}

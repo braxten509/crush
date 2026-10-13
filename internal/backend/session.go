@@ -2,9 +2,8 @@ package backend
 
 import (
 	"context"
+	"time"
 
-	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -13,194 +12,173 @@ import (
 
 // CreateSession creates a new session in the given workspace.
 func (b *Backend) CreateSession(ctx context.Context, workspaceID, title string) (session.Session, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return session.Session{}, err
 	}
-
-	return ws.Sessions.Create(ctx, title)
+	return o.CreateSession(ctx, title)
 }
 
 // GetSession retrieves a session by workspace and session ID.
 func (b *Backend) GetSession(ctx context.Context, workspaceID, sessionID string) (session.Session, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return session.Session{}, err
 	}
-
-	return ws.Sessions.Get(ctx, sessionID)
+	return o.GetSession(ctx, sessionID)
 }
 
 // ListSessions returns all sessions in the given workspace.
 func (b *Backend) ListSessions(ctx context.Context, workspaceID string) ([]session.Session, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return nil, err
 	}
-
-	return ws.Sessions.List(ctx)
+	return o.ListSessions(ctx)
 }
 
 // GetAgentSession returns session metadata with the agent's busy
 // status.
 func (b *Backend) GetAgentSession(ctx context.Context, workspaceID, sessionID string) (proto.AgentSession, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return proto.AgentSession{}, err
 	}
-
-	se, err := ws.Sessions.Get(ctx, sessionID)
+	se, err := o.GetSession(ctx, sessionID)
 	if err != nil {
 		return proto.AgentSession{}, err
 	}
-
-	var isSessionBusy bool
-	if ws.AgentCoordinator != nil {
-		isSessionBusy = ws.AgentCoordinator.IsSessionBusy(sessionID)
-	}
-
 	return proto.AgentSession{
 		Session: proto.Session{
 			ID:    se.ID,
 			Title: se.Title,
 		},
-		IsBusy: isSessionBusy,
+		IsBusy: o.IsSessionBusy(sessionID),
 	}, nil
 }
 
-// ListSessionMessages returns all messages for a session.
+// ListSessionMessages returns all messages for a session, draining
+// debounced updates first so HTTP clients (and the TUI on session
+// switch) observe the latest in-memory state.
 func (b *Backend) ListSessionMessages(ctx context.Context, workspaceID, sessionID string) ([]message.Message, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return nil, err
 	}
-
-	// Drain debounced updates so HTTP clients (and the TUI on session
-	// switch) observe the latest in-memory state rather than racing the
-	// debounce timer in message.Service.
-	if err := ws.Messages.FlushAll(ctx); err != nil {
-		return nil, err
-	}
-	return ws.Messages.List(ctx, sessionID)
+	return o.ListMessages(ctx, sessionID)
 }
 
 // ListSessionHistory returns the history items for a session.
 func (b *Backend) ListSessionHistory(ctx context.Context, workspaceID, sessionID string) ([]history.File, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return nil, err
 	}
-
-	return ws.History.ListBySession(ctx, sessionID)
+	return o.ListSessionHistory(ctx, sessionID)
 }
 
 // SaveSession updates a session in the given workspace.
 func (b *Backend) SaveSession(ctx context.Context, workspaceID string, sess session.Session) (session.Session, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return session.Session{}, err
 	}
-
-	return ws.Sessions.Save(ctx, sess)
-}
-
-// MCPServersDisabled returns the MCP servers disabled for the given
-// workspace's repository.
-func (b *Backend) MCPServersDisabled(ctx context.Context, workspaceID string) ([]string, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	return ws.Sessions.MCPDisabledServers(ctx)
-}
-
-// MCPServersEnabled returns the MCP servers with a repository-scoped
-// enabled override (config-disabled servers the user enabled here).
-func (b *Backend) MCPServersEnabled(ctx context.Context, workspaceID string) ([]string, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	return ws.Sessions.MCPServersEnabled(ctx)
-}
-
-// SetMCPServerDisabled toggles a repository-scoped MCP override for the
-// given workspace and applies it to the running client.
-func (b *Backend) SetMCPServerDisabled(ctx context.Context, workspaceID, name string, disabled bool) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	if err := ws.Sessions.SetMCPServerDisabled(ctx, name, disabled); err != nil {
-		return err
-	}
-	return mcptools.SetLocalDisabled(ctx, ws.Cfg, name, disabled)
-}
-
-// SetMCPServerConfigDisabled toggles an MCP server's disabled flag in the
-// global config and applies the change to the running client.
-func (b *Backend) SetMCPServerConfigDisabled(ctx context.Context, workspaceID, name string, disabled bool) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	override, err := session.HasMCPOverride(ctx, ws.Sessions, name)
-	if err != nil {
-		return err
-	}
-	return mcptools.SetConfigDisabled(ctx, ws.Cfg, config.ScopeGlobal, name, disabled, override)
-}
-
-// StartMCPServer starts the named MCP server for the given workspace even
-// when its config entry is disabled. Runtime-only.
-func (b *Backend) StartMCPServer(ctx context.Context, workspaceID, name string) error {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	return mcptools.InitializeSingleForced(ctx, name, ws.Cfg)
+	return o.SaveSession(ctx, sess)
 }
 
 // DeleteSession deletes a session from the given workspace.
 func (b *Backend) DeleteSession(ctx context.Context, workspaceID, sessionID string) error {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return err
 	}
-
-	return ws.Sessions.Delete(ctx, sessionID)
-}
-
-// ListUserMessages returns user-role messages for a session.
-func (b *Backend) ListUserMessages(ctx context.Context, workspaceID, sessionID string) ([]message.Message, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	return ws.Messages.ListUserMessages(ctx, sessionID)
-}
-
-// ListAllUserMessages returns all user-role messages across sessions.
-func (b *Backend) ListAllUserMessages(ctx context.Context, workspaceID string) ([]message.Message, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	return ws.Messages.ListAllUserMessages(ctx)
+	return o.DeleteSession(ctx, sessionID)
 }
 
 // SetKeptSkill turns a skill on or off for a whole session.
 func (b *Backend) SetKeptSkill(ctx context.Context, workspaceID, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {
-	ws, err := b.GetWorkspace(workspaceID)
+	o, err := b.ops(workspaceID)
 	if err != nil {
 		return session.Session{}, err
 	}
-	return ws.Sessions.SetKeptSkill(ctx, sessionID, skill, on)
+	return o.SetKeptSkill(ctx, sessionID, skill, on)
+}
+
+// ListUserMessages returns user-role messages for a session.
+func (b *Backend) ListUserMessages(ctx context.Context, workspaceID, sessionID string) ([]message.Message, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return o.ListUserMessages(ctx, sessionID)
+}
+
+// ListAllUserMessages returns all user-role messages across sessions.
+func (b *Backend) ListAllUserMessages(ctx context.Context, workspaceID string) ([]message.Message, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return o.ListAllUserMessages(ctx)
+}
+
+// LoadMessageReview loads the retained file review of a message in a
+// session.
+func (b *Backend) LoadMessageReview(ctx context.Context, workspaceID, sessionID, messageID string) (message.Message, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return message.Message{}, err
+	}
+	return o.LoadMessageReview(ctx, sessionID, messageID)
+}
+
+// ListSavedSessions lists saved chats across every project.
+func (b *Backend) ListSavedSessions(ctx context.Context, workspaceID, selected string) ([]session.Session, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return o.ListSavedSessions(ctx, selected)
+}
+
+// ChangeSavedSession renames, deletes, or (with DiscardEmpty) discards
+// an empty saved chat.
+func (b *Backend) ChangeSavedSession(ctx context.Context, workspaceID string, change session.CatalogChange) error {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return err
+	}
+	if change.DiscardEmpty {
+		return o.DiscardEmptySession(ctx, change.Session.ID)
+	}
+	return o.ChangeSavedSession(ctx, change.Session, change.Remove)
+}
+
+// FileTrackerRecordRead records a file read for a session.
+func (b *Backend) FileTrackerRecordRead(ctx context.Context, workspaceID, sessionID, path string) error {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return err
+	}
+	o.FileTrackerRecordRead(ctx, sessionID, path)
+	return nil
+}
+
+// FileTrackerLastReadTime returns the last read time for a file in a
+// session.
+func (b *Backend) FileTrackerLastReadTime(ctx context.Context, workspaceID, sessionID, path string) (time.Time, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return o.FileTrackerLastReadTime(ctx, sessionID, path), nil
+}
+
+// FileTrackerListReadFiles returns the list of read files for a session.
+func (b *Backend) FileTrackerListReadFiles(ctx context.Context, workspaceID, sessionID string) ([]string, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return o.FileTrackerListReadFiles(ctx, sessionID)
 }

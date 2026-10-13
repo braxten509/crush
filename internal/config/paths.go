@@ -102,17 +102,17 @@ func isInsideWorktree() bool {
 	return err == nil && strings.TrimSpace(string(bts)) == "true"
 }
 
-// worktreeRoot returns the absolute path of the git working tree root for
-// dir, or the empty string if dir is not inside a working tree (bare
-// repositories, missing git binary, plain directories, or any other
-// failure mode). Linked worktrees and submodules each report their own
-// top-level, which is what callers want when bounding lookups.
 // worktreeRootCache memoizes the git worktree root per directory. The root
 // is stable for the life of the process, so we avoid re-shelling out to
 // "git rev-parse" on every config reload. Keyed by the requested dir; the
 // value is the resolved root ("" when dir is not in a git worktree).
 var worktreeRootCache sync.Map // map[string]string
 
+// worktreeRoot returns the absolute path of the git working tree root for
+// dir, or the empty string if dir is not inside a working tree (bare
+// repositories, missing git binary, plain directories, or any other
+// failure mode). Linked worktrees and submodules each report their own
+// top-level, which is what callers want when bounding lookups.
 func worktreeRoot(dir string) string {
 	if cached, ok := worktreeRootCache.Load(dir); ok {
 		return cached.(string)

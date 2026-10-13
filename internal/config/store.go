@@ -41,11 +41,12 @@ type RuntimeOverrides struct {
 // writeMu serialises every operation that produces a new in-memory Config:
 // the typed copy-on-write mutators (SetCompactMode, UpdatePreferredModel,
 // ...) and ReloadFromDisk. Typed mutators take Lock; autoReload takes
-// TryLock so a write triggered re-entrantly during a reload (e.g.
-// configureProviders calling RemoveConfigField) skips the nested reload
-// instead of deadlocking. This is what lets published Configs be treated
-// as immutable: a mutator clones, mutates the clone, and swaps it in under
-// writeMu rather than mutating the live Config in place.
+// TryLock so a write triggered re-entrantly during a reload (e.g. an OAuth
+// token refresh) skips the nested reload instead of deadlocking. The load
+// pipeline itself never writes mid-load: it returns pending writes that
+// the store persists afterwards. This is what lets published Configs be
+// treated as immutable: a mutator clones, mutates the clone, and swaps it
+// in under writeMu rather than mutating the live Config in place.
 type ConfigStore struct {
 	config             *Config
 	workingDir         string

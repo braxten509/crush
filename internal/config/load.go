@@ -123,7 +123,7 @@ func (s *ConfigStore) persistModelFallbacks(resolved resolvedModels) error {
 
 // ReloadFromDisk re-runs the config load/merge flow and updates the in-memory
 // config atomically. It rebuilds the staleness snapshot after successful reload.
-// On failure, the store state is rolled back to its previous state.
+// On failure, the store state is left as it was.
 // Concurrent calls are serialised via writeMu.
 func (s *ConfigStore) ReloadFromDisk(ctx context.Context) error {
 	if s.workingDir == "" {
@@ -193,7 +193,7 @@ func (s *ConfigStore) autoReload(ctx context.Context) error {
 	}
 	// Skip if a reload is already in progress. This handles both
 	// concurrent auto-reloads after parallel writes and re-entrant
-	// calls from configureProviders during a reload.
+	// calls from writes made during a reload (e.g. an OAuth token refresh).
 	//
 	// Note: if a write completes after the in-progress reload has
 	// already read the config file, that write won't be reflected in

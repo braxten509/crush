@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -116,16 +115,15 @@ func (h *taskHub) runCheckIns(sessionID string, s *sessionCheckIns) {
 		work, sendCtx = h.checkInSnapshot(s)
 		return checkInNotification(work, time.Now())
 	}
-	send := func(_ context.Context, prompt string) error {
+	send := func(_ context.Context, prompt string) {
 		if prompt == "" || sendCtx == nil {
-			return nil
+			return
 		}
-		_, err := h.c.Run(sendCtx, sessionID, prompt)
-		return err
+		if _, err := h.c.Run(sendCtx, sessionID, prompt); err != nil {
+			slog.Warn("Progress check-in failed", "session", sessionID, "error", err)
+		}
 	}
-	if err := checkInLoop(context.Background(), h.checkInInterval(), s.done, h.isClosing, note, send); err != nil {
-		slog.Warn("Progress check-in failed", "session", sessionID, "error", err)
-	}
+	checkInLoop(context.Background(), h.checkInInterval(), s.done, h.isClosing, note, send)
 }
 
 // checkInSnapshot lists the session's running work, oldest first, and a
@@ -144,11 +142,12 @@ func (h *taskHub) checkInSnapshot(s *sessionCheckIns) ([]checkInWork, context.Co
 }
 
 // checkInLoop waits interval, sends a note, and repeats; each wait starts
-// after the previous note was handled. It returns when done is closed, the
-// context ends, closing reports true, or a send fails (that error).
-func checkInLoop(ctx context.Context, interval time.Duration, done <-chan struct{}, closing func() bool, note func(elapsed time.Duration) string, send func(context.Context, string) error) error {
+// after the previous note was handled. A failed send waits for the next
+// round, since the work it reports on is still running. It returns when
+// done is closed, the context ends, or closing reports true.
+func checkInLoop(ctx context.Context, interval time.Duration, done <-chan struct{}, closing func() bool, note func(elapsed time.Duration) string, send func(context.Context, string)) {
 	if interval <= 0 {
-		return nil
+		return
 	}
 	started := time.Now()
 	timer := time.NewTimer(interval)
@@ -156,25 +155,20 @@ func checkInLoop(ctx context.Context, interval time.Duration, done <-chan struct
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case <-done:
-			return nil
+			return
 		case <-timer.C:
 		}
 		select {
 		case <-done:
-			return nil
+			return
 		default:
 		}
 		if closing() {
-			return nil
+			return
 		}
-		if err := send(ctx, note(time.Since(started).Round(time.Second))); err != nil {
-			if errors.Is(err, context.Canceled) {
-				return nil
-			}
-			return err
-		}
+		send(ctx, note(time.Since(started).Round(time.Second)))
 		timer.Reset(interval)
 	}
 }
@@ -186,8 +180,10 @@ func checkInNotification(work []checkInWork, now time.Time) string {
 	if len(work) == 0 {
 		return ""
 	}
-	lines := max(3, checkInTailLines/len(work))
-	bytes := max(300, checkInTotalBytes/len(work))
+	// The work shares one budget, so the note stays the same size however
+	// much is running.
+	lines := max(1, checkInTailLines/len(work))
+	bytes := max(1, checkInTotalBytes/len(work))
 	var b strings.Builder
 	name, id := fmt.Sprintf("%d background tasks", len(work)), ""
 	if len(work) == 1 {

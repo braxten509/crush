@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/google/uuid"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
@@ -225,7 +226,8 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			sessionID := GetSessionFromContext(ctx)
 			shellEnv := getContextValue(ctx, ShellEnvContextKey, []string(nil))
 			backgroundSignal := make(chan struct{}, 1)
-			shellEnv = append(append([]string(nil), shellEnv...), fmt.Sprintf("%s=%p", NativeShellEnv, backgroundSignal))
+			marker := uuid.NewString()
+			shellEnv = append(append([]string(nil), shellEnv...), NativeShellEnv+"="+marker)
 			if sessionID == "" {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for executing shell command")
 			}
@@ -316,7 +318,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					ShellID:          bgShell.ID,
 				}
 				response := fmt.Sprintf("Background shell started with ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
-				if jobStarted(ctx, sessionID, backgroundSignal, bgShell) {
+				if jobStarted(ctx, sessionID, marker, bgShell) {
 					response += jobReportNote
 				}
 				if movedSleep {
@@ -337,7 +339,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			}
 
 			// Wait for either completion, auto-background threshold, or context cancellation
-			unregisterBackground := registerShellBackground(sessionID, backgroundSignal)
+			unregisterBackground := registerShellBackground(sessionID, marker, backgroundSignal)
 			defer unregisterBackground()
 			manuallyBackgrounded := false
 			ticker := time.NewTicker(100 * time.Millisecond)
@@ -417,7 +419,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			if manuallyBackgrounded {
 				response = fmt.Sprintf("Command moved to the background by the user.\n\nBackground shell ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
 			}
-			if jobStarted(ctx, sessionID, backgroundSignal, bgShell) {
+			if jobStarted(ctx, sessionID, marker, bgShell) {
 				response += jobReportNote
 			}
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil

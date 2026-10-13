@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
 
@@ -128,8 +127,8 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 }
 
 func init() {
-	tools.JobStarted = func(sessionID, marker string, job *shell.BackgroundShell) bool {
-		h := hubForSession(sessionID)
+	tools.JobStarted = func(env []string, sessionID, marker string, job *shell.BackgroundShell) bool {
+		h := hubForJob(env, sessionID)
 		if h == nil {
 			return false
 		}
@@ -139,16 +138,27 @@ func init() {
 	}
 }
 
-// hubForSession finds the hub whose Crush owns the session.
-func hubForSession(sessionID string) *taskHub {
-	hubsMu.Lock()
-	candidates := slices.Clone(hubs)
-	hubsMu.Unlock()
-	for _, h := range candidates {
-		if h.c == nil || h.c.sessions == nil {
-			continue
+// hubForJob finds the hub of the Crush whose agent turn started the job,
+// from the shell environment that Crush gave the turn. Sub-agent turns
+// carry no session there, so their jobs aren't reported to a chat that
+// has already finished.
+func hubForJob(env []string, sessionID string) *taskHub {
+	var dir, session string
+	for _, variable := range env {
+		if value, ok := strings.CutPrefix(variable, TasksDirEnv+"="); ok {
+			dir = value
 		}
-		if _, err := h.c.sessions.Get(context.Background(), sessionID); err == nil {
+		if value, ok := strings.CutPrefix(variable, TasksSessionEnv+"="); ok {
+			session = value
+		}
+	}
+	if dir == "" || session == "" || session != sessionID {
+		return nil
+	}
+	hubsMu.Lock()
+	defer hubsMu.Unlock()
+	for _, h := range hubs {
+		if h.dir == dir && h.c != nil {
 			return h
 		}
 	}
@@ -204,10 +214,11 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 		}
 		waited := job.WaitContext(ctx)
 		removeCheckIn()
+		stoppedByAgent := tools.StoppedByAgent(job.ID)
 		if !waited {
 			return
 		}
-		if tools.StoppedByAgent(job.ID) {
+		if stoppedByAgent {
 			h.forgetJob(job.ID)
 			return
 		}

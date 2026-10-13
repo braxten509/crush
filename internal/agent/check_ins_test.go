@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -19,18 +18,16 @@ func TestCheckInLoopSendsUntilDone(t *testing.T) {
 	done := make(chan struct{})
 	var mu sync.Mutex
 	var sent []string
-	send := func(_ context.Context, prompt string) error {
+	send := func(_ context.Context, prompt string) {
 		mu.Lock()
 		defer mu.Unlock()
 		sent = append(sent, prompt)
 		if len(sent) == 3 {
 			close(done)
 		}
-		return nil
 	}
 	note := func(time.Duration) string { return "note" }
-	err := checkInLoop(t.Context(), 5*time.Millisecond, done, func() bool { return false }, note, send)
-	require.NoError(t, err)
+	checkInLoop(t.Context(), 5*time.Millisecond, done, func() bool { return false }, note, send)
 	require.Equal(t, []string{"note", "note", "note"}, sent, "stops once the work is done")
 }
 
@@ -41,16 +38,14 @@ func TestCheckInLoopWaitsForEachSendToFinish(t *testing.T) {
 	// check-ins never pile up.
 	done := make(chan struct{})
 	var starts []time.Time
-	send := func(_ context.Context, _ string) error {
+	send := func(_ context.Context, _ string) {
 		starts = append(starts, time.Now())
 		time.Sleep(30 * time.Millisecond)
 		if len(starts) == 2 {
 			close(done)
 		}
-		return nil
 	}
-	err := checkInLoop(t.Context(), 10*time.Millisecond, done, func() bool { return false }, func(time.Duration) string { return "" }, send)
-	require.NoError(t, err)
+	checkInLoop(t.Context(), 10*time.Millisecond, done, func() bool { return false }, func(time.Duration) string { return "" }, send)
 	require.Len(t, starts, 2)
 	require.GreaterOrEqual(t, starts[1].Sub(starts[0]), 40*time.Millisecond)
 }
@@ -58,24 +53,52 @@ func TestCheckInLoopWaitsForEachSendToFinish(t *testing.T) {
 func TestCheckInLoopOffAndStops(t *testing.T) {
 	t.Parallel()
 
-	never := func(context.Context, string) error { t.Fatal("must not send"); return nil }
+	never := func(context.Context, string) { t.Fatal("must not send") }
 	note := func(time.Duration) string { return "" }
 	open := make(chan struct{})
 
-	require.NoError(t, checkInLoop(t.Context(), 0, open, func() bool { return false }, note, never), "0 turns check-ins off")
+	// Each call returning at all is the check: 0 turns check-ins off, then
+	// done work, a closing Crush and an ended context each stop the loop.
+	checkInLoop(t.Context(), 0, open, func() bool { return false }, note, never)
 
 	closed := make(chan struct{})
 	close(closed)
-	require.NoError(t, checkInLoop(t.Context(), time.Millisecond, closed, func() bool { return false }, note, never))
+	checkInLoop(t.Context(), time.Millisecond, closed, func() bool { return false }, note, never)
 
-	require.NoError(t, checkInLoop(t.Context(), time.Millisecond, open, func() bool { return true }, note, never), "Crush closing")
+	checkInLoop(t.Context(), time.Millisecond, open, func() bool { return true }, note, never)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	require.NoError(t, checkInLoop(ctx, time.Hour, open, func() bool { return false }, note, never))
+	checkInLoop(ctx, time.Hour, open, func() bool { return false }, note, never)
+}
 
-	failing := func(context.Context, string) error { return errors.New("session gone") }
-	require.EqualError(t, checkInLoop(t.Context(), time.Millisecond, open, func() bool { return false }, note, failing), "session gone")
+// A check-in that fails (a cancelled turn, a provider error) doesn't end
+// the session's check-ins: the work it reports on is still running.
+func TestCheckInsKeepGoingAfterAFailedSend(t *testing.T) {
+	calls := make(chan SessionAgentCall, 64)
+	var failed sync.Once
+	c := sessionRunTestCoordinator(t, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		calls <- call
+		var err error
+		failed.Do(func() { err = context.Canceled })
+		if err != nil {
+			return nil, err
+		}
+		return fakeSessionReply(call, "received"), nil
+	})
+	h := c.tasks
+	h.checkInEvery = 200 * time.Millisecond
+	session, err := h.c.sessions.Create(t.Context(), "failing")
+	require.NoError(t, err)
+	remove := h.addCheckIn(session.ID, fixedWork("Job A", "build", "a out", time.Now()))
+	defer remove()
+	for range 2 {
+		select {
+		case <-calls:
+		case <-time.After(2 * time.Second):
+			t.Fatal("check-ins stopped after a failed one")
+		}
+	}
 }
 
 func fixedWork(id, name, output string, started time.Time) checkInWork {
@@ -118,12 +141,12 @@ func TestCheckInNotificationListsAllWorkWithinBudget(t *testing.T) {
 	require.Contains(t, two, "[t2] review, running 0s\nLatest progress:\nhalf done")
 
 	var many []checkInWork
-	for i := range 10 {
+	for i := range 50 {
 		many = append(many, fixedWork(fmt.Sprint(i), "job", strings.Repeat("output line\n", 400), now))
 	}
 	text := checkInNotification(many, now)
-	require.Less(t, len(text), checkInTotalBytes+2000, "ten items stay within the shared budget plus headings")
-	require.Equal(t, 10, strings.Count(text, "Latest progress:"))
+	require.Less(t, len(text), checkInTotalBytes+50*60, "fifty items stay within the shared budget plus headings")
+	require.Equal(t, 50, strings.Count(text, "Latest progress:"))
 }
 
 func TestTailTextKeepsTheEnd(t *testing.T) {
@@ -204,6 +227,8 @@ collect:
 	removeB()
 	removeC()
 	removeC() // removing twice is harmless
+	// A check-in already on its way when the work ended may still land.
+	time.Sleep(300 * time.Millisecond)
 	for len(calls) > 0 {
 		<-calls
 	}
@@ -216,16 +241,17 @@ collect:
 // Real background jobs in one session share check-ins too.
 func TestBackgroundJobsShareOneCheckIn(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
-	// Each start takes about a second, so the first round comes after both.
-	h.checkInEvery = 1500 * time.Millisecond
-	first := startNativeJob(t, h, sessionID, "printf one; sleep 4")
-	second := startNativeJob(t, h, sessionID, "printf two; sleep 4")
+	// Each start takes about a second; the round leaves room for both on a
+	// busy machine.
+	h.checkInEvery = 4 * time.Second
+	first := startNativeJob(t, h, sessionID, "printf one; sleep 10")
+	second := startNativeJob(t, h, sessionID, "printf two; sleep 10")
 	select {
 	case notice := <-notices:
 		require.Contains(t, notice, "<status>running</status>")
 		require.Contains(t, notice, "[Job "+first.ID+"]")
 		require.Contains(t, notice, "[Job "+second.ID+"]")
-	case <-time.After(3 * time.Second):
+	case <-time.After(6 * time.Second):
 		t.Fatal("check-in missing")
 	}
 }

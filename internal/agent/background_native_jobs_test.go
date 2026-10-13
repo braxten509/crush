@@ -42,11 +42,12 @@ func nativeJobTest(t *testing.T) (*taskHub, string, chan string) {
 	return h, session.ID, notices
 }
 
-// runNativeTool calls a tool the way a native agent's turn does.
-func runNativeTool(t *testing.T, h *taskHub, sessionID string, tool fantasy.AgentTool, input any) fantasy.ToolResponse {
+// runNativeTool calls a tool the way a native agent's turn does, with the
+// shell environment Crush gives that turn.
+func runNativeTool(t *testing.T, env []string, sessionID string, tool fantasy.AgentTool, input any) fantasy.ToolResponse {
 	t.Helper()
 	ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, sessionID)
-	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, h.env(sessionID))
+	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, env)
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
 	response, err := tool.Run(ctx, fantasy.ToolCall{ID: "call-" + t.Name(), Name: tool.Info().Name, Input: string(data)})
@@ -57,10 +58,16 @@ func runNativeTool(t *testing.T, h *taskHub, sessionID string, tool fantasy.Agen
 
 func startNativeJob(t *testing.T, h *taskHub, sessionID, command string) *shell.BackgroundShell {
 	t.Helper()
+	job, response := startJobWithEnv(t, h, h.env(sessionID), sessionID, command)
+	require.Contains(t, response.Content, "Crush will report when it ends")
+	return job
+}
+
+func startJobWithEnv(t *testing.T, h *taskHub, env []string, sessionID, command string) (*shell.BackgroundShell, fantasy.ToolResponse) {
+	t.Helper()
 	options := h.c.cfg.Config().Options
 	bash := tools.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "")
-	response := runNativeTool(t, h, sessionID, bash, tools.BashParams{Command: command, WorkingDir: t.TempDir(), RunInBackground: true})
-	require.Contains(t, response.Content, "Crush will report when it ends")
+	response := runNativeTool(t, env, sessionID, bash, tools.BashParams{Command: command, WorkingDir: t.TempDir(), RunInBackground: true})
 	var meta tools.BashResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(response.Metadata), &meta))
 	job, ok := shell.GetBackgroundShellManager().Get(meta.ShellID)
@@ -71,7 +78,7 @@ func startNativeJob(t *testing.T, h *taskHub, sessionID, command string) *shell.
 		}
 		_ = shell.GetBackgroundShellManager().Remove(job.ID)
 	})
-	return job
+	return job, response
 }
 
 // A job the agent's own bash call put in the background reports back once
@@ -131,10 +138,40 @@ func TestNativeBackgroundJobListedOnceAndUserStopIsReported(t *testing.T) {
 func TestNativeBackgroundJobStoppedByAgentSendsNothing(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
 	job := startNativeJob(t, h, sessionID, "sleep 30")
-	runNativeTool(t, h, sessionID, tools.NewJobKillTool(), tools.JobKillParams{ShellID: job.ID})
+	runNativeTool(t, h.env(sessionID), sessionID, tools.NewJobKillTool(), tools.JobKillParams{ShellID: job.ID})
 	require.True(t, job.IsDone())
 	require.Never(t, func() bool { return len(notices) > 0 }, 1500*time.Millisecond, 50*time.Millisecond, "the agent's own stop was reported")
 	require.Eventually(t, func() bool { return !h.hasRunning(sessionID) }, 2*time.Second, 20*time.Millisecond)
+}
+
+// Stopping a job that has already ended leaves no mark behind.
+func TestJobKillOfEndedJobLeavesNoMark(t *testing.T) {
+	h, sessionID, notices := nativeJobTest(t)
+	job := startNativeJob(t, h, sessionID, "sleep 1.5")
+	select {
+	case <-notices:
+	case <-time.After(8 * time.Second):
+		t.Fatal("completion notification missing")
+	}
+	runNativeTool(t, h.env(sessionID), sessionID, tools.NewJobKillTool(), tools.JobKillParams{ShellID: job.ID})
+	require.False(t, tools.StoppedByAgent(job.ID))
+}
+
+// A sub-agent's turn carries no session in its shell environment, so its
+// jobs aren't reported to its chat, which has finished by the time they
+// end. A job whose environment names another Crush isn't taken either.
+func TestJobsOutsideTheMainChatAreNotWatched(t *testing.T) {
+	h, sessionID, notices := nativeJobTest(t)
+	for _, env := range [][]string{
+		{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "="},
+		{TasksDirEnv + "=" + t.TempDir(), TasksSessionEnv + "=" + sessionID},
+	} {
+		job, response := startJobWithEnv(t, h, env, sessionID, "sleep 30")
+		require.NotContains(t, response.Content, "Crush will report when it ends")
+		require.NoError(t, shell.GetBackgroundShellManager().Kill(job.ID))
+	}
+	require.False(t, h.hasRunning(sessionID))
+	require.Never(t, func() bool { return len(notices) > 0 }, time.Second, 50*time.Millisecond)
 }
 
 // crush bg jobs go through the same watcher and still report exactly once.

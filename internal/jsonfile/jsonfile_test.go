@@ -91,7 +91,35 @@ func TestUpdateSkipsWritesAndRemovesEmptyValues(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist, "an empty list removes the file")
 
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o600))
-	require.Nil(t, Read[[]string](path), "an unreadable file reads as the zero value")
+	require.Nil(t, Read[[]string](path), "a damaged file reads as the zero value")
 	require.NoError(t, Update(path, func(list *[]string) bool { *list = append(*list, "b"); return true }))
 	require.Equal(t, []string{"b"}, Read[[]string](path))
+	kept, err := os.ReadFile(path + ".corrupt")
+	require.NoError(t, err)
+	require.Equal(t, "{not json", string(kept), "the damaged file is kept aside")
+}
+
+// A file that exists but can't be read stops the change instead of being
+// replaced by one that holds only the new entry.
+func TestUpdateLeavesUnreadableFilesAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "list.json")
+	require.NoError(t, os.WriteFile(path, []byte(`["a"]`), 0o600))
+	require.NoError(t, os.Chmod(path, 0))
+	t.Cleanup(func() { os.Chmod(path, 0o600) })
+	if _, err := os.ReadFile(path); err == nil {
+		t.Skip("this user can read files without permission")
+	}
+	require.Error(t, Update(path, func(list *[]string) bool { *list = append(*list, "b"); return true }))
+	require.NoError(t, os.Chmod(path, 0o600))
+	require.Equal(t, []string{"a"}, Read[[]string](path))
+}
+
+// Two spellings of one path share the same in-process lock.
+func TestPathLockCleansThePath(t *testing.T) {
+	dir := t.TempDir()
+	first, unlock := pathLock(filepath.Join(dir, "list.json"))
+	unlock()
+	second, unlock := pathLock(filepath.Join(dir, "sub", "..", "list.json"))
+	unlock()
+	require.Equal(t, first, second)
 }

@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/charmbracelet/crush/internal/shell"
@@ -11,9 +10,10 @@ import (
 const NativeShellEnv = "CRUSH_NATIVE_SHELL"
 
 // JobStarted is told about every job a bash call leaves running in the
-// background, with the NativeShellEnv value its processes carry, so Crush
-// can report on the job until it ends. It returns whether it took the job.
-var JobStarted func(sessionID, marker string, job *shell.BackgroundShell) bool
+// background, with the call's shell environment and the NativeShellEnv
+// value its processes carry, so Crush can report on the job until it ends.
+// It returns whether it took the job.
+var JobStarted func(env []string, sessionID, marker string, job *shell.BackgroundShell) bool
 
 type watchedJobKey struct{}
 
@@ -23,11 +23,11 @@ func WithWatchedJob(ctx context.Context) context.Context {
 	return context.WithValue(ctx, watchedJobKey{}, true)
 }
 
-func jobStarted(ctx context.Context, sessionID string, signal chan struct{}, job *shell.BackgroundShell) bool {
+func jobStarted(ctx context.Context, sessionID, marker string, job *shell.BackgroundShell) bool {
 	if JobStarted == nil || getContextValue(ctx, watchedJobKey{}, false) {
 		return false
 	}
-	return JobStarted(sessionID, fmt.Sprintf("%p", signal), job)
+	return JobStarted(getContextValue(ctx, ShellEnvContextKey, []string(nil)), sessionID, marker, job)
 }
 
 // agentStops holds the jobs the agent's own job_kill call ended, so the
@@ -46,19 +46,19 @@ var shellBackgrounds = struct {
 	foreground map[string]struct{}
 }{sessions: make(map[string]map[chan struct{}]struct{}), foreground: make(map[string]struct{})}
 
-func registerShellBackground(sessionID string, signal chan struct{}) func() {
+func registerShellBackground(sessionID, marker string, signal chan struct{}) func() {
 	shellBackgrounds.Lock()
 	if shellBackgrounds.sessions[sessionID] == nil {
 		shellBackgrounds.sessions[sessionID] = make(map[chan struct{}]struct{})
 	}
 	shellBackgrounds.sessions[sessionID][signal] = struct{}{}
-	shellBackgrounds.foreground[fmt.Sprintf("%p", signal)] = struct{}{}
+	shellBackgrounds.foreground[marker] = struct{}{}
 	shellBackgrounds.Unlock()
 	return func() {
 		shellBackgrounds.Lock()
 		defer shellBackgrounds.Unlock()
 		delete(shellBackgrounds.sessions[sessionID], signal)
-		delete(shellBackgrounds.foreground, fmt.Sprintf("%p", signal))
+		delete(shellBackgrounds.foreground, marker)
 		if len(shellBackgrounds.sessions[sessionID]) == 0 {
 			delete(shellBackgrounds.sessions, sessionID)
 		}

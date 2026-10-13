@@ -1,7 +1,6 @@
 package dialog
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -20,11 +19,18 @@ import (
 	"github.com/pkg/browser"
 )
 
+// OAuthProvider drives one provider's sign-in flow for the [OAuth] dialog.
+//
+// initiateAuth runs as a [tea.Cmd] and must not change provider state;
+// anything it needs to keep travels back in [ActionInitiateOAuth]. The
+// other methods are called from HandleMsg on the update loop, so they may
+// update provider state, but the commands they return must only use
+// values captured when they were built.
 type OAuthProvider interface {
 	name() string
 	initiateAuth() tea.Msg
-	startPolling(deviceCode string, expiresIn int) tea.Cmd
-	stopPolling() tea.Msg
+	startPolling(msg ActionInitiateOAuth) tea.Cmd
+	stopPolling() tea.Cmd
 	// supportsCodeEntry reports whether the sign-in can finish with a
 	// code pasted back from the authorization page instead of the
 	// loopback redirect — for when the user declines the browser
@@ -78,7 +84,6 @@ type OAuth struct {
 	expiresIn       int
 	interval        int
 	token           *oauth.Token
-	cancelFunc      context.CancelFunc
 	// codeInput is the paste field for providers whose browser flow
 	// can finish with a code entered back in the terminal.
 	codeInput textinput.Model
@@ -230,7 +235,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 			default:
 				// Cancel the in-flight authorization so a dismissed dialog
 				// does not leave a poller or loopback listener behind.
-				return ActionCloseOAuth{Cmd: m.oAuthProvider.stopPolling}
+				return ActionCloseOAuth{Cmd: m.oAuthProvider.stopPolling()}
 			}
 		}
 
@@ -241,7 +246,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 		m.verificationURL = msg.VerificationURL
 		m.interval = msg.Interval
 		m.State = OAuthStateDisplay
-		return ActionCmd{m.oAuthProvider.startPolling(msg.DeviceCode, msg.ExpiresIn)}
+		return ActionCmd{m.oAuthProvider.startPolling(msg)}
 
 	case ActionCompleteOAuth:
 		// The device flow finished and we have a token. Immediately
@@ -253,14 +258,14 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 		m.State = OAuthStateSaving
 		m.token = msg.Token
 		return ActionCmd{tea.Batch(
-			m.oAuthProvider.stopPolling,
+			m.oAuthProvider.stopPolling(),
 			m.spinner.Tick,
 			m.saveCredential(),
 		)}
 
 	case ActionOAuthErrored:
 		m.State = OAuthStateError
-		cmd := tea.Batch(m.oAuthProvider.stopPolling, util.ReportError(msg.Error))
+		cmd := tea.Batch(m.oAuthProvider.stopPolling(), util.ReportError(msg.Error))
 		return ActionCmd{cmd}
 
 	case tea.PasteMsg:
@@ -577,10 +582,11 @@ func (m *OAuth) copyCodeAndOpenURL() tea.Cmd {
 	if m.State != OAuthStateDisplay {
 		return nil
 	}
+	verificationURL := m.verificationURL
 	if m.userCode == "" {
 		// Browser flows have no code to copy; just open the URL.
 		return func() tea.Msg {
-			if err := browser.OpenURL(m.verificationURL); err != nil {
+			if err := browser.OpenURL(verificationURL); err != nil {
 				return ActionOAuthErrored{fmt.Errorf("failed to open browser: %w", err)}
 			}
 			return nil
@@ -590,7 +596,7 @@ func (m *OAuth) copyCodeAndOpenURL() tea.Cmd {
 		m.userCode,
 		"Code copied and URL opened",
 		func() tea.Msg {
-			if err := browser.OpenURL(m.verificationURL); err != nil {
+			if err := browser.OpenURL(verificationURL); err != nil {
 				return ActionOAuthErrored{fmt.Errorf("failed to open browser: %w", err)}
 			}
 			return nil

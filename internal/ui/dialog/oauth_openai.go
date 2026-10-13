@@ -41,19 +41,25 @@ func (m *OAuthOpenAI) initiateAuth() tea.Msg {
 	if err != nil {
 		return ActionOAuthErrored{Error: fmt.Errorf("failed to start browser auth: %w", err)}
 	}
-	m.flow = flow
-
 	return ActionInitiateOAuth{
 		VerificationURL: flow.StartURL(),
+		flowState:       flow,
 	}
 }
 
-func (m *OAuthOpenAI) startPolling(_ string, _ int) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithCancel(context.Background())
-		m.cancelFunc = cancel
+func (m *OAuthOpenAI) startPolling(msg ActionInitiateOAuth) tea.Cmd {
+	if flow, ok := msg.flowState.(*openai.BrowserFlow); ok {
+		m.flow = flow
+	}
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelFunc = cancel
+	flow := m.flow
 
-		token, err := m.flow.Wait(ctx)
+	return func() tea.Msg {
+		token, err := flow.Wait(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil // cancelled, don't report error.
@@ -65,14 +71,18 @@ func (m *OAuthOpenAI) startPolling(_ string, _ int) tea.Cmd {
 	}
 }
 
-func (m *OAuthOpenAI) stopPolling() tea.Msg {
-	if m.cancelFunc != nil {
-		m.cancelFunc()
+func (m *OAuthOpenAI) stopPolling() tea.Cmd {
+	cancel, flow := m.cancelFunc, m.flow
+	m.cancelFunc = nil
+	return func() tea.Msg {
+		if cancel != nil {
+			cancel()
+		}
+		if flow != nil {
+			flow.Close()
+		}
+		return nil
 	}
-	if m.flow != nil {
-		m.flow.Close()
-	}
-	return nil
 }
 
 // supportsCodeEntry reports whether the provider's flow can finish with

@@ -191,6 +191,11 @@ type (
 		ExpiresIn       int
 		VerificationURL string
 		Interval        int
+
+		// flowState carries provider-private state (a browser flow or a
+		// device code) from the initiating command back to the update
+		// loop, so the command never writes to the provider itself.
+		flowState any
 	}
 
 	// ActionCompleteOAuth is sent when the device flow completes successfully.

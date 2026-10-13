@@ -58,11 +58,15 @@ func (m *OAuthHyper) initiateAuth() tea.Msg {
 	}
 }
 
-func (m *OAuthHyper) startPolling(deviceCode string, expiresIn int) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithCancel(context.Background())
-		m.cancelFunc = cancel
+func (m *OAuthHyper) startPolling(msg ActionInitiateOAuth) tea.Cmd {
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelFunc = cancel
+	deviceCode, expiresIn := msg.DeviceCode, msg.ExpiresIn
 
+	return func() tea.Msg {
 		refreshToken, err := hyper.PollForToken(ctx, deviceCode, expiresIn)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -88,11 +92,15 @@ func (m *OAuthHyper) startPolling(deviceCode string, expiresIn int) tea.Cmd {
 	}
 }
 
-func (m *OAuthHyper) stopPolling() tea.Msg {
-	if m.cancelFunc != nil {
-		m.cancelFunc()
+func (m *OAuthHyper) stopPolling() tea.Cmd {
+	cancel := m.cancelFunc
+	m.cancelFunc = nil
+	return func() tea.Msg {
+		if cancel != nil {
+			cancel()
+		}
+		return nil
 	}
-	return nil
 }
 
 // supportsCodeEntry reports whether the provider's flow can finish with

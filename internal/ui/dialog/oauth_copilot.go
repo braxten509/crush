@@ -42,23 +42,29 @@ func (m *OAuthCopilot) initiateAuth() tea.Msg {
 		return ActionOAuthErrored{Error: fmt.Errorf("failed to initiate device auth: %w", err)}
 	}
 
-	m.deviceCode = deviceCode
-
 	return ActionInitiateOAuth{
 		DeviceCode:      deviceCode.DeviceCode,
 		UserCode:        deviceCode.UserCode,
 		VerificationURL: deviceCode.VerificationURI,
 		ExpiresIn:       deviceCode.ExpiresIn,
 		Interval:        deviceCode.Interval,
+		flowState:       deviceCode,
 	}
 }
 
-func (m *OAuthCopilot) startPolling(deviceCode string, expiresIn int) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithCancel(context.Background())
-		m.cancelFunc = cancel
+func (m *OAuthCopilot) startPolling(msg ActionInitiateOAuth) tea.Cmd {
+	if deviceCode, ok := msg.flowState.(*copilot.DeviceCode); ok {
+		m.deviceCode = deviceCode
+	}
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelFunc = cancel
+	deviceCode := m.deviceCode
 
-		token, err := copilot.PollForToken(ctx, m.deviceCode)
+	return func() tea.Msg {
+		token, err := copilot.PollForToken(ctx, deviceCode)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil // cancelled, don't report error.
@@ -70,11 +76,15 @@ func (m *OAuthCopilot) startPolling(deviceCode string, expiresIn int) tea.Cmd {
 	}
 }
 
-func (m *OAuthCopilot) stopPolling() tea.Msg {
-	if m.cancelFunc != nil {
-		m.cancelFunc()
+func (m *OAuthCopilot) stopPolling() tea.Cmd {
+	cancel := m.cancelFunc
+	m.cancelFunc = nil
+	return func() tea.Msg {
+		if cancel != nil {
+			cancel()
+		}
+		return nil
 	}
-	return nil
 }
 
 // supportsCodeEntry reports whether the provider's flow can finish with

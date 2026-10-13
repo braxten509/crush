@@ -166,10 +166,17 @@ func (f *FilePicker) ID() string {
 	return FilePickerID
 }
 
+// filePickerPreviewReadyMsg reports that the highlighted image finished
+// transmitting, so the dialog can start showing its preview.
+type filePickerPreviewReadyMsg struct{}
+
 // HandleMsg updates the [FilePicker] dialog based on the given message.
 func (f *FilePicker) HandleMsg(msg tea.Msg) Action {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
+	case filePickerPreviewReadyMsg:
+		f.previewingImage = true
+		return nil
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, f.km.Close):
@@ -195,10 +202,7 @@ func (f *FilePicker) HandleMsg(msg tea.Msg) Action {
 			if err == nil {
 				cmds = append(cmds, tea.Sequence(
 					f.imgEnc.Transmit(selFile, img, f.CellSize(), f.imgPrevWidth, f.imgPrevHeight, f.isTmux),
-					func() tea.Msg {
-						f.previewingImage = true
-						return nil
-					},
+					func() tea.Msg { return filePickerPreviewReadyMsg{} },
 				))
 			}
 		}

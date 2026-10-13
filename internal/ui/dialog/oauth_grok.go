@@ -27,8 +27,13 @@ func NewOAuthGrok(
 }
 
 type OAuthGrok struct {
-	flow       *grok.BrowserFlow
+	flow *grok.BrowserFlow
+	// cancelFunc stops the running poll (device flow or browser wait).
 	cancelFunc context.CancelFunc
+	// codeCancel stops an in-flight exchange of a pasted code. It is
+	// separate from cancelFunc so submitting a code does not orphan the
+	// browser wait that is still running alongside it.
+	codeCancel context.CancelFunc
 }
 
 var _ OAuthProvider = (*OAuthGrok)(nil)
@@ -40,10 +45,9 @@ func (m *OAuthGrok) name() string {
 func (m *OAuthGrok) initiateAuth() tea.Msg {
 	flow, err := grok.StartBrowserFlow()
 	if err == nil {
-		m.flow = flow
-
 		return ActionInitiateOAuth{
 			VerificationURL: flow.StartURL(),
+			flowState:       flow,
 		}
 	}
 
@@ -57,11 +61,19 @@ func (m *OAuthGrok) initiateAuth() tea.Msg {
 	return deviceCodeInitiate(deviceCode)
 }
 
-func (m *OAuthGrok) startPolling(deviceCode string, expiresIn int) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithCancel(context.Background())
-		m.cancelFunc = cancel
+func (m *OAuthGrok) startPolling(msg ActionInitiateOAuth) tea.Cmd {
+	if flow, ok := msg.flowState.(*grok.BrowserFlow); ok {
+		m.flow = flow
+	}
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelFunc = cancel
+	flow := m.flow
+	deviceCode, expiresIn := msg.DeviceCode, msg.ExpiresIn
 
+	return func() tea.Msg {
 		if deviceCode != "" {
 			token, err := grok.PollForToken(ctx, deviceCode, expiresIn)
 			if err != nil {
@@ -73,7 +85,7 @@ func (m *OAuthGrok) startPolling(deviceCode string, expiresIn int) tea.Cmd {
 			return ActionCompleteOAuth{Token: token}
 		}
 
-		token, err := m.flow.Wait(ctx)
+		token, err := flow.Wait(ctx)
 		if err == nil {
 			return ActionCompleteOAuth{Token: token}
 		}
@@ -92,14 +104,21 @@ func (m *OAuthGrok) startPolling(deviceCode string, expiresIn int) tea.Cmd {
 	}
 }
 
-func (m *OAuthGrok) stopPolling() tea.Msg {
-	if m.cancelFunc != nil {
-		m.cancelFunc()
+func (m *OAuthGrok) stopPolling() tea.Cmd {
+	cancel, codeCancel, flow := m.cancelFunc, m.codeCancel, m.flow
+	m.cancelFunc, m.codeCancel = nil, nil
+	return func() tea.Msg {
+		if cancel != nil {
+			cancel()
+		}
+		if codeCancel != nil {
+			codeCancel()
+		}
+		if flow != nil {
+			flow.Close()
+		}
+		return nil
 	}
-	if m.flow != nil {
-		m.flow.Close()
-	}
-	return nil
 }
 
 func (m *OAuthGrok) supportsCodeEntry() bool {
@@ -107,14 +126,20 @@ func (m *OAuthGrok) supportsCodeEntry() bool {
 }
 
 func (m *OAuthGrok) submitCode(input string) tea.Cmd {
-	return func() tea.Msg {
-		if m.flow == nil {
+	flow := m.flow
+	if flow == nil {
+		return func() tea.Msg {
 			return ActionOAuthErrored{Error: fmt.Errorf("no browser flow in progress")}
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		m.cancelFunc = cancel
+	}
+	if m.codeCancel != nil {
+		m.codeCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.codeCancel = cancel
 
-		token, err := m.flow.CompleteWithCode(ctx, input)
+	return func() tea.Msg {
+		token, err := flow.CompleteWithCode(ctx, input)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil // cancelled, don't report error.

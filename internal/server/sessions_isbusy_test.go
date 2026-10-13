@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -108,7 +109,7 @@ func TestSessionListIncludesIsBusy(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/workspaces/"+wsID+"/sessions", nil)
 	req.SetPathValue("id", wsID)
 	rec := httptest.NewRecorder()
-	c.handleGetWorkspaceSessions(rec, req)
+	c.endpointHandler(rpc.ListSessions)(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var got []proto.Session
@@ -126,7 +127,7 @@ func TestSessionListIdleSessionIsNotBusy(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/workspaces/"+wsID+"/sessions", nil)
 	req.SetPathValue("id", wsID)
 	rec := httptest.NewRecorder()
-	c.handleGetWorkspaceSessions(rec, req)
+	c.endpointHandler(rpc.ListSessions)(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var got []proto.Session
@@ -144,7 +145,7 @@ func TestSessionGetIncludesIsBusy(t *testing.T) {
 	req.SetPathValue("id", wsID)
 	req.SetPathValue("sid", sid)
 	rec := httptest.NewRecorder()
-	c.handleGetWorkspaceSession(rec, req)
+	c.endpointHandler(rpc.GetSession)(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var got proto.Session
@@ -221,7 +222,7 @@ func listSessions(t *testing.T, c *controllerV1, wsID string) []proto.Session {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/workspaces/"+wsID+"/sessions", nil)
 	req.SetPathValue("id", wsID)
 	rec := httptest.NewRecorder()
-	c.handleGetWorkspaceSessions(rec, req)
+	c.endpointHandler(rpc.ListSessions)(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	var got []proto.Session
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
@@ -327,7 +328,7 @@ func TestSessionGetIncludesAttachedClients(t *testing.T) {
 	req.SetPathValue("id", ws.ID)
 	req.SetPathValue("sid", "S1")
 	rec := httptest.NewRecorder()
-	c.handleGetWorkspaceSession(rec, req)
+	c.endpointHandler(rpc.GetSession)(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var got proto.Session

@@ -3,8 +3,6 @@ package workspace
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log/slog"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -13,9 +11,9 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/app"
+	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/gitutil"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
@@ -24,7 +22,6 @@ import (
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/skills"
 )
 
@@ -34,6 +31,8 @@ import (
 type AppWorkspace struct {
 	app   *app.App
 	store *config.ConfigStore
+	// ops holds the operation bodies shared with the server backend.
+	ops backend.Ops
 }
 
 // NewAppWorkspace creates a new AppWorkspace wrapping the given app
@@ -42,29 +41,30 @@ func NewAppWorkspace(a *app.App, store *config.ConfigStore) *AppWorkspace {
 	return &AppWorkspace{
 		app:   a,
 		store: store,
+		ops:   backend.Ops{App: a, Cfg: store},
 	}
 }
 
 // -- Sessions --
 
 func (w *AppWorkspace) CreateSession(ctx context.Context, title string) (session.Session, error) {
-	return w.app.Sessions.Create(ctx, title)
+	return w.ops.CreateSession(ctx, title)
 }
 
 func (w *AppWorkspace) GetSession(ctx context.Context, sessionID string) (session.Session, error) {
-	return w.app.Sessions.Get(ctx, sessionID)
+	return w.ops.GetSession(ctx, sessionID)
 }
 
 func (w *AppWorkspace) ListSessions(ctx context.Context) ([]session.Session, error) {
-	return w.app.Sessions.List(ctx)
+	return w.ops.ListSessions(ctx)
 }
 
 func (w *AppWorkspace) SaveSession(ctx context.Context, sess session.Session) (session.Session, error) {
-	return w.app.Sessions.Save(ctx, sess)
+	return w.ops.SaveSession(ctx, sess)
 }
 
 func (w *AppWorkspace) DeleteSession(ctx context.Context, sessionID string) error {
-	return w.app.Sessions.Delete(ctx, sessionID)
+	return w.ops.DeleteSession(ctx, sessionID)
 }
 
 func (w *AppWorkspace) CreateAgentToolSessionID(messageID, toolCallID string) string {
@@ -91,21 +91,15 @@ func (w *AppWorkspace) RoutesChannelEvents() bool { return false }
 // -- Messages --
 
 func (w *AppWorkspace) ListMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
-	// Drain any debounced updates so the caller observes the latest
-	// in-memory state. message.Service buffers streaming deltas and a
-	// cold List would otherwise miss them at session-switch time.
-	if err := w.app.Messages.FlushAll(ctx); err != nil {
-		return nil, err
-	}
-	return w.app.Messages.List(ctx, sessionID)
+	return w.ops.ListMessages(ctx, sessionID)
 }
 
 func (w *AppWorkspace) ListUserMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
-	return w.app.Messages.ListUserMessages(ctx, sessionID)
+	return w.ops.ListUserMessages(ctx, sessionID)
 }
 
 func (w *AppWorkspace) ListAllUserMessages(ctx context.Context) ([]message.Message, error) {
-	return w.app.Messages.ListAllUserMessages(ctx)
+	return w.ops.ListAllUserMessages(ctx)
 }
 
 // -- Agent --
@@ -130,55 +124,18 @@ func (w *AppWorkspace) AgentRunChannel(ctx context.Context, channel, sessionID, 
 }
 
 func (w *AppWorkspace) AgentRunShellCommand(ctx context.Context, sessionID, command string, termWidth int, onProgress func(string), isFirstMessage bool) (proto.ShellCommandResponse, error) {
-	var persist shell.PersistFunc
-	if sessionID != "" {
-		persist = func(cmd, output string, exitCode int) error {
-			return shell.PersistOutput(ctx, w.app.Messages, sessionID, cmd, output, exitCode, w.store.Config().Options.DataDirectory)
-		}
-	}
-
-	opts := shell.RunOptions{
-		Command:   command,
-		Cwd:       w.store.WorkingDir(),
-		TermWidth: termWidth,
-	}
-
-	var result shell.CaptureResult
-	var err error
-
-	if onProgress != nil {
-		result, err = shell.RunAndCaptureStream(ctx, opts, onProgress)
-	} else {
-		result, err = shell.RunAndPersist(ctx, opts, persist)
-	}
-
-	if err != nil && onProgress == nil {
-		return proto.ShellCommandResponse{}, err
-	}
-
-	// Persist if we used the streaming path (persist wasn't called by RunAndPersist).
-	if onProgress != nil && persist != nil {
-		if persistErr := persist(command, result.Output, result.ExitCode); persistErr != nil {
-			slog.Error("Failed to persist shell command output", "error", persistErr, "command", command)
-		}
-	}
-
-	// Generate a title from the shell command if it was the first message.
-	if isFirstMessage && w.app.AgentCoordinator != nil {
-		titleCtx := context.WithoutCancel(ctx)
-		w.app.AgentCoordinator.GenerateTitle(titleCtx, sessionID, "$ "+command)
-	}
-
-	return proto.ShellCommandResponse{
-		Output:   result.Output,
-		ExitCode: result.ExitCode,
-	}, nil
+	return w.ops.RunShellCommand(ctx, backend.ShellCommand{
+		SessionID:      sessionID,
+		Command:        command,
+		Cwd:            w.store.WorkingDir(),
+		TermWidth:      termWidth,
+		OnProgress:     onProgress,
+		IsFirstMessage: isFirstMessage,
+	})
 }
 
 func (w *AppWorkspace) AgentCancel(sessionID string) {
-	if w.app.AgentCoordinator != nil {
-		w.app.AgentCoordinator.Cancel(sessionID)
-	}
+	w.ops.CancelSession(sessionID)
 }
 
 func (w *AppWorkspace) AgentBackground(sessionID string) bool {
@@ -186,16 +143,14 @@ func (w *AppWorkspace) AgentBackground(sessionID string) bool {
 }
 
 func (w *AppWorkspace) AgentInterrupt(sessionID string) {
-	if w.app.AgentCoordinator != nil {
-		w.app.AgentCoordinator.Interrupt(sessionID)
-	}
+	w.ops.Interrupt(sessionID)
 }
 
 func (w *AppWorkspace) AgentRecallQueuedPrompt(_ context.Context, sessionID string) (*message.QueuedPrompt, error) {
 	if w.app.AgentCoordinator == nil {
 		return nil, ErrAgentNotInitialized
 	}
-	return w.app.AgentCoordinator.RecallQueuedPrompt(sessionID), nil
+	return w.ops.RecallQueuedPrompt(sessionID)
 }
 
 func (w *AppWorkspace) AgentIsBusy() bool {
@@ -206,10 +161,7 @@ func (w *AppWorkspace) AgentIsBusy() bool {
 }
 
 func (w *AppWorkspace) AgentIsSessionBusy(sessionID string) bool {
-	if w.app.AgentCoordinator == nil {
-		return false
-	}
-	return w.app.AgentCoordinator.IsSessionBusy(sessionID)
+	return w.ops.IsSessionBusy(sessionID)
 }
 
 func (w *AppWorkspace) AgentModel() AgentModel {
@@ -235,37 +187,25 @@ func (w *AppWorkspace) AgentReadyErr() error {
 }
 
 func (w *AppWorkspace) AgentQueuedPrompts(sessionID string) int {
-	if w.app.AgentCoordinator == nil {
-		return 0
-	}
-	return w.app.AgentCoordinator.QueuedPrompts(sessionID)
+	return w.ops.QueuedPrompts(sessionID)
 }
 
 func (w *AppWorkspace) AgentQueuedPromptsList(sessionID string) []string {
-	if w.app.AgentCoordinator == nil {
-		return nil
-	}
-	return w.app.AgentCoordinator.QueuedPromptsList(sessionID)
+	return w.ops.QueuedPromptsList(sessionID)
 }
 
 func (w *AppWorkspace) AgentClearQueue(sessionID string) {
-	if w.app.AgentCoordinator != nil {
-		w.app.AgentCoordinator.ClearQueue(sessionID)
-	}
+	w.ops.ClearQueue(sessionID)
 }
 
+// AgentSetMain switches the active agent. Like the server, it refuses
+// while the agent is running.
 func (w *AppWorkspace) AgentSetMain(agentID string) error {
-	if w.app.AgentCoordinator == nil {
-		return errors.New("agent coordinator not initialized")
-	}
-	return w.app.AgentCoordinator.SetMainAgent(agentID)
+	return w.ops.SetMainAgent(agentID)
 }
 
 func (w *AppWorkspace) AgentSummarize(ctx context.Context, sessionID string) error {
-	if w.app.AgentCoordinator == nil {
-		return errors.New("agent coordinator not initialized")
-	}
-	return w.app.AgentCoordinator.Summarize(ctx, sessionID)
+	return w.ops.Summarize(ctx, sessionID)
 }
 
 func (w *AppWorkspace) UpdateAgentModel(ctx context.Context) error {
@@ -281,21 +221,24 @@ func (w *AppWorkspace) InitCoderAgentNonInteractive(ctx context.Context) error {
 }
 
 func (w *AppWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	return w.app.GetDefaultSmallModel(providerID)
+	return w.ops.GetDefaultSmallModel(providerID)
 }
 
 // -- Permissions --
 
 func (w *AppWorkspace) PermissionGrant(perm permission.PermissionRequest) bool {
-	return w.app.Permissions.Grant(perm)
+	resolved, _ := w.ops.ResolvePermission(perm, proto.PermissionAllow)
+	return resolved
 }
 
 func (w *AppWorkspace) PermissionGrantPersistent(perm permission.PermissionRequest) bool {
-	return w.app.Permissions.GrantPersistent(perm)
+	resolved, _ := w.ops.ResolvePermission(perm, proto.PermissionAllowForSession)
+	return resolved
 }
 
 func (w *AppWorkspace) PermissionDeny(perm permission.PermissionRequest) bool {
-	return w.app.Permissions.Deny(perm)
+	resolved, _ := w.ops.ResolvePermission(perm, proto.PermissionDeny)
+	return resolved
 }
 
 func (w *AppWorkspace) PermissionSkipRequests() bool {
@@ -319,31 +262,31 @@ func (w *AppWorkspace) QuestionCancel() bool {
 // -- FileTracker --
 
 func (w *AppWorkspace) FileTrackerRecordRead(ctx context.Context, sessionID, path string) {
-	w.app.FileTracker.RecordRead(ctx, sessionID, path)
+	w.ops.FileTrackerRecordRead(ctx, sessionID, path)
 }
 
 func (w *AppWorkspace) FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time {
-	return w.app.FileTracker.LastReadTime(ctx, sessionID, path)
+	return w.ops.FileTrackerLastReadTime(ctx, sessionID, path)
 }
 
 func (w *AppWorkspace) FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
-	return w.app.FileTracker.ListReadFiles(ctx, sessionID)
+	return w.ops.FileTrackerListReadFiles(ctx, sessionID)
 }
 
 // -- History --
 
 func (w *AppWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
-	return w.app.History.ListBySession(ctx, sessionID)
+	return w.ops.ListSessionHistory(ctx, sessionID)
 }
 
 // -- LSP --
 
 func (w *AppWorkspace) LSPStart(ctx context.Context, path string) {
-	w.app.LSPManager.Start(ctx, path)
+	w.ops.LSPStart(ctx, path)
 }
 
 func (w *AppWorkspace) LSPStopAll(ctx context.Context) {
-	w.app.LSPManager.StopAll(ctx)
+	w.ops.LSPStopAll(ctx)
 }
 
 func (w *AppWorkspace) LSPGetStates() map[string]LSPClientInfo {
@@ -380,7 +323,7 @@ func (w *AppWorkspace) WorkingDir() string {
 }
 
 func (w *AppWorkspace) GitBranch(context.Context) (string, error) {
-	return gitutil.CurrentBranch(w.store.WorkingDir()), nil
+	return w.ops.GitBranch(), nil
 }
 
 func (w *AppWorkspace) Resolver() config.VariableResolver {
@@ -390,64 +333,57 @@ func (w *AppWorkspace) Resolver() config.VariableResolver {
 // -- Config mutations --
 
 func (w *AppWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
-	return w.store.UpdatePreferredModel(scope, modelType, model)
+	return w.ops.UpdatePreferredModel(scope, modelType, model)
 }
 
 func (w *AppWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {
-	return w.store.SetCompactMode(scope, enabled)
+	return w.ops.SetCompactMode(scope, enabled)
 }
 
 func (w *AppWorkspace) SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error {
-	if err := w.store.SetProviderAPIKey(scope, providerID, apiKey); err != nil {
-		return err
-	}
-	w.store.SignalAuthComplete(providerID)
-	return nil
+	return w.ops.SetProviderAPIKey(scope, providerID, apiKey)
 }
 
 func (w *AppWorkspace) SetConfigField(scope config.Scope, key string, value any) error {
-	return w.store.SetConfigField(scope, key, value)
+	return w.ops.SetConfigField(scope, key, value)
 }
 
 func (w *AppWorkspace) SetConfigFields(scope config.Scope, fields map[string]any) error {
-	return w.store.SetConfigFields(scope, fields)
+	return w.ops.SetConfigFields(scope, fields)
 }
 
 func (w *AppWorkspace) RemoveConfigField(scope config.Scope, key string) error {
-	return w.store.RemoveConfigField(scope, key)
+	return w.ops.RemoveConfigField(scope, key)
 }
 
 func (w *AppWorkspace) ImportCopilot() (*oauth.Token, bool) {
-	return w.store.ImportCopilot()
+	return w.ops.ImportCopilot()
 }
 
 func (w *AppWorkspace) RefreshOAuthToken(ctx context.Context, scope config.Scope, providerID string) error {
-	return w.store.RefreshOAuthToken(ctx, scope, providerID)
+	return w.ops.RefreshOAuthToken(ctx, scope, providerID)
 }
 
 // -- Project lifecycle --
 
 func (w *AppWorkspace) ProjectNeedsInitialization() (bool, error) {
-	return config.ProjectNeedsInitialization(w.store)
+	return w.ops.ProjectNeedsInitialization()
 }
 
 func (w *AppWorkspace) MarkProjectInitialized() error {
-	return config.MarkProjectInitialized(w.store)
+	return w.ops.MarkProjectInitialized()
 }
 
 func (w *AppWorkspace) InitializePrompt() (string, error) {
-	return agent.InitializePrompt(w.store)
+	return w.ops.InitializePrompt()
 }
 
 func (w *AppWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
-	mgr := w.app.Skills
-	mgr.Refresh(skills.ConfigDiscovery(w.store))
-	return skills.Catalog(mgr.ActiveSkills(), mgr.ResolvedPaths(), mgr.WorkingDir()), nil
+	return w.ops.ListSkills(), nil
 }
 
 func (w *AppWorkspace) ReadSkill(_ context.Context, skillID string) ([]byte, skills.SkillReadResult, error) {
-	mgr := w.app.Skills
-	return skills.ReadContent(mgr.ActiveSkills(), mgr.ResolvedPaths(), mgr.WorkingDir(), skillID)
+	return w.ops.ReadSkill(skillID)
 }
 
 // -- MCP operations --
@@ -465,94 +401,54 @@ func (w *AppWorkspace) MCPRefreshResources(ctx context.Context, name string) {
 }
 
 func (w *AppWorkspace) RefreshMCPTools(ctx context.Context, name string) {
-	mcptools.RefreshTools(ctx, w.store, name)
+	w.ops.RefreshMCPTools(ctx, name)
 }
 
 func (w *AppWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
-	contents, err := mcptools.ReadResource(ctx, w.store, name, uri)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]MCPResourceContents, len(contents))
-	for i, c := range contents {
-		result[i] = MCPResourceContents{
-			URI:      c.URI,
-			MIMEType: c.MIMEType,
-			Text:     c.Text,
-			Blob:     c.Blob,
-		}
-	}
-	return result, nil
+	return w.ops.ReadMCPResource(ctx, name, uri)
 }
 
 func (w *AppWorkspace) ListMCPPrompts(context.Context) ([]commands.MCPPrompt, error) {
-	return commands.LoadMCPPrompts()
+	return w.ops.ListMCPPrompts()
 }
 
 func (w *AppWorkspace) GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error) {
-	return commands.GetMCPPrompt(w.store, clientID, promptID, args)
+	return w.ops.GetMCPPrompt(clientID, promptID, args)
 }
 
 func (w *AppWorkspace) EnableDockerMCP(ctx context.Context) error {
-	mcpConfig, err := w.store.PrepareDockerMCPConfig()
-	if err != nil {
-		return err
-	}
-
-	if err := mcptools.InitializeSingle(ctx, config.DockerMCPName, w.store); err != nil {
-		disableErr := mcptools.DisableSingle(w.store, config.DockerMCPName)
-		w.store.RemoveDockerMCPInMemory()
-		return fmt.Errorf("failed to start docker MCP: %w", errors.Join(err, disableErr))
-	}
-
-	if err := w.store.PersistDockerMCPConfig(mcpConfig); err != nil {
-		disableErr := mcptools.DisableSingle(w.store, config.DockerMCPName)
-		w.store.RemoveDockerMCPInMemory()
-		return fmt.Errorf("docker MCP started but failed to persist configuration: %w", errors.Join(err, disableErr))
-	}
-
-	return nil
+	return w.ops.EnableDockerMCP(ctx)
 }
 
 func (w *AppWorkspace) DisableDockerMCP() error {
-	if err := mcptools.DisableSingle(w.store, config.DockerMCPName); err != nil {
-		return fmt.Errorf("failed to disable docker MCP: %w", err)
-	}
-	return w.store.DisableDockerMCP()
+	return w.ops.DisableDockerMCP()
 }
 
 // MCPServersDisabled returns the MCP servers disabled for this
 // repository. The override set is shared by every session, including
 // sub-agent sessions.
 func (w *AppWorkspace) MCPServersDisabled(ctx context.Context) ([]string, error) {
-	return w.app.Sessions.MCPDisabledServers(ctx)
+	return w.ops.MCPServersDisabled(ctx)
 }
 
 // MCPServersEnabled returns the MCP servers with a repository-scoped
 // enabled override: config-disabled servers the user enabled here. Startup
 // force-starts them so the toggle survives restarts.
 func (w *AppWorkspace) MCPServersEnabled(ctx context.Context) ([]string, error) {
-	return w.app.Sessions.MCPServersEnabled(ctx)
+	return w.ops.MCPServersEnabled(ctx)
 }
 
 // MCPSetServerDisabled adds or removes a repository-scoped MCP override
 // and applies it to the running client. Config files are never touched.
 func (w *AppWorkspace) MCPSetServerDisabled(ctx context.Context, name string, disabled bool) error {
-	if err := w.app.Sessions.SetMCPServerDisabled(ctx, name, disabled); err != nil {
-		return err
-	}
-	return mcptools.SetLocalDisabled(ctx, w.store, name, disabled)
+	return w.ops.SetMCPServerDisabled(ctx, name, disabled)
 }
 
 // MCPSetServerConfigDisabled toggles an MCP server's disabled flag in the
 // global config and applies the change to the running client unless a
 // repository-scoped override takes precedence.
 func (w *AppWorkspace) MCPSetServerConfigDisabled(ctx context.Context, name string, disabled bool) error {
-	override, err := session.HasMCPOverride(ctx, w.app.Sessions, name)
-	if err != nil {
-		return err
-	}
-	return mcptools.SetConfigDisabled(ctx, w.store, config.ScopeGlobal, name, disabled, override)
+	return w.ops.SetMCPServerConfigDisabled(ctx, name, disabled)
 }
 
 // MCPStartServer starts the named MCP server even when its config entry is
@@ -560,15 +456,18 @@ func (w *AppWorkspace) MCPSetServerConfigDisabled(ctx context.Context, name stri
 // MCPSetServerDisabled makes the start survive restarts. Config files are
 // never touched.
 func (w *AppWorkspace) MCPStartServer(ctx context.Context, name string) error {
-	return mcptools.InitializeSingleForced(ctx, name, w.store)
+	return w.ops.StartMCPServer(ctx, name)
 }
 
+// MCPAuthenticate runs the OAuth flow for a named MCP server, opening the
+// authorization page in the local browser. (The server suppresses the
+// browser and lets the remote client open it instead.)
 func (w *AppWorkspace) MCPAuthenticate(ctx context.Context, name string) error {
 	return mcptools.AuthenticateMCP(ctx, w.store, name)
 }
 
 func (w *AppWorkspace) MCPPendingAuth() []mcptools.PendingAuthServer {
-	return mcptools.PendingAuthMCPs(w.store)
+	return w.ops.MCPPendingAuth()
 }
 
 func (w *AppWorkspace) MCPAuthURL(name string) string {
@@ -595,9 +494,6 @@ func (w *AppWorkspace) Store() *config.ConfigStore {
 	return w.store
 }
 
-// Compile-time check that AppWorkspace implements Workspace.
-var _ Workspace = (*AppWorkspace)(nil)
-
 func (w *AppWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {
-	return w.app.Sessions.SetKeptSkill(ctx, sessionID, skill, on)
+	return w.ops.SetKeptSkill(ctx, sessionID, skill, on)
 }

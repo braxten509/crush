@@ -85,6 +85,9 @@ func (c *Client) GetGlobalConfig(ctx context.Context) (*config.Config, error) {
 		return nil, err
 	}
 	defer rsp.Body.Close()
+	if err := checkStatus(rsp); err != nil {
+		return nil, fmt.Errorf("failed to get server config: %w", err)
+	}
 	if err := json.NewDecoder(rsp.Body).Decode(&cfg); err != nil {
 		return nil, err
 	}
@@ -98,8 +101,8 @@ func (c *Client) Health(ctx context.Context) error {
 		return err
 	}
 	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server health check failed: %s", rsp.Status)
+	if err := checkStatus(rsp); err != nil {
+		return fmt.Errorf("server health check failed: %w", err)
 	}
 	return nil
 }
@@ -112,6 +115,9 @@ func (c *Client) VersionInfo(ctx context.Context) (*proto.VersionInfo, error) {
 		return nil, err
 	}
 	defer rsp.Body.Close()
+	if err := checkStatus(rsp); err != nil {
+		return nil, fmt.Errorf("failed to get server version: %w", err)
+	}
 	if err := json.NewDecoder(rsp.Body).Decode(&vi); err != nil {
 		return nil, err
 	}
@@ -135,10 +141,11 @@ func (c *Client) ShutdownServerIfIdle(ctx context.Context) error {
 		return err
 	}
 	defer rsp.Body.Close()
-	if rsp.StatusCode == http.StatusOK {
+	err = checkStatus(rsp)
+	if err == nil {
 		return nil
 	}
-	failure := fmt.Errorf("server shutdown failed: %s", rsp.Status)
+	failure := fmt.Errorf("server shutdown failed: %w", err)
 	switch rsp.StatusCode {
 	case http.StatusConflict:
 		return fmt.Errorf("%w: %w", ErrServerBusy, failure)
@@ -167,12 +174,12 @@ func (c *Client) ShutdownServer(ctx context.Context) error {
 		return err
 	}
 	defer rsp.Body.Close()
-	if rsp.StatusCode == http.StatusOK {
+	err = checkStatus(rsp)
+	if err == nil {
 		return nil
 	}
-	failure := fmt.Errorf("server shutdown failed: %s", rsp.Status)
-	switch rsp.StatusCode {
-	case http.StatusConflict:
+	failure := fmt.Errorf("server shutdown failed: %w", err)
+	if rsp.StatusCode == http.StatusConflict {
 		return fmt.Errorf("%w: %w", ErrServerBusy, failure)
 	}
 	return failure

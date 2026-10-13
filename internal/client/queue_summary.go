@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/charmbracelet/crush/internal/message"
-	"net/http"
 	"net/url"
+
+	"github.com/charmbracelet/crush/internal/message"
 )
 
 func (c *Client) GetAgentSessionQueuedPromptSummaries(ctx context.Context, id, sessionID string) ([]message.QueuedPromptSummary, error) {
@@ -15,8 +15,8 @@ func (c *Client) GetAgentSessionQueuedPromptSummaries(ctx context.Context, id, s
 		return nil, err
 	}
 	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("queued prompts: HTTP %d", rsp.StatusCode)
+	if err := checkStatus(rsp); err != nil {
+		return nil, fmt.Errorf("queued prompts: %w", err)
 	}
 	var result []message.QueuedPromptSummary
 	err = json.NewDecoder(rsp.Body).Decode(&result)

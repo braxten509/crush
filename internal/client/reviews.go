@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
 	"github.com/charmbracelet/crush/internal/proto"
 )
@@ -15,10 +14,21 @@ func (c *Client) LoadMessageReview(ctx context.Context, workspaceID, sessionID, 
 		return proto.Message{}, err
 	}
 	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return proto.Message{}, fmt.Errorf("diff details are unavailable (only the latest five prompts keep them)")
+	if err := checkStatus(rsp); err != nil {
+		return proto.Message{}, &reviewUnavailableError{err: err}
 	}
 	var msg proto.Message
 	err = json.NewDecoder(rsp.Body).Decode(&msg)
 	return msg, err
 }
+
+// reviewUnavailableError keeps the user-facing explanation for a missing
+// review while still exposing the underlying status error (for example
+// [ErrNotFound]) to errors.Is.
+type reviewUnavailableError struct{ err error }
+
+func (e *reviewUnavailableError) Error() string {
+	return "diff details are unavailable (only the latest five prompts keep them)"
+}
+
+func (e *reviewUnavailableError) Unwrap() error { return e.err }

@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/skills"
-	"net/http"
 )
 
 func (c *Client) InstalledSkills(ctx context.Context, id string) ([]skills.InstalledSkill, error) {
@@ -15,8 +16,8 @@ func (c *Client) InstalledSkills(ctx context.Context, id string) ([]skills.Insta
 		return nil, err
 	}
 	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("list installed skills: HTTP %d", rsp.StatusCode)
+	if err := checkStatus(rsp); err != nil {
+		return nil, fmt.Errorf("list installed skills: %w", err)
 	}
 	var entries []skills.InstalledSkill
 	err = json.NewDecoder(rsp.Body).Decode(&entries)
@@ -29,12 +30,8 @@ func (c *Client) ManageSkill(ctx context.Context, id, action, name string, enabl
 		return err
 	}
 	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		var result struct {
-			Message string `json:"message"`
-		}
-		_ = json.NewDecoder(rsp.Body).Decode(&result)
-		return fmt.Errorf("manage skill: HTTP %d %s", rsp.StatusCode, result.Message)
+	if err := checkStatus(rsp); err != nil {
+		return fmt.Errorf("manage skill: %w", err)
 	}
 	return nil
 }

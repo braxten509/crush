@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/charmbracelet/crush/internal/session"
 	"net/http"
 	"net/url"
+
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 func (c *Client) ListSavedSessions(ctx context.Context, workspace, selected string) ([]session.Session, error) {
@@ -15,21 +16,22 @@ func (c *Client) ListSavedSessions(ctx context.Context, workspace, selected stri
 		return nil, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("cannot list saved chats: status %d", response.StatusCode)
+	if err := checkStatus(response); err != nil {
+		return nil, fmt.Errorf("cannot list saved chats: %w", err)
 	}
 	var result []session.Session
 	err = json.NewDecoder(response.Body).Decode(&result)
 	return result, err
 }
+
 func (c *Client) ChangeSavedSession(ctx context.Context, workspace string, target session.Session, remove bool) error {
 	response, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/saved-sessions", workspace), nil, jsonBody(session.CatalogChange{Session: target, Remove: remove}), http.Header{"Content-Type": []string{"application/json"}})
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("cannot change saved chat: status %d", response.StatusCode)
+	if err := checkStatus(response); err != nil {
+		return fmt.Errorf("cannot change saved chat: %w", err)
 	}
 	return nil
 }
@@ -40,8 +42,8 @@ func (c *Client) DiscardEmptySession(ctx context.Context, workspace, id string) 
 		return err
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("cannot discard empty chat: status %d", response.StatusCode)
+	if err := checkStatus(response); err != nil {
+		return fmt.Errorf("cannot discard empty chat: %w", err)
 	}
 	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 )
 
 // GitBranch returns the current Git branch of the workspace's working
@@ -16,8 +15,8 @@ func (c *Client) GitBranch(ctx context.Context, id string) (string, error) {
 		return "", fmt.Errorf("failed to get git branch: %w", err)
 	}
 	defer rsp.Body.Close()
-	if rsp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get git branch: status code %d", rsp.StatusCode)
+	if err := checkStatus(rsp); err != nil {
+		return "", fmt.Errorf("failed to get git branch: %w", err)
 	}
 	var result struct {
 		Branch string `json:"branch"`

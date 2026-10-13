@@ -18,6 +18,7 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 		outsideWorktree: !isInsideWorktree(),
 	}
 
+	store.loading.Store(true)
 	res, err := buildConfig(context.Background(), buildParams{
 		workingDir:      workingDir,
 		dataDir:         dataDir,
@@ -33,6 +34,7 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 		},
 		onCatalog: store.refreshShadowCatalogs,
 	})
+	store.loading.Store(false)
 
 	// Hold writeMu for the rest of the load so persisting the pipeline's
 	// writes below cannot trigger an auto-reload.
@@ -190,6 +192,12 @@ func (s *ConfigStore) applyPendingWrites(writes []pendingWrite) {
 func (s *ConfigStore) autoReload(ctx context.Context) error {
 	if s.workingDir == "" {
 		return nil // Expected skip: working directory not set
+	}
+	// Skip while Load builds the initial config: the write came from the
+	// load itself (an OAuth refresh during the catalog fetch), whose result
+	// Load publishes anyway, and reloading would re-enter that fetch.
+	if s.loading.Load() {
+		return nil
 	}
 	// Skip if a reload is already in progress. This handles both
 	// concurrent auto-reloads after parallel writes and re-entrant

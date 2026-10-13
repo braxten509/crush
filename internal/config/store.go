@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/env"
@@ -93,6 +94,12 @@ type ConfigStore struct {
 	// working tree (checked once, as it shells out to git).
 	debug           bool
 	outsideWorktree bool
+
+	// loading is set while Load builds the initial config. Writes made
+	// meanwhile (an OAuth refresh triggered by the catalog fetch) must not
+	// auto-reload: a reload re-enters the provider catalog fetch that is
+	// still running, which deadlocks.
+	loading atomic.Bool
 }
 
 // Config returns the pure-data config struct (read-only after load).

@@ -920,96 +920,11 @@ func resolveSelectedModels(cfg *Config, knownProviders []catwalk.Provider) (reso
 
 	largeModelSelected, largeModelConfigured := cfg.Models[SelectedModelTypeLarge]
 	if largeModelConfigured {
-		if largeModelSelected.Model != "" {
-			large.Model = largeModelSelected.Model
-		}
-		if largeModelSelected.Provider != "" {
-			large.Provider = largeModelSelected.Provider
-		}
-		model := cfg.GetModel(large.Provider, large.Model)
-		if model == nil {
-			large = defaultLarge
-			result.LargeFallback = true
-		} else {
-			large.ServiceTier = largeModelSelected.ServiceTier
-			large.Ultracode = largeModelSelected.Ultracode
-			if largeModelSelected.MaxTokens > 0 {
-				large.MaxTokens = largeModelSelected.MaxTokens
-			} else {
-				large.MaxTokens = model.DefaultMaxTokens
-			}
-			if largeModelSelected.ReasoningEffort != "" {
-				large.ReasoningEffort = largeModelSelected.ReasoningEffort
-			} else {
-				large.ReasoningEffort = model.DefaultReasoningEffort
-			}
-			large.Think = largeModelSelected.Think
-			if largeModelSelected.Temperature != nil {
-				large.Temperature = largeModelSelected.Temperature
-			}
-			if largeModelSelected.TopP != nil {
-				large.TopP = largeModelSelected.TopP
-			}
-			if largeModelSelected.TopK != nil {
-				large.TopK = largeModelSelected.TopK
-			}
-			if largeModelSelected.FrequencyPenalty != nil {
-				large.FrequencyPenalty = largeModelSelected.FrequencyPenalty
-			}
-			if largeModelSelected.PresencePenalty != nil {
-				large.PresencePenalty = largeModelSelected.PresencePenalty
-			}
-			if largeModelSelected.ProviderOptions != nil {
-				large.ProviderOptions = maps.Clone(largeModelSelected.ProviderOptions)
-			}
-		}
+		large, result.LargeFallback = cfg.resolveSelectedModel(defaultLarge, largeModelSelected)
 	}
 	smallModelSelected, smallModelConfigured := cfg.Models[SelectedModelTypeSmall]
 	if smallModelConfigured {
-		if smallModelSelected.Model != "" {
-			small.Model = smallModelSelected.Model
-		}
-		if smallModelSelected.Provider != "" {
-			small.Provider = smallModelSelected.Provider
-		}
-
-		model := cfg.GetModel(small.Provider, small.Model)
-		if model == nil {
-			small = defaultSmall
-			result.SmallFallback = true
-		} else {
-			small.ServiceTier = smallModelSelected.ServiceTier
-			small.Ultracode = smallModelSelected.Ultracode
-			if smallModelSelected.MaxTokens > 0 {
-				small.MaxTokens = smallModelSelected.MaxTokens
-			} else {
-				small.MaxTokens = model.DefaultMaxTokens
-			}
-			if smallModelSelected.ReasoningEffort != "" {
-				small.ReasoningEffort = smallModelSelected.ReasoningEffort
-			} else {
-				small.ReasoningEffort = model.DefaultReasoningEffort
-			}
-			if smallModelSelected.Temperature != nil {
-				small.Temperature = smallModelSelected.Temperature
-			}
-			if smallModelSelected.TopP != nil {
-				small.TopP = smallModelSelected.TopP
-			}
-			if smallModelSelected.TopK != nil {
-				small.TopK = smallModelSelected.TopK
-			}
-			if smallModelSelected.FrequencyPenalty != nil {
-				small.FrequencyPenalty = smallModelSelected.FrequencyPenalty
-			}
-			if smallModelSelected.PresencePenalty != nil {
-				small.PresencePenalty = smallModelSelected.PresencePenalty
-			}
-			if smallModelSelected.ProviderOptions != nil {
-				small.ProviderOptions = maps.Clone(smallModelSelected.ProviderOptions)
-			}
-			small.Think = smallModelSelected.Think
-		}
+		small, result.SmallFallback = cfg.resolveSelectedModel(defaultSmall, smallModelSelected)
 	}
 
 	// When small isn't explicitly configured and the provider isn't a
@@ -1035,6 +950,57 @@ func resolveSelectedModels(cfg *Config, knownProviders []catwalk.Provider) (reso
 	result.Large = large
 	result.Small = small
 	return result, nil
+}
+
+// resolveSelectedModel lays a configured model selection over the default
+// one. When the selected model does not exist it returns the default and
+// reports the fallback. Otherwise unset limits and reasoning effort come
+// from the model's defaults, and the sampling settings come from the
+// selection.
+func (c *Config) resolveSelectedModel(def, selected SelectedModel) (SelectedModel, bool) {
+	resolved := def
+	if selected.Model != "" {
+		resolved.Model = selected.Model
+	}
+	if selected.Provider != "" {
+		resolved.Provider = selected.Provider
+	}
+	model := c.GetModel(resolved.Provider, resolved.Model)
+	if model == nil {
+		return def, true
+	}
+	resolved.ServiceTier = selected.ServiceTier
+	resolved.Ultracode = selected.Ultracode
+	if selected.MaxTokens > 0 {
+		resolved.MaxTokens = selected.MaxTokens
+	} else {
+		resolved.MaxTokens = model.DefaultMaxTokens
+	}
+	if selected.ReasoningEffort != "" {
+		resolved.ReasoningEffort = selected.ReasoningEffort
+	} else {
+		resolved.ReasoningEffort = model.DefaultReasoningEffort
+	}
+	resolved.Think = selected.Think
+	if selected.Temperature != nil {
+		resolved.Temperature = selected.Temperature
+	}
+	if selected.TopP != nil {
+		resolved.TopP = selected.TopP
+	}
+	if selected.TopK != nil {
+		resolved.TopK = selected.TopK
+	}
+	if selected.FrequencyPenalty != nil {
+		resolved.FrequencyPenalty = selected.FrequencyPenalty
+	}
+	if selected.PresencePenalty != nil {
+		resolved.PresencePenalty = selected.PresencePenalty
+	}
+	if selected.ProviderOptions != nil {
+		resolved.ProviderOptions = maps.Clone(selected.ProviderOptions)
+	}
+	return resolved, false
 }
 
 // lookupConfigs searches config files starting at cwd and walking up

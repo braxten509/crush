@@ -307,9 +307,7 @@ func (s *cliSteps) takePendingSteered() []SessionAgentCall {
 	defer s.steerMu.Unlock()
 	var calls []SessionAgentCall
 	for _, st := range s.steered {
-		if !st.hidden {
-			calls = append(calls, st.calls...)
-		}
+		calls = append(calls, st.calls...)
 	}
 	s.steered = nil
 	return calls
@@ -318,9 +316,6 @@ func (s *cliSteps) takePendingSteered() []SessionAgentCall {
 type cliSteered struct {
 	text  string
 	calls []SessionAgentCall
-	// hidden drops it from the queue display once the queue is cleared;
-	// it can't be unsent, so it still shows in chat if the CLI takes it.
-	hidden bool
 }
 
 // pendingSteered lists the prompts handed to the CLI but not taken in yet.
@@ -329,22 +324,11 @@ func (s *cliSteps) pendingSteered() []string {
 	defer s.steerMu.Unlock()
 	var prompts []string
 	for _, st := range s.steered {
-		if st.hidden {
-			continue
-		}
 		for _, q := range st.calls {
 			prompts = append(prompts, q.Prompt)
 		}
 	}
 	return prompts
-}
-
-func (s *cliSteps) hideSteered() {
-	s.steerMu.Lock()
-	defer s.steerMu.Unlock()
-	for i := range s.steered {
-		s.steered[i].hidden = true
-	}
 }
 
 // steer takes the queued prompts for the CLI to fold into the running turn,

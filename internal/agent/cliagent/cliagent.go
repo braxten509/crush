@@ -584,23 +584,6 @@ func (s *steered) take(text string) bool {
 	return false
 }
 
-// takeIn removes and returns the steered texts content contains; a CLI may
-// hand several queued messages to the model at once.
-func (s *steered) takeIn(content string) []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var took, kept []string
-	for _, t := range s.texts {
-		if strings.Contains(content, t) {
-			took = append(took, t)
-		} else {
-			kept = append(kept, t)
-		}
-	}
-	s.texts = kept
-	return took
-}
-
 func (s *steered) pending() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -263,13 +263,6 @@ func assistantEntries(m message.Message, last bool, results map[string]resultAt,
 	return out
 }
 
-func stepStateThinking(streaming bool) string {
-	if streaming {
-		return "running"
-	}
-	return "done"
-}
-
 func askItem(tc message.ToolCall, res *resultAt, at int64) Item {
 	var p tools.QuestionParams
 	_ = json.Unmarshal([]byte(tc.Input), &p)

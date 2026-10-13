@@ -7,9 +7,6 @@ func (s *cliSteps) pendingSteeredSummaries() []message.QueuedPromptSummary {
 	defer s.steerMu.Unlock()
 	var result []message.QueuedPromptSummary
 	for _, st := range s.steered {
-		if st.hidden {
-			continue
-		}
 		for _, call := range st.calls {
 			result = append(result, message.QueuedPromptSummary{Prompt: call.Prompt, SubmissionID: call.SubmissionID})
 		}

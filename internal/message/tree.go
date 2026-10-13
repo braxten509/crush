@@ -74,27 +74,6 @@ func (s *service) TreeRevision(ctx context.Context, id string) (int64, error) {
 	}
 	return storage.TreeRevision(ctx, id)
 }
-func (s *service) activeTree(ctx context.Context, id string, rows []db.Message) ([]db.Message, error) {
-	storage, ok := s.q.(treeStorage)
-	if !ok {
-		return rows, nil
-	}
-	ids, err := storage.TreePath(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	byID := make(map[string]db.Message, len(rows))
-	for _, row := range rows {
-		byID[row.ID] = row
-	}
-	active := make([]db.Message, 0, len(ids))
-	for _, id := range ids {
-		if row, ok := byID[id]; ok {
-			active = append(active, row)
-		}
-	}
-	return active, nil
-}
 
 type BranchSummary struct{ Text, Model, Provider, FromID, AncestorID string }
 

@@ -109,12 +109,8 @@ type Server struct {
 	done    chan struct{}
 }
 
-// Start shares the window. It fails when Tailscale isn't running here.
-func Start(src Source) (*Server, error) {
-	return StartContext(context.Background(), src)
-}
-
-// StartContext lets a dismissed setup cancel discovery before sharing starts.
+// StartContext shares the window. It fails when Tailscale isn't running
+// here; ctx lets a dismissed setup cancel discovery before sharing starts.
 func StartContext(ctx context.Context, src Source) (*Server, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()

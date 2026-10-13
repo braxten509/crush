@@ -32,6 +32,7 @@ import (
 	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/noninteractive"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
@@ -639,38 +640,33 @@ func (app *App) restoreModelFromSession(ctx context.Context, sessionID string) e
 func (app *App) overrideModelsForNonInteractive(ctx context.Context, largeModel, smallModel string) error {
 	providers := app.config.Config().Providers.Copy()
 
-	largeMatches, smallMatches, err := findModels(providers, largeModel, smallModel)
-	if err != nil {
-		return err
-	}
-
 	var largeProviderID string
 
 	// Override large model.
 	if largeModel != "" {
-		found, err := validateMatches(largeMatches, largeModel, "large")
+		found, err := noninteractive.ResolveModel(providers, largeModel, "large")
 		if err != nil {
 			return err
 		}
-		largeProviderID = found.provider
-		slog.Info("Overriding large model for non-interactive run", "provider", found.provider, "model", found.modelID)
+		largeProviderID = found.Provider
+		slog.Info("Overriding large model for non-interactive run", "provider", found.Provider, "model", found.ModelID)
 		app.config.OverridePreferredModel(config.SelectedModelTypeLarge, config.SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
+			Provider: found.Provider,
+			Model:    found.ModelID,
 		})
 	}
 
 	// Override small model.
 	switch {
 	case smallModel != "":
-		found, err := validateMatches(smallMatches, smallModel, "small")
+		found, err := noninteractive.ResolveModel(providers, smallModel, "small")
 		if err != nil {
 			return err
 		}
-		slog.Info("Overriding small model for non-interactive run", "provider", found.provider, "model", found.modelID)
+		slog.Info("Overriding small model for non-interactive run", "provider", found.Provider, "model", found.ModelID)
 		app.config.OverridePreferredModel(config.SelectedModelTypeSmall, config.SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
+			Provider: found.Provider,
+			Model:    found.ModelID,
 		})
 
 	case largeModel != "":

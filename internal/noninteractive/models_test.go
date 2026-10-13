@@ -1,4 +1,4 @@
-package app
+package noninteractive
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseModelStr(t *testing.T) {
+func TestParseModelString(t *testing.T) {
 	tests := []struct {
 		name            string
 		modelStr        string
@@ -63,7 +63,7 @@ func TestParseModelStr(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			providers := tt.setupProviders()
-			filter, modelID := parseModelStr(providers, tt.modelStr)
+			filter, modelID := parseModelString(providers, tt.modelStr)
 
 			require.Equal(t, tt.expectedFilter, filter, "provider filter mismatch")
 			require.Equal(t, tt.expectedModelID, modelID, "model ID mismatch")
@@ -183,16 +183,7 @@ func TestFindModels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			providers := tt.setupProviders()
 
-			// Use findModels with the model as "large" and empty "small".
-			matches, _, err := findModels(providers, tt.modelStr, "")
-			if err != nil {
-				if tt.expectError {
-					require.Contains(t, err.Error(), tt.errorContains)
-				} else {
-					require.NoError(t, err)
-				}
-				return
-			}
+			matches := findModels(providers, tt.modelStr)
 
 			// Validate the matches.
 			match, err := validateMatches(matches, tt.modelStr, "large")
@@ -202,9 +193,81 @@ func TestFindModels(t *testing.T) {
 				require.Contains(t, err.Error(), tt.errorContains)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedProvider, match.provider)
-				require.Equal(t, tt.expectedModelID, match.modelID)
+				require.Equal(t, tt.expectedProvider, match.Provider)
+				require.Equal(t, tt.expectedModelID, match.ModelID)
 			}
 		})
 	}
+}
+
+// characterizationProviders exercises the cases on which the two former
+// copies of the matcher (in-process app and client/server cmd) disagreed.
+func characterizationProviders() map[string]config.ProviderConfig {
+	return map[string]config.ProviderConfig{
+		"openai":     {ID: "openai", Models: []catwalk.Model{{ID: "gpt-4o"}, {ID: "shared"}}},
+		"anthropic":  {ID: "anthropic", Models: []catwalk.Model{{ID: "claude-x"}, {ID: "shared"}}},
+		"synthetic":  {ID: "synthetic", Models: []catwalk.Model{{ID: "moonshot/kimi-k2"}}},
+		"openrouter": {ID: "openrouter", Models: []catwalk.Model{{ID: "anthropic/claude-x"}, {ID: "anthropic/claude-or"}}},
+		"off":        {ID: "off", Disable: true, Models: []catwalk.Model{{ID: "off-model"}}},
+	}
+}
+
+// TestResolveModel pins the unified semantics. Rows marked "changed" used to
+// resolve differently in at least one of the two former copies.
+func TestResolveModel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in       string
+		provider string
+		model    string
+		errPart  string
+	}{
+		{in: "gpt-4o", provider: "openai", model: "gpt-4o"},
+		{in: "GPT-4O", provider: "openai", model: "gpt-4o"},
+		{in: "openai/gpt-4o", provider: "openai", model: "gpt-4o"},
+		{in: "openai/GPT-4O", provider: "openai", model: "gpt-4o"},
+		// Changed: the provider prefix is case-insensitive (was "not found"
+		// in both copies).
+		{in: "OpenAI/gpt-4o", provider: "openai", model: "gpt-4o"},
+		// Changed for client/server mode, which split on the first slash
+		// and reported "not found".
+		{in: "moonshot/kimi-k2", provider: "synthetic", model: "moonshot/kimi-k2"},
+		{in: "synthetic/moonshot/kimi-k2", provider: "synthetic", model: "moonshot/kimi-k2"},
+		// A provider-qualified match wins over a full-ID match elsewhere.
+		{in: "anthropic/claude-x", provider: "anthropic", model: "claude-x"},
+		{in: "openrouter/anthropic/claude-x", provider: "openrouter", model: "anthropic/claude-x"},
+		// Changed: the vendor prefix of an OpenRouter-style ID names a
+		// provider that lacks the model, so the whole string is tried as an
+		// ID (was "not found" in both copies).
+		{in: "anthropic/claude-or", provider: "openrouter", model: "anthropic/claude-or"},
+		{in: "shared", errPart: `large model: model "shared" found in multiple providers: `},
+		{in: "off-model", errPart: `large model "off-model" not found`},
+		{in: "off/off-model", errPart: `large model "off/off-model" not found`},
+		{in: "nope/gpt-4o", errPart: `large model "nope/gpt-4o" not found`},
+		{in: "openai/", errPart: `large model "openai/" not found`},
+		{in: "", errPart: `large model "" not found`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+			got, err := ResolveModel(characterizationProviders(), tt.in, "large")
+			if tt.errPart != "" {
+				require.ErrorContains(t, err, tt.errPart)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, ModelMatch{Provider: tt.provider, ModelID: tt.model}, got)
+		})
+	}
+}
+
+func TestResolveModel_AmbiguousNamesEveryProvider(t *testing.T) {
+	t.Parallel()
+
+	_, err := ResolveModel(characterizationProviders(), "shared", "small")
+	require.ErrorContains(t, err, "small model: ")
+	require.ErrorContains(t, err, "anthropic")
+	require.ErrorContains(t, err, "openai")
+	require.ErrorContains(t, err, "Please specify provider using 'provider/model' format")
 }

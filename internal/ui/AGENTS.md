@@ -127,8 +127,13 @@ requires:
 RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string
 ```
 
-`NewToolMessageItem` in `chat/tools.go` is the central factory that routes
-tool names to specific types:
+`NewToolMessageItem` in `chat/tool_registry.go` is the central factory. It
+looks the tool name up in `toolSpecs`, one entry per built-in tool holding
+its item constructor and how it is copied to the clipboard (heading name,
+parameter and result formatting); MCP tools and unknown tools fall back to
+the MCP and generic items. Tools with the usual layout (spinner, header of
+parameters, early states, body) describe it with a `standardTool` in
+`chat/tool_standard.go`. Renderers live in:
 
 | File                  | Tools rendered                                 |
 | --------------------- | ---------------------------------------------- |
@@ -202,8 +207,15 @@ through all components that need access to app state or styles.
 - `model/` — Main UI model and major sub-models (chat, sidebar, header,
   status, pills, session, onboarding, keys, etc.)
 - `chat/` — Chat message item types and tool renderers
-- `dialog/` — Dialog implementations (models, sessions, commands,
-  permissions, API key, OAuth, filepicker, reasoning, quit)
+- `dialog/` — The `Dialog` interface, `Overlay`, actions, dialog IDs
+  (`ids.go`) and the smaller dialogs (commands, filepicker, reasoning,
+  quit, ...). Larger dialogs live in subpackages that import it:
+  - `dialog/auth` — auth method, API key, OAuth flows, AWS SSO
+  - `dialog/models`, `dialog/sessions`, `dialog/theme`,
+    `dialog/permissions`, `dialog/mcpservers`, `dialog/remotecontrol`
+  - `dialog/questionform` — inline question forms and plan handoff
+  - `dialog/internal/kit` — shared layout, help and list-item helpers;
+    `dialog/internal/kittest` — shared test helpers
 - `list/` — Generic lazy-rendered scrollable list with viewport tracking
 - `common/` — Shared `Common` struct, layout helpers, markdown rendering,
   diff rendering, scrollbar

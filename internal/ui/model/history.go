@@ -21,15 +21,22 @@ type promptHistoryLoadedMsg struct {
 // loadPromptHistory loads user messages for history navigation. Both queries
 // stop at the 200 most recent entries; recall only steps back one at a time.
 func (m *UI) loadPromptHistory() tea.Cmd {
+	// Capture the session now: the command runs off the Update goroutine.
+	ws := m.com.Workspace
+	var sessionID string
+	hasSession := m.session != nil
+	if hasSession {
+		sessionID = m.session.ID
+	}
 	return func() tea.Msg {
 		ctx := context.Background()
 		var messages []message.Message
 		var err error
 
-		if m.session != nil {
-			messages, err = m.com.Workspace.ListUserMessages(ctx, m.session.ID)
+		if hasSession {
+			messages, err = ws.ListUserMessages(ctx, sessionID)
 		} else {
-			messages, err = m.com.Workspace.ListAllUserMessages(ctx)
+			messages, err = ws.ListAllUserMessages(ctx)
 		}
 		if err != nil {
 			slog.Error("Failed to load prompt history", "error", err)
@@ -60,10 +67,10 @@ func (m *UI) handleHistoryUp(msg tea.Msg) tea.Cmd {
 	prevHeight := m.textarea.Height()
 	// Navigate to older history entry from cursor position (0,0).
 	if m.textarea.Length() == 0 || m.isAtEditorStart() {
-		if !m.bangMode && len(m.recalledDrafts[m.currentSessionID()]) > 0 {
+		if !m.bangMode && len(m.queue.recalledDrafts[m.currentSessionID()]) > 0 {
 			return m.restoreRecalledDrafts()
 		}
-		if !m.bangMode && m.hasSession() && m.agentReady && (m.isAgentBusy() || m.promptQueue > 0 || m.failedRecalls[m.currentSessionID()]) {
+		if !m.bangMode && m.hasSession() && m.agentReady && (m.isAgentBusy() || m.queue.count > 0 || m.queue.failedRecalls[m.currentSessionID()]) {
 			return m.recallQueuedPrompt()
 		}
 		return m.historyUpFromStart(prevHeight)
@@ -97,10 +104,10 @@ type queuedPromptRecalledMsg struct {
 }
 
 func (m *UI) recallQueuedPrompt() tea.Cmd {
-	if m.promptRecallInFlight {
+	if m.queue.recallInFlight {
 		return nil
 	}
-	m.promptRecallInFlight = true
+	m.queue.recallInFlight = true
 	ws, sessionID, draft := m.com.Workspace, m.currentSessionID(), m.textarea.Value()
 	historyIndex := m.promptHistory.index
 	return func() tea.Msg {
@@ -112,27 +119,24 @@ func (m *UI) recallQueuedPrompt() tea.Cmd {
 }
 
 func (m *UI) applyRecalledPrompt(msg queuedPromptRecalledMsg) tea.Cmd {
-	m.promptRecallInFlight = false
+	m.queue.recallInFlight = false
 	if msg.err != nil {
-		if m.failedRecalls == nil {
-			m.failedRecalls = make(map[string]bool)
+		if m.queue.failedRecalls == nil {
+			m.queue.failedRecalls = make(map[string]bool)
 		}
-		m.failedRecalls[msg.sessionID] = true
+		m.queue.failedRecalls[msg.sessionID] = true
 		return util.ReportError(msg.err)
 	}
-	delete(m.failedRecalls, msg.sessionID)
+	delete(m.queue.failedRecalls, msg.sessionID)
 	if msg.prompt != nil {
 		m.finishPendingPrompt(msg.prompt.SubmissionID, false)
-		if m.recalledDrafts == nil {
-			m.recalledDrafts = make(map[string][]message.QueuedPrompt)
-		}
-		m.recalledDrafts[msg.sessionID] = append(m.recalledDrafts[msg.sessionID], *msg.prompt)
+		m.queue.recallDraft(msg.sessionID, *msg.prompt)
 	}
 	if msg.sessionID != m.currentSessionID() {
 		return nil
 	}
-	m.invalidatePromptQueue()
-	m.promptQueueCheckedAt = time.Time{}
+	m.queue.invalidate()
+	m.queue.checkedAt = time.Time{}
 	m.invalidateBusyCaches()
 	cmds := []tea.Cmd{m.dispatchPromptQueueRefresh(), m.dispatchBusyRefresh()}
 	if msg.prompt != nil {
@@ -149,11 +153,11 @@ func (m *UI) applyRecalledPrompt(msg queuedPromptRecalledMsg) tea.Cmd {
 }
 
 func (m *UI) restoreRecalledDrafts() tea.Cmd {
-	drafts := m.recalledDrafts[m.currentSessionID()]
+	drafts := m.queue.recalledDrafts[m.currentSessionID()]
 	if len(drafts) == 0 || m.bangMode {
 		return nil
 	}
-	delete(m.recalledDrafts, m.currentSessionID())
+	delete(m.queue.recalledDrafts, m.currentSessionID())
 	prevHeight := m.textarea.Height()
 	text := m.textarea.Value()
 	for _, draft := range drafts {
@@ -171,7 +175,7 @@ func (m *UI) restoreRecalledDrafts() tea.Cmd {
 	m.textarea.MoveToEnd()
 	m.promptHistory.index = -1
 	m.promptHistory.draft = text
-	m.closeCompletions()
+	m.mention.close()
 	m.updateLayoutAndSize()
 	return m.updateTextareaWithPrevHeight(nil, prevHeight)
 }
@@ -212,14 +216,6 @@ func (m *UI) handleHistoryEscape(msg tea.Msg) tea.Cmd {
 
 	// Let textarea handle escape normally.
 	return m.updateTextarea(msg)
-}
-
-// updateHistoryDraft updates history state when text is modified.
-func (m *UI) updateHistoryDraft(oldValue string) {
-	if m.textarea.Value() != oldValue {
-		m.promptHistory.draft = m.textarea.Value()
-		m.promptHistory.index = -1
-	}
 }
 
 // syncBangModeFromTextarea engages or disengages bang mode based on
@@ -283,29 +279,4 @@ func (m *UI) historyNext() bool {
 	m.textarea.InsertString(m.promptHistory.messages[nextIndex])
 	m.syncBangModeFromTextarea()
 	return true
-}
-
-// historyReset resets the history, but does not clear the message
-// it just sets the current draft to empty and the position in the history.
-func (m *UI) historyReset() {
-	m.promptHistory.index = -1
-	m.promptHistory.draft = ""
-}
-
-// isAtEditorStart returns true if we are at the 0 line and 0 col in the textarea.
-func (m *UI) isAtEditorStart() bool {
-	return m.textarea.Line() == 0 && m.textarea.LineInfo().ColumnOffset == 0
-}
-
-// isAtEditorEnd returns true if we are in the last line and the last column in the textarea.
-func (m *UI) isAtEditorEnd() bool {
-	lineCount := m.textarea.LineCount()
-	if lineCount == 0 {
-		return true
-	}
-	if m.textarea.Line() != lineCount-1 {
-		return false
-	}
-	info := m.textarea.LineInfo()
-	return info.CharOffset >= info.CharWidth-1 || info.CharWidth == 0
 }

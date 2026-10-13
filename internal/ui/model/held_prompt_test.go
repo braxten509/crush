@@ -17,19 +17,19 @@ func TestMidTurnPromptWaitsInQueueList(t *testing.T) {
 	u.sendMessage("later")
 	require.Empty(t, u.chat.flat)
 	require.Equal(t, []string{"later"}, u.visiblePromptQueueItems(), "listed before the agent's queue is fetched")
-	id := u.pendingPrompts[0].ID
-	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.promptQueueGen,
+	id := u.queue.pending[0].ID
+	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.queue.gen,
 		prompts: []string{"later"}, entries: []message.QueuedPromptSummary{{Prompt: "later", SubmissionID: id}}})
 	require.Equal(t, []string{"later"}, u.visiblePromptQueueItems(), "listed once the agent reports it")
 	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "later")
 
-	saved := u.pendingPrompts[0].Clone()
+	saved := u.queue.pending[0].Clone()
 	saved.ID = "saved"
 	u.appendSessionMessage(saved)
 	require.Len(t, u.chat.flat, 1)
 	require.Equal(t, "saved", u.chat.flat[0].ID())
 	require.Empty(t, u.visiblePromptQueueItems(), "the started prompt leaves the queue list")
-	require.Empty(t, u.heldPrompts)
+	require.Empty(t, u.queue.held)
 }
 
 // Ctrl+Enter moves a held prompt into the chat; its saved copy must then
@@ -43,12 +43,12 @@ func TestReleasedPromptIsReplacedBySavedCopy(t *testing.T) {
 	u.releaseHeldPrompts()
 	require.Len(t, u.chat.flat, 2)
 
-	saved := u.pendingPrompts[0].Clone()
+	saved := u.queue.pending[0].Clone()
 	saved.ID = "saved-first"
 	u.appendSessionMessage(saved)
 	require.Len(t, u.chat.flat, 2, "the saved copy replaces the released row")
 	require.Equal(t, "saved-first", u.chat.flat[0].ID())
-	require.Equal(t, u.pendingPrompts[0].ID, u.chat.flat[1].ID(), "the other released row keeps its own ID")
+	require.Equal(t, u.queue.pending[0].ID, u.chat.flat[1].ID(), "the other released row keeps its own ID")
 }
 
 // A held prompt's text shows above the composer without opening the panel,

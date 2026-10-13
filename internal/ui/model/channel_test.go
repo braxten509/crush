@@ -66,7 +66,7 @@ func newChannelUI(ws *channelWorkspace) *UI {
 		com:      com,
 		status:   NewStatus(com, nil),
 		chat:     NewChat(com, config.ScrollbarDefault),
-		textarea: textarea.New(),
+		composer: composer{textarea: textarea.New()},
 		state:    uiChat,
 		focus:    uiFocusEditor,
 		width:    140,

@@ -21,7 +21,7 @@ func TestSubmittedMessageShowsWorkingBeforeDispatchAndHandsOff(t *testing.T) {
 	require.Len(t, u.chat.flat, 1, "Working is display-only")
 	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Working")
 	require.NotNil(t, u.chat.EnsureAnimating())
-	confirmed := u.pendingPrompts[0].Clone()
+	confirmed := u.queue.pending[0].Clone()
 	confirmed.ID = "saved"
 	u.appendSessionMessage(confirmed)
 	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Working")
@@ -34,14 +34,14 @@ func TestSubmittedMessageShowsWorkingBeforeDispatchAndHandsOff(t *testing.T) {
 func TestLegacyQueueSummariesHideOnlyMatchingPendingCopies(t *testing.T) {
 	u, _ := newSubmissionUI()
 	u.sendMessage("same")
-	id := u.pendingPrompts[0].ID
+	id := u.queue.pending[0].ID
 	for _, entries := range [][]message.QueuedPromptSummary{
 		{{Prompt: "same"}, {Prompt: "same"}},
 		{{Prompt: "same", SubmissionID: id}, {Prompt: "same"}},
 		{{Prompt: "same"}, {Prompt: "same", SubmissionID: id}},
 	} {
-		u.promptQueueItems = []string{"same", "same"}
-		u.promptQueueEntries = entries
+		u.queue.items = []string{"same", "same"}
+		u.queue.entries = entries
 		require.Equal(t, []string{"same"}, u.visiblePromptQueueItems())
 	}
 }
@@ -118,7 +118,7 @@ func TestCancelBeforeDispatchPreventsThePromptBeingSent(t *testing.T) {
 	runCmds(u, u.interruptAgent())
 	runCmds(u, cmd)
 	require.Empty(t, ws.submissions)
-	require.Empty(t, u.submittingPrompts)
+	require.Empty(t, u.queue.submitting)
 	require.Nil(t, u.chat.waitingItem)
 }
 
@@ -158,31 +158,31 @@ func TestCancelDuringSlowHandoffCancelsDispatchContext(t *testing.T) {
 func TestLegacyQueueConfirmationDoesNotRestoreADuplicate(t *testing.T) {
 	u, _ := newSubmissionUI()
 	u.sendMessage("same")
-	u.promptQueueItems = []string{"same", "same"}
-	u.promptQueue = 2
-	u.promptQueueEntries = []message.QueuedPromptSummary{{Prompt: "same"}, {Prompt: "same"}}
-	confirmed := u.pendingPrompts[0].Clone()
+	u.queue.items = []string{"same", "same"}
+	u.queue.count = 2
+	u.queue.entries = []message.QueuedPromptSummary{{Prompt: "same"}, {Prompt: "same"}}
+	confirmed := u.queue.pending[0].Clone()
 	confirmed.ID = "saved"
 	u.appendSessionMessage(confirmed)
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 	require.Equal(t, []string{"same"}, u.visiblePromptQueueItems())
-	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.promptQueueGen, prompts: []string{"same"}, entries: []message.QueuedPromptSummary{{Prompt: "same"}}})
+	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.queue.gen, prompts: []string{"same"}, entries: []message.QueuedPromptSummary{{Prompt: "same"}}})
 	require.Equal(t, []string{"same"}, u.visiblePromptQueueItems(), "the remaining different submission remains visible in a fresh snapshot")
 }
 
 func TestSentMessagesAreNotRepeatedInQueueEvenWithIdenticalText(t *testing.T) {
 	u, _ := newSubmissionUI()
 	u.sendMessage("same")
-	id := u.pendingPrompts[0].ID
-	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.promptQueueGen,
+	id := u.queue.pending[0].ID
+	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.queue.gen,
 		prompts: []string{"same", "same"}, entries: []message.QueuedPromptSummary{{Prompt: "same", SubmissionID: id}, {Prompt: "same", SubmissionID: "different"}}})
-	require.Equal(t, 2, u.promptQueue, "internal delivery state is preserved")
+	require.Equal(t, 2, u.queue.count, "internal delivery state is preserved")
 	require.Equal(t, []string{"same"}, u.visiblePromptQueueItems(), "only the different submission stays in the queue panel")
-	confirmed := u.pendingPrompts[0].Clone()
+	confirmed := u.queue.pending[0].Clone()
 	confirmed.ID = "saved"
 	u.appendSessionMessage(confirmed)
 	require.Equal(t, 1, u.visiblePromptQueueCount(), "confirmation still uses the same submission identity")
-	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.promptQueueGen, prompts: []string{"same"}, entries: []message.QueuedPromptSummary{{Prompt: "same", SubmissionID: id}}})
+	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.queue.gen, prompts: []string{"same"}, entries: []message.QueuedPromptSummary{{Prompt: "same", SubmissionID: id}}})
 	require.Zero(t, u.visiblePromptQueueCount())
 	require.NotContains(t, ansi.Strip(u.pillsView), "Queued")
 }

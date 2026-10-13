@@ -134,10 +134,7 @@ func (m *UI) openSelfUpdateForm(id, text, description string, yes, no func() tea
 		return no()
 	}
 	m.cliUpdatePrompt = &cliUpdatePrompt{form: form, moved: moved}
-	m.activeInline = form
-	m.textarea.Blur()
-	m.focus = uiFocusEditor
-	m.activeInline.SetFocused(true)
+	m.openInline(form)
 	m.updateLayoutAndSize()
 	return nil
 }

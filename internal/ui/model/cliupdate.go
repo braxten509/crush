@@ -125,10 +125,7 @@ func (m *UI) openCLIUpdateForm(updates []cliupdate.Update) {
 		return m.installCLIUpdates(updates)
 	}
 	m.cliUpdatePrompt = &cliUpdatePrompt{form: form, updates: updates}
-	m.activeInline = form
-	m.textarea.Blur()
-	m.focus = uiFocusEditor
-	m.activeInline.SetFocused(true)
+	m.openInline(form)
 	m.updateLayoutAndSize()
 }
 

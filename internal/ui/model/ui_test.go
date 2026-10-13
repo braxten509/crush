@@ -232,7 +232,7 @@ func newPlanUI(t *testing.T, sessionID string) (*UI, *testWorkspace) {
 		com:        com,
 		mode:       uiInputModePlan,
 		agentReady: true,
-		textarea:   textarea.New(),
+		composer:   composer{textarea: textarea.New()},
 		dialog:     dialog.NewOverlay(),
 		session:    sess,
 		chat:       NewChat(com, config.ScrollbarDefault),
@@ -290,7 +290,7 @@ func TestCtrlBDoesNotToggleSidebar(t *testing.T) {
 		focus:       uiFocusSidebar,
 		session:     &session.Session{ID: "sess-1"},
 		chat:        NewChat(com, config.ScrollbarDefault),
-		textarea:    textarea.New(),
+		composer:    composer{textarea: textarea.New()},
 		dialog:      dialog.NewOverlay(),
 		attachments: att,
 		width:       140,
@@ -507,7 +507,7 @@ func TestComposerFocusOnlySetting(t *testing.T) {
 		u.layout.main = image.Rect(0, 0, 60, 10)
 		u.layout.sidebar = image.Rect(60, 0, 80, 10)
 		u.layout.editor = image.Rect(0, 10, 60, 14)
-		u.sidebarScrollable = true
+		u.sidebar.scrollable = true
 		u.handleClickFocus(tea.MouseClickMsg{X: 1, Y: 11})
 		require.Equal(t, uiFocusEditor, u.focus, "clicking the composer focuses it")
 		u.handleClickFocus(tea.MouseClickMsg{X: 5, Y: 3})
@@ -612,7 +612,7 @@ func TestSetInputMode_SwitchesToCode(t *testing.T) {
 	u := &UI{
 		com:      &common.Common{Workspace: ws},
 		mode:     uiInputModePlan,
-		textarea: textarea.New(),
+		composer: composer{textarea: textarea.New()},
 	}
 	applyModeSwitchMsg(u, u.setInputMode(uiInputModeCode))
 	require.Equal(t, uiInputModeCode, u.mode)
@@ -626,7 +626,7 @@ func TestSetInputMode_SwitchesToPlan(t *testing.T) {
 	u := &UI{
 		com:      &common.Common{Workspace: ws},
 		mode:     uiInputModeCode,
-		textarea: textarea.New(),
+		composer: composer{textarea: textarea.New()},
 	}
 	applyModeSwitchMsg(u, u.setInputMode(uiInputModePlan))
 	require.Equal(t, uiInputModePlan, u.mode)

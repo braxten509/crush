@@ -480,19 +480,12 @@ func (r *callbackReceiver) current() *authFlight {
 	return r.flight
 }
 
-// bind starts the listener if one is not already running. The port was
-// resolved and pinned at construction, so this always targets the port the
-// redirect URI points at; if it is busy the error surfaces loudly rather
-// than silently binding a port nobody will redirect to.
-func (r *callbackReceiver) bind() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.bindLocked()
-}
-
-// bindLocked is bind with r.mu already held. The listener starts accepting
-// before this returns, so a browser opened immediately after cannot beat
-// the server to the port.
+// bindLocked starts the listener if one is not already running; r.mu must
+// be held. The port was resolved and pinned at construction, so this always
+// targets the port the redirect URI points at; if it is busy the error
+// surfaces loudly rather than silently binding a port nobody will redirect
+// to. The listener starts accepting before this returns, so a browser opened
+// immediately after cannot beat the server to the port.
 func (r *callbackReceiver) bindLocked() error {
 	if r.closed {
 		return errors.New("OAuth callback listener closed")

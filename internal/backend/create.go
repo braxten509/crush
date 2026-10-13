@@ -48,26 +48,12 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	// A client is arriving: cancel any pending idle shutdown so we never
 	// hand back a workspace on a server that is about to tear itself down.
 	b.cancelShutdownLocked()
-	if existingID, ok := b.pathIndex[key]; ok {
-		if ws, found := b.workspaces.Get(existingID); found {
-			// Hold b.mu while registering: teardown also
-			// acquires b.mu before tearing the workspace
-			// down, so this guarantees the workspace we
-			// return cannot be torn out from under us
-			// between lookup and registerClient. Lock order
-			// here is b.mu -> ws.clientsMu.
-			if !stringSlicesEqual(ws.Cfg.Overrides().EnabledChannels, args.Channels) {
-				b.mu.Unlock()
-				return nil, proto.Workspace{}, ErrChannelOptInMismatch
-			}
-			logFirstWinsMismatch(ws, args)
-			b.registerClient(ws, clientID)
-			b.mu.Unlock()
-			return ws, workspaceToProto(ws), nil
+	if ws, joined, err := b.joinExistingLocked(key, clientID, args); joined || err != nil {
+		b.mu.Unlock()
+		if err != nil {
+			return nil, proto.Workspace{}, err
 		}
-		// pathIndex referenced a workspace that has since been
-		// removed; clean the stale entry and fall through.
-		delete(b.pathIndex, key)
+		return ws, workspaceToProto(ws), nil
 	}
 	// Commit to the slow creation path. Mark this create as pending
 	// while mu is still held so a teardown that runs during the
@@ -77,77 +63,11 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	// that pending only drops once the workspace is visible in the map.
 	b.pending++
 	b.mu.Unlock()
-	defer func() {
-		b.mu.Lock()
-		b.pending--
-		// If this create ended up registering nothing (it failed, or
-		// deduped onto an existing workspace that has since gone) and
-		// it was holding the last teardown back, the server may now be
-		// idle with no pending work. Arm the idle-shutdown timer here so
-		// a failed create racing the last teardown does not leak an
-		// empty server that a plain teardown already declined to reap.
-		shutdownNow := b.scheduleShutdownIfIdleLocked()
-		b.mu.Unlock()
-		if shutdownNow {
-			slog.Info("No workspaces remain after create settled, shutting down server...")
-			b.shutdownFn()
-		}
-	}()
+	defer b.settleCreate()
 
-	id := uuid.New().String()
-	cfg, err := config.Init(args.Path, args.DataDir, args.Debug)
+	ws, err := b.newWorkspace(args, key)
 	if err != nil {
-		return nil, proto.Workspace{}, fmt.Errorf("failed to initialize config: %w", err)
-	}
-
-	cpuaffinity.ApplyOptions(cfg.Config().Options)
-	cfg.Overrides().SkipPermissionRequests = args.YOLO
-	cfg.Overrides().EnabledChannels = args.Channels
-
-	if err := createDotCrushDir(cfg.Config().Options.DataDirectory); err != nil {
-		return nil, proto.Workspace{}, fmt.Errorf("failed to create data directory: %w", err)
-	}
-
-	if !testing.Testing() {
-		if err := projects.Register(args.Path, cfg.Config().Options.DataDirectory); err != nil {
-			slog.Warn("Failed to register project", "error", err)
-		}
-	}
-	conn, err := db.Connect(b.ctx, cfg.Config().Options.DataDirectory, db.WithDataDirLock(true))
-	if err != nil {
-		return nil, proto.Workspace{}, fmt.Errorf("failed to connect to database: %w", err)
-	}
-	db.PruneIdleReviewsInBackground(b.ctx, conn)
-
-	// Discover skills once per workspace, before app.New. The backend
-	// hosts multiple workspaces concurrently, so the manager is
-	// constructed WITHOUT WithGlobalMirror to prevent last-writer-wins
-	// cross-talk between workspaces.
-	discoveryCfg := skillsDiscoveryConfig(cfg)
-	allSkills, activeSkills, skillStates := skills.DiscoverFromConfig(discoveryCfg)
-	skillsMgr := skills.NewManager(
-		allSkills, activeSkills, skillStates,
-		skills.WithResolvedPaths(discoveryCfg.ResolvePaths()),
-		skills.WithWorkingDir(discoveryCfg.WorkingDir),
-	)
-
-	appWorkspace, err := app.New(b.ctx, conn, cfg, skillsMgr)
-	if err != nil {
-		return nil, proto.Workspace{}, fmt.Errorf("failed to create app workspace: %w", err)
-	}
-
-	wsCtx, wsCancel := context.WithCancel(b.ctx)
-	ws := &Workspace{
-		App:          appWorkspace,
-		ID:           id,
-		Path:         args.Path,
-		Cfg:          cfg,
-		Env:          args.Env,
-		Skills:       skillsMgr,
-		resolvedPath: key,
-		ctx:          wsCtx,
-		cancel:       wsCancel,
-		clients:      make(map[string]*clientState),
+		return nil, proto.Workspace{}, err
 	}
 
 	b.mu.Lock()
@@ -164,26 +84,16 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	}
 	// Re-check the index under the lock: a concurrent caller may have
 	// won the race between the initial unlock and here.
-	if existingID, ok := b.pathIndex[key]; ok {
-		if existing, found := b.workspaces.Get(existingID); found {
-			// Register under b.mu so teardown cannot run
-			// between lookup and registerClient. Lock order
-			// is b.mu -> ws.clientsMu.
-			if !stringSlicesEqual(existing.Cfg.Overrides().EnabledChannels, args.Channels) {
-				b.mu.Unlock()
-				ws.invokeShutdown()
-				return nil, proto.Workspace{}, ErrChannelOptInMismatch
-			}
-			logFirstWinsMismatch(existing, args)
-			b.registerClient(existing, clientID)
-			b.mu.Unlock()
-			ws.invokeShutdown()
-			return existing, workspaceToProto(existing), nil
+	if existing, joined, err := b.joinExistingLocked(key, clientID, args); joined || err != nil {
+		b.mu.Unlock()
+		ws.invokeShutdown()
+		if err != nil {
+			return nil, proto.Workspace{}, err
 		}
-		delete(b.pathIndex, key)
+		return existing, workspaceToProto(existing), nil
 	}
-	b.workspaces.Set(id, ws)
-	b.pathIndex[key] = id
+	b.workspaces.Set(ws.ID, ws)
+	b.pathIndex[key] = ws.ID
 	// Register the originating client's hold while still holding
 	// b.mu so the workspace is observable with its claim from the
 	// moment it appears in the index.
@@ -202,6 +112,113 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	}
 
 	return ws, workspaceToProto(ws), nil
+}
+
+// joinExistingLocked registers clientID on the live workspace already
+// indexed at key, reporting whether there was one. A stale index entry
+// (its workspace has since been removed) is cleaned up. Joining with a
+// different channel opt-in fails with [ErrChannelOptInMismatch].
+//
+// It must be called with b.mu held: teardown also acquires b.mu before
+// tearing a workspace down, so the workspace returned cannot be torn out
+// from under the caller between lookup and registerClient. Lock order is
+// b.mu -> ws.clientsMu.
+func (b *Backend) joinExistingLocked(key, clientID string, args proto.Workspace) (*Workspace, bool, error) {
+	existingID, ok := b.pathIndex[key]
+	if !ok {
+		return nil, false, nil
+	}
+	ws, found := b.workspaces.Get(existingID)
+	if !found {
+		delete(b.pathIndex, key)
+		return nil, false, nil
+	}
+	if !stringSlicesEqual(ws.Cfg.Overrides().EnabledChannels, args.Channels) {
+		return nil, false, ErrChannelOptInMismatch
+	}
+	logFirstWinsMismatch(ws, args)
+	b.registerClient(ws, clientID)
+	return ws, true, nil
+}
+
+// settleCreate ends a create's pending claim on the server's lifetime.
+//
+// If the create ended up registering nothing (it failed, or deduped onto
+// an existing workspace that has since gone) and it was holding the last
+// teardown back, the server may now be idle with no pending work. Arming
+// the idle-shutdown timer here keeps a failed create racing the last
+// teardown from leaking an empty server that a plain teardown already
+// declined to reap.
+func (b *Backend) settleCreate() {
+	b.mu.Lock()
+	b.pending--
+	shutdownNow := b.scheduleShutdownIfIdleLocked()
+	b.mu.Unlock()
+	if shutdownNow {
+		slog.Info("No workspaces remain after create settled, shutting down server...")
+		b.shutdownFn()
+	}
+}
+
+// newWorkspace performs the slow part of creating a workspace: loading
+// its config, opening its database, discovering skills and starting its
+// app. It runs without b.mu held.
+func (b *Backend) newWorkspace(args proto.Workspace, key string) (*Workspace, error) {
+	id := uuid.New().String()
+	cfg, err := config.Init(args.Path, args.DataDir, args.Debug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize config: %w", err)
+	}
+
+	cpuaffinity.ApplyOptions(cfg.Config().Options)
+	cfg.Overrides().SkipPermissionRequests = args.YOLO
+	cfg.Overrides().EnabledChannels = args.Channels
+
+	if err := createDotCrushDir(cfg.Config().Options.DataDirectory); err != nil {
+		return nil, fmt.Errorf("failed to create data directory: %w", err)
+	}
+
+	if !testing.Testing() {
+		if err := projects.Register(args.Path, cfg.Config().Options.DataDirectory); err != nil {
+			slog.Warn("Failed to register project", "error", err)
+		}
+	}
+	conn, err := db.Connect(b.ctx, cfg.Config().Options.DataDirectory, db.WithDataDirLock(true))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+	db.PruneIdleReviewsInBackground(b.ctx, conn)
+
+	// Discover skills once per workspace, before app.New. The backend
+	// hosts multiple workspaces concurrently, so the manager is
+	// constructed WITHOUT WithGlobalMirror to prevent last-writer-wins
+	// cross-talk between workspaces.
+	discoveryCfg := skillsDiscoveryConfig(cfg)
+	allSkills, activeSkills, skillStates := skills.DiscoverFromConfig(discoveryCfg)
+	skillsMgr := skills.NewManager(
+		allSkills, activeSkills, skillStates,
+		skills.WithResolvedPaths(discoveryCfg.ResolvePaths()),
+		skills.WithWorkingDir(discoveryCfg.WorkingDir),
+	)
+
+	appWorkspace, err := app.New(b.ctx, conn, cfg, skillsMgr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create app workspace: %w", err)
+	}
+
+	wsCtx, wsCancel := context.WithCancel(b.ctx)
+	return &Workspace{
+		App:          appWorkspace,
+		ID:           id,
+		Path:         args.Path,
+		Cfg:          cfg,
+		Env:          args.Env,
+		Skills:       skillsMgr,
+		resolvedPath: key,
+		ctx:          wsCtx,
+		cancel:       wsCancel,
+		clients:      make(map[string]*clientState),
+	}, nil
 }
 
 // skillsDiscoveryConfig adapts a *config.ConfigStore to the

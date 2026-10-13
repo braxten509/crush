@@ -30,7 +30,7 @@ func newRecallUI() (*UI, *recallWorkspace) {
 	ws := &recallWorkspace{countingWorkspace: &countingWorkspace{ready: true, agentBusy: true}}
 	u := newBusyUI(ws.countingWorkspace)
 	u.com.Workspace = ws
-	u.completions = completions.New(u.com.Styles.Completions.Normal, u.com.Styles.Completions.Focused, u.com.Styles.Completions.Match)
+	u.mention.popup = completions.New(u.com.Styles.Completions.Normal, u.com.Styles.Completions.Focused, u.com.Styles.Completions.Match)
 	u.textarea.CharLimit = -1
 	u.promptHistory.index = -1
 	u.promptHistory.messages = []string{"past message"}

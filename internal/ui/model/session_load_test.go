@@ -134,7 +134,7 @@ func newLoadTestUI(t testing.TB, ws *loadWorkspace) *UI {
 	u.keyMap = DefaultKeyMap()
 	u.status = NewStatus(u.com, u)
 	u.attachments = attachments.New(nil, attachments.Keymap{})
-	u.completions = completions.New(u.com.Styles.Completions.Normal, u.com.Styles.Completions.Focused, u.com.Styles.Completions.Match)
+	u.mention.popup = completions.New(u.com.Styles.Completions.Normal, u.com.Styles.Completions.Focused, u.com.Styles.Completions.Match)
 	u.agentReady = true
 	u.session = &session.Session{ID: "old", Title: "Old chat"}
 	old := message.Message{ID: "old-user", SessionID: "old", Role: message.User}

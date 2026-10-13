@@ -394,12 +394,8 @@ type UI struct {
 	readyPlaceholder   string
 	workingPlaceholder string
 
-	// Completions state
-	completions              *completions.Completions
-	completionsOpen          bool
-	completionsStartIndex    int
-	completionsQuery         string
-	completionsPositionStart image.Point // x,y where user typed '@'
+	// mention is the @ mention completions popup; see mention.go.
+	mention mentionCompletions
 
 	// Chat components
 	chat *Chat
@@ -594,7 +590,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		textarea:            ta,
 		chat:                ch,
 		header:              header,
-		completions:         comp,
 		attachments:         attachments,
 		todoSpinner:         todoSpinner,
 		frames:              newFrameCache(frameCacheTTL, frameCacheMaxEntries),
@@ -606,6 +601,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	}
 
 	status := NewStatus(com, ui)
+	ui.mention.popup = comp
 	ui.lspProbe.val.states = make(map[string]workspace.LSPClientInfo)
 	ui.mcpProbe.val = make(map[string]mcp.ClientInfo)
 
@@ -1842,9 +1838,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case util.ClearStatusMsg:
 		m.status.ClearInfoMsg()
 	case completions.CompletionItemsLoadedMsg:
-		if m.completionsOpen {
-			m.completions.SetItems(msg.Files, msg.Resources)
-		}
+		m.mention.setItems(msg)
 	case uv.KittyGraphicsEvent:
 		if !bytes.HasPrefix(msg.Payload, []byte("OK")) {
 			slog.Warn("Unexpected Kitty graphics response",
@@ -3270,21 +3264,21 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 		switch m.focus {
 		case uiFocusEditor:
 			// Handle completions if open.
-			if m.completionsOpen {
-				if msg, ok := m.completions.Update(msg); ok {
+			if m.mention.open {
+				if msg, ok := m.mention.popup.Update(msg); ok {
 					switch msg := msg.(type) {
 					case completions.SelectionMsg[completions.FileCompletionValue]:
 						cmds = append(cmds, m.insertFileCompletion(msg.Value.Path))
 						if !msg.KeepOpen {
-							m.closeCompletions()
+							m.mention.close()
 						}
 					case completions.SelectionMsg[completions.ResourceCompletionValue]:
 						cmds = append(cmds, m.insertMCPResourceCompletion(msg.Value))
 						if !msg.KeepOpen {
-							m.closeCompletions()
+							m.mention.close()
 						}
 					case completions.ClosedMsg:
-						m.completionsOpen = false
+						m.mention.open = false
 					}
 					return tea.Batch(cmds...)
 				}
@@ -3397,7 +3391,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			case key.Matches(msg, m.keyMap.Editor.Newline):
 				prevHeight := m.textarea.Height()
 				m.textarea.InsertRune('\n')
-				m.closeCompletions()
+				m.mention.close()
 				cmds = append(cmds, m.updateTextareaWithPrevHeight(msg, prevHeight))
 			case key.Matches(msg, m.keyMap.Editor.CopySelection):
 				if m.textarea.HasSelection() {
@@ -3460,16 +3454,9 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				curIdx := len(curValue)
 
 				// Trigger completions on @.
-				if msg.String() == "@" && !m.completionsOpen {
-					// Only show if beginning of prompt or after whitespace.
-					if curIdx == 0 || (curIdx > 0 && isWhitespace(curValue[curIdx-1])) {
-						m.completionsOpen = true
-						m.completionsQuery = ""
-						m.completionsStartIndex = curIdx
-						m.completionsPositionStart = m.completionsPosition()
-						depth, limit := m.com.Config().Options.TUI.Completions.Limits()
-						cmds = append(cmds, m.completions.Open(depth, limit))
-					}
+				if m.mention.triggers(msg.String(), curValue) {
+					depth, limit := m.com.Config().Options.TUI.Completions.Limits()
+					cmds = append(cmds, m.mention.begin(curIdx, m.completionsPosition(), depth, limit))
 				}
 
 				// remove the details if they are open when user starts typing
@@ -3513,26 +3500,8 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 
 				// After updating textarea, check if we need to filter completions.
 				// Skip filtering on the initial @ keystroke since items are loading async.
-				if m.completionsOpen && msg.String() != "@" {
-					newValue := m.textarea.Value()
-					newIdx := len(newValue)
-
-					// Close completions if cursor moved before start.
-					if newIdx <= m.completionsStartIndex {
-						m.closeCompletions()
-					} else if msg.String() == "space" {
-						// Close on space.
-						m.closeCompletions()
-					} else {
-						// Extract current word and filter.
-						word := m.textareaWord()
-						if strings.HasPrefix(word, "@") {
-							m.completionsQuery = word[1:]
-							m.completions.Filter(m.completionsQuery)
-						} else if m.completionsOpen {
-							m.closeCompletions()
-						}
-					}
+				if m.mention.open && msg.String() != "@" {
+					m.mention.follow(msg.String(), m.textarea.Value(), m.textareaWord())
 				}
 			}
 		case uiFocusMain:
@@ -3778,23 +3747,8 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	m.status.Draw(scr, layout.status)
 
 	// Draw completions popup if open
-	if !isOnboarding && m.completionsOpen && m.completions.HasItems() {
-		w, h := m.completions.Size()
-		x := m.completionsPositionStart.X
-		y := m.completionsPositionStart.Y - h
-
-		screenW := area.Dx()
-		if x+w > screenW {
-			x = screenW - w
-		}
-		x = max(0, x)
-		y = max(0, y+1) // Offset for attachments row
-
-		completionsView := uv.NewStyledString(m.completions.Render())
-		completionsView.Draw(scr, image.Rectangle{
-			Min: image.Pt(x, y),
-			Max: image.Pt(x+w, y+h),
-		})
+	if !isOnboarding {
+		m.mention.draw(scr, area.Dx())
 	}
 
 	// Debugging rendering (visually see when the tui rerenders)
@@ -4936,25 +4890,17 @@ type modeSwitchedMsg struct {
 	err               error
 }
 
-// closeCompletions closes the completions popup and resets state.
-func (m *UI) closeCompletions() {
-	m.completionsOpen = false
-	m.completionsQuery = ""
-	m.completionsStartIndex = 0
-	m.completions.Close()
-}
-
 // insertCompletionText replaces the @query in the textarea with the given text.
 // Returns false if the replacement cannot be performed.
 func (m *UI) insertCompletionText(text string) bool {
 	value := m.textarea.Value()
-	if m.completionsStartIndex > len(value) {
+	if m.mention.startIndex > len(value) {
 		return false
 	}
 
 	word := m.textareaWord()
-	endIdx := min(m.completionsStartIndex+len(word), len(value))
-	newValue := value[:m.completionsStartIndex] + text + value[endIdx:]
+	endIdx := min(m.mention.startIndex+len(word), len(value))
+	newValue := value[:m.mention.startIndex] + text + value[endIdx:]
 	m.textarea.SetValue(newValue)
 	m.textarea.MoveToEnd()
 	m.textarea.InsertRune(' ')
@@ -5267,7 +5213,7 @@ func (m *UI) refreshStyles() {
 		m.cacheSidebarLogo(m.layout.sidebar.Dx())
 	}
 	m.textarea.SetStyles(t.Editor.Textarea)
-	m.completions.SetStyles(t.Completions.Normal, t.Completions.Focused, t.Completions.Match)
+	m.mention.popup.SetStyles(t.Completions.Normal, t.Completions.Focused, t.Completions.Match)
 	m.attachments.SetStyles(t.Attachments)
 	m.todoSpinner.Style = t.Pills.TodoSpinner
 	m.status.help.Styles = t.Help
@@ -5769,7 +5715,7 @@ func (m *UI) interruptAgent() tea.Cmd {
 
 // editorWantsEsc reports whether esc has another job in the focused editor.
 func (m *UI) editorWantsEsc() bool {
-	return m.focus == uiFocusEditor && (m.completionsOpen || m.attachments.Deleting() || m.promptHistory.index >= 0)
+	return m.focus == uiFocusEditor && (m.mention.open || m.attachments.Deleting() || m.promptHistory.index >= 0)
 }
 
 // cancelAgent handles the cancel key press: with prompts queued it stops

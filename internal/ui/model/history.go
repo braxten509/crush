@@ -178,7 +178,7 @@ func (m *UI) restoreRecalledDrafts() tea.Cmd {
 	m.textarea.MoveToEnd()
 	m.promptHistory.index = -1
 	m.promptHistory.draft = text
-	m.closeCompletions()
+	m.mention.close()
 	m.updateLayoutAndSize()
 	return m.updateTextareaWithPrevHeight(nil, prevHeight)
 }

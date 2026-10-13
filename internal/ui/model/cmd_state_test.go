@@ -173,7 +173,7 @@ func TestInsertFileCompletionRecordsReadOnUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	u.textarea.SetValue("@no")
-	u.completionsStartIndex = 0
+	u.mention.startIndex = 0
 	cmd := u.insertFileCompletion(path)
 	reads := 0
 	msgs := runOffLoop(t, cmd, func() { reads = max(reads, len(u.sessionFileReads)) })

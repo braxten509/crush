@@ -120,7 +120,8 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 func (t *turn) onReasoningStart(id string, reasoning fantasy.ReasoningContent) error {
 	t.currentAssistant.Activity = "thinking"
 	t.currentAssistant.ActivityAt = time.Now().Unix()
-	t.currentAssistant.AppendReasoningContent(reasoning.Text)
+	t.currentAssistant.FinishThinking()
+	t.currentAssistant.StartReasoning(reasoning.Text)
 	return t.a.messages.Update(t.genCtx, *t.currentAssistant)
 }
 
@@ -135,7 +136,11 @@ func (t *turn) onReasoningEnd(id string, reasoning fantasy.ReasoningContent) err
 	// handle anthropic signature
 	if anthropicData, ok := reasoning.ProviderMetadata[anthropic.Name]; ok {
 		if reasoning, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok {
-			t.currentAssistant.AppendReasoningSignature(reasoning.Signature)
+			if reasoning.RedactedData != "" {
+				t.currentAssistant.SetReasoningRedactedData(reasoning.RedactedData)
+			} else {
+				t.currentAssistant.AppendReasoningSignature(reasoning.Signature)
+			}
 		}
 	}
 	if googleData, ok := reasoning.ProviderMetadata[google.Name]; ok {

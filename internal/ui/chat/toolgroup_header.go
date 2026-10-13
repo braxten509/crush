@@ -20,46 +20,11 @@ func (g *ToolGroupItem) header(width int) string {
 	if g.expanded {
 		marker = "▾ "
 	}
-	var tools, failed, moved int
-	var edited []string
-	seen := map[string]bool{}
-	for _, c := range g.children {
-		t, ok := c.(ToolMessageItem)
-		if !ok {
-			continue
-		}
-		tools++
-		if st, ok := t.(interface{ computeStatus() ToolStatus }); ok && st.computeStatus() == ToolStatusError {
-			failed++
-		}
-		if isMovedToBackground(t) {
-			moved++
-		}
-		if f := editedFile(t); f != "" && !seen[f] && !ignoredReviewPath(f, "") {
-			seen[f] = true
-			edited = append(edited, filepath.Base(f))
-		}
-	}
-	count := actionCount(tools)
+	tally := g.tallySteps()
+	count := actionCount(tally.tools)
 
 	status := g.status()
-	icon := g.sty.Tool.IconSuccess.Render()
-	if status != "" || g.Spinning() {
-		icon = g.sty.Tool.IconPending.Render()
-	} else {
-		// Check only the last tool's status for the icon, skipping thinking-only steps
-		for i := len(g.children) - 1; i >= 0; i-- {
-			if lastTool, ok := g.children[i].(interface{ computeStatus() ToolStatus }); ok {
-				if lastTool.computeStatus() == ToolStatusError {
-					icon = g.sty.Tool.IconError.Render()
-				} else if t, ok := g.children[i].(ToolMessageItem); ok && isMovedToBackground(t) {
-					// Still running, so not a finished ✓.
-					icon = g.sty.Tool.IconPending.SetString(backgroundIcon).Render()
-				}
-				break
-			}
-		}
-	}
+	icon := g.headerIcon(status)
 	line := icon + " " + g.sty.Tool.NameNormal.Render(count)
 	// The original action label, immediately after the status icon, opens
 	// the review. File names and line counts remain a passive summary.
@@ -73,53 +38,136 @@ func (g *ToolGroupItem) header(width int) string {
 			g.changesCols = [2]int{MessageLeftPaddingTotal + start, MessageLeftPaddingTotal + end}
 		}
 	}
-	switch {
-	case storedSummary != "":
-		line += g.sty.Tool.ParamKey.Render(" · " + storedSummary)
-		if g.storedCounted {
-			line += " " + g.sty.Tool.ChangesAdd.Render(fmt.Sprintf("+%d", g.storedAdds)) + " " +
-				g.sty.Tool.ChangesDel.Render(fmt.Sprintf("−%d", g.storedDels))
+	line += g.changeSummary(status, changes, tally.edited, storedSummary)
+	if tally.moved > 0 {
+		line += g.sty.Tool.ParamKey.Render(fmt.Sprintf(" · %d backgrounded", tally.moved))
+	}
+	if tally.failed > 0 {
+		line += g.sty.Tool.ErrorMessage.Render(fmt.Sprintf(" · %d failed", tally.failed))
+	}
+	line += g.activitySuffix(status)
+	return ansi.Truncate(g.sty.Tool.ParamKey.Render(marker)+line, width, "…")
+}
+
+// stepTally counts a group's tool calls for its header.
+type stepTally struct {
+	tools, failed, moved int
+	// edited holds the base names of the files the tools edited, once
+	// each, in order.
+	edited []string
+}
+
+// tallySteps counts the tool calls, the failed and backgrounded ones, and
+// the files they edited.
+func (g *ToolGroupItem) tallySteps() stepTally {
+	var tally stepTally
+	seen := map[string]bool{}
+	for _, c := range g.children {
+		t, ok := c.(ToolMessageItem)
+		if !ok {
+			continue
 		}
-	case g.storedDeletions && len(changes) == 0:
-		line += g.sty.Tool.ParamKey.Render(" · Some files were deleted")
-	case len(changes) > 0 || len(edited) > 0:
-		// Copies, moves and removals alone have no line counts to show.
-		counted := diffreview.AnyCounted(changes) && slices.ContainsFunc(changes, diffreview.File.HasEdits)
-		if status != "" && !counted {
+		tally.tools++
+		if st, ok := t.(interface{ computeStatus() ToolStatus }); ok && st.computeStatus() == ToolStatusError {
+			tally.failed++
+		}
+		if isMovedToBackground(t) {
+			tally.moved++
+		}
+		if f := editedFile(t); f != "" && !seen[f] && !ignoredReviewPath(f, "") {
+			seen[f] = true
+			tally.edited = append(tally.edited, filepath.Base(f))
+		}
+	}
+	return tally
+}
+
+// headerIcon is pending while the group works, and otherwise follows the
+// last tool's outcome.
+func (g *ToolGroupItem) headerIcon(status string) string {
+	if status != "" || g.Spinning() {
+		return g.sty.Tool.IconPending.Render()
+	}
+	// Check only the last tool's status for the icon, skipping thinking-only steps
+	for i := len(g.children) - 1; i >= 0; i-- {
+		if lastTool, ok := g.children[i].(interface{ computeStatus() ToolStatus }); ok {
+			if lastTool.computeStatus() == ToolStatusError {
+				return g.sty.Tool.IconError.Render()
+			}
+			if t, ok := g.children[i].(ToolMessageItem); ok && isMovedToBackground(t) {
+				// Still running, so not a finished ✓.
+				return g.sty.Tool.IconPending.SetString(backgroundIcon).Render()
+			}
 			break
 		}
-		line += g.sty.Tool.ParamKey.Render(" · ")
-		if status == "" {
-			label := g.liveChangeLabel(changes, edited)
-			line += g.sty.Tool.ParamKey.Render(label)
-			if counted && label != "" {
-				line += " "
-			}
+	}
+	return g.sty.Tool.IconSuccess.Render()
+}
+
+// changeSummary describes the files the group changed: the saved summary,
+// the captured changes, or the files the tools edited, with line counts
+// when known.
+func (g *ToolGroupItem) changeSummary(status string, changes []diffreview.File, edited []string, storedSummary string) string {
+	switch {
+	case storedSummary != "":
+		summary := g.sty.Tool.ParamKey.Render(" · " + storedSummary)
+		if g.storedCounted {
+			summary += " " + g.lineCounts(g.storedAdds, g.storedDels)
 		}
-		if counted {
-			adds, dels := diffreview.Stats(changes)
-			line += g.sty.Tool.ChangesAdd.Render(fmt.Sprintf("+%d", adds)) + " " +
-				g.sty.Tool.ChangesDel.Render(fmt.Sprintf("−%d", dels))
+		return summary
+	case g.storedDeletions && len(changes) == 0:
+		return g.sty.Tool.ParamKey.Render(" · Some files were deleted")
+	case len(changes) > 0 || len(edited) > 0:
+		return g.liveChangeSummary(status, changes, edited)
+	}
+	return ""
+}
+
+// liveChangeSummary describes changes made in this session. While working
+// only line counts are shown, and only when there are some.
+func (g *ToolGroupItem) liveChangeSummary(status string, changes []diffreview.File, edited []string) string {
+	// Copies, moves and removals alone have no line counts to show.
+	counted := diffreview.AnyCounted(changes) && slices.ContainsFunc(changes, diffreview.File.HasEdits)
+	if status != "" && !counted {
+		return ""
+	}
+	summary := g.sty.Tool.ParamKey.Render(" · ")
+	if status == "" {
+		label := g.liveChangeLabel(changes, edited)
+		summary += g.sty.Tool.ParamKey.Render(label)
+		if counted && label != "" {
+			summary += " "
 		}
 	}
-	if moved > 0 {
-		line += g.sty.Tool.ParamKey.Render(fmt.Sprintf(" · %d backgrounded", moved))
+	if counted {
+		adds, dels := diffreview.Stats(changes)
+		summary += g.lineCounts(adds, dels)
 	}
-	if failed > 0 {
-		line += g.sty.Tool.ErrorMessage.Render(fmt.Sprintf(" · %d failed", failed))
-	}
+	return summary
+}
+
+// lineCounts renders added and removed line counts.
+func (g *ToolGroupItem) lineCounts(adds, dels int) string {
+	return g.sty.Tool.ChangesAdd.Render(fmt.Sprintf("+%d", adds)) + " " +
+		g.sty.Tool.ChangesDel.Render(fmt.Sprintf("−%d", dels))
+}
+
+// activitySuffix keeps the activity timer and animation in step with
+// status and renders what is happening now, or "" when idle.
+func (g *ToolGroupItem) activitySuffix(status string) string {
 	g.syncActivity(time.Now())
 	if status != "" && status != g.animLabel {
 		g.animLabel = status
 		g.anim.SetLabel(status)
 	}
 	if status == "Compacting conversation" {
-		line += g.sty.Tool.ParamKey.Render(" | ") + renderCompactingStatus(g.sty, g.activity.elapsed(time.Now()), g.anim.RenderEllipsis())
-	} else if status != "" {
-		// Working: say what's happening now, not the whole command.
-		line += g.sty.Tool.ParamKey.Render(" | ") + g.anim.Render()
+		return g.sty.Tool.ParamKey.Render(" | ") + renderCompactingStatus(g.sty, g.activity.elapsed(time.Now()), g.anim.RenderEllipsis())
 	}
-	return ansi.Truncate(g.sty.Tool.ParamKey.Render(marker)+line, width, "…")
+	if status != "" {
+		// Working: say what's happening now, not the whole command.
+		return g.sty.Tool.ParamKey.Render(" | ") + g.anim.Render()
+	}
+	return ""
 }
 
 // liveChangeLabel describes the captured file changes or, without them,

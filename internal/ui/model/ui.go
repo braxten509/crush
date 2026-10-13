@@ -300,11 +300,6 @@ type UI struct {
 	backgroundResends int
 	// watchBackground tells [WatchTerminalBackground] whether to check.
 	watchBackground atomic.Bool
-	// quietFrame lets the next View reuse lastView: set for messages that
-	// can't change the screen (background checks).
-	quietFrame   bool
-	lastView     tea.View
-	haveLastView bool
 
 	// mouseEnabled controls whether Bubble Tea mouse reporting is active.
 	// When false, the terminal emulator (or tmux) handles text selection,
@@ -326,11 +321,10 @@ type UI struct {
 	state uiState
 	mode  uiInputMode
 
-	// Frame memoization (see framecache.go). scrollOnlyUpdate is set by
-	// handlers that change nothing but the chat scroll position; frameDirty
-	// overrides it when a layout change happens in the same update.
-	frames           *frameCache
-	scrollOnlyUpdate bool
+	// Frame memoization (see framecache.go): frames holds the memoized
+	// frames, frame the per-update bookkeeping and the last view.
+	frames *frameCache
+	frame  frameState
 
 	// tasks are the background sub-agents seen this run, by ID, and
 	// bgProcs the processes the agents left running. They share a row
@@ -343,9 +337,6 @@ type UI struct {
 	hostServers  []agent.Server
 	tasksFocused bool
 	taskSel      int
-	frameDirty   bool
-	frameSkipPut bool
-	frameGCArmed bool
 	// planReadySessionID holds the session whose plan run emitted the
 	// plan-ready marker but has not been confirmed for execution yet. It
 	// lets the user reopen the handoff prompt after dismissing it.
@@ -978,7 +969,7 @@ func (m *UI) loadMCPrompts() tea.Msg {
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(dialog.PreviewReadyMsg); ok {
-		m.invalidateFrames()
+		m.frame.invalidate()
 	}
 	model, cmd := m.update(msg)
 	return model, tea.Batch(cmd, m.syncPreview(), m.hostStatus())
@@ -1041,7 +1032,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			typed.Discard()
 		}
-		m.invalidateFrames()
+		m.frame.invalidate()
 		return m, nil
 	case *secureentry.Form:
 		return m, m.openSecureQuestionForm(typed)
@@ -1226,7 +1217,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.session != nil && m.session.ID == msg.session.ID {
 			m.session.KeptSkills = msg.session.KeptSkills
 			m.syncKeptSkillsDialog()
-			m.invalidateFrames()
+			m.frame.invalidate()
 		}
 	case userCommandsLoadedMsg:
 		m.customCommands = msg.Commands
@@ -1720,7 +1711,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if lines == 0 {
 				break
 			}
-			m.markScrollOnly()
+			m.frame.markScrollOnly()
 			m.applyChatScroll(lines)
 		}
 	case frameGCMsg:
@@ -1740,7 +1731,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd, done := m.chat.WarmStep(msg.seq)
 			if cmd != nil {
 				// Warming only fills caches; the frame is unchanged.
-				m.markScrollOnly()
+				m.frame.markScrollOnly()
 				cmds = append(cmds, cmd)
 			} else if done {
 				// Heights are cached now, so the final layout pass (scrollbar
@@ -1962,7 +1953,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.textarea.Placeholder != prevPlaceholder {
-		m.invalidateFrames()
+		m.frame.invalidate()
 	}
 
 	// TTL backstop: schedule an off-thread re-probe for any memoized
@@ -1974,7 +1965,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// should return all cmds anyway.
 	if m.attachments.Update(msg) {
 		cmds = append(cmds, m.turnOffRemovedKeptSkills())
-		m.invalidateFrames()
+		m.frame.invalidate()
 	}
 	// Any update may have put a spinner on screen (new message, tool update,
 	// scroll, session load); make sure the clock is running. This is the
@@ -2006,12 +1997,12 @@ func (m *UI) handleAnimTick(msg animTickMsg) tea.Cmd {
 	}
 	if m.state != uiChat {
 		m.chat.stopAnimating(msg)
-		m.markScrollOnly()
+		m.frame.markScrollOnly()
 		return nil
 	}
 	changed, cmd := m.chat.Tick(msg)
 	if !changed {
-		m.markScrollOnly()
+		m.frame.markScrollOnly()
 		return cmd
 	}
 	if m.chat.Follow() {
@@ -3824,14 +3815,14 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			case key.Matches(msg, m.keyMap.Chat.Expand):
 				m.chat.ToggleExpandedSelectedItem()
 			case key.Matches(msg, m.keyMap.Chat.Up):
-				m.markScrollOnly()
+				m.frame.markScrollOnly()
 				m.chat.ScrollBy(-1)
 				if !m.chat.SelectedItemInView() {
 					m.chat.SelectPrev()
 					m.chat.ScrollToSelected()
 				}
 			case key.Matches(msg, m.keyMap.Chat.Down):
-				m.markScrollOnly()
+				m.frame.markScrollOnly()
 				m.chat.ScrollBy(1)
 				if !m.chat.SelectedItemInView() {
 					m.chat.SelectNext()
@@ -3844,19 +3835,19 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				m.chat.SelectNext()
 				m.chat.ScrollToSelected()
 			case key.Matches(msg, m.keyMap.Chat.HalfPageUp):
-				m.markScrollOnly()
+				m.frame.markScrollOnly()
 				m.chat.ScrollBy(-m.chat.Height() / 2)
 				m.chat.SelectFirstInView()
 			case key.Matches(msg, m.keyMap.Chat.HalfPageDown):
-				m.markScrollOnly()
+				m.frame.markScrollOnly()
 				m.chat.ScrollBy(m.chat.Height() / 2)
 				m.chat.SelectLastInView()
 			case key.Matches(msg, m.keyMap.Chat.PageUp):
-				m.markScrollOnly()
+				m.frame.markScrollOnly()
 				m.chat.ScrollBy(-m.chat.Height())
 				m.chat.SelectFirstInView()
 			case key.Matches(msg, m.keyMap.Chat.PageDown):
-				m.markScrollOnly()
+				m.frame.markScrollOnly()
 				m.chat.ScrollBy(m.chat.Height())
 				m.chat.SelectLastInView()
 			case key.Matches(msg, m.keyMap.Chat.Home):
@@ -4130,14 +4121,10 @@ func mouseMode(enabled, wantsMotion bool) tea.MouseMode {
 // View renders the UI model's view. A background check changes nothing on
 // screen, so it reuses the last frame instead of drawing one.
 func (m *UI) View() tea.View {
-	if m.quietFrame && m.haveLastView {
-		m.quietFrame = false
-		return m.lastView
+	if v, ok := m.frame.quietView(); ok {
+		return v
 	}
-	m.quietFrame = false
-	m.lastView = m.view()
-	m.haveLastView = true
-	return m.lastView
+	return m.frame.remember(m.view())
 }
 
 func (m *UI) view() tea.View {
@@ -4685,7 +4672,7 @@ func (m *UI) updateTextareaWithPrevHeight(msg tea.Msg, prevHeight int) tea.Cmd {
 
 // updateSize updates the sizes of UI components based on the current layout.
 func (m *UI) updateSize() {
-	m.invalidateFrames()
+	m.frame.invalidate()
 
 	// Set status width
 	m.status.SetWidth(m.layout.status.Dx())
@@ -5302,7 +5289,7 @@ func (m *UI) applyFileCompletion(msg fileCompletionMsg) tea.Cmd {
 	if msg.attachment == nil || !m.attachments.Update(*msg.attachment) {
 		return nil
 	}
-	m.invalidateFrames()
+	m.frame.invalidate()
 	return m.turnOffRemovedKeptSkills()
 }
 
@@ -5642,7 +5629,7 @@ func (m *UI) keptSkillItems(entries []skills.CatalogEntry) []dialog.KeptSkillIte
 }
 
 func (m *UI) setKeptSkill(skill session.KeptSkill, on bool) tea.Cmd {
-	m.invalidateFrames()
+	m.frame.invalidate()
 	if !m.hasSession() {
 		m.pendingKeptSkills = slices.DeleteFunc(m.pendingKeptSkills, func(k session.KeptSkill) bool { return k.ID == skill.ID })
 		if on {

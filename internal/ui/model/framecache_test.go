@@ -201,7 +201,7 @@ func frameTestItems(prefix string) []chat.MessageItem {
 // scrollOnlyUpdate simulates a scroll-only Update followed by View.
 func scrollOnlyUpdate(u *UI, lines int) tea.View {
 	u.beginFrameUpdate()
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	_ = u.chat.ScrollBy(lines)
 	u.endFrameUpdate()
 	return u.View()
@@ -222,11 +222,11 @@ func TestView_ScrollOnlyUpdateHitsCache(t *testing.T) {
 	require.Equal(t, first.Content, second.Content)
 
 	// A scroll-only update at the same position is served from cache.
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	third := u.View()
 	require.Equal(t, 1, u.frames.hits)
 	require.Equal(t, first.Content, third.Content)
-	require.False(t, u.scrollOnlyUpdate, "flag must be consumed by View")
+	require.False(t, u.frame.scrollOnly, "flag must be consumed by View")
 }
 
 func TestView_ScrollAwayAndBackHitsCache(t *testing.T) {
@@ -279,7 +279,7 @@ func TestView_ContentChangeBetweenScrollsIsNotStale(t *testing.T) {
 	require.Equal(t, 0, u.frames.hits)
 
 	// A following scroll-only View at the same key serves the new content.
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	v := u.View()
 	require.Equal(t, 1, u.frames.hits)
 	require.Equal(t, after.Content, v.Content)
@@ -292,11 +292,11 @@ func TestView_LayoutChangeOverridesScrollOnly(t *testing.T) {
 	u.View()
 	require.Equal(t, 1, u.frames.Len())
 
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	u.updateSize()
 	u.View()
 	require.Equal(t, 0, u.frames.hits, "layout change must not serve a memoized frame")
-	require.False(t, u.frameDirty)
+	require.False(t, u.frame.dirty)
 }
 
 func TestView_LayoutChangeDuringDrawIsNotStoredUnderStaleKey(t *testing.T) {
@@ -307,12 +307,12 @@ func TestView_LayoutChangeDuringDrawIsNotStoredUnderStaleKey(t *testing.T) {
 
 	// Resize without recomputing layout: Draw detects the drift, calls
 	// updateSize, and sets frameDirty after the key was computed.
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	u.width += 10
 	u.View()
 	require.Equal(t, 0, u.frames.hits)
 	require.Equal(t, 0, u.frames.Len(), "frame drawn under a changed layout must not be memoized")
-	require.False(t, u.frameDirty, "dirty flag must not leak into the next update")
+	require.False(t, u.frame.dirty, "dirty flag must not leak into the next update")
 
 	u.View()
 	require.Equal(t, 1, u.frames.Len())
@@ -328,7 +328,7 @@ func TestView_DialogDisablesCache(t *testing.T) {
 	u.View()
 	require.Equal(t, 0, u.frames.Len(), "opening a dialog must drop memoized frames")
 
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	u.View()
 	require.Equal(t, 0, u.frames.hits)
 	require.Equal(t, 0, u.frames.Len(), "frames must not be memoized while a dialog is open")
@@ -341,9 +341,9 @@ func TestFrameGC_ArmsOnceAndDrainsWhenIdle(t *testing.T) {
 	u.beginFrameUpdate()
 	require.Nil(t, u.endFrameUpdate(), "non-scroll update must not arm the GC timer")
 
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	require.NotNil(t, u.endFrameUpdate(), "first scroll-only update must arm the GC timer")
-	require.True(t, u.frameGCArmed)
+	require.True(t, u.frame.gcArmed)
 	require.Nil(t, u.endFrameUpdate(), "must not double-arm")
 	u.View()
 	require.Equal(t, 1, u.frames.Len())
@@ -351,7 +351,7 @@ func TestFrameGC_ArmsOnceAndDrainsWhenIdle(t *testing.T) {
 	// GC while frames are still fresh: nothing swept, frame served, re-armed.
 	u.beginFrameUpdate()
 	u.handleFrameGC()
-	require.True(t, u.scrollOnlyUpdate, "GC must not invalidate frames")
+	require.True(t, u.frame.scrollOnly, "GC must not invalidate frames")
 	require.NotNil(t, u.endFrameUpdate(), "GC must re-arm while frames remain")
 	u.View()
 	require.Equal(t, 1, u.frames.hits)
@@ -361,13 +361,13 @@ func TestFrameGC_ArmsOnceAndDrainsWhenIdle(t *testing.T) {
 	u.frames.now = func() time.Time { return now.Add(2 * time.Minute) }
 	u.beginFrameUpdate()
 	u.handleFrameGC()
-	require.False(t, u.scrollOnlyUpdate)
-	require.True(t, u.frameSkipPut)
+	require.False(t, u.frame.scrollOnly)
+	require.True(t, u.frame.skipPut)
 	require.Nil(t, u.endFrameUpdate(), "GC must stop once the cache is empty")
 	u.View()
 	require.Equal(t, 0, u.frames.Len(), "post-drain render must not be memoized")
-	require.False(t, u.frameSkipPut)
-	require.False(t, u.frameGCArmed)
+	require.False(t, u.frame.skipPut)
+	require.False(t, u.frame.gcArmed)
 }
 
 func TestKeyScroll_DoesNotSequenceGCTick(t *testing.T) {
@@ -378,8 +378,8 @@ func TestKeyScroll_DoesNotSequenceGCTick(t *testing.T) {
 
 	u.beginFrameUpdate()
 	cmd := u.handleKeyPressMsg(tea.KeyPressMsg{Code: tea.KeyPgUp})
-	require.True(t, u.scrollOnlyUpdate)
-	require.False(t, u.frameGCArmed, "key handler must not arm the GC timer itself")
+	require.True(t, u.frame.scrollOnly)
+	require.False(t, u.frame.gcArmed, "key handler must not arm the GC timer itself")
 	require.Nil(t, cmd, "scroll key with no animations must produce no sequenced cmds")
 	require.NotNil(t, u.endFrameUpdate())
 }
@@ -397,7 +397,7 @@ func TestUpdate_WheelScrollThroughUpdateHitsCache(t *testing.T) {
 	}
 	_, cmd := u.Update(wheel)
 	require.NotNil(t, cmd, "first scroll-only update must return the GC arm")
-	require.True(t, u.frameGCArmed)
+	require.True(t, u.frame.gcArmed)
 	v := u.View()
 	require.Equal(t, 1, u.frames.hits, "clamped wheel scroll must be served from cache")
 	require.Equal(t, bottom.Content, v.Content)
@@ -429,14 +429,14 @@ func TestUpdate_FrameGCMsgReArmsThroughUpdate(t *testing.T) {
 	u := newFrameTestUI(t)
 	u.View()
 
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	require.NotNil(t, u.endFrameUpdate())
 	u.View()
 	require.Equal(t, 1, u.frames.Len())
 
 	_, cmd := u.Update(frameGCMsg{})
 	require.NotNil(t, cmd, "GC through Update must re-arm while frames remain")
-	require.True(t, u.frameGCArmed)
+	require.True(t, u.frame.gcArmed)
 	u.View()
 	require.Equal(t, 2, u.frames.hits, "GC must not discard fresh frames")
 
@@ -444,7 +444,7 @@ func TestUpdate_FrameGCMsgReArmsThroughUpdate(t *testing.T) {
 	u.frames.now = func() time.Time { return now.Add(2 * time.Minute) }
 	_, cmd = u.Update(frameGCMsg{})
 	require.Nil(t, cmd, "GC through Update must disarm once drained")
-	require.False(t, u.frameGCArmed)
+	require.False(t, u.frame.gcArmed)
 	u.View()
 	require.Equal(t, 0, u.frames.Len())
 }
@@ -459,13 +459,13 @@ func TestUpdate_DirtyFromNonCacheableViewResetsNextScrollOnlyView(t *testing.T) 
 	// leaves frameDirty behind; the next scroll-only view after the dialog
 	// closes must not serve the pre-change frame.
 	u.dialog.OpenDialog(stubDialog{})
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	u.updateSize()
 	u.View()
 	require.Equal(t, 0, u.frames.Len())
 
 	u.dialog.CloseFrontDialog()
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	u.View()
 	require.Equal(t, 0, u.frames.hits)
 	require.Equal(t, 1, u.frames.Len())

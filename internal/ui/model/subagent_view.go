@@ -60,7 +60,7 @@ func (m *UI) openSubagentView(task agent.Task) tea.Cmd {
 	v.chat.Focus()
 	m.subagentView = v
 	m.dialog.CloseDialog(dialog.SubAgentsID)
-	m.invalidateFrames()
+	m.frame.invalidate()
 	return m.loadSubagentView()
 }
 
@@ -68,7 +68,7 @@ func (m *UI) closeSubagentView() {
 	if v := m.subagentView; v != nil {
 		v.cancel()
 		m.subagentView = nil
-		m.invalidateFrames()
+		m.frame.invalidate()
 	}
 }
 
@@ -147,7 +147,7 @@ func (m *UI) handleSubagentView(msg tea.Msg) (tea.Cmd, bool) {
 			v.chat.follow = false
 			v.chat.SetSelected(selected)
 		}
-		m.invalidateFrames()
+		m.frame.invalidate()
 		if v.dirty {
 			return m.queueSubagentRefresh(), true
 		}
@@ -264,7 +264,7 @@ func (m *UI) handleSubagentAnimTick(msg animTickMsg) tea.Cmd {
 		if v.chat.Follow() {
 			v.chat.ScrollToBottom()
 		}
-		m.invalidateFrames()
+		m.frame.invalidate()
 	}
 	return cmd
 }

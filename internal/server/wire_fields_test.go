@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -78,7 +79,7 @@ func TestPutSessionKeepsSnakeCaseFields(t *testing.T) {
 	req.SetPathValue("id", wsID)
 	req.SetPathValue("sid", "s1")
 	rec := httptest.NewRecorder()
-	c.handlePutWorkspaceSession(rec, req)
+	c.endpointHandler(rpc.SaveSession)(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
 	require.Equal(t, want, sessions.saved)
@@ -101,7 +102,7 @@ func TestSessionHistoryUsesWireFields(t *testing.T) {
 	req.SetPathValue("id", wsID)
 	req.SetPathValue("sid", "s1")
 	rec := httptest.NewRecorder()
-	c.handleGetWorkspaceSessionHistory(rec, req)
+	c.endpointHandler(rpc.SessionHistory)(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
 	var got []proto.File

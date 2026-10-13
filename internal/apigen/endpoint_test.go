@@ -129,7 +129,7 @@ func TestBuilderCompileContract(t *testing.T) {
 
 func TestBuilderVerbsAndSSE(t *testing.T) {
 	t.Parallel()
-	for method, build := range map[string]func(string) endpointBuilder{
+	for method, build := range map[string]func(string) Builder{
 		http.MethodGet:    Get,
 		http.MethodPost:   Post,
 		http.MethodPut:    Put,

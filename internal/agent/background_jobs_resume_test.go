@@ -62,7 +62,9 @@ func TestFinishedBackgroundJobIsForgotten(t *testing.T) {
 	h, calls, path := savingJobHub(t)
 	session, err := h.c.sessions.Create(t.Context(), "jobs")
 	require.NoError(t, err)
-	job := startJob(t, h, session.ID, "sleep 1; echo done")
+	// Long enough that a busy machine still reads the save before the
+	// job ends and is forgotten.
+	job := startJob(t, h, session.ID, "sleep 3; echo done")
 	saved := readSavedJobs(t, path)
 	require.Len(t, saved, 1)
 	require.Equal(t, job.ID, saved[0].ID)
@@ -72,7 +74,7 @@ func TestFinishedBackgroundJobIsForgotten(t *testing.T) {
 	select {
 	case call := <-calls:
 		require.Contains(t, call.Prompt, "exit code 0")
-	case <-time.After(8 * time.Second):
+	case <-time.After(12 * time.Second):
 		t.Fatal("completion notification missing")
 	}
 	require.Eventually(t, func() bool { return len(readSavedJobs(t, path)) == 0 }, 2*time.Second, 20*time.Millisecond)

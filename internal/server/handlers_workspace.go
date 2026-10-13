@@ -94,7 +94,7 @@ func (c *controllerV1) setCurrentSession(r *http.Request, req proto.CurrentSessi
 	if err != nil {
 		return rpc.Empty{}, err
 	}
-	return rpc.Empty{}, c.backend.SetCurrentSession(r.PathValue("id"), clientID, req.SessionID)
+	return rpc.Empty{}, c.backend.SetCurrentSession(r.Context(), r.PathValue("id"), clientID, req.SessionID)
 }
 
 // deleteWorkspace releases the calling client's creation hold on a
@@ -160,6 +160,9 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 		case ev, ok := <-events:
 			if !ok {
 				return
+			}
+			if !c.deliverToClient(r.Context(), id, clientID, ev.Payload) {
+				continue
 			}
 			wrapped := wrapEvent(ev.Payload)
 			if wrapped == nil {

@@ -45,6 +45,7 @@ func PermissionRequestToDomain(p PermissionRequest) permission.PermissionRequest
 // into its wire form.
 func PermissionNotificationFromDomain(n permission.PermissionNotification) PermissionNotification {
 	return PermissionNotification{
+		SessionID:  n.SessionID,
 		ToolCallID: n.ToolCallID,
 		Granted:    n.Granted,
 		Denied:     n.Denied,
@@ -55,6 +56,7 @@ func PermissionNotificationFromDomain(n permission.PermissionNotification) Permi
 // notification back into the domain type.
 func PermissionNotificationToDomain(n PermissionNotification) permission.PermissionNotification {
 	return permission.PermissionNotification{
+		SessionID:  n.SessionID,
 		ToolCallID: n.ToolCallID,
 		Granted:    n.Granted,
 		Denied:     n.Denied,

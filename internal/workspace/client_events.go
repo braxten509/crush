@@ -339,7 +339,7 @@ func (w *ClientWorkspace) translateEvent(ev any) tea.Msg {
 	case pubsub.Event[proto.QuestionNotification]:
 		return pubsub.Event[question.Notification]{
 			Type:    e.Type,
-			Payload: question.Notification{BatchID: e.Payload.BatchID},
+			Payload: question.Notification{BatchID: e.Payload.BatchID, SessionID: e.Payload.SessionID},
 		}
 	case pubsub.Event[proto.Message]:
 		return pubsub.Event[message.Message]{

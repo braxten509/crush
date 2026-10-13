@@ -26,6 +26,11 @@ import (
 //     viewing. Empty string means the client has no session selected
 //     (e.g. the landing screen). Cleared automatically when the
 //     clientState entry is removed.
+//   - sessionReported records whether the client has ever reported a
+//     current session via [Backend.SetCurrentSession]. Clients that
+//     never report one (e.g. API clients predating session reporting)
+//     are indistinguishable from landing-screen clients by session ID
+//     alone; this flag lets the SSE filter fail open for them.
 //   - released marks that the client gave up its claim explicitly while
 //     streams were still open, which a clean exit does. The final stream
 //     detach then tears down immediately instead of waiting out the
@@ -38,6 +43,7 @@ type clientState struct {
 	streams          int
 	holdTimer        *time.Timer
 	currentSessionID string
+	sessionReported  bool
 	released         bool
 }
 
@@ -78,6 +84,12 @@ type Workspace struct {
 	// clients tracks each client's claim on this workspace. Refcount
 	// is a derived value: len(clients).
 	clients map[string]*clientState
+
+	// rootCache memoizes [Backend.RootSessionID] resolutions, keyed by
+	// session ID. Session parentage is fixed at creation, so entries
+	// never go stale; the cache keeps a DB read per event per client
+	// off the SSE hot path.
+	rootCache sync.Map // map[string]string
 
 	// shutdownFn is the function invoked by [Backend.teardown] to
 	// release the workspace's underlying resources. It defaults to the

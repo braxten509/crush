@@ -37,7 +37,6 @@ import (
 	"github.com/charmbracelet/crush/internal/clipboard"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/cpuaffinity"
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
@@ -192,6 +191,19 @@ type (
 
 	// closeDialogMsg is sent to close the current dialog.
 	closeDialogMsg struct{}
+
+	// filePickerDoneMsg closes the file picker once its selection was
+	// delivered.
+	filePickerDoneMsg struct{}
+
+	// chatHighlightCopiedMsg clears the chat's mouse selection after its
+	// text reached the clipboard.
+	chatHighlightCopiedMsg struct{}
+
+	// chatReleaseCopyMsg fires a double-click interval after a mouse
+	// release left a chat highlight; the highlight is copied unless another
+	// click came in since.
+	chatReleaseCopyMsg struct{}
 
 	// hyperRefreshDoneMsg is sent after a silent Hyper OAuth refresh
 	// finishes. It carries the original model-selection action so the
@@ -1450,6 +1462,12 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case copyChatHighlightMsg:
 		cmds = append(cmds, m.copyChatHighlight())
+	case chatReleaseCopyMsg:
+		if time.Since(m.lastClickTime) >= doubleClickThreshold {
+			cmds = append(cmds, m.copyChatHighlight())
+		}
+	case chatHighlightCopiedMsg:
+		m.chat.ClearMouse()
 	case dialog.OpenLinkMsg:
 		cmds = append(cmds, openChatLink(msg.URL, m.com.Workspace.WorkingDir()))
 	case openImageMsg:
@@ -1656,11 +1674,8 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			released := m.chat.HandleMouseUp(x, y)
 			cmds = append(cmds, m.takeChatLink(m.chat))
 			if released && m.chat.HasHighlight() {
-				cmds = append(cmds, tea.Tick(doubleClickThreshold, func(t time.Time) tea.Msg {
-					if time.Since(m.lastClickTime) >= doubleClickThreshold {
-						return copyChatHighlightMsg{}
-					}
-					return nil
+				cmds = append(cmds, tea.Tick(doubleClickThreshold, func(time.Time) tea.Msg {
+					return chatReleaseCopyMsg{}
 				}))
 			}
 		}
@@ -1848,6 +1863,13 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gitBranch = msg.branch
 	case gitBranchPollMsg:
 		cmds = append(cmds, m.fetchGitBranch(), m.gitBranchTicker())
+	case configWriteMsg:
+		cmds = append(cmds, m.applyConfigWrite(msg))
+	case fileCompletionMsg:
+		cmds = append(cmds, m.applyFileCompletion(msg))
+	case filePickerDoneMsg:
+		m.dialog.CloseDialog(dialog.FilePickerID)
+		fimage.ResetCache()
 	case util.InfoMsg:
 		if msg.Type == util.InfoTypeError {
 			slog.Error("Error reported", "error", msg.Msg)
@@ -2476,17 +2498,7 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionSelectNotificationStyle:
-		cfg := m.com.Config()
-		if cfg != nil && cfg.Options != nil {
-			cfg.Options.Notifications = msg.Style
-			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.notifications", msg.Style); err != nil {
-				cmds = append(cmds, util.ReportError(err))
-			} else {
-				cmds = append(cmds, util.CmdHandler(util.NewInfoMsg("Notifications set to: "+msg.Style)))
-			}
-			// Reinitialize notification backend with new style.
-			m.notifyBackend = selectNotificationBackend(m.caps, cfg)
-		}
+		cmds = append(cmds, m.selectNotificationStyle(msg.Style))
 		m.dialog.CloseDialog(dialog.NotificationsID)
 	case dialog.ActionNewSession:
 		if m.isAgentBusy() {
@@ -2538,24 +2550,7 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		cmds = append(cmds, m.toggleUltracode())
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleTransparentBackground:
-		cmds = append(cmds, func() tea.Msg {
-			cfg := m.com.Config()
-			if cfg == nil {
-				return util.ReportError(errors.New("configuration not found"))()
-			}
-
-			isTransparent := cfg.Options != nil && cfg.Options.TUI.IsTransparent()
-			newValue := !isTransparent
-			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.transparent", newValue); err != nil {
-				return util.ReportError(err)()
-			}
-			m.isTransparent = newValue
-
-			if newValue {
-				return util.NewInfoMsg("Using the terminal's background")
-			}
-			return util.NewInfoMsg("Using Crush's background")
-		})
+		cmds = append(cmds, m.toggleTransparentBackground())
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionCheckCLIUpdates:
 		m.dialog.CloseDialog(dialog.CommandsID)
@@ -2567,68 +2562,13 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openComposerFooterForm()
 	case dialog.ActionToggleAgentCPUs:
-		cfg := m.com.Config()
-		newValue := cfg == nil || cfg.Options == nil || !cfg.Options.AgentCPUsEnabled
-		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.agent_cpus_enabled", newValue); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		} else if newValue {
-			cpus := ""
-			if cfg != nil && cfg.Options != nil {
-				cpus = cfg.Options.AgentCPUs
-			}
-			if list, err := cpuaffinity.Apply(cpus); err != nil {
-				cmds = append(cmds, util.ReportError(err))
-			} else {
-				cmds = append(cmds, util.ReportInfo("AI work now runs on CPUs "+list))
-			}
-		} else if err := cpuaffinity.Reset(); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		} else {
-			cmds = append(cmds, util.ReportInfo("AI work can use the whole CPU again"))
-		}
+		cmds = append(cmds, m.toggleAgentCPUs())
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleComposerFocusOnly:
-		newValue := !m.composerFocusOnly()
-		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.composer_focus_only", newValue); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		} else {
-			if newValue && m.focus != uiFocusEditor {
-				// Hand focus back to the composer it now keeps.
-				if m.activeInline != nil {
-					m.focusActiveInline(uiFocusEditor)
-				} else {
-					m.focus = uiFocusEditor
-					cmds = append(cmds, m.textarea.Focus())
-					m.chat.Blur()
-				}
-			}
-			status := "Tab moves focus again"
-			if newValue {
-				status = "Focus stays on the composer"
-			}
-			cmds = append(cmds, util.ReportInfo(status))
-		}
+		cmds = append(cmds, m.toggleComposerFocusOnly())
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionSwitchTheme:
-		themeName := msg.Theme
-		newStyles, err := styles.LoadTheme(themeName)
-		if err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", themeName); err != nil {
-			if m.preThemeStyles != nil {
-				m.applyTheme(*m.preThemeStyles)
-				m.preThemeStyles = nil
-			}
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		m.applyTheme(newStyles)
-		m.preThemeStyles = nil
-		cmds = append(cmds, util.ReportInfo("Theme switched to "+themeName))
-		m.userThemeSelected = true
-		m.dialog.CloseDialog(dialog.ThemeID)
+		cmds = append(cmds, m.switchTheme(msg.Theme))
 	case dialog.ActionPreviewTheme:
 		newStyles, err := styles.LoadTheme(msg.Theme)
 		if err != nil {
@@ -2756,14 +2696,15 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 			cmds = append(cmds, util.ReportError(err))
 			break
 		}
-		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", name); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		cmds = append(cmds, util.ReportInfo("Created new theme: "+name))
-		m.dialog.CloseDialog(dialog.ThemeNewID)
-		m.dialog.CloseDialog(dialog.ThemeID)
-		m.openThemeEditorDialog(name)
+		cmds = append(cmds, m.writeConfigField("options.tui.active_theme", name, func(err error) tea.Cmd {
+			if err != nil {
+				return util.ReportError(err)
+			}
+			m.dialog.CloseDialog(dialog.ThemeNewID)
+			m.dialog.CloseDialog(dialog.ThemeID)
+			m.openThemeEditorDialog(name)
+			return util.ReportInfo("Created new theme: " + name)
+		}))
 	case dialog.ActionRenameTheme:
 		oldName := msg.OldName
 		newName := strings.ToLower(msg.NewName)
@@ -2772,41 +2713,53 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 			cmds = append(cmds, util.ReportError(err))
 			break
 		}
+		renamed := func() tea.Cmd {
+			m.dialog.CloseDialog(dialog.ThemeID)
+			m.openThemeDialog()
+			return util.ReportInfo("Renamed theme " + oldName + " to " + newName)
+		}
 		cfg := m.com.Config()
-		if cfg != nil && cfg.Options != nil && cfg.Options.TUI != nil && strings.EqualFold(cfg.Options.TUI.ActiveTheme, oldName) {
-			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", newName); err != nil {
+		if cfg == nil || cfg.Options == nil || cfg.Options.TUI == nil || !strings.EqualFold(cfg.Options.TUI.ActiveTheme, oldName) {
+			cmds = append(cmds, renamed())
+			break
+		}
+		cmds = append(cmds, m.writeConfigField("options.tui.active_theme", newName, func(err error) tea.Cmd {
+			if err != nil {
 				if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
 					slog.Error("Failed to roll back theme rename", "error", rollbackErr)
 				}
-				cmds = append(cmds, util.ReportError(err))
-				break
+				return util.ReportError(err)
 			}
-		}
-		cmds = append(cmds, util.ReportInfo("Renamed theme "+oldName+" to "+newName))
-		m.dialog.CloseDialog(dialog.ThemeID)
-		m.openThemeDialog()
+			return renamed()
+		}))
 	case dialog.ActionDeleteTheme:
 		if err := styles.DeleteThemeFile(msg.Name); err != nil {
 			cmds = append(cmds, util.ReportError(err))
 			break
 		}
+		name := msg.Name
+		deleted := func() tea.Cmd {
+			m.dialog.CloseDialog(dialog.ThemeID)
+			m.openThemeDialog()
+			return util.ReportInfo("Deleted theme " + name)
+		}
 		// If the deleted theme was active, reset to the default theme.
-		if strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), msg.Name) {
-			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", "charmtone-panther"); err != nil {
-				cmds = append(cmds, util.ReportError(err))
-				break
+		if !strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), name) {
+			cmds = append(cmds, deleted())
+			break
+		}
+		cmds = append(cmds, m.writeConfigField("options.tui.active_theme", "charmtone-panther", func(err error) tea.Cmd {
+			if err != nil {
+				return util.ReportError(err)
 			}
 			newStyles, err := styles.LoadTheme("charmtone-panther")
 			if err != nil {
-				cmds = append(cmds, util.ReportError(err))
-				break
+				return util.ReportError(err)
 			}
 			m.applyTheme(newStyles)
 			m.preThemeStyles = nil
-		}
-		cmds = append(cmds, util.ReportInfo("Deleted theme "+msg.Name))
-		m.dialog.CloseDialog(dialog.ThemeID)
-		m.openThemeDialog()
+			return deleted()
+		}))
 	case dialog.ActionToggleMouseSupport:
 		cfg := m.com.Config()
 		if cfg == nil {
@@ -2819,17 +2772,16 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		mouseEnabled := cfg.Options == nil || cfg.Options.TUI.Mouse == nil || *cfg.Options.TUI.Mouse
 		newValue := !mouseEnabled
 		m.mouseEnabled = newValue
-		cmds = append(cmds, func() tea.Msg {
-			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.mouse", newValue); err != nil {
-				return util.ReportError(err)()
+		cmds = append(cmds, m.writeConfigField("options.tui.mouse", newValue, func(err error) tea.Cmd {
+			if err != nil {
+				return util.ReportError(err)
 			}
-
 			status := "disabled"
 			if newValue {
 				status = "enabled"
 			}
-			return util.NewInfoMsg("Mouse support " + status)
-		})
+			return util.ReportInfo("Mouse support " + status)
+		}))
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionQuit:
 		cmds = append(cmds, tea.Quit)
@@ -2909,16 +2861,11 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		}
 
 	case dialog.ActionFilePickerSelected:
+		// The picker closes on the Update goroutine once the selection's
+		// own command has delivered its message.
 		cmds = append(cmds, tea.Sequence(
 			msg.Cmd(),
-			func() tea.Msg {
-				m.dialog.CloseDialog(dialog.FilePickerID)
-				return nil
-			},
-			func() tea.Msg {
-				fimage.ResetCache()
-				return nil
-			},
+			util.CmdHandler(filePickerDoneMsg{}),
 		))
 
 	case dialog.ActionRunCustomCommand:
@@ -3623,7 +3570,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				if !m.currentModelSupportsImages() {
 					break
 				}
-				cmds = append(cmds, m.pasteImageFromClipboard)
+				cmds = append(cmds, m.pasteImageFromClipboard())
 			case key.Matches(msg, m.keyMap.Editor.PasteText):
 				cmds = append(cmds, m.pasteTextFromClipboard)
 
@@ -5292,42 +5239,71 @@ func (m *UI) insertFileCompletion(path string) tea.Cmd {
 	}
 	heightCmd := m.handleTextareaHeightChange(prevHeight)
 
+	// The command runs off the Update goroutine, so it captures what it
+	// needs now; the read is recorded by applyFileCompletion.
+	supportsImages := m.currentModelSupportsImages()
+	ws := m.com.Workspace
+	sessionID := m.currentSessionID()
+	hasSession := m.hasSession()
 	fileCmd := func() tea.Msg {
-		if !m.currentModelSupportsImages() && common.IsImagePath(path) {
+		if !supportsImages && common.IsImagePath(path) {
 			return util.NewWarnMsg("The current model does not support image attachments")
 		}
 
 		absPath, _ := filepath.Abs(path)
 
-		if m.hasSession() {
+		if hasSession {
 			// Skip attachment if file was already read and hasn't been modified.
-			lastRead := m.com.Workspace.FileTrackerLastReadTime(context.Background(), m.session.ID, absPath)
+			lastRead := ws.FileTrackerLastReadTime(context.Background(), sessionID, absPath)
 			if !lastRead.IsZero() {
 				if info, err := os.Stat(path); err == nil && !info.ModTime().After(lastRead) {
 					return nil
 				}
 			}
-		} else if slices.Contains(m.sessionFileReads, absPath) {
-			return nil
 		}
 
-		m.sessionFileReads = append(m.sessionFileReads, absPath)
-
+		msg := fileCompletionMsg{absPath: absPath, noSession: !hasSession}
 		// Add file as attachment.
 		content, err := os.ReadFile(path)
 		if err != nil {
 			// If it fails, let the LLM handle it later.
-			return nil
+			return msg
 		}
-
-		return message.Attachment{
+		msg.attachment = &message.Attachment{
 			FilePath: path,
 			FileName: filepath.Base(path),
 			MimeType: mimeOf(content),
 			Content:  content,
 		}
+		return msg
 	}
 	return tea.Batch(heightCmd, fileCmd)
+}
+
+// fileCompletionMsg carries a file picked from the @ completions, read off
+// the Update goroutine.
+type fileCompletionMsg struct {
+	absPath string
+	// noSession: the file was picked before the chat existed, so reads are
+	// tracked (and deduplicated) in sessionFileReads alone.
+	noSession bool
+	// attachment is nil when the file could not be read; the LLM handles
+	// it later.
+	attachment *message.Attachment
+}
+
+// applyFileCompletion records a completed file read and attaches the file.
+// Runs on the Update goroutine.
+func (m *UI) applyFileCompletion(msg fileCompletionMsg) tea.Cmd {
+	if msg.noSession && slices.Contains(m.sessionFileReads, msg.absPath) {
+		return nil
+	}
+	m.sessionFileReads = append(m.sessionFileReads, msg.absPath)
+	if msg.attachment == nil || !m.attachments.Update(*msg.attachment) {
+		return nil
+	}
+	m.invalidateFrames()
+	return m.turnOffRemovedKeptSkills()
 }
 
 // insertMCPResourceCompletion inserts the selected resource into the textarea,
@@ -6787,12 +6763,14 @@ func (m *UI) handlePasteMsg(msg tea.PasteMsg) tea.Cmd {
 	}
 
 	if hasPasteExceededThreshold(msg) {
+		// Number the paste now: the command runs off the Update goroutine.
+		idx := m.pasteIdx()
 		return func() tea.Msg {
 			content := []byte(msg.Content)
 			if int64(len(content)) > common.MaxAttachmentSize {
 				return util.ReportWarn("Paste is too big (>5mb)")
 			}
-			name := fmt.Sprintf("paste_%d.txt", m.pasteIdx())
+			name := fmt.Sprintf("paste_%d.txt", idx)
 			mimeBufferSize := min(512, len(content))
 			mimeType := http.DetectContentType(content[:mimeBufferSize])
 			return message.Attachment{
@@ -6899,11 +6877,21 @@ func (m *UI) pasteTextFromClipboard() tea.Msg {
 	return tea.PasteMsg{Content: string(textData)}
 }
 
-// pasteImageFromClipboard reads image data from the system clipboard and
-// creates an attachment. If no image data is found, it falls back to
-// interpreting clipboard text as a file path.
-func (m *UI) pasteImageFromClipboard() tea.Msg {
-	if !m.currentModelSupportsImages() {
+// pasteImageFromClipboard returns a command that reads image data from the
+// system clipboard and creates an attachment. If no image data is found, it
+// falls back to interpreting clipboard text as a file path. What the command
+// needs from the model is captured now, as it runs off the Update goroutine.
+func (m *UI) pasteImageFromClipboard() tea.Cmd {
+	supportsImages, idx := m.currentModelSupportsImages(), m.pasteIdx()
+	return func() tea.Msg {
+		return pasteImageFromClipboard(supportsImages, idx)
+	}
+}
+
+// pasteImageFromClipboard does the work of [UI.pasteImageFromClipboard];
+// idx numbers a pasted image.
+func pasteImageFromClipboard(supportsImages bool, idx int) tea.Msg {
+	if !supportsImages {
 		return util.NewWarnMsg("The current model does not support image attachments")
 	}
 	imageData, err := clipboard.Read(clipboard.FormatImage)
@@ -6913,7 +6901,7 @@ func (m *UI) pasteImageFromClipboard() tea.Msg {
 			Msg:  "File too large, max 5MB",
 		}
 	}
-	name := fmt.Sprintf("paste_%d.png", m.pasteIdx())
+	name := fmt.Sprintf("paste_%d.png", idx)
 	if err == nil {
 		return message.Attachment{
 			FilePath: name,
@@ -7104,10 +7092,7 @@ func (m *UI) copyChatHighlight() tea.Cmd {
 	return common.CopyToClipboardWithCallback(
 		text,
 		"Selected text copied to clipboard",
-		func() tea.Msg {
-			m.chat.ClearMouse()
-			return nil
-		},
+		util.CmdHandler(chatHighlightCopiedMsg{}),
 	)
 }
 

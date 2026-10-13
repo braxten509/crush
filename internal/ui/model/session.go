@@ -143,10 +143,6 @@ func (m *UI) reportCurrentSession(sessionID string) tea.Cmd {
 	}
 }
 
-func (m *UI) loadSessionFiles(sessionID string) ([]SessionFile, error) {
-	return loadSessionFiles(context.Background(), m.com.Workspace, sessionID)
-}
-
 func loadSessionFiles(ctx context.Context, ws workspace.Workspace, sessionID string) ([]SessionFile, error) {
 	files, err := ws.ListSessionHistory(ctx, sessionID)
 	if err != nil {
@@ -203,8 +199,10 @@ func (m *UI) handleFileEvent(file history.File) tea.Cmd {
 		return nil
 	}
 
+	// Capture the session now: the command runs off the Update goroutine.
+	ws, sessionID := m.com.Workspace, m.session.ID
 	return func() tea.Msg {
-		sessionFiles, err := m.loadSessionFiles(m.session.ID)
+		sessionFiles, err := loadSessionFiles(context.Background(), ws, sessionID)
 		// could not load session files
 		if err != nil {
 			return util.NewErrorMsg(err)

@@ -1,4 +1,4 @@
-package cmd
+package serverctl
 
 import (
 	"encoding/json"
@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/version"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,13 +86,6 @@ func staleVersion() proto.VersionInfo {
 	}
 }
 
-func versionCheckCmd(t *testing.T) *cobra.Command {
-	t.Helper()
-	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
-	return cmd
-}
-
 // TestRestartIfStale_HonorsRefusedShutdown is the headline regression.
 // BuildID derives from the executable's mtime, so any rebuild — including
 // every `go run` — makes a second session look like an upgrade. Launching
@@ -108,7 +100,7 @@ func TestRestartIfStale_HonorsRefusedShutdown(t *testing.T) {
 		busy: true,
 	})
 
-	restarted, err := restartIfStale(versionCheckCmd(t), hostURL)
+	restarted, err := restartIfStale(t.Context(), hostURL)
 	require.NoError(t, err)
 	require.False(t, restarted, "a refused shutdown must not be reported as a restart")
 	require.Equal(t, []string{proto.ServerControlShutdownIfIdle}, log.all(),
@@ -129,7 +121,7 @@ func TestRestartIfStale_LeavesLegacyServerBusy(t *testing.T) {
 		workspaces: 3,
 	})
 
-	restarted, err := restartIfStale(versionCheckCmd(t), hostURL)
+	restarted, err := restartIfStale(t.Context(), hostURL)
 	require.NoError(t, err)
 	require.False(t, restarted, "a legacy server with workspaces must be reused, not replaced")
 	require.Equal(t, []string{proto.ServerControlShutdownIfIdle}, log.all(),
@@ -148,7 +140,7 @@ func TestRestartIfStale_ShutsDownLegacyServerWhenIdle(t *testing.T) {
 		legacy: true,
 	})
 
-	restarted, err := restartIfStale(versionCheckCmd(t), hostURL)
+	restarted, err := restartIfStale(t.Context(), hostURL)
 	require.NoError(t, err)
 	require.True(t, restarted, "an idle legacy server must be replaced")
 	require.Equal(t,
@@ -164,7 +156,7 @@ func TestRestartIfStale_RestartsWhenServerAgrees(t *testing.T) {
 
 	hostURL, log := newControlServer(t, controlServerOpts{vi: staleVersion()})
 
-	restarted, err := restartIfStale(versionCheckCmd(t), hostURL)
+	restarted, err := restartIfStale(t.Context(), hostURL)
 	require.NoError(t, err)
 	require.True(t, restarted, "an idle stale server must be restarted")
 	require.Equal(t, []string{proto.ServerControlShutdownIfIdle}, log.all())
@@ -179,7 +171,7 @@ func TestRestartIfStale_MatchingServerUntouched(t *testing.T) {
 		vi: proto.VersionInfo{Version: version.Version, BuildID: version.BuildID},
 	})
 
-	restarted, err := restartIfStale(versionCheckCmd(t), hostURL)
+	restarted, err := restartIfStale(t.Context(), hostURL)
 	require.NoError(t, err)
 	require.False(t, restarted)
 	require.Empty(t, log.all())
@@ -217,7 +209,7 @@ func TestCreateWorkspaceOnLiveServer_RetriesPastExitingServer(t *testing.T) {
 	c, err := client.NewClient(t.TempDir(), "tcp", u.Host)
 	require.NoError(t, err)
 
-	ws, err := createWorkspaceOnLiveServer(t.Context(), c, proto.Workspace{Path: t.TempDir()},
+	ws, err := CreateWorkspace(t.Context(), c, proto.Workspace{Path: t.TempDir()},
 		func() error {
 			mu.Lock()
 			replaced++
@@ -249,7 +241,7 @@ func TestCreateWorkspaceOnLiveServer_GivesUpOnOtherFailures(t *testing.T) {
 	c, err := client.NewClient(t.TempDir(), "tcp", u.Host)
 	require.NoError(t, err)
 
-	_, err = createWorkspaceOnLiveServer(t.Context(), c, proto.Workspace{Path: t.TempDir()},
+	_, err = CreateWorkspace(t.Context(), c, proto.Workspace{Path: t.TempDir()},
 		func() error {
 			t.Fatal("a non-lifecycle failure must not spawn a replacement server")
 			return nil

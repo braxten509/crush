@@ -315,3 +315,5 @@ func (c cache[T]) Store(v T) error {
 	}
 	return nil
 }
+
+const defaultCatwalkURL = "https://catwalk.charm.land"

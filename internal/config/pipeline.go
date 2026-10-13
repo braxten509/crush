@@ -6,10 +6,17 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/env"
+	"github.com/charmbracelet/crush/internal/fsext"
+	"github.com/charmbracelet/crush/internal/shellconfig"
+	"github.com/qjebbs/go-jsons"
+	"github.com/tidwall/gjson"
 )
 
 // buildParams are the inputs to buildConfig. Load and ReloadFromDisk run
@@ -263,4 +270,162 @@ func (p buildParams) pick(load, reload string) string {
 // errorf wraps err with the load or the reload variant of a message.
 func (p buildParams) errorf(load, reload string, err error) error {
 	return fmt.Errorf("%s: %w", p.pick(load, reload), err)
+}
+
+// mustMarshalConfig marshals the config to JSON bytes, returning empty JSON on
+// error.
+func mustMarshalConfig(cfg *Config) []byte {
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return []byte("{}")
+	}
+	return data
+}
+
+// lookupConfigs searches config files starting at cwd and walking up
+// through the current project. The upward walk stops at the git
+// working tree root when one can be detected, otherwise at cwd itself,
+// so an unrelated crush.json placed above the project is never picked
+// up. Global user-level config locations are always included
+// regardless of the boundary.
+func lookupConfigs(cwd string) []string {
+	// Prepend global user config and machine-owned data JSON. Only the user
+	// config directory contributes a crushrc; the data directory is writable
+	// machine state and must never be executed as Bash. Missing files are
+	// skipped when loaded.
+	configPaths := []string{
+		systemConfigPath,
+		GlobalConfig(),
+		shellConfigSibling(GlobalConfig()),
+		GlobalConfigData(),
+	}
+
+	// Ordered high-to-low priority within a directory. LookupBounded returns
+	// matches in this order, and the later reverse + merge make the earliest
+	// listed name win on conflict. So: .crushrc beats crushrc, both beat the
+	// JSON configs, and .crush.json beats crush.json.
+	configNames := []string{
+		"." + appName + "rc",
+		appName + "rc",
+		"." + appName + ".json",
+		appName + ".json",
+	}
+
+	foundConfigs, err := fsext.LookupBounded(cwd, projectBoundary(cwd), configNames...)
+	if err != nil {
+		// returns at least default configs
+		return configPaths
+	}
+
+	// reverse order so last config has more priority
+	slices.Reverse(foundConfigs)
+
+	return append(configPaths, foundConfigs...)
+}
+
+func loadFromConfigPaths(ctx context.Context, configPaths []string) (*Config, []string, error) {
+	var configs [][]byte
+	var loaded []string
+
+	// Track directories that have both crush.json and crushrc to warn
+	// about potential confusion, along with the top-level keys each
+	// defines so we can report conflicts.
+	jsonDirKeys := make(map[string]map[string]bool)
+	shDirKeys := make(map[string]map[string]bool)
+
+	for _, path := range configPaths {
+		if path == "" {
+			continue
+		}
+		data, err := readFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, nil, fmt.Errorf("failed to open config file %s: %w", path, err)
+		}
+		if len(data) == 0 {
+			continue
+		}
+
+		dir := filepath.Dir(path)
+		if isShellConfig(path) {
+			jsonBytes, err := shellconfig.LoadShellConfig(ctx, path, data)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to load shell config %s: %w", path, err)
+			}
+			if len(jsonBytes) > 0 {
+				if !json.Valid(jsonBytes) {
+					return nil, nil, fmt.Errorf("shell config %s produced invalid JSON", path)
+				}
+				addTopLevelKeys(shDirKeys, dir, jsonBytes)
+				configs = append(configs, jsonBytes)
+				loaded = append(loaded, path)
+			}
+		} else {
+			if !json.Valid(data) {
+				return nil, nil, fmt.Errorf("invalid JSON in config file %s", path)
+			}
+			addTopLevelKeys(jsonDirKeys, dir, data)
+			configs = append(configs, data)
+			loaded = append(loaded, path)
+		}
+	}
+
+	// Warn if both a JSON config and a crushrc exist in the same directory
+	// and define overlapping top-level keys. Disjoint coexistence is
+	// intentional and not worth warning about.
+	for dir, jKeys := range jsonDirKeys {
+		sKeys, ok := shDirKeys[dir]
+		if !ok {
+			continue
+		}
+		var conflicts []string
+		for k := range jKeys {
+			if sKeys[k] {
+				conflicts = append(conflicts, k)
+			}
+		}
+		if len(conflicts) > 0 {
+			slices.Sort(conflicts)
+			slog.Warn("Found both a JSON config and a crushrc in the same directory; merging with crushrc taking precedence",
+				"dir", dir, "conflicting_keys", strings.Join(conflicts, ", "))
+		}
+	}
+
+	cfg, err := loadFromBytes(configs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cfg, loaded, nil
+}
+
+// addTopLevelKeys records the top-level JSON keys present in data into the
+// set for dir.
+func addTopLevelKeys(m map[string]map[string]bool, dir string, data []byte) {
+	keys := m[dir]
+	if keys == nil {
+		keys = make(map[string]bool)
+		m[dir] = keys
+	}
+	gjson.ParseBytes(data).ForEach(func(key, _ gjson.Result) bool {
+		keys[key.String()] = true
+		return true
+	})
+}
+
+func loadFromBytes(configs [][]byte) (*Config, error) {
+	if len(configs) == 0 {
+		return &Config{}, nil
+	}
+
+	data, err := jsons.Merge(configs)
+	if err != nil {
+		return nil, err
+	}
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
 }

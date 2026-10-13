@@ -260,18 +260,8 @@ type UI struct {
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
 
-	// remote is the window's Remote Control share, nil while off.
-	remote            *remote.Server
-	remotePresence    remote.Presence
-	remotePhones      []string
-	remoteStarting    bool
-	remoteGeneration  uint64
-	remoteSetupCancel context.CancelFunc
-	remoteSetupBusy   bool
-	remoteSetupInfo   remote.SetupInfo
-	// remoteQuiet: the share was asked for by the phone's launcher, so it
-	// starts without opening the Remote Control dialog over the new window.
-	remoteQuiet bool
+	// remote is the window's Remote Control share; see remote.go.
+	remote remoteShare
 
 	// inSessionHost: this Crush is one session in the session list, and
 	// reports its state there; see session_host.go.
@@ -740,7 +730,7 @@ func (m *UI) Init() tea.Cmd {
 	if id := os.Getenv(remote.LaunchEnv); id != "" {
 		_ = os.Unsetenv(remote.LaunchEnv)
 		remote.SetLaunchID(id)
-		m.remoteQuiet = true
+		m.remote.quiet = true
 		if cmd := m.openRemote(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}

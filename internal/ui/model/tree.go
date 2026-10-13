@@ -48,7 +48,7 @@ func (m *UI) treeReady() error {
 	if m.session == nil {
 		return fmt.Errorf("start a chat first")
 	}
-	if m.remote != nil || m.remoteStarting {
+	if m.remote.server != nil || m.remote.starting {
 		return fmt.Errorf("turn off phone sharing first")
 	}
 	if m.sessionLoad.active {

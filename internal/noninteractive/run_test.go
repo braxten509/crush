@@ -46,7 +46,7 @@ func newFakeBackend() *fakeBackend {
 	}
 }
 
-func (f *fakeBackend) record(format string, args ...any) {
+func (f *fakeBackend) recordf(format string, args ...any) {
 	f.calls = append(f.calls, fmt.Sprintf(format, args...))
 }
 
@@ -55,33 +55,33 @@ func (f *fakeBackend) Config(context.Context) (*config.Config, error) {
 }
 
 func (f *fakeBackend) SetModel(_ context.Context, typ config.SelectedModelType, m config.SelectedModel) error {
-	f.record("set %s %s/%s effort=%q tier=%q", typ, m.Provider, m.Model, m.ReasoningEffort, m.ServiceTier)
+	f.recordf("set %s %s/%s effort=%q tier=%q", typ, m.Provider, m.Model, m.ReasoningEffort, m.ServiceTier)
 	f.cfg.Models[typ] = m
 	return nil
 }
 
 func (f *fakeBackend) DefaultSmallModel(_ context.Context, providerID string) (*config.SelectedModel, error) {
-	f.record("default-small %s", providerID)
+	f.recordf("default-small %s", providerID)
 	return &config.SelectedModel{Provider: providerID, Model: "claude-small"}, nil
 }
 
 func (f *fakeBackend) LastAssistantModel(_ context.Context, sessionID string) (string, string, error) {
-	f.record("last-assistant %s", sessionID)
+	f.recordf("last-assistant %s", sessionID)
 	return f.last[0], f.last[1], nil
 }
 
 func (f *fakeBackend) UpdateAgent(context.Context) error {
-	f.record("update-agent")
+	f.recordf("update-agent")
 	return nil
 }
 
 func (f *fakeBackend) Prepare(context.Context) error {
-	f.record("prepare")
+	f.recordf("prepare")
 	return f.prepareErr
 }
 
 func (f *fakeBackend) ResolveSession(_ context.Context, id string, useLast bool) (string, error) {
-	f.record("resolve %q last=%t", id, useLast)
+	f.recordf("resolve %q last=%t", id, useLast)
 	if f.resolveErr != nil {
 		return "", f.resolveErr
 	}
@@ -89,7 +89,7 @@ func (f *fakeBackend) ResolveSession(_ context.Context, id string, useLast bool)
 }
 
 func (f *fakeBackend) Stream(_ context.Context, out *Output, sessionID, prompt string) error {
-	f.record("stream %s %s", sessionID, prompt)
+	f.recordf("stream %s %s", sessionID, prompt)
 	defer out.Finish()
 	_, err := fmt.Fprint(out.Stdout, f.streamed)
 	return err

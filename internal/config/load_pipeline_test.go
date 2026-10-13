@@ -317,3 +317,92 @@ func TestLoadPipeline_UnconfiguredLoadsWithoutAgents(t *testing.T) {
 	require.False(t, store.Config().IsConfigured())
 	require.Empty(t, store.Config().Agents)
 }
+
+// TestLoadPipeline_UnconfiguredLoadTracksStaleness is a regression test for
+// Load skipping the staleness snapshot when no provider was usable, which
+// left a later edit to the config files undetected until the first reload.
+func TestLoadPipeline_UnconfiguredLoadTracksStaleness(t *testing.T) {
+	e := newPipelineEnv(t)
+	t.Setenv("CRUSH_DISABLE_DEFAULT_PROVIDERS", "")
+	projectConfig := filepath.Join(e.workDir, "crush.json")
+	e.write(t, projectConfig, `{"options": {"debug": false}}`)
+
+	store, err := Load(e.workDir, e.dataDir, false)
+	require.NoError(t, err)
+	require.False(t, store.Config().IsConfigured())
+	require.False(t, store.ConfigStaleness().Dirty)
+
+	e.write(t, projectConfig, `{"options": {"debug": true, "context_paths": ["X.md"]}}`)
+	result := store.ConfigStaleness()
+	require.True(t, result.Dirty)
+	require.Contains(t, result.Changed, projectConfig)
+}
+
+// TestLoadPipeline_ReloadKeepsDebugFlag is a regression test for a reload
+// dropping the --debug flag: Load forced Options.Debug on, but the reload
+// path rebuilt the config from the files alone, so any config write
+// silently turned off debug logging for the rest of the session.
+func TestLoadPipeline_ReloadKeepsDebugFlag(t *testing.T) {
+	e := newPipelineEnv(t)
+	e.writeRichConfig(t)
+
+	store, err := Load(e.workDir, e.dataDir, true)
+	require.NoError(t, err)
+	require.True(t, store.Config().Options.Debug)
+
+	require.NoError(t, store.ReloadFromDisk(context.Background()))
+	require.True(t, store.Config().Options.Debug, "reload must keep the --debug flag")
+}
+
+// TestLoadPipeline_ReloadKeepsEnvironmentDefaults is a regression test for
+// a reload dropping the defaults Load derives from where Crush runs rather
+// than from the config files: the bounded file walks outside a git working
+// tree and Apple Terminal's transparent background.
+func TestLoadPipeline_ReloadKeepsEnvironmentDefaults(t *testing.T) {
+	e := newPipelineEnv(t)
+	e.writeRichConfig(t)
+	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
+
+	store, err := Load(e.workDir, e.dataDir, false)
+	require.NoError(t, err)
+	require.True(t, store.Config().Options.TUI.IsTransparent())
+
+	// The test process runs inside a git working tree, so simulate the
+	// outside case the way Load records it.
+	store.outsideWorktree = true
+	require.NoError(t, store.ReloadFromDisk(context.Background()))
+
+	cfg := store.Config()
+	require.True(t, cfg.Options.TUI.IsTransparent(), "reload must keep Apple Terminal transparency")
+	depth, items := cfg.Tools.Ls.Limits()
+	require.Equal(t, 2, depth)
+	require.Equal(t, 100, items)
+	depth, items = cfg.Options.TUI.Completions.Limits()
+	require.Equal(t, 2, depth)
+	require.Equal(t, 100, items)
+}
+
+// TestReadConfig_EnvironmentDefaultsYieldToConfig verifies that the
+// environment-derived defaults never override explicit settings.
+func TestReadConfig_EnvironmentDefaultsYieldToConfig(t *testing.T) {
+	e := newPipelineEnv(t)
+	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
+	e.write(t, filepath.Join(e.workDir, "crush.json"), `{
+		"options": {"tui": {"transparent": false, "completions": {"max_depth": 7}}},
+		"tools": {"ls": {"max_items": 9}}
+	}`)
+
+	cfg, _, err := readConfig(t.Context(), buildParams{
+		workingDir:      e.workDir,
+		dataDir:         e.dataDir,
+		outsideWorktree: true,
+	})
+	require.NoError(t, err)
+	require.False(t, cfg.Options.TUI.IsTransparent())
+	depth, items := cfg.Options.TUI.Completions.Limits()
+	require.Equal(t, 7, depth)
+	require.Equal(t, 100, items)
+	depth, items = cfg.Tools.Ls.Limits()
+	require.Equal(t, 2, depth)
+	require.Equal(t, 9, items)
+}

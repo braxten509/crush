@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -129,6 +128,12 @@ type ConfigStore struct {
 	// on the next wait.
 	authSignalMu sync.Mutex
 	authSignals  map[string]chan struct{}
+
+	// debug and outsideWorktree are the load-time inputs a reload must
+	// reapply: the --debug flag, and whether Crush runs outside a git
+	// working tree (checked once, as it shells out to git).
+	debug           bool
+	outsideWorktree bool
 }
 
 // Config returns the pure-data config struct (read-only after load).
@@ -1384,121 +1389,38 @@ func (s *ConfigStore) ReloadFromDisk(ctx context.Context) error {
 }
 
 // reloadFromDiskLocked performs the actual reload. Caller must hold writeMu.
+//
+// It runs the same pipeline as Load. The new Config is finished before it
+// is published, since existing agents may read Config concurrently; on
+// failure the store is left untouched.
 func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
-	// Migrate deprecated disable_notifications before reloading config.
-	migrateDisableNotifications()
-
-	configPaths := lookupConfigs(s.workingDir)
-	cfg, loadedPaths, err := loadFromConfigPaths(ctx, configPaths)
-	if err != nil {
-		return fmt.Errorf("failed to reload config: %w", err)
-	}
-
-	// Apply defaults (using existing data directory if set)
+	// Keep the data directory the store already resolved.
 	var dataDir string
 	if cur := s.Config(); cur != nil && cur.Options != nil {
 		dataDir = cur.Options.DataDirectory
 	}
-	cfg.setDefaults(s.workingDir, dataDir)
 
-	// Merge workspace config if present
-	workspacePath := filepath.Join(cfg.Options.DataDirectory, fmt.Sprintf("%s.json", appName))
-	if wsData, err := readFile(workspacePath); err == nil && len(wsData) > 0 {
-		if !json.Valid(wsData) {
-			return fmt.Errorf("invalid JSON in config file %s", workspacePath)
-		}
-		merged, mergeErr := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
-		if mergeErr == nil {
-			dataDir := cfg.Options.DataDirectory
-			*cfg = *merged
-			cfg.setDefaults(s.workingDir, dataDir)
-			loadedPaths = append(loadedPaths, workspacePath)
-		}
+	res, err := buildConfig(ctx, buildParams{
+		workingDir:      s.workingDir,
+		dataDir:         dataDir,
+		debug:           s.debug,
+		outsideWorktree: s.outsideWorktree,
+		modelOverrides:  s.overrides.Models,
+		refreshHyper:    s.refreshHyperToken,
+		reload:          true,
+	})
+	if res != nil {
+		s.applyPendingWrites(res.pending)
 	}
-
-	// Validate hooks after all config merging is complete so matcher
-	// regexes are recompiled on the reloaded config (mirrors Load).
-	if err := cfg.ValidateHooks(); err != nil {
-		return fmt.Errorf("invalid hook configuration on reload: %w", err)
-	}
-
-	// Save current state for potential rollback.
-	oldConfig := s.Config()
-	oldLoadedPaths := s.loadedPaths
-	oldResolver := s.resolver
-	oldKnownProviders := s.knownProviders
-	oldOverrides := s.overrides
-	oldWorkspacePath := s.workspacePath
-
-	// Preserve runtime overrides
-	overrides := s.overrides
-
-	// Reapply model choices made in this instance. The global config file is
-	// shared, so it may now name a model a sibling instance selected; a
-	// reload triggered by an unrelated write must not swap the user's model
-	// mid-session. An external edit to the config still takes effect for any
-	// model type this instance never chose.
-	maps.Copy(cfg.Models, overrides.Models)
-
-	// Reconfigure providers
-	env := env.New()
-	resolver := NewShellVariableResolver(env)
-
-	// Apply top-level env vars before configuring providers so variables
-	// like AWS_PROFILE are visible to the AWS SDK credential chain.
-	cfg.applyEnv(resolver)
-
-	providers, err := Providers(cfg)
 	if err != nil {
-		if len(providers) == 0 {
-			return fmt.Errorf("failed to load providers during reload: %w", err)
-		}
-		slog.Warn("Reload continuing with the previously known providers", "error", err)
+		return err
 	}
-
-	pending, err := cfg.configureProviders(ctx, env, resolver, providers)
-	s.applyPendingWrites(pending)
-	if err != nil {
-		return fmt.Errorf("failed to configure providers during reload: %w", err)
-	}
-
-	// Finish the new snapshot before publishing it. Existing agents may read
-	// Config concurrently, so post-publication map replacement is a data race.
-	var setupErr error
-	if !cfg.IsConfigured() {
-		slog.Warn("No providers configured after reload")
-	} else {
-		resolved, resolveErr := resolveSelectedModels(cfg, providers)
-		if resolveErr != nil {
-			setupErr = fmt.Errorf("failed to configure selected models during reload: %w", resolveErr)
-		} else {
-			cfg.Models[SelectedModelTypeLarge] = resolved.Large
-			cfg.Models[SelectedModelTypeSmall] = resolved.Small
-			cfg.SetupAgents()
-		}
-	}
-
-	// Rollback on setup failure
-	if setupErr != nil {
-		s.setConfig(oldConfig)
-		s.loadedPaths = oldLoadedPaths
-		s.resolver = oldResolver
-		s.knownProviders = oldKnownProviders
-		s.overrides = oldOverrides
-		s.workspacePath = oldWorkspacePath
-		return setupErr
-	}
-	s.setConfig(cfg)
-	s.loadedPaths = loadedPaths
-	s.resolver = resolver
-	s.knownProviders = providers
-	s.overrides = overrides
-	s.workspacePath = workspacePath
+	s.publishBuild(res)
 
 	// Rebuild staleness tracking. Track every discovered config path, not
 	// just the ones that loaded, so a config file created after this reload
 	// is detected as a change on the next staleness check.
-	s.captureStalenessSnapshot(append(slices.Clone(configPaths), loadedPaths...))
+	s.captureStalenessSnapshot(append(slices.Clone(res.files.discovered), res.files.loaded...))
 
 	return nil
 }

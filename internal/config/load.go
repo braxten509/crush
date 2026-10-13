@@ -39,156 +39,114 @@ const defaultCatwalkURL = "https://catwalk.charm.land"
 // Load loads the configuration from the default paths and returns a
 // ConfigStore that owns both the pure-data Config and all runtime state.
 func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
-	// Migrate deprecated disable_notifications before loading config.
-	migrateDisableNotifications()
-
-	configPaths := lookupConfigs(workingDir)
-
-	cfg, loadedPaths, err := loadFromConfigPaths(context.Background(), configPaths)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config from paths %v: %w", configPaths, err)
-	}
-
-	cfg.setDefaults(workingDir, dataDir)
-
 	store := &ConfigStore{
-		config:         cfg,
-		workingDir:     workingDir,
-		globalDataPath: GlobalConfigData(),
-		workspacePath:  filepath.Join(cfg.Options.DataDirectory, fmt.Sprintf("%s.json", appName)),
-		loadedPaths:    loadedPaths,
+		workingDir:      workingDir,
+		globalDataPath:  GlobalConfigData(),
+		debug:           debug,
+		outsideWorktree: !isInsideWorktree(),
 	}
 
-	if debug {
-		cfg.Options.Debug = true
-	}
-
-	// Load workspace config last so it has highest priority.
-	if wsData, err := readFile(store.workspacePath); err == nil && len(wsData) > 0 {
-		if !json.Valid(wsData) {
-			return nil, fmt.Errorf("invalid JSON in config file %s", store.workspacePath)
-		}
-		merged, mergeErr := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
-		if mergeErr == nil {
-			// Preserve defaults that setDefaults already applied.
-			dataDir := cfg.Options.DataDirectory
-			*cfg = *merged
-			cfg.setDefaults(workingDir, dataDir)
-			store.config = cfg
-			store.loadedPaths = append(store.loadedPaths, store.workspacePath)
-		}
-	}
-
-	// Validate hooks after all config merging is complete so workspace
-	// hooks also get their matcher regexes compiled.
-	if err := cfg.ValidateHooks(); err != nil {
-		return nil, fmt.Errorf("invalid hook configuration: %w", err)
-	}
-
-	if !isInsideWorktree() {
-		const depth = 2
-		const items = 100
-		slog.Warn("No git repository detected in working directory, will limit file walk operations", "depth", depth, "items", items)
-		assignIfNil(&cfg.Tools.Ls.MaxDepth, depth)
-		assignIfNil(&cfg.Tools.Ls.MaxItems, items)
-		assignIfNil(&cfg.Options.TUI.Completions.MaxDepth, depth)
-		assignIfNil(&cfg.Options.TUI.Completions.MaxItems, items)
-	}
-
-	if isAppleTerminal() {
-		slog.Warn("Detected Apple Terminal, enabling transparent mode")
-		assignIfNil(&cfg.Options.TUI.Transparent, true)
-	}
-
-	// Load known providers, this loads the config from catwalk. A failed
-	// refresh still yields the cached or embedded catalog, so only an empty
-	// list is fatal: starting up without providers is worse than starting
-	// up with slightly stale ones. Pass a Hyper token refresher so the
-	// catalog fetch can retry on 401.
-	providers, err := Providers(cfg, func(ctx context.Context) error {
-		return store.RefreshOAuthToken(ctx, ScopeGlobal, "hyper")
+	res, err := buildConfig(context.Background(), buildParams{
+		workingDir:      workingDir,
+		dataDir:         dataDir,
+		debug:           debug,
+		outsideWorktree: store.outsideWorktree,
+		refreshHyper:    store.refreshHyperToken,
+		// Publish the merged config before the catalog loads: the Hyper
+		// token refresher and the catalog refetches go through the store.
+		onMerged: func(cfg *Config, files configFiles) {
+			store.setConfig(cfg)
+			store.workspacePath = files.workspace
+			store.loadedPaths = files.loaded
+		},
+		onCatalog: store.refreshShadowCatalogs,
 	})
-	if err != nil {
-		if len(providers) == 0 {
-			return nil, err
-		}
-		slog.Warn("Continuing with the previously known providers", "error", err)
-	}
-	store.knownProviders = providers
-
-	// When Catwalk refreshed its catalog this run, give the model
-	// catalogs that shadow Catwalk's the same treatment: the ChatGPT and
-	// Grok catalogs are otherwise only fetched at login and would freeze
-	// there while Catwalk keeps moving. Best effort; a failed fetch keeps
-	// the catalog loaded from config.
-	//
-	// The refetches publish a copy-on-write config, so re-read it
-	// afterwards: the mutations below must land on the live config rather
-	// than a snapshot the store has already replaced.
-	if CatwalkUpdated() {
-		fetchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		store.refetchOpenAIModels(fetchCtx, ScopeGlobal)
-		store.refetchGrokModels(fetchCtx, ScopeGlobal)
-		cancel()
-		cfg = store.Config()
-	}
-
-	env := env.New()
-	// Configure providers
-	valueResolver := NewShellVariableResolver(env)
-	store.resolver = valueResolver
 
 	// Hold writeMu for the rest of the load so persisting the pipeline's
 	// writes below cannot trigger an auto-reload.
 	store.writeMu.Lock()
 	defer store.writeMu.Unlock()
 
-	// Apply top-level env vars before configuring providers so variables
-	// like AWS_PROFILE are visible to the AWS SDK credential chain.
-	cfg.applyEnv(valueResolver)
-
-	pending, err := cfg.configureProviders(context.Background(), env, valueResolver, store.knownProviders)
-	store.applyPendingWrites(pending)
+	if res != nil {
+		store.applyPendingWrites(res.pending)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure providers: %w", err)
+		return nil, err
 	}
+	store.publishBuild(res)
 
-	if !cfg.IsConfigured() {
-		slog.Warn("No providers configured")
-		return store, nil
-	}
-
-	resolved, err := resolveSelectedModels(cfg, store.knownProviders)
-	if err != nil {
-		return nil, fmt.Errorf("failed to configure selected models: %w", err)
-	}
-	cfg.Models[SelectedModelTypeLarge] = resolved.Large
-	cfg.Models[SelectedModelTypeSmall] = resolved.Small
-
-	// Persist any fallback corrections while we still hold writeMu.
-	if resolved.LargeFallback {
-		if err := store.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
-			return store.updatePreferredModelFields(c, SelectedModelTypeLarge, resolved.Large)
-		}); err != nil {
-			return nil, fmt.Errorf("failed to update preferred large model: %w", err)
+	// Persist any fallback corrections while we still hold writeMu. Only
+	// the initial load does this: a reload must not write a fallback into
+	// the config file it shares with sibling instances.
+	if res.configured {
+		if err := store.persistModelFallbacks(res.models); err != nil {
+			return nil, err
 		}
 	}
-	if resolved.SmallFallback {
-		if err := store.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
-			return store.updatePreferredModelFields(c, SelectedModelTypeSmall, resolved.Small)
-		}); err != nil {
-			return nil, fmt.Errorf("failed to update preferred small model: %w", err)
-		}
-	}
-	store.SetupAgents()
 
-	// Capture initial staleness snapshot
 	// Capture initial staleness snapshot. Track every discovered config path,
 	// not just the ones that loaded, so a config file created after startup
 	// (e.g. a crushrc added mid-session) is detected as a change.
-	store.captureStalenessSnapshot(append(slices.Clone(configPaths), loadedPaths...))
+	store.captureStalenessSnapshot(append(slices.Clone(res.files.discovered), res.files.loaded...))
 
 	return store, nil
+}
+
+// refreshHyperToken refreshes the global Hyper OAuth token. It is the
+// HyperTokenRefresher handed to the provider catalog fetch.
+func (s *ConfigStore) refreshHyperToken(ctx context.Context) error {
+	return s.RefreshOAuthToken(ctx, ScopeGlobal, "hyper")
+}
+
+// refreshShadowCatalogs renews the model catalogs that shadow Catwalk's
+// when Catwalk refreshed its catalog this run: the ChatGPT and Grok
+// catalogs are otherwise only fetched at login and would freeze there
+// while Catwalk keeps moving. Best effort; a failed fetch keeps the
+// catalog loaded from config.
+//
+// The refetches publish a copy-on-write config, so it returns the live
+// config: the rest of the load must land on it rather than on a snapshot
+// the store has already replaced. Only the initial load does this, so a
+// reload never makes network calls for these catalogs.
+func (s *ConfigStore) refreshShadowCatalogs(cfg *Config) *Config {
+	if !CatwalkUpdated() {
+		return cfg
+	}
+	fetchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.refetchOpenAIModels(fetchCtx, ScopeGlobal)
+	s.refetchGrokModels(fetchCtx, ScopeGlobal)
+	return s.Config()
+}
+
+// publishBuild installs the result of buildConfig on the store. Caller
+// must hold writeMu.
+func (s *ConfigStore) publishBuild(res *buildResult) {
+	s.setConfig(res.cfg)
+	s.loadedPaths = res.files.loaded
+	s.workspacePath = res.files.workspace
+	s.resolver = res.resolver
+	s.knownProviders = res.knownProviders
+}
+
+// persistModelFallbacks writes the model selections that resolution had
+// to correct back to the global config. Caller must hold writeMu.
+func (s *ConfigStore) persistModelFallbacks(resolved resolvedModels) error {
+	if resolved.LargeFallback {
+		if err := s.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
+			return s.updatePreferredModelFields(c, SelectedModelTypeLarge, resolved.Large)
+		}); err != nil {
+			return fmt.Errorf("failed to update preferred large model: %w", err)
+		}
+	}
+	if resolved.SmallFallback {
+		if err := s.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
+			return s.updatePreferredModelFields(c, SelectedModelTypeSmall, resolved.Small)
+		}); err != nil {
+			return fmt.Errorf("failed to update preferred small model: %w", err)
+		}
+	}
+	return nil
 }
 
 // mustMarshalConfig marshals the config to JSON bytes, returning empty JSON on

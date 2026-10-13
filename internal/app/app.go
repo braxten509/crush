@@ -88,18 +88,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	q := db.New(conn)
 	versions := filehistory.New(conn, store.Config().Options.DataDirectory, store.WorkingDir())
 	versions.ScheduleMaintenance(ctx)
-	go func() {
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				versions.ScheduleMaintenance(ctx)
-			}
-		}
-	}()
+	go maintainFileHistory(ctx, versions)
 	sessions := session.NewService(q, conn, versions.Maintain)
 	messages := message.NewService(q, message.WithFileHistory(versions))
 	files := history.NewService(q, conn)
@@ -143,29 +132,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	// Check for updates in the background.
 	go app.checkForUpdates(ctx)
 
-	// Arm initialization synchronously before launching it so WaitForInit
-	// blocks for the in-flight init instead of racing the goroutine and
-	// returning before any MCP tools register.
-	mcp.ArmInit()
-	// Config-disabled servers the user enabled via Toggle MCPs have a
-	// repository-scoped enabled override; force-start them so the toggle
-	// survives restarts. A read failure only means the override is skipped.
-	var forceStart []string
-	if enabled, err := app.Sessions.MCPServersEnabled(ctx); err != nil {
-		slog.Warn("Failed to list enabled MCP overrides; config-disabled servers stay disabled", "error", err)
-	} else {
-		for _, name := range enabled {
-			if m, ok := store.Config().MCP[name]; ok && m.Disabled {
-				forceStart = append(forceStart, name)
-			}
-		}
-	}
-	// Servers disabled for this repository via Toggle MCPs are not started.
-	localDisabled, err := app.Sessions.MCPDisabledServers(ctx)
-	if err != nil {
-		slog.Warn("Failed to list disabled MCP overrides; starting them anyway", "error", err)
-	}
-	go mcp.Initialize(ctx, app.Permissions, store, forceStart, localDisabled)
+	app.startMCP(ctx, store)
 
 	// Start herdr integration when running inside a herdr pane.
 	app.herdrClient = herdr.Init()
@@ -194,6 +161,57 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 		return nil, fmt.Errorf("failed to initialize coder agent: %w", err)
 	}
 
+	app.watchLSP(ctx)
+
+	return app, nil
+}
+
+// maintainFileHistory reschedules file-history maintenance every minute
+// until ctx is done.
+func maintainFileHistory(ctx context.Context, versions *filehistory.Store) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			versions.ScheduleMaintenance(ctx)
+		}
+	}
+}
+
+// startMCP starts MCP initialization in the background, honoring the
+// repository's Toggle MCPs overrides.
+func (app *App) startMCP(ctx context.Context, store *config.ConfigStore) {
+	// Arm initialization synchronously before launching it so WaitForInit
+	// blocks for the in-flight init instead of racing the goroutine and
+	// returning before any MCP tools register.
+	mcp.ArmInit()
+	// Config-disabled servers the user enabled via Toggle MCPs have a
+	// repository-scoped enabled override; force-start them so the toggle
+	// survives restarts. A read failure only means the override is skipped.
+	var forceStart []string
+	if enabled, err := app.Sessions.MCPServersEnabled(ctx); err != nil {
+		slog.Warn("Failed to list enabled MCP overrides; config-disabled servers stay disabled", "error", err)
+	} else {
+		for _, name := range enabled {
+			if m, ok := store.Config().MCP[name]; ok && m.Disabled {
+				forceStart = append(forceStart, name)
+			}
+		}
+	}
+	// Servers disabled for this repository via Toggle MCPs are not started.
+	localDisabled, err := app.Sessions.MCPDisabledServers(ctx)
+	if err != nil {
+		slog.Warn("Failed to list disabled MCP overrides; starting them anyway", "error", err)
+	}
+	go mcp.Initialize(ctx, app.Permissions, store, forceStart, localDisabled)
+}
+
+// watchLSP reports LSP state changes as events and announces the
+// configured servers.
+func (app *App) watchLSP(ctx context.Context) {
 	// Set up callback for LSP state updates.
 	app.LSPManager.SetCallback(func(name string, client *lsp.Client) {
 		if client == nil {
@@ -207,8 +225,6 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	// TrackConfigured must run after SetCallback so the callback is already
 	// installed when configured-but-not-yet-started LSPs are announced.
 	go app.LSPManager.TrackConfigured(ctx)
-
-	return app, nil
 }
 
 // Config returns the pure-data configuration.

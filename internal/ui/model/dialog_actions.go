@@ -218,13 +218,20 @@ func (m *UI) handleModelAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait..."))
 			break
 		}
-		cmd, err := m.setReasoningEffort(msg.Effort, msg.Ultracode)
+		// The picker closes once the effort was saved, and stays open
+		// when saving failed.
+		cmd, err := m.setReasoningEffort(msg.Effort, msg.Ultracode, func(err error) tea.Cmd {
+			if err != nil {
+				return util.ReportError(err)
+			}
+			m.dialog.CloseDialog(dialog.ReasoningID)
+			return nil
+		})
 		if err != nil {
 			cmds = append(cmds, util.ReportError(err))
 			break
 		}
 		cmds = append(cmds, cmd)
-		m.dialog.CloseDialog(dialog.ReasoningID)
 	case dialog.ActionPermissionResponse:
 		m.dialog.CloseDialog(dialog.PermissionsID)
 		switch msg.Action {

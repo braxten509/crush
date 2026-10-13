@@ -447,6 +447,10 @@ func (m *UI) handleAgentMsg(msg tea.Msg) (tea.Cmd, bool) {
 		if cmd := m.handleSelectModel(msg.action); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case copilotImportDoneMsg:
+		if cmd := m.selectModel(msg.action, true); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case creditsUpdatedMsg:
 		m.hyperCredits = msg.credits
 	case usageRefreshedMsg:

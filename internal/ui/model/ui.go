@@ -118,6 +118,13 @@ type (
 		action dialog.ActionSelectModel
 	}
 
+	// copilotImportDoneMsg is sent after the GitHub Copilot token import
+	// finishes. It carries the original model-selection action so the
+	// selection can be resumed.
+	copilotImportDoneMsg struct {
+		action dialog.ActionSelectModel
+	}
+
 	// copyChatHighlightMsg is sent to copy the current chat highlight to clipboard.
 	copyChatHighlightMsg struct{}
 

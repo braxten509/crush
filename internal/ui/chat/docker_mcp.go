@@ -37,80 +37,8 @@ type DockerMCPToolRenderContext struct{}
 // RenderTool implements the [ToolRenderer] interface.
 func (d *DockerMCPToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
 	cappedWidth := cappedMessageWidth(width)
-
-	var params map[string]any
-	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		params = make(map[string]any)
-	}
-
 	tool := strings.TrimPrefix(opts.ToolCall.Name, "mcp_"+config.DockerMCPName+"_")
-
-	mainParam := opts.ToolCall.Input
-	extraArgs := map[string]string{}
-	switch tool {
-	case "mcp-find":
-		if query, ok := params["query"]; ok {
-			if qStr, ok := query.(string); ok {
-				mainParam = qStr
-			}
-		}
-		for k, v := range params {
-			if k == "query" {
-				continue
-			}
-			data, _ := json.Marshal(v)
-			extraArgs[k] = string(data)
-		}
-	case "mcp-add":
-		if name, ok := params["name"]; ok {
-			if nStr, ok := name.(string); ok {
-				mainParam = nStr
-			}
-		}
-		for k, v := range params {
-			if k == "name" {
-				continue
-			}
-			data, _ := json.Marshal(v)
-			extraArgs[k] = string(data)
-		}
-	case "mcp-remove":
-		if name, ok := params["name"]; ok {
-			if nStr, ok := name.(string); ok {
-				mainParam = nStr
-			}
-		}
-		for k, v := range params {
-			if k == "name" {
-				continue
-			}
-			data, _ := json.Marshal(v)
-			extraArgs[k] = string(data)
-		}
-	case "mcp-exec":
-		if name, ok := params["name"]; ok {
-			if nStr, ok := name.(string); ok {
-				mainParam = nStr
-			}
-		}
-	case "mcp-config-set":
-		if server, ok := params["server"]; ok {
-			if sStr, ok := server.(string); ok {
-				mainParam = sStr
-			}
-		}
-	}
-
-	var toolParams []string
-	toolParams = append(toolParams, mainParam)
-	keys := make([]string, 0, len(extraArgs))
-	for k := range extraArgs {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		toolParams = append(toolParams, k, extraArgs[k])
-	}
+	toolParams := dockerMCPHeaderParams(tool, opts.ToolCall.Input)
 
 	if opts.IsPending() {
 		return pendingTool(sty, d.formatToolName(sty, tool), opts.Anim, false)
@@ -129,8 +57,69 @@ func (d *DockerMCPToolRenderContext) RenderTool(sty *styles.Styles, width int, o
 		return joinToolParts(header, d.renderMCPServers(sty, opts, cappedWidth))
 	}
 
+	if body, ok := dockerMCPResultContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, body)
+	}
+	return header
+}
+
+// dockerMCPParam is the parameter a Docker MCP tool's header leads with,
+// and whether its other parameters follow.
+type dockerMCPParam struct {
+	key    string
+	extras bool
+}
+
+// dockerMCPParams maps the Docker MCP tools with a leading parameter to it.
+// Other tools show their raw input.
+var dockerMCPParams = map[string]dockerMCPParam{
+	"mcp-find":       {key: "query", extras: true},
+	"mcp-add":        {key: "name", extras: true},
+	"mcp-remove":     {key: "name", extras: true},
+	"mcp-exec":       {key: "name"},
+	"mcp-config-set": {key: "server"},
+}
+
+// dockerMCPHeaderParams returns the header parameters of a Docker MCP tool
+// call: the leading one, then the extra key/value pairs sorted by key.
+func dockerMCPHeaderParams(tool, input string) []string {
+	var params map[string]any
+	if err := json.Unmarshal([]byte(input), &params); err != nil {
+		params = make(map[string]any)
+	}
+
+	mainParam := input
+	spec, ok := dockerMCPParams[tool]
+	if !ok {
+		return []string{mainParam}
+	}
+	if value, ok := params[spec.key].(string); ok {
+		mainParam = value
+	}
+	toolParams := []string{mainParam}
+	if !spec.extras {
+		return toolParams
+	}
+
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		if k != spec.key {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		data, _ := json.Marshal(params[k])
+		toolParams = append(toolParams, k, string(data))
+	}
+	return toolParams
+}
+
+// dockerMCPResultContent renders a finished call's text and image content.
+// It reports false when the call has no result or nothing to show.
+func dockerMCPResultContent(sty *styles.Styles, opts *ToolRenderOpts, cappedWidth int) (string, bool) {
 	if !opts.HasResult() {
-		return header
+		return "", false
 	}
 
 	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
@@ -148,10 +137,9 @@ func (d *DockerMCPToolRenderContext) RenderTool(sty *styles.Styles, width int, o
 	}
 
 	if len(parts) == 0 {
-		return header
+		return "", false
 	}
-
-	return joinToolParts(header, strings.Join(parts, "\n"))
+	return strings.Join(parts, "\n"), true
 }
 
 // FindMCPResponse represents the response from mcp-find.

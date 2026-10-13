@@ -14,13 +14,13 @@ func (s *cliSteps) pendingSteeredSummaries() []message.QueuedPromptSummary {
 	return result
 }
 
-func (a *sessionAgent) QueuedPromptSummaries(sessionID string) []message.QueuedPromptSummary {
+func (s *sessionScheduler) QueuedPromptSummaries(sessionID string) []message.QueuedPromptSummary {
 	var result []message.QueuedPromptSummary
-	if s, _ := a.steering.Get(sessionID); s != nil {
+	if s, _ := s.steering.Get(sessionID); s != nil {
 		result = s.pendingSteeredSummaries()
 	}
-	pending, _ := a.interrupting.Get(sessionID)
-	queued, _ := a.messageQueue.Get(sessionID)
+	pending, _ := s.interrupting.Get(sessionID)
+	queued, _ := s.messageQueue.Get(sessionID)
 	for _, calls := range [][]SessionAgentCall{pending, queued} {
 		for _, call := range calls {
 			result = append(result, message.QueuedPromptSummary{Prompt: call.Prompt, SubmissionID: call.SubmissionID})

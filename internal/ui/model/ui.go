@@ -3085,7 +3085,7 @@ func (m *UI) restoreModelFromSession(msgs []message.Message) tea.Cmd {
 
 	return m.updateAgentModelCmd(func() tea.Msg {
 		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
-			return util.ReportError(err)
+			return util.ReportError(err)()
 		}
 		slog.Info("Restored model from session",
 			"provider", lastAssistant.Provider,
@@ -3207,7 +3207,7 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 
 	cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
 		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
-			return util.ReportError(err)
+			return util.ReportError(err)()
 		}
 
 		var (
@@ -4991,7 +4991,7 @@ func (m *UI) openEditor(value string) tea.Cmd {
 		}()
 
 		if err != nil {
-			return util.ReportError(err)
+			return util.ReportError(err)()
 		}
 		return editorFileMsg(tmpPath)
 	})
@@ -5008,7 +5008,7 @@ const promptWidth = 2
 func editorFileMsg(path string) tea.Msg {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return util.ReportError(err)
+		return util.ReportError(err)()
 	}
 	return openEditorMsg{
 		Text: strings.TrimSpace(string(content)),
@@ -6768,7 +6768,7 @@ func (m *UI) handlePasteMsg(msg tea.PasteMsg) tea.Cmd {
 		return func() tea.Msg {
 			content := []byte(msg.Content)
 			if int64(len(content)) > common.MaxAttachmentSize {
-				return util.ReportWarn("Paste is too big (>5mb)")
+				return util.ReportWarn("Paste is too big (>5mb)")()
 			}
 			name := fmt.Sprintf("paste_%d.txt", idx)
 			mimeBufferSize := min(512, len(content))
@@ -6838,18 +6838,18 @@ func (m *UI) handleFilePathPaste(path string) tea.Cmd {
 	return func() tea.Msg {
 		fileInfo, err := os.Stat(path)
 		if err != nil {
-			return util.ReportError(err)
+			return util.ReportError(err)()
 		}
 		if fileInfo.IsDir() {
-			return util.ReportWarn("Cannot attach a directory")
+			return util.ReportWarn("Cannot attach a directory")()
 		}
 		if fileInfo.Size() > common.MaxAttachmentSize {
-			return util.ReportWarn("File is too big (>5mb)")
+			return util.ReportWarn("File is too big (>5mb)")()
 		}
 
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return util.ReportError(err)
+			return util.ReportError(err)()
 		}
 
 		mimeBufferSize := min(512, len(content))

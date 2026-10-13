@@ -2,12 +2,13 @@ package agent
 
 import (
 	"bytes"
-	"github.com/charmbracelet/crush/internal/agent/tools"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/charmbracelet/crush/internal/agent/tools"
 )
 
 func init() { markedProcs = linuxMarkedProcs }

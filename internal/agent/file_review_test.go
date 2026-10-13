@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"testing"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
-	"testing"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
@@ -26,8 +26,10 @@ func TestSecureEntryExcludedFromLateAndFutureReviews(t *testing.T) {
 	sess, err := env.sessions.Create(t.Context(), "secure entry review")
 	require.NoError(t, err)
 	path := filepath.Join(env.workingDir, "credentials.env")
-	r := &turnFileReview{root: env.workingDir, messages: env.messages, sessionID: sess.ID,
-		trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
+	r := &turnFileReview{
+		root: env.workingDir, messages: env.messages, sessionID: sess.ID,
+		trackers: map[string]*filechange.Tracker{}, results: map[string]string{},
+	}
 	r.track("template", "write", `{"file_path":"credentials.env"}`)
 	require.NoError(t, os.WriteFile(path, []byte("TOKEN=%s\n"), 0o600))
 	require.NoError(t, r.save(t.Context(), message.ToolResult{ToolCallID: "template", Name: "write"}))
@@ -36,12 +38,16 @@ func TestSecureEntryExcludedFromLateAndFutureReviews(t *testing.T) {
 	defer target.Close()
 	require.NoError(t, target.Save([]byte("synthetic-secret-never-in-chat")))
 	r.finish(t.Context())
-	future := &turnFileReview{root: env.workingDir, messages: env.messages, sessionID: sess.ID,
-		trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
+	future := &turnFileReview{
+		root: env.workingDir, messages: env.messages, sessionID: sess.ID,
+		trackers: map[string]*filechange.Tracker{}, results: map[string]string{},
+	}
 	future.track("later", "edit", `{"file_path":"credentials.env"}`)
 	// Native tool reviews and snapshots both obey the sensitive exclusion.
-	require.NoError(t, future.save(t.Context(), message.ToolResult{ToolCallID: "later", Name: "edit", Metadata: filechange.WithReview("", &filechange.Review{Root: env.workingDir,
-		Changes: []filechange.Change{{Path: path, After: &filechange.State{Content: "synthetic-secret-never-in-chat"}}}})}))
+	require.NoError(t, future.save(t.Context(), message.ToolResult{ToolCallID: "later", Name: "edit", Metadata: filechange.WithReview("", &filechange.Review{
+		Root:    env.workingDir,
+		Changes: []filechange.Change{{Path: path, After: &filechange.State{Content: "synthetic-secret-never-in-chat"}}},
+	})}))
 	future.finish(t.Context())
 	require.NoError(t, env.messages.FlushAll(t.Context()))
 	msgs, err := loadFileReviewMessages(env.messages, t.Context(), sess.ID)
@@ -104,7 +110,6 @@ printf '%s\n' '{"type":"result","subtype":"success"}'
 	files := diffreview.Build([]diffreview.Edit{{Path: "changed.txt", Before: meta.OldContent, After: meta.NewContent}})
 	require.Len(t, files, 1)
 	require.Equal(t, "changed.txt", files[0].Path)
-
 }
 
 func TestFileReviewPersistsFailedAndLateChanges(t *testing.T) {
@@ -115,8 +120,10 @@ func TestFileReviewPersistsFailedAndLateChanges(t *testing.T) {
 	require.NoError(t, err)
 	path := filepath.Join(root, "file.txt")
 	require.NoError(t, os.WriteFile(path, []byte("original\n"), 0o644))
-	r := &turnFileReview{root: root, messages: env.messages, sessionID: session.ID,
-		trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
+	r := &turnFileReview{
+		root: root, messages: env.messages, sessionID: session.ID,
+		trackers: map[string]*filechange.Tracker{}, results: map[string]string{},
+	}
 	r.track("edit-1", "edit", `{"file_path":"file.txt"}`)
 	// A tool which changed the file before reporting its events, then failed.
 	require.NoError(t, os.WriteFile(path, []byte("first\n"), 0o644))
@@ -169,8 +176,10 @@ func TestFileReviewIgnoresNonEditingTools(t *testing.T) {
 	env := testEnv(t)
 	session, err := env.sessions.Create(t.Context(), "no folder scans")
 	require.NoError(t, err)
-	r := &turnFileReview{root: env.workingDir, messages: env.messages, sessionID: session.ID,
-		trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
+	r := &turnFileReview{
+		root: env.workingDir, messages: env.messages, sessionID: session.ID,
+		trackers: map[string]*filechange.Tracker{}, results: map[string]string{},
+	}
 	for _, name := range []string{"bash", "view", "glob", "grep"} {
 		r.track(name, name, `{"file_path":".","path":".","command":"echo hello"}`)
 		require.NoError(t, r.save(t.Context(), message.ToolResult{ToolCallID: name, Name: name}))
@@ -199,16 +208,16 @@ func visibleReviewRoot(t *testing.T) string {
 func TestOutsideRepositoryToolMetadataIsNotRecorded(t *testing.T) {
 	env := testEnv(t)
 	root := visibleReviewRoot(t)
-	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0700))
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
 	outside := t.TempDir()
 	path := filepath.Join(outside, "outside.txt")
-	require.NoError(t, os.WriteFile(path, []byte("before"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
 	session, err := env.sessions.Create(t.Context(), "scoped review")
 	require.NoError(t, err)
 	review := &turnFileReview{root: root, cli: true, messages: env.messages, sessionID: session.ID, trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
 	input, _ := json.Marshal(map[string]string{"file_path": path})
 	review.track("edit", "edit", string(input))
-	require.NoError(t, os.WriteFile(path, []byte("after"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("after"), 0o600))
 	require.NoError(t, review.save(t.Context(), message.ToolResult{ToolCallID: "edit", Name: "edit", Metadata: `{"old_content":"before","new_content":"after","additions":1,"removals":1}`}))
 	messages, err := loadFileReviewMessages(env.messages, t.Context(), session.ID)
 	require.NoError(t, err)

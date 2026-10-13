@@ -1172,46 +1172,13 @@ func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Mo
 		return Model{}, Model{}, errSmallModelNotFound
 	}
 
-	largeModelID := largeModelCfg.Model
-	smallModelID := smallModelCfg.Model
-
-	if largeModelCfg.Provider == openrouter.Name && isExactoSupported(largeModelID) {
-		largeModelID += ":exacto"
-	}
-
-	if smallModelCfg.Provider == openrouter.Name && isExactoSupported(smallModelID) {
-		smallModelID += ":exacto"
-	}
-
-	largeModel, err := largeProvider.LanguageModel(ctx, largeModelID)
+	largeModel, err := c.languageModel(ctx, largeProvider, largeProviderCfg, largeModelCfg)
 	if err != nil {
 		return Model{}, Model{}, err
 	}
-	smallModel, err := smallProvider.LanguageModel(ctx, smallModelID)
+	smallModel, err := c.languageModel(ctx, smallProvider, smallProviderCfg, smallModelCfg)
 	if err != nil {
 		return Model{}, Model{}, err
-	}
-
-	// Bound each request with the configured timeout so unreachable or hung
-	// providers fail instead of blocking a session forever. The wrapper is
-	// applied per request, so retries get a fresh budget each attempt.
-	// Agent CLIs manage their own timeouts, and the session agent needs the
-	// unwrapped model to recognize them.
-	requestTimeout := c.cfg.Config().Options.GetRequestTimeout()
-	if !config.IsCLIProviderType(largeProviderCfg.Type) {
-		largeModel = newRequestTimeoutModel(largeModel, requestTimeout)
-	}
-	if !config.IsCLIProviderType(smallProviderCfg.Type) {
-		smallModel = newRequestTimeoutModel(smallModel, requestTimeout)
-	}
-
-	// Hyper completions no longer report the hypercredit balance, so wrap
-	// the Hyper models to fetch it from /v1/credits on every request.
-	if largeModelCfg.Provider == hyper.Name {
-		largeModel = newHyperCreditsModel(largeModel, c.hyperAPIKey)
-	}
-	if smallModelCfg.Provider == hyper.Name {
-		smallModel = newHyperCreditsModel(smallModel, c.hyperAPIKey)
 	}
 
 	large := Model{
@@ -1228,6 +1195,35 @@ func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Mo
 	}
 
 	return large, small, nil
+}
+
+// languageModel returns the selected model of a built provider, wrapped
+// the same way wherever Crush runs one (main agents, sub-agents and
+// background tasks):
+//   - OpenRouter models that support it run on their exacto variant;
+//   - each request to an API provider is bounded by the configured request
+//     timeout, so unreachable or hung providers fail instead of blocking a
+//     session forever. The wrapper is applied per request, so retries get a
+//     fresh budget each attempt. Agent CLIs manage their own timeouts, and
+//     the session agent needs the unwrapped model to recognize them;
+//   - Hyper completions no longer report the hypercredit balance, so Hyper
+//     models fetch it from /v1/credits on every request.
+func (c *coordinator) languageModel(ctx context.Context, provider fantasy.Provider, providerCfg config.ProviderConfig, selected config.SelectedModel) (fantasy.LanguageModel, error) {
+	modelID := selected.Model
+	if selected.Provider == openrouter.Name && isExactoSupported(modelID) {
+		modelID += ":exacto"
+	}
+	model, err := provider.LanguageModel(ctx, modelID)
+	if err != nil {
+		return nil, err
+	}
+	if !config.IsCLIProviderType(providerCfg.Type) {
+		model = newRequestTimeoutModel(model, c.cfg.Config().Options.GetRequestTimeout())
+	}
+	if selected.Provider == hyper.Name {
+		model = newHyperCreditsModel(model, c.hyperAPIKey)
+	}
+	return model, nil
 }
 
 // hyperAPIKey resolves the Hyper API key from the live config, so an

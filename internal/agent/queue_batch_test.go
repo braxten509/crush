@@ -50,11 +50,13 @@ func (m *batchRecordingModel) Stream(ctx context.Context, call fantasy.Call) (fa
 	}
 	return m.finishStreamModel.Stream(ctx, call)
 }
+
 func (m *batchRecordingModel) snapshot() []fantasy.Call {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return append([]fantasy.Call(nil), m.calls...)
 }
+
 func batchUserTexts(call fantasy.Call) []string {
 	var texts []string
 	for _, msg := range call.Prompt {
@@ -69,6 +71,7 @@ func batchUserTexts(call fantasy.Call) []string {
 	}
 	return texts
 }
+
 func batchWaitTurn(t *testing.T, model *batchRecordingModel, number int) {
 	t.Helper()
 	select {
@@ -442,7 +445,7 @@ printf '%s\n' "$prompt" >> "$CRUSH_BATCH_CAPTURE"
 echo '{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"done"}}}}'
 echo '{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}'
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "grok"), []byte(script), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "grok"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	// Keep the attachment cache and fake CLI's state inside the test directory.
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))

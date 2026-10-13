@@ -513,7 +513,7 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 	if err != nil {
 		return nil, Model{}, err
 	}
-	lm, err := fp.LanguageModel(ctx, model.ID)
+	lm, err := h.c.languageModel(ctx, fp, provider, selected)
 	if err != nil {
 		return nil, Model{}, err
 	}
@@ -536,21 +536,20 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		subTasks = h
 	}
 	sub := NewSessionAgent(SessionAgentOptions{
-		LargeModel:  m,
-		SmallModel:  m,
-		IsSubAgent:  true,
-		IsYolo:      h.c.permissions.SkipRequests(),
-		Sessions:    h.c.sessions,
-		Messages:    h.c.messages,
-		Cfg:         h.c.cfg,
-		Tasks:       subTasks,
-		Notify:      h.c.notify,
-		RunComplete: h.c.runComplete,
+		LargeModel:           m,
+		SmallModel:           m,
+		SystemPromptPrefix:   provider.SystemPromptPrefix,
+		IsSubAgent:           true,
+		DisableAutoSummarize: h.c.cfg.Config().Options.DisableAutoSummarize,
+		IsYolo:               h.c.permissions.SkipRequests(),
+		Sessions:             h.c.sessions,
+		Messages:             h.c.messages,
+		Cfg:                  h.c.cfg,
+		Tasks:                subTasks,
+		Notify:               h.c.notify,
+		RunComplete:          h.c.runComplete,
 	})
 	if !config.IsCLIProviderType(provider.Type) {
-		lm = newRequestTimeoutModel(lm, h.c.cfg.Config().Options.GetRequestTimeout())
-		m.Model = lm
-		sub.SetModels(m, m)
 		agentCfg := h.c.cfg.Config().Agents[config.AgentTask]
 		nativeTools, err := h.c.buildTools(ctx, agentCfg, true)
 		if err != nil {

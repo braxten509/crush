@@ -1,4 +1,4 @@
-package agent
+package providers
 
 import (
 	"context"
@@ -9,39 +9,43 @@ import (
 	"charm.land/fantasy"
 )
 
-// requestTimeoutError reports that an LLM request exhausted its configured
+// RequestTimeoutError reports that an LLM request exhausted its configured
 // request_timeout budget. For streaming requests this is an idle timeout:
 // it only fires when the provider sends nothing for the whole window, so a
 // slow but actively streaming response is never killed. It wraps the
 // underlying error so callers can still match [context.DeadlineExceeded]
 // through the chain.
-type requestTimeoutError struct {
-	timeout time.Duration
-	idle    bool
-	cause   error
+type RequestTimeoutError struct {
+	// Timeout is the budget the request exhausted.
+	Timeout time.Duration
+	// Idle reports a stream that went silent rather than a request that
+	// never answered.
+	Idle bool
+	// Cause is the error the deadline produced.
+	Cause error
 }
 
-func (e *requestTimeoutError) Error() string {
-	msg := fmt.Sprintf("LLM request timed out after %s", e.timeout)
-	if e.idle {
-		msg = fmt.Sprintf("LLM stream received no data for %s", e.timeout)
+func (e *RequestTimeoutError) Error() string {
+	msg := fmt.Sprintf("LLM request timed out after %s", e.Timeout)
+	if e.Idle {
+		msg = fmt.Sprintf("LLM stream received no data for %s", e.Timeout)
 	}
-	if e.cause != nil {
-		return fmt.Sprintf("%s: %v", msg, e.cause)
+	if e.Cause != nil {
+		return fmt.Sprintf("%s: %v", msg, e.Cause)
 	}
 	return msg
 }
 
-func (e *requestTimeoutError) Unwrap() error { return e.cause }
+func (e *RequestTimeoutError) Unwrap() error { return e.Cause }
 
-// userMessage explains the timeout in the UI, including how long the request
+// UserMessage explains the timeout in the UI, including how long the request
 // ran before giving up and how to change the limit.
-func (e *requestTimeoutError) userMessage() string {
+func (e *RequestTimeoutError) UserMessage() string {
 	hint := "Increase the limit with \"option request-timeout SECONDS\" or set it to 0 to disable the timeout."
-	if e.idle {
-		return fmt.Sprintf("The model stopped sending data for %s. %s", e.timeout, hint)
+	if e.Idle {
+		return fmt.Sprintf("The model stopped sending data for %s. %s", e.Timeout, hint)
 	}
-	return fmt.Sprintf("The model did not respond within %s. %s", e.timeout, hint)
+	return fmt.Sprintf("The model did not respond within %s. %s", e.Timeout, hint)
 }
 
 // requestTimeoutModel wraps a [fantasy.LanguageModel] so requests are
@@ -65,19 +69,19 @@ func newRequestTimeoutModel(m fantasy.LanguageModel, timeout time.Duration) fant
 	return requestTimeoutModel{LanguageModel: m, timeout: timeout}
 }
 
-// wrapTimedOut replaces err with the requestTimeoutError when this model's
+// wrapTimedOut replaces err with the RequestTimeoutError when this model's
 // own deadline fired. Other errors — user cancellation, outer deadlines,
 // provider failures — pass through unchanged. Cancellation errors caused by
 // our own timer report as [context.DeadlineExceeded] so callers never
 // mistake a timeout for a user cancellation.
-func wrapTimedOut(ctx context.Context, timeoutErr *requestTimeoutError, err error) error {
+func wrapTimedOut(ctx context.Context, timeoutErr *RequestTimeoutError, err error) error {
 	if err == nil || context.Cause(ctx) != timeoutErr {
 		return err
 	}
 	if errors.Is(err, context.Canceled) {
-		timeoutErr.cause = context.DeadlineExceeded
+		timeoutErr.Cause = context.DeadlineExceeded
 	} else {
-		timeoutErr.cause = err
+		timeoutErr.Cause = err
 	}
 	return timeoutErr
 }
@@ -86,7 +90,7 @@ func wrapTimedOut(ctx context.Context, timeoutErr *requestTimeoutError, err erro
 // deadline: there is no incremental progress signal, so the whole call must
 // finish within the budget.
 func (m requestTimeoutModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
-	timeoutErr := &requestTimeoutError{timeout: m.timeout}
+	timeoutErr := &RequestTimeoutError{Timeout: m.timeout}
 	ctx, cancel := context.WithTimeoutCause(ctx, m.timeout, timeoutErr)
 	defer cancel()
 	resp, err := m.LanguageModel.Generate(ctx, call)
@@ -101,7 +105,7 @@ func (m requestTimeoutModel) Generate(ctx context.Context, call fantasy.Call) (*
 // or the idle timeout aborts it. Both the initial connection and gaps
 // between parts share the same budget.
 func (m requestTimeoutModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
-	timeoutErr := &requestTimeoutError{timeout: m.timeout, idle: true}
+	timeoutErr := &RequestTimeoutError{Timeout: m.timeout, Idle: true}
 	ctx, cancel := context.WithCancelCause(ctx)
 	timer := time.AfterFunc(m.timeout, func() { cancel(timeoutErr) })
 

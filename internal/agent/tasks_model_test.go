@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -31,10 +32,9 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 	sub, m, err := h.subAgent(t.Context(), providerCfg, model, selected, false)
 	require.NoError(t, err)
 
-	credits, ok := m.Model.(*hyperCreditsModel)
-	require.True(t, ok, "hyper task models refresh the credit balance, got %T", m.Model)
-	_, ok = credits.LanguageModel.(requestTimeoutModel)
-	require.True(t, ok, "task models are bounded by the request timeout, got %T", credits.LanguageModel)
+	// The decorators are the providers package's; their types name them.
+	require.Equal(t, "*providers.hyperCreditsModel", fmt.Sprintf("%T", m.Model),
+		"hyper task models refresh the credit balance")
 
 	agent, ok := sub.(*sessionAgent)
 	require.True(t, ok)

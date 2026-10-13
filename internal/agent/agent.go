@@ -39,6 +39,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/notify"
+	"github.com/charmbracelet/crush/internal/agent/providers"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
@@ -1655,7 +1656,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		}
 		var fantasyErr *fantasy.Error
 		var providerErr *fantasy.ProviderError
-		var requestTimedOutErr *requestTimeoutError
+		var requestTimedOutErr *providers.RequestTimeoutError
 		const defaultTitle = "Provider Error"
 		linkStyle := lipgloss.NewStyle().Foreground(charmtone.Guac).Underline(true)
 		if isCancelErr {
@@ -1663,7 +1664,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		} else if errors.As(err, &requestTimedOutErr) {
 			// Checked before the provider branches so a deadline our own
 			// request timeout imposed is never reported as a provider error.
-			currentAssistant.AddFinish(message.FinishReasonError, "Request timed out", requestTimedOutErr.userMessage())
+			currentAssistant.AddFinish(message.FinishReasonError, "Request timed out", requestTimedOutErr.UserMessage())
 		} else if isHyper && errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusUnauthorized {
 			currentAssistant.AddFinish(message.FinishReasonError, "Unauthorized", `Please re-authenticate with Hyper. You can also run "crush auth" to re-authenticate.`)
 		} else if errors.As(err, &providerErr) {

@@ -509,11 +509,11 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 
 // subAgent builds the agent a task runs on.
 func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly bool) (SessionAgent, Model, error) {
-	fp, err := h.c.buildProvider(provider, selected, true)
+	fp, err := h.c.providerBuilder().Provider(provider, selected, true)
 	if err != nil {
 		return nil, Model{}, err
 	}
-	lm, err := h.c.languageModel(ctx, fp, provider, selected)
+	lm, err := h.c.providerBuilder().LanguageModel(ctx, fp, provider, selected)
 	if err != nil {
 		return nil, Model{}, err
 	}

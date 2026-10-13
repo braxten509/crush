@@ -1,4 +1,4 @@
-package agent
+package providers
 
 import (
 	"encoding/json"
@@ -66,15 +66,15 @@ func TestAbacusNativeRequestsCarryModelControls(t *testing.T) {
 			catalog := catwalk.Model{ID: test.id, Name: name, CanReason: true, ReasoningLevels: []string{test.effort}, DefaultMaxTokens: 128000}
 			provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, BaseURL: server.URL + "/v1", APIKey: "test-key", Models: []catwalk.Model{catalog}}
 			selected := config.SelectedModel{Provider: provider.ID, Model: test.id, ReasoningEffort: test.effort, ServiceTier: test.tier}
-			c := &coordinator{cfg: config.NewTestStore(&config.Config{Options: &config.Options{}})}
-			fp, err := c.buildProvider(provider, selected, false)
+			b := Builder{Config: config.NewTestStore(&config.Config{Options: &config.Options{}})}
+			fp, err := b.Provider(provider, selected, false)
 			require.NoError(t, err)
 			lm, err := fp.LanguageModel(t.Context(), test.id)
 			require.NoError(t, err)
 			maxTokens := int64(8192)
 			response, err := lm.Generate(t.Context(), fantasy.Call{
 				Prompt: fantasy.Prompt{fantasy.NewUserMessage("hi")}, MaxOutputTokens: &maxTokens,
-				ProviderOptions: getProviderOptions(Model{ModelCfg: selected, CatwalkCfg: catalog}, provider),
+				ProviderOptions: Options(catalog, selected, provider),
 			})
 			require.NoError(t, err)
 			require.Equal(t, int64(2), response.Usage.OutputTokens)
@@ -102,7 +102,7 @@ func TestAbacusThinkingTogglesAndExtraBody(t *testing.T) {
 		for _, think := range []bool{false, true} {
 			catalog := catwalk.Model{ID: id, CanReason: true}
 			provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, ExtraBody: map[string]any{"custom_parameter": "preserved"}}
-			options := getProviderOptions(Model{CatwalkCfg: catalog, ModelCfg: config.SelectedModel{Provider: provider.ID, Model: id, Think: think}}, provider)
+			options := Options(catalog, config.SelectedModel{Provider: provider.ID, Model: id, Think: think}, provider)
 			if native, ok := options[anthropic.Name].(*anthropic.ProviderOptions); ok {
 				require.Equal(t, think, native.Thinking != nil)
 				require.Equal(t, "preserved", native.ExtraBody["custom_parameter"])

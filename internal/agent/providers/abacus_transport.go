@@ -1,4 +1,4 @@
-package agent
+package providers
 
 import (
 	"bytes"
@@ -22,9 +22,9 @@ type abacusResolver func(string) (string, error)
 
 func (resolve abacusResolver) ResolveValue(value string) (string, error) { return resolve(value) }
 
-func (c *coordinator) abacusHTTPClient(provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel) *http.Client {
+func (b Builder) abacusHTTPClient(provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel) *http.Client {
 	var transport http.RoundTripper = http.DefaultTransport
-	if c.cfg.Config().Options.Debug {
+	if b.Config.Config().Options.Debug {
 		transport = log.NewHTTPClient().Transport
 	}
 	return &http.Client{Transport: &abacusTransport{
@@ -37,7 +37,7 @@ func (c *coordinator) abacusHTTPClient(provider config.ProviderConfig, model cat
 			return discover.DiscoverModels(ctx, discover.Config{
 				ID: provider.ID, BaseURL: provider.BaseURL, APIKey: provider.APIKey,
 				ExtraHeaders: provider.ExtraHeaders, KnownProviders: config.ModelCatalog(),
-			}, abacusResolver(c.cfg.Resolve))
+			}, abacusResolver(b.Config.Resolve))
 		},
 	}}
 }

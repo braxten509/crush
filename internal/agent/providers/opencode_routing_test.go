@@ -1,4 +1,4 @@
-package agent
+package providers
 
 import (
 	"testing"
@@ -88,17 +88,19 @@ func TestBuildProviderOpenCodeRouting(t *testing.T) {
 	} {
 		t.Run(providerID, func(t *testing.T) {
 			t.Parallel()
-			env := testEnv(t)
 			providerCfg := config.ProviderConfig{
 				ID:      providerID,
 				BaseURL: "https://opencode.ai/zen/v1",
 				Type:    catwalk.TypeOpenAICompat,
 				APIKey:  "$OPENCODE_API_KEY",
 			}
-			coord := newTestCoordinator(t, env, providerID, providerCfg)
+			cfg, err := config.Init(t.TempDir(), "", false)
+			require.NoError(t, err)
+			cfg.Config().Providers.Set(providerID, providerCfg)
+			builder := Builder{Config: cfg}
 
 			for _, modelID := range []string{"kimi-k3", "muse-spark-1.3-contributor-free", "grok-4.6", "gpt-5.6-luna"} {
-				provider, err := coord.buildProvider(providerCfg, config.SelectedModel{
+				provider, err := builder.Provider(providerCfg, config.SelectedModel{
 					Model:    modelID,
 					Provider: providerID,
 				}, false)

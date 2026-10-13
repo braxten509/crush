@@ -1,4 +1,4 @@
-package agent
+package providers
 
 import (
 	"maps"
@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/openai-go/option"
 )
 
-func (c *coordinator) buildAbacusProvider(provider config.ProviderConfig, selected config.SelectedModel) (fantasy.Provider, error) {
+func (b Builder) buildAbacusProvider(provider config.ProviderConfig, selected config.SelectedModel) (fantasy.Provider, error) {
 	model := catwalk.Model{ID: selected.Model}
 	for _, candidate := range provider.Models {
 		if candidate.ID == selected.Model {
@@ -19,11 +19,11 @@ func (c *coordinator) buildAbacusProvider(provider config.ProviderConfig, select
 		}
 	}
 	effective := config.AbacusProviderForModel(provider, model)
-	baseURL, err := c.cfg.Resolve(effective.BaseURL)
+	baseURL, err := b.Config.Resolve(effective.BaseURL)
 	if err != nil {
 		return nil, err
 	}
-	apiKey, err := c.cfg.Resolve(provider.APIKey)
+	apiKey, err := b.Config.Resolve(provider.APIKey)
 	if err != nil {
 		return nil, err
 	}
@@ -31,12 +31,12 @@ func (c *coordinator) buildAbacusProvider(provider config.ProviderConfig, select
 	if headers == nil {
 		headers = make(map[string]string)
 	}
-	client := c.abacusHTTPClient(provider, model, selected)
+	client := b.abacusHTTPClient(provider, model, selected)
 	if effective.Type == catwalk.TypeAnthropic {
-		return c.buildAnthropicProvider(baseURL, apiKey, headers, provider.ID, client)
+		return b.buildAnthropicProvider(baseURL, apiKey, headers, provider.ID, client)
 	}
 	if config.AbacusAPIFormat(model) != "responses" {
-		return c.buildOpenaiCompatProvider(baseURL, apiKey, headers, provider.ExtraBody, provider.ID, false, client)
+		return b.buildOpenaiCompatProvider(baseURL, apiKey, headers, provider.ExtraBody, provider.ID, false, client)
 	}
 	opts := []openai.Option{openai.WithAPIKey(apiKey), openai.WithBaseURL(baseURL), openai.WithUseResponsesAPI(), openai.WithResponsesAPIFunc(func(string) bool { return true }), openai.WithHTTPClient(client)}
 	if len(headers) > 0 {
@@ -48,7 +48,7 @@ func (c *coordinator) buildAbacusProvider(provider config.ProviderConfig, select
 	}
 	// Fantasy's model table predates some of Abacus's Responses models. Keep
 	// controls intact even when that table would omit reasoning or priority.
-	options := getProviderOptions(Model{CatwalkCfg: model, ModelCfg: selected}, provider)
+	options := Options(model, selected, provider)
 	if responses, ok := options[openai.Name].(*openai.ResponsesProviderOptions); ok {
 		if responses.ReasoningEffort != nil {
 			sdkOptions = append(sdkOptions, option.WithJSONSet("reasoning.effort", string(*responses.ReasoningEffort)))

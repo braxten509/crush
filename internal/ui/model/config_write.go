@@ -87,7 +87,7 @@ func (m *UI) toggleTransparentBackground() tea.Cmd {
 	if cfg == nil {
 		return util.ReportError(errors.New("configuration not found"))
 	}
-	newValue := !(cfg.Options != nil && cfg.Options.TUI.IsTransparent())
+	newValue := cfg.Options == nil || !cfg.Options.TUI.IsTransparent()
 	return m.writeConfigField("options.tui.transparent", newValue, func(err error) tea.Cmd {
 		if err != nil {
 			return util.ReportError(err)

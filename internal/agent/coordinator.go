@@ -238,11 +238,7 @@ func (c *coordinator) BeginAccepted(sessionID string) *AcceptedRun {
 
 func (c *coordinator) Cancel(sessionID string) {
 	if c.tasks != nil {
-		c.tasks.mu.Lock()
-		if run := c.tasks.sessionRuns[sessionID]; run != nil {
-			run.cancel()
-		}
-		c.tasks.mu.Unlock()
+		c.tasks.cancelSessionRun(sessionID)
 	}
 	c.currentAgent().Cancel(sessionID)
 }

@@ -1,4 +1,4 @@
-package agent
+package procs
 
 import (
 	"bytes"
@@ -7,20 +7,18 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/charmbracelet/crush/internal/agent/tools"
 )
 
 func init() { markedProcs = linuxMarkedProcs }
 
 // linuxMarkedProcs reads the process table from /proc.
-func linuxMarkedProcs(markers []string) map[int]proc {
+func linuxMarkedProcs(markers []string) map[int]Entry {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil
 	}
 	boot := bootTime()
-	procs := map[int]proc{}
+	procs := map[int]Entry{}
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
 		if err != nil {
@@ -49,27 +47,7 @@ func linuxMarkedProcs(markers []string) map[int]proc {
 			continue // A zombie or kernel thread.
 		}
 		// ponytail: assumes USER_HZ is 100, true on every Linux in use.
-		nativeShellID := ""
-		managedJobID := ""
-		session := ""
-		busService := false
-		for _, variable := range bytes.Split(env, []byte{0}) {
-			if value, ok := strings.CutPrefix(string(variable), managedJobEnv+"="); ok {
-				managedJobID = value
-			}
-			if value, ok := strings.CutPrefix(string(variable), tools.NativeShellEnv+"="); ok {
-				nativeShellID = value
-			}
-			if value, ok := strings.CutPrefix(string(variable), TasksSessionEnv+"="); ok {
-				session = value
-			}
-			// D-Bus sets this for every service it activates, and the
-			// service's own children inherit it.
-			if bytes.HasPrefix(variable, []byte("DBUS_STARTER_BUS_TYPE=")) {
-				busService = true
-			}
-		}
-		procs[pid] = proc{pid: pid, ppid: ppid, sid: sid, args: args, started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond), nativeShellID: nativeShellID, managedJobID: managedJobID, session: session, busService: busService}
+		procs[pid] = Entry{PID: pid, PPID: ppid, SID: sid, Args: args, Started: boot.Add(time.Duration(ticks) * 10 * time.Millisecond), Env: bytes.Split(env, []byte{0})}
 	}
 	return procs
 }

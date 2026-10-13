@@ -186,31 +186,84 @@ func (m *UI) updateSize() {
 func (m *UI) generateLayout(w, h int) uiLayout {
 	// The screen area we're working with
 	area := image.Rect(0, 0, w, h)
+	editorHeight := m.layoutEditorHeight()
+	appRect, helpRect := m.layoutAppAndHelp(area)
 
-	// The help height: the short hint row is hidden, so the status bar only
-	// takes rows when the full help (ctrl+g) is open. Badges and
-	// notifications draw on the bottom margin row instead.
-	helpHeight := 0
-	// The editor height: textarea height + margin for attachments and bottom spacing.
-	// When an inline editor is active, use its height instead.
-	editorHeight := m.textarea.Height() + editorHeightMargin
-	if m.activeInline != nil {
-		// The editor content width depends only on terminal width
-		// and layout (not on editor height), so passing the current
-		// frame's width to Height() keeps layout in sync with the
-		// width Draw will use, preventing flicker during fast resize.
-		editorWidth := m.editorContentWidth()
-		if collapsed, ok := m.collapsedInlineEditor(); ok {
-			editorHeight = collapsed.CollapsedHeight() + 1
+	uiLayout := uiLayout{
+		area:   area,
+		status: helpRect,
+	}
+
+	// Handle different app states
+	switch m.state {
+	case uiOnboarding, uiInitialize:
+		// Layout
+		//
+		// header
+		// ------
+		// main
+		// ------
+		// help
+		uiLayout.header, uiLayout.main = splitLandingHeader(appRect)
+
+	case uiLanding:
+		// Layout
+		//
+		// header
+		// ------
+		// main
+		// ------
+		// editor
+		// ------
+		// help
+		headerRect, mainRect := splitLandingHeader(appRect)
+		var editorRect image.Rectangle
+		layout.Vertical(
+			layout.Len(mainRect.Dy()-editorHeight),
+			layout.Fill(1),
+		).Split(mainRect).Assign(&mainRect, &editorRect)
+		// The composer runs edge to edge, as in the chat (but the header and
+		// main keep their padding).
+		editorRect.Min.X = area.Min.X
+		editorRect.Max.X = area.Max.X
+		uiLayout.header = headerRect
+		uiLayout.main = mainRect
+		uiLayout.editor = editorRect
+
+	case uiChat:
+		if m.isCompact {
+			m.layoutCompactChat(&uiLayout, appRect, editorHeight)
 		} else {
-			editorHeight = m.activeInline.Height(editorWidth)
+			m.layoutChat(&uiLayout, appRect, editorHeight)
 		}
 	}
-	// The sidebar width
-	sidebarWidth := 32
-	// The header height
-	const landingHeaderHeight = 4
 
+	return uiLayout
+}
+
+// layoutEditorHeight is the editor's height: the textarea's plus the margin
+// for attachments and bottom spacing, or an active inline editor's.
+func (m *UI) layoutEditorHeight() int {
+	if m.activeInline == nil {
+		return m.textarea.Height() + editorHeightMargin
+	}
+	// The editor content width depends only on terminal width and layout
+	// (not on editor height), so passing the current frame's width to
+	// Height() keeps layout in sync with the width Draw will use,
+	// preventing flicker during fast resize.
+	editorWidth := m.editorContentWidth()
+	if collapsed, ok := m.collapsedInlineEditor(); ok {
+		return collapsed.CollapsedHeight() + 1
+	}
+	return m.activeInline.Height(editorWidth)
+}
+
+// layoutAppAndHelp splits area into the app, inside its margins, and the
+// status bar below it. The short hint row is hidden, so the status bar only
+// takes rows when the full help (ctrl+g) is open. Badges and notifications
+// draw on the bottom margin row instead.
+func (m *UI) layoutAppAndHelp(area image.Rectangle) (appRect, helpRect image.Rectangle) {
+	helpHeight := 0
 	var helpKeyMap help.KeyMap = m
 	if m.status != nil && m.status.ShowingAll() {
 		for _, row := range helpKeyMap.FullHelp() {
@@ -219,7 +272,6 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 	}
 
 	// Add app margins
-	var appRect, helpRect image.Rectangle
 	layout.Vertical(
 		layout.Len(area.Dy()-helpHeight),
 		layout.Fill(1),
@@ -243,156 +295,114 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 			appRect.Max.X = area.Max.X
 		}
 	}
+	return appRect, helpRect
+}
 
-	uiLayout := uiLayout{
-		area:   area,
-		status: helpRect,
+// landingHeaderHeight is the header's height outside the chat.
+const landingHeaderHeight = 4
+
+// splitLandingHeader splits the header off the top of appRect.
+func splitLandingHeader(appRect image.Rectangle) (headerRect, mainRect image.Rectangle) {
+	layout.Vertical(
+		layout.Len(landingHeaderHeight),
+		layout.Fill(1),
+	).Split(appRect).Assign(&headerRect, &mainRect)
+	return headerRect, mainRect
+}
+
+// sidebarWidth is the chat sidebar's width.
+const sidebarWidth = 32
+
+// layoutChat lays out the chat with its sidebar:
+//
+//	------|---
+//	main  |
+//	------| side
+//	editor|
+//	----------
+//	help
+func (m *UI) layoutChat(l *uiLayout, appRect image.Rectangle, editorHeight int) {
+	// Background tasks are listed under the editor, so the editor block
+	// grows to hold them.
+	tasksHeight := m.tasksHeight()
+	editorHeight += tasksHeight
+
+	var mainRect, sideRect image.Rectangle
+	layout.Horizontal(
+		layout.Len(appRect.Dx()-sidebarWidth),
+		layout.Fill(1),
+	).Split(appRect).Assign(&mainRect, &sideRect)
+	// Add padding left
+	sideRect.Min.X += 1
+	var editorRect image.Rectangle
+	layout.Vertical(
+		layout.Len(mainRect.Dy()-editorHeight),
+		layout.Fill(1),
+	).Split(mainRect).Assign(&mainRect, &editorRect)
+	mainRect.Max.X -= 1 // Add padding right
+	l.sidebar = sideRect
+	l.main, l.pills = m.splitPills(mainRect)
+	// Add bottom margin to main
+	l.main.Max.Y -= 1
+	l.editor, l.tasks = splitTasks(editorRect, tasksHeight)
+}
+
+// layoutCompactChat lays out the chat without its sidebar:
+//
+//	main
+//	------
+//	editor
+//	------
+//	help
+//
+// There is no header bar: ctrl+d opens the session details over the top of
+// the chat.
+func (m *UI) layoutCompactChat(l *uiLayout, appRect image.Rectangle, editorHeight int) {
+	// Background tasks are listed under the editor, so the editor block
+	// grows to hold them, and so does the usage below it.
+	tasksHeight := m.tasksHeight()
+	editorHeight += tasksHeight
+	usageHeight := 0
+	if usage := m.compactUsage(appRect.Dx()); usage != "" {
+		usageHeight = lipgloss.Height(usage)
 	}
+	editorHeight += usageHeight
 
-	// Handle different app states
-	switch m.state {
-	case uiOnboarding, uiInitialize:
-		// Layout
-		//
-		// header
-		// ------
-		// main
-		// ------
-		// help
+	mainRect := appRect
+	detailsHeight := min(sessionDetailsMaxHeight, l.area.Dy())
+	var sessionDetailsArea image.Rectangle
+	layout.Vertical(
+		layout.Len(detailsHeight),
+		layout.Fill(1),
+	).Split(appRect).Assign(&sessionDetailsArea, new(image.Rectangle))
+	l.sessionDetails = sessionDetailsArea
+	var editorRect image.Rectangle
+	layout.Vertical(
+		layout.Len(mainRect.Dy()-editorHeight),
+		layout.Fill(1),
+	).Split(mainRect).Assign(&mainRect, &editorRect)
+	l.main, l.pills = m.splitPills(mainRect)
+	// Add bottom margin to main
+	l.main.Max.Y -= 1
+	l.editor, l.tasks = splitTasks(editorRect, tasksHeight)
+	l.usage = l.editor
+	l.usage.Min.Y = max(l.editor.Min.Y, l.editor.Max.Y-usageHeight)
+	l.editor.Max.Y = l.usage.Min.Y
+}
 
-		var headerRect, mainRect image.Rectangle
-		layout.Vertical(
-			layout.Len(landingHeaderHeight),
-			layout.Fill(1),
-		).Split(appRect).Assign(&headerRect, &mainRect)
-		uiLayout.header = headerRect
-		uiLayout.main = mainRect
-
-	case uiLanding:
-		// Layout
-		//
-		// header
-		// ------
-		// main
-		// ------
-		// editor
-		// ------
-		// help
-		var headerRect, mainRect image.Rectangle
-		layout.Vertical(
-			layout.Len(landingHeaderHeight),
-			layout.Fill(1),
-		).Split(appRect).Assign(&headerRect, &mainRect)
-		var editorRect image.Rectangle
-		layout.Vertical(
-			layout.Len(mainRect.Dy()-editorHeight),
-			layout.Fill(1),
-		).Split(mainRect).Assign(&mainRect, &editorRect)
-		// The composer runs edge to edge, as in the chat (but the header and
-		// main keep their padding).
-		editorRect.Min.X = area.Min.X
-		editorRect.Max.X = area.Max.X
-		uiLayout.header = headerRect
-		uiLayout.main = mainRect
-		uiLayout.editor = editorRect
-
-	case uiChat:
-		// Background tasks are listed under the editor, so the editor
-		// block grows to hold them.
-		tasksHeight := m.tasksHeight()
-		editorHeight += tasksHeight
-		if m.isCompact {
-			usageHeight := 0
-			if usage := m.compactUsage(appRect.Dx()); usage != "" {
-				usageHeight = lipgloss.Height(usage)
-			}
-			editorHeight += usageHeight
-			// Layout
-			//
-			// main
-			// ------
-			// editor
-			// ------
-			// help
-			//
-			// There is no header bar: ctrl+d opens the session details
-			// over the top of the chat.
-			mainRect := appRect
-			detailsHeight := min(sessionDetailsMaxHeight, area.Dy())
-			var sessionDetailsArea image.Rectangle
-			layout.Vertical(
-				layout.Len(detailsHeight),
-				layout.Fill(1),
-			).Split(appRect).Assign(&sessionDetailsArea, new(image.Rectangle))
-			uiLayout.sessionDetails = sessionDetailsArea
-			var editorRect image.Rectangle
-			layout.Vertical(
-				layout.Len(mainRect.Dy()-editorHeight),
-				layout.Fill(1),
-			).Split(mainRect).Assign(&mainRect, &editorRect)
-			pillsHeight := m.pillsAreaHeight()
-			if pillsHeight > 0 {
-				pillsHeight = min(pillsHeight, mainRect.Dy())
-				var chatRect, pillsRect image.Rectangle
-				layout.Vertical(
-					layout.Len(mainRect.Dy()-pillsHeight),
-					layout.Fill(1),
-				).Split(mainRect).Assign(&chatRect, &pillsRect)
-				uiLayout.main = chatRect
-				uiLayout.pills = pillsRect
-			} else {
-				uiLayout.main = mainRect
-			}
-			// Add bottom margin to main
-			uiLayout.main.Max.Y -= 1
-			uiLayout.editor, uiLayout.tasks = splitTasks(editorRect, tasksHeight)
-			uiLayout.usage = uiLayout.editor
-			uiLayout.usage.Min.Y = max(uiLayout.editor.Min.Y, uiLayout.editor.Max.Y-usageHeight)
-			uiLayout.editor.Max.Y = uiLayout.usage.Min.Y
-		} else {
-			// Layout
-			//
-			// ------|---
-			// main  |
-			// ------| side
-			// editor|
-			// ----------
-			// help
-
-			var mainRect, sideRect image.Rectangle
-			layout.Horizontal(
-				layout.Len(appRect.Dx()-sidebarWidth),
-				layout.Fill(1),
-			).Split(appRect).Assign(&mainRect, &sideRect)
-			// Add padding left
-			sideRect.Min.X += 1
-			var editorRect image.Rectangle
-			layout.Vertical(
-				layout.Len(mainRect.Dy()-editorHeight),
-				layout.Fill(1),
-			).Split(mainRect).Assign(&mainRect, &editorRect)
-			mainRect.Max.X -= 1 // Add padding right
-			uiLayout.sidebar = sideRect
-			pillsHeight := m.pillsAreaHeight()
-			if pillsHeight > 0 {
-				pillsHeight = min(pillsHeight, mainRect.Dy())
-				var chatRect, pillsRect image.Rectangle
-				layout.Vertical(
-					layout.Len(mainRect.Dy()-pillsHeight),
-					layout.Fill(1),
-				).Split(mainRect).Assign(&chatRect, &pillsRect)
-				uiLayout.main = chatRect
-				uiLayout.pills = pillsRect
-			} else {
-				uiLayout.main = mainRect
-			}
-			// Add bottom margin to main
-			uiLayout.main.Max.Y -= 1
-			uiLayout.editor, uiLayout.tasks = splitTasks(editorRect, tasksHeight)
-		}
+// splitPills takes the pills panel off the bottom of the chat area, when
+// there is one.
+func (m *UI) splitPills(mainRect image.Rectangle) (chatRect, pillsRect image.Rectangle) {
+	pillsHeight := m.pillsAreaHeight()
+	if pillsHeight <= 0 {
+		return mainRect, image.Rectangle{}
 	}
-
-	return uiLayout
+	pillsHeight = min(pillsHeight, mainRect.Dy())
+	layout.Vertical(
+		layout.Len(mainRect.Dy()-pillsHeight),
+		layout.Fill(1),
+	).Split(mainRect).Assign(&chatRect, &pillsRect)
+	return chatRect, pillsRect
 }
 
 // uiLayout defines the positioning of UI elements.

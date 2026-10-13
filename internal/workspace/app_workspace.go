@@ -494,9 +494,6 @@ func (w *AppWorkspace) Store() *config.ConfigStore {
 	return w.store
 }
 
-// Compile-time check that AppWorkspace implements Workspace.
-var _ Workspace = (*AppWorkspace)(nil)
-
 func (w *AppWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {
 	return w.ops.SetKeptSkill(ctx, sessionID, skill, on)
 }

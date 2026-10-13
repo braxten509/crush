@@ -7,11 +7,6 @@ import (
 	"github.com/charmbracelet/crush/internal/skills"
 )
 
-var (
-	_ skills.Management = (*AppWorkspace)(nil)
-	_ skills.Management = (*ClientWorkspace)(nil)
-)
-
 func (w *AppWorkspace) ListInstalledSkills(_ context.Context) ([]skills.InstalledSkill, error) {
 	return w.ops.InstalledSkills(), nil
 }

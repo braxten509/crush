@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
 	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
+	"github.com/charmbracelet/crush/internal/ui/dialog/skillbrowser"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/home"
@@ -97,7 +98,7 @@ func (m *UI) handleGenericDialogAction(action dialog.Action) tea.Cmd {
 		if msg.Cmd != nil {
 			cmds = append(cmds, msg.Cmd)
 		}
-	case dialog.ActionSkillsChanged:
+	case skillbrowser.ActionSkillsChanged:
 		cmds = append(cmds, m.loadCustomCommands())
 
 	case dialog.ActionQuit:

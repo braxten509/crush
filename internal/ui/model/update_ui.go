@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+	"github.com/charmbracelet/crush/internal/ui/dialog/skillbrowser"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -132,7 +133,7 @@ func (m *UI) handleUIMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case closeDialogMsg:
 		m.dialog.CloseFrontDialog()
 
-	case dialog.SkillsResultMsg:
+	case skillbrowser.SkillsResultMsg:
 		if m.dialog.Dialog(dialog.SkillsID) == msg.Dialog {
 			cmds = append(cmds, m.handleDialogAction(msg.Dialog.HandleMsg(msg)))
 		} else if msg.Mutated {

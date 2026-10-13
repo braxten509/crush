@@ -11,6 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestSkillsCommandOpensSkillsDialog pins the palette entry that opens the
+// skills dialog (dialog/skillbrowser).
+func TestSkillsCommandOpensSkillsDialog(t *testing.T) {
+	sty := styles.CharmtonePantera()
+	com := &common.Common{Styles: &sty, Workspace: fastModeWorkspace{cfg: &config.Config{}}}
+	c, err := NewCommands(com, "", false, false, false, nil, nil)
+	require.NoError(t, err)
+	for _, r := range "skills" {
+		c.HandleMsg(kittest.KeyMsg(r))
+	}
+	require.Equal(t, ActionOpenDialog{SkillsID}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+}
+
 // The Docker MCP check finishes while the user types. It used to clear the
 // filter, so "/remot" + check + "e" filtered on "e" alone and enter quit.
 func TestCommandsRefreshKeepsTheFilter(t *testing.T) {

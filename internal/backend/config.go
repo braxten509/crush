@@ -111,6 +111,9 @@ func (b *Backend) SetProviderAPIKey(workspaceID string, scope config.Scope, prov
 	if err := ws.Cfg.SetProviderAPIKey(scope, providerID, apiKey); err != nil {
 		return err
 	}
+	// Wake agents blocked in WaitForTokenChange for this provider, as the
+	// in-process workspace does.
+	ws.Cfg.SignalAuthComplete(providerID)
 	publishConfigChanged(ws)
 	return nil
 }

@@ -332,20 +332,28 @@ func (h *Host) drawList(scr uv.Screen, p palette) {
 	}
 }
 
-// drawServer draws a server's row: its link, and × while it is picked.
+// drawServer draws a server's row: its named link with the port on the
+// right, and × while it is picked. The × keeps its room either way, so the
+// port doesn't move when the row is picked.
 func (h *Host) drawServer(scr uv.Screen, server hostServer, y, width int, picked bool, p palette) {
 	bg := p.bg
 	if picked {
 		bg = p.selected
 	}
 	base := lipgloss.NewStyle().Background(bg)
-	bar, closeMark := base.Render(" "), ""
+	bar, closeMark := base.Render(" "), base.Render("  ")
 	if picked {
 		bar = base.Foreground(p.accent).Render("▌")
 		closeMark = base.Foreground(p.text).Render("× ")
 	}
-	link := base.Foreground(p.accent).Hyperlink(server.url()).Render("↗ localhost:" + strconv.Itoa(server.port))
-	draw(scr, 0, y, width, bar+spread(base, link, closeMark, width-1))
+	port := ":" + strconv.Itoa(server.port)
+	label, right := "↗ localhost"+port, closeMark
+	if server.name != "" {
+		label = "↗ " + server.name
+		right = base.Foreground(p.muted).Render(port) + base.Render(" ") + closeMark
+	}
+	link := base.Foreground(p.accent).Hyperlink(server.url()).Render(label)
+	draw(scr, 0, y, width, bar+spread(base, link, right, width-1))
 }
 
 // drawListBlock draws session i as two lines: its mark and title, then its

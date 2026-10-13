@@ -1,11 +1,28 @@
 package agent
 
-import "slices"
+import (
+	"path/filepath"
+	"slices"
+	"strings"
+)
 
 // Server is a background process listening on a TCP port of this computer.
 type Server struct {
 	Port    int
 	Process Process
+}
+
+// Title names the server: its job's name, or else the program it runs.
+func (s Server) Title() string {
+	if s.Process.Name != "" {
+		return s.Process.Name
+	}
+	for field := range strings.FieldsSeq(s.Process.Command) {
+		if !strings.Contains(field, "=") {
+			return filepath.Base(field)
+		}
+	}
+	return ""
 }
 
 // listeningPorts returns the ports the given processes listen on for

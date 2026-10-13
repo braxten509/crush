@@ -24,6 +24,8 @@ type Process struct {
 	PID     int
 	JobID   string // Managed shell jobs need no operating-system child process.
 	Command string
+	// Name is what the agent called a managed job; empty for others.
+	Name    string
 	Started time.Time
 	// marker is a managed job's environment marker, which its processes
 	// carry.

@@ -14,6 +14,7 @@ import (
 type hostServer struct {
 	port    int
 	session int // the id of the chat that reported it
+	name    string
 }
 
 func (s hostServer) url() string { return "http://localhost:" + strconv.Itoa(s.port) }
@@ -38,9 +39,9 @@ func (h *Host) servers() []hostServer {
 		if s.kind != chatSession {
 			continue
 		}
-		for _, port := range s.snapshot().Servers {
-			if !slices.ContainsFunc(out, func(o hostServer) bool { return o.port == port }) {
-				out = append(out, hostServer{port: port, session: s.id})
+		for _, server := range s.snapshot().Servers {
+			if !slices.ContainsFunc(out, func(o hostServer) bool { return o.port == server.Port }) {
+				out = append(out, hostServer{port: server.Port, session: s.id, name: server.Name})
 			}
 		}
 	}

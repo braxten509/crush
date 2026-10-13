@@ -51,7 +51,23 @@ type Status struct {
 	State                 State  `json:"state,omitempty"`
 	UseTerminalBackground bool   `json:"use_terminal_background,omitempty"`
 	// Servers are the ports the session's background work listens on.
-	Servers []int `json:"servers,omitempty"`
+	Servers []Server `json:"servers,omitempty"`
+}
+
+// Server is a port a session's background work listens on, and its name.
+type Server struct {
+	Port int    `json:"port"`
+	Name string `json:"name,omitempty"`
+}
+
+// UnmarshalJSON also reads a bare port, which older sessions send.
+func (s *Server) UnmarshalJSON(data []byte) error {
+	if port, err := strconv.Atoi(string(data)); err == nil {
+		*s = Server{Port: port}
+		return nil
+	}
+	type plain Server
+	return json.Unmarshal(data, (*plain)(s))
 }
 
 // Equal reports whether s and o say the same.

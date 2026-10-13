@@ -37,7 +37,7 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 		st.Title = m.session.Title
 	}
 	for _, server := range m.hostServers {
-		st.Servers = append(st.Servers, server.Port)
+		st.Servers = append(st.Servers, sessionhost.Server{Port: server.Port, Name: server.Title()})
 	}
 	if model := m.selectedLargeModel(); model != nil {
 		st.Model = model.CatwalkCfg.Name

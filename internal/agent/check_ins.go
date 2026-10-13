@@ -203,11 +203,7 @@ func checkInNotification(work []checkInWork, now time.Time) string {
 		}
 		fmt.Fprintf(&b, "\n[%s] %s, running %s\nLatest progress:\n%s\n", w.id, w.name, now.Sub(w.started).Round(time.Second), progress)
 	}
-	header := fmt.Sprintf("<%s>\n", TaskNotificationTag)
-	if id != "" {
-		header += fmt.Sprintf("<task-id>%s</task-id>\n", id)
-	}
-	return fmt.Sprintf("%s<name>%s</name>\n<status>%s</status>\n<result>\n%s</result>\n</%s>", header, name, TaskRunning, b.String(), TaskNotificationTag)
+	return taskResult{ID: id, Name: name, Status: string(TaskRunning), Body: strings.TrimSuffix(b.String(), "\n")}.String()
 }
 
 // backgroundJobWork is a running job as its session's check-ins list it.

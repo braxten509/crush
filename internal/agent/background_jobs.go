@@ -243,7 +243,7 @@ func backgroundJobNotification(job *shell.BackgroundShell, spillDir string) stri
 		output += "\n" + err.Error()
 	}
 	output = tools.TruncateOutput(output, spillDir)
-	return fmt.Sprintf("<%s>\n<name>%s</name>\n<status>%s</status>\n<result>\nJob %s (%s) ended with exit code %d.\n%s\n</result>\n</%s>", TaskNotificationTag, BackgroundProcessName, status, job.ID, job.Description, shell.ExitCode(err), output, TaskNotificationTag)
+	return taskResult{Name: BackgroundProcessName, Status: status, Body: fmt.Sprintf("Job %s (%s) ended with exit code %d.\n%s", job.ID, job.Description, shell.ExitCode(err), output)}.String()
 }
 
 func (h *taskHub) recordBackgroundTool(ctx context.Context, sessionID string, call fantasy.ToolCall, response fantasy.ToolResponse) {

@@ -737,8 +737,7 @@ func (h *taskHub) ask(req TaskRequest) error {
 		if form != nil {
 			out = strings.TrimSpace(out + "\n\n" + secureEntryStatuses(r.Questions, statuses))
 		}
-		msg := fmt.Sprintf("<%s>\n<name>%s</name>\n<status>%s</status>\n<result>\n%s\n</result>\n</%s>",
-			TaskNotificationTag, AskName, status, out, TaskNotificationTag)
+		msg := taskResult{Name: AskName, Status: status, Body: out}.String()
 		accept := h.acceptHandoff(req.Session, func() {
 			if h.askSession == req.Session {
 				h.askSession = ""
@@ -1026,6 +1025,27 @@ func (h *taskHub) publish(t Task) {
 	}
 }
 
+// taskResult is a <crush-task-result> message: how Crush tells an agent
+// about its sub-agents, background jobs, question forms and check-ins.
+// ID and CLI are left out when empty.
+type taskResult struct {
+	ID, Name, CLI, Status, Body string
+}
+
+func (r taskResult) String() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "<%s>\n", TaskNotificationTag)
+	if r.ID != "" {
+		fmt.Fprintf(&b, "<task-id>%s</task-id>\n", r.ID)
+	}
+	fmt.Fprintf(&b, "<name>%s</name>\n", r.Name)
+	if r.CLI != "" {
+		fmt.Fprintf(&b, "<cli>%s</cli>\n", r.CLI)
+	}
+	fmt.Fprintf(&b, "<status>%s</status>\n<result>\n%s\n</result>\n</%s>", r.Status, r.Body, TaskNotificationTag)
+	return b.String()
+}
+
 func taskNotification(t Task, output string) string {
 	output = strings.TrimSpace(output)
 	if output == "" {
@@ -1034,8 +1054,7 @@ func taskNotification(t Task, output string) string {
 	if len(output) > taskResultLimit {
 		output = output[:taskResultLimit] + "\n[result truncated]"
 	}
-	return fmt.Sprintf("<%s>\n<task-id>%s</task-id>\n<name>%s</name>\n<cli>%s/%s</cli>\n<status>%s</status>\n<result>\n%s\n</result>\n</%s>",
-		TaskNotificationTag, t.ID, t.Name, t.CLI, t.Model, t.Status, output, TaskNotificationTag)
+	return taskResult{ID: t.ID, Name: t.Name, CLI: t.CLI + "/" + t.Model, Status: string(t.Status), Body: output}.String()
 }
 
 // ParseTaskNotification returns the name and status of a task result

@@ -181,8 +181,7 @@ func (h *taskHub) reportDetached(k detachedKey, d detachedProc, ended time.Time)
 // process ended. Crush isn't its parent, so there is no exit status.
 func detachedNotification(k detachedKey, d detachedProc, ended time.Time) string {
 	took := ended.Sub(k.started).Round(time.Second)
-	return fmt.Sprintf("<%s>\n<name>%s</name>\n<status>ended</status>\n<result>\nThe background process `%s` (PID %d) ended after about %s. Crush can't see its exit status; check its output file if it wrote one.\n</result>\n</%s>",
-		TaskNotificationTag, BackgroundProcessName, d.command, k.pid, took, TaskNotificationTag)
+	return taskResult{Name: BackgroundProcessName, Status: "ended", Body: fmt.Sprintf("The background process `%s` (PID %d) ended after about %s. Crush can't see its exit status; check its output file if it wrote one.", d.command, k.pid, took)}.String()
 }
 
 // isForegroundCommand checks the owning CLI's pending tools before listing

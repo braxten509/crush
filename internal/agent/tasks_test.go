@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -126,4 +127,38 @@ func TestTaskModelTuning(t *testing.T) {
 	m, err = taskModel(abacus, catwalk.Model{ID: "gpt-6.1-sol", ReasoningLevels: opus.ReasoningLevels}, TaskRequest{Effort: "high", Fast: true})
 	require.NoError(t, err)
 	require.Equal(t, "fast", m.ServiceTier)
+}
+
+// Every kind of task result keeps the exact text the hand-written formats
+// produced before taskResult; the chat, the phone and agents parse it.
+func TestTaskResultMatchesEarlierFormats(t *testing.T) {
+	t.Parallel()
+
+	task := Task{ID: "t3", Name: "review", CLI: "codex", Model: "gpt-6-astra", Status: TaskDone}
+	require.Equal(t,
+		fmt.Sprintf("<%s>\n<task-id>%s</task-id>\n<name>%s</name>\n<cli>%s/%s</cli>\n<status>%s</status>\n<result>\n%s\n</result>\n</%s>",
+			TaskNotificationTag, task.ID, task.Name, task.CLI, task.Model, task.Status, "all good", TaskNotificationTag),
+		taskNotification(task, "  all good  "))
+
+	require.Equal(t,
+		fmt.Sprintf("<%s>\n<name>%s</name>\n<status>%s</status>\n<result>\n%s\n</result>\n</%s>", TaskNotificationTag, AskName, AskAnswered, "Q1: yes", TaskNotificationTag),
+		taskResult{Name: AskName, Status: AskAnswered, Body: "Q1: yes"}.String())
+
+	key, process := detachedKey{pid: 42, started: time.Unix(0, 0)}, detachedProc{session: "s", command: "sleep 9"}
+	require.Equal(t,
+		fmt.Sprintf("<%s>\n<name>%s</name>\n<status>ended</status>\n<result>\nThe background process `%s` (PID %d) ended after about %s. Crush can't see its exit status; check its output file if it wrote one.\n</result>\n</%s>",
+			TaskNotificationTag, BackgroundProcessName, "sleep 9", 42, 9*time.Second, TaskNotificationTag),
+		detachedNotification(key, process, time.Unix(9, 0)))
+
+	now := time.Now()
+	work := []checkInWork{{id: "Job 004", name: "Background process: run", started: now.Add(-time.Minute), ctx: t.Context(), progress: func() string { return "3/10" }}}
+	body := "Automatic progress check: still running. This is not a finished result.\n\n[Job 004] Background process: run, running 1m0s\nLatest progress:\n3/10\n"
+	require.Equal(t,
+		fmt.Sprintf("<%s>\n<task-id>%s</task-id>\n<name>%s</name>\n<status>%s</status>\n<result>\n%s</result>\n</%s>", TaskNotificationTag, "Job 004", "Background process: run", TaskRunning, body, TaskNotificationTag),
+		checkInNotification(work, now))
+
+	name, status, ok := ParseTaskNotification(taskResult{ID: "x", Name: "n", CLI: "c/m", Status: "s", Body: "b"}.String())
+	require.True(t, ok)
+	require.Equal(t, "n", name)
+	require.Equal(t, "s", status)
 }

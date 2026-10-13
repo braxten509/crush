@@ -183,7 +183,7 @@ func interruptedJobsNotification(jobs []savedJob) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\nWork these jobs started outside Crush, such as a systemd unit or a detached process, may still be running or may already have finished. Check the real state and results of each job now. Start again with crush bg whatever still needs to run, or start a crush bg job that waits for the outside work, so Crush reports its completion. Don't end your turn waiting for these jobs to report.")
-	return fmt.Sprintf("<%s>\n<name>%s</name>\n<status>%s</status>\n<result>\n%s\n</result>\n</%s>", TaskNotificationTag, BackgroundProcessName, TaskStopped, b.String(), TaskNotificationTag)
+	return taskResult{Name: BackgroundProcessName, Status: string(TaskStopped), Body: b.String()}.String()
 }
 
 func indentLines(text, prefix string) string {

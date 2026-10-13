@@ -82,63 +82,10 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			main := uv.NewStyledString(m.landingView())
 			main.Draw(scr, layout.main)
 		}
-
-		if m.activeInline != nil {
-			m.activeInline.SetFocused(m.focus == uiFocusEditor)
-			if collapsed, ok := m.collapsedInlineEditor(); ok {
-				collapsed.DrawCollapsed(scr, layout.editor)
-				m.inlineCursor = nil
-			} else {
-				m.inlineCursor = m.activeInline.Draw(scr, layout.editor)
-			}
-		} else {
-			editor := uv.NewStyledString(m.renderEditorView(scr.Bounds().Dx()))
-			editor.Draw(scr, layout.editor)
-			m.inlineCursor = nil
-		}
+		m.drawComposer(scr, layout.editor, scr.Bounds().Dx())
 
 	case uiChat:
-		if !m.isCompact {
-			m.drawSidebar(scr, layout.sidebar)
-		}
-
-		if m.sessionSwitchPending() {
-			m.drawSessionLoading(scr, layout.main)
-		} else {
-			m.chat.Draw(scr, layout.main)
-		}
-		if layout.pills.Dy() > 0 && m.pillsView != "" {
-			uv.NewStyledString(m.pillsView).Draw(scr, layout.pills)
-		}
-
-		if m.activeInline != nil {
-			m.activeInline.SetFocused(m.focus == uiFocusEditor)
-			if collapsed, ok := m.collapsedInlineEditor(); ok {
-				collapsed.DrawCollapsed(scr, layout.editor)
-				m.inlineCursor = nil
-			} else {
-				m.inlineCursor = m.activeInline.Draw(scr, layout.editor)
-			}
-		} else {
-			editorWidth := scr.Bounds().Dx()
-			if !m.isCompact {
-				editorWidth -= layout.sidebar.Dx()
-			}
-			editor := uv.NewStyledString(m.renderEditorView(editorWidth))
-			editor.Draw(scr, layout.editor)
-			m.inlineCursor = nil
-		}
-		if layout.usage.Dy() > 0 {
-			uv.NewStyledString(m.compactUsage(layout.usage.Dx())).Draw(scr, layout.usage)
-		}
-		if layout.tasks.Dy() > 0 {
-			uv.NewStyledString(m.renderTasks(layout.tasks.Dx())).Draw(scr, layout.tasks)
-		}
-
-		// Draw details overlay in compact mode when open
-		if m.isCompact && m.detailsOpen {
-			m.drawSessionDetails(scr, layout.sessionDetails)
-		}
+		m.drawChat(scr, layout)
 	}
 
 	isOnboarding := m.state == uiOnboarding
@@ -169,33 +116,92 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	if m.dialog.HasDialogs() {
 		return m.dialog.Draw(scr, scr.Bounds())
 	}
+	return m.editorCursor()
+}
 
-	switch m.focus {
-	case uiFocusEditor:
-		if m.layout.editor.Dy() <= 0 {
-			// Don't show cursor if editor is not visible
-			return nil
-		}
-		if m.detailsOpen && m.isCompact {
-			// Don't show cursor if details overlay is open
-			return nil
-		}
+// drawChat draws the chat state: the sidebar, the transcript, the pills,
+// the composer, the usage and task rows and, in compact mode, the session
+// details over it all when open.
+func (m *UI) drawChat(scr uv.Screen, layout uiLayout) {
+	if !m.isCompact {
+		m.drawSidebar(scr, layout.sidebar)
+	}
 
-		if m.activeInline != nil {
-			if cur := m.inlineCursor; cur != nil {
-				cur.X += m.layout.editor.Min.X // Inline editor draws from area left
-				cur.Y += m.layout.editor.Min.Y // and top
-				return cur
-			}
-			return nil
-		}
+	if m.sessionSwitchPending() {
+		m.drawSessionLoading(scr, layout.main)
+	} else {
+		m.chat.Draw(scr, layout.main)
+	}
+	if layout.pills.Dy() > 0 && m.pillsView != "" {
+		uv.NewStyledString(m.pillsView).Draw(scr, layout.pills)
+	}
 
-		if m.textarea.Focused() {
-			cur := m.textarea.Cursor()
-			cur.X += m.layout.editor.Min.X                 // The composer's left edge
-			cur.Y += m.layout.editor.Min.Y + editorTextTop // Separator and attachments rows
+	editorWidth := scr.Bounds().Dx()
+	if !m.isCompact {
+		editorWidth -= layout.sidebar.Dx()
+	}
+	m.drawComposer(scr, layout.editor, editorWidth)
+	if layout.usage.Dy() > 0 {
+		uv.NewStyledString(m.compactUsage(layout.usage.Dx())).Draw(scr, layout.usage)
+	}
+	if layout.tasks.Dy() > 0 {
+		uv.NewStyledString(m.renderTasks(layout.tasks.Dx())).Draw(scr, layout.tasks)
+	}
+
+	// Draw details overlay in compact mode when open
+	if m.isCompact && m.detailsOpen {
+		m.drawSessionDetails(scr, layout.sessionDetails)
+	}
+}
+
+// drawComposer draws the active inline editor, collapsed while the chat has
+// focus, or else the textarea rendered width cells wide, and remembers the
+// inline editor's cursor.
+func (m *UI) drawComposer(scr uv.Screen, area uv.Rectangle, width int) {
+	if m.activeInline == nil {
+		editor := uv.NewStyledString(m.renderEditorView(width))
+		editor.Draw(scr, area)
+		m.inlineCursor = nil
+		return
+	}
+	m.activeInline.SetFocused(m.focus == uiFocusEditor)
+	if collapsed, ok := m.collapsedInlineEditor(); ok {
+		collapsed.DrawCollapsed(scr, area)
+		m.inlineCursor = nil
+		return
+	}
+	m.inlineCursor = m.activeInline.Draw(scr, area)
+}
+
+// editorCursor is where the terminal cursor goes: in the focused editor or
+// inline editor, unless it is hidden or covered.
+func (m *UI) editorCursor() *tea.Cursor {
+	if m.focus != uiFocusEditor {
+		return nil
+	}
+	if m.layout.editor.Dy() <= 0 {
+		// Don't show cursor if editor is not visible
+		return nil
+	}
+	if m.detailsOpen && m.isCompact {
+		// Don't show cursor if details overlay is open
+		return nil
+	}
+
+	if m.activeInline != nil {
+		if cur := m.inlineCursor; cur != nil {
+			cur.X += m.layout.editor.Min.X // Inline editor draws from area left
+			cur.Y += m.layout.editor.Min.Y // and top
 			return cur
 		}
+		return nil
+	}
+
+	if m.textarea.Focused() {
+		cur := m.textarea.Cursor()
+		cur.X += m.layout.editor.Min.X                 // The composer's left edge
+		cur.Y += m.layout.editor.Min.Y + editorTextTop // Separator and attachments rows
+		return cur
 	}
 	return nil
 }

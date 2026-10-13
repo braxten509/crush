@@ -369,6 +369,9 @@ func (b Builder) isAnthropicThinking(model config.SelectedModel) bool {
 	return err == nil && opts.Thinking != nil
 }
 
+// Provider builds the Fantasy provider that serves model from providerCfg.
+// isSubAgent marks requests a sub-agent makes, which Copilot is told were
+// started by an agent rather than the user.
 func (b Builder) Provider(providerCfg config.ProviderConfig, model config.SelectedModel, isSubAgent bool) (fantasy.Provider, error) {
 	if providerCfg.ID == config.AbacusProviderID {
 		return b.buildAbacusProvider(providerCfg, model)

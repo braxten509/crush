@@ -364,6 +364,23 @@ func TestRoutingPaste(t *testing.T) {
 	require.Equal(t, "three", u.textarea.Value(), "the chat ignores pastes")
 }
 
+func TestRoutingPasteInlineBeatsDialog(t *testing.T) {
+	t.Parallel()
+
+	u := newRoutingUI(t)
+	inline := &recInline{}
+	u.activeInline = inline
+	d := &recDialog{id: "rec"}
+	u.dialog.OpenDialog(d)
+	u.Update(tea.PasteMsg{Content: "one"})
+	require.Equal(t, []string{"one"}, inline.pastes, "a focused inline editor takes pastes even under a dialog")
+	require.Empty(t, d.msgs)
+
+	u.focus = uiFocusMain
+	u.Update(tea.PasteMsg{Content: "two"})
+	require.Len(t, d.msgs, 1, "a blurred one does not")
+}
+
 func TestRoutingMouseClick(t *testing.T) {
 	t.Parallel()
 

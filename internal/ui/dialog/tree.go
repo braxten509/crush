@@ -1,15 +1,17 @@
 package dialog
 
 import (
+	"context"
+	"strings"
+
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"context"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"strings"
 )
 
 const TreeID = "tree"
@@ -286,11 +288,11 @@ func (d *Tree) HandleMsg(msg tea.Msg) Action {
 }
 func (d *Tree) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := d.com.Styles
-	width := max(0, min(defaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
-	height := max(0, min(defaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
+	width := max(0, min(kit.DefaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
+	height := max(0, min(kit.DefaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	inner := max(0, width-t.Dialog.View.GetHorizontalFrameSize())
-	d.input.SetWidth(dialogInputTextWidth(t, d.input, inner))
-	listHeight, totalHeight, _ := sizeDialogList(t, d.list, inner, max(0, height-3))
+	d.input.SetWidth(kit.DialogInputTextWidth(t, d.input, inner))
+	listHeight, totalHeight, _ := kit.SizeDialogList(t, d.list, inner, max(0, height-3))
 	if totalHeight <= listHeight {
 		d.list.ScrollToTop()
 	}

@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -206,7 +207,7 @@ func (m *AuthMethod) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 	rc.AddPart(cards)
 
-	rc.Help = "\n" + renderDialogHelp(t, &m.help, m, innerWidth)
+	rc.Help = "\n" + kit.RenderDialogHelp(t, &m.help, m, innerWidth)
 
 	view := rc.Render()
 	if m.isOnboarding {

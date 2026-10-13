@@ -13,6 +13,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -266,11 +267,11 @@ func (m *Models) modelTypeRadioView() string {
 func (m *Models) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := m.com.Styles
 	width := max(0, min(defaultModelsDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
-	height := max(0, min(defaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
+	height := max(0, min(kit.DefaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	m.input.SetWidth(dialogInputTextWidth(t, m.input, innerWidth))
+	m.input.SetWidth(kit.DialogInputTextWidth(t, m.input, innerWidth))
 
-	listHeight, listTotalHeight, _ := sizeDialogList(t, m.list, innerWidth, height)
+	listHeight, listTotalHeight, _ := kit.SizeDialogList(t, m.list, innerWidth, height)
 
 	rc := NewRenderContext(t, width)
 	rc.Title = "Switch Model"
@@ -285,10 +286,10 @@ func (m *Models) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc.AddPart(inputView)
 
 	listView := t.Dialog.List.Height(m.list.Height()).Render(m.list.Render())
-	listView = joinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, m.list.Offset())
+	listView = kit.JoinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, m.list.Offset())
 	rc.AddPart(listView)
 
-	rc.Help = renderDialogHelp(t, &m.help, m, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &m.help, m, innerWidth)
 
 	cur := m.Cursor()
 
@@ -297,7 +298,7 @@ func (m *Models) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		rc.TitleInfo = ""
 		rc.IsOnboarding = true
 		view := rc.Render()
-		cur = adjustOnboardingInputCursor(t, cur)
+		cur = kit.AdjustOnboardingInputCursor(t, cur)
 		DrawOnboardingCursor(scr, area, view, cur)
 	} else {
 		view := rc.Render()

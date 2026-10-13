@@ -5,6 +5,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
@@ -101,7 +102,7 @@ func (m *ModelItem) SelectedModelType() config.SelectedModelType {
 	return m.modelType.Config()
 }
 
-var _ ListItem = &ModelItem{}
+var _ kit.ListItem = &ModelItem{}
 
 // NewModelItem creates a new ModelItem.
 func NewModelItem(t *styles.Styles, prov catwalk.Provider, model catwalk.Model, typ ModelType, showProvider bool) *ModelItem {
@@ -116,32 +117,32 @@ func NewModelItem(t *styles.Styles, prov catwalk.Provider, model catwalk.Model, 
 	}
 }
 
-// Filter implements ListItem.
+// Filter implements kit.ListItem.
 func (m *ModelItem) Filter() string {
 	return m.model.Name
 }
 
-// ID implements ListItem.
+// ID implements kit.ListItem.
 func (m *ModelItem) ID() string {
 	return modelKey(string(m.prov.ID), m.model.ID)
 }
 
-// Render implements ListItem.
+// Render implements kit.ListItem.
 func (m *ModelItem) Render(width int) string {
 	var providerInfo string
 	if m.showProvider {
 		providerInfo = string(m.prov.Name)
 	}
-	styles := ListItemStyles{
+	styles := kit.ListItemStyles{
 		ItemBlurred:     m.t.Dialog.NormalItem,
 		ItemFocused:     m.t.Dialog.SelectedItem,
 		InfoTextBlurred: m.t.Dialog.ListItem.InfoBlurred,
 		InfoTextFocused: m.t.Dialog.ListItem.InfoFocused,
 	}
-	return renderItem(styles, m.model.Name, providerInfo, m.focused, width, m.cache, &m.m)
+	return kit.RenderItem(styles, m.model.Name, providerInfo, m.focused, width, m.cache, &m.m)
 }
 
-// SetFocused implements ListItem.
+// SetFocused implements kit.ListItem.
 func (m *ModelItem) SetFocused(focused bool) {
 	if m.focused == focused {
 		return
@@ -153,9 +154,9 @@ func (m *ModelItem) SetFocused(focused bool) {
 	}
 }
 
-// SetMatch implements ListItem.
+// SetMatch implements kit.ListItem.
 func (m *ModelItem) SetMatch(fm fuzzy.Match) {
-	if sameFuzzyMatch(m.m, fm) {
+	if kit.SameFuzzyMatch(m.m, fm) {
 		return
 	}
 	m.cache = nil

@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -267,8 +268,8 @@ func (d *Skills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	width := max(0, min(80, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	height := max(0, min(22, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	innerWidth := max(0, width-t.Dialog.View.GetHorizontalFrameSize())
-	offset := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight + t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight + t.Dialog.HelpView.GetVerticalFrameSize() + t.Dialog.View.GetVerticalFrameSize() + 3
-	d.input.SetWidth(dialogInputTextWidth(t, d.input, innerWidth))
+	offset := t.Dialog.Title.GetVerticalFrameSize() + kit.TitleContentHeight + t.Dialog.InputPrompt.GetVerticalFrameSize() + kit.InputContentHeight + t.Dialog.HelpView.GetVerticalFrameSize() + t.Dialog.View.GetVerticalFrameSize() + 3
+	d.input.SetWidth(kit.DialogInputTextWidth(t, d.input, innerWidth))
 	d.list.SetSize(innerWidth, max(0, height-offset))
 	rc := NewRenderContext(t, width)
 	rc.Title = "Skills · Installed"
@@ -309,7 +310,7 @@ func (d *Skills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	textWidth := max(0, innerWidth-t.Dialog.SecondaryText.GetHorizontalFrameSize())
 	rc.AddPart(t.Dialog.SecondaryText.Width(innerWidth).Height(1).Render(ansi.Truncate(plainSkillText(detail), textWidth, "…")))
 	rc.AddPart(t.Dialog.SecondaryText.Width(innerWidth).Height(1).Render(ansi.Truncate(plainSkillText(d.status), textWidth, "…")))
-	rc.Help = renderDialogHelp(t, &d.help, d, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &d.help, d, innerWidth)
 	cur := InputCursor(t, d.input.Cursor())
 	DrawCenterCursor(scr, area, rc.Render(), cur)
 	return cur

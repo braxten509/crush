@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -116,7 +117,7 @@ func (d *ThemeNew) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	} else {
 		rc.AddPart(errStyle.Height(reservedErrHeight).Render(""))
 	}
-	rc.Help = renderDialogHelp(t, &d.help, d, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &d.help, d, innerWidth)
 
 	view := rc.Render()
 	cur := d.Cursor()

@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pkg/browser"
@@ -156,7 +157,7 @@ func (m *AWSSSO) dialogContent() string {
 	elements := []string{
 		m.headerContent(),
 		m.innerDialogContent(),
-		renderDialogHelp(t, &m.help, m, innerWidth),
+		kit.RenderDialogHelp(t, &m.help, m, innerWidth),
 	}
 	return strings.Join(elements, "\n")
 }

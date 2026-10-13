@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	fimage "github.com/charmbracelet/crush/internal/ui/image"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -251,7 +252,7 @@ func (f *FilePicker) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc := NewRenderContext(t, width)
 	rc.Gap = 1
 	rc.Title = "Add Image"
-	rc.Help = renderDialogHelp(t, &f.help, f, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &f.help, f, innerWidth)
 
 	if imgPrevHeight > 0 {
 		imgPreview := t.Dialog.ImagePreview.Align(lipgloss.Center).Width(innerWidth).Render(f.imagePreview(imgPrevWidth, imgPrevHeight))

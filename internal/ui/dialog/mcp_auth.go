@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/pkg/browser"
 )
@@ -237,7 +238,7 @@ func (m *MCPAuth) dialogContent() string {
 	elements := []string{
 		m.headerContent(),
 		m.innerContent(),
-		renderDialogHelp(t, &m.help, m, innerWidth),
+		kit.RenderDialogHelp(t, &m.help, m, innerWidth),
 	}
 	return strings.Join(elements, "\n")
 }

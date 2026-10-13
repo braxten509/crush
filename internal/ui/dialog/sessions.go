@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -286,14 +287,14 @@ func (s *Session) Cursor() *tea.Cursor {
 func (s *Session) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := s.com.Styles
 	s.bodyArea = image.Rectangle{}
-	width := max(0, min(defaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
-	height := max(0, min(defaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
+	width := max(0, min(kit.DefaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
+	height := max(0, min(kit.DefaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	s.input.SetWidth(dialogInputTextWidth(t, s.input, innerWidth))
-	listHeight, listTotalHeight, listWidth := sizeDialogList(t, s.list, innerWidth, height)
+	s.input.SetWidth(kit.DialogInputTextWidth(t, s.input, innerWidth))
+	listHeight, listTotalHeight, listWidth := kit.SizeDialogList(t, s.list, innerWidth, height)
 
 	// Hide the timestamps uniformly when the widest would crowd the title.
-	applyInfoColumnVisibility(s.list.FilteredItems(), listWidth, sessionInfoMaxPercent)
+	kit.ApplyInfoColumnVisibility(s.list.FilteredItems(), listWidth, kit.SessionInfoMaxPercent)
 
 	// This makes it so we do not scroll the list if we don't have to
 	start, end := s.list.VisibleItemIndices()
@@ -326,16 +327,16 @@ func (s *Session) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		}
 		cur = item.Cursor()
 		start, end := s.list.VisibleItemIndices()
-		cur = renameCursorOffset(t, cur, lipgloss.Height(message), start, end, s.list.Selected())
+		cur = kit.RenameCursorOffset(t, cur, lipgloss.Height(message), start, end, s.list.Selected())
 	default:
 		inputView := t.Dialog.InputPrompt.Render(s.input.View())
 		cur = s.Cursor()
 		rc.AddPart(inputView)
 	}
 	bodyView := t.Dialog.List.Height(s.list.Height()).Render(s.list.Render())
-	bodyView = joinScrollbar(t, bodyView, listHeight, listTotalHeight, listHeight, s.list.Offset())
+	bodyView = kit.JoinScrollbar(t, bodyView, listHeight, listTotalHeight, listHeight, s.list.Offset())
 	rc.AddPart(bodyView)
-	rc.Help = renderDialogHelp(t, &s.help, s, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &s.help, s, innerWidth)
 
 	view := rc.Render()
 	s.updateSessionListArea(area, view, bodyView, rc.Help, rc.ViewStyle, t.Dialog.List, innerWidth, listHeight)

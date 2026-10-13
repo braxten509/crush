@@ -179,14 +179,16 @@ box width — border and padding live *inside* it.
   (`styleA.Render(x) + styleB.Render(y)`), rather than concatenating raw
   strings and wrapping the whole thing in one style. An inner segment's
   reset code drops the outer color for everything after it.
-- Use the shared helpers instead of re-deriving widths:
-  - keybind hints → `renderDialogHelp(t, &m.help, m, innerWidth)` (sizes,
+- Use the shared helpers in `dialog/internal/kit` instead of re-deriving
+  widths:
+  - keybind hints → `kit.RenderDialogHelp(t, &m.help, m, innerWidth)` (sizes,
     pads, truncates — never `helpStyle.Render(m.help.View(m))` raw);
-  - text inputs → `dialogInputTextWidth(t, input, innerWidth)` (accounts
-    for the `"> "` prompt);
+  - text inputs → `kit.DialogInputTextWidth(t, input, innerWidth)`
+    (accounts for the `"> "` prompt);
   - titles → `common.DialogTitle` (truncates instead of wrapping);
-  - list + scrollbar → `joinScrollbar`;
-  - hiding a crowded info column → `applyInfoColumnVisibility`.
+  - list + scrollbar → `kit.JoinScrollbar` (size the list with
+    `kit.SizeDialogList`);
+  - hiding a crowded info column → `kit.ApplyInfoColumnVisibility`.
 - Clamp width/height to the drawable `area` (`max(0, min(maxW, area.Dx()-frame))`)
   so dialogs stay inside small terminals.
 

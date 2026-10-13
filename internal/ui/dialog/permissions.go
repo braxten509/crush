@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -394,9 +395,9 @@ func (p *Permissions) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	buttons := p.renderButtons(contentWidth, fullscreen)
 	// Pack the hints to the content width so they truncate cleanly instead
 	// of overflowing. The dialog frame supplies the padding, so this renders
-	// the hint line without the extra help view inset that renderDialogHelp
+	// the hint line without the extra help view inset that kit.RenderDialogHelp
 	// applies for RenderContext dialogs.
-	helpView := shortHelpLine(&p.help, p.ShortHelp(), contentWidth)
+	helpView := kit.ShortHelpLine(&p.help, p.ShortHelp(), contentWidth)
 
 	p.defaultDiffSplitMode = width >= splitModeMinWidth
 
@@ -431,7 +432,7 @@ func (p *Permissions) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 	content = p.viewport.View()
 	if needsScrollbar {
-		content = joinScrollbar(t, content, availableHeight, p.viewport.TotalLineCount(), availableHeight, p.viewport.YOffset())
+		content = kit.JoinScrollbar(t, content, availableHeight, p.viewport.TotalLineCount(), availableHeight, p.viewport.YOffset())
 	}
 
 	parts := []string{header}

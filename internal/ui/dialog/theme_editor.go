@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -126,7 +127,7 @@ func (ed *ThemeEditor) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	width := max(0, min(themeEditorDialogMaxWidth, area.Dx()))
 	height := max(0, min(themeEditorDialogMaxHeight, area.Dy()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight +
+	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + kit.TitleContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
 		t.Dialog.View.GetVerticalFrameSize()
 	listHeight := max(1, height-heightOffset)
@@ -160,7 +161,7 @@ func (ed *ThemeEditor) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		cur.Y += t.Dialog.View.GetBorderTopSize() +
 			t.Dialog.View.GetPaddingTop() +
 			t.Dialog.View.GetMarginTop() +
-			titleContentHeight +
+			kit.TitleContentHeight +
 			rc.Gap +
 			t.Dialog.List.GetBorderTopSize() +
 			t.Dialog.List.GetPaddingTop() +

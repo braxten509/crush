@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -123,7 +124,7 @@ func (r *Remote) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc := NewRenderContext(t, width)
 	rc.Title = "Remote Control"
 	rc.AddPart(lipgloss.JoinVertical(lipgloss.Left, body...))
-	rc.Help = renderDialogHelp(t, &r.help, r, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &r.help, r, innerWidth)
 	DrawCenter(scr, area, rc.Render())
 	return nil
 }

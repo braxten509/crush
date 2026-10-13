@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/cpuaffinity"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -278,8 +279,8 @@ func commandsRadioView(sty *styles.Styles, selected CommandType, hasUserCmds boo
 // Draw implements [Dialog].
 func (c *Commands) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := c.com.Styles
-	width := max(0, min(defaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
-	height := max(0, min(defaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
+	width := max(0, min(kit.DefaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
+	height := max(0, min(kit.DefaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	if area.Dx() != c.windowWidth && c.selected == SystemCommands {
 		c.windowWidth = area.Dx()
 		// since some items in the list depend on width (e.g. toggle sidebar command),
@@ -288,17 +289,17 @@ func (c *Commands) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	innerWidth := width - c.com.Styles.Dialog.View.GetHorizontalFrameSize()
-	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight +
-		t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight +
+	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + kit.TitleContentHeight +
+		t.Dialog.InputPrompt.GetVerticalFrameSize() + kit.InputContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
 		t.Dialog.View.GetVerticalFrameSize()
 
-	c.input.SetWidth(dialogInputTextWidth(t, c.input, innerWidth))
+	c.input.SetWidth(kit.DialogInputTextWidth(t, c.input, innerWidth))
 
 	c.list.SetSize(innerWidth, max(0, height-heightOffset))
 
 	// Hide the shortcut hints uniformly when the widest would crowd names.
-	applyInfoColumnVisibility(c.list.FilteredItems(), innerWidth, commandInfoMaxPercent)
+	kit.ApplyInfoColumnVisibility(c.list.FilteredItems(), innerWidth, kit.CommandInfoMaxPercent)
 
 	rc := NewRenderContext(t, width)
 	rc.Title = "Commands"
@@ -307,7 +308,7 @@ func (c *Commands) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc.AddPart(inputView)
 	listView := t.Dialog.List.Height(c.list.Height()).Render(c.list.Render())
 	rc.AddPart(listView)
-	rc.Help = renderDialogHelp(t, &c.help, c, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &c.help, c, innerWidth)
 
 	if c.loading {
 		rc.Help = t.Dialog.HelpView.Width(innerWidth).Render(c.spinner.View() + " Generating Prompt...")

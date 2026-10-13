@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/pkg/browser"
@@ -319,7 +320,7 @@ func (m *OAuth) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		view := m.dialogContent()
 		cur := m.cursor()
 		if cur != nil {
-			cur = adjustOnboardingInputCursor(t, cur)
+			cur = kit.AdjustOnboardingInputCursor(t, cur)
 			DrawOnboardingCursor(scr, area, view, cur)
 		} else {
 			DrawOnboarding(scr, area, view)
@@ -356,7 +357,7 @@ func (m *OAuth) dialogContent() string {
 		elements := []string{
 			m.headerContent(),
 			m.innerDialogContent(),
-			renderDialogHelp(t, &m.help, m, innerWidth),
+			kit.RenderDialogHelp(t, &m.help, m, innerWidth),
 		}
 		return strings.Join(elements, "\n")
 	}

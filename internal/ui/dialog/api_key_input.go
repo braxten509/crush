@@ -13,6 +13,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -165,7 +166,7 @@ func (m *APIKeyInput) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	textStyle := t.Dialog.SecondaryText
 	dialogStyle := t.Dialog.View.Width(m.width)
 	inputStyle := t.Dialog.InputPrompt
-	helpView := renderDialogHelp(t, &m.help, m, m.width-dialogStyle.GetHorizontalFrameSize())
+	helpView := kit.RenderDialogHelp(t, &m.help, m, m.width-dialogStyle.GetHorizontalFrameSize())
 
 	m.input.Prompt = m.spinner.View()
 
@@ -182,7 +183,7 @@ func (m *APIKeyInput) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	if m.isOnboarding {
 		view := content
-		cur = adjustOnboardingInputCursor(t, cur)
+		cur = kit.AdjustOnboardingInputCursor(t, cur)
 		DrawOnboardingCursor(scr, area, view, cur)
 	} else {
 		view := dialogStyle.Render(content)

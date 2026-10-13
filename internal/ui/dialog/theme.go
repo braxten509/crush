@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -110,7 +111,7 @@ func (r *ThemeItem) Finished() bool {
 
 var (
 	_ Dialog              = (*Theme)(nil)
-	_ ListItem            = (*ThemeItem)(nil)
+	_ kit.ListItem        = (*ThemeItem)(nil)
 	_ list.FilterableItem = (*ThemeSectionHeader)(nil)
 )
 
@@ -473,12 +474,12 @@ func (th *Theme) currentThemeName() string {
 
 func (th *Theme) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := th.com.Styles
-	width := max(0, min(defaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
-	height := max(0, min(defaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
+	width := max(0, min(kit.DefaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
+	height := max(0, min(kit.DefaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
 
-	th.input.SetWidth(dialogInputTextWidth(t, th.input, innerWidth))
-	listHeight, listTotalHeight, _ := sizeDialogList(t, th.list, innerWidth, height)
+	th.input.SetWidth(kit.DialogInputTextWidth(t, th.input, innerWidth))
+	listHeight, listTotalHeight, _ := kit.SizeDialogList(t, th.list, innerWidth, height)
 
 	var cur *tea.Cursor
 	rc := NewRenderContext(t, width)
@@ -503,7 +504,7 @@ func (th *Theme) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		}
 		cur = item.Cursor()
 		start, end := th.list.VisibleItemIndices()
-		cur = renameCursorOffset(t, cur, lipgloss.Height(message), start, end, th.list.Selected())
+		cur = kit.RenameCursorOffset(t, cur, lipgloss.Height(message), start, end, th.list.Selected())
 	default:
 		inputView := t.Dialog.InputPrompt.Render(th.input.View())
 		rc.AddPart(inputView)
@@ -518,9 +519,9 @@ func (th *Theme) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	listView := t.Dialog.List.Height(th.list.Height()).Render(th.list.Render())
-	listView = joinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, th.list.Offset())
+	listView = kit.JoinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, th.list.Offset())
 	rc.AddPart(listView)
-	rc.Help = renderDialogHelp(t, &th.help, th, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &th.help, th, innerWidth)
 
 	view := rc.Render()
 
@@ -734,7 +735,7 @@ func (r *ThemeItem) SetFocused(focused bool) {
 }
 
 func (r *ThemeItem) SetMatch(m fuzzy.Match) {
-	if !sameFuzzyMatch(r.m, m) {
+	if !kit.SameFuzzyMatch(r.m, m) {
 		r.cache = nil
 		r.Bump()
 	}
@@ -783,7 +784,7 @@ func (r *ThemeItem) Render(width int) string {
 	if r.hideInfo {
 		info = ""
 	}
-	s := ListItemStyles{
+	s := kit.ListItemStyles{
 		ItemBlurred:     r.t.Dialog.NormalItem,
 		ItemFocused:     r.t.Dialog.SelectedItem,
 		InfoTextBlurred: r.t.Dialog.Sessions.InfoBlurred,
@@ -806,5 +807,5 @@ func (r *ThemeItem) Render(width int) string {
 		}
 	}
 
-	return renderItem(s, r.label, info, r.focused, width, r.cache, &r.m)
+	return kit.RenderItem(s, r.label, info, r.focused, width, r.cache, &r.m)
 }

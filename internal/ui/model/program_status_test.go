@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestProgramStatus(t *testing.T) {
 	require.Equal(t, tea.ProgramStateBlocked, ps.State)
 	require.Equal(t, tea.ProgramStatusKindQuestion, ps.Kind)
 
-	u.dialog.OpenDialogWithGrace(dialog.NewPermissions(u.com, permission.PermissionRequest{ID: "p", ToolName: "bash"}))
+	u.dialog.OpenDialogWithGrace(permissions.NewPermissions(u.com, permission.PermissionRequest{ID: "p", ToolName: "bash"}))
 	ps = u.programStatus()
 	require.Equal(t, tea.ProgramStateBlocked, ps.State)
 	require.Equal(t, tea.ProgramStatusKindPermission, ps.Kind)

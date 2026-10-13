@@ -1,4 +1,6 @@
-package dialog
+// Package permissions holds the dialog that asks the user to allow or deny
+// a tool call.
+package permissions
 
 import (
 	"encoding/json"
@@ -15,21 +17,10 @@ import (
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
-)
-
-// PermissionsID is the identifier for the permissions dialog.
-const PermissionsID = "permissions"
-
-// PermissionAction represents the user's response to a permission request.
-type PermissionAction string
-
-const (
-	PermissionAllow           PermissionAction = "allow"
-	PermissionAllowForSession PermissionAction = "allow_session"
-	PermissionDeny            PermissionAction = "deny"
 )
 
 // Permissions dialog sizing constants.
@@ -128,7 +119,7 @@ func defaultPermissionsKeyMap() permissionsKeyMap {
 			key.WithKeys("d", "D"),
 			key.WithHelp("d", "deny"),
 		),
-		Close: CloseKey,
+		Close: dialog.CloseKey,
 		ToggleDiffMode: key.NewBinding(
 			key.WithKeys("t"),
 			key.WithHelp("t", "toggle diff view"),
@@ -164,7 +155,7 @@ func defaultPermissionsKeyMap() permissionsKeyMap {
 	}
 }
 
-var _ Dialog = (*Permissions)(nil)
+var _ dialog.Dialog = (*Permissions)(nil)
 
 // PermissionsOption configures the permissions dialog.
 type PermissionsOption func(*Permissions)
@@ -222,7 +213,7 @@ func (p *Permissions) calculateContentWidth(width int) int {
 
 // ID implements [Dialog].
 func (*Permissions) ID() string {
-	return PermissionsID
+	return dialog.PermissionsID
 }
 
 // ToolCallID returns the tool call ID associated with this dialog's
@@ -232,13 +223,13 @@ func (p *Permissions) ToolCallID() string {
 }
 
 // HandleMsg implements [Dialog].
-func (p *Permissions) HandleMsg(msg tea.Msg) Action {
+func (p *Permissions) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, p.keyMap.Close):
 			// Escape denies the permission request.
-			return p.respond(PermissionDeny)
+			return p.respond(dialog.PermissionDeny)
 		case key.Matches(msg, p.keyMap.Right), key.Matches(msg, p.keyMap.Tab):
 			p.selectedOption = (p.selectedOption + 1) % 3
 		case key.Matches(msg, p.keyMap.Left):
@@ -247,11 +238,11 @@ func (p *Permissions) HandleMsg(msg tea.Msg) Action {
 		case key.Matches(msg, p.keyMap.Select):
 			return p.selectCurrentOption()
 		case key.Matches(msg, p.keyMap.Allow):
-			return p.respond(PermissionAllow)
+			return p.respond(dialog.PermissionAllow)
 		case key.Matches(msg, p.keyMap.AllowSession):
-			return p.respond(PermissionAllowForSession)
+			return p.respond(dialog.PermissionAllowForSession)
 		case key.Matches(msg, p.keyMap.Deny):
-			return p.respond(PermissionDeny)
+			return p.respond(dialog.PermissionDeny)
 		case key.Matches(msg, p.keyMap.ToggleDiffMode):
 			if p.hasDiffView() {
 				newMode := !p.isSplitMode()
@@ -305,16 +296,16 @@ func (p *Permissions) HandleMsg(msg tea.Msg) Action {
 func (p *Permissions) selectCurrentOption() tea.Msg {
 	switch p.selectedOption {
 	case 0:
-		return p.respond(PermissionAllow)
+		return p.respond(dialog.PermissionAllow)
 	case 1:
-		return p.respond(PermissionAllowForSession)
+		return p.respond(dialog.PermissionAllowForSession)
 	default:
-		return p.respond(PermissionDeny)
+		return p.respond(dialog.PermissionDeny)
 	}
 }
 
-func (p *Permissions) respond(action PermissionAction) tea.Msg {
-	return ActionPermissionResponse{
+func (p *Permissions) respond(action dialog.PermissionAction) tea.Msg {
+	return dialog.ActionPermissionResponse{
 		Permission: p.permission,
 		Action:     action,
 	}
@@ -442,7 +433,7 @@ func (p *Permissions) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	parts = append(parts, "", buttons, "", helpView)
 
 	innerContent := lipgloss.JoinVertical(lipgloss.Left, parts...)
-	DrawCenterCursor(scr, area, dialogStyle.Render(innerContent), nil)
+	dialog.DrawCenterCursor(scr, area, dialogStyle.Render(innerContent), nil)
 	return nil
 }
 

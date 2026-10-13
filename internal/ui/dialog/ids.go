@@ -42,4 +42,7 @@ const (
 
 	// MCPTogglesID is the identifier for the MCP toggles dialog.
 	MCPTogglesID = "mcp_toggles"
+
+	// PermissionsID is the identifier for the permissions dialog.
+	PermissionsID = "permissions"
 )

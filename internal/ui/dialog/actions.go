@@ -193,6 +193,15 @@ type (
 	}
 )
 
+// PermissionAction represents the user's response to a permission request.
+type PermissionAction string
+
+const (
+	PermissionAllow           PermissionAction = "allow"
+	PermissionAllowForSession PermissionAction = "allow_session"
+	PermissionDeny            PermissionAction = "deny"
+)
+
 // ActionCmd represents an action that carries a [tea.Cmd] to be passed to the
 // Bubble Tea program loop.
 type ActionCmd struct {

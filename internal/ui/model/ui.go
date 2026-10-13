@@ -60,6 +60,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
 	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
 	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
 	"github.com/charmbracelet/crush/internal/ui/dialog/sessions"
@@ -6414,12 +6415,12 @@ func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
 	m.dialog.CloseDialog(dialog.PermissionsID)
 
 	// Get diff mode from config.
-	var opts []dialog.PermissionsOption
+	var opts []permissions.PermissionsOption
 	if diffMode := m.com.Config().Options.TUI.DiffMode; diffMode != "" {
-		opts = append(opts, dialog.WithDiffMode(diffMode == "split"))
+		opts = append(opts, permissions.WithDiffMode(diffMode == "split"))
 	}
 
-	permDialog := dialog.NewPermissions(m.com, perm, opts...)
+	permDialog := permissions.NewPermissions(m.com, perm, opts...)
 	m.dialog.OpenDialogWithGrace(permDialog)
 	return nil
 }
@@ -6512,7 +6513,7 @@ func (m *UI) handlePermissionNotification(notification permission.PermissionNoti
 		return
 	}
 	if d := m.dialog.Dialog(dialog.PermissionsID); d != nil {
-		if perm, ok := d.(*dialog.Permissions); ok && perm.ToolCallID() == notification.ToolCallID {
+		if perm, ok := d.(*permissions.Permissions); ok && perm.ToolCallID() == notification.ToolCallID {
 			m.dialog.CloseDialog(dialog.PermissionsID)
 		}
 	}

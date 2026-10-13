@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/charmbracelet/crush/internal/ui/list"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/sahilm/fuzzy"
@@ -70,4 +72,9 @@ func ScreenText(scr uv.ScreenBuffer) string {
 		rows[y] = b.String()
 	}
 	return strings.Join(rows, "\n")
+}
+
+// KeyMsg returns the key press message for typing r.
+func KeyMsg(r rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: r, Text: string(r)}
 }

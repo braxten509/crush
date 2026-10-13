@@ -1,4 +1,4 @@
-package dialog
+package permissions
 
 import (
 	"testing"
@@ -6,6 +6,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kittest"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/stretchr/testify/require"
 )
@@ -29,20 +31,20 @@ func TestPermissions_ActionKeysResolve(t *testing.T) {
 
 	tests := []struct {
 		key    tea.KeyPressMsg
-		action PermissionAction
+		action dialog.PermissionAction
 	}{
-		{keyMsg('a'), PermissionAllow},
-		{keyMsg('A'), PermissionAllow},
-		{keyMsg('d'), PermissionDeny},
-		{keyMsg('D'), PermissionDeny},
-		{keyMsg('s'), PermissionAllowForSession},
-		{keyMsg('S'), PermissionAllowForSession},
+		{kittest.KeyMsg('a'), dialog.PermissionAllow},
+		{kittest.KeyMsg('A'), dialog.PermissionAllow},
+		{kittest.KeyMsg('d'), dialog.PermissionDeny},
+		{kittest.KeyMsg('D'), dialog.PermissionDeny},
+		{kittest.KeyMsg('s'), dialog.PermissionAllowForSession},
+		{kittest.KeyMsg('S'), dialog.PermissionAllowForSession},
 	}
 
 	for _, tc := range tests {
 		p := newTestPermissions(t)
 		action := p.HandleMsg(tc.key)
-		resp, ok := action.(ActionPermissionResponse)
+		resp, ok := action.(dialog.ActionPermissionResponse)
 		require.Truef(t, ok, "key %q should produce ActionPermissionResponse", tc.key.Text)
 		require.Equal(t, tc.action, resp.Action)
 	}
@@ -68,7 +70,7 @@ func TestPermissions_NavigationCyclesOptions(t *testing.T) {
 	require.Equal(t, 0, p.selectedOption)
 
 	// Left cycles backward.
-	p.HandleMsg(keyMsg('h'))
+	p.HandleMsg(kittest.KeyMsg('h'))
 	require.Equal(t, 2, p.selectedOption)
 }
 
@@ -81,9 +83,9 @@ func TestPermissions_EnterConfirmsSelection(t *testing.T) {
 	p.selectedOption = 1 // Allow for session.
 
 	action := p.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	resp, ok := action.(ActionPermissionResponse)
+	resp, ok := action.(dialog.ActionPermissionResponse)
 	require.True(t, ok)
-	require.Equal(t, PermissionAllowForSession, resp.Action)
+	require.Equal(t, dialog.PermissionAllowForSession, resp.Action)
 }
 
 // TestPermissions_EscapeDenies verifies that escape denies the request.
@@ -92,7 +94,7 @@ func TestPermissions_EscapeDenies(t *testing.T) {
 
 	p := newTestPermissions(t)
 	action := p.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape})
-	resp, ok := action.(ActionPermissionResponse)
+	resp, ok := action.(dialog.ActionPermissionResponse)
 	require.True(t, ok)
-	require.Equal(t, PermissionDeny, resp.Action)
+	require.Equal(t, dialog.PermissionDeny, resp.Action)
 }

@@ -30,15 +30,6 @@ import (
 // Codex is driven through `codex app-server`, its JSON-RPC protocol for rich
 // clients (the one its IDE extension uses). `codex app-server generate-ts`
 // prints the schema.
-type rpcMessage struct {
-	ID     json.RawMessage `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params"`
-	Result json.RawMessage `json:"result"`
-	Error  *struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
 
 type codexItem struct {
 	Type             string          `json:"type"`

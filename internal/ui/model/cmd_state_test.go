@@ -353,5 +353,5 @@ func TestSwitchThemeWriteFailureKeepsPicker(t *testing.T) {
 	require.True(t, ok)
 	u.Update(written)
 	require.True(t, u.dialog.ContainsDialog(dialog.ThemeID))
-	require.False(t, u.userThemeSelected)
+	require.False(t, u.theme.userSelected)
 }

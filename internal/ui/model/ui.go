@@ -296,16 +296,8 @@ type UI struct {
 	// copy/paste, right-click, and scrolling instead of Crush.
 	mouseEnabled bool
 
-	// themeKey identifies the currently applied theme so applyTheme can
-	// skip the expensive style rebuild when switching to a provider that
-	// resolves to the same theme.
-	themeKey string
-
-	// userThemeSelected records that the user explicitly chose a theme
-	// during this session. It guards against provider-driven theme swaps
-	// discarding that choice, even in client/server mode where the
-	// config round-trip may not reflect the selection immediately.
-	userThemeSelected bool
+	// theme tracks the applied theme and any preview; see theme.go.
+	theme themeController
 
 	focus uiFocusState
 	state uiState
@@ -547,9 +539,6 @@ type UI struct {
 	todoSpinner    spinner.Model
 	todoIsSpinning bool
 
-	// preThemeStyles stores the styles before a theme preview so we can revert.
-	preThemeStyles *styles.Styles
-
 	// mouse highlighting related state
 	lastClickTime time.Time
 	hoverX        int
@@ -656,8 +645,8 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	// Seed the active theme key from the large model provider so the
 	// first model selection can correctly skip a redundant theme swap.
 	if cfg := com.Config(); cfg != nil {
-		ui.themeKey = styles.ThemeKeyForProvider(cfg.Models[config.SelectedModelTypeLarge].Provider)
-		ui.userThemeSelected = common.ThemeNameFromConfig(cfg) != ""
+		ui.theme.key = styles.ThemeKeyForProvider(cfg.Models[config.SelectedModelTypeLarge].Provider)
+		ui.theme.userSelected = common.ThemeNameFromConfig(cfg) != ""
 	}
 
 	// Seed the yolo cache once at construction; afterwards it is kept
@@ -2383,6 +2372,10 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		return tea.Batch(cmds...)
 	}
 
+	if cmd, ok := m.handleThemeAction(action); ok {
+		return cmd
+	}
+
 	isOnboarding := m.state == uiOnboarding
 
 	switch msg := action.(type) {
@@ -2548,199 +2541,6 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionToggleComposerFocusOnly:
 		cmds = append(cmds, m.toggleComposerFocusOnly())
 		m.dialog.CloseDialog(dialog.CommandsID)
-	case dialog.ActionSwitchTheme:
-		cmds = append(cmds, m.switchTheme(msg.Theme))
-	case dialog.ActionPreviewTheme:
-		newStyles, err := styles.LoadTheme(msg.Theme)
-		if err != nil {
-			break
-		}
-		if m.preThemeStyles == nil {
-			saved := m.com.Styles.Clone()
-			m.preThemeStyles = &saved
-		}
-		m.previewTheme(newStyles)
-	case dialog.ActionRevertThemePreview:
-		if m.preThemeStyles != nil {
-			m.applyTheme(*m.preThemeStyles)
-			m.preThemeStyles = nil
-		}
-		m.dialog.CloseDialog(dialog.ThemeID)
-	case dialog.ActionPreviewThemePalette:
-		newStyles, err := styles.LoadPaletteTheme(msg.Base, msg.Palette)
-		if err != nil {
-			break
-		}
-		if m.preThemeStyles == nil {
-			saved := m.com.Styles.Clone()
-			m.preThemeStyles = &saved
-		}
-		m.previewTheme(newStyles)
-	case dialog.ActionSaveThemePalette:
-		// The theme is stored under its own name; Base only identifies the
-		// built-in palette its colors are derived from.
-		themeName := msg.Name
-		if themeName == "" {
-			themeName = msg.Base
-		}
-
-		// Write the file before touching the UI so a failed save never
-		// leaves colors applied that did not reach disk.
-		savePath, err := styles.ThemePath(themeName)
-		if err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		tf := &styles.ThemeFile{Base: msg.Base, Palette: msg.Palette}
-		if err := styles.SaveThemeFile(savePath, tf); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-
-		// Only take over the whole UI when the saved theme is the active
-		// one (or the implicit default). Otherwise the preview backup
-		// stays intact so esc restores the user's real theme instead of
-		// leaving the edited colors applied until restart.
-		activeTheme := common.ThemeNameFromConfig(m.com.Config())
-		isActive := strings.EqualFold(activeTheme, themeName)
-		if activeTheme == "" {
-			isActive = strings.EqualFold(themeName, "charmtone-panther")
-		}
-		if isActive {
-			newStyles, err := styles.LoadTheme(themeName)
-			if err != nil {
-				cmds = append(cmds, util.ReportError(err))
-				break
-			}
-			m.applyTheme(newStyles)
-			m.preThemeStyles = nil
-		}
-		cmds = append(cmds, util.ReportInfo("Theme saved"))
-		m.dialog.CloseDialog(dialog.ThemeEditorID)
-		if td, ok := m.dialog.Dialog(dialog.ThemeID).(*dialog.Theme); ok {
-			td.RefreshThemes(themeName)
-		}
-	case dialog.ActionEditTheme:
-		m.openThemeEditorDialog(msg.Name)
-	case dialog.ActionRevertThemePalette:
-		if m.preThemeStyles != nil {
-			m.applyTheme(*m.preThemeStyles)
-			m.preThemeStyles = nil
-		}
-		m.dialog.CloseDialog(dialog.ThemeEditorID)
-	case dialog.ActionRevertOverriddenTheme:
-		// Drop any user override layered on top of the built-in: the
-		// shadowing theme file and the config palette entry.
-		if path, err := styles.FindThemeFile(msg.Name); err == nil {
-			if err := os.Remove(path); err != nil {
-				cmds = append(cmds, util.ReportError(fmt.Errorf("revert theme: %w", err)))
-				break
-			}
-		}
-		// If the reverted theme is the active one, re-apply the pristine
-		// built-in so the change is visible immediately.
-		if strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), msg.Name) {
-			if newStyles, err := styles.LoadTheme(msg.Name); err == nil {
-				m.applyTheme(newStyles)
-			}
-		}
-		cmds = append(cmds, util.ReportInfo("Reverted "+msg.Name+" to its built-in colors"))
-		m.dialog.CloseDialog(dialog.ThemeID)
-		m.openThemeDialog()
-	case dialog.ActionCreateTheme:
-		base := msg.Base
-		if base == "" {
-			base = "charmtone-panther"
-		}
-		name := msg.Name
-		exported, err := styles.ExportResolvedPalette(base)
-		if err != nil {
-			// Fall back to the default theme when the base theme is no
-			// longer resolvable (e.g. a user theme that was since deleted).
-			base = "charmtone-panther"
-			exported, err = styles.ExportResolvedPalette(base)
-			if err != nil {
-				cmds = append(cmds, util.ReportError(err))
-				break
-			}
-		}
-		savePath, err := styles.ThemePath(name)
-		if err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		// ExportResolvedPalette already pins Base to the built-in root the
-		// palette was resolved from. Keep it so the new theme stays
-		// loadable even if a user theme used as the source is later
-		// deleted or renamed.
-		if err := styles.SaveThemeFile(savePath, exported); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		cmds = append(cmds, m.writeConfigField("options.tui.active_theme", name, func(err error) tea.Cmd {
-			if err != nil {
-				return util.ReportError(err)
-			}
-			m.dialog.CloseDialog(dialog.ThemeNewID)
-			m.dialog.CloseDialog(dialog.ThemeID)
-			m.openThemeEditorDialog(name)
-			return util.ReportInfo("Created new theme: " + name)
-		}))
-	case dialog.ActionRenameTheme:
-		oldName := msg.OldName
-		newName := strings.ToLower(msg.NewName)
-		oldPath, newPath, err := styles.RenameThemeFile(oldName, newName)
-		if err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		renamed := func() tea.Cmd {
-			m.dialog.CloseDialog(dialog.ThemeID)
-			m.openThemeDialog()
-			return util.ReportInfo("Renamed theme " + oldName + " to " + newName)
-		}
-		cfg := m.com.Config()
-		if cfg == nil || cfg.Options == nil || cfg.Options.TUI == nil || !strings.EqualFold(cfg.Options.TUI.ActiveTheme, oldName) {
-			cmds = append(cmds, renamed())
-			break
-		}
-		cmds = append(cmds, m.writeConfigField("options.tui.active_theme", newName, func(err error) tea.Cmd {
-			if err != nil {
-				if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
-					slog.Error("Failed to roll back theme rename", "error", rollbackErr)
-				}
-				return util.ReportError(err)
-			}
-			return renamed()
-		}))
-	case dialog.ActionDeleteTheme:
-		if err := styles.DeleteThemeFile(msg.Name); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-		name := msg.Name
-		deleted := func() tea.Cmd {
-			m.dialog.CloseDialog(dialog.ThemeID)
-			m.openThemeDialog()
-			return util.ReportInfo("Deleted theme " + name)
-		}
-		// If the deleted theme was active, reset to the default theme.
-		if !strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), name) {
-			cmds = append(cmds, deleted())
-			break
-		}
-		cmds = append(cmds, m.writeConfigField("options.tui.active_theme", "charmtone-panther", func(err error) tea.Cmd {
-			if err != nil {
-				return util.ReportError(err)
-			}
-			newStyles, err := styles.LoadTheme("charmtone-panther")
-			if err != nil {
-				return util.ReportError(err)
-			}
-			m.applyTheme(newStyles)
-			m.preThemeStyles = nil
-			return deleted()
-		}))
 	case dialog.ActionToggleMouseSupport:
 		cfg := m.com.Config()
 		if cfg == nil {
@@ -5475,14 +5275,9 @@ func (m *UI) applyThemeForProvider(providerID string) {
 	// per-provider default, so provider or session changes never discard
 	// their choice. The in-memory flag covers client/server mode, where
 	// the config round-trip may not surface the selection right away.
-	if m.userThemeSelected || common.ThemeNameFromConfig(m.com.Config()) != "" {
+	if !m.theme.swapForProvider(providerID, common.ThemeNameFromConfig(m.com.Config()) != "") {
 		return
 	}
-	key := styles.ThemeKeyForProvider(providerID)
-	if key == m.themeKey {
-		return
-	}
-	m.themeKey = key
 	m.applyTheme(styles.ThemeForProvider(providerID))
 }
 

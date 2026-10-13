@@ -24,7 +24,6 @@ import (
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/skills"
-	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/google/uuid"
 )
@@ -517,16 +516,15 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	b.registerClient(ws, clientID)
 	b.mu.Unlock()
 
+	// Only logged: the workspace has no event subscribers yet (its
+	// clients attach after this returns), and the SSE stream carries no
+	// UI notices, so an event here would never reach a client.
 	if args.Version != "" && args.Version != version.Version {
 		slog.Warn(
 			"Client/server version mismatch",
 			"client", args.Version,
 			"server", version.Version,
 		)
-		appWorkspace.SendEvent(util.NewWarnMsg(fmt.Sprintf(
-			"Server version %q differs from client version %q. Consider restarting the server.",
-			version.Version, args.Version,
-		)))
 	}
 
 	return ws, workspaceToProto(ws), nil

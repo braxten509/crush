@@ -60,6 +60,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
 	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
 	"github.com/charmbracelet/crush/internal/ui/dialog/sessions"
 	"github.com/charmbracelet/crush/internal/ui/dialog/models"
@@ -1236,7 +1237,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mcpStateChangedMsg:
 		if dia := m.dialog.Dialog(dialog.MCPTogglesID); dia != nil {
-			if toggles, ok := dia.(*dialog.MCPToggles); ok {
+			if toggles, ok := dia.(*mcpservers.MCPToggles); ok {
 				for name, info := range msg.states {
 					toggles.SetItemStatus(name, mcpStatusText(info))
 				}
@@ -2851,7 +2852,7 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionDisableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.disableDockerMCP)
-	case dialog.ActionToggleMCP:
+	case mcpservers.ActionToggleMCP:
 		cmds = append(cmds, m.applyMCPToggle(msg))
 	case dialog.ActionInitializeProject:
 		if m.isAgentBusy() {

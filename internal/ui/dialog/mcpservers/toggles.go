@@ -1,4 +1,4 @@
-package dialog
+package mcpservers
 
 import (
 	"strings"
@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -83,7 +84,7 @@ type MCPToggles struct {
 	}
 }
 
-var _ Dialog = (*MCPToggles)(nil)
+var _ dialog.Dialog = (*MCPToggles)(nil)
 
 // NewMCPToggles creates a new MCP toggles dialog.
 func NewMCPToggles(com *common.Common, items []MCPToggleItem) *MCPToggles {
@@ -113,14 +114,14 @@ func NewMCPToggles(com *common.Common, items []MCPToggleItem) *MCPToggles {
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "switch scope"),
 	)
-	m.keyMap.Close = CloseKey
+	m.keyMap.Close = dialog.CloseKey
 
 	return m
 }
 
 // ID implements Dialog.
 func (m *MCPToggles) ID() string {
-	return MCPTogglesID
+	return dialog.MCPTogglesID
 }
 
 // Items returns the current items.
@@ -134,7 +135,7 @@ func (m *MCPToggles) Scope() MCPToggleScope {
 }
 
 // HandleMsg implements Dialog.
-func (m *MCPToggles) HandleMsg(msg tea.Msg) Action {
+func (m *MCPToggles) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
@@ -179,7 +180,7 @@ func (m *MCPToggles) HandleMsg(msg tea.Msg) Action {
 				Global:   m.scope == MCPToggleScopeGlobal,
 			}
 		case key.Matches(msg, m.keyMap.Close):
-			return ActionClose{}
+			return dialog.ActionClose{}
 		}
 	}
 	return nil
@@ -189,7 +190,7 @@ func (m *MCPToggles) HandleMsg(msg tea.Msg) Action {
 func (m *MCPToggles) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := m.com.Styles
 	m.width = max(0, min(m.requiredWidth(t), area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
-	DrawCenter(scr, area, m.dialogContent())
+	dialog.DrawCenter(scr, area, m.dialogContent())
 	return nil
 }
 
@@ -209,7 +210,7 @@ func (m *MCPToggles) requiredWidth(t *styles.Styles) int {
 func (m *MCPToggles) dialogContent() string {
 	t := m.com.Styles
 	innerWidth := m.width - t.Dialog.View.GetHorizontalFrameSize()
-	rc := NewRenderContext(t, m.width)
+	rc := dialog.NewRenderContext(t, m.width)
 	rc.Title = "Toggle MCPs"
 	rc.TitleInfo = m.scopeRadioView(t)
 	rc.AddPart(m.innerContent())

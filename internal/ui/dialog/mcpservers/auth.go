@@ -1,4 +1,6 @@
-package dialog
+// Package mcpservers holds the MCP server dialogs: authenticating servers
+// that need OAuth and toggling servers on or off.
+package mcpservers
 
 import (
 	"context"
@@ -12,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/pkg/browser"
@@ -50,7 +53,7 @@ type MCPAuth struct {
 	}
 }
 
-var _ Dialog = (*MCPAuth)(nil)
+var _ dialog.Dialog = (*MCPAuth)(nil)
 
 // NewMCPAuth creates a new MCP authentication dialog.
 func NewMCPAuth(com *common.Common, pending []mcptools.PendingAuthServer, authURLFn func(string) string) (*MCPAuth, tea.Cmd) {
@@ -83,14 +86,14 @@ func NewMCPAuth(com *common.Common, pending []mcptools.PendingAuthServer, authUR
 		key.WithKeys("s"),
 		key.WithHelp("s", "skip"),
 	)
-	m.keyMap.Close = CloseKey
+	m.keyMap.Close = dialog.CloseKey
 
 	return m, m.spinner.Tick
 }
 
 // ID implements Dialog.
 func (m *MCPAuth) ID() string {
-	return MCPAuthID
+	return dialog.MCPAuthID
 }
 
 // CancelAuth cancels any in-progress authentication.
@@ -102,7 +105,7 @@ func (m *MCPAuth) CancelAuth() {
 }
 
 // HandleMsg processes messages and returns actions.
-func (m *MCPAuth) HandleMsg(msg tea.Msg) Action {
+func (m *MCPAuth) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		switch m.state {
@@ -114,7 +117,7 @@ func (m *MCPAuth) HandleMsg(msg tea.Msg) Action {
 				cmds = append(cmds, cmd)
 			}
 			if len(cmds) > 0 {
-				return ActionCmd{tea.Batch(cmds...)}
+				return dialog.ActionCmd{Cmd: tea.Batch(cmds...)}
 			}
 		}
 
@@ -135,10 +138,10 @@ func (m *MCPAuth) HandleMsg(msg tea.Msg) Action {
 			// prompt we fall back to the server URL. Starting the flow
 			// (and opening the browser) is enter's job, not c's.
 			if u := m.authURL(); u != "" {
-				return ActionCmd{common.CopyToClipboard(u, "URL copied to clipboard")}
+				return dialog.ActionCmd{Cmd: common.CopyToClipboard(u, "URL copied to clipboard")}
 			}
 			if u := m.currentServer().URL; u != "" {
-				return ActionCmd{common.CopyToClipboard(u, "URL copied to clipboard")}
+				return dialog.ActionCmd{Cmd: common.CopyToClipboard(u, "URL copied to clipboard")}
 			}
 		case key.Matches(msg, m.keyMap.Skip):
 			if m.state == MCPAuthStatePrompt {
@@ -146,15 +149,15 @@ func (m *MCPAuth) HandleMsg(msg tea.Msg) Action {
 			}
 		case key.Matches(msg, m.keyMap.Close):
 			m.CancelAuth()
-			return ActionClose{}
+			return dialog.ActionClose{}
 		}
 
-	case ActionMCPAuthComplete:
+	case dialog.ActionMCPAuthComplete:
 		m.state = MCPAuthStateSuccess
 		m.cancelAuth = nil
 		return nil
 
-	case ActionMCPAuthErrored:
+	case dialog.ActionMCPAuthErrored:
 		m.state = MCPAuthStateError
 		m.err = msg.Error
 		m.cancelAuth = nil
@@ -163,9 +166,9 @@ func (m *MCPAuth) HandleMsg(msg tea.Msg) Action {
 	return nil
 }
 
-func (m *MCPAuth) startAuth() Action {
+func (m *MCPAuth) startAuth() dialog.Action {
 	if m.current >= len(m.pending) {
-		return ActionClose{}
+		return dialog.ActionClose{}
 	}
 	m.state = MCPAuthStateAuthenticating
 	m.err = nil
@@ -177,19 +180,19 @@ func (m *MCPAuth) startAuth() Action {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelAuth = cancel
 
-	return ActionCmd{tea.Batch(
+	return dialog.ActionCmd{Cmd: tea.Batch(
 		m.spinner.Tick,
 		func() tea.Msg {
-			return ActionMCPAuthStarted{Name: name, Ctx: ctx}
+			return dialog.ActionMCPAuthStarted{Name: name, Ctx: ctx}
 		},
 	)}
 }
 
-func (m *MCPAuth) advance() Action {
+func (m *MCPAuth) advance() dialog.Action {
 	m.CancelAuth()
 	m.current++
 	if m.current >= len(m.pending) {
-		return ActionClose{}
+		return dialog.ActionClose{}
 	}
 	m.state = MCPAuthStatePrompt
 	m.err = nil
@@ -225,7 +228,7 @@ func (m *MCPAuth) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	m.width = max(0, min(60, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	dialogStyle := t.Dialog.View.Width(m.width)
 	view := dialogStyle.Render(m.dialogContent())
-	DrawCenter(scr, area, view)
+	dialog.DrawCenter(scr, area, view)
 	return nil
 }
 

@@ -1,10 +1,11 @@
-package dialog
+package mcpservers
 
 import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/stretchr/testify/require"
 )
@@ -149,5 +150,5 @@ func TestMCPToggles_NavigationClamps(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "serena", toggled.Name, "cursor must clamp at the bottom")
 
-	require.IsType(t, ActionClose{}, m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape}))
+	require.IsType(t, dialog.ActionClose{}, m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape}))
 }

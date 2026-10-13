@@ -102,23 +102,40 @@ func (s *ConfigStore) SetProviderAPIKey(scope Scope, providerID string, apiKey a
 	return nil
 }
 
+// oauthCatalog describes the model catalog a provider's OAuth login
+// grants beside its API-key models.
+type oauthCatalog struct {
+	// label names the account in log messages.
+	label string
+	// field is the provider config key the catalog is stored under.
+	field string
+	// fetch retrieves the catalog with the login's token.
+	fetch func(context.Context, *oauth.Token) ([]catwalk.Model, error)
+	// set stores the catalog on an in-memory provider config.
+	set func(*ProviderConfig, []catwalk.Model)
+}
+
+// clear drops the catalog from an in-memory provider config.
+func (c oauthCatalog) clear(pc *ProviderConfig) { c.set(pc, nil) }
+
 // oauthCatalogs lists the providers whose OAuth login grants its own model
 // catalog, keyed by provider ID. These providers hold either an OAuth
 // login or an API key, never both: storing a key retires the login along
 // with its catalog.
-var oauthCatalogs = map[string]struct {
-	// field is the provider config key the catalog is stored under.
-	field string
-	// clear drops the catalog from an in-memory provider config.
-	clear func(*ProviderConfig)
-}{
+var oauthCatalogs = map[string]oauthCatalog{
 	string(catwalk.InferenceProviderOpenAI): {
+		label: "ChatGPT",
 		field: "chatgpt_models",
-		clear: func(pc *ProviderConfig) { pc.ChatGPTModels = nil },
+		// Indirect so tests can stub fetchOpenAIModels.
+		fetch: func(ctx context.Context, t *oauth.Token) ([]catwalk.Model, error) { return fetchOpenAIModels(ctx, t) },
+		set:   func(pc *ProviderConfig, models []catwalk.Model) { pc.ChatGPTModels = models },
 	},
 	string(catwalk.InferenceProviderXAI): {
+		label: "Grok",
 		field: "grok_models",
-		clear: func(pc *ProviderConfig) { pc.GrokModels = nil },
+		// Indirect so tests can stub fetchGrokModels.
+		fetch: func(ctx context.Context, t *oauth.Token) ([]catwalk.Model, error) { return fetchGrokModels(ctx, t) },
+		set:   func(pc *ProviderConfig, models []catwalk.Model) { pc.GrokModels = models },
 	},
 }
 
@@ -248,41 +265,7 @@ var fetchOpenAIModels = openai.Models
 // grants next to the provider's API-key models. Best effort: a failure
 // leaves the existing catalog in place and the login still succeeds.
 func (s *ConfigStore) refetchOpenAIModels(ctx context.Context, scope Scope) {
-	const providerID = string(catwalk.InferenceProviderOpenAI)
-	pc, ok := s.Config().Providers.Get(providerID)
-	if !ok || pc.OAuthToken == nil {
-		return
-	}
-	// The access token may have expired since login, so renew it before
-	// asking for the catalog: the models endpoint rejects stale tokens
-	// with a 401. A failed refresh falls through and lets the fetch run
-	// on the old token, which keeps the existing catalog in place.
-	if pc.OAuthToken.IsExpired() {
-		if err := s.RefreshOAuthToken(ctx, scope, providerID); err != nil {
-			slog.Warn("Failed to refresh the ChatGPT token before fetching the model catalog", "error", err)
-		}
-		if refreshed, ok := s.Config().Providers.Get(providerID); ok && refreshed.OAuthToken != nil {
-			pc = refreshed
-		}
-	}
-	models, err := fetchOpenAIModels(ctx, pc.OAuthToken)
-	if err != nil {
-		slog.Warn("Failed to fetch ChatGPT model catalog after auth", "error", err)
-		return
-	}
-	if err := s.update(scope, func(c *Config) map[string]any {
-		p, ok := c.Providers.Get(providerID)
-		if !ok {
-			return nil
-		}
-		p.ChatGPTModels = models
-		c.Providers.Set(providerID, p)
-		return map[string]any{
-			"providers.openai.chatgpt_models": models,
-		}
-	}); err != nil {
-		slog.Warn("Failed to persist ChatGPT model catalog", "error", err)
-	}
+	s.refetchOAuthCatalog(ctx, scope, string(catwalk.InferenceProviderOpenAI))
 }
 
 // RefetchOpenAIChatGPTModels fills in the ChatGPT model catalog when the
@@ -309,41 +292,7 @@ var fetchGrokModels = grok.Models
 // to the provider's API-key models. Best effort: a failure leaves the
 // existing catalog in place and the login still succeeds.
 func (s *ConfigStore) refetchGrokModels(ctx context.Context, scope Scope) {
-	const providerID = string(catwalk.InferenceProviderXAI)
-	pc, ok := s.Config().Providers.Get(providerID)
-	if !ok || pc.OAuthToken == nil {
-		return
-	}
-	// The access token may have expired since login, so renew it before
-	// asking for the catalog: the models endpoint rejects stale tokens
-	// with a 401. A failed refresh falls through and lets the fetch run
-	// on the old token, which keeps the existing catalog in place.
-	if pc.OAuthToken.IsExpired() {
-		if err := s.RefreshOAuthToken(ctx, scope, providerID); err != nil {
-			slog.Warn("Failed to refresh the Grok token before fetching the model catalog", "error", err)
-		}
-		if refreshed, ok := s.Config().Providers.Get(providerID); ok && refreshed.OAuthToken != nil {
-			pc = refreshed
-		}
-	}
-	models, err := fetchGrokModels(ctx, pc.OAuthToken)
-	if err != nil {
-		slog.Warn("Failed to fetch Grok model catalog after auth", "error", err)
-		return
-	}
-	if err := s.update(scope, func(c *Config) map[string]any {
-		p, ok := c.Providers.Get(providerID)
-		if !ok {
-			return nil
-		}
-		p.GrokModels = models
-		c.Providers.Set(providerID, p)
-		return map[string]any{
-			"providers.xai.grok_models": models,
-		}
-	}); err != nil {
-		slog.Warn("Failed to persist Grok model catalog", "error", err)
-	}
+	s.refetchOAuthCatalog(ctx, scope, string(catwalk.InferenceProviderXAI))
 }
 
 // RefetchGrokModels fills in the Grok model catalog when the xAI
@@ -359,6 +308,47 @@ func (s *ConfigStore) RefetchGrokModels(ctx context.Context) {
 		return
 	}
 	s.refetchGrokModels(ctx, ScopeGlobal)
+}
+
+// refetchOAuthCatalog fetches and stores the model catalog the provider's
+// OAuth login grants (see oauthCatalogs). Best effort: a failure leaves
+// the existing catalog in place.
+func (s *ConfigStore) refetchOAuthCatalog(ctx context.Context, scope Scope, providerID string) {
+	catalog := oauthCatalogs[providerID]
+	pc, ok := s.Config().Providers.Get(providerID)
+	if !ok || pc.OAuthToken == nil {
+		return
+	}
+	// The access token may have expired since login, so renew it before
+	// asking for the catalog: the models endpoint rejects stale tokens
+	// with a 401. A failed refresh falls through and lets the fetch run
+	// on the old token, which keeps the existing catalog in place.
+	if pc.OAuthToken.IsExpired() {
+		if err := s.RefreshOAuthToken(ctx, scope, providerID); err != nil {
+			slog.Warn("Failed to refresh the "+catalog.label+" token before fetching the model catalog", "error", err)
+		}
+		if refreshed, ok := s.Config().Providers.Get(providerID); ok && refreshed.OAuthToken != nil {
+			pc = refreshed
+		}
+	}
+	models, err := catalog.fetch(ctx, pc.OAuthToken)
+	if err != nil {
+		slog.Warn("Failed to fetch "+catalog.label+" model catalog after auth", "error", err)
+		return
+	}
+	if err := s.update(scope, func(c *Config) map[string]any {
+		p, ok := c.Providers.Get(providerID)
+		if !ok {
+			return nil
+		}
+		catalog.set(&p, models)
+		c.Providers.Set(providerID, p)
+		return map[string]any{
+			fmt.Sprintf("providers.%s.%s", providerID, catalog.field): models,
+		}
+	}); err != nil {
+		slog.Warn("Failed to persist "+catalog.label+" model catalog", "error", err)
+	}
 }
 
 // ImportCopilot attempts to import a GitHub Copilot token from disk.

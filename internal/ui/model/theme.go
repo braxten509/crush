@@ -309,3 +309,97 @@ func (m *UI) deleteTheme(name string) tea.Cmd {
 		return deleted()
 	})
 }
+
+// applyThemeForProvider swaps the active theme to the one associated with
+// the given provider, but only when that theme differs from the one
+// already applied. Most providers share a single theme, so re-selecting a
+// model from the same theme family would otherwise pay the full cost of
+// invalidating the markdown renderer cache and re-rendering the entire
+// transcript for no visible change.
+// A theme explicitly selected in the config always wins, so provider
+// changes never discard the user's choice.
+func (m *UI) applyThemeForProvider(providerID string) {
+	// A theme the user explicitly selected always wins over the
+	// per-provider default, so provider or session changes never discard
+	// their choice. The in-memory flag covers client/server mode, where
+	// the config round-trip may not surface the selection right away.
+	if !m.theme.swapForProvider(providerID, common.ThemeNameFromConfig(m.com.Config()) != "") {
+		return
+	}
+	m.applyTheme(styles.ThemeForProvider(providerID))
+}
+
+// applyTheme replaces the active styles with the given theme, drops the
+// shared style caches, and refreshes every component that caches style
+// data.
+func (m *UI) applyTheme(s styles.Styles) {
+	*m.com.Styles = s
+	common.InvalidateStyleCaches()
+	m.refreshStyles()
+	m.chat.InvalidateRenderCaches()
+}
+
+// previewTheme applies the given styles for live preview inside an open
+// theme dialog. The whole interface updates, but only the chat messages
+// currently on screen re-render; the rest of the transcript keeps its
+// cached output so browsing themes stays fast in large sessions. Off-screen
+// messages follow along when the theme is actually applied.
+func (m *UI) previewTheme(s styles.Styles) {
+	*m.com.Styles = s
+	common.InvalidateStyleCaches()
+	m.refreshStyles()
+	m.chat.InvalidateVisibleRenderCaches()
+}
+
+// refreshStyles pushes the current *m.com.Styles into every subcomponent
+// that copies or pre-renders style-dependent values at construction time.
+// Callers are responsible for invalidating chat render caches.
+func (m *UI) refreshStyles() {
+	t := m.com.Styles
+	m.header.refresh()
+	if m.layout.sidebar.Dx() > 0 {
+		m.cacheSidebarLogo(m.layout.sidebar.Dx())
+	}
+	m.textarea.SetStyles(t.Editor.Textarea)
+	m.mention.popup.SetStyles(t.Completions.Normal, t.Completions.Focused, t.Completions.Match)
+	m.attachments.SetStyles(t.Attachments)
+	m.todoSpinner.Style = t.Pills.TodoSpinner
+	m.status.help.Styles = t.Help
+	if d := m.dialog.Dialog(dialog.ThemeID); d != nil {
+		if td, ok := d.(*dialog.Theme); ok {
+			td.RefreshStyles()
+		}
+	}
+}
+
+// openThemeNewDialog opens the new theme naming dialog. The new theme
+// inherits its palette from the currently active theme.
+func (m *UI) openThemeNewDialog() {
+	if m.dialog.ContainsDialog(dialog.ThemeNewID) {
+		m.dialog.BringToFront(dialog.ThemeNewID)
+		return
+	}
+	base := common.ThemeNameFromConfig(m.com.Config())
+	m.dialog.OpenDialog(dialog.NewThemeNew(m.com, base))
+}
+
+// openThemeDialog opens the theme picker dialog.
+func (m *UI) openThemeDialog() {
+	if m.dialog.ContainsDialog(dialog.ThemeID) {
+		m.dialog.BringToFront(dialog.ThemeID)
+		return
+	}
+	themeDialog := dialog.NewTheme(m.com)
+	m.dialog.OpenDialog(themeDialog)
+}
+
+// openThemeEditorDialog opens the theme editor dialog for the given theme.
+// An empty themeName edits the currently active theme.
+func (m *UI) openThemeEditorDialog(themeName string) {
+	if m.dialog.ContainsDialog(dialog.ThemeEditorID) {
+		m.dialog.BringToFront(dialog.ThemeEditorID)
+		return
+	}
+	themeDialog := dialog.NewThemeEditor(m.com, themeName)
+	m.dialog.OpenDialog(themeDialog)
+}

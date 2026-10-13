@@ -3,6 +3,11 @@ package model
 import (
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/models"
+	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+	"github.com/charmbracelet/crush/internal/ui/dialog/sessions"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/permission"
@@ -138,7 +143,7 @@ func (m *UI) openModelsDialog() tea.Cmd {
 	}
 
 	isOnboarding := m.state == uiOnboarding
-	modelsDialog, err := dialog.NewModels(m.com, isOnboarding)
+	modelsDialog, err := models.NewModels(m.com, isOnboarding)
 	if err != nil {
 		return util.ReportError(err)
 	}
@@ -217,7 +222,7 @@ func (m *UI) openSessionsDialog() tea.Cmd {
 		selectedSessionID = m.session.ID
 	}
 
-	dialog, err := dialog.NewSessions(m.com, selectedSessionID)
+	dialog, err := sessions.NewSessions(m.com, selectedSessionID)
 	if err != nil {
 		return util.ReportError(err)
 	}
@@ -251,12 +256,12 @@ func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
 	m.dialog.CloseDialog(dialog.PermissionsID)
 
 	// Get diff mode from config.
-	var opts []dialog.PermissionsOption
+	var opts []permissions.PermissionsOption
 	if diffMode := m.com.Config().Options.TUI.DiffMode; diffMode != "" {
-		opts = append(opts, dialog.WithDiffMode(diffMode == "split"))
+		opts = append(opts, permissions.WithDiffMode(diffMode == "split"))
 	}
 
-	permDialog := dialog.NewPermissions(m.com, perm, opts...)
+	permDialog := permissions.NewPermissions(m.com, perm, opts...)
 	m.dialog.OpenDialogWithGrace(permDialog)
 	return nil
 }
@@ -274,7 +279,7 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 	// Close any existing question form first to prevent stacking.
 	m.dropQuestionForm()
 
-	form := dialog.NewQuestionForm(m.com.Styles, batch)
+	form := questionform.NewQuestionForm(m.com.Styles, batch)
 	form.SetImageCapabilities(&m.caps)
 	form.OnAnswer = func(responses []question.Answer) {
 		m.com.Workspace.QuestionAnswer(responses)

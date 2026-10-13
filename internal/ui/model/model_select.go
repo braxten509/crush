@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/auth"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
@@ -258,9 +260,9 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.Se
 
 	switch provider.ID {
 	case "hyper":
-		dlg, cmd = dialog.NewOAuthHyper(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = auth.NewOAuthHyper(m.com, isOnboarding, provider, model, modelType)
 	case catwalk.InferenceProviderCopilot:
-		dlg, cmd = dialog.NewOAuthCopilot(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = auth.NewOAuthCopilot(m.com, isOnboarding, provider, model, modelType)
 	case catwalk.InferenceProviderOpenAI:
 		providerCfg, _ := m.com.Config().Providers.Get(string(provider.ID))
 		hasAPIKey := providerCfg.HasAPIKey(m.com.Workspace.Resolver())
@@ -268,13 +270,13 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.Se
 		case model.Model == "" || providerCfg.OAuthToken != nil:
 			// The sign-in placeholder, or a re-authentication while the
 			// ChatGPT login is the credential in force.
-			dlg, cmd = dialog.NewOAuthOpenAI(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewOAuthOpenAI(m.com, isOnboarding, provider, model, modelType)
 		case !hasAPIKey:
 			// No credential at all: let the user pick the method.
-			dlg = dialog.NewAuthMethod(m.com, isOnboarding, provider, model, modelType)
+			dlg = auth.NewAuthMethod(m.com, isOnboarding, provider, model, modelType)
 		default:
 			// An API key is the credential in force: edit it.
-			dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
 		}
 	case catwalk.InferenceProviderXAI:
 		providerCfg, _ := m.com.Config().Providers.Get(string(provider.ID))
@@ -283,16 +285,16 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.Se
 		case model.Model == "" || providerCfg.OAuthToken != nil:
 			// The sign-in flow's hand-off, or a re-authentication while
 			// the Grok login is the credential in force.
-			dlg, cmd = dialog.NewOAuthGrok(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewOAuthGrok(m.com, isOnboarding, provider, model, modelType)
 		case !hasAPIKey:
 			// No credential at all: let the user pick the method.
-			dlg = dialog.NewAuthMethod(m.com, isOnboarding, provider, model, modelType)
+			dlg = auth.NewAuthMethod(m.com, isOnboarding, provider, model, modelType)
 		default:
 			// An API key is the credential in force: edit it.
-			dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
 		}
 	default:
-		dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = auth.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
 	}
 
 	if m.dialog.ContainsDialog(dlg.ID()) {
@@ -319,12 +321,12 @@ func (m *UI) openAuthenticationDialogWithMethod(provider catwalk.Provider, model
 	if useOAuth {
 		switch provider.ID {
 		case catwalk.InferenceProviderOpenAI:
-			dlg, cmd = dialog.NewOAuthOpenAI(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewOAuthOpenAI(m.com, isOnboarding, provider, model, modelType)
 		case catwalk.InferenceProviderXAI:
-			dlg, cmd = dialog.NewOAuthGrok(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewOAuthGrok(m.com, isOnboarding, provider, model, modelType)
 		}
 	} else {
-		dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = auth.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
 	}
 
 	if m.dialog.ContainsDialog(dlg.ID()) {

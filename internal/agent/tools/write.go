@@ -4,18 +4,12 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/diff"
-	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
-	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
 
 	"github.com/charmbracelet/crush/internal/lsp"
@@ -72,11 +66,8 @@ func NewWriteTool(
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("Path is a directory, not a file: %s", filePath)), nil
 				}
 
-				modTime := fileInfo.ModTime().Truncate(time.Second)
-				lastRead := filetracker.LastReadTime(ctx, sessionID, filePath)
-				if modTime.After(lastRead) {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("File %s has been modified since it was last read.\nLast modification: %s\nLast read: %s\n\nPlease read the file again before modifying it.",
-						filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339))), nil
+				if stale := checkFresh(ctx, filetracker, sessionID, filePath, fileInfo, staleWrite); stale != "" {
+					return fantasy.NewTextErrorResponse(stale), nil
 				}
 
 				oldContent, readErr := os.ReadFile(filePath)
@@ -100,86 +91,43 @@ func NewWriteTool(
 				}
 			}
 
-			diff, additions, removals := diff.GenerateDiff(
-				oldContent,
-				params.Content,
-				strings.TrimPrefix(filePath, workingDir),
-			)
-
-			p, err := permissions.Request(
-				ctx,
-				permission.CreatePermissionRequest{
-					SessionID:   sessionID,
-					Path:        fsext.PathOrPrefix(filePath, workingDir),
-					ToolCallID:  call.ID,
-					ToolName:    WriteToolName,
-					Action:      "write",
-					Description: fmt.Sprintf("Create file %s", filePath),
-					Params: WritePermissionsParams{
-						FilePath:   filePath,
-						OldContent: oldContent,
-						NewContent: params.Content,
-					},
+			edit := editContext{ctx, permissions, files, filetracker, workingDir}
+			p, d, err := requestEdit(edit, editRequest{
+				sessionID:   sessionID,
+				filePath:    filePath,
+				callID:      call.ID,
+				toolName:    WriteToolName,
+				description: fmt.Sprintf("Create file %s", filePath),
+				oldContent:  oldContent,
+				newContent:  params.Content,
+				params: WritePermissionsParams{
+					FilePath:   filePath,
+					OldContent: oldContent,
+					NewContent: params.Content,
 				},
-			)
+			})
 			if err != nil {
 				return fantasy.ToolResponse{}, err
 			}
+			metadata := WriteResponseMetadata{
+				Diff:      d.text,
+				Additions: d.additions,
+				Removals:  d.removals,
+			}
 			if !p {
-				resp := NewPermissionDeniedResponse()
-				resp = fantasy.WithResponseMetadata(resp, WriteResponseMetadata{
-					Diff:      diff,
-					Additions: additions,
-					Removals:  removals,
-				})
-				return resp, nil
+				return deniedResponse(metadata), nil
 			}
 
 			err = os.WriteFile(filePath, []byte(params.Content), 0o644)
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error writing file: %w", err)
 			}
-
-			if filechange.InRepository(filechange.RepositoryRoot(workingDir), workingDir, filePath) {
-				// Check if file exists in history
-				file, err := files.GetByPathAndSession(ctx, filePath, sessionID)
-				if err != nil {
-					_, err = files.Create(ctx, sessionID, filePath, oldContent)
-					if err != nil {
-						// Log error but don't fail the operation
-						return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
-					}
-				}
-				if file.Content != oldContent {
-					// User manually changed the content; store an intermediate version
-					_, err = files.CreateVersion(ctx, sessionID, filePath, oldContent)
-					if err != nil {
-						slog.Error("Error creating file history version", "error", err)
-					}
-				}
-				// Store the new version
-				_, err = files.CreateVersion(ctx, sessionID, filePath, params.Content)
-				if err != nil {
-					slog.Error("Error creating file history version", "error", err)
-				}
-
+			if err := recordFileChange(edit, sessionID, filePath, oldContent, params.Content); err != nil {
+				return fantasy.ToolResponse{}, err
 			}
 
-			filetracker.RecordRead(ctx, sessionID, filePath)
-
-			notifyLSPs(ctx, lspManager, params.FilePath)
-
-			result := fmt.Sprintf("File successfully written: %s", filePath)
-			result = fmt.Sprintf("<result>\n%s\n</result>", result)
-			result += getDiagnostics(filePath, lspManager)
-			return fantasy.WithResponseMetadata(
-				fantasy.NewTextResponse(result),
-				WriteResponseMetadata{
-					Diff:      diff,
-					Additions: additions,
-					Removals:  removals,
-				},
-			), nil
+			result := afterWrite(ctx, lspManager, filePath, fmt.Sprintf("<result>\nFile successfully written: %s\n</result>", filePath))
+			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result), metadata), nil
 		},
 	)
 }

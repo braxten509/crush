@@ -4,11 +4,12 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
@@ -148,7 +149,7 @@ func (m *UI) handlePlanHandoff(rc notify.RunComplete) tea.Cmd {
 		return nil
 	}
 	m.setPlanReadyPending(rc.SessionID)
-	if _, ok := m.activeInline.(*dialog.PlanHandoffInline); ok {
+	if _, ok := m.activeInline.(*questionform.PlanHandoffInline); ok {
 		return nil
 	}
 	m.openPlanHandoff()
@@ -160,7 +161,7 @@ func (m *UI) handlePlanHandoff(rc notify.RunComplete) tea.Cmd {
 // session, since plan mode is scoped to the session it was enabled in.
 func (m *UI) resetPlanModeState() tea.Cmd {
 	m.setPlanReadyPending("")
-	if _, ok := m.activeInline.(*dialog.PlanHandoffInline); ok {
+	if _, ok := m.activeInline.(*questionform.PlanHandoffInline); ok {
 		m.activeInline = nil
 		m.textarea.Focus()
 	}
@@ -190,7 +191,7 @@ func (m *UI) openPlanHandoff() {
 	if m.secureQuestionFormOpen() {
 		return
 	}
-	inline := dialog.NewPlanHandoffInline(m.com)
+	inline := questionform.NewPlanHandoffInline(m.com)
 	inline.OnConfirm = func(yolo bool) tea.Cmd {
 		if m.com.Workspace.PermissionSkipRequests() != yolo {
 			m.toggleYoloMode()

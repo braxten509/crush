@@ -4,16 +4,8 @@ package cmd
 
 import (
 	"os"
-	"os/exec"
 	"syscall"
 )
-
-func detachProcess(c *exec.Cmd) {
-	if c.SysProcAttr == nil {
-		c.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	c.SysProcAttr.Setsid = true
-}
 
 // relaunch replaces this process with a fresh Crush started in dir.
 func relaunch(dir string, args []string) error {

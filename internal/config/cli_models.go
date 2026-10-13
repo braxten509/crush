@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -95,7 +96,7 @@ func refreshCLIModels(path string) {
 			for i, m := range models {
 				if j := slices.IndexFunc(p.cfg.Models, func(k catwalk.Model) bool { return k.ID == m.ID }); j >= 0 {
 					known := p.cfg.Models[j]
-					known.Name = cmpOr(m.Name, known.Name)
+					known.Name = cmp.Or(m.Name, known.Name)
 					// Structured CLI catalogues declare the actual supported
 					// controls, including an explicit empty list. Static fallback
 					// entries must not erase or replace that information.
@@ -194,14 +195,14 @@ func grokModelMetadata(data []byte) ([]catwalk.Model, error) {
 		if entry.ID == "" {
 			continue
 		}
-		model := cliModels(entry.ID, cmpOr(entry.Name, entry.ID))[0]
+		model := cliModels(entry.ID, cmp.Or(entry.Name, entry.ID))[0]
 		if entry.Meta.ContextWindow > 0 {
 			model.ContextWindow = entry.Meta.ContextWindow
 		}
 		model.ReasoningLevels = []string{}
 		if entry.Meta.SupportsEffort {
 			for _, effort := range entry.Meta.Efforts {
-				value := cmpOr(effort.Value, effort.ID)
+				value := cmp.Or(effort.Value, effort.ID)
 				if value == "" {
 					continue
 				}
@@ -351,13 +352,4 @@ func discoverCodex(ctx context.Context, bin string) ([]catwalk.Model, error) {
 		models = append(models, m)
 	}
 	return models, nil
-}
-
-func cmpOr(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

@@ -6,6 +6,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/notification"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -70,8 +71,8 @@ func (n *NotificationItem) Finished() bool {
 }
 
 var (
-	_ Dialog   = (*Notifications)(nil)
-	_ ListItem = (*NotificationItem)(nil)
+	_ Dialog       = (*Notifications)(nil)
+	_ kit.ListItem = (*NotificationItem)(nil)
 )
 
 // NewNotifications creates a new notification style picker dialog.
@@ -181,12 +182,12 @@ func (n *Notifications) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	width := max(0, min(notificationsDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	height := max(0, min(notificationsDialogMaxHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight +
-		t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight +
+	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + kit.TitleContentHeight +
+		t.Dialog.InputPrompt.GetVerticalFrameSize() + kit.InputContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
 		t.Dialog.View.GetVerticalFrameSize()
 
-	n.input.SetWidth(dialogInputTextWidth(t, n.input, innerWidth))
+	n.input.SetWidth(kit.DialogInputTextWidth(t, n.input, innerWidth))
 	n.list.SetSize(innerWidth, max(0, height-heightOffset))
 
 	rc := NewRenderContext(t, width)
@@ -203,7 +204,7 @@ func (n *Notifications) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	listView := t.Dialog.List.Height(n.list.Height()).Render(n.list.Render())
 	rc.AddPart(listView)
-	rc.Help = renderDialogHelp(t, &n.help, n, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &n.help, n, innerWidth)
 
 	view := rc.Render()
 
@@ -293,7 +294,7 @@ func (n *NotificationItem) SetFocused(focused bool) {
 
 // SetMatch sets the fuzzy match for the notification item.
 func (n *NotificationItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(n.m, m) {
+	if kit.SameFuzzyMatch(n.m, m) {
 		return
 	}
 	n.cache = nil
@@ -309,11 +310,11 @@ func (n *NotificationItem) Render(width int) string {
 	if n.isCurrent {
 		info = "current"
 	}
-	st := ListItemStyles{
+	st := kit.ListItemStyles{
 		ItemBlurred:     n.t.Dialog.NormalItem,
 		ItemFocused:     n.t.Dialog.SelectedItem,
 		InfoTextBlurred: n.t.Dialog.ListItem.InfoBlurred,
 		InfoTextFocused: n.t.Dialog.ListItem.InfoFocused,
 	}
-	return renderItem(st, n.style.Title, info, n.focused, width, n.cache, &n.m)
+	return kit.RenderItem(st, n.style.Title, info, n.focused, width, n.cache, &n.m)
 }

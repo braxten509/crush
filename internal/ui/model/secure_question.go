@@ -3,19 +3,19 @@ package model
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/secureentry"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/notification"
 )
 
 type secureQuestionClosedMsg struct{ form *secureentry.Form }
 
 func (m *UI) secureQuestionFormOpen() bool {
-	form, ok := m.activeInline.(*dialog.QuestionForm)
+	form, ok := m.activeInline.(*questionform.QuestionForm)
 	return ok && form.HasSecureEntry()
 }
 
 func (m *UI) dropQuestionForm() {
-	if form, ok := m.activeInline.(*dialog.QuestionForm); ok && form != nil {
+	if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form != nil {
 		form.Dismiss()
 		m.activeInline = nil
 	}
@@ -27,14 +27,14 @@ func (m *UI) dropQuestionForm() {
 func (m *UI) handleSecureEntryMsg(msg tea.Msg) (cmd tea.Cmd, ok bool) {
 	switch typed := msg.(type) {
 	case secureQuestionClosedMsg:
-		if form, ok := m.activeInline.(*dialog.QuestionForm); ok && form.OwnsSecureForm(typed.form) {
+		if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form.OwnsSecureForm(typed.form) {
 			m.dropQuestionForm()
 			m.textarea.Focus()
 			m.updateLayoutAndSize()
 		}
 		return nil, true
-	case dialog.SecureQuestionPaste:
-		if form, ok := m.activeInline.(*dialog.QuestionForm); ok {
+	case questionform.SecureQuestionPaste:
+		if form, ok := m.activeInline.(*questionform.QuestionForm); ok {
 			form.HandleSecurePaste(typed)
 		} else {
 			typed.Discard()
@@ -68,7 +68,7 @@ func (m *UI) openSecureQuestionForm(form *secureentry.Form) tea.Cmd {
 		m.activeInline = nil
 	}
 	m.dropQuestionForm()
-	m.openInline(dialog.NewSecureQuestionForm(m.com.Styles, form))
+	m.openInline(questionform.NewSecureQuestionForm(m.com.Styles, form))
 	m.updateLayoutAndSize()
 	m.chat.ScrollToBottom()
 	return tea.Batch(cmd, m.playNotificationSound(notification.SoundQuestion), func() tea.Msg { <-form.Done(); return secureQuestionClosedMsg{form: form} })

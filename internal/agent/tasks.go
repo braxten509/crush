@@ -509,11 +509,11 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 
 // subAgent builds the agent a task runs on.
 func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly bool) (SessionAgent, Model, error) {
-	fp, err := h.c.buildProvider(provider, selected, true)
+	fp, err := h.c.providerBuilder().Provider(provider, selected, true)
 	if err != nil {
 		return nil, Model{}, err
 	}
-	lm, err := fp.LanguageModel(ctx, model.ID)
+	lm, err := h.c.providerBuilder().LanguageModel(ctx, fp, provider, selected)
 	if err != nil {
 		return nil, Model{}, err
 	}
@@ -536,21 +536,20 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		subTasks = h
 	}
 	sub := NewSessionAgent(SessionAgentOptions{
-		LargeModel:  m,
-		SmallModel:  m,
-		IsSubAgent:  true,
-		IsYolo:      h.c.permissions.SkipRequests(),
-		Sessions:    h.c.sessions,
-		Messages:    h.c.messages,
-		Cfg:         h.c.cfg,
-		Tasks:       subTasks,
-		Notify:      h.c.notify,
-		RunComplete: h.c.runComplete,
+		LargeModel:           m,
+		SmallModel:           m,
+		SystemPromptPrefix:   provider.SystemPromptPrefix,
+		IsSubAgent:           true,
+		DisableAutoSummarize: h.c.cfg.Config().Options.DisableAutoSummarize,
+		IsYolo:               h.c.permissions.SkipRequests(),
+		Sessions:             h.c.sessions,
+		Messages:             h.c.messages,
+		Cfg:                  h.c.cfg,
+		Tasks:                subTasks,
+		Notify:               h.c.notify,
+		RunComplete:          h.c.runComplete,
 	})
 	if !config.IsCLIProviderType(provider.Type) {
-		lm = newRequestTimeoutModel(lm, h.c.cfg.Config().Options.GetRequestTimeout())
-		m.Model = lm
-		sub.SetModels(m, m)
 		agentCfg := h.c.cfg.Config().Agents[config.AgentTask]
 		nativeTools, err := h.c.buildTools(ctx, agentCfg, true)
 		if err != nil {

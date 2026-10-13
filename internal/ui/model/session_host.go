@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/crush/internal/sessionhost"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
@@ -48,7 +49,7 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 			st.Model += " · Fast"
 		}
 	}
-	_, asking := m.activeInline.(*dialog.QuestionForm)
+	_, asking := m.activeInline.(*questionform.QuestionForm)
 	switch {
 	case asking || m.dialog.ContainsDialog(dialog.PermissionsID):
 		st.State = sessionhost.StateWaiting

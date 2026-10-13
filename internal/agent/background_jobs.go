@@ -79,7 +79,7 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 			input = tools.JobOutputParams{ShellID: id}
 		}
 	} else {
-		tool = tools.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "")
+		tool = tools.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "", reportStartedJob)
 		input = tools.BashParams{Command: params.Command, WorkingDir: params.WorkingDir, Description: params.Name, RunInBackground: true}
 	}
 	tool = guardedTool{tool}
@@ -126,16 +126,16 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 	return TaskReply{Background: &response}
 }
 
-func init() {
-	tools.JobStarted = func(env []string, sessionID, marker string, job *shell.BackgroundShell) bool {
-		h := hubForJob(env, sessionID)
-		if h == nil {
-			return false
-		}
-		ctx, release := h.reserveFollowUp(sessionID)
-		h.watchJob(ctx, release, sessionID, marker, job, false)
-		return true
+// reportStartedJob has the hub of the turn that started a background job
+// report on it until it ends. It is the bash tool's [tools.JobStarted].
+func reportStartedJob(env []string, sessionID, marker string, job *shell.BackgroundShell) bool {
+	h := hubForJob(env, sessionID)
+	if h == nil {
+		return false
 	}
+	ctx, release := h.reserveFollowUp(sessionID)
+	h.watchJob(ctx, release, sessionID, marker, job, false)
+	return true
 }
 
 // hubForJob finds the hub of the Crush whose agent turn started the job,

@@ -23,7 +23,7 @@ func TestShellFileReviewCLIEndToEnd(t *testing.T) {
 			env := testEnv(t)
 			env.workingDir = visibleReviewRoot(t)
 			bin, outside := t.TempDir(), visibleReviewRoot(t)
-			require.NoError(t, os.WriteFile(filepath.Join(outside, "hello.txt"), []byte("existing\n"), 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(outside, "hello.txt"), []byte("existing\n"), 0o600))
 			command := fmt.Sprintf(`python3 - <<'PY'
 from pathlib import Path
 root = Path(%q)
@@ -49,7 +49,7 @@ send({'type':'user','message':{'content':[{'type':'tool_result','tool_use_id':'s
 send({'type':'assistant','message':{'content':[{'type':'text','text':'Done.'}]}})
 send({'type':'result','subtype':'success'})
 `, commandJSON, map[bool]string{true: "True", false: "False"}[late])
-			require.NoError(t, os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0755))
+			require.NoError(t, os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755))
 			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 			provider := cliagent.NewProvider(config.TypeClaudeCode, env.workingDir, t.TempDir(), env.permissions, env.history, "", false)
 			model, err := provider.LanguageModel(t.Context(), "fixture")

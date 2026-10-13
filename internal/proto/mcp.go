@@ -198,3 +198,11 @@ func (i *MCPClientInfo) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+// MCPResourceContents holds the contents of an MCP resource.
+type MCPResourceContents struct {
+	URI      string `json:"uri"`
+	MIMEType string `json:"mime_type,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Blob     []byte `json:"blob,omitempty"`
+}

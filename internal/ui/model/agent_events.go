@@ -5,6 +5,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/auth"
+	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/charmbracelet/crush/internal/agent/notify"
@@ -113,7 +117,7 @@ func (m *UI) handleChannelMessage(ev mcp.Event) tea.Cmd {
 // is stale regardless of BatchID. The CLI update form isn't one of
 // the service's questions, so it stays.
 func (m *UI) handleQuestionNotification(_ question.Notification) {
-	if form, ok := m.activeInline.(*dialog.QuestionForm); ok && !m.cliUpdatePromptOpen() && !form.HasSecureEntry() {
+	if form, ok := m.activeInline.(*questionform.QuestionForm); ok && !m.cliUpdatePromptOpen() && !form.HasSecureEntry() {
 		m.activeInline = nil
 		m.textarea.Focus()
 		m.updateLayoutAndSize()
@@ -139,7 +143,7 @@ func (m *UI) handlePermissionNotification(notification permission.PermissionNoti
 		return
 	}
 	if d := m.dialog.Dialog(dialog.PermissionsID); d != nil {
-		if perm, ok := d.(*dialog.Permissions); ok && perm.ToolCallID() == notification.ToolCallID {
+		if perm, ok := d.(*permissions.Permissions); ok && perm.ToolCallID() == notification.ToolCallID {
 			m.dialog.CloseDialog(dialog.PermissionsID)
 		}
 	}
@@ -209,7 +213,7 @@ func (m *UI) handleReAuthenticate(providerID string) tea.Cmd {
 func (m *UI) handleAWSSSOAuth(command, url string) tea.Cmd {
 	// Update the URL on an already-open dialog.
 	if existing := m.dialog.Dialog(dialog.AWSSSOID); existing != nil {
-		if awsDlg, ok := existing.(*dialog.AWSSSO); ok && url != "" {
+		if awsDlg, ok := existing.(*auth.AWSSSO); ok && url != "" {
 			awsDlg.SetURL(url)
 		}
 		m.dialog.BringToFront(dialog.AWSSSOID)
@@ -218,7 +222,7 @@ func (m *UI) handleAWSSSOAuth(command, url string) tea.Cmd {
 	if command == "" {
 		return nil
 	}
-	dlg, cmd := dialog.NewAWSSSO(m.com, command)
+	dlg, cmd := auth.NewAWSSSO(m.com, command)
 	if url != "" {
 		dlg.SetURL(url)
 	}
@@ -233,7 +237,7 @@ func (m *UI) handleAWSSSOAuthResult(errMsg string) tea.Cmd {
 	if existing == nil {
 		return nil
 	}
-	awsDlg, ok := existing.(*dialog.AWSSSO)
+	awsDlg, ok := existing.(*auth.AWSSSO)
 	if !ok {
 		return nil
 	}

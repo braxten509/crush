@@ -4,6 +4,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -90,7 +92,7 @@ func (m *UI) paneOwner() inputOwner {
 // secureEntryCovered reports whether a secure entry holds a secret while
 // something else has the keys.
 func (m *UI) secureEntryCovered() bool {
-	form, ok := m.activeInline.(*dialog.QuestionForm)
+	form, ok := m.activeInline.(*questionform.QuestionForm)
 	return ok && form.HasSecureEntry() && form.SecureEntryActive() && (m.focus != uiFocusEditor || m.dialog.HasDialogs())
 }
 

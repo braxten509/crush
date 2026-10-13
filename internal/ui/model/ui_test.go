@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/chat"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -254,7 +255,7 @@ func applyModeSwitchMsg(u *UI, cmd tea.Cmd) []tea.Cmd {
 }
 
 func isPlanHandoffInline(u *UI) bool {
-	_, ok := u.activeInline.(*dialog.PlanHandoffInline)
+	_, ok := u.activeInline.(*questionform.PlanHandoffInline)
 	return ok
 }
 
@@ -430,7 +431,7 @@ func TestHandlePlanHandoff_RequestChangesSendsFeedbackInPlanMode(t *testing.T) {
 		Text:      "Here is the plan.\n<!-- CRUSH_PLAN_READY -->",
 	})
 
-	inline, ok := u.activeInline.(*dialog.PlanHandoffInline)
+	inline, ok := u.activeInline.(*questionform.PlanHandoffInline)
 	require.True(t, ok)
 	require.NotNil(t, inline.OnRequestChanges)
 	require.NotNil(t, inline.OnConfirm)
@@ -561,7 +562,7 @@ func TestPlanHandoffRequestChangesAllowsChatTextSelection(t *testing.T) {
 		},
 	}))
 
-	inline := dialog.NewPlanHandoffInline(u.com)
+	inline := questionform.NewPlanHandoffInline(u.com)
 	inline.SetFocused(true)
 	inline.HandleKey(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	u.activeInline = inline
@@ -587,7 +588,7 @@ func TestPlanHandoffRequestChangesRoutesEditorTextSelection(t *testing.T) {
 
 	u := newTestUI()
 	u.dialog = dialog.NewOverlay()
-	inline := dialog.NewPlanHandoffInline(u.com)
+	inline := questionform.NewPlanHandoffInline(u.com)
 	inline.SetFocused(true)
 	inline.HandleKey(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	inline.HandlePaste(tea.PasteMsg{Content: "copy me"})
@@ -699,7 +700,7 @@ func TestPlanHandoffConfirm_ClearsPendingAndSwitchesMode(t *testing.T) {
 		SessionID: "sess-1",
 		Text:      "plan\n<!-- CRUSH_PLAN_READY -->",
 	})
-	inline, ok := u.activeInline.(*dialog.PlanHandoffInline)
+	inline, ok := u.activeInline.(*questionform.PlanHandoffInline)
 	require.True(t, ok)
 
 	cmd := inline.OnConfirm(false)
@@ -772,7 +773,7 @@ func TestPlanHandoffExplicitPermissionMode(t *testing.T) {
 		u, ws := newPlanUI(t, "sess-1")
 		ws.yolo = !yolo
 		u.openPlanHandoff()
-		inline := u.activeInline.(*dialog.PlanHandoffInline)
+		inline := u.activeInline.(*questionform.PlanHandoffInline)
 		cmd := inline.OnConfirm(yolo)
 		require.Equal(t, yolo, ws.yolo)
 		require.Empty(t, ws.runPrompts, "wait for the coder model to finish switching")

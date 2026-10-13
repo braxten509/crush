@@ -113,9 +113,28 @@ type AgentModel struct {
 // Workspace is the main abstraction consumed by the TUI and CLI. It
 // groups every operation a frontend needs to perform against a running
 // workspace, regardless of whether the workspace is in-process or
-// remote.
+// remote. It is assembled from consumer-sized slices so code that needs
+// only part of it can depend on just that part.
+//
+// Both implementations also offer AgentCancel, AgentIsBusy,
+// SetConfigFields, RemoveConfigField and MCPStartServer. No frontend
+// calls them, so they are not part of Workspace; they stay on the
+// concrete types next to the server endpoints they mirror.
 type Workspace interface {
-	// Sessions
+	SessionService
+	MessageService
+	FileService
+	AgentService
+	InteractionService
+	LSPService
+	ConfigService
+	ProjectService
+	MCPService
+	Lifecycle
+}
+
+// SessionService manages a workspace's sessions.
+type SessionService interface {
 	CreateSession(ctx context.Context, title string) (session.Session, error)
 	GetSession(ctx context.Context, sessionID string) (session.Session, error)
 	ListSessions(ctx context.Context) ([]session.Session, error)
@@ -132,34 +151,35 @@ type Workspace interface {
 	// SetKeptSkill turns a skill on or off for a whole session: while on,
 	// every turn reminds the agent of it.
 	SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error)
+}
 
-	// Messages
+// MessageService reads a workspace's messages.
+type MessageService interface {
 	ListMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	LoadMessageReview(ctx context.Context, sessionID, messageID string) (message.Message, error)
 	ListUserMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	ListAllUserMessages(ctx context.Context) ([]message.Message, error)
+}
 
-	// RoutesChannelEvents reports whether the workspace's backing
-	// process routes MCP channel events into sessions itself. When
-	// true (client/server mode), frontends must not inject channel
-	// messages on EventChannelMessage — the server injects each event
-	// exactly once and the resulting turn arrives through the normal
-	// session/message event stream. When false (in-process mode), the
-	// frontend owns injection.
-	RoutesChannelEvents() bool
+// FileService tracks the files sessions read and change.
+type FileService interface {
+	FileTrackerRecordRead(ctx context.Context, sessionID, path string)
+	FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time
+	FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error)
+	ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error)
+}
 
-	// Agent
+// AgentService drives the workspace's agent.
+type AgentService interface {
 	AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error
 	AgentRunChannel(ctx context.Context, channel, sessionID, prompt string, attachments ...message.Attachment) error
 	AgentRunShellCommand(ctx context.Context, sessionID, command string, termWidth int, onProgress func(string), isFirstMessage bool) (proto.ShellCommandResponse, error)
-	AgentCancel(sessionID string)
 	// AgentInterrupt stops the active run and sends the next queued
 	// prompt, if any.
 	AgentInterrupt(sessionID string)
 	// AgentBackground moves the commands the running turn waits on to the
 	// background (Ctrl+B), reporting whether the agent could be asked.
 	AgentBackground(sessionID string) bool
-	AgentIsBusy() bool
 	AgentIsSessionBusy(sessionID string) bool
 	AgentModel() AgentModel
 	AgentIsReady() bool
@@ -180,68 +200,63 @@ type Workspace interface {
 	InitCoderAgent(ctx context.Context) error
 	InitCoderAgentNonInteractive(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel
+}
 
-	// Permissions
-	//
-	// PermissionGrant, PermissionGrantPersistent, and PermissionDeny
-	// return true if the call resolved the pending request and false if
-	// it had already been resolved by another subscriber (or is no
-	// longer pending). A false return is not an error; the modal can
-	// still close locally because the resolution will arrive via the
-	// PermissionNotification event stream regardless of which client
-	// won the race.
+// InteractionService resolves the permission requests and questions the
+// agent raises.
+//
+// PermissionGrant, PermissionGrantPersistent, and PermissionDeny return
+// true if the call resolved the pending request and false if it had
+// already been resolved by another subscriber (or is no longer pending).
+// A false return is not an error; the modal can still close locally
+// because the resolution will arrive via the PermissionNotification
+// event stream regardless of which client won the race.
+type InteractionService interface {
 	PermissionGrant(perm permission.PermissionRequest) bool
 	PermissionGrantPersistent(perm permission.PermissionRequest) bool
 	PermissionDeny(perm permission.PermissionRequest) bool
 	PermissionSkipRequests() bool
 	PermissionSetSkipRequests(skip bool)
-
-	// Questions
-	//
 	// QuestionAnswer resolves the pending question with responses.
 	QuestionAnswer(responses []question.Answer) bool
-
 	// QuestionCancel cancels the pending question.
 	QuestionCancel() bool
+}
 
-	// FileTracker
-	FileTrackerRecordRead(ctx context.Context, sessionID, path string)
-	FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time
-	FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error)
-
-	// History
-	ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error)
-
-	// LSP
+// LSPService manages the workspace's language servers.
+type LSPService interface {
 	LSPStart(ctx context.Context, path string)
 	LSPStopAll(ctx context.Context)
 	LSPGetStates() map[string]LSPClientInfo
 	LSPGetDiagnosticCounts(name string) lsp.DiagnosticCounts
+}
 
-	// Config (read-only data)
+// ConfigService reads the workspace configuration and changes it
+// (through the server in client mode).
+type ConfigService interface {
 	Config() *config.Config
 	WorkingDir() string
 	GitBranch(ctx context.Context) (string, error)
 	Resolver() config.VariableResolver
-
-	// Config mutations (proxied to server in client mode)
 	UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error
 	SetCompactMode(scope config.Scope, enabled bool) error
 	SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error
 	SetConfigField(scope config.Scope, key string, value any) error
-	SetConfigFields(scope config.Scope, fields map[string]any) error
-	RemoveConfigField(scope config.Scope, key string) error
 	ImportCopilot() (*oauth.Token, bool)
 	RefreshOAuthToken(ctx context.Context, scope config.Scope, providerID string) error
+}
 
-	// Project lifecycle
+// ProjectService covers project initialization and skills.
+type ProjectService interface {
 	ProjectNeedsInitialization() (bool, error)
 	MarkProjectInitialized() error
 	InitializePrompt() (string, error)
 	ListSkills(ctx context.Context) ([]skills.CatalogEntry, error)
 	ReadSkill(ctx context.Context, skillID string) ([]byte, skills.SkillReadResult, error)
+}
 
-	// MCP operations (server-side in client mode)
+// MCPService manages MCP servers (server-side in client mode).
+type MCPService interface {
 	MCPGetStates() map[string]mcptools.ClientInfo
 	MCPRefreshPrompts(ctx context.Context, name string)
 	MCPRefreshResources(ctx context.Context, name string)
@@ -255,20 +270,53 @@ type Workspace interface {
 	MCPSetServerDisabled(ctx context.Context, name string, disabled bool) error
 	MCPSetServerConfigDisabled(ctx context.Context, name string, disabled bool) error
 	MCPServersEnabled(ctx context.Context) ([]string, error)
-	MCPStartServer(ctx context.Context, name string) error
 	MCPAuthenticate(ctx context.Context, name string) error
 	MCPPendingAuth() []mcptools.PendingAuthServer
 	MCPAuthURL(name string) string
+}
 
-	// Events
+// Lifecycle connects a workspace to the TUI and tears it down.
+type Lifecycle interface {
+	// RoutesChannelEvents reports whether the workspace's backing
+	// process routes MCP channel events into sessions itself. When
+	// true (client/server mode), frontends must not inject channel
+	// messages on EventChannelMessage — the server injects each event
+	// exactly once and the resulting turn arrives through the normal
+	// session/message event stream. When false (in-process mode), the
+	// frontend owns injection.
+	RoutesChannelEvents() bool
 	Subscribe(program *tea.Program)
 	Shutdown()
 }
 
-// MCPResourceContents holds the contents of an MCP resource.
-type MCPResourceContents struct {
-	URI      string `json:"uri"`
-	MIMEType string `json:"mime_type,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Blob     []byte `json:"blob,omitempty"`
+// The slices below are implemented by both workspaces but deliberately
+// kept out of [Workspace]: frontends discover them with a type assertion,
+// and test doubles that embed a nil Workspace must keep failing that
+// assertion instead of panicking on a call.
+
+// QueueSummaries describes queued prompts in detail.
+type QueueSummaries interface {
+	AgentQueuedPromptSummaries(sessionID string) []message.QueuedPromptSummary
 }
+
+var (
+	_ Workspace = (*AppWorkspace)(nil)
+	_ Workspace = (*ClientWorkspace)(nil)
+
+	_ skills.Management             = (*AppWorkspace)(nil)
+	_ skills.Management             = (*ClientWorkspace)(nil)
+	_ session.CatalogWorkspace      = (*AppWorkspace)(nil)
+	_ session.CatalogWorkspace      = (*ClientWorkspace)(nil)
+	_ session.EmptySessionWorkspace = (*AppWorkspace)(nil)
+	_ session.EmptySessionWorkspace = (*ClientWorkspace)(nil)
+	_ QueueSummaries                = (*AppWorkspace)(nil)
+	_ QueueSummaries                = (*ClientWorkspace)(nil)
+
+	// Session trees and file restore need a local agent, so only the
+	// in-process workspace offers them.
+	_ TreeManagement  = (*AppWorkspace)(nil)
+	_ FileRestoration = (*AppWorkspace)(nil)
+)
+
+// MCPResourceContents holds the contents of an MCP resource.
+type MCPResourceContents = proto.MCPResourceContents

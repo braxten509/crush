@@ -5,6 +5,9 @@ import (
 	"errors"
 	"os"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
+	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/projects"
@@ -183,11 +186,11 @@ func (m *UI) handleTreeAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 func (m *UI) handleRemoteDialogAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 	var cmds []tea.Cmd
 	switch msg := action.(type) {
-	case dialog.ActionRemoteOff:
+	case remotecontrol.ActionRemoteOff:
 		cmds = append(cmds, m.stopRemote())
-	case dialog.ActionRemoteSetup:
+	case remotecontrol.ActionRemoteSetup:
 		cmds = append(cmds, m.runRemoteSetup(msg.Action))
-	case dialog.ActionRemoteSetupClose:
+	case remotecontrol.ActionRemoteSetupClose:
 		m.closeRemoteSetup()
 	default:
 		return nil, false
@@ -368,7 +371,7 @@ func (m *UI) handlePaletteAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 	case dialog.ActionDisableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.disableDockerMCP)
-	case dialog.ActionToggleMCP:
+	case mcpservers.ActionToggleMCP:
 		cmds = append(cmds, m.applyMCPToggle(msg))
 	case dialog.ActionSaveProject:
 		m.dialog.CloseDialog(dialog.CommandsID)

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
@@ -177,7 +179,7 @@ func (m *UI) openRemote() tea.Cmd {
 	}
 	m.remote.generation++
 	if !m.remote.quiet {
-		m.dialog.OpenDialog(dialog.NewRemoteSetup(m.com))
+		m.dialog.OpenDialog(remotecontrol.NewRemoteSetup(m.com))
 	}
 	return m.checkRemoteSetup()
 }
@@ -219,7 +221,7 @@ func (m *UI) handleRemoteStarted(msg remoteStartedMsg) tea.Cmd {
 			info = setupErr.Info
 		}
 		m.remote.setupInfo = info
-		if d, ok := m.dialog.Dialog(dialog.RemoteSetupID).(*dialog.RemoteSetup); ok {
+		if d, ok := m.dialog.Dialog(dialog.RemoteSetupID).(*remotecontrol.RemoteSetup); ok {
 			d.SetInfo(info)
 		}
 		if setupErr != nil && info.State != remote.SetupUnsupported {
@@ -289,7 +291,7 @@ func (m *UI) handleRemoteSetupFinished(msg remoteSetupFinishedMsg) tea.Cmd {
 		info := m.remote.setupInfo
 		info.Title = "Setup did not finish"
 		info.Detail = "The step was cancelled or failed. You can retry it, choose Check again if you finished elsewhere, or cancel setup."
-		if d, ok := m.dialog.Dialog(dialog.RemoteSetupID).(*dialog.RemoteSetup); ok {
+		if d, ok := m.dialog.Dialog(dialog.RemoteSetupID).(*remotecontrol.RemoteSetup); ok {
 			d.SetInfo(info)
 		}
 		return nil
@@ -303,10 +305,10 @@ func (m *UI) openRemoteDialog() {
 		return
 	}
 	s := m.remote.server
-	m.dialog.OpenDialog(dialog.NewRemote(m.com, func() dialog.RemoteStatus {
+	m.dialog.OpenDialog(remotecontrol.NewRemote(m.com, func() remotecontrol.RemoteStatus {
 		st := s.Status()
 		_, port, _ := net.SplitHostPort(st.Addr)
-		return dialog.RemoteStatus{Host: st.Host, Port: port, Phones: st.Phones}
+		return remotecontrol.RemoteStatus{Host: st.Host, Port: port, Phones: st.Phones}
 	}))
 }
 

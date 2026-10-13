@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -62,8 +63,8 @@ type BackgroundItem struct {
 }
 
 var (
-	_ Dialog   = (*Background)(nil)
-	_ ListItem = (*BackgroundItem)(nil)
+	_ Dialog       = (*Background)(nil)
+	_ kit.ListItem = (*BackgroundItem)(nil)
 )
 
 // NewBackground creates the background processes dialog.
@@ -191,15 +192,15 @@ func (b *Background) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	width := max(0, min(backgroundDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
 
-	// Sized like the dialogs with a filter input, as sizeDialogList
+	// Sized like the dialogs with a filter input, as kit.SizeDialogList
 	// assumes one.
-	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight +
-		t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight +
+	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + kit.TitleContentHeight +
+		t.Dialog.InputPrompt.GetVerticalFrameSize() + kit.InputContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
 		t.Dialog.View.GetVerticalFrameSize()
 	maxAvailable := area.Dy() - t.Dialog.View.GetVerticalBorderSize()
 	height := max(backgroundDialogMinHeight, min(backgroundDialogMaxHeight, heightOffset+len(b.items), maxAvailable))
-	listHeight, listTotalHeight, _ := sizeDialogList(t, b.list, innerWidth, height)
+	listHeight, listTotalHeight, _ := kit.SizeDialogList(t, b.list, innerWidth, height)
 
 	rc := NewRenderContext(t, width)
 	rc.Title = "Background Processes"
@@ -213,9 +214,9 @@ func (b *Background) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	} else {
 		b.list.ScrollToSelected()
 		listView := t.Dialog.List.Height(b.list.Height()).Render(b.list.Render())
-		rc.AddPart(joinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, b.list.Offset()))
+		rc.AddPart(kit.JoinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, b.list.Offset()))
 	}
-	rc.Help = renderDialogHelp(t, &b.help, b, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &b.help, b, innerWidth)
 	DrawCenterCursor(scr, area, rc.Render(), nil)
 	return nil
 }
@@ -291,7 +292,7 @@ func (i *BackgroundItem) SetFocused(focused bool) {
 
 // SetMatch sets the fuzzy match for the item.
 func (i *BackgroundItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(i.m, m) {
+	if kit.SameFuzzyMatch(i.m, m) {
 		return
 	}
 	i.cache = nil
@@ -301,7 +302,7 @@ func (i *BackgroundItem) SetMatch(m fuzzy.Match) {
 
 // Render returns the string representation of the item.
 func (i *BackgroundItem) Render(width int) string {
-	return renderItem(ListItemStyles{
+	return kit.RenderItem(kit.ListItemStyles{
 		ItemBlurred:     i.t.Dialog.NormalItem,
 		ItemFocused:     i.t.Dialog.SelectedItem,
 		InfoTextBlurred: i.t.Dialog.ListItem.InfoBlurred,

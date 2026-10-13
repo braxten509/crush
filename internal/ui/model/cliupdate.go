@@ -12,7 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/cliupdate"
 	"github.com/charmbracelet/crush/internal/question"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
@@ -33,7 +33,7 @@ type cliUpdatesInstalledMsg struct {
 // cliUpdatePrompt is an open update form (agent CLIs or Crush itself) and
 // the updates it offers.
 type cliUpdatePrompt struct {
-	form    *dialog.QuestionForm
+	form    *questionform.QuestionForm
 	updates []cliupdate.Update
 	// moved reports the offer in the status bar when a question takes the
 	// form's place. Unset for CLI updates.
@@ -104,7 +104,7 @@ func (m *UI) openCLIUpdateForm(updates []cliupdate.Update) {
 		names[i] = u.Name
 		changes[i] = fmt.Sprintf("%s %s → %s", u.Name, u.Current, u.Latest)
 	}
-	form := dialog.NewQuestionForm(m.com.Styles, question.Request{
+	form := questionform.NewQuestionForm(m.com.Styles, question.Request{
 		ID: "cli-updates",
 		Questions: []question.Question{{
 			ID:          "install",

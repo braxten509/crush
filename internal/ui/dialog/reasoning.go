@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -63,8 +64,8 @@ func (r *ReasoningItem) Finished() bool {
 }
 
 var (
-	_ Dialog   = (*Reasoning)(nil)
-	_ ListItem = (*ReasoningItem)(nil)
+	_ Dialog       = (*Reasoning)(nil)
+	_ kit.ListItem = (*ReasoningItem)(nil)
 )
 
 // NewReasoning creates a new reasoning effort dialog.
@@ -183,12 +184,12 @@ func (r *Reasoning) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	width := max(0, min(reasoningDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
 
-	r.input.SetWidth(dialogInputTextWidth(t, r.input, innerWidth))
+	r.input.SetWidth(kit.DialogInputTextWidth(t, r.input, innerWidth))
 
 	// Size the dialog to fit the list content, clamped to min/max bounds.
 	listTotalHeight := r.list.TotalHeight()
-	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight +
-		t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight +
+	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + kit.TitleContentHeight +
+		t.Dialog.InputPrompt.GetVerticalFrameSize() + kit.InputContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
 		t.Dialog.View.GetVerticalFrameSize()
 	// The Ultracode switch takes one line under the list.
@@ -200,7 +201,7 @@ func (r *Reasoning) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	maxAvailable := area.Dy() - t.Dialog.View.GetVerticalBorderSize() - extra
 	height := max(reasoningDialogMinHeight, min(reasoningDialogMaxHeight, desiredHeight, maxAvailable))
 
-	listHeight, listTotalHeight, _ := sizeDialogList(t, r.list, innerWidth, height)
+	listHeight, listTotalHeight, _ := kit.SizeDialogList(t, r.list, innerWidth, height)
 
 	rc := NewRenderContext(t, width)
 	rc.Title = "Select Reasoning Effort"
@@ -215,12 +216,12 @@ func (r *Reasoning) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	listView := t.Dialog.List.Height(r.list.Height()).Render(r.list.Render())
-	listView = joinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, r.list.Offset())
+	listView = kit.JoinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, r.list.Offset())
 	rc.AddPart(listView)
 	if r.ultracode != nil {
 		rc.AddPart(r.ultracodeLine(innerWidth))
 	}
-	rc.Help = renderDialogHelp(t, &r.help, r, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &r.help, r, innerWidth)
 
 	view := rc.Render()
 
@@ -339,7 +340,7 @@ func (r *ReasoningItem) SetFocused(focused bool) {
 
 // SetMatch sets the fuzzy match for the reasoning item.
 func (r *ReasoningItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(r.m, m) {
+	if kit.SameFuzzyMatch(r.m, m) {
 		return
 	}
 	r.cache = nil
@@ -355,11 +356,11 @@ func (r *ReasoningItem) Render(width int) string {
 	if r.isCurrent {
 		info = "current"
 	}
-	styles := ListItemStyles{
+	styles := kit.ListItemStyles{
 		ItemBlurred:     r.t.Dialog.NormalItem,
 		ItemFocused:     r.t.Dialog.SelectedItem,
 		InfoTextBlurred: r.t.Dialog.ListItem.InfoBlurred,
 		InfoTextFocused: r.t.Dialog.ListItem.InfoFocused,
 	}
-	return renderItem(styles, r.title, info, r.focused, width, r.cache, &r.m)
+	return kit.RenderItem(styles, r.title, info, r.focused, width, r.cache, &r.m)
 }

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/theme"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
@@ -188,7 +190,7 @@ func (m *UI) saveThemePalette(msg dialog.ActionSaveThemePalette) tea.Cmd {
 		m.theme.endPreview()
 	}
 	m.dialog.CloseDialog(dialog.ThemeEditorID)
-	if td, ok := m.dialog.Dialog(dialog.ThemeID).(*dialog.Theme); ok {
+	if td, ok := m.dialog.Dialog(dialog.ThemeID).(*theme.Theme); ok {
 		td.RefreshThemes(themeName)
 	}
 	return util.ReportInfo("Theme saved")
@@ -366,7 +368,7 @@ func (m *UI) refreshStyles() {
 	m.todoSpinner.Style = t.Pills.TodoSpinner
 	m.status.help.Styles = t.Help
 	if d := m.dialog.Dialog(dialog.ThemeID); d != nil {
-		if td, ok := d.(*dialog.Theme); ok {
+		if td, ok := d.(*theme.Theme); ok {
 			td.RefreshStyles()
 		}
 	}
@@ -380,7 +382,7 @@ func (m *UI) openThemeNewDialog() {
 		return
 	}
 	base := common.ThemeNameFromConfig(m.com.Config())
-	m.dialog.OpenDialog(dialog.NewThemeNew(m.com, base))
+	m.dialog.OpenDialog(theme.NewThemeNew(m.com, base))
 }
 
 // openThemeDialog opens the theme picker dialog.
@@ -389,7 +391,7 @@ func (m *UI) openThemeDialog() {
 		m.dialog.BringToFront(dialog.ThemeID)
 		return
 	}
-	themeDialog := dialog.NewTheme(m.com)
+	themeDialog := theme.NewTheme(m.com)
 	m.dialog.OpenDialog(themeDialog)
 }
 
@@ -400,6 +402,6 @@ func (m *UI) openThemeEditorDialog(themeName string) {
 		m.dialog.BringToFront(dialog.ThemeEditorID)
 		return
 	}
-	themeDialog := dialog.NewThemeEditor(m.com, themeName)
+	themeDialog := theme.NewThemeEditor(m.com, themeName)
 	m.dialog.OpenDialog(themeDialog)
 }

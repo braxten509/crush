@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
 
@@ -44,7 +46,7 @@ func TestRemoteActionsRunLikeKeys(t *testing.T) {
 func TestRemoteSetupCancelDiscardsLateChecks(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
 	m.remote.generation = 1
 	m.remote.starting = true
 	ctx, cancel := context.WithCancel(t.Context())
@@ -63,7 +65,7 @@ func TestRemoteSetupCancelDiscardsLateChecks(t *testing.T) {
 func TestRemoteSetupRequiresExplicitCurrentAction(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
 	m.remote.setupInfo = remote.SetupInfo{State: remote.SetupLogin, Action: "connect"}
 	require.Nil(t, m.runRemoteSetup("install"))
 	require.Nil(t, m.runRemoteSetup(""))
@@ -77,7 +79,7 @@ func TestRemoteSetupRequiresExplicitCurrentAction(t *testing.T) {
 func TestRemoteSetupFailureStaysRetryable(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
 	m.remote.generation = 4
 	m.remote.starting = true
 	info := remote.SetupInfo{State: remote.SetupMissing, Title: "Install Tailscale", Action: "install", Button: "Install Tailscale"}
@@ -90,7 +92,7 @@ func TestRemoteSetupFailureStaysRetryable(t *testing.T) {
 	require.False(t, m.remote.setupBusy)
 	require.True(t, m.dialog.ContainsDialog(dialog.RemoteSetupID))
 	d := m.dialog.Dialog(dialog.RemoteSetupID)
-	require.Equal(t, dialog.ActionRemoteSetup{Action: "install"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	require.Equal(t, remotecontrol.ActionRemoteSetup{Action: "install"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }
 
 // newChatWorkspace creates the session a new chat's first message needs.

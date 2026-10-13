@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ func TestQuestionFormClickRunsOnRelease(t *testing.T) {
 	u := newTestUI()
 	u.dialog = dialog.NewOverlay()
 	var got []question.Answer
-	form := dialog.NewQuestionForm(u.com.Styles, question.Request{Questions: []question.Question{{
+	form := questionform.NewQuestionForm(u.com.Styles, question.Request{Questions: []question.Question{{
 		ID: "q", Type: question.TypeYesNo, Text: "Ship it?",
 	}}})
 	form.OnAnswer = func(a []question.Answer) { got = a }

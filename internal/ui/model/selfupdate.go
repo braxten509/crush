@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/cliupdate"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/selfupdate"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
@@ -114,7 +114,7 @@ func (m *UI) openSelfUpdateForm(id, text, description string, yes, no func() tea
 	if m.activeInline != nil || m.secureQuestionFormOpen() {
 		return moved()
 	}
-	form := dialog.NewQuestionForm(m.com.Styles, question.Request{
+	form := questionform.NewQuestionForm(m.com.Styles, question.Request{
 		ID: id,
 		Questions: []question.Question{{
 			ID:          "answer",

@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/dustin/go-humanize"
@@ -154,7 +155,7 @@ func (d *Usage) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc := NewRenderContext(t, width)
 	rc.Title = "Usage"
 	d.refresh.SetEnabled(d.data.Kind != "" && !d.data.Refreshing)
-	rc.Help = renderDialogHelp(t, &d.help, d, inner)
+	rc.Help = kit.RenderDialogHelp(t, &d.help, d, inner)
 	lines := strings.Split(ansi.Wrap(d.body(), max(1, inner-2), ""), "\n")
 	available := max(1, area.Dy()-t.Dialog.View.GetVerticalFrameSize()-t.Dialog.Title.GetVerticalFrameSize()-1-lipgloss.Height(rc.Help))
 	d.maxOffset = max(0, len(lines)-available)

@@ -1,0 +1,17 @@
+Recently used (configured=false)
+  openai:sub-1 "Sub One" showProvider=true
+  anthropic:claude-a "Renamed A" showProvider=true
+Custom (configured=true)
+  custom:c-1 "C One" showProvider=false
+My OpenAI (configured=true)
+  openai:sub-1 "Sub One" showProvider=false
+  openai:sub-2 "Sub Two" showProvider=false
+Anthropic (configured=true)
+  anthropic:claude-a "Renamed A" showProvider=false
+  anthropic:claude-b "Claude B" showProvider=false
+  anthropic:claude-extra "claude-extra" showProvider=false
+Gemini (configured=false)
+  gemini:gem-a "Gem A" showProvider=false
+selected: anthropic:claude-b
+placeholder: Choose a model for large, complex tasks
+config field recent_models.large: openai:sub-1 anthropic:claude-a

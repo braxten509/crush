@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textarea"
@@ -264,7 +266,7 @@ type UI struct {
 	// caps hold different terminal capabilities that we query for.
 	caps common.Capabilities
 	// previewPlaced is the question form sketch on screen, if any.
-	previewPlaced *dialog.PreviewPlacement
+	previewPlaced *questionform.PreviewPlacement
 
 	// composer is the prompt editor; see composer.go.
 	composer
@@ -599,7 +601,7 @@ func (m *UI) Init() tea.Cmd {
 
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if _, ok := msg.(dialog.PreviewReadyMsg); ok {
+	if _, ok := msg.(questionform.PreviewReadyMsg); ok {
 		m.frame.invalidate()
 	}
 	model, cmd := m.update(msg)
@@ -611,15 +613,15 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // when that changes, and removed once the form closes or something
 // covers it.
 func (m *UI) syncPreview() tea.Cmd {
-	var want *dialog.PreviewPlacement
+	var want *questionform.PreviewPlacement
 	var load tea.Cmd
-	form, ok := m.activeInline.(*dialog.QuestionForm)
+	form, ok := m.activeInline.(*questionform.QuestionForm)
 	if ok && !m.dialog.HasDialogs() && m.state == uiChat {
 		want, load = form.PreviewState()
 	}
 	// Look again once the next frame is drawn: the form may have moved, or
 	// a just-opened form shows where its sketch goes.
-	recheck := tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return dialog.PreviewReadyMsg{} })
+	recheck := tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return questionform.PreviewReadyMsg{} })
 	if equalPlacement(want, m.previewPlaced) {
 		if ok && form.PreviewWaiting() {
 			return tea.Batch(load, recheck)
@@ -629,10 +631,10 @@ func (m *UI) syncPreview() tea.Cmd {
 	old := m.previewPlaced
 	m.previewPlaced = want
 	_, tmux := m.caps.Env.LookupEnv("TMUX")
-	return tea.Batch(load, dialog.PreviewPlacementCmd(old, want, tmux), recheck)
+	return tea.Batch(load, questionform.PreviewPlacementCmd(old, want, tmux), recheck)
 }
 
-func equalPlacement(a, b *dialog.PreviewPlacement) bool {
+func equalPlacement(a, b *questionform.PreviewPlacement) bool {
 	if a == nil || b == nil {
 		return a == b
 	}

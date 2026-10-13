@@ -242,6 +242,15 @@ func (h *taskHub) endSessionRun(r *sessionRun) {
 	}
 }
 
+// cancelSessionRun cancels the headless run sessionID belongs to, if any.
+func (h *taskHub) cancelSessionRun(sessionID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if run := h.sessionRuns[sessionID]; run != nil {
+		run.cancel()
+	}
+}
+
 // reserveFollowUp is held from before a task/form is acknowledged until its
 // follow-up Run has returned, including time spent waiting for a result.
 func (h *taskHub) reserveFollowUp(sessionID string) (context.Context, func()) {

@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent"
@@ -419,7 +422,7 @@ func (m *UI) handleAgentMsg(msg tea.Msg) (tea.Cmd, bool) {
 
 	case mcpStateChangedMsg:
 		if dia := m.dialog.Dialog(dialog.MCPTogglesID); dia != nil {
-			if toggles, ok := dia.(*dialog.MCPToggles); ok {
+			if toggles, ok := dia.(*mcpservers.MCPToggles); ok {
 				for name, info := range msg.states {
 					toggles.SetItemStatus(name, mcpStatusText(info))
 				}
@@ -584,7 +587,7 @@ func (m *UI) handleUIMsg(msg tea.Msg) (tea.Cmd, bool) {
 		}
 	case chatHighlightCopiedMsg:
 		m.chat.ClearMouse()
-	case dialog.OpenLinkMsg:
+	case questionform.OpenLinkMsg:
 		cmds = append(cmds, openChatLink(msg.URL, m.com.Workspace.WorkingDir()))
 	case openImageMsg:
 		cmds = append(cmds, openAttachmentImage(msg.Attachment, m.com.Workspace.WorkingDir()))

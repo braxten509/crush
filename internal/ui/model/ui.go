@@ -60,6 +60,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/theme"
 	"github.com/charmbracelet/crush/internal/ui/dialog/auth"
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	fimage "github.com/charmbracelet/crush/internal/ui/image"
@@ -2698,7 +2699,7 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		}
 		cmds = append(cmds, util.ReportInfo("Theme saved"))
 		m.dialog.CloseDialog(dialog.ThemeEditorID)
-		if td, ok := m.dialog.Dialog(dialog.ThemeID).(*dialog.Theme); ok {
+		if td, ok := m.dialog.Dialog(dialog.ThemeID).(*theme.Theme); ok {
 			td.RefreshThemes(themeName)
 		}
 	case dialog.ActionEditTheme:
@@ -5572,7 +5573,7 @@ func (m *UI) refreshStyles() {
 	m.todoSpinner.Style = t.Pills.TodoSpinner
 	m.status.help.Styles = t.Help
 	if d := m.dialog.Dialog(dialog.ThemeID); d != nil {
-		if td, ok := d.(*dialog.Theme); ok {
+		if td, ok := d.(*theme.Theme); ok {
 			td.RefreshStyles()
 		}
 	}
@@ -5723,7 +5724,7 @@ func (m *UI) openThemeNewDialog() {
 		return
 	}
 	base := common.ThemeNameFromConfig(m.com.Config())
-	m.dialog.OpenDialog(dialog.NewThemeNew(m.com, base))
+	m.dialog.OpenDialog(theme.NewThemeNew(m.com, base))
 }
 
 // openThemeDialog opens the theme picker dialog.
@@ -5732,7 +5733,7 @@ func (m *UI) openThemeDialog() {
 		m.dialog.BringToFront(dialog.ThemeID)
 		return
 	}
-	themeDialog := dialog.NewTheme(m.com)
+	themeDialog := theme.NewTheme(m.com)
 	m.dialog.OpenDialog(themeDialog)
 }
 
@@ -5743,7 +5744,7 @@ func (m *UI) openThemeEditorDialog(themeName string) {
 		m.dialog.BringToFront(dialog.ThemeEditorID)
 		return
 	}
-	themeDialog := dialog.NewThemeEditor(m.com, themeName)
+	themeDialog := theme.NewThemeEditor(m.com, themeName)
 	m.dialog.OpenDialog(themeDialog)
 }
 

@@ -15,4 +15,13 @@ const (
 
 	// OAuthID is the identifier for the OAuth sign-in dialog.
 	OAuthID = "oauth"
+
+	// ThemeID is the identifier for the theme management dialog.
+	ThemeID = "theme"
+
+	// ThemeEditorID is the identifier for the theme palette editor dialog.
+	ThemeEditorID = "theme_editor"
+
+	// ThemeNewID is the identifier for the new theme dialog.
+	ThemeNewID = "theme_new"
 )

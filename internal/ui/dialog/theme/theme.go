@@ -1,4 +1,6 @@
-package dialog
+// Package theme holds the theme dialogs: the theme list, the palette
+// editor and the new theme prompt.
+package theme
 
 import (
 	"strings"
@@ -9,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -18,8 +21,6 @@ import (
 )
 
 const (
-	ThemeID = "theme"
-
 	// newThemeItemName is the sentinel name for the "New Theme..." entry.
 	newThemeItemName = "__new_theme__"
 )
@@ -110,7 +111,7 @@ func (r *ThemeItem) Finished() bool {
 }
 
 var (
-	_ Dialog              = (*Theme)(nil)
+	_ dialog.Dialog       = (*Theme)(nil)
 	_ kit.ListItem        = (*ThemeItem)(nil)
 	_ list.FilterableItem = (*ThemeSectionHeader)(nil)
 )
@@ -180,14 +181,14 @@ func NewTheme(com *common.Common) *Theme {
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "cancel"),
 	)
-	th.keyMap.Close = CloseKey
+	th.keyMap.Close = dialog.CloseKey
 
 	th.setThemeItems()
 	return th
 }
 
 func (th *Theme) ID() string {
-	return ThemeID
+	return dialog.ThemeID
 }
 
 // RefreshThemes rebuilds the theme list after on-disk changes (e.g. the
@@ -285,7 +286,7 @@ func (th *Theme) selectPrevTheme() {
 	}
 }
 
-func (th *Theme) HandleMsg(msg tea.Msg) Action {
+func (th *Theme) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch th.mode {
@@ -321,7 +322,7 @@ func (th *Theme) HandleMsg(msg tea.Msg) Action {
 		default:
 			switch {
 			case key.Matches(msg, th.keyMap.Close):
-				return ActionRevertThemePreview{}
+				return dialog.ActionRevertThemePreview{}
 			case key.Matches(msg, th.keyMap.EditTheme):
 				selectedItem := th.list.SelectedItem()
 				if selectedItem == nil {
@@ -331,7 +332,7 @@ func (th *Theme) HandleMsg(msg tea.Msg) Action {
 				if !ok || themeItem.name == newThemeItemName {
 					break
 				}
-				return ActionEditTheme{Name: themeItem.name}
+				return dialog.ActionEditTheme{Name: themeItem.name}
 			case key.Matches(msg, th.keyMap.Rename):
 				selectedItem := th.list.SelectedItem()
 				if selectedItem == nil {
@@ -363,7 +364,7 @@ func (th *Theme) HandleMsg(msg tea.Msg) Action {
 				if !ok || themeItem.name == newThemeItemName || !themeItem.overridden {
 					break
 				}
-				return ActionRevertOverriddenTheme{Name: themeItem.name}
+				return dialog.ActionRevertOverriddenTheme{Name: themeItem.name}
 			case key.Matches(msg, th.keyMap.Previous):
 				th.list.Focus()
 				th.selectPrevTheme()
@@ -384,9 +385,9 @@ func (th *Theme) HandleMsg(msg tea.Msg) Action {
 					break
 				}
 				if themeItem.name == newThemeItemName {
-					return ActionOpenDialog{ThemeNewID}
+					return dialog.ActionOpenDialog{DialogID: dialog.ThemeNewID}
 				}
-				return ActionSwitchTheme{Theme: themeItem.name}
+				return dialog.ActionSwitchTheme{Theme: themeItem.name}
 			default:
 				var cmd tea.Cmd
 				th.input, cmd = th.input.Update(msg)
@@ -398,19 +399,19 @@ func (th *Theme) HandleMsg(msg tea.Msg) Action {
 				if !th.isSelectableThemeItem(0) {
 					th.selectNextTheme()
 				}
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 			}
 		}
 	}
 	return nil
 }
 
-func (th *Theme) confirmDelete() Action {
+func (th *Theme) confirmDelete() dialog.Action {
 	item := th.selectedThemeItem()
 	if item == nil || item.name == newThemeItemName {
 		return nil
 	}
-	return ActionDeleteTheme{Name: item.name}
+	return dialog.ActionDeleteTheme{Name: item.name}
 }
 
 // canDeleteSelected reports whether the currently selected theme item
@@ -424,7 +425,7 @@ func (th *Theme) canDeleteSelected() bool {
 	return !styles.IsBuiltinTheme(item.name)
 }
 
-func (th *Theme) confirmRename() Action {
+func (th *Theme) confirmRename() dialog.Action {
 	item := th.selectedThemeItem()
 	th.mode = themesModeNormal
 	if item == nil {
@@ -438,7 +439,7 @@ func (th *Theme) confirmRename() Action {
 	if strings.EqualFold(newName, oldName) {
 		return nil
 	}
-	return ActionRenameTheme{OldName: oldName, NewName: newName}
+	return dialog.ActionRenameTheme{OldName: oldName, NewName: newName}
 }
 
 func (th *Theme) selectedThemeItem() *ThemeItem {
@@ -450,7 +451,7 @@ func (th *Theme) selectedThemeItem() *ThemeItem {
 	return nil
 }
 
-func (th *Theme) previewAction() Action {
+func (th *Theme) previewAction() dialog.Action {
 	selectedItem := th.list.SelectedItem()
 	if selectedItem == nil {
 		return nil
@@ -459,7 +460,7 @@ func (th *Theme) previewAction() Action {
 	if !ok || themeItem.name == newThemeItemName {
 		return nil
 	}
-	return ActionPreviewTheme{Theme: themeItem.name}
+	return dialog.ActionPreviewTheme{Theme: themeItem.name}
 }
 
 // currentThemeName returns the active theme name from config, defaulting
@@ -482,7 +483,7 @@ func (th *Theme) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	listHeight, listTotalHeight, _ := kit.SizeDialogList(t, th.list, innerWidth, height)
 
 	var cur *tea.Cursor
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "Themes"
 	switch th.mode {
 	case themesModeDeleting:
@@ -508,7 +509,7 @@ func (th *Theme) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	default:
 		inputView := t.Dialog.InputPrompt.Render(th.input.View())
 		rc.AddPart(inputView)
-		cur = InputCursor(t, th.input.Cursor())
+		cur = dialog.InputCursor(t, th.input.Cursor())
 	}
 
 	visibleCount := len(th.list.FilteredItems())
@@ -525,7 +526,7 @@ func (th *Theme) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	view := rc.Render()
 
-	DrawCenterCursor(scr, area, view, cur)
+	dialog.DrawCenterCursor(scr, area, view, cur)
 	return cur
 }
 

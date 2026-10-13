@@ -1,4 +1,4 @@
-package dialog
+package theme
 
 import (
 	"fmt"
@@ -10,13 +10,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
 const (
-	ThemeEditorID              = "theme_editor"
 	themeEditorDialogMaxWidth  = 74
 	themeEditorDialogMaxHeight = 24
 )
@@ -50,7 +50,7 @@ type ThemeEditor struct {
 	}
 }
 
-var _ Dialog = (*ThemeEditor)(nil)
+var _ dialog.Dialog = (*ThemeEditor)(nil)
 
 // NewThemeEditor creates an editor for the given theme. When themeName is
 // empty the currently active theme is edited.
@@ -70,7 +70,7 @@ func NewThemeEditor(com *common.Common, themeName string) *ThemeEditor {
 	ed.keyMap.Save = key.NewBinding(key.WithKeys("enter", "ctrl+s"), key.WithHelp("enter", "save"))
 	ed.keyMap.Next = key.NewBinding(key.WithKeys("down", "ctrl+n", "tab"), key.WithHelp("↓", "next"))
 	ed.keyMap.Previous = key.NewBinding(key.WithKeys("up", "ctrl+p", "shift+tab"), key.WithHelp("↑", "previous"))
-	ed.keyMap.Close = CloseKey
+	ed.keyMap.Close = dialog.CloseKey
 
 	ed.loadTheme()
 	ed.syncInput()
@@ -78,21 +78,21 @@ func NewThemeEditor(com *common.Common, themeName string) *ThemeEditor {
 }
 
 func (ed *ThemeEditor) ID() string {
-	return ThemeEditorID
+	return dialog.ThemeEditorID
 }
 
-func (ed *ThemeEditor) HandleMsg(msg tea.Msg) Action {
+func (ed *ThemeEditor) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, ed.keyMap.Close):
-			return ActionRevertThemePalette{}
+			return dialog.ActionRevertThemePalette{}
 		case key.Matches(msg, ed.keyMap.Save):
 			ed.applyInput()
 			if ed.invalid {
 				return nil
 			}
-			return ActionSaveThemePalette{Name: ed.name, Base: ed.base, Palette: ed.palette}
+			return dialog.ActionSaveThemePalette{Name: ed.name, Base: ed.base, Palette: ed.palette}
 		case key.Matches(msg, ed.keyMap.Previous):
 			ed.applyInput()
 			if ed.index == 0 {
@@ -102,17 +102,17 @@ func (ed *ThemeEditor) HandleMsg(msg tea.Msg) Action {
 			}
 			ed.syncInput()
 			ed.keepSelectedVisible(0)
-			return ActionPreviewThemePalette{Base: ed.base, Palette: ed.palette}
+			return dialog.ActionPreviewThemePalette{Base: ed.base, Palette: ed.palette}
 		case key.Matches(msg, ed.keyMap.Next):
 			ed.applyInput()
 			ed.index = (ed.index + 1) % len(ed.slots)
 			ed.syncInput()
 			ed.keepSelectedVisible(0)
-			return ActionPreviewThemePalette{Base: ed.base, Palette: ed.palette}
+			return dialog.ActionPreviewThemePalette{Base: ed.base, Palette: ed.palette}
 		default:
 			ed.input, _ = ed.input.Update(msg)
 			ed.applyInput()
-			return ActionPreviewThemePalette{Base: ed.base, Palette: ed.palette}
+			return dialog.ActionPreviewThemePalette{Base: ed.base, Palette: ed.palette}
 		}
 	}
 	return nil
@@ -141,7 +141,7 @@ func (ed *ThemeEditor) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	ed.input.SetWidth(max(0, inputWidth))
 	ed.help.SetWidth(innerWidth)
 
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = fmt.Sprintf("Edit Theme: %s", ed.name)
 	rc.Gap = 1
 	listView := t.Dialog.List.MarginBottom(0).Height(listHeight).Render(ed.renderSlots(listWidth, listHeight))
@@ -179,7 +179,7 @@ func (ed *ThemeEditor) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			inputPrefixWidth
 	}
 
-	DrawCenterCursor(scr, area, view, cur)
+	dialog.DrawCenterCursor(scr, area, view, cur)
 	return cur
 }
 

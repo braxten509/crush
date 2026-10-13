@@ -1,4 +1,4 @@
-package dialog
+package theme
 
 import (
 	"strings"
@@ -9,17 +9,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-const (
-	// ThemeNewID is the identifier for the new theme dialog.
-	ThemeNewID = "theme_new"
-
-	themeNewDialogMaxWidth = 60
-)
+const themeNewDialogMaxWidth = 60
 
 // ThemeNew prompts for a name and base when creating a new theme.
 type ThemeNew struct {
@@ -35,7 +31,7 @@ type ThemeNew struct {
 	}
 }
 
-var _ Dialog = (*ThemeNew)(nil)
+var _ dialog.Dialog = (*ThemeNew)(nil)
 
 // NewThemeNew creates a dialog that asks for the name of a new theme. The
 // new theme inherits its palette from base.
@@ -59,40 +55,40 @@ func NewThemeNew(com *common.Common, base string) *ThemeNew {
 		key.WithKeys("enter", "ctrl+y"),
 		key.WithHelp("enter", "create"),
 	)
-	d.keyMap.Close = CloseKey
+	d.keyMap.Close = dialog.CloseKey
 
 	return d
 }
 
 func (d *ThemeNew) ID() string {
-	return ThemeNewID
+	return dialog.ThemeNewID
 }
 
-func (d *ThemeNew) HandleMsg(msg tea.Msg) Action {
+func (d *ThemeNew) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, d.keyMap.Close):
-			return ActionClose{}
+			return dialog.ActionClose{}
 		case key.Matches(msg, d.keyMap.Confirm):
 			name := strings.TrimSpace(d.input.Value())
 			if err := styles.ValidateThemeName(name); err != nil {
 				d.err = err.Error()
 				return nil
 			}
-			return ActionCreateTheme{Name: name, Base: d.base}
+			return dialog.ActionCreateTheme{Name: name, Base: d.base}
 		default:
 			var cmd tea.Cmd
 			d.input, cmd = d.input.Update(msg)
 			d.err = ""
-			return ActionCmd{cmd}
+			return dialog.ActionCmd{Cmd: cmd}
 		}
 	}
 	return nil
 }
 
 func (d *ThemeNew) Cursor() *tea.Cursor {
-	return InputCursor(d.com.Styles, d.input.Cursor())
+	return dialog.InputCursor(d.com.Styles, d.input.Cursor())
 }
 
 func (d *ThemeNew) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
@@ -103,7 +99,7 @@ func (d *ThemeNew) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	d.input.SetWidth(innerWidth - t.Dialog.InputPrompt.GetHorizontalFrameSize() - 1)
 	d.help.SetWidth(innerWidth)
 
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "New Theme"
 	rc.AddPart(t.Dialog.InputPrompt.Render(d.input.View()))
 	// Reserve space for the validation error so the dialog keeps the same
@@ -121,7 +117,7 @@ func (d *ThemeNew) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	view := rc.Render()
 	cur := d.Cursor()
-	DrawCenterCursor(scr, area, view, cur)
+	dialog.DrawCenterCursor(scr, area, view, cur)
 	return cur
 }
 

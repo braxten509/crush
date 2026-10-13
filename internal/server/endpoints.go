@@ -1,6 +1,8 @@
 package server
 
 import (
+	"slices"
+
 	"github.com/charmbracelet/crush/internal/apigen"
 	"github.com/charmbracelet/crush/internal/rpc"
 )
@@ -12,6 +14,19 @@ import (
 // and the few endpoints whose shape does not fit a typed handler (the
 // SSE stream, queued-prompt listing and recall) keep hand-written ones.
 func (c *controllerV1) endpoints() []apigen.Endpoint {
+	return slices.Concat(
+		c.systemEndpoints(),
+		c.workspaceEndpoints(),
+		c.sessionEndpoints(),
+		c.interactionEndpoints(),
+		c.agentEndpoints(),
+		c.configEndpoints(),
+		c.mcpEndpoints(),
+	)
+}
+
+// systemEndpoints documents and routes the server itself and its clients.
+func (c *controllerV1) systemEndpoints() []apigen.Endpoint {
 	return []apigen.Endpoint{
 		route(c, rpc.Health, c.getHealth).
 			Summary("Health check").
@@ -44,7 +59,12 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			PathParam("client_id", "Client ID (UUID)").
 			Fails(400).
 			Build(),
+	}
+}
 
+// workspaceEndpoints documents and routes workspaces and their event stream.
+func (c *controllerV1) workspaceEndpoints() []apigen.Endpoint {
+	return []apigen.Endpoint{
 		route(c, rpc.ListWorkspaces, c.listWorkspaces).
 			Summary("List workspaces").
 			Tags("workspaces").
@@ -107,13 +127,19 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			SSE().
 			Fails(400, 404, 500).
 			Handle(c.handleGetWorkspaceEvents),
+	}
+}
 
+// sessionEndpoints documents and routes sessions, their messages and the files they touch.
+func (c *controllerV1) sessionEndpoints() []apigen.Endpoint {
+	return []apigen.Endpoint{
 		route(c, rpc.ListSavedSessions, c.listSavedSessions).
 			Summary("List saved chats across projects").
 			Tags("sessions").
 			PathParam("id", "Workspace ID").
 			Fails(404, 500).
 			Build(),
+
 		route(c, rpc.ChangeSavedSession, c.changeSavedSession, decodeErrorMessage("invalid saved chat")).
 			Summary("Rename or delete a saved chat").
 			Tags("sessions").
@@ -222,7 +248,12 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			RequiredQueryParam("path", "File path").
 			Fails(404, 500).
 			Build(),
+	}
+}
 
+// interactionEndpoints documents and routes language servers, permission prompts and questions.
+func (c *controllerV1) interactionEndpoints() []apigen.Endpoint {
+	return []apigen.Endpoint{
 		route(c, rpc.ListLSPs, c.listLSPs).
 			Summary("List LSP clients").
 			Tags("lsp").
@@ -286,7 +317,12 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			PathParam("id", "Workspace ID").
 			Fails(400, 404, 500).
 			Build(),
+	}
+}
 
+// agentEndpoints documents and routes the agent and its runs.
+func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
+	return []apigen.Endpoint{
 		route(c, rpc.AgentInfo, c.getAgentInfo).
 			Summary("Get agent info").
 			Tags("agent").
@@ -420,7 +456,12 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			QueryParam("provider_id", "Provider ID").
 			Fails(404, 500).
 			Build(),
+	}
+}
 
+// configEndpoints documents and routes configuration, project setup and skills.
+func (c *controllerV1) configEndpoints() []apigen.Endpoint {
+	return []apigen.Endpoint{
 		route(c, rpc.SetConfigField, c.setConfigField).
 			Summary("Set a config field").
 			Tags("config").
@@ -521,7 +562,12 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Summary("Install or enable/disable a skill").
 			Tags("skills").PathParam("id", "Workspace ID").
 			Fails(400, 404, 500).Build(),
+	}
+}
 
+// mcpEndpoints documents and routes MCP servers.
+func (c *controllerV1) mcpEndpoints() []apigen.Endpoint {
+	return []apigen.Endpoint{
 		route(c, rpc.RefreshMCPTools, c.refreshMCPTools).
 			Summary("Refresh MCP tools").
 			Tags("mcp").

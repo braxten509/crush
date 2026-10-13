@@ -119,10 +119,7 @@ func (m *UI) openComposerFooterForm() {
 		m.updateLayoutAndSize()
 		return util.ReportInfo("Composer updated")
 	}
-	m.activeInline = form
-	m.textarea.Blur()
-	m.focus = uiFocusEditor
-	m.activeInline.SetFocused(true)
+	m.openInline(form)
 	m.updateLayoutAndSize()
 }
 

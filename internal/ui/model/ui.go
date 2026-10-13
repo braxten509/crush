@@ -857,7 +857,8 @@ func (m *UI) setState(state uiState, focus uiFocusState) {
 		m.isCompact = false
 	}
 	m.state = state
-	m.focus = focus
+	// Callers bring the textarea and the chat in line themselves.
+	m.setFocus(focus, focusRecordOnly)
 	// Changing the state may change layout, so update it.
 	m.updateLayoutAndSize()
 }
@@ -2087,17 +2088,13 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 	case m.state != uiChat:
 		return nil
 	case m.focus != uiFocusSidebar && image.Pt(msg.X, msg.Y).In(m.layout.sidebar) && m.sidebar.scrollable && !m.composerFocusOnly():
-		m.focus = uiFocusSidebar
-		m.textarea.Blur()
-		m.chat.Blur()
+		m.setFocus(uiFocusSidebar)
 		return nil
 	case m.focus != uiFocusEditor && image.Pt(msg.X, msg.Y).In(m.layout.editor):
 		if m.activeInline != nil {
 			m.focusActiveInline(uiFocusEditor)
 		} else {
-			m.focus = uiFocusEditor
-			cmd = m.textarea.Focus()
-			m.chat.Blur()
+			cmd = m.setFocus(uiFocusEditor)
 		}
 		m.sidebar.scrollbarVisible = false
 	case m.focus != uiFocusMain && image.Pt(msg.X, msg.Y).In(m.layout.main) && !m.composerFocusOnly():
@@ -2106,9 +2103,7 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 		if m.activeInline != nil {
 			m.focusActiveInline(uiFocusMain)
 		} else {
-			m.focus = uiFocusMain
-			m.textarea.Blur()
-			m.chat.Focus()
+			m.setFocus(uiFocusMain)
 		}
 		m.sidebar.scrollbarVisible = false
 	}
@@ -2132,18 +2127,13 @@ func (m *UI) focusActiveInline(focus uiFocusState) {
 		return
 	}
 
-	m.focus = focus
-	m.textarea.Blur()
+	m.setFocus(focus)
 	switch focus {
 	case uiFocusEditor:
 		m.activeInline.SetFocused(true)
-		if m.chat != nil {
-			m.chat.Blur()
-		}
 	case uiFocusMain:
 		m.activeInline.SetFocused(false)
 		if m.chat != nil {
-			m.chat.Focus()
 			m.chat.SetSelected(m.chat.Len() - 1)
 		}
 	}
@@ -3361,21 +3351,13 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 
 				return tea.Batch(m.sendMessage(value, attachments...), m.loadPromptHistory())
 			case key.Matches(msg, m.keyMap.Chat.NewSession):
-				if !m.hasSession() {
-					break
-				}
-				if m.isAgentBusy() {
-					cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before starting a new session..."))
-					break
-				}
-				if cmd := m.newSession(); cmd != nil {
+				if cmd := m.newSessionFromKey(); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Tab):
 				if m.state != uiLanding && !m.composerFocusOnly() {
 					m.setState(m.state, uiFocusMain)
-					m.textarea.Blur()
-					m.chat.Focus()
+					m.setFocus(uiFocusMain)
 					m.chat.SetSelected(m.chat.Len() - 1)
 				}
 			case key.Matches(msg, m.keyMap.Editor.OpenEditor):
@@ -3511,25 +3493,14 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Tab):
-				m.focus = uiFocusEditor
 				m.sidebar.scrollbarVisible = false
-				cmds = append(cmds, m.textarea.Focus())
-				m.chat.Blur()
+				cmds = append(cmds, m.setFocus(uiFocusEditor))
 			case key.Matches(msg, m.keyMap.Chat.FocusSidebar):
 				if m.state == uiChat && !m.isCompact && m.hasSession() && m.sidebar.scrollable {
-					m.focus = uiFocusSidebar
-					m.chat.Blur()
+					m.setFocus(uiFocusSidebar, keepTextareaFocus)
 				}
 			case key.Matches(msg, m.keyMap.Chat.NewSession):
-				if !m.hasSession() {
-					break
-				}
-				if m.isAgentBusy() {
-					cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before starting a new session..."))
-					break
-				}
-				m.focus = uiFocusEditor
-				if cmd := m.newSession(); cmd != nil {
+				if cmd := m.newSessionFromKey(); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Chat.Expand):
@@ -3596,14 +3567,11 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			case key.Matches(msg, m.keyMap.Chat.End):
 				m.sidebar.scrollToBottom()
 			case key.Matches(msg, m.keyMap.Chat.FocusChat):
-				m.focus = uiFocusMain
 				m.sidebar.scrollbarVisible = false
-				m.chat.Focus()
+				m.setFocus(uiFocusMain, keepTextareaFocus)
 			case key.Matches(msg, m.keyMap.Tab):
-				m.focus = uiFocusEditor
 				m.sidebar.scrollbarVisible = false
-				cmds = append(cmds, m.textarea.Focus())
-				m.chat.Blur()
+				cmds = append(cmds, m.setFocus(uiFocusEditor))
 			default:
 				handleGlobalKeys(msg)
 			}
@@ -4232,8 +4200,7 @@ func (m *UI) toggleCompactMode() tea.Cmd {
 		if m.activeInline != nil {
 			m.focusActiveInline(uiFocusEditor)
 		} else {
-			m.focus = uiFocusEditor
-			cmds = append(cmds, m.textarea.Focus())
+			cmds = append(cmds, m.setFocus(uiFocusEditor, keepChatFocus))
 		}
 	}
 
@@ -6086,10 +6053,7 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 	form.OnCancel = func() {
 		m.com.Workspace.QuestionCancel()
 	}
-	m.activeInline = form
-	m.textarea.Blur()
-	m.focus = uiFocusEditor
-	m.activeInline.SetFocused(true)
+	m.openInline(form)
 	m.updateLayoutAndSize()
 	return cmd
 }
@@ -6238,10 +6202,7 @@ func (m *UI) openPlanHandoff() {
 	inline.OnRequestChanges = func(feedback string) tea.Cmd {
 		return m.sendMessage(feedback)
 	}
-	m.activeInline = inline
-	m.textarea.Blur()
-	m.focus = uiFocusEditor
-	m.activeInline.SetFocused(true)
+	m.openInline(inline)
 	if m.status != nil {
 		m.updateLayoutAndSize()
 	}

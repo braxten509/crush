@@ -31,10 +31,7 @@ func (m *UI) openSecureQuestionForm(form *secureentry.Form) tea.Cmd {
 		m.activeInline = nil
 	}
 	m.dropQuestionForm()
-	m.activeInline = dialog.NewSecureQuestionForm(m.com.Styles, form)
-	m.textarea.Blur()
-	m.focus = uiFocusEditor
-	m.activeInline.SetFocused(true)
+	m.openInline(dialog.NewSecureQuestionForm(m.com.Styles, form))
 	m.updateLayoutAndSize()
 	m.chat.ScrollToBottom()
 	return tea.Batch(cmd, m.playNotificationSound(notification.SoundQuestion), func() tea.Msg { <-form.Done(); return secureQuestionClosedMsg{form: form} })

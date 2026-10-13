@@ -307,3 +307,16 @@ func (m *UI) startLSPs(paths []string) tea.Cmd {
 		return nil
 	}
 }
+
+// newSessionFromKey starts a new chat from the new-session key, unless the
+// agent is still busy.
+func (m *UI) newSessionFromKey() tea.Cmd {
+	if !m.hasSession() {
+		return nil
+	}
+	if m.isAgentBusy() {
+		return util.ReportWarn("Agent is busy, please wait before starting a new session...")
+	}
+	m.setFocus(uiFocusEditor, focusRecordOnly)
+	return m.newSession()
+}

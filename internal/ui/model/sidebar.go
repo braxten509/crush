@@ -220,8 +220,7 @@ func (m *UI) updateSidebarScrollState() {
 	// If the sidebar is focused but no longer scrollable (e.g. after a
 	// resize), return focus to the chat.
 	if m.focus == uiFocusSidebar && !m.sidebar.scrollable {
-		m.focus = uiFocusMain
-		m.chat.Focus()
+		m.setFocus(uiFocusMain, keepTextareaFocus)
 	}
 }
 

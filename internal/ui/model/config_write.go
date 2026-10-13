@@ -122,9 +122,7 @@ func (m *UI) toggleComposerFocusOnly() tea.Cmd {
 			if m.activeInline != nil {
 				m.focusActiveInline(uiFocusEditor)
 			} else {
-				m.focus = uiFocusEditor
-				cmds = append(cmds, m.textarea.Focus())
-				m.chat.Blur()
+				cmds = append(cmds, m.setFocus(uiFocusEditor))
 			}
 		}
 		status := "Tab moves focus again"

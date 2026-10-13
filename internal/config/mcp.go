@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/config/resolve"
 	"github.com/charmbracelet/crush/internal/oauth"
 )
 
@@ -181,7 +182,7 @@ func (m MCPs) Sorted() []MCP {
 // so $VAR / $(cmd) expand; in client mode pass IdentityResolver so the
 // template is forwarded verbatim and expansion happens on the server.
 func (m MCPConfig) ResolvedEnv(r VariableResolver) ([]string, error) {
-	return resolveEnvs(m.Env, r)
+	return resolve.EnvList(m.Env, r)
 }
 
 // ResolvedArgs returns m.Args with every element expanded through the
@@ -193,18 +194,7 @@ func (m MCPConfig) ResolvedEnv(r VariableResolver) ([]string, error) {
 //
 // See ResolvedEnv for guidance on picking a resolver.
 func (m MCPConfig) ResolvedArgs(r VariableResolver) ([]string, error) {
-	if len(m.Args) == 0 {
-		return nil, nil
-	}
-	out := make([]string, len(m.Args))
-	for i, a := range m.Args {
-		v, err := r.ResolveValue(a)
-		if err != nil {
-			return nil, fmt.Errorf("arg %d: %w", i, err)
-		}
-		out[i] = v
-	}
-	return out, nil
+	return resolve.Args(m.Args, r)
 }
 
 // ResolvedURL returns m.URL expanded through the given resolver. The
@@ -271,51 +261,5 @@ func (m MCPConfig) IsSessionless(r VariableResolver) bool {
 //
 // See ResolvedEnv for guidance on picking a resolver.
 func (m MCPConfig) ResolvedHeaders(r VariableResolver) (map[string]string, error) {
-	if len(m.Headers) == 0 {
-		return map[string]string{}, nil
-	}
-	out := make(map[string]string, len(m.Headers))
-	// Sort keys so failures are reported deterministically when more
-	// than one header would fail.
-	keys := make([]string, 0, len(m.Headers))
-	for k := range m.Headers {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	for _, k := range keys {
-		v, err := r.ResolveValue(m.Headers[k])
-		if err != nil {
-			return nil, fmt.Errorf("header %s: %w", k, err)
-		}
-		if v == "" {
-			continue
-		}
-		out[k] = v
-	}
-	return out, nil
-}
-
-// resolveEnvs expands every value in envs through the given resolver
-// and returns a fresh "KEY=value" slice sorted by key. The input map is
-// not mutated. On the first resolution failure it returns nil and an
-// error identifying the offending variable; the inner resolver error is
-// already sanitized by ResolveValue and is wrapped with %w.
-func resolveEnvs(envs map[string]string, r VariableResolver) ([]string, error) {
-	if len(envs) == 0 {
-		return nil, nil
-	}
-	keys := make([]string, 0, len(envs))
-	for k := range envs {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	res := make([]string, 0, len(envs))
-	for _, k := range keys {
-		v, err := r.ResolveValue(envs[k])
-		if err != nil {
-			return nil, fmt.Errorf("env %s: %w", k, err)
-		}
-		res = append(res, fmt.Sprintf("%s=%s", k, v))
-	}
-	return res, nil
+	return resolve.Headers(m.Headers, r)
 }

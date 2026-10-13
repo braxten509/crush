@@ -1,9 +1,10 @@
 package config
 
 import (
-	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/charmbracelet/crush/internal/config/resolve"
 )
 
 type LSPConfig struct {
@@ -53,18 +54,7 @@ func (l LSPs) Sorted() []LSP {
 // so $VAR / $(cmd) expand; in client mode pass IdentityResolver so the
 // template is forwarded verbatim.
 func (l LSPConfig) ResolvedArgs(r VariableResolver) ([]string, error) {
-	if len(l.Args) == 0 {
-		return nil, nil
-	}
-	out := make([]string, len(l.Args))
-	for i, a := range l.Args {
-		v, err := r.ResolveValue(a)
-		if err != nil {
-			return nil, fmt.Errorf("arg %d: %w", i, err)
-		}
-		out[i] = v
-	}
-	return out, nil
+	return resolve.Args(l.Args, r)
 }
 
 // ResolvedEnv returns l.Env with every value expanded through the
@@ -85,23 +75,5 @@ func (l LSPConfig) ResolvedArgs(r VariableResolver) ([]string, error) {
 //
 // See ResolvedArgs for guidance on picking a resolver.
 func (l LSPConfig) ResolvedEnv(r VariableResolver) (map[string]string, error) {
-	if len(l.Env) == 0 {
-		return map[string]string{}, nil
-	}
-	out := make(map[string]string, len(l.Env))
-	// Sort keys so failures are reported deterministically when more
-	// than one value would fail.
-	keys := make([]string, 0, len(l.Env))
-	for k := range l.Env {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	for _, k := range keys {
-		v, err := r.ResolveValue(l.Env[k])
-		if err != nil {
-			return nil, fmt.Errorf("env %q: %w", k, err)
-		}
-		out[k] = v
-	}
-	return out, nil
+	return resolve.EnvMap(l.Env, r)
 }

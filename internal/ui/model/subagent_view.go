@@ -175,46 +175,20 @@ func (m *UI) handleSubagentView(msg tea.Msg) (tea.Cmd, bool) {
 			return m.queueSubagentRefresh(), false
 		}
 	}
-	if m.dialog.HasDialogs() {
+	// Dialogs over the view take its input.
+	if m.inputOwner() != ownerSubagentView {
 		return nil, false
 	}
+	return m.handleSubagentInput(v, msg)
+}
+
+// handleSubagentInput handles the keys and the mouse over the sub-agent
+// view. ok is false for any other message.
+func (m *UI) handleSubagentInput(v *subagentView, msg tea.Msg) (cmd tea.Cmd, ok bool) {
 	main, _, back := m.subagentViewAreas(image.Rect(0, 0, m.width, m.height))
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "ctrl+c", "y":
-			if v.chat.HasHighlight() {
-				return common.CopyToClipboardWithCallback(v.chat.HighlightContent(), "Selected text copied to clipboard", nil), true
-			}
-		case "esc":
-			m.closeSubagentView()
-		case "tab", "shift+tab", "left", "right":
-			v.returnFocused = !v.returnFocused
-		case "enter", "space":
-			if v.returnFocused {
-				m.closeSubagentView()
-			} else {
-				v.chat.ToggleExpandedSelectedItem()
-			}
-		case "up", "k":
-			v.returnFocused = false
-			v.chat.ScrollBy(-1)
-		case "down", "j":
-			if v.chat.AtBottom() {
-				v.returnFocused = true
-			} else {
-				v.chat.ScrollBy(1)
-			}
-		case "pgup", "ctrl+u":
-			v.chat.ScrollBy(-max(1, main.Dy()/2))
-		case "pgdown", "ctrl+d":
-			v.chat.ScrollBy(max(1, main.Dy()/2))
-		case "home":
-			v.chat.ScrollToTop()
-		case "end":
-			v.chat.ScrollToBottom()
-		}
-		return nil, true
+		return m.handleSubagentKey(v, msg, main), true
 	case tea.KeyReleaseMsg, tea.PasteMsg:
 		return nil, true
 	case tea.MouseWheelMsg:
@@ -354,6 +328,45 @@ func (m *UI) drawSubagentView(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	uv.NewStyledString(ansi.Truncate(button, back.Dx(), "…")).Draw(scr, back)
 	if m.dialog.HasDialogs() {
 		return m.dialog.Draw(scr, area)
+	}
+	return nil
+}
+
+// handleSubagentKey handles a key over the sub-agent view, which shows in
+// main. The view takes every key.
+func (m *UI) handleSubagentKey(v *subagentView, msg tea.KeyPressMsg, main image.Rectangle) tea.Cmd {
+	switch msg.String() {
+	case "ctrl+c", "y":
+		if v.chat.HasHighlight() {
+			return common.CopyToClipboardWithCallback(v.chat.HighlightContent(), "Selected text copied to clipboard", nil)
+		}
+	case "esc":
+		m.closeSubagentView()
+	case "tab", "shift+tab", "left", "right":
+		v.returnFocused = !v.returnFocused
+	case "enter", "space":
+		if v.returnFocused {
+			m.closeSubagentView()
+		} else {
+			v.chat.ToggleExpandedSelectedItem()
+		}
+	case "up", "k":
+		v.returnFocused = false
+		v.chat.ScrollBy(-1)
+	case "down", "j":
+		if v.chat.AtBottom() {
+			v.returnFocused = true
+		} else {
+			v.chat.ScrollBy(1)
+		}
+	case "pgup", "ctrl+u":
+		v.chat.ScrollBy(-max(1, main.Dy()/2))
+	case "pgdown", "ctrl+d":
+		v.chat.ScrollBy(max(1, main.Dy()/2))
+	case "home":
+		v.chat.ScrollToTop()
+	case "end":
+		v.chat.ScrollToBottom()
 	}
 	return nil
 }

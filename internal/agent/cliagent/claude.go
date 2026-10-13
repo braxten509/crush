@@ -315,10 +315,7 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	t.Emit = p.reviewEvents(t.Emit)
 	r := &claudeRun{ctx: ctx, m: m, t: t, p: p, live: live, ctl: &claudeTurn{p: p}, calls: map[string][2]string{}}
 	if t.SessionID != "" && !t.NoTools {
-		defer onBackground(t.SessionID, func() bool {
-			r.ctl.ctrlB.Store(true)
-			return p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b", "request": map[string]any{"subtype": "background_tasks"}}) == nil
-		})()
+		defer onBackground(t.SessionID, r.background)()
 	}
 	defer func() {
 		if r.finished && keep && live.native != "" {
@@ -346,41 +343,8 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	defer func() { r.stopSteer() }()
 
 	r.recordUsage = claudeUsageRecorder(r.t.Emit)
-read:
-	for {
-		var raw []byte
-		if len(pending) > 0 {
-			raw, pending = pending[0], pending[1:]
-		} else {
-			select {
-			case line, ok := <-live.lines:
-				if !ok {
-					break read
-				}
-				raw = line
-			case <-r.steerWait:
-				r.finished = true
-				return nil
-			}
-		}
-		var line claudeLine
-		if json.Unmarshal(raw, &line) != nil {
-			continue
-		}
-		live.track(line)
-		if line.ParentToolUseID != "" {
-			continue // a sub-agent's own steps; its result comes as a tool result
-		}
-		var done bool
-		var err error
-		if ctx.Err() != nil {
-			done, err = r.handleInterrupted(line)
-		} else {
-			done, err = r.handleLine(line, raw)
-		}
-		if done || err != nil {
-			return err
-		}
+	if done, err := r.readLoop(pending); done {
+		return err
 	}
 	if err := r.flushThinking(false); err != nil {
 		return err
@@ -392,4 +356,52 @@ read:
 		return ErrResume
 	}
 	return exitError("claude", p)
+}
+
+// background handles Ctrl+B by asking Claude Code to move its running
+// tasks to the background.
+func (r *claudeRun) background() bool {
+	r.ctl.ctrlB.Store(true)
+	return r.p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b", "request": map[string]any{"subtype": "background_tasks"}}) == nil
+}
+
+// readLoop handles lines left over from an earlier turn, then the process's
+// output, until the turn ends. done reports that runClaude should return
+// err; otherwise the process's output ended.
+func (r *claudeRun) readLoop(pending [][]byte) (done bool, err error) {
+	for {
+		var raw []byte
+		if len(pending) > 0 {
+			raw, pending = pending[0], pending[1:]
+		} else {
+			select {
+			case line, ok := <-r.live.lines:
+				if !ok {
+					return false, nil
+				}
+				raw = line
+			case <-r.steerWait:
+				r.finished = true
+				return true, nil
+			}
+		}
+		var line claudeLine
+		if json.Unmarshal(raw, &line) != nil {
+			continue
+		}
+		r.live.track(line)
+		if line.ParentToolUseID != "" {
+			continue // a sub-agent's own steps; its result comes as a tool result
+		}
+		var done bool
+		var err error
+		if r.ctx.Err() != nil {
+			done, err = r.handleInterrupted(line)
+		} else {
+			done, err = r.handleLine(line, raw)
+		}
+		if done || err != nil {
+			return true, err
+		}
+	}
 }

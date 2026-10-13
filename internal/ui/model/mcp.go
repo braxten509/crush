@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
@@ -59,8 +60,7 @@ type mcpStartingRetryMsg struct{}
 // states. While a fetch is already in flight it only marks the state dirty;
 // applyMCPStates re-dispatches so the freshest data still lands.
 func (m *UI) requestMCPRefresh() tea.Cmd {
-	if m.mcpFetchInFlight {
-		m.mcpRefreshQueued = true
+	if !m.mcpProbe.request() {
 		return nil
 	}
 	return m.dispatchMCPRefresh()
@@ -72,13 +72,9 @@ func (m *UI) requestMCPRefresh() tea.Cmd {
 // in flight. The closure captures only locals (never m) so it is safe
 // off-thread.
 func (m *UI) dispatchMCPRefresh() tea.Cmd {
-	if m.mcpFetchInFlight || m.com == nil || m.com.Workspace == nil {
+	if m.com == nil || m.com.Workspace == nil || !m.mcpProbe.start() {
 		return nil
 	}
-	m.mcpFetchInFlight = true
-	// Stamp the check time at dispatch too so the TTL backstop doesn't
-	// keep re-requesting while this fetch is in flight.
-	m.mcpCheckedAt = time.Now()
 	ws := m.com.Workspace
 	return func() tea.Msg {
 		return mcpStateChangedMsg{
@@ -93,13 +89,11 @@ func (m *UI) dispatchMCPRefresh() tea.Cmd {
 // last-known-good states instead of blanking the sidebar. Runs on the
 // Update goroutine.
 func (m *UI) applyMCPStates(msg mcpStateChangedMsg) []tea.Cmd {
-	m.mcpFetchInFlight = false
-	m.mcpCheckedAt = time.Now()
+	requeue := m.mcpProbe.finish()
 	if msg.states == nil {
 		// A failed fetch (e.g. a transient HTTP error in client/server
 		// mode) keeps the last-known-good states on screen.
-		if m.mcpRefreshQueued {
-			m.mcpRefreshQueued = false
+		if requeue {
 			if cmd := m.dispatchMCPRefresh(); cmd != nil {
 				return []tea.Cmd{cmd}
 			}
@@ -116,12 +110,12 @@ func (m *UI) applyMCPStates(msg mcpStateChangedMsg) []tea.Cmd {
 		if info.State != mcp.StateNeedsAuth {
 			continue
 		}
-		if prev, ok := m.mcpStates[name]; !ok || prev.State != mcp.StateNeedsAuth {
+		if prev, ok := m.mcpProbe.val[name]; !ok || prev.State != mcp.StateNeedsAuth {
 			newlyNeedsAuth = true
 			break
 		}
 	}
-	m.mcpStates = msg.states
+	m.mcpProbe.val = msg.states
 
 	var cmds []tea.Cmd
 	if newlyNeedsAuth {
@@ -129,8 +123,7 @@ func (m *UI) applyMCPStates(msg mcpStateChangedMsg) []tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	}
-	if m.mcpRefreshQueued {
-		m.mcpRefreshQueued = false
+	if requeue {
 		if cmd := m.dispatchMCPRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -169,7 +162,7 @@ func (m *UI) mcpInfo(width, maxItems int, isSection bool) string {
 	t := m.com.Styles
 
 	for _, mcp := range m.com.Config().MCP.Sorted() {
-		if state, ok := m.mcpStates[mcp.Name]; ok {
+		if state, ok := m.mcpProbe.val[mcp.Name]; ok {
 			mcps = append(mcps, state)
 		}
 	}
@@ -278,13 +271,13 @@ func (m *UI) openMCPTogglesDialog() tea.Cmd {
 	if err != nil {
 		return util.ReportError(err)
 	}
-	m.dialog.OpenDialog(dialog.NewMCPToggles(m.com, items))
+	m.dialog.OpenDialog(mcpservers.NewMCPToggles(m.com, items))
 	return nil
 }
 
 // mcpToggleItems builds the dialog items from the configured servers, the
 // live connection states, and the repository's disabled overrides.
-func (m *UI) mcpToggleItems() ([]dialog.MCPToggleItem, error) {
+func (m *UI) mcpToggleItems() ([]mcpservers.MCPToggleItem, error) {
 	disabledServers, err := m.com.Workspace.MCPServersDisabled(context.Background())
 	if err != nil {
 		return nil, err
@@ -303,14 +296,14 @@ func (m *UI) mcpToggleItems() ([]dialog.MCPToggleItem, error) {
 	for _, name := range enabledServers {
 		enabled[name] = struct{}{}
 	}
-	items := make([]dialog.MCPToggleItem, 0, len(m.com.Config().MCP))
+	items := make([]mcpservers.MCPToggleItem, 0, len(m.com.Config().MCP))
 	for _, configured := range m.com.Config().MCP.Sorted() {
 		_, enabledOverride := enabled[configured.Name]
-		item := dialog.MCPToggleItem{
+		item := mcpservers.MCPToggleItem{
 			Name:            configured.Name,
 			ConfigDisabled:  configured.MCP.Disabled,
 			EnabledOverride: enabledOverride,
-			Status:          mcpStatusText(m.mcpStates[configured.Name]),
+			Status:          mcpStatusText(m.mcpProbe.val[configured.Name]),
 		}
 		if _, off := disabled[configured.Name]; off {
 			item.Disabled = true
@@ -324,7 +317,7 @@ func (m *UI) mcpToggleItems() ([]dialog.MCPToggleItem, error) {
 // client. Local toggles write a repository-scoped override; global toggles
 // write the disabled flag to the config. The dialog keeps its own
 // optimistic state; failures surface as an error toast.
-func (m *UI) applyMCPToggle(msg dialog.ActionToggleMCP) tea.Cmd {
+func (m *UI) applyMCPToggle(msg mcpservers.ActionToggleMCP) tea.Cmd {
 	name := msg.Name
 	disable := msg.Disabled
 	status := "enabled"

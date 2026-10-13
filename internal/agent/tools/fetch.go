@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -12,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"charm.land/fantasy"
-	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/charmbracelet/crush/internal/permission"
 )
@@ -74,7 +74,7 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for creating a new file")
+				return fantasy.ToolResponse{}, errors.New("session ID is required for fetching a URL")
 			}
 
 			p, err := permissions.Request(
@@ -152,7 +152,7 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 
 			case "markdown":
 				if strings.Contains(contentType, "text/html") {
-					markdown, err := convertHTMLToMarkdown(content)
+					markdown, err := ConvertHTMLToMarkdown(content)
 					if err != nil {
 						return fantasy.NewTextErrorResponse("Failed to convert HTML to Markdown: " + err.Error()), nil
 					}
@@ -199,15 +199,4 @@ func extractTextFromHTML(html string) (string, error) {
 	text = strings.Join(strings.Fields(text), " ")
 
 	return text, nil
-}
-
-func convertHTMLToMarkdown(html string) (string, error) {
-	converter := md.NewConverter("", true, nil)
-
-	markdown, err := converter.ConvertString(html)
-	if err != nil {
-		return "", err
-	}
-
-	return markdown, nil
 }

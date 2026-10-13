@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kittest"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -60,7 +61,7 @@ func TestSkillsCommandAndPersistedToggle(t *testing.T) {
 	c, err := NewCommands(com, "", false, false, false, nil, nil)
 	require.NoError(t, err)
 	for _, r := range "skills" {
-		c.HandleMsg(keyMsg(r))
+		c.HandleMsg(kittest.KeyMsg(r))
 	}
 	require.Equal(t, ActionOpenDialog{SkillsID}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 	manager := &skillManagementStub{entries: []skills.InstalledSkill{{CatalogEntry: skills.CatalogEntry{ID: "example", Name: "example", Description: "An example"}, Enabled: true}}}

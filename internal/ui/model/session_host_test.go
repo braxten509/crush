@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/sessionhost"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ func TestHostStatusIsSentOncePerChange(t *testing.T) {
 	require.NotNil(t, m.hostStatus())
 	require.Equal(t, sessionhost.StateWorking, m.lastHostStatus.State)
 
-	m.dialog.OpenDialogWithGrace(dialog.NewPermissions(m.com, permission.PermissionRequest{ID: "p1", ToolName: "bash"}))
+	m.dialog.OpenDialogWithGrace(permissions.NewPermissions(m.com, permission.PermissionRequest{ID: "p1", ToolName: "bash"}))
 	require.NotNil(t, m.hostStatus())
 	require.Equal(t, sessionhost.StateWaiting, m.lastHostStatus.State, "a prompt waiting for the user wins over working")
 }

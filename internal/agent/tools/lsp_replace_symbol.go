@@ -48,6 +48,7 @@ func NewReplaceSymbolTool(
 	permissions permission.Service,
 	files history.Service,
 	filetracker filetracker.Service,
+	workingDir string,
 ) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		ReplaceSymbolToolName,
@@ -151,18 +152,15 @@ func NewReplaceSymbolTool(
 				}
 			}
 
-			if files != nil && sessionID != "" {
-				if _, err := files.CreateVersion(ctx, sessionID, params.FilePath, string(content)); err != nil {
-					slog.Warn("Failed to create file version before replace", "path", params.FilePath, "error", err)
-				}
-			}
-
 			if err := os.WriteFile(params.FilePath, []byte(newContent), 0o644); err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 			}
 
-			if filetracker != nil && sessionID != "" {
-				filetracker.RecordRead(ctx, sessionID, params.FilePath)
+			if sessionID != "" {
+				record := editContext{ctx: ctx, files: files, filetracker: filetracker, workingDir: workingDir}
+				if err := recordFileChange(record, sessionID, params.FilePath, string(content), newContent); err != nil {
+					slog.Warn("Failed to create file version after replace", "path", params.FilePath, "error", err)
+				}
 			}
 
 			notifyLSPs(ctx, lspManager, params.FilePath)

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/diffdetect"
+	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 )
@@ -16,7 +16,7 @@ type parsedDiffFile struct {
 }
 
 func looksLikeDiff(content string) bool {
-	return diffdetect.IsUnifiedDiff(content)
+	return diff.IsUnifiedDiff(content)
 }
 
 func parseUnifiedDiff(content string) []parsedDiffFile {

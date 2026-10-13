@@ -39,7 +39,7 @@ func TestMessageToProtoToolResult(t *testing.T) {
 		},
 	}
 
-	got := messageToProto(src)
+	got := proto.MessageFromDomain(src)
 	require.Len(t, got.Parts, 1)
 	tr, ok := got.Parts[0].(proto.ToolResult)
 	require.True(t, ok, "expected proto.ToolResult, got %T", got.Parts[0])
@@ -280,7 +280,7 @@ func TestMCPUnknownEventTypeNotMappedToStateChange(t *testing.T) {
 
 	// Use a value well outside the known range.
 	unknown := mcp.EventType(99)
-	pt := mcpEventTypeToProto(unknown)
+	pt := proto.MCPEventTypeFromDomain(unknown)
 	require.Equal(t, proto.MCPEventType(""), pt,
 		"unknown MCP event types must map to empty proto type, not state_changed")
 }
@@ -303,7 +303,7 @@ func TestMessageToProtoPrismModel(t *testing.T) {
 		PrismDollarSavings:      ptrFloat(0.002),
 	}
 
-	got := messageToProto(src)
+	got := proto.MessageFromDomain(src)
 	require.Equal(t, "prism-42", got.PrismModelID)
 	require.Equal(t, "GLM 5.3", got.PrismModelName)
 	require.NotNil(t, got.PrismHypercreditSavings)

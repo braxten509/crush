@@ -16,6 +16,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -323,7 +324,7 @@ func (a *Arguments) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		description = descStyle.Render(a.description)
 	}
 
-	helpView := renderDialogHelp(s, &a.help, a, width)
+	helpView := kit.RenderDialogHelp(s, &a.help, a, width)
 	if a.loading {
 		helpView = s.Dialog.HelpView.Width(width).Render(a.spinner.View() + " Generating Prompt...")
 	}
@@ -335,7 +336,7 @@ func (a *Arguments) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	a.viewport.SetHeight(viewportHeight)
 	a.viewport.SetContent(renderedFields)
 
-	content := joinScrollbar(s, a.viewport.View(), viewportHeight, a.viewport.TotalLineCount(), viewportHeight, a.viewport.YOffset())
+	content := kit.JoinScrollbar(s, a.viewport.View(), viewportHeight, a.viewport.TotalLineCount(), viewportHeight, a.viewport.YOffset())
 	var contentParts []string
 	if description != "" {
 		contentParts = append(contentParts, description)

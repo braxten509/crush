@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kittest"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
@@ -117,7 +118,7 @@ func TestKeptSkillsCommandIsFoundWithoutTakingOverSkills(t *testing.T) {
 	c, err := NewCommands(com, "", false, false, false, nil, nil)
 	require.NoError(t, err)
 	for _, r := range "keep skills" {
-		c.HandleMsg(keyMsg(r))
+		c.HandleMsg(kittest.KeyMsg(r))
 	}
 	require.Equal(t, ActionOpenDialog{KeptSkillsID}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kittest"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/stretchr/testify/require"
@@ -29,12 +30,12 @@ func TestTreeSelectSearchAndBookmark(t *testing.T) {
 	d.HandleMsg(struct{}{}) // unrelated background events must not reset selection
 	require.Equal(t, ActionTreeJump{"old"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 	for _, r := range "gamma" {
-		d.HandleMsg(keyMsg(r))
+		d.HandleMsg(kittest.KeyMsg(r))
 	}
 	require.Equal(t, ActionTreeJump{"new"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 	d.HandleMsg(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
 	for _, r := range "bookmark" {
-		d.HandleMsg(keyMsg(r))
+		d.HandleMsg(kittest.KeyMsg(r))
 	}
 	require.Equal(t, ActionTreeLabel{"new", "bookmark"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }

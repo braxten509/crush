@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -216,7 +217,7 @@ func (m *KeptSkills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := m.com.Styles
 	m.width = max(0, min(m.requiredWidth(), area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := m.width - t.Dialog.View.GetHorizontalFrameSize()
-	m.input.SetWidth(dialogInputTextWidth(t, m.input, innerWidth))
+	m.input.SetWidth(kit.DialogInputTextWidth(t, m.input, innerWidth))
 
 	// Title, note, filter, the blank rows around the list, the "more"
 	// hint and help take about ten rows; the list gets the rest.
@@ -231,7 +232,7 @@ func (m *KeptSkills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc.AddPart(t.Dialog.SecondaryText.Width(innerWidth).Render(keptSkillsNote))
 	rc.AddPart(t.Dialog.InputPrompt.Render(m.input.View()))
 	rc.AddPart(m.listView(innerWidth, rows))
-	rc.Help = renderDialogHelp(t, &m.help, m, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &m.help, m, innerWidth)
 	view := rc.Render()
 
 	cur := InputCursor(t, m.input.Cursor())

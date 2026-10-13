@@ -3,10 +3,13 @@ package model
 import (
 	"context"
 	"image/color"
+	"log/slog"
 	"reflect"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Crush sets the terminal's background color, and the renderer only sends
@@ -91,4 +94,28 @@ func sameRGB(a, b color.Color) bool {
 	ar, ag, ab, _ := a.RGBA()
 	br, bg, bb, _ := b.RGBA()
 	return ar>>8 == br>>8 && ag>>8 == bg>>8 && ab>>8 == bb>>8
+}
+
+// handleWidthProbe switches the renderer to grapheme measuring when the
+// terminal drew the probe's emoji sequence two cells wide without reporting
+// mode 2027 support. Bubble Tea only enables grapheme width from a mode 2027
+// report, so the command delivers one. The screen is repainted either way
+// because the probe wrote over it.
+func (m *UI) handleWidthProbe(msg tea.CursorPositionMsg) tea.Cmd {
+	if !m.widthProbePending {
+		return nil
+	}
+	wide, ok := common.WidthProbeResult(msg)
+	if !ok {
+		return nil
+	}
+	m.widthProbePending = false
+	slog.Debug("Terminal width probe", "wide", wide, "mode_2027", m.caps.UnicodeCore)
+	if wide && !m.caps.UnicodeCore {
+		return tea.Sequence(
+			func() tea.Msg { return tea.ModeReportMsg{Mode: ansi.ModeUnicodeCore, Value: ansi.ModeSet} },
+			tea.ClearScreen,
+		)
+	}
+	return tea.ClearScreen
 }

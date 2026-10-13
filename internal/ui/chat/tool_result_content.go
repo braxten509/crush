@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/diffdetect"
+	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 )
@@ -49,7 +49,7 @@ func renderToolResultTextContent(sty *styles.Styles, content string, widths tool
 		}
 		return sty.Tool.Body.Render(toolOutputPlainContent(sty, content, widths.Body, expanded))
 	}
-	if diffdetect.IsUnifiedDiff(content) {
+	if diff.IsUnifiedDiff(content) {
 		return toolOutputDiffContentFromUnified(sty, content, widths.Diff, expanded)
 	}
 	if looksLikeMarkdown(content) {

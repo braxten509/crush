@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +49,7 @@ func TestPostWorkspaces_RejectsMissingClientID(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	c.handlePostWorkspaces(rec, req)
+	c.endpointHandler(rpc.CreateWorkspace)(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	var perr proto.Error
@@ -66,7 +67,7 @@ func TestPostWorkspaces_RejectsMalformedClientID(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	c.handlePostWorkspaces(rec, req)
+	c.endpointHandler(rpc.CreateWorkspace)(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -79,7 +80,7 @@ func TestDeleteWorkspace_RejectsMissingClientID(t *testing.T) {
 	req.SetPathValue("id", "abc")
 	rec := httptest.NewRecorder()
 
-	c.handleDeleteWorkspaces(rec, req)
+	c.endpointHandler(rpc.DeleteWorkspace)(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -92,7 +93,7 @@ func TestDeleteWorkspace_RejectsMalformedClientID(t *testing.T) {
 	req.SetPathValue("id", "abc")
 	rec := httptest.NewRecorder()
 
-	c.handleDeleteWorkspaces(rec, req)
+	c.endpointHandler(rpc.DeleteWorkspace)(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -138,7 +139,7 @@ func postCurrentSession(t *testing.T, c *controllerV1, wsID, clientID, sessionID
 	req.SetPathValue("id", wsID)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	c.handlePostWorkspaceCurrentSession(rec, req)
+	c.endpointHandler(rpc.SetCurrentSession)(rec, req)
 	return rec
 }
 
@@ -153,7 +154,7 @@ func TestPostCurrentSession_RejectsMissingClientID(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	c.handlePostWorkspaceCurrentSession(rec, req)
+	c.endpointHandler(rpc.SetCurrentSession)(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -177,7 +178,7 @@ func TestPostCurrentSession_RejectsBadBody(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	c.handlePostWorkspaceCurrentSession(rec, req)
+	c.endpointHandler(rpc.SetCurrentSession)(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -127,7 +128,7 @@ func postAgent(t *testing.T, c *controllerV1, ctx context.Context, wsID, session
 	req.SetPathValue("id", wsID)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	c.handlePostWorkspaceAgent(rec, req)
+	c.endpointHandler(rpc.SendMessage)(rec, req)
 	return rec
 }
 

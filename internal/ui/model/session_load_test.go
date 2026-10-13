@@ -134,7 +134,7 @@ func newLoadTestUI(t testing.TB, ws *loadWorkspace) *UI {
 	u.keyMap = DefaultKeyMap()
 	u.status = NewStatus(u.com, u)
 	u.attachments = attachments.New(nil, attachments.Keymap{})
-	u.completions = completions.New(u.com.Styles.Completions.Normal, u.com.Styles.Completions.Focused, u.com.Styles.Completions.Match)
+	u.mention.popup = completions.New(u.com.Styles.Completions.Normal, u.com.Styles.Completions.Focused, u.com.Styles.Completions.Match)
 	u.agentReady = true
 	u.session = &session.Session{ID: "old", Title: "Old chat"}
 	old := message.Message{ID: "old-user", SessionID: "old", Role: message.User}
@@ -360,7 +360,7 @@ func TestSessionLoadFailureEndsLoadingAndKeepsPrompt(t *testing.T) {
 	msgs := make(chan tea.Msg, 64)
 	startCmds(u.openSession(session.Session{ID: "broken"}), msgs)
 	require.Nil(t, u.sendMessage("for the new chat"))
-	require.Empty(t, u.pendingPrompts, "nothing may be sent while switching")
+	require.Empty(t, u.queue.pending, "nothing may be sent while switching")
 
 	close(release)
 	failed := await[sessionLoadFailedMsg](t, msgs)
@@ -369,7 +369,7 @@ func TestSessionLoadFailureEndsLoadingAndKeepsPrompt(t *testing.T) {
 	require.Equal(t, "old", u.session.ID)
 	require.Contains(t, u.View().Content, "a message in the old chat")
 	require.Equal(t, "for the new chat", u.textarea.Value())
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 	require.Empty(t, ws.runSessions)
 
 	require.NotEmpty(t, cmds)
@@ -390,15 +390,15 @@ func TestSessionSwitchSendsDeferredPromptToNewSession(t *testing.T) {
 	msgs := make(chan tea.Msg, 64)
 	startCmds(u.openSession(session.Session{ID: "new"}), msgs)
 	require.Nil(t, u.sendMessage("follow up"))
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 
 	close(release)
 	update(u, ws, await[loadSessionMsg](t, msgs))
-	require.Len(t, u.pendingPrompts, 1)
-	require.Equal(t, "new", u.pendingPrompts[0].SessionID)
+	require.Len(t, u.queue.pending, 1)
+	require.Equal(t, "new", u.queue.pending[0].SessionID)
 	last, ok := u.chat.flat[len(u.chat.flat)-1].(*chat.UserMessageItem)
 	require.True(t, ok)
-	require.Equal(t, u.pendingPrompts[0].ID, last.ID(), "the prompt shows at the end of the new chat")
+	require.Equal(t, u.queue.pending[0].ID, last.ID(), "the prompt shows at the end of the new chat")
 }
 
 // TestEventsDuringLoadAreReplayed streams into the session while it loads:

@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	fimage "github.com/charmbracelet/crush/internal/ui/image"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -166,10 +167,17 @@ func (f *FilePicker) ID() string {
 	return FilePickerID
 }
 
+// filePickerPreviewReadyMsg reports that the highlighted image finished
+// transmitting, so the dialog can start showing its preview.
+type filePickerPreviewReadyMsg struct{}
+
 // HandleMsg updates the [FilePicker] dialog based on the given message.
 func (f *FilePicker) HandleMsg(msg tea.Msg) Action {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
+	case filePickerPreviewReadyMsg:
+		f.previewingImage = true
+		return nil
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, f.km.Close):
@@ -195,10 +203,7 @@ func (f *FilePicker) HandleMsg(msg tea.Msg) Action {
 			if err == nil {
 				cmds = append(cmds, tea.Sequence(
 					f.imgEnc.Transmit(selFile, img, f.CellSize(), f.imgPrevWidth, f.imgPrevHeight, f.isTmux),
-					func() tea.Msg {
-						f.previewingImage = true
-						return nil
-					},
+					func() tea.Msg { return filePickerPreviewReadyMsg{} },
 				))
 			}
 		}
@@ -247,7 +252,7 @@ func (f *FilePicker) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	rc := NewRenderContext(t, width)
 	rc.Gap = 1
 	rc.Title = "Add Image"
-	rc.Help = renderDialogHelp(t, &f.help, f, innerWidth)
+	rc.Help = kit.RenderDialogHelp(t, &f.help, f, innerWidth)
 
 	if imgPrevHeight > 0 {
 		imgPreview := t.Dialog.ImagePreview.Align(lipgloss.Center).Width(innerWidth).Render(f.imagePreview(imgPrevWidth, imgPrevHeight))

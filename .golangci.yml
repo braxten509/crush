@@ -41,7 +41,7 @@ linters:
         text: "SA1019.*interp.ExecHandler"
         linters:
           - staticcheck
-      - path: internal/agent/tools/mcp/init.go
+      - path: internal/agent/tools/mcp/session.go
         text: "SA1019.*LoggingMessageHandler"
         linters:
           - staticcheck

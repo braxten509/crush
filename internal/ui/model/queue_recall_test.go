@@ -30,7 +30,7 @@ func newRecallUI() (*UI, *recallWorkspace) {
 	ws := &recallWorkspace{countingWorkspace: &countingWorkspace{ready: true, agentBusy: true}}
 	u := newBusyUI(ws.countingWorkspace)
 	u.com.Workspace = ws
-	u.completions = completions.New(u.com.Styles.Completions.Normal, u.com.Styles.Completions.Focused, u.com.Styles.Completions.Match)
+	u.mention.popup = completions.New(u.com.Styles.Completions.Normal, u.com.Styles.Completions.Focused, u.com.Styles.Completions.Match)
 	u.textarea.CharLimit = -1
 	u.promptHistory.index = -1
 	u.promptHistory.messages = []string{"past message"}
@@ -106,17 +106,17 @@ func TestUpRecallErrorPreservesEditorAndQueue(t *testing.T) {
 	require.NotNil(t, u.applyRecalledPrompt(cmd().(queuedPromptRecalledMsg)))
 	require.Equal(t, "draft", u.textarea.Value())
 	require.Equal(t, -1, u.promptHistory.index)
-	require.False(t, u.promptRecallInFlight)
+	require.False(t, u.queue.recallInFlight)
 	// The server may now be idle after withdrawing the last prompt.
 	warmCaches(u, false)
-	u.promptQueue = 0
+	u.queue.count = 0
 	u.textarea.MoveToBegin()
 	ws.err = nil
 	ws.prompt = &message.QueuedPrompt{Prompt: "recovered"}
 	cmd = u.handleHistoryUp(tea.KeyPressMsg{Code: tea.KeyUp})
 	u.applyRecalledPrompt(cmd().(queuedPromptRecalledMsg))
 	require.Contains(t, u.textarea.Value(), "recovered")
-	require.False(t, u.failedRecalls["s1"])
+	require.False(t, u.queue.failedRecalls["s1"])
 }
 
 func TestUpRecallTakesPriorityWhileBrowsingHistory(t *testing.T) {

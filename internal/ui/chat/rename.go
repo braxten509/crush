@@ -1,8 +1,6 @@
 package chat
 
 import (
-	"encoding/json"
-
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/message"
@@ -31,33 +29,19 @@ type RenameToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *RenameToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Rename Symbol", opts.Anim, opts.Compact)
-	}
+	return renameTool.render(sty, width, opts)
+}
 
-	var params tools.RenameParams
-	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
-
-	toolParams := []string{params.Symbol + " → " + params.NewName}
-	if params.Path != "" {
-		toolParams = append(toolParams, "path", fsext.PrettyPath(params.Path))
-	}
-
-	header := toolHeader(sty, opts.Status, "Rename Symbol", cappedWidth, opts, toolParams...)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
+// renameTool draws Rename Symbol tool calls with the standard layout.
+var renameTool = standardTool[tools.RenameParams]{
+	name:    "Rename Symbol",
+	lenient: true,
+	header: func(params tools.RenameParams) []string {
+		toolParams := []string{params.Symbol + " → " + params.NewName}
+		if params.Path != "" {
+			toolParams = append(toolParams, "path", fsext.PrettyPath(params.Path))
+		}
+		return toolParams
+	},
+	body: plainResultBody[tools.RenameParams],
 }

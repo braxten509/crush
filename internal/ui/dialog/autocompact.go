@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -81,13 +82,13 @@ func (d *Autocompact) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := d.com.Styles
 	width := max(0, min(52, area.Dx()))
 	inner := max(0, width-t.Dialog.View.GetHorizontalFrameSize())
-	d.input.SetWidth(dialogInputTextWidth(t, d.input, inner))
+	d.input.SetWidth(kit.DialogInputTextWidth(t, d.input, inner))
 	title := common.DialogTitle(t, t.Dialog.TitleText.Render("Fallback compaction"), max(0, inner-t.Dialog.Title.GetHorizontalFrameSize()), t.Dialog.TitleGradFromColor, t.Dialog.TitleGradToColor)
 	parts := []string{t.Dialog.Title.Render(title), t.Dialog.InputPrompt.Render(d.input.View())}
 	if d.errorText != "" {
 		parts = append(parts, t.Dialog.TitleError.Width(inner).Render(d.errorText))
 	}
-	parts = append(parts, renderDialogHelp(t, &d.help, d, inner))
+	parts = append(parts, kit.RenderDialogHelp(t, &d.help, d, inner))
 	view := t.Dialog.View.Width(width).MaxHeight(area.Dy()).Render(strings.Join(parts, "\n"))
 	cur := InputCursor(t, d.input.Cursor())
 	DrawCenterCursor(scr, area, view, cur)

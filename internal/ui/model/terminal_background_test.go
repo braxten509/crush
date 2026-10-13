@@ -57,11 +57,11 @@ func TestBackgroundChecksReuseTheLastFrame(t *testing.T) {
 	t.Parallel()
 
 	u := newTestUI()
-	u.lastView, u.haveLastView = tea.View{AltScreen: true, WindowTitle: "last frame"}, true
+	u.frame.last, u.frame.haveLast = tea.View{AltScreen: true, WindowTitle: "last frame"}, true
 	query := tea.RequestBackgroundColor()
 	require.True(t, isBackgroundQuery(query))
 	require.Equal(t, query, NewFilter().Filter(u, query), "the query still goes to the terminal")
 	require.Equal(t, "last frame", u.View().WindowTitle, "but nothing is redrawn")
-	require.False(t, u.quietFrame)
+	require.False(t, u.frame.quiet)
 	require.False(t, isBackgroundQuery(tea.KeyPressMsg{}))
 }

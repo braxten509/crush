@@ -62,7 +62,7 @@ func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
 				m := newBusyUI(base)
 				m.com.Workspace = ws
 				m.session = test.session
-				m.userThemeSelected = true
+				m.theme.userSelected = true
 				m.applyBusyState(m.dispatchBusyRefresh()().(busyStateMsg))
 
 				want := initial

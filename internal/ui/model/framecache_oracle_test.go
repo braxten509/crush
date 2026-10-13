@@ -61,7 +61,7 @@ func TestScrollbarDefault_ClampedScrollRevealsScrollbar(t *testing.T) {
 	// Wheel down at the bottom: clamped, so offsets do not move, but
 	// ScrollBy still calls showScrollbar and sets scrollbarVisible.
 	u.beginFrameUpdate()
-	u.markScrollOnly()
+	u.frame.markScrollOnly()
 	_ = u.chat.ScrollBy(5)
 	u.endFrameUpdate()
 	require.True(t, u.chat.scrollbarVisible, "scroll must reveal the scrollbar")

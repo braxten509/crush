@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/agent/procs"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/shell"
 )
@@ -51,7 +53,39 @@ type proc struct {
 // markedProcs lists the processes carrying one of the hubs' environment
 // marker, which every agent CLI of theirs, and everything those start,
 // inherits. It is nil where the process table can't be read.
-var markedProcs = func(markers []string) map[int]proc { return nil }
+var markedProcs = func(markers []string) map[int]proc {
+	entries := procs.Marked(markers)
+	if entries == nil {
+		return nil
+	}
+	marked := make(map[int]proc, len(entries))
+	for pid, e := range entries {
+		marked[pid] = procFromEntry(e)
+	}
+	return marked
+}
+
+// procFromEntry reads what Crush set in a process's environment.
+func procFromEntry(e procs.Entry) proc {
+	p := proc{pid: e.PID, ppid: e.PPID, sid: e.SID, args: e.Args, started: e.Started}
+	for _, variable := range e.Env {
+		if value, ok := strings.CutPrefix(string(variable), managedJobEnv+"="); ok {
+			p.managedJobID = value
+		}
+		if value, ok := strings.CutPrefix(string(variable), tools.NativeShellEnv+"="); ok {
+			p.nativeShellID = value
+		}
+		if value, ok := strings.CutPrefix(string(variable), TasksSessionEnv+"="); ok {
+			p.session = value
+		}
+		// D-Bus sets this for every service it activates, and the
+		// service's own children inherit it.
+		if bytes.HasPrefix(variable, []byte("DBUS_STARTER_BUS_TYPE=")) {
+			p.busService = true
+		}
+	}
+	return p
+}
 
 func hubMarkers() []string {
 	hubsMu.Lock()

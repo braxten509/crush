@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -31,15 +30,6 @@ import (
 // Codex is driven through `codex app-server`, its JSON-RPC protocol for rich
 // clients (the one its IDE extension uses). `codex app-server generate-ts`
 // prints the schema.
-type rpcMessage struct {
-	ID     json.RawMessage `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params"`
-	Result json.RawMessage `json:"result"`
-	Error  *struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
 
 type codexItem struct {
 	Type             string          `json:"type"`
@@ -158,85 +148,16 @@ type codexKey struct {
 // session, so commands it moved to the background keep running and the
 // model can check on them, and follow-ups skip its startup.
 type codexLive struct {
-	p       *proc
-	lines   <-chan []byte
-	key     codexKey
-	thread  string
-	idle    chan struct{} // closed to end the between-turns drain
-	drained chan struct{}
-	dead    atomic.Bool
-	timer   *time.Timer
+	liveProc[codexKey]
+	thread string
 }
 
-var codexSessions = struct {
-	mu sync.Mutex
-	m  map[string]*codexLive
-}{m: map[string]*codexLive{}}
+func (l *codexLive) resumeID() string { return l.thread }
 
-// takeCodex hands over the session's live process if it can run this turn,
-// closing it otherwise.
-// ponytail: a turn with other settings closes it, stopping any commands it
+// codexSessions holds the live processes, one per Crush session.
+// ponytail: a turn with other settings closes one, stopping any commands it
 // moved to the background; so does [claudeIdle] without a turn.
-func takeCodex(sessionID string, key codexKey, resume string) *codexLive {
-	codexSessions.mu.Lock()
-	l := codexSessions.m[sessionID]
-	delete(codexSessions.m, sessionID)
-	codexSessions.mu.Unlock()
-	if l == nil {
-		return nil
-	}
-	l.timer.Stop()
-	close(l.idle)
-	<-l.drained
-	if l.dead.Load() || l.key != key || resume == "" || resume != l.thread {
-		l.p.finish()
-		return nil
-	}
-	return l
-}
-
-// keepCodex parks a process after a finished turn until the session's next
-// prompt, or closes it after [claudeIdle].
-func keepCodex(sessionID string, l *codexLive) {
-	l.idle, l.drained = make(chan struct{}), make(chan struct{})
-	go func() {
-		defer close(l.drained)
-		for {
-			select {
-			case <-l.idle:
-				return
-			case _, ok := <-l.lines:
-				if !ok {
-					l.dead.Store(true)
-					<-l.idle
-					return
-				}
-			}
-		}
-	}()
-	l.timer = time.AfterFunc(claudeIdle, func() {
-		codexSessions.mu.Lock()
-		if codexSessions.m[sessionID] != l {
-			codexSessions.mu.Unlock()
-			return
-		}
-		delete(codexSessions.m, sessionID)
-		codexSessions.mu.Unlock()
-		close(l.idle)
-		<-l.drained
-		l.p.finish()
-	})
-	codexSessions.mu.Lock()
-	old := codexSessions.m[sessionID]
-	codexSessions.m[sessionID] = l
-	codexSessions.mu.Unlock()
-	if old != nil {
-		old.timer.Stop()
-		close(old.idle)
-		<-old.drained
-		old.p.finish()
-	}
-}
+var codexSessions = newLivePool[codexKey, *codexLive]()
 
 // codexCtrlB is what Codex is told after Ctrl+B interrupted its turn; the
 // interrupt kept it from learning the commands' terminal sessions.
@@ -248,68 +169,98 @@ func codexCtrlB(sessions []string) string {
 	return "The user pressed Ctrl+B to move the command you were waiting on to the background. It is still running " + where + ", so don't start it again and don't wait for it now: carry on with anything else, or say in a sentence that it's running in the background and end your turn. Check on it later, e.g. when the user asks."
 }
 
+// codexRun is one turn of a Codex app-server process: what it was started
+// with, the thread and turn it drives, and what it has reported so far.
+type codexRun struct {
+	ctx context.Context
+	m   *Model
+	t   Turn
+	p   *proc
+
+	approval, sandbox string
+	threadID          string
+	// active holds the thread and turn IDs, read by the cancel watcher.
+	active atomic.Pointer[[2]string]
+	// finished is set once the turn completed, so the process may be kept.
+	finished bool
+
+	// Messages queued mid-turn go in through turn/steer; Codex reports each
+	// as a userMessage item when the model takes it in.
+	sent      steered
+	steers    int
+	stopSteer func()
+
+	contextSettings                               codexContextSettings
+	catalogWindow, catalogLimit, effectivePercent int64
+	reportedWindow                                int64
+	contextRequested                              bool
+	compacting                                    bool
+	lastActivity                                  time.Time
+
+	// Ctrl+B interrupts the turn: Codex keeps its commands running in
+	// their terminal sessions, and a new turn tells the model so.
+	running          atomic.Int32 // commands in progress
+	ctrlB, movedToBg atomic.Bool
+	openCmds         map[string]time.Time
+	backgrounded     map[string]bool // their results are already shown
+
+	// Crush tool name and input per item (file changes expand to one call
+	// per file), and command output streamed so far.
+	calls    map[string][2]string
+	changes  map[string][]codexChange
+	output   map[string]*strings.Builder
+	textOpen bool
+}
+
 func runCodex(ctx context.Context, m *Model, t Turn) error {
+	r := &codexRun{
+		ctx: ctx, m: m, t: t,
+		openCmds:     map[string]time.Time{},
+		backgrounded: map[string]bool{},
+		calls:        map[string][2]string{},
+		changes:      map[string][]codexChange{},
+		output:       map[string]*strings.Builder{},
+	}
 	// Crush's permission prompts replace Codex's own; the sandbox still
 	// applies. YOLO mode lifts both, matching Crush's own tools.
-	approval, sandbox := "on-request", "workspace-write"
+	r.approval, r.sandbox = "on-request", "workspace-write"
 	if t.NoTools || m.ReadOnly {
-		approval, sandbox = "never", "read-only"
+		r.approval, r.sandbox = "never", "read-only"
 	} else if m.autoApproved(t.SessionID) {
-		approval, sandbox = "never", "danger-full-access"
+		r.approval, r.sandbox = "never", "danger-full-access"
 	}
-	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: approval, sandbox: sandbox}
+	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: r.approval, sandbox: r.sandbox}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *codexLive
 	if keep {
-		live = takeCodex(t.SessionID, key, t.Resume)
+		live = codexSessions.take(t.SessionID, key, t.Resume)
 	}
-	var (
-		p        *proc
-		lines    <-chan []byte
-		threadID string
-	)
+	var lines <-chan []byte
 	if live != nil {
-		p, lines, threadID = live.p, live.lines, live.thread
+		r.p, lines, r.threadID = live.p, live.lines, live.thread
 	} else {
 		// Crush hands every CLI the shared memory; Codex's own stays off.
 		var err error
 		args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0", "-c", codexGuardHook()}
-		if p, err = startReviewProc(m.Dir, t.Env, !t.NoTools, "codex", args...); err != nil {
+		if r.p, err = startReviewProc(m.Dir, t.Env, !t.NoTools, "codex", args...); err != nil {
 			return err
 		}
-		lines = p.readLines()
+		lines = r.p.readLines()
 	}
-	t.Emit = p.reviewEvents(t.Emit)
-	var contextSettings codexContextSettings
-	catalogWindow, catalogLimit, effectivePercent := codexCatalogContext(m.ID)
-	var reportedWindow int64
-	contextRequested := false
-	reportContext := func() error {
-		if t.NoTools {
-			return nil
-		}
-		event := codexContextBudget(contextSettings, catalogWindow, catalogLimit, reportedWindow, effectivePercent)
-		if event.ContextLimit <= 0 {
-			return nil
-		}
-		return t.Emit(event)
-	}
-	compacting := false
-	lastActivity := time.Time{}
-	finished := false
+	p := r.p
+	r.t.Emit = p.reviewEvents(r.t.Emit)
+	r.catalogWindow, r.catalogLimit, r.effectivePercent = codexCatalogContext(m.ID)
 	defer func() {
-		if finished && keep && threadID != "" {
-			keepCodex(t.SessionID, &codexLive{p: p, lines: lines, key: key, thread: threadID})
+		if r.finished && keep && r.threadID != "" {
+			codexSessions.keep(t.SessionID, &codexLive{liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: r.threadID}, nil, nil)
 		} else {
 			p.finish()
 		}
 	}()
 
-	// Thread and turn IDs, read by the cancel watcher.
-	var active atomic.Pointer[[2]string]
 	stop := p.watchCancel(ctx, func() {
-		if ids := active.Load(); ids != nil {
+		if ids := r.active.Load(); ids != nil {
 			_ = p.send(map[string]any{"id": "4", "method": "turn/interrupt", "params": map[string]any{"threadId": ids[0], "turnId": ids[1]}})
 		} else {
 			p.closeInput()
@@ -317,57 +268,14 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	})
 	defer stop()
 
-	// Messages queued mid-turn go in through turn/steer; Codex reports each
-	// as a userMessage item when the model takes it in.
-	var sent steered
-	steers := 0
-	stopSteer := pollSteerInputRetry(t, func() bool { return active.Load() != nil }, func(text string, attachments []message.Attachment) bool {
-		ids := active.Load()
-		if ids == nil {
-			return false
-		}
-		steers++
-		sent.add(text)
-		err := p.send(map[string]any{"id": "steer-" + strconv.Itoa(steers), "method": "turn/steer", "params": map[string]any{
-			"threadId":       ids[0],
-			"expectedTurnId": ids[1],
-			"input":          codexInput(withSavedImagePaths(text, attachments), attachments),
-		}})
-		if err != nil {
-			sent.take(text)
-		}
-		return true
-	})
-	defer stopSteer()
+	r.stopSteer = pollSteerInputRetry(r.t, func() bool { return r.active.Load() != nil }, r.steer)
+	defer r.stopSteer()
 
-	startTurn := func(input []any) {
-		params := map[string]any{"threadId": threadID, "input": input}
-		if t.Effort != "" {
-			params["effort"] = t.Effort
-		}
-		if m.ServiceTier != "" {
-			params["serviceTier"] = m.ServiceTier
-		}
-		_ = p.send(map[string]any{"id": codexTurnID, "method": "turn/start", "params": params})
-	}
-	startThread := func() {
-		params := map[string]any{"cwd": m.Dir, "model": m.ID, "approvalPolicy": approval, "sandbox": sandbox}
-		if m.ServiceTier != "" {
-			params["serviceTier"] = m.ServiceTier
-		}
-		method := "thread/start"
-		if t.Resume != "" {
-			method, params["threadId"] = "thread/resume", t.Resume
-		} else if t.NoTools {
-			params["ephemeral"] = true
-		}
-		_ = p.send(map[string]any{"id": codexThreadID, "method": method, "params": params})
-	}
 	if live != nil {
-		if err := t.Emit(Event{Type: EventSession, Session: threadID}); err != nil {
+		if err := r.t.Emit(Event{Type: EventSession, Session: r.threadID}); err != nil {
 			return err
 		}
-		startTurn(codexInput(withSavedImagePaths(t.Prompt, t.Attachments), t.Attachments))
+		r.startTurn(codexInput(withSavedImagePaths(t.Prompt, t.Attachments), t.Attachments))
 	} else {
 		_ = p.send(map[string]any{"id": codexInitID, "method": "initialize", "params": map[string]any{
 			"clientInfo": map[string]any{"name": "crush", "title": "Crush", "version": version.Version},
@@ -376,56 +284,17 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		}})
 	}
 
-	// Ctrl+B interrupts the turn: Codex keeps its commands running in
-	// their terminal sessions, and a new turn tells the model so.
-	var running atomic.Int32 // commands in progress
-	var ctrlB, movedToBg atomic.Bool
-	interruptForBg := func() {
-		if ids := active.Load(); ids != nil && movedToBg.CompareAndSwap(false, true) {
-			ctrlB.Store(false)
-			_ = p.send(map[string]any{"id": "ctrl-b", "method": "turn/interrupt", "params": map[string]any{"threadId": ids[0], "turnId": ids[1]}})
-		}
-	}
 	if t.SessionID != "" && !t.NoTools {
 		defer onBackground(t.SessionID, func() bool {
-			if active.Load() == nil {
+			if r.active.Load() == nil {
 				return false
 			}
-			ctrlB.Store(true)
-			if running.Load() > 0 {
-				interruptForBg()
+			r.ctrlB.Store(true)
+			if r.running.Load() > 0 {
+				r.interruptForBg()
 			}
 			return true
 		})()
-	}
-	openCmds := map[string]time.Time{}
-	backgrounded := map[string]bool{} // their results are already shown
-
-	// Crush tool name and input per item (file changes expand to one call
-	// per file), and command output streamed so far.
-	calls := map[string][2]string{}
-	changes := map[string][]codexChange{}
-	output := map[string]*strings.Builder{}
-	textOpen := false
-
-	emitCall := func(id, name, input string) error {
-		calls[id] = [2]string{name, input}
-		textOpen = false
-		if err := t.Emit(Event{Type: EventToolStart, ID: id, Name: name}); err != nil {
-			return err
-		}
-		return t.Emit(Event{Type: EventToolCall, ID: id, Name: name, Input: input})
-	}
-	emitResult := func(id, out string, isError bool) error {
-		call := calls[id]
-		meta := ""
-		if !isError {
-			meta = resultMetadata(call[0], call[1], out)
-			if backgrounded[id] {
-				meta = markBackground(call[0], meta)
-			}
-		}
-		return t.Emit(Event{Type: EventToolResult, ID: id, Name: call[0], Output: out, Metadata: meta, IsError: isError})
 	}
 
 	for raw := range lines {
@@ -440,330 +309,29 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		if msg.Method != "" && id != "" {
 			var params codexParams
 			_ = json.Unmarshal(msg.Params, &params)
-			go codexRequest(ctx, m, t, p, msg, params, changes[params.ItemID])
+			go codexRequest(ctx, m, r.t, p, msg, params, r.changes[params.ItemID])
 			continue
 		}
 		if ctx.Err() != nil {
 			// Interrupted: once the turn winds down the process is kept, as
 			// exiting would stop the commands it runs in the background.
-			stopSteer()
+			r.stopSteer()
 			if msg.Method == "turn/completed" {
-				finished = true
+				r.finished = true
 				return ctx.Err()
 			}
 			continue
 		}
 
-		// Responses to our requests.
-		if msg.Method == "" && id == "crush-context-config" {
-			if msg.Error == nil {
-				var res struct {
-					Config codexContextSettings `json:"config"`
-				}
-				if json.Unmarshal(msg.Result, &res) == nil {
-					contextSettings = res.Config
-				}
-			}
-			if err := reportContext(); err != nil {
-				return err
-			}
-			continue
-		}
-		if msg.Method == "" && id == "ctrl-b-list" {
-			var res struct {
-				Data []struct {
-					ItemID    string `json:"itemId"`
-					ProcessID string `json:"processId"`
-				} `json:"data"`
-			}
-			_ = json.Unmarshal(msg.Result, &res)
-			var sessions []string
-			var all []string
-			for _, d := range res.Data {
-				all = append(all, d.ProcessID)
-				if backgrounded[d.ItemID] {
-					sessions = append(sessions, d.ProcessID)
-				}
-			}
-			if len(sessions) == 0 {
-				sessions = all
-			}
-			startTurn([]any{map[string]any{"type": "text", "text": codexCtrlB(sessions), "text_elements": []any{}}})
-			continue
-		}
-		if msg.Method == "" && (id == codexHooksID || id == codexTrustID) {
-			// A Codex without hooks still runs; Crush's own checks remain.
-			if msg.Error != nil {
-				slog.Warn("Codex did not take Crush's secrets guard", "error", msg.Error.Message)
-			}
-			if trust := codexGuardTrust(msg.Result); id == codexHooksID && msg.Error == nil && trust != nil {
-				_ = p.send(trust)
-			} else {
-				startThread()
-			}
-			continue
-		}
-		if msg.Method == "" {
-			if strings.HasPrefix(id, "steer-") {
-				// A steer that missed the turn is never confirmed, so it
-				// runs as the next turn instead.
-				if msg.Error != nil {
-					slog.Debug("Codex did not take a steered message", "error", msg.Error.Message)
-				}
-				continue
-			}
-			if msg.Error != nil {
-				if id == codexThreadID && t.Resume != "" {
-					return ErrResume
-				}
-				return fmt.Errorf("Codex: %s", msg.Error.Message)
-			}
-			switch id {
-			case codexInitID:
-				_ = p.send(map[string]any{"method": "initialized"})
-				_ = p.send(map[string]any{"id": codexHooksID, "method": "hooks/list", "params": map[string]any{"cwds": []string{m.Dir}}})
-			case codexThreadID:
-				var res struct {
-					Thread struct {
-						ID string `json:"id"`
-					} `json:"thread"`
-				}
-				_ = json.Unmarshal(msg.Result, &res)
-				threadID = res.Thread.ID
-				if err := t.Emit(Event{Type: EventSession, Session: threadID}); err != nil {
-					return err
-				}
-				startTurn(codexInput(withSavedImagePaths(t.Prompt, t.Attachments), t.Attachments))
-			case codexTurnID:
-				var res struct {
-					Turn struct {
-						ID string `json:"id"`
-					} `json:"turn"`
-				}
-				_ = json.Unmarshal(msg.Result, &res)
-				active.Store(&[2]string{threadID, res.Turn.ID})
-			}
-			continue
-		}
-
-		var params codexParams
-		if (strings.HasPrefix(msg.Method, "item/") || msg.Method == "thread/tokenUsage/updated") && time.Since(lastActivity) >= time.Second {
-			if err := t.Emit(Event{Type: EventActivity}); err != nil {
-				return err
-			}
-			lastActivity = time.Now()
-		}
-		_ = json.Unmarshal(msg.Params, &params)
-		item := params.Item
+		var done bool
 		var err error
-		switch msg.Method {
-		case "item/agentMessage/delta":
-			if compacting {
-				break
-			}
-			textOpen = true
-			err = t.Emit(Event{Type: EventText, Text: params.Delta})
-		case "item/reasoning/summaryTextDelta", "item/reasoning/textDelta":
-			if compacting {
-				break
-			}
-			err = t.Emit(Event{Type: EventReasoning, Text: params.Delta})
-		case "item/commandExecution/outputDelta":
-			if output[params.ItemID] == nil {
-				output[params.ItemID] = &strings.Builder{}
-			}
-			output[params.ItemID].WriteString(params.Delta)
-		case "thread/tokenUsage/updated":
-			if u := params.TokenUsage; u != nil {
-				if u.ModelContextWindow > 0 {
-					reportedWindow = u.ModelContextWindow
-					if !t.NoTools && !contextRequested {
-						contextRequested = true
-						_ = p.send(map[string]any{"id": "crush-context-config", "method": "config/read", "params": map[string]any{"cwd": m.Dir, "includeLayers": false}})
-					}
-				}
-				if err := reportContext(); err != nil {
-					return err
-				}
-				err = t.Emit(Event{Type: EventUsage, Usage: fantasy.Usage{
-					InputTokens:     u.Last.InputTokens - u.Last.CachedInputTokens,
-					OutputTokens:    u.Last.OutputTokens,
-					ReasoningTokens: u.Last.ReasoningTokens,
-					TotalTokens:     u.Last.TotalTokens,
-					CacheReadTokens: u.Last.CachedInputTokens,
-				}})
-			}
-		case "account/rateLimits/updated":
-			var up struct {
-				RateLimits codexSnapshot `json:"rateLimits"`
-			}
-			_ = json.Unmarshal(msg.Params, &up)
-			setLimits(config.TypeCodexCLI, up.RateLimits.limits())
-		case "turn/completed":
-			if params.Turn.Status == "interrupted" && movedToBg.Load() && ctx.Err() == nil {
-				movedToBg.Store(false)
-				active.Store(nil)
-				for id := range openCmds {
-					backgrounded[id] = true
-					if err := emitResult(id, "Moved to the background (Ctrl+B). Still running.", false); err != nil {
-						return err
-					}
-				}
-				clear(openCmds)
-				running.Store(0)
-				// The follow-up turn starts once the sessions are known.
-				_ = p.send(map[string]any{"id": "ctrl-b-list", "method": "thread/backgroundTerminals/list", "params": map[string]any{"threadId": threadID}})
-				continue
-			}
-			switch params.Turn.Status {
-			case "completed":
-				finished = true
-				return nil
-			case "interrupted":
-				return context.Canceled
-			}
-			if e := params.Turn.Error; e != nil {
-				return errors.New("Codex: " + e.Message)
-			}
-			return errors.New("Codex: turn " + params.Turn.Status)
-
-		case "thread/compacted":
-			compacting = false
-			err = t.Emit(Event{Type: EventCompacting})
-
-		case "item/started":
-			// A command Codex handed back still running (its yield time ran
-			// out) goes on as a background terminal once the model moves on.
-			// Its item stays open until it exits.
-			if item.Type != "userMessage" {
-				for id, started := range openCmds {
-					if time.Since(started) <= tools.ForegroundWaitLimit {
-						continue
-					}
-					delete(openCmds, id)
-					running.Add(-1)
-					backgrounded[id] = true
-					out := ""
-					if b := output[id]; b != nil {
-						out = strings.TrimRight(b.String(), "\n") + "\n\n"
-					}
-					if err := emitResult(id, strings.TrimLeft(out, "\n")+"Still running in the background.", false); err != nil {
-						return err
-					}
-				}
-			}
-			switch item.Type {
-			case "reasoning":
-				if compacting {
-					break
-				}
-				// Some models expose reasoning lifecycle without text deltas.
-				// Preserve the activity state without manufacturing or displaying thoughts.
-				err = t.Emit(Event{Type: EventReasoning})
-			case "contextCompaction":
-				compacting = true
-				err = t.Emit(Event{Type: EventCompacting, Compacting: true})
-			case "userMessage":
-				var text strings.Builder
-				for _, c := range item.Content {
-					text.WriteString(c.Text)
-				}
-				if typed := withoutImagePaths(text.String()); sent.take(typed) {
-					err = t.Emit(Event{Type: EventUserMessage, Text: typed})
-				}
-			case "agentMessage":
-				if compacting {
-					break
-				}
-				// Consecutive messages without tools in between would run
-				// together.
-				if textOpen {
-					err = t.Emit(Event{Type: EventText, Text: "\n\n"})
-				}
-			case "commandExecution":
-				openCmds[item.ID] = time.Now()
-				running.Add(1)
-				err = emitCall(item.ID, tools.BashToolName, marshal(map[string]string{"command": unwrapShell(item.Command), "description": ""}))
-				if ctrlB.Load() {
-					interruptForBg()
-				}
-			case "fileChange":
-				changes[item.ID] = item.Changes
-				for i, c := range item.Changes {
-					name, input := codexChangeTool(c)
-					if err = emitCall(item.ID+"#"+strconv.Itoa(i), name, input); err != nil {
-						break
-					}
-				}
-			case "mcpToolCall":
-				err = emitCall(item.ID, "mcp_"+item.Server+"_"+item.Tool, string(item.Arguments))
-			case "webSearch":
-				err = emitCall(item.ID, tools.WebSearchToolName, marshal(map[string]string{"query": item.Query}))
-			}
-
-		case "item/completed":
-			failed := item.Status == "failed" || item.Status == "declined"
-			switch item.Type {
-			case "contextCompaction":
-				compacting = false
-				err = t.Emit(Event{Type: EventCompacting})
-			case "commandExecution":
-				if _, ok := calls[item.ID]; !ok || backgrounded[item.ID] {
-					break // backgrounded here or in an earlier turn; the model reads its output itself
-				}
-				if _, ok := openCmds[item.ID]; ok {
-					delete(openCmds, item.ID)
-					running.Add(-1)
-				}
-				out := ""
-				if item.AggregatedOutput != nil {
-					out = *item.AggregatedOutput
-				} else if b := output[item.ID]; b != nil {
-					out = b.String()
-				}
-				if item.ExitCode != nil && *item.ExitCode != 0 {
-					out = strings.TrimRight(out, "\n") + fmt.Sprintf("\n\nExit code %d", *item.ExitCode)
-				}
-				if item.Status == "declined" {
-					out = "The user denied this command."
-				}
-				err = emitResult(item.ID, strings.TrimLeft(out, "\n"), failed)
-			case "fileChange":
-				out := "Applied"
-				if failed {
-					out = "Patch " + item.Status
-				}
-				for i, c := range changes[item.ID] {
-					callID := item.ID + "#" + strconv.Itoa(i)
-					if failed {
-						err = emitResult(callID, out, true)
-					} else {
-						// Codex has usually written the file before Crush reads
-						// its "before" copy, so rebuild it from the patch.
-						err = t.Emit(Event{Type: EventToolResult, ID: callID, Name: calls[callID][0], Output: out, Metadata: codexChangeMetadata(m.Dir, c)})
-					}
-					if err != nil {
-						break
-					}
-				}
-			case "mcpToolCall":
-				var parts []string
-				if item.Result != nil {
-					for _, c := range item.Result.Content {
-						if c.Type == "text" {
-							parts = append(parts, c.Text)
-						}
-					}
-				}
-				if item.Error != nil {
-					failed, parts = true, []string{item.Error.Message}
-				}
-				err = emitResult(item.ID, strings.Join(parts, "\n"), failed)
-			case "webSearch":
-				err = emitResult(item.ID, "Searched the web", failed)
-			}
+		if msg.Method == "" {
+			// Responses to our requests.
+			err = r.handleResponse(id, msg)
+		} else {
+			done, err = r.handleNotification(msg)
 		}
-		if err != nil {
+		if done || err != nil {
 			return err
 		}
 	}
@@ -774,6 +342,424 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		return errors.New("Codex: the kept process ended")
 	}
 	return exitError("codex", p)
+}
+
+// steer sends a message queued mid-turn to the running turn.
+func (r *codexRun) steer(text string, attachments []message.Attachment) bool {
+	ids := r.active.Load()
+	if ids == nil {
+		return false
+	}
+	r.steers++
+	r.sent.add(text)
+	err := r.p.send(map[string]any{"id": "steer-" + strconv.Itoa(r.steers), "method": "turn/steer", "params": map[string]any{
+		"threadId":       ids[0],
+		"expectedTurnId": ids[1],
+		"input":          codexInput(withSavedImagePaths(text, attachments), attachments),
+	}})
+	if err != nil {
+		r.sent.take(text)
+	}
+	return true
+}
+
+func (r *codexRun) startTurn(input []any) {
+	params := map[string]any{"threadId": r.threadID, "input": input}
+	if r.t.Effort != "" {
+		params["effort"] = r.t.Effort
+	}
+	if r.m.ServiceTier != "" {
+		params["serviceTier"] = r.m.ServiceTier
+	}
+	_ = r.p.send(map[string]any{"id": codexTurnID, "method": "turn/start", "params": params})
+}
+
+func (r *codexRun) startThread() {
+	params := map[string]any{"cwd": r.m.Dir, "model": r.m.ID, "approvalPolicy": r.approval, "sandbox": r.sandbox}
+	if r.m.ServiceTier != "" {
+		params["serviceTier"] = r.m.ServiceTier
+	}
+	method := "thread/start"
+	if r.t.Resume != "" {
+		method, params["threadId"] = "thread/resume", r.t.Resume
+	} else if r.t.NoTools {
+		params["ephemeral"] = true
+	}
+	_ = r.p.send(map[string]any{"id": codexThreadID, "method": method, "params": params})
+}
+
+func (r *codexRun) interruptForBg() {
+	if ids := r.active.Load(); ids != nil && r.movedToBg.CompareAndSwap(false, true) {
+		r.ctrlB.Store(false)
+		_ = r.p.send(map[string]any{"id": "ctrl-b", "method": "turn/interrupt", "params": map[string]any{"threadId": ids[0], "turnId": ids[1]}})
+	}
+}
+
+func (r *codexRun) reportContext() error {
+	if r.t.NoTools {
+		return nil
+	}
+	event := codexContextBudget(r.contextSettings, r.catalogWindow, r.catalogLimit, r.reportedWindow, r.effectivePercent)
+	if event.ContextLimit <= 0 {
+		return nil
+	}
+	return r.t.Emit(event)
+}
+
+func (r *codexRun) emitCall(id, name, input string) error {
+	r.calls[id] = [2]string{name, input}
+	r.textOpen = false
+	if err := r.t.Emit(Event{Type: EventToolStart, ID: id, Name: name}); err != nil {
+		return err
+	}
+	return r.t.Emit(Event{Type: EventToolCall, ID: id, Name: name, Input: input})
+}
+
+func (r *codexRun) emitResult(id, out string, isError bool) error {
+	call := r.calls[id]
+	meta := ""
+	if !isError {
+		meta = resultMetadata(call[0], call[1], out)
+		if r.backgrounded[id] {
+			meta = markBackground(call[0], meta)
+		}
+	}
+	return r.t.Emit(Event{Type: EventToolResult, ID: id, Name: call[0], Output: out, Metadata: meta, IsError: isError})
+}
+
+// handleResponse handles Codex's response to one of Crush's requests. An
+// error ends the turn.
+func (r *codexRun) handleResponse(id string, msg rpcMessage) error {
+	switch {
+	case id == "crush-context-config":
+		if msg.Error == nil {
+			var res struct {
+				Config codexContextSettings `json:"config"`
+			}
+			if json.Unmarshal(msg.Result, &res) == nil {
+				r.contextSettings = res.Config
+			}
+		}
+		return r.reportContext()
+	case id == "ctrl-b-list":
+		r.continueAfterCtrlB(msg)
+		return nil
+	case id == codexHooksID || id == codexTrustID:
+		// A Codex without hooks still runs; Crush's own checks remain.
+		if msg.Error != nil {
+			slog.Warn("Codex did not take Crush's secrets guard", "error", msg.Error.Message)
+		}
+		if trust := codexGuardTrust(msg.Result); id == codexHooksID && msg.Error == nil && trust != nil {
+			_ = r.p.send(trust)
+		} else {
+			r.startThread()
+		}
+		return nil
+	case strings.HasPrefix(id, "steer-"):
+		// A steer that missed the turn is never confirmed, so it
+		// runs as the next turn instead.
+		if msg.Error != nil {
+			slog.Debug("Codex did not take a steered message", "error", msg.Error.Message)
+		}
+		return nil
+	}
+	if msg.Error != nil {
+		if id == codexThreadID && r.t.Resume != "" {
+			return ErrResume
+		}
+		return fmt.Errorf("Codex: %s", msg.Error.Message)
+	}
+	switch id {
+	case codexInitID:
+		_ = r.p.send(map[string]any{"method": "initialized"})
+		_ = r.p.send(map[string]any{"id": codexHooksID, "method": "hooks/list", "params": map[string]any{"cwds": []string{r.m.Dir}}})
+	case codexThreadID:
+		var res struct {
+			Thread struct {
+				ID string `json:"id"`
+			} `json:"thread"`
+		}
+		_ = json.Unmarshal(msg.Result, &res)
+		r.threadID = res.Thread.ID
+		if err := r.t.Emit(Event{Type: EventSession, Session: r.threadID}); err != nil {
+			return err
+		}
+		r.startTurn(codexInput(withSavedImagePaths(r.t.Prompt, r.t.Attachments), r.t.Attachments))
+	case codexTurnID:
+		var res struct {
+			Turn struct {
+				ID string `json:"id"`
+			} `json:"turn"`
+		}
+		_ = json.Unmarshal(msg.Result, &res)
+		r.active.Store(&[2]string{r.threadID, res.Turn.ID})
+	}
+	return nil
+}
+
+// continueAfterCtrlB starts the turn that tells the model which terminal
+// sessions its backgrounded commands run in.
+func (r *codexRun) continueAfterCtrlB(msg rpcMessage) {
+	var res struct {
+		Data []struct {
+			ItemID    string `json:"itemId"`
+			ProcessID string `json:"processId"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(msg.Result, &res)
+	var sessions []string
+	var all []string
+	for _, d := range res.Data {
+		all = append(all, d.ProcessID)
+		if r.backgrounded[d.ItemID] {
+			sessions = append(sessions, d.ProcessID)
+		}
+	}
+	if len(sessions) == 0 {
+		sessions = all
+	}
+	r.startTurn([]any{map[string]any{"type": "text", "text": codexCtrlB(sessions), "text_elements": []any{}}})
+}
+
+// handleNotification handles a notification from Codex. done reports that
+// the turn ended, with err.
+func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
+	var params codexParams
+	if (strings.HasPrefix(msg.Method, "item/") || msg.Method == "thread/tokenUsage/updated") && time.Since(r.lastActivity) >= time.Second {
+		if err := r.t.Emit(Event{Type: EventActivity}); err != nil {
+			return true, err
+		}
+		r.lastActivity = time.Now()
+	}
+	_ = json.Unmarshal(msg.Params, &params)
+	switch msg.Method {
+	case "item/agentMessage/delta":
+		if r.compacting {
+			break
+		}
+		r.textOpen = true
+		err = r.t.Emit(Event{Type: EventText, Text: params.Delta})
+	case "item/reasoning/summaryTextDelta", "item/reasoning/textDelta":
+		if r.compacting {
+			break
+		}
+		err = r.t.Emit(Event{Type: EventReasoning, Text: params.Delta})
+	case "item/commandExecution/outputDelta":
+		if r.output[params.ItemID] == nil {
+			r.output[params.ItemID] = &strings.Builder{}
+		}
+		r.output[params.ItemID].WriteString(params.Delta)
+	case "thread/tokenUsage/updated":
+		err = r.handleTokenUsage(params)
+	case "account/rateLimits/updated":
+		var up struct {
+			RateLimits codexSnapshot `json:"rateLimits"`
+		}
+		_ = json.Unmarshal(msg.Params, &up)
+		setLimits(config.TypeCodexCLI, up.RateLimits.limits())
+	case "turn/completed":
+		return r.handleTurnCompleted(params)
+	case "thread/compacted":
+		r.compacting = false
+		err = r.t.Emit(Event{Type: EventCompacting})
+	case "item/started":
+		err = r.handleItemStarted(params.Item)
+	case "item/completed":
+		err = r.handleItemCompleted(params.Item)
+	}
+	return err != nil, err
+}
+
+func (r *codexRun) handleTokenUsage(params codexParams) error {
+	u := params.TokenUsage
+	if u == nil {
+		return nil
+	}
+	if u.ModelContextWindow > 0 {
+		r.reportedWindow = u.ModelContextWindow
+		if !r.t.NoTools && !r.contextRequested {
+			r.contextRequested = true
+			_ = r.p.send(map[string]any{"id": "crush-context-config", "method": "config/read", "params": map[string]any{"cwd": r.m.Dir, "includeLayers": false}})
+		}
+	}
+	if err := r.reportContext(); err != nil {
+		return err
+	}
+	return r.t.Emit(Event{Type: EventUsage, Usage: fantasy.Usage{
+		InputTokens:     u.Last.InputTokens - u.Last.CachedInputTokens,
+		OutputTokens:    u.Last.OutputTokens,
+		ReasoningTokens: u.Last.ReasoningTokens,
+		TotalTokens:     u.Last.TotalTokens,
+		CacheReadTokens: u.Last.CachedInputTokens,
+	}})
+}
+
+// handleTurnCompleted ends the turn, unless Ctrl+B interrupted it to move
+// commands to the background: then a follow-up turn starts once their
+// terminal sessions are known.
+func (r *codexRun) handleTurnCompleted(params codexParams) (done bool, err error) {
+	if params.Turn.Status == "interrupted" && r.movedToBg.Load() && r.ctx.Err() == nil {
+		r.movedToBg.Store(false)
+		r.active.Store(nil)
+		for id := range r.openCmds {
+			r.backgrounded[id] = true
+			if err := r.emitResult(id, "Moved to the background (Ctrl+B). Still running.", false); err != nil {
+				return true, err
+			}
+		}
+		clear(r.openCmds)
+		r.running.Store(0)
+		// The follow-up turn starts once the sessions are known.
+		_ = r.p.send(map[string]any{"id": "ctrl-b-list", "method": "thread/backgroundTerminals/list", "params": map[string]any{"threadId": r.threadID}})
+		return false, nil
+	}
+	switch params.Turn.Status {
+	case "completed":
+		r.finished = true
+		return true, nil
+	case "interrupted":
+		return true, context.Canceled
+	}
+	if e := params.Turn.Error; e != nil {
+		return true, errors.New("Codex: " + e.Message)
+	}
+	return true, errors.New("Codex: turn " + params.Turn.Status)
+}
+
+func (r *codexRun) handleItemStarted(item codexItem) (err error) {
+	// A command Codex handed back still running (its yield time ran
+	// out) goes on as a background terminal once the model moves on.
+	// Its item stays open until it exits.
+	if item.Type != "userMessage" {
+		for id, started := range r.openCmds {
+			if time.Since(started) <= tools.ForegroundWaitLimit {
+				continue
+			}
+			delete(r.openCmds, id)
+			r.running.Add(-1)
+			r.backgrounded[id] = true
+			out := ""
+			if b := r.output[id]; b != nil {
+				out = strings.TrimRight(b.String(), "\n") + "\n\n"
+			}
+			if err := r.emitResult(id, strings.TrimLeft(out, "\n")+"Still running in the background.", false); err != nil {
+				return err
+			}
+		}
+	}
+	switch item.Type {
+	case "reasoning":
+		if r.compacting {
+			break
+		}
+		// Some models expose reasoning lifecycle without text deltas.
+		// Preserve the activity state without manufacturing or displaying thoughts.
+		err = r.t.Emit(Event{Type: EventReasoning})
+	case "contextCompaction":
+		r.compacting = true
+		err = r.t.Emit(Event{Type: EventCompacting, Compacting: true})
+	case "userMessage":
+		var text strings.Builder
+		for _, c := range item.Content {
+			text.WriteString(c.Text)
+		}
+		if typed := withoutImagePaths(text.String()); r.sent.take(typed) {
+			err = r.t.Emit(Event{Type: EventUserMessage, Text: typed})
+		}
+	case "agentMessage":
+		if r.compacting {
+			break
+		}
+		// Consecutive messages without tools in between would run
+		// together.
+		if r.textOpen {
+			err = r.t.Emit(Event{Type: EventText, Text: "\n\n"})
+		}
+	case "commandExecution":
+		r.openCmds[item.ID] = time.Now()
+		r.running.Add(1)
+		err = r.emitCall(item.ID, tools.BashToolName, marshal(map[string]string{"command": unwrapShell(item.Command), "description": ""}))
+		if r.ctrlB.Load() {
+			r.interruptForBg()
+		}
+	case "fileChange":
+		r.changes[item.ID] = item.Changes
+		for i, c := range item.Changes {
+			name, input := codexChangeTool(c)
+			if err = r.emitCall(item.ID+"#"+strconv.Itoa(i), name, input); err != nil {
+				break
+			}
+		}
+	case "mcpToolCall":
+		err = r.emitCall(item.ID, "mcp_"+item.Server+"_"+item.Tool, string(item.Arguments))
+	case "webSearch":
+		err = r.emitCall(item.ID, tools.WebSearchToolName, marshal(map[string]string{"query": item.Query}))
+	}
+	return err
+}
+
+func (r *codexRun) handleItemCompleted(item codexItem) (err error) {
+	failed := item.Status == "failed" || item.Status == "declined"
+	switch item.Type {
+	case "contextCompaction":
+		r.compacting = false
+		err = r.t.Emit(Event{Type: EventCompacting})
+	case "commandExecution":
+		if _, ok := r.calls[item.ID]; !ok || r.backgrounded[item.ID] {
+			break // backgrounded here or in an earlier turn; the model reads its output itself
+		}
+		if _, ok := r.openCmds[item.ID]; ok {
+			delete(r.openCmds, item.ID)
+			r.running.Add(-1)
+		}
+		out := ""
+		if item.AggregatedOutput != nil {
+			out = *item.AggregatedOutput
+		} else if b := r.output[item.ID]; b != nil {
+			out = b.String()
+		}
+		if item.ExitCode != nil && *item.ExitCode != 0 {
+			out = strings.TrimRight(out, "\n") + fmt.Sprintf("\n\nExit code %d", *item.ExitCode)
+		}
+		if item.Status == "declined" {
+			out = "The user denied this command."
+		}
+		err = r.emitResult(item.ID, strings.TrimLeft(out, "\n"), failed)
+	case "fileChange":
+		out := "Applied"
+		if failed {
+			out = "Patch " + item.Status
+		}
+		for i, c := range r.changes[item.ID] {
+			callID := item.ID + "#" + strconv.Itoa(i)
+			if failed {
+				err = r.emitResult(callID, out, true)
+			} else {
+				// Codex has usually written the file before Crush reads
+				// its "before" copy, so rebuild it from the patch.
+				err = r.t.Emit(Event{Type: EventToolResult, ID: callID, Name: r.calls[callID][0], Output: out, Metadata: codexChangeMetadata(r.m.Dir, c)})
+			}
+			if err != nil {
+				break
+			}
+		}
+	case "mcpToolCall":
+		var parts []string
+		if item.Result != nil {
+			for _, c := range item.Result.Content {
+				if c.Type == "text" {
+					parts = append(parts, c.Text)
+				}
+			}
+		}
+		if item.Error != nil {
+			failed, parts = true, []string{item.Error.Message}
+		}
+		err = r.emitResult(item.ID, strings.Join(parts, "\n"), failed)
+	case "webSearch":
+		err = r.emitResult(item.ID, "Searched the web", failed)
+	}
+	return err
 }
 
 // codexInput includes the captured image bytes, including clipboard images

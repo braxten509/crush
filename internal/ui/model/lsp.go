@@ -27,7 +27,11 @@ var lspStatesTTL = 5 * time.Second
 
 // lspStatesMsg delivers LSP states and per-server diagnostic counts fetched
 // off-thread.
-type lspStatesMsg struct {
+type lspStatesMsg lspSnapshot
+
+// lspSnapshot is the memoized LSP state: each server's state and its
+// diagnostic counts by severity.
+type lspSnapshot struct {
 	states      map[string]workspace.LSPClientInfo
 	diagnostics map[string]lsp.DiagnosticCounts
 }
@@ -42,8 +46,7 @@ type LSPInfo struct {
 // state. While a fetch is already in flight it only marks the state dirty;
 // applyLSPStates re-dispatches so the freshest data still lands.
 func (m *UI) requestLSPRefresh() tea.Cmd {
-	if m.lspFetchInFlight {
-		m.lspRefreshQueued = true
+	if !m.lspProbe.request() {
 		return nil
 	}
 	return m.dispatchLSPRefresh()
@@ -55,13 +58,9 @@ func (m *UI) requestLSPRefresh() tea.Cmd {
 // returns nil while a fetch is already in flight. The closure captures only
 // locals (never m) so it is safe off-thread.
 func (m *UI) dispatchLSPRefresh() tea.Cmd {
-	if m.lspFetchInFlight || m.com == nil || m.com.Workspace == nil {
+	if m.com == nil || m.com.Workspace == nil || !m.lspProbe.start() {
 		return nil
 	}
-	m.lspFetchInFlight = true
-	// Stamp the check time at dispatch too so the TTL backstop doesn't
-	// keep re-requesting while this fetch is in flight.
-	m.lspCheckedAt = time.Now()
 	ws := m.com.Workspace
 	return func() tea.Msg {
 		states := ws.LSPGetStates()
@@ -76,12 +75,9 @@ func (m *UI) dispatchLSPRefresh() tea.Cmd {
 // applyLSPStates stores an off-thread LSP fetch result and re-dispatches
 // when events arrived while it was in flight. Runs on the Update goroutine.
 func (m *UI) applyLSPStates(msg lspStatesMsg) tea.Cmd {
-	m.lspFetchInFlight = false
-	m.lspCheckedAt = time.Now()
-	m.lspStates = msg.states
-	m.lspDiagnostics = msg.diagnostics
-	if m.lspRefreshQueued {
-		m.lspRefreshQueued = false
+	requeue := m.lspProbe.finish()
+	m.lspProbe.val = lspSnapshot(msg)
+	if requeue {
 		return m.dispatchLSPRefresh()
 	}
 	return nil
@@ -91,7 +87,7 @@ func (m *UI) applyLSPStates(msg lspStatesMsg) tea.Cmd {
 // states, shown in the compact header.
 func (m *UI) lspErrorCount() int {
 	count := 0
-	for _, info := range m.lspStates {
+	for _, info := range m.lspProbe.val.states {
 		count += info.DiagnosticCount
 	}
 	return count
@@ -105,13 +101,13 @@ func (m *UI) lspErrorCount() int {
 func (m *UI) lspInfo(width, maxItems int, isSection bool) string {
 	t := m.com.Styles
 
-	states := slices.SortedFunc(maps.Values(m.lspStates), func(a, b workspace.LSPClientInfo) int {
+	states := slices.SortedFunc(maps.Values(m.lspProbe.val.states), func(a, b workspace.LSPClientInfo) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 
 	var lsps []LSPInfo
 	for _, state := range states {
-		counts := m.lspDiagnostics[state.Name]
+		counts := m.lspProbe.val.diagnostics[state.Name]
 		lsps = append(lsps, LSPInfo{LSPClientInfo: state, Diagnostics: map[protocol.DiagnosticSeverity]int{
 			protocol.SeverityError:       counts.Error,
 			protocol.SeverityWarning:     counts.Warning,

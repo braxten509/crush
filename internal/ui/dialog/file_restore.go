@@ -23,6 +23,7 @@ type (
 		Restore bool
 	}
 )
+
 type FileRestore struct {
 	com            *common.Common
 	plan           *filehistory.Plan

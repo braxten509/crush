@@ -1,10 +1,14 @@
 package client
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
+
+	"github.com/charmbracelet/crush/internal/proto"
 )
 
 // Typed outcomes callers need to distinguish from ordinary transport
@@ -61,4 +65,17 @@ func checkStatus(rsp *http.Response, ok ...int) error {
 		return fmt.Errorf("%w: %w", ErrServerShuttingDown, err)
 	}
 	return err
+}
+
+// decodeErrorMessage attempts to decode the response body as a
+// proto.Error and returns its message. It returns an empty string
+// when the body is empty or cannot be decoded into a proto.Error
+// with a non-empty message, letting callers fall back to a
+// status-only error.
+func decodeErrorMessage(body io.Reader) string {
+	var e proto.Error
+	if err := json.NewDecoder(body).Decode(&e); err != nil {
+		return ""
+	}
+	return e.Message
 }

@@ -112,6 +112,21 @@ func TestSetProviderAPIKey_PublishesConfigChanged(t *testing.T) {
 	awaitConfigChanged(t, evc, ws.ID)
 }
 
+// TestSetProviderAPIKey_SignalsAuthComplete verifies that setting a key
+// through the backend wakes agents blocked in WaitForTokenChange, matching
+// the in-process workspace.
+func TestSetProviderAPIKey_SignalsAuthComplete(t *testing.T) {
+	b, ws, _ := newPublishingWorkspace(t)
+
+	waited := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	go func() { waited <- ws.Cfg.WaitForTokenChange(ctx, "openai") }()
+
+	require.NoError(t, b.SetProviderAPIKey(ws.ID, config.ScopeGlobal, "openai", "test-key"))
+	require.NoError(t, <-waited)
+}
+
 func TestMarkProjectInitialized_PublishesConfigChanged(t *testing.T) {
 	b, ws, evc := newPublishingWorkspace(t)
 

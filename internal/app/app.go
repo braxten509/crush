@@ -5,18 +5,12 @@ package app
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
@@ -26,25 +20,18 @@ import (
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/filetracker"
-	"github.com/charmbracelet/crush/internal/format"
 	"github.com/charmbracelet/crush/internal/herdr"
 	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
-	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/skills"
-	"github.com/charmbracelet/crush/internal/ui/anim"
-	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/update"
 	"github.com/charmbracelet/crush/internal/version"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/term"
 )
 
 // UpdateAvailableMsg is sent when a new version is available.
@@ -101,18 +88,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	q := db.New(conn)
 	versions := filehistory.New(conn, store.Config().Options.DataDirectory, store.WorkingDir())
 	versions.ScheduleMaintenance(ctx)
-	go func() {
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				versions.ScheduleMaintenance(ctx)
-			}
-		}
-	}()
+	go maintainFileHistory(ctx, versions)
 	sessions := session.NewService(q, conn, versions.Maintain)
 	messages := message.NewService(q, message.WithFileHistory(versions))
 	files := history.NewService(q, conn)
@@ -156,29 +132,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	// Check for updates in the background.
 	go app.checkForUpdates(ctx)
 
-	// Arm initialization synchronously before launching it so WaitForInit
-	// blocks for the in-flight init instead of racing the goroutine and
-	// returning before any MCP tools register.
-	mcp.ArmInit()
-	// Config-disabled servers the user enabled via Toggle MCPs have a
-	// repository-scoped enabled override; force-start them so the toggle
-	// survives restarts. A read failure only means the override is skipped.
-	var forceStart []string
-	if enabled, err := app.Sessions.MCPServersEnabled(ctx); err != nil {
-		slog.Warn("Failed to list enabled MCP overrides; config-disabled servers stay disabled", "error", err)
-	} else {
-		for _, name := range enabled {
-			if m, ok := store.Config().MCP[name]; ok && m.Disabled {
-				forceStart = append(forceStart, name)
-			}
-		}
-	}
-	// Servers disabled for this repository via Toggle MCPs are not started.
-	localDisabled, err := app.Sessions.MCPDisabledServers(ctx)
-	if err != nil {
-		slog.Warn("Failed to list disabled MCP overrides; starting them anyway", "error", err)
-	}
-	go mcp.Initialize(ctx, app.Permissions, store, forceStart, localDisabled)
+	app.startMCP(ctx, store)
 
 	// Start herdr integration when running inside a herdr pane.
 	app.herdrClient = herdr.Init()
@@ -207,6 +161,57 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 		return nil, fmt.Errorf("failed to initialize coder agent: %w", err)
 	}
 
+	app.watchLSP(ctx)
+
+	return app, nil
+}
+
+// maintainFileHistory reschedules file-history maintenance every minute
+// until ctx is done.
+func maintainFileHistory(ctx context.Context, versions *filehistory.Store) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			versions.ScheduleMaintenance(ctx)
+		}
+	}
+}
+
+// startMCP starts MCP initialization in the background, honoring the
+// repository's Toggle MCPs overrides.
+func (app *App) startMCP(ctx context.Context, store *config.ConfigStore) {
+	// Arm initialization synchronously before launching it so WaitForInit
+	// blocks for the in-flight init instead of racing the goroutine and
+	// returning before any MCP tools register.
+	mcp.ArmInit()
+	// Config-disabled servers the user enabled via Toggle MCPs have a
+	// repository-scoped enabled override; force-start them so the toggle
+	// survives restarts. A read failure only means the override is skipped.
+	var forceStart []string
+	if enabled, err := app.Sessions.MCPServersEnabled(ctx); err != nil {
+		slog.Warn("Failed to list enabled MCP overrides; config-disabled servers stay disabled", "error", err)
+	} else {
+		for _, name := range enabled {
+			if m, ok := store.Config().MCP[name]; ok && m.Disabled {
+				forceStart = append(forceStart, name)
+			}
+		}
+	}
+	// Servers disabled for this repository via Toggle MCPs are not started.
+	localDisabled, err := app.Sessions.MCPDisabledServers(ctx)
+	if err != nil {
+		slog.Warn("Failed to list disabled MCP overrides; starting them anyway", "error", err)
+	}
+	go mcp.Initialize(ctx, app.Permissions, store, forceStart, localDisabled)
+}
+
+// watchLSP reports LSP state changes as events and announces the
+// configured servers.
+func (app *App) watchLSP(ctx context.Context) {
 	// Set up callback for LSP state updates.
 	app.LSPManager.SetCallback(func(name string, client *lsp.Client) {
 		if client == nil {
@@ -220,8 +225,6 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	// TrackConfigured must run after SetCallback so the callback is already
 	// installed when configured-but-not-yet-started LSPs are announced.
 	go app.LSPManager.TrackConfigured(ctx)
-
-	return app, nil
 }
 
 // Config returns the pure-data configuration.
@@ -267,673 +270,11 @@ func (app *App) ReportCurrentSession(sessionID string) {
 	app.herdrClient.SetSessionID(sessionID)
 }
 
-// resolveSession resolves which session to use for a non-interactive run
-// If continueSessionID is set, it looks up that session by ID
-// If useLast is set, it returns the most recently updated top-level session
-// Otherwise, it creates a new session
-func (app *App) resolveSession(ctx context.Context, continueSessionID string, useLast bool) (session.Session, error) {
-	switch {
-	case continueSessionID != "":
-		if app.Sessions.IsAgentToolSession(continueSessionID) {
-			return session.Session{}, fmt.Errorf("cannot continue an agent tool session: %s", continueSessionID)
-		}
-		sess, err := app.Sessions.Get(ctx, continueSessionID)
-		if err != nil {
-			return session.Session{}, fmt.Errorf("session not found: %s", continueSessionID)
-		}
-		if sess.ParentSessionID != "" {
-			return session.Session{}, fmt.Errorf("cannot continue a child session: %s", continueSessionID)
-		}
-		return sess, nil
-
-	case useLast:
-		sess, err := app.Sessions.GetLast(ctx)
-		if err != nil {
-			return session.Session{}, fmt.Errorf("no sessions found to continue")
-		}
-		return sess, nil
-
-	default:
-		return app.Sessions.Create(ctx, agent.DefaultSessionName)
-	}
-}
-
-// RunWaitingLine and RunResumedLine are written to stderr by
-// [App.RunNonInteractive] when the agent starts and stops waiting on its
-// sub-agents.
-const (
-	RunWaitingLine = "Waiting for sub-agents to finish..."
-	RunResumedLine = "Sub-agents finished; continuing."
-)
-
-// RunNonInteractive runs the application in non-interactive mode with the
-// given prompt, printing to stdout.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, fast, hideSpinner bool, continueSessionID string, useLast bool) error {
-	slog.Info("Running in non-interactive mode")
-
-	// Re-initialize the coder agent without interactive-only tools.
-	if err := app.InitCoderAgentNonInteractive(ctx); err != nil {
-		return fmt.Errorf("failed to reinitialize agent for non-interactive mode: %w", err)
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	if largeModel != "" || smallModel != "" {
-		if err := app.overrideModelsForNonInteractive(ctx, largeModel, smallModel); err != nil {
-			return fmt.Errorf("failed to override models: %w", err)
-		}
-	}
-
-	// The reasoning effort and fast mode apply to the model that will
-	// actually run. On a continued session without an explicit model
-	// override, the model is resolved later from the session's last
-	// assistant message, so the override is applied after that restore
-	// instead.
-	tuned := reasoningEffort != "" || fast
-	deferredEffort := (continueSessionID != "" || useLast) && largeModel == "" && smallModel == ""
-	if tuned && !deferredEffort {
-		if err := app.overrideTuning(ctx, reasoningEffort, fast); err != nil {
-			return err
-		}
-	}
-
-	var (
-		spinner   *format.Spinner
-		stderrTTY bool
-		progress  bool
-	)
-
-	stderrTTY = term.IsTerminal(os.Stderr.Fd())
-	progress = app.config.Config().Options.Progress == nil || *app.config.Config().Options.Progress
-
-	if !hideSpinner && stderrTTY {
-		activeTheme := ""
-		if cfg := app.config.Config(); cfg != nil && cfg.Options != nil && cfg.Options.TUI != nil {
-			activeTheme = cfg.Options.TUI.ActiveTheme
-		}
-		t := styles.ThemeFromConfig(activeTheme)
-
-		spinner = format.NewSpinner(ctx, cancel, anim.Settings{
-			Size:        10,
-			Label:       "Generating",
-			GradColorA:  t.WorkingGradFromColor,
-			GradColorB:  t.WorkingGradToColor,
-			CycleColors: true,
-		})
-		spinner.Start()
-	}
-
-	// Helper function to stop spinner once.
-	stopSpinner := func() {
-		if !hideSpinner && spinner != nil {
-			spinner.Stop()
-			spinner = nil
-		}
-	}
-
-	// Non-interactive runs get a single shot at the tool palette, so wait for
-	// MCP initialization to settle before reading MCP tools. The coordinator
-	// waits again for the same reason (it is the gate the client/server path
-	// goes through); doing it here too surfaces the failure before we create a
-	// session, and lets the UpdateModels below see every MCP tool. The wait is
-	// bounded so a server wedged mid-handshake cannot stall the one-shot run
-	// for its full connect timeout; past the budget the run proceeds without
-	// the unfinished servers' tools.
-	if err := mcp.WaitForInitBudget(ctx, mcp.InitWaitBudget); err != nil {
-		return fmt.Errorf("failed to wait for MCP initialization: %w", err)
-	}
-
-	// force update of agent models before running so mcp tools are loaded
-	app.AgentCoordinator.UpdateModels(ctx)
-
-	defer stopSpinner()
-
-	sess, err := app.resolveSession(ctx, continueSessionID, useLast)
-	if err != nil {
-		return fmt.Errorf("failed to create session for non-interactive mode: %w", err)
-	}
-
-	if continueSessionID != "" || useLast {
-		slog.Info("Continuing session for non-interactive run", "session_id", sess.ID)
-		// If no explicit model override was requested, restore the
-		// model/provider from the last assistant message in the
-		// session, provided it is still available.
-		if largeModel == "" && smallModel == "" {
-			if err := app.restoreModelFromSession(ctx, sess.ID); err != nil {
-				slog.Warn("Failed to restore model from session", "error", err)
-			}
-		}
-	} else {
-		slog.Info("Created session for non-interactive run", "session_id", sess.ID)
-	}
-
-	if tuned && deferredEffort {
-		if err := app.overrideTuning(ctx, reasoningEffort, fast); err != nil {
-			return err
-		}
-	}
-
-	// Automatically approve all permission requests for this non-interactive
-	// session.
-	app.Permissions.AutoApproveSession(sess.ID)
-
-	// Report session identity to herdr.
-	app.ReportCurrentSession(sess.ID)
-
-	type response struct {
-		result *fantasy.AgentResult
-		err    error
-	}
-	done := make(chan response, 1)
-
-	messageEvents := app.Messages.Subscribe(ctx)
-	completionEvents := app.runCompletions.Subscribe(ctx)
-	var lastCompletion notify.RunComplete
-	readCompletion := func(event pubsub.Event[notify.RunComplete]) {
-		if event.Payload.SessionID == sess.ID {
-			lastCompletion = event.Payload
-		}
-	}
-	// Waiting on sub-agents is reported on stderr, one line each time it
-	// starts or ends, so callers such as benchmarks can show it.
-	statusEvents := make(chan bool, 16)
-	runCtx := agent.WithRunStatus(ctx, func(waiting bool) {
-		select {
-		case statusEvents <- waiting:
-		case <-ctx.Done():
-		}
-	})
-	go func(ctx context.Context, sessionID, prompt string) {
-		result, err := app.AgentCoordinator.Run(ctx, sess.ID, prompt)
-		if err != nil {
-			done <- response{
-				err: fmt.Errorf("failed to start agent processing stream: %w", err),
-			}
-			return
-		}
-		done <- response{
-			result: result,
-		}
-	}(runCtx, sess.ID, prompt)
-
-	messageReadBytes := make(map[string]int)
-	var printed bool
-	var lastPrintedMessageID string
-	printMessage := func(msg message.Message) error {
-		content := msg.Content().String()
-		readBytes := messageReadBytes[msg.ID]
-		if len(content) < readBytes {
-			return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
-		}
-		part := content[readBytes:]
-		if readBytes == 0 {
-			part = strings.TrimLeft(part, " \t")
-		}
-		if (printed || strings.TrimSpace(part) != "") && part != "" {
-			if printed && lastPrintedMessageID != msg.ID {
-				fmt.Fprint(output, "\n\n")
-			}
-			printed = true
-			lastPrintedMessageID = msg.ID
-			fmt.Fprint(output, part)
-		}
-		messageReadBytes[msg.ID] = len(content)
-		return nil
-	}
-
-	defer func() {
-		if progress && stderrTTY {
-			_, _ = fmt.Fprintf(os.Stderr, ansi.ResetProgressBar)
-		}
-
-		// Always print a newline at the end. If output is a TTY this will
-		// prevent the prompt from overwriting the last line of output.
-		_, _ = fmt.Fprintln(output)
-	}()
-
-	for {
-		if progress && stderrTTY {
-			// HACK: Reinitialize the terminal progress bar on every iteration
-			// so it doesn't get hidden by the terminal due to inactivity.
-			_, _ = fmt.Fprintf(os.Stderr, ansi.SetIndeterminateProgressBar)
-		}
-
-		select {
-		case result := <-done:
-			stopSpinner()
-			if result.err != nil {
-				if errors.Is(result.err, context.Canceled) || errors.Is(result.err, agent.ErrRequestCancelled) {
-					slog.Debug("Non-interactive: agent processing cancelled", "session_id", sess.ID)
-					return nil
-				}
-				return fmt.Errorf("agent processing failed: %w", result.err)
-			}
-			// Completion can beat the last message event through the pubsub
-			// fan-in. The coordinator publishes before returning, so drain
-			// its broker and use the exact final message ID. Timestamp order
-			// is ambiguous when several replies finish in the same second.
-		readCompletions:
-			for {
-				select {
-				case event, ok := <-completionEvents:
-					if !ok {
-						break readCompletions
-					}
-					readCompletion(event)
-				default:
-					break readCompletions
-				}
-			}
-			var msg message.Message
-			var err error
-			if lastCompletion.MessageID != "" {
-				msg, err = app.Messages.Get(ctx, lastCompletion.MessageID)
-			} else {
-				msg, err = app.Messages.GetLastAssistantMessage(ctx, sess.ID)
-			}
-			if err == nil {
-				return printMessage(msg)
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			return nil
-
-		case event, ok := <-completionEvents:
-			if !ok {
-				completionEvents = nil
-			} else {
-				readCompletion(event)
-			}
-
-		case waiting := <-statusEvents:
-			stopSpinner()
-			if printed && stderrTTY {
-				fmt.Fprintln(os.Stderr)
-			}
-			if waiting {
-				fmt.Fprintln(os.Stderr, RunWaitingLine)
-			} else {
-				fmt.Fprintln(os.Stderr, RunResumedLine)
-			}
-
-		case event := <-messageEvents:
-			msg := event.Payload
-			if msg.SessionID == sess.ID && msg.Role == message.Assistant && len(msg.Parts) > 0 {
-				stopSpinner()
-
-				if err := printMessage(msg); err != nil {
-					return err
-				}
-			}
-
-		case <-ctx.Done():
-			stopSpinner()
-			return ctx.Err()
-		}
-	}
-}
-
 func (app *App) UpdateAgentModel(ctx context.Context) error {
 	if app.AgentCoordinator == nil {
 		return fmt.Errorf("agent configuration is missing")
 	}
 	return app.AgentCoordinator.UpdateModels(ctx)
-}
-
-// restoreModelFromSession reads the last assistant message in the
-// session and, if it used a different provider/model than the current
-// config, overrides the preferred model in-memory (non-persistent)
-// provided the provider/model is still available. This ensures that
-// continuing a session uses the same model that produced the last
-// response.
-func (app *App) restoreModelFromSession(ctx context.Context, sessionID string) error {
-	lastMsg, err := app.Messages.GetLastAssistantMessage(ctx, sessionID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		return fmt.Errorf("failed to get last assistant message: %w", err)
-	}
-	if lastMsg.Provider == "" || lastMsg.Model == "" {
-		return nil
-	}
-
-	cfg := app.config.Config()
-	currentLarge := cfg.Models[config.SelectedModelTypeLarge]
-	if currentLarge.Provider == lastMsg.Provider && currentLarge.Model == lastMsg.Model {
-		return nil
-	}
-
-	if !cfg.IsModelAvailable(lastMsg.Provider, lastMsg.Model) {
-		slog.Debug("Skipping model restoration: provider/model not available",
-			"provider", lastMsg.Provider,
-			"model", lastMsg.Model)
-		return nil
-	}
-
-	app.config.OverridePreferredModel(config.SelectedModelTypeLarge, config.SelectedModel{
-		Provider: lastMsg.Provider,
-		Model:    lastMsg.Model,
-	})
-	if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
-		smallModel := app.GetDefaultSmallModel(lastMsg.Provider)
-		app.config.OverridePreferredModel(config.SelectedModelTypeSmall, smallModel)
-	}
-	if err := app.AgentCoordinator.UpdateModels(ctx); err != nil {
-		return fmt.Errorf("failed to update agent models: %w", err)
-	}
-	slog.Info("Restored model from session",
-		"provider", lastMsg.Provider,
-		"model", lastMsg.Model)
-	return nil
-}
-
-// overrideModelsForNonInteractive parses the model strings and temporarily
-// overrides the model configurations, then rebuilds the agent.
-// Format: "model-name" (searches all providers) or "provider/model-name".
-// Model matching is case-insensitive.
-// If largeModel is provided but smallModel is not, the small model defaults to
-// the provider's default small model.
-func (app *App) overrideModelsForNonInteractive(ctx context.Context, largeModel, smallModel string) error {
-	providers := app.config.Config().Providers.Copy()
-
-	largeMatches, smallMatches, err := findModels(providers, largeModel, smallModel)
-	if err != nil {
-		return err
-	}
-
-	var largeProviderID string
-
-	// Override large model.
-	if largeModel != "" {
-		found, err := validateMatches(largeMatches, largeModel, "large")
-		if err != nil {
-			return err
-		}
-		largeProviderID = found.provider
-		slog.Info("Overriding large model for non-interactive run", "provider", found.provider, "model", found.modelID)
-		app.config.OverridePreferredModel(config.SelectedModelTypeLarge, config.SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
-		})
-	}
-
-	// Override small model.
-	switch {
-	case smallModel != "":
-		found, err := validateMatches(smallMatches, smallModel, "small")
-		if err != nil {
-			return err
-		}
-		slog.Info("Overriding small model for non-interactive run", "provider", found.provider, "model", found.modelID)
-		app.config.OverridePreferredModel(config.SelectedModelTypeSmall, config.SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
-		})
-
-	case largeModel != "":
-		// No small model specified, but large model was - use provider's default.
-		smallCfg := app.GetDefaultSmallModel(largeProviderID)
-		app.config.OverridePreferredModel(config.SelectedModelTypeSmall, smallCfg)
-	}
-
-	return app.AgentCoordinator.UpdateModels(ctx)
-}
-
-// overrideTuning validates the requested reasoning effort and fast mode
-// against the large model in effect for this run (which may have been
-// overridden by --model or restored from a continued session) and applies
-// them as an in-memory override. An empty effort keeps the model's own.
-func (app *App) overrideTuning(ctx context.Context, reasoningEffort string, fast bool) error {
-	cfg := app.config.Config()
-	selected, ok := cfg.Models[config.SelectedModelTypeLarge]
-	if !ok {
-		return fmt.Errorf("no large model selected; set one with the --model flag or 'model large'")
-	}
-	if reasoningEffort != "" {
-		if err := cfg.ValidateReasoningEffort(selected.Provider, selected.Model, reasoningEffort); err != nil {
-			return err
-		}
-		selected.ReasoningEffort = reasoningEffort
-	}
-	if fast {
-		if err := cfg.ValidateFastMode(selected.Provider, selected.Model); err != nil {
-			return err
-		}
-		selected.ServiceTier = "fast"
-	}
-	slog.Info("Overriding model tuning for non-interactive run",
-		"provider", selected.Provider,
-		"model", selected.Model,
-		"reasoning_effort", selected.ReasoningEffort,
-		"service_tier", selected.ServiceTier)
-	app.config.OverridePreferredModel(config.SelectedModelTypeLarge, selected)
-	return app.AgentCoordinator.UpdateModels(ctx)
-}
-
-// GetDefaultSmallModel returns the default small model for the given
-// provider. Falls back to the large model if no default is found.
-func (app *App) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	cfg := app.config.Config()
-	largeModelCfg := cfg.Models[config.SelectedModelTypeLarge]
-	if small, ok := cfg.CLISmallModel(providerID); ok {
-		return small
-	}
-
-	// Find the provider in the known providers list to get its default small model.
-	knownProviders, _ := config.Providers(cfg)
-	var knownProvider *catwalk.Provider
-	for _, p := range knownProviders {
-		if string(p.ID) == providerID {
-			knownProvider = &p
-			break
-		}
-	}
-
-	// For unknown/local providers, use the large model as small.
-	if knownProvider == nil {
-		slog.Warn("Using large model as small model for unknown provider", "provider", providerID, "model", largeModelCfg.Model)
-		return largeModelCfg
-	}
-
-	defaultSmallModelID := knownProvider.DefaultSmallModelID
-	model := cfg.GetModel(providerID, defaultSmallModelID)
-	if model == nil {
-		slog.Warn("Default small model not found, using large model", "provider", providerID, "model", largeModelCfg.Model)
-		return largeModelCfg
-	}
-
-	// A subscription-authenticated provider only serves the models its
-	// subscription grants, so the default small model must come from that
-	// catalog as well. This applies to ChatGPT-authenticated OpenAI and
-	// Grok-authenticated xAI alike.
-	if largeModelCfg.Provider == providerID {
-		var pick func(config.ProviderConfig) *catwalk.Model
-		switch providerID {
-		case string(catwalk.InferenceProviderOpenAI):
-			pick = chatGPTSmallModel
-		case string(catwalk.InferenceProviderXAI):
-			pick = grokSmallModel
-		}
-		if pick != nil {
-			if pc, ok := cfg.Providers.Get(providerID); ok && pc.OAuthToken != nil {
-				if small := pick(pc); small != nil {
-					return config.SelectedModel{
-						Provider:        providerID,
-						Model:           small.ID,
-						MaxTokens:       small.DefaultMaxTokens,
-						ReasoningEffort: small.DefaultReasoningEffort,
-					}
-				}
-				return largeModelCfg
-			}
-		}
-	}
-
-	slog.Info("Using provider default small model", "provider", providerID, "model", defaultSmallModelID)
-	return config.SelectedModel{
-		Provider:        providerID,
-		Model:           defaultSmallModelID,
-		MaxTokens:       model.DefaultMaxTokens,
-		ReasoningEffort: model.DefaultReasoningEffort,
-	}
-}
-
-// chatGPTSmallModel picks a lightweight model from the ChatGPT catalog,
-// preferring a "mini" variant and falling back to the last entry (the
-// catalog lists heavier models first). Returns nil when the catalog is
-// empty.
-func chatGPTSmallModel(pc config.ProviderConfig) *catwalk.Model {
-	for i := range pc.ChatGPTModels {
-		if strings.Contains(pc.ChatGPTModels[i].ID, "mini") {
-			return &pc.ChatGPTModels[i]
-		}
-	}
-	if len(pc.ChatGPTModels) > 0 {
-		return &pc.ChatGPTModels[len(pc.ChatGPTModels)-1]
-	}
-	return nil
-}
-
-// grokSmallModel picks a lightweight model from the Grok catalog,
-// preferring a "fast" or "mini" variant and falling back to the last
-// entry (the catalog lists heavier models first). Returns nil when the
-// catalog is empty.
-func grokSmallModel(pc config.ProviderConfig) *catwalk.Model {
-	for _, marker := range []string{"fast", "mini"} {
-		for i := range pc.GrokModels {
-			if strings.Contains(pc.GrokModels[i].ID, marker) {
-				return &pc.GrokModels[i]
-			}
-		}
-	}
-	if len(pc.GrokModels) > 0 {
-		return &pc.GrokModels[len(pc.GrokModels)-1]
-	}
-	return nil
-}
-
-func (app *App) setupEvents() {
-	ctx, cancel := context.WithCancel(app.globalCtx)
-	app.eventsCtx = ctx
-	app.subscribe(ctx, "sessions", app.Sessions.Subscribe)
-	app.subscribe(ctx, "messages", app.Messages.Subscribe)
-	app.subscribeMustDeliver(ctx, "permissions", app.Permissions.Subscribe)
-	app.subscribeMustDeliver(ctx, "permissions-notifications", app.Permissions.SubscribeNotifications)
-	app.subscribeMustDeliver(ctx, "question-batches", app.Questions.Subscribe)
-	app.subscribeMustDeliver(ctx, "question-notifications", app.Questions.SubscribeNotifications)
-	app.subscribe(ctx, "history", app.History.Subscribe)
-	app.subscribe(ctx, "agent-notifications", app.agentNotifications.Subscribe)
-	app.subscribeMustDeliver(ctx, "run-completions", app.runCompletions.Subscribe)
-	app.subscribe(ctx, "tasks", app.tasks.Subscribe)
-	app.subscribe(ctx, "mcp", mcp.SubscribeEvents)
-	app.subscribe(ctx, "mcp-channels", app.subscribeScopedChannelEvents)
-	app.subscribe(ctx, "lsp", SubscribeLSPEvents)
-	if app.Skills != nil {
-		app.subscribe(ctx, "skills", app.Skills.SubscribeEvents)
-	}
-	cleanupFunc := func(context.Context) error {
-		cancel()
-		app.serviceEventsWG.Wait()
-		app.events.Shutdown()
-		return nil
-	}
-	app.cleanupFuncs = append(app.cleanupFuncs, cleanupFunc)
-}
-
-// subscribeScopedChannelEvents forwards channel message events for servers
-// this workspace both declares in its MCP config and opted in (via
-// --channels or channel_enabled; see mcp.ChannelOptIn).
-// The MCP broker is process-global and channel events carry no workspace
-// identity, so this per-app scoping is what keeps another workspace's channel
-// messages out of this app's event stream (see mcp.SubscribeChannelEvents).
-// The scoped events feed the TUI's in-process injection and, in server mode,
-// the SSE stream to attached clients.
-func (app *App) subscribeScopedChannelEvents(ctx context.Context) <-chan pubsub.Event[mcp.Event] {
-	raw := mcp.SubscribeChannelEvents(ctx)
-	scoped := make(chan pubsub.Event[mcp.Event], 64)
-	go func() {
-		defer close(scoped)
-		for ev := range raw {
-			mcpCfg, declared := app.config.Config().MCP[ev.Payload.Name]
-			if !declared {
-				continue
-			}
-			if !mcp.ChannelOptIn(mcpCfg, app.config.Overrides().EnabledChannels, ev.Payload.Name) {
-				continue
-			}
-			select {
-			case scoped <- ev:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return scoped
-}
-
-// subscribe fans a service's event stream into the shared app.events
-// broker on app.serviceEventsWG, re-publishing each upstream event as a
-// tea.Msg. The goroutine exits when ctx is cancelled or the upstream
-// channel closes. It is a generic method (Go 1.27) so it can live in the
-// App namespace while still inferring the upstream event type T.
-func (app *App) subscribe[T any](
-	ctx context.Context,
-	name string,
-	subscriber func(context.Context) <-chan pubsub.Event[T],
-) {
-	// Subscribe before returning, so no event published right after setup
-	// is lost while the goroutine is still waiting to run.
-	subCh := subscriber(ctx)
-	app.serviceEventsWG.Go(func() {
-		for {
-			select {
-			case event, ok := <-subCh:
-				if !ok {
-					slog.Debug("Subscription channel closed", "name", name)
-					return
-				}
-				app.events.Publish(pubsub.UpdatedEvent, tea.Msg(event))
-			case <-ctx.Done():
-				slog.Debug("Subscription cancelled", "name", name)
-				return
-			}
-		}
-	})
-}
-
-// subscribeMustDeliver is the bounded-blocking fan-in variant of
-// [App.subscribe]: it re-publishes upstream events onto the shared
-// app.events broker using PublishMustDeliver instead of Publish. Use
-// this for terminal events that subscribers cannot tolerate losing —
-// notably RunComplete, which is the authoritative end-of-run signal
-// for `crush run`. A lossy fan-in here can drop the only terminal
-// event and hang non-interactive clients waiting on it.
-func (app *App) subscribeMustDeliver[T any](
-	ctx context.Context,
-	name string,
-	subscriber func(context.Context) <-chan pubsub.Event[T],
-) {
-	// Subscribe before returning, so no event published right after setup
-	// is lost while the goroutine is still waiting to run.
-	subCh := subscriber(ctx)
-	app.serviceEventsWG.Go(func() {
-		for {
-			select {
-			case event, ok := <-subCh:
-				if !ok {
-					slog.Debug("Subscription channel closed", "name", name)
-					return
-				}
-				app.events.PublishMustDeliver(ctx, pubsub.UpdatedEvent, tea.Msg(event))
-			case <-ctx.Done():
-				slog.Debug("Subscription cancelled", "name", name)
-				return
-			}
-		}
-	})
 }
 
 func (app *App) InitCoderAgent(ctx context.Context) error {
@@ -972,44 +313,6 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		return err
 	}
 	return nil
-}
-
-// Subscribe sends events to the TUI as tea.Msgs.
-func (app *App) Subscribe(program *tea.Program) {
-	defer log.RecoverPanic("app.Subscribe", func() {
-		slog.Info("TUI subscription panic: attempting graceful shutdown")
-		program.Quit()
-	})
-
-	app.tuiWG.Add(1)
-	tuiCtx, tuiCancel := context.WithCancel(app.globalCtx)
-	app.cleanupFuncs = append(app.cleanupFuncs, func(context.Context) error {
-		slog.Debug("Cancelling TUI message handler")
-		tuiCancel()
-		app.tuiWG.Wait()
-		return nil
-	})
-	defer app.tuiWG.Done()
-
-	detachSecureForms := secureentry.AttachForms(func(form *secureentry.Form) { program.Send(form) })
-	defer detachSecureForms()
-	events := app.events.Subscribe(tuiCtx)
-	// Now that the TUI hears task events, resume the sub-agents an earlier
-	// Crush left unfinished.
-	agent.ResumeInterruptedTasks()
-	for {
-		select {
-		case <-tuiCtx.Done():
-			slog.Debug("TUI message handler shutting down")
-			return
-		case ev, ok := <-events:
-			if !ok {
-				slog.Debug("TUI message channel closed")
-				return
-			}
-			program.Send(ev.Payload)
-		}
-	}
 }
 
 // Shutdown performs a graceful shutdown of the application.

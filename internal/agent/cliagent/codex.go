@@ -201,6 +201,54 @@ type codexRun struct {
 }
 
 func runCodex(ctx context.Context, m *Model, t Turn) error {
+	r := newCodexRun(ctx, m, t)
+	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: r.approval, sandbox: r.sandbox}
+	// A sub-agent runs one turn, so its process isn't kept for more.
+	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
+	live, lines, err := r.open(keep, key)
+	if err != nil {
+		return err
+	}
+	p := r.p
+	r.t.Emit = p.reviewEvents(r.t.Emit)
+	r.catalogWindow, r.catalogLimit, r.effectivePercent = codexCatalogContext(m.ID)
+	defer func() {
+		if r.finished && keep && r.threadID != "" {
+			codexSessions.keep(t.SessionID, &codexLive{liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: r.threadID}, nil, nil)
+		} else {
+			p.finish()
+		}
+	}()
+
+	stop := p.watchCancel(ctx, r.cancel)
+	defer stop()
+
+	r.stopSteer = pollSteerInputRetry(r.t, func() bool { return r.active.Load() != nil }, r.steer)
+	defer r.stopSteer()
+
+	if err := r.begin(live != nil); err != nil {
+		return err
+	}
+
+	if t.SessionID != "" && !t.NoTools {
+		defer onBackground(t.SessionID, r.background)()
+	}
+
+	if done, err := r.readLoop(lines); done {
+		return err
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if live != nil {
+		return errors.New("Codex: the kept process ended")
+	}
+	return exitError("codex", p)
+}
+
+// newCodexRun prepares a Codex turn, picking the approval policy and
+// sandbox from the session's permissions.
+func newCodexRun(ctx context.Context, m *Model, t Turn) *codexRun {
 	r := &codexRun{
 		ctx: ctx, m: m, t: t,
 		openCmds:     map[string]time.Time{},
@@ -217,74 +265,74 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	} else if m.autoApproved(t.SessionID) {
 		r.approval, r.sandbox = "never", "danger-full-access"
 	}
-	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: r.approval, sandbox: r.sandbox}
-	// A sub-agent runs one turn, so its process isn't kept for more.
-	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
+	return r
+}
+
+// open resumes the session's kept Codex process when it matches, or starts
+// a new app server. It returns the kept process, if any, and the lines the
+// process prints.
+func (r *codexRun) open(keep bool, key codexKey) (*codexLive, <-chan []byte, error) {
 	var live *codexLive
 	if keep {
-		live = codexSessions.take(t.SessionID, key, t.Resume)
+		live = codexSessions.take(r.t.SessionID, key, r.t.Resume)
 	}
-	var lines <-chan []byte
 	if live != nil {
-		r.p, lines, r.threadID = live.p, live.lines, live.thread
+		r.p, r.threadID = live.p, live.thread
+		return live, live.lines, nil
+	}
+	// Crush hands every CLI the shared memory; Codex's own stays off.
+	var err error
+	args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0", "-c", codexGuardHook()}
+	if r.p, err = startReviewProc(r.m.Dir, r.t.Env, !r.t.NoTools, "codex", args...); err != nil {
+		return nil, nil, err
+	}
+	return nil, r.p.readLines(), nil
+}
+
+// cancel interrupts the running turn, or closes the process's input when
+// no turn has started yet.
+func (r *codexRun) cancel() {
+	if ids := r.active.Load(); ids != nil {
+		_ = r.p.send(map[string]any{"id": "4", "method": "turn/interrupt", "params": map[string]any{"threadId": ids[0], "turnId": ids[1]}})
 	} else {
-		// Crush hands every CLI the shared memory; Codex's own stays off.
-		var err error
-		args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0", "-c", codexGuardHook()}
-		if r.p, err = startReviewProc(m.Dir, t.Env, !t.NoTools, "codex", args...); err != nil {
-			return err
-		}
-		lines = r.p.readLines()
+		r.p.closeInput()
 	}
-	p := r.p
-	r.t.Emit = p.reviewEvents(r.t.Emit)
-	r.catalogWindow, r.catalogLimit, r.effectivePercent = codexCatalogContext(m.ID)
-	defer func() {
-		if r.finished && keep && r.threadID != "" {
-			codexSessions.keep(t.SessionID, &codexLive{liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: r.threadID}, nil, nil)
-		} else {
-			p.finish()
-		}
-	}()
+}
 
-	stop := p.watchCancel(ctx, func() {
-		if ids := r.active.Load(); ids != nil {
-			_ = p.send(map[string]any{"id": "4", "method": "turn/interrupt", "params": map[string]any{"threadId": ids[0], "turnId": ids[1]}})
-		} else {
-			p.closeInput()
-		}
-	})
-	defer stop()
-
-	r.stopSteer = pollSteerInputRetry(r.t, func() bool { return r.active.Load() != nil }, r.steer)
-	defer r.stopSteer()
-
-	if live != nil {
+// begin starts the turn on a kept process, or initializes a new one; the
+// turn then starts once the thread is ready.
+func (r *codexRun) begin(resumed bool) error {
+	if resumed {
 		if err := r.t.Emit(Event{Type: EventSession, Session: r.threadID}); err != nil {
 			return err
 		}
-		r.startTurn(codexInput(withSavedImagePaths(t.Prompt, t.Attachments), t.Attachments))
-	} else {
-		_ = p.send(map[string]any{"id": codexInitID, "method": "initialize", "params": map[string]any{
-			"clientInfo": map[string]any{"name": "crush", "title": "Crush", "version": version.Version},
-			// For thread/backgroundTerminals/list after Ctrl+B.
-			"capabilities": map[string]any{"experimentalApi": true},
-		}})
+		r.startTurn(codexInput(withSavedImagePaths(r.t.Prompt, r.t.Attachments), r.t.Attachments))
+		return nil
 	}
+	_ = r.p.send(map[string]any{"id": codexInitID, "method": "initialize", "params": map[string]any{
+		"clientInfo": map[string]any{"name": "crush", "title": "Crush", "version": version.Version},
+		// For thread/backgroundTerminals/list after Ctrl+B.
+		"capabilities": map[string]any{"experimentalApi": true},
+	}})
+	return nil
+}
 
-	if t.SessionID != "" && !t.NoTools {
-		defer onBackground(t.SessionID, func() bool {
-			if r.active.Load() == nil {
-				return false
-			}
-			r.ctrlB.Store(true)
-			if r.running.Load() > 0 {
-				r.interruptForBg()
-			}
-			return true
-		})()
+// background handles Ctrl+B: it interrupts the turn while commands run so
+// they carry on in the background. It reports whether a turn was running.
+func (r *codexRun) background() bool {
+	if r.active.Load() == nil {
+		return false
 	}
+	r.ctrlB.Store(true)
+	if r.running.Load() > 0 {
+		r.interruptForBg()
+	}
+	return true
+}
 
+// readLoop handles the process's messages until the turn ends. done reports
+// that runCodex should return err; otherwise the process's output ended.
+func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 	for raw := range lines {
 		var msg rpcMessage
 		if json.Unmarshal(raw, &msg) != nil {
@@ -297,16 +345,16 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		if msg.Method != "" && id != "" {
 			var params codexParams
 			_ = json.Unmarshal(msg.Params, &params)
-			go codexRequest(ctx, m, r.t, p, msg, params, r.changes[params.ItemID])
+			go codexRequest(r.ctx, r.m, r.t, r.p, msg, params, r.changes[params.ItemID])
 			continue
 		}
-		if ctx.Err() != nil {
+		if r.ctx.Err() != nil {
 			// Interrupted: once the turn winds down the process is kept, as
 			// exiting would stop the commands it runs in the background.
 			r.stopSteer()
 			if msg.Method == "turn/completed" {
 				r.finished = true
-				return ctx.Err()
+				return true, r.ctx.Err()
 			}
 			continue
 		}
@@ -320,16 +368,10 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 			done, err = r.handleNotification(msg)
 		}
 		if done || err != nil {
-			return err
+			return true, err
 		}
 	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if live != nil {
-		return errors.New("Codex: the kept process ended")
-	}
-	return exitError("codex", p)
+	return false, nil
 }
 
 // steer sends a message queued mid-turn to the running turn.

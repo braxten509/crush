@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/oauth"
+	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
@@ -322,5 +323,44 @@ func TestComposerFooterFormSavesOffLoop(t *testing.T) {
 		} else {
 			require.Equal(t, "Composer updated", info.Msg)
 		}
+	}
+}
+
+func (w *prefWorkspace) PermissionGrant(perm permission.PermissionRequest) bool {
+	w.record("grant " + perm.ID)
+	return true
+}
+
+func (w *prefWorkspace) PermissionGrantPersistent(perm permission.PermissionRequest) bool {
+	w.record("grant persistent " + perm.ID)
+	return true
+}
+
+func (w *prefWorkspace) PermissionDeny(perm permission.PermissionRequest) bool {
+	w.record("deny " + perm.ID)
+	return true
+}
+
+// TestPermissionResponseRunsOffLoop pins that answering a permission
+// request closes the dialog at once and sends the answer when the command
+// runs.
+func TestPermissionResponseRunsOffLoop(t *testing.T) {
+	t.Parallel()
+
+	for action, want := range map[dialog.PermissionAction]string{
+		dialog.PermissionAllow:           "grant p1",
+		dialog.PermissionAllowForSession: "grant persistent p1",
+		dialog.PermissionDeny:            "deny p1",
+	} {
+		u, ws := newPrefUI(t)
+		u.dialog.OpenDialog(idDialog{id: dialog.PermissionsID})
+		cmd := u.handleDialogAction(dialog.ActionPermissionResponse{
+			Permission: permission.PermissionRequest{ID: "p1"},
+			Action:     action,
+		})
+		require.False(t, u.dialog.ContainsDialog(dialog.PermissionsID))
+		require.Empty(t, ws.recorded(), "the answer must not be sent on the Update goroutine")
+		collectMsgs(cmd)
+		require.Equal(t, []string{want}, ws.recorded())
 	}
 }

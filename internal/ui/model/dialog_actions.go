@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	fimage "github.com/charmbracelet/crush/internal/ui/image"
 	"github.com/charmbracelet/crush/internal/ui/util"
+	"github.com/charmbracelet/crush/internal/workspace"
 )
 
 // handleDialogMsg gives a message to the front dialog and handles the
@@ -234,19 +235,28 @@ func (m *UI) handleModelAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 		cmds = append(cmds, cmd)
 	case dialog.ActionPermissionResponse:
 		m.dialog.CloseDialog(dialog.PermissionsID)
-		switch msg.Action {
-		case dialog.PermissionAllow:
-			m.com.Workspace.PermissionGrant(msg.Permission)
-		case dialog.PermissionAllowForSession:
-			m.com.Workspace.PermissionGrantPersistent(msg.Permission)
-		case dialog.PermissionDeny:
-			m.com.Workspace.PermissionDeny(msg.Permission)
-		}
+		cmds = append(cmds, respondToPermission(m.com.Workspace, msg))
 
 	default:
 		return nil, false
 	}
 	return tea.Batch(cmds...), true
+}
+
+// respondToPermission returns a command that answers a permission request
+// off the Update goroutine (an HTTP round-trip in client/server mode).
+func respondToPermission(ws workspace.Workspace, msg dialog.ActionPermissionResponse) tea.Cmd {
+	return func() tea.Msg {
+		switch msg.Action {
+		case dialog.PermissionAllow:
+			ws.PermissionGrant(msg.Permission)
+		case dialog.PermissionAllowForSession:
+			ws.PermissionGrantPersistent(msg.Permission)
+		case dialog.PermissionDeny:
+			ws.PermissionDeny(msg.Permission)
+		}
+		return nil
+	}
 }
 
 // handlePromptAction handles the actions that put something into the

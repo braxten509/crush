@@ -34,7 +34,7 @@ type globDescriptionData struct {
 }
 
 func globDescription() string {
-	return renderTemplate(globDescriptionTpl, globDescriptionData{
+	return RenderTemplate(globDescriptionTpl, globDescriptionData{
 		MaxResults: 100,
 	})
 }

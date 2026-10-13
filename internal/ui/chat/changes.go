@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/diffreview"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/ui/diffreview"
 )
 
 // Changes returns the file changes the group's finished tool calls made,

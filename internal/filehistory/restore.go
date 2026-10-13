@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/diffreview"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/secureentry"
-	"github.com/charmbracelet/crush/internal/ui/diffreview"
 	"github.com/google/uuid"
 )
 

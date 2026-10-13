@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
 	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
+	"github.com/charmbracelet/crush/internal/ui/dialog/skillbrowser"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/home"
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	fimage "github.com/charmbracelet/crush/internal/ui/image"
 	"github.com/charmbracelet/crush/internal/ui/util"
+	"github.com/charmbracelet/crush/internal/workspace"
 )
 
 // handleDialogMsg gives a message to the front dialog and handles the
@@ -96,7 +98,7 @@ func (m *UI) handleGenericDialogAction(action dialog.Action) tea.Cmd {
 		if msg.Cmd != nil {
 			cmds = append(cmds, msg.Cmd)
 		}
-	case dialog.ActionSkillsChanged:
+	case skillbrowser.ActionSkillsChanged:
 		cmds = append(cmds, m.loadCustomCommands())
 
 	case dialog.ActionQuit:
@@ -218,28 +220,44 @@ func (m *UI) handleModelAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait..."))
 			break
 		}
-		cmd, err := m.setReasoningEffort(msg.Effort, msg.Ultracode)
+		// The picker closes once the effort was saved, and stays open
+		// when saving failed.
+		cmd, err := m.setReasoningEffort(msg.Effort, msg.Ultracode, func(err error) tea.Cmd {
+			if err != nil {
+				return util.ReportError(err)
+			}
+			m.dialog.CloseDialog(dialog.ReasoningID)
+			return nil
+		})
 		if err != nil {
 			cmds = append(cmds, util.ReportError(err))
 			break
 		}
 		cmds = append(cmds, cmd)
-		m.dialog.CloseDialog(dialog.ReasoningID)
 	case dialog.ActionPermissionResponse:
 		m.dialog.CloseDialog(dialog.PermissionsID)
-		switch msg.Action {
-		case dialog.PermissionAllow:
-			m.com.Workspace.PermissionGrant(msg.Permission)
-		case dialog.PermissionAllowForSession:
-			m.com.Workspace.PermissionGrantPersistent(msg.Permission)
-		case dialog.PermissionDeny:
-			m.com.Workspace.PermissionDeny(msg.Permission)
-		}
+		cmds = append(cmds, respondToPermission(m.com.Workspace, msg))
 
 	default:
 		return nil, false
 	}
 	return tea.Batch(cmds...), true
+}
+
+// respondToPermission returns a command that answers a permission request
+// off the Update goroutine (an HTTP round-trip in client/server mode).
+func respondToPermission(ws workspace.Workspace, msg dialog.ActionPermissionResponse) tea.Cmd {
+	return func() tea.Msg {
+		switch msg.Action {
+		case dialog.PermissionAllow:
+			ws.PermissionGrant(msg.Permission)
+		case dialog.PermissionAllowForSession:
+			ws.PermissionGrantPersistent(msg.Permission)
+		case dialog.PermissionDeny:
+			ws.PermissionDeny(msg.Permission)
+		}
+		return nil
+	}
 }
 
 // handlePromptAction handles the actions that put something into the
@@ -367,10 +385,10 @@ func (m *UI) handlePaletteAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionEnableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
-		cmds = append(cmds, m.enableDockerMCP)
+		cmds = append(cmds, enableDockerMCP(m.com.Workspace))
 	case dialog.ActionDisableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
-		cmds = append(cmds, m.disableDockerMCP)
+		cmds = append(cmds, disableDockerMCP(m.com.Workspace))
 	case mcpservers.ActionToggleMCP:
 		cmds = append(cmds, m.applyMCPToggle(msg))
 	case dialog.ActionSaveProject:

@@ -106,30 +106,8 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 
 func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (result *fantasy.AgentResult, err error) {
 	defer c.recoverTurn(ctx, sessionID, &err)
-	if err := c.readyWg.Wait(); err != nil {
+	if err := c.awaitTurnReady(ctx); err != nil {
 		return nil, err
-	}
-
-	// MCP servers connect asynchronously (see mcp.Initialize).
-	//
-	// Interactive runs never wait for that to finish: the tool list below
-	// is built from whatever is registered right now, servers still
-	// connecting are simply absent from this run's palette, and they are
-	// picked up by later runs once they register and publish
-	// EventToolsListChanged. Blocking here froze the TUI for the duration
-	// of the slowest server's connect timeout whenever a prompt was sent
-	// before initialization finished — most visibly on the first message.
-	//
-	// Non-interactive runs get a single shot at the tool palette, so they
-	// do wait for initialization to settle — but bounded by InitWaitBudget
-	// rather than each server's connect timeout, so a server wedged
-	// mid-handshake cannot stall a headless run for minutes. Past the
-	// budget the turn proceeds without the stragglers; their tools simply
-	// stay absent from this run.
-	if !c.interactive {
-		if err := mcp.WaitForInitBudget(ctx, mcp.InitWaitBudget); err != nil {
-			return nil, fmt.Errorf("failed to wait for MCP initialization: %w", err)
-		}
 	}
 
 	// refresh models before each run. Snapshot the agent first: the run,
@@ -141,22 +119,9 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 	}
 
 	model := agent.Model()
-	maxTokens := model.CatwalkCfg.DefaultMaxTokens
-	if model.ModelCfg.MaxTokens != 0 {
-		maxTokens = model.ModelCfg.MaxTokens
-	}
-
-	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-	if !ok {
-		return nil, errModelProviderNotConfigured
-	}
-
-	mergedOptions, temp, topP, topK, freqPenalty, presPenalty := mergeCallOptions(model, providerCfg)
-
-	if err := c.refreshTokenIfExpired(ctx, providerCfg); err != nil {
-		// NOTE(@andreynering): We don't return here because the event handling to ask the user to reauthenticate
-		// depends on the flow below. If refresh fails, proceed with the token we have.
-		slog.Error("Failed to refresh OAuth2 token. Proceeding with existing token.", "error", err)
+	call, err := c.turnModelSettings(ctx, model)
+	if err != nil {
+		return nil, err
 	}
 
 	// Coalesce per-attempt RunComplete payloads so only the final
@@ -191,32 +156,21 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 	runID := RunIDFromContext(ctx)
 	channel := ChannelFromContext(ctx)
 	c.syncSessionChannel(ctx, sessionID, channel)
-	run := func() (*fantasy.AgentResult, error) {
-		return agent.Run(ctx, SessionAgentCall{
-			SessionID:         sessionID,
-			SubmissionID:      message.SubmissionID(ctx),
-			RunID:             runID,
-			Channel:           channel,
-			Prompt:            prompt,
-			HiddenUserMessage: message.HiddenUserMessage(ctx),
-			CLIContinue:       ctx.Value(cliContinueKey{}) != nil,
-			Attachments:       attachments,
-			MaxOutputTokens:   maxTokens,
-			ProviderOptions:   mergedOptions,
-			Temperature:       temp,
-			TopP:              topP,
-			TopK:              providers.CallTopK(providerCfg, topK),
-			FrequencyPenalty:  freqPenalty,
-			PresencePenalty:   presPenalty,
-			OnComplete:        onComplete,
-			Accepted:          accept,
-			NonInteractive:    !c.interactive,
-			sessionRun:        sessionRun,
-			OnAuthRefresh:     c.makeAuthRefreshCallback(providerCfg),
-		})
-	}
+	call.SessionID = sessionID
+	call.SubmissionID = message.SubmissionID(ctx)
+	call.RunID = runID
+	call.Channel = channel
+	call.Prompt = prompt
+	call.HiddenUserMessage = message.HiddenUserMessage(ctx)
+	call.CLIContinue = ctx.Value(cliContinueKey{}) != nil
+	call.Attachments = attachments
+	call.OnComplete = onComplete
+	call.Accepted = accept
+	call.NonInteractive = !c.interactive
+	call.sessionRun = sessionRun
+
 	beforeLoaded := c.skillTracker.LoadedNames()
-	result, originalErr := run()
+	result, originalErr := agent.Run(ctx, call)
 	logTurnSkillUsage(sessionID, prompt, c.activeSkills, c.skillTracker, beforeLoaded)
 
 	// Notify only if still unauthorized after retry — a successful
@@ -239,6 +193,71 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 		MarkRunCompletePublished(ctx)
 	}
 	return result, originalErr
+}
+
+// awaitTurnReady waits for the coordinator to finish starting and, for
+// non-interactive runs, for MCP servers to connect.
+func (c *coordinator) awaitTurnReady(ctx context.Context) error {
+	if err := c.readyWg.Wait(); err != nil {
+		return err
+	}
+
+	// MCP servers connect asynchronously (see mcp.Initialize).
+	//
+	// Interactive runs never wait for that to finish: the tool list below
+	// is built from whatever is registered right now, servers still
+	// connecting are simply absent from this run's palette, and they are
+	// picked up by later runs once they register and publish
+	// EventToolsListChanged. Blocking here froze the TUI for the duration
+	// of the slowest server's connect timeout whenever a prompt was sent
+	// before initialization finished — most visibly on the first message.
+	//
+	// Non-interactive runs get a single shot at the tool palette, so they
+	// do wait for initialization to settle — but bounded by InitWaitBudget
+	// rather than each server's connect timeout, so a server wedged
+	// mid-handshake cannot stall a headless run for minutes. Past the
+	// budget the turn proceeds without the stragglers; their tools simply
+	// stay absent from this run.
+	if !c.interactive {
+		if err := mcp.WaitForInitBudget(ctx, mcp.InitWaitBudget); err != nil {
+			return fmt.Errorf("failed to wait for MCP initialization: %w", err)
+		}
+	}
+	return nil
+}
+
+// turnModelSettings returns a call carrying the model's output limit,
+// sampling options and auth refresh, refreshing an expired OAuth token
+// first.
+func (c *coordinator) turnModelSettings(ctx context.Context, model Model) (SessionAgentCall, error) {
+	maxTokens := model.CatwalkCfg.DefaultMaxTokens
+	if model.ModelCfg.MaxTokens != 0 {
+		maxTokens = model.ModelCfg.MaxTokens
+	}
+
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return SessionAgentCall{}, errModelProviderNotConfigured
+	}
+
+	mergedOptions, temp, topP, topK, freqPenalty, presPenalty := mergeCallOptions(model, providerCfg)
+
+	if err := c.refreshTokenIfExpired(ctx, providerCfg); err != nil {
+		// NOTE(@andreynering): We don't return here because the event handling to ask the user to reauthenticate
+		// depends on the flow below. If refresh fails, proceed with the token we have.
+		slog.Error("Failed to refresh OAuth2 token. Proceeding with existing token.", "error", err)
+	}
+
+	return SessionAgentCall{
+		MaxOutputTokens:  maxTokens,
+		ProviderOptions:  mergedOptions,
+		Temperature:      temp,
+		TopP:             topP,
+		TopK:             providers.CallTopK(providerCfg, topK),
+		FrequencyPenalty: freqPenalty,
+		PresencePenalty:  presPenalty,
+		OnAuthRefresh:    c.makeAuthRefreshCallback(providerCfg),
+	}, nil
 }
 
 // syncSessionChannel reconciles the session's persisted channel binding with

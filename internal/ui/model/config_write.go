@@ -7,13 +7,32 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/cpuaffinity"
 	"github.com/charmbracelet/crush/internal/ui/util"
+	"github.com/charmbracelet/crush/internal/workspace"
 )
 
-// configWriteMsg delivers the outcome of an off-thread config write back to
-// the Update goroutine, where then runs with the write's error.
-type configWriteMsg struct {
+// workDoneMsg delivers the outcome of work done off the Update goroutine (a
+// config or theme file write, an agent rebuild) back to it, where then runs
+// with the work's error.
+type workDoneMsg struct {
 	err  error
 	then func(err error) tea.Cmd
+}
+
+// doThen runs work off the Update goroutine and then, once it finished,
+// runs then with its error on the Update goroutine, so then may change UI
+// state. work must capture only locals, never the model.
+func doThen(work func() error, then func(err error) tea.Cmd) tea.Cmd {
+	return func() tea.Msg {
+		return workDoneMsg{err: work(), then: then}
+	}
+}
+
+// applyWorkDone finishes off-thread work on the Update goroutine.
+func (m *UI) applyWorkDone(msg workDoneMsg) tea.Cmd {
+	if msg.then == nil {
+		return nil
+	}
+	return msg.then(msg.err)
 }
 
 // writeConfigField writes one global config field off the Update goroutine
@@ -22,21 +41,42 @@ type configWriteMsg struct {
 // command itself captures only locals.
 func (m *UI) writeConfigField(key string, value any, then func(err error) tea.Cmd) tea.Cmd {
 	ws := m.com.Workspace
-	return func() tea.Msg {
-		return configWriteMsg{
-			err:  ws.SetConfigField(config.ScopeGlobal, key, value),
-			then: then,
-		}
-	}
+	return doThen(func() error {
+		return ws.SetConfigField(config.ScopeGlobal, key, value)
+	}, then)
 }
 
-// applyConfigWrite finishes an off-thread config write on the Update
-// goroutine.
-func (m *UI) applyConfigWrite(msg configWriteMsg) tea.Cmd {
-	if msg.then == nil {
+// savePreferredModel stores model as the preferred model of kind off the
+// Update goroutine. With fillSmall, a successful write also stores the
+// provider's default small model. then runs on the Update goroutine with
+// the write's error and the small model write's error.
+func savePreferredModel(ws workspace.Workspace, kind config.SelectedModelType, model config.SelectedModel, fillSmall bool, then func(err, smallErr error) tea.Cmd) tea.Cmd {
+	// Written by the command before it delivers its message, read by
+	// then after Update received it.
+	var smallErr error
+	return doThen(func() error {
+		if err := ws.UpdatePreferredModel(config.ScopeGlobal, kind, model); err != nil {
+			return err
+		}
+		if fillSmall {
+			small := ws.GetDefaultSmallModel(model.Provider)
+			smallErr = ws.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, small)
+		}
+		return nil
+	}, func(err error) tea.Cmd {
+		return then(err, smallErr)
+	})
+}
+
+// saveCompactMode saves the compact mode setting off the Update goroutine
+// and reports a failed save.
+func saveCompactMode(ws workspace.Workspace, compact bool) tea.Cmd {
+	return func() tea.Msg {
+		if err := ws.SetCompactMode(config.ScopeGlobal, compact); err != nil {
+			return util.ReportError(err)()
+		}
 		return nil
 	}
-	return msg.then(msg.err)
 }
 
 // toggleTransparentBackground flips options.tui.transparent. The config

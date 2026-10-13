@@ -11,7 +11,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/ui/diffreview"
+	"github.com/charmbracelet/crush/internal/diffreview"
 	"github.com/stretchr/testify/require"
 )
 

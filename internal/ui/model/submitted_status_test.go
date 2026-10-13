@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/skillbrowser"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
@@ -80,7 +81,7 @@ func (coveringDialog) Draw(uv.Screen, uv.Rectangle) *tea.Cursor { return nil }
 
 func TestSkillCompletionReachesPickerUnderAnotherDialog(t *testing.T) {
 	u, _ := newSubmissionUI()
-	picker := dialog.NewSkills(u.com, statusSkillManager{})
+	picker := skillbrowser.NewSkills(u.com, statusSkillManager{})
 	msg := picker.Load()()
 	u.dialog.OpenDialog(picker)
 	u.dialog.OpenDialog(coveringDialog{})

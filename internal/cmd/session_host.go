@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/remote"
-	"github.com/charmbracelet/crush/internal/sessionhost"
+	"github.com/charmbracelet/crush/internal/ui/sessionhost"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )

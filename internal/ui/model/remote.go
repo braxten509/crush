@@ -352,10 +352,16 @@ func (m *UI) syncRemotePresence() {
 	m.remote.setPresence(p)
 }
 
+// errRemoteReplyPending is returned by runRemoteAction when the action's
+// command answers the phone itself once its work finished.
+var errRemoteReplyPending = errors.New("remote reply pending")
+
 // handleRemoteAction runs a phone request as if its key had been pressed.
 func (m *UI) handleRemoteAction(a *remote.Action) tea.Cmd {
 	cmd, err := m.runRemoteAction(a)
-	a.Done(err)
+	if !errors.Is(err, errRemoteReplyPending) {
+		a.Done(err)
+	}
 	return tea.Batch(cmd, m.remote.wait())
 }
 
@@ -406,7 +412,16 @@ func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
 	case remote.ActModel:
 		return m.remoteSelectModel(a.Provider, a.Model)
 	case remote.ActEffort:
-		return m.setReasoningEffort(a.Effort, nil)
+		// The phone hears back once the effort was saved, off the Update
+		// goroutine.
+		cmd, err := m.setReasoningEffort(a.Effort, nil, func(err error) tea.Cmd {
+			a.Done(err)
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return cmd, errRemoteReplyPending
 	case remote.ActThink:
 		return m.toggleThinking(), nil
 	case remote.ActFast:

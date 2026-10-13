@@ -9,7 +9,6 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/glamour/v2/ansi"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/diffview"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -172,6 +171,25 @@ func quickStyle(o quickStyleOpts) Styles {
 		s      Styles
 	)
 
+	quickStyleInputs(&s, o, base)
+	quickStyleMarkdown(&s, o)
+	quickStyleMarkdownVariants(&s, o, base)
+	quickStyleQuietMarkdown(&s, o, muted, subtle)
+	quickStyleWidgets(&s, o, base)
+	quickStyleHeader(&s, o, base, muted, subtle)
+	quickStyleTools(&s, o, base, muted, subtle)
+	quickStyleEditor(&s, o)
+	quickStyleSidebar(&s, o, base, muted, subtle)
+	quickStyleChat(&s, o, base, muted, subtle)
+	quickStyleDialogs(&s, o, base)
+	quickStyleCompletions(&s, o, base)
+
+	return s
+}
+
+// quickStyleInputs sets the background and working colors, the text input and
+// the composer textarea.
+func quickStyleInputs(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	s.Background = o.bgBase
 
 	// Populate color fields
@@ -229,416 +247,10 @@ func quickStyle(o quickStyleOpts) Styles {
 			Blink: true,
 		},
 	}
+}
 
-	s.Markdown = ansi.StyleConfig{
-		Document: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				// BlockPrefix: "\n",
-				// BlockSuffix: "\n",
-				// Replies are in the full text color, like Codex: a
-				// shaded body made the reply read as secondary.
-				Color: hex(o.fgBase),
-			},
-			// Margin: new(uint(defaultMargin)),
-		},
-		BlockQuote: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{},
-			Indent:         new(uint(1)),
-			IndentToken:    new("│ "),
-		},
-		List: ansi.StyleList{
-			LevelIndent: defaultListIndent,
-		},
-		Heading: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				BlockSuffix: "\n",
-				Color:       hex(o.info),
-				Bold:        new(true),
-			},
-		},
-		// No background chip on headings, the same as inline code: text
-		// on a colored block is harder to read.
-		H1: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "# ",
-			},
-		},
-		H2: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "## ",
-			},
-		},
-		H3: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "### ",
-			},
-		},
-		H4: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "#### ",
-			},
-		},
-		H5: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "##### ",
-			},
-		},
-		H6: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "###### ",
-				Color:  hex(o.successMostSubtle),
-				Bold:   new(false),
-			},
-		},
-		Strikethrough: ansi.StylePrimitive{
-			CrossedOut: new(true),
-		},
-		Emph: ansi.StylePrimitive{
-			Italic: new(true),
-		},
-		Strong: ansi.StylePrimitive{
-			Bold: new(true),
-		},
-		HorizontalRule: ansi.StylePrimitive{
-			Color:  hex(o.separator),
-			Format: "\n--------\n",
-		},
-		Item: ansi.StylePrimitive{
-			BlockPrefix: "• ",
-		},
-		Enumeration: ansi.StylePrimitive{
-			BlockPrefix: ". ",
-		},
-		Task: ansi.StyleTask{
-			StylePrimitive: ansi.StylePrimitive{},
-			Ticked:         "[✓] ",
-			Unticked:       "[ ] ",
-		},
-		Link: ansi.StylePrimitive{
-			Color:     hex(o.info),
-			Underline: new(true),
-		},
-		LinkText: ansi.StylePrimitive{
-			Color: hex(o.successMostSubtle),
-			Bold:  new(true),
-		},
-		Image: ansi.StylePrimitive{
-			Color:     hex(o.accent),
-			Underline: new(true),
-		},
-		ImageText: ansi.StylePrimitive{
-			Color:  hex(o.fgMoreSubtle),
-			Format: "Image: {{.text}} →",
-		},
-		// Inline code is colored text only: no background and no padding,
-		// like Codex. A chip background made code harder to read, and the
-		// padding would show as stray spaces without it. Copies still get
-		// the backticks back from the message source (list.HighlightSource).
-		Code: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Color: hex(o.destructive),
-			},
-		},
-		CodeBlock: ansi.StyleCodeBlock{
-			StyleBlock: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{
-					Color: hex(o.bgLessVisible),
-				},
-				Margin: new(uint(defaultMargin)),
-			},
-			Chroma: &ansi.Chroma{
-				Text: ansi.StylePrimitive{
-					Color: hex(o.fgSubtle),
-				},
-				Error: ansi.StylePrimitive{
-					Color:           hex(o.onPrimary),
-					BackgroundColor: hex(o.error),
-				},
-				Comment: ansi.StylePrimitive{
-					Color: hex(o.fgMostSubtle),
-				},
-				CommentPreproc: ansi.StylePrimitive{
-					Color: hex(o.accent),
-				},
-				Keyword: ansi.StylePrimitive{
-					Color: hex(o.info),
-				},
-				KeywordReserved: ansi.StylePrimitive{
-					Color: hex(o.keyword),
-				},
-				KeywordNamespace: ansi.StylePrimitive{
-					Color: hex(o.keyword),
-				},
-				KeywordType: ansi.StylePrimitive{
-					Color: hex(o.infoMoreSubtle),
-				},
-				Operator: ansi.StylePrimitive{
-					Color: hex(o.fgSubtle),
-				},
-				Punctuation: ansi.StylePrimitive{
-					Color: hex(o.warningSubtle),
-				},
-				Name: ansi.StylePrimitive{
-					Color: hex(o.fgSubtle),
-				},
-				NameBuiltin: ansi.StylePrimitive{
-					Color: hex(o.accent),
-				},
-				NameTag: ansi.StylePrimitive{
-					Color: hex(o.secondary),
-				},
-				NameAttribute: ansi.StylePrimitive{
-					Color: hex(o.infoMoreSubtle),
-				},
-				NameClass: ansi.StylePrimitive{
-					Color:     hex(o.primary),
-					Underline: new(true),
-					Bold:      new(true),
-				},
-				NameDecorator: ansi.StylePrimitive{
-					Color: hex(o.attention),
-				},
-				NameFunction: ansi.StylePrimitive{
-					Color: hex(o.successMostSubtle),
-				},
-				LiteralNumber: ansi.StylePrimitive{
-					Color: hex(o.success),
-				},
-				LiteralString: ansi.StylePrimitive{
-					Color: hex(o.warningSubtle),
-				},
-				LiteralStringEscape: ansi.StylePrimitive{
-					Color: hex(o.successMoreSubtle),
-				},
-				GenericDeleted: ansi.StylePrimitive{
-					Color: hex(o.destructive),
-				},
-				GenericEmph: ansi.StylePrimitive{
-					Italic: new(true),
-				},
-				GenericInserted: ansi.StylePrimitive{
-					Color: hex(o.successMostSubtle),
-				},
-				GenericStrong: ansi.StylePrimitive{
-					Bold: new(true),
-				},
-				GenericSubheading: ansi.StylePrimitive{
-					Color: hex(o.fgMoreSubtle),
-				},
-				Background: ansi.StylePrimitive{
-					BackgroundColor: hex(o.bgLessVisible),
-				},
-			},
-		},
-		Table: ansi.StyleTable{
-			StyleBlock: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{},
-			},
-		},
-		DefinitionDescription: ansi.StylePrimitive{
-			BlockPrefix: "\n ",
-		},
-	}
-
-	// PlanMarkdown keeps the rich markdown colors for the plan card. H2–H5 in
-	// s.Markdown only set Prefix and rely on glamour inheriting Color/Bold
-	// from the base Heading style; copy them explicitly so section headings
-	// stand out inside the card.
-	planMD := s.Markdown
-	headingColor := hex(o.info)
-	headingBold := new(true)
-	for _, h := range []*ansi.StyleBlock{&planMD.H1, &planMD.H2, &planMD.H3, &planMD.H4, &planMD.H5} {
-		if h.Color == nil {
-			h.Color = headingColor
-		}
-		if h.Bold == nil {
-			h.Bold = headingBold
-		}
-	}
-	// Replace raw markdown prefixes ("## ", "### ", …) with clean indentation so
-	// the plan card doesn't show literal # / ## characters. H1 and H2 get no
-	// prefix (they stand on their own with bold+color); H3–H5 use increasing
-	// indentation for hierarchy.
-	planMD.H1.Prefix = ""
-	planMD.H2.Prefix = ""
-	planMD.H3.Prefix = "  "
-	planMD.H4.Prefix = "    "
-	planMD.H5.Prefix = "      "
-	planMD.Code.Color = hex(o.destructive)
-	planMD.Code.Bold = new(true)
-	planMD.CodeBlock.Color = hex(o.fgBase)
-	s.PlanMarkdown = planMD
-
-	// QuestionMarkdown is the reply markdown with dimmed body text, for a
-	// question's description, so it reads as secondary to the question.
-	questionMD := s.Markdown
-	questionMD.Document.Color = hex(o.fgMoreSubtle)
-	s.QuestionMarkdown = questionMD
-
-	// QuietMarkdown style - muted colors on subtle background for thinking content.
-	plainBg := hex(o.bgLeastVisible)
-	plainFg := hex(o.fgMoreSubtle)
-	s.QuietMarkdown = ansi.StyleConfig{
-		Document: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-		},
-		BlockQuote: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-			Indent:      new(uint(1)),
-			IndentToken: new("│ "),
-		},
-		List: ansi.StyleList{
-			LevelIndent: defaultListIndent,
-		},
-		Heading: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				BlockSuffix:     "\n",
-				Bold:            new(true),
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-		},
-		H1: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          " ",
-				Suffix:          " ",
-				Bold:            new(true),
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-		},
-		H2: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "## ",
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-		},
-		H3: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "### ",
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-		},
-		H4: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "#### ",
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-		},
-		H5: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "##### ",
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-		},
-		H6: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "###### ",
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-		},
-		Strikethrough: ansi.StylePrimitive{
-			CrossedOut:      new(true),
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		Emph: ansi.StylePrimitive{
-			Italic:          new(true),
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		Strong: ansi.StylePrimitive{
-			Bold:            new(true),
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		HorizontalRule: ansi.StylePrimitive{
-			Format:          "\n--------\n",
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		Item: ansi.StylePrimitive{
-			BlockPrefix:     "• ",
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		Enumeration: ansi.StylePrimitive{
-			BlockPrefix:     ". ",
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		Task: ansi.StyleTask{
-			StylePrimitive: ansi.StylePrimitive{
-				Color:           plainFg,
-				BackgroundColor: plainBg,
-			},
-			Ticked:   "[✓] ",
-			Unticked: "[ ] ",
-		},
-		Link: ansi.StylePrimitive{
-			Underline:       new(true),
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		LinkText: ansi.StylePrimitive{
-			Bold:            new(true),
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		Image: ansi.StylePrimitive{
-			Underline:       new(true),
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		ImageText: ansi.StylePrimitive{
-			Format:          "Image: {{.text}} →",
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-		// Inline code is the one primitive that must NOT take plainFg: with
-		// the same color as the surrounding text it would be invisible as
-		// code. A slightly brighter foreground marks it without a chip
-		// background, which made it harder to read.
-		Code: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{
-				Color: hex(o.fgSubtle),
-			},
-		},
-		CodeBlock: ansi.StyleCodeBlock{
-			StyleBlock: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{
-					Color:           plainFg,
-					BackgroundColor: plainBg,
-				},
-				Margin: new(uint(defaultMargin)),
-			},
-		},
-		Table: ansi.StyleTable{
-			StyleBlock: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{
-					Color:           plainFg,
-					BackgroundColor: plainBg,
-				},
-			},
-		},
-		DefinitionDescription: ansi.StylePrimitive{
-			BlockPrefix:     "\n ",
-			Color:           plainFg,
-			BackgroundColor: plainBg,
-		},
-	}
-
+// quickStyleWidgets sets the help, diff view and file picker styles.
+func quickStyleWidgets(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	s.Help = help.Styles{
 		ShortKey:       base.Foreground(o.fgMoreSubtle),
 		ShortDesc:      base.Foreground(o.fgMostSubtle),
@@ -715,7 +327,11 @@ func quickStyle(o quickStyleOpts) Styles {
 		FileSize:         base.Foreground(o.fgMoreSubtle),
 		EmptyDirectory:   base.Foreground(o.fgMoreSubtle).PaddingLeft(2).SetString("Empty directory"),
 	}
+}
 
+// quickStyleHeader sets the tool success mark, the header and the compact
+// details.
+func quickStyleHeader(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.Style) {
 	// borders
 	s.ToolCallSuccess = lipgloss.NewStyle().Foreground(o.success).SetString(ToolSuccess)
 
@@ -736,7 +352,10 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.CompactDetails.Title = base
 	s.CompactDetails.View = base.Padding(0, 1, 1, 1).Border(lipgloss.RoundedBorder()).BorderForeground(o.primary)
 	s.CompactDetails.Version = lipgloss.NewStyle().Foreground(o.separator)
+}
 
+// quickStyleTools sets the tool call styles.
+func quickStyleTools(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.Style) {
 	// Tool rendering styles
 	s.Tool.IconPending = base.Foreground(o.successMostSubtle).SetString(ToolPending)
 	s.Tool.IconSuccess = base.Foreground(o.success).SetString(ToolSuccess)
@@ -834,7 +453,11 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.ResultTruncation = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Tool.ResultItemName = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Tool.ResultItemDesc = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+}
 
+// quickStyleEditor sets the buttons, the composer prompts and the question
+// form tabs.
+func quickStyleEditor(s *Styles, o quickStyleOpts) {
 	// Buttons
 	s.Button.Focused = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.button)
 	s.Button.Blurred = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.buttonSubtle)
@@ -918,7 +541,11 @@ func quickStyle(o quickStyleOpts) Styles {
 
 	s.Tab.ActiveStyle = uv.Style{Fg: o.fgBase}
 	s.Tab.InactiveStyle = uv.Style{Fg: o.fgMoreSubtle}
+}
 
+// quickStyleSidebar sets the logo, section, initialize, sidebar, footer and
+// model info styles.
+func quickStyleSidebar(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.Style) {
 	// Logo
 	s.Logo.FieldColor = o.primary
 	s.Logo.TitleColorA = o.secondary
@@ -1006,7 +633,11 @@ func quickStyle(o quickStyleOpts) Styles {
 	// ResourceGroup
 	s.Resource.DefaultTitleFg = o.fgMoreSubtle
 	s.Resource.DefaultDescFg = o.fgMostSubtle
+}
 
+// quickStyleChat sets the chat message, ANSI palette, shell, plan, thinking
+// and selection styles.
+func quickStyleChat(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.Style) {
 	// Chat
 	messageFocussedBorder := lipgloss.Border{
 		Left: "▌",
@@ -1083,168 +714,4 @@ func quickStyle(o quickStyleOpts) Styles {
 
 	// Text selection.
 	s.TextSelection = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.primary)
-
-	// Dialog styles
-	s.Dialog.Title = base.Padding(0, 1).Foreground(o.primary)
-	s.Dialog.TitleText = base.Foreground(o.primary)
-	s.Dialog.TitleError = base.Foreground(o.destructive)
-	s.Dialog.TitleAccent = base.Foreground(o.success).Bold(true)
-	s.Dialog.TitleLineBase = lipgloss.NewStyle()
-	s.Dialog.TitleGradFromColor = o.primary
-	s.Dialog.TitleGradToColor = o.secondary
-
-	// Dialog.ListItem (commands, reasoning, models). The info column holds
-	// secondary hints like keybind shortcuts, so mute it when blurred and
-	// keep it readable on the focused row.
-	s.Dialog.ListItem.InfoBlurred = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
-	s.Dialog.ListItem.InfoFocused = lipgloss.NewStyle().Foreground(o.fgBase)
-
-	// Dialog.Models
-	s.Dialog.Models.ConfiguredText = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
-
-	// Dialog.Permissions
-	s.Dialog.Permissions.KeyText = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
-	s.Dialog.Permissions.ValueText = lipgloss.NewStyle().Foreground(o.fgBase)
-	s.Dialog.Permissions.ParamsBg = o.bgLessVisible
-
-	// Dialog.Quit
-	s.Dialog.Quit.Content = lipgloss.NewStyle().Foreground(o.fgBase)
-	s.Dialog.Quit.Hint = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
-	s.Dialog.Quit.Frame = lipgloss.NewStyle().BorderForeground(o.primary).Border(lipgloss.RoundedBorder()).Padding(1, 2)
-	s.Dialog.View = base.Border(lipgloss.RoundedBorder()).BorderForeground(o.primary)
-	s.Dialog.PrimaryText = base.Padding(0, 1).Foreground(o.primary)
-	s.Dialog.SecondaryText = base.Padding(0, 1).Foreground(o.fgMostSubtle)
-	s.Dialog.HelpView = base.Padding(0, 1).AlignHorizontal(lipgloss.Left)
-	s.Dialog.Help.ShortKey = base.Foreground(o.fgMoreSubtle)
-	s.Dialog.Help.ShortDesc = base.Foreground(o.fgMostSubtle)
-	s.Dialog.Help.ShortSeparator = base.Foreground(o.separator)
-	s.Dialog.Help.Ellipsis = base.Foreground(o.separator)
-	s.Dialog.Help.FullKey = base.Foreground(o.fgMoreSubtle)
-	s.Dialog.Help.FullDesc = base.Foreground(o.fgMostSubtle)
-	s.Dialog.Help.FullSeparator = base.Foreground(o.separator)
-	s.Dialog.NormalItem = base.Padding(0, 1).Foreground(o.fgBase)
-	s.Dialog.SelectedItem = base.Padding(0, 1).Background(o.primary).Foreground(o.onPrimary)
-	s.Dialog.InputPrompt = base.Margin(1, 1)
-
-	s.Dialog.List = base.Margin(0, 0, 1, 0)
-	s.Dialog.ContentPanel = base.Background(o.bgLessVisible).Foreground(o.fgBase).Padding(1, 2)
-	s.Dialog.ContentPanelBg = o.bgLessVisible
-	s.Dialog.Spinner = base.Foreground(o.secondary)
-	s.Dialog.ScrollbarThumb = base.Foreground(o.secondary)
-	s.Dialog.ScrollbarTrack = base.Foreground(o.separator)
-
-	s.Dialog.ImagePreview = lipgloss.NewStyle().Padding(0, 1).Foreground(o.fgMostSubtle)
-
-	// API key input dialog
-	s.Dialog.APIKey.Spinner = base.Foreground(o.success)
-
-	// Auth method choice dialog: the selected card lights up in the success
-	// color while the other stays quiet.
-	s.Dialog.AuthMethod.Prompt = base.Padding(0, 1)
-	s.Dialog.AuthMethod.CardBlurred = base.Border(lipgloss.RoundedBorder()).BorderForeground(o.separator).Foreground(o.fgMostSubtle)
-	s.Dialog.AuthMethod.CardFocused = base.Border(lipgloss.RoundedBorder()).BorderForeground(o.success).Foreground(o.success)
-
-	// OAuth dialog
-	s.Dialog.OAuth.Spinner = base.Foreground(o.successMoreSubtle)
-	s.Dialog.OAuth.Instructions = lipgloss.NewStyle().Foreground(o.fgBase)
-	s.Dialog.OAuth.UserCode = lipgloss.NewStyle().Bold(true).Foreground(o.fgBase)
-	s.Dialog.OAuth.Success = lipgloss.NewStyle().Foreground(o.successMoreSubtle)
-	s.Dialog.OAuth.Link = lipgloss.NewStyle().Foreground(o.successMostSubtle).Underline(true)
-	s.Dialog.OAuth.Enter = lipgloss.NewStyle().Foreground(o.keyword)
-	s.Dialog.OAuth.ErrorText = lipgloss.NewStyle().Foreground(o.error)
-	s.Dialog.OAuth.StatusText = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
-	s.Dialog.OAuth.UserCodeBg = o.bgLeastVisible
-
-	s.Dialog.Arguments.Content = base.Padding(1)
-	s.Dialog.Arguments.Description = base.MarginBottom(1).MaxHeight(3)
-	s.Dialog.Arguments.InputLabelBlurred = base.Foreground(o.fgMoreSubtle)
-	s.Dialog.Arguments.InputLabelFocused = base.Bold(true)
-	s.Dialog.Arguments.InputRequiredMarkBlurred = base.Foreground(o.fgMoreSubtle).SetString("*")
-	s.Dialog.Arguments.InputRequiredMarkFocused = base.Foreground(o.primary).Bold(true).SetString("*")
-
-	s.Dialog.Sessions.DeletingTitle = s.Dialog.Title.Foreground(o.destructive)
-	s.Dialog.Sessions.DeletingView = s.Dialog.View.BorderForeground(o.destructive)
-	s.Dialog.Sessions.DeletingMessage = base.Padding(1)
-	s.Dialog.Sessions.DeletingTitleGradientFromColor = o.destructive
-	s.Dialog.Sessions.DeletingTitleGradientToColor = o.primary
-	s.Dialog.Sessions.DeletingItemBlurred = s.Dialog.NormalItem.Foreground(o.fgMostSubtle)
-	s.Dialog.Sessions.DeletingItemFocused = s.Dialog.SelectedItem.Background(o.destructive).Foreground(o.onPrimary)
-
-	s.Dialog.Sessions.RenamingingTitle = s.Dialog.Title.Foreground(o.warningSubtle)
-	s.Dialog.Sessions.RenamingView = s.Dialog.View.BorderForeground(o.warningSubtle)
-	s.Dialog.Sessions.RenamingingMessage = base.Padding(1)
-	s.Dialog.Sessions.RenamingTitleGradientFromColor = o.warningSubtle
-	s.Dialog.Sessions.RenamingTitleGradientToColor = o.accent
-	s.Dialog.Sessions.RenamingItemBlurred = s.Dialog.NormalItem.Foreground(o.fgMostSubtle)
-	s.Dialog.Sessions.RenamingingItemFocused = s.Dialog.SelectedItem.UnsetBackground().UnsetForeground()
-	s.Dialog.Sessions.RenamingPlaceholder = base.Foreground(o.fgMoreSubtle)
-	s.Dialog.Sessions.InfoBlurred = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
-	s.Dialog.Sessions.InfoFocused = lipgloss.NewStyle().Foreground(o.fgBase)
-
-	s.Status.Help = lipgloss.NewStyle().Padding(0, 1)
-	s.Status.ModeBadgePlan = lipgloss.NewStyle().Foreground(o.plan).Padding(0, 1).Bold(true).SetString("PLAN MODE")
-	s.Status.ModeBadgeYolo = lipgloss.NewStyle().Foreground(o.busy).Padding(0, 1).Bold(true).SetString("YOLO MODE")
-	s.Status.ModeBadgeRemote = lipgloss.NewStyle().Foreground(o.info).Padding(0, 1).Bold(true).SetString("REMOTE")
-	s.Status.ModeBannerPlanBadge = s.Status.ModeBadgePlan
-	s.Status.ModeBannerPlan = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.planMoreSubtle).Padding(0, 1)
-	s.Status.ModeBannerYoloBadge = s.Status.ModeBadgeYolo
-	s.Status.ModeBannerYolo = lipgloss.NewStyle().Foreground(o.bgBase).Background(o.yolo).Padding(0, 1)
-	s.Status.SuccessIndicator = base.Foreground(o.success).Background(o.bgLeastVisible).Padding(0, 1).Bold(true).SetString("OKAY!")
-	s.Status.InfoIndicator = s.Status.SuccessIndicator.Foreground(o.info)
-	s.Status.UpdateIndicator = s.Status.SuccessIndicator.Foreground(o.accent).SetString("HEY!")
-	s.Status.WarnIndicator = s.Status.SuccessIndicator.Foreground(o.warning).SetString("WARNING")
-	s.Status.ErrorIndicator = s.Status.SuccessIndicator.Foreground(o.error).SetString("ERROR")
-	s.Status.SuccessMessage = base.Foreground(o.fgSubtle).Background(o.bgLeastVisible).Padding(0, 1)
-	s.Status.InfoMessage = s.Status.SuccessMessage
-	s.Status.UpdateMessage = s.Status.SuccessMessage
-	s.Status.WarnMessage = s.Status.SuccessMessage
-	s.Status.ErrorMessage = s.Status.SuccessMessage
-
-	// Completions styles
-	s.Completions.Normal = base.Background(o.bgLessVisible).Foreground(o.fgBase)
-	s.Completions.Focused = base.Background(o.primary).Foreground(o.onPrimary)
-	s.Completions.Match = base.Underline(true)
-
-	// Attachments styles
-	attachmentIconStyle := base.Foreground(o.bgLessVisible).Background(o.success).Padding(0, 1)
-	s.Attachments.Image = attachmentIconStyle.SetString(ImageIcon)
-	s.Attachments.Text = attachmentIconStyle.SetString(TextIcon)
-	s.Attachments.Skill = attachmentIconStyle.SetString(SkillIcon)
-	s.Attachments.Normal = base.Padding(0, 1).Background(o.fgMoreSubtle).Foreground(o.fgBase)
-	s.Attachments.KeptIcon = base.Foreground(o.bgBase).Background(o.plan).Padding(0, 1).SetString("on")
-	s.Attachments.KeptName = base.Padding(0, 1).Background(o.planMoreSubtle).Foreground(o.fgBase)
-	s.Attachments.KeptDot = base.Foreground(o.plan).SetString("●")
-	s.Attachments.KeptText = base.Foreground(o.plan)
-	// Remove and Deleting share the same slot on the right side of a chip
-	// and must keep the same geometry so toggling delete-mode doesn't
-	// shift the chips. Padding(0, 1) puts a colored cell on each side of the
-	// glyph so it isn't flush against the box edge, while MarginRight(1)
-	// keeps a transparent gap between adjacent chips.
-	s.Attachments.Remove = base.Padding(0, 1).MarginRight(1).Background(o.bgLessVisible).Foreground(o.fgSubtle).SetString(RemoveIcon)
-	s.Attachments.Deleting = base.Padding(0, 1).MarginRight(1).Bold(true).Background(o.destructive).Foreground(o.fgBase)
-	s.Attachments.More = base.Foreground(o.fgSubtle)
-
-	// Pills styles
-	s.Pills.Base = base.Padding(0, 1)
-	s.Pills.Focused = base.Padding(0, 1).BorderStyle(lipgloss.RoundedBorder()).BorderForeground(o.bgMostVisible)
-	s.Pills.QueueItemPrefix = lipgloss.NewStyle().Foreground(o.fgMoreSubtle).SetString("  •")
-	s.Pills.QueueItemText = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
-	s.Pills.QueueLabel = lipgloss.NewStyle().Foreground(o.fgBase)
-	s.Pills.QueueIconBase = lipgloss.NewStyle().Foreground(o.fgBase)
-	s.Pills.QueueGradFromColor = o.error
-	s.Pills.QueueGradToColor = o.secondary
-	s.Pills.TodoLabel = lipgloss.NewStyle().Foreground(o.fgBase)
-	s.Pills.TodoProgress = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
-	s.Pills.TodoCurrentTask = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
-	s.Pills.TodoSpinner = lipgloss.NewStyle().Foreground(o.successMostSubtle)
-	s.Pills.HelpKey = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
-	s.Pills.HelpText = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
-	s.Pills.Area = base
-
-	return s
 }
-
-// withMarkdownBackground returns a copy of cfg with bg applied to every style
-// primitive that does not already set its own background, so glamour paints an
-// uninterrupted background under all rendered text. Primitives that carry an
-// intentional background of their own (e.g. H1, inline code) keep it.

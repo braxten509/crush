@@ -320,18 +320,19 @@ func (m *UI) mcpToggleItems() ([]mcpservers.MCPToggleItem, error) {
 func (m *UI) applyMCPToggle(msg mcpservers.ActionToggleMCP) tea.Cmd {
 	name := msg.Name
 	disable := msg.Disabled
+	ws := m.com.Workspace
 	status := "enabled"
 	if disable {
 		status = "disabled"
 	}
 	return func() tea.Msg {
 		if msg.Global {
-			if err := m.com.Workspace.MCPSetServerConfigDisabled(context.TODO(), name, disable); err != nil {
+			if err := ws.MCPSetServerConfigDisabled(context.TODO(), name, disable); err != nil {
 				return util.NewErrorMsg(err)
 			}
 			return util.NewInfoMsg(fmt.Sprintf("MCP %q %s globally", name, status))
 		}
-		if err := m.com.Workspace.MCPSetServerDisabled(context.TODO(), name, disable); err != nil {
+		if err := ws.MCPSetServerDisabled(context.TODO(), name, disable); err != nil {
 			return util.NewErrorMsg(err)
 		}
 		return util.NewInfoMsg(fmt.Sprintf("MCP %q %s for this repository", name, status))

@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/dialog/sessions"
+	"github.com/charmbracelet/crush/internal/ui/dialog/skillbrowser"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/event"
@@ -72,7 +73,7 @@ func (m *UI) openDialog(id string) tea.Cmd {
 			cmds = append(cmds, util.ReportInfo("Skill management is unavailable in this workspace."))
 			break
 		}
-		picker := dialog.NewSkills(m.com, manager)
+		picker := skillbrowser.NewSkills(m.com, manager)
 		m.dialog.OpenDialog(picker)
 		cmds = append(cmds, picker.Load())
 	case dialog.BackgroundID:

@@ -65,7 +65,7 @@ type lsDescriptionData struct {
 }
 
 func lsDescription() string {
-	return renderTemplate(lsDescriptionTpl, lsDescriptionData{
+	return RenderTemplate(lsDescriptionTpl, lsDescriptionData{
 		MaxFiles: maxLSFiles,
 	})
 }

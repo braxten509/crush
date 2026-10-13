@@ -18,13 +18,13 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/sessionhost"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/attachments"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/notification"
+	"github.com/charmbracelet/crush/internal/ui/sessionhost"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
@@ -115,6 +115,13 @@ type (
 	// finishes. It carries the original model-selection action so the
 	// selection can be resumed.
 	hyperRefreshDoneMsg struct {
+		action dialog.ActionSelectModel
+	}
+
+	// copilotImportDoneMsg is sent after the GitHub Copilot token import
+	// finishes. It carries the original model-selection action so the
+	// selection can be resumed.
+	copilotImportDoneMsg struct {
 		action dialog.ActionSelectModel
 	}
 
@@ -569,8 +576,9 @@ func (m *UI) Init() tea.Cmd {
 	// whose catalog is missing (the fetch at login failed, or the
 	// credentials predate it) refills lazily, so the models dialog shows
 	// the subscription section as soon as it is opened.
+	ws := m.com.Workspace
 	cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
-		_ = m.com.Workspace.UpdateAgentModel(context.TODO())
+		_ = ws.UpdateAgentModel(context.TODO())
 		return nil
 	}))
 	// Prime the memoized busy/permission state off-thread.

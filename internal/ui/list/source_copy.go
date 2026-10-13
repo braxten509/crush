@@ -47,67 +47,9 @@ func HighlightSource(blocks []string, rendered string, area image.Rectangle, sta
 			strings.TrimSpace(ansi.Strip(rendered)) == ""
 		return source, whole
 	}
-	// Keep leading/trailing rows: trimming them shifts selection coordinates.
-	rendered = strings.ReplaceAll(strings.ReplaceAll(rendered, "\r\n", "\n"), "\t", "    ")
-	buf := renderBuffer(rendered, area, area.Dx(), area.Dy())
-	var visible strings.Builder
-	var cells []copyCell
-	for y := 0; y < buf.Height(); y++ {
-		line := buf.Line(y)
-		for x := 0; x < len(line); x++ {
-			cell := line.At(x)
-			if cell == nil || cell.Content == "" {
-				continue
-			}
-			text := cell.Content
-			start := visible.Len()
-			for _, r := range text {
-				if !unicode.IsSpace(r) {
-					visible.WriteRune(r)
-				}
-			}
-			if visible.Len() > start {
-				cells = append(cells, copyCell{x, y, max(1, cell.Width), start, visible.Len()})
-			}
-		}
-	}
-
-	var offsets []sourceByte
-	for pos, r := range source {
-		if unicode.IsSpace(r) {
-			continue
-		}
-		size := utf8.RuneLen(r)
-		for range size {
-			offsets = append(offsets, sourceByte{pos, pos + size})
-		}
-	}
-	// Match literal blocks separately: a long reply with hundreds of fences or
-	// headings must not exhaust a whole-message diff budget and corrupt code.
-	mapping := make([]int, visible.Len())
-	for i := range mapping {
-		mapping[i] = -1
-	}
-	visibleAt, sourceAt := 0, 0
-	for _, block := range blocks {
-		compact := strings.Map(func(r rune) rune {
-			if unicode.IsSpace(r) {
-				return -1
-			}
-			return r
-		}, block)
-		if compact == "" {
-			continue
-		}
-		if at := strings.Index(visible.String()[visibleAt:], compact); at >= 0 {
-			visibleAt += at
-			for i := range len(compact) {
-				mapping[visibleAt+i] = sourceAt + i
-			}
-			visibleAt += len(compact)
-		}
-		sourceAt += len(compact)
-	}
+	visible, cells := visibleCells(rendered, area)
+	offsets := sourceOffsets(source)
+	mapping := mapBlocks(blocks, visible)
 
 	first, last := -1, -1
 	for _, cell := range cells {
@@ -142,6 +84,84 @@ func HighlightSource(blocks []string, rendered string, area image.Rectangle, sta
 		return "", true
 	}
 	return source[first:last], true
+}
+
+// visibleCells renders rendered into area and returns its glyphs without
+// whitespace, with the screen cell each glyph came from.
+func visibleCells(rendered string, area image.Rectangle) (string, []copyCell) {
+	// Keep leading/trailing rows: trimming them shifts selection coordinates.
+	rendered = strings.ReplaceAll(strings.ReplaceAll(rendered, "\r\n", "\n"), "\t", "    ")
+	buf := renderBuffer(rendered, area, area.Dx(), area.Dy())
+	var visible strings.Builder
+	var cells []copyCell
+	for y := 0; y < buf.Height(); y++ {
+		line := buf.Line(y)
+		for x := 0; x < len(line); x++ {
+			cell := line.At(x)
+			if cell == nil || cell.Content == "" {
+				continue
+			}
+			text := cell.Content
+			start := visible.Len()
+			for _, r := range text {
+				if !unicode.IsSpace(r) {
+					visible.WriteRune(r)
+				}
+			}
+			if visible.Len() > start {
+				cells = append(cells, copyCell{x, y, max(1, cell.Width), start, visible.Len()})
+			}
+		}
+	}
+	return visible.String(), cells
+}
+
+// sourceOffsets returns, for each byte of source without whitespace, the
+// byte range of the rune it belongs to in source.
+func sourceOffsets(source string) []sourceByte {
+	var offsets []sourceByte
+	for pos, r := range source {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		size := utf8.RuneLen(r)
+		for range size {
+			offsets = append(offsets, sourceByte{pos, pos + size})
+		}
+	}
+	return offsets
+}
+
+// mapBlocks maps each byte of visible to the byte of the whitespace-free
+// source it shows, or -1. Literal blocks are matched separately: a long
+// reply with hundreds of fences or headings must not exhaust a
+// whole-message diff budget and corrupt code.
+func mapBlocks(blocks []string, visible string) []int {
+	mapping := make([]int, len(visible))
+	for i := range mapping {
+		mapping[i] = -1
+	}
+	visibleAt, sourceAt := 0, 0
+	for _, block := range blocks {
+		compact := strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) {
+				return -1
+			}
+			return r
+		}, block)
+		if compact == "" {
+			continue
+		}
+		if at := strings.Index(visible[visibleAt:], compact); at >= 0 {
+			visibleAt += at
+			for i := range len(compact) {
+				mapping[visibleAt+i] = sourceAt + i
+			}
+			visibleAt += len(compact)
+		}
+		sourceAt += len(compact)
+	}
+	return mapping
 }
 
 func selectedCell(cell copyCell, startLine, startCol, endLine, endCol int) bool {

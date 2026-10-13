@@ -1,0 +1,110 @@
+# Mechanical commits (pure moves and formatting) to skip in git blame.
+# Use: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# chore: apply gofumpt formatting
+c7c22e9abfce6205b649cd20e4499be804894f1b
+
+# refactor: split serverctl into spawn, health and stale-server files
+16a7769b17d032247192b98edaa23bc45f2740ce
+
+# refactor: move workspace and server connection setup out of root.go
+d74e16ec7f17b3012ab231f5c6d1d635777b1635
+
+# refactor(config): split load.go, store.go and config.go into files by responsibility
+2e36045454923436353f769fa699e88929067c3e
+
+# refactor(ui): split chat tools.go into header, output, hooks and copy files
+8425f077930ecee847dd68cdd0abcbd3c35fd20a
+
+# refactor: move session show and last output into session_show.go
+a7a07a8754f4800aa007ffaa21c9f7e14a977fb9
+
+# refactor: split app.go into events and default small model files
+999d07e8573d984a53e49498ed36b1147c3ed7b3
+
+# refactor(agent): split coordinator.go into run, models, toolset, auth, sub-agent and skills files
+ed74a67f17f7e8e58d996f3cdc76fef029af0805
+
+# refactor(ui): split assistant and streaming markdown files by concern
+8dbc51bbbaeecc694dd28d52384700251ed518ad
+
+# test(config): split load_test.go to follow the source file split
+df76aa798b34bcbade838f6a8069e0edd97c9811
+
+# refactor(mcp): split init.go into state, auth, client, session and transport files
+cc3fca2b7e2fcb50bb5161aebb79c3a1aee16974
+
+# refactor(ui): move question form tab bar into tabs.go
+106fa08284d8f2a80450fc61421ba99246935c25
+
+# refactor(ui): move choice list scrolling into choice_scroll.go
+c7ea466923053e5d4803f73f7b89645e7158a4bc
+
+# refactor(ui): move the key help to help.go
+fec5df5a64fe2d176896be7aac9d9c67f497bb36
+
+# refactor(ui): move permission content renderers into content.go
+d701739e196829b0e5338748e892a4ce88c2715c
+
+# refactor(ui): move theme list items into items.go
+5e99cba770c6b905018efe60bde159e5ed740a41
+
+# refactor(ui): split ui.go into files per concern (pure move)
+ce6b2ff0da6b5e0705a373f53ae6d64811d017a3
+
+# refactor(ui): split chat.go into drawing, animation, scrolling and mouse files (pure move)
+5932fd0a207a9064449981ceef550198a16d2fdd
+
+# refactor: split backend.go into workspace, create, clients and shutdown files
+407ddc26ff57c70369fbd9edc5d70c88a0ca0fae
+
+# refactor: move the client workspace event loop into client_events.go
+96bd20abd7af8ffd4a0e654216460272c2bacb00
+
+# refactor(agent): move titles, summaries, usage, tool filters and prompt building out of agent.go
+887e3ca2cd01ef15868bc6de7ddf87b9fb87d9d5
+
+# refactor(agent): move task asks, spawning and the request inbox out of tasks.go
+abea631c4a2355c85c9bec32476d5b0f4e8aca0c
+
+# refactor(agent): move turn stream callbacks and finishing into their own files
+87597aba33149bd120d2e169236ea8513b601fac
+
+# refactor(agent): move CLI step tracking and handoff prompts out of cli_turn.go
+67b700051ba665fbdf471a0bd9f39d2d9e0664da
+
+# refactor(cliagent): split codex, claude and cliagent files into handlers, messages, steering and processes
+4f4e91065ad8dcadc46b608ca4943054c50c740f
+
+# refactor(ui): split update.go into terminal and UI, workspace event, agent and session handler files (pure move)
+ddcf567a3c89582b0e125f20b0766c55e3645f49
+
+# refactor(ui): move question form drawing into form_draw.go (pure move)
+a000578d1f44cfb60d0fb910150829e8aeaca494
+
+# refactor: split remote hub state views and item helpers into files
+6100e45e39f1fd275889f54a105c3c346248a999
+
+# refactor: split ui/list cache, scrolling and selection into files
+b6518beb918060410d66ae8ece092205455f5cac
+
+# refactor: split diffview rendering and syntax highlighting into files
+1df33feff066be75928f54e8496d5c3672559875
+
+# refactor: split message update coalescing and part encoding into files
+d0ecb2ebffabdde732cc62dbeb6c323492918374
+
+# refactor: split oauth/mcp callback receiver and metadata client into files
+e5535aa40f2cbcd5cee89552f931d7fa1cb00280
+
+# refactor: move sessionhost key and mouse handling into input.go
+240f2a86d281f0757f0ec3935bc076a445eec287
+
+# refactor: split lsp client file sync, diagnostics and queries into files
+07bc3c31ef4db1235af53d2f0634de7397cf73c2
+
+# refactor: move tool group header and change labels into toolgroup_header.go
+86ee1c6b146896710271a8c2c33e7e8998722f77
+
+# refactor: move markdown and dialog style builders into their own files
+b8d4d1d23784f5ddc2257686ed87fd0142e5774f

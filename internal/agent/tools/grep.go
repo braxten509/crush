@@ -104,7 +104,7 @@ type grepDescriptionData struct {
 }
 
 func grepDescription() string {
-	return renderTemplate(grepDescriptionTpl, grepDescriptionData{
+	return RenderTemplate(grepDescriptionTpl, grepDescriptionData{
 		MaxResults: 100,
 	})
 }

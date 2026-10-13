@@ -45,4 +45,7 @@ const (
 
 	// PermissionsID is the identifier for the permissions dialog.
 	PermissionsID = "permissions"
+
+	// SkillsID is the identifier for the skills dialog.
+	SkillsID = "skills"
 )

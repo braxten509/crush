@@ -40,6 +40,7 @@ func (m *UI) updateHyperCredits() {
 // OAuth token is refreshed first so a long-running session keeps
 // reporting a balance.
 func (m *UI) fetchHyperCredits() tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
 		var (
 			apiKey      string
@@ -47,14 +48,14 @@ func (m *UI) fetchHyperCredits() tea.Cmd {
 			providerCfg config.ProviderConfig
 		)
 		getAPIKey := func() (ok bool) {
-			if cfg = m.com.Config(); cfg == nil || cfg.Providers == nil {
+			if cfg = ws.Config(); cfg == nil || cfg.Providers == nil {
 				return false
 			}
 			if providerCfg, ok = cfg.Providers.Get(hyper.Name); !ok {
 				return false
 			}
 			var err error
-			apiKey, err = m.com.Workspace.Resolver().ResolveValue(providerCfg.APIKey)
+			apiKey, err = ws.Resolver().ResolveValue(providerCfg.APIKey)
 			return err == nil && apiKey != ""
 		}
 		if !getAPIKey() {
@@ -64,7 +65,7 @@ func (m *UI) fetchHyperCredits() tea.Cmd {
 		if providerCfg.OAuthToken != nil && providerCfg.OAuthToken.IsExpired() {
 			ctxRefresh, cancelRefresh := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancelRefresh()
-			if err := m.com.Workspace.RefreshOAuthToken(ctxRefresh, config.ScopeGlobal, hyper.Name); err != nil {
+			if err := ws.RefreshOAuthToken(ctxRefresh, config.ScopeGlobal, hyper.Name); err != nil {
 				slog.Warn("Hyper OAuth refresh failed before fetching credits, trying with existing token", "error", err)
 			} else if !getAPIKey() {
 				return nil
@@ -92,10 +93,11 @@ func (m *UI) hyperCreditsTicker() tea.Cmd {
 // fetchGitBranch reads the workspace's checked-out branch off the render
 // path. A failed read keeps whatever the last poll reported.
 func (m *UI) fetchGitBranch() tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), gitBranchFetchTimeout)
 		defer cancel()
-		branch, err := m.com.Workspace.GitBranch(ctx)
+		branch, err := ws.GitBranch(ctx)
 		if err != nil {
 			slog.Warn("Failed to read the git branch", "error", err)
 			return nil

@@ -6,15 +6,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent"
-	"github.com/charmbracelet/crush/internal/sessionhost"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+	"github.com/charmbracelet/crush/internal/ui/sessionhost"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
 // hostStatus tells the session list what this session is doing, when it
-// runs inside one (see internal/sessionhost). It sends only changes.
+// runs inside one (see internal/ui/sessionhost). It sends only changes.
 func (m *UI) hostStatus() tea.Cmd {
 	if !m.inSessionHost {
 		return nil

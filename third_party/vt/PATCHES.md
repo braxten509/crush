@@ -3,7 +3,7 @@
 Source: github.com/charmbracelet/x/vt, the version go.mod pins (see
 `replace` there). Go can only patch a dependency through a full copy, so
 this folder holds upstream's sources with the changes below, made for
-Crush's terminal sessions (internal/sessionhost). Run
+Crush's terminal sessions (internal/ui/sessionhost). Run
 `scripts/third-party-diff.sh vt` to see them exactly; that list must match
 this file.
 

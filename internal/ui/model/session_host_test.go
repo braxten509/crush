@@ -5,8 +5,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/sessionhost"
 	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
+	"github.com/charmbracelet/crush/internal/ui/sessionhost"
 	"github.com/stretchr/testify/require"
 )
 

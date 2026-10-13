@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,74 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
+
+func TestToolGroupExpandedSingleActivity(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	tc := message.ToolCall{ID: "command", Name: "bash", Input: `{"command":"ls"}`, Finished: true}
+	tool := NewToolMessageItem(&sty, "tool", tc, &message.ToolResult{ToolCallID: tc.ID, Content: "ok"}, false, "")
+	msg := &message.Message{ID: "thinking", Role: message.Assistant}
+	msg.AppendReasoningContent("Deciding the next step.")
+	thinking := NewAssistantMessageItem(&sty, msg)
+	require.True(t, Foldable(thinking))
+	g := NewToolGroupItem(&sty)
+	g.SetChildren([]MessageItem{tool, thinking})
+	g.SetLive(true)
+	g.SetBusy(true)
+	require.True(t, g.ToggleExpanded())
+	for _, width := range []int{40, 80, 120} {
+		rendered := ansi.Strip(g.RawRender(width))
+		require.Equal(t, 1, strings.Count(rendered, "Thinking"), rendered)
+		require.NotContains(t, rendered, "Deciding the next step.")
+		require.Contains(t, rendered, "Bash")
+		require.Len(t, g.shown, 1)
+	}
+	g.SetLive(false)
+	require.NotContains(t, ansi.Strip(g.RawRender(120)), "Thinking")
+}
+
+func TestToolGroupExpandedDetailsRemainClosed(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	input, err := json.Marshal(map[string]string{"command": "echo first\necho " + strings.Repeat("long-command-", 15) + "LAST_COMMAND_PART"})
+	require.NoError(t, err)
+	firstCall := message.ToolCall{ID: "first", Name: "bash", Input: string(input), Finished: true}
+	first := NewToolMessageItem(&sty, "first-message", firstCall, &message.ToolResult{ToolCallID: firstCall.ID, Content: "FIRST_OUTPUT"}, false, "")
+	secondCall := message.ToolCall{ID: "second", Name: "view", Input: `{"file_path":"/workspace/file.txt"}`, Finished: true}
+	second := NewToolMessageItem(&sty, "second-message", secondCall, &message.ToolResult{ToolCallID: secondCall.ID, Content: "SECOND_OUTPUT"}, false, "")
+	g := NewToolGroupItem(&sty)
+	g.SetChildren([]MessageItem{first, second})
+	require.True(t, g.ToggleExpanded())
+	for _, width := range []int{40, 80, 120} {
+		rendered := ansi.Strip(g.RawRender(width))
+		require.NotContains(t, rendered, "FIRST_OUTPUT")
+		require.NotContains(t, rendered, "SECOND_OUTPUT")
+		require.NotContains(t, rendered, "LAST_COMMAND_PART")
+		for _, child := range g.shown {
+			require.NotContains(t, ansi.Strip(child.RawRender(width)), "\n", "closed tools stay on one row")
+		}
+	}
+
+	g.RawRender(80)
+	require.False(t, g.HandleMouseClick(ansi.MouseLeft, MessageLeftPaddingTotal+1, g.childLines[0]))
+	rendered := ansi.Strip(g.RawRender(80))
+	require.Contains(t, rendered, "FIRST_OUTPUT")
+	require.Contains(t, rendered, "LAST_COMMAND_PART")
+	require.NotContains(t, rendered, "SECOND_OUTPUT")
+
+	thirdCall := message.ToolCall{ID: "third", Name: "bash", Input: `{"command":"ls"}`, Finished: true}
+	third := NewToolMessageItem(&sty, "third-message", thirdCall, &message.ToolResult{ToolCallID: thirdCall.ID, Content: "THIRD_OUTPUT"}, false, "")
+	g.SetChildren([]MessageItem{first, second, third})
+	rendered = ansi.Strip(g.RawRender(80))
+	require.Contains(t, rendered, "FIRST_OUTPUT", "new steps preserve the tool opened by the user")
+	require.NotContains(t, rendered, "SECOND_OUTPUT")
+	require.NotContains(t, rendered, "THIRD_OUTPUT")
+	require.False(t, g.ToggleExpanded())
+	require.True(t, g.ToggleExpanded())
+	require.Contains(t, ansi.Strip(g.RawRender(80)), "FIRST_OUTPUT")
+	require.False(t, g.HandleMouseClick(ansi.MouseLeft, MessageLeftPaddingTotal+1, g.childLines[0]))
+	require.NotContains(t, ansi.Strip(g.RawRender(80)), "FIRST_OUTPUT")
+}
 
 // A live group keeps a status between steps while the agent is busy.
 func TestToolGroupStatusBetweenSteps(t *testing.T) {

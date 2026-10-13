@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,22 +14,28 @@ import (
 	"github.com/charmbracelet/crush/internal/shell"
 )
 
-// Check-ins: while a background job or sub-agent runs, Crush wakes the
-// session's agent every options.check_in_minutes (default 2) with a short
-// progress note, so it can tell the user how far along the work is. Each
-// note is delivered like a finished job's result. The next one waits until
-// the agent has had the previous one, so they never pile up behind a busy
-// agent. Services never get check-ins.
+// Check-ins: while background jobs or sub-agents run, Crush wakes the
+// session's agent every options.check_in_minutes (default 2) with one
+// progress note listing all of them, so it can tell the user how far along
+// the work is. Each note is delivered like a finished job's result. The next
+// one waits until the agent has had the previous one, so they never pile up
+// behind a busy agent. Services never get check-ins.
 
-// checkInTailLines and checkInTailBytes bound the job output quoted in a
-// check-in.
+// checkInTailLines and checkInTotalBytes bound the output quoted in one
+// check-in; several running items share them.
 const (
-	checkInTailLines = 15
-	checkInTailBytes = 1500
+	checkInTailLines  = 15
+	checkInTotalBytes = 3000
 )
 
 func (h *taskHub) checkInInterval() time.Duration {
-	if h == nil || h.c == nil || h.c.cfg == nil {
+	if h == nil {
+		return 0
+	}
+	if h.checkInEvery > 0 {
+		return h.checkInEvery
+	}
+	if h.c == nil || h.c.cfg == nil {
 		return 0
 	}
 	return h.c.cfg.Config().Options.GetCheckInInterval()
@@ -39,16 +47,100 @@ func (h *taskHub) isClosing() bool {
 	return h.closing
 }
 
-// runCheckIns sends note to the session every check-in interval until done
-// is closed, the context ends, or Crush shuts down.
-func (h *taskHub) runCheckIns(ctx context.Context, sessionID string, done <-chan struct{}, note func(elapsed time.Duration) string) {
-	send := func(ctx context.Context, prompt string) error {
-		_, err := h.c.Run(ctx, sessionID, prompt)
+// checkInWork is one running job or sub-agent a session's check-ins list.
+type checkInWork struct {
+	id, name string
+	started  time.Time
+	// ctx is the work's own; a check-in is sent under one still live.
+	ctx      context.Context
+	progress func() string
+}
+
+// sessionCheckIns is the one check-in loop of a session with running work.
+// done closes when the last work is removed.
+type sessionCheckIns struct {
+	work map[int]checkInWork
+	done chan struct{}
+}
+
+// addCheckIn lists work in its session's check-ins until remove is called,
+// starting the session's check-in loop if none runs.
+func (h *taskHub) addCheckIn(sessionID string, w checkInWork) (remove func()) {
+	if h.checkInInterval() <= 0 {
+		return func() {}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.checkIns == nil {
+		h.checkIns = make(map[string]*sessionCheckIns)
+	}
+	s := h.checkIns[sessionID]
+	if s == nil {
+		s = &sessionCheckIns{work: make(map[int]checkInWork), done: make(chan struct{})}
+		h.checkIns[sessionID] = s
+		go h.runCheckIns(sessionID, s)
+	}
+	h.checkInSeq++
+	key := h.checkInSeq
+	s.work[key] = w
+	return func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if _, ok := s.work[key]; !ok {
+			return
+		}
+		delete(s.work, key)
+		if len(s.work) == 0 {
+			close(s.done)
+			if h.checkIns[sessionID] == s {
+				delete(h.checkIns, sessionID)
+			}
+		}
+	}
+}
+
+// runCheckIns sends the session one note about all its running work every
+// check-in interval until the work is done or Crush shuts down.
+func (h *taskHub) runCheckIns(sessionID string, s *sessionCheckIns) {
+	defer func() {
+		// Work added later starts a fresh loop.
+		h.mu.Lock()
+		if h.checkIns[sessionID] == s {
+			delete(h.checkIns, sessionID)
+		}
+		h.mu.Unlock()
+	}()
+	var sendCtx context.Context
+	note := func(time.Duration) string {
+		var work []checkInWork
+		work, sendCtx = h.checkInSnapshot(s)
+		return checkInNotification(work, time.Now())
+	}
+	send := func(_ context.Context, prompt string) error {
+		if prompt == "" || sendCtx == nil {
+			return nil
+		}
+		_, err := h.c.Run(sendCtx, sessionID, prompt)
 		return err
 	}
-	if err := checkInLoop(ctx, h.checkInInterval(), done, h.isClosing, note, send); err != nil {
+	if err := checkInLoop(context.Background(), h.checkInInterval(), s.done, h.isClosing, note, send); err != nil {
 		slog.Warn("Progress check-in failed", "session", sessionID, "error", err)
 	}
+}
+
+// checkInSnapshot lists the session's running work, oldest first, and a
+// context of one that is still live.
+func (h *taskHub) checkInSnapshot(s *sessionCheckIns) ([]checkInWork, context.Context) {
+	h.mu.Lock()
+	work := slices.Collect(maps.Values(s.work))
+	h.mu.Unlock()
+	slices.SortFunc(work, func(a, b checkInWork) int { return a.started.Compare(b.started) })
+	for _, w := range work {
+		if w.ctx.Err() == nil {
+			return work, w.ctx
+		}
+	}
+	return work, nil
 }
 
 // checkInLoop waits interval, sends a note, and repeats; each wait starts
@@ -87,54 +179,77 @@ func checkInLoop(ctx context.Context, interval time.Duration, done <-chan struct
 	}
 }
 
-// checkInNotification is a task-result message with status running, so the
-// chat shows it as a one-line notice like other job messages.
-func checkInNotification(id, name string, elapsed time.Duration, progress string) string {
-	progress = strings.TrimSpace(progress)
-	if progress == "" {
-		progress = "(no output yet)"
+// checkInNotification is one task-result message with status running
+// about all of a session's running work, so the chat shows it as a
+// one-line notice like other job messages. It is empty without work.
+func checkInNotification(work []checkInWork, now time.Time) string {
+	if len(work) == 0 {
+		return ""
 	}
-	return fmt.Sprintf("<%s>\n<task-id>%s</task-id>\n<name>%s</name>\n<status>%s</status>\n<result>\nAutomatic progress check: still running after %s. This is not a finished result.\nLatest progress:\n%s\n</result>\n</%s>",
-		TaskNotificationTag, id, name, TaskRunning, elapsed, progress, TaskNotificationTag)
+	lines := max(3, checkInTailLines/len(work))
+	bytes := max(300, checkInTotalBytes/len(work))
+	var b strings.Builder
+	name, id := fmt.Sprintf("%d background tasks", len(work)), ""
+	if len(work) == 1 {
+		name, id = work[0].name, work[0].id
+		b.WriteString("Automatic progress check: still running. This is not a finished result.\n")
+	} else {
+		fmt.Fprintf(&b, "Automatic progress check: %d still running. These are not finished results.\n", len(work))
+	}
+	for _, w := range work {
+		progress := tailText(strings.TrimSpace(w.progress()), lines, bytes)
+		if progress == "" {
+			progress = "(no output yet)"
+		}
+		fmt.Fprintf(&b, "\n[%s] %s, running %s\nLatest progress:\n%s\n", w.id, w.name, now.Sub(w.started).Round(time.Second), progress)
+	}
+	header := fmt.Sprintf("<%s>\n", TaskNotificationTag)
+	if id != "" {
+		header += fmt.Sprintf("<task-id>%s</task-id>\n", id)
+	}
+	return fmt.Sprintf("%s<name>%s</name>\n<status>%s</status>\n<result>\n%s</result>\n</%s>", header, name, TaskRunning, b.String(), TaskNotificationTag)
 }
 
-// backgroundJobCheckIn quotes the end of a running job's output.
-func backgroundJobCheckIn(job *shell.BackgroundShell, elapsed time.Duration) string {
-	stdout, stderr, _, _ := job.GetOutput()
+// backgroundJobWork is a running job as its session's check-ins list it.
+func backgroundJobWork(ctx context.Context, job *shell.BackgroundShell) checkInWork {
 	name := BackgroundProcessName
 	if job.Description != "" {
 		name += ": " + job.Description
 	}
-	return checkInNotification(job.ID, name, elapsed, tailText(strings.TrimSpace(stdout+"\n"+stderr)))
+	return checkInWork{id: "Job " + job.ID, name: name, started: job.Started, ctx: ctx, progress: func() string {
+		stdout, stderr, _, _ := job.GetOutput()
+		return stdout + "\n" + stderr
+	}}
 }
 
-// subAgentCheckIn quotes the sub-agent's latest reply so far.
-func (h *taskHub) subAgentCheckIn(ctx context.Context, t Task, elapsed time.Duration) string {
-	var latest string
-	if h.c != nil && h.c.messages != nil {
-		if msgs, err := h.c.messages.List(ctx, t.ChildID); err == nil {
-			for i := len(msgs) - 1; i >= 0; i-- {
-				if msgs[i].Role == message.Assistant {
-					if text := strings.TrimSpace(msgs[i].Content().Text); text != "" {
-						latest = text
-						break
-					}
-				}
+// subAgentProgress is the sub-agent's latest reply so far.
+func (h *taskHub) subAgentProgress(ctx context.Context, t Task) string {
+	if h.c == nil || h.c.messages == nil {
+		return ""
+	}
+	msgs, err := h.c.messages.List(ctx, t.ChildID)
+	if err != nil {
+		return ""
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == message.Assistant {
+			if text := strings.TrimSpace(msgs[i].Content().Text); text != "" {
+				return text
 			}
 		}
 	}
-	return checkInNotification(t.ID, t.Name, elapsed, tailText(latest))
+	return ""
 }
 
-// tailText keeps the last checkInTailLines lines, at most checkInTailBytes.
-func tailText(s string) string {
+// tailText keeps the last maxLines lines, at most maxBytes.
+func tailText(s string, maxLines, maxBytes int) string {
 	lines := strings.Split(s, "\n")
-	if len(lines) > checkInTailLines {
-		lines = lines[len(lines)-checkInTailLines:]
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
 	}
 	s = strings.Join(lines, "\n")
-	if len(s) > checkInTailBytes {
-		s = "…" + s[len(s)-checkInTailBytes:]
+	if len(s) > maxBytes {
+		s = "…" + strings.ToValidUTF8(s[len(s)-maxBytes:], "")
 	}
 	return s
 }
@@ -153,5 +268,5 @@ func fmtCheckIn(interval time.Duration) string {
 	if minutes := int(interval / time.Minute); minutes != 1 {
 		every = fmt.Sprintf("every %d minutes", minutes)
 	}
-	return fmt.Sprintf(` While your background jobs (not services) and sub-agents run, Crush also sends you a <%s> message with status %s %s: an automatic progress check with the work's latest output. Answer each one with a short progress update for the user (percent of the agreed work done and what is running now), then keep working or end your turn. Don't stop, restart or poll the work because of a check-in; act only if its output shows the work is broken.`, TaskNotificationTag, TaskRunning, every)
+	return fmt.Sprintf(` While your background jobs (not services) and sub-agents run, Crush also sends you one <%s> message with status %s %s that lists all of them: an automatic progress check with each one's latest output. Answer each one with a short progress update for the user (percent of the agreed work done and what is running now), then keep working or end your turn. Don't stop, restart or poll the work because of a check-in; act only if its output shows the work is broken.`, TaskNotificationTag, TaskRunning, every)
 }

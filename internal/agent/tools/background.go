@@ -1,11 +1,44 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"sync"
+
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 const NativeShellEnv = "CRUSH_NATIVE_SHELL"
+
+// JobStarted is told about every job a bash call leaves running in the
+// background, with the NativeShellEnv value its processes carry, so Crush
+// can report on the job until it ends. It returns whether it took the job.
+var JobStarted func(sessionID, marker string, job *shell.BackgroundShell) bool
+
+type watchedJobKey struct{}
+
+// WithWatchedJob marks a bash call whose caller reports on its background
+// job itself, so JobStarted isn't told.
+func WithWatchedJob(ctx context.Context) context.Context {
+	return context.WithValue(ctx, watchedJobKey{}, true)
+}
+
+func jobStarted(ctx context.Context, sessionID string, signal chan struct{}, job *shell.BackgroundShell) bool {
+	if JobStarted == nil || getContextValue(ctx, watchedJobKey{}, false) {
+		return false
+	}
+	return JobStarted(sessionID, fmt.Sprintf("%p", signal), job)
+}
+
+// agentStops holds the jobs the agent's own job_kill call ended, so the
+// agent isn't told about a stop it made.
+var agentStops sync.Map
+
+// StoppedByAgent reports, once, whether job_kill ended the job.
+func StoppedByAgent(id string) bool {
+	_, ok := agentStops.LoadAndDelete(id)
+	return ok
+}
 
 var shellBackgrounds = struct {
 	sync.Mutex

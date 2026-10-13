@@ -68,8 +68,7 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return renderJobTool(sty, opts, cappedWidth, "Start", meta.ShellID, description, content)
 	}
 
-	// Regular bash command. The command is always rendered expanded
-	// (newlines preserved); expansion only controls the output body.
+	// Regular bash command.
 	cmd := params.Command
 	cmd = strings.ReplaceAll(cmd, "\t", "    ")
 	cmd = common.StripBashDisplayPrefix(cmd, b.workingDir)
@@ -81,10 +80,9 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		toolParams = append(toolParams, "background", "true")
 	}
 
-	// The command is always rendered expanded (wrapped, never
-	// truncated); expansion only controls the output body.
+	// Standalone and individually expanded commands wrap in full.
 	headerOpts := *opts
-	headerOpts.ExpandedContent = true
+	headerOpts.ExpandedContent = !opts.Compact
 	header := toolHeader(sty, opts.Status, "Bash", cappedWidth, &headerOpts, toolParams...)
 	if opts.Compact {
 		return header

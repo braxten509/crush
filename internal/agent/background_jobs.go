@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -87,6 +88,7 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 		tool = newHookedTool(tool, hooks.NewRunner(configured, h.c.cfg.WorkingDir(), h.c.cfg.WorkingDir()))
 	}
 	ctx = context.WithValue(ctx, tools.SessionIDContextKey, req.Session)
+	ctx = tools.WithWatchedJob(ctx)
 	callID := uuid.NewString()
 	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, append(h.env(req.Session), managedJobEnv+"="+callID))
 	data, err := json.Marshal(input)
@@ -115,79 +117,119 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 		if !ok {
 			return fail(fmt.Errorf("background job %q disappeared", metadata.ShellID))
 		}
-		h.mu.Lock()
-		if h.backgroundOwners == nil {
-			h.backgroundOwners = make(map[string]string)
-		}
-		for old := range h.backgroundOwners {
-			if _, exists := shell.GetBackgroundShellManager().Get(old); !exists {
-				delete(h.backgroundOwners, old)
-				delete(h.backgroundServices, old)
-			}
-		}
-		h.backgroundOwners[job.ID] = req.Session
-		if h.backgroundServices == nil {
-			h.backgroundServices = make(map[string]bool)
-		}
-		h.backgroundServices[job.ID] = params.Service
-		if h.backgroundShells == nil {
-			h.backgroundShells = make(map[string]*shell.BackgroundShell)
-		}
-		h.backgroundShells[callID] = job
-		if !params.Service {
-			if h.jobHandoffs == nil {
-				h.jobHandoffs = make(map[string]bool)
-			}
-			h.jobHandoffs[callID] = true
-		}
-		h.mu.Unlock()
 		response.Content = fmt.Sprintf("Started background job %s. Use crush bg --output %s to read output or crush bg --stop %s to stop it. Crush will report completion; keep working without waiting.", job.ID, job.ID, job.ID)
 		if params.Service {
 			response.Content += " This is a service; it will not delay completion notifications."
 		}
 		transferred = true
-		h.rememberJob(job, req.Session, params.Service)
-		go func() {
-			defer release()
-			defer func() {
-				h.mu.Lock()
-				delete(h.backgroundShells, callID)
-				delete(h.backgroundServices, job.ID)
-				delete(h.jobHandoffs, callID)
-				h.mu.Unlock()
-			}()
-			done := make(chan struct{})
-			if !params.Service {
-				go h.runCheckIns(ctx, req.Session, done, func(elapsed time.Duration) string {
-					return backgroundJobCheckIn(job, elapsed)
-				})
-			}
-			waited := job.WaitContext(ctx)
-			close(done)
-			if !waited {
-				return
-			}
-			closing := func() bool { h.mu.Lock(); defer h.mu.Unlock(); return h.closing }
+		h.watchJob(ctx, release, req.Session, callID, job, params.Service)
+	}
+	return TaskReply{Background: &response}
+}
+
+func init() {
+	tools.JobStarted = func(sessionID, marker string, job *shell.BackgroundShell) bool {
+		h := hubForSession(sessionID)
+		if h == nil {
+			return false
+		}
+		ctx, release := h.reserveFollowUp(sessionID)
+		h.watchJob(ctx, release, sessionID, marker, job, false)
+		return true
+	}
+}
+
+// hubForSession finds the hub whose Crush owns the session.
+func hubForSession(sessionID string) *taskHub {
+	hubsMu.Lock()
+	candidates := slices.Clone(hubs)
+	hubsMu.Unlock()
+	for _, h := range candidates {
+		if h.c == nil || h.c.sessions == nil {
+			continue
+		}
+		if _, err := h.c.sessions.Get(context.Background(), sessionID); err == nil {
+			return h
+		}
+	}
+	return nil
+}
+
+// watchJob is the one place background jobs are tracked, whichever way they
+// started: it lists the job as the session's, saves it so a restart can
+// report it, sends progress check-ins, and tells the agent when it ends,
+// unless the agent stopped it itself. marker is the environment value the
+// job's processes carry. release is called once the job is reported.
+func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marker string, job *shell.BackgroundShell, service bool) {
+	h.mu.Lock()
+	if h.backgroundOwners == nil {
+		h.backgroundOwners = make(map[string]string)
+	}
+	for old := range h.backgroundOwners {
+		if _, exists := shell.GetBackgroundShellManager().Get(old); !exists {
+			delete(h.backgroundOwners, old)
+			delete(h.backgroundServices, old)
+		}
+	}
+	h.backgroundOwners[job.ID] = sessionID
+	if h.backgroundServices == nil {
+		h.backgroundServices = make(map[string]bool)
+	}
+	h.backgroundServices[job.ID] = service
+	if h.backgroundShells == nil {
+		h.backgroundShells = make(map[string]*shell.BackgroundShell)
+	}
+	h.backgroundShells[marker] = job
+	if !service {
+		if h.jobHandoffs == nil {
+			h.jobHandoffs = make(map[string]bool)
+		}
+		h.jobHandoffs[marker] = true
+	}
+	h.mu.Unlock()
+	h.rememberJob(job, sessionID, service)
+	spillDir := h.c.cfg.Config().Options.DataDirectory
+	go func() {
+		defer release()
+		defer func() {
+			h.mu.Lock()
+			delete(h.backgroundShells, marker)
+			delete(h.backgroundServices, job.ID)
+			delete(h.jobHandoffs, marker)
+			h.mu.Unlock()
+		}()
+		removeCheckIn := func() {}
+		if !service {
+			removeCheckIn = h.addCheckIn(sessionID, backgroundJobWork(ctx, job))
+		}
+		waited := job.WaitContext(ctx)
+		removeCheckIn()
+		if !waited {
+			return
+		}
+		if tools.StoppedByAgent(job.ID) {
+			h.forgetJob(job.ID)
+			return
+		}
+		closing := func() bool { h.mu.Lock(); defer h.mu.Unlock(); return h.closing }
+		if closing() {
+			// Shutdown killed the job; the next Crush reports it.
+			h.interruptJob(job)
+			return
+		}
+		notice := backgroundJobNotification(job, spillDir)
+		accept := h.acceptHandoff(sessionID, func() { delete(h.jobHandoffs, marker) })
+		_, err := h.c.RunAccepted(ctx, accept, sessionID, notice)
+		accept.Close()
+		if err != nil {
+			slog.Error("Background job notification failed", "job", job.ID, "error", err)
 			if closing() {
-				// Shutdown killed the job; the next Crush reports it.
 				h.interruptJob(job)
 				return
 			}
-			notice := backgroundJobNotification(job, options.DataDirectory)
-			accept := h.acceptHandoff(req.Session, func() { delete(h.jobHandoffs, callID) })
-			_, err := h.c.RunAccepted(ctx, accept, req.Session, notice)
-			accept.Close()
-			if err != nil {
-				slog.Error("Background job notification failed", "job", job.ID, "error", err)
-				if closing() {
-					h.interruptJob(job)
-					return
-				}
-			}
-			h.forgetJob(job.ID)
-		}()
-	}
-	return TaskReply{Background: &response}
+		}
+		h.forgetJob(job.ID)
+	}()
 }
 
 func backgroundJobNotification(job *shell.BackgroundShell, spillDir string) string {

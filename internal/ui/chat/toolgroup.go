@@ -375,12 +375,11 @@ func (g *ToolGroupItem) ToggleExpanded() bool {
 	return g.expanded
 }
 
-// syncCompact renders tools as one-line headers while collapsed (only the
-// latest shows) and in full while expanded.
+// syncCompact leaves tool details closed until the tool itself is expanded.
 func (g *ToolGroupItem) syncCompact() {
 	for _, c := range g.children {
 		if cp, ok := c.(Compactable); ok {
-			cp.SetCompact(!g.expanded)
+			cp.SetCompact(true)
 		}
 	}
 }
@@ -422,11 +421,17 @@ func (g *ToolGroupItem) RawRender(width int) string {
 	}
 	g.childLines, g.shown = g.childLines[:0], g.shown[:0]
 	if g.expanded {
-		start := max(0, len(g.children)-toolGroupShown)
+		var actions []MessageItem
+		for _, c := range g.children {
+			if _, ok := c.(ToolMessageItem); ok {
+				actions = append(actions, c)
+			}
+		}
+		start := max(0, len(actions)-toolGroupShown)
 		if start > 0 {
 			sb.WriteString("\n" + g.sty.Tool.ParamKey.Render(fmt.Sprintf("  … %d earlier", start)))
 		}
-		for _, c := range g.children[start:] {
+		for _, c := range actions[start:] {
 			sb.WriteString("\n\n")
 			g.childLines = append(g.childLines, strings.Count(sb.String(), "\n"))
 			g.shown = append(g.shown, c)

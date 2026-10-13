@@ -48,8 +48,10 @@ func NewJobKillTool() fantasy.AgentTool {
 				Description: bgShell.Description,
 			}
 
+			agentStops.Store(params.ShellID, struct{}{})
 			err := bgManager.Kill(params.ShellID)
 			if err != nil {
+				agentStops.Delete(params.ShellID)
 				return fantasy.NewTextErrorResponse(err.Error()), nil
 			}
 

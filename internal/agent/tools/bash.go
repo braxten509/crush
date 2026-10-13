@@ -316,6 +316,9 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					ShellID:          bgShell.ID,
 				}
 				response := fmt.Sprintf("Background shell started with ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
+				if jobStarted(ctx, sessionID, backgroundSignal, bgShell) {
+					response += jobReportNote
+				}
 				if movedSleep {
 					response = "A sleep longer than 10 seconds doesn't run in the foreground, so this runs in the background. To wait for something, loop on a check (until <check>; do sleep 2; done).\n\n" + response
 				}
@@ -414,10 +417,16 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			if manuallyBackgrounded {
 				response = fmt.Sprintf("Command moved to the background by the user.\n\nBackground shell ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
 			}
+			if jobStarted(ctx, sessionID, backgroundSignal, bgShell) {
+				response += jobReportNote
+			}
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 		},
 	)
 }
+
+// jobReportNote tells the agent a background job reports back by itself.
+const jobReportNote = " Crush will report when it ends; keep working without waiting."
 
 // formatOutput formats the output of a completed command with error handling
 func formatOutput(stdout, stderr string, execErr error, spillDir string) string {

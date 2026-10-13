@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -78,7 +79,7 @@ func BackgroundProcesses() []Process {
 	now, moved := time.Now(), cliagent.LastBackground()
 	out := managedBackgroundProcesses()
 	for _, p := range procs {
-		if managedBackgroundJob(p.managedJobID) != nil {
+		if managedBackgroundJob(cmp.Or(p.managedJobID, p.nativeShellID)) != nil {
 			continue
 		}
 		if p.session == "" {
@@ -259,7 +260,7 @@ func KillProcess(pid int) error {
 	markers := hubMarkers()
 	procs := markedProcs(markers)
 	if process, ok := procs[pid]; ok {
-		if job := managedBackgroundJob(process.managedJobID); job != nil {
+		if job := managedBackgroundJob(cmp.Or(process.managedJobID, process.nativeShellID)); job != nil {
 			return shell.GetBackgroundShellManager().Kill(job.ID)
 		}
 	}

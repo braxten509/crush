@@ -345,18 +345,19 @@ func (t *baseToolMessageItem) RawRender(width int) string {
 	content, height, ok := t.getCachedRender(toolItemWidth)
 	// if we are spinning or there is no cache rerender
 	if !ok || t.isSpinning() {
+		compact := t.isCompact && !t.expandedContent
 		content = t.toolRenderer.RenderTool(t.sty, toolItemWidth, &ToolRenderOpts{
 			ToolCall:        t.toolCall,
 			Result:          t.result,
 			Anim:            t.anim,
 			ExpandedContent: t.expandedContent,
-			Compact:         t.isCompact,
+			Compact:         compact,
 			IsSpinning:      t.isSpinning(),
 			Status:          t.computeStatus(),
 		})
 
 		// Prepend hook indicator if hooks ran for this tool call.
-		if t.result != nil {
+		if t.result != nil && !compact {
 			if hookLine := toolOutputHookIndicator(t.sty, t.result.Metadata, toolItemWidth); hookLine != "" {
 				content = hookLine + "\n\n" + content
 			}
@@ -622,6 +623,9 @@ func toolParamList(sty *styles.Styles, params []string, width int, opts *ToolRen
 		if remaining := width - lipgloss.Width(partsStr) - 3; remaining >= minSpaceForMainParam {
 			output = fmt.Sprintf("%s (%s)", mainParam, partsStr)
 		}
+	}
+	if opts != nil && opts.Compact {
+		output = strings.Join(strings.Fields(output), " ")
 	}
 
 	if width >= 0 && (opts == nil || !opts.ExpandedContent) {

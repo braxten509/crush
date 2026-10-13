@@ -148,6 +148,11 @@ type taskHub struct {
 	// jobHandoffs marks jobs (by call ID, not services) whose result has
 	// not been handed to the agent yet.
 	jobHandoffs map[string]bool
+	// checkIns holds each session's one check-in loop; see addCheckIn.
+	checkIns   map[string]*sessionCheckIns
+	checkInSeq int
+	// checkInEvery lets tests shorten check-ins; zero uses the setting.
+	checkInEvery time.Duration
 	// reaper is the write end of the reaper's pipe; see startReaper.
 	reaper *os.File
 }
@@ -588,10 +593,9 @@ func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub Sessio
 	go func() {
 		defer release()
 		defer cancel()
-		done := make(chan struct{})
-		go h.runCheckIns(runCtx, snapshot.SessionID, done, func(elapsed time.Duration) string {
-			return h.subAgentCheckIn(runCtx, snapshot, elapsed)
-		})
+		removeCheckIn := h.addCheckIn(snapshot.SessionID, checkInWork{id: snapshot.ID, name: snapshot.Name, started: snapshot.Started, ctx: runCtx, progress: func() string {
+			return h.subAgentProgress(runCtx, snapshot)
+		}})
 		result, err := sub.Run(runCtx, SessionAgentCall{
 			SessionID:       t.ChildID,
 			Prompt:          prompt,
@@ -599,7 +603,7 @@ func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub Sessio
 			NonInteractive:  true,
 			ProviderOptions: getProviderOptions(m, provider),
 		})
-		close(done)
+		removeCheckIn()
 		h.finish(ctx, t.ID, subAgentOutput(result), err)
 	}()
 	return snapshot

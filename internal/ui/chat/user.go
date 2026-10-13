@@ -144,6 +144,10 @@ func (m *UserMessageItem) renderTaskNotification(name, status string, width int)
 		line := icon + " " + m.sty.Pills.HelpText.Render("Your answers to the questions: ") + m.sty.Pills.TodoLabel.Render(status)
 		return ansi.Truncate(line, width, "…")
 	}
+	if agent.TaskStatus(status) == agent.TaskRunning {
+		line := m.sty.Tool.IconPending.Render() + " " + m.sty.Pills.HelpText.Render("Still running: ") + m.sty.Pills.TodoLabel.Render(name)
+		return ansi.Truncate(line, width, "…")
+	}
 	verb := "finished"
 	switch agent.TaskStatus(status) {
 	case agent.TaskFailed:

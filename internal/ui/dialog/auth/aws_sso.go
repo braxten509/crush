@@ -1,4 +1,4 @@
-package dialog
+package auth
 
 import (
 	"strings"
@@ -9,14 +9,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pkg/browser"
 )
-
-// AWSSSOID is the identifier for the AWS SSO auth dialog.
-const AWSSSOID = "aws_sso"
 
 // awsSSOState represents the current state of the AWS SSO flow.
 type awsSSOState int
@@ -51,7 +49,7 @@ type AWSSSO struct {
 	errMsg string
 }
 
-var _ Dialog = (*AWSSSO)(nil)
+var _ dialog.Dialog = (*AWSSSO)(nil)
 
 // NewAWSSSO creates a new AWS SSO authentication dialog for the given refresh
 // command. The dialog starts in the waiting state; SetURL and Finish drive it
@@ -78,7 +76,7 @@ func NewAWSSSO(com *common.Common, command string) (*AWSSSO, tea.Cmd) {
 		key.WithKeys("enter", "ctrl+y"),
 		key.WithHelp("enter", "open in browser"),
 	)
-	m.keyMap.Close = CloseKey
+	m.keyMap.Close = dialog.CloseKey
 
 	return m, m.spinner.Tick
 }
@@ -104,18 +102,18 @@ func (m *AWSSSO) Finish(errMsg string) {
 
 // ID implements Dialog.
 func (m *AWSSSO) ID() string {
-	return AWSSSOID
+	return dialog.AWSSSOID
 }
 
 // HandleMsg handles messages and state transitions.
-func (m *AWSSSO) HandleMsg(msg tea.Msg) Action {
+func (m *AWSSSO) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		if m.state == awsSSOStateWaiting {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			if cmd != nil {
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 			}
 		}
 
@@ -123,14 +121,14 @@ func (m *AWSSSO) HandleMsg(msg tea.Msg) Action {
 		switch {
 		case key.Matches(msg, m.keyMap.Open):
 			if m.state == awsSSOStateWaiting && m.url != "" {
-				return ActionCmd{m.openURLCmd()}
+				return dialog.ActionCmd{Cmd: m.openURLCmd()}
 			}
 			if m.state == awsSSOStateSuccess {
-				return ActionClose{}
+				return dialog.ActionClose{}
 			}
 
 		case key.Matches(msg, m.keyMap.Close):
-			return ActionClose{}
+			return dialog.ActionClose{}
 		}
 	}
 
@@ -146,7 +144,7 @@ func (m *AWSSSO) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	)
 	m.width = dialogWidth
 	view := dialogStyle.Render(m.dialogContent())
-	DrawCenter(scr, area, view)
+	dialog.DrawCenter(scr, area, view)
 	return nil
 }
 

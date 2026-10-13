@@ -1,4 +1,4 @@
-package dialog
+package auth
 
 import (
 	"testing"
@@ -134,14 +134,4 @@ func TestOAuthOpenAIStopPollingWithoutFlow(t *testing.T) {
 	require.NotNil(t, m.cancelFunc)
 	require.Nil(t, m.stopPolling()())
 	require.Nil(t, m.cancelFunc)
-}
-
-// TestFilePickerPreviewReadyMsg checks that the preview flag is set on
-// the update loop from a message, not from inside the transmit command.
-func TestFilePickerPreviewReadyMsg(t *testing.T) {
-	t.Parallel()
-
-	f := &FilePicker{}
-	require.Nil(t, f.HandleMsg(filePickerPreviewReadyMsg{}))
-	require.True(t, f.previewingImage)
 }

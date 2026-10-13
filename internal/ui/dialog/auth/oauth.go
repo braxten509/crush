@@ -1,4 +1,4 @@
-package dialog
+package auth
 
 import (
 	"fmt"
@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -53,9 +54,6 @@ const (
 	OAuthStateError
 )
 
-// OAuthID is the identifier for the model selection dialog.
-const OAuthID = "oauth"
-
 // OAuth handles the OAuth flow authentication.
 type OAuth struct {
 	com          *common.Common
@@ -90,7 +88,7 @@ type OAuth struct {
 	codeInput textinput.Model
 }
 
-var _ Dialog = (*OAuth)(nil)
+var _ dialog.Dialog = (*OAuth)(nil)
 
 // newOAuth creates a new device flow component.
 func newOAuth(
@@ -137,7 +135,7 @@ func newOAuth(
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "enter code"),
 	)
-	m.keyMap.Close = CloseKey
+	m.keyMap.Close = dialog.CloseKey
 
 	if m.oAuthProvider.supportsCodeEntry() {
 		m.codeInput = textinput.New()
@@ -153,11 +151,11 @@ func newOAuth(
 
 // ID implements Dialog.
 func (m *OAuth) ID() string {
-	return OAuthID
+	return dialog.OAuthID
 }
 
 // HandleMsg handles messages and state transitions.
-func (m *OAuth) HandleMsg(msg tea.Msg) Action {
+func (m *OAuth) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		switch m.State {
@@ -165,7 +163,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			if cmd != nil {
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 			}
 		}
 
@@ -178,10 +176,10 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 			case key.Matches(msg, m.keyMap.Submit):
 				if value := m.codeInput.Value(); value != "" {
 					m.codeInput.Blur()
-					return ActionCmd{m.oAuthProvider.submitCode(value)}
+					return dialog.ActionCmd{Cmd: m.oAuthProvider.submitCode(value)}
 				}
 				cmd := m.copyCodeAndOpenURL()
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 
 			case key.Matches(msg, m.keyMap.Close):
 				m.codeInput.Blur()
@@ -191,7 +189,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 				var cmd tea.Cmd
 				m.codeInput, cmd = m.codeInput.Update(msg)
 				if cmd != nil {
-					return ActionCmd{cmd}
+					return dialog.ActionCmd{Cmd: cmd}
 				}
 				return nil
 			}
@@ -204,11 +202,11 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 
 		case key.Matches(msg, m.keyMap.Copy):
 			cmd := m.copyCode()
-			return ActionCmd{cmd}
+			return dialog.ActionCmd{Cmd: cmd}
 
 		case key.Matches(msg, m.keyMap.CopyURL):
 			cmd := m.copyURL()
-			return ActionCmd{cmd}
+			return dialog.ActionCmd{Cmd: cmd}
 
 		case key.Matches(msg, m.keyMap.Submit):
 			switch m.State {
@@ -221,7 +219,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 
 			default:
 				cmd := m.copyCodeAndOpenURL()
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 			}
 
 		case key.Matches(msg, m.keyMap.Close):
@@ -236,7 +234,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 			default:
 				// Cancel the in-flight authorization so a dismissed dialog
 				// does not leave a poller or loopback listener behind.
-				return ActionCloseOAuth{Cmd: m.oAuthProvider.stopPolling()}
+				return dialog.ActionCloseOAuth{Cmd: m.oAuthProvider.stopPolling()}
 			}
 		}
 
@@ -247,7 +245,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 		m.verificationURL = msg.VerificationURL
 		m.interval = msg.Interval
 		m.State = OAuthStateDisplay
-		return ActionCmd{m.oAuthProvider.startPolling(msg)}
+		return dialog.ActionCmd{Cmd: m.oAuthProvider.startPolling(msg)}
 
 	case ActionCompleteOAuth:
 		// The device flow finished and we have a token. Immediately
@@ -258,7 +256,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 		// work behind a keypress.
 		m.State = OAuthStateSaving
 		m.token = msg.Token
-		return ActionCmd{tea.Batch(
+		return dialog.ActionCmd{Cmd: tea.Batch(
 			m.oAuthProvider.stopPolling(),
 			m.spinner.Tick,
 			m.saveCredential(),
@@ -267,7 +265,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 	case ActionOAuthErrored:
 		m.State = OAuthStateError
 		cmd := tea.Batch(m.oAuthProvider.stopPolling(), util.ReportError(msg.Error))
-		return ActionCmd{cmd}
+		return dialog.ActionCmd{Cmd: cmd}
 
 	case tea.PasteMsg:
 		// Pasting into the dialog goes straight into the paste field,
@@ -277,7 +275,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 			var cmd tea.Cmd
 			m.codeInput, cmd = m.codeInput.Update(msg)
 			if cmd != nil {
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 			}
 		}
 
@@ -292,7 +290,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) Action {
 		// Save failed; surface the error and move to the error state so
 		// the user can dismiss and retry the flow.
 		m.State = OAuthStateError
-		return ActionCmd{util.ReportError(msg.err)}
+		return dialog.ActionCmd{Cmd: util.ReportError(msg.err)}
 	}
 	return nil
 }
@@ -321,16 +319,16 @@ func (m *OAuth) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		cur := m.cursor()
 		if cur != nil {
 			cur = kit.AdjustOnboardingInputCursor(t, cur)
-			DrawOnboardingCursor(scr, area, view, cur)
+			dialog.DrawOnboardingCursor(scr, area, view, cur)
 		} else {
-			DrawOnboarding(scr, area, view)
+			dialog.DrawOnboarding(scr, area, view)
 		}
 	} else {
 		view := dialogStyle.Render(m.dialogContent())
 		if cur := m.cursor(); cur != nil {
-			DrawCenterCursor(scr, area, view, cur)
+			dialog.DrawCenterCursor(scr, area, view, cur)
 		} else {
-			DrawCenter(scr, area, view)
+			dialog.DrawCenter(scr, area, view)
 		}
 	}
 	return nil
@@ -340,7 +338,7 @@ func (m *OAuth) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 // terminal caret sits in the input.
 func (m *OAuth) cursor() *tea.Cursor {
 	if m.codeEntryActive() && m.codeInput.Focused() {
-		return InputCursor(m.com.Styles, m.codeInput.Cursor())
+		return dialog.InputCursor(m.com.Styles, m.codeInput.Cursor())
 	}
 	return nil
 }
@@ -627,8 +625,8 @@ func (m *OAuth) saveCredential() tea.Cmd {
 // confirmAndSelectModel is invoked when the user acknowledges the success
 // screen. The credential is already saved, so this only resumes model
 // selection, which closes the dialog.
-func (m *OAuth) confirmAndSelectModel() Action {
-	return ActionSelectModel{
+func (m *OAuth) confirmAndSelectModel() dialog.Action {
+	return dialog.ActionSelectModel{
 		Provider:  m.provider,
 		Model:     m.model,
 		ModelType: m.modelType,

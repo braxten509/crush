@@ -1,4 +1,4 @@
-package dialog
+package auth
 
 import (
 	"fmt"
@@ -13,6 +13,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -28,9 +29,6 @@ const (
 	APIKeyInputStateVerified
 	APIKeyInputStateError
 )
-
-// APIKeyInputID is the identifier for the model selection dialog.
-const APIKeyInputID = "api_key_input"
 
 // APIKeyInput represents a model selection dialog.
 type APIKeyInput struct {
@@ -53,7 +51,7 @@ type APIKeyInput struct {
 	help    help.Model
 }
 
-var _ Dialog = (*APIKeyInput)(nil)
+var _ dialog.Dialog = (*APIKeyInput)(nil)
 
 // NewAPIKeyInput creates a new Models dialog.
 func NewAPIKeyInput(
@@ -91,25 +89,25 @@ func NewAPIKeyInput(
 		key.WithKeys("enter", "ctrl+y"),
 		key.WithHelp("enter", "submit"),
 	)
-	m.keyMap.Close = CloseKey
+	m.keyMap.Close = dialog.CloseKey
 
 	return &m, nil
 }
 
 // ID implements Dialog.
 func (m *APIKeyInput) ID() string {
-	return APIKeyInputID
+	return dialog.APIKeyInputID
 }
 
 // HandleMsg implements [Dialog].
-func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
+func (m *APIKeyInput) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case ActionChangeAPIKeyState:
 		m.state = msg.State
 		switch m.state {
 		case APIKeyInputStateVerifying:
 			cmd := tea.Batch(m.spinner.Tick, m.verifyAPIKey)
-			return ActionCmd{cmd}
+			return dialog.ActionCmd{Cmd: cmd}
 		}
 	case spinner.TickMsg:
 		switch m.state {
@@ -117,7 +115,7 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			if cmd != nil {
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 			}
 		}
 	case tea.KeyPressMsg:
@@ -129,7 +127,7 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 			case APIKeyInputStateVerified:
 				return m.saveKeyAndContinue()
 			default:
-				return ActionClose{}
+				return dialog.ActionClose{}
 			}
 		case key.Matches(msg, m.keyMap.Submit):
 			switch m.state {
@@ -142,14 +140,14 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			if cmd != nil {
-				return ActionCmd{cmd}
+				return dialog.ActionCmd{Cmd: cmd}
 			}
 		}
 	case tea.PasteMsg:
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		if cmd != nil {
-			return ActionCmd{cmd}
+			return dialog.ActionCmd{Cmd: cmd}
 		}
 	}
 	return nil
@@ -184,10 +182,10 @@ func (m *APIKeyInput) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	if m.isOnboarding {
 		view := content
 		cur = kit.AdjustOnboardingInputCursor(t, cur)
-		DrawOnboardingCursor(scr, area, view, cur)
+		dialog.DrawOnboardingCursor(scr, area, view, cur)
 	} else {
 		view := dialogStyle.Render(content)
-		DrawCenterCursor(scr, area, view, cur)
+		dialog.DrawCenterCursor(scr, area, view, cur)
 	}
 	return cur
 }
@@ -261,7 +259,7 @@ func (m *APIKeyInput) inputView() string {
 
 // Cursor returns the cursor position relative to the dialog.
 func (m *APIKeyInput) Cursor() *tea.Cursor {
-	return InputCursor(m.com.Styles, m.input.Cursor())
+	return dialog.InputCursor(m.com.Styles, m.input.Cursor())
 }
 
 // FullHelp returns the full help view.
@@ -307,13 +305,13 @@ func (m *APIKeyInput) verifyAPIKey() tea.Msg {
 	return ActionChangeAPIKeyState{APIKeyInputStateError}
 }
 
-func (m *APIKeyInput) saveKeyAndContinue() Action {
+func (m *APIKeyInput) saveKeyAndContinue() dialog.Action {
 	err := m.com.Workspace.SetProviderAPIKey(config.ScopeGlobal, string(m.provider.ID), m.input.Value())
 	if err != nil {
-		return ActionCmd{util.ReportError(fmt.Errorf("failed to save API key: %w", err))}
+		return dialog.ActionCmd{Cmd: util.ReportError(fmt.Errorf("failed to save API key: %w", err))}
 	}
 
-	return ActionSelectModel{
+	return dialog.ActionSelectModel{
 		Provider:  m.provider,
 		Model:     m.model,
 		ModelType: m.modelType,

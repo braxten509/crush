@@ -1,4 +1,4 @@
-package dialog
+package auth
 
 import (
 	"cmp"
@@ -13,12 +13,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 )
-
-// AuthMethodID is the identifier for the auth method selection dialog.
-const AuthMethodID = "auth_method"
 
 const (
 	defaultAuthMethodDialogMaxWidth = 72
@@ -60,7 +58,7 @@ type AuthMethod struct {
 	}
 }
 
-var _ Dialog = (*AuthMethod)(nil)
+var _ dialog.Dialog = (*AuthMethod)(nil)
 
 // NewAuthMethod creates a dialog that chooses between OAuth and API key
 // authentication for the given provider.
@@ -102,11 +100,11 @@ func NewAuthMethod(
 
 // ID implements Dialog.
 func (m *AuthMethod) ID() string {
-	return AuthMethodID
+	return dialog.AuthMethodID
 }
 
 // HandleMsg implements Dialog.
-func (m *AuthMethod) HandleMsg(msg tea.Msg) Action {
+func (m *AuthMethod) HandleMsg(msg tea.Msg) dialog.Action {
 	if click, ok := msg.(tea.MouseClickMsg); ok {
 		return m.handleMouseClick(click)
 	}
@@ -118,12 +116,12 @@ func (m *AuthMethod) HandleMsg(msg tea.Msg) Action {
 
 	switch {
 	case key.Matches(keyMsg, m.keyMap.Close):
-		return ActionClose{}
+		return dialog.ActionClose{}
 	case key.Matches(keyMsg, m.keyMap.Choose):
 		m.selected = 1 - m.selected
 		return nil
 	case key.Matches(keyMsg, m.keyMap.Select):
-		return ActionSelectAuthMethod{
+		return dialog.ActionSelectAuthMethod{
 			Provider:  m.provider,
 			Model:     m.model,
 			ModelType: m.modelType,
@@ -135,7 +133,7 @@ func (m *AuthMethod) HandleMsg(msg tea.Msg) Action {
 
 // handleMouseClick focuses the clicked card; a second click on the same
 // card within the double-click threshold confirms the choice.
-func (m *AuthMethod) handleMouseClick(msg tea.MouseClickMsg) Action {
+func (m *AuthMethod) handleMouseClick(msg tea.MouseClickMsg) dialog.Action {
 	if msg.Button != tea.MouseLeft {
 		return nil
 	}
@@ -159,7 +157,7 @@ func (m *AuthMethod) handleMouseClick(msg tea.MouseClickMsg) Action {
 	if !confirm {
 		return nil
 	}
-	return ActionSelectAuthMethod{
+	return dialog.ActionSelectAuthMethod{
 		Provider:  m.provider,
 		Model:     m.model,
 		ModelType: m.modelType,
@@ -173,7 +171,7 @@ func (m *AuthMethod) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	width := max(0, min(defaultAuthMethodDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
 
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "Let’s Auth " + cmp.Or(m.provider.Name, string(m.provider.ID))
 
 	prompt := t.Dialog.AuthMethod.Prompt.Width(innerWidth).Render("How would you like to authenticate?")
@@ -217,9 +215,9 @@ func (m *AuthMethod) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 	m.updateCardAreas(area, view, sideBySide, cardWidth, innerWidth)
 	if m.isOnboarding {
-		DrawOnboardingCursor(scr, area, view, nil)
+		dialog.DrawOnboardingCursor(scr, area, view, nil)
 	} else {
-		DrawCenter(scr, area, view)
+		dialog.DrawCenter(scr, area, view)
 	}
 	return nil
 }

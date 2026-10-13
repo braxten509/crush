@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
@@ -174,40 +173,8 @@ type (
 	}
 )
 
-// Messages for API key input dialog.
+// Messages from the auth dialogs that the UI handles.
 type (
-	ActionChangeAPIKeyState struct {
-		State APIKeyInputState
-	}
-)
-
-// Messages for OAuth2 device flow dialog.
-type (
-	// ActionInitiateOAuth is sent when the device auth is initiated
-	// successfully.
-	ActionInitiateOAuth struct {
-		DeviceCode      string
-		UserCode        string
-		ExpiresIn       int
-		VerificationURL string
-		Interval        int
-
-		// flowState carries provider-private state (a browser flow or a
-		// device code) from the initiating command back to the update
-		// loop, so the command never writes to the provider itself.
-		flowState any
-	}
-
-	// ActionCompleteOAuth is sent when the device flow completes successfully.
-	ActionCompleteOAuth struct {
-		Token *oauth.Token
-	}
-
-	// ActionOAuthErrored is sent when the device flow encounters an error.
-	ActionOAuthErrored struct {
-		Error error
-	}
-
 	// ActionCloseOAuth closes the OAuth dialog and runs the given cleanup
 	// command, cancelling any in-flight authorization. It exists so a
 	// dismissed dialog does not leave a poller or loopback listener

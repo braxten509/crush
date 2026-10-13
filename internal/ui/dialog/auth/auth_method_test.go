@@ -1,4 +1,4 @@
-package dialog
+package auth
 
 import (
 	"image"
@@ -8,6 +8,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/stretchr/testify/require"
@@ -28,10 +29,10 @@ func TestAuthMethodDefaultsToOAuth(t *testing.T) {
 	t.Parallel()
 
 	m := newTestAuthMethod()
-	require.Equal(t, AuthMethodID, m.ID())
+	require.Equal(t, dialog.AuthMethodID, m.ID())
 
 	action := m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	selected, ok := action.(ActionSelectAuthMethod)
+	selected, ok := action.(dialog.ActionSelectAuthMethod)
 	require.True(t, ok)
 	require.True(t, selected.UseOAuth)
 	require.Equal(t, "openai", string(selected.Provider.ID))
@@ -46,27 +47,27 @@ func TestAuthMethodTogglesToAPIKey(t *testing.T) {
 	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyDown})
 
 	action := m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	selected, ok := action.(ActionSelectAuthMethod)
+	selected, ok := action.(dialog.ActionSelectAuthMethod)
 	require.True(t, ok)
 	require.False(t, selected.UseOAuth)
 
 	// Up toggles back to OAuth.
 	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyUp})
 	action = m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	selected, ok = action.(ActionSelectAuthMethod)
+	selected, ok = action.(dialog.ActionSelectAuthMethod)
 	require.True(t, ok)
 	require.True(t, selected.UseOAuth)
 
 	// Left/right toggle as well, since the cards sit side by side.
 	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyRight})
 	action = m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	selected, ok = action.(ActionSelectAuthMethod)
+	selected, ok = action.(dialog.ActionSelectAuthMethod)
 	require.True(t, ok)
 	require.False(t, selected.UseOAuth)
 
 	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyLeft})
 	action = m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	selected, ok = action.(ActionSelectAuthMethod)
+	selected, ok = action.(dialog.ActionSelectAuthMethod)
 	require.True(t, ok)
 	require.True(t, selected.UseOAuth)
 }
@@ -76,7 +77,7 @@ func TestAuthMethodClose(t *testing.T) {
 
 	m := newTestAuthMethod()
 	action := m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape})
-	_, ok := action.(ActionClose)
+	_, ok := action.(dialog.ActionClose)
 	require.True(t, ok)
 }
 
@@ -86,14 +87,14 @@ func TestAuthMethodVimKeysToggle(t *testing.T) {
 	m := newTestAuthMethod()
 	m.HandleMsg(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	action := m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	selected, ok := action.(ActionSelectAuthMethod)
+	selected, ok := action.(dialog.ActionSelectAuthMethod)
 	require.True(t, ok)
 	require.False(t, selected.UseOAuth)
 
 	m = newTestAuthMethod()
 	m.HandleMsg(tea.KeyPressMsg{Code: 'h', Text: "h"})
 	action = m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	selected, ok = action.(ActionSelectAuthMethod)
+	selected, ok = action.(dialog.ActionSelectAuthMethod)
 	require.True(t, ok)
 	require.False(t, selected.UseOAuth)
 }
@@ -139,7 +140,7 @@ func TestAuthMethodMouseDoubleClickConfirms(t *testing.T) {
 	})
 	require.Nil(t, m.HandleMsg(click))
 	action := m.HandleMsg(click)
-	selected, ok := action.(ActionSelectAuthMethod)
+	selected, ok := action.(dialog.ActionSelectAuthMethod)
 	require.True(t, ok)
 	require.False(t, selected.UseOAuth)
 }

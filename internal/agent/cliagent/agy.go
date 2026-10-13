@@ -1,6 +1,7 @@
 package cliagent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -126,7 +127,7 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			}
 		case "result":
 			if line.Result.Status != "SUCCESS" {
-				return errors.New("AGY: " + cmpOr(line.Result.Response, "turn failed"))
+				return errors.New("AGY: " + cmp.Or(line.Result.Response, "turn failed"))
 			}
 			return nil
 		}

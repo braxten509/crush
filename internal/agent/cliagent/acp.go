@@ -1,6 +1,7 @@
 package cliagent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -216,7 +217,7 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 					SessionID string `json:"sessionId"`
 				}
 				_ = json.Unmarshal(msg.Result, &res)
-				sid := cmpOr(res.SessionID, t.Resume)
+				sid := cmp.Or(res.SessionID, t.Resume)
 				session.Store(&sid)
 				if err := t.Emit(Event{Type: EventSession, Session: sid}); err != nil {
 					return err
@@ -321,9 +322,9 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 			tc = &acpTool{}
 			calls[u.ToolCallID] = tc
 		}
-		tc.kind = cmpOr(u.Kind, tc.kind)
+		tc.kind = cmp.Or(u.Kind, tc.kind)
 		if tc.title == "" || u.SessionUpdate == "tool_call" {
-			tc.title = cmpOr(u.Title, tc.title)
+			tc.title = cmp.Or(u.Title, tc.title)
 		}
 		if len(u.RawInput) > 0 {
 			tc.input = u.RawInput
@@ -399,9 +400,9 @@ func acpTool2Crush(tc *acpTool) (string, string) {
 	case "edit":
 		if d := tc.diff; d != nil {
 			if d.OldText == "" && in("old_string", "oldString") == "" {
-				return tools.WriteToolName, marshal(tools.WriteParams{FilePath: cmpOr(d.Path, path), Content: d.NewText})
+				return tools.WriteToolName, marshal(tools.WriteParams{FilePath: cmp.Or(d.Path, path), Content: d.NewText})
 			}
-			return tools.EditToolName, marshal(tools.EditParams{FilePath: cmpOr(d.Path, path), OldString: d.OldText, NewString: d.NewText})
+			return tools.EditToolName, marshal(tools.EditParams{FilePath: cmp.Or(d.Path, path), OldString: d.OldText, NewString: d.NewText})
 		}
 		if content := in("content"); content != "" && path != "" {
 			return tools.WriteToolName, marshal(tools.WriteParams{FilePath: path, Content: content})
@@ -414,7 +415,7 @@ func acpTool2Crush(tc *acpTool) (string, string) {
 			return tools.WebFetchToolName, marshal(map[string]string{"url": url})
 		}
 	}
-	name := cmpOr(tc.title, tc.kind, "tool")
+	name := cmp.Or(tc.title, tc.kind, "tool")
 	if tc.input == nil {
 		return name, "{}"
 	}
@@ -478,13 +479,4 @@ func acpRequest(ctx context.Context, m *Model, t Turn, p *proc, msg rpcMessage) 
 		}
 	}
 	_ = p.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"outcome": map[string]any{"outcome": "cancelled"}}})
-}
-
-func cmpOr(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

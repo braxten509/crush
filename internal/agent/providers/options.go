@@ -54,12 +54,91 @@ func effectiveReasoningEffort(model modelConfig) string {
 	return ""
 }
 
+// optionsCall is what a provider's options builder works from: the model,
+// the provider, and the options merged from the catalog, the provider and
+// the user's selection, which the builder completes and parses.
+type optionsCall struct {
+	model    modelConfig
+	provider config.ProviderConfig
+	merged   map[string]any
+	// effort is the reasoning effort the call should use, and setEffort
+	// whether it is one the model takes.
+	effort    string
+	setEffort bool
+}
+
+// setEffortDefault sets key in the merged options to value when the call
+// should carry a reasoning effort and the user didn't configure key
+// themselves. It reports whether it set it.
+func (c *optionsCall) setEffortDefault(key string, value any) bool {
+	if _, ok := c.merged[key]; ok || !c.setEffort {
+		return false
+	}
+	c.merged[key] = value
+	return true
+}
+
+// thinkingSwitch is the {"type": "enabled"|"disabled"} object several
+// OpenAI-compatible providers use to turn thinking on and off.
+func thinkingSwitch(on bool) map[string]any {
+	if on {
+		return map[string]any{"type": "enabled"}
+	}
+	return map[string]any{"type": "disabled"}
+}
+
+// optionsBuilder completes the merged options with the reasoning controls
+// a provider type expects and parses them into its typed options.
+type optionsBuilder func(c *optionsCall) fantasy.ProviderOptions
+
+// optionsBuilders maps each provider type to its options builder. Types
+// without one get the known custom providers' handling, or no options.
+var optionsBuilders = map[catwalk.Type]optionsBuilder{
+	openai.Name:       openaiOptions,
+	azure.Name:        openaiOptions,
+	anthropic.Name:    anthropicOptions,
+	bedrock.Name:      anthropicOptions,
+	openrouter.Name:   reasoningObjectOptions(openrouter.Name, openrouter.ParseOptions),
+	vercel.Name:       reasoningObjectOptions(vercel.Name, vercel.ParseOptions),
+	google.Name:       googleOptions,
+	openaicompat.Name: compatOptions,
+	hyper.Name:        compatOptions,
+}
+
 // Options returns the provider options for a call to the selected model.
 func Options(catwalkModel catwalk.Model, selected config.SelectedModel, providerCfg config.ProviderConfig) fantasy.ProviderOptions {
 	model := modelConfig{CatwalkCfg: catwalkModel, ModelCfg: selected}
 	providerCfg = config.AbacusProviderForModel(providerCfg, model.CatwalkCfg)
-	options := fantasy.ProviderOptions{}
+	merged, ok := mergeOptions(model, providerCfg)
+	if !ok {
+		return fantasy.ProviderOptions{}
+	}
 
+	effort := effectiveReasoningEffort(model)
+	c := &optionsCall{
+		model:    model,
+		provider: providerCfg,
+		merged:   merged,
+		effort:   effort,
+		setEffort: model.CatwalkCfg.CanReason &&
+			effort != "" &&
+			slices.Contains(model.CatwalkCfg.ReasoningLevels, effort),
+	}
+	if build, ok := optionsBuilders[providerCfg.Type]; ok {
+		return build(c)
+	}
+	// Known custom providers (litellm, llamacpp, lmstudio, ollama, omlx)
+	// are openai-compat under the hood.
+	if discover.IsKnownCustomProvider(string(providerCfg.Type)) {
+		return customOptions(c)
+	}
+	return fantasy.ProviderOptions{}
+}
+
+// mergeOptions merges the catalog's, the provider's and the user's
+// provider options, later ones winning. It reports false when they can't
+// be merged.
+func mergeOptions(model modelConfig, providerCfg config.ProviderConfig) (map[string]any, bool) {
 	cfgOpts := []byte("{}")
 	providerCfgOpts := []byte("{}")
 	catwalkOpts := []byte("{}")
@@ -94,7 +173,7 @@ func Options(catwalkModel catwalk.Model, selected config.SelectedModel, provider
 	got, err := jsons.Merge(readers)
 	if err != nil {
 		slog.Error("Could not merge call config", "err", err)
-		return options
+		return nil, false
 	}
 
 	mergedOptions := make(map[string]any)
@@ -102,7 +181,7 @@ func Options(catwalkModel catwalk.Model, selected config.SelectedModel, provider
 	err = json.Unmarshal([]byte(got), &mergedOptions)
 	if err != nil {
 		slog.Error("Could not create config for call", "err", err)
-		return options
+		return nil, false
 	}
 	delete(mergedOptions, config.AbacusAPIFormatOption)
 	if providerCfg.ID == config.AbacusProviderID && len(providerCfg.ExtraBody) > 0 {
@@ -118,288 +197,313 @@ func Options(catwalkModel catwalk.Model, selected config.SelectedModel, provider
 		}
 		mergedOptions["extra_body"] = extra
 	}
+	return mergedOptions, true
+}
 
-	reasoningEffort := effectiveReasoningEffort(model)
-	shouldSetEffort := model.CatwalkCfg.CanReason &&
-		reasoningEffort != "" &&
-		slices.Contains(model.CatwalkCfg.ReasoningLevels, reasoningEffort)
+// openaiOptions builds options for OpenAI and Azure, on the Responses API
+// when the model uses it.
+func openaiOptions(c *optionsCall) fantasy.ProviderOptions {
+	model := c.model
+	isAbacus := c.provider.ID == config.AbacusProviderID
+	if isAbacus && config.SupportsFastMode(c.provider, model.CatwalkCfg) && model.ModelCfg.ServiceTier != "" {
+		if model.ModelCfg.ServiceTier == "fast" {
+			c.merged["service_tier"] = "priority"
+		} else {
+			c.merged["service_tier"] = "auto"
+		}
+	}
+	c.setEffortDefault("reasoning_effort", c.effort)
 
-	switch providerCfg.Type {
-	case openai.Name, azure.Name:
-		if providerCfg.ID == config.AbacusProviderID && config.SupportsFastMode(providerCfg, model.CatwalkCfg) && model.ModelCfg.ServiceTier != "" {
-			if model.ModelCfg.ServiceTier == "fast" {
-				mergedOptions["service_tier"] = "priority"
-			} else {
-				mergedOptions["service_tier"] = "auto"
-			}
+	options := fantasy.ProviderOptions{}
+	if openai.IsResponsesModel(model.CatwalkCfg.ID) || (isAbacus && config.AbacusAPIFormat(model.CatwalkCfg) == "responses") {
+		if openai.IsResponsesReasoningModel(model.CatwalkCfg.ID) {
+			c.merged["reasoning_summary"] = "auto"
+			c.merged["include"] = []openai.IncludeType{openai.IncludeReasoningEncryptedContent}
 		}
-		_, hasReasoningEffort := mergedOptions["reasoning_effort"]
-		if !hasReasoningEffort && shouldSetEffort {
-			mergedOptions["reasoning_effort"] = reasoningEffort
+		if parsed, err := openai.ParseResponsesOptions(c.merged); err == nil {
+			options[openai.Name] = parsed
 		}
-		if openai.IsResponsesModel(model.CatwalkCfg.ID) || (providerCfg.ID == config.AbacusProviderID && config.AbacusAPIFormat(model.CatwalkCfg) == "responses") {
-			if openai.IsResponsesReasoningModel(model.CatwalkCfg.ID) {
-				mergedOptions["reasoning_summary"] = "auto"
-				mergedOptions["include"] = []openai.IncludeType{openai.IncludeReasoningEncryptedContent}
-			}
-			parsed, err := openai.ParseResponsesOptions(mergedOptions)
-			if err == nil {
-				options[openai.Name] = parsed
+	} else if parsed, err := openai.ParseOptions(c.merged); err == nil {
+		options[openai.Name] = parsed
+	}
+	return options
+}
+
+// anthropicQuirks are provider IDs that serve the Anthropic API but take
+// their reasoning controls differently.
+var anthropicQuirks = map[string]func(c *optionsCall, hasEffort, hasThink bool){
+	string(catwalk.InferenceProviderAlibabaSingapore): alibabaAnthropicReasoning,
+	string(catwalk.InferenceProviderAlibabaUS):        alibabaAnthropicReasoning,
+}
+
+// anthropicOptions builds options for Anthropic and Bedrock, which is
+// Anthropic under another provider name: its options must land under
+// anthropic.Name for the Anthropic language model to pick them up.
+func anthropicOptions(c *optionsCall) fantasy.ProviderOptions {
+	_, hasEffort := c.merged["effort"]
+	_, hasThink := c.merged["thinking"]
+	if quirk, ok := anthropicQuirks[c.provider.ID]; ok {
+		quirk(c, hasEffort, hasThink)
+	} else if !c.setEffortDefault("effort", c.effort) && !hasThink && c.model.ModelCfg.Think {
+		c.merged["thinking"] = map[string]any{"budget_tokens": 2000}
+	}
+
+	options := fantasy.ProviderOptions{}
+	if parsed, err := anthropic.ParseOptions(c.merged); err == nil {
+		options[anthropic.Name] = parsed
+	}
+	return options
+}
+
+// alibabaAnthropicReasoning passes the effort, or else the thinking switch,
+// in the request body.
+func alibabaAnthropicReasoning(c *optionsCall, hasEffort, hasThink bool) {
+	extraBody := make(map[string]any)
+	switch {
+	case !hasEffort && c.setEffort:
+		extraBody["reasoning_effort"] = c.effort
+	case !hasThink && c.model.CatwalkCfg.CanReason:
+		extraBody["thinking"] = thinkingSwitch(c.model.ModelCfg.Think)
+	}
+	c.merged["extra_body"] = extraBody
+}
+
+// reasoningObjectOptions builds options for providers that take the effort
+// in a "reasoning" object (OpenRouter and Vercel).
+func reasoningObjectOptions[T fantasy.ProviderOptionsData](name string, parse func(map[string]any) (T, error)) optionsBuilder {
+	return func(c *optionsCall) fantasy.ProviderOptions {
+		c.setEffortDefault("reasoning", map[string]any{
+			"enabled": true,
+			"effort":  c.effort,
+		})
+		options := fantasy.ProviderOptions{}
+		if parsed, err := parse(c.merged); err == nil {
+			options[name] = parsed
+		}
+		return options
+	}
+}
+
+// googleOptions builds options for Gemini: a thinking budget for Gemini 2
+// models, and a thinking level for later ones.
+func googleOptions(c *optionsCall) fantasy.ProviderOptions {
+	if _, hasReasoning := c.merged["thinking_config"]; !hasReasoning {
+		if strings.HasPrefix(c.model.CatwalkCfg.ID, "gemini-2") {
+			c.merged["thinking_config"] = map[string]any{
+				"thinking_budget":  2000,
+				"include_thoughts": true,
 			}
 		} else {
-			parsed, err := openai.ParseOptions(mergedOptions)
-			if err == nil {
-				options[openai.Name] = parsed
+			c.merged["thinking_config"] = map[string]any{
+				"thinking_level":   c.effort,
+				"include_thoughts": true,
 			}
 		}
+	}
+	options := fantasy.ProviderOptions{}
+	if parsed, err := google.ParseOptions(c.merged); err == nil {
+		options[google.Name] = parsed
+	}
+	return options
+}
 
-	case anthropic.Name, bedrock.Name:
-		var (
-			_, hasEffort = mergedOptions["effort"]
-			_, hasThink  = mergedOptions["thinking"]
-			extraBody    = make(map[string]any)
-		)
+// compatQuirk adapts the OpenAI-compatible request for one provider ID.
+// "reasoning_effort" is a standard OpenAI field, but "thinking" is not, so
+// each provider that has one sets it its own way.
+//
+// TODO: Abstract this in Fantasy somehow?
+// TODO: Allow custom providers to specify how to set this?
+type compatQuirk struct {
+	// effort places the reasoning effort when the call carries one the
+	// user didn't configure. Nil sets "reasoning_effort".
+	effort func(c *optionsCall, extraBody map[string]any)
+	// thinking sets the provider's own reasoning switches in the body.
+	thinking func(c *optionsCall, extraBody map[string]any)
+}
 
-		switch providerCfg.ID {
-		case string(catwalk.InferenceProviderAlibabaSingapore), string(catwalk.InferenceProviderAlibabaUS):
-			switch {
-			case !hasEffort && shouldSetEffort:
-				extraBody["reasoning_effort"] = reasoningEffort
-			case !hasThink && model.CatwalkCfg.CanReason:
-				if model.ModelCfg.Think {
-					extraBody["thinking"] = map[string]any{"type": "enabled"}
-				} else {
-					extraBody["thinking"] = map[string]any{"type": "disabled"}
-				}
-			}
-			mergedOptions["extra_body"] = extraBody
-
-		default:
-			switch {
-			case !hasEffort && shouldSetEffort:
-				mergedOptions["effort"] = reasoningEffort
-			case !hasThink && model.ModelCfg.Think:
-				mergedOptions["thinking"] = map[string]any{"budget_tokens": 2000}
-			}
-		}
-
-		parsed, err := anthropic.ParseOptions(mergedOptions)
-		if err == nil {
-			options[anthropic.Name] = parsed
-		}
-
-	case openrouter.Name:
-		_, hasReasoning := mergedOptions["reasoning"]
-		if !hasReasoning && shouldSetEffort {
-			mergedOptions["reasoning"] = map[string]any{
-				"enabled": true,
-				"effort":  reasoningEffort,
-			}
-		}
-		parsed, err := openrouter.ParseOptions(mergedOptions)
-		if err == nil {
-			options[openrouter.Name] = parsed
-		}
-
-	case vercel.Name:
-		_, hasReasoning := mergedOptions["reasoning"]
-		if !hasReasoning && shouldSetEffort {
-			mergedOptions["reasoning"] = map[string]any{
-				"enabled": true,
-				"effort":  reasoningEffort,
-			}
-		}
-		parsed, err := vercel.ParseOptions(mergedOptions)
-		if err == nil {
-			options[vercel.Name] = parsed
-		}
-
-	case google.Name:
-		_, hasReasoning := mergedOptions["thinking_config"]
-		if !hasReasoning {
-			if strings.HasPrefix(model.CatwalkCfg.ID, "gemini-2") {
-				mergedOptions["thinking_config"] = map[string]any{
-					"thinking_budget":  2000,
-					"include_thoughts": true,
-				}
-			} else {
-				mergedOptions["thinking_config"] = map[string]any{
-					"thinking_level":   reasoningEffort,
-					"include_thoughts": true,
-				}
-			}
-		}
-		parsed, err := google.ParseOptions(mergedOptions)
-		if err == nil {
-			options[google.Name] = parsed
-		}
-
-	case openaicompat.Name, hyper.Name:
-		extraBody := make(map[string]any)
-
-		_, hasReasoningEffort := mergedOptions["reasoning_effort"]
-		if !hasReasoningEffort && shouldSetEffort {
-			switch providerCfg.ID {
-			case string(catwalk.InferenceProviderIoNet):
-				extraBody["reasoning"] = map[string]string{"effort": reasoningEffort}
-			case string(catwalk.InferenceProviderOpenCodeGo), string(catwalk.InferenceProviderOpenCodeZen):
-				// MiniMax models use the "thinking" parameter instead of
-				// "reasoning_effort". Other models on these providers still
-				// use the standard field.
-				if !strings.HasPrefix(strings.ToLower(model.CatwalkCfg.ID), "minimax") {
-					mergedOptions["reasoning_effort"] = reasoningEffort
-				}
-			default:
-				mergedOptions["reasoning_effort"] = reasoningEffort
-			}
-		}
-
-		// "reasoning effort" is a standard OpenAI field, but "thinking" is not.
-		// Setting it in the right way for each provider.
-		// TODO: Abstract this in Fantasy somehow?
-		// TODO: Allow custom providers to specify how to set this?
-		switch providerCfg.ID {
-		case config.AbacusProviderID:
-			if existing, ok := mergedOptions["extra_body"].(map[string]any); ok {
-				for key, value := range existing {
-					extraBody[key] = value
-				}
-			}
-			id := strings.ToLower(model.CatwalkCfg.ID)
-			if _, explicit := extraBody["thinking"]; explicit {
-				break
-			}
-			switch {
-			case strings.Contains(id, "minimax"):
-				if model.ModelCfg.Think || shouldSetEffort {
-					mode := "enabled"
-					if strings.Contains(id, "minimax-m3") {
-						mode = "adaptive"
-						extraBody["reasoning_split"] = true
-					}
-					extraBody["thinking"] = map[string]any{"type": mode}
-				} else {
-					extraBody["thinking"] = map[string]any{"type": "disabled"}
-				}
-				delete(mergedOptions, "reasoning_effort")
-			case strings.Contains(id, "deepseek") || strings.HasPrefix(id, "zai-org/"):
-				if model.ModelCfg.Think || (shouldSetEffort && reasoningEffort != "none") {
-					extraBody["thinking"] = map[string]any{"type": "enabled"}
-				} else {
-					extraBody["thinking"] = map[string]any{"type": "disabled"}
-				}
-			}
-		case hyper.Name:
-			extraBody["thinking"] = model.ModelCfg.Think
-		case string(catwalk.InferenceProviderIoNet):
-			if _, ok := extraBody["reasoning"]; !ok && model.CatwalkCfg.CanReason {
-				if model.ModelCfg.Think {
+// compatQuirks are the OpenAI-compatible providers with their own
+// reasoning controls.
+var compatQuirks = map[string]compatQuirk{
+	config.AbacusProviderID: {thinking: abacusThinking},
+	hyper.Name: {thinking: func(c *optionsCall, extraBody map[string]any) {
+		extraBody["thinking"] = c.model.ModelCfg.Think
+	}},
+	string(catwalk.InferenceProviderIoNet): {
+		effort: func(c *optionsCall, extraBody map[string]any) {
+			extraBody["reasoning"] = map[string]string{"effort": c.effort}
+		},
+		thinking: func(c *optionsCall, extraBody map[string]any) {
+			if _, ok := extraBody["reasoning"]; !ok && c.model.CatwalkCfg.CanReason {
+				if c.model.ModelCfg.Think {
 					extraBody["reasoning"] = map[string]string{"effort": "medium"}
 				} else {
 					extraBody["reasoning"] = map[string]string{"effort": "none"}
 				}
 			}
-
-		case string(catwalk.InferenceProviderZAI), string(catwalk.InferenceProviderDeepSeek):
-			if model.ModelCfg.Think || reasoningEffort != "" {
-				extraBody["thinking"] = map[string]any{"type": "enabled"}
-			} else {
-				extraBody["thinking"] = map[string]any{"type": "disabled"}
-			}
-
-		case string(catwalk.InferenceProviderFireworks):
-			// NOTE: Fireworks break if we set both `reasoning_effort` and `thinking`.
-			if reasoningEffort == "" {
-				if model.ModelCfg.Think {
-					extraBody["thinking"] = map[string]any{"type": "enabled"}
-				} else {
-					extraBody["thinking"] = map[string]any{"type": "disabled"}
-				}
-			}
-
-		case string(catwalk.InferenceProviderBaseten):
-			extraBody["chat_template_args"] = map[string]any{
-				"enable_thinking": model.ModelCfg.Think || reasoningEffort != "" && reasoningEffort != "none",
-			}
-
-		case string(catwalk.InferenceProviderOpenCodeGo), string(catwalk.InferenceProviderOpenCodeZen):
-			// MiniMax M3 uses the "thinking" parameter to control reasoning.
-			// "reasoning_split" must be true so thinking content is returned
-			// in the "reasoning_content" field instead of inline in "content".
-			if strings.HasPrefix(strings.ToLower(model.CatwalkCfg.ID), "minimax") {
-				if model.CatwalkCfg.CanReason && (model.ModelCfg.Think || reasoningEffort != "") {
-					extraBody["thinking"] = map[string]any{"type": "adaptive"}
-					extraBody["reasoning_split"] = true
-				} else {
-					extraBody["thinking"] = map[string]any{"type": "disabled"}
-				}
-			}
-
-		case string(catwalk.InferenceProviderAlibabaSingapore), string(catwalk.InferenceProviderAlibabaUS):
-			if model.CatwalkCfg.CanReason && !shouldSetEffort {
-				extraBody["enable_thinking"] = model.ModelCfg.Think
-			}
+		},
+	},
+	string(catwalk.InferenceProviderZAI):       {thinking: enabledWhenReasoning},
+	string(catwalk.InferenceProviderDeepSeek):  {thinking: enabledWhenReasoning},
+	string(catwalk.InferenceProviderFireworks): {thinking: fireworksThinking},
+	string(catwalk.InferenceProviderBaseten): {thinking: func(c *optionsCall, extraBody map[string]any) {
+		extraBody["chat_template_args"] = map[string]any{
+			"enable_thinking": c.model.ModelCfg.Think || c.effort != "" && c.effort != "none",
 		}
+	}},
+	string(catwalk.InferenceProviderOpenCodeGo):       {effort: openCodeEffort, thinking: openCodeThinking},
+	string(catwalk.InferenceProviderOpenCodeZen):      {effort: openCodeEffort, thinking: openCodeThinking},
+	string(catwalk.InferenceProviderAlibabaSingapore): {thinking: alibabaCompatThinking},
+	string(catwalk.InferenceProviderAlibabaUS):        {thinking: alibabaCompatThinking},
+}
 
-		mergedOptions["extra_body"] = extraBody
+// compatOptions builds options for OpenAI-compatible providers and Hyper.
+func compatOptions(c *optionsCall) fantasy.ProviderOptions {
+	extraBody := make(map[string]any)
+	quirk := compatQuirks[c.provider.ID]
 
-		parsed, err := openaicompat.ParseOptions(mergedOptions)
-		if err == nil {
-			options[openaicompat.Name] = parsed
+	if _, ok := c.merged["reasoning_effort"]; !ok && c.setEffort {
+		if quirk.effort != nil {
+			quirk.effort(c, extraBody)
+		} else {
+			c.merged["reasoning_effort"] = c.effort
 		}
+	}
+	if quirk.thinking != nil {
+		quirk.thinking(c, extraBody)
+	}
+	c.merged["extra_body"] = extraBody
 
-	default:
-		// Known custom providers (litellm, llamacpp, lmstudio, ollama,
-		// omlx) are openai-compat under the hood.
-		if discover.IsKnownCustomProvider(string(providerCfg.Type)) {
-			// Set "top_k" under "extra_body", as it is not part of the OpenAI protocol
-			// and will be explicitly omitted by Fantasy downstream.
-			topK := cmp.Or(model.ModelCfg.TopK, model.CatwalkCfg.Options.TopK)
-			if topK != nil {
-				extraBody, hasExtraBody := mergedOptions["extra_body"].(map[string]any)
-				if !hasExtraBody {
-					extraBody = make(map[string]any)
-					mergedOptions["extra_body"] = extraBody
-				}
-				if _, hasTopK := extraBody["top_k"]; !hasTopK {
-					extraBody["top_k"] = *topK
-				}
+	options := fantasy.ProviderOptions{}
+	if parsed, err := openaicompat.ParseOptions(c.merged); err == nil {
+		options[openaicompat.Name] = parsed
+	}
+	return options
+}
+
+// abacusThinking keeps the user's request body and sets the thinking
+// switch the model's family expects, unless the user set one.
+func abacusThinking(c *optionsCall, extraBody map[string]any) {
+	if existing, ok := c.merged["extra_body"].(map[string]any); ok {
+		maps.Copy(extraBody, existing)
+	}
+	if _, explicit := extraBody["thinking"]; explicit {
+		return
+	}
+	id := strings.ToLower(c.model.CatwalkCfg.ID)
+	switch {
+	case strings.Contains(id, "minimax"):
+		if c.model.ModelCfg.Think || c.setEffort {
+			mode := "enabled"
+			if strings.Contains(id, "minimax-m3") {
+				mode = "adaptive"
+				extraBody["reasoning_split"] = true
 			}
+			extraBody["thinking"] = map[string]any{"type": mode}
+		} else {
+			extraBody["thinking"] = thinkingSwitch(false)
+		}
+		delete(c.merged, "reasoning_effort")
+	case strings.Contains(id, "deepseek") || strings.HasPrefix(id, "zai-org/"):
+		extraBody["thinking"] = thinkingSwitch(c.model.ModelCfg.Think || (c.setEffort && c.effort != "none"))
+	}
+}
 
-			_, hasReasoningEffort := mergedOptions["reasoning_effort"]
-			if !hasReasoningEffort && shouldSetEffort {
-				mergedOptions["reasoning_effort"] = reasoningEffort
-			}
+// enabledWhenReasoning turns thinking on whenever the call reasons.
+func enabledWhenReasoning(c *optionsCall, extraBody map[string]any) {
+	extraBody["thinking"] = thinkingSwitch(c.model.ModelCfg.Think || c.effort != "")
+}
 
-			parsed, err := openaicompat.ParseOptions(mergedOptions)
-			if err == nil {
-				options[openaicompat.Name] = parsed
-			} else {
-				if topK != nil {
-					slog.Warn(
-						"Failed to parse provider_options, falling back to top_k only",
-						"provider", providerCfg.ID,
-						"error", err,
-					)
+// fireworksThinking sets the thinking switch only without an effort:
+// Fireworks breaks if both `reasoning_effort` and `thinking` are set.
+func fireworksThinking(c *optionsCall, extraBody map[string]any) {
+	if c.effort == "" {
+		extraBody["thinking"] = thinkingSwitch(c.model.ModelCfg.Think)
+	}
+}
 
-					fallbackMergeOptions := map[string]any{
-						"extra_body": map[string]any{"top_k": *topK},
-					}
-					parsed, err := openaicompat.ParseOptions(fallbackMergeOptions)
-					if err == nil {
-						options[openaicompat.Name] = parsed
-					} else {
-						slog.Warn(
-							"Failed to parse fallback provider options, this should never happen",
-							"provider", providerCfg.ID,
-							"error", err,
-						)
-					}
-				}
-			}
+// openCodeEffort sets "reasoning_effort" except for MiniMax models, which
+// use the "thinking" parameter instead. Other models on these providers
+// still use the standard field.
+func openCodeEffort(c *optionsCall, _ map[string]any) {
+	if !isMiniMax(c.model.CatwalkCfg.ID) {
+		c.merged["reasoning_effort"] = c.effort
+	}
+}
+
+// openCodeThinking controls MiniMax M3's reasoning with the "thinking"
+// parameter. "reasoning_split" must be true so thinking content is
+// returned in the "reasoning_content" field instead of inline in
+// "content".
+func openCodeThinking(c *optionsCall, extraBody map[string]any) {
+	if !isMiniMax(c.model.CatwalkCfg.ID) {
+		return
+	}
+	if c.model.CatwalkCfg.CanReason && (c.model.ModelCfg.Think || c.effort != "") {
+		extraBody["thinking"] = map[string]any{"type": "adaptive"}
+		extraBody["reasoning_split"] = true
+	} else {
+		extraBody["thinking"] = thinkingSwitch(false)
+	}
+}
+
+func isMiniMax(modelID string) bool {
+	return strings.HasPrefix(strings.ToLower(modelID), "minimax")
+}
+
+// alibabaCompatThinking switches thinking for models that reason without
+// effort levels.
+func alibabaCompatThinking(c *optionsCall, extraBody map[string]any) {
+	if c.model.CatwalkCfg.CanReason && !c.setEffort {
+		extraBody["enable_thinking"] = c.model.ModelCfg.Think
+	}
+}
+
+// customOptions builds options for the known custom providers, which speak
+// OpenAI-compat.
+func customOptions(c *optionsCall) fantasy.ProviderOptions {
+	// Set "top_k" under "extra_body", as it is not part of the OpenAI protocol
+	// and will be explicitly omitted by Fantasy downstream.
+	topK := cmp.Or(c.model.ModelCfg.TopK, c.model.CatwalkCfg.Options.TopK)
+	if topK != nil {
+		extraBody, hasExtraBody := c.merged["extra_body"].(map[string]any)
+		if !hasExtraBody {
+			extraBody = make(map[string]any)
+			c.merged["extra_body"] = extraBody
+		}
+		if _, hasTopK := extraBody["top_k"]; !hasTopK {
+			extraBody["top_k"] = *topK
 		}
 	}
 
+	c.setEffortDefault("reasoning_effort", c.effort)
+
+	options := fantasy.ProviderOptions{}
+	parsed, err := openaicompat.ParseOptions(c.merged)
+	if err == nil {
+		options[openaicompat.Name] = parsed
+		return options
+	}
+	if topK == nil {
+		return options
+	}
+	slog.Warn(
+		"Failed to parse provider_options, falling back to top_k only",
+		"provider", c.provider.ID,
+		"error", err,
+	)
+	fallbackMergeOptions := map[string]any{
+		"extra_body": map[string]any{"top_k": *topK},
+	}
+	parsed, err = openaicompat.ParseOptions(fallbackMergeOptions)
+	if err == nil {
+		options[openaicompat.Name] = parsed
+	} else {
+		slog.Warn(
+			"Failed to parse fallback provider options, this should never happen",
+			"provider", c.provider.ID,
+			"error", err,
+		)
+	}
 	return options
 }
 

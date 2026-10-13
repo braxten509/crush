@@ -337,6 +337,16 @@ func setupWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
 // setupLocalWorkspace creates an in-process app.App and wraps it in an
 // AppWorkspace.
 func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
+	appInstance, cleanup, err := setupLocalApp(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
+	return workspace.NewAppWorkspace(appInstance, appInstance.Store()), cleanup, nil
+}
+
+// setupLocalApp loads the config for the working directory and creates an
+// in-process app.App. The cleanup function shuts the app down.
+func setupLocalApp(cmd *cobra.Command) (*app.App, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
 	yolo, _ := cmd.Flags().GetBool("yolo")
 	channels, _ := cmd.Flags().GetStringSlice("channels")
@@ -406,9 +416,8 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 		event.Init()
 	}
 
-	ws := workspace.NewAppWorkspace(appInstance, store)
 	cleanup := func() { appInstance.Shutdown() }
-	return ws, cleanup, nil
+	return appInstance, cleanup, nil
 }
 
 // localSkillsDiscoveryConfig adapts a *config.ConfigStore to the inputs

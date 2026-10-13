@@ -440,6 +440,12 @@ func (m *Models) addCustomProviderGroups(b *modelGroupsBuilder, cfg *config.Conf
 		}
 	}
 
+	type customProvider struct {
+		id   string
+		name string
+		cfg  config.ProviderConfig
+	}
+	var custom []customProvider
 	for id, p := range cfg.Providers.Seq2() {
 		if p.Disable {
 			continue
@@ -448,15 +454,17 @@ func (m *Models) addCustomProviderGroups(b *modelGroupsBuilder, cfg *config.Conf
 		// Check if this provider is not in the known providers list
 		if !slices.ContainsFunc(knownProviders, containsProviderFunc(id)) ||
 			!slices.ContainsFunc(m.providers, containsProviderFunc(id)) {
-			provider := p.ToProvider()
-
-			// Add this unknown provider to the list
-			name := cmp.Or(p.Name, id)
-
-			addedProviders[id] = true
-
-			b.appendNonEmpty(b.newGroup(name, true, provider, p.Models))
+			custom = append(custom, customProvider{id: id, name: cmp.Or(p.Name, id), cfg: p})
 		}
+	}
+	// The config keeps providers in a map, so order the groups by the
+	// name they show (then ID), as the remote CLI list does.
+	slices.SortFunc(custom, func(a, b customProvider) int {
+		return cmp.Or(cmp.Compare(a.name, b.name), cmp.Compare(a.id, b.id))
+	})
+	for _, c := range custom {
+		addedProviders[c.id] = true
+		b.appendNonEmpty(b.newGroup(c.name, true, c.cfg.ToProvider(), c.cfg.Models))
 	}
 	return addedProviders
 }

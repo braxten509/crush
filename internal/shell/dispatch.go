@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/filechange"
-	"github.com/charmbracelet/crush/internal/filepathext"
+	"github.com/charmbracelet/crush/internal/fsext"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -56,7 +56,7 @@ func scriptDispatchHandler(blockFuncs []BlockFunc) execMiddleware {
 			// Resolve relative paths against the interpreter's cwd, not
 			// the process cwd — hook commands are authored with the hook
 			// Runner's cwd in mind and sub-shells can cd before an exec.
-			scriptPath := filepathext.SmartJoin(interp.HandlerCtx(ctx).Dir, args[0])
+			scriptPath := fsext.SmartJoin(interp.HandlerCtx(ctx).Dir, args[0])
 			probe, err := probeFile(scriptPath)
 			if err != nil {
 				return err

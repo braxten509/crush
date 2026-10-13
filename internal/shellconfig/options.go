@@ -47,28 +47,11 @@ func handleOption(ctx context.Context, args []string, stdin io.Reader, stdout, s
 	key := args[1]
 	o := b.section("options")
 
-	if key == "ui" {
+	switch key {
+	case "ui":
 		return optionUI(o, args, stderr)
-	}
-
-	// "option reset <key>" wipes a list back to empty. Because the builder
-	// applies operations in execution order, this is just an assignment:
-	// values added after the reset are kept, earlier ones are dropped.
-	if key == "reset" {
-		if len(args) < 3 {
-			return usage(stderr, "usage: option reset <list-key>")
-		}
-		target := args[2]
-		spec, ok := optionSpecs[target]
-		if !ok {
-			return usage(stderr, fmt.Sprintf("option: unknown key %q", target))
-		}
-		if spec.kind != optList {
-			return usage(stderr, fmt.Sprintf("option: reset only applies to list options, %q is not one", target))
-		}
-		o[spec.jsonKey] = []any{}
-		slog.Info("Option list reset in shell config", "key", target)
-		return nil
+	case "reset":
+		return optionReset(o, args, stderr)
 	}
 
 	// Determine the value.
@@ -77,32 +60,13 @@ func handleOption(ctx context.Context, args []string, stdin io.Reader, stdout, s
 		val = args[2]
 	}
 
-	if key == "attribution-trailer-style" {
-		if val == "" {
-			return usage(stderr, "option: attribution-trailer-style requires a value")
-		}
-		switch val {
-		case "none", "co-authored-by", "assisted-by":
-		default:
-			return usage(stderr, fmt.Sprintf("option: attribution-trailer-style expects none, co-authored-by, or assisted-by, got %q", val))
-		}
-		attribution := childMap(o, "attribution")
-		if _, ok := attribution["generated_with"]; !ok {
-			attribution["generated_with"] = true
-		}
-		attribution["trailer_style"] = val
-		slog.Info("Option set in shell config", "key", key, "value", val)
-		return nil
-	}
-
-	if key == "attribution-generated-with" {
-		bv := true
-		if val != "" {
-			parsed, err := parseBool(val)
-			if err != nil {
-				return usage(stderr, fmt.Sprintf("option: attribution-generated-with expects true/false, got %q", val))
-			}
-			bv = parsed
+	switch key {
+	case "attribution-trailer-style":
+		return optionTrailerStyle(o, val, stderr)
+	case "attribution-generated-with":
+		bv, err := optionBoolValue(key, val, stderr)
+		if err != nil {
+			return err
 		}
 		childMap(o, "attribution")["generated_with"] = bv
 		slog.Info("Option set in shell config", "key", key, "value", bv)
@@ -113,54 +77,105 @@ func handleOption(ctx context.Context, args []string, stdin io.Reader, stdout, s
 	if !ok {
 		return usage(stderr, fmt.Sprintf("option: unknown key %q", key))
 	}
+	return setOption(o, key, spec, val, stderr)
+}
 
+// optionReset implements "option reset <list-key>", which wipes a list back
+// to empty. Because the builder applies operations in execution order, this
+// is just an assignment: values added after the reset are kept, earlier ones
+// are dropped.
+func optionReset(o map[string]any, args []string, stderr io.Writer) error {
+	if len(args) < 3 {
+		return usage(stderr, "usage: option reset <list-key>")
+	}
+	target := args[2]
+	spec, ok := optionSpecs[target]
+	if !ok {
+		return usage(stderr, fmt.Sprintf("option: unknown key %q", target))
+	}
+	if spec.kind != optList {
+		return usage(stderr, fmt.Sprintf("option: reset only applies to list options, %q is not one", target))
+	}
+	o[spec.jsonKey] = []any{}
+	slog.Info("Option list reset in shell config", "key", target)
+	return nil
+}
+
+// optionTrailerStyle implements "option attribution-trailer-style <style>".
+// Choosing a trailer style also turns on the generated-with line unless it
+// was set explicitly.
+func optionTrailerStyle(o map[string]any, val string, stderr io.Writer) error {
+	const key = "attribution-trailer-style"
+	if val == "" {
+		return usage(stderr, "option: attribution-trailer-style requires a value")
+	}
+	switch val {
+	case "none", "co-authored-by", "assisted-by":
+	default:
+		return usage(stderr, fmt.Sprintf("option: attribution-trailer-style expects none, co-authored-by, or assisted-by, got %q", val))
+	}
+	attribution := childMap(o, "attribution")
+	if _, ok := attribution["generated_with"]; !ok {
+		attribution["generated_with"] = true
+	}
+	attribution["trailer_style"] = val
+	slog.Info("Option set in shell config", "key", key, "value", val)
+	return nil
+}
+
+// optionBoolValue parses a boolean option value; an omitted value means
+// true.
+func optionBoolValue(key, val string, stderr io.Writer) (bool, error) {
+	if val == "" {
+		return true, nil
+	}
+	parsed, err := parseBool(val)
+	if err != nil {
+		return false, usage(stderr, fmt.Sprintf("option: %s expects true/false, got %q", key, val))
+	}
+	return parsed, nil
+}
+
+// setOption stores val under the option's JSON key, parsed according to the
+// option's kind. Lists append; every other kind replaces.
+func setOption(o map[string]any, key string, spec optionSpec, val string, stderr io.Writer) error {
+	if val == "" && spec.kind != optBool {
+		return usage(stderr, fmt.Sprintf("option: %s requires a value", key))
+	}
+
+	var logged any
 	switch spec.kind {
 	case optList:
-		if val == "" {
-			return usage(stderr, fmt.Sprintf("option: %s requires a value", key))
-		}
 		o[spec.jsonKey] = appendArr(o, spec.jsonKey, val)
-		slog.Info("Option set in shell config", "key", key, "value", val)
-		return nil
+		logged = val
 
 	case optBool:
-		// If no value, default to true. Inverted keys store the negation,
-		// so a positive key like "metrics" maps onto "disable_metrics".
-		bv := true
-		if val != "" {
-			parsed, err := parseBool(val)
-			if err != nil {
-				return usage(stderr, fmt.Sprintf("option: %s expects true/false, got %q", key, val))
-			}
-			bv = parsed
+		// Inverted keys store the negation, so a positive key like
+		// "metrics" maps onto "disable_metrics".
+		bv, err := optionBoolValue(key, val, stderr)
+		if err != nil {
+			return err
 		}
 		if spec.inverted {
 			bv = !bv
 		}
 		o[spec.jsonKey] = bv
-		slog.Info("Option set in shell config", "key", key, "value", o[spec.jsonKey])
-		return nil
+		logged = bv
 
 	case optInt:
-		if val == "" {
-			return usage(stderr, fmt.Sprintf("option: %s requires a value", key))
-		}
 		n, err := strconv.Atoi(val)
 		if err != nil {
 			return usage(stderr, fmt.Sprintf("option: %s expects a number of seconds, got %q", key, val))
 		}
 		o[spec.jsonKey] = n
-		slog.Info("Option set in shell config", "key", key, "value", n)
-		return nil
+		logged = n
 
 	default: // optString
-		if val == "" {
-			return usage(stderr, fmt.Sprintf("option: %s requires a value", key))
-		}
 		o[spec.jsonKey] = val
-		slog.Info("Option set in shell config", "key", key, "value", val)
-		return nil
+		logged = val
 	}
+	slog.Info("Option set in shell config", "key", key, "value", logged)
+	return nil
 }
 
 // optionKind is the value type of a user-facing option key.

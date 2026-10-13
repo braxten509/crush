@@ -40,11 +40,12 @@ func (m *UI) setAutocompact(tokens int64) tea.Cmd {
 }
 
 func (m *UI) saveAutocompactCmd(tokens int64) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
-		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.auto_compact_token_limit", tokens); err != nil {
+		if err := ws.SetConfigField(config.ScopeGlobal, "options.auto_compact_token_limit", tokens); err != nil {
 			return util.ReportError(err)()
 		}
-		if err := m.com.Workspace.UpdateAgentModel(context.Background()); err != nil {
+		if err := ws.UpdateAgentModel(context.Background()); err != nil {
 			return util.ReportError(err)()
 		}
 		return util.NewInfoMsg(fmt.Sprintf("Fallback compaction set to %d tokens", tokens))

@@ -11,12 +11,14 @@ import (
 	"slices"
 
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/diffreview"
 	"github.com/charmbracelet/crush/internal/filechange"
-	"github.com/charmbracelet/crush/internal/ui/diffreview"
 )
 
-const reviewTextBudget = 2 << 20
-const reviewPayloadLimit = 16 << 20
+const (
+	reviewTextBudget   = 2 << 20
+	reviewPayloadLimit = 16 << 20
+)
 
 var ErrReviewExpired = errors.New("diff details are no longer saved (only the latest five prompts keep them)")
 
@@ -49,11 +51,7 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 		}
 		var metadata map[string]json.RawMessage
 		_ = json.Unmarshal([]byte(result.Metadata), &metadata)
-		hasDiff := result.Review != nil && (len(result.Review.Changes) > 0 || result.Review.Deletions)
-		for _, key := range []string{"old_content", "new_content", "diff"} {
-			hasDiff = hasDiff || len(metadata[key]) > 0
-		}
-		if !hasDiff {
+		if !hasReviewDiff(result.Review, metadata) {
 			continue
 		}
 		summary := &filechange.ReviewSummary{}
@@ -63,67 +61,20 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 		countLines(summary, result.Review, metadata)
 		detail := reviewDetail{Metadata: result.Metadata}
 		if result.Review != nil {
-			review := *result.Review
-			review.Changes = slices.Clone(review.Changes)
-			for n, change := range review.Changes {
-				visible := !filechange.HiddenReviewPath(change.Path, review.Root)
-				if visible {
-					summary.Files++
-				}
-				deleted := change.Before != nil && change.After == nil
-				if visible && !deleted && len(summary.Paths) < 3 {
-					summary.Paths = append(summary.Paths, change.Path)
-				}
-				if visible && change.Transfer != nil {
-					switch change.Transfer.Kind {
-					case "copy":
-						summary.Copied++
-					case "checkout":
-						summary.Checkouts++
-					case "move":
-						summary.Moved++
-					case "generated":
-						summary.Generated++
-					}
-				}
-				change.Before = boundedReviewState(change.Before, &budget)
-				change.After = boundedReviewState(change.After, &budget)
-				if change.Transfer != nil && change.Transfer.Baseline != nil {
-					transfer := *change.Transfer
-					transfer.Baseline = boundedReviewState(transfer.Baseline, &budget)
-					change.Transfer = &transfer
-				}
-				review.Changes[n] = change
-			}
-			detail.Review = &review
+			detail.Review = summarizeReview(summary, result.Review, &budget)
 			// These repeat the same snapshots already carried by Review.
-			for _, key := range []string{"old_content", "new_content", "diff"} {
-				delete(metadata, key)
-			}
+			deletePreviews(metadata)
 			if result.Metadata != "" {
 				encoded, _ := json.Marshal(metadata)
 				detail.Metadata = string(encoded)
 			}
 		} else {
 			summary.Files = 1
-			size := 0
-			for _, key := range []string{"old_content", "new_content", "diff"} {
-				size += len(metadata[key])
-			}
-			if size > budget {
-				for _, key := range []string{"old_content", "new_content", "diff"} {
-					delete(metadata, key)
-				}
-				metadata["review_omitted"] = json.RawMessage(`"Preview exceeds the saved diff size limit"`)
-			} else {
-				budget -= size
-			}
+			boundMetadataPreviews(metadata, &budget)
 			encoded, _ := json.Marshal(metadata)
 			detail.Metadata = string(encoded)
 		}
-		for _, key := range []string{"old_content", "new_content", "diff"} {
-			delete(metadata, key)
-		}
+		deletePreviews(metadata)
 		if result.Metadata != "" {
 			encoded, _ := json.Marshal(metadata)
 			result.Metadata = string(encoded)
@@ -135,22 +86,114 @@ func separateReviews(id, sessionID string, parts []ContentPart) ([]ContentPart, 
 	if len(details) == 0 {
 		return compact, nil, nil
 	}
-	data, err := json.Marshal(details)
+	payload, err := compressReviewDetails(details)
 	if err != nil {
 		return nil, nil, err
 	}
+	return compact, payload, nil
+}
+
+// reviewPreviewKeys are the metadata fields that hold a result's diff
+// preview.
+var reviewPreviewKeys = []string{"old_content", "new_content", "diff"}
+
+// hasReviewDiff reports whether a result carries file changes worth a
+// review: captured changes, a deletion, or a diff preview in its metadata.
+func hasReviewDiff(review *filechange.Review, metadata map[string]json.RawMessage) bool {
+	hasDiff := review != nil && (len(review.Changes) > 0 || review.Deletions)
+	for _, key := range reviewPreviewKeys {
+		hasDiff = hasDiff || len(metadata[key]) > 0
+	}
+	return hasDiff
+}
+
+// deletePreviews drops the diff preview fields from metadata.
+func deletePreviews(metadata map[string]json.RawMessage) {
+	for _, key := range reviewPreviewKeys {
+		delete(metadata, key)
+	}
+}
+
+// boundMetadataPreviews keeps a metadata diff preview while it fits the
+// remaining budget, and otherwise replaces it with a note that it was
+// omitted.
+func boundMetadataPreviews(metadata map[string]json.RawMessage, budget *int) {
+	size := 0
+	for _, key := range reviewPreviewKeys {
+		size += len(metadata[key])
+	}
+	if size > *budget {
+		deletePreviews(metadata)
+		metadata["review_omitted"] = json.RawMessage(`"Preview exceeds the saved diff size limit"`)
+	} else {
+		*budget -= size
+	}
+}
+
+// summarizeReview counts the visible files of review into summary and
+// returns a copy of review whose snapshots fit the remaining budget, without
+// restore data.
+func summarizeReview(summary *filechange.ReviewSummary, original *filechange.Review, budget *int) *filechange.Review {
+	review := *original
+	review.Changes = slices.Clone(review.Changes)
+	for n, change := range review.Changes {
+		if !filechange.HiddenReviewPath(change.Path, review.Root) {
+			countChange(summary, change)
+		}
+		change.Before = boundedReviewState(change.Before, budget)
+		change.After = boundedReviewState(change.After, budget)
+		if change.Transfer != nil && change.Transfer.Baseline != nil {
+			transfer := *change.Transfer
+			transfer.Baseline = boundedReviewState(transfer.Baseline, budget)
+			change.Transfer = &transfer
+		}
+		review.Changes[n] = change
+	}
+	return &review
+}
+
+// countChange adds one visible change to summary: the file, its path (for
+// the first three files that still exist) and how it was transferred.
+func countChange(summary *filechange.ReviewSummary, change filechange.Change) {
+	summary.Files++
+	deleted := change.Before != nil && change.After == nil
+	if !deleted && len(summary.Paths) < 3 {
+		summary.Paths = append(summary.Paths, change.Path)
+	}
+	if change.Transfer == nil {
+		return
+	}
+	switch change.Transfer.Kind {
+	case "copy":
+		summary.Copied++
+	case "checkout":
+		summary.Checkouts++
+	case "move":
+		summary.Moved++
+	case "generated":
+		summary.Generated++
+	}
+}
+
+// compressReviewDetails encodes and gzips the details payload. A payload
+// over reviewPayloadLimit is not saved: it returns nil.
+func compressReviewDetails(details map[string]reviewDetail) ([]byte, error) {
+	data, err := json.Marshal(details)
+	if err != nil {
+		return nil, err
+	}
 	if len(data) > reviewPayloadLimit {
-		return compact, nil, nil
+		return nil, nil
 	}
 	var compressed bytes.Buffer
 	w, _ := gzip.NewWriterLevel(&compressed, gzip.BestSpeed)
 	if _, err := w.Write(data); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if err := w.Close(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return compact, compressed.Bytes(), nil
+	return compressed.Bytes(), nil
 }
 
 // countLines totals the lines a result added and removed, and the files it

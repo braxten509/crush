@@ -1,14 +1,15 @@
 package model
 
 import (
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/crush/internal/question"
-	"github.com/charmbracelet/crush/internal/secureentry"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/question"
+	"github.com/charmbracelet/crush/internal/secureentry"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+	"github.com/stretchr/testify/require"
 )
 
 func secureFormFixture(t *testing.T) (*secureentry.Form, string) {
@@ -32,7 +33,7 @@ func TestExternalSecureCancellationDismissesOnlyItsOwnForm(t *testing.T) {
 	form, _ := secureFormFixture(t)
 	u, _ := newSubmissionUI()
 	u.Update(form)
-	inline := u.activeInline.(*dialog.QuestionForm)
+	inline := u.activeInline.(*questionform.QuestionForm)
 	u.Update(tea.PasteMsg{Content: "dummy-key"})
 	form.Cancel()
 	select {
@@ -54,7 +55,7 @@ func TestSecureQuestionsUseTheInlineFormAndSurviveOrdinaryNotifications(t *testi
 	u, _ := newSubmissionUI()
 	u.textarea.SetValue("existing draft")
 	u.Update(form)
-	inline, ok := u.activeInline.(*dialog.QuestionForm)
+	inline, ok := u.activeInline.(*questionform.QuestionForm)
 	require.True(t, ok)
 	require.True(t, inline.HasSecureEntry())
 	u.Update(tea.PasteMsg{Content: "dummy-key"})

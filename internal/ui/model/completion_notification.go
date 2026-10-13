@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent/notify"
-	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/notification"
 )
 
@@ -29,7 +28,6 @@ func (m *UI) checkAgentFinished(n notify.Notification) tea.Cmd {
 func (m *UI) handleAgentFinished(msg agentFinishedMsg) tea.Cmd {
 	n := msg.notification
 	if m.hasSession() && m.session.ID == n.SessionID {
-		common.StopTurn()
 		m.turnOutcome = tea.ProgramStateDone
 	}
 	return tea.Batch(

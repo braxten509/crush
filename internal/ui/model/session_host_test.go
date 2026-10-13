@@ -4,9 +4,10 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/sessionhost"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
+	"github.com/charmbracelet/crush/internal/ui/sessionhost"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ func TestHostStatusIsSentOncePerChange(t *testing.T) {
 	require.NotNil(t, m.hostStatus())
 	require.Equal(t, sessionhost.StateWorking, m.lastHostStatus.State)
 
-	m.dialog.OpenDialogWithGrace(dialog.NewPermissions(m.com, permission.PermissionRequest{ID: "p1", ToolName: "bash"}))
+	m.dialog.OpenDialogWithGrace(permissions.NewPermissions(m.com, permission.PermissionRequest{ID: "p1", ToolName: "bash"}))
 	require.NotNil(t, m.hostStatus())
 	require.Equal(t, sessionhost.StateWaiting, m.lastHostStatus.State, "a prompt waiting for the user wins over working")
 }
@@ -54,4 +55,18 @@ func TestHostStatusReportsBackgroundPreference(t *testing.T) {
 	require.NotNil(t, m.hostStatus())
 	require.True(t, m.lastHostStatus.UseTerminalBackground)
 	require.Nil(t, m.hostStatus())
+}
+
+func TestHostStatusSpinsForUntrackedProcess(t *testing.T) {
+	t.Parallel()
+	m := newBusyUI(&countingWorkspace{ready: true})
+	m.inSessionHost = true
+
+	m.taskRow.bgProcs = []agent.Process{{PID: 7, Session: "other"}, {JobID: "j1", Session: "s1"}}
+	m.hostStatus()
+	require.Equal(t, sessionhost.StateReady, m.lastHostStatus.State, "another chat's process and Crush's own jobs are judged elsewhere")
+
+	m.taskRow.bgProcs = append(m.taskRow.bgProcs, agent.Process{PID: 8, Session: "s1"})
+	require.NotNil(t, m.hostStatus())
+	require.Equal(t, sessionhost.StateBackground, m.lastHostStatus.State, "a CLI's own background shell keeps the chat spinning")
 }

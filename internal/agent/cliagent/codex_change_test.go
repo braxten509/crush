@@ -44,7 +44,7 @@ func TestCodexChangeMetadataDoesNotDependOnReadTiming(t *testing.T) {
 func TestCodexReversedPatchCarriesFullRestoreStates(t *testing.T) {
 	dir := visibleReviewRoot(t)
 	path := filepath.Join(dir, "file")
-	require.NoError(t, os.WriteFile(path, []byte("one\nCHANGED\nthree\n"), 0750))
+	require.NoError(t, os.WriteFile(path, []byte("one\nCHANGED\nthree\n"), 0o750))
 	change := codexChange{Path: path, Diff: "@@ -1,3 +1,3 @@\n one\n-two\n+CHANGED\n three\n"}
 	change.Kind.Type = "update"
 	_, review := filechange.TakeReview(codexChangeMetadata(dir, change))
@@ -52,7 +52,7 @@ func TestCodexReversedPatchCarriesFullRestoreStates(t *testing.T) {
 	require.Len(t, review.Changes, 1)
 	require.Equal(t, "one\ntwo\nthree\n", review.Changes[0].Before.Content)
 	require.Equal(t, "one\nCHANGED\nthree\n", review.Changes[0].After.Content)
-	require.EqualValues(t, 0750, review.Changes[0].Before.Mode)
+	require.EqualValues(t, 0o750, review.Changes[0].Before.Mode)
 	change.Kind.Type = "add"
 	_, review = filechange.TakeReview(codexChangeMetadata(dir, change))
 	require.Nil(t, review.Changes[0].Before)

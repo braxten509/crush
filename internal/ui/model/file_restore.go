@@ -1,13 +1,14 @@
 package model
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
-	"time"
 )
 
 func (m *UI) previewFiles(target string, fork bool, next dialog.Action) (bool, tea.Cmd) {
@@ -25,6 +26,7 @@ func (m *UI) previewFiles(target string, fork bool, next dialog.Action) (bool, t
 		return filePreviewMsg{busy, id, plan, next, err}
 	}
 }
+
 func (m *UI) previewUndoFiles() tea.Cmd {
 	if err := m.treeReady(); err != nil {
 		return util.ReportError(err)
@@ -44,6 +46,7 @@ func (m *UI) previewUndoFiles() tea.Cmd {
 		return filePreviewMsg{busy, id, plan, nil, err}
 	}
 }
+
 func (m *UI) chooseFileRestore(action dialog.ActionFileRestore) tea.Cmd {
 	if err := m.treeReady(); err != nil {
 		return util.ReportError(err)
@@ -115,6 +118,7 @@ func (m *UI) finishFilePreview(result filePreviewMsg) tea.Cmd {
 	m.dialog.OpenDialog(dialog.NewFileRestore(m.com, result.plan, result.next))
 	return nil
 }
+
 func (m *UI) finishFileUndo(result fileUndoMsg) tea.Cmd {
 	m.dialog.CloseDialog(dialog.FileRestoreID)
 	if result.err != nil {

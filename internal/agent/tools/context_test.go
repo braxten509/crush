@@ -81,11 +81,11 @@ func TestGetContextValue(t *testing.T) {
 			var got any
 			switch tt.defaultValue.(type) {
 			case string:
-				got = getContextValue(ctx, tt.key, tt.defaultValue.(string))
+				got = GetContextValue(ctx, tt.key, tt.defaultValue.(string))
 			case bool:
-				got = getContextValue(ctx, tt.key, tt.defaultValue.(bool))
+				got = GetContextValue(ctx, tt.key, tt.defaultValue.(bool))
 			case int:
-				got = getContextValue(ctx, tt.key, tt.defaultValue.(int))
+				got = GetContextValue(ctx, tt.key, tt.defaultValue.(int))
 			}
 
 			if got != tt.want {

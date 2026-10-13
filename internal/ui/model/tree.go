@@ -1,17 +1,18 @@
 package model
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
-	"path/filepath"
-	"time"
 )
 
 func (m *UI) openTreeDialog() tea.Cmd {
@@ -29,6 +30,7 @@ func (m *UI) openTreeDialog() tea.Cmd {
 	m.dialog.OpenDialog(dialog.NewTree(m.com, entries))
 	return nil
 }
+
 func (m *UI) labelTree(action dialog.ActionTreeLabel) tea.Cmd {
 	if m.session == nil {
 		return nil
@@ -48,7 +50,7 @@ func (m *UI) treeReady() error {
 	if m.session == nil {
 		return fmt.Errorf("start a chat first")
 	}
-	if m.remote != nil || m.remoteStarting {
+	if m.remote.active() {
 		return fmt.Errorf("turn off phone sharing first")
 	}
 	if m.sessionLoad.active {
@@ -57,11 +59,12 @@ func (m *UI) treeReady() error {
 	if m.isAgentBusy() {
 		return fmt.Errorf("wait for the reply to finish")
 	}
-	if len(m.pendingPrompts) > 0 {
+	if len(m.queue.pending) > 0 {
 		return fmt.Errorf("wait for pending prompts, or recall them first")
 	}
 	return nil
 }
+
 func (m *UI) confirmTree(target, prompt string) tea.Cmd {
 	if err := m.treeReady(); err != nil {
 		return util.ReportError(err)
@@ -71,6 +74,7 @@ func (m *UI) confirmTree(target, prompt string) tea.Cmd {
 	}
 	return nil
 }
+
 func (m *UI) editTree(target string) tea.Cmd {
 	if err := m.treeReady(); err != nil {
 		return util.ReportError(err)
@@ -152,6 +156,7 @@ func (m *UI) navigateTree(action dialog.ActionTreeNavigate, approved ...*filehis
 		return treeFinishedMsg{sessionID: id, prompt: action.Prompt, editID: editID, err: err, notice: notice}
 	}
 }
+
 func (m *UI) finishTree(result treeFinishedMsg) tea.Cmd {
 	m.dialog.CloseDialog(dialog.FileRestoreID)
 	if d, ok := m.dialog.Dialog(dialog.TreeID).(*dialog.Tree); ok {
@@ -169,6 +174,7 @@ func (m *UI) finishTree(result treeFinishedMsg) tea.Cmd {
 	}
 	return tea.Batch(m.resetPlanModeState(), m.loadSession(result.sessionID), util.ReportInfo(result.notice))
 }
+
 func (m *UI) copyTree(target string, fork bool, approved ...*filehistory.Plan) tea.Cmd {
 	if err := m.treeReady(); err != nil {
 		return util.ReportError(err)
@@ -204,6 +210,7 @@ func (m *UI) copyTree(target string, fork bool, approved ...*filehistory.Plan) t
 		return treeFinishedMsg{sessionID: copiedID, prompt: prompt, editID: editID, notice: notice, err: err}
 	}
 }
+
 func (m *UI) cloneTree() tea.Cmd {
 	if err := m.treeReady(); err != nil {
 		return util.ReportError(err)

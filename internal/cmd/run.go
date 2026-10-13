@@ -17,14 +17,12 @@ import (
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/format"
 	"github.com/charmbracelet/crush/internal/herdr"
+	"github.com/charmbracelet/crush/internal/noninteractive"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/workspace"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/term"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
@@ -108,66 +106,21 @@ crush run --continue "Follow up on your last response"
 			event.SetContinueLastSession(true)
 		}
 
+		opts := noninteractive.Options{
+			Prompt:            prompt,
+			LargeModel:        largeModel,
+			SmallModel:        smallModel,
+			ReasoningEffort:   reasoningEffort,
+			Fast:              fast,
+			ContinueSessionID: sessionID,
+			UseLast:           useLast,
+		}
+
+		hideSpinner := quiet || verbose
 		if useClientServer() {
-			c, ws, cleanup, err := connectToServer(cmd)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
-
-			event.AppInitialized()
-
-			if !ws.Config.IsConfigured() {
-				return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
-			}
-
-			clientWs := workspace.NewClientWorkspace(c, *ws)
-			if err := clientWs.InitCoderAgentNonInteractive(ctx); err != nil {
-				return fmt.Errorf("failed to initialize agent: %w", err)
-			}
-
-			if sessionID != "" {
-				sess, err := resolveSessionByID(ctx, c, ws.ID, sessionID)
-				if err != nil {
-					return err
-				}
-				sessionID = sess.ID
-			}
-
-			if verbose {
-				slog.SetDefault(slog.New(log.New(os.Stderr)))
-			}
-
-			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, fast, quiet || verbose, sessionID, useLast)
+			return runOnServer(ctx, cmd, opts, verbose, hideSpinner)
 		}
-
-		ws, cleanup, err := setupLocalWorkspace(cmd)
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-
-		event.AppInitialized()
-
-		if !ws.Config().IsConfigured() {
-			return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
-		}
-
-		if verbose {
-			slog.SetDefault(slog.New(log.New(os.Stderr)))
-		}
-
-		appWs := ws.(*workspace.AppWorkspace)
-
-		if sessionID != "" {
-			sess, err := resolveSessionID(ctx, appWs.App().Sessions, sessionID)
-			if err != nil {
-				return err
-			}
-			sessionID = sess.ID
-		}
-
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, reasoningEffort, fast, quiet || verbose, sessionID, useLast)
+		return runInProcess(ctx, cmd, opts, verbose, hideSpinner)
 	},
 }
 
@@ -183,108 +136,161 @@ func init() {
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
 }
 
-// runNonInteractive executes the agent via the server and streams output
-// to stdout.
-func runNonInteractive(
-	ctx context.Context,
-	c *client.Client,
-	ws *proto.Workspace,
-	prompt, largeModel, smallModel, reasoningEffort string,
-	fast, hideSpinner bool,
-	continueSessionID string,
-	useLast bool,
-) error {
-	slog.Info("Running in non-interactive mode")
+// runOnServer runs a `crush run` turn on the Crush server, starting it if
+// needed.
+func runOnServer(ctx context.Context, cmd *cobra.Command, opts noninteractive.Options, verbose, hideSpinner bool) error {
+	c, ws, cleanup, err := connectToServer(cmd)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	event.AppInitialized()
 
-	if largeModel != "" || smallModel != "" {
-		if err := overrideModels(ctx, c, ws, largeModel, smallModel); err != nil {
-			return fmt.Errorf("failed to override models: %w", err)
-		}
+	if !ws.Config.IsConfigured() {
+		return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
 	}
 
-	// The reasoning effort and fast mode apply to the model that will
-	// actually run. On a continued session without an explicit model
-	// override, the model is resolved later from the session's last
-	// assistant message, so the override is applied after that restore
-	// instead.
-	tuned := reasoningEffort != "" || fast
-	deferredEffort := (continueSessionID != "" || useLast) && largeModel == "" && smallModel == ""
-	if tuned && !deferredEffort {
-		if err := overrideTuning(ctx, c, ws.ID, reasoningEffort, fast); err != nil {
+	clientWs := workspace.NewClientWorkspace(c, *ws)
+	if err := clientWs.InitCoderAgentNonInteractive(ctx); err != nil {
+		return fmt.Errorf("failed to initialize agent: %w", err)
+	}
+
+	if opts.ContinueSessionID != "" {
+		sess, err := resolveSessionByID(ctx, c, ws.ID, opts.ContinueSessionID)
+		if err != nil {
 			return err
 		}
+		opts.ContinueSessionID = sess.ID
 	}
 
-	var (
-		spinner   *format.Spinner
-		stderrTTY bool
-		progress  bool
-	)
-
-	stderrTTY = term.IsTerminal(os.Stderr.Fd())
-	progress = ws.Config.Options.Progress == nil || *ws.Config.Options.Progress
-
-	if !hideSpinner && stderrTTY {
-		t := common.ThemeStylesFromConfig(ws.Config)
-
-		spinner = format.NewSpinner(ctx, cancel, anim.Settings{
-			Size:        10,
-			Label:       "Generating",
-			GradColorA:  t.WorkingGradFromColor,
-			GradColorB:  t.WorkingGradToColor,
-			CycleColors: true,
-		})
-		spinner.Start()
+	if verbose {
+		slog.SetDefault(slog.New(log.New(os.Stderr)))
 	}
 
-	stopSpinner := func() {
-		if !hideSpinner && spinner != nil {
-			spinner.Stop()
-			spinner = nil
+	return noninteractive.Run(ctx, &clientRun{c: c, ws: ws}, opts, runTerminal(ws.Config, hideSpinner))
+}
+
+// runInProcess runs a `crush run` turn in this process.
+func runInProcess(ctx context.Context, cmd *cobra.Command, opts noninteractive.Options, verbose, hideSpinner bool) error {
+	appInstance, cleanup, err := setupLocalApp(cmd)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	event.AppInitialized()
+
+	if !appInstance.Config().IsConfigured() {
+		return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+	}
+
+	if verbose {
+		slog.SetDefault(slog.New(log.New(os.Stderr)))
+	}
+
+	if opts.ContinueSessionID != "" {
+		sess, err := resolveSessionID(ctx, appInstance.Sessions, opts.ContinueSessionID)
+		if err != nil {
+			return err
+		}
+		opts.ContinueSessionID = sess.ID
+	}
+
+	// Re-initialize the coder agent without interactive-only tools.
+	if err := appInstance.InitCoderAgentNonInteractive(ctx); err != nil {
+		return fmt.Errorf("failed to reinitialize agent for non-interactive mode: %w", err)
+	}
+
+	return noninteractive.Run(ctx, appInstance.NonInteractive(), opts, runTerminal(appInstance.Config(), hideSpinner))
+}
+
+// runTerminal describes how `crush run` presents itself on this terminal:
+// the reply on stdout, and, unless hidden, a spinner themed from cfg.
+func runTerminal(cfg *config.Config, hideSpinner bool) noninteractive.Terminal {
+	return noninteractive.Terminal{
+		Stdout:      os.Stdout,
+		HideSpinner: hideSpinner,
+		Progress:    cfg.Options.Progress == nil || *cfg.Options.Progress,
+		NewSpinner: func(ctx context.Context, cancel context.CancelFunc) noninteractive.Spinner {
+			t := common.ThemeStylesFromConfig(cfg)
+			return format.NewSpinner(ctx, cancel, anim.Settings{
+				Size:        10,
+				Label:       "Generating",
+				GradColorA:  t.WorkingGradFromColor,
+				GradColorB:  t.WorkingGradToColor,
+				CycleColors: true,
+			})
+		},
+	}
+}
+
+// clientRun is the [noninteractive.Backend] for client/server mode: it
+// runs the turn on the server and streams the reply back over SSE. Model
+// changes are written to the workspace's preferred models on the server.
+type clientRun struct {
+	c  *client.Client
+	ws *proto.Workspace
+}
+
+func (r *clientRun) Config(ctx context.Context) (*config.Config, error) {
+	cfg, err := r.c.GetConfig(ctx, r.ws.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config: %w", err)
+	}
+	return cfg, nil
+}
+
+func (r *clientRun) SetModel(ctx context.Context, typ config.SelectedModelType, model config.SelectedModel) error {
+	return r.c.UpdatePreferredModel(ctx, r.ws.ID, config.ScopeWorkspace, typ, model)
+}
+
+func (r *clientRun) DefaultSmallModel(ctx context.Context, providerID string) (*config.SelectedModel, error) {
+	return r.c.GetDefaultSmallModel(ctx, r.ws.ID, providerID)
+}
+
+func (r *clientRun) LastAssistantModel(ctx context.Context, sessionID string) (string, string, error) {
+	msgs, err := r.c.ListMessages(ctx, r.ws.ID, sessionID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to list messages: %w", err)
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == proto.Assistant && !msgs[i].IsSummaryMessage {
+			return msgs[i].Provider, msgs[i].Model, nil
 		}
 	}
+	return "", "", nil
+}
 
+func (r *clientRun) UpdateAgent(ctx context.Context) error {
+	return r.c.UpdateAgent(ctx, r.ws.ID)
+}
+
+func (r *clientRun) Prepare(ctx context.Context) error {
 	// Wait for the agent to become ready (MCP init, etc).
-	if err := waitForAgent(ctx, c, ws.ID); err != nil {
-		stopSpinner()
+	if err := waitForAgent(ctx, r.c, r.ws.ID); err != nil {
 		return fmt.Errorf("agent not ready: %w", err)
 	}
 
 	// Force-update agent models so MCP tools are loaded.
-	if err := c.UpdateAgent(ctx, ws.ID); err != nil {
+	if err := r.c.UpdateAgent(ctx, r.ws.ID); err != nil {
 		slog.Warn("Failed to update agent", "error", err)
 	}
+	return nil
+}
 
-	defer stopSpinner()
-
-	sess, err := resolveSession(ctx, c, ws.ID, continueSessionID, useLast)
+func (r *clientRun) ResolveSession(ctx context.Context, continueSessionID string, useLast bool) (string, error) {
+	sess, err := resolveSession(ctx, r.c, r.ws.ID, continueSessionID, useLast)
 	if err != nil {
-		return fmt.Errorf("failed to resolve session: %w", err)
+		return "", fmt.Errorf("failed to resolve session: %w", err)
 	}
-	if continueSessionID != "" || useLast {
-		slog.Info("Continuing session for non-interactive run", "session_id", sess.ID)
-		// If no explicit model override was requested, restore the
-		// model/provider from the last assistant message in the
-		// session, provided it is still available.
-		if largeModel == "" && smallModel == "" {
-			if err := restoreModelFromSession(ctx, c, ws, sess.ID); err != nil {
-				slog.Warn("Failed to restore model from session", "error", err)
-			}
-		}
-	} else {
-		slog.Info("Created session for non-interactive run", "session_id", sess.ID)
-	}
+	return sess.ID, nil
+}
 
-	if tuned && deferredEffort {
-		if err := overrideTuning(ctx, c, ws.ID, reasoningEffort, fast); err != nil {
-			return err
-		}
-	}
-
-	events, err := c.SubscribeEvents(ctx, ws.ID)
+// Stream sends the prompt to the server and prints the reply from the
+// workspace's event stream until this run's RunComplete arrives.
+func (r *clientRun) Stream(ctx context.Context, out *noninteractive.Output, sessionID, prompt string) error {
+	events, err := r.c.SubscribeEvents(ctx, r.ws.ID)
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to events: %w", err)
 	}
@@ -295,38 +301,31 @@ func runNonInteractive(
 	// loop would exit on whichever RunComplete arrived first for
 	// the same session and drop the queued prompt's output.
 	runID := uuid.New().String()
-	if err := c.SendMessage(ctx, ws.ID, sess.ID, runID, "", prompt); err != nil {
+	if err := r.c.SendMessage(ctx, r.ws.ID, sessionID, runID, "", prompt); err != nil {
 		return fmt.Errorf("failed to send message: %w", err)
 	}
 
 	stream := &runStream{
-		sessionID: sess.ID,
+		sessionID: sessionID,
 		runID:     runID,
-		out:       os.Stdout,
+		out:       out.Stdout,
 		read:      make(map[string]int),
 	}
 
 	// Start herdr integration when running inside a herdr pane.
 	hc := herdr.Init()
-	hc.SetSessionID(sess.ID)
+	hc.SetSessionID(sessionID)
 	defer hc.Close()
 
-	defer func() {
-		if progress && stderrTTY {
-			_, _ = fmt.Fprintf(os.Stderr, ansi.ResetProgressBar)
-		}
-		_, _ = fmt.Fprintln(os.Stdout)
-	}()
+	defer out.Finish()
 
 	for {
-		if progress && stderrTTY {
-			_, _ = fmt.Fprintf(os.Stderr, ansi.SetIndeterminateProgressBar)
-		}
+		out.Heartbeat()
 
 		select {
 		case ev, ok := <-events:
 			if !ok {
-				stopSpinner()
+				out.StopSpinner()
 				return nil
 			}
 
@@ -335,7 +334,7 @@ func runNonInteractive(
 				hc.HandleEvent(hev)
 			}
 
-			done, err := stream.handle(ev, stopSpinner)
+			done, err := stream.handle(ev, out.StopSpinner)
 			if err != nil {
 				return err
 			}
@@ -344,17 +343,17 @@ func runNonInteractive(
 			}
 
 		case <-ctx.Done():
-			stopSpinner()
+			out.StopSpinner()
 			cancelCtx, cancelRequest := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancelRequest()
-			_ = c.CancelAgentSession(cancelCtx, ws.ID, sess.ID)
+			_ = r.c.CancelAgentSession(cancelCtx, r.ws.ID, sessionID)
 			return ctx.Err()
 		}
 	}
 }
 
 // runStream tracks the per-message stdout cursor and the
-// reconciliation state used by [runNonInteractive] to translate
+// reconciliation state used by [clientRun.Stream] to translate
 // streaming SSE events into a final, complete stdout for `crush run`.
 // It is split out so the state machine can be exercised in unit tests
 // without spinning up the full server/client harness.
@@ -513,232 +512,6 @@ func waitForAgent(ctx context.Context, c *client.Client, wsID string) error {
 	}
 }
 
-// overrideModels resolves model strings and updates the workspace
-// configuration via the server.
-func overrideModels(
-	ctx context.Context,
-	c *client.Client,
-	ws *proto.Workspace,
-	largeModel, smallModel string,
-) error {
-	cfg, err := c.GetConfig(ctx, ws.ID)
-	if err != nil {
-		return fmt.Errorf("failed to get config: %w", err)
-	}
-
-	providers := cfg.Providers.Copy()
-
-	largeMatches, smallMatches := findModelMatches(providers, largeModel, smallModel)
-
-	var largeProviderID string
-
-	if largeModel != "" {
-		found, err := validateModelMatches(largeMatches, largeModel, "large")
-		if err != nil {
-			return err
-		}
-		largeProviderID = found.provider
-		slog.Info("Overriding large model", "provider", found.provider, "model", found.modelID)
-		if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeLarge, config.SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
-		}); err != nil {
-			return fmt.Errorf("failed to set large model: %w", err)
-		}
-	}
-
-	switch {
-	case smallModel != "":
-		found, err := validateModelMatches(smallMatches, smallModel, "small")
-		if err != nil {
-			return err
-		}
-		slog.Info("Overriding small model", "provider", found.provider, "model", found.modelID)
-		if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeSmall, config.SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
-		}); err != nil {
-			return fmt.Errorf("failed to set small model: %w", err)
-		}
-
-	case largeModel != "":
-		sm, err := c.GetDefaultSmallModel(ctx, ws.ID, largeProviderID)
-		if err != nil {
-			slog.Warn("Failed to get default small model", "error", err)
-		} else if sm != nil {
-			if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeSmall, *sm); err != nil {
-				return fmt.Errorf("failed to set small model: %w", err)
-			}
-		}
-	}
-
-	return c.UpdateAgent(ctx, ws.ID)
-}
-
-// restoreModelFromSession reads the last assistant message in the
-// session and, if it used a different provider/model than the current
-// config, updates the preferred model on the server provided the
-// provider/model is still available. This ensures that continuing a
-// session uses the same model that produced the last response.
-func restoreModelFromSession(ctx context.Context, c *client.Client, ws *proto.Workspace, sessionID string) error {
-	msgs, err := c.ListMessages(ctx, ws.ID, sessionID)
-	if err != nil {
-		return fmt.Errorf("failed to list messages: %w", err)
-	}
-
-	var lastAssistant *proto.Message
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == proto.Assistant && !msgs[i].IsSummaryMessage {
-			lastAssistant = &msgs[i]
-			break
-		}
-	}
-	if lastAssistant == nil || lastAssistant.Provider == "" || lastAssistant.Model == "" {
-		return nil
-	}
-
-	cfg := ws.Config
-	currentLarge := cfg.Models[config.SelectedModelTypeLarge]
-	if currentLarge.Provider == lastAssistant.Provider && currentLarge.Model == lastAssistant.Model {
-		return nil
-	}
-
-	if !cfg.IsModelAvailable(lastAssistant.Provider, lastAssistant.Model) {
-		slog.Debug("Skipping model restoration: provider/model not available",
-			"provider", lastAssistant.Provider,
-			"model", lastAssistant.Model)
-		return nil
-	}
-
-	selectedModel := config.SelectedModel{
-		Provider: lastAssistant.Provider,
-		Model:    lastAssistant.Model,
-	}
-	if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeLarge, selectedModel); err != nil {
-		return fmt.Errorf("failed to set large model: %w", err)
-	}
-
-	if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
-		sm, err := c.GetDefaultSmallModel(ctx, ws.ID, lastAssistant.Provider)
-		if err != nil {
-			slog.Warn("Failed to get default small model", "error", err)
-		} else if sm != nil {
-			if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeSmall, *sm); err != nil {
-				slog.Warn("Failed to set small model during session restore", "error", err)
-			}
-		}
-	}
-
-	return c.UpdateAgent(ctx, ws.ID)
-}
-
-// overrideTuning validates the requested reasoning effort and fast mode
-// against the large model in effect for this run (which may have been
-// overridden by --model or restored from a continued session) and applies
-// them on the server. An empty effort keeps the model's own.
-func overrideTuning(ctx context.Context, c *client.Client, wsID, reasoningEffort string, fast bool) error {
-	cfg, err := c.GetConfig(ctx, wsID)
-	if err != nil {
-		return fmt.Errorf("failed to get config: %w", err)
-	}
-
-	selected, ok := cfg.Models[config.SelectedModelTypeLarge]
-	if !ok {
-		return fmt.Errorf("no large model selected; set one with the --model flag or 'model large'")
-	}
-	if reasoningEffort != "" {
-		if err := cfg.ValidateReasoningEffort(selected.Provider, selected.Model, reasoningEffort); err != nil {
-			return err
-		}
-		selected.ReasoningEffort = reasoningEffort
-	}
-	if fast {
-		if err := cfg.ValidateFastMode(selected.Provider, selected.Model); err != nil {
-			return err
-		}
-		selected.ServiceTier = "fast"
-	}
-	slog.Info("Overriding model tuning for non-interactive run",
-		"provider", selected.Provider,
-		"model", selected.Model,
-		"reasoning_effort", selected.ReasoningEffort,
-		"service_tier", selected.ServiceTier)
-	if err := c.UpdatePreferredModel(ctx, wsID, config.ScopeWorkspace, config.SelectedModelTypeLarge, selected); err != nil {
-		return fmt.Errorf("failed to set model tuning: %w", err)
-	}
-	return c.UpdateAgent(ctx, wsID)
-}
-
-type modelMatch struct {
-	provider string
-	modelID  string
-}
-
-// findModelMatches searches providers for matching large/small model
-// strings.
-func findModelMatches(providers map[string]config.ProviderConfig, largeModel, smallModel string) ([]modelMatch, []modelMatch) {
-	largeFilter, largeID := parseModelString(largeModel)
-	smallFilter, smallID := parseModelString(smallModel)
-
-	var largeMatches, smallMatches []modelMatch
-	for name, provider := range providers {
-		if provider.Disable {
-			continue
-		}
-		for _, m := range provider.Models {
-			if matchesModel(largeID, largeFilter, m.ID, name) {
-				largeMatches = append(largeMatches, modelMatch{provider: name, modelID: m.ID})
-			}
-			if matchesModel(smallID, smallFilter, m.ID, name) {
-				smallMatches = append(smallMatches, modelMatch{provider: name, modelID: m.ID})
-			}
-		}
-	}
-	return largeMatches, smallMatches
-}
-
-// parseModelString splits "provider/model" into (provider, model) or
-// ("", model).
-func parseModelString(s string) (string, string) {
-	if s == "" {
-		return "", ""
-	}
-	if idx := strings.Index(s, "/"); idx >= 0 {
-		return s[:idx], s[idx+1:]
-	}
-	return "", s
-}
-
-// matchesModel returns true if the model ID matches the filter
-// criteria.
-func matchesModel(wantID, wantProvider, modelID, providerName string) bool {
-	if wantID == "" {
-		return false
-	}
-	if wantProvider != "" && wantProvider != providerName {
-		return false
-	}
-	return strings.EqualFold(modelID, wantID)
-}
-
-// validateModelMatches ensures exactly one match exists.
-func validateModelMatches(matches []modelMatch, modelID, label string) (modelMatch, error) {
-	switch {
-	case len(matches) == 0:
-		return modelMatch{}, fmt.Errorf("%s model %q not found", label, modelID)
-	case len(matches) > 1:
-		names := make([]string, len(matches))
-		for i, m := range matches {
-			names[i] = m.provider
-		}
-		return modelMatch{}, fmt.Errorf(
-			"%s model: model %q found in multiple providers: %s. Please specify provider using 'provider/model' format",
-			label, modelID, strings.Join(names, ", "),
-		)
-	}
-	return matches[0], nil
-}
-
 // resolveSession returns the session to use for a non-interactive run.
 // If continueSessionID is set it fetches that session; if useLast is set it
 // returns the most recently updated top-level session; otherwise it creates a
@@ -785,13 +558,7 @@ func resolveSessionByID(ctx context.Context, c *client.Client, wsID, id string) 
 		return nil, err
 	}
 
-	var matches []proto.Session
-	for _, s := range sessions {
-		hash := session.HashID(s.ID)
-		if hash == id || strings.HasPrefix(hash, id) {
-			matches = append(matches, s)
-		}
-	}
+	matches := sessionsMatchingHash(sessions, id, func(s proto.Session) string { return s.ID })
 
 	switch len(matches) {
 	case 0:

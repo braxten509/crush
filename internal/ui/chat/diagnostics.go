@@ -1,8 +1,6 @@
 package chat
 
 import (
-	"encoding/json"
-
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/message"
@@ -35,34 +33,20 @@ type DiagnosticsToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (d *DiagnosticsToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Diagnostics", opts.Anim, opts.Compact)
-	}
+	return diagnosticsTool.render(sty, width, opts)
+}
 
-	var params tools.DiagnosticsParams
-	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
-
-	// Show "project" if no file path, otherwise show the file path.
-	mainParam := "project"
-	if params.FilePath != "" {
-		mainParam = fsext.PrettyPath(params.FilePath)
-	}
-
-	header := toolHeader(sty, opts.Status, "Diagnostics", cappedWidth, opts, mainParam)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
+// diagnosticsTool draws Diagnostics tool calls with the standard layout.
+var diagnosticsTool = standardTool[tools.DiagnosticsParams]{
+	name:    "Diagnostics",
+	lenient: true,
+	header: func(params tools.DiagnosticsParams) []string {
+		// Show "project" if no file path, otherwise show the file path.
+		mainParam := "project"
+		if params.FilePath != "" {
+			mainParam = fsext.PrettyPath(params.FilePath)
+		}
+		return []string{mainParam}
+	},
+	body: plainResultBody[tools.DiagnosticsParams],
 }

@@ -2,9 +2,10 @@ package config
 
 import (
 	"encoding/json"
+	"slices"
+
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
-	"slices"
 )
 
 // SetSkillEnabled persists a name toggle and publishes the new config only

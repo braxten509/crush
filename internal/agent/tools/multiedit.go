@@ -4,15 +4,10 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/diff"
-	"github.com/charmbracelet/crush/internal/filechange"
-	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
@@ -76,7 +71,7 @@ func NewMultiEditTool(
 				return fantasy.NewTextErrorResponse("at least one edit operation is required"), nil
 			}
 
-			params.FilePath = filepathext.SmartJoin(workingDir, params.FilePath)
+			params.FilePath = fsext.SmartJoin(workingDir, params.FilePath)
 
 			// Validate all edits before applying any
 			if err := validateEdits(params.Edits); err != nil {
@@ -102,13 +97,9 @@ func NewMultiEditTool(
 				return response, nil
 			}
 
-			// Notify LSP clients about the change
-			notifyLSPs(ctx, lspManager, params.FilePath)
-
-			// Wait for LSP diagnostics and add them to the response
-			text := fmt.Sprintf("<result>\n%s\n</result>\n", response.Content)
-			text += getDiagnostics(params.FilePath, lspManager)
-			response.Content = text
+			// Notify LSP clients about the change and add their diagnostics
+			// to the response.
+			response.Content = afterWrite(ctx, lspManager, params.FilePath, fmt.Sprintf("<result>\n%s\n</result>\n", response.Content))
 			return response, nil
 		},
 	)
@@ -174,9 +165,6 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for creating a new file")
 	}
 
-	// Check permissions
-	_, additions, removals := diff.GenerateDiff("", currentContent, strings.TrimPrefix(params.FilePath, edit.workingDir))
-
 	editsApplied := len(params.Edits) - len(failedEdits)
 	var description string
 	if len(failedEdits) > 0 {
@@ -184,14 +172,15 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 	} else {
 		description = fmt.Sprintf("Create file %s with %d edits", params.FilePath, editsApplied)
 	}
-	p, err := edit.permissions.Request(edit.ctx, permission.CreatePermissionRequest{
-		SessionID:   sessionID,
-		Path:        fsext.PathOrPrefix(params.FilePath, edit.workingDir),
-		ToolCallID:  call.ID,
-		ToolName:    MultiEditToolName,
-		Action:      "write",
-		Description: description,
-		Params: MultiEditPermissionsParams{
+	// Check permissions.
+	p, d, err := requestEdit(edit, editRequest{
+		sessionID:   sessionID,
+		filePath:    params.FilePath,
+		callID:      call.ID,
+		toolName:    MultiEditToolName,
+		description: description,
+		newContent:  currentContent,
+		params: MultiEditPermissionsParams{
 			FilePath:   params.FilePath,
 			OldContent: "",
 			NewContent: currentContent,
@@ -200,17 +189,16 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 	if err != nil {
 		return fantasy.ToolResponse{}, err
 	}
+	metadata := MultiEditResponseMetadata{
+		OldContent:   "",
+		NewContent:   currentContent,
+		Additions:    d.additions,
+		Removals:     d.removals,
+		EditsApplied: editsApplied,
+		EditsFailed:  failedEdits,
+	}
 	if !p {
-		resp := NewPermissionDeniedResponse()
-		resp = fantasy.WithResponseMetadata(resp, MultiEditResponseMetadata{
-			OldContent:   "",
-			NewContent:   currentContent,
-			Additions:    additions,
-			Removals:     removals,
-			EditsApplied: editsApplied,
-			EditsFailed:  failedEdits,
-		})
-		return resp, nil
+		return deniedResponse(metadata), nil
 	}
 
 	// Write the file
@@ -219,21 +207,9 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 	}
 
-	if filechange.InRepository(filechange.RepositoryRoot(edit.workingDir), edit.workingDir, params.FilePath) {
-		// Update file history
-		_, err = edit.files.Create(edit.ctx, sessionID, params.FilePath, "")
-		if err != nil {
-			return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
-		}
-
-		_, err = edit.files.CreateVersion(edit.ctx, sessionID, params.FilePath, currentContent)
-		if err != nil {
-			slog.Error("Error creating file history version", "error", err)
-		}
-
+	if err := recordNewFile(edit, sessionID, params.FilePath, currentContent); err != nil {
+		return fantasy.ToolResponse{}, err
 	}
-
-	edit.filetracker.RecordRead(edit.ctx, sessionID, params.FilePath)
 
 	var message string
 	if len(failedEdits) > 0 {
@@ -243,17 +219,7 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 	}
 	message = withWhitespaceNote(message, whitespaceCorrected)
 
-	return fantasy.WithResponseMetadata(
-		fantasy.NewTextResponse(message),
-		MultiEditResponseMetadata{
-			OldContent:   "",
-			NewContent:   currentContent,
-			Additions:    additions,
-			Removals:     removals,
-			EditsApplied: editsApplied,
-			EditsFailed:  failedEdits,
-		},
-	), nil
+	return fantasy.WithResponseMetadata(fantasy.NewTextResponse(message), metadata), nil
 }
 
 func processMultiEditExistingFile(edit editContext, params MultiEditParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
@@ -282,9 +248,6 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 		return fantasy.NewTextErrorResponse("no changes made - all edits resulted in identical content"), nil
 	}
 
-	// Generate diff and check permissions
-	_, additions, removals := diff.GenerateDiff(oldContent, currentContent, strings.TrimPrefix(params.FilePath, edit.workingDir))
-
 	editsApplied := len(params.Edits) - len(failedEdits)
 	var description string
 	if len(failedEdits) > 0 {
@@ -292,14 +255,16 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	} else {
 		description = fmt.Sprintf("Apply %d edits to file %s", editsApplied, params.FilePath)
 	}
-	p, err := edit.permissions.Request(edit.ctx, permission.CreatePermissionRequest{
-		SessionID:   sessionID,
-		Path:        fsext.PathOrPrefix(params.FilePath, edit.workingDir),
-		ToolCallID:  call.ID,
-		ToolName:    MultiEditToolName,
-		Action:      "write",
-		Description: description,
-		Params: MultiEditPermissionsParams{
+	// Generate diff and check permissions.
+	p, d, err := requestEdit(edit, editRequest{
+		sessionID:   sessionID,
+		filePath:    params.FilePath,
+		callID:      call.ID,
+		toolName:    MultiEditToolName,
+		description: description,
+		oldContent:  oldContent,
+		newContent:  currentContent,
+		params: MultiEditPermissionsParams{
 			FilePath:   params.FilePath,
 			OldContent: oldContent,
 			NewContent: currentContent,
@@ -308,17 +273,16 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	if err != nil {
 		return fantasy.ToolResponse{}, err
 	}
+	metadata := MultiEditResponseMetadata{
+		OldContent:   oldContent,
+		NewContent:   currentContent,
+		Additions:    d.additions,
+		Removals:     d.removals,
+		EditsApplied: editsApplied,
+		EditsFailed:  failedEdits,
+	}
 	if !p {
-		resp := NewPermissionDeniedResponse()
-		resp = fantasy.WithResponseMetadata(resp, MultiEditResponseMetadata{
-			OldContent:   oldContent,
-			NewContent:   currentContent,
-			Additions:    additions,
-			Removals:     removals,
-			EditsApplied: editsApplied,
-			EditsFailed:  failedEdits,
-		})
-		return resp, nil
+		return deniedResponse(metadata), nil
 	}
 
 	writeContent := currentContent
@@ -338,17 +302,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	}
 	message = withWhitespaceNote(message, whitespaceCorrected)
 
-	return fantasy.WithResponseMetadata(
-		fantasy.NewTextResponse(message),
-		MultiEditResponseMetadata{
-			OldContent:   oldContent,
-			NewContent:   currentContent,
-			Additions:    additions,
-			Removals:     removals,
-			EditsApplied: editsApplied,
-			EditsFailed:  failedEdits,
-		},
-	), nil
+	return fantasy.WithResponseMetadata(fantasy.NewTextResponse(message), metadata), nil
 }
 
 // applyEditToContent applies a single edit, reporting whether it only matched

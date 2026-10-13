@@ -13,7 +13,7 @@ const NativeShellEnv = "CRUSH_NATIVE_SHELL"
 // background, with the call's shell environment and the NativeShellEnv
 // value its processes carry, so Crush can report on the job until it ends.
 // It returns whether it took the job.
-var JobStarted func(env []string, sessionID, marker string, job *shell.BackgroundShell) bool
+type JobStarted func(env []string, sessionID, marker string, job *shell.BackgroundShell) bool
 
 type watchedJobKey struct{}
 
@@ -23,16 +23,28 @@ func WithWatchedJob(ctx context.Context) context.Context {
 	return context.WithValue(ctx, watchedJobKey{}, true)
 }
 
-func jobStarted(ctx context.Context, sessionID, marker string, job *shell.BackgroundShell) bool {
-	if JobStarted == nil || getContextValue(ctx, watchedJobKey{}, false) {
+// Tell tells f about a job the bash call in ctx left running, unless the
+// call's caller watches it itself. It reports whether f took the job.
+func (f JobStarted) Tell(ctx context.Context, sessionID, marker string, job *shell.BackgroundShell) bool {
+	if f == nil || GetContextValue(ctx, watchedJobKey{}, false) {
 		return false
 	}
-	return JobStarted(getContextValue(ctx, ShellEnvContextKey, []string(nil)), sessionID, marker, job)
+	return f(GetContextValue(ctx, ShellEnvContextKey, []string(nil)), sessionID, marker, job)
 }
 
 // agentStops holds the jobs the agent's own job_kill call ended, so the
 // agent isn't told about a stop it made.
 var agentStops sync.Map
+
+// MarkStoppedByAgent records that job_kill is ending the job.
+func MarkStoppedByAgent(id string) {
+	agentStops.Store(id, struct{}{})
+}
+
+// UnmarkStoppedByAgent forgets a stop job_kill failed to make.
+func UnmarkStoppedByAgent(id string) {
+	agentStops.Delete(id)
+}
 
 // StoppedByAgent reports, once, whether job_kill ended the job.
 func StoppedByAgent(id string) bool {
@@ -46,7 +58,7 @@ var shellBackgrounds = struct {
 	foreground map[string]struct{}
 }{sessions: make(map[string]map[chan struct{}]struct{}), foreground: make(map[string]struct{})}
 
-func registerShellBackground(sessionID, marker string, signal chan struct{}) func() {
+func RegisterShellBackground(sessionID, marker string, signal chan struct{}) func() {
 	shellBackgrounds.Lock()
 	if shellBackgrounds.sessions[sessionID] == nil {
 		shellBackgrounds.sessions[sessionID] = make(map[chan struct{}]struct{})

@@ -1,0 +1,256 @@
+package agent
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+
+	"charm.land/catwalk/pkg/catwalk"
+	"github.com/google/uuid"
+
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	agentprompt "github.com/charmbracelet/crush/internal/agent/prompt"
+	"github.com/charmbracelet/crush/internal/config"
+)
+
+// cliName is the short name agents use for a CLI provider type.
+func cliName(t catwalk.Type) string {
+	s := strings.TrimSuffix(string(t), "-cli")
+	return strings.TrimSuffix(s, "-code")
+}
+
+func taskProviderName(provider config.ProviderConfig) string {
+	if provider.ID == config.AbacusProviderID {
+		return provider.ID
+	}
+	return cliName(provider.Type)
+}
+
+// cliProviders lists the configured agent CLI providers.
+func (h *taskHub) taskProviders() []config.ProviderConfig {
+	var out []config.ProviderConfig
+	for _, p := range h.c.cfg.Config().Providers.Seq2() {
+		if (config.IsCLIProviderType(p.Type) || p.ID == config.AbacusProviderID) && !p.Disable && len(p.Models) > 0 {
+			out = append(out, p)
+		}
+	}
+	slices.SortFunc(out, func(a, b config.ProviderConfig) int { return strings.Compare(taskProviderName(a), taskProviderName(b)) })
+	return out
+}
+
+func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
+	ctx, release := h.reserveFollowUp(req.Session)
+	started := false
+	defer func() {
+		if !started {
+			release()
+		}
+	}()
+	prompt := strings.TrimSpace(req.Prompt)
+	if prompt == "" {
+		return nil, errors.New("the task prompt is empty")
+	}
+	var provider *config.ProviderConfig
+	var names []string
+	for _, p := range h.taskProviders() {
+		names = append(names, taskProviderName(p))
+		if strings.EqualFold(req.CLI, taskProviderName(p)) || (config.IsCLIProviderType(p.Type) && strings.EqualFold(req.CLI, string(p.Type))) {
+			provider = &p
+		}
+	}
+	if provider == nil {
+		return nil, fmt.Errorf("unknown CLI %q; available: %s", req.CLI, strings.Join(names, ", "))
+	}
+	model := provider.Models[0]
+	if req.Model != "" {
+		i := slices.IndexFunc(provider.Models, func(m catwalk.Model) bool { return strings.EqualFold(m.ID, req.Model) })
+		if i < 0 {
+			return nil, fmt.Errorf("unknown %s model %q; available: %s", taskProviderName(*provider), req.Model, strings.Join(modelIDs(provider.Models), ", "))
+		}
+		model = provider.Models[i]
+	}
+
+	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {
+		return nil, fmt.Errorf("unknown session %q", req.Session)
+	}
+	selected, err := taskModel(*provider, model, req)
+	if err != nil {
+		return nil, err
+	}
+	sub, m, err := h.subAgent(ctx, *provider, model, selected, req.ReadOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	name := cmp.Or(strings.TrimSpace(req.Name), firstLine(prompt, 40))
+	child, err := h.c.sessions.CreateTaskSession(ctx, uuid.NewString(), req.Session, name)
+	if err != nil {
+		return nil, err
+	}
+	if !config.IsCLIProviderType(provider.Type) {
+		h.c.permissions.AutoApproveSession(child.ID)
+	}
+
+	h.skipUsedIDs(req.Session)
+	t := &Task{
+		SessionID: req.Session, ChildID: child.ID, Name: name,
+		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, ReadOnly: req.ReadOnly, Status: TaskRunning, Started: time.Now(),
+	}
+	started = true
+	snapshot := h.start(ctx, release, t, sub, m, *provider, subAgentPrompt(prompt, req.ReadOnly))
+	return &snapshot, nil
+}
+
+// subAgent builds the agent a task runs on.
+func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly bool) (SessionAgent, Model, error) {
+	fp, err := h.c.providerBuilder().Provider(provider, selected, true)
+	if err != nil {
+		return nil, Model{}, err
+	}
+	lm, err := h.c.providerBuilder().LanguageModel(ctx, fp, provider, selected)
+	if err != nil {
+		return nil, Model{}, err
+	}
+	// Sub-agents work on their own, like Claude Code's, but within what
+	// Crush's YOLO mode allows.
+	if cm, ok := lm.(*cliagent.Model); ok {
+		cm.Guarded = true
+		cm.ReadOnly = readOnly
+		// Marks what it starts, so leftovers show up as background
+		// processes. Without a session it can't spawn sub-agents itself.
+		// A read-only one isn't told where Crush is: Crush runs its
+		// background jobs outside the read-only sandbox.
+		if !readOnly {
+			cm.Env = []string{TasksDirEnv + "=" + h.dir}
+		}
+	}
+	m := Model{Model: lm, CatwalkCfg: model, ModelCfg: selected, FlatRate: provider.FlatRate}
+	var subTasks *taskHub
+	if !config.IsCLIProviderType(provider.Type) {
+		subTasks = h
+	}
+	sub := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           m,
+		SmallModel:           m,
+		SystemPromptPrefix:   provider.SystemPromptPrefix,
+		IsSubAgent:           true,
+		DisableAutoSummarize: h.c.cfg.Config().Options.DisableAutoSummarize,
+		IsYolo:               h.c.permissions.SkipRequests(),
+		Sessions:             h.c.sessions,
+		Messages:             h.c.messages,
+		Cfg:                  h.c.cfg,
+		Tasks:                subTasks,
+		Notify:               h.c.notify,
+		RunComplete:          h.c.runComplete,
+	})
+	if !config.IsCLIProviderType(provider.Type) {
+		agentCfg := h.c.cfg.Config().Agents[config.AgentTask]
+		nativeTools, err := h.c.buildTools(ctx, agentCfg, true)
+		if err != nil {
+			return nil, Model{}, err
+		}
+		sub.SetTools(nativeTools)
+		p, err := taskPrompt(agentprompt.WithWorkingDir(h.c.cfg.WorkingDir()))
+		if err != nil {
+			return nil, Model{}, err
+		}
+		text, err := p.Build(ctx, lm.Provider(), model.ID, h.c.cfg)
+		if err != nil {
+			return nil, Model{}, err
+		}
+		sub.SetSystemPrompt(text)
+	}
+	return sub, m, nil
+}
+
+// start runs a task in the background and returns its first snapshot. A
+// task without an ID gets the next one. release is called once the task's
+// result is delivered.
+func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub SessionAgent, m Model, provider config.ProviderConfig, prompt string) Task {
+	h.mu.Lock()
+	if t.ID == "" {
+		h.seq++
+		t.ID = fmt.Sprintf("t%d", h.seq)
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	h.cancels[t.ID] = cancel
+	h.tasks[t.ID] = t
+	if run := h.sessionRuns[t.SessionID]; run != nil {
+		h.sessionRuns[t.ChildID] = run
+	}
+	snapshot := *t
+	h.mu.Unlock()
+	h.remember(snapshot, provider.ID)
+	h.publish(snapshot)
+
+	go func() {
+		defer release()
+		defer cancel()
+		removeCheckIn := h.addCheckIn(snapshot.SessionID, checkInWork{id: snapshot.ID, name: snapshot.Name, started: snapshot.Started, ctx: runCtx, progress: func() string {
+			return h.subAgentProgress(runCtx, snapshot)
+		}})
+		result, err := sub.Run(runCtx, SessionAgentCall{
+			SessionID:       t.ChildID,
+			Prompt:          prompt,
+			MaxOutputTokens: m.CatwalkCfg.DefaultMaxTokens,
+			NonInteractive:  true,
+			ProviderOptions: getProviderOptions(m, provider),
+		})
+		removeCheckIn()
+		h.finish(ctx, t.ID, subAgentOutput(result), err)
+	}()
+	return snapshot
+}
+
+// taskModel is the model a sub-agent runs on, tuned as its request asks:
+// the effort must be one of the model's levels, and only Claude and Codex
+// have a fast mode.
+func taskModel(provider config.ProviderConfig, model catwalk.Model, req TaskRequest) (config.SelectedModel, error) {
+	selected := config.SelectedModel{Provider: provider.ID, Model: model.ID, ReasoningEffort: model.DefaultReasoningEffort}
+	if effort := strings.ToLower(strings.TrimSpace(req.Effort)); effort != "" {
+		if !slices.Contains(model.ReasoningLevels, effort) {
+			if len(model.ReasoningLevels) == 0 {
+				return selected, fmt.Errorf("%s model %q has no effort levels", taskProviderName(provider), model.ID)
+			}
+			return selected, fmt.Errorf("%s model %q takes effort %s, not %q", taskProviderName(provider), model.ID, strings.Join(model.ReasoningLevels, ", "), effort)
+		}
+		selected.ReasoningEffort = effort
+	}
+	if req.Fast {
+		if provider.Type != config.TypeClaudeCode && !config.SupportsFastMode(provider, model) {
+			return selected, fmt.Errorf("fast mode is only for claude and codex, not %s", cliName(provider.Type))
+		}
+		selected.ServiceTier = "fast"
+	}
+	return selected, nil
+}
+
+// subAgentPrompt is a new sub-agent's first prompt.
+func subAgentPrompt(prompt string, readOnly bool) string {
+	if readOnly {
+		return subAgentPreamble + readOnlyPreamble + prompt
+	}
+	return subAgentPreamble + prompt
+}
+
+// readOnlyPreamble tells a read-only sub-agent where it stands, so it
+// doesn't spend its turn fighting the sandbox.
+const readOnlyPreamble = `You are read-only: you can read anything and run commands, but nothing can change this project's files (writes fail with a read-only file system error). Don't try to work around that. Where a change is needed, describe it in your report instead.
+
+`
+
+const subAgentPreamble = `You are a sub-agent that another AI agent started in the background from Crush. Do the task below on your own; nobody can answer questions while you work. Never ask the user anything (no "crush ask", no question tools): settle small details yourself. If the task says to check with the user first, or an open question would change the work substantially, don't guess: stop before that part and end with the questions (and the options you see) in your final report, so the agent that started you can answer them or ask the user. You end as soon as you stop replying, so finish what you start instead of leaving it running in the background. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Crush refuses a "sleep" longer than 10 seconds in the foreground; to wait for something, loop on a check (until <check>; do sleep 2; done). When you're done, end with a concise report of what you did and found: that final message is all the other agent will see.
+
+`
+
+func modelIDs(models []catwalk.Model) []string {
+	ids := make([]string, len(models))
+	for i, m := range models {
+		ids[i] = m.ID
+	}
+	return ids
+}

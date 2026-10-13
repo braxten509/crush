@@ -1,8 +1,6 @@
 package chat
 
 import (
-	"encoding/json"
-
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -34,41 +32,27 @@ type FetchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (f *FetchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Fetch", opts.Anim, opts.Compact)
-	}
+	return fetchTool.render(sty, width, opts)
+}
 
-	var params tools.FetchParams
-	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
-	}
-
-	toolParams := []string{params.URL}
-	if params.Format != "" {
-		toolParams = append(toolParams, "format", params.Format)
-	}
-	if params.Timeout != 0 {
-		toolParams = append(toolParams, "timeout", formatTimeout(params.Timeout))
-	}
-
-	header := toolHeader(sty, opts.Status, "Fetch", cappedWidth, opts, toolParams...)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	// Determine file extension for syntax highlighting based on format.
-	file := getFileExtensionForFormat(params.Format)
-	body := toolOutputCodeContent(sty, file, opts.Result.Content, 0, cappedWidth, opts.ExpandedContent)
-	return joinToolParts(header, body)
+// fetchTool draws Fetch tool calls with the standard layout.
+var fetchTool = standardTool[tools.FetchParams]{
+	name: "Fetch",
+	header: func(params tools.FetchParams) []string {
+		toolParams := []string{params.URL}
+		if params.Format != "" {
+			toolParams = append(toolParams, "format", params.Format)
+		}
+		if params.Timeout != 0 {
+			toolParams = append(toolParams, "timeout", formatTimeout(params.Timeout))
+		}
+		return toolParams
+	},
+	body: func(sty *styles.Styles, opts *ToolRenderOpts, params tools.FetchParams, cappedWidth int) string {
+		// Determine file extension for syntax highlighting based on format.
+		file := getFileExtensionForFormat(params.Format)
+		return toolOutputCodeContent(sty, file, opts.Result.Content, 0, cappedWidth, opts.ExpandedContent)
+	},
 }
 
 // getFileExtensionForFormat returns a filename with appropriate extension for syntax highlighting.
@@ -109,32 +93,19 @@ type WebFetchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WebFetchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Fetch", opts.Anim, opts.Compact)
-	}
+	return webFetchTool.render(sty, width, opts)
+}
 
-	var params tools.WebFetchParams
-	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
-	}
-
-	toolParams := []string{params.URL}
-	header := toolHeader(sty, opts.Status, "Fetch", cappedWidth, opts, toolParams...)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	body := toolOutputMarkdownContent(sty, opts.Result.Content, cappedWidth, opts.ExpandedContent)
-	return joinToolParts(header, body)
+// webFetchTool draws Fetch tool calls with the standard layout.
+var webFetchTool = standardTool[tools.WebFetchParams]{
+	name: "Fetch",
+	header: func(params tools.WebFetchParams) []string {
+		toolParams := []string{params.URL}
+		return toolParams
+	},
+	body: func(sty *styles.Styles, opts *ToolRenderOpts, params tools.WebFetchParams, cappedWidth int) string {
+		return toolOutputMarkdownContent(sty, opts.Result.Content, cappedWidth, opts.ExpandedContent)
+	},
 }
 
 // -----------------------------------------------------------------------------
@@ -163,30 +134,17 @@ type WebSearchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WebSearchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Search", opts.Anim, opts.Compact)
-	}
+	return webSearchTool.render(sty, width, opts)
+}
 
-	var params tools.WebSearchParams
-	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
-	}
-
-	toolParams := []string{params.Query}
-	header := toolHeader(sty, opts.Status, "Search", cappedWidth, opts, toolParams...)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	body := toolOutputMarkdownContent(sty, opts.Result.Content, cappedWidth, opts.ExpandedContent)
-	return joinToolParts(header, body)
+// webSearchTool draws Search tool calls with the standard layout.
+var webSearchTool = standardTool[tools.WebSearchParams]{
+	name: "Search",
+	header: func(params tools.WebSearchParams) []string {
+		toolParams := []string{params.Query}
+		return toolParams
+	},
+	body: func(sty *styles.Styles, opts *ToolRenderOpts, params tools.WebSearchParams, cappedWidth int) string {
+		return toolOutputMarkdownContent(sty, opts.Result.Content, cappedWidth, opts.ExpandedContent)
+	},
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -88,7 +88,7 @@ func (m *UI) openComposerFooterForm() {
 	if m.activeInline != nil {
 		return
 	}
-	form := dialog.NewQuestionForm(m.com.Styles, question.Request{
+	form := questionform.NewQuestionForm(m.com.Styles, question.Request{
 		ID: "composer-footer",
 		Questions: []question.Question{{
 			ID:          "items",
@@ -113,16 +113,15 @@ func (m *UI) openComposerFooterForm() {
 		if len(items) == 0 {
 			items = []string{footerNone}
 		}
-		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.composer_footer", items); err != nil {
-			return util.ReportError(err)
-		}
-		m.updateLayoutAndSize()
-		return util.ReportInfo("Composer updated")
+		return m.writeConfigField("options.tui.composer_footer", items, func(err error) tea.Cmd {
+			if err != nil {
+				return util.ReportError(err)
+			}
+			m.updateLayoutAndSize()
+			return util.ReportInfo("Composer updated")
+		})
 	}
-	m.activeInline = form
-	m.textarea.Blur()
-	m.focus = uiFocusEditor
-	m.activeInline.SetFocused(true)
+	m.openInline(form)
 	m.updateLayoutAndSize()
 }
 

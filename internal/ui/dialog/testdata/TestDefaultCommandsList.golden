@@ -1,0 +1,128 @@
+=== bare
+new_session | New Session | ctrl+n | dialog.ActionNewSession{} | New Session clear
+switch_session | Sessions | ctrl+s | dialog.ActionOpenDialog{DialogID:session} | Sessions
+switch_model | Switch Model | ctrl+l | dialog.ActionOpenDialog{DialogID:models} | Switch Model
+usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
+autocompact | Fallback compaction |  | dialog.ActionOpenDialog{DialogID:autocompact} | Fallback compaction
+select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
+toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
+toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
+init | Initialize Project |  | dialog.ActionInitializeProject{} | Initialize Project
+save_project | Save Project |  | dialog.ActionSaveProject{} | Save Project
+open_project | Open Project |  | dialog.ActionOpenDialog{DialogID:projects} | Open Project projects
+background | Background Processes | ctrl+x | dialog.ActionOpenDialog{DialogID:background} | Background Processes processes kill
+sub_agents | Sub-agents |  | dialog.ActionOpenDialog{DialogID:sub-agents} | Sub-agents agents tasks stop
+remote | Remote Control |  | dialog.ActionOpenDialog{DialogID:remote} | Remote Control rc phone
+update_clis | Update Agent CLIs |  | dialog.ActionCheckCLIUpdates{} | Update Agent CLIs upgrade version
+update_crush | Update Crush |  | dialog.ActionSelfUpdate{} | Update Crush upgrade upstream release
+skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install skills enable skills disable skills
+kept_skills | Skills for this chat |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Skills for this chat keep skills on remind skills every message bring skills back after compression
+toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
+toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
+customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
+switch_theme | Themes |  | dialog.ActionOpenDialog{DialogID:theme} | Themes
+toggle_mouse | Disable Mouse |  | dialog.ActionToggleMouseSupport{} | Disable Mouse
+quit | Quit | ctrl+c | tea.QuitMsg{} | Quit exit
+
+=== session with thinking model
+new_session | New Session | ctrl+n | dialog.ActionNewSession{} | New Session clear
+switch_session | Sessions | ctrl+s | dialog.ActionOpenDialog{DialogID:session} | Sessions
+switch_model | Switch Model | ctrl+l | dialog.ActionOpenDialog{DialogID:models} | Switch Model
+usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
+autocompact | Fallback compaction |  | dialog.ActionOpenDialog{DialogID:autocompact} | Fallback compaction
+undo-file-restore | Undo Last File Restore |  | dialog.ActionUndoFiles{} | Undo Last File Restore
+tree | Session Tree |  | dialog.ActionOpenDialog{DialogID:tree} | Session Tree
+fork | Fork from Prompt |  | dialog.ActionOpenDialog{DialogID:fork} | Fork from Prompt
+clone | Clone Current Branch |  | dialog.ActionTreeClone{} | Clone Current Branch
+summarize | Summarize Session |  | dialog.ActionSummarize{SessionID:s1} | Summarize Session compact
+toggle_thinking | Disable Thinking Mode |  | dialog.ActionToggleThinking{} | Disable Thinking Mode
+toggle_sidebar | Toggle Sidebar |  | dialog.ActionToggleCompactMode{} | Toggle Sidebar
+file_picker | Open File Picker | ctrl+f | dialog.ActionOpenDialog{DialogID:filepicker} | Open File Picker
+open_external_editor | Open External Editor | ctrl+o | dialog.ActionExternalEditor{} | Open External Editor
+disable_docker_mcp | Disable Docker MCP Catalog |  | dialog.ActionDisableDockerMCP{} | Disable Docker MCP Catalog
+toggle_mcps | Toggle MCPs |  | dialog.ActionOpenDialog{DialogID:mcp_toggles} | Toggle MCPs
+toggle_pills | Toggle To-Dos/Queue | ctrl+t | dialog.ActionTogglePills{} | Toggle To-Dos/Queue
+select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
+toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
+toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
+init | Initialize Project |  | dialog.ActionInitializeProject{} | Initialize Project
+save_project | Save Project |  | dialog.ActionSaveProject{} | Save Project
+open_project | Open Project |  | dialog.ActionOpenDialog{DialogID:projects} | Open Project projects
+background | Background Processes | ctrl+x | dialog.ActionOpenDialog{DialogID:background} | Background Processes processes kill
+sub_agents | Sub-agents |  | dialog.ActionOpenDialog{DialogID:sub-agents} | Sub-agents agents tasks stop
+remote | Remote Control |  | dialog.ActionOpenDialog{DialogID:remote} | Remote Control rc phone
+update_clis | Update Agent CLIs |  | dialog.ActionCheckCLIUpdates{} | Update Agent CLIs upgrade version
+update_crush | Update Crush |  | dialog.ActionSelfUpdate{} | Update Crush upgrade upstream release
+skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install skills enable skills disable skills
+kept_skills | Skills for this chat |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Skills for this chat keep skills on remind skills every message bring skills back after compression
+toggle_transparent | Use Crush Background |  | dialog.ActionToggleTransparentBackground{} | Use Crush Background background color transparent theme
+toggle_composer_focus | Let Tab Move Focus |  | dialog.ActionToggleComposerFocusOnly{} | Let Tab Move Focus tab focus
+customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
+switch_theme | Themes |  | dialog.ActionOpenDialog{DialogID:theme} | Themes
+toggle_mouse | Enable Mouse |  | dialog.ActionToggleMouseSupport{} | Enable Mouse
+quit | Quit | ctrl+c | tea.QuitMsg{} | Quit exit
+
+=== claude code with effort levels
+new_session | New Session | ctrl+n | dialog.ActionNewSession{} | New Session clear
+switch_session | Sessions | ctrl+s | dialog.ActionOpenDialog{DialogID:session} | Sessions
+switch_model | Switch Model | ctrl+l | dialog.ActionOpenDialog{DialogID:models} | Switch Model
+usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
+autocompact | Fallback compaction |  | dialog.ActionOpenDialog{DialogID:autocompact} | Fallback compaction
+undo-file-restore | Undo Last File Restore |  | dialog.ActionUndoFiles{} | Undo Last File Restore
+tree | Session Tree |  | dialog.ActionOpenDialog{DialogID:tree} | Session Tree
+fork | Fork from Prompt |  | dialog.ActionOpenDialog{DialogID:fork} | Fork from Prompt
+clone | Clone Current Branch |  | dialog.ActionTreeClone{} | Clone Current Branch
+summarize | Summarize Session |  | dialog.ActionSummarize{SessionID:} | Summarize Session compact
+toggle_fast_mode | Disable FAST Mode |  | dialog.ActionToggleFastMode{} | Disable FAST Mode fast speed
+toggle_ultracode | Turn Off Ultracode |  | dialog.ActionToggleUltracode{} | Turn Off Ultracode ultracode ultra workflows
+select_reasoning_effort | Select Reasoning Effort |  | dialog.ActionOpenDialog{DialogID:reasoning} | Select Reasoning Effort effort
+enable_docker_mcp | Enable Docker MCP Catalog |  | dialog.ActionEnableDockerMCP{} | Enable Docker MCP Catalog
+toggle_mcps | Toggle MCPs |  | dialog.ActionOpenDialog{DialogID:mcp_toggles} | Toggle MCPs
+toggle_pills | Toggle Queue | ctrl+t | dialog.ActionTogglePills{} | Toggle Queue
+select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
+toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
+toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
+init | Initialize Project |  | dialog.ActionInitializeProject{} | Initialize Project
+save_project | Save Project |  | dialog.ActionSaveProject{} | Save Project
+open_project | Open Project |  | dialog.ActionOpenDialog{DialogID:projects} | Open Project projects
+background | Background Processes | ctrl+x | dialog.ActionOpenDialog{DialogID:background} | Background Processes processes kill
+sub_agents | Sub-agents |  | dialog.ActionOpenDialog{DialogID:sub-agents} | Sub-agents agents tasks stop
+remote | Remote Control |  | dialog.ActionOpenDialog{DialogID:remote} | Remote Control rc phone
+update_clis | Update Agent CLIs |  | dialog.ActionCheckCLIUpdates{} | Update Agent CLIs upgrade version
+update_crush | Update Crush |  | dialog.ActionSelfUpdate{} | Update Crush upgrade upstream release
+skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install skills enable skills disable skills
+kept_skills | Skills for this chat |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Skills for this chat keep skills on remind skills every message bring skills back after compression
+toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
+toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
+customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
+switch_theme | Themes |  | dialog.ActionOpenDialog{DialogID:theme} | Themes
+toggle_mouse | Disable Mouse |  | dialog.ActionToggleMouseSupport{} | Disable Mouse
+quit | Quit | ctrl+c | tea.QuitMsg{} | Quit exit
+
+=== todos only
+new_session | New Session | ctrl+n | dialog.ActionNewSession{} | New Session clear
+switch_session | Sessions | ctrl+s | dialog.ActionOpenDialog{DialogID:session} | Sessions
+switch_model | Switch Model | ctrl+l | dialog.ActionOpenDialog{DialogID:models} | Switch Model
+usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
+autocompact | Fallback compaction |  | dialog.ActionOpenDialog{DialogID:autocompact} | Fallback compaction
+toggle_pills | Toggle To-Dos | ctrl+t | dialog.ActionTogglePills{} | Toggle To-Dos
+select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
+toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
+toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
+init | Initialize Project |  | dialog.ActionInitializeProject{} | Initialize Project
+save_project | Save Project |  | dialog.ActionSaveProject{} | Save Project
+open_project | Open Project |  | dialog.ActionOpenDialog{DialogID:projects} | Open Project projects
+background | Background Processes | ctrl+x | dialog.ActionOpenDialog{DialogID:background} | Background Processes processes kill
+sub_agents | Sub-agents |  | dialog.ActionOpenDialog{DialogID:sub-agents} | Sub-agents agents tasks stop
+remote | Remote Control |  | dialog.ActionOpenDialog{DialogID:remote} | Remote Control rc phone
+update_clis | Update Agent CLIs |  | dialog.ActionCheckCLIUpdates{} | Update Agent CLIs upgrade version
+update_crush | Update Crush |  | dialog.ActionSelfUpdate{} | Update Crush upgrade upstream release
+skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install skills enable skills disable skills
+kept_skills | Skills for this chat |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Skills for this chat keep skills on remind skills every message bring skills back after compression
+toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
+toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
+customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
+switch_theme | Themes |  | dialog.ActionOpenDialog{DialogID:theme} | Themes
+toggle_mouse | Disable Mouse |  | dialog.ActionToggleMouseSupport{} | Disable Mouse
+quit | Quit | ctrl+c | tea.QuitMsg{} | Quit exit
+

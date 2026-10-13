@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
 
@@ -44,14 +46,14 @@ func TestRemoteActionsRunLikeKeys(t *testing.T) {
 func TestRemoteSetupCancelDiscardsLateChecks(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
-	m.remoteGeneration = 1
-	m.remoteStarting = true
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
+	m.remote.generation = 1
+	m.remote.starting = true
 	ctx, cancel := context.WithCancel(t.Context())
-	m.remoteSetupCancel = cancel
+	m.remote.setupCancel = cancel
 	m.closeRemoteSetup()
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
-	require.False(t, m.remoteStarting)
+	require.False(t, m.remote.starting)
 	require.False(t, m.dialog.ContainsDialog(dialog.RemoteSetupID))
 	err := &remote.SetupError{Info: remote.SetupInfo{State: remote.SetupMissing, Action: "install"}}
 	require.Nil(t, m.handleRemoteStarted(remoteStartedMsg{generation: 1, err: err}))
@@ -63,13 +65,13 @@ func TestRemoteSetupCancelDiscardsLateChecks(t *testing.T) {
 func TestRemoteSetupRequiresExplicitCurrentAction(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
-	m.remoteSetupInfo = remote.SetupInfo{State: remote.SetupLogin, Action: "connect"}
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
+	m.remote.setupInfo = remote.SetupInfo{State: remote.SetupLogin, Action: "connect"}
 	require.Nil(t, m.runRemoteSetup("install"))
 	require.Nil(t, m.runRemoteSetup(""))
-	m.remoteSetupBusy = true
+	m.remote.setupBusy = true
 	require.Nil(t, m.runRemoteSetup("connect"))
-	m.remoteSetupBusy = false
+	m.remote.setupBusy = false
 	m.dialog.CloseDialog(dialog.RemoteSetupID)
 	require.Nil(t, m.runRemoteSetup("connect"))
 }
@@ -77,20 +79,20 @@ func TestRemoteSetupRequiresExplicitCurrentAction(t *testing.T) {
 func TestRemoteSetupFailureStaysRetryable(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
-	m.remoteGeneration = 4
-	m.remoteStarting = true
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
+	m.remote.generation = 4
+	m.remote.starting = true
 	info := remote.SetupInfo{State: remote.SetupMissing, Title: "Install Tailscale", Action: "install", Button: "Install Tailscale"}
 	cmd := m.handleRemoteStarted(remoteStartedMsg{generation: 4, err: &remote.SetupError{Info: info}})
 	require.NotNil(t, cmd, "keep checking after manual installation elsewhere")
-	require.False(t, m.remoteStarting)
-	require.Equal(t, info, m.remoteSetupInfo)
-	m.remoteSetupBusy = true
+	require.False(t, m.remote.starting)
+	require.Equal(t, info, m.remote.setupInfo)
+	m.remote.setupBusy = true
 	require.Nil(t, m.handleRemoteSetupFinished(remoteSetupFinishedMsg{generation: 4, err: errors.New("cancelled")}))
-	require.False(t, m.remoteSetupBusy)
+	require.False(t, m.remote.setupBusy)
 	require.True(t, m.dialog.ContainsDialog(dialog.RemoteSetupID))
 	d := m.dialog.Dialog(dialog.RemoteSetupID)
-	require.Equal(t, dialog.ActionRemoteSetup{Action: "install"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	require.Equal(t, remotecontrol.ActionRemoteSetup{Action: "install"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }
 
 // newChatWorkspace creates the session a new chat's first message needs.

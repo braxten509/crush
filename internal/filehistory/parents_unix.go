@@ -41,7 +41,7 @@ func walkRestoreParents(path string, create bool, opened func(string)) (*restore
 		}
 		next, err := unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		if os.IsNotExist(err) && create {
-			if err := unix.Mkdirat(fd, part, 0755); err != nil && !os.IsExist(err) {
+			if err := unix.Mkdirat(fd, part, 0o755); err != nil && !os.IsExist(err) {
 				return nil, err
 			}
 			next, err = unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
@@ -70,16 +70,19 @@ func (t *restoreTarget) open() (*os.File, error) {
 	}
 	return os.NewFile(uintptr(fd), t.name), nil
 }
+
 func (t *restoreTarget) createTemp(name string) (*os.File, error) {
-	fd, err := unix.Openat(int(t.directory.Fd()), name, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
+	fd, err := unix.Openat(int(t.directory.Fd()), name, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
 	if err != nil {
 		return nil, err
 	}
 	return os.NewFile(uintptr(fd), name), nil
 }
+
 func (t *restoreTarget) rename(name string) error {
 	return unix.Renameat(int(t.directory.Fd()), name, int(t.directory.Fd()), t.name)
 }
+
 func (t *restoreTarget) remove(name string) error {
 	return unix.Unlinkat(int(t.directory.Fd()), name, 0)
 }

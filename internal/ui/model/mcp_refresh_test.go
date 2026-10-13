@@ -36,7 +36,7 @@ func TestMCPEventRefreshIsOffThreadAndDeduped(t *testing.T) {
 		Payload: mcp.Event{Type: mcp.EventStateChanged, Name: "ctx", State: mcp.StateConnected},
 	})
 	require.Zero(t, ws.syncProbes(), "the MCP event handler must not probe synchronously")
-	require.True(t, m.mcpFetchInFlight, "an MCP state change must schedule an off-thread refresh")
+	require.True(t, m.mcpProbe.inFlight, "an MCP state change must schedule an off-thread refresh")
 
 	// A second event while the fetch is in flight queues a re-fetch instead
 	// of stacking another dispatch.
@@ -45,13 +45,13 @@ func TestMCPEventRefreshIsOffThreadAndDeduped(t *testing.T) {
 		Payload: mcp.Event{Type: mcp.EventStateChanged, Name: "ctx", State: mcp.StateConnected},
 	})
 	require.Zero(t, ws.syncProbes())
-	require.True(t, m.mcpRefreshQueued, "an event during an in-flight fetch must queue a re-fetch")
+	require.True(t, m.mcpProbe.queued, "an event during an in-flight fetch must queue a re-fetch")
 
 	runCmds(m, cmd)
-	require.False(t, m.mcpFetchInFlight)
-	require.False(t, m.mcpRefreshQueued, "the queued flag must clear once the re-dispatched fetch lands")
-	require.Equal(t, 4, m.mcpStates["ctx"].Counts.Tools, "fetched states must land in the cache")
-	require.Equal(t, 2, m.mcpStates["ctx"].Counts.Prompts, "fetched prompt counts must land in the cache")
+	require.False(t, m.mcpProbe.inFlight)
+	require.False(t, m.mcpProbe.queued, "the queued flag must clear once the re-dispatched fetch lands")
+	require.Equal(t, 4, m.mcpProbe.val["ctx"].Counts.Tools, "fetched states must land in the cache")
+	require.Equal(t, 2, m.mcpProbe.val["ctx"].Counts.Prompts, "fetched prompt counts must land in the cache")
 	require.Equal(t, 2, ws.mcpStateCalls, "one fetch plus the queued re-fetch")
 }
 
@@ -77,7 +77,7 @@ func TestMCPStartingRetryLoop(t *testing.T) {
 		"slow": {Name: "slow", State: mcp.StateStarting},
 	}})
 	require.Len(t, cmds, 1, "a starting server must arm the retry tick")
-	require.Equal(t, mcp.StateStarting, m.mcpStates["slow"].State)
+	require.Equal(t, mcp.StateStarting, m.mcpProbe.val["slow"].State)
 
 	// The server settles before the tick fires; the re-probe lands the
 	// connected state and the loop stops.
@@ -85,10 +85,10 @@ func TestMCPStartingRetryLoop(t *testing.T) {
 		"slow": {Name: "slow", State: mcp.StateConnected, Counts: mcp.Counts{Tools: 2}},
 	}
 	_, cmd := m.Update(mcpStartingRetryMsg{})
-	require.True(t, m.mcpFetchInFlight, "the retry tick must re-dispatch a state refresh")
+	require.True(t, m.mcpProbe.inFlight, "the retry tick must re-dispatch a state refresh")
 	runCmds(m, cmd)
-	require.False(t, m.mcpFetchInFlight)
-	require.Equal(t, mcp.StateConnected, m.mcpStates["slow"].State,
+	require.False(t, m.mcpProbe.inFlight)
+	require.Equal(t, mcp.StateConnected, m.mcpProbe.val["slow"].State,
 		"the retry loop must converge on the settled state")
 
 	cmds = m.applyMCPStates(mcpStateChangedMsg{states: map[string]mcp.ClientInfo{
@@ -136,18 +136,18 @@ func TestMCPStatesTTLBackstop(t *testing.T) {
 	// The check time starts zero, so the first Update sees the MCP cache as
 	// stale and dispatches a refresh.
 	_, cmd := m.Update(plainMsg{})
-	require.True(t, m.mcpFetchInFlight, "a stale MCP cache must re-dispatch a refresh")
+	require.True(t, m.mcpProbe.inFlight, "a stale MCP cache must re-dispatch a refresh")
 	runCmds(m, cmd)
-	require.False(t, m.mcpFetchInFlight)
+	require.False(t, m.mcpProbe.inFlight)
 
 	// A fresh stamp keeps the backstop quiet.
 	m.Update(plainMsg{})
-	require.False(t, m.mcpFetchInFlight, "a fresh MCP cache must not re-dispatch")
+	require.False(t, m.mcpProbe.inFlight, "a fresh MCP cache must not re-dispatch")
 
 	// Once the TTL elapses, the next Update re-dispatches.
-	m.mcpCheckedAt = time.Now().Add(-2 * mcpStatesTTL)
+	m.mcpProbe.checkedAt = time.Now().Add(-2 * mcpStatesTTL)
 	m.Update(plainMsg{})
-	require.True(t, m.mcpFetchInFlight, "an expired MCP cache must re-dispatch a refresh")
+	require.True(t, m.mcpProbe.inFlight, "an expired MCP cache must re-dispatch a refresh")
 }
 
 // TestMCPFailedFetchKeepsLastKnownGood pins the error path: a fetch that
@@ -167,15 +167,15 @@ func TestMCPFailedFetchKeepsLastKnownGood(t *testing.T) {
 	warmCaches(m, false)
 
 	runCmds(m, m.requestMCPRefresh())
-	require.Equal(t, mcp.StateConnected, m.mcpStates["ctx"].State,
+	require.Equal(t, mcp.StateConnected, m.mcpProbe.val["ctx"].State,
 		"the seeded states must land in the cache")
 
 	// Simulate the next fetch failing (the client workspace returns nil
 	// states when the round-trip errors).
 	cmds := m.applyMCPStates(mcpStateChangedMsg{states: nil})
 	require.Empty(t, cmds)
-	require.False(t, m.mcpFetchInFlight)
-	require.Equal(t, mcp.StateConnected, m.mcpStates["ctx"].State,
+	require.False(t, m.mcpProbe.inFlight)
+	require.Equal(t, mcp.StateConnected, m.mcpProbe.val["ctx"].State,
 		"a failed fetch must keep the last-known-good states")
 }
 
@@ -192,7 +192,7 @@ func TestConnectionRecoveredResyncsMCPStates(t *testing.T) {
 
 	m.Update(workspace.ConnectionEvent{State: workspace.ConnectionRecovered})
 	require.Zero(t, ws.syncProbes(), "the recovery handler must not probe synchronously")
-	require.True(t, m.mcpFetchInFlight,
+	require.True(t, m.mcpProbe.inFlight,
 		"recovery must re-sync the MCP states: events published while the stream was down are gone")
 }
 
@@ -212,11 +212,11 @@ func TestMCPAuthCompleteRefreshesStates(t *testing.T) {
 		dialog.ActionMCPAuthComplete{Name: "ctx"},
 		dialog.ActionMCPAuthErrored{Name: "ctx", Error: errors.New("authentication timed out")},
 	} {
-		m.mcpFetchInFlight = false
-		m.mcpCheckedAt = time.Now()
+		m.mcpProbe.inFlight = false
+		m.mcpProbe.checkedAt = time.Now()
 		m.Update(action)
 		require.Zero(t, ws.mcpStateCalls, "the auth action handler must not probe synchronously")
-		require.True(t, m.mcpFetchInFlight,
+		require.True(t, m.mcpProbe.inFlight,
 			"auth completion must refresh the MCP states (%T)", action)
 	}
 }

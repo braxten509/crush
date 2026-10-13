@@ -11,7 +11,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/filepathext"
+	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/permission"
 )
 
@@ -49,7 +49,7 @@ func NewReadMCPResourceTool(cfg *config.ConfigStore, permissions permission.Serv
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for reading MCP resources")
 			}
 
-			relPath := filepathext.SmartJoin(cfg.WorkingDir(), cmp.Or(params.URI, "mcp-resource"))
+			relPath := fsext.SmartJoin(cfg.WorkingDir(), cmp.Or(params.URI, "mcp-resource"))
 			p, err := permissions.Request(
 				ctx,
 				permission.CreatePermissionRequest{

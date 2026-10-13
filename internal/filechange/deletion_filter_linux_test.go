@@ -80,11 +80,11 @@ func BenchmarkDeleteBatch(b *testing.B) {
 			directory := filepath.Join(root, "files")
 			for range b.N {
 				b.StopTimer()
-				if err := os.Mkdir(directory, 0700); err != nil {
+				if err := os.Mkdir(directory, 0o700); err != nil {
 					b.Fatal(err)
 				}
 				for index := range 10000 {
-					if err := os.WriteFile(filepath.Join(directory, fmt.Sprint(index)), []byte("fixture"), 0600); err != nil {
+					if err := os.WriteFile(filepath.Join(directory, fmt.Sprint(index)), []byte("fixture"), 0o600); err != nil {
 						b.Fatal(err)
 					}
 				}

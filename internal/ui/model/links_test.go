@@ -18,7 +18,7 @@ import (
 func TestLinkTarget(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "A file #1%.txt")
-	require.NoError(t, os.WriteFile(path, []byte("test"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("test"), 0o600))
 	fileURL := (&url.URL{Scheme: "file", Path: path}).String()
 	for _, destination := range []string{fileURL, fileURL + ":12:3", fileURL + "#L12", "A%20file%20%231%25.txt"} {
 		got, err := linkTarget(destination, dir)
@@ -41,7 +41,7 @@ func TestLinkTarget(t *testing.T) {
 	}
 	// Existing colon-containing names win over editor line suffixes.
 	colon := filepath.Join(dir, "report:12")
-	require.NoError(t, os.WriteFile(colon, nil, 0600))
+	require.NoError(t, os.WriteFile(colon, nil, 0o600))
 	got, err := linkTarget(colon, dir)
 	require.NoError(t, err)
 	require.Equal(t, (&url.URL{Scheme: "file", Path: colon}).String(), got)
@@ -137,10 +137,10 @@ func TestOpenChatLinkDesktopDispatch(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "folder with spaces")
-	require.NoError(t, os.Mkdir(path, 0700))
+	require.NoError(t, os.Mkdir(path, 0o700))
 	output := filepath.Join(dir, "opened")
 	dispatcher := filepath.Join(dir, "xdg-open")
-	require.NoError(t, os.WriteFile(dispatcher, []byte("#!/bin/sh\n[ /dev/null -ef /proc/self/fd/0 ] || exit 40\n[ /dev/null -ef /proc/self/fd/1 ] || exit 41\n[ /dev/null -ef /proc/self/fd/2 ] || exit 42\nprintf 'noisy app output\\n'\nprintf 'Qt accessibility warning\\n' >&2\nprintf '%s' \"$1\" > \"$LINK_TEST_OUTPUT\"\n"), 0700))
+	require.NoError(t, os.WriteFile(dispatcher, []byte("#!/bin/sh\n[ /dev/null -ef /proc/self/fd/0 ] || exit 40\n[ /dev/null -ef /proc/self/fd/1 ] || exit 41\n[ /dev/null -ef /proc/self/fd/2 ] || exit 42\nprintf 'noisy app output\\n'\nprintf 'Qt accessibility warning\\n' >&2\nprintf '%s' \"$1\" > \"$LINK_TEST_OUTPUT\"\n"), 0o700))
 	t.Setenv("PATH", dir)
 	t.Setenv("LINK_TEST_OUTPUT", output)
 	require.Nil(t, openChatLink(path, dir)())
@@ -154,7 +154,7 @@ func TestOpenChatLinkDesktopFailure(t *testing.T) {
 		t.Skip("Linux desktop dispatcher")
 	}
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), []byte("#!/bin/sh\necho 'app failure' >&2\nexit 7\n"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), []byte("#!/bin/sh\necho 'app failure' >&2\nexit 7\n"), 0o700))
 	t.Setenv("PATH", dir)
 	msg, ok := openChatLink(dir, dir)().(util.InfoMsg)
 	require.True(t, ok)

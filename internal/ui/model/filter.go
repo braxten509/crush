@@ -38,7 +38,7 @@ func NewFilter() *Filter {
 func (f *Filter) Filter(model tea.Model, msg tea.Msg) tea.Msg {
 	if ui, ok := model.(*UI); ok && isBackgroundQuery(msg) {
 		// Bubble Tea sends the query, then redraws; skip the redraw.
-		ui.quietFrame = true
+		ui.frame.quiet = true
 		return msg
 	}
 	switch typed := msg.(type) {

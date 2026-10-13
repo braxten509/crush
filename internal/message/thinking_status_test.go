@@ -1,8 +1,9 @@
 package message
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestThinkingStatusDoesNotRequireReasoningText(t *testing.T) {

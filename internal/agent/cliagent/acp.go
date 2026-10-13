@@ -1,6 +1,7 @@
 package cliagent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -71,6 +72,35 @@ const (
 	acpPromptID  = "3"
 )
 
+// acpRun is one turn of an ACP agent.
+type acpRun struct {
+	ctx      context.Context
+	m        *Model
+	t        Turn
+	p        *proc
+	name     string
+	setModel bool
+
+	session atomic.Pointer[string]
+	calls   map[string]*acpTool
+	// loading is set while session/load replays history, which is skipped.
+	loading bool
+
+	// OpenCode folds a session/prompt sent mid-turn into the running turn
+	// at its next step, then answers it with the turn's own result. It
+	// sends no echo, so a message counts as taken once a tool call ends
+	// and the model moves on, or once its prompt is answered. Grok would
+	// only queue it as a separate turn.
+	steerMu   sync.Mutex
+	steerIDs  map[string]string // unanswered steered prompts
+	steerN    int
+	sent      steered
+	prompted  atomic.Bool
+	boundary  bool   // a tool call ended since the last confirm
+	final     []byte // the turn's result, held while steered prompts are open
+	stopSteer func()
+}
+
 // runACP drives an ACP agent started with args. setModel selects m.ID with
 // session/set_model for agents that take no model flag.
 func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, setModel bool) error {
@@ -89,10 +119,15 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 	}
 	defer p.finish()
 	t.Emit = p.reviewEvents(t.Emit)
+	r := &acpRun{
+		ctx: ctx, m: m, t: t, p: p, name: name, setModel: setModel,
+		calls:    map[string]*acpTool{},
+		loading:  t.Resume != "",
+		steerIDs: map[string]string{},
+	}
 
-	var session atomic.Pointer[string]
 	stop := p.watchCancel(ctx, func() {
-		if id := session.Load(); id != nil {
+		if id := r.session.Load(); id != nil {
 			_ = p.send(map[string]any{"jsonrpc": "2.0", "method": "session/cancel", "params": map[string]any{"sessionId": *id}})
 		} else {
 			p.closeInput()
@@ -105,68 +140,11 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 		"clientCapabilities": map[string]any{"fs": map[string]any{"readTextFile": false, "writeTextFile": false}, "terminal": false},
 	}})
 
-	calls := map[string]*acpTool{}
-	loading := t.Resume != "" // session/load replays history first; skip it
-
-	// OpenCode folds a session/prompt sent mid-turn into the running turn
-	// at its next step, then answers it with the turn's own result. It
-	// sends no echo, so a message counts as taken once a tool call ends
-	// and the model moves on, or once its prompt is answered. Grok would
-	// only queue it as a separate turn.
-	var (
-		steerMu  sync.Mutex
-		steerIDs = map[string]string{} // unanswered steered prompts
-		steerN   int
-		sent     steered
-		prompted atomic.Bool
-		boundary bool   // a tool call ended since the last confirm
-		final    []byte // the turn's result, held while steered prompts are open
-	)
-	stopSteer := func() {}
+	r.stopSteer = func() {}
 	if name == "opencode" {
-		stopSteer = pollSteer(t, prompted.Load, func(text string) {
-			steerMu.Lock()
-			steerN++
-			id := "steer-" + strconv.Itoa(steerN)
-			steerIDs[id] = text
-			steerMu.Unlock()
-			sent.add(text)
-			if p.send(map[string]any{"jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": map[string]any{
-				"sessionId": *session.Load(),
-				"prompt":    []any{map[string]any{"type": "text", "text": text}},
-			}}) != nil {
-				steerMu.Lock()
-				delete(steerIDs, id)
-				steerMu.Unlock()
-				sent.take(text)
-			}
-		})
+		r.stopSteer = pollSteer(r.t, r.prompted.Load, r.steer)
 	}
-	defer stopSteer()
-	confirm := func(texts ...string) error {
-		for _, text := range texts {
-			if sent.take(text) {
-				if err := t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	confirmAll := func() error {
-		steerMu.Lock()
-		var texts []string
-		for _, text := range steerIDs {
-			texts = append(texts, text)
-		}
-		steerMu.Unlock()
-		return confirm(texts...)
-	}
-	openSteers := func() int {
-		steerMu.Lock()
-		defer steerMu.Unlock()
-		return len(steerIDs)
-	}
+	defer r.stopSteer()
 	for p.lines.Scan() {
 		var msg rpcMessage
 		if json.Unmarshal(p.lines.Bytes(), &msg) != nil {
@@ -175,107 +153,172 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 		id := strings.Trim(string(msg.ID), `"`)
 
 		if msg.Method != "" && id != "" {
-			go acpRequest(ctx, m, t, p, msg)
+			go acpRequest(ctx, m, r.t, p, msg)
 			continue
 		}
 
-		if msg.Method == "" && strings.HasPrefix(id, "steer-") {
-			steerMu.Lock()
-			text := steerIDs[id]
-			delete(steerIDs, id)
-			steerMu.Unlock()
-			if msg.Error != nil {
-				sent.take(text) // not taken; Crush runs it next
-			} else if err := confirm(text); err != nil {
-				return err
-			}
-			if final != nil && openSteers() == 0 {
-				return acpFinish(name, final, t.Emit)
-			}
+		var done bool
+		var err error
+		switch {
+		case msg.Method == "" && strings.HasPrefix(id, "steer-"):
+			done, err = r.handleSteerResponse(id, msg)
+		case msg.Method == "":
+			done, err = r.handleResponse(id, msg)
+		case msg.Method != "session/update" || r.loading:
 			continue
+		default:
+			err = r.handleUpdate(msg)
 		}
-
-		if msg.Method == "" {
-			if msg.Error != nil {
-				if id == acpSessionID && t.Resume != "" {
-					return ErrResume
-				}
-				return fmt.Errorf("%s: %s", name, msg.Error.Message)
-			}
-			switch id {
-			case acpInitID:
-				params := map[string]any{"cwd": m.Dir, "mcpServers": []any{}}
-				method := "session/new"
-				if t.Resume != "" {
-					method, params["sessionId"] = "session/load", t.Resume
-				}
-				_ = p.send(map[string]any{"jsonrpc": "2.0", "id": acpSessionID, "method": method, "params": params})
-			case acpSessionID:
-				loading = false
-				var res struct {
-					SessionID string `json:"sessionId"`
-				}
-				_ = json.Unmarshal(msg.Result, &res)
-				sid := cmpOr(res.SessionID, t.Resume)
-				session.Store(&sid)
-				if err := t.Emit(Event{Type: EventSession, Session: sid}); err != nil {
-					return err
-				}
-				if setModel {
-					_ = p.send(map[string]any{"jsonrpc": "2.0", "id": "set-model", "method": "session/set_model", "params": map[string]any{"sessionId": sid, "modelId": m.ID}})
-				}
-				_ = p.send(map[string]any{"jsonrpc": "2.0", "id": acpPromptID, "method": "session/prompt", "params": map[string]any{
-					"sessionId": sid,
-					"prompt":    []any{map[string]any{"type": "text", "text": withImagePaths(t.Prompt, t.Attachments)}},
-				}})
-				prompted.Store(true)
-			case acpPromptID:
-				stopSteer()
-				if openSteers() > 0 {
-					// Their answers follow; one may even run as its own turn.
-					final = msg.Result
-					continue
-				}
-				return acpFinish(name, msg.Result, t.Emit)
-			}
-			continue
-		}
-
-		if msg.Method != "session/update" || loading {
-			continue
-		}
-		var params struct {
-			Update acpUpdate `json:"update"`
-		}
-		_ = json.Unmarshal(msg.Params, &params)
-		switch u := params.Update; {
-		case u.SessionUpdate == "tool_call_update" && (u.Status == "completed" || u.Status == "failed"):
-			boundary = true
-		case u.SessionUpdate == "agent_message_chunk", u.SessionUpdate == "agent_thought_chunk", u.SessionUpdate == "tool_call":
-			// The model's next step, which has the messages sent before it.
-			if (boundary || final != nil) && sent.pending() > 0 {
-				if err := confirmAll(); err != nil {
-					return err
-				}
-			}
-			boundary = false
-		}
-		if name == "opencode" && params.Update.SessionUpdate == "usage_update" && params.Update.Size > 0 {
-			if err := t.Emit(openCodeContextBudget(params.Update.Size)); err != nil {
-				return err
-			}
-		}
-		if err := acpHandleUpdate(params.Update, calls, t.Emit); err != nil {
+		if done || err != nil {
 			return err
 		}
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if t.Resume != "" && session.Load() == nil {
+	if t.Resume != "" && r.session.Load() == nil {
 		return ErrResume
 	}
 	return exitError(name, p)
+}
+
+// steer sends a prompt queued mid-turn to the running session.
+func (r *acpRun) steer(text string) {
+	r.steerMu.Lock()
+	r.steerN++
+	id := "steer-" + strconv.Itoa(r.steerN)
+	r.steerIDs[id] = text
+	r.steerMu.Unlock()
+	r.sent.add(text)
+	if r.p.send(map[string]any{"jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": map[string]any{
+		"sessionId": *r.session.Load(),
+		"prompt":    []any{map[string]any{"type": "text", "text": text}},
+	}}) != nil {
+		r.steerMu.Lock()
+		delete(r.steerIDs, id)
+		r.steerMu.Unlock()
+		r.sent.take(text)
+	}
+}
+
+// confirm reports the steered prompts the agent took in.
+func (r *acpRun) confirm(texts ...string) error {
+	for _, text := range texts {
+		if r.sent.take(text) {
+			if err := r.t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (r *acpRun) confirmAll() error {
+	r.steerMu.Lock()
+	var texts []string
+	for _, text := range r.steerIDs {
+		texts = append(texts, text)
+	}
+	r.steerMu.Unlock()
+	return r.confirm(texts...)
+}
+
+func (r *acpRun) openSteers() int {
+	r.steerMu.Lock()
+	defer r.steerMu.Unlock()
+	return len(r.steerIDs)
+}
+
+// handleSteerResponse handles the answer to a steered prompt. done reports
+// that the turn ended, with err.
+func (r *acpRun) handleSteerResponse(id string, msg rpcMessage) (done bool, err error) {
+	r.steerMu.Lock()
+	text := r.steerIDs[id]
+	delete(r.steerIDs, id)
+	r.steerMu.Unlock()
+	if msg.Error != nil {
+		r.sent.take(text) // not taken; Crush runs it next
+	} else if err := r.confirm(text); err != nil {
+		return true, err
+	}
+	if r.final != nil && r.openSteers() == 0 {
+		return true, acpFinish(r.name, r.final, r.t.Emit)
+	}
+	return false, nil
+}
+
+// handleResponse handles the agent's response to one of Crush's requests.
+// done reports that the turn ended, with err.
+func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error) {
+	if msg.Error != nil {
+		if id == acpSessionID && r.t.Resume != "" {
+			return true, ErrResume
+		}
+		return true, fmt.Errorf("%s: %s", r.name, msg.Error.Message)
+	}
+	switch id {
+	case acpInitID:
+		params := map[string]any{"cwd": r.m.Dir, "mcpServers": []any{}}
+		method := "session/new"
+		if r.t.Resume != "" {
+			method, params["sessionId"] = "session/load", r.t.Resume
+		}
+		_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": acpSessionID, "method": method, "params": params})
+	case acpSessionID:
+		r.loading = false
+		var res struct {
+			SessionID string `json:"sessionId"`
+		}
+		_ = json.Unmarshal(msg.Result, &res)
+		sid := cmp.Or(res.SessionID, r.t.Resume)
+		r.session.Store(&sid)
+		if err := r.t.Emit(Event{Type: EventSession, Session: sid}); err != nil {
+			return true, err
+		}
+		if r.setModel {
+			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-model", "method": "session/set_model", "params": map[string]any{"sessionId": sid, "modelId": r.m.ID}})
+		}
+		_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": acpPromptID, "method": "session/prompt", "params": map[string]any{
+			"sessionId": sid,
+			"prompt":    []any{map[string]any{"type": "text", "text": withImagePaths(r.t.Prompt, r.t.Attachments)}},
+		}})
+		r.prompted.Store(true)
+	case acpPromptID:
+		r.stopSteer()
+		if r.openSteers() > 0 {
+			// Their answers follow; one may even run as its own turn.
+			r.final = msg.Result
+			return false, nil
+		}
+		return true, acpFinish(r.name, msg.Result, r.t.Emit)
+	}
+	return false, nil
+}
+
+// handleUpdate handles a session/update notification.
+func (r *acpRun) handleUpdate(msg rpcMessage) error {
+	var params struct {
+		Update acpUpdate `json:"update"`
+	}
+	_ = json.Unmarshal(msg.Params, &params)
+	switch u := params.Update; {
+	case u.SessionUpdate == "tool_call_update" && (u.Status == "completed" || u.Status == "failed"):
+		r.boundary = true
+	case u.SessionUpdate == "agent_message_chunk", u.SessionUpdate == "agent_thought_chunk", u.SessionUpdate == "tool_call":
+		// The model's next step, which has the messages sent before it.
+		if (r.boundary || r.final != nil) && r.sent.pending() > 0 {
+			if err := r.confirmAll(); err != nil {
+				return err
+			}
+		}
+		r.boundary = false
+	}
+	if r.name == "opencode" && params.Update.SessionUpdate == "usage_update" && params.Update.Size > 0 {
+		if err := r.t.Emit(openCodeContextBudget(params.Update.Size)); err != nil {
+			return err
+		}
+	}
+	return acpHandleUpdate(params.Update, r.calls, r.t.Emit)
 }
 
 // acpFinish reports a finished session/prompt's usage and stop reason.
@@ -321,9 +364,9 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 			tc = &acpTool{}
 			calls[u.ToolCallID] = tc
 		}
-		tc.kind = cmpOr(u.Kind, tc.kind)
+		tc.kind = cmp.Or(u.Kind, tc.kind)
 		if tc.title == "" || u.SessionUpdate == "tool_call" {
-			tc.title = cmpOr(u.Title, tc.title)
+			tc.title = cmp.Or(u.Title, tc.title)
 		}
 		if len(u.RawInput) > 0 {
 			tc.input = u.RawInput
@@ -399,9 +442,9 @@ func acpTool2Crush(tc *acpTool) (string, string) {
 	case "edit":
 		if d := tc.diff; d != nil {
 			if d.OldText == "" && in("old_string", "oldString") == "" {
-				return tools.WriteToolName, marshal(tools.WriteParams{FilePath: cmpOr(d.Path, path), Content: d.NewText})
+				return tools.WriteToolName, marshal(tools.WriteParams{FilePath: cmp.Or(d.Path, path), Content: d.NewText})
 			}
-			return tools.EditToolName, marshal(tools.EditParams{FilePath: cmpOr(d.Path, path), OldString: d.OldText, NewString: d.NewText})
+			return tools.EditToolName, marshal(tools.EditParams{FilePath: cmp.Or(d.Path, path), OldString: d.OldText, NewString: d.NewText})
 		}
 		if content := in("content"); content != "" && path != "" {
 			return tools.WriteToolName, marshal(tools.WriteParams{FilePath: path, Content: content})
@@ -414,7 +457,7 @@ func acpTool2Crush(tc *acpTool) (string, string) {
 			return tools.WebFetchToolName, marshal(map[string]string{"url": url})
 		}
 	}
-	name := cmpOr(tc.title, tc.kind, "tool")
+	name := cmp.Or(tc.title, tc.kind, "tool")
 	if tc.input == nil {
 		return name, "{}"
 	}
@@ -478,13 +521,4 @@ func acpRequest(ctx context.Context, m *Model, t Turn, p *proc, msg rpcMessage) 
 		}
 	}
 	_ = p.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"outcome": map[string]any{"outcome": "cancelled"}}})
-}
-
-func cmpOr(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

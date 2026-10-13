@@ -9,6 +9,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +67,7 @@ func startNativeJob(t *testing.T, h *taskHub, sessionID, command string) *shell.
 func startJobWithEnv(t *testing.T, h *taskHub, env []string, sessionID, command string) (*shell.BackgroundShell, fantasy.ToolResponse) {
 	t.Helper()
 	options := h.c.cfg.Config().Options
-	bash := tools.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "")
+	bash := shelltool.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "", reportStartedJob)
 	response := runNativeTool(t, env, sessionID, bash, tools.BashParams{Command: command, WorkingDir: t.TempDir(), RunInBackground: true})
 	var meta tools.BashResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(response.Metadata), &meta))
@@ -138,7 +139,7 @@ func TestNativeBackgroundJobListedOnceAndUserStopIsReported(t *testing.T) {
 func TestNativeBackgroundJobStoppedByAgentSendsNothing(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
 	job := startNativeJob(t, h, sessionID, "sleep 30")
-	runNativeTool(t, h.env(sessionID), sessionID, tools.NewJobKillTool(), tools.JobKillParams{ShellID: job.ID})
+	runNativeTool(t, h.env(sessionID), sessionID, shelltool.NewJobKillTool(), tools.JobKillParams{ShellID: job.ID})
 	require.True(t, job.IsDone())
 	require.Never(t, func() bool { return len(notices) > 0 }, 1500*time.Millisecond, 50*time.Millisecond, "the agent's own stop was reported")
 	require.Eventually(t, func() bool { return !h.hasRunning(sessionID) }, 2*time.Second, 20*time.Millisecond)
@@ -153,7 +154,7 @@ func TestJobKillOfEndedJobLeavesNoMark(t *testing.T) {
 	case <-time.After(8 * time.Second):
 		t.Fatal("completion notification missing")
 	}
-	runNativeTool(t, h.env(sessionID), sessionID, tools.NewJobKillTool(), tools.JobKillParams{ShellID: job.ID})
+	runNativeTool(t, h.env(sessionID), sessionID, shelltool.NewJobKillTool(), tools.JobKillParams{ShellID: job.ID})
 	require.False(t, tools.StoppedByAgent(job.ID))
 }
 

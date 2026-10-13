@@ -41,6 +41,7 @@ type FileRestoreRequest struct {
 func WithFileRestore(ctx context.Context, request *FileRestoreRequest) context.Context {
 	return context.WithValue(ctx, restoreContextKey{}, request)
 }
+
 func (s *service) restoreFiles(ctx context.Context, operation func() error) error {
 	request, _ := ctx.Value(restoreContextKey{}).(*FileRestoreRequest)
 	if request == nil {

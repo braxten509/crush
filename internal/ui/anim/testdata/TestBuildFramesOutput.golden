@@ -1,0 +1,762 @@
+=== {ID:a Size:4 Label:frames-golden-plain LabelColor:<nil> GradColorA:<nil> GradColorB:<nil> CycleColors:false NoScramble:false Suffix:<nil> SuffixColor:<nil>}
+width=24 cycling=4 labelWidth=19 births=[14 17 6 8 10 8 2 2 19 2 7 12 19 6 3 7 6 15 0 3 1 1 17 5]
+label=d7470051d7348d1a15fea5e902dd46806d5accd061022cc211574ce65bf54cb7
+ellipsis=[".  " ".. " "..."]
+initial[0]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[1]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[2]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[3]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[4]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[5]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[6]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[7]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[8]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+initial[9]=4df42f54b3998ffdecd58a806eb164db9270c1afbf1d7af3b1a8259fdfa0721c
+cycling[0]=362047f08cdc27ae30f503eae4ddcd263b9bf99e0dda52bed3c2fce8c50bac96 "£8!c&€Cf4a7b^97#0€e~B!A1"
+cycling[1]=e06bedb6f8d5130e5409f223e22843fc4e958f2dc81da8d7f2a550e3eea62a66 ")c3$!b8=44)Dfb)!1fd6F(9+"
+cycling[2]=973ec995cd9a356c8d1c435d5229f1e2da41e804db017dc70863cfc85ca1d9be "Fb44=b25177$956~&a^(fe7C"
+cycling[3]=c3d666cbb2e1e325ad3d54db75abc8c58a30e587656f6e9eefa5dcc596824d6b "Cde^De#%4)~)5!+€&Ad94E4="
+cycling[4]=58666386646e5b0c7c81234073c59c8e88a2f50912475983749c3d329d857c94 ")&=81+@4+1AAF1E_D)€@56B6"
+cycling[5]=1be9153868e4703a3e8114dc5ddd562865c09b9a57cfda520a1aebb96995c906 ")0&5€%)=08A#£=€6£4&+7=eE"
+cycling[6]=b67ccc3a00dc400dc379046cd95f262632b1f58d4b5f1582163ea9dd158356a2 "c^E*_0004b(e@cCB=((^^9d5"
+cycling[7]=102863a3e6b5413dba6590f265e9d3fad30dc91c6ae1fd45701c967b3048a4b2 "~FB£052£243@AFD(=BB)^1B!"
+cycling[8]=28a0c50cd58c726b3d6fff725162cf0fbdd8979ad5f9d57493446b57179d5d2e "+72a04)Eb9)f04$E0a07E2cc"
+cycling[9]=35246bec994c3af25e67f1829bdb2a4f816d2116e043f681a3ac89a0ed80592e "3~C67*!9&7c&8c!Ee46E1A*7"
+render[0]=fbb03f4b6fda220cbf897be142da99e1c169d623963a117826efbedaba04b7c2 "..................-....."
+render[1]=9346496474891c64cdce62d38ac004b5ce693299383158f1751bcfd2cda04abd "..................-.la.."
+render[2]=18d620bb15b576d9e2fe63d80732f702a877b01ce9bd014ec946a7ba642fb438 "......ra.e........-.la.."
+render[3]=2e0197a93e2bb3d2874fd4fbf60366b7835162a48f6d221dfd44a344f9f48a6f "......ra.e....l...-pla.."
+render[4]=2e0197a93e2bb3d2874fd4fbf60366b7835162a48f6d221dfd44a344f9f48a6f "......ra.e....l...-pla.."
+render[5]=b6ab756805c796b1107360e177632f3df3104e3ee375cbb387f926592eb783b9 "......ra.e....l...-pla.n"
+render[6]=007503fef0c27ef46653a82e3703b07012b2999f2ec5285b7ba4881f4a601143 "..E...ra.e...ol.e.-pla.n"
+render[7]=5b6bba1a735ff95d0c299b6c4b7e6b9dfb011593f14fc0f973b54362874a7c67 "..B...ra.es..olde.-pla.n"
+render[8]=1d5119668924a9af02bc6557540418c836986ca5e1eaf6d82a3c37f450a74797 "..2a.fra.es..olde.-pla.n"
+render[9]=aa616dd4c5e9b5d5e1d8cc16507947e519bf74521e3c2508f7d6725102e9ba14 "..C6.fra.es..olde.-pla.n"
+render[10]=12e810d3a9eeb093233f472afa3b10128e0c62d2fba6dd6b2b99f275020047f3 "..!c fra.es..olde.-pla.n"
+render[11]=428c8abf238b6e2bf45b7e310785d4ef14a97295d602cc330c500a3bef81b6c9 "..3$ fra.es..olde.-pla.n"
+render[12]=e96061e0d52b588e99a1a03b7dd5a2b753849c844889b955b044cbfbe3084a43 "..44 fra.es-.olde.-pla.n"
+render[13]=45951c72817b820e134be487a049bf00f30a354e5c14266bcc60c42399fc51b4 "..e^ fra.es-.olde.-pla.n"
+render[14]=830bf1d0fafaf044a4e9d06f548878f3a8239de75703378f875ebe0ffcc43751 ").=8 fra.es-.olde.-pla.n"
+render[15]=fd5d56f30340d4703dda93e031582476206c7b30933a98f47972abbaa0465eec ").&5 fra.es-.olden-pla.n"
+render[16]=5bea32d6d124463a2347204d43d0e18ae70cea803b94ef030ee69fcdf74893f5 "c.E* fra.es-.olden-pla.n"
+render[17]=4d529a0f6f65326f2b2d295f0c1b38786b5dc1cef31956d298e9d7ec62fbf21b "~FB£ fra.es-.olden-plain"
+render[18]=62cd09f3031aea57f1beb43c96a3d7756bdada1f3ac9900c4f6883d6f8f0e9b0 "+72a fra.es-.olden-plain"
+render[19]=d50dc37c98f019a5afeda94e0559df9a841790976420eab675bcaf7b282d0c57 "3~C6 frames-golden-plain"
+render[20]=b617a14d95733311cd3d9fbcf82377c1d2a07bc75448298879f3d0f41a25d39e "£8!c frames-golden-plain.  "
+render[21]=87b6104025e5fba7c15a6dd198797b29b675d0c9b7dde1980cb7e203f1f7df43 ")c3$ frames-golden-plain.  "
+render[22]=75fc8a61000ed4c3d2cd3f910f85c3928fb0db199b1e8fa849e97b565d825ae1 "Fb44 frames-golden-plain.  "
+render[23]=9662532b5d613528b16ca00cae0d4643e063258a05f7e77e89a5a372f5da43db "Cde^ frames-golden-plain.  "
+render[24]=14abe44bae83613a843e83b6f613284491fdec0189a9b9d0d97e7e891a1124ba ")&=8 frames-golden-plain.  "
+render[25]=64d5c7df3eb70247fb40e85a0c626b4b393544eadfbf7a271c15f194df075009 ")0&5 frames-golden-plain.  "
+render[26]=6697dee22369ed99bb57fb1b62efad6cef8514a1210778e08a0b9c990f448a33 "c^E* frames-golden-plain.  "
+render[27]=040d5c6520bd0dc6aa2e13973941a8ace8f0b334a16e78f076562147b6945e09 "~FB£ frames-golden-plain.  "
+render[28]=d3a3c540db5653598548db0c0adfcdb434db699f1d500a1cc3b03504dc183678 "+72a frames-golden-plain.. "
+render[29]=0f95a4ab5743d21f347306879dfcf58591bd9b80a0d2226d436e43fc1aa7035c "3~C6 frames-golden-plain.. "
+--- recolored
+width=24 cycling=4 labelWidth=19 births=[14 17 6 8 10 8 2 2 19 2 7 12 19 6 3 7 6 15 0 3 1 1 17 5]
+label=6d1bbde4b21d60b334200d8adeb17d123abdc6ed26daff6b4afe3cf99014e5c0
+ellipsis=["\x1b[38;2;0;0;255m.  \x1b[m" "\x1b[38;2;0;0;255m.. \x1b[m" "\x1b[38;2;0;0;255m...\x1b[m"]
+initial[0]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[1]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[2]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[3]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[4]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[5]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[6]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[7]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[8]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+initial[9]=5487faa50c8058e574bbc308f0374c9c0da5d0735de471c58c4e6b33cc7f9ab1
+cycling[0]=f69d2764f1b736b2f672423d1f7b56c1672f687fc7c054024c19ad1f01cb27a6 "*!~e@(E~Fe_e#€1776)5#b4^"
+cycling[1]=368e1b6acc1192247231ab195e4377e88903f35efc3cece37da3e678ba470598 "Dd1~£~+=ED1&4F=DC7)6=8(%"
+cycling[2]=b2171956f8f1c4c2cd4cb0c884dfb3df916e6c25564310efa1a16eadbd1ff71d "#12#A~cc2F0$FD~^0@aA3^0_"
+cycling[3]=22d11355ad7ecc4b39cef19945d4187c23cecd1da5a7a8dd79a1eeb7ed46a186 "17C686F%E3(A4€A0@@*3B7c7"
+cycling[4]=03d843de5ee5e6608abc9b0d2c0157bcb7c959152a9910a1d66b66669ce382aa "#D8AB2+D+2d2&+9A66Ac$)FA"
+cycling[5]=deb907ff962ab0d6a0eb1c27d3e1ff6217c774a4a4dc9c285845f648d90a3f8d "ab8@DfA+4&E~@^£3£)7$d#D^"
+cycling[6]=a42c4dacefd5e86f41dc8127d2afb35da29db2e782c5bd45572977f976b8fa1d "&*^b1f8)f80C0+6d€A^3101&"
+cycling[7]=dd0ee9370194b3ed80a11fefeae82ff4f3a6e4bb52eccdaf01ddc0e90c989685 "&c€6!)^C%3B€€fA95Ea*8Da*"
+cycling[8]=08c5dd704228eb84ec2ad3034bf49c07c680495206bf4feddad8802286a68b4c "!A3E~09c+%d7=cA_5D7~C4%9"
+cycling[9]=b64ed8980bb6a70faf24fe9bae9f44b0cb7c295bf6ce428897a27b69ffa9bd7c "&4e_5e7)&€601~a)d6d(%~*e"
+render[0]=19bfb49886c1f5154a031f6b22364463523e89d0c6290f9e14d0c81068869b40 "..................-....."
+render[1]=341068628f11103d729a6059b285d79272d49f64b85b620af21a2ab068d566bb "..................-.la.."
+render[2]=aa576ac1cba4ea150e62082fa2678817046191b0a68b03a5c3f174d50ea2d199 "......ra.e........-.la.."
+render[3]=d83318138369862133f573f44d015ffe024eef152ab4e7d27a91ca08e81115f0 "......ra.e....l...-pla.."
+render[4]=d83318138369862133f573f44d015ffe024eef152ab4e7d27a91ca08e81115f0 "......ra.e....l...-pla.."
+render[5]=b22cd11309be47858f68c18162ae04a3fc835eb93cc991a1aff3bb36da69304c "......ra.e....l...-pla.n"
+render[6]=cfa96bbb98af6165ab3ba789d76ad21394437b40d12dcd0b3e10e4901c2a7feb "..^...ra.e...ol.e.-pla.n"
+render[7]=ed900b5bb5bc590a481d9b789dc48ba473e48da1b6e707b77b169ed77bfbcd70 "..€...ra.es..olde.-pla.n"
+render[8]=5817e4218ac83b30901ea205b67f30a74121bd60f3bd5638d2e0c1ed8046e42f "..3E.fra.es..olde.-pla.n"
+render[9]=64e13e1507cdaf0d9256b6510ddd3152fd2b1fe3b7e6a88149e6b1d7cff14ea8 "..e_.fra.es..olde.-pla.n"
+render[10]=59701b0538631c91255be0e842d0c8abb2ffc536fb26d16d5faf253a8a54858b "..~e fra.es..olde.-pla.n"
+render[11]=7b3fc6d43162fe5dd596db464807afed7c6e516981a3d95922b938380a70a4d0 "..1~ fra.es..olde.-pla.n"
+render[12]=d8142ffe0909df0978e0a248fd2501faa79676682d9f3c50eb0f6bf7ea0a6102 "..2# fra.es-.olde.-pla.n"
+render[13]=23c8cd9569f1f861738c9e6206957b7e877dab7024afaa5f19507615145b88ed "..C6 fra.es-.olde.-pla.n"
+render[14]=6c58a1d02ce9427f4280795b93253f27a47d340167956b0e862c41a6964c2818 "#.8A fra.es-.olde.-pla.n"
+render[15]=68f3a4ad307e3603df9ec226e4f19c5fe39f3d3d1d363ba565c346e604f118d1 "a.8@ fra.es-.olden-pla.n"
+render[16]=e70a353e87d0ef6e38ef12ee24ba7367fef4aefbf239d32f8a633d645068e7c9 "&.^b fra.es-.olden-pla.n"
+render[17]=70d8b8da95ad012c09aa677d58d666b1cc9e761ed11d1adfef71d77e214eb740 "&c€6 fra.es-.olden-plain"
+render[18]=15e688b529a88356c2fd2dd45bb04ccb1daa222a9f44a8e89a20ceb4f626d48f "!A3E fra.es-.olden-plain"
+render[19]=02e3bc76567bcb69359af917dc8c2c3c8d5c6fc1d3b0239ff1189e08ee8325bd "&4e_ frames-golden-plain"
+render[20]=be25c74283c188838c4dfa7741b121b0741d94853e1f316d3f949a1a09904a0c "*!~e frames-golden-plain.  "
+render[21]=55277c31e7d6e95a336ffc782fec3025bf948c57b37d7764226d1e9099b99bbf "Dd1~ frames-golden-plain.  "
+render[22]=eb49259d70f5ff0312e779b2665253303b1f20d4f23d42facb76a0ca3db52186 "#12# frames-golden-plain.  "
+render[23]=4834a4b84722a79ac1b6d23dea18e1ff56616d4eafa6073f871ad119954e492f "17C6 frames-golden-plain.  "
+render[24]=c32ec2eabfeb7791291cd9605daf7ed0184d013db1086bbe711818c570b17798 "#D8A frames-golden-plain.  "
+=== {ID:b Size:6 Label:frames-golden-colors LabelColor:{R:255 G:0 B:0 A:255} GradColorA:{R:0 G:255 B:0 A:255} GradColorB:{R:0 G:0 B:255 A:255} CycleColors:false NoScramble:false Suffix:<nil> SuffixColor:<nil>}
+width=27 cycling=6 labelWidth=20 births=[8 8 7 1 11 7 17 6 10 6 13 6 18 12 2 13 15 2 0 6 5 18 15 15 2 12 8]
+label=f8cd2f987f63aee52b3a6cea23f976f8ce8bf281d31e990414349e6dbc910b29
+ellipsis=["\x1b[38;2;255;0;0m.  \x1b[m" "\x1b[38;2;255;0;0m.. \x1b[m" "\x1b[38;2;255;0;0m...\x1b[m"]
+initial[0]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[1]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[2]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[3]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[4]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[5]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[6]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[7]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[8]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+initial[9]=35a2ea8bccc8475cd5d359040a94d152150d75a32208c79c09bd132c34199cb1
+cycling[0]=9785cae4aa047477b123bb2fb46e62fb866693287d235e86d15b1c7da7e62b9f "c23Aa09@_90c493c=&0817)#a&4"
+cycling[1]=c1381db17298b1112ca799c3b3a0e9dda210e18698cea8c5c56557272c581851 "E#9)~~=^6D!d1F&+3_=&dcf%+!F"
+cycling[2]=aaac9f568f0aaa924b984e9e9ec6b0fe932de0584c375d3a98346e4f004c455e "5€Bb)bb+5!a5+3bF0e3%6%D%9c#"
+cycling[3]=76ba5dd223f2e80aaec3af88840e2905a01a533156f6bed398db52b858bf678a "dc0d18)%(4(99^€FcE(3_b€da+E"
+cycling[4]=cd12f0097895b79a0a9ee7551a35dd461401b4fdb36328e3a5df55d38665cea3 "~BEE4ad!$(%*!0!99C#9e87fc€8"
+cycling[5]=4a1b3a08df3606b4c28389f56105773299f94806f5ec35d5e525d3908eb84339 "08=~eCB5#8£F(b^&FE^99C2!%@("
+cycling[6]=8b50bf5e8d8660a3271f2d359c861c2883d1b352af85be58c67b03a6ecfed1d0 "+A=fb77@(=4!1d@$%€f3£6^9!bD"
+cycling[7]=5b001abc7c3557f912c286382ff155d0738949d2b4cd6be71e753c275c775536 "&)=~D~01faeEc€+£E!!£#€75F_%"
+cycling[8]=b710bde822a971a23536fe95fa3ba7b4828d9387f0a17b5b1e71cbe253517123 "(B€%££b^=5€=a^(F=1BD£d35+#B"
+cycling[9]=8af8380d22c098f026a2a2f7c3895a5c66b0466fa7c0edd9c7dbf89c81da7906 "%!D%#)~_3A9bbC(!=^6c4__(~!1"
+render[0]=6301917a5a75adedfb4c418d869183111e616c0dcf4150ede7577a7a0f95ad84 "..................e........"
+render[1]=4e00e4b41829889825d22357ef1d023ef8a2ee074c883b284b17c0324e7c392d "...)..............e........"
+render[2]=fdbd23d18a7dccd6b36878e08b90310506d50148b9ff6879344b8fd5eb3e18a3 "...b..........g..de.....o.."
+render[3]=1d079bf67c509e924a15a385a406c51ec03caee542f967834aa51bc2fa43ce1b "...d..........g..de.....o.."
+render[4]=9c14bf05a1a00127e809c1c9dfcdfad33673acff921a6c3850590aa6f98a585a "...E..........g..de.....o.."
+render[5]=04d18d45461ef4dee324a8b56fc3bdc121b0f04a53dd41bfaedf9d0733d6152a "...~..........g..de.-...o.."
+render[6]=55b34aceec6bf91e5d153debdb4d55a0ae936f34da2d034da4c5f9f8139f3502 "...f...f.a.e..g..den-...o.."
+render[7]=3aab1a1c549a4216955bb06e9486348f4e57e09211695460fbf9764bca20d7a5 "..=~.~.f.a.e..g..den-...o.."
+render[8]=3457522dfd23edc26f2538b74aaa77a712d7fc21cb8f7e12e1ca1e6ca268ea7e "(B€%.£.f.a.e..g..den-...o.s"
+render[9]=0219bc9c77731d346559bb62703bb2f139d914df404ccd62bd4f776408ade380 "%!D%.).f.a.e..g..den-...o.s"
+render[10]=303a0f67a7a64ffe89e90a9ba675784adbefd908a4cc629fb7b12dc360de3e9f "c23A.0.fra.e..g..den-...o.s"
+render[11]=8d653718d01847f51c0cb14ea47751ac9412b85635f1651fc3fb63783bafe58d "E#9)~~.fra.e..g..den-...o.s"
+render[12]=fea61516231809afd8403179670828d761e80aac4a6d8dd3797812b0ef778984 "5€Bb)b.fra.e.-g..den-...ors"
+render[13]=f51ba9cf6bf803fb8e889ddccb2ae5163ffa466285edcdf8c63e1f3a4011f782 "dc0d18.frame.-go.den-...ors"
+render[14]=41c88c5536d4f6eb84abfc70163eeb554a854dc4313fee543c10f0f9cdd81b89 "~BEE4a.frame.-go.den-...ors"
+render[15]=0676e4825163f140b839691b06428d0b805acf9a53c44392b9ed271cfd45a264 "08=~eC.frame.-golden-.olors"
+render[16]=56b243aaaf91dc0016dd1e87f7059e31efd081cef9c4c864de94d8760ed16c25 "+A=fb7.frame.-golden-.olors"
+render[17]=983e029b71f7f3e6d62564d37ffabe03e12a9de0e7a0f547a76f30293a3949ae "&)=~D~ frame.-golden-.olors"
+render[18]=e642cb3df4e6336c21e2bb51a715786fe1058c2c4bea4b335f8b5956b01c8e8a "(B€%££ frames-golden-colors"
+render[19]=bd84c826a51e5bdfd18347f6f69760b29eaa4e0f971a6f59dbe840a3a4f1f01a "%!D%#) frames-golden-colors"
+render[20]=ca188be70f8a97cb9b3c223fda942ceee6df1f87e667f84d182054532dc3f285 "c23Aa0 frames-golden-colors.  "
+render[21]=37fc19feae113093811d8c3a9c03f83e0daa1f2e1619b8f66436df3ebbe7f440 "E#9)~~ frames-golden-colors.  "
+render[22]=3946f2ce8ef5e0e63ce536f311e7c1161dd4f174b09cff68ed32ad26c8d45475 "5€Bb)b frames-golden-colors.  "
+render[23]=9eb71528d40230f6d7a547993c91c983dcbb8f07bad2a90b5535e2932e629045 "dc0d18 frames-golden-colors.  "
+render[24]=47f0755a3ddcc70e91b1588bd0f6c136051ed2eaa45b84a4d5fbed924aeab488 "~BEE4a frames-golden-colors.  "
+render[25]=f397caa492bab5f1f5e77566cbe2250c32b68f094302caca6e1a6da04ad3cb54 "08=~eC frames-golden-colors.  "
+render[26]=2bd4c6bbbe543c156edc541f1f308c8cea2b7895b7b9dbe3be7d9a4ba3e3bb9e "+A=fb7 frames-golden-colors.  "
+render[27]=255d40fd7b7bf4560c9837d79e6693d8c6405eb3848c8b22c20a744a5cee5559 "&)=~D~ frames-golden-colors.  "
+render[28]=2e319552aa97ad0d6f39eefb19b3a5071f2fac8ae9c97d9637b8afc08f5495a0 "(B€%££ frames-golden-colors.. "
+render[29]=424fda748e89dcccca23c387354dbe179a08fe3243548b708f11bd8328d332d6 "%!D%#) frames-golden-colors.. "
+--- recolored
+width=27 cycling=6 labelWidth=20 births=[8 8 7 1 11 7 17 6 10 6 13 6 18 12 2 13 15 2 0 6 5 18 15 15 2 12 8]
+label=91fb54292b754dd6045e1eaeb14ac2fc888765830b843c910fe67d3bf5892299
+ellipsis=["\x1b[38;2;0;0;255m.  \x1b[m" "\x1b[38;2;0;0;255m.. \x1b[m" "\x1b[38;2;0;0;255m...\x1b[m"]
+initial[0]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[1]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[2]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[3]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[4]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[5]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[6]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[7]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[8]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+initial[9]=84338b29a740ffa592db222c20d9f607439d4f55545b78addba8fa70ee693ef4
+cycling[0]=b16d463b65a271aaf1576e2a3c341e71766aa8276be9f2603d4b4a12e393a70e "0(Bdc8AF7!*9_$D~A+#9E&9F€E$"
+cycling[1]=accc62f384070924b2080842a81580b9959685e9c223492ac45da92e4b8a2658 "F_@D@CE*a3*e@&C£6D208=A£02+"
+cycling[2]=700c8b8485f3ca21649183492f25e4062d1bb88c5dc1e45d3d937764673db859 "~^C97^$FB$48_b9!e98€1D~&E~^"
+cycling[3]=93ace577cd0d9b83bcb7700ebd6f7c04bc271008fef800be7a42eb7e06bf9ace "£46)8!7B$e£7A4%*2f9cD291DFA"
+cycling[4]=0e4c438c4753fa389794282d7422eae68d2b6a572d6f79e1dca8ff47817355f4 "@bf=5+d$a4=0@~09(fD€=6$d=!£"
+cycling[5]=0d9f2b53b5c46d4ad8574e82ac91512acf807a2f9f7fcfdcdc84e2ee05f64be4 "@5^48F3_^~7A£0B+8fa4167@0F7"
+cycling[6]=f5efc9ebf6705205ca2db929f1275f8a022aa8cec3a851e38469c96af34a6b81 "e&=4800CBFc9£854#5_#a0e8^f6"
+cycling[7]=082ee4cf487208d08db81989cbe6dcf353629c25e086170dd0fc5a170a00c6b6 "c$e(_a(6D&E)BFAd$e70!@E&0!d"
+cycling[8]=31cf97c8849db638d0f0dc483b845e38e193678f0e0ae6945cd2550f72ea293c "!0~D#0d()0!~A7@5@)DE!9B@ee6"
+cycling[9]=9a657aa9ce1fa1938465be9654ff78157df1cb0bc5bc5cb285e14bc0f6df4d30 "BE78*b@1e=99=~Af)9_4=D%d_2f"
+render[0]=b562383719918dec38e1669bd8bcd103a61ab8282e77b00d81966522cc688b16 "..................e........"
+render[1]=03875264410c450dfc18590be4d5b38351350327a89256dec0e97cf6125eec15 "...D..............e........"
+render[2]=c6c5e736daf9ba4e23ec2f9f266ec3c65c958d2eb708f735ef5423600ca5a7ec "...9..........g..de.....o.."
+render[3]=7f8e09b1580d016b99aff7a0a78465771494f26319342547dac0834c079b77a4 "...)..........g..de.....o.."
+render[4]=dbca52a98cc863ac580e159689f50d3a36084b87a45ea4b82ff6bb8c6eae6c09 "...=..........g..de.....o.."
+render[5]=22c06ff5ea7f7a270ff78b2399e8de5116490093ccbf27acd025bfcadcb37ba1 "...4..........g..de.-...o.."
+render[6]=4bf9b6d0b5c9de3eb5314e90b695992ef2fc3ef0b6f8f6fa1baae4a04862b4f3 "...4...f.a.e..g..den-...o.."
+render[7]=117bef7716471c193b38ab1cd917a89e84a72772e4ed3f6716e3c80d538da62b "..e(.a.f.a.e..g..den-...o.."
+render[8]=c022a0cbb4cdbc770534db1c173faa549f9e828f02a0d68fe68b77d59ea383ac "!0~D.0.f.a.e..g..den-...o.s"
+render[9]=1cd69be32d7302b92db07bc3d57612df1a550b74033c01c0db5ebca2214832d0 "BE78.b.f.a.e..g..den-...o.s"
+render[10]=aaf5717faaa0b8a23e39fc0a5fa3c7f87896e50d1616b6703fe2ace99dbed65c "0(Bd.8.fra.e..g..den-...o.s"
+render[11]=9318e2b6578068bef70f5de3ca002ac140dd7d8c4988b28dae0f8c493c4b80e8 "F_@D@C.fra.e..g..den-...o.s"
+render[12]=9d20387271fa662bd496a8e6fd10a9fe7aa7873f0b825c8d9e35739903172ce6 "~^C97^.fra.e.-g..den-...ors"
+render[13]=f08a9bd66b079441481ede5d19f69b88356baa08bf7d01e00ae25c779725bf56 "£46)8!.frame.-go.den-...ors"
+render[14]=0ce0fe789f0ce5f53600c4d768c088b1e28dace1b0a2eda1b87f57a20743f07a "@bf=5+.frame.-go.den-...ors"
+render[15]=aad1116d9e4b6ad3f8a5c0944da6239e82647ed7c496893ab22b4841a716a7b1 "@5^48F.frame.-golden-.olors"
+render[16]=fbb9bf4d545fa1dc00d791271f983237b8f8ea27f4d7606e0781868948892958 "e&=480.frame.-golden-.olors"
+render[17]=3063b53fd6a2bf7c038ee09e1f76a77d0d0bd6afbbc82dd9033a3f5329cbd2bd "c$e(_a frame.-golden-.olors"
+render[18]=dbd185f03ced0036b4f42a8a28bdcdd69db66c54797d18ac67d8dd6794372654 "!0~D#0 frames-golden-colors"
+render[19]=1ce5bb5f2e0bcf77866c367996e6806b6909a58ae259ad6101633da35f6689ee "BE78*b frames-golden-colors"
+render[20]=dd65ee3d8e161791021cfbcafadac956a36bb335f61bc03199f42a7e873e61d1 "0(Bdc8 frames-golden-colors.  "
+render[21]=8a6b8a9f85875f1c8213ea728f35b358a25b22418c730ccd8715f8f3fe579ee2 "F_@D@C frames-golden-colors.  "
+render[22]=3c990c76d1239778782c0f6201e5d29973f3af4379cf518a9814513fa96ba02a "~^C97^ frames-golden-colors.  "
+render[23]=427ad69a08e337eb4d56663f9d1ae0191b987c396f2f74451bee00728ea91747 "£46)8! frames-golden-colors.  "
+render[24]=9de79d1c9f8595007a52b7cead0559907b0703004ff0354b93448fbdb92eb3b8 "@bf=5+ frames-golden-colors.  "
+=== {ID:c Size:3 Label:frames-golden-cycle LabelColor:<nil> GradColorA:{R:255 G:0 B:0 A:255} GradColorB:{R:0 G:0 B:255 A:255} CycleColors:true NoScramble:false Suffix:<nil> SuffixColor:<nil>}
+width=23 cycling=3 labelWidth=19 births=[5 11 15 8 7 19 9 7 4 19 15 19 1 11 5 8 0 6 13 8 0 8 17]
+label=cb25bdc0cc484b763ea32e2397a37d0837ff1641b8ca7bbad7dad0c1d667685b
+ellipsis=[".  " ".. " "..."]
+initial[0]=1c7492382dfcfbcfe21c899250a6dc92b14a46f40c2942043efe8571ed067634
+initial[1]=c7db7b0bd4465960b14faa0ba2a549bd7801789bf791c787e78f6b2b296f7c2d
+initial[2]=e96922864eb3619348c72bc0b16bbddf201c557e9f0f64f6ba8d29a549b165d6
+initial[3]=81b0d77333827238d4129f064b3320cbfad94cbf207bc2852b365bff081b97e9
+initial[4]=84cc83dd0c7af7792741f932d3b24c808d9f04ca3496a27eb8dcc00eacfc08be
+initial[5]=7df97ba08283aade2398f8ae978549797f46231e42bf326890702657ce191ca4
+initial[6]=501861ff648a6f3517fcec0da6fc58437c3cfb55ec66f8cc4bb3dfc0a05f4aea
+initial[7]=d63cafbb70e2f03a982d6c27ab7e6bbfd22c71c71bffa0b919e2476560a2cbee
+initial[8]=0b6919cc585026bcdece6bee21442763f8afbbb1bb61c1119acbb64ef3a75308
+initial[9]=afe1a28eeef134e55f7ebd91062d1ba9fe68016f8071992da998c59b0302d8c6
+initial[10]=08f5b2a59a89b136dcc901e4c6b9630eb04f370935da7507b8a20285fbcc52e1
+initial[11]=feb6abdb0222f0637f2846d55663802d0ea85a749ec5edc0f136aea2f76a1264
+initial[12]=294594a17616a22c07eb0c37dc090c4faf3cc139064f214208866a55b7551a7d
+initial[13]=637d8ee87301d516ea17fe9c34fa7d4d1b9f8ca26d377e0814d693da66d54b76
+initial[14]=cd83e22dc56acd981a26c81cdb40426218bac0b33dbb0e6a7bf3f6a5a32f57b0
+initial[15]=8e039a1156485a8eeb9cff79fad9b6c0a1923d82c237dd720532df147a5b299d
+initial[16]=a24eaefb9b804c947546b370990e1f5fdd6d016304d56efd9aa25809ee7c3474
+initial[17]=ede747b88d4c0716fb7e5d66657c468849f052981d6271dd6daaf4739593412b
+initial[18]=ce00c8d283a09e9e69ea83610b0d1b2f5cb91eb658f72e7dafa7852d62e0a162
+initial[19]=6c4f879283b458609254f640bca28d3033918e46ede441fe94474820328435a5
+initial[20]=130274a30faac25d2f160c2c038067e60a4ad5cf86aaaf2bdc19de60e2483e49
+initial[21]=f13294905f31684247ed0cebc28d900ecc5aa25ee58015883cc50394d6af53bb
+initial[22]=a76bd374da7ed1e42daa6f4156047eb59b18a37649154eef78b89f99da179bb2
+initial[23]=585c4b082e22eef3d71d378ea8cee4f0884778decb22267e73ce55c2fb4ae717
+initial[24]=9201fee00ddfd5d1fde767eb4d104841f6b312c871a068b5fa259a4c4944e66d
+initial[25]=c883468663180e3438d38aead140ca18faf992371cc51e2676124e493c998345
+initial[26]=373541a4b16489a0f50393000cbcf663197780ba3dbed08587aa7b70eca7a64c
+initial[27]=d6fa901a404d9ab5103548919bc901dec4adb6e8d51b9252585ba070817de88b
+initial[28]=ef7cc511eb84806e2cfda4d9ad511466c06234f208d03d9bc6f63b7f7a3af02c
+initial[29]=e5e3d375aded36c14a985efe8cb793ce9a666dbd89b361ec53734f6dbd9eb560
+initial[30]=27c92c3f4008337262c4d3f1f160f93c273e29f0d49f5d2e709bf2d2b46fbeb3
+initial[31]=fe02975b9f98742f8543d803a338986c9794a5156c90dc27d25a67f70ba64dfb
+initial[32]=9bcc6943155f63717d17dfbcef9af49cc8633ed8c652afd4eafd9974a978cd76
+initial[33]=049a8d12f3ffd4f0c0f481a21696e740beed5773074fc0fa19da808c1948605d
+initial[34]=1af00110b0555299ffd5ee0136c52596d47b5ae8f2c10901e0445b840f845da2
+initial[35]=61b9b2475449821f262ae1a16fbdd3a0cb5ae45a0353edd093fed878abfc8ff0
+initial[36]=1c5d53e1a07b487756d7ef95b77af0f5bb80d01c2587d71f666403cd86a9bfe6
+initial[37]=fab1dd087e3dc749717f3d8addd6f13c5e3eb63988d0c6b1ba6aeb3cd9895a83
+initial[38]=3b56cedff57f18714fbe87f70a6d317652e7d491f05ca6fedecd4f010b64d545
+initial[39]=6de0b580d44bfa38676f25e0d6707cf7a4ec18cbb4fa5eabae719b0fa8852709
+initial[40]=ab0cd69dbd7972b73b8625f5f3b8bff08c3070bd4ac2186af85bf53aae26a87a
+initial[41]=f3ede6c9bd6829041c8f359c8db3d880f64259e2b24422c455be65003c5bf318
+initial[42]=69cfabb7024041a831f140ea80c9a77c8c26ffc66eff81b013925d25ebe2570d
+initial[43]=63d21637dc6203c2b4dd57c053eba7cb92ae6077feeabbf9d2168c311e2274e4
+initial[44]=88278e3e5987c8c2bc741053a1dd2b294b79b349cd220c6dd0791785d8391228
+initial[45]=9bb676562021dd4c549a4aea9c2b2bb92b557fe92a92d857341c31ff85ed5934
+cycling[0]=ca3270d0ad472829e0bc28435aa761eadd5c4dae832fc1ae0a0f2ad89c15d116 "£#@7da!@4c%@€2=++E(£#88"
+cycling[1]=b79a928da9ef5101ca3fa702477f4a5a50ea0d5681ff31ef7ae11a04f345406a "€fA*$fbeA5!a^6*$~e!76$3"
+cycling[2]=ac7f5006b439db9a60443af5126f5b156f921cd81aee48591ab82567a5b91b50 "$B(8)£)&da7aB==6+~eaA3€"
+cycling[3]=18a279cf4d6ec838945fdf6a528bbd23eb86e690d5200aff2450cfbc779d75dc "^8Bbc~c+CE)6C49fc!)!~=2"
+cycling[4]=2e737a56e7f0e595034eedabd1d1024af70ced86f59ed23fa7a288fb185760a4 "£=^Dab*a&9C7B%cC7E%#acC"
+cycling[5]=31f5468224de50e2e0ad5c04d51d03dfcfdeed70cbe24f42a5b42a86f8fc8f6b "_!€*+5&%9A#1E45Ac^%F€=1"
+cycling[6]=0b427bce504135bb5af80ea49cd5489d5469376855cf4ab70340f8b3f1ab31ea "E*1C+$3a9@%4bee_c5598bf"
+cycling[7]=ccca7c76caf14d97e1e96ebf088e5d1fb8cfed931e99c114dab4626813e95040 "f!8~0+€b£0_9D56)6$6+5c$"
+cycling[8]=29c66c53c41101752c0c6c483e0858f1f74c1358e05787e83f8dc7e68141876a "+DA)3~3@_£#&^9CCf#D$414"
+cycling[9]=128b18dc800e24027cea90408d19479154cc935dcfdb0943eac728af79d59458 "E4$£b6)+Af~€^&+=0)E&1c4"
+cycling[10]=0b472e945cf36271524c1ac9bf45d5ca433e94b9e95b862fd87fc777551502cd "c+3C2£2€€5B0~~E~f9%*8_b"
+cycling[11]=c97f7e0d192c038dda49a373e6cc71aacaa7196079d7fbe9ce2d3b4ff5cf95a9 "9A2^d(2e&7F1f_90041DCA="
+cycling[12]=c88a38e56c4dc2be84a0285ebae84b6b06c347baabf76b8a1b9fa396b219c2d2 "^%&$(€D74aE#=E&^E04^e%A"
+cycling[13]=d28e1d8f4d3b962d8d120fa35a0068533b05fd88268be2ddb5732fcfc989f8b7 "*4€4~2_£e#&%@#9*%&$%C$7"
+cycling[14]=c5a430d32b605e7680a00b70fc79a6a58c7251976511b11af7a10bd911a1d4b8 "%7)(0)6b££1!C70c39*~eb5"
+cycling[15]=ba436795927b449245ab3b0e32c602826c53b3a978259f90bcefdbaf69cb0229 "35@1@3Be^)_1)28A#^^2=A#"
+cycling[16]=46e52ee1288220073ab059cfd31471c7b663d60c677b798e1363a75617b1e66d "(=e%)Bb0F621A$Bb€f~C€44"
+cycling[17]=2dda6ee8d18742112d2a5314aa797419adddda043d9fd8c1109ef50be6ee2dee "F0~1%€0(8(f0BB$aCBCb^9£"
+cycling[18]=1e8c9a28a335444a7601dac90fdb4ff46642ef09144cf0d5618e51c78efa2796 "CcFf_9BDf#!a93+D58a+a#&"
+cycling[19]=7adf44143ba9c40509f965259f316626fd6c5925fe9bf7d269756a64681ca320 "d$~4eFB)a!6^2%$c_4&$d^)"
+cycling[20]=8f38985ef42001cb960c4bff78996a766c2abdccc2033d9936fbd475ae49a771 "=~0!+D^~541e83e86B~@$*e"
+cycling[21]=71f8647a06816f20eab5376aaa2e2f5849a7eece7303866fd10f372705029182 "~1!C$D~))bEfa8=61€_=+£5"
+cycling[22]=6549426e48570ccd31e78ccf141a34795e15073384021c1238a70d5e5c06e551 "*~@d4_3&C1c#@!CEff@a_€~"
+cycling[23]=3fc75a6f071fe29472f3aa81922aaa4a8b6adda8d0c9447bba65bee7c25e9fda "3bB0(1B4~#94=£1@~E3EB&a"
+cycling[24]=8faa54a916c7d247db1f21ddf0432a5126ba060fe686f8b727c21872066cb4ca "((f~d#8!c%#%_Ae8b%26(&9"
+cycling[25]=3cad411be4ef8c52275a811ebe00e61cb6e8428b14e9e83813c05bd16b2db90b "f*B*=a)€^£bFAf(&()7e8^d"
+cycling[26]=10c1b3c85d6f8fc4961b163d8511f22068c07a1d6793a416ab0c2708189b5918 "0_8a*@afb0De9(=4de9F7B!"
+cycling[27]=0bb63255720c76285200e3db2f906848e9d8373a0282ad61c1e466080b5b1e22 "2*41€+B=4£€D2£Ed^!fc#9*"
+cycling[28]=d0334a528ddcf02e9f5f29902e76684a7c3c4f8855894e8a12407db7c137a657 "&9)&^%A=6@BbC7£FE@fC=2#"
+cycling[29]=306340fbf4eb244632d7bf6ca5d7e30e2775ebcdec0a9873baef3d306a591fad "DFa~D~+(a4f5CBb26D)d5+!"
+cycling[30]=acb548d17c5267e1f4be0cfd19871ec43631e08444993b6e1efbe43326c737c6 "f14€%c£^€€8E5*36F5%+=aC"
+cycling[31]=36bc71941f00bcf8f7f1ff6ff06436d96fac75342d0cd716473cfcd5eee29b6b "$B€1(2£_1€75$€*9b8Eb%&)"
+cycling[32]=73bb95562bb5b7bdc32c297629471a7d4aa9788e885b2a4477e783d96de37030 "£)^Eb!9Db~@=4€2f8D!*&1A"
+cycling[33]=0f9859bdaf9b911e1d59fa73129400c05137057608a7393e0c407bc09a673f4d "a&&_C79a+8de0*=~%&€cBB4"
+cycling[34]=73352bdeeecfbbd9eb2bf6c8d91ac64713d5b4a3f3273bef10b0f26be5c19822 "B6£14@e4€_b^1D*e&_=)B)~"
+cycling[35]=8827c798523dd06b8c2f347800905e8e8d8d8d478cc5dba7ffb5c0eb3041165c "~&6@3f£26c!9=8d=1830&(7"
+cycling[36]=37f7c442d05b0ecc087452e7d700131a6aa671f035b6e95cf5b5a95ed915b111 "9^)$6e=F#2%e=£F53EBd0=*"
+cycling[37]=bd29b3131edd6c9c627dcdecf85ed5df679882391ec7f97902cdc69a833abd20 "F&bEbda£f8)0A2~^f^bB~_0"
+cycling[38]=7201636fdfca7021672ee18520cf5f41a27bb8a36d672a1858c68aeb772b50ae "c~f22a7&dEb3$23(&^%c#%@"
+cycling[39]=95c38eec046eef0a7e45d9377adf36cd5a6c3805e658d168fc0609292104d5c3 "€&96f6+~@&7eF&2fA£F40cE"
+cycling[40]=23250ce6999f29ea0db947a6c0f86cf835760369f1621f2c07ecbabe19ef7b8c "b7ae#€E+c~6~a4_@6%_!=#^"
+cycling[41]=1bb9147215c4b12025a196901dcd8560df3d759887b88adca7c1569a06ee50b3 "!B27a2(#B508$3~A%E_*65B"
+cycling[42]=11c86c1a543f9592c5f8d9549b321302bcc81d10f8398711ca21a21ac97cd1fe "!()b@_6#@5C20%%#$$eD6+#"
+cycling[43]=5d52ab3c13eabb21fe52aa4ae5c9e18c0d117a3a295738a5aea9bbbe8f9f0b6a "fa*3e%7^d*E(+caFc2fF9@f"
+cycling[44]=3bac4bb94aac20528b1994668faeeb209dc1834b8112d03b67d6f2d348b29eb8 "=€D~6+654c&#$*A6($€58CA"
+cycling[45]=b81a405ff36a10e60f4ec578f8383be018dbcac1b221bbfd4b14c0fd8534f1b4 "e6%6#dFdCec$@@&@0&)6eB1"
+render[0]=23df4bca99dda9d04e9d0fbc1ea44488aa354b327b67f04c9687bb3625430962 "................n...c.."
+render[1]=041f14368302c5f14fab2b3a6f0fad82dc9939173072e5a8e2d4babc76c830d9 "............o...n...c.."
+render[2]=983eac76147fa4d2a1d27b6115c2802376660c790e734e5ffa44edcb5c495869 "............o...n...c.."
+render[3]=1324e6dccd38e04ab1849ebe22917247e1e8432d29696e6eeb49c52ead276af1 "............o...n...c.."
+render[4]=893d1d6842dde1a1ac649b0145c59497a15256c05bae3031da2366965ce3a10c "........e...o...n...c.."
+render[5]=bd8fb8f793e9bf1f8a5420799ac4cd24030bc8a89e09b68252aa452e695a6b64 "_.......e...o.d.n...c.."
+render[6]=d76df3635ff25e5fe1578eb35c1e09bf32faa1ba2861bbd344ce913f4043c511 "E.......e...o.d.n-..c.."
+render[7]=fdbaa5fba545d677029f6ef4d61c459d6e592a495f2b0f24f64448ae93401ab8 "f...f..me...o.d.n-..c.."
+render[8]=07e7a5057a2993f5f1d7afc40cf91450ea54031e32c6a4acd9c8e2fc47e872bf "+.. f..me...o.den-.ycl."
+render[9]=ed66ea46f016dc8ff99685e0eab6d44511275d3093aca7c31cafca586dc72c85 "E.. f.ame...o.den-.ycl."
+render[10]=3f3630d5ff53606ed721ce4cf65df8ce40bfc83ba955fb377de11ba4a38a87c6 "c.. f.ame...o.den-.ycl."
+render[11]=35bd0dee998f011fd52c45e72e17d2777ccb9be16fa0748893e0e778def7d5ca "9A. f.ame...olden-.ycl."
+render[12]=f3d5b23ce4e39a0f1d288aa0b9603ba892432eb0084f4ea7cfda525765549669 "^%. f.ame...olden-.ycl."
+render[13]=8d3b8965aef70e0f373734b4fa3fb5abd8d11de313bb16cdcaa1341095933cfa "*4. f.ame...olden-cycl."
+render[14]=9554760466f4d57c40066adaad5d171f38b3917a309bfdee5c6efb20cd38618c "%7. f.ame...olden-cycl."
+render[15]=18650883c3a6992152ec2f0708794e797ae8b9c9af26804792910d52edf6094d "35@ f.ame.-.olden-cycl."
+render[16]=c1773aee8d9cf3a50433e433083cd96992e187ed70c2570db26c79d8b77ec54c "(=e f.ame.-.olden-cycl."
+render[17]=3d744d8b12f7a02618c71244a741e22d43ec5869f235f756cfb5250b0ba9fa8a "F0~ f.ame.-.olden-cycle"
+render[18]=7c42df56c4b8d5b17b3acd8b0a387666b194c758b63928313ce42deb2a824b55 "CcF f.ame.-.olden-cycle"
+render[19]=714ceb307473ad680a417d62a0054461d8c3142c502193e3ad40df39faa11939 "d$~ frames-golden-cycle"
+render[20]=b97c304e991c5286b059358649215acfb1280f51c9836d6d70e621a956201dc7 "=~0 frames-golden-cycle.  "
+render[21]=7df4712f1bdd951c85c1e8c5736cf60048d943882318ce2e41795be452afb5b3 "~1! frames-golden-cycle.  "
+render[22]=46593ccb82ed80b9a5bca5e9dd15d0cabd9c5acb79dc065edd245bbbb9f3a0df "*~@ frames-golden-cycle.  "
+render[23]=b8458bb20737ebd9cd8fcb4d7fd2eb04e75e2966c552b6b0714f86b121420cbb "3bB frames-golden-cycle.  "
+render[24]=c2714bb3e396de898a79c4d11a1c7b7a118b458c3c1e77680f6ba0ac136d3d00 "((f frames-golden-cycle.  "
+render[25]=75f041cb9cff0b3256281260274603054840a4bd56624282bd671eab82af7655 "f*B frames-golden-cycle.  "
+render[26]=ed8e3f7ed6c71e28a6379be10f784a035a8d427702a39f8b2df597dda56a27c9 "0_8 frames-golden-cycle.  "
+render[27]=03b25a4be534d6ec9ae7e1724b3251edb92335cb3fdeaa4bd285383091b11a3d "2*4 frames-golden-cycle.  "
+render[28]=532337d45fa99ace3449413a0b81d6d0c5a70dc82551f3e1e83a346bab6d8b19 "&9) frames-golden-cycle.. "
+render[29]=763d85b44056b3f59ea15868204ea076c425e3f1d6bb639b494b72e85f8b0b99 "DFa frames-golden-cycle.. "
+--- recolored
+width=23 cycling=3 labelWidth=19 births=[5 11 15 8 7 19 9 7 4 19 15 19 1 11 5 8 0 6 13 8 0 8 17]
+label=16ce3b634ad690c0aac7b64e256f9f150f7bba3990a33247b38376a7fddb3cc8
+ellipsis=["\x1b[38;2;0;0;255m.  \x1b[m" "\x1b[38;2;0;0;255m.. \x1b[m" "\x1b[38;2;0;0;255m...\x1b[m"]
+initial[0]=de9ff89cfbdd41f992a81a994d8000822bbaa5ab50269ad0e50c7a7c85ca5cc7
+initial[1]=e0a147929631b6a69ea5d9fe96c06a92be3a0122e58b270b047ed7b6bce25929
+initial[2]=f95c843819f9b43998ebe2bd3f953963c26dd7274ad2610196b57a34ace11a49
+initial[3]=d08b6469cebe24f8db20fc87716562378ab31fbc4b3832ed55df5f3a06446df3
+initial[4]=e8ad72c848b264cf1801ebae5bbbf813f39e38eb1585d88f85ee7e713fa11ba4
+initial[5]=eeaddb82112969c16df4a69bf8845d8b6104cbb3fc914aebcf44a66f44b8dd7e
+initial[6]=03b145c0f8758a03623f5484c9c990fa178869293fa2db27a9b0f9b275ef2f2e
+initial[7]=ed2d43b57336bd2980a8f6b791f6a1c3613a30f063dd0b9ec6870ba24080c6d8
+initial[8]=68d3b35848c818caceedb7e56bef7c334de3ef4fa28c60f5600f4c4bfd5b5290
+initial[9]=c46f676788095e3cfd2f127334a8dccecab174f7329da704caf98136cd4d7c67
+initial[10]=4d5a3460b39a616ef098912ec8d0fd7fa416e0d9ad49144c6d6fea163b761647
+initial[11]=b30ea0c0e588412d605d51a069320b8f2019918ba7b4455bea46db18edae58e6
+initial[12]=42f27aba92e78e4fb3ab83b5a1448cf0abdcbda06e27a830f6407ed44697bc2c
+initial[13]=40924332e17d8638e2cb3ac4db10471dd60da5404be17dc7feec1cf8a71add84
+initial[14]=2702d0fec2a5f8017dfdd2eab08e3717e32171613da28212b67377710cb62156
+initial[15]=bdbf8332463b0324ed716a9cd31cb4747b4b6a33ee253282407c71b0cd744bb3
+initial[16]=25e2d352ff51e6550385d2f95041de0ae472c2676c1bab5e2941a7e58b07dda2
+initial[17]=16eb48226238951e6a2e8786e274d599bfccda1cec1d7d92c3b049de7ef51f63
+initial[18]=eed54459baa9656f21ef7125d2654220332c84414bf937c36972d4e63f873979
+initial[19]=c8342116c14bc226fdc42ed8d5ff01920f15f9af6aa82d1ccdd2b589584f02b9
+initial[20]=f8ce9c75f2aa2f5d1d5b76f01fab8b2e0d5f4ce5eca8d19ad7c1668972ce8515
+initial[21]=1c816cf729fc2fe02a29048d2985128b9312b5037d4cb5f92e3a1a32ac1de60e
+initial[22]=2b099b71ed688f6a88bc24968a6c2a4cd4bde431539dccefbf632d40ce06ccfa
+initial[23]=636fd14c26779904a7f2bde9450833bfbec032d9073b5768a4a5f06de5f4422a
+initial[24]=c2d250dcd4abe658400d34627a6d1cfe51951403118b2de0bbac685f8aa3262f
+initial[25]=c7e081d8a8a7c16a774de7c3cec114e57358c7d133614fa6e17432d07f68c112
+initial[26]=448458fde2c7f992fa2dc75fcc287f78efd7b6bafad8067e3e61745295903825
+initial[27]=b5f1a7155c831e69edc5b47696cdb965934a2630b5dab6791232226951e48b55
+initial[28]=6c951bef6fc7851435c7eb66f4e08ad4fa5aed1bdec20330ef9f383ce0d9253e
+initial[29]=37c4728d66c6dc911ce8c025bd270dcd63c11b0cc67e85c9da01cddec47aa46f
+initial[30]=610d0c189ce8b18e5342d653872258204c70c379407a1447929c8ba378276679
+initial[31]=5302fa5c0ce8aa3d3958cf9c514335f678d543053e154fdc9bf05a7a9a7ba6c3
+initial[32]=29200d75518990b402f314f387acef2ea0f99063fe6b18c5d6222cc29ea05c47
+initial[33]=e120797620de57b7c06a08089b3a421e3fff244d52d61ce6c94fa6c133e2d1d3
+initial[34]=465e7a47f33d3a707b7df9392b1cc51d7c4334b3dd521c558a7ac755ce936360
+initial[35]=b5592dbe77d819fbd1a007dcbc73a46c0965dd81e04167dcaa0ddaac43112f0a
+initial[36]=fa3ecb7a0910878f91c9a1e427bf911b6c5119d68b77df62098f3f30d57561dc
+initial[37]=b9bbbb0412df79a327ee8857a137fed4c0335cc7ca28316281e0aaa75083358a
+initial[38]=4b5feb18c5861e75c659c8c0e459f689789a58efc58aa3690b84ea061fbccb53
+initial[39]=bfbb7aa18d20b0012da80f40e307839b76e2ed8603d52affd435c57cc6062c84
+initial[40]=cb0ce789bb09bea43e7d2626190172dd3dae49d7092e27b074786dec62c6786f
+initial[41]=c71e4f95d920abf89885235a61ea3086cfbe26d301b4e6b5b495cb7105a96caa
+initial[42]=21f620a6aff7c31c38a853d79db9027277b6f5fc9e1e6417a76804fca91bc0ed
+initial[43]=c9388ad859d370265ea3941ee24cc5a293b763c2989795e3ec51fd469373d2d8
+initial[44]=2444be867b0c31b6e6c55cbdf417ec49fa6ddb4ea55159c88b818dacda0fbad9
+initial[45]=4334e626915debae978d75d7de5ed7be9fe97b733fe7da0617254f43f714c1da
+cycling[0]=793cccc3485bb3d5ab78799318df8a54382dab94795070d3a1c00636eb38570f "5Ae!Ea!C+BC^2dDB^0@)F#9"
+cycling[1]=7a8e76bd3cb77bc89a279e160a58a08b79ff94224c6f952dfe4aca036c7bb458 "#2E#C(!F#6d~#3BcD$%@€$#"
+cycling[2]=7f8ff945b582320f28fbc1426ad07561780a033cd6f165e3836fda337ed943ae "#€52eafE€6*F~=0=&)E*C@c"
+cycling[3]=0355dce06d568e48491e4b2d877e20c2ce39a44c4a1b6367a6ed31b203d0c96f "=_3cA212d+859eb82*beeA!"
+cycling[4]=ff438cc86ed063d584f3fc7a300f78071b2554bf273cee9cb97a9e0afc35f8cf "$Fb^df3f*(@AC63Ff€5C£+$"
+cycling[5]=0b81be05e0f5de65f8b9207d910ef828623a14fe5e909e962321584bdd65d9f2 "8E~8e8E£!(%=74B#$eE_(+a"
+cycling[6]=5c2d3427e5a8b94feb3ee3c4e155040e61f544ef7a26610356b52ca86325d87c "€@^D1~b_+£~€F&3B(€d+1f&"
+cycling[7]=350edecdbb6425f251e2a5e1bca24e16459c80ccb168a2e9c3537832e81f2e51 "2Fd*35(97_3=&@dB5D)%8@3"
+cycling[8]=016d87c54411344d757579110e71e9e49ea1e0224cb444d4d3ce6e3e80fe2a2e "0b0FEc)^C3*+^bB1#324&£7"
+cycling[9]=82e38df013f5b8e25868324f2eb5383a6740d7ac4bdd2828349079f440238877 "*%EF68(c*)+€b0+8d0Fc3DC"
+cycling[10]=d81f79d575b611fd043b03d80548e21b903c83b69e6c3f0f553cb4d2b5cf13e2 "F@a_8=f*2#ED2EB2^E*#EE^"
+cycling[11]=89374814866b540f18b3d8b73775139dce61237e37d5a7dc4dd08e48d02f1e6d "fE(f=#100bc*£4fF)78D&^F"
+cycling[12]=b14a8adb13615288807c75ca0fc535d883c41d4de588960cd591fe2197cbe3ff "$%EA%e@+1!e*0!~ea€AE8%C"
+cycling[13]=98f6d044d813a1c4d04799ffbf7a2e963317bd5b3cb1ae598633dce5be0fdf8c "0^_bd9^C94=Ed%@9€A76dD!"
+cycling[14]=8e78aaf779119a01084f1b4117de2990ee4abb87c88e33806e4e67d5a18940e3 "4+3f1!!2ee0#^7bBd&cF€*8"
+cycling[15]=9afa7cc1d80731ce0c097d4a3220ccf8210e50f3d258a2a292b7bb3cb748f0cb "1$d#4&E885AA=c8FC&))cA&"
+cycling[16]=6129ff16d69330186922a71b67ffb127558937737ce025b6b3406f4703d87cce "~+26f32%a^5€!81b*d*Da35"
+cycling[17]=35cbc1f8063a2b3a5f7808eb3ef5e8dab4c7b57f8c67911aa92359ac4b7032af "3EdC_=_*C6D&EdE5c=€6F5€"
+cycling[18]=64179e653028700093d35e1c36e6dacc37834a61319fc12e5b1e8db8cc4de62d "!€dAF+D59+=^€d)5320ede!"
+cycling[19]=e2a271f6130745138d6d138aa55748591c49f8a9ec7c54793e383c4afd6d52e8 "40)!Fa€&c%#£bAbF+f£79)3"
+cycling[20]=c40b401c79a9f776941fa210dd8dc4cd04c08af63812ad45c0764116d8ada7a5 "A%D+02+£Cf7€50347d&$#€&"
+cycling[21]=a39bff91c49bf2bdf8210e97a0da017e4be65a7142023787251218de52ae2b36 "0+AC(&64A&(_0)91!(~D$~3"
+cycling[22]=41950e050af81f2c24b02f9250118eaeebcb21a0894db6e0a6f4450da4d640c0 "&(e~E@*c50Ad_~e)+C^^%1+"
+cycling[23]=b5245c208359f97dedfc22de2ab019d6cfac792fa140466c711965eb0e789a88 "£aF#%+a80eAE1+£c9_EfBaA"
+cycling[24]=f9e0614b82ad635a5fb05a59712cb2847745e6dee6473c36774db1ad9ffa0ea7 "7(EbaFEa9*#B()Cb5555A@#"
+cycling[25]=0fbfc577c7d3af9717fb50be1d5efba79fdde1d8ce853a776b2520d5c72c2ae7 "B3*6Fd%4ce377#ED%9!aA$9"
+cycling[26]=b1d7bdc381bd1ef43f44c3d290a0c5c30a9e8ff25d8efda956cac1fb689d53bb "c&)%$$c#^07c!2£a051CD4_"
+cycling[27]=b7949630801f18a6567aade0ab451b7983d1585d47e520d8ddf08518cb967e74 "@5__$2f)Fc^)99b052bb&*%"
+cycling[28]=dbe435c86cf04ffe6bc6ad49b294d4685b5f07796f4a5535dbce663302535be3 "&d€#ca18^89@)d4&@%=c#0+"
+cycling[29]=b66ed11d74b3786092eef3645470d8633cce808778ecba684b314931835d3ff3 ")£0^(6a0~+7_b€#%__f7€d3"
+cycling[30]=5398219f2f717f16d6b39c8202822da8bbeb988e54b314f2c30f82c6a3089554 "1E%&3Bc5#c~*~€~^9%@!$D5"
+cycling[31]=eea360836dfda43ac5bb8166faa2ed48efaf5701614e43aff053be8513dc890a "%)d4(45e547c69E_e9#A~c1"
+cycling[32]=ba8b2f52aa63cc1780d7f167567fb289c031fab08aeb4f7e4dcbacd83bfb4754 "&*=^4(A_2!#F$D*7#b~6*72"
+cycling[33]=80ae10bc9cd7d90298dad4b7386e1d0eb3e0c16a8e89d61e56f44f399d030372 "2e+(#B_$+aEA(@*€1!€c0=$"
+cycling[34]=d1135d3a8432fdf21540f1c09b29fe3bd5c95847762af00a2e8c56d012bd1f25 "@0F€D#3E=~04%c$)$~~1#$A"
+cycling[35]=eb468b47b6be2b005b643a956f619d699388c5f2dcf99b414d643c656b629b99 "9d~a88E@6f#c07BA&82€949"
+cycling[36]=b92d5e0052774ed75dddd1c4939086e2f249347bc922565b964408b9f55bf552 "€5+f$D9=b(6_2^A~F2EAD81"
+cycling[37]=26736eaa8f0a54656823a177ca50f01b0a2c4788a31b783439e780e9918c228e "_$#41=C*AfaA5#A0F~CCD^e"
+cycling[38]=ce19b9e6496b929c5152e282623f052547618c365272195ffc03a8e359193b7f "=€1#E7(€E3d)53b+)1_!BC)"
+cycling[39]=d0f8c9c829e489b6bc06d1c03b5c26477194733799e161810e4f2599112fbcf4 "+0ece*450#F9a3A49859%=D"
+cycling[40]=ee2a3a151bc66d8ae94ba65058cdf67b7ed65763b00199908e41749228b3b684 "3F£(b!C^604e9~$7€=e6E0%"
+cycling[41]=cb9499615801ee8ddb2cc533a021cbc142f587e7fb3b1fa7d51048538cc6f28a ")€F%7be59aA)A06B+!c7^78"
+cycling[42]=58fc6c3fb19fa6c04c3c92e7a0210f7a1ca85ab78f41a5ab6b10fdb7320ec62b "BB+EC*2(=6c5@b12a*+E&+&"
+cycling[43]=d3a36eb8a0a994a43fea4ddc76c3d3abb874255110377027382aa466ac41dfc0 "@)ace8037)A~2f)bBb05E&^"
+cycling[44]=3def2f4abb3167e9d7fbbb5d80df013c03ab0e55b9240a0bbb02e6a7d81611f3 "£)1b^)85$E$B!8EB4FdFf66"
+cycling[45]=979787cd4d6809be8400c070b6cd5fc0afdbff0a104496c5444b0a44fbf24e74 "51dd!%a=4)%eCBaa+AD_4A3"
+render[0]=d79ea9e887d4f82c6181cbbce1eef3c9ebc16aa8f74a20abe882cd25709c99c9 "................n...c.."
+render[1]=27f3ce14f3a6d24761faf0dce5b85313f7e915c9d204a390f4fe4a1f280a5ca6 "............o...n...c.."
+render[2]=0ed0b410e3c3d4af234db5e0bd404a9afd0f8132e621491e1bd20f7c07634e17 "............o...n...c.."
+render[3]=0049fe2ed90bd7e87fca3f49a97d5ada59590c4f64069e17228b0bdae7b5bf6d "............o...n...c.."
+render[4]=70f3bed7d9f59e514da34a84d7140959e40ee15e2623531e33a306e740609767 "........e...o...n...c.."
+render[5]=683f6384dd5810fca377158ab7af826649f2196b17aca93e62a107fcc82accb6 "8.......e...o.d.n...c.."
+render[6]=f2ef1befef21cb4c148115d378bc2f06c2ace0145cb39103fb56e8624aa89063 "€.......e...o.d.n-..c.."
+render[7]=16892c91bdc5cc1906a7711f6752ce374d3e31869fe245cd84a3c6c4f20c44c1 "2...f..me...o.d.n-..c.."
+render[8]=52217be97ce8d12e491b5704e06829fa110bc4ebae47318183509c0eb84b8294 "0.. f..me...o.den-.ycl."
+render[9]=0c9af42e864eeb40f1bf3efb08c5b91ca0cf56f9b1476bf61041956d6881a243 "*.. f.ame...o.den-.ycl."
+render[10]=a14d1bcb0c78d0cecec7a9811a01770c7bd6864cdf52b0f48d35373d51a425a5 "F.. f.ame...o.den-.ycl."
+render[11]=f71dee92ee6835450d8b56bc82bd31c8b0427e3124d18d1580d01583b3c1f7d9 "fE. f.ame...olden-.ycl."
+render[12]=fc281dd9826bf0d29e7e03e2e3c1bc9922324fe7f4f5db6f1f608662712dde3a "$%. f.ame...olden-.ycl."
+render[13]=18d8100f24e31a2c6f24f909b9520b9e641d2e68db213b757b4448e183282f48 "0^. f.ame...olden-cycl."
+render[14]=e24893036ee979e4b8a6529294f9c39fa5a4ad211fb5bc7cbdc2abf486550fd4 "4+. f.ame...olden-cycl."
+render[15]=387f4eb310a6c59003de4b118205e00966db7bfe13bea6e50b89a6b5fcfd8358 "1$d f.ame.-.olden-cycl."
+render[16]=0213e205604983f2dea00c3f0ac6bd3e6d884439eef1b68913ce3182b45a70d5 "~+2 f.ame.-.olden-cycl."
+render[17]=2f235a07892c3b5101444c1a51f29dc1db5730187b568b13079344cbaa720045 "3Ed f.ame.-.olden-cycle"
+render[18]=6c72d37c696994860df6a881a0c54fe75174d1aa31ae8a2a416d9099d61f915d "!€d f.ame.-.olden-cycle"
+render[19]=5005853bbc87d2be0309ccef601846a378d6fcb3d283240106d50194f6298146 "40) frames-golden-cycle"
+render[20]=c8633ec582f74d1b836b2b8380ace6662fbd90ffab1b2c19d1c6e807a39f0cde "A%D frames-golden-cycle.  "
+render[21]=c2009ad22e953aa185c608f08f7b0d14a01dde751d4957033ce567b9a14b7949 "0+A frames-golden-cycle.  "
+render[22]=ff923db634eb01240ca0e5c3e63facc7d0fcf962680a518156b01e621934b855 "&(e frames-golden-cycle.  "
+render[23]=59e3c176de02538e62c0399052c0b13d27372a73f1adfb192d42adaf237cc780 "£aF frames-golden-cycle.  "
+render[24]=16bd9897335d746873f0ec47025a691c33173bc5a7814ea7e16c1f79626bc118 "7(E frames-golden-cycle.  "
+=== {ID:d Size:5 Label: LabelColor:<nil> GradColorA:<nil> GradColorB:<nil> CycleColors:false NoScramble:false Suffix:<nil> SuffixColor:<nil>}
+width=5 cycling=5 labelWidth=0 births=[8 1 12 9 5]
+label=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ellipsis=[]
+initial[0]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[1]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[2]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[3]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[4]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[5]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[6]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[7]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[8]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+initial[9]=3338eeb5d00370e2505a4e0fd396b4cc73027bb60c6c7bae8ef57050ca2118bb
+cycling[0]=d58ce6518f8b414d9f39c7fe81f289e1cad59e427839493188ed4da6d60ba97d "£ebD6"
+cycling[1]=4905618220322188c8e73a4914231e9b0a1f48a47493d257e317d03508849852 "%£^€3"
+cycling[2]=6e295975626dc576e5bd02ebe43c362e42893af807573367589bb6bc7f434013 "ADc10"
+cycling[3]=3fe92dab39d6b2023310fd33d91b02f019c63aed89ffd7d7b371da2197ede060 "=B4&~"
+cycling[4]=a889e75c389d7f890f018d918a235193afed472d183ffc3a14d461e8abcc13a8 "%dA6&"
+cycling[5]=b96f03ef57fb65a7ff8aa7d7806387dd46b78172b9de37b71880f7db94d724f2 "£_£~8"
+cycling[6]=653cb755cccff0c035d1fa080b84de856a90c265a99185a39b5d7850d9c5fb5e "&9@b*"
+cycling[7]=04583e8cb902e86d683f004d4319a220faf89a7928354fd50a469531aebc5120 "Bd&0a"
+cycling[8]=f8a59a0e8f8981b16b8b97162f4617f90d321b4e2b17200c4e13af1905ad5147 "2£(*a"
+cycling[9]=5a304da27caf633fb3343f64fc97dd48e60a4ec8faa5d2876a55f243bb88bbc9 "fA^1e"
+render[0]=d67eb2333f49dd8ee4f6c249f023fa64769a1511ac531036ba217b0c078de2cf "....."
+render[1]=596672b88014b2202ed6884ef794344032ec54b8291070d14f2da0a2606702f3 ".£..."
+render[2]=783569a0d213100348041795139197ed5487e3c4486d4698ca7f68a52644fbd4 ".D..."
+render[3]=2713e1e097df151fe7243996e8a867a7bc5764eb6b411cd3d2e894cb8f4f3784 ".B..."
+render[4]=89a99b62d77a2565312570532c2d5e8fec38c2af0480b7ae3c16cfa446073caf ".d..."
+render[5]=3c58782dd540145d865dd75c876f9998922a07e250978141fdc15cc94ec96412 "._..8"
+render[6]=b0324a8334685204458bcad5123def3c970fbe2d6ada709b56e8f1e314ceb280 ".9..*"
+render[7]=82b5af45a1b982c79d4e975de23c20daac791c0906a9b0c974458446538d9fa7 ".d..a"
+render[8]=8551cc09772acafec60a69e70ca5a76e9e283ea7311ea11e467d7153c95ee60c "2£..a"
+render[9]=8d25d16767e147634d25a0f411cf8cdb135b399293efa9c4fbf8251fa02c6297 "fA.1e"
+render[10]=8b3707dc2edbc70674ece14c86f6f7a9fc6cb3e6f37c0d1a20f42cf293b6b357 "£e.D6"
+render[11]=b466b2f85321cd721ca02059f8ea443fb5c188252ef9bba0c631cee6ceb0d084 "%£.€3"
+render[12]=6192311a714b2287c5c837cb091f77bf1d2afe040147acee63cc5ede438710c9 "ADc10"
+render[13]=3a92c8d4b22567940388e3da9d0d73bbbf09aaa849e8366631b5037e2c9d4cc7 "=B4&~"
+render[14]=ab791805fde139f9a52b08a30138f89a67ac44005ada3ef9fea7942faae3a715 "%dA6&"
+render[15]=65b71013cbab78fc2b8a141d9fe667018c11c29cf6a2595301e5bf18e0d41c59 "£_£~8"
+render[16]=c449f3b20ef374bd034e2951aec56444a73bb613d732cbabd836f2a7d4ae175b "&9@b*"
+render[17]=67ce3f0441981c3c2a2981a0f88c6d456afadd988331e185ce67473cb58c49d0 "Bd&0a"
+render[18]=4eb04bc6b310a4d212d762b8aa3dafc8cf73fccc1c43896ff93abde2d8b02b57 "2£(*a"
+render[19]=367bc0f157b1e7365065b7da7db8a2f4ace8b420543c2fd7f08c9840dca1fcb2 "fA^1e"
+render[20]=b2f4ed17e2c9e3569891939f4715661c77ada1999f8284ef99bbbf3e9392e423 "£ebD6"
+render[21]=ac82eb29384c7ab17ddbe67f05af16934663982c35c81a475babc9afb7c044ee "%£^€3"
+render[22]=6192311a714b2287c5c837cb091f77bf1d2afe040147acee63cc5ede438710c9 "ADc10"
+render[23]=3a92c8d4b22567940388e3da9d0d73bbbf09aaa849e8366631b5037e2c9d4cc7 "=B4&~"
+render[24]=ab791805fde139f9a52b08a30138f89a67ac44005ada3ef9fea7942faae3a715 "%dA6&"
+render[25]=65b71013cbab78fc2b8a141d9fe667018c11c29cf6a2595301e5bf18e0d41c59 "£_£~8"
+render[26]=c449f3b20ef374bd034e2951aec56444a73bb613d732cbabd836f2a7d4ae175b "&9@b*"
+render[27]=67ce3f0441981c3c2a2981a0f88c6d456afadd988331e185ce67473cb58c49d0 "Bd&0a"
+render[28]=4eb04bc6b310a4d212d762b8aa3dafc8cf73fccc1c43896ff93abde2d8b02b57 "2£(*a"
+render[29]=367bc0f157b1e7365065b7da7db8a2f4ace8b420543c2fd7f08c9840dca1fcb2 "fA^1e"
+--- recolored
+width=5 cycling=5 labelWidth=0 births=[8 1 12 9 5]
+label=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ellipsis=[]
+initial[0]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[1]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[2]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[3]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[4]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[5]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[6]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[7]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[8]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+initial[9]=a33b420972cf16d7bb6410f2e6e7efbf37afaef1665da833d819eb4725b40a58
+cycling[0]=25f66bff36567b470b578c66382b21f22150ab20ea00ceb66543f6f0181d3391 "_D)%c"
+cycling[1]=8ef66620b221d2576911821b40893819a8b82851ca213c5f18aaf1a19b13ad0d "FCa@c"
+cycling[2]=8cf90423bff9830648a0bca8b617bd65f73841c5fb0ce6dce964df9278c2388a "d8^&A"
+cycling[3]=dbfceb02e50cfd146241762d7c7a344b4f09d28a1ed6509045377949de71a2f4 "7A£6a"
+cycling[4]=1e8a97c8f2edebe2240535b7a6eef73a253692411bcd942dfa6d250ba116e63f "_4^_+"
+cycling[5]=f5f37b12cacc88d71a113b69ec4907e34220a36b7ab1500c9d0f96773e5c5b75 "F=_aB"
+cycling[6]=0868f1b79cfd658a7a80252be1e22d091f19eab2a29ce7762fbcf53266831042 "f*&(B"
+cycling[7]=32361188e40503004b0100fc7384f49a10672b82394dd7df0191006204a5aa83 "4*F0D"
+cycling[8]=76cc92a5e21967d5a10cf2111b1559c3974e0764036172473b9d8c6870129472 "0€)dC"
+cycling[9]=695774ffc9c41206e08ef5e08d195440ebb8a8dad8d5b13378b96f83da3a59ae "BC#A!"
+render[0]=265586bccc35be945fa21df5b3e0bf4d3ff2899f8da9bb6cc8962fee73de5fbf "....."
+render[1]=228b0d4afde02732661dad28451f6d2668cbfa669640fceaab0e61fce468e725 ".C..."
+render[2]=d9e9b9c345b2c589df4ff997d465ed7821e1a7243970dcbd30e0726d06b193a7 ".8..."
+render[3]=2db041e259a61629834b8b09418464694786b9820f9bebc7a8a6d8320faea8ed ".A..."
+render[4]=79bb530ccd844433c4af92b19eaf2859fc01836b9dcb67fb31d0bce7a739b7de ".4..."
+render[5]=bc495c9f1d6218adcadfa316eae941d631654f2e58d8eb930ba09c73e51c5788 ".=..B"
+render[6]=15eb448c4bf2f8718c1c6f2b2843cacf5ec4467160b8cf411a392c0f96cd4497 ".*..B"
+render[7]=c610daf99148ef9920835579c2f35f56e2cda1c30182d65b82ead8a511d29296 ".*..D"
+render[8]=1f0f843e2e0e54b065b724de4bfd0f876006e3f5744c1454e535187c6781deb9 "0€..C"
+render[9]=8e29a267cd213a25635a28f702ff7216dd6f54b5295e4cee769d9ac08f87eef9 "BC.A!"
+render[10]=823ee7e10b5dd26d511f456a2bc1b39a22bd6f14177bafe936c708f3c44524a2 "_D.%c"
+render[11]=8b916b52245489a858e50e81634acf23ecabb25b5eb2de554019f81bbb564b4d "FC.@c"
+render[12]=138c7728f1586fc89c09bfba79819caf8dc4dfcb94f2fa131677f65c67609867 "d8^&A"
+render[13]=01e5842a850f3c5eafc8750567acea01a767839ba06564732a5e70faf884f70c "7A£6a"
+render[14]=1a9d488fb1456b80ea63b7c4cd30f1499de1310592902bdbac6de8f4353da21c "_4^_+"
+render[15]=7bd1eaa3f3f69897d912e85226fad1c588c19299b985f5ad4bc019d5d298bbf7 "F=_aB"
+render[16]=331f0343cea5c273d7fed61155fd8973958e4b9716f2e350424b2c98598bb6e2 "f*&(B"
+render[17]=e4f541b163026aeb4f655e9cc6fbc8f57138bd0d6bc90a022e72a6956b4316d6 "4*F0D"
+render[18]=08c235966fa794f63504889b409de8fdfe427ab7242e70cf66d224d6bbeec66a "0€)dC"
+render[19]=f13442549da87661dfccab677db2ebffe0d60a31ed7edf64daf207155b0e7762 "BC#A!"
+render[20]=01f2500bb714f366fa75fbbf0da4572d76935ee893bc34b0c1c6c98ff2c9a3fd "_D)%c"
+render[21]=17392dbb03a49a1d66698aa3a19c48c374a83f071925a5a537eac76f2a87efa6 "FCa@c"
+render[22]=138c7728f1586fc89c09bfba79819caf8dc4dfcb94f2fa131677f65c67609867 "d8^&A"
+render[23]=01e5842a850f3c5eafc8750567acea01a767839ba06564732a5e70faf884f70c "7A£6a"
+render[24]=1a9d488fb1456b80ea63b7c4cd30f1499de1310592902bdbac6de8f4353da21c "_4^_+"
+=== {ID:e Size:0 Label:frames-golden-noscramble LabelColor:{R:0 G:255 B:0 A:255} GradColorA:<nil> GradColorB:<nil> CycleColors:false NoScramble:true Suffix:<nil> SuffixColor:<nil>}
+width=24 cycling=0 labelWidth=24 births=[19 17 2 10 17 5 15 11 16 0 6 0 1 14 18 0 2 7 8 17 15 6 18 8]
+label=b9e74dd81a0045bfc78a277b1fbc600feb58850f5d829f5e0bbccdb2b27c9900
+ellipsis=["\x1b[38;2;0;255;0m.  \x1b[m" "\x1b[38;2;0;255;0m.. \x1b[m" "\x1b[38;2;0;255;0m...\x1b[m"]
+initial[0]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[1]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[2]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[3]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[4]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[5]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[6]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[7]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[8]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+initial[9]=2c02b0655378fe97ade15e40db7ef8aed0f20bc1537fe4f9e64bfd06356e5379
+cycling[0]=f5fc265166d71f7f91301baf33aef021f88e6060a0e3486e41e039fc65bad8a0 "^cb_&A6(fEbe55e32A+6067€"
+cycling[1]=b032c927e3a7ec68ef38b22942bc668687274c1a5ef2b9c4f62662d9324148d8 "b37F)88+BAc4*7#^+=2e27~e"
+cycling[2]=11a412315e84de50681a7751f0b2d3fef8965e4b38e6f0eaab75ce9d80db2417 "2@=f(#9!b&FE&@=a6!d$14€)"
+cycling[3]=7bb93d1f9ba1d159a9b0539fc52ea72631b8527cdea88ac41556553d042b3ab2 "~F$~E$*e1B8fD!!+1c#!+A34"
+cycling[4]=79e7c2daf24e2628540359fc0fc91ed68ead16f5ff4c677cc16fc36ee2499133 "E7_2&!e!2=4~D4=1#d&a7$85"
+cycling[5]=fca4aaf8b78f8e57432231959163187f47291f741846f8f94bfa59859de02b6e "C_B!)$@^d$8!CD2#*B86**c$"
+cycling[6]=ccbc01771b36a0aaf6c7e90efa18c87371e75094eac180d9ee3cab2f365c5bf1 "@f$$!!_~+4!@5+(=!1171~8A"
+cycling[7]=fe132b09a8820cdf74a0c7c2e75373405f4696408d1cf271f6d0a0861e8fce58 "3A426f=d!#f+~(=7*b$~=3~€"
+cycling[8]=19e7bc2f99705cf72ec561ad2d20677e9a6866b4baebb1f5432e62120691af8b "D^£)$€=_*_37£4E@0=%%7)35"
+cycling[9]=8065558f2175e0ec79ad54938c00313a4e1f5c602e9bddd708a641659236d1ad "6bA+a1~b£2#0)D1CCA=_Cb5@"
+render[0]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[1]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[2]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[3]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[4]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[5]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[6]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[7]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[8]=272e3e96c6d088360ca9c7d6d61e3335794b6b190d4c6422fc0b57b73a6b5ce0 "frames-golden-noscramble.. "
+render[9]=272e3e96c6d088360ca9c7d6d61e3335794b6b190d4c6422fc0b57b73a6b5ce0 "frames-golden-noscramble.. "
+render[10]=272e3e96c6d088360ca9c7d6d61e3335794b6b190d4c6422fc0b57b73a6b5ce0 "frames-golden-noscramble.. "
+render[11]=272e3e96c6d088360ca9c7d6d61e3335794b6b190d4c6422fc0b57b73a6b5ce0 "frames-golden-noscramble.. "
+render[12]=272e3e96c6d088360ca9c7d6d61e3335794b6b190d4c6422fc0b57b73a6b5ce0 "frames-golden-noscramble.. "
+render[13]=272e3e96c6d088360ca9c7d6d61e3335794b6b190d4c6422fc0b57b73a6b5ce0 "frames-golden-noscramble.. "
+render[14]=272e3e96c6d088360ca9c7d6d61e3335794b6b190d4c6422fc0b57b73a6b5ce0 "frames-golden-noscramble.. "
+render[15]=272e3e96c6d088360ca9c7d6d61e3335794b6b190d4c6422fc0b57b73a6b5ce0 "frames-golden-noscramble.. "
+render[16]=f4bf126c8e5f1c5333dbd36909d68fcf8c6501fc2e860184d59ba983ba074e38 "frames-golden-noscramble..."
+render[17]=f4bf126c8e5f1c5333dbd36909d68fcf8c6501fc2e860184d59ba983ba074e38 "frames-golden-noscramble..."
+render[18]=f4bf126c8e5f1c5333dbd36909d68fcf8c6501fc2e860184d59ba983ba074e38 "frames-golden-noscramble..."
+render[19]=f4bf126c8e5f1c5333dbd36909d68fcf8c6501fc2e860184d59ba983ba074e38 "frames-golden-noscramble..."
+render[20]=f4bf126c8e5f1c5333dbd36909d68fcf8c6501fc2e860184d59ba983ba074e38 "frames-golden-noscramble..."
+render[21]=f4bf126c8e5f1c5333dbd36909d68fcf8c6501fc2e860184d59ba983ba074e38 "frames-golden-noscramble..."
+render[22]=f4bf126c8e5f1c5333dbd36909d68fcf8c6501fc2e860184d59ba983ba074e38 "frames-golden-noscramble..."
+render[23]=f4bf126c8e5f1c5333dbd36909d68fcf8c6501fc2e860184d59ba983ba074e38 "frames-golden-noscramble..."
+render[24]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[25]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[26]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[27]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[28]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+render[29]=0e407d9b7f4bfb430d76cf84300c3afe1a5c2676e3ed977d859190b4b915b413 "frames-golden-noscramble.  "
+--- recolored
+width=24 cycling=0 labelWidth=24 births=[19 17 2 10 17 5 15 11 16 0 6 0 1 14 18 0 2 7 8 17 15 6 18 8]
+label=8040877e0118e24031fb4d09039a078326c94abef076a11062b7d2e71f7f793c
+ellipsis=["\x1b[38;2;0;0;255m.  \x1b[m" "\x1b[38;2;0;0;255m.. \x1b[m" "\x1b[38;2;0;0;255m...\x1b[m"]
+initial[0]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[1]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[2]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[3]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[4]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[5]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[6]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[7]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[8]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+initial[9]=a8e62bf27923d1e4b7283007ff6b63c488b3a0db82a28e2c0a91110df30e71ba
+cycling[0]=2ef690d1dabdbdb3af3f1da85da684ef106f3fbe914f0bc31192d374c17eaba0 "#%22A£a~8!!@Baab$&D£)=EE"
+cycling[1]=deba11c5a0bc7c604f543dcebf909bddb05fb3373d010c42175cca54e7aa4253 "~%2DC*d@B8)a^%6c£)c575e3"
+cycling[2]=87573f74f4bee37755b0872aaf5c3a59946280db5c4fe1d9b94c7b2b67087d95 "+83+#B^C#*C$EBb7B)e1F=a7"
+cycling[3]=ef09fc2d5b7527bcdaac87e8d0bf3e5769089fd1562c55be486f5e17cce36675 "€!^)B(!~^1*7dbEDd*3££4@7"
+cycling[4]=68038ac148256d8bef19b940d04192bbe4e39248e123d376fa57b719ee064f82 "CA€$€(E$f1&#=Ca8&d_D)^$a"
+cycling[5]=466ca112fee1773cb2f52075f6834e293acf77a9fc931fb808c12d0558084848 "8_)d=8&8996##&)E@C2*0=^£"
+cycling[6]=08545892fae0f8dd67bb93632cc3db2701eb86b394e83ff347897d38a1fc3f91 "E1F#dC€7a+@Bf=^#833€30€6"
+cycling[7]=d542860a33eb82ebe1a984a565bede97e73f3b5ef0f36d5c4d112451bf21b88b "0&5BD2%%D^D€eAd*2*$=281A"
+cycling[8]=6301919dcf30eeca4579d07f875bfca9968a022a3a2dd8e8dccb2f26495760b2 "5b%)*!77%C6e2)9@_~7^^fDA"
+cycling[9]=99828878d562e389fc37a8726e5f42cb3a26a33400240f470735e24bfd4814c7 "f$!F9!0D1&ec*%2^f9Ffb+$^"
+render[0]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+render[1]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+render[2]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+render[3]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+render[4]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+render[5]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+render[6]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+render[7]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+render[8]=69878fab7bcbbcd0541e0f0c37f30bc988dcf74bba4a6c3e4e02b01bd4ac1845 "frames-golden-noscramble.. "
+render[9]=69878fab7bcbbcd0541e0f0c37f30bc988dcf74bba4a6c3e4e02b01bd4ac1845 "frames-golden-noscramble.. "
+render[10]=69878fab7bcbbcd0541e0f0c37f30bc988dcf74bba4a6c3e4e02b01bd4ac1845 "frames-golden-noscramble.. "
+render[11]=69878fab7bcbbcd0541e0f0c37f30bc988dcf74bba4a6c3e4e02b01bd4ac1845 "frames-golden-noscramble.. "
+render[12]=69878fab7bcbbcd0541e0f0c37f30bc988dcf74bba4a6c3e4e02b01bd4ac1845 "frames-golden-noscramble.. "
+render[13]=69878fab7bcbbcd0541e0f0c37f30bc988dcf74bba4a6c3e4e02b01bd4ac1845 "frames-golden-noscramble.. "
+render[14]=69878fab7bcbbcd0541e0f0c37f30bc988dcf74bba4a6c3e4e02b01bd4ac1845 "frames-golden-noscramble.. "
+render[15]=69878fab7bcbbcd0541e0f0c37f30bc988dcf74bba4a6c3e4e02b01bd4ac1845 "frames-golden-noscramble.. "
+render[16]=47e0f9a93fae62bcdbd66279f6009d79d14fb3af53f8c7bbb8981c6c9df44096 "frames-golden-noscramble..."
+render[17]=47e0f9a93fae62bcdbd66279f6009d79d14fb3af53f8c7bbb8981c6c9df44096 "frames-golden-noscramble..."
+render[18]=47e0f9a93fae62bcdbd66279f6009d79d14fb3af53f8c7bbb8981c6c9df44096 "frames-golden-noscramble..."
+render[19]=47e0f9a93fae62bcdbd66279f6009d79d14fb3af53f8c7bbb8981c6c9df44096 "frames-golden-noscramble..."
+render[20]=47e0f9a93fae62bcdbd66279f6009d79d14fb3af53f8c7bbb8981c6c9df44096 "frames-golden-noscramble..."
+render[21]=47e0f9a93fae62bcdbd66279f6009d79d14fb3af53f8c7bbb8981c6c9df44096 "frames-golden-noscramble..."
+render[22]=47e0f9a93fae62bcdbd66279f6009d79d14fb3af53f8c7bbb8981c6c9df44096 "frames-golden-noscramble..."
+render[23]=47e0f9a93fae62bcdbd66279f6009d79d14fb3af53f8c7bbb8981c6c9df44096 "frames-golden-noscramble..."
+render[24]=7a0d43d581cd2dc3e50152d3b05e3a1b75ff3fc0aa0a300778af57b5a3c3f8c8 "frames-golden-noscramble.  "
+=== {ID:f Size:2 Label:frames-golden-ünïcode 漢字 LabelColor:<nil> GradColorA:<nil> GradColorB:<nil> CycleColors:false NoScramble:false Suffix:<nil> SuffixColor:{R:0 G:0 B:255 A:255}}
+width=29 cycling=2 labelWidth=26 births=[13 6 8 9 13 19 7 14 10 10 5 6 11 12 19 1 3 19 3 9 9 5 5 9 17 16 3 16 14]
+label=3faecd7ccf847e47f6523f4666c6a0e84eb2e8ca2805ec3515cea34d482b4430
+ellipsis=[".  " ".. " "..."]
+initial[0]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[1]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[2]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[3]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[4]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[5]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[6]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[7]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[8]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+initial[9]=5b7d1737ca5deedc5a3dc7262ccd43a7aea5aa1023c6e6e04ac13b72ec898db6
+cycling[0]=12bc2e8946165c99da3511793fd796f32dfc60be02e4c92a8ab910581899eaee "#8b01BE£@c!B+&~!_C04=5)DBf%_("
+cycling[1]=84e504737b5d75c8872cf7a68d6281989a7a29bb2726ec0b00f81fad819a64e0 "+cCECfb&c£8_&Ef1~Ad~a_b+5db=9"
+cycling[2]=30c9291ed2d148076970b25e76afebda5c487d2656e79aa57121249534d00876 "^5*ADa8@2(E^A!&5#d£54E1*=!7B9"
+cycling[3]=d1bcec04d865b0c36e16a3d2b05be87626c99dc76cba755f21754ba90379f03f "F+c_7=c#F!8f£€€C*%Fe&cfe+3F(E"
+cycling[4]=53730e6ab3778ce46f52a6401d41df75ffd03b204810a1648bbcf99d9484a6fe "B*+$E%))(99Cf71~e=)AC%e€b4B!A"
+cycling[5]=5716582f9bced96cd47d89c8e0ee163050c78d179b31d5e7279b61172ebf5930 "£bca6=$)$Fc73C4!@95&Fd3b^d^db"
+cycling[6]=039522ab2550fa1107c14ba460a0fea1576b653b3f173b0b6e7e18c844238e27 "F+0@B8B!d)(7f0)2~C7D!#04$B53@"
+cycling[7]=ece182caa651321b1031a2f87ab26da978fdb2e204e0c5fee58de9a4aa5f0822 "^$*e00~C59)5£C3*8A2_C$~aedE£D"
+cycling[8]=b722ba9c247c2ae54f8d42278a2bba9bf28613db54b0d5f6c48edc143c690322 "b)B!(feB$$4%&F£DFc210EBB*1B*£"
+cycling[9]=6c94063104ee7cc81c56bbbe784b30ee8924bf7d5ebad66627b2eba3e5a84320 "*)Df9)4@E(44~+&49)A#&65€aE#~~"
+render[0]=4fa1618d92c22ce870cd788bb0ac2e5e5317ff866489e7cdbdef0bf233e7e97c "............................."
+render[1]=fc59bf557cfe8dae1ef3e642baf46a6ca46801e181bbdfc7a93fecb846f929f0 "...............n............."
+render[2]=fc59bf557cfe8dae1ef3e642baf46a6ca46801e181bbdfc7a93fecb846f929f0 "...............n............."
+render[3]=eeccaea4ec4c02c60ce708ba0a5f9ca577a7b05518fefba6f04b08072d3acd7a "...............n-.n.......字.."
+render[4]=eeccaea4ec4c02c60ce708ba0a5f9ca577a7b05518fefba6f04b08072d3acd7a "...............n-.n.......字.."
+render[5]=ab85079c459aaade09717b30bbc6ef5ec39776306f7b47a59b576354278d147f "..........g....n-.n..od...字.."
+render[6]=9f32b26356c39ebc991a05985c273c791b6f83d021ba2087b77f9fa82b377176 ".+........go...n-.n..od...字.."
+render[7]=baa89d569ecfa6c98cdfda84771125fa04de87d7033c969e266a503b95d1247e ".$....m...go...n-.n..od...字.."
+render[8]=809fc771f10f25a7a762c857a2f708c3ba9d36e56b5a9194ee475f688723f1d2 ".) ...m...go...n-.n..od...字.."
+render[9]=57612ca5fdf62bac90af63c9faf07c9626a5f01c70980c95f769de113620595a ".) f..m...go...n-.nïcode..字.."
+render[10]=503e3cf14dfb1f9ddf099531d66d208d12359781787e88673807bf51aa457868 ".8 f..m.s-go...n-.nïcode..字.."
+render[11]=ca42ac6d30cf2c0306b914d3498c77b3e1df998ae3b247f14dc7c3b84bee8590 ".c f..m.s-gol..n-.nïcode..字.."
+render[12]=c2197b48d90cd7fbc49ef55bfe8e7e33cb749254d5bc14dedf413afe48cd823b ".5 f..m.s-gold.n-.nïcode..字.."
+render[13]=5d664a21d9f44fdc0d5dd1e2907fe03a6cbba871535e0aa786de3b2f42097340 "F+ fr.m.s-gold.n-.nïcode..字.."
+render[14]=de657537daaaf912815d142b0a2051b291a0befda03a0c962f6dc4d4d771a7a2 "B* fr.mes-gold.n-.nïcode..字."
+render[15]=09e1749724ff8b5b17f5664ce65e34939d4e6d11f77ee159d705489b43876422 "£b fr.mes-gold.n-.nïcode..字."
+render[16]=7ed0272a4e6f2450065b7da08c092e6b43f7635e33df505687c7d09590285f5e "F+ fr.mes-gold.n-.nïcode.漢字"
+render[17]=02ba5eb4d8034fb3fa7eb8dea68c9bb1de37067f7538b019767a4169498e61bd "^$ fr.mes-gold.n-.nïcode 漢字"
+render[18]=99ff8f7aa1641f29a1adf41e814e48181e20f5f17021e37dd6bb485b94789b42 "b) fr.mes-gold.n-.nïcode 漢字"
+render[19]=230cd056373df87788a1eba568bae8bd46c5bb815b56f62fca02338a3a89a376 "*) frames-golden-ünïcode 漢字"
+render[20]=dc95189c4ae03e9ed093b8f6d22bcf45e1e2ee5ac4f281a09056b825dcfafe48 "#8 frames-golden-ünïcode 漢字.  "
+render[21]=c34c46790788fac7e1ac6d497c8520e8c73fafcf0a2ce6adcc400cd7bebe7f06 "+c frames-golden-ünïcode 漢字.  "
+render[22]=84e61942bac9aeaa89f7ef215fb3d6a95f0cd20434b121cba5905589fe4842af "^5 frames-golden-ünïcode 漢字.  "
+render[23]=03caeeac8711d7647e1011cca19749308e1d193c5753dad6ebcd431783d2413c "F+ frames-golden-ünïcode 漢字.  "
+render[24]=f7ed05fd2fd7a568aaf99ef8d48306bbc2c3c918c52ee0238eba1c69f4460b22 "B* frames-golden-ünïcode 漢字.  "
+render[25]=8f5f74a095df6f52e2aa4cdf31bffeca833caa3097fbb14cd02e86ba98bd2ca7 "£b frames-golden-ünïcode 漢字.  "
+render[26]=03caeeac8711d7647e1011cca19749308e1d193c5753dad6ebcd431783d2413c "F+ frames-golden-ünïcode 漢字.  "
+render[27]=a1a82133c17bf2789c88a2612ce5cb0acd66e88f27084909f30ac8b9f5ff36f4 "^$ frames-golden-ünïcode 漢字.  "
+render[28]=945f6c98d0bcbe5731cb9780b652c812bcb7f3d869086a525da46cc9d58195b4 "b) frames-golden-ünïcode 漢字.. "
+render[29]=c9d8d6d80a35cbdff54194e4ed897a1c106122689f2ba80b219ea70525e50045 "*) frames-golden-ünïcode 漢字.. "
+--- recolored
+width=29 cycling=2 labelWidth=26 births=[13 6 8 9 13 19 7 14 10 10 5 6 11 12 19 1 3 19 3 9 9 5 5 9 17 16 3 16 14]
+label=e1b9df39cec5679444d10ae1a19d44a7b9510c04cfcbe98082ab04ea6883ae2c
+ellipsis=["\x1b[38;2;0;0;255m.  \x1b[m" "\x1b[38;2;0;0;255m.. \x1b[m" "\x1b[38;2;0;0;255m...\x1b[m"]
+initial[0]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[1]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[2]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[3]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[4]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[5]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[6]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[7]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[8]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+initial[9]=f9b5f610000e0ac627a5a14cd05ca89f168f0c1a74a68cd989892a36ef792ecf
+cycling[0]=b5b62bf73dc9c8087bf0459366b58d46e9848cbf1fc932e422108e69724162b2 "^d_6Dd)&(65(€!5$D5^@f0&C£)5+f"
+cycling[1]=cc609b165c18ea9bcc0e611e9f6c63318083eb486df6b5d409e177ab9dd170ff "€D&7^~FF317_0!($9da2@6c=*%37#"
+cycling[2]=172c64bd472adf7c77cbb7fe8704ec8e51674b8c2eef01aca4c250906581e92a "a^Cf*3a!abD(E^5%f8&3dF+fd)1C8"
+cycling[3]=070e0877bf0f8dfbff85f54cf5a66add199f074b85e5357bccdcc285566f4f95 "d4C#4d*&3%5#9a$€19€)FA*EB%adC"
+cycling[4]=cc6fc972e54b757f93c27c15d69dd28803de4558a65f44861db1e0484cbf08f8 "1_)!==1f15#5#(E&DA45_f+^0b^%4"
+cycling[5]=4cb9964f5109d14a01f5e66eb007383dd3dd9d406018997d9059b0869f039bdf "_2&F6a6edb65ad05_+9_afc!88)aF"
+cycling[6]=833fe4aaa04925695b93994d04ea48c206641cbf15e54b3be340e26ea102b186 "£c95^_(EB116$b&f~%eF70^c(E*e1"
+cycling[7]=32e6ee6f7944f576905621fa74ee338972f4077cf5d9f9a8a43b70e4055092b9 "€$AC*(4=4€9$£7^680$F+&D=*£#_+"
+cycling[8]=66498683ee5704c07fa56fab0065b498f026cad6f29ce6653807b93caa651c9e "e!ADd=_)AC4a3+%e£4b4&~51^$0^F"
+cycling[9]=d7c4bb67b24ddcfe74b54b56095406991f5a49a6ef5bff70442f393e72899cae "@_b)8D$Bca!FF£dc)1€a=e50*2!%)"
+render[0]=8830ab2f5d1b9be25dcb096b63520fcef04d8c439d11a5f07f4a02f6e21a951b "............................."
+render[1]=ded2a2404148f8e1f5175fce9abc551306e8edf21c98fb9c7969d36243ec8495 "...............n............."
+render[2]=ded2a2404148f8e1f5175fce9abc551306e8edf21c98fb9c7969d36243ec8495 "...............n............."
+render[3]=30dc80e38360fdfcd15001834013b723d17a7526da104fa53ef5903721039269 "...............n-.n.......字.."
+render[4]=30dc80e38360fdfcd15001834013b723d17a7526da104fa53ef5903721039269 "...............n-.n.......字.."
+render[5]=7e5bdc92f3bd6f5b0706c9eb11951673a650c8b97529046ad25b64c4730ddde5 "..........g....n-.n..od...字.."
+render[6]=8c6446521ec6103ca70e1e6eeca5840df4e51356ece63a7df9a32a679adc5e73 ".c........go...n-.n..od...字.."
+render[7]=bdab1f5c9caf9c57875779960d03712f8ba85303bcf5f0b220e32b33abb7d88f ".$....m...go...n-.n..od...字.."
+render[8]=980d5eabe5d60e00361dbe0d40b2dd3edcd7fb6c15017ff04ce52fae8ecca336 ".! ...m...go...n-.n..od...字.."
+render[9]=b2aee9b239fd52561ee499863f77a03eb6b1d8ea0354df997a7ec1d86b0159c7 "._ f..m...go...n-.nïcode..字.."
+render[10]=30ebc4a1debeb2ea2a928a1f49e26888457c5b62bc28c510309dff8369b9079b ".d f..m.s-go...n-.nïcode..字.."
+render[11]=261a8d02ac630a1d73e4f6be455aaee021b8bfccb6c4717d60cc5444733ba3dd ".D f..m.s-gol..n-.nïcode..字.."
+render[12]=7b4ae079aceebf28f27b0cbc8ae9ec27a2fde5e8494e5f435ae199e15a7882b2 ".^ f..m.s-gold.n-.nïcode..字.."
+render[13]=56aa1fe0a4d31978c2c89d2e76020ac3855fa0a8f0271df22fd9bfc3092a4122 "d4 fr.m.s-gold.n-.nïcode..字.."
+render[14]=baf2be2a49a4b0caec8b0234e4ab3b97e9653d2a713c489aed64317b865c42c4 "1_ fr.mes-gold.n-.nïcode..字."
+render[15]=c311a39d3b78553addce999d6cd365bc030dc24a740b653a9a8b650bc6a2d4bb "_2 fr.mes-gold.n-.nïcode..字."
+render[16]=7e31627d2614ae3a2220626fa5f440f81412f598475010c269b8987cf2614f15 "£c fr.mes-gold.n-.nïcode.漢字"
+render[17]=623860afc4e26bc2463f4ba724fb30fbbf1065b7161cbd4d7c31b6d9744dba74 "€$ fr.mes-gold.n-.nïcode 漢字"
+render[18]=e995b106627bbee6581c558510626f5a556e2801d7818e55e7e38a4ac81f4fc5 "e! fr.mes-gold.n-.nïcode 漢字"
+render[19]=dd170bff35a6838adfced3d46636ea56a7683676a5f11ef9135e57ea3ec178d4 "@_ frames-golden-ünïcode 漢字"
+render[20]=4853da21cbf05ac1f949e852c824de0c7f389d27c30bd62ead705e5126c433a7 "^d frames-golden-ünïcode 漢字.  "
+render[21]=0d0807d7241f5410a2992c815b942a16711058e55b3c0ff4085cade7749c5c53 "€D frames-golden-ünïcode 漢字.  "
+render[22]=1288af1622a853a272b0e4d31d25f4fb4598c1cd77d79b762aa858d44397e544 "a^ frames-golden-ünïcode 漢字.  "
+render[23]=1c3a7f77b775bb6a73b9dd897ab42948c938e6b4b37146e54cd41127ecb2eabe "d4 frames-golden-ünïcode 漢字.  "
+render[24]=03e67786aebffa92e63d496ae25c8e1ed7d6167a4004f8023db84f2963d677dd "1_ frames-golden-ünïcode 漢字.  "

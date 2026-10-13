@@ -70,7 +70,7 @@ func newTestUI() *UI {
 		com:      com,
 		status:   NewStatus(com, nil),
 		chat:     NewChat(com, config.ScrollbarDefault),
-		textarea: ta,
+		composer: composer{textarea: ta},
 		state:    uiChat,
 		focus:    uiFocusEditor,
 		width:    140,
@@ -304,7 +304,7 @@ func TestAutoExpandPillsIfReasonable(t *testing.T) {
 		u := newTestUI()
 		u.height = 50
 		u.session = &session.Session{ID: "s1", Todos: []session.Todo{}}
-		u.promptQueue = 2
+		u.queue.count = 2
 
 		u.autoExpandPillsIfReasonable()
 

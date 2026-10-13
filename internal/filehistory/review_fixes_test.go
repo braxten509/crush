@@ -17,7 +17,7 @@ import (
 
 func TestUnavailableObjectStorageKeepsPreviewReason(t *testing.T) {
 	f := setup(t)
-	require.NoError(t, os.WriteFile(filepath.Dir(f.store.directory), []byte("blocked"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Dir(f.store.directory), []byte("blocked"), 0o600))
 	p := filepath.Join(f.root, "file")
 	f.change(t, "a", p, state("before"), state("after"))
 	f.write(t, p, "after")
@@ -35,7 +35,7 @@ func fakeGit(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	calls := filepath.Join(dir, "calls")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "git"), []byte("#!/bin/sh\nprintf 'call\\n' >> \"$RESTORE_GIT_CALLS\"\ncase \"$*\" in *--show-toplevel*) echo /fixture;; *) echo \"${RESTORE_HEAD:-initial}\";; esac\n"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "git"), []byte("#!/bin/sh\nprintf 'call\\n' >> \"$RESTORE_GIT_CALLS\"\ncase \"$*\" in *--show-toplevel*) echo /fixture;; *) echo \"${RESTORE_HEAD:-initial}\";; esac\n"), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("RESTORE_GIT_CALLS", calls)
 	return calls
@@ -54,7 +54,7 @@ func TestPointAndPreviewCacheGitProcesses(t *testing.T) {
 		f.change(t, fmt.Sprint(i), p, state("before"), state("after"))
 		f.write(t, p, "after")
 	}
-	require.NoError(t, os.WriteFile(calls, nil, 0600))
+	require.NoError(t, os.WriteFile(calls, nil, 0o600))
 	_, err := f.store.Preview(t.Context(), "chat", "")
 	require.NoError(t, err)
 	require.Equal(t, 2, strings.Count(contents(t, calls), "call\n"))
@@ -82,7 +82,7 @@ func TestUndoWarnsOnlyWhenHeadReallyMoved(t *testing.T) {
 func TestParentsRejectSymlinkBeforeCreatingDirectories(t *testing.T) {
 	f := setup(t)
 	outside := filepath.Join(f.root, "outside")
-	require.NoError(t, os.Mkdir(outside, 0755))
+	require.NoError(t, os.Mkdir(outside, 0o755))
 	require.NoError(t, os.Symlink(outside, filepath.Join(f.root, "link")))
 	path := filepath.Join(f.root, "link", "must-not-exist", "file")
 	require.Error(t, safeParents(path))
@@ -139,7 +139,7 @@ func TestAnotherProcessCannotCollectUnpublishedCaptureOrUndo(t *testing.T) {
 			child.Env = append(os.Environ(), "RESTORE_GC_DATABASE="+directory)
 			output, err := child.CombinedOutput()
 			require.NoError(t, err, string(output))
-			saved := State{Exists: true, Digest: digest, Saved: true, Mode: 0644}
+			saved := State{Exists: true, Digest: digest, Saved: true, Mode: 0o644}
 			if kind == "capture" {
 				_, err = f.conn.Exec(`INSERT INTO file_history_changes(message_id,session_id,tool_id,path,capture_order,before_state,after_state,git_head) VALUES('pending','chat','tool','file',1,?,?,'')`, encode(saved), encode(State{}))
 			} else {
@@ -160,7 +160,7 @@ func TestDigestOnlySnapshotReusesPublishedVersion(t *testing.T) {
 	f := setup(t)
 	p := filepath.Join(f.root, "large")
 	f.change(t, "first", p, state("before"), state("saved"))
-	f.change(t, "second", p, &filechange.State{Digest: hash([]byte("saved")), Mode: 0644, Size: 5, RestoreDigestOnly: true}, state("later"))
+	f.change(t, "second", p, &filechange.State{Digest: hash([]byte("saved")), Mode: 0o644, Size: 5, RestoreDigestOnly: true}, state("later"))
 	f.write(t, p, "later")
 	plan, err := f.store.Preview(t.Context(), "chat", "first")
 	require.NoError(t, err)

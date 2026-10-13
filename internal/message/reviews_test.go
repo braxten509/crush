@@ -14,8 +14,10 @@ import (
 )
 
 func fixtureReview() ToolResult {
-	return ToolResult{ToolCallID: "call", Name: "bash", Content: "command output stays visible", Metadata: `{"output":"command output stays visible"}`,
-		Review: &filechange.Review{Root: "/workspace", Changes: []filechange.Change{{Path: "/workspace/main.go", Before: &filechange.State{Content: "before\n"}, After: &filechange.State{Content: "after\n"}}}}}
+	return ToolResult{
+		ToolCallID: "call", Name: "bash", Content: "command output stays visible", Metadata: `{"output":"command output stays visible"}`,
+		Review: &filechange.Review{Root: "/workspace", Changes: []filechange.Change{{Path: "/workspace/main.go", Before: &filechange.State{Content: "before\n"}, After: &filechange.State{Content: "after\n"}}}},
+	}
 }
 
 func TestParentPromptRetentionAlsoExpiresOldSubagentDiffs(t *testing.T) {

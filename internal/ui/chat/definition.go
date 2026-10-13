@@ -30,36 +30,24 @@ type DefinitionToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *DefinitionToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Find Definition", opts.Anim, opts.Compact)
-	}
+	return definitionTool.render(sty, width, opts)
+}
 
-	var params tools.DefinitionParams
-	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
+// definitionTool draws Find Definition tool calls with the standard layout.
+var definitionTool = standardTool[tools.DefinitionParams]{
+	name:    "Find Definition",
+	lenient: true,
+	header: func(params tools.DefinitionParams) []string {
+		return []string{params.Symbol}
+	},
+	body: func(sty *styles.Styles, opts *ToolRenderOpts, params tools.DefinitionParams, cappedWidth int) string {
+		// Try to render code with syntax highlighting using metadata.
+		var meta tools.DefinitionResponseMetadata
+		if err := json.Unmarshal([]byte(opts.Result.Metadata), &meta); err == nil && meta.Content != "" {
+			return toolOutputCodeContent(sty, meta.FilePath, meta.Content, 0, cappedWidth, opts.ExpandedContent)
+		}
 
-	header := toolHeader(sty, opts.Status, "Find Definition", cappedWidth, opts, params.Symbol)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	// Try to render code with syntax highlighting using metadata.
-	var meta tools.DefinitionResponseMetadata
-	if err := json.Unmarshal([]byte(opts.Result.Metadata), &meta); err == nil && meta.Content != "" {
-		body := toolOutputCodeContent(sty, meta.FilePath, meta.Content, 0, cappedWidth, opts.ExpandedContent)
-		return joinToolParts(header, body)
-	}
-
-	// Fallback to plain text.
-	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
+		// Fallback to plain text.
+		return plainResultBody(sty, opts, params, cappedWidth)
+	},
 }

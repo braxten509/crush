@@ -1,0 +1,179 @@
+package server
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/charmbracelet/crush/internal/backend"
+	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
+	"github.com/charmbracelet/crush/internal/session"
+)
+
+// sessionToWire converts a session for a REST response, filling the
+// computed-on-read busy and presence fields from the workspace (a nil
+// workspace reports neither).
+func sessionToWire(ws *backend.Workspace, s session.Session) proto.Session {
+	out := proto.SessionFromDomain(s)
+	out.IsBusy = isSessionBusy(ws, s.ID)
+	out.AttachedClients = attachedClients(ws, s.ID)
+	return out
+}
+
+// isSessionBusy reports whether the given workspace has an in-flight
+// agent run for sessionID. It tolerates a nil workspace (treating it as
+// "not busy") so REST handlers can pass GetWorkspace's result through
+// unconditionally — the workspace lookup error is already surfaced by
+// the prior ListSessions/GetSession call when relevant.
+func isSessionBusy(ws *backend.Workspace, sessionID string) bool {
+	if ws == nil || ws.App == nil || ws.AgentCoordinator == nil {
+		return false
+	}
+	return ws.AgentCoordinator.IsSessionBusy(sessionID)
+}
+
+// attachedClients returns the number of clients currently viewing
+// sessionID in ws. Hold-only clients (streams == 0) do not contribute.
+// A nil workspace is treated as zero so handlers can pass GetWorkspace's
+// result through without an extra guard.
+func attachedClients(ws *backend.Workspace, sessionID string) int {
+	if ws == nil {
+		return 0
+	}
+	return ws.AttachedClientsForSession(sessionID)
+}
+
+// sessionResult converts a single session result for a REST response.
+func (c *controllerV1) sessionResult(r *http.Request, s session.Session, err error) (proto.Session, error) {
+	if err != nil {
+		return proto.Session{}, err
+	}
+	ws, _ := c.backend.GetWorkspace(r.PathValue("id"))
+	return sessionToWire(ws, s), nil
+}
+
+// listSessions lists the sessions of a workspace.
+func (c *controllerV1) listSessions(r *http.Request, _ rpc.Empty) ([]proto.Session, error) {
+	id := r.PathValue("id")
+	sessions, err := c.backend.ListSessions(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	ws, _ := c.backend.GetWorkspace(id)
+	result := make([]proto.Session, len(sessions))
+	for i, s := range sessions {
+		result[i] = sessionToWire(ws, s)
+	}
+	return result, nil
+}
+
+// createSession creates a session titled after the request.
+func (c *controllerV1) createSession(r *http.Request, args proto.Session) (proto.Session, error) {
+	sess, err := c.backend.CreateSession(r.Context(), r.PathValue("id"), args.Title)
+	return c.sessionResult(r, sess, err)
+}
+
+// getSession returns a single session.
+func (c *controllerV1) getSession(r *http.Request, _ rpc.Empty) (proto.Session, error) {
+	sess, err := c.backend.GetSession(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+	return c.sessionResult(r, sess, err)
+}
+
+// saveSession updates a session. The body is decoded as the wire type,
+// not session.Session: the latter has no JSON tags, so snake_case fields
+// such as prompt_tokens and summary_message_id would silently decode as
+// zero and be persisted.
+func (c *controllerV1) saveSession(r *http.Request, sess proto.Session) (proto.Session, error) {
+	saved, err := c.backend.SaveSession(r.Context(), r.PathValue("id"), proto.SessionToDomain(sess))
+	return c.sessionResult(r, saved, err)
+}
+
+// deleteSession deletes a session.
+func (c *controllerV1) deleteSession(r *http.Request, _ rpc.Empty) (rpc.Empty, error) {
+	return rpc.Empty{}, c.backend.DeleteSession(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+}
+
+// setKeptSkill turns a skill on or off for a whole session.
+func (c *controllerV1) setKeptSkill(r *http.Request, req proto.SetKeptSkillRequest) (proto.Session, error) {
+	if req.ID == "" {
+		return proto.Session{}, badRequest("id is required")
+	}
+	sess, err := c.backend.SetKeptSkill(r.Context(), r.PathValue("id"), r.PathValue("sid"),
+		session.KeptSkill{ID: req.ID, Name: req.Name}, req.On)
+	if err != nil {
+		return proto.Session{}, err
+	}
+	return proto.SessionFromDomain(sess), nil
+}
+
+// listSavedSessions lists saved chats across every project.
+func (c *controllerV1) listSavedSessions(r *http.Request, _ rpc.Empty) ([]session.Session, error) {
+	return c.backend.ListSavedSessions(r.Context(), r.PathValue("id"), r.URL.Query().Get("selected"))
+}
+
+// changeSavedSession renames or deletes a saved chat, or discards an
+// empty one.
+func (c *controllerV1) changeSavedSession(r *http.Request, change session.CatalogChange) (struct{}, error) {
+	return struct{}{}, c.backend.ChangeSavedSession(r.Context(), r.PathValue("id"), change)
+}
+
+// getSessionHistory returns the file versions recorded for a session.
+func (c *controllerV1) getSessionHistory(r *http.Request, _ rpc.Empty) ([]proto.File, error) {
+	history, err := c.backend.ListSessionHistory(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+	if err != nil {
+		return nil, err
+	}
+	return proto.FilesFromDomain(history), nil
+}
+
+// getSessionMessages returns every message of a session.
+func (c *controllerV1) getSessionMessages(r *http.Request, _ rpc.Empty) ([]proto.Message, error) {
+	messages, err := c.backend.ListSessionMessages(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+	if err != nil {
+		return nil, err
+	}
+	return proto.MessagesFromDomain(messages), nil
+}
+
+// getMessageReview loads the retained file review of a message.
+func (c *controllerV1) getMessageReview(r *http.Request, _ rpc.Empty) (proto.Message, error) {
+	msg, err := c.backend.LoadMessageReview(r.Context(), r.PathValue("id"), r.PathValue("sid"), r.PathValue("mid"))
+	if err != nil {
+		return proto.Message{}, err
+	}
+	return proto.MessageFromDomain(msg), nil
+}
+
+// getSessionUserMessages returns the user messages of a session.
+func (c *controllerV1) getSessionUserMessages(r *http.Request, _ rpc.Empty) ([]proto.Message, error) {
+	messages, err := c.backend.ListUserMessages(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+	if err != nil {
+		return nil, err
+	}
+	return proto.MessagesFromDomain(messages), nil
+}
+
+// getAllUserMessages returns the user messages of every session.
+func (c *controllerV1) getAllUserMessages(r *http.Request, _ rpc.Empty) ([]proto.Message, error) {
+	messages, err := c.backend.ListAllUserMessages(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	return proto.MessagesFromDomain(messages), nil
+}
+
+// getFileTrackerFiles lists the files a session has read.
+func (c *controllerV1) getFileTrackerFiles(r *http.Request, _ rpc.Empty) ([]string, error) {
+	return c.backend.FileTrackerListReadFiles(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+}
+
+// recordFileRead records that a session read a file.
+func (c *controllerV1) recordFileRead(r *http.Request, req proto.FileTrackerReadRequest) (rpc.Empty, error) {
+	return rpc.Empty{}, c.backend.FileTrackerRecordRead(r.Context(), r.PathValue("id"), req.SessionID, req.Path)
+}
+
+// getFileLastRead returns when a session last read a file.
+func (c *controllerV1) getFileLastRead(r *http.Request, _ rpc.Empty) (time.Time, error) {
+	q := r.URL.Query()
+	return c.backend.FileTrackerLastReadTime(r.Context(), r.PathValue("id"), q.Get("session_id"), q.Get("path"))
+}

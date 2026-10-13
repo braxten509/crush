@@ -1,16 +1,17 @@
 package agent
 
 import (
-	"charm.land/fantasy"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"testing"
+
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
-	"strings"
-	"testing"
 )
 
 func TestTreeCLIStartsFreshAndHandoffExcludesAbandonedBranch(t *testing.T) {
@@ -92,6 +93,7 @@ func (m *treeSummaryModel) Generate(ctx context.Context, call fantasy.Call) (*fa
 	}
 	return m.finishStreamModel.Generate(ctx, call)
 }
+
 func TestTreeSummaryOptInCommonAncestorAndFailure(t *testing.T) {
 	env := testEnv(t)
 	ctx := t.Context()

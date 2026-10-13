@@ -92,12 +92,14 @@ func (m *UI) takeChatLink(c *Chat) tea.Cmd {
 	return openChatLink(destination, m.com.Workspace.WorkingDir())
 }
 
-type openImageMsg struct{ Attachment message.Attachment }
-type imagePress struct {
-	attachment message.Attachment
-	at         image.Point
-	dragged    bool
-}
+type (
+	openImageMsg struct{ Attachment message.Attachment }
+	imagePress   struct {
+		attachment message.Attachment
+		at         image.Point
+		dragged    bool
+	}
+)
 
 // imageFile preserves the image the user actually sent, even if its source
 // has since changed or came from the clipboard. No work happens at render.

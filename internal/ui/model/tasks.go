@@ -36,13 +36,31 @@ type (
 // taskSpinner is the half circle that turns while sub-agents run.
 var taskSpinner = []string{"◐", "◓", "◑", "◒"}
 
-func (m *UI) visibleTasks() []agent.Task {
-	if !m.hasSession() {
+// taskRow is the row under the editor listing the background sub-agents and
+// processes, and its selection.
+type taskRow struct {
+	// tasks are the background sub-agents seen this run, by ID, and
+	// bgProcs the processes the agents left running.
+	tasks   map[string]agent.Task
+	ticking bool
+	bgProcs []agent.Process
+	// hostServers are background processes listening on a port, which the
+	// session list shows in place of the row.
+	hostServers []agent.Server
+	// focused is set while Down from the editor selected the row; sel is
+	// the selected category.
+	focused bool
+	sel     int
+}
+
+// visible returns the running sub-agents of sessionID, oldest first.
+func (r *taskRow) visible(sessionID string) []agent.Task {
+	if sessionID == "" {
 		return nil
 	}
 	var out []agent.Task
-	for _, t := range m.tasks {
-		if t.SessionID == m.session.ID && t.Status == agent.TaskRunning {
+	for _, t := range r.tasks {
+		if t.SessionID == sessionID && t.Status == agent.TaskRunning {
 			out = append(out, t)
 		}
 	}
@@ -50,17 +68,54 @@ func (m *UI) visibleTasks() []agent.Task {
 	return out
 }
 
-// taskRowLen is how many categories the row has: sub-agents, then
+// len is how many categories the row has for sessionID: sub-agents, then
 // processes, if any.
-func (m *UI) taskRowLen() int {
+func (r *taskRow) len(sessionID string) int {
 	n := 0
-	if len(m.visibleTasks()) > 0 {
+	if len(r.visible(sessionID)) > 0 {
 		n++
 	}
-	if len(m.bgProcs) > 0 {
+	if len(r.bgProcs) > 0 {
 		n++
 	}
 	return n
+}
+
+// record stores the latest state of a sub-agent.
+func (r *taskRow) record(t agent.Task) {
+	if r.tasks == nil {
+		r.tasks = map[string]agent.Task{}
+	}
+	r.tasks[t.ID] = t
+}
+
+// expire drops the sub-agents that finished more than taskLinger ago.
+func (r *taskRow) expire() {
+	for id, t := range r.tasks {
+		if t.Status != agent.TaskRunning && time.Since(t.Ended) >= taskLinger {
+			delete(r.tasks, id)
+		}
+	}
+}
+
+// fit keeps the selection within a row of n categories, dropping the focus
+// when the row is empty.
+func (r *taskRow) fit(n int) {
+	if n == 0 {
+		r.focused = false
+	}
+	r.sel = min(r.sel, max(n-1, 0))
+}
+
+// visibleTasks returns the running sub-agents of the current session.
+func (m *UI) visibleTasks() []agent.Task {
+	return m.taskRow.visible(m.currentSessionID())
+}
+
+// taskRowLen is how many categories the row has: sub-agents, then
+// processes, if any.
+func (m *UI) taskRowLen() int {
+	return m.taskRow.len(m.currentSessionID())
 }
 
 // tasksHeight is the row's height in the layout. It only shows in the chat,
@@ -74,21 +129,14 @@ func (m *UI) tasksHeight() int {
 
 // relayoutTasks keeps the layout and the selection in step with the row.
 func (m *UI) relayoutTasks() {
-	n := m.taskRowLen()
-	if n == 0 {
-		m.tasksFocused = false
-	}
-	m.taskSel = min(m.taskSel, max(n-1, 0))
+	m.taskRow.fit(m.taskRowLen())
 	if m.tasksHeight() != m.layout.tasks.Dy() {
 		m.updateLayoutAndSize()
 	}
 }
 
 func (m *UI) handleTaskEvent(t agent.Task) tea.Cmd {
-	if m.tasks == nil {
-		m.tasks = map[string]agent.Task{}
-	}
-	m.tasks[t.ID] = t
+	m.taskRow.record(t)
 	m.relayoutTasks()
 	m.refreshBackgroundDialog()
 	return m.taskTick()
@@ -96,20 +144,16 @@ func (m *UI) handleTaskEvent(t agent.Task) tea.Cmd {
 
 // taskTick schedules the next refresh while any sub-agent is listed.
 func (m *UI) taskTick() tea.Cmd {
-	if m.taskTicking || len(m.visibleTasks()) == 0 {
+	if m.taskRow.ticking || len(m.visibleTasks()) == 0 {
 		return nil
 	}
-	m.taskTicking = true
+	m.taskRow.ticking = true
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return taskTickMsg{} })
 }
 
 func (m *UI) handleTaskTick() tea.Cmd {
-	m.taskTicking = false
-	for id, t := range m.tasks {
-		if t.Status != agent.TaskRunning && time.Since(t.Ended) >= taskLinger {
-			delete(m.tasks, id)
-		}
-	}
+	m.taskRow.ticking = false
+	m.taskRow.expire()
 	m.relayoutTasks()
 	return m.taskTick()
 }
@@ -128,7 +172,7 @@ func (m *UI) pollBgProcs() tea.Cmd {
 }
 
 func (m *UI) handleBgProcs(msg bgProcsMsg) tea.Cmd {
-	m.bgProcs, m.hostServers = msg.procs, msg.servers
+	m.taskRow.bgProcs, m.taskRow.hostServers = msg.procs, msg.servers
 	m.relayoutTasks()
 	m.refreshBackgroundDialog()
 	return m.pollBgProcs()
@@ -139,18 +183,23 @@ func (m *UI) handleBgProcs(msg bgProcsMsg) tea.Cmd {
 func (m *UI) refreshBackgroundDialog() {
 	for _, id := range []string{dialog.BackgroundID, dialog.SubAgentsID} {
 		if d, ok := m.dialog.Dialog(id).(*dialog.Background); ok {
-			d.SetItems(m.visibleTasks(), m.bgProcs, "")
+			d.SetItems(m.visibleTasks(), m.taskRow.bgProcs, "")
 		}
 	}
 }
 
 // focusTaskRow selects the row from the editor, if it has anything.
 func (m *UI) focusTaskRow() bool {
-	if m.taskRowLen() == 0 {
+	return m.taskRow.focus(m.taskRowLen())
+}
+
+// focus selects a row of n categories, if it has any.
+func (r *taskRow) focus(n int) bool {
+	if n == 0 {
 		return false
 	}
-	m.tasksFocused = true
-	m.taskSel = min(m.taskSel, m.taskRowLen()-1)
+	r.focused = true
+	r.sel = min(r.sel, n-1)
 	return true
 }
 
@@ -159,7 +208,7 @@ func (m *UI) focusTaskRow() bool {
 func (m *UI) handleTaskRowKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	n := m.taskRowLen()
 	if n == 0 {
-		m.tasksFocused = false
+		m.taskRow.focused = false
 		return nil, false
 	}
 	// The background key opens what's selected, like Enter.
@@ -168,15 +217,15 @@ func (m *UI) handleTaskRowKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	}
 	switch msg.String() {
 	case "left":
-		m.taskSel = (m.taskSel + n - 1) % n
+		m.taskRow.sel = (m.taskRow.sel + n - 1) % n
 	case "right", "tab":
-		m.taskSel = (m.taskSel + 1) % n
+		m.taskRow.sel = (m.taskRow.sel + 1) % n
 	case "up", "esc":
-		m.tasksFocused = false
+		m.taskRow.focused = false
 	case "enter", "space", "x", "delete", "backspace":
 		return m.openTaskRowDialog(), true
 	default:
-		m.tasksFocused = false
+		m.taskRow.focused = false
 		return nil, false
 	}
 	return nil, true
@@ -207,7 +256,7 @@ func (m *UI) renderTaskLine(width int, withHint bool) string {
 		}
 		items = append(items, icon+" "+t.Pills.TodoLabel.Render(label))
 	}
-	if n := len(m.bgProcs); n > 0 {
+	if n := len(m.taskRow.bgProcs); n > 0 {
 		label := fmt.Sprintf("%d background processes", n)
 		if n == 1 {
 			label = "1 background process"
@@ -218,7 +267,7 @@ func (m *UI) renderTaskLine(width int, withHint bool) string {
 		return ""
 	}
 	for i, item := range items {
-		if m.tasksFocused && i == m.taskSel {
+		if m.taskRow.focused && i == m.taskRow.sel {
 			items[i] = t.Dialog.SelectedItem.Render(ansi.Strip(item))
 		} else {
 			items[i] = " " + item + " "
@@ -227,7 +276,7 @@ func (m *UI) renderTaskLine(width int, withHint bool) string {
 
 	var hint string
 	switch {
-	case !m.tasksFocused:
+	case !m.taskRow.focused:
 		hint = "↓ manage"
 	default:
 		hint = "enter list · ←/→ select · ↑ back"
@@ -249,7 +298,7 @@ func splitTasks(editor uv.Rectangle, rows int) (uv.Rectangle, uv.Rectangle) {
 
 // openTaskRowDialog opens the dialog matching the selected row item.
 func (m *UI) openTaskRowDialog() tea.Cmd {
-	if m.taskSel == 0 && len(m.visibleTasks()) > 0 {
+	if m.taskRow.sel == 0 && len(m.visibleTasks()) > 0 {
 		return m.openSubAgentsDialog()
 	}
 	return m.openBackgroundDialog()
@@ -257,16 +306,16 @@ func (m *UI) openTaskRowDialog() tea.Cmd {
 
 // openBackgroundDialog lists only background processes.
 func (m *UI) openBackgroundDialog() tea.Cmd {
-	m.tasksFocused = false
+	m.taskRow.focused = false
 	m.dialog.CloseDialog(dialog.SubAgentsID)
 	m.dialog.CloseDialog(dialog.BackgroundID)
-	m.dialog.OpenDialog(dialog.NewBackground(m.com, m.bgProcs))
+	m.dialog.OpenDialog(dialog.NewBackground(m.com, m.taskRow.bgProcs))
 	return nil
 }
 
 // openSubAgentsDialog lists only sub-agents.
 func (m *UI) openSubAgentsDialog() tea.Cmd {
-	m.tasksFocused = false
+	m.taskRow.focused = false
 	tasks := m.visibleTasks()
 	m.dialog.CloseDialog(dialog.BackgroundID)
 	m.dialog.CloseDialog(dialog.SubAgentsID)

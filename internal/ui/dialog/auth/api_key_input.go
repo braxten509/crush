@@ -1,0 +1,347 @@
+package auth
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
+	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/charmbracelet/crush/internal/ui/util"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/exp/charmtone"
+)
+
+type APIKeyInputState int
+
+const (
+	APIKeyInputStateInitial APIKeyInputState = iota
+	APIKeyInputStateVerifying
+	APIKeyInputStateVerified
+	APIKeyInputStateError
+)
+
+// APIKeyInput represents a model selection dialog.
+type APIKeyInput struct {
+	com          *common.Common
+	isOnboarding bool
+
+	provider  catwalk.Provider
+	model     config.SelectedModel
+	modelType config.SelectedModelType
+
+	width int
+	state APIKeyInputState
+	// saving is set while the verified key is being saved.
+	saving bool
+
+	keyMap struct {
+		Submit key.Binding
+		Close  key.Binding
+	}
+	input   textinput.Model
+	spinner spinner.Model
+	help    help.Model
+}
+
+var _ dialog.Dialog = (*APIKeyInput)(nil)
+
+// NewAPIKeyInput creates a new Models dialog.
+func NewAPIKeyInput(
+	com *common.Common,
+	isOnboarding bool,
+	provider catwalk.Provider,
+	model config.SelectedModel,
+	modelType config.SelectedModelType,
+) (*APIKeyInput, tea.Cmd) {
+	t := com.Styles
+
+	m := APIKeyInput{}
+	m.com = com
+	m.isOnboarding = isOnboarding
+	m.provider = provider
+	m.model = model
+	m.modelType = modelType
+	m.width = 0 // Set dynamically in Draw().
+
+	m.input = textinput.New()
+	m.input.SetVirtualCursor(false)
+	m.input.Placeholder = "Enter your API key..."
+	m.input.SetStyles(com.Styles.TextInput)
+	m.input.Focus()
+
+	m.spinner = spinner.New(
+		spinner.WithSpinner(spinner.Dot),
+		spinner.WithStyle(t.Dialog.APIKey.Spinner),
+	)
+
+	m.help = help.New()
+	m.help.Styles = t.DialogHelpStyles()
+
+	m.keyMap.Submit = key.NewBinding(
+		key.WithKeys("enter", "ctrl+y"),
+		key.WithHelp("enter", "submit"),
+	)
+	m.keyMap.Close = dialog.CloseKey
+
+	return &m, nil
+}
+
+// ID implements Dialog.
+func (m *APIKeyInput) ID() string {
+	return dialog.APIKeyInputID
+}
+
+// HandleMsg implements [Dialog].
+func (m *APIKeyInput) HandleMsg(msg tea.Msg) dialog.Action {
+	switch msg := msg.(type) {
+	case ActionChangeAPIKeyState:
+		m.state = msg.State
+		switch m.state {
+		case APIKeyInputStateVerifying:
+			cmd := tea.Batch(m.spinner.Tick, m.verifyAPIKey())
+			return dialog.ActionCmd{Cmd: cmd}
+		}
+	case apiKeySavedMsg:
+		return m.keySaved(msg.err)
+	case spinner.TickMsg:
+		switch m.state {
+		case APIKeyInputStateVerifying:
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			if cmd != nil {
+				return dialog.ActionCmd{Cmd: cmd}
+			}
+		}
+	case tea.KeyPressMsg:
+		switch {
+		case m.state == APIKeyInputStateVerifying:
+			// do nothing
+		case key.Matches(msg, m.keyMap.Close):
+			switch m.state {
+			case APIKeyInputStateVerified:
+				return m.saveKeyAndContinue()
+			default:
+				return dialog.ActionClose{}
+			}
+		case key.Matches(msg, m.keyMap.Submit):
+			switch m.state {
+			case APIKeyInputStateInitial, APIKeyInputStateError:
+				return ActionChangeAPIKeyState{State: APIKeyInputStateVerifying}
+			case APIKeyInputStateVerified:
+				return m.saveKeyAndContinue()
+			}
+		default:
+			var cmd tea.Cmd
+			m.input, cmd = m.input.Update(msg)
+			if cmd != nil {
+				return dialog.ActionCmd{Cmd: cmd}
+			}
+		}
+	case tea.PasteMsg:
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		if cmd != nil {
+			return dialog.ActionCmd{Cmd: cmd}
+		}
+	}
+	return nil
+}
+
+// Draw implements [Dialog].
+func (m *APIKeyInput) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
+	t := m.com.Styles
+
+	m.width = max(0, min(60, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
+	innerWidth := m.width - t.Dialog.View.GetHorizontalFrameSize() - 2
+	m.input.SetWidth(max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)) // (1) cursor padding
+
+	textStyle := t.Dialog.SecondaryText
+	dialogStyle := t.Dialog.View.Width(m.width)
+	inputStyle := t.Dialog.InputPrompt
+	helpView := kit.RenderDialogHelp(t, &m.help, m, m.width-dialogStyle.GetHorizontalFrameSize())
+
+	m.input.Prompt = m.spinner.View()
+
+	content := strings.Join([]string{
+		m.headerView(),
+		inputStyle.Render(m.inputView()),
+		textStyle.Render("This will be written in your global configuration:"),
+		textStyle.Render(config.GlobalConfigData()),
+		"",
+		helpView,
+	}, "\n")
+
+	cur := m.Cursor()
+
+	if m.isOnboarding {
+		view := content
+		cur = kit.AdjustOnboardingInputCursor(t, cur)
+		dialog.DrawOnboardingCursor(scr, area, view, cur)
+	} else {
+		view := dialogStyle.Render(content)
+		dialog.DrawCenterCursor(scr, area, view, cur)
+	}
+	return cur
+}
+
+func (m *APIKeyInput) headerView() string {
+	var (
+		t           = m.com.Styles
+		titleStyle  = t.Dialog.Title
+		textStyle   = t.Dialog.PrimaryText
+		dialogStyle = t.Dialog.View.Width(m.width)
+	)
+	if m.isOnboarding {
+		return textStyle.Render(m.dialogTitle())
+	}
+	headerOffset := titleStyle.GetHorizontalFrameSize() + dialogStyle.GetHorizontalFrameSize()
+	return common.DialogTitle(t, titleStyle.Render(m.dialogTitle()), m.width-headerOffset, m.com.Styles.Dialog.TitleGradFromColor, m.com.Styles.Dialog.TitleGradToColor)
+}
+
+func (m *APIKeyInput) dialogTitle() string {
+	var (
+		t           = m.com.Styles
+		textStyle   = t.Dialog.TitleText
+		errorStyle  = t.Dialog.TitleError
+		accentStyle = t.Dialog.TitleAccent
+	)
+	switch m.state {
+	case APIKeyInputStateInitial:
+		return textStyle.Render("Enter your ") + accentStyle.Render(fmt.Sprintf("%s Key", m.provider.Name)) + textStyle.Render(".")
+	case APIKeyInputStateVerifying:
+		return textStyle.Render("Verifying your ") + accentStyle.Render(fmt.Sprintf("%s Key", m.provider.Name)) + textStyle.Render("...")
+	case APIKeyInputStateVerified:
+		return accentStyle.Render(fmt.Sprintf("%s Key", m.provider.Name)) + textStyle.Render(" validated.")
+	case APIKeyInputStateError:
+		return errorStyle.Render("Invalid ") + accentStyle.Render(fmt.Sprintf("%s Key", m.provider.Name)) + errorStyle.Render(". Try again?")
+	}
+	return ""
+}
+
+func (m *APIKeyInput) inputView() string {
+	t := m.com.Styles
+
+	switch m.state {
+	case APIKeyInputStateInitial:
+		m.input.Prompt = "> "
+		m.input.SetStyles(t.TextInput)
+		m.input.Focus()
+	case APIKeyInputStateVerifying:
+		ts := t.TextInput
+		ts.Blurred.Prompt = ts.Focused.Prompt
+
+		m.input.Prompt = m.spinner.View()
+		m.input.SetStyles(ts)
+		m.input.Blur()
+	case APIKeyInputStateVerified:
+		ts := t.TextInput
+		ts.Blurred.Prompt = ts.Focused.Prompt
+
+		m.input.Prompt = styles.CheckIcon + " "
+		m.input.SetStyles(ts)
+		m.input.Blur()
+	case APIKeyInputStateError:
+		ts := t.TextInput
+		ts.Focused.Prompt = ts.Focused.Prompt.Foreground(charmtone.Cherry)
+
+		m.input.Prompt = styles.LSPErrorIcon + " "
+		m.input.SetStyles(ts)
+		m.input.Focus()
+	}
+	return m.input.View()
+}
+
+// Cursor returns the cursor position relative to the dialog.
+func (m *APIKeyInput) Cursor() *tea.Cursor {
+	return dialog.InputCursor(m.com.Styles, m.input.Cursor())
+}
+
+// FullHelp returns the full help view.
+func (m *APIKeyInput) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{
+			m.keyMap.Submit,
+			m.keyMap.Close,
+		},
+	}
+}
+
+// ShortHelp returns the full help view.
+func (m *APIKeyInput) ShortHelp() []key.Binding {
+	return []key.Binding{
+		m.keyMap.Submit,
+		m.keyMap.Close,
+	}
+}
+
+// verifyAPIKey returns a command that tests the typed key against the
+// provider. It captures what it needs now, as it runs off the Update
+// goroutine.
+func (m *APIKeyInput) verifyAPIKey() tea.Cmd {
+	providerConfig := config.ProviderConfig{
+		ID:      string(m.provider.ID),
+		Name:    m.provider.Name,
+		APIKey:  m.input.Value(),
+		Type:    m.provider.Type,
+		BaseURL: m.provider.APIEndpoint,
+	}
+	resolver := m.com.Workspace.Resolver()
+	return func() tea.Msg {
+		start := time.Now()
+		err := providerConfig.TestConnection(resolver)
+
+		// intentionally wait for at least 750ms to make sure the user sees the spinner
+		elapsed := time.Since(start)
+		minimum := 750 * time.Millisecond
+		if elapsed < minimum {
+			time.Sleep(minimum - elapsed)
+		}
+
+		if err == nil {
+			return ActionChangeAPIKeyState{APIKeyInputStateVerified}
+		}
+		return ActionChangeAPIKeyState{APIKeyInputStateError}
+	}
+}
+
+// apiKeySavedMsg reports the outcome of saving the verified key.
+type apiKeySavedMsg struct{ err error }
+
+// saveKeyAndContinue saves the verified key off the Update goroutine (a
+// config write, or an HTTP round-trip in client/server mode); the model is
+// selected once it was saved.
+func (m *APIKeyInput) saveKeyAndContinue() dialog.Action {
+	if m.saving {
+		return nil
+	}
+	m.saving = true
+	ws := m.com.Workspace
+	providerID, apiKey := string(m.provider.ID), m.input.Value()
+	return dialog.ActionCmd{Cmd: func() tea.Msg {
+		return apiKeySavedMsg{err: ws.SetProviderAPIKey(config.ScopeGlobal, providerID, apiKey)}
+	}}
+}
+
+// keySaved finishes saveKeyAndContinue once the save landed.
+func (m *APIKeyInput) keySaved(err error) dialog.Action {
+	m.saving = false
+	if err != nil {
+		return dialog.ActionCmd{Cmd: util.ReportError(fmt.Errorf("failed to save API key: %w", err))}
+	}
+
+	return dialog.ActionSelectModel{
+		Provider:  m.provider,
+		Model:     m.model,
+		ModelType: m.modelType,
+	}
+}

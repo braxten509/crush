@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +24,7 @@ func postAgentMain(t *testing.T, c *controllerV1, wsID, agentID string) *httptes
 	req.SetPathValue("id", wsID)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	c.handlePostWorkspaceAgentMain(rec, req)
+	c.endpointHandler(rpc.SetMainAgent)(rec, req)
 	return rec
 }
 
@@ -79,6 +80,6 @@ func TestPostAgentMain_BadRequestBody(t *testing.T) {
 	req.SetPathValue("id", wsID)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	c.handlePostWorkspaceAgentMain(rec, req)
+	c.endpointHandler(rpc.SetMainAgent)(rec, req)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }

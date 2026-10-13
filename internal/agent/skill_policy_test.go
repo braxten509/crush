@@ -1,9 +1,10 @@
 package agent
 
 import (
+	"testing"
+
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestSkillDirectoryContainsDiscoveryMetadataOnly(t *testing.T) {

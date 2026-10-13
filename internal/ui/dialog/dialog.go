@@ -10,18 +10,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// Dialog sizing constants.
-const (
-	// defaultDialogMaxWidth is the maximum width for standard dialogs.
-	defaultDialogMaxWidth = 70
-	// defaultDialogHeight is the default height for standard dialogs.
-	defaultDialogHeight = 20
-	// titleContentHeight is the height of the title content line.
-	titleContentHeight = 1
-	// inputContentHeight is the height of the input content line.
-	inputContentHeight = 1
-)
-
 // CloseKey is the default key binding to close dialogs.
 var CloseKey = key.NewBinding(
 	key.WithKeys("esc", "alt+esc"),

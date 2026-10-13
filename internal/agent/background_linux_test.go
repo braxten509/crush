@@ -14,6 +14,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,7 @@ func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 		hubs = slices.DeleteFunc(hubs, func(candidate *taskHub) bool { return candidate == h })
 		hubsMu.Unlock()
 	})
-	tool := tools.NewBashTool(env.permissions, env.workingDir, env.workingDir, &config.Attribution{TrailerStyle: config.TrailerStyleNone}, "fixture")
+	tool := shelltool.NewBashTool(env.permissions, env.workingDir, env.workingDir, &config.Attribution{TrailerStyle: config.TrailerStyleNone}, "fixture", reportStartedJob)
 	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, t.Name()))
 	defer cancel()
 	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, []string{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "=" + t.Name()})
@@ -249,7 +250,7 @@ func TestSubAgentProcessesAreNotBackground(t *testing.T) {
 func TestYoungDetachedProcessesAreBackground(t *testing.T) {
 	h := registerTestHub(t)
 	backgroundMinAge = time.Hour
-	t.Cleanup(func() { backgroundMinAge = tools.ForegroundWaitLimit })
+	t.Cleanup(func() { backgroundMinAge = shelltool.ForegroundWaitLimit })
 	startDetached(t, h, t.Name())
 	require.Len(t, BackgroundProcesses(), 1, "an orphaned command is background work even before the age limit")
 	backgroundMinAge = 0

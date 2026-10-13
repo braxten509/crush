@@ -21,6 +21,7 @@ func (w *AppWorkspace) fileHistory() (*filehistory.Store, error) {
 	}
 	return service.FileHistory(), nil
 }
+
 func (w *AppWorkspace) PreviewFiles(ctx context.Context, id, target string, fork bool) (*filehistory.Plan, error) {
 	store, err := w.fileHistory()
 	if err != nil {
@@ -48,6 +49,7 @@ func (w *AppWorkspace) PreviewFiles(ctx context.Context, id, target string, fork
 	}
 	return store.Preview(ctx, id, target)
 }
+
 func (w *AppWorkspace) PreviewUndoFiles(ctx context.Context, id string) (*filehistory.Plan, error) {
 	store, err := w.fileHistory()
 	if err != nil {
@@ -55,6 +57,7 @@ func (w *AppWorkspace) PreviewUndoFiles(ctx context.Context, id string) (*filehi
 	}
 	return store.UndoPreview(ctx, id)
 }
+
 func (w *AppWorkspace) UndoFiles(ctx context.Context, plan *filehistory.Plan) (filehistory.Result, error) {
 	agent, ok := w.app.AgentCoordinator.(interface {
 		UndoFiles(context.Context, *filehistory.Plan) (filehistory.Result, error)

@@ -1,16 +1,17 @@
 package filechange
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestRepositoryScopeIncludesSiblingAndNewFilesButNotExternalAliases(t *testing.T) {
 	root := visibleRestoreRoot(t)
-	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0700))
-	require.NoError(t, os.Mkdir(filepath.Join(root, "subdir"), 0700))
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
+	require.NoError(t, os.Mkdir(filepath.Join(root, "subdir"), 0o700))
 	outside := visibleRestoreRoot(t)
 	put(t, root, "sibling.txt", "before")
 	put(t, outside, "external.txt", "private")
@@ -49,7 +50,7 @@ func TestNoRepositoryRecordsNoFiles(t *testing.T) {
 func TestLinkedWorktreeScope(t *testing.T) {
 	root := t.TempDir()
 	put(t, root, ".git", "gitdir: /a/separate/worktree\n")
-	require.NoError(t, os.Mkdir(filepath.Join(root, "nested"), 0700))
+	require.NoError(t, os.Mkdir(filepath.Join(root, "nested"), 0o700))
 	require.Equal(t, root, RepositoryRoot(filepath.Join(root, "nested")))
 }
 
@@ -65,7 +66,7 @@ func TestReportedDeletionIsFlagOnlyEvenWithoutRepository(t *testing.T) {
 
 func TestOutsideWritesDoNotAccumulateCapturePaths(t *testing.T) {
 	root := visibleRestoreRoot(t)
-	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0700))
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
 	outside := t.TempDir()
 	process := newProcessReview(root, nil)
 	record := process.executed(nil, []string{"writer"})

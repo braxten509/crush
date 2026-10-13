@@ -14,12 +14,16 @@ import (
 func TestSavedCloneReviewShowsCopiedCheckout(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
-	call := message.ToolCall{ID: "clone", Name: "bash", Finished: true,
-		Input: `{"command":"git clone source destination"}`}
-	result := &message.ToolResult{ToolCallID: call.ID, Name: call.Name,
+	call := message.ToolCall{
+		ID: "clone", Name: "bash", Finished: true,
+		Input: `{"command":"git clone source destination"}`,
+	}
+	result := &message.ToolResult{
+		ToolCallID: call.ID, Name: call.Name,
 		Review: &filechange.Review{Root: "/workspace", Changes: []filechange.Change{
 			{Path: "/workspace/destination/main.go", After: &filechange.State{Content: strings.Repeat("line\n", 100_000)}},
-		}}}
+		}},
+	}
 	g := NewToolGroupItem(&sty)
 	g.SetChildren([]MessageItem{NewToolMessageItem(&sty, "saved", call, result, false, "")})
 	header := ansi.Strip(g.header(160))

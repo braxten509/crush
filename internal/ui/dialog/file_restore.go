@@ -1,25 +1,29 @@
 package dialog
 
 import (
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"context"
 	"fmt"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"strings"
 )
 
 const FileRestoreID = "file-restore"
 
-type ActionUndoFiles struct{}
-type ActionFileRestore struct {
-	Plan    *filehistory.Plan
-	Next    Action
-	Restore bool
-}
+type (
+	ActionUndoFiles   struct{}
+	ActionFileRestore struct {
+		Plan    *filehistory.Plan
+		Next    Action
+		Restore bool
+	}
+)
+
 type FileRestore struct {
 	com            *common.Common
 	plan           *filehistory.Plan
@@ -33,6 +37,7 @@ type FileRestore struct {
 func NewFileRestore(com *common.Common, plan *filehistory.Plan, next Action) *FileRestore {
 	return &FileRestore{com: com, plan: plan, next: next}
 }
+
 func NewFileRestoreBusy(com *common.Common, text string, cancel context.CancelFunc) *FileRestore {
 	return &FileRestore{com: com, working: text, cancel: cancel}
 }
@@ -66,6 +71,7 @@ func (d *FileRestore) HandleMsg(msg tea.Msg) Action {
 	}
 	return nil
 }
+
 func (d *FileRestore) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := d.com.Styles
 	width := max(0, min(94, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))

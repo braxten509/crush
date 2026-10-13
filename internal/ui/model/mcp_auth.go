@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
 )
 
 // isAuthTimeout reports whether an error indicates the OAuth flow was
@@ -29,8 +30,9 @@ func isAuthTimeout(err error) bool {
 // provided context. The dialog owns the context and cancels it if the
 // user closes the dialog.
 func (m *UI) authenticateMCP(ctx context.Context, name string) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
-		if err := m.com.Workspace.MCPAuthenticate(ctx, name); err != nil {
+		if err := ws.MCPAuthenticate(ctx, name); err != nil {
 			if isAuthTimeout(err) {
 				return dialog.ActionMCPAuthErrored{Name: name, Error: fmt.Errorf("authentication timed out")}
 			}
@@ -54,7 +56,7 @@ func (m *UI) openMCPAuthDialog() tea.Cmd {
 		m.dialog.BringToFront(dialog.MCPAuthID)
 		return nil
 	}
-	dlg, cmd := dialog.NewMCPAuth(m.com, pending, m.com.Workspace.MCPAuthURL)
+	dlg, cmd := mcpservers.NewMCPAuth(m.com, pending, m.com.Workspace.MCPAuthURL)
 	m.dialog.OpenDialog(dlg)
 	return cmd
 }

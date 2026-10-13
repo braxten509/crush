@@ -10,8 +10,11 @@ import (
 	"strings"
 	"sync"
 
+	agenttools "github.com/charmbracelet/crush/internal/agent/tools"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
@@ -135,16 +138,13 @@ func (m *UI) loadSession(sessionID string) tea.Cmd {
 // for server-side presence tracking, not correctness-critical
 // state.
 func (m *UI) reportCurrentSession(sessionID string) tea.Cmd {
+	ws := m.com.Workspace
 	return func() tea.Msg {
-		if err := m.com.Workspace.SetCurrentSession(context.Background(), sessionID); err != nil {
+		if err := ws.SetCurrentSession(context.Background(), sessionID); err != nil {
 			slog.Debug("Failed to report current session", "session_id", sessionID, "error", err)
 		}
 		return nil
 	}
-}
-
-func (m *UI) loadSessionFiles(sessionID string) ([]SessionFile, error) {
-	return loadSessionFiles(context.Background(), m.com.Workspace, sessionID)
 }
 
 func loadSessionFiles(ctx context.Context, ws workspace.Workspace, sessionID string) ([]SessionFile, error) {
@@ -203,8 +203,10 @@ func (m *UI) handleFileEvent(file history.File) tea.Cmd {
 		return nil
 	}
 
+	// Capture the session now: the command runs off the Update goroutine.
+	ws, sessionID := m.com.Workspace, m.session.ID
 	return func() tea.Msg {
-		sessionFiles, err := m.loadSessionFiles(m.session.ID)
+		sessionFiles, err := loadSessionFiles(context.Background(), ws, sessionID)
 		// could not load session files
 		if err != nil {
 			return util.NewErrorMsg(err)
@@ -301,11 +303,117 @@ func (m *UI) startLSPs(paths []string) tea.Cmd {
 		return nil
 	}
 
+	ws := m.com.Workspace
 	return func() tea.Msg {
 		ctx := context.Background()
 		for _, path := range paths {
-			m.com.Workspace.LSPStart(ctx, path)
+			ws.LSPStart(ctx, path)
 		}
 		return nil
 	}
+}
+
+// newSessionFromKey starts a new chat from the new-session key, unless the
+// agent is still busy.
+func (m *UI) newSessionFromKey() tea.Cmd {
+	if !m.hasSession() {
+		return nil
+	}
+	if m.isAgentBusy() {
+		return util.ReportWarn("Agent is busy, please wait before starting a new session...")
+	}
+	m.setFocus(uiFocusEditor, focusRecordOnly)
+	return m.newSession()
+}
+
+// loadInitialSession loads the initial session if one was specified on startup.
+func (m *UI) loadInitialSession() tea.Cmd {
+	switch {
+	case m.state != uiLanding:
+		// Only load if we're in landing state (i.e., fully configured)
+		return nil
+	case m.initialSessionID != "":
+		return m.loadSession(m.initialSessionID)
+	case m.continueLastSession:
+		ws := m.com.Workspace
+		return func() tea.Msg {
+			sessions, err := ws.ListSessions(context.Background())
+			if err != nil || len(sessions) == 0 {
+				return nil
+			}
+			// Loading tracks state on the UI thread; hand the ID back.
+			return openSessionMsg{id: sessions[0].ID}
+		}
+	default:
+		return nil
+	}
+}
+
+// hasSession returns true if there is an active session with a valid ID.
+func (m *UI) hasSession() bool {
+	return m.session != nil && m.session.ID != ""
+}
+
+// CurrentSession returns the active session, or nil when there is none.
+// It is safe to call after the TUI has exited.
+func (m *UI) CurrentSession() *session.Session {
+	return m.session
+}
+
+// RelaunchDir returns the project directory to restart Crush in, if any.
+func (m *UI) RelaunchSession() (string, string) { return m.relaunchSessionID, m.relaunchDataDir }
+
+func (m *UI) RelaunchDir() string {
+	return m.relaunchDir
+}
+
+// newSession clears the current session state and prepares for a new session.
+// The actual session creation happens when the user sends their first message.
+// Returns a command to reload prompt history.
+func (m *UI) newSession() tea.Cmd {
+	if !m.hasSession() {
+		return nil
+	}
+
+	draftID := m.session.ID
+	planCmd := m.resetPlanModeState()
+	m.session = nil
+	m.agentBusyCache.set(false)
+	m.chat.SetAgentBusy(false)
+	// A session still opening must not replace the new chat when it lands.
+	abandonCmd := m.abandonSessionLoad()
+	m.sidebar.offset = 0
+	m.sessionFiles = nil
+	m.sessionFileReads = nil
+	m.setState(uiLanding, uiFocusEditor)
+	m.textarea.Focus()
+	m.chat.Blur()
+	m.chat.ClearMessages()
+	m.pillsExpanded = false
+	m.pillsAutoExpanded = false
+	m.queue.clear()
+	m.invalidateBusyCaches()
+	m.queue.invalidate()
+	m.pillsView = ""
+	m.historyReset()
+	agenttools.ResetCache()
+	ws := m.com.Workspace
+	return tea.Batch(
+		m.discardEmptySession(draftID),
+		planCmd,
+		abandonCmd,
+		func() tea.Msg {
+			ws.LSPStopAll(context.Background())
+			return nil
+		},
+		func() tea.Msg {
+			// A new chat starts clean: end what the agents left running.
+			for _, p := range agent.BackgroundProcesses() {
+				_ = agent.StopBackgroundProcess(p)
+			}
+			return nil
+		},
+		m.loadPromptHistory(),
+		m.reportCurrentSession(""),
+	)
 }

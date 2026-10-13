@@ -1,0 +1,1938 @@
+=== bash {"command":"ls -la\n\techo hi"} pending (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** ls -la     echo hi
+
+### Status:
+
+Pending...
+
+=== bash {"command":"ls -la\n\techo hi"} canceled (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** ls -la     echo hi
+
+### Status:
+
+Cancelled
+
+=== bash {"command":"ls -la\n\techo hi"} result (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** ls -la     echo hi
+
+### Result:
+
+```bash
+line 1
+line 2
+```
+
+=== bash {"command":"ls -la\n\techo hi"} error (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** ls -la     echo hi
+
+### Error:
+
+boom
+
+=== bash {"command":"ls -la\n\techo hi"} image (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** ls -la     echo hi
+
+### Result:
+
+[Image: image/png]
+
+=== job_output {"shell_id":"1"} pending (*chat.baseToolMessageItem)
+## Job: Output Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Status:
+
+Pending...
+
+=== job_output {"shell_id":"1"} canceled (*chat.baseToolMessageItem)
+## Job: Output Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Status:
+
+Cancelled
+
+=== job_output {"shell_id":"1"} result (*chat.baseToolMessageItem)
+## Job: Output Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Result:
+
+line 1
+line 2
+
+=== job_output {"shell_id":"1"} error (*chat.baseToolMessageItem)
+## Job: Output Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Error:
+
+boom
+
+=== job_output {"shell_id":"1"} image (*chat.baseToolMessageItem)
+## Job: Output Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Result:
+
+[Image: image/png]
+
+=== job_kill {"shell_id":"1"} pending (*chat.baseToolMessageItem)
+## Job: Kill Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Status:
+
+Pending...
+
+=== job_kill {"shell_id":"1"} canceled (*chat.baseToolMessageItem)
+## Job: Kill Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Status:
+
+Cancelled
+
+=== job_kill {"shell_id":"1"} result (*chat.baseToolMessageItem)
+## Job: Kill Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Result:
+
+line 1
+line 2
+
+=== job_kill {"shell_id":"1"} error (*chat.baseToolMessageItem)
+## Job: Kill Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Error:
+
+boom
+
+=== job_kill {"shell_id":"1"} image (*chat.baseToolMessageItem)
+## Job: Kill Tool Call
+
+### Parameters:
+
+**Shell id:** 1
+
+### Result:
+
+[Image: image/png]
+
+=== view {"file_path":"/tmp/x.go","limit":10,"offset":5} pending (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Parameters:
+
+**File:** /tmp/x.go
+**Limit:** 10
+**Offset:** 5
+
+### Status:
+
+Pending...
+
+=== view {"file_path":"/tmp/x.go","limit":10,"offset":5} canceled (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Parameters:
+
+**File:** /tmp/x.go
+**Limit:** 10
+**Offset:** 5
+
+### Status:
+
+Cancelled
+
+=== view {"file_path":"/tmp/x.go","limit":10,"offset":5} result (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Parameters:
+
+**File:** /tmp/x.go
+**Limit:** 10
+**Offset:** 5
+
+### Result:
+
+line 1
+line 2
+
+=== view {"file_path":"/tmp/x.go","limit":10,"offset":5} error (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Parameters:
+
+**File:** /tmp/x.go
+**Limit:** 10
+**Offset:** 5
+
+### Error:
+
+boom
+
+=== view {"file_path":"/tmp/x.go","limit":10,"offset":5} image (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Parameters:
+
+**File:** /tmp/x.go
+**Limit:** 10
+**Offset:** 5
+
+### Result:
+
+[Image: image/png]
+
+=== write {"file_path":"a.go","content":"x"} pending (*chat.baseToolMessageItem)
+## Write Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Status:
+
+Pending...
+
+=== write {"file_path":"a.go","content":"x"} canceled (*chat.baseToolMessageItem)
+## Write Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Status:
+
+Cancelled
+
+=== write {"file_path":"a.go","content":"x"} result (*chat.baseToolMessageItem)
+## Write Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Result:
+
+File: a.go
+```go
+x
+```
+
+=== write {"file_path":"a.go","content":"x"} error (*chat.baseToolMessageItem)
+## Write Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Error:
+
+boom
+
+=== write {"file_path":"a.go","content":"x"} image (*chat.baseToolMessageItem)
+## Write Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Result:
+
+[Image: image/png]
+
+=== edit {"file_path":"a.go","old_string":"a","new_string":"b"} pending (*chat.baseToolMessageItem)
+## Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Status:
+
+Pending...
+
+=== edit {"file_path":"a.go","old_string":"a","new_string":"b"} canceled (*chat.baseToolMessageItem)
+## Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Status:
+
+Cancelled
+
+=== edit {"file_path":"a.go","old_string":"a","new_string":"b"} result (*chat.baseToolMessageItem)
+## Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Result:
+
+line 1
+line 2
+
+=== edit {"file_path":"a.go","old_string":"a","new_string":"b"} error (*chat.baseToolMessageItem)
+## Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Error:
+
+boom
+
+=== edit {"file_path":"a.go","old_string":"a","new_string":"b"} image (*chat.baseToolMessageItem)
+## Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+
+### Result:
+
+[Image: image/png]
+
+=== multiedit {"file_path":"a.go","edits":[{"old_string":"a","new_string":"b"}]} pending (*chat.baseToolMessageItem)
+## Multi-Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+**Edits:** 1
+
+### Status:
+
+Pending...
+
+=== multiedit {"file_path":"a.go","edits":[{"old_string":"a","new_string":"b"}]} canceled (*chat.baseToolMessageItem)
+## Multi-Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+**Edits:** 1
+
+### Status:
+
+Cancelled
+
+=== multiedit {"file_path":"a.go","edits":[{"old_string":"a","new_string":"b"}]} result (*chat.baseToolMessageItem)
+## Multi-Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+**Edits:** 1
+
+### Result:
+
+line 1
+line 2
+
+=== multiedit {"file_path":"a.go","edits":[{"old_string":"a","new_string":"b"}]} error (*chat.baseToolMessageItem)
+## Multi-Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+**Edits:** 1
+
+### Error:
+
+boom
+
+=== multiedit {"file_path":"a.go","edits":[{"old_string":"a","new_string":"b"}]} image (*chat.baseToolMessageItem)
+## Multi-Edit Tool Call
+
+### Parameters:
+
+**File:** a.go
+**Edits:** 1
+
+### Result:
+
+[Image: image/png]
+
+=== glob {"pattern":"*.go","path":"d"} pending (*chat.baseToolMessageItem)
+## Glob Tool Call
+
+### Parameters:
+
+**Pattern:** *.go
+**Path:** d
+
+### Status:
+
+Pending...
+
+=== glob {"pattern":"*.go","path":"d"} canceled (*chat.baseToolMessageItem)
+## Glob Tool Call
+
+### Parameters:
+
+**Pattern:** *.go
+**Path:** d
+
+### Status:
+
+Cancelled
+
+=== glob {"pattern":"*.go","path":"d"} result (*chat.baseToolMessageItem)
+## Glob Tool Call
+
+### Parameters:
+
+**Pattern:** *.go
+**Path:** d
+
+### Result:
+
+```
+line 1
+line 2
+```
+
+=== glob {"pattern":"*.go","path":"d"} error (*chat.baseToolMessageItem)
+## Glob Tool Call
+
+### Parameters:
+
+**Pattern:** *.go
+**Path:** d
+
+### Error:
+
+boom
+
+=== glob {"pattern":"*.go","path":"d"} image (*chat.baseToolMessageItem)
+## Glob Tool Call
+
+### Parameters:
+
+**Pattern:** *.go
+**Path:** d
+
+### Result:
+
+[Image: image/png]
+
+=== grep {"pattern":"p","path":"d","include":"*.go","literal_text":true} pending (*chat.baseToolMessageItem)
+## Grep Tool Call
+
+### Parameters:
+
+**Pattern:** p
+**Path:** d
+**Include:** *.go
+**Literal:** true
+
+### Status:
+
+Pending...
+
+=== grep {"pattern":"p","path":"d","include":"*.go","literal_text":true} canceled (*chat.baseToolMessageItem)
+## Grep Tool Call
+
+### Parameters:
+
+**Pattern:** p
+**Path:** d
+**Include:** *.go
+**Literal:** true
+
+### Status:
+
+Cancelled
+
+=== grep {"pattern":"p","path":"d","include":"*.go","literal_text":true} result (*chat.baseToolMessageItem)
+## Grep Tool Call
+
+### Parameters:
+
+**Pattern:** p
+**Path:** d
+**Include:** *.go
+**Literal:** true
+
+### Result:
+
+```
+line 1
+line 2
+```
+
+=== grep {"pattern":"p","path":"d","include":"*.go","literal_text":true} error (*chat.baseToolMessageItem)
+## Grep Tool Call
+
+### Parameters:
+
+**Pattern:** p
+**Path:** d
+**Include:** *.go
+**Literal:** true
+
+### Error:
+
+boom
+
+=== grep {"pattern":"p","path":"d","include":"*.go","literal_text":true} image (*chat.baseToolMessageItem)
+## Grep Tool Call
+
+### Parameters:
+
+**Pattern:** p
+**Path:** d
+**Include:** *.go
+**Literal:** true
+
+### Result:
+
+[Image: image/png]
+
+=== ls {"path":""} pending (*chat.baseToolMessageItem)
+## List Tool Call
+
+### Parameters:
+
+**Path:** .
+
+### Status:
+
+Pending...
+
+=== ls {"path":""} canceled (*chat.baseToolMessageItem)
+## List Tool Call
+
+### Parameters:
+
+**Path:** .
+
+### Status:
+
+Cancelled
+
+=== ls {"path":""} result (*chat.baseToolMessageItem)
+## List Tool Call
+
+### Parameters:
+
+**Path:** .
+
+### Result:
+
+```
+line 1
+line 2
+```
+
+=== ls {"path":""} error (*chat.baseToolMessageItem)
+## List Tool Call
+
+### Parameters:
+
+**Path:** .
+
+### Error:
+
+boom
+
+=== ls {"path":""} image (*chat.baseToolMessageItem)
+## List Tool Call
+
+### Parameters:
+
+**Path:** .
+
+### Result:
+
+[Image: image/png]
+
+=== download {"url":"https://x","file_path":"f","timeout":30} pending (*chat.baseToolMessageItem)
+## Download Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**File Path:** f
+**Timeout:** 30s
+
+### Status:
+
+Pending...
+
+=== download {"url":"https://x","file_path":"f","timeout":30} canceled (*chat.baseToolMessageItem)
+## Download Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**File Path:** f
+**Timeout:** 30s
+
+### Status:
+
+Cancelled
+
+=== download {"url":"https://x","file_path":"f","timeout":30} result (*chat.baseToolMessageItem)
+## Download Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**File Path:** f
+**Timeout:** 30s
+
+### Result:
+
+```
+line 1
+line 2
+```
+
+=== download {"url":"https://x","file_path":"f","timeout":30} error (*chat.baseToolMessageItem)
+## Download Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**File Path:** f
+**Timeout:** 30s
+
+### Error:
+
+boom
+
+=== download {"url":"https://x","file_path":"f","timeout":30} image (*chat.baseToolMessageItem)
+## Download Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**File Path:** f
+**Timeout:** 30s
+
+### Result:
+
+[Image: image/png]
+
+=== fetch {"url":"https://x","format":"text","timeout":5} pending (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Format:** text
+**Timeout:** 5s
+
+### Status:
+
+Pending...
+
+=== fetch {"url":"https://x","format":"text","timeout":5} canceled (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Format:** text
+**Timeout:** 5s
+
+### Status:
+
+Cancelled
+
+=== fetch {"url":"https://x","format":"text","timeout":5} result (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Format:** text
+**Timeout:** 5s
+
+### Result:
+
+URL: https://x
+Format: text
+Timeout: 5s
+
+line 1
+line 2
+
+=== fetch {"url":"https://x","format":"text","timeout":5} error (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Format:** text
+**Timeout:** 5s
+
+### Error:
+
+boom
+
+=== fetch {"url":"https://x","format":"text","timeout":5} image (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Format:** text
+**Timeout:** 5s
+
+### Result:
+
+[Image: image/png]
+
+=== sourcegraph {"query":"q","count":3,"context_window":2} pending (*chat.baseToolMessageItem)
+## Sourcegraph Tool Call
+
+### Parameters:
+
+**Query:** q
+**Count:** 3
+**Context:** 2
+
+### Status:
+
+Pending...
+
+=== sourcegraph {"query":"q","count":3,"context_window":2} canceled (*chat.baseToolMessageItem)
+## Sourcegraph Tool Call
+
+### Parameters:
+
+**Query:** q
+**Count:** 3
+**Context:** 2
+
+### Status:
+
+Cancelled
+
+=== sourcegraph {"query":"q","count":3,"context_window":2} result (*chat.baseToolMessageItem)
+## Sourcegraph Tool Call
+
+### Parameters:
+
+**Query:** q
+**Count:** 3
+**Context:** 2
+
+### Result:
+
+```
+line 1
+line 2
+```
+
+=== sourcegraph {"query":"q","count":3,"context_window":2} error (*chat.baseToolMessageItem)
+## Sourcegraph Tool Call
+
+### Parameters:
+
+**Query:** q
+**Count:** 3
+**Context:** 2
+
+### Error:
+
+boom
+
+=== sourcegraph {"query":"q","count":3,"context_window":2} image (*chat.baseToolMessageItem)
+## Sourcegraph Tool Call
+
+### Parameters:
+
+**Query:** q
+**Count:** 3
+**Context:** 2
+
+### Result:
+
+[Image: image/png]
+
+=== lsp_diagnostics {"file_path":"a.go"} pending (*chat.baseToolMessageItem)
+## Lsp Diagnostics Tool Call
+
+### Parameters:
+
+**Project:** diagnostics
+
+### Status:
+
+Pending...
+
+=== lsp_diagnostics {"file_path":"a.go"} canceled (*chat.baseToolMessageItem)
+## Lsp Diagnostics Tool Call
+
+### Parameters:
+
+**Project:** diagnostics
+
+### Status:
+
+Cancelled
+
+=== lsp_diagnostics {"file_path":"a.go"} result (*chat.baseToolMessageItem)
+## Lsp Diagnostics Tool Call
+
+### Parameters:
+
+**Project:** diagnostics
+
+### Result:
+
+```
+line 1
+line 2
+```
+
+=== lsp_diagnostics {"file_path":"a.go"} error (*chat.baseToolMessageItem)
+## Lsp Diagnostics Tool Call
+
+### Parameters:
+
+**Project:** diagnostics
+
+### Error:
+
+boom
+
+=== lsp_diagnostics {"file_path":"a.go"} image (*chat.baseToolMessageItem)
+## Lsp Diagnostics Tool Call
+
+### Parameters:
+
+**Project:** diagnostics
+
+### Result:
+
+[Image: image/png]
+
+=== agent {"prompt":"do it"} pending (*chat.AgentToolMessageItem)
+## Agent Tool Call
+
+### Parameters:
+
+**Task:**
+do it
+
+### Status:
+
+Pending...
+
+=== agent {"prompt":"do it"} canceled (*chat.AgentToolMessageItem)
+## Agent Tool Call
+
+### Parameters:
+
+**Task:**
+do it
+
+### Status:
+
+Cancelled
+
+=== agent {"prompt":"do it"} result (*chat.AgentToolMessageItem)
+## Agent Tool Call
+
+### Parameters:
+
+**Task:**
+do it
+
+### Result:
+
+```markdown
+line 1
+line 2
+```
+
+=== agent {"prompt":"do it"} error (*chat.AgentToolMessageItem)
+## Agent Tool Call
+
+### Parameters:
+
+**Task:**
+do it
+
+### Error:
+
+boom
+
+=== agent {"prompt":"do it"} image (*chat.AgentToolMessageItem)
+## Agent Tool Call
+
+### Parameters:
+
+**Task:**
+do it
+
+### Result:
+
+[Image: image/png]
+
+=== agentic_fetch {"url":"https://x","prompt":"p"} pending (*chat.AgenticFetchToolMessageItem)
+## Agentic Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Prompt:** p
+
+### Status:
+
+Pending...
+
+=== agentic_fetch {"url":"https://x","prompt":"p"} canceled (*chat.AgenticFetchToolMessageItem)
+## Agentic Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Prompt:** p
+
+### Status:
+
+Cancelled
+
+=== agentic_fetch {"url":"https://x","prompt":"p"} result (*chat.AgenticFetchToolMessageItem)
+## Agentic Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Prompt:** p
+
+### Result:
+
+URL: https://x
+Prompt: p
+
+```markdown
+line 1
+line 2
+```
+
+=== agentic_fetch {"url":"https://x","prompt":"p"} error (*chat.AgenticFetchToolMessageItem)
+## Agentic Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Prompt:** p
+
+### Error:
+
+boom
+
+=== agentic_fetch {"url":"https://x","prompt":"p"} image (*chat.AgenticFetchToolMessageItem)
+## Agentic Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+**Prompt:** p
+
+### Result:
+
+[Image: image/png]
+
+=== web_fetch {"url":"https://x"} pending (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+
+### Status:
+
+Pending...
+
+=== web_fetch {"url":"https://x"} canceled (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+
+### Status:
+
+Cancelled
+
+=== web_fetch {"url":"https://x"} result (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+
+### Result:
+
+URL: https://x
+
+```markdown
+line 1
+line 2
+```
+
+=== web_fetch {"url":"https://x"} error (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+
+### Error:
+
+boom
+
+=== web_fetch {"url":"https://x"} image (*chat.baseToolMessageItem)
+## Fetch Tool Call
+
+### Parameters:
+
+**URL:** https://x
+
+### Result:
+
+[Image: image/png]
+
+=== web_search {"query":"q"} pending (*chat.baseToolMessageItem)
+## Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Status:
+
+Pending...
+
+=== web_search {"query":"q"} canceled (*chat.baseToolMessageItem)
+## Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Status:
+
+Cancelled
+
+=== web_search {"query":"q"} result (*chat.baseToolMessageItem)
+## Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Result:
+
+line 1
+line 2
+
+=== web_search {"query":"q"} error (*chat.baseToolMessageItem)
+## Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Error:
+
+boom
+
+=== web_search {"query":"q"} image (*chat.baseToolMessageItem)
+## Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Result:
+
+[Image: image/png]
+
+=== todos {"todos":[]} pending (*chat.baseToolMessageItem)
+## To-Do Tool Call
+
+### Parameters:
+
+**Todos:** []
+
+### Status:
+
+Pending...
+
+=== todos {"todos":[]} canceled (*chat.baseToolMessageItem)
+## To-Do Tool Call
+
+### Parameters:
+
+**Todos:** []
+
+### Status:
+
+Cancelled
+
+=== todos {"todos":[]} result (*chat.baseToolMessageItem)
+## To-Do Tool Call
+
+### Parameters:
+
+**Todos:** []
+
+### Result:
+
+```
+line 1
+line 2
+```
+
+=== todos {"todos":[]} error (*chat.baseToolMessageItem)
+## To-Do Tool Call
+
+### Parameters:
+
+**Todos:** []
+
+### Error:
+
+boom
+
+=== todos {"todos":[]} image (*chat.baseToolMessageItem)
+## To-Do Tool Call
+
+### Parameters:
+
+**Todos:** []
+
+### Result:
+
+[Image: image/png]
+
+=== question {"questions":[]} pending (*chat.baseToolMessageItem)
+## Question Tool Call
+
+### Parameters:
+
+**Questions:** []
+
+### Status:
+
+Pending...
+
+=== question {"questions":[]} canceled (*chat.baseToolMessageItem)
+## Question Tool Call
+
+### Parameters:
+
+**Questions:** []
+
+### Status:
+
+Cancelled
+
+=== question {"questions":[]} result (*chat.baseToolMessageItem)
+## Question Tool Call
+
+### Parameters:
+
+**Questions:** []
+
+### Result:
+
+line 1
+line 2
+
+=== question {"questions":[]} error (*chat.baseToolMessageItem)
+## Question Tool Call
+
+### Parameters:
+
+**Questions:** []
+
+### Error:
+
+boom
+
+=== question {"questions":[]} image (*chat.baseToolMessageItem)
+## Question Tool Call
+
+### Parameters:
+
+**Questions:** []
+
+### Result:
+
+[Image: image/png]
+
+=== lsp_references {"symbol":"Foo"} pending (*chat.baseToolMessageItem)
+## Lsp References Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Pending...
+
+=== lsp_references {"symbol":"Foo"} canceled (*chat.baseToolMessageItem)
+## Lsp References Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Cancelled
+
+=== lsp_references {"symbol":"Foo"} result (*chat.baseToolMessageItem)
+## Lsp References Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+line 1
+line 2
+
+=== lsp_references {"symbol":"Foo"} error (*chat.baseToolMessageItem)
+## Lsp References Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Error:
+
+boom
+
+=== lsp_references {"symbol":"Foo"} image (*chat.baseToolMessageItem)
+## Lsp References Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+[Image: image/png]
+
+=== lsp_definition {"symbol":"Foo"} pending (*chat.baseToolMessageItem)
+## Lsp Definition Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Pending...
+
+=== lsp_definition {"symbol":"Foo"} canceled (*chat.baseToolMessageItem)
+## Lsp Definition Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Cancelled
+
+=== lsp_definition {"symbol":"Foo"} result (*chat.baseToolMessageItem)
+## Lsp Definition Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+line 1
+line 2
+
+=== lsp_definition {"symbol":"Foo"} error (*chat.baseToolMessageItem)
+## Lsp Definition Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Error:
+
+boom
+
+=== lsp_definition {"symbol":"Foo"} image (*chat.baseToolMessageItem)
+## Lsp Definition Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+[Image: image/png]
+
+=== lsp_rename {"symbol":"Foo"} pending (*chat.baseToolMessageItem)
+## Lsp Rename Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Pending...
+
+=== lsp_rename {"symbol":"Foo"} canceled (*chat.baseToolMessageItem)
+## Lsp Rename Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Cancelled
+
+=== lsp_rename {"symbol":"Foo"} result (*chat.baseToolMessageItem)
+## Lsp Rename Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+line 1
+line 2
+
+=== lsp_rename {"symbol":"Foo"} error (*chat.baseToolMessageItem)
+## Lsp Rename Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Error:
+
+boom
+
+=== lsp_rename {"symbol":"Foo"} image (*chat.baseToolMessageItem)
+## Lsp Rename Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+[Image: image/png]
+
+=== lsp_replace_symbol {"symbol":"Foo"} pending (*chat.baseToolMessageItem)
+## Lsp Replace Symbol Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Pending...
+
+=== lsp_replace_symbol {"symbol":"Foo"} canceled (*chat.baseToolMessageItem)
+## Lsp Replace Symbol Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Cancelled
+
+=== lsp_replace_symbol {"symbol":"Foo"} result (*chat.baseToolMessageItem)
+## Lsp Replace Symbol Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+line 1
+line 2
+
+=== lsp_replace_symbol {"symbol":"Foo"} error (*chat.baseToolMessageItem)
+## Lsp Replace Symbol Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Error:
+
+boom
+
+=== lsp_replace_symbol {"symbol":"Foo"} image (*chat.baseToolMessageItem)
+## Lsp Replace Symbol Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+[Image: image/png]
+
+=== lsp_call_hierarchy {"symbol":"Foo"} pending (*chat.baseToolMessageItem)
+## Lsp Call Hierarchy Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Pending...
+
+=== lsp_call_hierarchy {"symbol":"Foo"} canceled (*chat.baseToolMessageItem)
+## Lsp Call Hierarchy Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Status:
+
+Cancelled
+
+=== lsp_call_hierarchy {"symbol":"Foo"} result (*chat.baseToolMessageItem)
+## Lsp Call Hierarchy Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+line 1
+line 2
+
+=== lsp_call_hierarchy {"symbol":"Foo"} error (*chat.baseToolMessageItem)
+## Lsp Call Hierarchy Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Error:
+
+boom
+
+=== lsp_call_hierarchy {"symbol":"Foo"} image (*chat.baseToolMessageItem)
+## Lsp Call Hierarchy Tool Call
+
+### Parameters:
+
+**Symbol:** Foo
+
+### Result:
+
+[Image: image/png]
+
+=== lsp_symbols {"query":"Foo"} pending (*chat.baseToolMessageItem)
+## Lsp Symbols Tool Call
+
+### Parameters:
+
+**Query:** Foo
+
+### Status:
+
+Pending...
+
+=== lsp_symbols {"query":"Foo"} canceled (*chat.baseToolMessageItem)
+## Lsp Symbols Tool Call
+
+### Parameters:
+
+**Query:** Foo
+
+### Status:
+
+Cancelled
+
+=== lsp_symbols {"query":"Foo"} result (*chat.baseToolMessageItem)
+## Lsp Symbols Tool Call
+
+### Parameters:
+
+**Query:** Foo
+
+### Result:
+
+line 1
+line 2
+
+=== lsp_symbols {"query":"Foo"} error (*chat.baseToolMessageItem)
+## Lsp Symbols Tool Call
+
+### Parameters:
+
+**Query:** Foo
+
+### Error:
+
+boom
+
+=== lsp_symbols {"query":"Foo"} image (*chat.baseToolMessageItem)
+## Lsp Symbols Tool Call
+
+### Parameters:
+
+**Query:** Foo
+
+### Result:
+
+[Image: image/png]
+
+=== lsp_restart {"name":"gopls"} pending (*chat.baseToolMessageItem)
+## Lsp Restart Tool Call
+
+### Parameters:
+
+**Name:** gopls
+
+### Status:
+
+Pending...
+
+=== lsp_restart {"name":"gopls"} canceled (*chat.baseToolMessageItem)
+## Lsp Restart Tool Call
+
+### Parameters:
+
+**Name:** gopls
+
+### Status:
+
+Cancelled
+
+=== lsp_restart {"name":"gopls"} result (*chat.baseToolMessageItem)
+## Lsp Restart Tool Call
+
+### Parameters:
+
+**Name:** gopls
+
+### Result:
+
+line 1
+line 2
+
+=== lsp_restart {"name":"gopls"} error (*chat.baseToolMessageItem)
+## Lsp Restart Tool Call
+
+### Parameters:
+
+**Name:** gopls
+
+### Error:
+
+boom
+
+=== lsp_restart {"name":"gopls"} image (*chat.baseToolMessageItem)
+## Lsp Restart Tool Call
+
+### Parameters:
+
+**Name:** gopls
+
+### Result:
+
+[Image: image/png]
+
+=== mcp_docker_search {"query":"q"} pending (*chat.baseToolMessageItem)
+## Mcp Docker Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Status:
+
+Pending...
+
+=== mcp_docker_search {"query":"q"} canceled (*chat.baseToolMessageItem)
+## Mcp Docker Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Status:
+
+Cancelled
+
+=== mcp_docker_search {"query":"q"} result (*chat.baseToolMessageItem)
+## Mcp Docker Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Result:
+
+line 1
+line 2
+
+=== mcp_docker_search {"query":"q"} error (*chat.baseToolMessageItem)
+## Mcp Docker Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Error:
+
+boom
+
+=== mcp_docker_search {"query":"q"} image (*chat.baseToolMessageItem)
+## Mcp Docker Search Tool Call
+
+### Parameters:
+
+**Query:** q
+
+### Result:
+
+[Image: image/png]
+
+=== mcp_github_issues {"repo":"r"} pending (*chat.baseToolMessageItem)
+## Mcp Github Issues Tool Call
+
+### Parameters:
+
+**Repo:** r
+
+### Status:
+
+Pending...
+
+=== mcp_github_issues {"repo":"r"} canceled (*chat.baseToolMessageItem)
+## Mcp Github Issues Tool Call
+
+### Parameters:
+
+**Repo:** r
+
+### Status:
+
+Cancelled
+
+=== mcp_github_issues {"repo":"r"} result (*chat.baseToolMessageItem)
+## Mcp Github Issues Tool Call
+
+### Parameters:
+
+**Repo:** r
+
+### Result:
+
+line 1
+line 2
+
+=== mcp_github_issues {"repo":"r"} error (*chat.baseToolMessageItem)
+## Mcp Github Issues Tool Call
+
+### Parameters:
+
+**Repo:** r
+
+### Error:
+
+boom
+
+=== mcp_github_issues {"repo":"r"} image (*chat.baseToolMessageItem)
+## Mcp Github Issues Tool Call
+
+### Parameters:
+
+**Repo:** r
+
+### Result:
+
+[Image: image/png]
+
+=== crush_info {"topic":"t"} pending (*chat.baseToolMessageItem)
+## Crush Info Tool Call
+
+### Parameters:
+
+**Topic:** t
+
+### Status:
+
+Pending...
+
+=== crush_info {"topic":"t"} canceled (*chat.baseToolMessageItem)
+## Crush Info Tool Call
+
+### Parameters:
+
+**Topic:** t
+
+### Status:
+
+Cancelled
+
+=== crush_info {"topic":"t"} result (*chat.baseToolMessageItem)
+## Crush Info Tool Call
+
+### Parameters:
+
+**Topic:** t
+
+### Result:
+
+line 1
+line 2
+
+=== crush_info {"topic":"t"} error (*chat.baseToolMessageItem)
+## Crush Info Tool Call
+
+### Parameters:
+
+**Topic:** t
+
+### Error:
+
+boom
+
+=== crush_info {"topic":"t"} image (*chat.baseToolMessageItem)
+## Crush Info Tool Call
+
+### Parameters:
+
+**Topic:** t
+
+### Result:
+
+[Image: image/png]
+
+=== unknown_tool {"some_key":"v"} pending (*chat.baseToolMessageItem)
+## Unknown Tool Tool Call
+
+### Parameters:
+
+**Some key:** v
+
+### Status:
+
+Pending...
+
+=== unknown_tool {"some_key":"v"} canceled (*chat.baseToolMessageItem)
+## Unknown Tool Tool Call
+
+### Parameters:
+
+**Some key:** v
+
+### Status:
+
+Cancelled
+
+=== unknown_tool {"some_key":"v"} result (*chat.baseToolMessageItem)
+## Unknown Tool Tool Call
+
+### Parameters:
+
+**Some key:** v
+
+### Result:
+
+line 1
+line 2
+
+=== unknown_tool {"some_key":"v"} error (*chat.baseToolMessageItem)
+## Unknown Tool Tool Call
+
+### Parameters:
+
+**Some key:** v
+
+### Error:
+
+boom
+
+=== unknown_tool {"some_key":"v"} image (*chat.baseToolMessageItem)
+## Unknown Tool Tool Call
+
+### Parameters:
+
+**Some key:** v
+
+### Result:
+
+[Image: image/png]
+
+=== bash {"command":5} pending (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** 5
+
+### Status:
+
+Pending...
+
+=== bash {"command":5} canceled (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** 5
+
+### Status:
+
+Cancelled
+
+=== bash {"command":5} result (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** 5
+
+### Result:
+
+```bash
+line 1
+line 2
+```
+
+=== bash {"command":5} error (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** 5
+
+### Error:
+
+boom
+
+=== bash {"command":5} image (*chat.BashToolMessageItem)
+## Bash Tool Call
+
+### Parameters:
+
+**Command:** 5
+
+### Result:
+
+[Image: image/png]
+
+=== view not json pending (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Status:
+
+Pending...
+
+=== view not json canceled (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Status:
+
+Cancelled
+
+=== view not json result (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Result:
+
+line 1
+line 2
+
+=== view not json error (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Error:
+
+boom
+
+=== view not json image (*chat.baseToolMessageItem)
+## View Tool Call
+
+### Result:
+
+[Image: image/png]
+

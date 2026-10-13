@@ -16,8 +16,10 @@ import (
 // A held prompt (sent mid-turn) stays out of the chat meanwhile.
 func (m *UI) appendPendingPrompt(sessionID, content string, attachments []message.Attachment, held bool) string {
 	id := uuid.NewString()
-	pending := message.Message{ID: id, SessionID: sessionID, Role: message.User, CreatedAt: time.Now().Unix(),
-		Parts: []message.ContentPart{message.TextContent{Text: content, SubmissionID: id}}}
+	pending := message.Message{
+		ID: id, SessionID: sessionID, Role: message.User, CreatedAt: time.Now().Unix(),
+		Parts: []message.ContentPart{message.TextContent{Text: content, SubmissionID: id}},
+	}
 	for _, attachment := range attachments {
 		path := attachment.FilePath
 		if path == "" {
@@ -25,12 +27,9 @@ func (m *UI) appendPendingPrompt(sessionID, content string, attachments []messag
 		}
 		pending.Parts = append(pending.Parts, message.BinaryContent{Path: path, MIMEType: attachment.MimeType, Data: attachment.Content})
 	}
-	m.pendingPrompts = append(m.pendingPrompts, pending)
+	m.queue.pending = append(m.queue.pending, pending)
 	if held {
-		if m.heldPrompts == nil {
-			m.heldPrompts = make(map[string]bool)
-		}
-		m.heldPrompts[id] = true
+		m.queue.hold(id)
 		if m.status != nil {
 			m.updateLayoutAndSize() // the queue list grows
 		}
@@ -47,11 +46,11 @@ func (m *UI) appendPendingPrompt(sessionID, content string, attachments []messag
 // when an interrupt sends them now.
 func (m *UI) releaseHeldPrompts() {
 	released := false
-	for _, pending := range m.pendingPrompts {
-		if pending.SessionID != m.currentSessionID() || !m.heldPrompts[pending.ID] {
+	for _, pending := range m.queue.pending {
+		if pending.SessionID != m.currentSessionID() || !m.queue.held[pending.ID] {
 			continue
 		}
-		delete(m.heldPrompts, pending.ID)
+		delete(m.queue.held, pending.ID)
 		m.chat.BeginInput(pending.ID)
 		m.lastUserMessageTime = time.Now().Unix()
 		// The chat item keeps its own copy: an item pointing into
@@ -68,51 +67,20 @@ func (m *UI) releaseHeldPrompts() {
 	}
 }
 
-func (m *UI) takePendingPrompt(id string) *message.Message {
-	if id == "" {
-		return nil
-	}
-	i := slices.IndexFunc(m.pendingPrompts, func(p message.Message) bool { return p.ID == id })
-	if i < 0 {
-		return nil
-	}
-	pending := m.pendingPrompts[i]
-	m.pendingPrompts = slices.Delete(m.pendingPrompts, i, i+1)
-	delete(m.heldPrompts, id)
-	return &pending
-}
-
-type promptSubmission struct {
-	sessionID string
-	cancel    context.CancelFunc
-	queued    bool
-}
-
-func (m *UI) trackPromptSubmission(id, sessionID string, cancel context.CancelFunc, queued bool) string {
-	if id == "" {
-		id = uuid.NewString()
-	}
-	if m.submittingPrompts == nil {
-		m.submittingPrompts = make(map[string]promptSubmission)
-	}
-	m.submittingPrompts[id] = promptSubmission{sessionID: sessionID, cancel: cancel, queued: queued}
-	return id
-}
-
 func (m *UI) confirmPendingPrompt(id string) *message.Message {
 	m.chat.ConfirmInput(id)
-	pending := m.takePendingPrompt(id)
-	if pending != nil && slices.Contains(m.promptQueueItems, pending.Content().Text) {
-		if m.confirmedQueueCopies == nil {
-			m.confirmedQueueCopies = make(map[string]message.Message)
+	pending := m.queue.take(id)
+	if pending != nil && slices.Contains(m.queue.items, pending.Content().Text) {
+		if m.queue.confirmedCopies == nil {
+			m.queue.confirmedCopies = make(map[string]message.Message)
 		}
-		m.confirmedQueueCopies[id] = *pending
+		m.queue.confirmedCopies[id] = *pending
 	}
 	return pending
 }
 
 func (m *UI) finishPendingPrompt(id string, restore bool) tea.Cmd {
-	pending := m.takePendingPrompt(id)
+	pending := m.queue.take(id)
 	if pending == nil {
 		return nil
 	}
@@ -124,10 +92,7 @@ func (m *UI) finishPendingPrompt(id string, restore bool) tea.Cmd {
 	for _, binary := range pending.BinaryContent() {
 		draft.Attachments = append(draft.Attachments, message.Attachment{FilePath: binary.Path, FileName: binary.Path, MimeType: binary.MIMEType, Content: binary.Data})
 	}
-	if m.recalledDrafts == nil {
-		m.recalledDrafts = make(map[string][]message.QueuedPrompt)
-	}
-	m.recalledDrafts[pending.SessionID] = append(m.recalledDrafts[pending.SessionID], draft)
+	m.queue.recallDraft(pending.SessionID, draft)
 	if pending.SessionID == m.currentSessionID() {
 		return m.restoreRecalledDrafts()
 	}
@@ -143,11 +108,11 @@ type pendingPromptResolvedMsg struct {
 }
 
 func (m *UI) resolvePendingPrompt(id string, restoreIfMissing bool) tea.Cmd {
-	i := slices.IndexFunc(m.pendingPrompts, func(p message.Message) bool { return p.ID == id })
+	i := slices.IndexFunc(m.queue.pending, func(p message.Message) bool { return p.ID == id })
 	if i < 0 {
 		return nil
 	}
-	ws, sessionID := m.com.Workspace, m.pendingPrompts[i].SessionID
+	ws, sessionID := m.com.Workspace, m.queue.pending[i].SessionID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -171,7 +136,7 @@ func (m *UI) applyResolvedPrompt(msg pendingPromptResolvedMsg) tea.Cmd {
 		if msg.sessionID == m.currentSessionID() {
 			return m.appendSessionMessage(*msg.saved)
 		}
-		m.takePendingPrompt(msg.submissionID)
+		m.queue.take(msg.submissionID)
 		return nil
 	}
 	// Only an authoritative failed completion proves no future save can

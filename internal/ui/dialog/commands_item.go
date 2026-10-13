@@ -4,13 +4,14 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 )
 
-// CommandItem wraps a uicmd.Command to implement the ListItem interface.
+// CommandItem wraps a uicmd.Command to implement the kit.ListItem interface.
 type CommandItem struct {
 	*list.Versioned
 	id          string
@@ -27,7 +28,7 @@ type CommandItem struct {
 	muted       bool
 }
 
-var _ ListItem = &CommandItem{Versioned: list.NewVersioned()}
+var _ kit.ListItem = &CommandItem{Versioned: list.NewVersioned()}
 
 // NewCommandItem creates a new CommandItem.
 func NewCommandItem(t *styles.Styles, id, title, shortcut string, action Action) *CommandItem {
@@ -65,7 +66,7 @@ func (c *CommandItem) WithMuted(muted bool) *CommandItem {
 	return c
 }
 
-// Filter implements ListItem.
+// Filter implements kit.ListItem.
 func (c *CommandItem) Filter() string {
 	base := c.title
 	if len(c.aliases) > 0 {
@@ -77,12 +78,12 @@ func (c *CommandItem) Filter() string {
 	return base
 }
 
-// ID implements ListItem.
+// ID implements kit.ListItem.
 func (c *CommandItem) ID() string {
 	return c.id
 }
 
-// SetFocused implements ListItem.
+// SetFocused implements kit.ListItem.
 func (c *CommandItem) SetFocused(focused bool) {
 	if c.focused == focused {
 		return
@@ -94,9 +95,9 @@ func (c *CommandItem) SetFocused(focused bool) {
 	}
 }
 
-// SetMatch implements ListItem.
+// SetMatch implements kit.ListItem.
 func (c *CommandItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(c.m, m) {
+	if kit.SameFuzzyMatch(c.m, m) {
 		return
 	}
 	c.cache = nil
@@ -116,7 +117,7 @@ func (c *CommandItem) Shortcut() string {
 	return c.shortcut
 }
 
-// InfoText implements infoColumnItem; the command shortcut is its info.
+// InfoText implements kit.InfoColumnItem; the command shortcut is its info.
 func (c *CommandItem) InfoText() string {
 	return c.shortcut
 }
@@ -134,9 +135,9 @@ func (c *CommandItem) SetHideInfo(v bool) {
 	}
 }
 
-// Render implements ListItem.
+// Render implements kit.ListItem.
 func (c *CommandItem) Render(width int) string {
-	styles := ListItemStyles{
+	styles := kit.ListItemStyles{
 		ItemBlurred:     c.t.Dialog.NormalItem,
 		ItemFocused:     c.t.Dialog.SelectedItem,
 		InfoTextBlurred: c.t.Dialog.ListItem.InfoBlurred,
@@ -150,7 +151,7 @@ func (c *CommandItem) Render(width int) string {
 	if c.hideInfo {
 		shortcut = ""
 	}
-	rendered := renderItem(styles, c.title, shortcut, c.focused, width, c.cache, &c.m)
+	rendered := kit.RenderItem(styles, c.title, shortcut, c.focused, width, c.cache, &c.m)
 	if c.description != "" {
 		descStyle := c.t.Dialog.SecondaryText
 		if c.focused {

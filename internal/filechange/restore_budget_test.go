@@ -2,11 +2,12 @@ package filechange
 
 import (
 	"encoding/base64"
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func visibleRestoreRoot(t testing.TB) string {
@@ -19,6 +20,7 @@ func visibleRestoreRoot(t testing.TB) string {
 	t.Cleanup(func() { os.RemoveAll(root) })
 	return root
 }
+
 func TestCheckpointHandsOffAndDropsRestorePayload(t *testing.T) {
 	root := visibleRestoreRoot(t)
 	tracker, err := New(t.Context(), root)
@@ -41,6 +43,7 @@ func TestCheckpointHandsOffAndDropsRestorePayload(t *testing.T) {
 	require.Equal(t, value.Digest, changed.Changes[0].Before.Digest)
 	require.True(t, changed.Changes[0].Before.RestoreDigestOnly)
 }
+
 func TestCheckpointBudgetMarksRemainder(t *testing.T) {
 	root := visibleRestoreRoot(t)
 	tracker, err := New(t.Context(), root)
@@ -64,6 +67,7 @@ func TestCheckpointBudgetMarksRemainder(t *testing.T) {
 	require.LessOrEqual(t, total, 12)
 	require.Equal(t, 2, omitted)
 }
+
 func TestImportedAndGeneratedFilesRemainStatOnlyUntilEdited(t *testing.T) {
 	for _, imported := range []bool{true, false} {
 		t.Run(map[bool]string{true: "checkout", false: "artifact"}[imported], func(t *testing.T) {
@@ -116,9 +120,9 @@ func TestCommandFinalizationDoesNotReadNewBuildArtifact(t *testing.T) {
 	root := visibleRestoreRoot(t)
 	ctx, report := WithCommandReview(t.Context(), root)
 	path := filepath.Join(root, "build", "output.jar")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	BeforeOpen(ctx, path, os.O_WRONLY|os.O_CREATE)
-	require.NoError(t, os.WriteFile(path, []byte("build bytes"), 0644))
+	require.NoError(t, os.WriteFile(path, []byte("build bytes"), 0o644))
 	review := report.Finish()
 	require.Len(t, review.Changes, 1)
 	require.Empty(t, review.Changes[0].After.RestoreData)

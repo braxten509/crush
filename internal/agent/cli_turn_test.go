@@ -126,8 +126,9 @@ func TestCLICompactionAfterTools(t *testing.T) {
 	t.Parallel()
 	var statuses []bool
 	var steps int
-	s := &cliSteps{running: toolRunningForSteer(),
-		ctx: t.Context(), open: true, tools: 1,
+	s := &cliSteps{
+		running: toolRunningForSteer(),
+		ctx:     t.Context(), open: true, tools: 1,
 		onCompacting: func(active bool) error { statuses = append(statuses, active); return nil },
 		sc: fantasy.AgentStreamCall{
 			PrepareStep: func(ctx context.Context, _ fantasy.PrepareStepFunctionOptions) (context.Context, fantasy.PrepareStepResult, error) {

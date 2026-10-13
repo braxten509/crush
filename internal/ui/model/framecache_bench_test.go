@@ -10,7 +10,7 @@ func BenchmarkView_ClampedOverscroll_Cached(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		u.beginFrameUpdate()
-		u.markScrollOnly()
+		u.frame.markScrollOnly()
 		_ = u.chat.ScrollBy(5)
 		u.View()
 	}
@@ -40,7 +40,7 @@ func BenchmarkView_MovingScroll_Cached(b *testing.B) {
 	i := 0
 	for b.Loop() {
 		u.beginFrameUpdate()
-		u.markScrollOnly()
+		u.frame.markScrollOnly()
 		if i%150 == 149 {
 			u.chat.ScrollToTop()
 		} else {
@@ -83,7 +83,7 @@ func benchOscillate(b *testing.B, maxEntries int) {
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
 		u.beginFrameUpdate()
-		u.markScrollOnly()
+		u.frame.markScrollOnly()
 		_ = u.chat.ScrollBy(deltas[i%len(deltas)])
 		u.View()
 	}

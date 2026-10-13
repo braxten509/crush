@@ -45,23 +45,23 @@ func TestSendingShowsMessageBeforeAgentReceivesIt(t *testing.T) {
 	require.Empty(t, ws.submissions)
 	require.Len(t, u.chat.flat, 1)
 	require.Contains(t, u.chat.flat[0].RawRender(100), "instant")
-	require.Len(t, u.pendingPrompts[0].BinaryContent(), 1)
-	id := u.pendingPrompts[0].ID
+	require.Len(t, u.queue.pending[0].BinaryContent(), 1)
+	id := u.queue.pending[0].ID
 	runCmds(u, cmd)
 	require.Equal(t, []string{id}, ws.submissions)
-	confirmed := u.pendingPrompts[0].Clone()
+	confirmed := u.queue.pending[0].Clone()
 	confirmed.ID = "saved"
 	u.appendSessionMessage(confirmed)
 	require.Len(t, u.chat.flat, 1, "confirmation must replace, not duplicate, the submitted message")
 	require.Equal(t, "saved", u.chat.flat[0].ID())
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 }
 
 func TestIdenticalSubmissionsReconcileIndependently(t *testing.T) {
 	u, _ := newSubmissionUI()
 	u.sendMessage("same")
 	u.sendMessage("same")
-	first, second := u.pendingPrompts[0].Clone(), u.pendingPrompts[1].Clone()
+	first, second := u.queue.pending[0].Clone(), u.queue.pending[1].Clone()
 	first.ID, second.ID = "first", "second"
 	u.appendSessionMessage(second)
 	u.appendSessionMessage(first)
@@ -75,12 +75,12 @@ func TestPendingMessagesSurviveSessionReloadWithoutDuplicates(t *testing.T) {
 	u.sendMessage("pending")
 	u.setSessionMessages(nil)
 	require.Len(t, u.chat.flat, 1)
-	confirmed := u.pendingPrompts[0].Clone()
+	confirmed := u.queue.pending[0].Clone()
 	confirmed.ID = "saved"
 	u.setSessionMessages([]message.Message{confirmed})
 	require.Len(t, u.chat.flat, 1)
 	require.Equal(t, "saved", u.chat.flat[0].ID())
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 }
 
 func TestFailedSubmissionRestoresDraftAndAttachments(t *testing.T) {
@@ -88,12 +88,12 @@ func TestFailedSubmissionRestoresDraftAndAttachments(t *testing.T) {
 	ws.err = errors.New("send failed")
 	cmd := u.sendMessage("retry me", message.Attachment{FileName: "photo.png", MimeType: "image/png", Content: []byte{1}})
 	u.textarea.SetValue("new draft")
-	id := u.pendingPrompts[0].ID
+	id := u.queue.pending[0].ID
 	runCmds(u, cmd)
-	require.Len(t, u.pendingPrompts, 1, "a failed acknowledgement may still be saved later")
+	require.Len(t, u.queue.pending, 1, "a failed acknowledgement may still be saved later")
 	_, cmd = u.Update(pubsub.Event[notify.RunComplete]{Type: pubsub.UpdatedEvent, Payload: notify.RunComplete{SessionID: "s1", SubmissionID: id, Error: "send failed"}})
 	runCmds(u, cmd)
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 	require.Empty(t, u.chat.flat)
 	require.Equal(t, "new draft\n\nretry me", u.textarea.Value())
 	require.Len(t, u.attachments.List(), 1)
@@ -104,7 +104,7 @@ func TestDefinitiveLocalFailureRestoresUnsentPrompt(t *testing.T) {
 	ws.err = &message.DefinitiveSubmissionError{Err: errors.New("model refresh failed")}
 	cmd := u.sendMessage("retry me", message.Attachment{FileName: "photo.png", MimeType: "image/png", Content: []byte{1}})
 	runCmds(u, cmd)
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 	require.Empty(t, u.chat.flat)
 	require.Equal(t, "retry me", u.textarea.Value())
 	require.Len(t, u.attachments.List(), 1)
@@ -114,12 +114,12 @@ func TestDefinitiveLocalFailureKeepsSavedMessageOutOfDraft(t *testing.T) {
 	u, ws := newSubmissionUI()
 	ws.err = &message.DefinitiveSubmissionError{Err: errors.New("model error after save")}
 	cmd := u.sendMessage("saved")
-	saved := u.pendingPrompts[0].Clone()
+	saved := u.queue.pending[0].Clone()
 	saved.ID = "saved"
 	ws.saved = []message.Message{saved}
 	runCmds(u, cmd)
 	require.Empty(t, u.textarea.Value())
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 	require.Len(t, u.chat.flat, 1)
 	require.Equal(t, "saved", u.chat.flat[0].ID())
 }
@@ -127,17 +127,19 @@ func TestDefinitiveLocalFailureKeepsSavedMessageOutOfDraft(t *testing.T) {
 func TestRecallRemovesImmediateTimelineCopy(t *testing.T) {
 	u, _ := newSubmissionUI()
 	u.sendMessage("queued")
-	id := u.pendingPrompts[0].ID
+	id := u.queue.pending[0].ID
 	u.applyRecalledPrompt(queuedPromptRecalledMsg{sessionID: "s1", prompt: &message.QueuedPrompt{Prompt: "queued", SubmissionID: id}})
 	require.Empty(t, u.chat.flat)
-	require.Empty(t, u.pendingPrompts)
+	require.Empty(t, u.queue.pending)
 	require.Equal(t, "queued", u.textarea.Value())
 }
 
 func TestCancelShowsImmediatelyAndLateEventsStayCanceled(t *testing.T) {
 	u, ws := newSubmissionUI()
-	active := message.Message{ID: "assistant", SessionID: "s1", Role: message.Assistant,
-		Parts: []message.ContentPart{message.ToolCall{ID: "tool", Name: "bash", Input: `{"command":"sleep 10"}`, Finished: true}}}
+	active := message.Message{
+		ID: "assistant", SessionID: "s1", Role: message.Assistant,
+		Parts: []message.ContentPart{message.ToolCall{ID: "tool", Name: "bash", Input: `{"command":"sleep 10"}`, Finished: true}},
+	}
 	u.appendSessionMessage(active)
 	tool := u.chat.MessageItem("tool").(chat.ToolMessageItem)
 	cmd := u.interruptAgent()
@@ -163,11 +165,15 @@ func TestCancelShowsImmediatelyAndLateEventsStayCanceled(t *testing.T) {
 
 func TestCancelLeavesFinishedActionsAlone(t *testing.T) {
 	u, _ := newSubmissionUI()
-	finished := message.Message{ID: "done", SessionID: "s1", Role: message.Assistant,
-		Parts: []message.ContentPart{message.ToolCall{ID: "tool", Name: "view", Finished: true}}}
+	finished := message.Message{
+		ID: "done", SessionID: "s1", Role: message.Assistant,
+		Parts: []message.ContentPart{message.ToolCall{ID: "tool", Name: "view", Finished: true}},
+	}
 	u.appendSessionMessage(finished)
-	u.appendSessionMessage(message.Message{ID: "result", SessionID: "s1", Role: message.Tool,
-		Parts: []message.ContentPart{message.ToolResult{ToolCallID: "tool", Name: "view", Content: "done"}}})
+	u.appendSessionMessage(message.Message{
+		ID: "result", SessionID: "s1", Role: message.Tool,
+		Parts: []message.ContentPart{message.ToolResult{ToolCallID: "tool", Name: "view", Content: "done"}},
+	})
 	tool := u.chat.MessageItem("tool").(chat.ToolMessageItem)
 	status := tool.Status()
 	u.interruptAgent()
@@ -178,17 +184,19 @@ func TestCompletionBeforeConfirmationDoesNotDuplicateDraft(t *testing.T) {
 	for _, canceled := range []bool{false, true} {
 		u, ws := newSubmissionUI()
 		u.sendMessage("already saved")
-		id := u.pendingPrompts[0].ID
-		saved := u.pendingPrompts[0].Clone()
+		id := u.queue.pending[0].ID
+		saved := u.queue.pending[0].Clone()
 		saved.ID = "saved"
 		ws.saved = []message.Message{saved}
-		_, cmd := u.Update(pubsub.Event[notify.RunComplete]{Type: pubsub.UpdatedEvent,
-			Payload: notify.RunComplete{SessionID: "s1", SubmissionID: id, Error: "run ended", Cancelled: canceled}})
+		_, cmd := u.Update(pubsub.Event[notify.RunComplete]{
+			Type:    pubsub.UpdatedEvent,
+			Payload: notify.RunComplete{SessionID: "s1", SubmissionID: id, Error: "run ended", Cancelled: canceled},
+		})
 		runCmds(u, cmd)
 		u.appendSessionMessage(saved)
 		require.Empty(t, u.textarea.Value(), "saved messages must not also reappear as unsent drafts")
 		require.Len(t, u.chat.flat, 1)
 		require.Equal(t, "saved", u.chat.flat[0].ID())
-		require.Empty(t, u.pendingPrompts)
+		require.Empty(t, u.queue.pending)
 	}
 }

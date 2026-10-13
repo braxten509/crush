@@ -174,7 +174,7 @@ func newBusyUI(ws *countingWorkspace) *UI {
 		com:         com,
 		status:      NewStatus(com, nil),
 		chat:        NewChat(com, config.ScrollbarDefault),
-		textarea:    textarea.New(),
+		composer:    composer{textarea: textarea.New()},
 		state:       uiChat,
 		focus:       uiFocusEditor,
 		width:       140,
@@ -207,9 +207,9 @@ func warmCaches(m *UI, busy bool) {
 	m.agentBusyCache.set(busy)
 	m.yoloCache.set(false)
 	m.agentReady = true
-	m.promptQueueCheckedAt = time.Now()
-	m.lspCheckedAt = time.Now()
-	m.mcpCheckedAt = time.Now()
+	m.queue.checkedAt = time.Now()
+	m.lspProbe.checkedAt = time.Now()
+	m.mcpProbe.checkedAt = time.Now()
 }
 
 // runCmds executes a command tree the way the Bubble Tea runtime would,
@@ -294,7 +294,7 @@ func TestStreamingUpdatedEventsDoNotProbe(t *testing.T) {
 		"per-chunk UpdatedEvents must not probe the workspace")
 	require.False(t, m.busyFetchInFlight,
 		"per-chunk UpdatedEvents must not schedule a busy refresh")
-	require.False(t, m.promptQueueInFlight,
+	require.False(t, m.queue.inFlight,
 		"per-chunk UpdatedEvents must not schedule a queue refresh")
 }
 
@@ -315,13 +315,13 @@ func TestMessageCreatedEventRefreshesBusyAndQueue(t *testing.T) {
 	})
 	require.Zero(t, ws.syncProbes(), "the event handler itself must not probe synchronously")
 	require.True(t, m.busyFetchInFlight, "CreatedEvent must schedule a busy refresh")
-	require.True(t, m.promptQueueInFlight, "CreatedEvent must schedule a queue refresh")
+	require.True(t, m.queue.inFlight, "CreatedEvent must schedule a queue refresh")
 
 	runCmds(m, cmd)
 	require.True(t, m.isAgentBusy(), "refreshed busy state must land in the cache")
-	require.Equal(t, 1, m.promptQueue, "refreshed queue count must land in the cache")
+	require.Equal(t, 1, m.queue.count, "refreshed queue count must land in the cache")
 	require.False(t, m.busyFetchInFlight)
-	require.False(t, m.promptQueueInFlight)
+	require.False(t, m.queue.inFlight)
 }
 
 // TestAgentTerminalNotificationsRefreshBusy pins the busy→idle edge: the
@@ -344,7 +344,7 @@ func TestAgentTerminalNotificationsRefreshBusy(t *testing.T) {
 				Payload: notify.Notification{Type: typ, SessionID: "s1"},
 			})
 			require.True(t, m.busyFetchInFlight, "terminal notification must schedule a busy refresh")
-			require.True(t, m.promptQueueInFlight, "terminal notification must schedule a queue refresh")
+			require.True(t, m.queue.inFlight, "terminal notification must schedule a queue refresh")
 
 			runCmds(m, cmd)
 			require.False(t, m.isAgentBusy(),
@@ -362,18 +362,18 @@ func TestSessionSwitchRefreshesQueueAndBusy(t *testing.T) {
 	ws := &countingWorkspace{ready: true, queued: []string{"a", "b"}}
 	m := newBusyUI(ws)
 	warmCaches(m, true)
-	m.promptQueue = 5 // stale queue pill from the previous session
-	m.promptQueueItems = []string{"x", "y", "z", "w", "v"}
+	m.queue.count = 5 // stale queue pill from the previous session
+	m.queue.items = []string{"x", "y", "z", "w", "v"}
 	ws.resetCounters()
 
 	_, cmd := m.Update(loadSessionMsg{session: &session.Session{ID: "s2"}})
-	require.Zero(t, m.promptQueue, "switching sessions must drop the old session's queue pill")
-	require.True(t, m.promptQueueInFlight, "session switch must schedule a queue refresh")
+	require.Zero(t, m.queue.count, "switching sessions must drop the old session's queue pill")
+	require.True(t, m.queue.inFlight, "session switch must schedule a queue refresh")
 	require.True(t, m.busyFetchInFlight, "session switch must schedule a busy refresh")
 
 	runCmds(m, cmd)
-	require.Equal(t, 2, m.promptQueue, "the new session's queue must be fetched")
-	require.Equal(t, []string{"a", "b"}, m.promptQueueItems)
+	require.Equal(t, 2, m.queue.count, "the new session's queue must be fetched")
+	require.Equal(t, []string{"a", "b"}, m.queue.items)
 }
 
 // TestToggleYoloWritesThroughCache: both yolo toggle paths share
@@ -448,7 +448,7 @@ func TestSendMessageSetsOptimisticBusy(t *testing.T) {
 		"sendMessage must optimistically mark the agent busy")
 
 	// esc right after enter: isAgentBusy gates cancelAgent, one press cancels.
-	require.Zero(t, m.promptQueue)
+	require.Zero(t, m.queue.count)
 	runCmds(m, m.cancelAgent())
 	require.Equal(t, 1, ws.interruptCalls, "one esc press must stop the agent")
 }
@@ -467,8 +467,8 @@ func TestEscapeSendsQueuedFromCachedCount(t *testing.T) {
 			m.promptHistory.index = -1
 			warmCaches(m, true)
 			if cached {
-				m.promptQueue = len(ws.queued)
-				m.promptQueueItems = append([]string(nil), ws.queued...)
+				m.queue.count = len(ws.queued)
+				m.queue.items = append([]string(nil), ws.queued...)
 			}
 			ws.resetCounters()
 
@@ -482,8 +482,8 @@ func TestEscapeSendsQueuedFromCachedCount(t *testing.T) {
 			require.Equal(t, 1, ws.interruptCalls, "esc must interrupt and send the queue")
 			require.Equal(t, []string{"a", "b"}, ws.queued)
 			if cached {
-				require.Equal(t, 2, m.promptQueue)
-				require.Equal(t, []string{"a", "b"}, m.promptQueueItems)
+				require.Equal(t, 2, m.queue.count)
+				require.Equal(t, []string{"a", "b"}, m.queue.items)
 			}
 			require.Zero(t, ws.cancelCalls, "a plain cancel would discard the queue")
 		})
@@ -508,7 +508,7 @@ func TestEscapeQueueHelp(t *testing.T) {
 	ws := &countingWorkspace{ready: true, agentBusy: true}
 	m := newBusyUI(ws)
 	warmCaches(m, true)
-	m.promptQueue = 1
+	m.queue.count = 1
 
 	short := m.ShortHelp()
 	full := m.FullHelp()
@@ -686,16 +686,16 @@ func TestStalePromptQueueDiscardedAndReDispatched(t *testing.T) {
 	ws := &countingWorkspace{ready: true, queued: []string{"real"}}
 	m := newBusyUI(ws)
 	warmCaches(m, false)
-	m.promptQueue = 1
-	m.promptQueueItems = []string{"real"}
+	m.queue.count = 1
+	m.queue.items = []string{"real"}
 
 	// A fetch is in flight; capture its generation, then a newer transition
 	// (esc clears the queue) supersedes it.
-	m.promptQueueInFlight = true
-	staleGen := m.promptQueueGen
-	m.invalidatePromptQueue()
-	m.promptQueue = 0
-	m.promptQueueItems = nil
+	m.queue.inFlight = true
+	staleGen := m.queue.gen
+	m.queue.invalidate()
+	m.queue.count = 0
+	m.queue.items = nil
 
 	// The stale fetch (still saw one prompt) lands for the same session.
 	cmds := m.applyPromptQueue(promptQueueMsg{
@@ -703,12 +703,12 @@ func TestStalePromptQueueDiscardedAndReDispatched(t *testing.T) {
 		gen:        staleGen,
 		prompts:    []string{"stale"},
 	})
-	require.Zero(t, m.promptQueue,
+	require.Zero(t, m.queue.count,
 		"a stale queue result must not repopulate the cleared queue")
-	require.Empty(t, m.promptQueueItems)
+	require.Empty(t, m.queue.items)
 	require.NotEmpty(t, cmds,
 		"a stale queue result must re-dispatch the authoritative fetch")
-	require.True(t, m.promptQueueInFlight, "the re-dispatched fetch must be in flight")
+	require.True(t, m.queue.inFlight, "the re-dispatched fetch must be in flight")
 }
 
 // TestStalePromptQueuePreservesSessionScoping pins that the generation guard
@@ -721,15 +721,15 @@ func TestStalePromptQueuePreservesSessionScoping(t *testing.T) {
 	ws := &countingWorkspace{ready: true}
 	m := newBusyUI(ws) // active session "s1"
 	warmCaches(m, false)
-	m.promptQueueInFlight = true
-	gen := m.promptQueueGen
+	m.queue.inFlight = true
+	gen := m.queue.gen
 
 	cmds := m.applyPromptQueue(promptQueueMsg{
 		forSession: "other",
 		gen:        gen,
 		prompts:    []string{"from other session"},
 	})
-	require.Zero(t, m.promptQueue,
+	require.Zero(t, m.queue.count,
 		"a result from a different session must never populate the queue")
 	require.NotEmpty(t, cmds, "a session-mismatched result must re-fetch for the current session")
 }
@@ -746,10 +746,10 @@ func TestRenderHelpersDoNotProbeWorkspace(t *testing.T) {
 	ws := &countingWorkspace{ready: true}
 	m := newBusyUI(ws)
 	m.agentReady = true
-	m.lspStates = map[string]workspace.LSPClientInfo{
+	m.lspProbe.val.states = map[string]workspace.LSPClientInfo{
 		"gopls": {Name: "gopls", State: lsp.StateReady, DiagnosticCount: 3},
 	}
-	m.lspDiagnostics = map[string]lsp.DiagnosticCounts{
+	m.lspProbe.val.diagnostics = map[string]lsp.DiagnosticCounts{
 		"gopls": {Error: 2, Warning: 1},
 	}
 
@@ -842,10 +842,10 @@ func TestMCPStateChangedRefreshesModel(t *testing.T) {
 		Payload: mcp.Event{Type: mcp.EventStateChanged, Name: "ctx", State: mcp.StateConnected},
 	})
 	require.Zero(t, ws.syncProbes(), "the MCP event handler must not probe synchronously")
-	require.True(t, m.mcpFetchInFlight, "an MCP state change must schedule a state refresh")
+	require.True(t, m.mcpProbe.inFlight, "an MCP state change must schedule a state refresh")
 	runCmds(m, cmd)
-	require.False(t, m.mcpFetchInFlight)
-	require.Equal(t, mcp.StateConnected, m.mcpStates["ctx"].State, "fetched states must land in the cache")
+	require.False(t, m.mcpProbe.inFlight)
+	require.Equal(t, mcp.StateConnected, m.mcpProbe.val["ctx"].State, "fetched states must land in the cache")
 
 	// The rebuild is sequenced with agentModelChangedCmd; tea.Sequence's
 	// wrapper msg is unexported, so deliver the invalidation message the
@@ -881,7 +881,7 @@ func TestLSPEventRefreshIsOffThreadAndDeduped(t *testing.T) {
 		Payload: workspace.LSPEvent{Type: workspace.LSPEventDiagnosticsChanged, Name: "gopls"},
 	})
 	require.Zero(t, ws.syncProbes(), "the LSP event handler must not probe synchronously")
-	require.True(t, m.lspFetchInFlight, "an LSP event must schedule an off-thread refresh")
+	require.True(t, m.lspProbe.inFlight, "an LSP event must schedule an off-thread refresh")
 
 	// A second event while the fetch is in flight queues a re-fetch instead
 	// of stacking another dispatch.
@@ -889,13 +889,13 @@ func TestLSPEventRefreshIsOffThreadAndDeduped(t *testing.T) {
 		Payload: workspace.LSPEvent{Type: workspace.LSPEventDiagnosticsChanged, Name: "gopls"},
 	})
 	require.Zero(t, ws.syncProbes())
-	require.True(t, m.lspRefreshQueued, "an event during an in-flight fetch must queue a re-fetch")
+	require.True(t, m.lspProbe.queued, "an event during an in-flight fetch must queue a re-fetch")
 
 	runCmds(m, cmd)
-	require.False(t, m.lspFetchInFlight)
-	require.False(t, m.lspRefreshQueued, "the queued flag must clear once the re-dispatched fetch lands")
-	require.Equal(t, 3, m.lspStates["gopls"].DiagnosticCount, "fetched states must land in the cache")
-	require.Equal(t, 2, m.lspDiagnostics["gopls"].Error, "fetched severity counts must land in the cache")
+	require.False(t, m.lspProbe.inFlight)
+	require.False(t, m.lspProbe.queued, "the queued flag must clear once the re-dispatched fetch lands")
+	require.Equal(t, 3, m.lspProbe.val.states["gopls"].DiagnosticCount, "fetched states must land in the cache")
+	require.Equal(t, 2, m.lspProbe.val.diagnostics["gopls"].Error, "fetched severity counts must land in the cache")
 	require.Equal(t, 3, m.lspErrorCount())
 	require.Equal(t, 2, ws.lspStateCalls, "one fetch plus the queued re-fetch")
 }

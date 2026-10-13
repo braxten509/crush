@@ -5,10 +5,10 @@ import (
 	"errors"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/diffreview"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/chat"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
-	"github.com/charmbracelet/crush/internal/ui/diffreview"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 

@@ -63,6 +63,10 @@ type ReasoningContent struct {
 	ResponsesData    *openai.ResponsesReasoningMetadata `json:"responses_data"`
 	StartedAt        int64                              `json:"started_at,omitempty"`
 	FinishedAt       int64                              `json:"finished_at,omitempty"`
+	RedactedData     string                             `json:"redacted_data,omitempty"`
+	Placed           bool                               `json:"placed,omitempty"`
+	TextOffset       int                                `json:"text_offset,omitempty"`
+	ToolCallIndex    int                                `json:"tool_call_index,omitempty"`
 }
 
 func (tc ReasoningContent) String() string {
@@ -211,12 +215,44 @@ func (m *Message) Content() TextContent {
 }
 
 func (m *Message) ReasoningContent() ReasoningContent {
-	for _, part := range m.Parts {
-		if c, ok := part.(ReasoningContent); ok {
-			return c
+	blocks := m.ReasoningBlocks()
+	if len(blocks) == 0 {
+		return ReasoningContent{}
+	}
+	combined := blocks[0]
+	for _, block := range blocks[1:] {
+		if block.Thinking != "" {
+			if combined.Thinking != "" {
+				combined.Thinking += "\n\n"
+			}
+			combined.Thinking += block.Thinking
+		}
+		if block.FinishedAt == 0 {
+			combined.FinishedAt = 0
+		} else if combined.FinishedAt != 0 {
+			combined.FinishedAt = block.FinishedAt
 		}
 	}
-	return ReasoningContent{}
+	return combined
+}
+
+func (m *Message) ReasoningBlocks() []ReasoningContent {
+	var blocks []ReasoningContent
+	for _, part := range m.Parts {
+		if c, ok := part.(ReasoningContent); ok {
+			blocks = append(blocks, c)
+		}
+	}
+	return blocks
+}
+
+func (m *Message) lastReasoningIndex() int {
+	for i := len(m.Parts) - 1; i >= 0; i-- {
+		if _, ok := m.Parts[i].(ReasoningContent); ok {
+			return i
+		}
+	}
+	return -1
 }
 
 func (m *Message) ImageURLContent() []ImageURLContent {
@@ -316,85 +352,70 @@ func (m *Message) AppendContent(delta string) {
 	}
 }
 
+func (m *Message) StartReasoning(text string) {
+	m.Parts = append(m.Parts, ReasoningContent{
+		Thinking:      text,
+		StartedAt:     time.Now().Unix(),
+		Placed:        true,
+		TextOffset:    len(m.Content().Text),
+		ToolCallIndex: len(m.ToolCalls()),
+	})
+}
+
+func (m *Message) openReasoningIndex() int {
+	i := m.lastReasoningIndex()
+	if i == -1 || m.Parts[i].(ReasoningContent).FinishedAt != 0 {
+		m.StartReasoning("")
+		return len(m.Parts) - 1
+	}
+	return i
+}
+
 func (m *Message) AppendReasoningContent(delta string) {
-	found := false
-	for i, part := range m.Parts {
-		if c, ok := part.(ReasoningContent); ok {
-			m.Parts[i] = ReasoningContent{
-				Thinking:   c.Thinking + delta,
-				Signature:  c.Signature,
-				StartedAt:  c.StartedAt,
-				FinishedAt: c.FinishedAt,
-			}
-			found = true
-		}
-	}
-	if !found {
-		m.Parts = append(m.Parts, ReasoningContent{
-			Thinking:  delta,
-			StartedAt: time.Now().Unix(),
-		})
-	}
+	i := m.openReasoningIndex()
+	c := m.Parts[i].(ReasoningContent)
+	c.Thinking += delta
+	m.Parts[i] = c
 }
 
 func (m *Message) AppendThoughtSignature(signature string, toolCallID string) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ReasoningContent); ok {
-			m.Parts[i] = ReasoningContent{
-				Thinking:         c.Thinking,
-				ThoughtSignature: c.ThoughtSignature + signature,
-				ToolID:           toolCallID,
-				Signature:        c.Signature,
-				StartedAt:        c.StartedAt,
-				FinishedAt:       c.FinishedAt,
-			}
-			return
-		}
-	}
-	m.Parts = append(m.Parts, ReasoningContent{ThoughtSignature: signature})
+	i := m.openReasoningIndex()
+	c := m.Parts[i].(ReasoningContent)
+	c.ThoughtSignature += signature
+	c.ToolID = toolCallID
+	m.Parts[i] = c
 }
 
 func (m *Message) AppendReasoningSignature(signature string) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ReasoningContent); ok {
-			m.Parts[i] = ReasoningContent{
-				Thinking:   c.Thinking,
-				Signature:  c.Signature + signature,
-				StartedAt:  c.StartedAt,
-				FinishedAt: c.FinishedAt,
-			}
-			return
-		}
-	}
-	m.Parts = append(m.Parts, ReasoningContent{Signature: signature})
+	i := m.openReasoningIndex()
+	c := m.Parts[i].(ReasoningContent)
+	c.Signature += signature
+	m.Parts[i] = c
+}
+
+func (m *Message) SetReasoningRedactedData(data string) {
+	i := m.openReasoningIndex()
+	c := m.Parts[i].(ReasoningContent)
+	c.RedactedData = data
+	m.Parts[i] = c
 }
 
 func (m *Message) SetReasoningResponsesData(data *openai.ResponsesReasoningMetadata) {
-	for i, part := range m.Parts {
-		if c, ok := part.(ReasoningContent); ok {
-			m.Parts[i] = ReasoningContent{
-				Thinking:      c.Thinking,
-				ResponsesData: data,
-				StartedAt:     c.StartedAt,
-				FinishedAt:    c.FinishedAt,
-			}
-			return
-		}
+	i := m.lastReasoningIndex()
+	if i == -1 {
+		return
 	}
+	c := m.Parts[i].(ReasoningContent)
+	c.ResponsesData = data
+	m.Parts[i] = c
 }
 
 func (m *Message) FinishThinking() {
+	now := time.Now().Unix()
 	for i, part := range m.Parts {
-		if c, ok := part.(ReasoningContent); ok {
-			if c.FinishedAt == 0 {
-				m.Parts[i] = ReasoningContent{
-					Thinking:   c.Thinking,
-					Signature:  c.Signature,
-					StartedAt:  c.StartedAt,
-					FinishedAt: time.Now().Unix(),
-				}
-			}
-			return
+		if c, ok := part.(ReasoningContent); ok && c.FinishedAt == 0 {
+			c.FinishedAt = now
+			m.Parts[i] = c
 		}
 	}
 }
@@ -552,6 +573,78 @@ func PromptWithTextAttachments(prompt string, attachments []Attachment) string {
 	return sb.String()
 }
 
+func (m *Message) assistantParts() []fantasy.MessagePart {
+	text := m.Content().Text
+	calls := m.ToolCalls()
+	blocks := m.ReasoningBlocks()
+	placed := len(blocks) > 0
+	for _, block := range blocks {
+		placed = placed && block.Placed
+	}
+
+	var parts []fantasy.MessagePart
+	textAt, callAt := 0, 0
+	emit := func(textEnd, callEnd int) {
+		textEnd = min(max(textEnd, textAt), len(text))
+		callEnd = min(max(callEnd, callAt), len(calls))
+		if segment := strings.TrimSpace(text[textAt:textEnd]); segment != "" {
+			parts = append(parts, fantasy.TextPart{Text: segment})
+		}
+		for _, call := range calls[callAt:callEnd] {
+			parts = append(parts, fantasy.ToolCallPart{
+				ToolCallID:       call.ID,
+				ToolName:         call.Name,
+				Input:            call.Input,
+				ProviderExecuted: call.ProviderExecuted,
+			})
+		}
+		textAt, callAt = textEnd, callEnd
+	}
+
+	if !placed {
+		emit(len(text), 0)
+		for _, block := range blocks {
+			if part, ok := reasoningPart(block, false); ok {
+				parts = append(parts, part)
+			}
+		}
+		emit(len(text), len(calls))
+		return parts
+	}
+
+	for _, block := range blocks {
+		emit(block.TextOffset, block.ToolCallIndex)
+		if part, ok := reasoningPart(block, true); ok {
+			parts = append(parts, part)
+		}
+	}
+	emit(len(text), len(calls))
+	return parts
+}
+
+func reasoningPart(block ReasoningContent, withAnthropic bool) (fantasy.ReasoningPart, bool) {
+	redacted := withAnthropic && block.RedactedData != ""
+	if block.Thinking == "" && !redacted {
+		return fantasy.ReasoningPart{}, false
+	}
+	part := fantasy.ReasoningPart{Text: block.Thinking, ProviderOptions: fantasy.ProviderOptions{}}
+	if withAnthropic && block.Signature != "" {
+		part.ProviderOptions[anthropic.Name] = &anthropic.ReasoningOptionMetadata{Signature: block.Signature}
+	} else if redacted {
+		part.ProviderOptions[anthropic.Name] = &anthropic.ReasoningOptionMetadata{RedactedData: block.RedactedData}
+	}
+	if block.ResponsesData != nil {
+		part.ProviderOptions[openai.Name] = block.ResponsesData
+	}
+	if block.ThoughtSignature != "" {
+		part.ProviderOptions[google.Name] = &google.ReasoningMetadata{
+			Signature: block.ThoughtSignature,
+			ToolID:    block.ToolID,
+		}
+	}
+	return part, true
+}
+
 func (m *Message) ToAIMessage() []fantasy.Message {
 	var messages []fantasy.Message
 	switch m.Role {
@@ -598,41 +691,9 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 			Content: parts,
 		})
 	case Assistant:
-		var parts []fantasy.MessagePart
-		text := strings.TrimSpace(m.Content().Text)
-		if text != "" {
-			parts = append(parts, fantasy.TextPart{Text: text})
-		}
-		reasoning := m.ReasoningContent()
-		if reasoning.Thinking != "" {
-			reasoningPart := fantasy.ReasoningPart{Text: reasoning.Thinking, ProviderOptions: fantasy.ProviderOptions{}}
-			if reasoning.Signature != "" {
-				reasoningPart.ProviderOptions[anthropic.Name] = &anthropic.ReasoningOptionMetadata{
-					Signature: reasoning.Signature,
-				}
-			}
-			if reasoning.ResponsesData != nil {
-				reasoningPart.ProviderOptions[openai.Name] = reasoning.ResponsesData
-			}
-			if reasoning.ThoughtSignature != "" {
-				reasoningPart.ProviderOptions[google.Name] = &google.ReasoningMetadata{
-					Signature: reasoning.ThoughtSignature,
-					ToolID:    reasoning.ToolID,
-				}
-			}
-			parts = append(parts, reasoningPart)
-		}
-		for _, call := range m.ToolCalls() {
-			parts = append(parts, fantasy.ToolCallPart{
-				ToolCallID:       call.ID,
-				ToolName:         call.Name,
-				Input:            call.Input,
-				ProviderExecuted: call.ProviderExecuted,
-			})
-		}
 		messages = append(messages, fantasy.Message{
 			Role:    fantasy.MessageRoleAssistant,
-			Content: parts,
+			Content: m.assistantParts(),
 		})
 	case Tool:
 		var parts []fantasy.MessagePart

@@ -1,33 +1,42 @@
 package dialog
 
 import (
+	"context"
+	"strings"
+
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"context"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"strings"
 )
 
-const TreeID = "tree"
-const ForkID = "fork"
-const treeRootID = "__tree_root__"
+const (
+	TreeID     = "tree"
+	ForkID     = "fork"
+	treeRootID = "__tree_root__"
+)
 
-type ActionTreeJump struct{ MessageID string }
-type ActionTreeLabel struct{ MessageID, Label string }
-type ActionTreeEdit struct{ MessageID string }
-type ActionTreeCopy struct {
-	MessageID string
-	Fork      bool
-}
-type ActionTreeClone struct{}
-type ActionTreeNavigate struct {
-	MessageID, Prompt string
-	Summary           bool
-}
+type (
+	ActionTreeJump  struct{ MessageID string }
+	ActionTreeLabel struct{ MessageID, Label string }
+	ActionTreeEdit  struct{ MessageID string }
+	ActionTreeCopy  struct {
+		MessageID string
+		Fork      bool
+	}
+)
+
+type (
+	ActionTreeClone    struct{}
+	ActionTreeNavigate struct {
+		MessageID, Prompt string
+		Summary           bool
+	}
+)
 
 type Tree struct {
 	EditMessageID  string
@@ -66,6 +75,7 @@ func (d *Tree) selectedID() string {
 	}
 	return ""
 }
+
 func (d *Tree) Confirm(target, prompt string) {
 	d.EditMessageID = ""
 	d.confirming = true
@@ -166,6 +176,7 @@ func (d *Tree) rebuild() {
 	d.list.SetSelected(selected)
 	d.list.ScrollToSelected()
 }
+
 func (d *Tree) branch(direction int) {
 	counts := map[string]int{}
 	for _, e := range d.entries {
@@ -191,6 +202,7 @@ func (d *Tree) branch(direction int) {
 		}
 	}
 }
+
 func (d *Tree) HandleMsg(msg tea.Msg) Action {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		if d.cancel != nil {
@@ -284,13 +296,14 @@ func (d *Tree) HandleMsg(msg tea.Msg) Action {
 	}
 	return ActionCmd{cmd}
 }
+
 func (d *Tree) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := d.com.Styles
-	width := max(0, min(defaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
-	height := max(0, min(defaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
+	width := max(0, min(kit.DefaultDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
+	height := max(0, min(kit.DefaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	inner := max(0, width-t.Dialog.View.GetHorizontalFrameSize())
-	d.input.SetWidth(dialogInputTextWidth(t, d.input, inner))
-	listHeight, totalHeight, _ := sizeDialogList(t, d.list, inner, max(0, height-3))
+	d.input.SetWidth(kit.DialogInputTextWidth(t, d.input, inner))
+	listHeight, totalHeight, _ := kit.SizeDialogList(t, d.list, inner, max(0, height-3))
 	if totalHeight <= listHeight {
 		d.list.ScrollToTop()
 	}

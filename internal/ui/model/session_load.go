@@ -114,7 +114,7 @@ func (m *UI) beginSessionLoad(sessionID string) (context.Context, uint64, bool) 
 		id:       sessionID,
 		started:  time.Now(),
 		cancel:   cancel,
-		canceled: maps.Clone(m.canceledMessages),
+		canceled: maps.Clone(m.queue.canceled),
 		deferred: prev.deferred,
 	}
 	if prev.active && prev.id == sessionID {
@@ -183,13 +183,10 @@ func (m *UI) restoreDeferredSends(sends []deferredSend) tea.Cmd {
 		case s.shell:
 			cmds = append(cmds, util.ReportWarn("Shell command not run: the conversation did not open"))
 		case !s.hidden:
-			if m.recalledDrafts == nil {
-				m.recalledDrafts = make(map[string][]message.QueuedPrompt)
-			}
-			m.recalledDrafts[id] = append(m.recalledDrafts[id], message.QueuedPrompt{Prompt: s.content, Attachments: s.attachments})
+			m.queue.recallDraft(id, message.QueuedPrompt{Prompt: s.content, Attachments: s.attachments})
 		}
 	}
-	if len(m.recalledDrafts[id]) > 0 {
+	if len(m.queue.recalledDrafts[id]) > 0 {
 		cmds = append(cmds, m.restoreRecalledDrafts())
 	}
 	return tea.Batch(cmds...)
@@ -294,17 +291,17 @@ func (m *UI) applyLoadedSession(msg loadSessionMsg) []tea.Cmd {
 	}
 	m.setState(uiChat, m.focus)
 	m.session = sess
-	m.sidebarOffset = 0
+	m.sidebar.offset = 0
 	m.sessionFiles = msg.files
 	// Session switch: the memoized busy state and queued prompts
 	// belong to the previous session. Drop them and re-fetch
 	// off-thread so the queue pill and esc behavior track the new
 	// session instead of a stale one.
 	m.invalidateBusyCaches()
-	m.invalidatePromptQueue()
-	m.promptQueue = 0
-	m.promptQueueItems = nil
-	m.promptQueueCheckedAt = time.Time{}
+	m.queue.invalidate()
+	m.queue.count = 0
+	m.queue.items = nil
+	m.queue.checkedAt = time.Time{}
 	if cmd := m.dispatchBusyRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -398,7 +395,7 @@ func prepareTranscript(ctx context.Context, ws workspace.Workspace, sty *styles.
 // have no prepared transcript (tests, synchronous reloads).
 func (m *UI) prepareTranscriptNow(msgs []message.Message) *preparedTranscript {
 	return prepareTranscript(context.Background(), m.com.Workspace, m.com.Styles, m.com.Config(),
-		m.com.Workspace.WorkingDir(), msgs, maps.Clone(m.canceledMessages))
+		m.com.Workspace.WorkingDir(), msgs, maps.Clone(m.queue.canceled))
 }
 
 // loadNestedTools fills agent tool calls with the tools of their child
@@ -490,9 +487,9 @@ func (m *UI) setPreparedMessages(msgs []message.Message, p *preparedTranscript) 
 		m.lastUserMessageTime = p.lastUserTime
 	}
 	items := p.items[:len(p.items):len(p.items)]
-	for i := range m.pendingPrompts {
-		pending := m.pendingPrompts[i]
-		if pending.SessionID == m.currentSessionID() && !m.heldPrompts[pending.ID] {
+	for i := range m.queue.pending {
+		pending := m.queue.pending[i]
+		if pending.SessionID == m.currentSessionID() && !m.queue.held[pending.ID] {
 			items = append(items, chat.ExtractMessageItems(m.com.Styles, &pending, nil, m.com.Workspace.WorkingDir())...)
 		}
 	}
@@ -519,7 +516,7 @@ func (m *UI) applyLateCancels(msgs []message.Message, prepared map[string]struct
 	var cmds []tea.Cmd
 	for i := range msgs {
 		id := msgs[i].ID
-		if _, now := m.canceledMessages[id]; !now {
+		if _, now := m.queue.canceled[id]; !now {
 			continue
 		}
 		if _, before := prepared[id]; before || msgs[i].IsFinished() {

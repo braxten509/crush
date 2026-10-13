@@ -155,34 +155,87 @@ func (c *frameCache) reset() {
 	clear(c.entries)
 }
 
+// frameState is the UI's per-update frame memoization bookkeeping, plus the
+// last view for frames that cannot have changed.
+type frameState struct {
+	// scrollOnly is set by handlers that change nothing but the chat scroll
+	// position; dirty overrides it when a layout change happens in the same
+	// update.
+	scrollOnly bool
+	dirty      bool
+	// skipPut keeps the next rendered frame out of the cache.
+	skipPut bool
+	// gcArmed is set while the idle GC timer is pending.
+	gcArmed bool
+
+	// quiet lets the next View reuse last: set for messages that can't
+	// change the screen (background checks).
+	quiet    bool
+	last     tea.View
+	haveLast bool
+}
+
 // markScrollOnly flags the current update as having changed nothing but the
 // chat scroll position or selection, which lets View serve a memoized frame
 // for that position. Update arms the idle GC timer when the flag is set; it
 // is not returned here so callers that sequence their commands do not put a
 // blocking tick ahead of real work.
-func (m *UI) markScrollOnly() {
-	m.scrollOnlyUpdate = true
+func (f *frameState) markScrollOnly() {
+	f.scrollOnly = true
 }
 
-// invalidateFrames forces the next View to drop all memoized frames, even if
-// the current update was marked scroll-only.
-func (m *UI) invalidateFrames() {
-	m.frameDirty = true
+// invalidate forces the next View to drop all memoized frames, even if the
+// current update was marked scroll-only.
+func (f *frameState) invalidate() {
+	f.dirty = true
+}
+
+// begin clears the per-update memoization flag so a flag left over from an
+// update whose View never consumed it cannot leak into this one.
+func (f *frameState) begin() {
+	f.scrollOnly = false
+	f.skipPut = false
+}
+
+// consume reports whether the update about to be drawn was scroll-only and
+// clears the per-update flags.
+func (f *frameState) consume() bool {
+	scrollOnly := f.scrollOnly && !f.dirty
+	f.scrollOnly = false
+	f.dirty = false
+	return scrollOnly
+}
+
+// quietView returns the last view when the coming frame is quiet and one
+// exists. Either way the quiet flag is spent.
+func (f *frameState) quietView() (tea.View, bool) {
+	quiet := f.quiet && f.haveLast
+	f.quiet = false
+	if quiet {
+		return f.last, true
+	}
+	return tea.View{}, false
+}
+
+// remember stores v as the last view and returns it.
+func (f *frameState) remember(v tea.View) tea.View {
+	f.last = v
+	f.haveLast = true
+	return v
 }
 
 // beginFrameUpdate clears the per-update memoization flag so a flag left
 // over from an update whose View never consumed it cannot leak into this
 // one.
 func (m *UI) beginFrameUpdate() {
-	m.scrollOnlyUpdate = false
-	m.frameSkipPut = false
+	m.frame.begin()
 }
 
 // endFrameUpdate returns the command that arms the idle GC timer when this
 // update was scroll-only, the coming View can actually memoize a frame, and
 // no timer is pending.
 func (m *UI) endFrameUpdate() tea.Cmd {
-	if !m.scrollOnlyUpdate || !m.frameCacheable() {
+	if !m.frame.scrollOnly || !m.frameCacheable() {
 		return nil
 	}
 	return m.armFrameGC()
@@ -195,10 +248,10 @@ func (m *UI) frameCacheable() bool {
 }
 
 func (m *UI) armFrameGC() tea.Cmd {
-	if m.frames == nil || m.frameGCArmed {
+	if m.frames == nil || m.frame.gcArmed {
 		return nil
 	}
-	m.frameGCArmed = true
+	m.frame.gcArmed = true
 	return tea.Tick(m.frames.ttl, func(time.Time) tea.Msg { return frameGCMsg{} })
 }
 
@@ -209,16 +262,16 @@ func (m *UI) armFrameGC() tea.Cmd {
 // full TTL: the frame rendered by the following View is not memoized so
 // nothing stays pinned and the timer is left disarmed until the next scroll.
 func (m *UI) handleFrameGC() {
-	m.frameGCArmed = false
+	m.frame.gcArmed = false
 	if m.frames == nil {
 		return
 	}
 	m.frames.gc(m.frames.now())
 	if m.frames.Len() == 0 {
-		m.frameSkipPut = true
+		m.frame.skipPut = true
 		return
 	}
-	m.scrollOnlyUpdate = true
+	m.frame.scrollOnly = true
 }
 
 // frameKeyNow returns the key for the current state without touching the
@@ -238,9 +291,7 @@ func (m *UI) frameKeyNow() (frameKey, bool) {
 // when the update was not scroll-only, and returns the key for the frame
 // about to be rendered. ok is false when the current state is not cacheable.
 func (m *UI) currentFrameKey() (key frameKey, ok bool) {
-	scrollOnly := m.scrollOnlyUpdate && !m.frameDirty
-	m.scrollOnlyUpdate = false
-	m.frameDirty = false
+	scrollOnly := m.frame.consume()
 	if m.frames == nil {
 		return frameKey{}, false
 	}
@@ -259,13 +310,13 @@ func (m *UI) currentFrameKey() (key frameKey, ok bool) {
 // so the cache is reset instead. GC-triggered renders are not stored so the
 // cache drains fully when idle.
 func (m *UI) storeFrame(key frameKey, content string, cursor *tea.Cursor) {
-	if m.frameDirty {
-		m.frameDirty = false
+	if m.frame.dirty {
+		m.frame.dirty = false
 		m.frames.reset()
 		return
 	}
-	if m.frameSkipPut {
-		m.frameSkipPut = false
+	if m.frame.skipPut {
+		m.frame.skipPut = false
 		return
 	}
 	// Re-read the key after Draw. Rendering an item may bump its version

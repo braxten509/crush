@@ -26,8 +26,8 @@ func TestPinnedRestoreParentDoesNotFollowReplacement(t *testing.T) {
 		t.Run(action, func(t *testing.T) {
 			f := setup(t)
 			directory, outside := filepath.Join(f.root, "selected"), filepath.Join(f.root, "outside")
-			require.NoError(t, os.MkdirAll(directory, 0755))
-			require.NoError(t, os.MkdirAll(outside, 0755))
+			require.NoError(t, os.MkdirAll(directory, 0o755))
+			require.NoError(t, os.MkdirAll(outside, 0o755))
 			path := filepath.Join(directory, "file")
 			outsidePath := filepath.Join(outside, "file")
 			f.write(t, outsidePath, "outside bytes must stay untouched")
@@ -52,7 +52,7 @@ func TestPinnedRestoreParentDoesNotFollowReplacement(t *testing.T) {
 				require.Equal(t, before, now)
 				require.Equal(t, "selected bytes", string(data))
 			case "replace", "recreate":
-				require.NoError(t, target.replace([]byte("restored bytes"), 0600, before))
+				require.NoError(t, target.replace([]byte("restored bytes"), 0o600, before))
 				require.Equal(t, "restored bytes", contents(t, actual))
 			case "delete":
 				require.NoError(t, target.delete(before))
@@ -70,8 +70,8 @@ func TestMissingRestoreParentsUsePinnedAncestor(t *testing.T) {
 	f := setup(t)
 	directory, outside := filepath.Join(f.root, "selected"), filepath.Join(f.root, "outside")
 	moved := filepath.Join(f.root, "moved")
-	require.NoError(t, os.Mkdir(directory, 0755))
-	require.NoError(t, os.Mkdir(outside, 0755))
+	require.NoError(t, os.Mkdir(directory, 0o755))
+	require.NoError(t, os.Mkdir(outside, 0o755))
 	swapped := false
 	target, err := walkRestoreParents(filepath.Join(directory, "missing", "nested", "file"), true, func(opened string) {
 		if opened == directory {
@@ -80,7 +80,7 @@ func TestMissingRestoreParentsUsePinnedAncestor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer target.close()
-	require.NoError(t, target.replace([]byte("recreated"), 0600, State{}))
+	require.NoError(t, target.replace([]byte("recreated"), 0o600, State{}))
 	actual := directory
 	if swapped {
 		actual = moved
@@ -92,7 +92,7 @@ func TestMissingRestoreParentsUsePinnedAncestor(t *testing.T) {
 func TestPinnedRestoreRejectsRacedLeafSymlink(t *testing.T) {
 	f := setup(t)
 	directory := filepath.Join(f.root, "selected")
-	require.NoError(t, os.Mkdir(directory, 0755))
+	require.NoError(t, os.Mkdir(directory, 0o755))
 	path, outside := filepath.Join(directory, "file"), filepath.Join(f.root, "outside")
 	f.write(t, path, "before")
 	f.write(t, outside, "untouched")
@@ -106,7 +106,7 @@ func TestPinnedRestoreRejectsRacedLeafSymlink(t *testing.T) {
 	_, data, err := target.current()
 	require.Error(t, err)
 	require.Empty(t, data)
-	require.ErrorIs(t, target.replace([]byte("restore"), 0600, before), errRestoreChanged)
+	require.ErrorIs(t, target.replace([]byte("restore"), 0o600, before), errRestoreChanged)
 	require.ErrorIs(t, target.delete(before), errRestoreChanged)
 	require.Equal(t, "untouched", contents(t, outside))
 }
@@ -121,7 +121,7 @@ func TestPinnedRestoreRechecksOrdinaryConcurrentEdit(t *testing.T) {
 	before, _, err := target.current()
 	require.NoError(t, err)
 	f.write(t, path, "concurrent edit")
-	require.ErrorIs(t, target.replace([]byte("restore"), 0600, before), errRestoreChanged)
+	require.ErrorIs(t, target.replace([]byte("restore"), 0o600, before), errRestoreChanged)
 	require.ErrorIs(t, target.delete(before), errRestoreChanged)
 	require.Equal(t, "concurrent edit", contents(t, path))
 }

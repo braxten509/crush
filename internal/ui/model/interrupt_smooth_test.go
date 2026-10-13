@@ -30,9 +30,9 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 	warmCaches(u, true)
 	u.sendMessage("first followup")
 	u.sendMessage("second followup")
-	u.promptQueue = 2
-	u.promptQueueItems = []string{"first followup", "second followup"}
-	u.promptQueueEntries = []message.QueuedPromptSummary{{Prompt: "first followup", SubmissionID: u.pendingPrompts[0].ID}, {Prompt: "second followup", SubmissionID: u.pendingPrompts[1].ID}}
+	u.queue.count = 2
+	u.queue.items = []string{"first followup", "second followup"}
+	u.queue.entries = []message.QueuedPromptSummary{{Prompt: "first followup", SubmissionID: u.queue.pending[0].ID}, {Prompt: "second followup", SubmissionID: u.queue.pending[1].ID}}
 	u.updateLayoutAndSize()
 	require.Equal(t, []string{"first followup", "second followup"}, u.visiblePromptQueueItems(), "mid-turn prompts wait in the queue list")
 	require.Equal(t, -1, renderedRow(u.chat.list.Render(), "followup"), "and stay out of the chat")
@@ -51,8 +51,8 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 	waiting := u.chat.waitingItem
 	require.NotNil(t, waiting)
 	require.Equal(t, composer, u.layout.editor)
-	require.Len(t, u.pendingPrompts, 2)
-	require.Len(t, u.submittingPrompts, 2, "queued handoffs must not be canceled with the old worker")
+	require.Len(t, u.queue.pending, 2)
+	require.Len(t, u.queue.submitting, 2, "queued handoffs must not be canceled with the old worker")
 	require.Zero(t, u.visiblePromptQueueCount())
 	for i := 0; i < 8; i++ {
 		u.chat.Tick(animTickMsg{gen: u.chat.animGen})
@@ -62,7 +62,7 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 		require.Equal(t, renderedRow(before, "second followup"), renderedRow(frame, "second followup"))
 		require.Equal(t, composer, u.layout.editor)
 	}
-	confirmed := u.pendingPrompts[len(u.pendingPrompts)-1].Clone()
+	confirmed := u.queue.pending[len(u.queue.pending)-1].Clone()
 	confirmed.ID = "saved-second"
 	u.appendSessionMessage(confirmed)
 	require.Same(t, waiting, u.chat.waitingItem, "persisted confirmation keeps the same animation")

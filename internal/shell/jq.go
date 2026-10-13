@@ -53,93 +53,126 @@ func handleJQ(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 		return err
 	}
 
-	var (
-		rawOutput  bool
-		compact    bool
-		slurp      bool
-		nullInput  bool
-		exitStatus bool
-		rawInput   bool
-		joinOutput bool
-		argNames   []string
-		argValues  []any
-	)
+	opts, err := parseJQArgs(args, stderr)
+	if err != nil {
+		return err
+	}
+	if opts.help {
+		fmt.Fprint(stdout, jqUsage)
+		return nil
+	}
 
-	// Parse flags and extract the query.
-	var queryStr string
-	var fileArgs []string
-	i := 1 // skip "jq"
-	for i < len(args) {
+	code, err := compileJQ(opts.query, opts.argNames, stderr)
+	if err != nil {
+		return err
+	}
+
+	// Build input values.
+	inputs, err := readInputs(ctx, stdin, opts.files, opts.nullInput, opts.rawInput, opts.slurp)
+	if err != nil {
+		// Prefer surfacing ctx cancellation verbatim so timeouts are
+		// distinguishable from user input errors.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		fmt.Fprintf(stderr, "jq: %s\n", err)
+		return interp.ExitStatus(2)
+	}
+
+	return runJQ(ctx, code, inputs, opts, stdout, stderr)
+}
+
+// jqOptions holds the parsed jq command line.
+type jqOptions struct {
+	rawOutput  bool
+	compact    bool
+	slurp      bool
+	nullInput  bool
+	exitStatus bool
+	rawInput   bool
+	joinOutput bool
+	// help is set when -h or --help was given; nothing else runs then.
+	help      bool
+	argNames  []string
+	argValues []any
+	query     string
+	files     []string
+}
+
+// jqBoolFlags maps each spelling of a boolean jq flag to what it sets.
+var jqBoolFlags = map[string]func(*jqOptions){
+	"-r":               func(o *jqOptions) { o.rawOutput = true },
+	"--raw-output":     func(o *jqOptions) { o.rawOutput = true },
+	"-j":               func(o *jqOptions) { o.joinOutput, o.rawOutput = true, true },
+	"--join-output":    func(o *jqOptions) { o.joinOutput, o.rawOutput = true, true },
+	"-c":               func(o *jqOptions) { o.compact = true },
+	"--compact-output": func(o *jqOptions) { o.compact = true },
+	"-s":               func(o *jqOptions) { o.slurp = true },
+	"--slurp":          func(o *jqOptions) { o.slurp = true },
+	"-n":               func(o *jqOptions) { o.nullInput = true },
+	"--null-input":     func(o *jqOptions) { o.nullInput = true },
+	"-e":               func(o *jqOptions) { o.exitStatus = true },
+	"--exit-status":    func(o *jqOptions) { o.exitStatus = true },
+	"-R":               func(o *jqOptions) { o.rawInput = true },
+	"--raw-input":      func(o *jqOptions) { o.rawInput = true },
+}
+
+// parseJQArgs parses the flags, the filter and the input files that follow
+// args[0] ("jq"). Usage errors are reported on stderr and returned as exit
+// status 2. The filter defaults to ".".
+func parseJQArgs(args []string, stderr io.Writer) (jqOptions, error) {
+	var opts jqOptions
+	for i := 1; i < len(args); i++ {
 		arg := args[i]
+		if set, ok := jqBoolFlags[arg]; ok {
+			set(&opts)
+			continue
+		}
 		switch {
 		case arg == "-h" || arg == "--help":
-			fmt.Fprint(stdout, jqUsage)
-			return nil
-		case arg == "-r" || arg == "--raw-output":
-			rawOutput = true
-		case arg == "-j" || arg == "--join-output":
-			joinOutput = true
-			rawOutput = true
-		case arg == "-c" || arg == "--compact-output":
-			compact = true
-		case arg == "-s" || arg == "--slurp":
-			slurp = true
-		case arg == "-n" || arg == "--null-input":
-			nullInput = true
-		case arg == "-e" || arg == "--exit-status":
-			exitStatus = true
-		case arg == "-R" || arg == "--raw-input":
-			rawInput = true
-		case arg == "--arg":
+			opts.help = true
+			return opts, nil
+		case arg == "--arg" || arg == "--argjson":
 			if i+2 >= len(args) {
-				fmt.Fprintf(stderr, "jq: --arg requires name and value\n")
-				return interp.ExitStatus(2)
+				fmt.Fprintf(stderr, "jq: %s requires name and value\n", arg)
+				return opts, interp.ExitStatus(2)
 			}
-			argNames = append(argNames, "$"+args[i+1])
-			argValues = append(argValues, args[i+2])
-			i += 2
-		case arg == "--argjson":
-			if i+2 >= len(args) {
-				fmt.Fprintf(stderr, "jq: --argjson requires name and value\n")
-				return interp.ExitStatus(2)
+			var val any = args[i+2]
+			if arg == "--argjson" {
+				if err := json.Unmarshal([]byte(args[i+2]), &val); err != nil {
+					fmt.Fprintf(stderr, "jq: invalid JSON for --argjson %s: %s\n", args[i+1], err)
+					return opts, interp.ExitStatus(2)
+				}
 			}
-			var val any
-			if err := json.Unmarshal([]byte(args[i+2]), &val); err != nil {
-				fmt.Fprintf(stderr, "jq: invalid JSON for --argjson %s: %s\n", args[i+1], err)
-				return interp.ExitStatus(2)
-			}
-			argNames = append(argNames, "$"+args[i+1])
-			argValues = append(argValues, val)
+			opts.argNames = append(opts.argNames, "$"+args[i+1])
+			opts.argValues = append(opts.argValues, val)
 			i += 2
 		case arg == "--":
-			i++
 			// Remaining args are file arguments.
-			for i < len(args) {
-				fileArgs = append(fileArgs, args[i])
-				i++
-			}
-			continue
-		case strings.HasPrefix(arg, "-") && queryStr != "":
+			opts.files = append(opts.files, args[i+1:]...)
+			i = len(args)
+		case strings.HasPrefix(arg, "-") && opts.query != "":
 			fmt.Fprintf(stderr, "jq: unknown option: %s\n", arg)
-			return interp.ExitStatus(2)
+			return opts, interp.ExitStatus(2)
+		case opts.query == "":
+			opts.query = arg
 		default:
-			if queryStr == "" {
-				queryStr = arg
-			} else {
-				fileArgs = append(fileArgs, arg)
-			}
+			opts.files = append(opts.files, arg)
 		}
-		i++
 	}
-
-	if queryStr == "" {
-		queryStr = "."
+	if opts.query == "" {
+		opts.query = "."
 	}
+	return opts, nil
+}
 
+// compileJQ parses and compiles a filter that may refer to the named
+// variables. Errors are reported on stderr and returned as exit status 3.
+func compileJQ(queryStr string, argNames []string, stderr io.Writer) (*gojq.Code, error) {
 	query, err := gojq.Parse(queryStr)
 	if err != nil {
 		fmt.Fprintf(stderr, "jq: %s\n", err)
-		return interp.ExitStatus(3)
+		return nil, interp.ExitStatus(3)
 	}
 
 	opts := []gojq.CompilerOption{
@@ -152,24 +185,16 @@ func handleJQ(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 	code, err := gojq.Compile(query, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "jq: %s\n", err)
-		return interp.ExitStatus(3)
+		return nil, interp.ExitStatus(3)
 	}
+	return code, nil
+}
 
-	// Build input values.
-	inputs, err := readInputs(ctx, stdin, fileArgs, nullInput, rawInput, slurp)
-	if err != nil {
-		// Prefer surfacing ctx cancellation verbatim so timeouts are
-		// distinguishable from user input errors.
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-		fmt.Fprintf(stderr, "jq: %s\n", err)
-		return interp.ExitStatus(2)
-	}
-
+// runJQ runs the filter on each input and writes the results.
+func runJQ(ctx context.Context, code *gojq.Code, inputs []any, opts jqOptions, stdout, stderr io.Writer) error {
 	var lastFalsy bool
 	for _, input := range inputs {
-		iter := code.Run(input, argValues...)
+		iter := code.Run(input, opts.argValues...)
 		for {
 			// Poll ctx on every value so a long-running filter (e.g. a
 			// generator over a slurped array) can be interrupted by hook
@@ -185,16 +210,16 @@ func handleJQ(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 				fmt.Fprintf(stderr, "jq: %s\n", err)
 				return interp.ExitStatus(5)
 			}
-			if exitStatus {
+			if opts.exitStatus {
 				lastFalsy = v == nil || v == false
 			}
-			if err := writeValue(stdout, v, rawOutput, compact, joinOutput); err != nil {
+			if err := writeValue(stdout, v, opts.rawOutput, opts.compact, opts.joinOutput); err != nil {
 				return err
 			}
 		}
 	}
 
-	if exitStatus && lastFalsy {
+	if opts.exitStatus && lastFalsy {
 		return interp.ExitStatus(1)
 	}
 	return nil

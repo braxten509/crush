@@ -136,7 +136,7 @@ done
 	turn("s1")
 	m.ID = "other" // A different model needs its own process.
 	turn("s1")
-	takeClaude("keep-test", claudeKey{}, "") // Close the parked one.
+	claudeSessions.take("keep-test", claudeKey{}, "") // Close the parked one.
 
 	data, err := os.ReadFile(starts)
 	require.NoError(t, err)

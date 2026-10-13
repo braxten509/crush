@@ -21,7 +21,7 @@ func TestReviewSequentialActionsRetainRestoreSupport(t *testing.T) {
 		r := p.executed(nil, []string{"writer", id})
 		path := filepath.Join(root, "file-"+id)
 		p.before(r, path)
-		require.NoError(t, os.WriteFile(path, []byte("12345678"), 0600))
+		require.NoError(t, os.WriteFile(path, []byte("12345678"), 0o600))
 		review := p.End(id)
 		require.NotNil(t, review)
 		require.Len(t, review.Changes, 1)

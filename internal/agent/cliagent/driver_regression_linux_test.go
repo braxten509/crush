@@ -39,7 +39,7 @@ echo '{"method":"item/started","params":{"item":{"type":"userMessage","id":"u2",
 echo '{"method":"turn/completed","params":{"turn":{"id":"next","status":"completed"}}}'
 cat >/dev/null
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	ready := make(chan struct{}, 1)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -47,7 +47,8 @@ cat >/dev/null
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	consumed, confirmed := 0, 0
-	err := model.Run(ctx, Turn{SessionID: "steer-transition", Prompt: "fixture", SteerReady: ready,
+	err := model.Run(ctx, Turn{
+		SessionID: "steer-transition", Prompt: "fixture", SteerReady: ready,
 		SteerInput: func() (string, []message.Attachment) {
 			consumed++
 			if consumed > 1 {
@@ -199,7 +200,7 @@ cat <<'OUTPUT'
 OUTPUT
 cat >/dev/null
 `
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
 			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 			previous := steerEchoTimeout
 			steerEchoTimeout = 40 * time.Millisecond
@@ -235,8 +236,8 @@ func TestAGYCredentialLookupUsesFetchDeadline(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-tool"), []byte("#!/bin/sh\nsleep 30 &\nwait\n"), 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte("#!/bin/sh\nexit 1\n"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-tool"), []byte("#!/bin/sh\nsleep 30 &\nwait\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
 	started := time.Now()
 	_, err := fetchAGYLimits(context.Background())
 	require.ErrorIs(t, err, context.DeadlineExceeded)

@@ -40,9 +40,11 @@ func setup(t *testing.T) *fixture {
 	require.NoError(t, err)
 	return f
 }
+
 func state(text string) *filechange.State {
-	return &filechange.State{Content: text, Size: int64(len(text)), Mode: 0644}
+	return &filechange.State{Content: text, Size: int64(len(text)), Mode: 0o644}
 }
+
 func (f *fixture) change(t *testing.T, id, path string, before, after *filechange.State) {
 	t.Helper()
 	f.count++
@@ -50,16 +52,19 @@ func (f *fixture) change(t *testing.T, id, path string, before, after *filechang
 	require.NoError(t, err)
 	require.NoError(t, f.store.Capture(t.Context(), "chat", id, id, &filechange.Review{Root: f.root, Changes: []filechange.Change{{Path: path, Before: before, After: after, Order: f.count}}}))
 }
+
 func (f *fixture) write(t *testing.T, path, content string) {
 	t.Helper()
-	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
+
 func contents(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return string(data)
 }
+
 func TestSameBranchRestoreUndoAndRestart(t *testing.T) {
 	f := setup(t)
 	path := filepath.Join(f.root, "notes.txt")
@@ -82,6 +87,7 @@ func TestSameBranchRestoreUndoAndRestart(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "second\n", contents(t, path))
 }
+
 func TestCrossBranchAndCreatedDeletedModes(t *testing.T) {
 	f := setup(t)
 	p := filepath.Join(f.root, "file")
@@ -91,7 +97,7 @@ func TestCrossBranchAndCreatedDeletedModes(t *testing.T) {
 	f.change(t, "old", p, state("root"), state("old"))
 	f.change(t, "created", created, nil, state("created"))
 	mode := state("deleted")
-	mode.Mode = 0750
+	mode.Mode = 0o750
 	f.change(t, "deleted", deleted, mode, nil)
 	require.NoError(t, f.q.SwitchTree(t.Context(), "chat", "root"))
 	f.change(t, "other", p, state("root"), state("other"))
@@ -109,8 +115,9 @@ func TestCrossBranchAndCreatedDeletedModes(t *testing.T) {
 	require.Equal(t, "deleted", contents(t, deleted))
 	info, err := os.Stat(deleted)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0750), info.Mode().Perm())
+	require.Equal(t, os.FileMode(0o750), info.Mode().Perm())
 }
+
 func TestConflictsSkippedAndRechecked(t *testing.T) {
 	f := setup(t)
 	p := filepath.Join(f.root, "file")
@@ -137,6 +144,7 @@ func TestConflictsSkippedAndRechecked(t *testing.T) {
 	require.Contains(t, r.Skipped, q)
 	require.Equal(t, "later manual", contents(t, q))
 }
+
 func TestTooLargeHiddenAndBinary(t *testing.T) {
 	f := setup(t)
 	p := filepath.Join(f.root, "large")
@@ -153,7 +161,7 @@ func TestTooLargeHiddenAndBinary(t *testing.T) {
 	require.NoError(t, f.conn.QueryRow(`SELECT count(*) FROM file_history_changes WHERE path=?`, hidden).Scan(&n))
 	require.Zero(t, n)
 	binary := []byte{0, 255, 2, 0}
-	snapshot := &filechange.State{RestoreData: base64.StdEncoding.EncodeToString(binary), Omitted: "Binary file", Mode: 0644, Size: 4}
+	snapshot := &filechange.State{RestoreData: base64.StdEncoding.EncodeToString(binary), Omitted: "Binary file", Mode: 0o644, Size: 4}
 	p = filepath.Join(f.root, "binary")
 	f.change(t, "binary", p, snapshot, state("now"))
 	f.write(t, p, "now")
@@ -163,13 +171,14 @@ func TestTooLargeHiddenAndBinary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(binary), contents(t, p))
 }
+
 func TestBudgetEvictionAndChatDeletionGC(t *testing.T) {
 	f := setup(t)
 	p := filepath.Join(f.root, "file")
 	data := make([]byte, 4096)
 	_, err := rand.Read(data)
 	require.NoError(t, err)
-	before := &filechange.State{Mode: 0644, Size: int64(len(data)), RestoreData: base64.StdEncoding.EncodeToString(data)}
+	before := &filechange.State{Mode: 0o644, Size: int64(len(data)), RestoreData: base64.StdEncoding.EncodeToString(data)}
 	f.change(t, "a", p, before, state("after"))
 	f.write(t, p, "after")
 	// The existing object is deduplicated across before/after and tool flushes.
@@ -193,6 +202,7 @@ func TestBudgetEvictionAndChatDeletionGC(t *testing.T) {
 	require.NoError(t, f.conn.QueryRow(`SELECT count(*) FROM file_history_changes`).Scan(&n))
 	require.Zero(t, n)
 }
+
 func TestCopyKeepsIndependentHistory(t *testing.T) {
 	f := setup(t)
 	p := filepath.Join(f.root, "file")
@@ -208,6 +218,7 @@ func TestCopyKeepsIndependentHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "before", contents(t, p))
 }
+
 func TestSymlinkAndStalePreviewRefused(t *testing.T) {
 	f := setup(t)
 	p := filepath.Join(f.root, "file")
@@ -233,14 +244,14 @@ func TestBudgetEvictsOldestChatFirst(t *testing.T) {
 	data := make([]byte, 2048)
 	_, err := rand.Read(data)
 	require.NoError(t, err)
-	f.change(t, "old", p, nil, &filechange.State{Mode: 0644, Size: 2048, RestoreData: base64.StdEncoding.EncodeToString(data)})
+	f.change(t, "old", p, nil, &filechange.State{Mode: 0o644, Size: 2048, RestoreData: base64.StdEncoding.EncodeToString(data)})
 	_, err = f.q.CreateSession(t.Context(), db.CreateSessionParams{ID: "new", Title: "new"})
 	require.NoError(t, err)
 	_, err = f.q.CreateMessage(t.Context(), db.CreateMessageParams{ID: "new", SessionID: "new", Role: "tool", Parts: "[]"})
 	require.NoError(t, err)
 	_, err = rand.Read(data)
 	require.NoError(t, err)
-	require.NoError(t, f.store.Capture(t.Context(), "new", "new", "call", &filechange.Review{Root: f.root, Changes: []filechange.Change{{Path: p, After: &filechange.State{Mode: 0644, Size: 2048, RestoreData: base64.StdEncoding.EncodeToString(data)}}}}))
+	require.NoError(t, f.store.Capture(t.Context(), "new", "new", "call", &filechange.Review{Root: f.root, Changes: []filechange.Change{{Path: p, After: &filechange.State{Mode: 0o644, Size: 2048, RestoreData: base64.StdEncoding.EncodeToString(data)}}}}))
 	f.store.Budget = 2300
 	require.NoError(t, f.store.Maintain(t.Context()))
 	var oldSaved, newSaved int

@@ -469,15 +469,39 @@ func (c *Commands) defaultCommands() []*CommandItem {
 
 	// Only show compact command if there's an active session
 	if c.hasSession {
-		commands = append(commands, NewCommandItem(c.com.Styles, "undo-file-restore", "Undo Last File Restore", "", ActionUndoFiles{}))
-		commands = append(commands, NewCommandItem(c.com.Styles, "tree", "Session Tree", "", ActionOpenDialog{TreeID}))
-		commands = append(commands, NewCommandItem(c.com.Styles, "fork", "Fork from Prompt", "", ActionOpenDialog{ForkID}))
-		commands = append(commands, NewCommandItem(c.com.Styles, "clone", "Clone Current Branch", "", ActionTreeClone{}))
-		commands = append(commands, NewCommandItem(c.com.Styles, "summarize", "Summarize Session", "", ActionSummarize{SessionID: c.sessionID}).WithAliases("compact"))
+		commands = append(commands, c.sessionCommands()...)
 	}
 
-	// Add reasoning toggle for models that support it
 	cfg := c.com.Config()
+	commands = append(commands, c.modelCommands(cfg)...)
+	commands = append(commands, c.layoutCommands()...)
+	commands = append(commands, c.toolCommands(cfg)...)
+	commands = append(commands, c.appCommands()...)
+	commands = append(commands, c.preferenceCommands(cfg)...)
+	commands = append(
+		commands,
+		NewCommandItem(c.com.Styles, "quit", "Quit", "ctrl+c", tea.QuitMsg{}).WithAliases("exit"),
+	)
+
+	return commands
+}
+
+// sessionCommands returns the commands that act on the open session.
+func (c *Commands) sessionCommands() []*CommandItem {
+	var commands []*CommandItem
+	commands = append(commands, NewCommandItem(c.com.Styles, "undo-file-restore", "Undo Last File Restore", "", ActionUndoFiles{}))
+	commands = append(commands, NewCommandItem(c.com.Styles, "tree", "Session Tree", "", ActionOpenDialog{TreeID}))
+	commands = append(commands, NewCommandItem(c.com.Styles, "fork", "Fork from Prompt", "", ActionOpenDialog{ForkID}))
+	commands = append(commands, NewCommandItem(c.com.Styles, "clone", "Clone Current Branch", "", ActionTreeClone{}))
+	commands = append(commands, NewCommandItem(c.com.Styles, "summarize", "Summarize Session", "", ActionSummarize{SessionID: c.sessionID}).WithAliases("compact"))
+	return commands
+}
+
+// modelCommands returns the toggles the coder model supports: FAST
+// mode, Ultracode, thinking and reasoning effort.
+func (c *Commands) modelCommands(cfg *config.Config) []*CommandItem {
+	var commands []*CommandItem
+	// Add reasoning toggle for models that support it
 	if agentCfg, ok := cfg.Agents[config.AgentCoder]; ok {
 		providerCfg := cfg.GetProviderForModel(agentCfg.Model)
 		model := cfg.GetModelByType(agentCfg.Model)
@@ -515,6 +539,13 @@ func (c *Commands) defaultCommands() []*CommandItem {
 			}
 		}
 	}
+	return commands
+}
+
+// layoutCommands returns the commands that depend on the window and
+// the model: the sidebar toggle and the file picker.
+func (c *Commands) layoutCommands() []*CommandItem {
+	var commands []*CommandItem
 	// Only show toggle compact mode command if window width is larger than compact breakpoint (120)
 	if c.windowWidth >= sidebarCompactModeBreakpoint && c.hasSession {
 		commands = append(commands, NewCommandItem(c.com.Styles, "toggle_sidebar", "Toggle Sidebar", "", ActionToggleCompactMode{}))
@@ -529,7 +560,13 @@ func (c *Commands) defaultCommands() []*CommandItem {
 			}))
 		}
 	}
+	return commands
+}
 
+// toolCommands returns the external editor, MCP, pills and
+// notification commands.
+func (c *Commands) toolCommands(cfg *config.Config) []*CommandItem {
+	var commands []*CommandItem
 	// Add external editor command if $EDITOR is available.
 	//
 	// TODO: Use [tea.EnvMsg] to get environment variable instead of os.Getenv;
@@ -572,7 +609,12 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	// Add a command for selecting notification style via picker dialog.
 	notificationLabel := "Notification Style"
 	commands = append(commands, NewCommandItem(c.com.Styles, "select_notifications", notificationLabel, "", ActionOpenDialog{DialogID: NotificationsID}))
+	return commands
+}
 
+// appCommands returns the commands that are always offered.
+func (c *Commands) appCommands() []*CommandItem {
+	var commands []*CommandItem
 	commands = append(
 		commands,
 		NewCommandItem(c.com.Styles, "toggle_yolo", "Toggle Yolo Mode", "ctrl+y", ActionToggleYoloMode{}),
@@ -588,7 +630,13 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "skills", "Skills", "", ActionOpenDialog{SkillsID}).WithAliases("install skills", "enable skills", "disable skills"),
 		NewCommandItem(c.com.Styles, "kept_skills", "Skills for this chat", "", ActionOpenDialog{KeptSkillsID}).WithAliases("keep skills on", "remind skills every message", "bring skills back after compression"),
 	)
+	return commands
+}
 
+// preferenceCommands returns the display and input preference
+// toggles, labelled for their current state.
+func (c *Commands) preferenceCommands(cfg *config.Config) []*CommandItem {
+	var commands []*CommandItem
 	// Add transparent background toggle.
 	// Crush's theme background, or the terminal's own (transparent).
 	transparentLabel := "Use Terminal Background"
@@ -622,12 +670,6 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		}
 		commands = append(commands, NewCommandItem(c.com.Styles, "toggle_agent_cpus", cpuLabel, "", ActionToggleAgentCPUs{}).WithAliases("cpu", "cores", "stutter"))
 	}
-
-	commands = append(
-		commands,
-		NewCommandItem(c.com.Styles, "quit", "Quit", "ctrl+c", tea.QuitMsg{}).WithAliases("exit"),
-	)
-
 	return commands
 }
 

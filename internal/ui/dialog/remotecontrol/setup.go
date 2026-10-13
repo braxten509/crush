@@ -1,4 +1,4 @@
-package dialog
+package remotecontrol
 
 import (
 	"image"
@@ -9,11 +9,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
-
-const RemoteSetupID = "remote_setup"
 
 type ActionRemoteSetup struct{ Action string }
 type ActionRemoteSetupClose struct{}
@@ -32,7 +31,7 @@ func NewRemoteSetup(com *common.Common) *RemoteSetup {
 	return &RemoteSetup{com: com, checking: true}
 }
 
-func (*RemoteSetup) ID() string { return RemoteSetupID }
+func (*RemoteSetup) ID() string { return dialog.RemoteSetupID }
 
 func (r *RemoteSetup) SetInfo(info remote.SetupInfo) {
 	if r.info.State != info.State {
@@ -51,7 +50,7 @@ func (r *RemoteSetup) choices() []string {
 	return []string{r.info.Button, "Check again", "Cancel"}
 }
 
-func (r *RemoteSetup) activate() Action {
+func (r *RemoteSetup) activate() dialog.Action {
 	choices := r.choices()
 	if r.selected == len(choices)-1 {
 		return ActionRemoteSetupClose{}
@@ -62,11 +61,11 @@ func (r *RemoteSetup) activate() Action {
 	return ActionRemoteSetup{Action: "check"}
 }
 
-func (r *RemoteSetup) HandleMsg(msg tea.Msg) Action {
+func (r *RemoteSetup) HandleMsg(msg tea.Msg) dialog.Action {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
-		case key.Matches(msg, CloseKey):
+		case key.Matches(msg, dialog.CloseKey):
 			return ActionRemoteSetupClose{}
 		case msg.String() == "shift+tab":
 			r.selected = (r.selected + len(r.choices()) - 1) % len(r.choices())
@@ -117,12 +116,12 @@ func (r *RemoteSetup) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		buttonRow = strings.Join(buttons, "\n")
 	}
 	buttonLine := lipgloss.Height(text)
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "Remote Control"
 	rc.AddPart(text + "\n" + lipgloss.PlaceHorizontal(inner, lipgloss.Center, buttonRow))
 	rc.Help = t.Dialog.HelpView.Render(ansi.Truncate("←/→ choose · enter confirm · esc cancel", max(0, inner-t.Dialog.HelpView.GetHorizontalFrameSize()), ""))
 	view := rc.Render()
-	DrawCenter(scr, area, view)
+	dialog.DrawCenter(scr, area, view)
 	// Hit boxes use the rendered frame geometry, including its title line.
 	frameWidth, frameHeight := lipgloss.Width(view), lipgloss.Height(view)
 	center := common.CenterRect(area, frameWidth, frameHeight)

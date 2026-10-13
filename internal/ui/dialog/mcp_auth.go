@@ -17,9 +17,6 @@ import (
 	"github.com/pkg/browser"
 )
 
-// MCPAuthID is the identifier for the MCP authentication dialog.
-const MCPAuthID = "mcp_auth"
-
 // MCPAuthState represents the current state of the MCP auth flow.
 type MCPAuthState int
 

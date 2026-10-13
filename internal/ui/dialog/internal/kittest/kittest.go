@@ -3,9 +3,11 @@
 package kittest
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/ui/list"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/sahilm/fuzzy"
 	"github.com/stretchr/testify/require"
 )
@@ -52,4 +54,20 @@ func EquivMatch(seed fuzzy.Match) fuzzy.Match {
 		Score:          seed.Score,
 		MatchedIndexes: append([]int(nil), seed.MatchedIndexes...),
 	}
+}
+
+// ScreenText flattens the screen buffer into newline-separated rows.
+func ScreenText(scr uv.ScreenBuffer) string {
+	bounds := scr.Bounds()
+	rows := make([]string, bounds.Dy())
+	for y := range bounds.Dy() {
+		var b strings.Builder
+		for x := range bounds.Dx() {
+			if cell := scr.CellAt(x, y); cell != nil {
+				b.WriteString(cell.Content)
+			}
+		}
+		rows[y] = b.String()
+	}
+	return strings.Join(rows, "\n")
 }

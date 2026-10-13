@@ -1,4 +1,4 @@
-package dialog
+package remotecontrol
 
 import (
 	"image"
@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kittest"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ func TestRemoteSetupRenderingAndMouse(t *testing.T) {
 		d.SetInfo(remote.SetupInfo{State: remote.SetupMissing, Title: "Install Tailscale", Detail: "Tailscale connects this computer privately to Pocket Agents. The official installer may ask for your computer password.", Action: "install", Button: "Install Tailscale"})
 		scr := uv.NewScreenBuffer(width, 30)
 		d.Draw(scr, image.Rect(0, 0, width, 30))
-		text := screenText(scr)
+		text := kittest.ScreenText(scr)
 		if width == 80 || width == 32 {
 			t.Logf("Terminal width %d:\n%s", width, text)
 		}

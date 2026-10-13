@@ -1,4 +1,6 @@
-package dialog
+// Package remotecontrol holds the Remote Control dialogs: the share status
+// view and the setup flow.
+package remotecontrol
 
 import (
 	"strings"
@@ -8,16 +10,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
-const (
-	// RemoteID is the identifier for the Remote Control dialog.
-	RemoteID             = "remote"
-	remoteDialogMaxWidth = 56
-)
+const remoteDialogMaxWidth = 56
 
 // ActionRemoteOff stops sharing the window with the phone.
 type ActionRemoteOff struct{}
@@ -44,7 +43,7 @@ type Remote struct {
 	}
 }
 
-var _ Dialog = (*Remote)(nil)
+var _ dialog.Dialog = (*Remote)(nil)
 
 // NewRemote creates the Remote Control dialog. status is read on every draw
 // so the phone list stays current.
@@ -61,28 +60,28 @@ func NewRemote(com *common.Common, status func() RemoteStatus) *Remote {
 		key.WithKeys("enter", " "),
 		key.WithHelp("enter", "confirm"),
 	)
-	r.keyMap.Close = CloseKey
+	r.keyMap.Close = dialog.CloseKey
 	return r
 }
 
 // ID implements [Dialog].
 func (*Remote) ID() string {
-	return RemoteID
+	return dialog.RemoteID
 }
 
 // HandleMsg implements [Dialog].
-func (r *Remote) HandleMsg(msg tea.Msg) Action {
+func (r *Remote) HandleMsg(msg tea.Msg) dialog.Action {
 	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, r.keyMap.Close):
-			return ActionClose{}
+			return dialog.ActionClose{}
 		case key.Matches(msg, r.keyMap.LeftRight, r.keyMap.Tab):
 			r.turnOff = !r.turnOff
 		case key.Matches(msg, r.keyMap.EnterSpace):
 			if r.turnOff {
 				return ActionRemoteOff{}
 			}
-			return ActionClose{}
+			return dialog.ActionClose{}
 		}
 	}
 	return nil
@@ -121,11 +120,11 @@ func (r *Remote) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}, " ")
 	body = append(body, lipgloss.PlaceHorizontal(innerWidth, lipgloss.Center, buttons))
 
-	rc := NewRenderContext(t, width)
+	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "Remote Control"
 	rc.AddPart(lipgloss.JoinVertical(lipgloss.Left, body...))
 	rc.Help = kit.RenderDialogHelp(t, &r.help, r, innerWidth)
-	DrawCenter(scr, area, rc.Render())
+	dialog.DrawCenter(scr, area, rc.Render())
 	return nil
 }
 

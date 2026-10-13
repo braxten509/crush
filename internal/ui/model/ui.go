@@ -60,6 +60,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
 	"github.com/charmbracelet/crush/internal/ui/dialog/sessions"
 	"github.com/charmbracelet/crush/internal/ui/dialog/models"
 	"github.com/charmbracelet/crush/internal/ui/dialog/theme"
@@ -2838,11 +2839,11 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionQuit:
 		cmds = append(cmds, tea.Quit)
-	case dialog.ActionRemoteOff:
+	case remotecontrol.ActionRemoteOff:
 		cmds = append(cmds, m.stopRemote())
-	case dialog.ActionRemoteSetup:
+	case remotecontrol.ActionRemoteSetup:
 		cmds = append(cmds, m.runRemoteSetup(msg.Action))
-	case dialog.ActionRemoteSetupClose:
+	case remotecontrol.ActionRemoteSetupClose:
 		m.closeRemoteSetup()
 	case dialog.ActionEnableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)

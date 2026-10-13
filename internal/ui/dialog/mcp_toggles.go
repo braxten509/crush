@@ -13,9 +13,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// MCPTogglesID is the identifier for the MCP toggles dialog.
-const MCPTogglesID = "mcp_toggles"
-
 // MCPToggleItem describes one configured MCP server in the toggles dialog.
 type MCPToggleItem struct {
 	Name string

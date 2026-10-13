@@ -30,4 +30,16 @@ const (
 
 	// SessionsID is the identifier for the session selector dialog.
 	SessionsID = "session"
+
+	// RemoteID is the identifier for the Remote Control dialog.
+	RemoteID = "remote"
+
+	// RemoteSetupID is the identifier for the Remote Control setup dialog.
+	RemoteSetupID = "remote_setup"
+
+	// MCPAuthID is the identifier for the MCP authentication dialog.
+	MCPAuthID = "mcp_auth"
+
+	// MCPTogglesID is the identifier for the MCP toggles dialog.
+	MCPTogglesID = "mcp_toggles"
 )

@@ -25,14 +25,14 @@ func BenchmarkTrackBatch(b *testing.B) {
 				directory := root
 				if hidden {
 					directory = filepath.Join(root, ".cache")
-					if err := os.Mkdir(directory, 0700); err != nil {
+					if err := os.Mkdir(directory, 0o700); err != nil {
 						b.Fatal(err)
 					}
 				}
 				paths := make([]string, count)
 				for i := range count {
 					paths[i] = filepath.Join(directory, fmt.Sprint(i))
-					if err := os.WriteFile(paths[i], []byte("fixture content\n"), 0600); err != nil {
+					if err := os.WriteFile(paths[i], []byte("fixture content\n"), 0o600); err != nil {
 						b.Fatal(err)
 					}
 				}

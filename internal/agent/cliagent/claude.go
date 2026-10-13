@@ -430,8 +430,10 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 			return
 		}
 		lastContextRequest = time.Now()
-		_ = p.send(map[string]any{"type": "control_request", "request_id": "crush-context",
-			"request": map[string]any{"subtype": "get_context_usage", "detail": "summary"}})
+		_ = p.send(map[string]any{
+			"type": "control_request", "request_id": "crush-context",
+			"request": map[string]any{"subtype": "get_context_usage", "detail": "summary"},
+		})
 	}
 	started := false
 	// Armed while waiting on steered messages after a result; Claude

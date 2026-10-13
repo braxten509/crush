@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/skills"
-	"net/http"
 )
 
 func (c *Client) InstalledSkills(ctx context.Context, id string) ([]skills.InstalledSkill, error) {

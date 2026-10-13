@@ -51,8 +51,10 @@ func requireAnswerBox(t *testing.T, sty styles.Styles, scr uv.ScreenBuffer, top,
 func TestFreeTextAnswerBox(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
-	d := NewFreeText(&sty, question.Question{ID: "q", Type: question.TypeFreeText,
-		Text: "What would you like to learn?", Description: "Name a topic."})
+	d := NewFreeText(&sty, question.Question{
+		ID: "q", Type: question.TypeFreeText,
+		Text: "What would you like to learn?", Description: "Name a topic.",
+	})
 	d.SetFocused(true)
 	d.editor.SetValue("Go")
 	const width = 100

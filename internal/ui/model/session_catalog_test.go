@@ -1,11 +1,12 @@
 package model
 
 import (
+	"testing"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestSavedSessionReopensItsOriginalFolder(t *testing.T) {

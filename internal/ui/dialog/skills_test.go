@@ -1,9 +1,11 @@
 package dialog
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
 	"errors"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -11,7 +13,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type skillManagementStub struct {
@@ -37,6 +38,7 @@ func TestSuccessfulSkillMutationStillRefreshesCommandsAfterListFailure(t *testin
 	require.Error(t, msg.Err)
 	require.IsType(t, ActionSkillsChanged{}, d.HandleMsg(msg))
 }
+
 func (s *skillManagementStub) SetSkillEnabled(_ context.Context, name string, enabled bool) error {
 	s.changes++
 	for i := range s.entries {
@@ -46,6 +48,7 @@ func (s *skillManagementStub) SetSkillEnabled(_ context.Context, name string, en
 	}
 	return nil
 }
+
 func (s *skillManagementStub) InstallSkill(context.Context, skills.DirectorySkill) error {
 	s.installed++
 	return nil

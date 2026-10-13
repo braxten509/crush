@@ -28,8 +28,10 @@ type turnFileReview struct {
 }
 
 func (a *sessionAgent) startFileReview(ctx context.Context, sessionID string) *turnFileReview {
-	r := &turnFileReview{messages: a.messages, sessionID: sessionID,
-		trackers: map[string]*filechange.Tracker{}, results: map[string]string{}}
+	r := &turnFileReview{
+		messages: a.messages, sessionID: sessionID,
+		trackers: map[string]*filechange.Tracker{}, results: map[string]string{},
+	}
 	_, r.cli = a.largeModel.Get().Model.(*cliagent.Model)
 	var root string
 	exclude := []string{config.GlobalCacheDir(), filepath.Dir(config.GlobalConfigData())}

@@ -22,6 +22,7 @@ func catalogFixture(t *testing.T) (Catalog, *sql.DB) {
 	require.NoError(t, projects.Register(directory, data))
 	return Catalog{Directory: directory, DataDirectory: data}, conn
 }
+
 func catalogChat(t *testing.T, conn *sql.DB, id, parent, role, parts string, stamp int64) {
 	t.Helper()
 	var parentID any
@@ -37,12 +38,14 @@ func catalogChat(t *testing.T, conn *sql.DB, id, parent, role, parts string, sta
 	_, err = conn.ExecContext(t.Context(), "UPDATE sessions SET updated_at=? WHERE id=?", stamp, id)
 	require.NoError(t, err)
 }
+
 func catalogExists(t *testing.T, conn *sql.DB, id string) bool {
 	t.Helper()
 	var exists bool
 	require.NoError(t, conn.QueryRowContext(t.Context(), "SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?)", id).Scan(&exists))
 	return exists
 }
+
 func TestCatalogListsCurrentFolderAndDiscardsOnlyItsAbandonedEmptyChats(t *testing.T) {
 	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(t.TempDir(), "data"))
 	first, a := catalogFixture(t)
@@ -86,6 +89,7 @@ func TestCatalogListsCurrentFolderAndDiscardsOnlyItsAbandonedEmptyChats(t *testi
 	require.False(t, catalogExists(t, b, "assistant-only"))
 	require.True(t, catalogExists(t, a, "selected-empty"))
 }
+
 func TestCatalogChangesStayInTheOriginalDatabase(t *testing.T) {
 	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(t.TempDir(), "data"))
 	first, a := catalogFixture(t)

@@ -158,7 +158,7 @@ send({'method':'item/completed','params':{'item':{'type':'commandExecution','id'
 send({'method':'turn/completed','params':{'turn':{'id':'turn','status':'completed'}}})
 sys.stdin.read()
 `, commandJSON)
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0o755))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	events, err := collect(t, "codex", "")
 	require.NoError(t, err)

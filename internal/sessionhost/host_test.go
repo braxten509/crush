@@ -319,8 +319,10 @@ func TestListShowsSessionDetails(t *testing.T) {
 		Status{Title: "Notes", Dir: filepath.Join(home, "notes"), Model: "Opus · High", State: StateReady},
 	)
 	text := screenText(h)
-	for _, want := range []string{"Sessions [3]", "+ Session | + Terminal", "‹", h.activityMark() + " Remote setup", "  crush", "! Inbox cleanup",
-		"⠶ Notes", "  notes"} {
+	for _, want := range []string{
+		"Sessions [3]", "+ Session | + Terminal", "‹", h.activityMark() + " Remote setup", "  crush", "! Inbox cleanup",
+		"⠶ Notes", "  notes",
+	} {
 		require.Contains(t, text, want)
 	}
 	require.NotContains(t, text, "alt+s hide", "the list has no key hint")

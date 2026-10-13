@@ -1,11 +1,12 @@
 package config
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/tidwall/gjson"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestSkillTogglesPersistWithoutClobberingOtherInstances(t *testing.T) {

@@ -136,8 +136,10 @@ func TestRecallRemovesImmediateTimelineCopy(t *testing.T) {
 
 func TestCancelShowsImmediatelyAndLateEventsStayCanceled(t *testing.T) {
 	u, ws := newSubmissionUI()
-	active := message.Message{ID: "assistant", SessionID: "s1", Role: message.Assistant,
-		Parts: []message.ContentPart{message.ToolCall{ID: "tool", Name: "bash", Input: `{"command":"sleep 10"}`, Finished: true}}}
+	active := message.Message{
+		ID: "assistant", SessionID: "s1", Role: message.Assistant,
+		Parts: []message.ContentPart{message.ToolCall{ID: "tool", Name: "bash", Input: `{"command":"sleep 10"}`, Finished: true}},
+	}
 	u.appendSessionMessage(active)
 	tool := u.chat.MessageItem("tool").(chat.ToolMessageItem)
 	cmd := u.interruptAgent()
@@ -163,11 +165,15 @@ func TestCancelShowsImmediatelyAndLateEventsStayCanceled(t *testing.T) {
 
 func TestCancelLeavesFinishedActionsAlone(t *testing.T) {
 	u, _ := newSubmissionUI()
-	finished := message.Message{ID: "done", SessionID: "s1", Role: message.Assistant,
-		Parts: []message.ContentPart{message.ToolCall{ID: "tool", Name: "view", Finished: true}}}
+	finished := message.Message{
+		ID: "done", SessionID: "s1", Role: message.Assistant,
+		Parts: []message.ContentPart{message.ToolCall{ID: "tool", Name: "view", Finished: true}},
+	}
 	u.appendSessionMessage(finished)
-	u.appendSessionMessage(message.Message{ID: "result", SessionID: "s1", Role: message.Tool,
-		Parts: []message.ContentPart{message.ToolResult{ToolCallID: "tool", Name: "view", Content: "done"}}})
+	u.appendSessionMessage(message.Message{
+		ID: "result", SessionID: "s1", Role: message.Tool,
+		Parts: []message.ContentPart{message.ToolResult{ToolCallID: "tool", Name: "view", Content: "done"}},
+	})
 	tool := u.chat.MessageItem("tool").(chat.ToolMessageItem)
 	status := tool.Status()
 	u.interruptAgent()
@@ -182,8 +188,10 @@ func TestCompletionBeforeConfirmationDoesNotDuplicateDraft(t *testing.T) {
 		saved := u.pendingPrompts[0].Clone()
 		saved.ID = "saved"
 		ws.saved = []message.Message{saved}
-		_, cmd := u.Update(pubsub.Event[notify.RunComplete]{Type: pubsub.UpdatedEvent,
-			Payload: notify.RunComplete{SessionID: "s1", SubmissionID: id, Error: "run ended", Cancelled: canceled}})
+		_, cmd := u.Update(pubsub.Event[notify.RunComplete]{
+			Type:    pubsub.UpdatedEvent,
+			Payload: notify.RunComplete{SessionID: "s1", SubmissionID: id, Error: "run ended", Cancelled: canceled},
+		})
 		runCmds(u, cmd)
 		u.appendSessionMessage(saved)
 		require.Empty(t, u.textarea.Value(), "saved messages must not also reappear as unsent drafts")

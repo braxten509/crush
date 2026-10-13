@@ -18,8 +18,10 @@ func TestMidTurnPromptWaitsInQueueList(t *testing.T) {
 	require.Empty(t, u.chat.flat)
 	require.Equal(t, []string{"later"}, u.visiblePromptQueueItems(), "listed before the agent's queue is fetched")
 	id := u.pendingPrompts[0].ID
-	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.promptQueueGen,
-		prompts: []string{"later"}, entries: []message.QueuedPromptSummary{{Prompt: "later", SubmissionID: id}}})
+	u.applyPromptQueue(promptQueueMsg{
+		forSession: "s1", gen: u.promptQueueGen,
+		prompts: []string{"later"}, entries: []message.QueuedPromptSummary{{Prompt: "later", SubmissionID: id}},
+	})
 	require.Equal(t, []string{"later"}, u.visiblePromptQueueItems(), "listed once the agent reports it")
 	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "later")
 

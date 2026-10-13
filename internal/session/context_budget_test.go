@@ -1,9 +1,10 @@
 package session
 
 import (
+	"testing"
+
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestContextBudgetSurvivesReloadAndUsageUpdates(t *testing.T) {

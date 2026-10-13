@@ -2,9 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"net/http"
+
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/sessioncatalog"
-	"net/http"
 )
 
 func (c *controllerV1) handleSavedSessions(w http.ResponseWriter, r *http.Request) {

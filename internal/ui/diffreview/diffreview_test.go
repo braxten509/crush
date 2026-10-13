@@ -79,11 +79,13 @@ func TestSnapshotPresenceAndNetChanges(t *testing.T) {
 func TestSnapshotBinaryAndModeChanges(t *testing.T) {
 	t.Parallel()
 	files := Build([]Edit{
-		{Path: "image", Snapshot: &filechange.Change{Path: "image",
+		{Path: "image", Snapshot: &filechange.Change{
+			Path:   "image",
 			Before: &filechange.State{Digest: "old", Size: 50, Mode: 0o644, Omitted: "Binary file"},
 			After:  &filechange.State{Digest: "new", Size: 50, Mode: 0o644, Omitted: "Binary file"},
 		}},
-		{Path: "script", Snapshot: &filechange.Change{Path: "script",
+		{Path: "script", Snapshot: &filechange.Change{
+			Path:   "script",
 			Before: &filechange.State{Content: "script", Mode: 0o644},
 			After:  &filechange.State{Content: "script", Mode: 0o755},
 		}},

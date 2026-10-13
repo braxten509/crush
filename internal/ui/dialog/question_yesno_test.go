@@ -61,8 +61,10 @@ func TestYesNoFormKeysAnswerDirectly(t *testing.T) {
 func TestYesNoLinesUpUnderTag(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
-	d := NewYesNo(&sty, question.Question{ID: "q", Type: question.TypeYesNo,
-		Text: "May I change this one file for you now?", Description: "Only that file."})
+	d := NewYesNo(&sty, question.Question{
+		ID: "q", Type: question.TypeYesNo,
+		Text: "May I change this one file for you now?", Description: "Only that file.",
+	})
 	const width = 30
 	h := d.Height(width)
 	scr := uv.NewScreenBuffer(width, h)

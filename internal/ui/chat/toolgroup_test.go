@@ -309,8 +309,10 @@ func TestToolGroupChangesNameEachFileOnce(t *testing.T) {
 	sty := styles.CharmtonePantera()
 	edit := func(id, old, new string) MessageItem {
 		tc := message.ToolCall{ID: id, Name: "edit", Input: `{"file_path":"/p/a.go","old_string":"` + old + `","new_string":"` + new + `"}`, Finished: true}
-		return NewToolMessageItem(&sty, "m1", tc, &message.ToolResult{ToolCallID: id, Name: "edit", Content: "ok",
-			Metadata: `{"additions":1,"removals":1,"old_content":"` + old + `\n","new_content":"` + new + `\n"}`}, false, "")
+		return NewToolMessageItem(&sty, "m1", tc, &message.ToolResult{
+			ToolCallID: id, Name: "edit", Content: "ok",
+			Metadata: `{"additions":1,"removals":1,"old_content":"` + old + `\n","new_content":"` + new + `\n"}`,
+		}, false, "")
 	}
 	g := NewToolGroupItem(&sty)
 	g.SetChildren([]MessageItem{edit("e1", "x", "y"), edit("e2", "y", "z")})

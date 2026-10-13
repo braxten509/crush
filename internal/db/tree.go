@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/google/uuid"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type TreeNode struct {
@@ -56,6 +57,7 @@ func (q *Queries) TreePath(ctx context.Context, sessionID string) ([]string, err
 	}
 	return ids, rows.Err()
 }
+
 func (q *Queries) TreeRevision(ctx context.Context, sessionID string) (int64, error) {
 	var revision int64
 	err := q.db.QueryRowContext(ctx, `SELECT revision FROM tree_heads WHERE session_id=?`, sessionID).Scan(&revision)
@@ -111,6 +113,7 @@ func (q *Queries) SwitchTreeNote(ctx context.Context, sessionID, messageID strin
 	}
 	return tx.Commit()
 }
+
 func (q *Queries) LabelTree(ctx context.Context, sessionID, messageID, label string) error {
 	result, err := q.db.ExecContext(ctx, `UPDATE tree_nodes SET label=? WHERE session_id=? AND message_id=?`, label, sessionID, messageID)
 	if err != nil {

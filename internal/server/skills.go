@@ -2,8 +2,9 @@ package server
 
 import (
 	"encoding/json"
-	"github.com/charmbracelet/crush/internal/proto"
 	"net/http"
+
+	"github.com/charmbracelet/crush/internal/proto"
 )
 
 func (c *controllerV1) handleGetInstalledSkills(w http.ResponseWriter, r *http.Request) {
@@ -14,6 +15,7 @@ func (c *controllerV1) handleGetInstalledSkills(w http.ResponseWriter, r *http.R
 	}
 	jsonEncode(w, entries)
 }
+
 func (c *controllerV1) handleManageSkill(w http.ResponseWriter, r *http.Request) {
 	var req proto.ManageSkillRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {

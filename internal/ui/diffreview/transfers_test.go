@@ -11,8 +11,10 @@ func TestImportedBaselineCountsOnlyLaterEdits(t *testing.T) {
 	t.Parallel()
 	base := &filechange.State{Content: "one\ntwo\nthree\n", Mode: 0o644}
 	edited := &filechange.State{Content: "one\nchanged\nthree\n", Mode: 0o644}
-	imported := filechange.Change{Path: "checkout/file", Order: 1, After: base,
-		Transfer: &filechange.Transfer{Kind: "checkout", Baseline: base}}
+	imported := filechange.Change{
+		Path: "checkout/file", Order: 1, After: base,
+		Transfer: &filechange.Transfer{Kind: "checkout", Baseline: base},
+	}
 	files := Build([]Edit{{Path: imported.Path, Snapshot: &imported}})
 	require.Len(t, files, 1)
 	require.Equal(t, Copied, files[0].Kind)
@@ -32,8 +34,10 @@ func TestMovedFilePreservesEditsWithoutCountingSourceDeletion(t *testing.T) {
 	base := &filechange.State{Content: "before\n", Mode: 0o644}
 	after := &filechange.State{Content: "after\n", Mode: 0o644}
 	source := filechange.Change{Path: "source", Before: base}
-	destination := filechange.Change{Path: "destination", After: after,
-		Transfer: &filechange.Transfer{Kind: "move", Source: "source", Baseline: base}}
+	destination := filechange.Change{
+		Path: "destination", After: after,
+		Transfer: &filechange.Transfer{Kind: "move", Source: "source", Baseline: base},
+	}
 	files := Build([]Edit{{Path: source.Path, Snapshot: &source}, {Path: destination.Path, Snapshot: &destination}})
 	require.Len(t, files, 1)
 	require.Equal(t, Moved, files[0].Kind)

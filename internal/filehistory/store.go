@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/charmbracelet/crush/internal/lock"
 	"io"
 	"log/slog"
 	"os"
@@ -23,12 +22,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/lock"
+
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/secureentry"
 )
 
-const ProjectBudget int64 = 2 << 30
-const evicted = "Restore data removed to keep this project under 2 GB"
+const (
+	ProjectBudget int64 = 2 << 30
+	evicted             = "Restore data removed to keep this project under 2 GB"
+)
 
 type State struct {
 	Exists bool   `json:"exists"`
@@ -68,6 +71,7 @@ func (s *Store) objectPath(digest string) (string, error) {
 	}
 	return filepath.Join(s.directory, digest[:2], digest), nil
 }
+
 func (s *Store) put(ctx context.Context, data []byte) (string, error) {
 	digest := hash(data)
 	path, _ := s.objectPath(digest)
@@ -78,7 +82,7 @@ func (s *Store) put(ctx context.Context, data []byte) (string, error) {
 			return digest, nil
 		}
 	}
-	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", err
 	}
 	var buffer bytes.Buffer
@@ -95,11 +99,12 @@ func (s *Store) put(ctx context.Context, data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err = atomicWrite(path, buffer.Bytes(), 0600); err != nil {
+	if err = atomicWrite(path, buffer.Bytes(), 0o600); err != nil {
 		return "", err
 	}
 	return digest, nil
 }
+
 func (s *Store) read(digest string) ([]byte, error) {
 	path, err := s.objectPath(digest)
 	if err != nil {
@@ -124,6 +129,7 @@ func (s *Store) read(digest string) ([]byte, error) {
 	}
 	return data, nil
 }
+
 func (s *Store) state(ctx context.Context, original *filechange.State) (State, error) {
 	if original == nil {
 		return State{}, nil
@@ -245,6 +251,7 @@ func (s *Store) Capture(ctx context.Context, sessionID, messageID, toolID string
 	}
 	return nil
 }
+
 func gitHead(ctx context.Context, directory string) string {
 	cmd := exec.CommandContext(ctx, "git", "-C", directory, "rev-parse", "HEAD")
 	data, err := cmd.Output()
@@ -291,6 +298,7 @@ func (s *Store) ScheduleMaintenance(ctx context.Context) {
 		}
 	}()
 }
+
 func (s *Store) maintain(ctx context.Context, keepUndo string) error {
 	if err := s.gc(ctx); err != nil {
 		return err
@@ -323,6 +331,7 @@ func (s *Store) maintain(ctx context.Context, keepUndo string) error {
 		}
 	}
 }
+
 func (s *Store) gc(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT digest FROM file_history_objects WHERE digest NOT IN (
  SELECT json_extract(before_state,'$.digest') FROM file_history_changes WHERE json_extract(before_state,'$.saved')=1
@@ -360,6 +369,7 @@ func (s *Store) gc(ctx context.Context) error {
 	}
 	return nil
 }
+
 func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	f, err := os.CreateTemp(filepath.Dir(path), ".crush-restore-*")
 	if err != nil {
@@ -409,6 +419,7 @@ func (s *Store) RecordPoint(ctx context.Context, sessionID, messageID string) er
 	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO file_history_points(message_id,session_id,git_root,git_head) VALUES(?,?,?,?)`, messageID, sessionID, root, s.pointHead)
 	return err
 }
+
 func gitRoot(ctx context.Context, directory string) string {
 	cmd := exec.CommandContext(ctx, "git", "-C", directory, "rev-parse", "--show-toplevel")
 	data, err := cmd.Output()

@@ -87,6 +87,7 @@ func (s *Store) path(ctx context.Context, id, target string) ([]string, error) {
 	}
 	return result, rows.Err()
 }
+
 func (s *Store) records(ctx context.Context, ids []string) ([]record, error) {
 	var result []record
 	for _, id := range ids {
@@ -129,6 +130,7 @@ func (s *Store) records(ctx context.Context, ids []string) ([]record, error) {
 	})
 	return result, nil
 }
+
 func (s *Store) Preview(ctx context.Context, id, target string) (*Plan, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -218,6 +220,7 @@ func (s *Store) Preview(ctx context.Context, id, target string) (*Plan, error) {
 	slices.SortFunc(plan.Entries, func(a, b Entry) int { return strings.Compare(a.Path, b.Path) })
 	return plan, nil
 }
+
 func same(a, b State) bool {
 	return a.Exists == b.Exists && (!a.Exists || a.Digest == b.Digest && a.Mode == b.Mode)
 }
@@ -245,6 +248,7 @@ func safePath(path string) error {
 	}
 	return nil
 }
+
 func currentState(path string, expected ...State) (State, []byte, error) {
 	target, err := openRestoreTarget(path, false)
 	if os.IsNotExist(err) {
@@ -256,6 +260,7 @@ func currentState(path string, expected ...State) (State, []byte, error) {
 	defer target.close()
 	return target.current(expected...)
 }
+
 func (s *Store) describe(e *Entry, head, currentHead string) {
 	e.Action = "restore"
 	if !e.After.Exists {
@@ -296,6 +301,7 @@ func (s *Store) describe(e *Entry, head, currentHead string) {
 		e.Adds, e.Dels = diffreview.Stats(diffreview.Build([]diffreview.Edit{{Path: e.Path, Before: string(before), After: string(after), Full: true}}))
 	}
 }
+
 func (s *Store) UndoPreview(ctx context.Context, id string) (*Plan, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -426,11 +432,13 @@ func (s *Store) MoveUndo(ctx context.Context, undoID, sessionID string) error {
 	return err
 }
 
-type gitState struct{ root, head string }
-type gitCache struct {
-	ctx         context.Context
-	directories map[string]gitState
-}
+type (
+	gitState struct{ root, head string }
+	gitCache struct {
+		ctx         context.Context
+		directories map[string]gitState
+	}
+)
 
 func newGitCache(ctx context.Context) *gitCache { return &gitCache{ctx, map[string]gitState{}} }
 func (g *gitCache) get(directory string) gitState {

@@ -6,8 +6,10 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 )
 
-const AbacusProviderID = "abacus"
-const AbacusAPIFormatOption = "abacus_api_format"
+const (
+	AbacusProviderID      = "abacus"
+	AbacusAPIFormatOption = "abacus_api_format"
+)
 
 func AbacusAPIFormat(model catwalk.Model) string {
 	if format, ok := model.Options.ProviderOptions[AbacusAPIFormatOption].(string); ok {

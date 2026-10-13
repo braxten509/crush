@@ -43,6 +43,7 @@ func windowsOpen(path string, access uint32, share uint32) (*os.File, error) {
 func openRestoreTarget(path string, create bool) (*restoreTarget, error) {
 	return walkRestoreParents(path, create, nil)
 }
+
 func walkRestoreParents(path string, create bool, opened func(string)) (_ *restoreTarget, err error) {
 	if err := safePath(path); err != nil {
 		return nil, err
@@ -62,7 +63,7 @@ func walkRestoreParents(path string, create bool, opened func(string)) (_ *resto
 		}
 		f, openErr := windowsOpen(current, windows.GENERIC_READ, windows.FILE_SHARE_READ)
 		if os.IsNotExist(openErr) && create {
-			if err = os.Mkdir(current, 0755); err != nil && !os.IsExist(err) {
+			if err = os.Mkdir(current, 0o755); err != nil && !os.IsExist(err) {
 				return nil, err
 			}
 			f, openErr = windowsOpen(current, windows.GENERIC_READ, windows.FILE_SHARE_READ)
@@ -84,20 +85,25 @@ func walkRestoreParents(path string, create bool, opened func(string)) (_ *resto
 	}
 	return target, nil
 }
+
 func (t *restoreTarget) close() {
 	for i := len(t.parents) - 1; i >= 0; i-- {
 		t.parents[i].Close()
 	}
 }
+
 func (t *restoreTarget) open() (*os.File, error) {
 	return windowsOpen(filepath.Join(t.directory, t.name), windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE)
 }
+
 func (t *restoreTarget) createTemp(name string) (*os.File, error) {
-	return os.OpenFile(filepath.Join(t.directory, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	return os.OpenFile(filepath.Join(t.directory, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 }
+
 func (t *restoreTarget) rename(name string) error {
 	return os.Rename(filepath.Join(t.directory, name), filepath.Join(t.directory, t.name))
 }
+
 func (t *restoreTarget) remove(name string) error {
 	f, err := windowsOpen(filepath.Join(t.directory, name), windows.DELETE|windows.FILE_READ_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE)
 	if err != nil {

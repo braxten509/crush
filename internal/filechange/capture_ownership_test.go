@@ -29,7 +29,7 @@ func TestReviewOverlappingAndLateReportsKeepTheirAllocation(t *testing.T) {
 			p := newProcessReview(root, nil)
 			p.store.restoreRemaining = 12
 			path := filepath.Join(root, "pending")
-			require.NoError(t, os.WriteFile(path, []byte("original"), 0600))
+			require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
 			if !late {
 				p.Begin("pending", "pending-writer")
 			}
@@ -41,21 +41,21 @@ func TestReviewOverlappingAndLateReportsKeepTheirAllocation(t *testing.T) {
 			first := p.executed(nil, []string{"first-writer"})
 			small := filepath.Join(root, "small")
 			p.before(first, small)
-			require.NoError(t, os.WriteFile(small, []byte("1234"), 0600))
+			require.NoError(t, os.WriteFile(small, []byte("1234"), 0o600))
 			require.Equal(t, "1234", restoredBytes(t, p.End("first").Changes[0].After))
 			require.Equal(t, 4, p.store.restoreRemaining)
 			p.Begin("overflow", "overflow-writer")
 			overflow := p.executed(nil, []string{"overflow-writer"})
 			large := filepath.Join(root, "large")
 			p.before(overflow, large)
-			require.NoError(t, os.WriteFile(large, []byte("12345678"), 0600))
+			require.NoError(t, os.WriteFile(large, []byte("12345678"), 0o600))
 			review := p.End("overflow")
 			require.Equal(t, RestoreBudgetReason, review.Changes[0].After.RestoreOmitted)
 			require.Equal(t, 4, p.store.restoreRemaining)
 			if late {
 				p.Begin("pending", "pending-writer")
 			}
-			require.NoError(t, os.WriteFile(path, []byte("edit"), 0600))
+			require.NoError(t, os.WriteFile(path, []byte("edit"), 0o600))
 			review = p.End("pending")
 			require.Equal(t, "original", restoredBytes(t, review.Changes[0].Before))
 			require.Equal(t, "edit", restoredBytes(t, review.Changes[0].After))
@@ -71,7 +71,7 @@ func TestReviewSharedBaselineReleasedAfterLastOwner(t *testing.T) {
 	p := newProcessReview(root, nil)
 	p.store.restoreRemaining = 12
 	path := filepath.Join(root, "shared")
-	require.NoError(t, os.WriteFile(path, []byte("original"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
 	for _, id := range []string{"one", "two"} {
 		p.Begin(id, id)
 		record := p.executed(nil, []string{id})
@@ -80,7 +80,7 @@ func TestReviewSharedBaselineReleasedAfterLastOwner(t *testing.T) {
 	require.Equal(t, 4, p.store.restoreRemaining, "unchanged baseline is captured once")
 	require.Nil(t, p.End("one"))
 	require.Equal(t, 4, p.store.restoreRemaining, "second owner still needs the baseline")
-	require.NoError(t, os.WriteFile(path, []byte("edit"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("edit"), 0o600))
 	review := p.End("two")
 	require.Equal(t, "original", restoredBytes(t, review.Changes[0].Before))
 	require.Equal(t, "edit", restoredBytes(t, review.Changes[0].After))
@@ -98,7 +98,7 @@ func TestNativeFinishReusesCapturesAndReturnsSameReview(t *testing.T) {
 			ctx, report := WithCommandReview(t.Context(), root)
 			report.store.restoreRemaining = 12
 			path := filepath.Join(root, "file")
-			require.NoError(t, os.WriteFile(path, []byte("original"), 0600))
+			require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
 			var process *ProcessReview
 			if subprocess {
 				process = newProcessReview(root, nil)
@@ -109,7 +109,7 @@ func TestNativeFinishReusesCapturesAndReturnsSameReview(t *testing.T) {
 			} else {
 				BeforeOpen(ctx, path, os.O_WRONLY|os.O_TRUNC)
 			}
-			require.NoError(t, os.WriteFile(path, []byte("edit"), 0600))
+			require.NoError(t, os.WriteFile(path, []byte("edit"), 0o600))
 			if subprocess {
 				report.changes = append(report.changes, process.End("command").Changes...)
 				require.Zero(t, report.store.restoreRemaining)
@@ -120,7 +120,7 @@ func TestNativeFinishReusesCapturesAndReturnsSameReview(t *testing.T) {
 			require.Equal(t, "edit", restoredBytes(t, review.Changes[0].After))
 			require.Equal(t, 12, report.store.restoreRemaining)
 			require.Empty(t, report.store.captures)
-			require.NoError(t, os.WriteFile(path, []byte("later"), 0600))
+			require.NoError(t, os.WriteFile(path, []byte("later"), 0o600))
 			require.Same(t, review, report.Finish())
 			require.Equal(t, "edit", restoredBytes(t, report.Finish().Changes[0].After))
 		})
@@ -138,9 +138,9 @@ func TestNativeImportedBaselineSurvivesCaptureHandoff(t *testing.T) {
 	copy := p.executed(wrapper, []string{"cp", "source", "file"})
 	path := filepath.Join(root, "file")
 	p.before(copy, path)
-	require.NoError(t, os.WriteFile(path, []byte("original"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
 	p.before(wrapper, path)
-	require.NoError(t, os.WriteFile(path, []byte("edit"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("edit"), 0o600))
 	report.changes = append(report.changes, p.End("command").Changes...)
 	review := report.Finish()
 	require.Len(t, review.Changes, 1)

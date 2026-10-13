@@ -1,14 +1,15 @@
 package model
 
 import (
+	"os"
+	"path/filepath"
+	"testing"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/stretchr/testify/require"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func secureFormFixture(t *testing.T) (*secureentry.Form, string) {

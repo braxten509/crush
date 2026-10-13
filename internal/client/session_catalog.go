@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/charmbracelet/crush/internal/session"
 	"net/http"
 	"net/url"
+
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 func (c *Client) ListSavedSessions(ctx context.Context, workspace, selected string) ([]session.Session, error) {
@@ -22,6 +23,7 @@ func (c *Client) ListSavedSessions(ctx context.Context, workspace, selected stri
 	err = json.NewDecoder(response.Body).Decode(&result)
 	return result, err
 }
+
 func (c *Client) ChangeSavedSession(ctx context.Context, workspace string, target session.Session, remove bool) error {
 	response, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/saved-sessions", workspace), nil, jsonBody(session.CatalogChange{Session: target, Remove: remove}), http.Header{"Content-Type": []string{"application/json"}})
 	if err != nil {

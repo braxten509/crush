@@ -873,7 +873,7 @@ func codexChangeMetadata(dir string, c codexChange) string {
 	}
 	_, adds, dels := diff.GenerateDiff(before, after, path)
 	metadata := marshal(tools.EditResponseMetadata{Additions: adds, Removals: dels, OldContent: before, NewContent: after})
-	mode := uint32(0644)
+	mode := uint32(0o644)
 	if info, err := os.Stat(path); err == nil {
 		mode = uint32(info.Mode())
 	}

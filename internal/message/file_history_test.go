@@ -30,8 +30,8 @@ func TestFileHistoryPrecedesReviewBoundingAndOutlivesPruning(t *testing.T) {
 	path := filepath.Join(root, "large.txt")
 	before := strings.Repeat("a", 3<<20)
 	after := "after\n"
-	require.NoError(t, os.WriteFile(path, []byte(after), 0644))
-	result, err := svc.Create(t.Context(), "chat", CreateMessageParams{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "call", Name: "edit", Review: &filechange.Review{Root: root, Changes: []filechange.Change{{Path: path, Before: &filechange.State{Content: before, Size: int64(len(before)), Mode: 0644}, After: &filechange.State{Content: after, Size: int64(len(after)), Mode: 0644}}}}}}})
+	require.NoError(t, os.WriteFile(path, []byte(after), 0o644))
+	result, err := svc.Create(t.Context(), "chat", CreateMessageParams{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "call", Name: "edit", Review: &filechange.Review{Root: root, Changes: []filechange.Change{{Path: path, Before: &filechange.State{Content: before, Size: int64(len(before)), Mode: 0o644}, After: &filechange.State{Content: after, Size: int64(len(after)), Mode: 0o644}}}}}}})
 	require.NoError(t, err)
 	review, err := svc.LoadReview(t.Context(), result.ID)
 	require.NoError(t, err)
@@ -65,10 +65,10 @@ func TestHistoryFailureDoesNotLoseCreatedOrUpdatedToolResult(t *testing.T) {
 	root, err = filepath.Abs(root)
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(root) })
-	require.NoError(t, os.WriteFile(filepath.Join(data, "file-history"), []byte("blocked"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(data, "file-history"), []byte("blocked"), 0o600))
 	versions := filehistory.New(conn, data, root)
 	svc := NewService(q, WithFileHistory(versions))
-	review := &filechange.Review{Root: root, Changes: []filechange.Change{{Path: filepath.Join(root, "file"), Before: &filechange.State{Content: "old", Mode: 0644, Size: 3}, After: &filechange.State{Content: "new", Mode: 0644, Size: 3}}}}
+	review := &filechange.Review{Root: root, Changes: []filechange.Change{{Path: filepath.Join(root, "file"), Before: &filechange.State{Content: "old", Mode: 0o644, Size: 3}, After: &filechange.State{Content: "new", Mode: 0o644, Size: 3}}}}
 	created, err := svc.Create(t.Context(), "chat", CreateMessageParams{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "call", Content: "tool succeeded", Review: review}}})
 	require.NoError(t, err)
 	loaded, err := svc.Get(t.Context(), created.ID)

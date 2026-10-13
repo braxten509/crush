@@ -26,7 +26,7 @@ func TestIdenticalShellCommandsKeepSeparateOccurrences(t *testing.T) {
 				write := func(record *invocation, name string) {
 					path := filepath.Join(root, name)
 					p.before(record, path)
-					require.NoError(t, os.WriteFile(path, []byte(name), 0600))
+					require.NoError(t, os.WriteFile(path, []byte(name), 0o600))
 				}
 				write(first, "first.txt")
 				write(second, "second.txt")
@@ -90,7 +90,7 @@ func TestProcessSnapshotsShareBudgetAcrossInvocations(t *testing.T) {
 	for index := range maxTextTotal/maxTextSize + 2 {
 		path := filepath.Join(root, fmt.Sprintf("file-%d.txt", index))
 		data := fmt.Sprintf("%08d", index) + strings.Repeat("x", maxTextSize-8)
-		require.NoError(t, os.WriteFile(path, []byte(data), 0600))
+		require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
 		p.before(p.executed(nil, []string{"writer"}), path)
 	}
 	require.LessOrEqual(t, retainedPreviewBytes(p), maxTextTotal)
@@ -100,7 +100,7 @@ func TestProcessSnapshotsShareBudgetAcrossInvocations(t *testing.T) {
 func TestProcessSnapshotsReuseDuplicateBaselines(t *testing.T) {
 	root := visibleRestoreRoot(t)
 	path := filepath.Join(root, "large.txt")
-	require.NoError(t, os.WriteFile(path, []byte(strings.Repeat("x", maxTextSize)), 0600))
+	require.NoError(t, os.WriteFile(path, []byte(strings.Repeat("x", maxTextSize)), 0o600))
 	p := newProcessReview(root, nil)
 	for range 65 {
 		p.before(p.executed(nil, []string{"writer"}), path)
@@ -115,7 +115,7 @@ func TestLateShellReportsKeepReadOnlyOccurrenceSeparate(t *testing.T) {
 	writer := p.executed(nil, []string{"python3", "script.py"})
 	path := filepath.Join(root, "second.txt")
 	p.before(writer, path)
-	require.NoError(t, os.WriteFile(path, []byte("second"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("second"), 0o600))
 	p.Begin("read-only", "python3 script.py")
 	require.Nil(t, p.End("read-only"))
 	p.Begin("writer", "python3 script.py")

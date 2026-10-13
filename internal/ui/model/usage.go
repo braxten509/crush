@@ -9,11 +9,13 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 )
 
-type usageTickMsg struct{ dialog *dialog.Usage }
-type usageRefreshedMsg struct {
-	dialog *dialog.Usage
-	err    error
-}
+type (
+	usageTickMsg      struct{ dialog *dialog.Usage }
+	usageRefreshedMsg struct {
+		dialog *dialog.Usage
+		err    error
+	}
+)
 
 func usageTick(d *dialog.Usage) tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return usageTickMsg{dialog: d} })

@@ -1,6 +1,9 @@
 package dialog
 
 import (
+	"image"
+	"testing"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/message"
@@ -8,8 +11,6 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/stretchr/testify/require"
-	"image"
-	"testing"
 )
 
 func TestTreeSelectSearchAndBookmark(t *testing.T) {

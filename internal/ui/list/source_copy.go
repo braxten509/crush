@@ -16,11 +16,13 @@ type CopySource interface {
 	CopySource() []string
 }
 
-type sourceByte struct{ start, end int }
-type copyCell struct {
-	x, y, width int
-	start, end  int
-}
+type (
+	sourceByte struct{ start, end int }
+	copyCell   struct {
+		x, y, width int
+		start, end  int
+	}
+)
 
 // HighlightSource maps selected visible characters back to the original message.
 // Alignment ignores whitespace so added wraps/gutters cannot become spaces in a

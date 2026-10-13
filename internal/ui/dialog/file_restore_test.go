@@ -1,15 +1,16 @@
 package dialog
 
 import (
+	"image"
+	"strings"
+	"testing"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/stretchr/testify/require"
-	"image"
-	"strings"
-	"testing"
 )
 
 func TestFileRestoreChoicesAndNarrowViewport(t *testing.T) {

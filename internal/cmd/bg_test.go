@@ -58,7 +58,7 @@ func TestBackgroundCommandTransportsQuotedArguments(t *testing.T) {
 					requests <- request
 					response := fantasy.NewTextResponse("job accepted")
 					reply, _ := json.Marshal(agent.TaskReply{Background: &response})
-					_ = os.WriteFile(strings.TrimSuffix(paths[0], ".req")+".ack", reply, 0600)
+					_ = os.WriteFile(strings.TrimSuffix(paths[0], ".req")+".ack", reply, 0o600)
 					return
 				}
 			}()

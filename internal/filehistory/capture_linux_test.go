@@ -22,11 +22,11 @@ func TestTrackerFullBeforeAfterBeyondReviewLimit(t *testing.T) {
 	path := filepath.Join(f.root, "large.bin")
 	before := bytes.Repeat([]byte{255, 0, 42}, 700000)
 	after := bytes.Repeat([]byte{0, 3, 254}, 900000)
-	require.NoError(t, os.WriteFile(path, before, 0640))
+	require.NoError(t, os.WriteFile(path, before, 0o640))
 	tracker, err := filechange.New(t.Context(), f.root)
 	require.NoError(t, err)
 	tracker.Track(path)
-	require.NoError(t, os.WriteFile(path, after, 0640))
+	require.NoError(t, os.WriteFile(path, after, 0o640))
 	review, err := tracker.Checkpoint(t.Context())
 	require.NoError(t, err)
 	require.Len(t, review.Changes, 1)
@@ -43,6 +43,7 @@ func TestTrackerFullBeforeAfterBeyondReviewLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(before), contents(t, path))
 }
+
 func TestShellCreatedFileCapturedAndRestored(t *testing.T) {
 	f := setup(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)

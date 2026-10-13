@@ -1,8 +1,9 @@
 package config
 
 import (
-	"charm.land/catwalk/pkg/catwalk"
 	"fmt"
+
+	"charm.land/catwalk/pkg/catwalk"
 )
 
 // NativeCompaction identifies agents that own their conversation's context.

@@ -16,8 +16,10 @@ import (
 // A held prompt (sent mid-turn) stays out of the chat meanwhile.
 func (m *UI) appendPendingPrompt(sessionID, content string, attachments []message.Attachment, held bool) string {
 	id := uuid.NewString()
-	pending := message.Message{ID: id, SessionID: sessionID, Role: message.User, CreatedAt: time.Now().Unix(),
-		Parts: []message.ContentPart{message.TextContent{Text: content, SubmissionID: id}}}
+	pending := message.Message{
+		ID: id, SessionID: sessionID, Role: message.User, CreatedAt: time.Now().Unix(),
+		Parts: []message.ContentPart{message.TextContent{Text: content, SubmissionID: id}},
+	}
 	for _, attachment := range attachments {
 		path := attachment.FilePath
 		if path == "" {

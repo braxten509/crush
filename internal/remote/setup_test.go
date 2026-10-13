@@ -102,7 +102,7 @@ case "$*" in
   'whois --json 100.99.1.2:5000') printf '%s' '{"Node":{"Name":"stranger"},"UserProfile":{"ID":8}}' ;;
   *) printf '%s' '{"Node":{"Name":"unknown"}}' ;;
 esac
-`), 0700))
+`), 0o700))
 	api := cliAPI{path: path}
 	me, err := api.self(t.Context())
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ esac
 func TestCLIErrorDoesNotRevealOutput(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "tailscale")
-	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho 'secret-auth-url' >&2\nexit 1\n"), 0700))
+	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho 'secret-auth-url' >&2\nexit 1\n"), 0o700))
 	_, err := (cliAPI{path: path}).self(t.Context())
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "secret-auth-url")
@@ -192,7 +192,7 @@ func TestInstallerDownloadsRejectBadResponses(t *testing.T) {
 			require.Equal(t, tc.body, string(data))
 			stat, err := os.Stat(file)
 			require.NoError(t, err)
-			require.Equal(t, os.FileMode(0600), stat.Mode().Perm())
+			require.Equal(t, os.FileMode(0o600), stat.Mode().Perm())
 			require.Error(t, downloadSetupFileWithClient(t.Context(), srv.Client(), srv.URL, file, 64), "never overwrite an existing file")
 		})
 	}
@@ -238,7 +238,7 @@ func TestInstallerVerificationBeforeExecution(t *testing.T) {
 				} else {
 					require.Equal(t, "https://tailscale.com/install.sh", address)
 				}
-				return os.WriteFile(destination, []byte("test fixture"), 0600)
+				return os.WriteFile(destination, []byte("test fixture"), 0o600)
 			}
 			err := installTailscaleWithDownload(t.Context(), platform, io.Discard, run, download)
 			if failure == "download" {

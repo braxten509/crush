@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"fmt"
+
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -24,6 +25,7 @@ func (w *AppWorkspace) Tree(ctx context.Context, id string) ([]message.TreeEntry
 	}
 	return tree.Tree(ctx, id)
 }
+
 func (w *AppWorkspace) SwitchTree(ctx context.Context, id, target string) error {
 	switcher, ok := w.app.AgentCoordinator.(interface {
 		SwitchTree(context.Context, string, string) error
@@ -33,6 +35,7 @@ func (w *AppWorkspace) SwitchTree(ctx context.Context, id, target string) error 
 	}
 	return switcher.SwitchTree(ctx, id, target)
 }
+
 func (w *AppWorkspace) LabelTree(ctx context.Context, id, target, label string) error {
 	tree, ok := w.app.Messages.(message.TreeService)
 	if !ok {
@@ -50,6 +53,7 @@ func (w *AppWorkspace) NavigateTree(ctx context.Context, id, target string, summ
 	}
 	return manager.NavigateTree(ctx, id, target, summary)
 }
+
 func (w *AppWorkspace) CopyTree(ctx context.Context, id, target string, fork bool) (string, string, error) {
 	manager, ok := w.app.AgentCoordinator.(interface {
 		CopyTree(context.Context, string, string, bool) (string, string, error)

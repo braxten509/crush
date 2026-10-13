@@ -1,9 +1,10 @@
 package message
 
 import (
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestTreeBranchesRemainSeparate(t *testing.T) {
@@ -46,6 +47,7 @@ func TestTreeBranchesRemainSeparate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, alternate.ID, last.ID)
 }
+
 func TestTreeSummaryDoesNotLeakAcrossBranches(t *testing.T) {
 	svc, id := newTestService(t)
 	ctx := t.Context()
@@ -64,6 +66,7 @@ func TestTreeSummaryDoesNotLeakAcrossBranches(t *testing.T) {
 	require.Len(t, msgs, 2)
 	require.Equal(t, alternate.ID, msgs[1].ID)
 }
+
 func TestTreeFailedSummaryDeletionPreservesChildren(t *testing.T) {
 	svc, id := newTestService(t)
 	ctx := t.Context()

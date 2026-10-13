@@ -510,8 +510,10 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		if err != nil {
 			return err
 		}
-		budget := session.ContextBudget{Provider: string(s.m.Kind), Model: s.m.ID,
-			Tokens: e.ContextLimit, Estimated: e.ContextEstimated}
+		budget := session.ContextBudget{
+			Provider: string(s.m.Kind), Model: s.m.ID,
+			Tokens: e.ContextLimit, Estimated: e.ContextEstimated,
+		}
 		if current.ContextBudget == budget {
 			return nil
 		}

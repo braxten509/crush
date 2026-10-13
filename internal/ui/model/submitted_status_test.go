@@ -1,16 +1,17 @@
 package model
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestSubmittedMessageShowsWorkingBeforeDispatchAndHandsOff(t *testing.T) {
@@ -174,8 +175,10 @@ func TestSentMessagesAreNotRepeatedInQueueEvenWithIdenticalText(t *testing.T) {
 	u, _ := newSubmissionUI()
 	u.sendMessage("same")
 	id := u.pendingPrompts[0].ID
-	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.promptQueueGen,
-		prompts: []string{"same", "same"}, entries: []message.QueuedPromptSummary{{Prompt: "same", SubmissionID: id}, {Prompt: "same", SubmissionID: "different"}}})
+	u.applyPromptQueue(promptQueueMsg{
+		forSession: "s1", gen: u.promptQueueGen,
+		prompts: []string{"same", "same"}, entries: []message.QueuedPromptSummary{{Prompt: "same", SubmissionID: id}, {Prompt: "same", SubmissionID: "different"}},
+	})
 	require.Equal(t, 2, u.promptQueue, "internal delivery state is preserved")
 	require.Equal(t, []string{"same"}, u.visiblePromptQueueItems(), "only the different submission stays in the queue panel")
 	confirmed := u.pendingPrompts[0].Clone()

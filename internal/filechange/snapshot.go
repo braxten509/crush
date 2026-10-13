@@ -476,6 +476,7 @@ func digest(data []byte) string {
 func StatDigest(info fs.FileInfo) string {
 	return fmt.Sprintf("stat:%d:%d:%d", info.Size(), info.ModTime().UnixNano(), changeTime(info))
 }
+
 func sameEntryState(a, b State) bool {
 	a.RestoreData, b.RestoreData = "", ""
 	a.RestoreDigestOnly, b.RestoreDigestOnly = false, false

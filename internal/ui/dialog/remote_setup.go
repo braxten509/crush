@@ -15,8 +15,10 @@ import (
 
 const RemoteSetupID = "remote_setup"
 
-type ActionRemoteSetup struct{ Action string }
-type ActionRemoteSetupClose struct{}
+type (
+	ActionRemoteSetup      struct{ Action string }
+	ActionRemoteSetupClose struct{}
+)
 
 // RemoteSetup keeps the same content edge and button slots in every state.
 // Only an explicit button press may install software or start a login.

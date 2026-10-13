@@ -1,13 +1,14 @@
 package model
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/workspace"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type restoreWorkspace struct {
@@ -20,17 +21,21 @@ func (w *restoreWorkspace) PreviewFiles(context.Context, string, string, bool) (
 	w.calls++
 	return &filehistory.Plan{SessionID: "chat", Entries: []filehistory.Entry{{Path: "file"}}}, nil
 }
+
 func (w *restoreWorkspace) PreviewUndoFiles(ctx context.Context, id string) (*filehistory.Plan, error) {
 	return w.PreviewFiles(ctx, id, "", false)
 }
+
 func (w *restoreWorkspace) UndoFiles(context.Context, *filehistory.Plan) (filehistory.Result, error) {
 	w.calls++
 	return filehistory.Result{Restored: 1}, nil
 }
+
 func (w *restoreWorkspace) CopyTree(context.Context, string, string, bool) (string, string, error) {
 	w.calls++
 	return "copy", "prompt", nil
 }
+
 func (w *restoreWorkspace) NavigateTree(context.Context, string, string, bool) error {
 	w.calls++
 	return nil
@@ -68,6 +73,7 @@ func TestFileOperationsRunOnlyInTeaCommands(t *testing.T) {
 		})
 	}
 }
+
 func TestCanceledPreviewCannotReopenDialog(t *testing.T) {
 	ui, base := newPlanUI(t, "chat")
 	ui.com.Workspace = &restoreWorkspace{testWorkspace: base}

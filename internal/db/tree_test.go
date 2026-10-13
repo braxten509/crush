@@ -1,10 +1,11 @@
 package db
 
 import (
-	"github.com/pressly/goose/v3"
-	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"testing"
+
+	"github.com/pressly/goose/v3"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTreeMigrationKeepsLinearOrderAndSurvivesReopen(t *testing.T) {

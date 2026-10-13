@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/skills"
 )

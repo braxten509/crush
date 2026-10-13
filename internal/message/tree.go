@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/google/uuid"
 )
@@ -50,6 +51,7 @@ func (s *service) Tree(ctx context.Context, id string) ([]TreeEntry, error) {
 
 	return entries, nil
 }
+
 func (s *service) SwitchTree(ctx context.Context, id, target string) error {
 	storage, ok := s.q.(treeStorage)
 	if !ok {
@@ -60,6 +62,7 @@ func (s *service) SwitchTree(ctx context.Context, id, target string) error {
 	}
 	return s.restoreFiles(ctx, func() error { return storage.SwitchTree(ctx, id, target) })
 }
+
 func (s *service) LabelTree(ctx context.Context, id, target, label string) error {
 	storage, ok := s.q.(treeStorage)
 	if !ok {
@@ -67,6 +70,7 @@ func (s *service) LabelTree(ctx context.Context, id, target, label string) error
 	}
 	return storage.LabelTree(ctx, id, target, label)
 }
+
 func (s *service) TreeRevision(ctx context.Context, id string) (int64, error) {
 	storage, ok := s.q.(treeStorage)
 	if !ok {
@@ -95,6 +99,7 @@ func (s *service) SwitchTreeNote(ctx context.Context, id, target string, summary
 		return storage.SwitchTreeNote(ctx, id, target, &db.TreeNote{FromID: summary.FromID, AncestorID: summary.AncestorID, Message: db.CreateMessageParams{ID: uuid.NewString(), SessionID: id, Role: string(Assistant), Parts: string(parts), Model: sql.NullString{String: summary.Model, Valid: summary.Model != ""}, Provider: sql.NullString{String: summary.Provider, Valid: summary.Provider != ""}}})
 	})
 }
+
 func (s *service) CopyTree(ctx context.Context, id, target string, fork bool) (string, string, error) {
 	storage, ok := s.q.(treeStorage)
 	if !ok {

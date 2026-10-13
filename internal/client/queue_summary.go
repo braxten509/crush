@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/charmbracelet/crush/internal/message"
 	"net/http"
 	"net/url"
+
+	"github.com/charmbracelet/crush/internal/message"
 )
 
 func (c *Client) GetAgentSessionQueuedPromptSummaries(ctx context.Context, id, sessionID string) ([]message.QueuedPromptSummary, error) {

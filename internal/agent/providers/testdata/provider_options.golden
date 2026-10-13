@@ -1,0 +1,2043 @@
+== openai/openai plain
+openai: &ProviderOptions{}
+== openai/openai reasoning-default
+openai: &ProviderOptions{ReasoningEffort: &"medium"}
+== openai/openai reasoning-selected
+openai: &ProviderOptions{ReasoningEffort: &"high"}
+== openai/openai reasoning-invalid
+openai: &ProviderOptions{ReasoningEffort: &"low"}
+== openai/openai reasoning-none
+openai: &ProviderOptions{ReasoningEffort: &"none"}
+== openai/openai think
+openai: &ProviderOptions{}
+== openai/openai think-off
+openai: &ProviderOptions{}
+== openai/openai think-cannot-reason
+openai: &ProviderOptions{}
+== openai/openai explicit-options
+openai: &ProviderOptions{ReasoningEffort: &"low"}
+== openai/openai explicit-thinking
+openai: &ProviderOptions{}
+== openai/openai extra-body
+openai: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low"}
+== openai/openai top-k
+openai: &ProviderOptions{}
+== openai/openai catwalk-top-k
+openai: &ProviderOptions{}
+== openai/openai malformed
+== openai/openai malformed-no-top-k
+== openai/openai gpt-5-fast
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"high", ReasoningSummary: &"auto"}
+== openai/openai gpt-5.2-standard
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"low", ReasoningSummary: &"auto"}
+== openai/openai gpt-5-pro
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"low", ReasoningSummary: &"auto"}
+== openai/openai gpt-4o
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningSummary: &"auto"}
+== openai/openai abacus-format
+openai: &ProviderOptions{ReasoningEffort: &"low"}
+== openai/openai gemini-2
+openai: &ProviderOptions{ReasoningEffort: &"low"}
+== openai/openai gemini-3
+openai: &ProviderOptions{ReasoningEffort: &"high"}
+== openai/openai minimax-m3
+openai: &ProviderOptions{ReasoningEffort: &"high"}
+== openai/openai minimax-m2-think
+openai: &ProviderOptions{}
+== openai/openai minimax-off
+openai: &ProviderOptions{}
+== openai/openai deepseek-none
+openai: &ProviderOptions{ReasoningEffort: &"none"}
+== openai/openai zai-org
+openai: &ProviderOptions{}
+== openai/openai claude
+openai: &ProviderOptions{ReasoningEffort: &"max"}
+== openai/openai claude-think
+openai: &ProviderOptions{}
+== azure/azure plain
+openai: &ProviderOptions{}
+== azure/azure reasoning-default
+openai: &ProviderOptions{ReasoningEffort: &"medium"}
+== azure/azure reasoning-selected
+openai: &ProviderOptions{ReasoningEffort: &"high"}
+== azure/azure reasoning-invalid
+openai: &ProviderOptions{ReasoningEffort: &"low"}
+== azure/azure reasoning-none
+openai: &ProviderOptions{ReasoningEffort: &"none"}
+== azure/azure think
+openai: &ProviderOptions{}
+== azure/azure think-off
+openai: &ProviderOptions{}
+== azure/azure think-cannot-reason
+openai: &ProviderOptions{}
+== azure/azure explicit-options
+openai: &ProviderOptions{ReasoningEffort: &"low"}
+== azure/azure explicit-thinking
+openai: &ProviderOptions{}
+== azure/azure extra-body
+openai: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low"}
+== azure/azure top-k
+openai: &ProviderOptions{}
+== azure/azure catwalk-top-k
+openai: &ProviderOptions{}
+== azure/azure malformed
+== azure/azure malformed-no-top-k
+== azure/azure gpt-5-fast
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"high", ReasoningSummary: &"auto"}
+== azure/azure gpt-5.2-standard
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"low", ReasoningSummary: &"auto"}
+== azure/azure gpt-5-pro
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"low", ReasoningSummary: &"auto"}
+== azure/azure gpt-4o
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningSummary: &"auto"}
+== azure/azure abacus-format
+openai: &ProviderOptions{ReasoningEffort: &"low"}
+== azure/azure gemini-2
+openai: &ProviderOptions{ReasoningEffort: &"low"}
+== azure/azure gemini-3
+openai: &ProviderOptions{ReasoningEffort: &"high"}
+== azure/azure minimax-m3
+openai: &ProviderOptions{ReasoningEffort: &"high"}
+== azure/azure minimax-m2-think
+openai: &ProviderOptions{}
+== azure/azure minimax-off
+openai: &ProviderOptions{}
+== azure/azure deepseek-none
+openai: &ProviderOptions{ReasoningEffort: &"none"}
+== azure/azure zai-org
+openai: &ProviderOptions{}
+== azure/azure claude
+openai: &ProviderOptions{ReasoningEffort: &"max"}
+== azure/azure claude-think
+openai: &ProviderOptions{}
+== openai-compat/abacus plain
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/abacus reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/abacus reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/abacus reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/abacus reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/abacus think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/abacus think-off
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/abacus think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/abacus explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/abacus explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/abacus extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== openai-compat/abacus top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/abacus catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/abacus malformed
+== openai-compat/abacus malformed-no-top-k
+== openai-compat/abacus gpt-5-fast
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"high", ReasoningSummary: &"auto", ServiceTier: &"priority"}
+== openai-compat/abacus gpt-5.2-standard
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"low", ReasoningSummary: &"auto", ServiceTier: &"auto"}
+== openai-compat/abacus gpt-5-pro
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"low", ReasoningSummary: &"auto"}
+== openai-compat/abacus gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/abacus abacus-format
+openai: &ResponsesProviderOptions{ReasoningEffort: &"low"}
+== openai-compat/abacus gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/abacus gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/abacus minimax-m3
+openai-compat: &ProviderOptions{ExtraBody: {reasoning_split: (bool)true, thinking: (map[string]interface {}){type: (string)"adaptive"}}}
+== openai-compat/abacus minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/abacus minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/abacus deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/abacus zai-org
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/abacus claude
+anthropic: &ProviderOptions{Effort: &"max"}
+== openai-compat/abacus claude-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== openai-compat/abacus plain
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus reasoning-default
+   (provider extra body)
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus reasoning-selected
+   (provider extra body)
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus reasoning-invalid
+   (provider extra body)
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus reasoning-none
+   (provider extra body)
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus think
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus think-off
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus think-cannot-reason
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus explicit-options
+   (provider extra body)
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus explicit-thinking
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus extra-body
+   (provider extra body)
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", route: (string)"fast", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== openai-compat/abacus top-k
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus catwalk-top-k
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus malformed
+   (provider extra body)
+== openai-compat/abacus malformed-no-top-k
+   (provider extra body)
+== openai-compat/abacus gpt-5-fast
+   (provider extra body)
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"high", ReasoningSummary: &"auto", ServiceTier: &"priority"}
+== openai-compat/abacus gpt-5.2-standard
+   (provider extra body)
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"low", ReasoningSummary: &"auto", ServiceTier: &"auto"}
+== openai-compat/abacus gpt-5-pro
+   (provider extra body)
+openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningEffort: &"low", ReasoningSummary: &"auto"}
+== openai-compat/abacus gpt-4o
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus abacus-format
+   (provider extra body)
+openai: &ResponsesProviderOptions{ReasoningEffort: &"low"}
+== openai-compat/abacus gemini-2
+   (provider extra body)
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus gemini-3
+   (provider extra body)
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus minimax-m3
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", reasoning_split: (bool)true, route: (string)"fast", thinking: (map[string]interface {}){type: (string)"adaptive"}}}
+== openai-compat/abacus minimax-m2-think
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast", thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/abacus minimax-off
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast", thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/abacus deepseek-none
+   (provider extra body)
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {custom: (string)"provider", route: (string)"fast", thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/abacus zai-org
+   (provider extra body)
+openai-compat: &ProviderOptions{ExtraBody: {custom: (string)"provider", route: (string)"fast", thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/abacus claude
+   (provider extra body)
+anthropic: &ProviderOptions{Effort: &"max", ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== openai-compat/abacus claude-think
+   (provider extra body)
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}, ExtraBody: {custom: (string)"provider", route: (string)"fast"}}
+== anthropic/anthropic plain
+anthropic: &ProviderOptions{}
+== anthropic/anthropic reasoning-default
+anthropic: &ProviderOptions{Effort: &"medium"}
+== anthropic/anthropic reasoning-selected
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/anthropic reasoning-invalid
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/anthropic reasoning-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== anthropic/anthropic think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/anthropic think-off
+anthropic: &ProviderOptions{}
+== anthropic/anthropic think-cannot-reason
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/anthropic explicit-options
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}, Effort: &"low"}
+== anthropic/anthropic explicit-thinking
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 500}}
+== anthropic/anthropic extra-body
+anthropic: &ProviderOptions{Effort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== anthropic/anthropic top-k
+anthropic: &ProviderOptions{}
+== anthropic/anthropic catwalk-top-k
+anthropic: &ProviderOptions{}
+== anthropic/anthropic malformed
+anthropic: &ProviderOptions{}
+== anthropic/anthropic malformed-no-top-k
+anthropic: &ProviderOptions{}
+== anthropic/anthropic gpt-5-fast
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/anthropic gpt-5.2-standard
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/anthropic gpt-5-pro
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/anthropic gpt-4o
+anthropic: &ProviderOptions{}
+== anthropic/anthropic abacus-format
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/anthropic gemini-2
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/anthropic gemini-3
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/anthropic minimax-m3
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/anthropic minimax-m2-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/anthropic minimax-off
+anthropic: &ProviderOptions{}
+== anthropic/anthropic deepseek-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== anthropic/anthropic zai-org
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/anthropic claude
+anthropic: &ProviderOptions{Effort: &"max"}
+== anthropic/anthropic claude-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/minimax plain
+anthropic: &ProviderOptions{}
+== anthropic/minimax reasoning-default
+anthropic: &ProviderOptions{Effort: &"medium"}
+== anthropic/minimax reasoning-selected
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/minimax reasoning-invalid
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/minimax reasoning-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== anthropic/minimax think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/minimax think-off
+anthropic: &ProviderOptions{}
+== anthropic/minimax think-cannot-reason
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/minimax explicit-options
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}, Effort: &"low"}
+== anthropic/minimax explicit-thinking
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 500}}
+== anthropic/minimax extra-body
+anthropic: &ProviderOptions{Effort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== anthropic/minimax top-k
+anthropic: &ProviderOptions{}
+== anthropic/minimax catwalk-top-k
+anthropic: &ProviderOptions{}
+== anthropic/minimax malformed
+anthropic: &ProviderOptions{}
+== anthropic/minimax malformed-no-top-k
+anthropic: &ProviderOptions{}
+== anthropic/minimax gpt-5-fast
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/minimax gpt-5.2-standard
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/minimax gpt-5-pro
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/minimax gpt-4o
+anthropic: &ProviderOptions{}
+== anthropic/minimax abacus-format
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/minimax gemini-2
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/minimax gemini-3
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/minimax minimax-m3
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/minimax minimax-m2-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/minimax minimax-off
+anthropic: &ProviderOptions{}
+== anthropic/minimax deepseek-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== anthropic/minimax zai-org
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/minimax claude
+anthropic: &ProviderOptions{Effort: &"max"}
+== anthropic/minimax claude-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/alibaba-singapore plain
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-singapore reasoning-default
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"medium"}}
+== anthropic/alibaba-singapore reasoning-selected
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"high"}}
+== anthropic/alibaba-singapore reasoning-invalid
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-singapore reasoning-none
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"none"}}
+== anthropic/alibaba-singapore think
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-singapore think-off
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== anthropic/alibaba-singapore think-cannot-reason
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-singapore explicit-options
+anthropic: &ProviderOptions{Effort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-singapore explicit-thinking
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 500}, ExtraBody: {}}
+== anthropic/alibaba-singapore extra-body
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-singapore top-k
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-singapore catwalk-top-k
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-singapore malformed
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-singapore malformed-no-top-k
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-singapore gpt-5-fast
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"high"}}
+== anthropic/alibaba-singapore gpt-5.2-standard
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-singapore gpt-5-pro
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-singapore gpt-4o
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-singapore abacus-format
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-singapore gemini-2
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-singapore gemini-3
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"high"}}
+== anthropic/alibaba-singapore minimax-m3
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"high"}}
+== anthropic/alibaba-singapore minimax-m2-think
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-singapore minimax-off
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== anthropic/alibaba-singapore deepseek-none
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"none"}}
+== anthropic/alibaba-singapore zai-org
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-singapore claude
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"max"}}
+== anthropic/alibaba-singapore claude-think
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-us plain
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-us reasoning-default
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"medium"}}
+== anthropic/alibaba-us reasoning-selected
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"high"}}
+== anthropic/alibaba-us reasoning-invalid
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-us reasoning-none
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"none"}}
+== anthropic/alibaba-us think
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-us think-off
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== anthropic/alibaba-us think-cannot-reason
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-us explicit-options
+anthropic: &ProviderOptions{Effort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-us explicit-thinking
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 500}, ExtraBody: {}}
+== anthropic/alibaba-us extra-body
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-us top-k
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-us catwalk-top-k
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-us malformed
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-us malformed-no-top-k
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-us gpt-5-fast
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"high"}}
+== anthropic/alibaba-us gpt-5.2-standard
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-us gpt-5-pro
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-us gpt-4o
+anthropic: &ProviderOptions{ExtraBody: {}}
+== anthropic/alibaba-us abacus-format
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-us gemini-2
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"low"}}
+== anthropic/alibaba-us gemini-3
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"high"}}
+== anthropic/alibaba-us minimax-m3
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"high"}}
+== anthropic/alibaba-us minimax-m2-think
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-us minimax-off
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== anthropic/alibaba-us deepseek-none
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"none"}}
+== anthropic/alibaba-us zai-org
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/alibaba-us claude
+anthropic: &ProviderOptions{ExtraBody: {reasoning_effort: (string)"max"}}
+== anthropic/alibaba-us claude-think
+anthropic: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== anthropic/opencode-zen plain
+anthropic: &ProviderOptions{}
+== anthropic/opencode-zen reasoning-default
+anthropic: &ProviderOptions{Effort: &"medium"}
+== anthropic/opencode-zen reasoning-selected
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/opencode-zen reasoning-invalid
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/opencode-zen reasoning-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== anthropic/opencode-zen think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/opencode-zen think-off
+anthropic: &ProviderOptions{}
+== anthropic/opencode-zen think-cannot-reason
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/opencode-zen explicit-options
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}, Effort: &"low"}
+== anthropic/opencode-zen explicit-thinking
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 500}}
+== anthropic/opencode-zen extra-body
+anthropic: &ProviderOptions{Effort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== anthropic/opencode-zen top-k
+anthropic: &ProviderOptions{}
+== anthropic/opencode-zen catwalk-top-k
+anthropic: &ProviderOptions{}
+== anthropic/opencode-zen malformed
+anthropic: &ProviderOptions{}
+== anthropic/opencode-zen malformed-no-top-k
+anthropic: &ProviderOptions{}
+== anthropic/opencode-zen gpt-5-fast
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/opencode-zen gpt-5.2-standard
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/opencode-zen gpt-5-pro
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/opencode-zen gpt-4o
+anthropic: &ProviderOptions{}
+== anthropic/opencode-zen abacus-format
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/opencode-zen gemini-2
+anthropic: &ProviderOptions{Effort: &"low"}
+== anthropic/opencode-zen gemini-3
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/opencode-zen minimax-m3
+anthropic: &ProviderOptions{Effort: &"high"}
+== anthropic/opencode-zen minimax-m2-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/opencode-zen minimax-off
+anthropic: &ProviderOptions{}
+== anthropic/opencode-zen deepseek-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== anthropic/opencode-zen zai-org
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== anthropic/opencode-zen claude
+anthropic: &ProviderOptions{Effort: &"max"}
+== anthropic/opencode-zen claude-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock plain
+anthropic: &ProviderOptions{}
+== bedrock/bedrock reasoning-default
+anthropic: &ProviderOptions{Effort: &"medium"}
+== bedrock/bedrock reasoning-selected
+anthropic: &ProviderOptions{Effort: &"high"}
+== bedrock/bedrock reasoning-invalid
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock reasoning-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== bedrock/bedrock think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock think-off
+anthropic: &ProviderOptions{}
+== bedrock/bedrock think-cannot-reason
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock explicit-options
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}, Effort: &"low"}
+== bedrock/bedrock explicit-thinking
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 500}}
+== bedrock/bedrock extra-body
+anthropic: &ProviderOptions{Effort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== bedrock/bedrock top-k
+anthropic: &ProviderOptions{}
+== bedrock/bedrock catwalk-top-k
+anthropic: &ProviderOptions{}
+== bedrock/bedrock malformed
+anthropic: &ProviderOptions{}
+== bedrock/bedrock malformed-no-top-k
+anthropic: &ProviderOptions{}
+== bedrock/bedrock gpt-5-fast
+anthropic: &ProviderOptions{Effort: &"high"}
+== bedrock/bedrock gpt-5.2-standard
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock gpt-5-pro
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock gpt-4o
+anthropic: &ProviderOptions{}
+== bedrock/bedrock abacus-format
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock gemini-2
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock gemini-3
+anthropic: &ProviderOptions{Effort: &"high"}
+== bedrock/bedrock minimax-m3
+anthropic: &ProviderOptions{Effort: &"high"}
+== bedrock/bedrock minimax-m2-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock minimax-off
+anthropic: &ProviderOptions{}
+== bedrock/bedrock deepseek-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== bedrock/bedrock zai-org
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock claude
+anthropic: &ProviderOptions{Effort: &"max"}
+== bedrock/bedrock claude-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock-europe plain
+anthropic: &ProviderOptions{}
+== bedrock/bedrock-europe reasoning-default
+anthropic: &ProviderOptions{Effort: &"medium"}
+== bedrock/bedrock-europe reasoning-selected
+anthropic: &ProviderOptions{Effort: &"high"}
+== bedrock/bedrock-europe reasoning-invalid
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock-europe reasoning-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== bedrock/bedrock-europe think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock-europe think-off
+anthropic: &ProviderOptions{}
+== bedrock/bedrock-europe think-cannot-reason
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock-europe explicit-options
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}, Effort: &"low"}
+== bedrock/bedrock-europe explicit-thinking
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 500}}
+== bedrock/bedrock-europe extra-body
+anthropic: &ProviderOptions{Effort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== bedrock/bedrock-europe top-k
+anthropic: &ProviderOptions{}
+== bedrock/bedrock-europe catwalk-top-k
+anthropic: &ProviderOptions{}
+== bedrock/bedrock-europe malformed
+anthropic: &ProviderOptions{}
+== bedrock/bedrock-europe malformed-no-top-k
+anthropic: &ProviderOptions{}
+== bedrock/bedrock-europe gpt-5-fast
+anthropic: &ProviderOptions{Effort: &"high"}
+== bedrock/bedrock-europe gpt-5.2-standard
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock-europe gpt-5-pro
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock-europe gpt-4o
+anthropic: &ProviderOptions{}
+== bedrock/bedrock-europe abacus-format
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock-europe gemini-2
+anthropic: &ProviderOptions{Effort: &"low"}
+== bedrock/bedrock-europe gemini-3
+anthropic: &ProviderOptions{Effort: &"high"}
+== bedrock/bedrock-europe minimax-m3
+anthropic: &ProviderOptions{Effort: &"high"}
+== bedrock/bedrock-europe minimax-m2-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock-europe minimax-off
+anthropic: &ProviderOptions{}
+== bedrock/bedrock-europe deepseek-none
+anthropic: &ProviderOptions{Effort: &"none"}
+== bedrock/bedrock-europe zai-org
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== bedrock/bedrock-europe claude
+anthropic: &ProviderOptions{Effort: &"max"}
+== bedrock/bedrock-europe claude-think
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+== openrouter/openrouter plain
+openrouter: &ProviderOptions{}
+== openrouter/openrouter reasoning-default
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"medium"}}
+== openrouter/openrouter reasoning-selected
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+== openrouter/openrouter reasoning-invalid
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== openrouter/openrouter reasoning-none
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"none"}}
+== openrouter/openrouter think
+openrouter: &ProviderOptions{}
+== openrouter/openrouter think-off
+openrouter: &ProviderOptions{}
+== openrouter/openrouter think-cannot-reason
+openrouter: &ProviderOptions{}
+== openrouter/openrouter explicit-options
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &false}}
+== openrouter/openrouter explicit-thinking
+openrouter: &ProviderOptions{}
+== openrouter/openrouter extra-body
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}, User: &"catwalk-user"}
+== openrouter/openrouter top-k
+openrouter: &ProviderOptions{}
+== openrouter/openrouter catwalk-top-k
+openrouter: &ProviderOptions{}
+== openrouter/openrouter malformed
+== openrouter/openrouter malformed-no-top-k
+== openrouter/openrouter gpt-5-fast
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+== openrouter/openrouter gpt-5.2-standard
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== openrouter/openrouter gpt-5-pro
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== openrouter/openrouter gpt-4o
+openrouter: &ProviderOptions{}
+== openrouter/openrouter abacus-format
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== openrouter/openrouter gemini-2
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== openrouter/openrouter gemini-3
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+== openrouter/openrouter minimax-m3
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+== openrouter/openrouter minimax-m2-think
+openrouter: &ProviderOptions{}
+== openrouter/openrouter minimax-off
+openrouter: &ProviderOptions{}
+== openrouter/openrouter deepseek-none
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"none"}}
+== openrouter/openrouter zai-org
+openrouter: &ProviderOptions{}
+== openrouter/openrouter claude
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"max"}}
+== openrouter/openrouter claude-think
+openrouter: &ProviderOptions{}
+== vercel/vercel plain
+vercel: &ProviderOptions{}
+== vercel/vercel reasoning-default
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"medium"}}
+== vercel/vercel reasoning-selected
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+== vercel/vercel reasoning-invalid
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== vercel/vercel reasoning-none
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"none"}}
+== vercel/vercel think
+vercel: &ProviderOptions{}
+== vercel/vercel think-off
+vercel: &ProviderOptions{}
+== vercel/vercel think-cannot-reason
+vercel: &ProviderOptions{}
+== vercel/vercel explicit-options
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &false}}
+== vercel/vercel explicit-thinking
+vercel: &ProviderOptions{}
+== vercel/vercel extra-body
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, User: &"catwalk-user", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== vercel/vercel top-k
+vercel: &ProviderOptions{}
+== vercel/vercel catwalk-top-k
+vercel: &ProviderOptions{}
+== vercel/vercel malformed
+== vercel/vercel malformed-no-top-k
+== vercel/vercel gpt-5-fast
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+== vercel/vercel gpt-5.2-standard
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== vercel/vercel gpt-5-pro
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== vercel/vercel gpt-4o
+vercel: &ProviderOptions{}
+== vercel/vercel abacus-format
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== vercel/vercel gemini-2
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+== vercel/vercel gemini-3
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+== vercel/vercel minimax-m3
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+== vercel/vercel minimax-m2-think
+vercel: &ProviderOptions{}
+== vercel/vercel minimax-off
+vercel: &ProviderOptions{}
+== vercel/vercel deepseek-none
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"none"}}
+== vercel/vercel zai-org
+vercel: &ProviderOptions{}
+== vercel/vercel claude
+vercel: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"max"}}
+== vercel/vercel claude-think
+vercel: &ProviderOptions{}
+== google/gemini plain
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini reasoning-default
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"medium"}}
+== google/gemini reasoning-selected
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"high"}}
+== google/gemini reasoning-invalid
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
+== google/gemini reasoning-none
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"none"}}
+== google/gemini think
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini think-off
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini think-cannot-reason
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini explicit-options
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{ThinkingBudget: &10}}
+== google/gemini explicit-thinking
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini extra-body
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
+== google/gemini top-k
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini catwalk-top-k
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini malformed
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini malformed-no-top-k
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini gpt-5-fast
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"high"}}
+== google/gemini gpt-5.2-standard
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
+== google/gemini gpt-5-pro
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
+== google/gemini gpt-4o
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini abacus-format
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
+== google/gemini gemini-2
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{ThinkingBudget: &2000, IncludeThoughts: &true}}
+== google/gemini gemini-3
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"high"}}
+== google/gemini minimax-m3
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"high"}}
+== google/gemini minimax-m2-think
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini minimax-off
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini deepseek-none
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"none"}}
+== google/gemini zai-org
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google/gemini claude
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"max"}}
+== google/gemini claude-think
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
+== google-vertex/vertexai plain
+== google-vertex/vertexai reasoning-default
+== google-vertex/vertexai reasoning-selected
+== google-vertex/vertexai reasoning-invalid
+== google-vertex/vertexai reasoning-none
+== google-vertex/vertexai think
+== google-vertex/vertexai think-off
+== google-vertex/vertexai think-cannot-reason
+== google-vertex/vertexai explicit-options
+== google-vertex/vertexai explicit-thinking
+== google-vertex/vertexai extra-body
+== google-vertex/vertexai top-k
+== google-vertex/vertexai catwalk-top-k
+== google-vertex/vertexai malformed
+== google-vertex/vertexai malformed-no-top-k
+== google-vertex/vertexai gpt-5-fast
+== google-vertex/vertexai gpt-5.2-standard
+== google-vertex/vertexai gpt-5-pro
+== google-vertex/vertexai gpt-4o
+== google-vertex/vertexai abacus-format
+== google-vertex/vertexai gemini-2
+== google-vertex/vertexai gemini-3
+== google-vertex/vertexai minimax-m3
+== google-vertex/vertexai minimax-m2-think
+== google-vertex/vertexai minimax-off
+== google-vertex/vertexai deepseek-none
+== google-vertex/vertexai zai-org
+== google-vertex/vertexai claude
+== google-vertex/vertexai claude-think
+== openai-compat/custom-compat plain
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/custom-compat reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/custom-compat reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/custom-compat think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat think-off
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat malformed
+== openai-compat/custom-compat malformed-no-top-k
+== openai-compat/custom-compat gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/custom-compat gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/custom-compat minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/custom-compat minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/custom-compat zai-org
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {}}
+== openai-compat/custom-compat claude-think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/custom-compat-options plain
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options reasoning-default
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/custom-compat-options reasoning-selected
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/custom-compat-options reasoning-invalid
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat-options reasoning-none
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/custom-compat-options think
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options think-off
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options think-cannot-reason
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options explicit-options
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat-options explicit-thinking
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options extra-body
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat-options top-k
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options catwalk-top-k
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options malformed
+   (provider options)
+== openai-compat/custom-compat-options malformed-no-top-k
+   (provider options)
+== openai-compat/custom-compat-options gpt-5-fast
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/custom-compat-options gpt-5.2-standard
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat-options gpt-5-pro
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat-options gpt-4o
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options abacus-format
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat-options gemini-2
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/custom-compat-options gemini-3
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/custom-compat-options minimax-m3
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/custom-compat-options minimax-m2-think
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options minimax-off
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options deepseek-none
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/custom-compat-options zai-org
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/custom-compat-options claude
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ReasoningEffort: &"max", ExtraBody: {}}
+== openai-compat/custom-compat-options claude-think
+   (provider options)
+openai-compat: &ProviderOptions{User: &"provider-user", ExtraBody: {}}
+== openai-compat/ionet plain
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/ionet reasoning-default
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "medium"}}}
+== openai-compat/ionet reasoning-selected
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "high"}}}
+== openai-compat/ionet reasoning-invalid
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "low"}}}
+== openai-compat/ionet reasoning-none
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "none"}}}
+== openai-compat/ionet think
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "medium"}}}
+== openai-compat/ionet think-off
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "none"}}}
+== openai-compat/ionet think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/ionet explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {reasoning: (map[string]string){effort: "medium"}}}
+== openai-compat/ionet explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "medium"}}}
+== openai-compat/ionet extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ExtraBody: {reasoning: (map[string]string){effort: "low"}}}
+== openai-compat/ionet top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/ionet catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/ionet malformed
+== openai-compat/ionet malformed-no-top-k
+== openai-compat/ionet gpt-5-fast
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "high"}}}
+== openai-compat/ionet gpt-5.2-standard
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "low"}}}
+== openai-compat/ionet gpt-5-pro
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "low"}}}
+== openai-compat/ionet gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/ionet abacus-format
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "low"}}}
+== openai-compat/ionet gemini-2
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "low"}}}
+== openai-compat/ionet gemini-3
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "high"}}}
+== openai-compat/ionet minimax-m3
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "high"}}}
+== openai-compat/ionet minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "medium"}}}
+== openai-compat/ionet minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "none"}}}
+== openai-compat/ionet deepseek-none
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "none"}}}
+== openai-compat/ionet zai-org
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "medium"}}}
+== openai-compat/ionet claude
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "max"}}}
+== openai-compat/ionet claude-think
+openai-compat: &ProviderOptions{ExtraBody: {reasoning: (map[string]string){effort: "medium"}}}
+== openai-compat/opencode-go plain
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/opencode-go reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/opencode-go reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-go reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/opencode-go think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go think-off
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-go explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-go top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go malformed
+== openai-compat/opencode-go malformed-no-top-k
+== openai-compat/opencode-go gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/opencode-go gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-go gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-go gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-go gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-go gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/opencode-go minimax-m3
+openai-compat: &ProviderOptions{ExtraBody: {reasoning_split: (bool)true, thinking: (map[string]interface {}){type: (string)"adaptive"}}}
+== openai-compat/opencode-go minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {reasoning_split: (bool)true, thinking: (map[string]interface {}){type: (string)"adaptive"}}}
+== openai-compat/opencode-go minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/opencode-go deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/opencode-go zai-org
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-go claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {}}
+== openai-compat/opencode-go claude-think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen plain
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/opencode-zen reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/opencode-zen reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-zen reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/opencode-zen think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen think-off
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-zen explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-zen top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen malformed
+== openai-compat/opencode-zen malformed-no-top-k
+== openai-compat/opencode-zen gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/opencode-zen gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-zen gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-zen gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-zen gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/opencode-zen gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/opencode-zen minimax-m3
+openai-compat: &ProviderOptions{ExtraBody: {reasoning_split: (bool)true, thinking: (map[string]interface {}){type: (string)"adaptive"}}}
+== openai-compat/opencode-zen minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {reasoning_split: (bool)true, thinking: (map[string]interface {}){type: (string)"adaptive"}}}
+== openai-compat/opencode-zen minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/opencode-zen deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/opencode-zen zai-org
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/opencode-zen claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {}}
+== openai-compat/opencode-zen claude-think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/zai plain
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/zai reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai think-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/zai think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/zai catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/zai malformed
+== openai-compat/zai malformed-no-top-k
+== openai-compat/zai gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/zai abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/zai deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai zai-org
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/zai claude-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek plain
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/deepseek reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek think-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/deepseek think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/deepseek catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/deepseek malformed
+== openai-compat/deepseek malformed-no-top-k
+== openai-compat/deepseek gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/deepseek abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/deepseek deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek zai-org
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/deepseek claude-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/fireworks plain
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/fireworks reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/fireworks reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/fireworks reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/fireworks reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/fireworks think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/fireworks think-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/fireworks think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/fireworks explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/fireworks explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/fireworks extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/fireworks top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/fireworks catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/fireworks malformed
+== openai-compat/fireworks malformed-no-top-k
+== openai-compat/fireworks gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/fireworks gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/fireworks gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/fireworks gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/fireworks abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/fireworks gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/fireworks gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/fireworks minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/fireworks minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/fireworks minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"disabled"}}}
+== openai-compat/fireworks deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/fireworks zai-org
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/fireworks claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {}}
+== openai-compat/fireworks claude-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (map[string]interface {}){type: (string)"enabled"}}}
+== openai-compat/baseten plain
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)false}}}
+== openai-compat/baseten reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)false}}}
+== openai-compat/baseten think
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten think-off
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)false}}}
+== openai-compat/baseten think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten top-k
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)false}}}
+== openai-compat/baseten catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)false}}}
+== openai-compat/baseten malformed
+== openai-compat/baseten malformed-no-top-k
+== openai-compat/baseten gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)false}}}
+== openai-compat/baseten abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)false}}}
+== openai-compat/baseten deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)false}}}
+== openai-compat/baseten zai-org
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/baseten claude-think
+openai-compat: &ProviderOptions{ExtraBody: {chat_template_args: (map[string]interface {}){enable_thinking: (bool)true}}}
+== openai-compat/alibaba-singapore plain
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-singapore reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/alibaba-singapore reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/alibaba-singapore reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-singapore reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/alibaba-singapore think
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-singapore think-off
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)false}}
+== openai-compat/alibaba-singapore think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-singapore explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-singapore explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-singapore extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-singapore top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-singapore catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-singapore malformed
+== openai-compat/alibaba-singapore malformed-no-top-k
+== openai-compat/alibaba-singapore gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/alibaba-singapore gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-singapore gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-singapore gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-singapore abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-singapore gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-singapore gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/alibaba-singapore minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/alibaba-singapore minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-singapore minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)false}}
+== openai-compat/alibaba-singapore deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/alibaba-singapore zai-org
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-singapore claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {}}
+== openai-compat/alibaba-singapore claude-think
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-us plain
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-us reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/alibaba-us reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/alibaba-us reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-us reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/alibaba-us think
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-us think-off
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)false}}
+== openai-compat/alibaba-us think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-us explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-us explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-us extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-us top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-us catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-us malformed
+== openai-compat/alibaba-us malformed-no-top-k
+== openai-compat/alibaba-us gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/alibaba-us gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-us gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-us gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/alibaba-us abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-us gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/alibaba-us gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/alibaba-us minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/alibaba-us minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-us minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)false}}
+== openai-compat/alibaba-us deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/alibaba-us zai-org
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/alibaba-us claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {}}
+== openai-compat/alibaba-us claude-think
+openai-compat: &ProviderOptions{ExtraBody: {enable_thinking: (bool)true}}
+== openai-compat/copilot plain
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {}}
+== openai-compat/copilot reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/copilot reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/copilot reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/copilot think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot think-off
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/copilot explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/copilot top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot malformed
+== openai-compat/copilot malformed-no-top-k
+== openai-compat/copilot gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/copilot gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/copilot gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/copilot gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/copilot gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {}}
+== openai-compat/copilot gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/copilot minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {}}
+== openai-compat/copilot minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {}}
+== openai-compat/copilot zai-org
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== openai-compat/copilot claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {}}
+== openai-compat/copilot claude-think
+openai-compat: &ProviderOptions{ExtraBody: {}}
+== hyper/hyper plain
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== hyper/hyper reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== hyper/hyper think-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== hyper/hyper think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== hyper/hyper explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)true}}
+== hyper/hyper explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== hyper/hyper extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== hyper/hyper catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== hyper/hyper malformed
+== hyper/hyper malformed-no-top-k
+== hyper/hyper gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== hyper/hyper abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== hyper/hyper minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== hyper/hyper deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper zai-org
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== hyper/hyper claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {thinking: (bool)false}}
+== hyper/hyper claude-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== openai-compat/hyper plain
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== openai-compat/hyper think-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper think-cannot-reason
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== openai-compat/hyper explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)true}}
+== openai-compat/hyper explicit-thinking
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== openai-compat/hyper extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper malformed
+== openai-compat/hyper malformed-no-top-k
+== openai-compat/hyper gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper gpt-4o
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper minimax-m2-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== openai-compat/hyper minimax-off
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper zai-org
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== openai-compat/hyper claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max", ExtraBody: {thinking: (bool)false}}
+== openai-compat/hyper claude-think
+openai-compat: &ProviderOptions{ExtraBody: {thinking: (bool)true}}
+== claude-code/claude-code plain
+== claude-code/claude-code reasoning-default
+== claude-code/claude-code reasoning-selected
+== claude-code/claude-code reasoning-invalid
+== claude-code/claude-code reasoning-none
+== claude-code/claude-code think
+== claude-code/claude-code think-off
+== claude-code/claude-code think-cannot-reason
+== claude-code/claude-code explicit-options
+== claude-code/claude-code explicit-thinking
+== claude-code/claude-code extra-body
+== claude-code/claude-code top-k
+== claude-code/claude-code catwalk-top-k
+== claude-code/claude-code malformed
+== claude-code/claude-code malformed-no-top-k
+== claude-code/claude-code gpt-5-fast
+== claude-code/claude-code gpt-5.2-standard
+== claude-code/claude-code gpt-5-pro
+== claude-code/claude-code gpt-4o
+== claude-code/claude-code abacus-format
+== claude-code/claude-code gemini-2
+== claude-code/claude-code gemini-3
+== claude-code/claude-code minimax-m3
+== claude-code/claude-code minimax-m2-think
+== claude-code/claude-code minimax-off
+== claude-code/claude-code deepseek-none
+== claude-code/claude-code zai-org
+== claude-code/claude-code claude
+== claude-code/claude-code claude-think
+== codex-cli/codex plain
+== codex-cli/codex reasoning-default
+== codex-cli/codex reasoning-selected
+== codex-cli/codex reasoning-invalid
+== codex-cli/codex reasoning-none
+== codex-cli/codex think
+== codex-cli/codex think-off
+== codex-cli/codex think-cannot-reason
+== codex-cli/codex explicit-options
+== codex-cli/codex explicit-thinking
+== codex-cli/codex extra-body
+== codex-cli/codex top-k
+== codex-cli/codex catwalk-top-k
+== codex-cli/codex malformed
+== codex-cli/codex malformed-no-top-k
+== codex-cli/codex gpt-5-fast
+== codex-cli/codex gpt-5.2-standard
+== codex-cli/codex gpt-5-pro
+== codex-cli/codex gpt-4o
+== codex-cli/codex abacus-format
+== codex-cli/codex gemini-2
+== codex-cli/codex gemini-3
+== codex-cli/codex minimax-m3
+== codex-cli/codex minimax-m2-think
+== codex-cli/codex minimax-off
+== codex-cli/codex deepseek-none
+== codex-cli/codex zai-org
+== codex-cli/codex claude
+== codex-cli/codex claude-think
+== made-up-type/unknown plain
+== made-up-type/unknown reasoning-default
+== made-up-type/unknown reasoning-selected
+== made-up-type/unknown reasoning-invalid
+== made-up-type/unknown reasoning-none
+== made-up-type/unknown think
+== made-up-type/unknown think-off
+== made-up-type/unknown think-cannot-reason
+== made-up-type/unknown explicit-options
+== made-up-type/unknown explicit-thinking
+== made-up-type/unknown extra-body
+== made-up-type/unknown top-k
+== made-up-type/unknown catwalk-top-k
+== made-up-type/unknown malformed
+== made-up-type/unknown malformed-no-top-k
+== made-up-type/unknown gpt-5-fast
+== made-up-type/unknown gpt-5.2-standard
+== made-up-type/unknown gpt-5-pro
+== made-up-type/unknown gpt-4o
+== made-up-type/unknown abacus-format
+== made-up-type/unknown gemini-2
+== made-up-type/unknown gemini-3
+== made-up-type/unknown minimax-m3
+== made-up-type/unknown minimax-m2-think
+== made-up-type/unknown minimax-off
+== made-up-type/unknown deepseek-none
+== made-up-type/unknown zai-org
+== made-up-type/unknown claude
+== made-up-type/unknown claude-think
+== litellm/litellm plain
+openai-compat: &ProviderOptions{}
+== litellm/litellm reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium"}
+== litellm/litellm reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== litellm/litellm reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== litellm/litellm reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== litellm/litellm think
+openai-compat: &ProviderOptions{}
+== litellm/litellm think-off
+openai-compat: &ProviderOptions{}
+== litellm/litellm think-cannot-reason
+openai-compat: &ProviderOptions{}
+== litellm/litellm explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== litellm/litellm explicit-thinking
+openai-compat: &ProviderOptions{}
+== litellm/litellm extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== litellm/litellm top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== litellm/litellm catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)64}}
+== litellm/litellm malformed
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== litellm/litellm malformed-no-top-k
+== litellm/litellm gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== litellm/litellm gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== litellm/litellm gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== litellm/litellm gpt-4o
+openai-compat: &ProviderOptions{}
+== litellm/litellm abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== litellm/litellm gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== litellm/litellm gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== litellm/litellm minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== litellm/litellm minimax-m2-think
+openai-compat: &ProviderOptions{}
+== litellm/litellm minimax-off
+openai-compat: &ProviderOptions{}
+== litellm/litellm deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== litellm/litellm zai-org
+openai-compat: &ProviderOptions{}
+== litellm/litellm claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max"}
+== litellm/litellm claude-think
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp plain
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium"}
+== llamacpp/llamacpp reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== llamacpp/llamacpp reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== llamacpp/llamacpp reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== llamacpp/llamacpp think
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp think-off
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp think-cannot-reason
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== llamacpp/llamacpp explicit-thinking
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== llamacpp/llamacpp top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== llamacpp/llamacpp catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)64}}
+== llamacpp/llamacpp malformed
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== llamacpp/llamacpp malformed-no-top-k
+== llamacpp/llamacpp gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== llamacpp/llamacpp gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== llamacpp/llamacpp gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== llamacpp/llamacpp gpt-4o
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== llamacpp/llamacpp gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== llamacpp/llamacpp gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== llamacpp/llamacpp minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== llamacpp/llamacpp minimax-m2-think
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp minimax-off
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== llamacpp/llamacpp zai-org
+openai-compat: &ProviderOptions{}
+== llamacpp/llamacpp claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max"}
+== llamacpp/llamacpp claude-think
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio plain
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium"}
+== lmstudio/lmstudio reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== lmstudio/lmstudio reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== lmstudio/lmstudio reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== lmstudio/lmstudio think
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio think-off
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio think-cannot-reason
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== lmstudio/lmstudio explicit-thinking
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== lmstudio/lmstudio top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== lmstudio/lmstudio catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)64}}
+== lmstudio/lmstudio malformed
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== lmstudio/lmstudio malformed-no-top-k
+== lmstudio/lmstudio gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== lmstudio/lmstudio gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== lmstudio/lmstudio gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== lmstudio/lmstudio gpt-4o
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== lmstudio/lmstudio gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== lmstudio/lmstudio gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== lmstudio/lmstudio minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== lmstudio/lmstudio minimax-m2-think
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio minimax-off
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== lmstudio/lmstudio zai-org
+openai-compat: &ProviderOptions{}
+== lmstudio/lmstudio claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max"}
+== lmstudio/lmstudio claude-think
+openai-compat: &ProviderOptions{}
+== ollama/ollama plain
+openai-compat: &ProviderOptions{}
+== ollama/ollama reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium"}
+== ollama/ollama reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== ollama/ollama reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== ollama/ollama reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== ollama/ollama think
+openai-compat: &ProviderOptions{}
+== ollama/ollama think-off
+openai-compat: &ProviderOptions{}
+== ollama/ollama think-cannot-reason
+openai-compat: &ProviderOptions{}
+== ollama/ollama explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== ollama/ollama explicit-thinking
+openai-compat: &ProviderOptions{}
+== ollama/ollama extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== ollama/ollama top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== ollama/ollama catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)64}}
+== ollama/ollama malformed
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== ollama/ollama malformed-no-top-k
+== ollama/ollama gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== ollama/ollama gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== ollama/ollama gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== ollama/ollama gpt-4o
+openai-compat: &ProviderOptions{}
+== ollama/ollama abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== ollama/ollama gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== ollama/ollama gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== ollama/ollama minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== ollama/ollama minimax-m2-think
+openai-compat: &ProviderOptions{}
+== ollama/ollama minimax-off
+openai-compat: &ProviderOptions{}
+== ollama/ollama deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== ollama/ollama zai-org
+openai-compat: &ProviderOptions{}
+== ollama/ollama claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max"}
+== ollama/ollama claude-think
+openai-compat: &ProviderOptions{}
+== omlx/omlx plain
+openai-compat: &ProviderOptions{}
+== omlx/omlx reasoning-default
+openai-compat: &ProviderOptions{ReasoningEffort: &"medium"}
+== omlx/omlx reasoning-selected
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== omlx/omlx reasoning-invalid
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== omlx/omlx reasoning-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== omlx/omlx think
+openai-compat: &ProviderOptions{}
+== omlx/omlx think-off
+openai-compat: &ProviderOptions{}
+== omlx/omlx think-cannot-reason
+openai-compat: &ProviderOptions{}
+== omlx/omlx explicit-options
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== omlx/omlx explicit-thinking
+openai-compat: &ProviderOptions{}
+== omlx/omlx extra-body
+openai-compat: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low", ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}}
+== omlx/omlx top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== omlx/omlx catwalk-top-k
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)64}}
+== omlx/omlx malformed
+openai-compat: &ProviderOptions{ExtraBody: {top_k: (int64)40}}
+== omlx/omlx malformed-no-top-k
+== omlx/omlx gpt-5-fast
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== omlx/omlx gpt-5.2-standard
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== omlx/omlx gpt-5-pro
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== omlx/omlx gpt-4o
+openai-compat: &ProviderOptions{}
+== omlx/omlx abacus-format
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== omlx/omlx gemini-2
+openai-compat: &ProviderOptions{ReasoningEffort: &"low"}
+== omlx/omlx gemini-3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== omlx/omlx minimax-m3
+openai-compat: &ProviderOptions{ReasoningEffort: &"high"}
+== omlx/omlx minimax-m2-think
+openai-compat: &ProviderOptions{}
+== omlx/omlx minimax-off
+openai-compat: &ProviderOptions{}
+== omlx/omlx deepseek-none
+openai-compat: &ProviderOptions{ReasoningEffort: &"none"}
+== omlx/omlx zai-org
+openai-compat: &ProviderOptions{}
+== omlx/omlx claude
+openai-compat: &ProviderOptions{ReasoningEffort: &"max"}
+== omlx/omlx claude-think
+openai-compat: &ProviderOptions{}

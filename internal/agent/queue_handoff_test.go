@@ -35,11 +35,13 @@ func TestQueueHandoffRetainsAcceptedFollowUpBeforeDispatch(t *testing.T) {
 			owner := newSessionRun(t.Context(), sess.ID)
 			defer owner.cancel()
 			attachment := message.Attachment{MimeType: "text/plain", FileName: "first.txt", Content: []byte("accepted attachment")}
-			call := SessionAgentCall{SessionID: sess.ID, Prompt: "accepted first", SubmissionID: "accepted-id", RunID: "accepted-run", Accepted: accepted, Attachments: []message.Attachment{attachment}, sessionRun: owner,
+			call := SessionAgentCall{
+				SessionID: sess.ID, Prompt: "accepted first", SubmissionID: "accepted-id", RunID: "accepted-run", Accepted: accepted, Attachments: []message.Attachment{attachment}, sessionRun: owner,
 				OnComplete: func(complete notify.RunComplete) {
 					owner.record(complete)
 					broker.Publish(pubsub.UpdatedEvent, complete)
-				}}
+				},
+			}
 			_, err = sa.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "queued second", SubmissionID: "queued-id", RunID: "queued-run"})
 			require.NoError(t, err)
 			if interrupt {

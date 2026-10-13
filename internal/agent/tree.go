@@ -1,13 +1,14 @@
 package agent
 
 import (
-	"charm.land/fantasy"
 	"context"
 	"fmt"
+	"strings"
+
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/shell"
-	"strings"
 )
 
 // SwitchTree is an optional local-workspace capability. Keep the dispatch lock
@@ -155,6 +156,7 @@ func treeLeaving(history []message.Message, entries []message.TreeEntry, target 
 	}
 	return history, "", nil
 }
+
 func (c *coordinator) CopyTree(ctx context.Context, id, target string, fork bool) (newID, prompt string, err error) {
 	err = c.withIdleTree(ctx, id, func(a *sessionAgent, tree message.TreeService) error {
 		var copyErr error

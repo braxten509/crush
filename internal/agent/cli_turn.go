@@ -479,6 +479,7 @@ func (s *cliSteps) talk() error {
 	return s.begin()
 }
 
+// handle drives the turn's callbacks from one event of the agent CLI.
 func (s *cliSteps) handle(e cliagent.Event) error {
 	// Resume normal status on activity even if a CLI omits its end event.
 	if s.compacting && (e.Type == cliagent.EventText || e.Type == cliagent.EventReasoning || e.Type == cliagent.EventToolStart || e.Type == cliagent.EventToolCall || e.Type == cliagent.EventUserMessage) {
@@ -493,156 +494,203 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 		}
 		return nil
 	case cliagent.EventCompacting:
-		if e.Compacting {
-			// A completed tool step may still be the current message.
-			// Give compaction its own visible assistant status.
-			if err := s.talk(); err != nil {
-				return err
-			}
-		}
-		return s.setCompacting(e.Compacting)
+		return s.handleCompacting(e)
 	case cliagent.EventSession:
 		s.native = e.Session
 	case cliagent.EventUsage:
 		s.usage = e.Usage
 	case cliagent.EventContextBudget:
-		current, err := s.a.sessions.Get(s.ctx, s.sessionID)
-		if err != nil {
-			return err
-		}
-		budget := session.ContextBudget{Provider: string(s.m.Kind), Model: s.m.ID,
-			Tokens: e.ContextLimit, Estimated: e.ContextEstimated}
-		if current.ContextBudget == budget {
-			return nil
-		}
-		current.ContextBudget = budget
-		_, err = s.a.sessions.Save(s.ctx, current)
-		return err
+		return s.handleContextBudget(e)
 	case cliagent.EventUserMessage:
-		calls := s.takeSteered(e.Text)
-		if len(calls) == 0 {
-			return nil
-		}
-		if s.onQueuedInput != nil {
-			s.onQueuedInput(calls)
-		}
-		// The user's message goes between the model's steps, as it does
-		// when a native turn folds in queued prompts.
-		reason := fantasy.FinishReasonStop
-		if s.tools > 0 {
-			reason = fantasy.FinishReasonToolCalls
-		}
-		if err := s.finish(reason); err != nil {
-			return err
-		}
-		for _, q := range calls {
-			if _, err := s.a.createUserMessage(s.ctx, q); err != nil {
-				return err
-			}
-		}
-		return s.begin()
+		return s.handleUserMessage(e)
 	case cliagent.EventReasoning:
-		if err := s.talk(); err != nil {
-			return err
-		}
-		if !s.thinking {
-			s.thinking = true
-			return s.sc.OnReasoningStart("0", fantasy.ReasoningContent{Text: e.Text})
-		}
-		return s.sc.OnReasoningDelta("0", e.Text)
+		return s.handleReasoning(e)
 	case cliagent.EventText:
-		if e.Text == cliagent.TextBreak && !s.hasText() {
-			return nil
-		}
-		if err := s.talk(); err != nil {
-			return err
-		}
-		if err := s.endThinking(); err != nil {
-			return err
-		}
-		s.content = appendText(s.content, e.Text)
-		return s.sc.OnTextDelta("0", e.Text)
+		return s.handleText(e)
 	case cliagent.EventToolStart:
-		if err := s.endThinking(); err != nil {
-			return err
-		}
-		s.tools++
-		s.setToolRunning(e.ID, true)
-		return s.sc.OnToolInputStart(e.ID, e.Name)
+		return s.handleToolStart(e)
 	case cliagent.EventToolCall:
-		s.tools++
-		s.setToolRunning(e.ID, true)
-		if path := cliagent.EditedFile(e.Name, e.Input); path != "" {
-			if !filepath.IsAbs(path) {
-				path = filepath.Join(s.m.Dir, path)
-			}
-			before, _ := os.ReadFile(path)
-			if s.edits == nil {
-				s.edits = map[string][2]string{}
-			}
-			s.edits[e.ID] = [2]string{path, string(before)}
-		}
-		if s.inputs == nil {
-			s.inputs = map[string]string{}
-		}
-		s.inputs[e.ID] = e.Input
-		tc := fantasy.ToolCallContent{ToolCallID: e.ID, ToolName: e.Name, Input: e.Input}
-		s.content = append(s.content, tc)
-		return s.sc.OnToolCall(tc)
+		return s.handleToolCall(e)
 	case cliagent.EventToolResult:
-		metadata, reportedReview := filechange.TakeReview(e.Metadata)
-		e.Metadata = metadata
-		s.setToolRunning(e.ID, false)
-		var out fantasy.ToolResultOutputContent = fantasy.ToolResultOutputContentText{Text: e.Output}
-		if e.IsError {
-			out = fantasy.ToolResultOutputContentError{Error: errors.New(e.Output)}
-		}
-		if s.known == nil {
-			s.known = map[string]string{}
-		}
-		if edit, ok := s.edits[e.ID]; ok && !e.IsError {
-			after, _ := os.ReadFile(edit[0])
-			if edit[1] == string(after) {
-				// The CLI wrote the file before Crush read its "before" copy.
-				var reported tools.EditResponseMetadata
-				_ = json.Unmarshal([]byte(e.Metadata), &reported)
-				switch old, known := s.known[edit[0]]; {
-				case reported.Additions+reported.Removals > 0 && reported.NewContent == string(after):
-					edit[1] = reported.OldContent // a full-file diff from the CLI itself
-				case known:
-					edit[1] = old
-				case e.Name == tools.WriteToolName && e.Metadata == "":
-					// Writing over an existing file needs a read first, which
-					// would be known, so this file was new.
-					edit[1] = ""
-				}
-			}
-			s.known[edit[0]] = string(after)
-			s.m.RecordEdit(s.ctx, s.sessionID, edit[0], edit[1])
-			// Diff the whole file, as Crush's own edit tool does, rather
-			// than the replaced text the CLI reports: the diff then has
-			// real line numbers.
-			// A late event can arrive with the new contents already on disk.
-			// Keep the CLI's reported diff instead of replacing it with an
-			// empty local diff when no earlier full-file content is known.
-			if edit[1] != string(after) || e.Metadata == "" {
-				_, adds, dels := diff.GenerateDiff(edit[1], string(after), edit[0])
-				meta, _ := json.Marshal(tools.EditResponseMetadata{Additions: adds, Removals: dels, OldContent: edit[1], NewContent: string(after)})
-				e.Metadata = string(meta)
-			}
-		}
-		if e.Name == tools.ViewToolName && !e.IsError && !strings.Contains(s.inputs[e.ID], `"offset"`) && !strings.Contains(s.inputs[e.ID], `"limit"`) {
-			var view tools.ViewResponseMetadata
-			if json.Unmarshal([]byte(e.Metadata), &view) == nil && view.FilePath != "" {
-				s.known[view.FilePath] = view.Content
-			}
-		}
-		e.Metadata = filechange.WithReview(e.Metadata, reportedReview)
-		tr := fantasy.ToolResultContent{ToolCallID: e.ID, ToolName: e.Name, Result: out, ClientMetadata: e.Metadata}
-		s.content = append(s.content, tr)
-		return s.sc.OnToolResult(tr)
+		return s.handleToolResult(e)
 	}
 	return nil
+}
+
+func (s *cliSteps) handleCompacting(e cliagent.Event) error {
+	if e.Compacting {
+		// A completed tool step may still be the current message.
+		// Give compaction its own visible assistant status.
+		if err := s.talk(); err != nil {
+			return err
+		}
+	}
+	return s.setCompacting(e.Compacting)
+}
+
+// handleContextBudget records the context budget the CLI reports.
+func (s *cliSteps) handleContextBudget(e cliagent.Event) error {
+	current, err := s.a.sessions.Get(s.ctx, s.sessionID)
+	if err != nil {
+		return err
+	}
+	budget := session.ContextBudget{
+		Provider: string(s.m.Kind), Model: s.m.ID,
+		Tokens: e.ContextLimit, Estimated: e.ContextEstimated,
+	}
+	if current.ContextBudget == budget {
+		return nil
+	}
+	current.ContextBudget = budget
+	_, err = s.a.sessions.Save(s.ctx, current)
+	return err
+}
+
+// handleUserMessage takes in the prompts the CLI was steered with.
+func (s *cliSteps) handleUserMessage(e cliagent.Event) error {
+	calls := s.takeSteered(e.Text)
+	if len(calls) == 0 {
+		return nil
+	}
+	if s.onQueuedInput != nil {
+		s.onQueuedInput(calls)
+	}
+	// The user's message goes between the model's steps, as it does
+	// when a native turn folds in queued prompts.
+	reason := fantasy.FinishReasonStop
+	if s.tools > 0 {
+		reason = fantasy.FinishReasonToolCalls
+	}
+	if err := s.finish(reason); err != nil {
+		return err
+	}
+	for _, q := range calls {
+		if _, err := s.a.createUserMessage(s.ctx, q); err != nil {
+			return err
+		}
+	}
+	return s.begin()
+}
+
+func (s *cliSteps) handleReasoning(e cliagent.Event) error {
+	if err := s.talk(); err != nil {
+		return err
+	}
+	if !s.thinking {
+		s.thinking = true
+		return s.sc.OnReasoningStart("0", fantasy.ReasoningContent{Text: e.Text})
+	}
+	return s.sc.OnReasoningDelta("0", e.Text)
+}
+
+func (s *cliSteps) handleText(e cliagent.Event) error {
+	if e.Text == cliagent.TextBreak && !s.hasText() {
+		return nil
+	}
+	if err := s.talk(); err != nil {
+		return err
+	}
+	if err := s.endThinking(); err != nil {
+		return err
+	}
+	s.content = appendText(s.content, e.Text)
+	return s.sc.OnTextDelta("0", e.Text)
+}
+
+func (s *cliSteps) handleToolStart(e cliagent.Event) error {
+	if err := s.endThinking(); err != nil {
+		return err
+	}
+	s.tools++
+	s.setToolRunning(e.ID, true)
+	return s.sc.OnToolInputStart(e.ID, e.Name)
+}
+
+// handleToolCall records a tool call, keeping the file an edit is about to
+// change so its result can carry a whole-file diff.
+func (s *cliSteps) handleToolCall(e cliagent.Event) error {
+	s.tools++
+	s.setToolRunning(e.ID, true)
+	if path := cliagent.EditedFile(e.Name, e.Input); path != "" {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(s.m.Dir, path)
+		}
+		before, _ := os.ReadFile(path)
+		if s.edits == nil {
+			s.edits = map[string][2]string{}
+		}
+		s.edits[e.ID] = [2]string{path, string(before)}
+	}
+	if s.inputs == nil {
+		s.inputs = map[string]string{}
+	}
+	s.inputs[e.ID] = e.Input
+	tc := fantasy.ToolCallContent{ToolCallID: e.ID, ToolName: e.Name, Input: e.Input}
+	s.content = append(s.content, tc)
+	return s.sc.OnToolCall(tc)
+}
+
+// handleToolResult records a tool result, with the whole-file diff of an
+// edit and the file contents a view showed.
+func (s *cliSteps) handleToolResult(e cliagent.Event) error {
+	metadata, reportedReview := filechange.TakeReview(e.Metadata)
+	e.Metadata = metadata
+	s.setToolRunning(e.ID, false)
+	var out fantasy.ToolResultOutputContent = fantasy.ToolResultOutputContentText{Text: e.Output}
+	if e.IsError {
+		out = fantasy.ToolResultOutputContentError{Error: errors.New(e.Output)}
+	}
+	if s.known == nil {
+		s.known = map[string]string{}
+	}
+	if edit, ok := s.edits[e.ID]; ok && !e.IsError {
+		e.Metadata = s.editMetadata(e, edit)
+	}
+	if e.Name == tools.ViewToolName && !e.IsError && !strings.Contains(s.inputs[e.ID], `"offset"`) && !strings.Contains(s.inputs[e.ID], `"limit"`) {
+		var view tools.ViewResponseMetadata
+		if json.Unmarshal([]byte(e.Metadata), &view) == nil && view.FilePath != "" {
+			s.known[view.FilePath] = view.Content
+		}
+	}
+	e.Metadata = filechange.WithReview(e.Metadata, reportedReview)
+	tr := fantasy.ToolResultContent{ToolCallID: e.ID, ToolName: e.Name, Result: out, ClientMetadata: e.Metadata}
+	s.content = append(s.content, tr)
+	return s.sc.OnToolResult(tr)
+}
+
+// editMetadata records a successful edit of edit's file (its path and its
+// contents before the call) and returns the result's metadata.
+func (s *cliSteps) editMetadata(e cliagent.Event, edit [2]string) string {
+	after, _ := os.ReadFile(edit[0])
+	if edit[1] == string(after) {
+		// The CLI wrote the file before Crush read its "before" copy.
+		var reported tools.EditResponseMetadata
+		_ = json.Unmarshal([]byte(e.Metadata), &reported)
+		switch old, known := s.known[edit[0]]; {
+		case reported.Additions+reported.Removals > 0 && reported.NewContent == string(after):
+			edit[1] = reported.OldContent // a full-file diff from the CLI itself
+		case known:
+			edit[1] = old
+		case e.Name == tools.WriteToolName && e.Metadata == "":
+			// Writing over an existing file needs a read first, which
+			// would be known, so this file was new.
+			edit[1] = ""
+		}
+	}
+	s.known[edit[0]] = string(after)
+	s.m.RecordEdit(s.ctx, s.sessionID, edit[0], edit[1])
+	// Diff the whole file, as Crush's own edit tool does, rather
+	// than the replaced text the CLI reports: the diff then has
+	// real line numbers.
+	// A late event can arrive with the new contents already on disk.
+	// Keep the CLI's reported diff instead of replacing it with an
+	// empty local diff when no earlier full-file content is known.
+	if edit[1] != string(after) || e.Metadata == "" {
+		_, adds, dels := diff.GenerateDiff(edit[1], string(after), edit[0])
+		meta, _ := json.Marshal(tools.EditResponseMetadata{Additions: adds, Removals: dels, OldContent: edit[1], NewContent: string(after)})
+		return string(meta)
+	}
+	return e.Metadata
 }
 
 func (s *cliSteps) result() *fantasy.AgentResult {

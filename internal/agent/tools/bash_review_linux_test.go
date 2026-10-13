@@ -3,18 +3,19 @@
 package tools
 
 import (
-	"charm.land/fantasy"
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/shell"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/shell"
 
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ import (
 
 func TestNativeBashReviewsScriptsAndRedirections(t *testing.T) {
 	root := visibleReviewRoot(t)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "existing"), []byte("before\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "existing"), []byte("before\n"), 0o600))
 	command := `printf 'first\n' > created
 python3 - <<'PY'
 from pathlib import Path

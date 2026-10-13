@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/message"
 )

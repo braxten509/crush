@@ -1,4 +1,4 @@
-package agent
+package providers
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/agent/hyper"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,4 +136,32 @@ func TestHyperCreditsModel_CoalescesRefreshes(t *testing.T) {
 	require.Eventually(t, func() bool { return rec.callCount() == 2 }, 5*time.Second, 5*time.Millisecond)
 	time.Sleep(50 * time.Millisecond)
 	require.Equal(t, 2, rec.callCount(), "coalesced refreshes must not run one fetch each")
+}
+
+// stubProvider hands out a fixed model.
+type stubProvider struct{ model fantasy.LanguageModel }
+
+func (p stubProvider) Name() string { return "stub" }
+
+func (p stubProvider) LanguageModel(context.Context, string) (fantasy.LanguageModel, error) {
+	return p.model, nil
+}
+
+func TestLanguageModelAppliesDecoratorChain(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeLanguageModel{}
+	b := Builder{Config: config.NewTestStore(&config.Config{Options: &config.Options{}})}
+
+	lm, err := b.LanguageModel(t.Context(), stubProvider{inner}, config.ProviderConfig{ID: hyper.Name, Type: hyper.Name}, config.SelectedModel{Provider: hyper.Name, Model: "m"})
+	require.NoError(t, err)
+	credits, ok := lm.(*hyperCreditsModel)
+	require.True(t, ok, "hyper models refresh the credit balance, got %T", lm)
+	timed, ok := credits.LanguageModel.(requestTimeoutModel)
+	require.True(t, ok, "API models are bounded by the request timeout, got %T", credits.LanguageModel)
+	require.Same(t, inner, timed.LanguageModel)
+
+	cli, err := b.LanguageModel(t.Context(), stubProvider{inner}, config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode}, config.SelectedModel{Provider: "claude", Model: "m"})
+	require.NoError(t, err)
+	require.Same(t, inner, cli, "agent CLIs keep their own timeouts and are not wrapped")
 }

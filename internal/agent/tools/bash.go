@@ -197,7 +197,9 @@ func blockFuncs() []shell.BlockFunc {
 	}
 }
 
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string) fantasy.AgentTool {
+// NewBashTool returns the bash tool. jobStarted, when set, is told about
+// the jobs its calls leave running in the background.
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, jobStarted JobStarted) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		BashToolName,
 		string(bashDescription(attribution, modelID)),
@@ -318,7 +320,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					ShellID:          bgShell.ID,
 				}
 				response := fmt.Sprintf("Background shell started with ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
-				if jobStarted(ctx, sessionID, marker, bgShell) {
+				if jobStarted.tell(ctx, sessionID, marker, bgShell) {
 					response += jobReportNote
 				}
 				if movedSleep {
@@ -419,7 +421,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			if manuallyBackgrounded {
 				response = fmt.Sprintf("Command moved to the background by the user.\n\nBackground shell ID: %s\n\nUse job_output tool to view output or job_kill to terminate.", bgShell.ID)
 			}
-			if jobStarted(ctx, sessionID, marker, bgShell) {
+			if jobStarted.tell(ctx, sessionID, marker, bgShell) {
 				response += jobReportNote
 			}
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil

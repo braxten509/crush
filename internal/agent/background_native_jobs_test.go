@@ -66,7 +66,7 @@ func startNativeJob(t *testing.T, h *taskHub, sessionID, command string) *shell.
 func startJobWithEnv(t *testing.T, h *taskHub, env []string, sessionID, command string) (*shell.BackgroundShell, fantasy.ToolResponse) {
 	t.Helper()
 	options := h.c.cfg.Config().Options
-	bash := tools.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "")
+	bash := tools.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "", reportStartedJob)
 	response := runNativeTool(t, env, sessionID, bash, tools.BashParams{Command: command, WorkingDir: t.TempDir(), RunInBackground: true})
 	var meta tools.BashResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(response.Metadata), &meta))

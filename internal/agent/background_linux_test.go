@@ -30,7 +30,7 @@ func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 		hubs = slices.DeleteFunc(hubs, func(candidate *taskHub) bool { return candidate == h })
 		hubsMu.Unlock()
 	})
-	tool := tools.NewBashTool(env.permissions, env.workingDir, env.workingDir, &config.Attribution{TrailerStyle: config.TrailerStyleNone}, "fixture")
+	tool := tools.NewBashTool(env.permissions, env.workingDir, env.workingDir, &config.Attribution{TrailerStyle: config.TrailerStyleNone}, "fixture", reportStartedJob)
 	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, t.Name()))
 	defer cancel()
 	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, []string{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "=" + t.Name()})

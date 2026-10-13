@@ -1,4 +1,4 @@
-package agent
+package providers
 
 import (
 	"context"
@@ -16,7 +16,8 @@ import (
 )
 
 func renamedAbacusModel(id string) catwalk.Model {
-	return catwalk.Model{ID: id, Name: "Example 2.5", CanReason: true,
+	return catwalk.Model{
+		ID: id, Name: "Example 2.5", CanReason: true,
 		ReasoningLevels: []string{"low", "high"}, DefaultMaxTokens: 8192,
 		Options: catwalk.ModelOptions{ProviderOptions: map[string]any{config.AbacusAPIFormatOption: "anthropic"}},
 	}

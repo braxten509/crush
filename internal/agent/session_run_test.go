@@ -424,3 +424,17 @@ func TestSessionRunWithoutSubAgentsReportsNothing(t *testing.T) {
 	time.Sleep(3 * waitReportDelay)
 	require.Empty(t, statuses)
 }
+
+func TestTaskHubCancelSessionRun(t *testing.T) {
+	t.Parallel()
+	h := &taskHub{}
+	// Without a run there is nothing to cancel.
+	h.cancelSessionRun("missing")
+
+	run, owner := h.beginSessionRun(t.Context(), "session")
+	require.True(t, owner)
+	h.cancelSessionRun("other")
+	require.NoError(t, run.ctx.Err())
+	h.cancelSessionRun("session")
+	require.ErrorIs(t, run.ctx.Err(), context.Canceled)
+}

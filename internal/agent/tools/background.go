@@ -13,7 +13,7 @@ const NativeShellEnv = "CRUSH_NATIVE_SHELL"
 // background, with the call's shell environment and the NativeShellEnv
 // value its processes carry, so Crush can report on the job until it ends.
 // It returns whether it took the job.
-var JobStarted func(env []string, sessionID, marker string, job *shell.BackgroundShell) bool
+type JobStarted func(env []string, sessionID, marker string, job *shell.BackgroundShell) bool
 
 type watchedJobKey struct{}
 
@@ -23,11 +23,13 @@ func WithWatchedJob(ctx context.Context) context.Context {
 	return context.WithValue(ctx, watchedJobKey{}, true)
 }
 
-func jobStarted(ctx context.Context, sessionID, marker string, job *shell.BackgroundShell) bool {
-	if JobStarted == nil || getContextValue(ctx, watchedJobKey{}, false) {
+// tell tells f about a job the bash call in ctx left running, unless the
+// call's caller watches it itself. It reports whether f took the job.
+func (f JobStarted) tell(ctx context.Context, sessionID, marker string, job *shell.BackgroundShell) bool {
+	if f == nil || getContextValue(ctx, watchedJobKey{}, false) {
 		return false
 	}
-	return JobStarted(getContextValue(ctx, ShellEnvContextKey, []string(nil)), sessionID, marker, job)
+	return f(getContextValue(ctx, ShellEnvContextKey, []string(nil)), sessionID, marker, job)
 }
 
 // agentStops holds the jobs the agent's own job_kill call ended, so the

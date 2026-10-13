@@ -26,7 +26,7 @@ func typeKeys(m *KeptSkills, text string) {
 	}
 }
 
-func TestKeptSkills_EnterTurnsSkillOnAndOff(t *testing.T) {
+func TestKeptSkills_EnterGoesToggleableThenOnThenOff(t *testing.T) {
 	t.Parallel()
 
 	m := newKeptSkillsForTest([]KeptSkillItem{
@@ -36,12 +36,16 @@ func TestKeptSkills_EnterTurnsSkillOnAndOff(t *testing.T) {
 
 	require.Nil(t, m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyDown}))
 	action := m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Equal(t, ActionToggleKeptSkill{ID: "/d/SKILL.md", Name: "deep-debugging", On: true, Toggleable: true}, action)
+	require.Equal(t, "toggleable", m.Items()[1].state())
+
+	action = m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.Equal(t, ActionToggleKeptSkill{ID: "/d/SKILL.md", Name: "deep-debugging", On: true}, action)
-	require.True(t, m.Items()[1].On)
+	require.Equal(t, "on", m.Items()[1].state())
 
 	action = m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.Equal(t, ActionToggleKeptSkill{ID: "/d/SKILL.md", Name: "deep-debugging", On: false}, action)
-	require.False(t, m.Items()[1].On)
+	require.Equal(t, "off", m.Items()[1].state())
 }
 
 func TestKeptSkills_FilterNarrowsTheList(t *testing.T) {
@@ -55,7 +59,7 @@ func TestKeptSkills_FilterNarrowsTheList(t *testing.T) {
 
 	typeKeys(m, "DEEP")
 	action := m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	require.Equal(t, ActionToggleKeptSkill{ID: "/d/SKILL.md", Name: "deep-debugging", On: true}, action)
+	require.Equal(t, ActionToggleKeptSkill{ID: "/d/SKILL.md", Name: "deep-debugging", On: true, Toggleable: true}, action)
 
 	typeKeys(m, "zzz")
 	require.Nil(t, m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}), "nothing to toggle when nothing matches")
@@ -80,25 +84,29 @@ func TestKeptSkills_ScrollsToTheCursor(t *testing.T) {
 	require.Equal(t, 5, strings.Count(view, "skill-"))
 }
 
-func TestKeptSkills_ShowsOnAndOff(t *testing.T) {
+func TestKeptSkills_ShowsEachState(t *testing.T) {
 	t.Parallel()
 
 	m := newKeptSkillsForTest([]KeptSkillItem{
 		{ID: "/a/SKILL.md", Name: "align"},
 		{ID: "/d/SKILL.md", Name: "deep-debugging", On: true},
+		{ID: "/t/SKILL.md", Name: "teach", On: true, Toggleable: true},
 	})
 	lines := strings.Split(ansi.Strip(m.listView(60, 10)), "\n")
-	var align, deep string
+	var align, deep, teach string
 	for _, line := range lines {
 		switch {
 		case strings.Contains(line, "align"):
 			align = line
 		case strings.Contains(line, "deep-debugging"):
 			deep = line
+		case strings.Contains(line, "teach"):
+			teach = line
 		}
 	}
-	require.True(t, strings.HasSuffix(strings.TrimRight(align, " "), "off"))
-	require.True(t, strings.HasSuffix(strings.TrimRight(deep, " "), "on"))
+	require.True(t, strings.HasSuffix(strings.TrimRight(align, " "), " off"))
+	require.True(t, strings.HasSuffix(strings.TrimRight(deep, " "), " on"))
+	require.True(t, strings.HasSuffix(strings.TrimRight(teach, " "), " toggleable"))
 
 	m.SetOn("/d/SKILL.md", false)
 	require.False(t, m.Items()[1].On)
@@ -123,20 +131,20 @@ func TestKeptSkillsCommandIsFoundWithoutTakingOverSkills(t *testing.T) {
 	require.Equal(t, ActionOpenDialog{KeptSkillsID}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }
 
-// Skills on for the chat are grouped by who turned them on; turning a skill
-// on yourself makes it yours, and the cursor follows it to its new group.
-func TestKeptSkills_GroupsByWhoTurnedThemOn(t *testing.T) {
+// Skills on for the chat are grouped into plain on and toggleable, and the
+// cursor follows a skill to its new group.
+func TestKeptSkills_GroupsOnToggleableAndOff(t *testing.T) {
 	t.Parallel()
 
 	m := newKeptSkillsForTest([]KeptSkillItem{
 		{ID: "/a/SKILL.md", Name: "align"},
 		{ID: "/d/SKILL.md", Name: "deep-debugging", On: true},
-		{ID: "/t/SKILL.md", Name: "teach", On: true, ByAgent: true},
+		{ID: "/t/SKILL.md", Name: "teach", On: true, Toggleable: true},
 	})
 	order := func() []string {
 		var out []string
 		for _, line := range strings.Split(ansi.Strip(m.listView(60, 10)), "\n") {
-			for _, want := range []string{"You turned on", "Agent turned on", "Off", "align", "deep-debugging", "teach"} {
+			for _, want := range []string{"align", "deep-debugging", "teach", "On", "Toggleable", "Off"} {
 				if strings.Contains(line, want) {
 					out = append(out, want)
 					break
@@ -145,15 +153,15 @@ func TestKeptSkills_GroupsByWhoTurnedThemOn(t *testing.T) {
 		}
 		return out
 	}
-	require.Equal(t, []string{"You turned on", "deep-debugging", "Agent turned on", "teach", "Off", "align"}, order())
+	require.Equal(t, []string{"On", "deep-debugging", "Toggleable", "teach", "Off", "align"}, order())
 
 	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyDown})
 	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyDown})
-	action := m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
-	require.Equal(t, ActionToggleKeptSkill{ID: "/a/SKILL.md", Name: "align", On: true}, action)
-	require.Equal(t, []string{"You turned on", "align", "deep-debugging", "Agent turned on", "teach"}, order())
-	require.Equal(t, ActionToggleKeptSkill{ID: "/a/SKILL.md", Name: "align", On: false}, m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}), "the cursor stays on the skill")
+	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Equal(t, []string{"On", "deep-debugging", "Toggleable", "align", "teach"}, order())
+	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Equal(t, []string{"On", "align", "deep-debugging", "Toggleable", "teach"}, order(), "the cursor stays on the skill")
 
-	m.SetState("/t/SKILL.md", true, false)
-	require.Equal(t, []string{"You turned on", "deep-debugging", "teach", "Off", "align"}, order(), "the open list follows changes made elsewhere")
+	m.SetState("/t/SKILL.md", false, false)
+	require.Equal(t, []string{"On", "align", "deep-debugging", "Off", "teach"}, order(), "the open list follows changes made elsewhere")
 }

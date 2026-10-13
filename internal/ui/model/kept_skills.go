@@ -96,7 +96,7 @@ func (m *UI) keptSkillItems(entries []skills.CatalogEntry) []dialog.KeptSkillIte
 	items := make([]dialog.KeptSkillItem, 0, len(entries))
 	for _, entry := range entries {
 		skill, on := kept[entry.ID]
-		items = append(items, dialog.KeptSkillItem{ID: entry.ID, Name: entry.Name, On: on, ByAgent: skill.ByAgent})
+		items = append(items, dialog.KeptSkillItem{ID: entry.ID, Name: entry.Name, On: on, Toggleable: skill.ByAgent})
 	}
 	slices.SortStableFunc(items, func(a, b dialog.KeptSkillItem) int {
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
@@ -133,7 +133,7 @@ func (m *UI) syncKeptSkillsDialog() {
 	}
 	for _, item := range dia.Items() {
 		skill, on := kept[item.ID]
-		if item.On != on || item.ByAgent != skill.ByAgent {
+		if item.On != on || item.Toggleable != skill.ByAgent {
 			dia.SetState(item.ID, on, skill.ByAgent)
 		}
 	}

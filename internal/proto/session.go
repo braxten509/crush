@@ -35,7 +35,7 @@ type Session struct {
 type KeptSkill struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// ByAgent is set when the agent turned the skill on.
+	// ByAgent is set when the skill is toggleable: the agent may turn it off.
 	ByAgent bool `json:"by_agent,omitempty"`
 }
 
@@ -44,6 +44,8 @@ type SetKeptSkillRequest struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	On   bool   `json:"on"`
+	// Toggleable lets the agent turn the skill off.
+	Toggleable bool `json:"toggleable,omitempty"`
 }
 
 // Todo represents a single todo entry on a session in the proto layer.

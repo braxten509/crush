@@ -51,7 +51,7 @@ func (c *Client) DeleteSession(ctx context.Context, id string, sessionID string)
 // SetKeptSkill turns a skill on or off for a whole session.
 func (c *Client) SetKeptSkill(ctx context.Context, id, sessionID string, skill proto.KeptSkill, on bool) (*proto.Session, error) {
 	sess, err := newCall(c, rpc.SetKeptSkill, "set kept skill", "session").at(id, sessionID).
-		do(ctx, proto.SetKeptSkillRequest{ID: skill.ID, Name: skill.Name, On: on})
+		do(ctx, proto.SetKeptSkillRequest{ID: skill.ID, Name: skill.Name, On: on, Toggleable: skill.ByAgent})
 	if err != nil {
 		return nil, err
 	}

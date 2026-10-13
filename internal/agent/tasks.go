@@ -516,7 +516,7 @@ Types: single_choice and multi_choice (2-5 choices, each with an id and label, o
 Skills can be on for the whole chat: Crush then gives you their text every turn, and they survive compaction. Turn one on yourself when the chat's ongoing work fits it (not for a single quick step), and off when the work has moved on:
   %[1]s skill on <name>
   %[1]s skill off <name>
-Use names from your skills list. The user sees a notice in the chat for each change. You can turn off only skills you turned on; ones the user turned on stay until the user turns them off. You may turn a skill back on after the user turned it off if the work needs it again. Sub-agents can't change chat skills.
+Use names from your skills list. The user sees a notice in the chat for each change. You can turn on any skill that is off, even one the user turned off, if the work needs it. You can turn off only toggleable skills: the ones you turned on and the ones the user marked toggleable. Skills the user set to plain on stay until the user turns them off. Sub-agents can't change chat skills.
 </crush_chat_skills>
 
 <crush_secure_entry>

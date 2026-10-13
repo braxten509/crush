@@ -29,31 +29,44 @@ type KeptSkillItem struct {
 	ID   string
 	Name string
 	On   bool
-	// ByAgent is set when the agent turned the skill on.
-	ByAgent bool
+	// Toggleable is set when the agent may turn the skill off. Skills that
+	// are on without it stay on until the user turns them off.
+	Toggleable bool
 }
 
 // keptSkillGroups name the list's groups, in order; see group.
-var keptSkillGroups = [...]string{"You turned on", "Agent turned on", "Off"}
+var keptSkillGroups = [...]string{"On", "Toggleable", "Off"}
 
-// group is the item's place in the list: the user's skills, the agent's,
-// then the rest.
+// group is the item's place in the list: skills only the user can turn
+// off, the toggleable ones, then the rest.
 func (i KeptSkillItem) group() int {
 	switch {
 	case !i.On:
 		return 2
-	case i.ByAgent:
+	case i.Toggleable:
 		return 1
 	}
 	return 0
 }
 
-// ActionToggleKeptSkill is sent when the user turns a skill on or off for
+// state is the item's label in the list.
+func (i KeptSkillItem) state() string {
+	switch {
+	case !i.On:
+		return "off"
+	case i.Toggleable:
+		return "toggleable"
+	}
+	return "on"
+}
+
+// ActionToggleKeptSkill is sent when the user changes a skill's state for
 // the current chat.
 type ActionToggleKeptSkill struct {
-	ID   string
-	Name string
-	On   bool
+	ID         string
+	Name       string
+	On         bool
+	Toggleable bool
 }
 
 // KeptSkills lets the user turn skills on or off for the current chat.
@@ -101,7 +114,7 @@ func NewKeptSkills(com *common.Common, items []KeptSkillItem) *KeptSkills {
 	)
 	m.keyMap.Toggle = key.NewBinding(
 		key.WithKeys("enter"),
-		key.WithHelp("enter", "on/off"),
+		key.WithHelp("enter", "toggleable/on/off"),
 	)
 	m.keyMap.Close = CloseKey
 
@@ -125,12 +138,12 @@ func (m *KeptSkills) SetOn(id string, on bool) {
 	m.SetState(id, on, false)
 }
 
-// SetState updates one skill's state and owner without sending an action,
-// so the open dialog follows changes the agent makes.
-func (m *KeptSkills) SetState(id string, on, byAgent bool) {
+// SetState updates one skill's state without sending an action, so the
+// open dialog follows changes the agent makes.
+func (m *KeptSkills) SetState(id string, on, toggleable bool) {
 	for i := range m.items {
 		if m.items[i].ID == id {
-			m.items[i].On, m.items[i].ByAgent = on, on && byAgent
+			m.items[i].On, m.items[i].Toggleable = on, on && toggleable
 		}
 	}
 	m.regroup()
@@ -196,10 +209,17 @@ func (m *KeptSkills) HandleMsg(msg tea.Msg) Action {
 			return nil
 		}
 		item := &m.items[m.filtered[m.cursor]]
-		// Turning a skill on yourself makes it yours.
-		item.On, item.ByAgent = !item.On, false
+		// Enter goes round: off, toggleable, on, then off again.
+		switch {
+		case !item.On:
+			item.On, item.Toggleable = true, true
+		case item.Toggleable:
+			item.Toggleable = false
+		default:
+			item.On = false
+		}
 		m.regroup()
-		return ActionToggleKeptSkill{ID: item.ID, Name: item.Name, On: item.On}
+		return ActionToggleKeptSkill{ID: item.ID, Name: item.Name, On: item.On, Toggleable: item.Toggleable}
 	default:
 		prev := m.input.Value()
 		var cmd tea.Cmd
@@ -240,12 +260,12 @@ func (m *KeptSkills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	return cur
 }
 
-// requiredWidth fits the longest skill name and its on/off label, with a
+// requiredWidth fits the longest skill name and its state label, with a
 // comfortable minimum.
 func (m *KeptSkills) requiredWidth() int {
 	widest := 56
 	for _, item := range m.items {
-		widest = max(widest, 2 /* dot + space */ +lipgloss.Width(item.Name)+1+3 /* off */)
+		widest = max(widest, 2 /* dot + space */ +lipgloss.Width(item.Name)+1+len("toggleable"))
 	}
 	return widest + 2 /* row padding */ + m.com.Styles.Dialog.View.GetHorizontalFrameSize()
 }
@@ -284,10 +304,7 @@ func (m *KeptSkills) listView(innerWidth, rows int) string {
 			lastGroup = g
 			lines = append(lines, t.Dialog.SecondaryText.Render(keptSkillGroups[g]))
 		}
-		state := "off"
-		if item.On {
-			state = "on"
-		}
+		state := item.state()
 		gap := max(1, rowWidth-2-lipgloss.Width(item.Name)-lipgloss.Width(state))
 
 		if pos == m.cursor {

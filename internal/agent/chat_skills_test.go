@@ -21,8 +21,8 @@ func writeTestSkill(t *testing.T, dir, name string) string {
 	return path
 }
 
-// Agents turn chat skills on and off with `crush skill`; skills the user
-// turned on are theirs to turn off. Each change leaves a notice in the chat
+// Agents turn chat skills on and off with `crush skill`; they may turn off
+// only toggleable skills, so a skill the user set to plain on stays. Each change leaves a notice in the chat
 // that never reaches the model.
 func TestAgentTurnsChatSkillsOnAndOff(t *testing.T) {
 	c := sessionRunTestCoordinator(t, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
@@ -75,6 +75,15 @@ func TestAgentTurnsChatSkillsOnAndOff(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, send("drawio", true).Error, "the agent may turn on a skill the user turned off")
 	require.True(t, kept()[0].ByAgent)
+
+	_, err = c.sessions.SetKeptSkill(t.Context(), sess.ID, session.KeptSkill{ID: drawio, Name: "drawio"}, true)
+	require.NoError(t, err)
+	require.False(t, kept()[0].ByAgent, "the user setting it to plain on takes it back")
+
+	_, err = c.sessions.SetKeptSkill(t.Context(), sess.ID, session.KeptSkill{ID: teach, Name: "teach", ByAgent: true}, true)
+	require.NoError(t, err)
+	require.Empty(t, send("teach", false).Error, "the agent may turn off a skill the user made toggleable")
+	require.Equal(t, []session.KeptSkill{{ID: drawio, Name: "drawio"}}, kept())
 
 	require.Contains(t, send("no-such-skill", true).Error, "no skill named")
 	require.Contains(t, h.handle([]byte(`{"session":"","skill":{"name":"teach","on":true}}`)).Error, "sub-agents")

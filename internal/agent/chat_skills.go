@@ -18,7 +18,8 @@ type SkillRequest struct {
 }
 
 // chatSkill turns a skill on or off for the whole chat on the agent's
-// behalf. The agent may not turn off a skill the user turned on. Each change
+// behalf. The agent may turn on any skill that is off, but turn off only
+// toggleable ones; a skill the user set to plain on is theirs. Each change
 // leaves a notice in the chat for the user; it never reaches the model.
 func (h *taskHub) chatSkill(req TaskRequest) (string, error) {
 	if req.Session == "" {
@@ -56,7 +57,7 @@ func (h *taskHub) chatSkill(req TaskRequest) (string, error) {
 		case current == nil:
 			return skill.Name + " is already off for this chat.", nil
 		case !current.ByAgent:
-			return "", fmt.Errorf("the user turned %s on for this chat, so only the user can turn it off", skill.Name)
+			return "", fmt.Errorf("the user turned %s on and did not make it toggleable, so only the user can turn it off", skill.Name)
 		}
 		if _, err := h.c.sessions.SetKeptSkill(ctx, req.Session, session.KeptSkill{ID: skill.SkillFilePath}, false); err != nil {
 			return "", err

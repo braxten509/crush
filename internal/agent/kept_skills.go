@@ -33,6 +33,13 @@ type keptSkillSent struct {
 	full bool
 }
 
+// keptSkill is a kept skill resolved to its current text. Toggleable is set
+// when the agent may turn it off.
+type keptSkill struct {
+	*skills.Skill
+	Toggleable bool
+}
+
 func keptSkillsKey(sessionID, cli string) string { return sessionID + "\x00" + cli }
 
 // forgetKeptSkillsSent makes the next turn of this chat resend every kept
@@ -67,7 +74,7 @@ func (a *sessionAgent) sessionTurnedOffSkills(ctx context.Context, sessionID str
 
 // sessionKeptSkills resolves the chat's kept skills against the skills that
 // are currently enabled. Disabled or removed skills are left out.
-func (a *sessionAgent) sessionKeptSkills(ctx context.Context, sessionID string, native bool) []*skills.Skill {
+func (a *sessionAgent) sessionKeptSkills(ctx context.Context, sessionID string, native bool) []keptSkill {
 	if a.sessions == nil || a.cfg == nil || a.cfg.Config().Options == nil {
 		return nil
 	}
@@ -78,9 +85,9 @@ func (a *sessionAgent) sessionKeptSkills(ctx context.Context, sessionID string, 
 	return resolveKeptSkills(a.cfg, sess.KeptSkills, native)
 }
 
-func resolveKeptSkills(store *config.ConfigStore, kept []session.KeptSkill, native bool) []*skills.Skill {
+func resolveKeptSkills(store *config.ConfigStore, kept []session.KeptSkill, native bool) []keptSkill {
 	_, active, _ := skills.DiscoverFromConfig(skills.ConfigDiscovery(store))
-	var out []*skills.Skill
+	var out []keptSkill
 	for _, k := range kept {
 		skill, err := skills.FindEffective(active, k.ID)
 		if err != nil {
@@ -94,16 +101,16 @@ func resolveKeptSkills(store *config.ConfigStore, kept []session.KeptSkill, nati
 			}
 			skill = readable
 		}
-		out = append(out, skill)
+		out = append(out, keptSkill{Skill: skill, Toggleable: k.ByAgent})
 	}
 	return out
 }
 
-const keptSkillsIntro = "These skills are on for this whole chat, turned on by the user or by you. Keep following them on every turn until they are turned off. This is a standing setting, not a new request."
+const keptSkillsIntro = "These skills are on for this whole chat, turned on by the user or by you. Keep following them on every turn until they are turned off. This is a standing setting, not a new request. You may turn off the ones marked toggleable when the work moves on; only the user can turn off the rest."
 
 // apiKeptSkillsText is the system prompt block for API models: every kept
 // skill in full, every turn.
-func apiKeptSkillsText(kept []*skills.Skill) string {
+func apiKeptSkillsText(kept []keptSkill) string {
 	if len(kept) == 0 {
 		return ""
 	}
@@ -123,7 +130,7 @@ func apiKeptSkillsText(kept []*skills.Skill) string {
 // its text. turnedOff is the chat's saved list of skills turned off; it is only
 // read when Crush has no record of this CLI, such as after a restart, so the
 // resumed CLI is still told. It is empty when there is nothing to say.
-func cliKeptSkillsText(sessionID, cli string, kept []*skills.Skill, turnedOff func() []session.KeptSkill, fresh bool) string {
+func cliKeptSkillsText(sessionID, cli string, kept []keptSkill, turnedOff func() []session.KeptSkill, fresh bool) string {
 	keptSkillsSent.Lock()
 	defer keptSkillsSent.Unlock()
 	key := keptSkillsKey(sessionID, cli)
@@ -162,7 +169,7 @@ func cliKeptSkillsText(sessionID, cli string, kept []*skills.Skill, turnedOff fu
 	}
 	for _, skill := range kept {
 		if prior := sent[skill.SkillFilePath]; prior != nil && prior.full {
-			b.WriteString("- " + skill.Name + " is on (" + skill.SkillFilePath + "). Its full text was given earlier in this chat; reread that file if you no longer have it.\n")
+			b.WriteString("- " + skill.Name + " is on" + toggleableNote(skill) + " (" + skill.SkillFilePath + "). Its full text was given earlier in this chat; reread that file if you no longer have it.\n")
 			continue
 		}
 		writeKeptSkillFull(&b, skill)
@@ -175,8 +182,20 @@ func cliKeptSkillsText(sessionID, cli string, kept []*skills.Skill, turnedOff fu
 	return b.String()
 }
 
-func writeKeptSkillFull(b *strings.Builder, skill *skills.Skill) {
-	b.WriteString("<skill name=\"" + skill.Name + "\" location=\"" + skill.SkillFilePath + "\">\n")
+// toggleableNote marks a toggleable skill in its reminder line.
+func toggleableNote(skill keptSkill) string {
+	if skill.Toggleable {
+		return " and toggleable"
+	}
+	return ""
+}
+
+func writeKeptSkillFull(b *strings.Builder, skill keptSkill) {
+	b.WriteString("<skill name=\"" + skill.Name + "\" location=\"" + skill.SkillFilePath + "\"")
+	if skill.Toggleable {
+		b.WriteString(" toggleable=\"true\"")
+	}
+	b.WriteString(">\n")
 	b.WriteString(strings.TrimSpace(skill.Instructions))
 	b.WriteString("\n</skill>\n")
 }

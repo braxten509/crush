@@ -301,7 +301,7 @@ func (m *UI) handlePromptAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 		m.dialog.CloseFrontDialog()
 		cmds = append(cmds, m.attachSkill(msg.ID, msg.Name))
 	case dialog.ActionToggleKeptSkill:
-		cmds = append(cmds, m.setKeptSkill(session.KeptSkill{ID: msg.ID, Name: msg.Name}, msg.On))
+		cmds = append(cmds, m.setKeptSkill(session.KeptSkill{ID: msg.ID, Name: msg.Name, ByAgent: msg.Toggleable}, msg.On))
 	case dialog.ActionRunMCPPrompt:
 		if len(msg.Arguments) > 0 && msg.Args == nil {
 			m.dialog.CloseFrontDialog()

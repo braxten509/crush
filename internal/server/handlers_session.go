@@ -99,7 +99,7 @@ func (c *controllerV1) setKeptSkill(r *http.Request, req proto.SetKeptSkillReque
 		return proto.Session{}, badRequest("id is required")
 	}
 	sess, err := c.backend.SetKeptSkill(r.Context(), r.PathValue("id"), r.PathValue("sid"),
-		session.KeptSkill{ID: req.ID, Name: req.Name}, req.On)
+		session.KeptSkill{ID: req.ID, Name: req.Name, ByAgent: req.Toggleable}, req.On)
 	if err != nil {
 		return proto.Session{}, err
 	}

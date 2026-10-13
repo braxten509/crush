@@ -71,13 +71,13 @@ type Session struct {
 	UpdatedAt  int64
 }
 
-// KeptSkill is a skill the user turned on for a whole chat. ID is the skill's
+// KeptSkill is a skill turned on for a whole chat. ID is the skill's
 // catalog ID (its SKILL.md path or builtin ID).
 type KeptSkill struct {
 	ID   string
 	Name string
-	// ByAgent is set when the agent turned the skill on; the agent may
-	// turn only these off. Skills the user turned on are the user's.
+	// ByAgent marks the skill toggleable: the agent may turn it off. Skills
+	// the agent turns on are toggleable; the user picks either state.
 	ByAgent bool
 }
 
@@ -432,9 +432,9 @@ func (s *service) keptSkillsWhere(ctx context.Context, sessionID string, turnedO
 }
 
 // SetKeptSkill turns a skill on or off for a whole chat and publishes the
-// updated session so every client shows the change. skill.ByAgent says who
-// turns it on: the agent turning on a skill the user has on leaves it the
-// user's, and the user turning on the agent's skill takes it over.
+// updated session so every client shows the change. skill.ByAgent makes it
+// toggleable; turning on a skill the user has on without it keeps it that
+// way, so the agent can't make the user's skill toggleable.
 func (s *service) SetKeptSkill(ctx context.Context, sessionID string, skill KeptSkill, on bool) (Session, error) {
 	var err error
 	if on {

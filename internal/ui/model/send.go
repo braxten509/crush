@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/chat"
-	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
@@ -73,9 +72,6 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 	if m.deferSendDuringSwitch(deferredSend{content: content, hidden: hidden, attachments: attachments}) {
 		return nil
 	}
-
-	// Start the turn timer.
-	common.StartTurn()
 
 	// Any new prompt supersedes a pending, unconfirmed plan.
 	m.setPlanReadyPending("")

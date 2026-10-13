@@ -172,6 +172,25 @@ func quickStyle(o quickStyleOpts) Styles {
 		s      Styles
 	)
 
+	quickStyleInputs(&s, o, base)
+	quickStyleMarkdown(&s, o)
+	quickStyleMarkdownVariants(&s, o, base)
+	quickStyleQuietMarkdown(&s, o, muted, subtle)
+	quickStyleWidgets(&s, o, base)
+	quickStyleHeader(&s, o, base, muted, subtle)
+	quickStyleTools(&s, o, base, muted, subtle)
+	quickStyleEditor(&s, o)
+	quickStyleSidebar(&s, o, base, muted, subtle)
+	quickStyleChat(&s, o, base, muted, subtle)
+	quickStyleDialogs(&s, o, base)
+	quickStyleCompletions(&s, o, base)
+
+	return s
+}
+
+// quickStyleInputs sets the background and working colors, the text input and
+// the composer textarea.
+func quickStyleInputs(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	s.Background = o.bgBase
 
 	// Populate color fields
@@ -229,7 +248,10 @@ func quickStyle(o quickStyleOpts) Styles {
 			Blink: true,
 		},
 	}
+}
 
+// quickStyleMarkdown sets the reply markdown style.
+func quickStyleMarkdown(s *Styles, o quickStyleOpts) {
 	s.Markdown = ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
@@ -439,7 +461,11 @@ func quickStyle(o quickStyleOpts) Styles {
 			BlockPrefix: "\n ",
 		},
 	}
+}
 
+// quickStyleMarkdownVariants derives the plan and question markdown styles
+// from the reply style.
+func quickStyleMarkdownVariants(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	// PlanMarkdown keeps the rich markdown colors for the plan card. H2–H5 in
 	// s.Markdown only set Prefix and rely on glamour inheriting Color/Bold
 	// from the base Heading style; copy them explicitly so section headings
@@ -474,7 +500,10 @@ func quickStyle(o quickStyleOpts) Styles {
 	questionMD := s.Markdown
 	questionMD.Document.Color = hex(o.fgMoreSubtle)
 	s.QuestionMarkdown = questionMD
+}
 
+// quickStyleQuietMarkdown sets the muted markdown style of thinking content.
+func quickStyleQuietMarkdown(s *Styles, o quickStyleOpts, muted, subtle lipgloss.Style) {
 	// QuietMarkdown style - muted colors on subtle background for thinking content.
 	plainBg := hex(o.bgLeastVisible)
 	plainFg := hex(o.fgMoreSubtle)
@@ -638,7 +667,10 @@ func quickStyle(o quickStyleOpts) Styles {
 			BackgroundColor: plainBg,
 		},
 	}
+}
 
+// quickStyleWidgets sets the help, diff view and file picker styles.
+func quickStyleWidgets(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	s.Help = help.Styles{
 		ShortKey:       base.Foreground(o.fgMoreSubtle),
 		ShortDesc:      base.Foreground(o.fgMostSubtle),
@@ -715,7 +747,11 @@ func quickStyle(o quickStyleOpts) Styles {
 		FileSize:         base.Foreground(o.fgMoreSubtle),
 		EmptyDirectory:   base.Foreground(o.fgMoreSubtle).PaddingLeft(2).SetString("Empty directory"),
 	}
+}
 
+// quickStyleHeader sets the tool success mark, the header and the compact
+// details.
+func quickStyleHeader(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.Style) {
 	// borders
 	s.ToolCallSuccess = lipgloss.NewStyle().Foreground(o.success).SetString(ToolSuccess)
 
@@ -736,7 +772,10 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.CompactDetails.Title = base
 	s.CompactDetails.View = base.Padding(0, 1, 1, 1).Border(lipgloss.RoundedBorder()).BorderForeground(o.primary)
 	s.CompactDetails.Version = lipgloss.NewStyle().Foreground(o.separator)
+}
 
+// quickStyleTools sets the tool call styles.
+func quickStyleTools(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.Style) {
 	// Tool rendering styles
 	s.Tool.IconPending = base.Foreground(o.successMostSubtle).SetString(ToolPending)
 	s.Tool.IconSuccess = base.Foreground(o.success).SetString(ToolSuccess)
@@ -834,7 +873,11 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.ResultTruncation = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Tool.ResultItemName = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Tool.ResultItemDesc = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+}
 
+// quickStyleEditor sets the buttons, the composer prompts and the question
+// form tabs.
+func quickStyleEditor(s *Styles, o quickStyleOpts) {
 	// Buttons
 	s.Button.Focused = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.button)
 	s.Button.Blurred = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.buttonSubtle)
@@ -918,7 +961,11 @@ func quickStyle(o quickStyleOpts) Styles {
 
 	s.Tab.ActiveStyle = uv.Style{Fg: o.fgBase}
 	s.Tab.InactiveStyle = uv.Style{Fg: o.fgMoreSubtle}
+}
 
+// quickStyleSidebar sets the logo, section, initialize, sidebar, footer and
+// model info styles.
+func quickStyleSidebar(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.Style) {
 	// Logo
 	s.Logo.FieldColor = o.primary
 	s.Logo.TitleColorA = o.secondary
@@ -1006,7 +1053,11 @@ func quickStyle(o quickStyleOpts) Styles {
 	// ResourceGroup
 	s.Resource.DefaultTitleFg = o.fgMoreSubtle
 	s.Resource.DefaultDescFg = o.fgMostSubtle
+}
 
+// quickStyleChat sets the chat message, ANSI palette, shell, plan, thinking
+// and selection styles.
+func quickStyleChat(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.Style) {
 	// Chat
 	messageFocussedBorder := lipgloss.Border{
 		Left: "▌",
@@ -1083,7 +1134,10 @@ func quickStyle(o quickStyleOpts) Styles {
 
 	// Text selection.
 	s.TextSelection = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.primary)
+}
 
+// quickStyleDialogs sets the dialog styles.
+func quickStyleDialogs(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	// Dialog styles
 	s.Dialog.Title = base.Padding(0, 1).Foreground(o.primary)
 	s.Dialog.TitleText = base.Foreground(o.primary)
@@ -1199,7 +1253,10 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Status.UpdateMessage = s.Status.SuccessMessage
 	s.Status.WarnMessage = s.Status.SuccessMessage
 	s.Status.ErrorMessage = s.Status.SuccessMessage
+}
 
+// quickStyleCompletions sets the completions, attachments and pills styles.
+func quickStyleCompletions(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	// Completions styles
 	s.Completions.Normal = base.Background(o.bgLessVisible).Foreground(o.fgBase)
 	s.Completions.Focused = base.Background(o.primary).Foreground(o.onPrimary)
@@ -1240,8 +1297,6 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Pills.HelpKey = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
 	s.Pills.HelpText = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Pills.Area = base
-
-	return s
 }
 
 // withMarkdownBackground returns a copy of cfg with bg applied to every style

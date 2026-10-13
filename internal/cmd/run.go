@@ -116,69 +116,11 @@ crush run --continue "Follow up on your last response"
 			UseLast:           useLast,
 		}
 
+		hideSpinner := quiet || verbose
 		if useClientServer() {
-			c, ws, cleanup, err := connectToServer(cmd)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
-
-			event.AppInitialized()
-
-			if !ws.Config.IsConfigured() {
-				return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
-			}
-
-			clientWs := workspace.NewClientWorkspace(c, *ws)
-			if err := clientWs.InitCoderAgentNonInteractive(ctx); err != nil {
-				return fmt.Errorf("failed to initialize agent: %w", err)
-			}
-
-			if sessionID != "" {
-				sess, err := resolveSessionByID(ctx, c, ws.ID, sessionID)
-				if err != nil {
-					return err
-				}
-				opts.ContinueSessionID = sess.ID
-			}
-
-			if verbose {
-				slog.SetDefault(slog.New(log.New(os.Stderr)))
-			}
-
-			return noninteractive.Run(ctx, &clientRun{c: c, ws: ws}, opts, runTerminal(ws.Config, quiet || verbose))
+			return runOnServer(ctx, cmd, opts, verbose, hideSpinner)
 		}
-
-		appInstance, cleanup, err := setupLocalApp(cmd)
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-
-		event.AppInitialized()
-
-		if !appInstance.Config().IsConfigured() {
-			return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
-		}
-
-		if verbose {
-			slog.SetDefault(slog.New(log.New(os.Stderr)))
-		}
-
-		if sessionID != "" {
-			sess, err := resolveSessionID(ctx, appInstance.Sessions, sessionID)
-			if err != nil {
-				return err
-			}
-			opts.ContinueSessionID = sess.ID
-		}
-
-		// Re-initialize the coder agent without interactive-only tools.
-		if err := appInstance.InitCoderAgentNonInteractive(ctx); err != nil {
-			return fmt.Errorf("failed to reinitialize agent for non-interactive mode: %w", err)
-		}
-
-		return noninteractive.Run(ctx, appInstance.NonInteractive(), opts, runTerminal(appInstance.Config(), quiet || verbose))
+		return runInProcess(ctx, cmd, opts, verbose, hideSpinner)
 	},
 }
 
@@ -192,6 +134,75 @@ func init() {
 	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
+}
+
+// runOnServer runs a `crush run` turn on the Crush server, starting it if
+// needed.
+func runOnServer(ctx context.Context, cmd *cobra.Command, opts noninteractive.Options, verbose, hideSpinner bool) error {
+	c, ws, cleanup, err := connectToServer(cmd)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	event.AppInitialized()
+
+	if !ws.Config.IsConfigured() {
+		return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+	}
+
+	clientWs := workspace.NewClientWorkspace(c, *ws)
+	if err := clientWs.InitCoderAgentNonInteractive(ctx); err != nil {
+		return fmt.Errorf("failed to initialize agent: %w", err)
+	}
+
+	if opts.ContinueSessionID != "" {
+		sess, err := resolveSessionByID(ctx, c, ws.ID, opts.ContinueSessionID)
+		if err != nil {
+			return err
+		}
+		opts.ContinueSessionID = sess.ID
+	}
+
+	if verbose {
+		slog.SetDefault(slog.New(log.New(os.Stderr)))
+	}
+
+	return noninteractive.Run(ctx, &clientRun{c: c, ws: ws}, opts, runTerminal(ws.Config, hideSpinner))
+}
+
+// runInProcess runs a `crush run` turn in this process.
+func runInProcess(ctx context.Context, cmd *cobra.Command, opts noninteractive.Options, verbose, hideSpinner bool) error {
+	appInstance, cleanup, err := setupLocalApp(cmd)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	event.AppInitialized()
+
+	if !appInstance.Config().IsConfigured() {
+		return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+	}
+
+	if verbose {
+		slog.SetDefault(slog.New(log.New(os.Stderr)))
+	}
+
+	if opts.ContinueSessionID != "" {
+		sess, err := resolveSessionID(ctx, appInstance.Sessions, opts.ContinueSessionID)
+		if err != nil {
+			return err
+		}
+		opts.ContinueSessionID = sess.ID
+	}
+
+	// Re-initialize the coder agent without interactive-only tools.
+	if err := appInstance.InitCoderAgentNonInteractive(ctx); err != nil {
+		return fmt.Errorf("failed to reinitialize agent for non-interactive mode: %w", err)
+	}
+
+	return noninteractive.Run(ctx, appInstance.NonInteractive(), opts, runTerminal(appInstance.Config(), hideSpinner))
 }
 
 // runTerminal describes how `crush run` presents itself on this terminal:

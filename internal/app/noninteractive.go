@@ -189,32 +189,8 @@ func (n nonInteractive) Stream(ctx context.Context, out *noninteractive.Output, 
 			// fan-in. The coordinator publishes before returning, so drain
 			// its broker and use the exact final message ID. Timestamp order
 			// is ambiguous when several replies finish in the same second.
-		readCompletions:
-			for {
-				select {
-				case event, ok := <-completionEvents:
-					if !ok {
-						break readCompletions
-					}
-					readCompletion(event)
-				default:
-					break readCompletions
-				}
-			}
-			var msg message.Message
-			var err error
-			if lastCompletion.MessageID != "" {
-				msg, err = app.Messages.Get(ctx, lastCompletion.MessageID)
-			} else {
-				msg, err = app.Messages.GetLastAssistantMessage(ctx, sessionID)
-			}
-			if err == nil {
-				return printer.print(msg)
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			return nil
+			drainCompletions(completionEvents, readCompletion)
+			return n.printFinalReply(ctx, &printer, sessionID, lastCompletion.MessageID)
 
 		case event, ok := <-completionEvents:
 			if !ok {
@@ -241,6 +217,42 @@ func (n nonInteractive) Stream(ctx context.Context, out *noninteractive.Output, 
 			return ctx.Err()
 		}
 	}
+}
+
+// drainCompletions passes every completion event already queued on events
+// to read, without waiting for more.
+func drainCompletions(events <-chan pubsub.Event[notify.RunComplete], read func(pubsub.Event[notify.RunComplete])) {
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				return
+			}
+			read(event)
+		default:
+			return
+		}
+	}
+}
+
+// printFinalReply prints whatever of the run's final assistant message has
+// not been printed yet: the message the run completed with when known,
+// otherwise the session's last assistant message.
+func (n nonInteractive) printFinalReply(ctx context.Context, printer *replyPrinter, sessionID, messageID string) error {
+	var msg message.Message
+	var err error
+	if messageID != "" {
+		msg, err = n.app.Messages.Get(ctx, messageID)
+	} else {
+		msg, err = n.app.Messages.GetLastAssistantMessage(ctx, sessionID)
+	}
+	if err == nil {
+		return printer.print(msg)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return nil
 }
 
 // replyPrinter writes the unseen tail of each assistant message to stdout,

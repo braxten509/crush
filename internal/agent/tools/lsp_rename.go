@@ -34,6 +34,7 @@ func NewRenameTool(
 	permissions permission.Service,
 	files history.Service,
 	filetracker filetracker.Service,
+	workingDir string,
 ) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		RenameToolName,
@@ -45,8 +46,8 @@ func NewRenameTool(
 			if params.NewName == "" {
 				return fantasy.NewTextErrorResponse("new_name is required"), nil
 			}
-			workingDir := cmp.Or(params.Path, ".")
-			resolved, err := resolveSymbol(ctx, lspManager, params.Symbol, workingDir)
+			searchDir := cmp.Or(params.Path, ".")
+			resolved, err := resolveSymbol(ctx, lspManager, params.Symbol, searchDir)
 			if err != nil {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("Symbol '%s' not found", params.Symbol)), nil
 			}
@@ -77,6 +78,9 @@ func NewRenameTool(
 
 			affectedFiles := collectAffectedFiles(edit)
 
+			// Keep the files' contents from before the rename, so the file
+			// history can record both versions of each.
+			before := make(map[string]string, len(affectedFiles))
 			if files != nil && sessionID != "" {
 				for _, path := range affectedFiles {
 					content, err := os.ReadFile(path)
@@ -84,9 +88,7 @@ func NewRenameTool(
 						slog.Warn("Failed to read file for version tracking", "path", path, "error", err)
 						continue
 					}
-					if _, err := files.CreateVersion(ctx, sessionID, path, string(content)); err != nil {
-						slog.Warn("Failed to create file version", "path", path, "error", err)
-					}
+					before[path] = string(content)
 				}
 			}
 
@@ -95,9 +97,27 @@ func NewRenameTool(
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("failed to apply rename edits: %s", err)), nil
 			}
 
-			if filetracker != nil && sessionID != "" {
+			if sessionID != "" {
+				record := editContext{ctx: ctx, files: files, filetracker: filetracker, workingDir: workingDir}
 				for _, path := range affectedFiles {
-					filetracker.RecordRead(ctx, sessionID, path)
+					oldContent, ok := before[path]
+					var newContent []byte
+					var err error
+					if ok {
+						newContent, err = os.ReadFile(path)
+						if err != nil {
+							slog.Warn("Failed to read renamed file for version tracking", "path", path, "error", err)
+						}
+					}
+					if !ok || err != nil {
+						if filetracker != nil {
+							filetracker.RecordRead(ctx, sessionID, path)
+						}
+						continue
+					}
+					if err := recordFileChange(record, sessionID, path, oldContent, string(newContent)); err != nil {
+						slog.Warn("Failed to create file version", "path", path, "error", err)
+					}
 				}
 			}
 

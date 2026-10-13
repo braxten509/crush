@@ -30,6 +30,8 @@ type Process struct {
 	// Name is what the agent called a managed job; empty for others.
 	Name    string
 	Started time.Time
+	// Session is the main session whose agent started the process.
+	Session string
 	// marker is a managed job's environment marker, which its processes
 	// carry.
 	marker string
@@ -126,7 +128,7 @@ func BackgroundProcesses() []Process {
 			continue
 		}
 		if !p.busService && isCommandRoot(p, procs) && !isForegroundCommand(p, procs) {
-			out = append(out, Process{PID: p.pid, Command: commandText(p.args), Started: p.started})
+			out = append(out, Process{PID: p.pid, Command: commandText(p.args), Started: p.started, Session: p.session})
 		}
 	}
 	slices.SortFunc(out, func(a, b Process) int { return a.Started.Compare(b.Started) })

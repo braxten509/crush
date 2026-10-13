@@ -55,10 +55,20 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 		st.State = sessionhost.StateWaiting
 	case m.isAgentBusy():
 		st.State = sessionhost.StateWorking
-	case agent.SessionHasUnfinishedWork(m.currentSessionID()):
+	case agent.SessionHasUnfinishedWork(m.currentSessionID()), m.hasUntrackedProcess():
 		st.State = sessionhost.StateBackground
 	}
 	return st
+}
+
+// hasUntrackedProcess reports a command this chat's agent left running
+// outside Crush's jobs, such as a CLI's own background shell. Crush's jobs
+// are judged by SessionHasUnfinishedWork, which leaves services out.
+func (m *UI) hasUntrackedProcess() bool {
+	id := m.currentSessionID()
+	return id != "" && slices.ContainsFunc(m.taskRow.bgProcs, func(p agent.Process) bool {
+		return p.JobID == "" && p.Session == id
+	})
 }
 
 // stopHostServer stops the server on port, as the session list asked.

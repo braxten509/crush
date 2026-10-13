@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
+	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -348,16 +349,10 @@ func (m *Models) isSelectedConfigured() bool {
 
 // setProviderItems sets the provider items in the list.
 func (m *Models) setProviderItems() error {
-	t := m.com.Styles
 	cfg := m.com.Config()
 
-	var selectedItemID string
 	selectedType := m.modelType.Config()
-	currentModel := cfg.Models[selectedType]
 	recentItems := cfg.RecentModels[selectedType]
-
-	// Track providers already added to avoid duplicates
-	addedProviders := make(map[string]bool)
 
 	// Get a list of known providers to compare against
 	knownProviders, err := config.Providers(cfg)
@@ -365,15 +360,86 @@ func (m *Models) setProviderItems() error {
 		return fmt.Errorf("failed to get providers: %w", err)
 	}
 
+	b := &modelGroupsBuilder{
+		t:            m.com.Styles,
+		modelType:    m.modelType,
+		currentModel: cfg.Models[selectedType],
+		itemsMap:     make(map[string]*ModelItem),
+		groups:       []ModelGroup{},
+	}
+	addedProviders := m.addCustomProviderGroups(b, cfg, knownProviders)
+	m.addKnownProviderGroups(b, cfg, addedProviders)
+
+	if len(recentItems) > 0 {
+		if err := m.addRecentGroup(b, recentItems, selectedType); err != nil {
+			return err
+		}
+	}
+
+	// Set model groups in the list.
+	m.list.SetGroups(b.groups...)
+	m.list.SetSelectedItem(b.selectedItemID)
+	if b.selectedItemID != "" {
+		m.list.ScrollToSelected()
+	} else {
+		m.list.ScrollToTop()
+	}
+
+	// Update placeholder based on model type
+	if !m.isOnboarding {
+		m.input.Placeholder = m.modelType.Placeholder()
+	}
+
+	return nil
+}
+
+// modelGroupsBuilder collects the model groups shown by the dialog and
+// tracks the item matching the current model.
+type modelGroupsBuilder struct {
+	t            *styles.Styles
+	modelType    ModelType
+	currentModel config.SelectedModel
+	// itemsMap contains the keys of added model items.
+	itemsMap       map[string]*ModelItem
+	selectedItemID string
+	groups         []ModelGroup
+}
+
+// newGroup builds a group titled name with an item for each model of
+// provider, recording the items and the one for the current model.
+func (b *modelGroupsBuilder) newGroup(name string, configured bool, provider catwalk.Provider, models []catwalk.Model) ModelGroup {
+	group := NewModelGroup(b.t, name, configured)
+	for _, model := range models {
+		item := NewModelItem(b.t, provider, model, b.modelType, false)
+		group.AppendItems(item)
+		b.itemsMap[item.ID()] = item
+		if model.ID == b.currentModel.Model && string(provider.ID) == b.currentModel.Provider {
+			b.selectedItemID = item.ID()
+		}
+	}
+	return group
+}
+
+// appendNonEmpty appends group unless it has no items.
+func (b *modelGroupsBuilder) appendNonEmpty(group ModelGroup) {
+	if len(group.Items) > 0 {
+		b.groups = append(b.groups, group)
+	}
+}
+
+// addCustomProviderGroups adds a group for each enabled configured
+// provider missing from the known or offered providers, and returns the
+// IDs it added.
+func (m *Models) addCustomProviderGroups(b *modelGroupsBuilder, cfg *config.Config, knownProviders []catwalk.Provider) map[string]bool {
+	// Track providers already added to avoid duplicates
+	addedProviders := make(map[string]bool)
+
 	containsProviderFunc := func(id string) func(p catwalk.Provider) bool {
 		return func(p catwalk.Provider) bool {
 			return p.ID == catwalk.InferenceProvider(id)
 		}
 	}
 
-	// itemsMap contains the keys of added model items.
-	itemsMap := make(map[string]*ModelItem)
-	groups := []ModelGroup{}
 	for id, p := range cfg.Providers.Seq2() {
 		if p.Disable {
 			continue
@@ -389,21 +455,15 @@ func (m *Models) setProviderItems() error {
 
 			addedProviders[id] = true
 
-			group := NewModelGroup(t, name, true)
-			for _, model := range p.Models {
-				item := NewModelItem(t, provider, model, m.modelType, false)
-				group.AppendItems(item)
-				itemsMap[item.ID()] = item
-				if model.ID == currentModel.Model && string(provider.ID) == currentModel.Provider {
-					selectedItemID = item.ID()
-				}
-			}
-			if len(group.Items) > 0 {
-				groups = append(groups, group)
-			}
+			b.appendNonEmpty(b.newGroup(name, true, provider, p.Models))
 		}
 	}
+	return addedProviders
+}
 
+// addKnownProviderGroups adds a group for each offered provider that is
+// neither disabled nor already added.
+func (m *Models) addKnownProviderGroups(b *modelGroupsBuilder, cfg *config.Config, addedProviders map[string]bool) {
 	// Now add known providers from the predefined list.
 	// Providers already has Hyper at the front of the list.
 	for _, provider := range m.providers {
@@ -419,25 +479,7 @@ func (m *Models) setProviderItems() error {
 
 		displayProvider := provider
 		if providerConfigured {
-			displayProvider.Name = cmp.Or(providerConfig.Name, displayProvider.Name)
-			modelIndex := make(map[string]int, len(displayProvider.Models))
-			for i, model := range displayProvider.Models {
-				modelIndex[model.ID] = i
-			}
-			for _, model := range providerConfig.Models {
-				if model.ID == "" {
-					continue
-				}
-				if idx, ok := modelIndex[model.ID]; ok {
-					if model.Name != "" {
-						displayProvider.Models[idx].Name = model.Name
-					}
-					continue
-				}
-				model.Name = cmp.Or(model.Name, model.ID)
-				displayProvider.Models = append(displayProvider.Models, model)
-				modelIndex[model.ID] = len(displayProvider.Models) - 1
-			}
+			displayProvider = withConfiguredModels(displayProvider, providerConfig)
 		}
 
 		name := cmp.Or(displayProvider.Name, providerID)
@@ -447,92 +489,91 @@ func (m *Models) setProviderItems() error {
 		// subscription grants are usable, so they are all the section
 		// lists; the API catalog would only 404. Without a login the
 		// section is the API catalog.
-		if providerConfig.OAuthToken != nil {
-			var subscriptionModels []catwalk.Model
-			switch provider.ID {
-			case catwalk.InferenceProviderOpenAI:
-				subscriptionModels = providerConfig.ChatGPTModels
-			case catwalk.InferenceProviderXAI:
-				subscriptionModels = providerConfig.GrokModels
-			}
-			if subscriptionModels != nil {
-				group := NewModelGroup(t, name, true)
-				for _, model := range subscriptionModels {
-					item := NewModelItem(t, provider, model, m.modelType, false)
-					group.AppendItems(item)
-					itemsMap[item.ID()] = item
-					if model.ID == currentModel.Model && string(provider.ID) == currentModel.Provider {
-						selectedItemID = item.ID()
-					}
-				}
-				if len(group.Items) > 0 {
-					groups = append(groups, group)
-				}
-				continue
-			}
+		if subscriptionModels := subscriptionModels(provider.ID, providerConfig); subscriptionModels != nil {
+			b.appendNonEmpty(b.newGroup(name, true, provider, subscriptionModels))
+			continue
 		}
 
-		group := NewModelGroup(t, name, providerConfigured)
-		for _, model := range displayProvider.Models {
-			item := NewModelItem(t, provider, model, m.modelType, false)
-			group.AppendItems(item)
-			itemsMap[item.ID()] = item
-			if model.ID == currentModel.Model && string(provider.ID) == currentModel.Provider {
-				selectedItemID = item.ID()
+		b.groups = append(b.groups, b.newGroup(name, providerConfigured, provider, displayProvider.Models))
+	}
+}
+
+// withConfiguredModels applies a provider's configured name and models to
+// its catalog entry: configured names override catalog ones, and models
+// missing from the catalog are appended.
+func withConfiguredModels(displayProvider catwalk.Provider, providerConfig config.ProviderConfig) catwalk.Provider {
+	displayProvider.Name = cmp.Or(providerConfig.Name, displayProvider.Name)
+	modelIndex := make(map[string]int, len(displayProvider.Models))
+	for i, model := range displayProvider.Models {
+		modelIndex[model.ID] = i
+	}
+	for _, model := range providerConfig.Models {
+		if model.ID == "" {
+			continue
+		}
+		if idx, ok := modelIndex[model.ID]; ok {
+			if model.Name != "" {
+				displayProvider.Models[idx].Name = model.Name
 			}
+			continue
+		}
+		model.Name = cmp.Or(model.Name, model.ID)
+		displayProvider.Models = append(displayProvider.Models, model)
+		modelIndex[model.ID] = len(displayProvider.Models) - 1
+	}
+	return displayProvider
+}
+
+// subscriptionModels returns the models a signed-in ChatGPT or Grok
+// subscription grants, or nil when the provider is not signed in with
+// one.
+func subscriptionModels(id catwalk.InferenceProvider, providerConfig config.ProviderConfig) []catwalk.Model {
+	if providerConfig.OAuthToken == nil {
+		return nil
+	}
+	switch id {
+	case catwalk.InferenceProviderOpenAI:
+		return providerConfig.ChatGPTModels
+	case catwalk.InferenceProviderXAI:
+		return providerConfig.GrokModels
+	}
+	return nil
+}
+
+// addRecentGroup puts the recently used models that are still offered in
+// a group at the top, and drops the stale ones from the config.
+func (m *Models) addRecentGroup(b *modelGroupsBuilder, recentItems []config.SelectedModel, selectedType config.SelectedModelType) error {
+	recentGroup := NewModelGroup(b.t, "Recently used", false)
+
+	var validRecentItems []config.SelectedModel
+	for _, recent := range recentItems {
+		key := modelKey(recent.Provider, recent.Model)
+		item, ok := b.itemsMap[key]
+		if !ok {
+			continue
 		}
 
-		groups = append(groups, group)
+		// Show provider for recent items
+		item = NewModelItem(b.t, item.prov, item.model, m.modelType, true)
+		item.showProvider = true
+
+		validRecentItems = append(validRecentItems, recent)
+		recentGroup.AppendItems(item)
+		if recent.Model == b.currentModel.Model && recent.Provider == b.currentModel.Provider {
+			b.selectedItemID = item.ID()
+		}
 	}
 
-	if len(recentItems) > 0 {
-		recentGroup := NewModelGroup(t, "Recently used", false)
-
-		var validRecentItems []config.SelectedModel
-		for _, recent := range recentItems {
-			key := modelKey(recent.Provider, recent.Model)
-			item, ok := itemsMap[key]
-			if !ok {
-				continue
-			}
-
-			// Show provider for recent items
-			item = NewModelItem(t, item.prov, item.model, m.modelType, true)
-			item.showProvider = true
-
-			validRecentItems = append(validRecentItems, recent)
-			recentGroup.AppendItems(item)
-			if recent.Model == currentModel.Model && recent.Provider == currentModel.Provider {
-				selectedItemID = item.ID()
-			}
-		}
-
-		if len(validRecentItems) != len(recentItems) {
-			// FIXME: Does this need to be here? Is it mutating the config during a read?
-			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, fmt.Sprintf("recent_models.%s", selectedType), validRecentItems); err != nil {
-				return fmt.Errorf("failed to update recent models: %w", err)
-			}
-		}
-
-		if len(recentGroup.Items) > 0 {
-			groups = append([]ModelGroup{recentGroup}, groups...)
+	if len(validRecentItems) != len(recentItems) {
+		// FIXME: Does this need to be here? Is it mutating the config during a read?
+		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, fmt.Sprintf("recent_models.%s", selectedType), validRecentItems); err != nil {
+			return fmt.Errorf("failed to update recent models: %w", err)
 		}
 	}
 
-	// Set model groups in the list.
-	m.list.SetGroups(groups...)
-	m.list.SetSelectedItem(selectedItemID)
-	if selectedItemID != "" {
-		m.list.ScrollToSelected()
-	} else {
-		m.list.ScrollToTop()
+	if len(recentGroup.Items) > 0 {
+		b.groups = append([]ModelGroup{recentGroup}, b.groups...)
 	}
-
-	// Update placeholder based on model type
-	if !m.isOnboarding {
-		m.input.Placeholder = m.modelType.Placeholder()
-	}
-
 	return nil
 }
 

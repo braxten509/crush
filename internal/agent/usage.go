@@ -25,6 +25,23 @@ func (a *sessionAgent) openrouterCost(metadata fantasy.ProviderMetadata) *float6
 	return &opts.Usage.Cost
 }
 
+// stepsOpenrouterCost sums the OpenRouter-reported cost of every step, or
+// returns nil when no step reported one.
+func (a *sessionAgent) stepsOpenrouterCost(steps []fantasy.StepResult) *float64 {
+	var openrouterCost *float64
+	for _, step := range steps {
+		stepCost := a.openrouterCost(step.ProviderMetadata)
+		if stepCost != nil {
+			newCost := *stepCost
+			if openrouterCost != nil {
+				newCost += *openrouterCost
+			}
+			openrouterCost = &newCost
+		}
+	}
+	return openrouterCost
+}
+
 // extractPrismModel returns the ID and name of the model that actually
 // served the turn, as reported by the Hyper Prism model router headers,
 // or empty strings when the turn was not routed through a Prism model.

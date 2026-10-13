@@ -42,6 +42,33 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		}
 	}()
 
+	resp, model, success := a.streamTitle(ctx, sessionID, userPrompt)
+	if !success {
+		// The deferred fallback will save the default session name.
+		return
+	}
+
+	title := cleanTitle(resp.Response.Content.Text(), userPrompt)
+
+	// Calculate usage and cost.
+	cost := titleCost(model, resp.TotalUsage, a.stepsOpenrouterCost(resp.Steps))
+	promptTokens := contextTokens(resp.TotalUsage)
+	completionTokens := resp.TotalUsage.OutputTokens
+
+	// Atomically update only title and usage fields to avoid overriding other
+	// concurrent session updates.
+	saveErr := a.sessions.UpdateTitleAndUsage(ctx, sessionID, title, promptTokens, completionTokens, cost)
+	if saveErr != nil {
+		slog.Error("Failed to save session title and usage", "error", saveErr)
+		return
+	}
+	titleSaved = true
+}
+
+// streamTitle asks the small model, then the large one, for a title. It
+// returns the first complete response and the model that produced it, or
+// false when every model failed or ran out of tokens.
+func (a *sessionAgent) streamTitle(ctx context.Context, sessionID, userPrompt string) (*fantasy.AgentResult, Model, bool) {
 	smallModel := a.smallModel.Get()
 	largeModel := a.largeModel.Get()
 	systemPromptPrefix := a.systemPromptPrefix.Get()
@@ -78,22 +105,16 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		{"large", largeModel},
 	}
 
-	var resp *fantasy.AgentResult
-	var err error
-	var model Model
-	var success bool
 	for _, attempt := range attempts {
 		tok := int64(40)
 		if attempt.model.CatwalkCfg.CanReason {
 			tok = attempt.model.CatwalkCfg.DefaultMaxTokens
 		}
 		agent := newAgent(attempt.model.Model, titlePrompt, tok)
-		resp, err = agent.Stream(ctx, streamCall)
+		resp, err := agent.Stream(ctx, streamCall)
 		if err == nil && resp.Response.FinishReason != fantasy.FinishReasonLength {
-			model = attempt.model
 			slog.Debug("Generated title with " + attempt.name + " model")
-			success = true
-			break
+			return resp, attempt.model, true
 		}
 		if err != nil {
 			slog.Error("Error generating title with "+attempt.name+" model; trying next", "err", err)
@@ -101,14 +122,14 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 			slog.Error("Title generation hit token limit with " + attempt.name + " model; trying next")
 		}
 	}
-	if !success {
-		// The deferred fallback will save the default session name.
-		return
-	}
+	return nil, Model{}, false
+}
 
+// cleanTitle turns a model's reply into a one-line title, falling back to
+// the start of the user's prompt when the reply is empty.
+func cleanTitle(text, userPrompt string) string {
 	// Clean up title.
-	var title string
-	title = strings.ReplaceAll(resp.Response.Content.Text(), "\n", " ")
+	title := strings.ReplaceAll(text, "\n", " ")
 
 	// Remove thinking tags if present.
 	title = thinkTagRegex.ReplaceAllString(title, "")
@@ -126,25 +147,17 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		}
 		title = cmp.Or(fallback, DefaultSessionName)
 	}
+	return title
+}
 
-	// Calculate usage and cost.
-	var openrouterCost *float64
-	for _, step := range resp.Steps {
-		stepCost := a.openrouterCost(step.ProviderMetadata)
-		if stepCost != nil {
-			newCost := *stepCost
-			if openrouterCost != nil {
-				newCost += *openrouterCost
-			}
-			openrouterCost = &newCost
-		}
-	}
-
+// titleCost prices a title request from the model's rates, preferring the
+// cost OpenRouter reported. Flat-rate models cost nothing.
+func titleCost(model Model, usage fantasy.Usage, openrouterCost *float64) float64 {
 	modelConfig := model.CatwalkCfg
-	cost := modelConfig.CostPer1MInCached/1e6*float64(resp.TotalUsage.CacheCreationTokens) +
-		modelConfig.CostPer1MOutCached/1e6*float64(resp.TotalUsage.CacheReadTokens) +
-		modelConfig.CostPer1MIn/1e6*float64(resp.TotalUsage.InputTokens) +
-		modelConfig.CostPer1MOut/1e6*float64(resp.TotalUsage.OutputTokens)
+	cost := modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
+		modelConfig.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
+		modelConfig.CostPer1MIn/1e6*float64(usage.InputTokens) +
+		modelConfig.CostPer1MOut/1e6*float64(usage.OutputTokens)
 
 	// Use override cost if available (e.g., from OpenRouter).
 	if openrouterCost != nil {
@@ -155,16 +168,5 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 	if model.FlatRate {
 		cost = 0
 	}
-
-	promptTokens := contextTokens(resp.TotalUsage)
-	completionTokens := resp.TotalUsage.OutputTokens
-
-	// Atomically update only title and usage fields to avoid overriding other
-	// concurrent session updates.
-	saveErr := a.sessions.UpdateTitleAndUsage(ctx, sessionID, title, promptTokens, completionTokens, cost)
-	if saveErr != nil {
-		slog.Error("Failed to save session title and usage", "error", saveErr)
-		return
-	}
-	titleSaved = true
+	return cost
 }

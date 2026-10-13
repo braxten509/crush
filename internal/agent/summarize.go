@@ -78,56 +78,10 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		resp, err = a.cliSummarize(genCtx, cliModel, sessionID, largeModel.ModelCfg.ReasoningEffort, msgs, summaryPromptText, &summaryMessage)
 	}
 	if resp == nil && err == nil {
-		resp, err = agent.Stream(genCtx, fantasy.AgentStreamCall{
-			Prompt:          summaryPromptText,
-			Messages:        aiMsgs,
-			Headers:         sessionHeaders(sessionID),
-			ProviderOptions: opts,
-			OnAuthRefresh:   onAuthRefresh,
-			ModelProvider: func() fantasy.LanguageModel {
-				return a.largeModel.Get().Model
-			},
-			PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-				prepared.Messages = options.Messages
-				if systemPromptPrefix != "" {
-					prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
-				}
-				return callContext, prepared, nil
-			},
-			OnReasoningDelta: func(id string, text string) error {
-				summaryMessage.AppendReasoningContent(text)
-				return a.messages.Update(genCtx, summaryMessage)
-			},
-			OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-				// Handle anthropic signature.
-				if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
-					if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
-						summaryMessage.AppendReasoningSignature(signature.Signature)
-					}
-				}
-				summaryMessage.FinishThinking()
-				return a.messages.Update(genCtx, summaryMessage)
-			},
-			OnTextDelta: func(id, text string) error {
-				summaryMessage.AppendContent(text)
-				return a.messages.Update(genCtx, summaryMessage)
-			},
-		})
+		resp, err = agent.Stream(genCtx, a.summaryStreamCall(genCtx, sessionID, summaryPromptText, aiMsgs, opts, onAuthRefresh, systemPromptPrefix, &summaryMessage))
 	}
 	if err != nil {
-		isCancelErr := errors.Is(err, context.Canceled)
-		if isCancelErr {
-			// User cancelled summarize we need to remove the summary message.
-			deleteErr := a.messages.Delete(ctx, summaryMessage.ID)
-			return deleteErr
-		}
-		// Mark the summary message as finished with an error so the UI
-		// stops spinning.
-		summaryMessage.AddFinish(message.FinishReasonError, "Summarization Error", err.Error())
-		if updateErr := a.messages.Update(ctx, summaryMessage); updateErr != nil {
-			return updateErr
-		}
-		return err
+		return a.failSummary(ctx, &summaryMessage, err)
 	}
 
 	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
@@ -136,18 +90,74 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return err
 	}
 
-	var openrouterCost *float64
-	for _, step := range resp.Steps {
-		stepCost := a.openrouterCost(step.ProviderMetadata)
-		if stepCost != nil {
-			newCost := *stepCost
-			if openrouterCost != nil {
-				newCost += *openrouterCost
-			}
-			openrouterCost = &newCost
-		}
+	if err := a.saveSummaryUsage(genCtx, largeModel, currentSession, resp, summaryMessage); err != nil {
+		return err
 	}
+	return a.runQueuedAfterSummary(ctx, sessionID, cancel)
+}
 
+// summaryStreamCall streams the summary into summaryMessage as it arrives.
+func (a *sessionAgent) summaryStreamCall(genCtx context.Context, sessionID, summaryPromptText string, aiMsgs []fantasy.Message, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, systemPromptPrefix string, summaryMessage *message.Message) fantasy.AgentStreamCall {
+	return fantasy.AgentStreamCall{
+		Prompt:          summaryPromptText,
+		Messages:        aiMsgs,
+		Headers:         sessionHeaders(sessionID),
+		ProviderOptions: opts,
+		OnAuthRefresh:   onAuthRefresh,
+		ModelProvider: func() fantasy.LanguageModel {
+			return a.largeModel.Get().Model
+		},
+		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+			prepared.Messages = options.Messages
+			if systemPromptPrefix != "" {
+				prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
+			}
+			return callContext, prepared, nil
+		},
+		OnReasoningDelta: func(id string, text string) error {
+			summaryMessage.AppendReasoningContent(text)
+			return a.messages.Update(genCtx, *summaryMessage)
+		},
+		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
+			// Handle anthropic signature.
+			if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
+				if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
+					summaryMessage.AppendReasoningSignature(signature.Signature)
+				}
+			}
+			summaryMessage.FinishThinking()
+			return a.messages.Update(genCtx, *summaryMessage)
+		},
+		OnTextDelta: func(id, text string) error {
+			summaryMessage.AppendContent(text)
+			return a.messages.Update(genCtx, *summaryMessage)
+		},
+	}
+}
+
+// failSummary ends a summary that failed. A cancelled summary is removed;
+// any other failure is recorded on the summary message so the UI stops
+// spinning.
+func (a *sessionAgent) failSummary(ctx context.Context, summaryMessage *message.Message, err error) error {
+	isCancelErr := errors.Is(err, context.Canceled)
+	if isCancelErr {
+		// User cancelled summarize we need to remove the summary message.
+		deleteErr := a.messages.Delete(ctx, summaryMessage.ID)
+		return deleteErr
+	}
+	// Mark the summary message as finished with an error so the UI
+	// stops spinning.
+	summaryMessage.AddFinish(message.FinishReasonError, "Summarization Error", err.Error())
+	if updateErr := a.messages.Update(ctx, *summaryMessage); updateErr != nil {
+		return updateErr
+	}
+	return err
+}
+
+// saveSummaryUsage records the summary's cost and makes it the session's
+// summary message, resetting the context token counts.
+func (a *sessionAgent) saveSummaryUsage(ctx context.Context, largeModel Model, currentSession session.Session, resp *fantasy.AgentResult, summaryMessage message.Message) error {
+	openrouterCost := a.stepsOpenrouterCost(resp.Steps)
 	a.updateSessionUsage(largeModel, &currentSession, resp.TotalUsage, openrouterCost, false)
 
 	// Just in case, get just the last usage info.
@@ -156,11 +166,13 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	currentSession.CompletionTokens = summaryCompletionTokens(usage, summaryMessage)
 	currentSession.PromptTokens = 0
 	currentSession.EstimatedUsage = usageIsZero(usage)
-	_, err = a.sessions.Save(genCtx, currentSession)
-	if err != nil {
-		return err
-	}
+	_, err := a.sessions.Save(ctx, currentSession)
+	return err
+}
 
+// runQueuedAfterSummary releases the summary's active request and runs the
+// prompts queued while it was summarizing.
+func (a *sessionAgent) runQueuedAfterSummary(ctx context.Context, sessionID string, cancel context.CancelFunc) error {
 	// Release the active request before processing queued messages so that
 	// Run() does not see the session as busy.
 	mu := a.sessionMu(sessionID)

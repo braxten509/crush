@@ -405,7 +405,7 @@ func keptSkillsToProto(kept []session.KeptSkill) []proto.KeptSkill {
 	}
 	out := make([]proto.KeptSkill, len(kept))
 	for i, skill := range kept {
-		out[i] = proto.KeptSkill{ID: skill.ID, Name: skill.Name}
+		out[i] = proto.KeptSkill{ID: skill.ID, Name: skill.Name, ByAgent: skill.ByAgent}
 	}
 	return out
 }

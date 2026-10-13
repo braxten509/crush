@@ -69,6 +69,13 @@ func (m *UserMessageItem) RawRender(width int) string {
 
 	msgContent := strings.TrimSpace(m.message.Content().Text)
 
+	if m.message.Role == message.System {
+		content = m.renderSystemNotice(msgContent, cappedWidth)
+		height = lipgloss.Height(content)
+		m.setCachedRender(content, cappedWidth, height)
+		return m.renderHighlighted(content, cappedWidth, height)
+	}
+
 	// A background task's result is for the agent; show a one-line notice.
 	if name, status, ok := agent.ParseTaskNotification(msgContent); ok {
 		content = m.renderTaskNotification(name, status, cappedWidth)
@@ -148,6 +155,21 @@ func (m *UserMessageItem) renderTaskNotification(name, status string, width int)
 	return ansi.Truncate(line, width, "…")
 }
 
+// renderSystemNotice shows a notice such as "teach turned on by the agent"
+// on one line, the skill's name highlighted like a task's.
+func (m *UserMessageItem) renderSystemNotice(text string, width int) string {
+	icon := m.sty.Attachments.KeptDot.SetString("◐").Render()
+	name, rest, ok := strings.Cut(text, " turned ")
+	if !ok {
+		return ansi.Truncate(icon+" "+m.sty.Pills.HelpText.Render(text), width, "…")
+	}
+	if strings.HasPrefix(rest, "off") {
+		icon = m.sty.Pills.HelpText.Render("○")
+	}
+	line := icon + " " + m.sty.Pills.TodoLabel.Render(name) + m.sty.Pills.HelpText.Render(" turned "+rest)
+	return ansi.Truncate(line, width, "…")
+}
+
 // Render implements MessageItem.
 func (m *UserMessageItem) Render(width int) string {
 	// Bypass the prefix cache while a highlight range is active so
@@ -220,6 +242,9 @@ func (m *UserMessageItem) SetHighlight(startLine, startCol, endLine, endCol int)
 
 // isNotice reports whether the message is a background task's result.
 func (m *UserMessageItem) isNotice() bool {
+	if m.message.Role == message.System {
+		return true
+	}
 	_, _, ok := agent.ParseTaskNotification(strings.TrimSpace(m.message.Content().Text))
 	return ok
 }

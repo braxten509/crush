@@ -100,7 +100,7 @@ func TestCLIKeptSkillsTextSaysWhenASkillIsTurnedOff(t *testing.T) {
 
 	cliKeptSkillsText(sessionID, "claude", []*skills.Skill{alpha, beta}, nil, false)
 	text := cliKeptSkillsText(sessionID, "claude", []*skills.Skill{beta}, nil, false)
-	require.Contains(t, text, "- The user turned alpha off for this chat. Stop following it from now on.")
+	require.Contains(t, text, "- alpha is off for this chat now. Stop following it.")
 	require.Contains(t, text, "- beta is on")
 
 	// The off line is said once; with nothing on, nothing more is sent.
@@ -117,7 +117,7 @@ func TestCLIKeptSkillsTextSaysOffAfterCompaction(t *testing.T) {
 	forgetKeptSkillsSent(sessionID)
 
 	text := cliKeptSkillsText(sessionID, "claude", nil, nil, false)
-	require.Contains(t, text, "The user turned alpha off")
+	require.Contains(t, text, "alpha is off for this chat now")
 	require.NotContains(t, text, keptSkillsIntro)
 }
 
@@ -144,7 +144,7 @@ func TestCLIKeptSkillsTextTellsAResumedCLIAfterARestart(t *testing.T) {
 	}
 
 	text := cliKeptSkillsText(sessionID, "claude", nil, turnedOff, false)
-	require.Contains(t, text, "The user turned alpha off")
+	require.Contains(t, text, "alpha is off for this chat now")
 	require.Empty(t, cliKeptSkillsText(sessionID, "claude", nil, turnedOff, false))
 	require.Equal(t, 1, calls, "the saved list is only read when there is no record")
 

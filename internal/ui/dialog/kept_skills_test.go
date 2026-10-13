@@ -121,3 +121,38 @@ func TestKeptSkillsCommandIsFoundWithoutTakingOverSkills(t *testing.T) {
 	}
 	require.Equal(t, ActionOpenDialog{KeptSkillsID}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }
+
+// Skills on for the chat are grouped by who turned them on; turning a skill
+// on yourself makes it yours, and the cursor follows it to its new group.
+func TestKeptSkills_GroupsByWhoTurnedThemOn(t *testing.T) {
+	t.Parallel()
+
+	m := newKeptSkillsForTest([]KeptSkillItem{
+		{ID: "/a/SKILL.md", Name: "align"},
+		{ID: "/d/SKILL.md", Name: "deep-debugging", On: true},
+		{ID: "/t/SKILL.md", Name: "teach", On: true, ByAgent: true},
+	})
+	order := func() []string {
+		var out []string
+		for _, line := range strings.Split(ansi.Strip(m.listView(60, 10)), "\n") {
+			for _, want := range []string{"You turned on", "Agent turned on", "Off", "align", "deep-debugging", "teach"} {
+				if strings.Contains(line, want) {
+					out = append(out, want)
+					break
+				}
+			}
+		}
+		return out
+	}
+	require.Equal(t, []string{"You turned on", "deep-debugging", "Agent turned on", "teach", "Off", "align"}, order())
+
+	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyDown})
+	m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyDown})
+	action := m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Equal(t, ActionToggleKeptSkill{ID: "/a/SKILL.md", Name: "align", On: true}, action)
+	require.Equal(t, []string{"You turned on", "align", "deep-debugging", "Agent turned on", "teach"}, order())
+	require.Equal(t, ActionToggleKeptSkill{ID: "/a/SKILL.md", Name: "align", On: false}, m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}), "the cursor stays on the skill")
+
+	m.SetState("/t/SKILL.md", true, false)
+	require.Equal(t, []string{"You turned on", "deep-debugging", "teach", "Off", "align"}, order(), "the open list follows changes made elsewhere")
+}

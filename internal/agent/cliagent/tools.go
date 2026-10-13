@@ -177,8 +177,8 @@ func sleepRefused(name, input string) bool {
 	return name == tools.BashToolName && json.Unmarshal([]byte(input), &in) == nil && tools.LeadingSleep(in.Command)
 }
 
-// IsSpawnCommand reports whether a shell command only runs `crush spawn` or
-// `crush ask`:
+// IsSpawnCommand reports whether a shell command only runs `crush spawn`,
+// `crush ask` or `crush skill`:
 // one or more lines of it, each optionally fed by a quoted heredoc, with
 // nothing that could run anything else.
 func IsSpawnCommand(cmd string) bool {
@@ -210,7 +210,7 @@ func IsSpawnCommand(cmd string) bool {
 func spawnLine(line string) (delim string, ok bool) {
 	rest, ok := "", false
 	bin, _ := os.Executable()
-	for _, prefix := range []string{"crush spawn", "crush ask", bin + " spawn", bin + " ask"} {
+	for _, prefix := range []string{"crush spawn", "crush ask", "crush skill", bin + " spawn", bin + " ask", bin + " skill"} {
 		if rest, ok = strings.CutPrefix(line, prefix); ok {
 			break
 		}

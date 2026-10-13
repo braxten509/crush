@@ -76,6 +76,9 @@ type Session struct {
 type KeptSkill struct {
 	ID   string
 	Name string
+	// ByAgent is set when the agent turned the skill on; the agent may
+	// turn only these off. Skills the user turned on are the user's.
+	ByAgent bool
 }
 
 // ContextBudget is the native agent's compaction boundary, scoped to the
@@ -411,7 +414,7 @@ func (s *service) TurnedOffSkills(ctx context.Context, sessionID string) ([]Kept
 }
 
 func (s *service) keptSkillsWhere(ctx context.Context, sessionID string, turnedOff bool) ([]KeptSkill, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT skill_id, name FROM session_kept_skills
+	rows, err := s.db.QueryContext(ctx, `SELECT skill_id, name, by_agent FROM session_kept_skills
 		WHERE session_id = ? AND turned_off = ? ORDER BY position`, sessionID, turnedOff)
 	if err != nil {
 		return nil, err
@@ -420,7 +423,7 @@ func (s *service) keptSkillsWhere(ctx context.Context, sessionID string, turnedO
 	var kept []KeptSkill
 	for rows.Next() {
 		var skill KeptSkill
-		if err := rows.Scan(&skill.ID, &skill.Name); err != nil {
+		if err := rows.Scan(&skill.ID, &skill.Name, &skill.ByAgent); err != nil {
 			return nil, err
 		}
 		kept = append(kept, skill)
@@ -429,14 +432,18 @@ func (s *service) keptSkillsWhere(ctx context.Context, sessionID string, turnedO
 }
 
 // SetKeptSkill turns a skill on or off for a whole chat and publishes the
-// updated session so every client shows the change.
+// updated session so every client shows the change. skill.ByAgent says who
+// turns it on: the agent turning on a skill the user has on leaves it the
+// user's, and the user turning on the agent's skill takes it over.
 func (s *service) SetKeptSkill(ctx context.Context, sessionID string, skill KeptSkill, on bool) (Session, error) {
 	var err error
 	if on {
-		_, err = s.db.ExecContext(ctx, `INSERT INTO session_kept_skills (session_id, skill_id, name, position)
-			VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM session_kept_skills WHERE session_id = ?))
-			ON CONFLICT(session_id, skill_id) DO UPDATE SET name = excluded.name, turned_off = 0`,
-			sessionID, skill.ID, skill.Name, sessionID)
+		_, err = s.db.ExecContext(ctx, `INSERT INTO session_kept_skills (session_id, skill_id, name, position, by_agent)
+			VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM session_kept_skills WHERE session_id = ?), ?)
+			ON CONFLICT(session_id, skill_id) DO UPDATE SET name = excluded.name,
+				by_agent = CASE WHEN turned_off = 0 AND by_agent = 0 THEN 0 ELSE excluded.by_agent END,
+				turned_off = 0`,
+			sessionID, skill.ID, skill.Name, sessionID, skill.ByAgent)
 	} else {
 		_, err = s.db.ExecContext(ctx, `UPDATE session_kept_skills SET turned_off = 1 WHERE session_id = ? AND skill_id = ?`,
 			sessionID, skill.ID)

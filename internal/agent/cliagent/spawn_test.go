@@ -27,6 +27,9 @@ func TestIsSpawnCommand(t *testing.T) {
 		"crush ask <<'EOF'\n{\"questions\":[{\"question\":\"$(x)?\"}]}\nEOF":                  true,
 		"crush ask <<'EOF'\n{}\nEOF\nrm -rf ~":                                                false,
 		"crush asker":                                                                         false,
+		"crush skill on teach":                                                                true,
+		"crush skill off teach; rm -rf ~":                                                     false,
+		"crush skillful":                                                                      false,
 	} {
 		require.Equal(t, want, IsSpawnCommand(cmd), cmd)
 	}

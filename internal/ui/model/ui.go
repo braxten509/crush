@@ -1213,6 +1213,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.session != nil && m.session.ID == msg.session.ID {
 			m.session.KeptSkills = msg.session.KeptSkills
+			m.syncKeptSkillsDialog()
 			m.invalidateFrames()
 		}
 	case userCommandsLoadedMsg:
@@ -1282,6 +1283,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			prevPillsHeight := m.pillsAreaHeight()
 			m.updateHyperCredits()
 			m.session = &msg.Payload
+			m.syncKeptSkillsDialog()
 			if !prevHasInProgress && hasInProgressTodo(m.session.Todos) {
 				m.todoIsSpinning = true
 				cmds = append(cmds, m.todoSpinner.Tick)
@@ -2093,6 +2095,11 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 		}
 		m.chat.AppendMessages(items...)
 		m.chat.ScrollToBottom()
+	case message.System:
+		m.chat.AppendMessages(chat.ExtractMessageItems(m.com.Styles, &msg, nil, m.com.Workspace.WorkingDir())...)
+		if m.chat.Follow() {
+			m.chat.ScrollToBottom()
+		}
 	case message.Assistant:
 		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil, m.com.Workspace.WorkingDir())
 		if _, cancelled := m.canceledMessages[msg.ID]; !cancelled && msg.FinishReason() != message.FinishReasonCanceled {
@@ -5643,13 +5650,14 @@ func (m *UI) openKeptSkillsDialog() tea.Cmd {
 // keptSkillItems lists every skill, sorted by name, marking the ones that
 // are on for this chat.
 func (m *UI) keptSkillItems(entries []skills.CatalogEntry) []dialog.KeptSkillItem {
-	on := make(map[string]bool)
-	for _, kept := range m.keptSkills() {
-		on[kept.ID] = true
+	kept := make(map[string]session.KeptSkill)
+	for _, skill := range m.keptSkills() {
+		kept[skill.ID] = skill
 	}
 	items := make([]dialog.KeptSkillItem, 0, len(entries))
 	for _, entry := range entries {
-		items = append(items, dialog.KeptSkillItem{ID: entry.ID, Name: entry.Name, On: on[entry.ID]})
+		skill, on := kept[entry.ID]
+		items = append(items, dialog.KeptSkillItem{ID: entry.ID, Name: entry.Name, On: on, ByAgent: skill.ByAgent})
 	}
 	slices.SortStableFunc(items, func(a, b dialog.KeptSkillItem) int {
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
@@ -5670,6 +5678,25 @@ func (m *UI) setKeptSkill(skill session.KeptSkill, on bool) tea.Cmd {
 	return func() tea.Msg {
 		sess, err := ws.SetKeptSkill(context.Background(), sessionID, skill, on)
 		return keptSkillsChangedMsg{session: sess, err: err}
+	}
+}
+
+// syncKeptSkillsDialog makes an open "Skills for this chat" dialog follow
+// the chat's skills, such as ones the agent turned on or off.
+func (m *UI) syncKeptSkillsDialog() {
+	dia, ok := m.dialog.Dialog(dialog.KeptSkillsID).(*dialog.KeptSkills)
+	if !ok {
+		return
+	}
+	kept := make(map[string]session.KeptSkill)
+	for _, skill := range m.keptSkills() {
+		kept[skill.ID] = skill
+	}
+	for _, item := range dia.Items() {
+		skill, on := kept[item.ID]
+		if item.On != on || item.ByAgent != skill.ByAgent {
+			dia.SetState(item.ID, on, skill.ByAgent)
+		}
 	}
 }
 

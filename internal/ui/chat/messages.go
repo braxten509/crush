@@ -480,6 +480,9 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, toolResults m
 		}
 		r := attachments.NewRenderer(sty.Attachments)
 		return []MessageItem{NewUserMessageItem(sty, msg, r)}
+	case message.System:
+		// A notice for the user, such as a skill the agent turned on.
+		return []MessageItem{NewUserMessageItem(sty, msg, nil)}
 	case message.Assistant:
 		var items []MessageItem
 		if ShouldRenderAssistantMessage(msg) {

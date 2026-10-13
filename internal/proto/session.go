@@ -35,6 +35,8 @@ type Session struct {
 type KeptSkill struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// ByAgent is set when the agent turned the skill on.
+	ByAgent bool `json:"by_agent,omitempty"`
 }
 
 // SetKeptSkillRequest turns a skill on or off for a whole session.

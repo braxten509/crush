@@ -134,6 +134,11 @@ func buildItems(msgs []message.Message, st chatState) []Item {
 			}
 		case message.Assistant:
 			entries = append(entries, assistantEntries(m, last, results, st)...)
+		case message.System:
+			// A notice for the user, such as a skill the agent turned on.
+			if text := strings.TrimSpace(m.Content().Text); text != "" {
+				entries = append(entries, entry{item: Item{ID: m.ID, Kind: "notice", Time: m.CreatedAt, Text: text, Tone: "plain"}})
+			}
 		}
 	}
 	return fold(entries, st)

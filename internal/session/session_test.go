@@ -223,3 +223,43 @@ func TestKeptSkillsPersistInOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, fetchedOther.KeptSkills)
 }
+
+// The chat remembers who turned each skill on. The agent turning on a skill
+// the user already has on leaves it the user's; the user turning on the
+// agent's skill takes it over.
+func TestKeptSkillsRememberWhoTurnedThemOn(t *testing.T) {
+	// Not parallel, like TestKeptSkillsPersistInOrder.
+	dataDir := t.TempDir()
+	t.Cleanup(func() {
+		require.NoError(t, db.Release(dataDir))
+		db.ResetPool()
+	})
+	conn, err := db.Connect(t.Context(), dataDir)
+	require.NoError(t, err)
+	sessions := NewService(db.New(conn), conn)
+	created, err := sessions.Create(t.Context(), "chat")
+	require.NoError(t, err)
+
+	mine := KeptSkill{ID: "/skills/mine/SKILL.md", Name: "mine"}
+	theirs := KeptSkill{ID: "/skills/theirs/SKILL.md", Name: "theirs", ByAgent: true}
+	_, err = sessions.SetKeptSkill(t.Context(), created.ID, mine, true)
+	require.NoError(t, err)
+	updated, err := sessions.SetKeptSkill(t.Context(), created.ID, theirs, true)
+	require.NoError(t, err)
+	require.Equal(t, []KeptSkill{mine, theirs}, updated.KeptSkills)
+
+	updated, err = sessions.SetKeptSkill(t.Context(), created.ID, KeptSkill{ID: mine.ID, Name: mine.Name, ByAgent: true}, true)
+	require.NoError(t, err)
+	require.False(t, updated.KeptSkills[0].ByAgent, "the agent can't take over the user's skill")
+
+	updated, err = sessions.SetKeptSkill(t.Context(), created.ID, KeptSkill{ID: theirs.ID, Name: theirs.Name}, true)
+	require.NoError(t, err)
+	require.False(t, updated.KeptSkills[1].ByAgent, "the user turning it on makes it theirs")
+
+	_, err = sessions.SetKeptSkill(t.Context(), created.ID, KeptSkill{ID: mine.ID}, false)
+	require.NoError(t, err)
+	updated, err = sessions.SetKeptSkill(t.Context(), created.ID, KeptSkill{ID: mine.ID, Name: mine.Name, ByAgent: true}, true)
+	require.NoError(t, err)
+	require.Equal(t, mine.ID, updated.KeptSkills[0].ID, "it keeps its place in the list")
+	require.True(t, updated.KeptSkills[0].ByAgent, "after the user turned it off, the agent may turn it back on")
+}

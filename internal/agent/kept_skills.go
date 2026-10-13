@@ -12,7 +12,8 @@ import (
 	"github.com/charmbracelet/crush/internal/skills"
 )
 
-// Kept skills are skills the user turned on for a whole chat. API models
+// Kept skills are skills turned on for a whole chat, by the user or by the
+// agent (`crush skill`). API models
 // rebuild their context from the database every turn, so they get the full
 // text in the system prompt each turn. Agent CLIs keep their own history, so
 // they get the full text once (and again after a fresh native session or a
@@ -98,7 +99,7 @@ func resolveKeptSkills(store *config.ConfigStore, kept []session.KeptSkill, nati
 	return out
 }
 
-const keptSkillsIntro = "The user turned these skills on for this whole chat. Keep following them on every turn until the user turns them off. This is a standing setting, not a new request."
+const keptSkillsIntro = "These skills are on for this whole chat, turned on by the user or by you. Keep following them on every turn until they are turned off. This is a standing setting, not a new request."
 
 // apiKeptSkillsText is the system prompt block for API models: every kept
 // skill in full, every turn.
@@ -168,7 +169,7 @@ func cliKeptSkillsText(sessionID, cli string, kept []*skills.Skill, turnedOff fu
 		sent[skill.SkillFilePath] = &keptSkillSent{name: skill.Name, full: true}
 	}
 	for _, name := range off {
-		b.WriteString("- The user turned " + name + " off for this chat. Stop following it from now on.\n")
+		b.WriteString("- " + name + " is off for this chat now. Stop following it.\n")
 	}
 	b.WriteString("</crush_kept_skills>")
 	return b.String()

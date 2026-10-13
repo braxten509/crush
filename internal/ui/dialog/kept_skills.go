@@ -1,6 +1,7 @@
 package dialog
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -27,6 +28,23 @@ type KeptSkillItem struct {
 	ID   string
 	Name string
 	On   bool
+	// ByAgent is set when the agent turned the skill on.
+	ByAgent bool
+}
+
+// keptSkillGroups name the list's groups, in order; see group.
+var keptSkillGroups = [...]string{"You turned on", "Agent turned on", "Off"}
+
+// group is the item's place in the list: the user's skills, the agent's,
+// then the rest.
+func (i KeptSkillItem) group() int {
+	switch {
+	case !i.On:
+		return 2
+	case i.ByAgent:
+		return 1
+	}
+	return 0
 }
 
 // ActionToggleKeptSkill is sent when the user turns a skill on or off for
@@ -103,11 +121,18 @@ func (m *KeptSkills) Items() []KeptSkillItem {
 // SetOn updates one skill's state without sending an action, so the open
 // dialog follows changes made elsewhere, such as a chip's remove button.
 func (m *KeptSkills) SetOn(id string, on bool) {
+	m.SetState(id, on, false)
+}
+
+// SetState updates one skill's state and owner without sending an action,
+// so the open dialog follows changes the agent makes.
+func (m *KeptSkills) SetState(id string, on, byAgent bool) {
 	for i := range m.items {
 		if m.items[i].ID == id {
-			m.items[i].On = on
+			m.items[i].On, m.items[i].ByAgent = on, on && byAgent
 		}
 	}
+	m.regroup()
 }
 
 func (m *KeptSkills) applyFilter() {
@@ -118,8 +143,38 @@ func (m *KeptSkills) applyFilter() {
 			m.filtered = append(m.filtered, i)
 		}
 	}
+	m.sortFiltered()
 	m.cursor = 0
 	m.offset = 0
+}
+
+// sortFiltered puts the filtered skills in their groups, keeping name order
+// inside each.
+func (m *KeptSkills) sortFiltered() {
+	slices.SortFunc(m.filtered, func(a, b int) int {
+		if g := m.items[a].group() - m.items[b].group(); g != 0 {
+			return g
+		}
+		return a - b // items come sorted by name
+	})
+}
+
+// regroup re-sorts after a state change, keeping the cursor on its skill.
+func (m *KeptSkills) regroup() {
+	at := -1
+	if m.cursor >= 0 && m.cursor < len(m.filtered) {
+		at = m.filtered[m.cursor]
+	}
+	m.sortFiltered()
+	if i := slices.Index(m.filtered, at); i >= 0 {
+		m.cursor = i
+	}
+}
+
+// grouped reports whether the list shows its group headings: only once a
+// skill is on, so a plain list stays plain.
+func (m *KeptSkills) grouped() bool {
+	return slices.ContainsFunc(m.items, func(i KeptSkillItem) bool { return i.On })
 }
 
 // HandleMsg implements Dialog.
@@ -140,7 +195,9 @@ func (m *KeptSkills) HandleMsg(msg tea.Msg) Action {
 			return nil
 		}
 		item := &m.items[m.filtered[m.cursor]]
-		item.On = !item.On
+		// Turning a skill on yourself makes it yours.
+		item.On, item.ByAgent = !item.On, false
+		m.regroup()
 		return ActionToggleKeptSkill{ID: item.ID, Name: item.Name, On: item.On}
 	default:
 		prev := m.input.Value()
@@ -164,6 +221,10 @@ func (m *KeptSkills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	// Title, note, filter, the blank rows around the list, the "more"
 	// hint and help take about ten rows; the list gets the rest.
 	rows := max(1, min(keptSkillsMaxRows, area.Dy()-t.Dialog.View.GetVerticalFrameSize()-10))
+	if m.grouped() {
+		// Room for the group headings.
+		rows = max(1, rows-len(keptSkillGroups))
+	}
 
 	rc := NewRenderContext(t, m.width)
 	rc.Title = "Skills for this chat"
@@ -214,8 +275,14 @@ func (m *KeptSkills) listView(innerWidth, rows int) string {
 	m.scrollTo(rows)
 	end := min(len(m.filtered), m.offset+rows)
 	lines := make([]string, 0, rows+1)
+	grouped := m.grouped()
+	lastGroup := -1
 	for pos := m.offset; pos < end; pos++ {
 		item := m.items[m.filtered[pos]]
+		if g := item.group(); grouped && g != lastGroup {
+			lastGroup = g
+			lines = append(lines, t.Dialog.SecondaryText.Render(keptSkillGroups[g]))
+		}
 		state := "off"
 		if item.On {
 			state = "on"

@@ -107,12 +107,16 @@ type TaskRequest struct {
 	Ask         json.RawMessage    `json:"ask,omitempty"`
 	SecureEntry *secureentry.Spec  `json:"secure_entry,omitempty"`
 	Background  *BackgroundRequest `json:"background,omitempty"`
+	// Skill turns a skill on or off for the whole chat (`crush skill`).
+	Skill *SkillRequest `json:"skill,omitempty"`
 }
 
 type TaskReply struct {
 	Task       *Task                 `json:"task,omitempty"`
 	Error      string                `json:"error,omitempty"`
 	Background *fantasy.ToolResponse `json:"background,omitempty"`
+	// Message is a plain answer for the agent, such as from `crush skill`.
+	Message string `json:"message,omitempty"`
 }
 
 type taskHub struct {
@@ -372,6 +376,13 @@ func (h *taskHub) handle(data []byte) TaskReply {
 	}
 	if req.Background != nil {
 		return h.background(req)
+	}
+	if req.Skill != nil {
+		message, err := h.chatSkill(req)
+		if err != nil {
+			return TaskReply{Error: err.Error()}
+		}
+		return TaskReply{Message: message}
 	}
 	if req.SecureEntry != nil {
 		// `crush secure-entry` is shorthand for a one-question form, so the
@@ -1090,6 +1101,13 @@ The user answers questions in Crush's question form, not in chat. Whenever you n
 
 Types: single_choice and multi_choice (2-5 choices, each with an id and label, optional short description and optional "image": an absolute path to a PNG sketch the form shows for the choice under the cursor, as the design-preview skill makes; the form adds a type-your-own answer and notes on its own, so never add an "Other" choice), yes_no (only for accept/reject), free_text, secure_entry (a masked secret field; see crush_secure_entry). Every question needs a description. Ask up to %[4]d at once; several show as tabs with a review step before submitting. Then end your turn with at most one short line saying the questions are open: the answers arrive as a <%[3]s> message named %[5]q. Only one set of questions can be open at a time. Sub-agents can't ask the user. When you hand one work that needs the user's input, ask the user first and put the answers in its task. When a sub-agent's result comes back with questions, answer them yourself when you can, and ask the user only what you can't settle.
 </crush_questions>
+
+<crush_chat_skills>
+Skills can be on for the whole chat: Crush then gives you their text every turn, and they survive compaction. Turn one on yourself when the chat's ongoing work fits it (not for a single quick step), and off when the work has moved on:
+  %[1]s skill on <name>
+  %[1]s skill off <name>
+Use names from your skills list. The user sees a notice in the chat for each change. You can turn off only skills you turned on; ones the user turned on stay until the user turns them off. You may turn a skill back on after the user turned it off if the work needs it again. Sub-agents can't change chat skills.
+</crush_chat_skills>
 
 <crush_secure_entry>
 For API keys, tokens, passwords, and other secrets, NEVER use ordinary questions (free_text and the like), chat, CLI stdin, command arguments, environment variables, or your own tools to collect the value. Prepare a file with a literal placeholder for each secret first.

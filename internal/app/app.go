@@ -7,12 +7,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
@@ -24,13 +22,11 @@ import (
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/herdr"
 	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
-	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/skills"
@@ -265,229 +261,6 @@ func (app *App) UpdateAgentModel(ctx context.Context) error {
 	return app.AgentCoordinator.UpdateModels(ctx)
 }
 
-// GetDefaultSmallModel returns the default small model for the given
-// provider. Falls back to the large model if no default is found.
-func (app *App) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	cfg := app.config.Config()
-	largeModelCfg := cfg.Models[config.SelectedModelTypeLarge]
-	if small, ok := cfg.CLISmallModel(providerID); ok {
-		return small
-	}
-
-	// Find the provider in the known providers list to get its default small model.
-	knownProviders, _ := config.Providers(cfg)
-	var knownProvider *catwalk.Provider
-	for _, p := range knownProviders {
-		if string(p.ID) == providerID {
-			knownProvider = &p
-			break
-		}
-	}
-
-	// For unknown/local providers, use the large model as small.
-	if knownProvider == nil {
-		slog.Warn("Using large model as small model for unknown provider", "provider", providerID, "model", largeModelCfg.Model)
-		return largeModelCfg
-	}
-
-	defaultSmallModelID := knownProvider.DefaultSmallModelID
-	model := cfg.GetModel(providerID, defaultSmallModelID)
-	if model == nil {
-		slog.Warn("Default small model not found, using large model", "provider", providerID, "model", largeModelCfg.Model)
-		return largeModelCfg
-	}
-
-	// A subscription-authenticated provider only serves the models its
-	// subscription grants, so the default small model must come from that
-	// catalog as well. This applies to ChatGPT-authenticated OpenAI and
-	// Grok-authenticated xAI alike.
-	if largeModelCfg.Provider == providerID {
-		var pick func(config.ProviderConfig) *catwalk.Model
-		switch providerID {
-		case string(catwalk.InferenceProviderOpenAI):
-			pick = chatGPTSmallModel
-		case string(catwalk.InferenceProviderXAI):
-			pick = grokSmallModel
-		}
-		if pick != nil {
-			if pc, ok := cfg.Providers.Get(providerID); ok && pc.OAuthToken != nil {
-				if small := pick(pc); small != nil {
-					return config.SelectedModel{
-						Provider:        providerID,
-						Model:           small.ID,
-						MaxTokens:       small.DefaultMaxTokens,
-						ReasoningEffort: small.DefaultReasoningEffort,
-					}
-				}
-				return largeModelCfg
-			}
-		}
-	}
-
-	slog.Info("Using provider default small model", "provider", providerID, "model", defaultSmallModelID)
-	return config.SelectedModel{
-		Provider:        providerID,
-		Model:           defaultSmallModelID,
-		MaxTokens:       model.DefaultMaxTokens,
-		ReasoningEffort: model.DefaultReasoningEffort,
-	}
-}
-
-// chatGPTSmallModel picks a lightweight model from the ChatGPT catalog,
-// preferring a "mini" variant and falling back to the last entry (the
-// catalog lists heavier models first). Returns nil when the catalog is
-// empty.
-func chatGPTSmallModel(pc config.ProviderConfig) *catwalk.Model {
-	for i := range pc.ChatGPTModels {
-		if strings.Contains(pc.ChatGPTModels[i].ID, "mini") {
-			return &pc.ChatGPTModels[i]
-		}
-	}
-	if len(pc.ChatGPTModels) > 0 {
-		return &pc.ChatGPTModels[len(pc.ChatGPTModels)-1]
-	}
-	return nil
-}
-
-// grokSmallModel picks a lightweight model from the Grok catalog,
-// preferring a "fast" or "mini" variant and falling back to the last
-// entry (the catalog lists heavier models first). Returns nil when the
-// catalog is empty.
-func grokSmallModel(pc config.ProviderConfig) *catwalk.Model {
-	for _, marker := range []string{"fast", "mini"} {
-		for i := range pc.GrokModels {
-			if strings.Contains(pc.GrokModels[i].ID, marker) {
-				return &pc.GrokModels[i]
-			}
-		}
-	}
-	if len(pc.GrokModels) > 0 {
-		return &pc.GrokModels[len(pc.GrokModels)-1]
-	}
-	return nil
-}
-
-func (app *App) setupEvents() {
-	ctx, cancel := context.WithCancel(app.globalCtx)
-	app.eventsCtx = ctx
-	app.subscribe(ctx, "sessions", app.Sessions.Subscribe)
-	app.subscribe(ctx, "messages", app.Messages.Subscribe)
-	app.subscribeMustDeliver(ctx, "permissions", app.Permissions.Subscribe)
-	app.subscribeMustDeliver(ctx, "permissions-notifications", app.Permissions.SubscribeNotifications)
-	app.subscribeMustDeliver(ctx, "question-batches", app.Questions.Subscribe)
-	app.subscribeMustDeliver(ctx, "question-notifications", app.Questions.SubscribeNotifications)
-	app.subscribe(ctx, "history", app.History.Subscribe)
-	app.subscribe(ctx, "agent-notifications", app.agentNotifications.Subscribe)
-	app.subscribeMustDeliver(ctx, "run-completions", app.runCompletions.Subscribe)
-	app.subscribe(ctx, "tasks", app.tasks.Subscribe)
-	app.subscribe(ctx, "mcp", mcp.SubscribeEvents)
-	app.subscribe(ctx, "mcp-channels", app.subscribeScopedChannelEvents)
-	app.subscribe(ctx, "lsp", SubscribeLSPEvents)
-	if app.Skills != nil {
-		app.subscribe(ctx, "skills", app.Skills.SubscribeEvents)
-	}
-	cleanupFunc := func(context.Context) error {
-		cancel()
-		app.serviceEventsWG.Wait()
-		app.events.Shutdown()
-		return nil
-	}
-	app.cleanupFuncs = append(app.cleanupFuncs, cleanupFunc)
-}
-
-// subscribeScopedChannelEvents forwards channel message events for servers
-// this workspace both declares in its MCP config and opted in (via
-// --channels or channel_enabled; see mcp.ChannelOptIn).
-// The MCP broker is process-global and channel events carry no workspace
-// identity, so this per-app scoping is what keeps another workspace's channel
-// messages out of this app's event stream (see mcp.SubscribeChannelEvents).
-// The scoped events feed the TUI's in-process injection and, in server mode,
-// the SSE stream to attached clients.
-func (app *App) subscribeScopedChannelEvents(ctx context.Context) <-chan pubsub.Event[mcp.Event] {
-	raw := mcp.SubscribeChannelEvents(ctx)
-	scoped := make(chan pubsub.Event[mcp.Event], 64)
-	go func() {
-		defer close(scoped)
-		for ev := range raw {
-			mcpCfg, declared := app.config.Config().MCP[ev.Payload.Name]
-			if !declared {
-				continue
-			}
-			if !mcp.ChannelOptIn(mcpCfg, app.config.Overrides().EnabledChannels, ev.Payload.Name) {
-				continue
-			}
-			select {
-			case scoped <- ev:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return scoped
-}
-
-// subscribe fans a service's event stream into the shared app.events
-// broker on app.serviceEventsWG, re-publishing each upstream event as a
-// tea.Msg. The goroutine exits when ctx is cancelled or the upstream
-// channel closes. It is a generic method (Go 1.27) so it can live in the
-// App namespace while still inferring the upstream event type T.
-func (app *App) subscribe[T any](
-	ctx context.Context,
-	name string,
-	subscriber func(context.Context) <-chan pubsub.Event[T],
-) {
-	// Subscribe before returning, so no event published right after setup
-	// is lost while the goroutine is still waiting to run.
-	subCh := subscriber(ctx)
-	app.serviceEventsWG.Go(func() {
-		for {
-			select {
-			case event, ok := <-subCh:
-				if !ok {
-					slog.Debug("Subscription channel closed", "name", name)
-					return
-				}
-				app.events.Publish(pubsub.UpdatedEvent, tea.Msg(event))
-			case <-ctx.Done():
-				slog.Debug("Subscription cancelled", "name", name)
-				return
-			}
-		}
-	})
-}
-
-// subscribeMustDeliver is the bounded-blocking fan-in variant of
-// [App.subscribe]: it re-publishes upstream events onto the shared
-// app.events broker using PublishMustDeliver instead of Publish. Use
-// this for terminal events that subscribers cannot tolerate losing —
-// notably RunComplete, which is the authoritative end-of-run signal
-// for `crush run`. A lossy fan-in here can drop the only terminal
-// event and hang non-interactive clients waiting on it.
-func (app *App) subscribeMustDeliver[T any](
-	ctx context.Context,
-	name string,
-	subscriber func(context.Context) <-chan pubsub.Event[T],
-) {
-	// Subscribe before returning, so no event published right after setup
-	// is lost while the goroutine is still waiting to run.
-	subCh := subscriber(ctx)
-	app.serviceEventsWG.Go(func() {
-		for {
-			select {
-			case event, ok := <-subCh:
-				if !ok {
-					slog.Debug("Subscription channel closed", "name", name)
-					return
-				}
-				app.events.PublishMustDeliver(ctx, pubsub.UpdatedEvent, tea.Msg(event))
-			case <-ctx.Done():
-				slog.Debug("Subscription cancelled", "name", name)
-				return
-			}
-		}
-	})
-}
-
 func (app *App) InitCoderAgent(ctx context.Context) error {
 	return app.initCoderAgent(ctx, true)
 }
@@ -524,44 +297,6 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		return err
 	}
 	return nil
-}
-
-// Subscribe sends events to the TUI as tea.Msgs.
-func (app *App) Subscribe(program *tea.Program) {
-	defer log.RecoverPanic("app.Subscribe", func() {
-		slog.Info("TUI subscription panic: attempting graceful shutdown")
-		program.Quit()
-	})
-
-	app.tuiWG.Add(1)
-	tuiCtx, tuiCancel := context.WithCancel(app.globalCtx)
-	app.cleanupFuncs = append(app.cleanupFuncs, func(context.Context) error {
-		slog.Debug("Cancelling TUI message handler")
-		tuiCancel()
-		app.tuiWG.Wait()
-		return nil
-	})
-	defer app.tuiWG.Done()
-
-	detachSecureForms := secureentry.AttachForms(func(form *secureentry.Form) { program.Send(form) })
-	defer detachSecureForms()
-	events := app.events.Subscribe(tuiCtx)
-	// Now that the TUI hears task events, resume the sub-agents an earlier
-	// Crush left unfinished.
-	agent.ResumeInterruptedTasks()
-	for {
-		select {
-		case <-tuiCtx.Done():
-			slog.Debug("TUI message handler shutting down")
-			return
-		case ev, ok := <-events:
-			if !ok {
-				slog.Debug("TUI message channel closed")
-				return
-			}
-			program.Send(ev.Payload)
-		}
-	}
 }
 
 // Shutdown performs a graceful shutdown of the application.

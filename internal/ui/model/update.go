@@ -604,8 +604,8 @@ func (m *UI) handleUIMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.textarea.MoveToEnd()
 		m.syncBangModeFromTextarea()
 		cmds = append(cmds, m.updateTextareaWithPrevHeight(msg, prevHeight))
-	case configWriteMsg:
-		cmds = append(cmds, m.applyConfigWrite(msg))
+	case workDoneMsg:
+		cmds = append(cmds, m.applyWorkDone(msg))
 	case fileCompletionMsg:
 		cmds = append(cmds, m.applyFileCompletion(msg))
 	case filePickerDoneMsg:

@@ -7,9 +7,7 @@ import (
 	"charm.land/bubbles/v2/help"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
-	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
 )
@@ -57,16 +55,14 @@ func (m *UI) setState(state uiState, focus uiFocusState) {
 	m.updateLayoutAndSize()
 }
 
-// toggleCompactMode toggles compact mode between uiChat and uiChatCompact states.
+// toggleCompactMode toggles compact mode between uiChat and uiChatCompact
+// states. The layout changes at once; the setting is saved off the Update
+// goroutine (a synchronous HTTP round-trip in client/server mode), and a
+// failed save is reported.
 func (m *UI) toggleCompactMode() tea.Cmd {
 	m.forceCompactMode = !m.forceCompactMode
 
-	err := m.com.Workspace.SetCompactMode(config.ScopeGlobal, m.forceCompactMode)
-	if err != nil {
-		return util.ReportError(err)
-	}
-
-	var cmds []tea.Cmd
+	cmds := []tea.Cmd{saveCompactMode(m.com.Workspace, m.forceCompactMode)}
 	if m.forceCompactMode && m.focus == uiFocusSidebar {
 		// The sidebar is going away, so focus the editor again to keep key
 		// events routed somewhere useful.

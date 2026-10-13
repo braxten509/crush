@@ -138,8 +138,8 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	valueResolver := NewShellVariableResolver(env)
 	store.resolver = valueResolver
 
-	// Hold writeMu during initial load to prevent configureProviders
-	// from triggering auto-reload via RemoveConfigField.
+	// Hold writeMu for the rest of the load so persisting the pipeline's
+	// writes below cannot trigger an auto-reload.
 	store.writeMu.Lock()
 	defer store.writeMu.Unlock()
 
@@ -147,7 +147,9 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	// like AWS_PROFILE are visible to the AWS SDK credential chain.
 	cfg.applyEnv(valueResolver)
 
-	if err := cfg.configureProviders(context.Background(), store, env, valueResolver, store.knownProviders); err != nil {
+	pending, err := cfg.configureProviders(context.Background(), env, valueResolver, store.knownProviders)
+	store.applyPendingWrites(pending)
+	if err != nil {
 		return nil, fmt.Errorf("failed to configure providers: %w", err)
 	}
 
@@ -227,7 +229,22 @@ func PushPopCrushEnv() func() {
 	return restore
 }
 
-func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env env.Env, resolver VariableResolver, knownProviders []catwalk.Provider) error {
+// pendingWrite is a config-file edit the load pipeline decided on but left
+// for the store to persist once loading is done, so that building a Config
+// never writes to disk part-way through.
+type pendingWrite struct {
+	Scope Scope
+	// Remove is the JSON path to delete from the scope's config file.
+	Remove string
+}
+
+// configureProviders resolves the known and custom providers in c against
+// the environment. Any config-file edits it decides on are returned as
+// pending writes for the caller to persist; they are returned even when
+// configuration fails part-way, matching the disk state an inline write
+// would have left behind.
+func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver VariableResolver, knownProviders []catwalk.Provider) ([]pendingWrite, error) {
+	var pending []pendingWrite
 	catalogProviders := knownProviders
 	knownProviderNames := make(map[string]bool)
 	restore := PushPopCrushEnv()
@@ -299,7 +316,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 		for k, v := range headers {
 			resolved, err := resolver.ResolveValue(v)
 			if err != nil {
-				return fmt.Errorf("resolving provider %s header %q: %w", p.ID, k, err)
+				return pending, fmt.Errorf("resolving provider %s header %q: %w", p.ID, k, err)
 			}
 			if resolved == "" {
 				delete(headers, k)
@@ -326,11 +343,9 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 		switch {
 		case p.ID == catwalk.InferenceProviderAnthropic && config.OAuthToken != nil:
 			// Claude Code subscription is not supported anymore. Remove to show onboarding.
-			// RemoveConfigField persists the deletion to disk. The in-memory
-			// state is kept consistent by the Providers.Del call below; any
-			// concurrent reload that races with this write will also see the
-			// removal because it re-reads from disk.
-			store.RemoveConfigField(ScopeGlobal, "providers.anthropic")
+			// The deletion is persisted by the caller once loading is done;
+			// Providers.Del keeps the in-memory state consistent meanwhile.
+			pending = append(pending, pendingWrite{Scope: ScopeGlobal, Remove: "providers.anthropic"})
 			c.Providers.Del(string(p.ID))
 			continue
 		case p.ID == catwalk.InferenceProviderCopilot && config.OAuthToken != nil:
@@ -525,7 +540,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 		for k, v := range providerConfig.ExtraHeaders {
 			resolved, err := resolver.ResolveValue(v)
 			if err != nil {
-				return fmt.Errorf("resolving provider %s header %q: %w", id, k, err)
+				return pending, fmt.Errorf("resolving provider %s header %q: %w", id, k, err)
 			}
 			if resolved == "" {
 				delete(providerConfig.ExtraHeaders, k)
@@ -538,10 +553,10 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 	}
 
 	if c.Providers.Len() == 0 && c.Options.DisableDefaultProviders {
-		return fmt.Errorf("default providers are disabled and there are no custom providers are configured")
+		return pending, fmt.Errorf("default providers are disabled and there are no custom providers are configured")
 	}
 
-	return nil
+	return pending, nil
 }
 
 // applyEnv sets top-level env vars from the config. Keys are sorted for

@@ -491,14 +491,7 @@ func (s *ConfigStore) pinPreferredModelLocked(modelType SelectedModelType, model
 //
 // The write is protected by an in-process mutex and a cross-process flock.
 func (s *ConfigStore) RemoveConfigField(scope Scope, key string) error {
-	err := s.atomicWrite(scope, func(data []byte) ([]byte, error) {
-		v, sErr := sjson.Delete(string(data), key)
-		if sErr != nil {
-			return nil, fmt.Errorf("failed to delete config field %s: %w", key, sErr)
-		}
-		return []byte(v), nil
-	})
-	if err != nil {
+	if err := s.removeConfigFieldNoReload(scope, key); err != nil {
 		return err
 	}
 
@@ -507,6 +500,18 @@ func (s *ConfigStore) RemoveConfigField(scope Scope, key string) error {
 	}
 
 	return nil
+}
+
+// removeConfigFieldNoReload deletes a key from the config file for the
+// given scope without touching in-memory state.
+func (s *ConfigStore) removeConfigFieldNoReload(scope Scope, key string) error {
+	return s.atomicWrite(scope, func(data []byte) ([]byte, error) {
+		v, sErr := sjson.Delete(string(data), key)
+		if sErr != nil {
+			return nil, fmt.Errorf("failed to delete config field %s: %w", key, sErr)
+		}
+		return []byte(v), nil
+	})
 }
 
 // UpdatePreferredModel updates the preferred model for the given type and
@@ -1417,10 +1422,7 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 		return fmt.Errorf("invalid hook configuration on reload: %w", err)
 	}
 
-	// Save current state for potential rollback BEFORE configureProviders,
-	// which may write to disk via RemoveConfigField (e.g. removing stale
-	// OAuth providers). Capturing after would snapshot a config that has
-	// already been mutated, and the rollback would restore corrupted state.
+	// Save current state for potential rollback.
 	oldConfig := s.Config()
 	oldLoadedPaths := s.loadedPaths
 	oldResolver := s.resolver
@@ -1454,7 +1456,9 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 		slog.Warn("Reload continuing with the previously known providers", "error", err)
 	}
 
-	if err := cfg.configureProviders(ctx, s, env, resolver, providers); err != nil {
+	pending, err := cfg.configureProviders(ctx, env, resolver, providers)
+	s.applyPendingWrites(pending)
+	if err != nil {
 		return fmt.Errorf("failed to configure providers during reload: %w", err)
 	}
 
@@ -1497,6 +1501,18 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 	s.captureStalenessSnapshot(append(slices.Clone(configPaths), loadedPaths...))
 
 	return nil
+}
+
+// applyPendingWrites persists the config-file edits the load pipeline
+// requested. It never reloads: the caller is mid-load and already holds
+// writeMu. Failures are logged and otherwise ignored, since the in-memory
+// config already reflects the edit and the next load will retry it.
+func (s *ConfigStore) applyPendingWrites(writes []pendingWrite) {
+	for _, w := range writes {
+		if err := s.removeConfigFieldNoReload(w.Scope, w.Remove); err != nil {
+			slog.Warn("Failed to persist config change made while loading", "key", w.Remove, "error", err)
+		}
+	}
 }
 
 // autoReload conditionally reloads config from disk after writes.

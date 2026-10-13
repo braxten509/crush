@@ -339,12 +339,12 @@ func (m *UI) staleWorkspaceRefreshCmds() []tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	}
-	if time.Since(m.lspCheckedAt) >= lspStatesTTL {
+	if m.lspProbe.stale(lspStatesTTL) {
 		if cmd := m.dispatchLSPRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
-	if time.Since(m.mcpCheckedAt) >= mcpStatesTTL {
+	if m.mcpProbe.stale(mcpStatesTTL) {
 		if cmd := m.dispatchMCPRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}

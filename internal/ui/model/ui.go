@@ -41,7 +41,6 @@ import (
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/home"
-	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/projects"
@@ -417,31 +416,18 @@ type UI struct {
 		yesInitializeSelected bool
 	}
 
-	// lspStates / lspDiagnostics memoize the workspace LSP state and
-	// per-server severity counts (each probe behind them is a synchronous
-	// HTTP round-trip in client/server mode, and the sidebar, landing view,
-	// and compact header render them every frame). LSP events refresh them
-	// off-thread with a TTL backstop; see lsp.go.
-	lspStates        map[string]workspace.LSPClientInfo
-	lspDiagnostics   map[string]lsp.DiagnosticCounts
-	lspFetchInFlight bool
-	// lspRefreshQueued records that an LSP event arrived while a fetch was
-	// already in flight; applyLSPStates re-dispatches so the freshest state
-	// still lands.
-	lspRefreshQueued bool
-	lspCheckedAt     time.Time
+	// lspProbe memoizes the workspace LSP state and per-server severity
+	// counts (each probe behind them is a synchronous HTTP round-trip in
+	// client/server mode, and the sidebar, landing view, and compact header
+	// render them every frame). LSP events refresh them off-thread with a
+	// TTL backstop; see lsp.go.
+	lspProbe asyncProbe[lspSnapshot]
 
-	// mcpStates memoizes the workspace MCP state (a synchronous probe in
-	// client/server mode) and its off-thread refresh bookkeeping. MCP
-	// state_changed events refresh it off-thread with a TTL backstop and a
-	// retry loop while servers are starting; see mcp.go.
-	mcpStates        map[string]mcp.ClientInfo
-	mcpFetchInFlight bool
-	// mcpRefreshQueued records that a refresh was requested while a fetch
-	// was already in flight; applyMCPStates re-dispatches so the freshest
-	// state still lands.
-	mcpRefreshQueued bool
-	mcpCheckedAt     time.Time
+	// mcpProbe memoizes the workspace MCP state (a synchronous probe in
+	// client/server mode). MCP state_changed events refresh it off-thread
+	// with a TTL backstop and a retry loop while servers are starting; see
+	// mcp.go.
+	mcpProbe asyncProbe[map[string]mcp.ClientInfo]
 	// mcpStartingRetries counts the consecutive starting-state re-probes
 	// driving the retry loop's exponential backoff. Event-driven refreshes
 	// renew the budget; settled states reset it.
@@ -631,8 +617,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		attachments:         attachments,
 		todoSpinner:         todoSpinner,
 		frames:              newFrameCache(frameCacheTTL, frameCacheMaxEntries),
-		lspStates:           make(map[string]workspace.LSPClientInfo),
-		mcpStates:           make(map[string]mcp.ClientInfo),
 		notifyBackend:       notification.NoopBackend{},
 		notifyWindowFocused: true,
 		initialSessionID:    initialSessionID,
@@ -641,6 +625,8 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	}
 
 	status := NewStatus(com, ui)
+	ui.lspProbe.val.states = make(map[string]workspace.LSPClientInfo)
+	ui.mcpProbe.val = make(map[string]mcp.ClientInfo)
 
 	// Seed the active theme key from the large model provider so the
 	// first model selection can correctly skip a redundant theme swap.

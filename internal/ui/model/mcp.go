@@ -59,8 +59,7 @@ type mcpStartingRetryMsg struct{}
 // states. While a fetch is already in flight it only marks the state dirty;
 // applyMCPStates re-dispatches so the freshest data still lands.
 func (m *UI) requestMCPRefresh() tea.Cmd {
-	if m.mcpFetchInFlight {
-		m.mcpRefreshQueued = true
+	if !m.mcpProbe.request() {
 		return nil
 	}
 	return m.dispatchMCPRefresh()
@@ -72,13 +71,9 @@ func (m *UI) requestMCPRefresh() tea.Cmd {
 // in flight. The closure captures only locals (never m) so it is safe
 // off-thread.
 func (m *UI) dispatchMCPRefresh() tea.Cmd {
-	if m.mcpFetchInFlight || m.com == nil || m.com.Workspace == nil {
+	if m.com == nil || m.com.Workspace == nil || !m.mcpProbe.start() {
 		return nil
 	}
-	m.mcpFetchInFlight = true
-	// Stamp the check time at dispatch too so the TTL backstop doesn't
-	// keep re-requesting while this fetch is in flight.
-	m.mcpCheckedAt = time.Now()
 	ws := m.com.Workspace
 	return func() tea.Msg {
 		return mcpStateChangedMsg{
@@ -93,13 +88,11 @@ func (m *UI) dispatchMCPRefresh() tea.Cmd {
 // last-known-good states instead of blanking the sidebar. Runs on the
 // Update goroutine.
 func (m *UI) applyMCPStates(msg mcpStateChangedMsg) []tea.Cmd {
-	m.mcpFetchInFlight = false
-	m.mcpCheckedAt = time.Now()
+	requeue := m.mcpProbe.finish()
 	if msg.states == nil {
 		// A failed fetch (e.g. a transient HTTP error in client/server
 		// mode) keeps the last-known-good states on screen.
-		if m.mcpRefreshQueued {
-			m.mcpRefreshQueued = false
+		if requeue {
 			if cmd := m.dispatchMCPRefresh(); cmd != nil {
 				return []tea.Cmd{cmd}
 			}
@@ -116,12 +109,12 @@ func (m *UI) applyMCPStates(msg mcpStateChangedMsg) []tea.Cmd {
 		if info.State != mcp.StateNeedsAuth {
 			continue
 		}
-		if prev, ok := m.mcpStates[name]; !ok || prev.State != mcp.StateNeedsAuth {
+		if prev, ok := m.mcpProbe.val[name]; !ok || prev.State != mcp.StateNeedsAuth {
 			newlyNeedsAuth = true
 			break
 		}
 	}
-	m.mcpStates = msg.states
+	m.mcpProbe.val = msg.states
 
 	var cmds []tea.Cmd
 	if newlyNeedsAuth {
@@ -129,8 +122,7 @@ func (m *UI) applyMCPStates(msg mcpStateChangedMsg) []tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	}
-	if m.mcpRefreshQueued {
-		m.mcpRefreshQueued = false
+	if requeue {
 		if cmd := m.dispatchMCPRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -169,7 +161,7 @@ func (m *UI) mcpInfo(width, maxItems int, isSection bool) string {
 	t := m.com.Styles
 
 	for _, mcp := range m.com.Config().MCP.Sorted() {
-		if state, ok := m.mcpStates[mcp.Name]; ok {
+		if state, ok := m.mcpProbe.val[mcp.Name]; ok {
 			mcps = append(mcps, state)
 		}
 	}
@@ -310,7 +302,7 @@ func (m *UI) mcpToggleItems() ([]dialog.MCPToggleItem, error) {
 			Name:            configured.Name,
 			ConfigDisabled:  configured.MCP.Disabled,
 			EnabledOverride: enabledOverride,
-			Status:          mcpStatusText(m.mcpStates[configured.Name]),
+			Status:          mcpStatusText(m.mcpProbe.val[configured.Name]),
 		}
 		if _, off := disabled[configured.Name]; off {
 			item.Disabled = true

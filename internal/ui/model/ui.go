@@ -60,6 +60,14 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/auth"
+	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
+	"github.com/charmbracelet/crush/internal/ui/dialog/models"
+	"github.com/charmbracelet/crush/internal/ui/dialog/permissions"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
+	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
+	"github.com/charmbracelet/crush/internal/ui/dialog/sessions"
+	"github.com/charmbracelet/crush/internal/ui/dialog/theme"
 	fimage "github.com/charmbracelet/crush/internal/ui/image"
 	"github.com/charmbracelet/crush/internal/ui/logo"
 	"github.com/charmbracelet/crush/internal/ui/notification"
@@ -386,7 +394,7 @@ type UI struct {
 	// caps hold different terminal capabilities that we query for.
 	caps common.Capabilities
 	// previewPlaced is the question form sketch on screen, if any.
-	previewPlaced *dialog.PreviewPlacement
+	previewPlaced *questionform.PreviewPlacement
 
 	// Editor components
 	textarea textarea.Model
@@ -965,7 +973,7 @@ func (m *UI) loadMCPrompts() tea.Msg {
 
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if _, ok := msg.(dialog.PreviewReadyMsg); ok {
+	if _, ok := msg.(questionform.PreviewReadyMsg); ok {
 		m.invalidateFrames()
 	}
 	model, cmd := m.update(msg)
@@ -977,15 +985,15 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // when that changes, and removed once the form closes or something
 // covers it.
 func (m *UI) syncPreview() tea.Cmd {
-	var want *dialog.PreviewPlacement
+	var want *questionform.PreviewPlacement
 	var load tea.Cmd
-	form, ok := m.activeInline.(*dialog.QuestionForm)
+	form, ok := m.activeInline.(*questionform.QuestionForm)
 	if ok && !m.dialog.HasDialogs() && m.state == uiChat {
 		want, load = form.PreviewState()
 	}
 	// Look again once the next frame is drawn: the form may have moved, or
 	// a just-opened form shows where its sketch goes.
-	recheck := tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return dialog.PreviewReadyMsg{} })
+	recheck := tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return questionform.PreviewReadyMsg{} })
 	if equalPlacement(want, m.previewPlaced) {
 		if ok && form.PreviewWaiting() {
 			return tea.Batch(load, recheck)
@@ -995,10 +1003,10 @@ func (m *UI) syncPreview() tea.Cmd {
 	old := m.previewPlaced
 	m.previewPlaced = want
 	_, tmux := m.caps.Env.LookupEnv("TMUX")
-	return tea.Batch(load, dialog.PreviewPlacementCmd(old, want, tmux), recheck)
+	return tea.Batch(load, questionform.PreviewPlacementCmd(old, want, tmux), recheck)
 }
 
-func equalPlacement(a, b *dialog.PreviewPlacement) bool {
+func equalPlacement(a, b *questionform.PreviewPlacement) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -1017,14 +1025,14 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// question answers, and remote presence handling entirely.
 	switch typed := msg.(type) {
 	case secureQuestionClosedMsg:
-		if form, ok := m.activeInline.(*dialog.QuestionForm); ok && form.OwnsSecureForm(typed.form) {
+		if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form.OwnsSecureForm(typed.form) {
 			m.dropQuestionForm()
 			m.textarea.Focus()
 			m.updateLayoutAndSize()
 		}
 		return m, nil
-	case dialog.SecureQuestionPaste:
-		if form, ok := m.activeInline.(*dialog.QuestionForm); ok {
+	case questionform.SecureQuestionPaste:
+		if form, ok := m.activeInline.(*questionform.QuestionForm); ok {
 			form.HandleSecurePaste(typed)
 		} else {
 			typed.Discard()
@@ -1034,7 +1042,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case *secureentry.Form:
 		return m, m.openSecureQuestionForm(typed)
 	}
-	if form, ok := m.activeInline.(*dialog.QuestionForm); ok && form.HasSecureEntry() && form.SecureEntryActive() && (m.focus != uiFocusEditor || m.dialog.HasDialogs()) {
+	if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form.HasSecureEntry() && form.SecureEntryActive() && (m.focus != uiFocusEditor || m.dialog.HasDialogs()) {
 		switch typed := msg.(type) {
 		case tea.PasteMsg:
 			return m, nil
@@ -1230,7 +1238,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mcpStateChangedMsg:
 		if dia := m.dialog.Dialog(dialog.MCPTogglesID); dia != nil {
-			if toggles, ok := dia.(*dialog.MCPToggles); ok {
+			if toggles, ok := dia.(*mcpservers.MCPToggles); ok {
 				for name, info := range msg.states {
 					toggles.SetItemStatus(name, mcpStatusText(info))
 				}
@@ -1450,7 +1458,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case copyChatHighlightMsg:
 		cmds = append(cmds, m.copyChatHighlight())
-	case dialog.OpenLinkMsg:
+	case questionform.OpenLinkMsg:
 		cmds = append(cmds, openChatLink(msg.URL, m.com.Workspace.WorkingDir()))
 	case openImageMsg:
 		cmds = append(cmds, openAttachmentImage(msg.Attachment, m.com.Workspace.WorkingDir()))
@@ -2696,7 +2704,7 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		}
 		cmds = append(cmds, util.ReportInfo("Theme saved"))
 		m.dialog.CloseDialog(dialog.ThemeEditorID)
-		if td, ok := m.dialog.Dialog(dialog.ThemeID).(*dialog.Theme); ok {
+		if td, ok := m.dialog.Dialog(dialog.ThemeID).(*theme.Theme); ok {
 			td.RefreshThemes(themeName)
 		}
 	case dialog.ActionEditTheme:
@@ -2833,11 +2841,11 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionQuit:
 		cmds = append(cmds, tea.Quit)
-	case dialog.ActionRemoteOff:
+	case remotecontrol.ActionRemoteOff:
 		cmds = append(cmds, m.stopRemote())
-	case dialog.ActionRemoteSetup:
+	case remotecontrol.ActionRemoteSetup:
 		cmds = append(cmds, m.runRemoteSetup(msg.Action))
-	case dialog.ActionRemoteSetupClose:
+	case remotecontrol.ActionRemoteSetupClose:
 		m.closeRemoteSetup()
 	case dialog.ActionEnableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
@@ -2845,7 +2853,7 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionDisableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.disableDockerMCP)
-	case dialog.ActionToggleMCP:
+	case mcpservers.ActionToggleMCP:
 		cmds = append(cmds, m.applyMCPToggle(msg))
 	case dialog.ActionInitializeProject:
 		if m.isAgentBusy() {
@@ -3309,9 +3317,9 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.Se
 
 	switch provider.ID {
 	case "hyper":
-		dlg, cmd = dialog.NewOAuthHyper(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = auth.NewOAuthHyper(m.com, isOnboarding, provider, model, modelType)
 	case catwalk.InferenceProviderCopilot:
-		dlg, cmd = dialog.NewOAuthCopilot(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = auth.NewOAuthCopilot(m.com, isOnboarding, provider, model, modelType)
 	case catwalk.InferenceProviderOpenAI:
 		providerCfg, _ := m.com.Config().Providers.Get(string(provider.ID))
 		hasAPIKey := providerCfg.HasAPIKey(m.com.Workspace.Resolver())
@@ -3319,13 +3327,13 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.Se
 		case model.Model == "" || providerCfg.OAuthToken != nil:
 			// The sign-in placeholder, or a re-authentication while the
 			// ChatGPT login is the credential in force.
-			dlg, cmd = dialog.NewOAuthOpenAI(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewOAuthOpenAI(m.com, isOnboarding, provider, model, modelType)
 		case !hasAPIKey:
 			// No credential at all: let the user pick the method.
-			dlg = dialog.NewAuthMethod(m.com, isOnboarding, provider, model, modelType)
+			dlg = auth.NewAuthMethod(m.com, isOnboarding, provider, model, modelType)
 		default:
 			// An API key is the credential in force: edit it.
-			dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
 		}
 	case catwalk.InferenceProviderXAI:
 		providerCfg, _ := m.com.Config().Providers.Get(string(provider.ID))
@@ -3334,16 +3342,16 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.Se
 		case model.Model == "" || providerCfg.OAuthToken != nil:
 			// The sign-in flow's hand-off, or a re-authentication while
 			// the Grok login is the credential in force.
-			dlg, cmd = dialog.NewOAuthGrok(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewOAuthGrok(m.com, isOnboarding, provider, model, modelType)
 		case !hasAPIKey:
 			// No credential at all: let the user pick the method.
-			dlg = dialog.NewAuthMethod(m.com, isOnboarding, provider, model, modelType)
+			dlg = auth.NewAuthMethod(m.com, isOnboarding, provider, model, modelType)
 		default:
 			// An API key is the credential in force: edit it.
-			dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
 		}
 	default:
-		dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = auth.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
 	}
 
 	if m.dialog.ContainsDialog(dlg.ID()) {
@@ -3370,12 +3378,12 @@ func (m *UI) openAuthenticationDialogWithMethod(provider catwalk.Provider, model
 	if useOAuth {
 		switch provider.ID {
 		case catwalk.InferenceProviderOpenAI:
-			dlg, cmd = dialog.NewOAuthOpenAI(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewOAuthOpenAI(m.com, isOnboarding, provider, model, modelType)
 		case catwalk.InferenceProviderXAI:
-			dlg, cmd = dialog.NewOAuthGrok(m.com, isOnboarding, provider, model, modelType)
+			dlg, cmd = auth.NewOAuthGrok(m.com, isOnboarding, provider, model, modelType)
 		}
 	} else {
-		dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
+		dlg, cmd = auth.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
 	}
 
 	if m.dialog.ContainsDialog(dlg.ID()) {
@@ -5570,7 +5578,7 @@ func (m *UI) refreshStyles() {
 	m.todoSpinner.Style = t.Pills.TodoSpinner
 	m.status.help.Styles = t.Help
 	if d := m.dialog.Dialog(dialog.ThemeID); d != nil {
-		if td, ok := d.(*dialog.Theme); ok {
+		if td, ok := d.(*theme.Theme); ok {
 			td.RefreshStyles()
 		}
 	}
@@ -5721,7 +5729,7 @@ func (m *UI) openThemeNewDialog() {
 		return
 	}
 	base := common.ThemeNameFromConfig(m.com.Config())
-	m.dialog.OpenDialog(dialog.NewThemeNew(m.com, base))
+	m.dialog.OpenDialog(theme.NewThemeNew(m.com, base))
 }
 
 // openThemeDialog opens the theme picker dialog.
@@ -5730,7 +5738,7 @@ func (m *UI) openThemeDialog() {
 		m.dialog.BringToFront(dialog.ThemeID)
 		return
 	}
-	themeDialog := dialog.NewTheme(m.com)
+	themeDialog := theme.NewTheme(m.com)
 	m.dialog.OpenDialog(themeDialog)
 }
 
@@ -5741,7 +5749,7 @@ func (m *UI) openThemeEditorDialog(themeName string) {
 		m.dialog.BringToFront(dialog.ThemeEditorID)
 		return
 	}
-	themeDialog := dialog.NewThemeEditor(m.com, themeName)
+	themeDialog := theme.NewThemeEditor(m.com, themeName)
 	m.dialog.OpenDialog(themeDialog)
 }
 
@@ -6294,7 +6302,7 @@ func (m *UI) openModelsDialog() tea.Cmd {
 	}
 
 	isOnboarding := m.state == uiOnboarding
-	modelsDialog, err := dialog.NewModels(m.com, isOnboarding)
+	modelsDialog, err := models.NewModels(m.com, isOnboarding)
 	if err != nil {
 		return util.ReportError(err)
 	}
@@ -6373,7 +6381,7 @@ func (m *UI) openSessionsDialog() tea.Cmd {
 		selectedSessionID = m.session.ID
 	}
 
-	dialog, err := dialog.NewSessions(m.com, selectedSessionID)
+	dialog, err := sessions.NewSessions(m.com, selectedSessionID)
 	if err != nil {
 		return util.ReportError(err)
 	}
@@ -6407,12 +6415,12 @@ func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
 	m.dialog.CloseDialog(dialog.PermissionsID)
 
 	// Get diff mode from config.
-	var opts []dialog.PermissionsOption
+	var opts []permissions.PermissionsOption
 	if diffMode := m.com.Config().Options.TUI.DiffMode; diffMode != "" {
-		opts = append(opts, dialog.WithDiffMode(diffMode == "split"))
+		opts = append(opts, permissions.WithDiffMode(diffMode == "split"))
 	}
 
-	permDialog := dialog.NewPermissions(m.com, perm, opts...)
+	permDialog := permissions.NewPermissions(m.com, perm, opts...)
 	m.dialog.OpenDialogWithGrace(permDialog)
 	return nil
 }
@@ -6430,7 +6438,7 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 	// Close any existing question form first to prevent stacking.
 	m.dropQuestionForm()
 
-	form := dialog.NewQuestionForm(m.com.Styles, batch)
+	form := questionform.NewQuestionForm(m.com.Styles, batch)
 	form.SetImageCapabilities(&m.caps)
 	form.OnAnswer = func(responses []question.Answer) {
 		m.com.Workspace.QuestionAnswer(responses)
@@ -6452,7 +6460,7 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 // is stale regardless of BatchID. The CLI update form isn't one of
 // the service's questions, so it stays.
 func (m *UI) handleQuestionNotification(_ question.Notification) {
-	if form, ok := m.activeInline.(*dialog.QuestionForm); ok && !m.cliUpdatePromptOpen() && !form.HasSecureEntry() {
+	if form, ok := m.activeInline.(*questionform.QuestionForm); ok && !m.cliUpdatePromptOpen() && !form.HasSecureEntry() {
 		m.activeInline = nil
 		m.textarea.Focus()
 		m.updateLayoutAndSize()
@@ -6505,7 +6513,7 @@ func (m *UI) handlePermissionNotification(notification permission.PermissionNoti
 		return
 	}
 	if d := m.dialog.Dialog(dialog.PermissionsID); d != nil {
-		if perm, ok := d.(*dialog.Permissions); ok && perm.ToolCallID() == notification.ToolCallID {
+		if perm, ok := d.(*permissions.Permissions); ok && perm.ToolCallID() == notification.ToolCallID {
 			m.dialog.CloseDialog(dialog.PermissionsID)
 		}
 	}
@@ -6528,7 +6536,7 @@ func (m *UI) handlePlanHandoff(rc notify.RunComplete) tea.Cmd {
 		return nil
 	}
 	m.setPlanReadyPending(rc.SessionID)
-	if _, ok := m.activeInline.(*dialog.PlanHandoffInline); ok {
+	if _, ok := m.activeInline.(*questionform.PlanHandoffInline); ok {
 		return nil
 	}
 	m.openPlanHandoff()
@@ -6540,7 +6548,7 @@ func (m *UI) handlePlanHandoff(rc notify.RunComplete) tea.Cmd {
 // session, since plan mode is scoped to the session it was enabled in.
 func (m *UI) resetPlanModeState() tea.Cmd {
 	m.setPlanReadyPending("")
-	if _, ok := m.activeInline.(*dialog.PlanHandoffInline); ok {
+	if _, ok := m.activeInline.(*questionform.PlanHandoffInline); ok {
 		m.activeInline = nil
 		m.textarea.Focus()
 	}
@@ -6570,7 +6578,7 @@ func (m *UI) openPlanHandoff() {
 	if m.secureQuestionFormOpen() {
 		return
 	}
-	inline := dialog.NewPlanHandoffInline(m.com)
+	inline := questionform.NewPlanHandoffInline(m.com)
 	inline.OnConfirm = func(yolo bool) tea.Cmd {
 		if m.com.Workspace.PermissionSkipRequests() != yolo {
 			m.toggleYoloMode()
@@ -6663,7 +6671,7 @@ func (m *UI) handleReAuthenticate(providerID string) tea.Cmd {
 func (m *UI) handleAWSSSOAuth(command, url string) tea.Cmd {
 	// Update the URL on an already-open dialog.
 	if existing := m.dialog.Dialog(dialog.AWSSSOID); existing != nil {
-		if awsDlg, ok := existing.(*dialog.AWSSSO); ok && url != "" {
+		if awsDlg, ok := existing.(*auth.AWSSSO); ok && url != "" {
 			awsDlg.SetURL(url)
 		}
 		m.dialog.BringToFront(dialog.AWSSSOID)
@@ -6672,7 +6680,7 @@ func (m *UI) handleAWSSSOAuth(command, url string) tea.Cmd {
 	if command == "" {
 		return nil
 	}
-	dlg, cmd := dialog.NewAWSSSO(m.com, command)
+	dlg, cmd := auth.NewAWSSSO(m.com, command)
 	if url != "" {
 		dlg.SetURL(url)
 	}
@@ -6687,7 +6695,7 @@ func (m *UI) handleAWSSSOAuthResult(errMsg string) tea.Cmd {
 	if existing == nil {
 		return nil
 	}
-	awsDlg, ok := existing.(*dialog.AWSSSO)
+	awsDlg, ok := existing.(*auth.AWSSSO)
 	if !ok {
 		return nil
 	}

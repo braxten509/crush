@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kittest"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/stretchr/testify/require"
@@ -106,22 +107,6 @@ func TestQuitMouseClickIgnoresNonButtonAndNonLeftClicks(t *testing.T) {
 	require.True(t, q.selectedNo)
 }
 
-// screenText flattens the screen buffer into newline-separated rows.
-func screenText(scr uv.ScreenBuffer) string {
-	bounds := scr.Bounds()
-	rows := make([]string, bounds.Dy())
-	for y := range bounds.Dy() {
-		var b strings.Builder
-		for x := range bounds.Dx() {
-			if cell := scr.CellAt(x, y); cell != nil {
-				b.WriteString(cell.Content)
-			}
-		}
-		rows[y] = b.String()
-	}
-	return strings.Join(rows, "\n")
-}
-
 func TestQuitMouseButtonsRenderInlineWhenTheyDontFit(t *testing.T) {
 	t.Parallel()
 
@@ -132,7 +117,7 @@ func TestQuitMouseButtonsRenderInlineWhenTheyDontFit(t *testing.T) {
 	// The dialog does not fit, so the buttons fall back to inline
 	// rendering: they stay visible, but are not clickable.
 	require.Nil(t, q.compositor)
-	text := screenText(scr)
+	text := kittest.ScreenText(scr)
 	require.Contains(t, text, "Yep!")
 	require.Contains(t, text, "Nope")
 	require.Nil(t, q.HandleMsg(tea.MouseClickMsg(tea.Mouse{X: 1, Y: 1, Button: tea.MouseLeft})))

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kittest"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/stretchr/testify/require"
 )
@@ -22,10 +23,6 @@ func (s *stubDialog) HandleMsg(msg tea.Msg) Action {
 }
 func (s *stubDialog) Draw(_ uv.Screen, _ uv.Rectangle) *tea.Cursor { return nil }
 
-func keyMsg(r rune) tea.KeyPressMsg {
-	return tea.KeyPressMsg{Code: r, Text: string(r)}
-}
-
 // TestOverlay_GracePeriodSwallowsKeys verifies that all keystrokes
 // arriving within the grace period after OpenDialogWithGrace are absorbed
 // and never forwarded to the dialog.
@@ -37,7 +34,7 @@ func TestOverlay_GracePeriodSwallowsKeys(t *testing.T) {
 	o.OpenDialogWithGrace(d)
 
 	for _, r := range []rune{'a', 's', 'd', 'x', 'z'} {
-		o.Update(keyMsg(r))
+		o.Update(kittest.KeyMsg(r))
 	}
 	require.Empty(t, d.received, "no keys should reach the dialog during grace period")
 }
@@ -55,7 +52,7 @@ func TestOverlay_GracePeriodArmsAfterQuiet(t *testing.T) {
 	o.graceOpenedAt = time.Now().Add(-graceMaxDelay - time.Millisecond)
 	o.graceLastInputAt = time.Now().Add(-graceQuietPeriod - time.Millisecond)
 
-	o.Update(keyMsg('a'))
+	o.Update(kittest.KeyMsg('a'))
 	require.Len(t, d.received, 1, "key after grace period should reach the dialog")
 }
 
@@ -73,7 +70,7 @@ func TestOverlay_GracePeriodBurstExtendsQuietWindow(t *testing.T) {
 	// Each one resets the quiet timer, but we stay under graceMaxDelay.
 	for range 5 {
 		o.graceLastInputAt = time.Now().Add(-40 * time.Millisecond)
-		o.Update(keyMsg('a'))
+		o.Update(kittest.KeyMsg('a'))
 	}
 	require.Empty(t, d.received, "burst within max delay should be absorbed")
 
@@ -81,7 +78,7 @@ func TestOverlay_GracePeriodBurstExtendsQuietWindow(t *testing.T) {
 	// the fixed deadline forces arming.
 	o.graceOpenedAt = time.Now().Add(-graceMaxDelay - time.Millisecond)
 	o.graceLastInputAt = time.Now() // just typed, but max delay wins
-	o.Update(keyMsg('b'))
+	o.Update(kittest.KeyMsg('b'))
 	require.Len(t, d.received, 1, "key after max delay should reach dialog even during burst")
 }
 
@@ -94,7 +91,7 @@ func TestOverlay_OpenDialogWithoutGraceHasNoGuard(t *testing.T) {
 	o := NewOverlay()
 	o.OpenDialog(d)
 
-	o.Update(keyMsg('a'))
+	o.Update(kittest.KeyMsg('a'))
 	require.Len(t, d.received, 1, "dialog without grace should receive keys immediately")
 }
 
@@ -113,7 +110,7 @@ func TestOverlay_GraceClearedOnClose(t *testing.T) {
 	o.CloseFrontDialog()
 	o.OpenDialog(d2)
 
-	o.Update(keyMsg('a'))
+	o.Update(kittest.KeyMsg('a'))
 	require.Len(t, d2.received, 1, "new dialog after grace close should receive keys immediately")
 }
 
@@ -147,7 +144,7 @@ func TestOverlay_ReopenSameDialogSkipsGrace(t *testing.T) {
 	o.OpenDialogWithGrace(d2)
 
 	// Keys should reach the new dialog immediately — no grace.
-	o.Update(keyMsg('a'))
+	o.Update(kittest.KeyMsg('a'))
 	require.Len(t, d2.received, 1, "reopened dialog with same ID should skip grace")
 }
 
@@ -164,7 +161,7 @@ func TestOverlay_ReopenDifferentDialogKeepsGrace(t *testing.T) {
 	d2 := &stubDialog{id: "other"}
 	o.OpenDialogWithGrace(d2)
 
-	o.Update(keyMsg('a'))
+	o.Update(kittest.KeyMsg('a'))
 	require.Empty(t, d2.received, "different dialog ID should still have grace period")
 }
 
@@ -184,6 +181,6 @@ func TestOverlay_ReopenAfterWindowExpiresKeepsGrace(t *testing.T) {
 	d2 := &stubDialog{id: "permissions"}
 	o.OpenDialogWithGrace(d2)
 
-	o.Update(keyMsg('a'))
+	o.Update(kittest.KeyMsg('a'))
 	require.Empty(t, d2.received, "reopened dialog after window expires should have grace")
 }

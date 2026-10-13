@@ -1,8 +1,6 @@
 package chat
 
 import (
-	"encoding/json"
-
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/message"
@@ -31,33 +29,19 @@ type ReferencesToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *ReferencesToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Find References", opts.Anim, opts.Compact)
-	}
+	return referencesTool.render(sty, width, opts)
+}
 
-	var params tools.ReferencesParams
-	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
-
-	toolParams := []string{params.Symbol}
-	if params.Path != "" {
-		toolParams = append(toolParams, "path", fsext.PrettyPath(params.Path))
-	}
-
-	header := toolHeader(sty, opts.Status, "Find References", cappedWidth, opts, toolParams...)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
+// referencesTool draws Find References tool calls with the standard layout.
+var referencesTool = standardTool[tools.ReferencesParams]{
+	name:    "Find References",
+	lenient: true,
+	header: func(params tools.ReferencesParams) []string {
+		toolParams := []string{params.Symbol}
+		if params.Path != "" {
+			toolParams = append(toolParams, "path", fsext.PrettyPath(params.Path))
+		}
+		return toolParams
+	},
+	body: plainResultBody[tools.ReferencesParams],
 }

@@ -348,38 +348,21 @@ type DownloadToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (d *DownloadToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Download", opts.Anim, opts.Compact)
-	}
+	return downloadTool.render(sty, width, opts)
+}
 
-	var params tools.DownloadParams
-	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
-	}
-
-	toolParams := []string{params.URL}
-	if params.FilePath != "" {
-		toolParams = append(toolParams, "file_path", fsext.PrettyPath(params.FilePath))
-	}
-	if params.Timeout != 0 {
-		toolParams = append(toolParams, "timeout", formatTimeout(params.Timeout))
-	}
-
-	header := toolHeader(sty, opts.Status, "Download", cappedWidth, opts, toolParams...)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
+// downloadTool draws Download tool calls with the standard layout.
+var downloadTool = standardTool[tools.DownloadParams]{
+	name: "Download",
+	header: func(params tools.DownloadParams) []string {
+		toolParams := []string{params.URL}
+		if params.FilePath != "" {
+			toolParams = append(toolParams, "file_path", fsext.PrettyPath(params.FilePath))
+		}
+		if params.Timeout != 0 {
+			toolParams = append(toolParams, "timeout", formatTimeout(params.Timeout))
+		}
+		return toolParams
+	},
+	body: plainResultBody[tools.DownloadParams],
 }

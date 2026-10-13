@@ -1,8 +1,6 @@
 package chat
 
 import (
-	"encoding/json"
-
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -30,28 +28,18 @@ type SymbolsToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *SymbolsToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "List Symbols", opts.Anim, opts.Compact)
-	}
+	return symbolsTool.render(sty, width, opts)
+}
 
-	var params tools.SymbolsParams
-	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
-
-	header := toolHeader(sty, opts.Status, "List Symbols", cappedWidth, opts, params.FilePath)
-	if opts.Compact {
-		return header
-	}
-
-	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
-		return joinToolParts(header, earlyState)
-	}
-
-	if opts.HasEmptyResult() {
-		return header
-	}
-
-	// Render as code to preserve tree indentation.
-	body := toolOutputCodeContent(sty, params.FilePath, opts.Result.Content, 0, cappedWidth, opts.ExpandedContent)
-	return joinToolParts(header, body)
+// symbolsTool draws List Symbols tool calls with the standard layout.
+var symbolsTool = standardTool[tools.SymbolsParams]{
+	name:    "List Symbols",
+	lenient: true,
+	header: func(params tools.SymbolsParams) []string {
+		return []string{params.FilePath}
+	},
+	body: func(sty *styles.Styles, opts *ToolRenderOpts, params tools.SymbolsParams, cappedWidth int) string {
+		// Render as code to preserve tree indentation.
+		return toolOutputCodeContent(sty, params.FilePath, opts.Result.Content, 0, cappedWidth, opts.ExpandedContent)
+	},
 }

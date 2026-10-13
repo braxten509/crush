@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -57,8 +58,8 @@ type ProjectItem struct {
 }
 
 var (
-	_ Dialog   = (*Projects)(nil)
-	_ ListItem = (*ProjectItem)(nil)
+	_ Dialog       = (*Projects)(nil)
+	_ kit.ListItem = (*ProjectItem)(nil)
 )
 
 // NewProjects creates the saved projects dialog.
@@ -176,16 +177,16 @@ func (p *Projects) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := p.com.Styles
 	width := max(0, min(projectsDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	p.input.SetWidth(dialogInputTextWidth(t, p.input, innerWidth))
+	p.input.SetWidth(kit.DialogInputTextWidth(t, p.input, innerWidth))
 
-	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight +
-		t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight +
+	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + kit.TitleContentHeight +
+		t.Dialog.InputPrompt.GetVerticalFrameSize() + kit.InputContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
 		t.Dialog.View.GetVerticalFrameSize()
 	maxAvailable := area.Dy() - t.Dialog.View.GetVerticalBorderSize()
 	height := max(projectsDialogMinHeight, min(projectsDialogMaxHeight, heightOffset+p.list.TotalHeight(), maxAvailable))
 
-	listHeight, listTotalHeight, _ := sizeDialogList(t, p.list, innerWidth, height)
+	listHeight, listTotalHeight, _ := kit.SizeDialogList(t, p.list, innerWidth, height)
 
 	rc := NewRenderContext(t, width)
 	rc.Title = "Open Project"
@@ -197,8 +198,8 @@ func (p *Projects) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		p.list.ScrollToSelected()
 	}
 	listView := t.Dialog.List.Height(p.list.Height()).Render(p.list.Render())
-	rc.AddPart(joinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, p.list.Offset()))
-	rc.Help = renderDialogHelp(t, &p.help, p, innerWidth)
+	rc.AddPart(kit.JoinScrollbar(t, listView, listHeight, listTotalHeight, listHeight, p.list.Offset()))
+	rc.Help = kit.RenderDialogHelp(t, &p.help, p, innerWidth)
 
 	cur := p.Cursor()
 	DrawCenterCursor(scr, area, rc.Render(), cur)
@@ -236,7 +237,7 @@ func (i *ProjectItem) SetFocused(focused bool) {
 
 // SetMatch sets the fuzzy match for the item.
 func (i *ProjectItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(i.m, m) {
+	if kit.SameFuzzyMatch(i.m, m) {
 		return
 	}
 	i.cache = nil
@@ -250,7 +251,7 @@ func (i *ProjectItem) Render(width int) string {
 	if i.isCurrent {
 		info = "current"
 	}
-	return renderItem(ListItemStyles{
+	return kit.RenderItem(kit.ListItemStyles{
 		ItemBlurred:     i.t.Dialog.NormalItem,
 		ItemFocused:     i.t.Dialog.SelectedItem,
 		InfoTextBlurred: i.t.Dialog.ListItem.InfoBlurred,

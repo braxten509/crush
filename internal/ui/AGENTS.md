@@ -127,8 +127,13 @@ requires:
 RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string
 ```
 
-`NewToolMessageItem` in `chat/tools.go` is the central factory that routes
-tool names to specific types:
+`NewToolMessageItem` in `chat/tool_registry.go` is the central factory. It
+looks the tool name up in `toolSpecs`, one entry per built-in tool holding
+its item constructor and how it is copied to the clipboard (heading name,
+parameter and result formatting); MCP tools and unknown tools fall back to
+the MCP and generic items. Tools with the usual layout (spinner, header of
+parameters, early states, body) describe it with a `standardTool` in
+`chat/tool_standard.go`. Renderers live in:
 
 | File                  | Tools rendered                                 |
 | --------------------- | ---------------------------------------------- |
@@ -179,14 +184,16 @@ box width — border and padding live *inside* it.
   (`styleA.Render(x) + styleB.Render(y)`), rather than concatenating raw
   strings and wrapping the whole thing in one style. An inner segment's
   reset code drops the outer color for everything after it.
-- Use the shared helpers instead of re-deriving widths:
-  - keybind hints → `renderDialogHelp(t, &m.help, m, innerWidth)` (sizes,
+- Use the shared helpers in `dialog/internal/kit` instead of re-deriving
+  widths:
+  - keybind hints → `kit.RenderDialogHelp(t, &m.help, m, innerWidth)` (sizes,
     pads, truncates — never `helpStyle.Render(m.help.View(m))` raw);
-  - text inputs → `dialogInputTextWidth(t, input, innerWidth)` (accounts
-    for the `"> "` prompt);
+  - text inputs → `kit.DialogInputTextWidth(t, input, innerWidth)`
+    (accounts for the `"> "` prompt);
   - titles → `common.DialogTitle` (truncates instead of wrapping);
-  - list + scrollbar → `joinScrollbar`;
-  - hiding a crowded info column → `applyInfoColumnVisibility`.
+  - list + scrollbar → `kit.JoinScrollbar` (size the list with
+    `kit.SizeDialogList`);
+  - hiding a crowded info column → `kit.ApplyInfoColumnVisibility`.
 - Clamp width/height to the drawable `area` (`max(0, min(maxW, area.Dx()-frame))`)
   so dialogs stay inside small terminals.
 
@@ -200,8 +207,15 @@ through all components that need access to app state or styles.
 - `model/` — Main UI model and major sub-models (chat, sidebar, header,
   status, pills, session, onboarding, keys, etc.)
 - `chat/` — Chat message item types and tool renderers
-- `dialog/` — Dialog implementations (models, sessions, commands,
-  permissions, API key, OAuth, filepicker, reasoning, quit)
+- `dialog/` — The `Dialog` interface, `Overlay`, actions, dialog IDs
+  (`ids.go`) and the smaller dialogs (commands, filepicker, reasoning,
+  quit, ...). Larger dialogs live in subpackages that import it:
+  - `dialog/auth` — auth method, API key, OAuth flows, AWS SSO
+  - `dialog/models`, `dialog/sessions`, `dialog/theme`,
+    `dialog/permissions`, `dialog/mcpservers`, `dialog/remotecontrol`
+  - `dialog/questionform` — inline question forms and plan handoff
+  - `dialog/internal/kit` — shared layout, help and list-item helpers;
+    `dialog/internal/kittest` — shared test helpers
 - `list/` — Generic lazy-rendered scrollable list with viewport tracking
 - `common/` — Shared `Common` struct, layout helpers, markdown rendering,
   diff rendering, scrollbar

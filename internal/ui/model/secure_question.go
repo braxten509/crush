@@ -3,19 +3,19 @@ package model
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/secureentry"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/notification"
 )
 
 type secureQuestionClosedMsg struct{ form *secureentry.Form }
 
 func (m *UI) secureQuestionFormOpen() bool {
-	form, ok := m.activeInline.(*dialog.QuestionForm)
+	form, ok := m.activeInline.(*questionform.QuestionForm)
 	return ok && form.HasSecureEntry()
 }
 
 func (m *UI) dropQuestionForm() {
-	if form, ok := m.activeInline.(*dialog.QuestionForm); ok && form != nil {
+	if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form != nil {
 		form.Dismiss()
 		m.activeInline = nil
 	}
@@ -31,7 +31,7 @@ func (m *UI) openSecureQuestionForm(form *secureentry.Form) tea.Cmd {
 		m.activeInline = nil
 	}
 	m.dropQuestionForm()
-	m.activeInline = dialog.NewSecureQuestionForm(m.com.Styles, form)
+	m.activeInline = questionform.NewSecureQuestionForm(m.com.Styles, form)
 	m.textarea.Blur()
 	m.focus = uiFocusEditor
 	m.activeInline.SetFocused(true)

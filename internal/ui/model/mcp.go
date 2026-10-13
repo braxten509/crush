@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/mcpservers"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
@@ -278,13 +279,13 @@ func (m *UI) openMCPTogglesDialog() tea.Cmd {
 	if err != nil {
 		return util.ReportError(err)
 	}
-	m.dialog.OpenDialog(dialog.NewMCPToggles(m.com, items))
+	m.dialog.OpenDialog(mcpservers.NewMCPToggles(m.com, items))
 	return nil
 }
 
 // mcpToggleItems builds the dialog items from the configured servers, the
 // live connection states, and the repository's disabled overrides.
-func (m *UI) mcpToggleItems() ([]dialog.MCPToggleItem, error) {
+func (m *UI) mcpToggleItems() ([]mcpservers.MCPToggleItem, error) {
 	disabledServers, err := m.com.Workspace.MCPServersDisabled(context.Background())
 	if err != nil {
 		return nil, err
@@ -303,10 +304,10 @@ func (m *UI) mcpToggleItems() ([]dialog.MCPToggleItem, error) {
 	for _, name := range enabledServers {
 		enabled[name] = struct{}{}
 	}
-	items := make([]dialog.MCPToggleItem, 0, len(m.com.Config().MCP))
+	items := make([]mcpservers.MCPToggleItem, 0, len(m.com.Config().MCP))
 	for _, configured := range m.com.Config().MCP.Sorted() {
 		_, enabledOverride := enabled[configured.Name]
-		item := dialog.MCPToggleItem{
+		item := mcpservers.MCPToggleItem{
 			Name:            configured.Name,
 			ConfigDisabled:  configured.MCP.Disabled,
 			EnabledOverride: enabledOverride,
@@ -324,7 +325,7 @@ func (m *UI) mcpToggleItems() ([]dialog.MCPToggleItem, error) {
 // client. Local toggles write a repository-scoped override; global toggles
 // write the disabled flag to the config. The dialog keeps its own
 // optimistic state; failures surface as an error toast.
-func (m *UI) applyMCPToggle(msg dialog.ActionToggleMCP) tea.Cmd {
+func (m *UI) applyMCPToggle(msg mcpservers.ActionToggleMCP) tea.Cmd {
 	name := msg.Name
 	disable := msg.Disabled
 	status := "enabled"

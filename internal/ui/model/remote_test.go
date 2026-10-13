@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
 )
 
 func TestRemoteActionsRunLikeKeys(t *testing.T) {
@@ -44,7 +45,7 @@ func TestRemoteActionsRunLikeKeys(t *testing.T) {
 func TestRemoteSetupCancelDiscardsLateChecks(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
 	m.remoteGeneration = 1
 	m.remoteStarting = true
 	ctx, cancel := context.WithCancel(t.Context())
@@ -63,7 +64,7 @@ func TestRemoteSetupCancelDiscardsLateChecks(t *testing.T) {
 func TestRemoteSetupRequiresExplicitCurrentAction(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
 	m.remoteSetupInfo = remote.SetupInfo{State: remote.SetupLogin, Action: "connect"}
 	require.Nil(t, m.runRemoteSetup("install"))
 	require.Nil(t, m.runRemoteSetup(""))
@@ -77,7 +78,7 @@ func TestRemoteSetupRequiresExplicitCurrentAction(t *testing.T) {
 func TestRemoteSetupFailureStaysRetryable(t *testing.T) {
 	t.Parallel()
 	m := newBusyUI(&countingWorkspace{})
-	m.dialog = dialog.NewOverlay(dialog.NewRemoteSetup(m.com))
+	m.dialog = dialog.NewOverlay(remotecontrol.NewRemoteSetup(m.com))
 	m.remoteGeneration = 4
 	m.remoteStarting = true
 	info := remote.SetupInfo{State: remote.SetupMissing, Title: "Install Tailscale", Action: "install", Button: "Install Tailscale"}
@@ -90,7 +91,7 @@ func TestRemoteSetupFailureStaysRetryable(t *testing.T) {
 	require.False(t, m.remoteSetupBusy)
 	require.True(t, m.dialog.ContainsDialog(dialog.RemoteSetupID))
 	d := m.dialog.Dialog(dialog.RemoteSetupID)
-	require.Equal(t, dialog.ActionRemoteSetup{Action: "install"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	require.Equal(t, remotecontrol.ActionRemoteSetup{Action: "install"}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }
 
 // newChatWorkspace creates the session a new chat's first message needs.

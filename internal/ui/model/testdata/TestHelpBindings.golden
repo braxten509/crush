@@ -1,0 +1,2720 @@
+state=1 focus=1 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=1 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=1 focus=1 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=1 focus=2 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=2 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=2 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: ctrl+c=quit, ctrl+c=quit, ctrl+g=more
+  full: ctrl+c=quit
+  full: ctrl+g=less, ctrl+c=quit
+state=1 focus=3 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=1 focus=3 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=1 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: -, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: -, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: -, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: -, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: -, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: -, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: -, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: -, / or ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=1 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=2 focus=1 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=2 focus=2 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=2 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=2 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=change focus, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: -, ctrl+p=commands, shift+tab=mode, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: ctrl+g=less, ctrl+c=quit
+state=2 focus=3 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=2 focus=3 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=1 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: esc=cancel, tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: esc=cancel, tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus chat, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: esc=cancel, tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: esc=cancel, tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus chat, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, / or ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+j=newline, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ctrl+j=newline, @=mention file, ctrl+o=open editor, ctrl+shift+v=paste text, ctrl+shift+a=select all, ctrl+shift+c=copy selection, ctrl+shift+x=cut selection
+  full: ctrl+r+{i}=delete attachment at index i, ctrl+r+r=delete all attachments, esc=cancel delete mode
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=1 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=3 focus=1 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: 
+  full: 
+state=3 focus=2 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: esc=cancel, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: esc=cancel, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ←/→=switch section, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ←/→=switch section
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ←/→=switch section, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ←/→=switch section
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: esc=cancel, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: esc=cancel, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ←/→=switch section, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ←/→=switch section
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ←/→=switch section, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ←/→=switch section
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ←/→=switch section, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ←/→=switch section
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ←/→=switch section, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ←/→=switch section
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ←/→=switch section, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ←/→=switch section
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down, c/y=copy, ←/→=switch section, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end, =, l/→=focus sidebar
+  full: c/y=copy, esc=clear selection
+  full: ←/→=switch section
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=2 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=2 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=false session=false inline=false typed=false focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=false session=false inline=false typed=false focusOnly=false
+  short: esc=cancel, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=true session=false inline=false typed=false focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=true session=false inline=false typed=false focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=false session=true inline=false typed=false focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=false session=true inline=false typed=false focusOnly=false
+  short: esc=cancel, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=true session=true inline=false typed=false focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=true session=true inline=false typed=false focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=false session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=true session=false inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=false session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=true session=true inline=true typed=false focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=false session=false inline=false typed=true focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=false session=false inline=false typed=true focusOnly=false
+  short: esc=cancel, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=true session=false inline=false typed=true focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=true session=false inline=false typed=true focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=false session=true inline=false typed=true focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=false session=true inline=false typed=true focusOnly=false
+  short: esc=cancel, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=true session=true inline=false typed=true focusOnly=false
+  short: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=true session=true inline=false typed=true focusOnly=false
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: tab=focus editor, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=false session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=true session=false inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=false session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=true session=true inline=true typed=true focusOnly=false
+  short: tab=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: tab=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=false session=false inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=false session=false inline=false typed=false focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=true session=false inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=true session=false inline=false typed=false focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=false session=true inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=false session=true inline=false typed=false focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=true session=true inline=false typed=false focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=true session=true inline=false typed=false focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=false session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=true session=false inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=false session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=true session=true inline=true typed=false focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=false session=false inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=false session=false inline=false typed=true focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=true session=false inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=true session=false inline=false typed=true focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=false session=true inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=false session=true inline=false typed=true focusOnly=true
+  short: esc=cancel, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=cancel
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=true session=true inline=false typed=true focusOnly=true
+  short: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=true queued=true session=true inline=false typed=true focusOnly=true
+  short: esc=interrupt, send queued, ctrl+enter=interrupt, send queued, -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ↑↓=scroll, h/←=focus chat, ctrl+c=quit, ctrl+g=more
+  full: esc=interrupt, send queued
+  full: ctrl+enter=interrupt, send queued
+  full: -, shift+tab=mode, ctrl+p=commands, ctrl+l=models, ctrl+s=sessions, ctrl+y=toggle yolo, ctrl+n=new session, =
+  full: ↑↓=scroll
+  full: h/←=focus chat
+  full: g=home, G=end
+  full: ctrl+g=less, ctrl+c=quit
+state=3 focus=3 busy=false queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=false session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=true session=false inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=false session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=false queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end
+state=3 focus=3 busy=true queued=true session=true inline=true typed=true focusOnly=true
+  short: click=focus editor, ↑↓=scroll, b/pgup=page up, f/pgdn=page down
+  full: click=focus editor
+  full: ↑↓=scroll, shift+↑↓=scroll one item, b/pgup=page up, f/pgdn=page down
+  full: u=half page up, d=half page down, g=home, G=end

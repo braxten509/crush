@@ -76,3 +76,20 @@ func (c *composer) randomizePlaceholders() {
 	c.workingPlaceholder = workingPlaceholders[rand.Intn(len(workingPlaceholders))]
 	c.readyPlaceholder = readyPlaceholders[rand.Intn(len(readyPlaceholders))]
 }
+
+// placeholder is the editor's placeholder for the mode: bang mode, YOLO
+// coding, a busy agent, planning or ready.
+func (c *composer) placeholder(busy, plan, yolo bool) string {
+	switch {
+	case c.bangMode:
+		return "Run a shell command"
+	case !plan && yolo:
+		return "Go crazy"
+	case busy:
+		return c.workingPlaceholder
+	case plan:
+		return "Let's plan"
+	default:
+		return c.readyPlaceholder
+	}
+}

@@ -174,26 +174,10 @@ func (m *UI) finishUpdate(msg tea.Msg) []tea.Cmd {
 func (m *UI) syncPlaceholder() {
 	prevPlaceholder := m.textarea.Placeholder
 	if m.focus == uiFocusEditor {
-		m.textarea.Placeholder = m.editorPlaceholder()
+		m.textarea.Placeholder = m.placeholder(m.isAgentBusy(), m.mode == uiInputModePlan, m.yoloModeCached())
 	}
 	if m.textarea.Placeholder != prevPlaceholder {
 		m.frame.invalidate()
-	}
-}
-
-// editorPlaceholder is the editor's placeholder for the current mode.
-func (m *UI) editorPlaceholder() string {
-	switch {
-	case m.bangMode:
-		return "Run a shell command"
-	case m.mode != uiInputModePlan && m.yoloModeCached():
-		return "Go crazy"
-	case m.isAgentBusy():
-		return m.workingPlaceholder
-	case m.mode == uiInputModePlan:
-		return "Let's plan"
-	default:
-		return m.readyPlaceholder
 	}
 }
 

@@ -5,8 +5,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/oauth/copilot"
 	"github.com/charmbracelet/crush/internal/oauth/grok"
+	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,4 +139,25 @@ func TestOAuthOpenAIStopPollingWithoutFlow(t *testing.T) {
 	require.NotNil(t, m.cancelFunc)
 	require.Nil(t, m.stopPolling()())
 	require.Nil(t, m.cancelFunc)
+}
+
+// TestOAuthKeys checks the dialog's key handling in the display state:
+// closing cancels the flow, and saving swallows submits and closes.
+func TestOAuthKeys(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	m, _ := newOAuth(&common.Common{Styles: &sty}, false, catwalk.Provider{ID: "hyper", Name: "Hyper"},
+		config.SelectedModel{}, config.SelectedModelTypeLarge, &OAuthHyper{})
+	m.HandleMsg(ActionInitiateOAuth{DeviceCode: "dc", UserCode: "UC", VerificationURL: "https://x"})
+	require.Equal(t, OAuthStateDisplay, m.State)
+
+	esc := tea.KeyPressMsg{Code: tea.KeyEscape}
+	closeAction, ok := m.HandleMsg(esc).(dialog.ActionCloseOAuth)
+	require.True(t, ok)
+	require.NotNil(t, closeAction.Cmd)
+
+	m.State = OAuthStateSaving
+	require.Nil(t, m.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	require.Nil(t, m.HandleMsg(esc))
 }

@@ -168,75 +168,7 @@ func (m *OAuth) HandleMsg(msg tea.Msg) dialog.Action {
 		}
 
 	case tea.KeyPressMsg:
-		// The paste field swallows keys while focused so typing lands in
-		// it: enter submits the pasted code, esc steps back to the
-		// buttons.
-		if m.codeEntryActive() && m.codeInput.Focused() {
-			switch {
-			case key.Matches(msg, m.keyMap.Submit):
-				if value := m.codeInput.Value(); value != "" {
-					m.codeInput.Blur()
-					return dialog.ActionCmd{Cmd: m.oAuthProvider.submitCode(value)}
-				}
-				cmd := m.copyCodeAndOpenURL()
-				return dialog.ActionCmd{Cmd: cmd}
-
-			case key.Matches(msg, m.keyMap.Close):
-				m.codeInput.Blur()
-				return nil
-
-			default:
-				var cmd tea.Cmd
-				m.codeInput, cmd = m.codeInput.Update(msg)
-				if cmd != nil {
-					return dialog.ActionCmd{Cmd: cmd}
-				}
-				return nil
-			}
-		}
-
-		switch {
-		case m.codeEntryActive() && key.Matches(msg, m.keyMap.FocusCode):
-			m.codeInput.Focus()
-			return nil
-
-		case key.Matches(msg, m.keyMap.Copy):
-			cmd := m.copyCode()
-			return dialog.ActionCmd{Cmd: cmd}
-
-		case key.Matches(msg, m.keyMap.CopyURL):
-			cmd := m.copyURL()
-			return dialog.ActionCmd{Cmd: cmd}
-
-		case key.Matches(msg, m.keyMap.Submit):
-			switch m.State {
-			case OAuthStateSuccess:
-				return m.confirmAndSelectModel()
-
-			case OAuthStateSaving:
-				// Save in progress; ignore submits until it finishes.
-				return nil
-
-			default:
-				cmd := m.copyCodeAndOpenURL()
-				return dialog.ActionCmd{Cmd: cmd}
-			}
-
-		case key.Matches(msg, m.keyMap.Close):
-			switch m.State {
-			case OAuthStateSuccess:
-				return m.confirmAndSelectModel()
-
-			case OAuthStateSaving:
-				// Save in progress; ignore submits until it finishes.
-				return nil
-
-			default:
-				// Cancel the in-flight authorization so a dismissed dialog
-				// does not leave a poller or loopback listener behind.
-				return dialog.ActionCloseOAuth{Cmd: m.oAuthProvider.stopPolling()}
-			}
-		}
+		return m.handleKeyPress(msg)
 
 	case ActionInitiateOAuth:
 		m.deviceCode = msg.DeviceCode
@@ -291,6 +223,81 @@ func (m *OAuth) HandleMsg(msg tea.Msg) dialog.Action {
 		// the user can dismiss and retry the flow.
 		m.State = OAuthStateError
 		return dialog.ActionCmd{Cmd: util.ReportError(msg.err)}
+	}
+	return nil
+}
+
+// handleKeyPress handles a key press: typing in the paste field, copying,
+// opening the URL, confirming and closing.
+func (m *OAuth) handleKeyPress(msg tea.KeyPressMsg) dialog.Action {
+	// The paste field swallows keys while focused so typing lands in
+	// it: enter submits the pasted code, esc steps back to the
+	// buttons.
+	if m.codeEntryActive() && m.codeInput.Focused() {
+		switch {
+		case key.Matches(msg, m.keyMap.Submit):
+			if value := m.codeInput.Value(); value != "" {
+				m.codeInput.Blur()
+				return dialog.ActionCmd{Cmd: m.oAuthProvider.submitCode(value)}
+			}
+			cmd := m.copyCodeAndOpenURL()
+			return dialog.ActionCmd{Cmd: cmd}
+
+		case key.Matches(msg, m.keyMap.Close):
+			m.codeInput.Blur()
+			return nil
+
+		default:
+			var cmd tea.Cmd
+			m.codeInput, cmd = m.codeInput.Update(msg)
+			if cmd != nil {
+				return dialog.ActionCmd{Cmd: cmd}
+			}
+			return nil
+		}
+	}
+
+	switch {
+	case m.codeEntryActive() && key.Matches(msg, m.keyMap.FocusCode):
+		m.codeInput.Focus()
+		return nil
+
+	case key.Matches(msg, m.keyMap.Copy):
+		cmd := m.copyCode()
+		return dialog.ActionCmd{Cmd: cmd}
+
+	case key.Matches(msg, m.keyMap.CopyURL):
+		cmd := m.copyURL()
+		return dialog.ActionCmd{Cmd: cmd}
+
+	case key.Matches(msg, m.keyMap.Submit):
+		switch m.State {
+		case OAuthStateSuccess:
+			return m.confirmAndSelectModel()
+
+		case OAuthStateSaving:
+			// Save in progress; ignore submits until it finishes.
+			return nil
+
+		default:
+			cmd := m.copyCodeAndOpenURL()
+			return dialog.ActionCmd{Cmd: cmd}
+		}
+
+	case key.Matches(msg, m.keyMap.Close):
+		switch m.State {
+		case OAuthStateSuccess:
+			return m.confirmAndSelectModel()
+
+		case OAuthStateSaving:
+			// Save in progress; ignore submits until it finishes.
+			return nil
+
+		default:
+			// Cancel the in-flight authorization so a dismissed dialog
+			// does not leave a poller or loopback listener behind.
+			return dialog.ActionCloseOAuth{Cmd: m.oAuthProvider.stopPolling()}
+		}
 	}
 	return nil
 }

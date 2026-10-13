@@ -19,7 +19,6 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
-	"github.com/charmbracelet/crush/internal/server"
 	"github.com/google/uuid"
 )
 
@@ -37,15 +36,6 @@ type Client struct {
 	addr           string
 	clientID       string
 	recallRequests sync.Map // workspace/session -> request token retained after a failed response
-}
-
-// DefaultClient creates a new [Client] connected to the default server address.
-func DefaultClient(path string) (*Client, error) {
-	host, err := server.ParseHostURL(server.DefaultHost())
-	if err != nil {
-		return nil, err
-	}
-	return NewClient(path, host.Scheme, host.Host)
 }
 
 // NewClient creates a new [Client] connected to the server at the given
@@ -230,14 +220,6 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, headers
 
 func (c *Client) post(ctx context.Context, path string, query url.Values, body io.Reader, headers http.Header) (*http.Response, error) {
 	return c.sendReq(ctx, http.MethodPost, path, query, body, headers)
-}
-
-func (c *Client) delete(ctx context.Context, path string, query url.Values, headers http.Header) (*http.Response, error) {
-	return c.sendReq(ctx, http.MethodDelete, path, query, nil, headers)
-}
-
-func (c *Client) put(ctx context.Context, path string, query url.Values, body io.Reader, headers http.Header) (*http.Response, error) {
-	return c.sendReq(ctx, http.MethodPut, path, query, body, headers)
 }
 
 func (c *Client) sendReq(ctx context.Context, method, path string, query url.Values, body io.Reader, headers http.Header) (*http.Response, error) {

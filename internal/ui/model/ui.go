@@ -307,17 +307,10 @@ type UI struct {
 	frames *frameCache
 	frame  frameState
 
-	// tasks are the background sub-agents seen this run, by ID, and
-	// bgProcs the processes the agents left running. They share a row
-	// under the editor, which Down selects (tasksFocused, taskSel).
-	tasks       map[string]agent.Task
-	taskTicking bool
-	bgProcs     []agent.Process
-	// hostServers are background processes listening on a port, which the
-	// session list shows in place of the row.
-	hostServers  []agent.Server
-	tasksFocused bool
-	taskSel      int
+	// taskRow lists the background sub-agents and processes under the
+	// editor; see tasks.go.
+	taskRow taskRow
+
 	// planReadySessionID holds the session whose plan run emitted the
 	// plan-ready marker but has not been confirmed for execution yet. It
 	// lets the user reopen the handoff prompt after dismissing it.
@@ -3116,7 +3109,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			return true
 		case key.Matches(msg, m.keyMap.Chat.Background):
 			if m.state == uiChat {
-				if m.tasksFocused {
+				if m.taskRow.focused {
 					cmds = append(cmds, m.openTaskRowDialog())
 				} else {
 					cmds = append(cmds, m.openBackgroundDialog())
@@ -3242,7 +3235,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	// The background row under the editor takes keys while selected.
-	if m.tasksFocused && m.focus == uiFocusEditor && m.activeInline == nil {
+	if m.taskRow.focused && m.focus == uiFocusEditor && m.activeInline == nil {
 		if cmd, ok := m.handleTaskRowKey(msg); ok {
 			return cmd
 		}

@@ -2,6 +2,7 @@ package questionform
 
 import (
 	"image"
+	"image/color"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -146,72 +147,17 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	// The answer field is a thin box beside the gutter bar (see
 	// answerPad), with one cell of padding before the text.
 	bar := answerBar(d.Styles, d.focused)
-	const textLeft = questionBarWidth + 1
 	band := answerBand(d.Styles)
 	iconPrompt := questionIconPrompt(d.Styles, d.focused)
-	iconWidth := lipgloss.Width(iconPrompt)
-
-	// ftLine is a single buffer row. cursorX >= 0 marks the row
-	// carrying the textarea cursor and its column (incl. prefix).
-	type ftLine struct {
-		text    string
-		cursorX int
-		band    bool // paint the answer band from the box's left edge
-	}
-
-	// build renders the full content (header, description, textarea)
-	// into a flat line buffer at the given content width. Returns
-	// the buffer and the row index of the cursor (-1 if none).
-	build := func(contentWidth int) ([]ftLine, int) {
-		var lines []ftLine
-		cursorRow := -1
-
-		header := iconPrompt + d.Styles.Editor.QuestionUnselected.Render(
-			ansi.Wrap(d.Request.Text, contentWidth-iconWidth, ""),
-		)
-		for _, l := range strings.Split(header, "\n") {
-			lines = append(lines, ftLine{text: l, cursorX: -1})
-		}
-		lines = append(lines, ftLine{cursorX: -1}) // blank
-
-		if d.Request.Description != "" {
-			for _, l := range strings.Split(questionDescription(d.Styles, d.Request.Description, contentWidth), "\n") {
-				lines = append(lines, ftLine{text: l, cursorX: -1})
-			}
-			lines = append(lines, ftLine{cursorX: -1}) // blank
-		}
-
-		// Grow the textarea to fill the form height, bounded by the
-		// min and max editor heights.
-		boxWidth := contentWidth - questionBarWidth
-		lines = append(lines, ftLine{text: bar + answerPad(d.Styles, boxWidth, true), cursorX: -1})
-		headerLines := len(lines)
-		fill := viewport - headerLines - 2 // -2 for the box's bottom padding and the trailing blank
-		available := min(freeTextMaxEditorHeight, max(freeTextMinEditorHeight, fill))
-		d.editor.SetHeight(available)
-		d.editor.SetWidth(boxWidth - 2) // a cell of padding on each side
-		tc := d.editor.Cursor()
-		for j, ln := range strings.Split(d.editor.View(), "\n") {
-			cursorX := -1
-			if tc != nil && tc.Y == j {
-				cursorRow = len(lines)
-				cursorX = tc.X + textLeft
-			}
-			lines = append(lines, ftLine{text: bar + " " + ln, cursorX: cursorX, band: true})
-		}
-		lines = append(lines, ftLine{text: bar + answerPad(d.Styles, boxWidth, false), cursorX: -1})
-		lines = append(lines, ftLine{cursorX: -1}) // trailing bottom padding, matches Height()
-		return lines, cursorRow
-	}
 
 	// Build at full width; reserve a scrollbar column and rebuild
 	// only if the content overflows the viewport.
 	contentWidth := area.Dx()
-	lines, cursorRow := build(contentWidth)
+	lines, cursorRow := d.buildLines(contentWidth, viewport, bar, iconPrompt)
 	overflow := viewport > 0 && len(lines) > viewport
 	if overflow {
 		contentWidth--
-		lines, cursorRow = build(contentWidth)
+		lines, cursorRow = d.buildLines(contentWidth, viewport, bar, iconPrompt)
 	}
 
 	// Clamp scroll, then keep the cursor row visible unless the
@@ -243,18 +189,7 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		if ln.band {
 			// Cells the text left bare (padding, the empty rows, the
 			// right edge) take the band color too.
-			for x := area.Min.X + questionBarWidth; x < area.Min.X+contentWidth; x++ {
-				cell := scr.CellAt(x, y)
-				if cell == nil {
-					fill := uv.EmptyCell
-					fill.Style.Bg = band
-					scr.SetCell(x, y, &fill)
-				} else if cell.Style.Bg == nil {
-					c := *cell
-					c.Style.Bg = band
-					scr.SetCell(x, y, &c)
-				}
-			}
+			fillBandRow(scr, area.Min.X+questionBarWidth, area.Min.X+contentWidth, y, band)
 		}
 		if ln.cursorX >= 0 && ln.cursorX < contentWidth && baseCursor != nil {
 			c := *baseCursor
@@ -274,6 +209,82 @@ func (d *FreeText) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	return cur
+}
+
+// freeTextLine is a single row of the free-text scroll buffer.
+// cursorX >= 0 marks the row carrying the textarea cursor and its column
+// (incl. prefix).
+type freeTextLine struct {
+	text    string
+	cursorX int
+	band    bool // paint the answer band from the box's left edge
+}
+
+// buildLines renders the full content (header, description, textarea)
+// into a flat line buffer at the given content width, growing the
+// textarea to fill viewport. Returns the buffer and the row index of the
+// cursor (-1 if none).
+func (d *FreeText) buildLines(contentWidth, viewport int, bar, iconPrompt string) ([]freeTextLine, int) {
+	// The answer text starts one cell of padding past the gutter bar.
+	const textLeft = questionBarWidth + 1
+	iconWidth := lipgloss.Width(iconPrompt)
+
+	var lines []freeTextLine
+	cursorRow := -1
+
+	header := iconPrompt + d.Styles.Editor.QuestionUnselected.Render(
+		ansi.Wrap(d.Request.Text, contentWidth-iconWidth, ""),
+	)
+	for _, l := range strings.Split(header, "\n") {
+		lines = append(lines, freeTextLine{text: l, cursorX: -1})
+	}
+	lines = append(lines, freeTextLine{cursorX: -1}) // blank
+
+	if d.Request.Description != "" {
+		for _, l := range strings.Split(questionDescription(d.Styles, d.Request.Description, contentWidth), "\n") {
+			lines = append(lines, freeTextLine{text: l, cursorX: -1})
+		}
+		lines = append(lines, freeTextLine{cursorX: -1}) // blank
+	}
+
+	// Grow the textarea to fill the form height, bounded by the
+	// min and max editor heights.
+	boxWidth := contentWidth - questionBarWidth
+	lines = append(lines, freeTextLine{text: bar + answerPad(d.Styles, boxWidth, true), cursorX: -1})
+	headerLines := len(lines)
+	fill := viewport - headerLines - 2 // -2 for the box's bottom padding and the trailing blank
+	available := min(freeTextMaxEditorHeight, max(freeTextMinEditorHeight, fill))
+	d.editor.SetHeight(available)
+	d.editor.SetWidth(boxWidth - 2) // a cell of padding on each side
+	tc := d.editor.Cursor()
+	for j, ln := range strings.Split(d.editor.View(), "\n") {
+		cursorX := -1
+		if tc != nil && tc.Y == j {
+			cursorRow = len(lines)
+			cursorX = tc.X + textLeft
+		}
+		lines = append(lines, freeTextLine{text: bar + " " + ln, cursorX: cursorX, band: true})
+	}
+	lines = append(lines, freeTextLine{text: bar + answerPad(d.Styles, boxWidth, false), cursorX: -1})
+	lines = append(lines, freeTextLine{cursorX: -1}) // trailing bottom padding, matches Height()
+	return lines, cursorRow
+}
+
+// fillBandRow gives the cells of row y from x0 up to x1 that have no
+// background the band color.
+func fillBandRow(scr uv.Screen, x0, x1, y int, band color.Color) {
+	for x := x0; x < x1; x++ {
+		cell := scr.CellAt(x, y)
+		if cell == nil {
+			fill := uv.EmptyCell
+			fill.Style.Bg = band
+			scr.SetCell(x, y, &fill)
+		} else if cell.Style.Bg == nil {
+			c := *cell
+			c.Style.Bg = band
+			scr.SetCell(x, y, &c)
+		}
+	}
 }
 
 // HeightChanged reports whether the textarea height changed.

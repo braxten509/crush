@@ -4,6 +4,7 @@ package skills
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -42,7 +43,7 @@ type Skill struct {
 	DisableModelInvocation bool              `yaml:"disable-model-invocation" json:"disable_model_invocation"`
 	License                string            `yaml:"license,omitempty" json:"license,omitempty"`
 	Compatibility          string            `yaml:"compatibility,omitempty" json:"compatibility,omitempty"`
-	Metadata               map[string]string `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+	Metadata               map[string]string `yaml:"-" json:"metadata,omitempty"`
 	Instructions           string            `yaml:"-" json:"instructions"`
 	Path                   string            `yaml:"-" json:"path"`
 	SkillFilePath          string            `yaml:"-" json:"skill_file_path"`
@@ -174,6 +175,7 @@ func ParseContent(content []byte) (*Skill, error) {
 	if err := yaml.Unmarshal([]byte(frontmatter), &skill); err != nil {
 		return nil, fmt.Errorf("parsing frontmatter: %w", err)
 	}
+	skill.Metadata = parseMetadata(frontmatter)
 
 	skill.Instructions = strings.TrimSpace(body)
 
@@ -382,6 +384,34 @@ func Deduplicate(all []*Skill) []*Skill {
 		}
 	}
 	return result
+}
+
+// parseMetadata reads the free-form metadata map. Skills written for other
+// tools nest lists and maps in it; those values are kept as JSON text instead
+// of failing the whole skill.
+func parseMetadata(frontmatter string) map[string]string {
+	var raw struct {
+		Metadata map[string]any `yaml:"metadata"`
+	}
+	if err := yaml.Unmarshal([]byte(frontmatter), &raw); err != nil || len(raw.Metadata) == 0 {
+		return nil
+	}
+	metadata := make(map[string]string, len(raw.Metadata))
+	for key, value := range raw.Metadata {
+		switch v := value.(type) {
+		case string:
+			metadata[key] = v
+		case map[string]any, []any:
+			if encoded, err := json.Marshal(v); err == nil {
+				metadata[key] = string(encoded)
+			}
+		case nil:
+			metadata[key] = ""
+		default:
+			metadata[key] = fmt.Sprint(v)
+		}
+	}
+	return metadata
 }
 
 // ApproxTokenCount returns a rough estimate of how many tokens a string

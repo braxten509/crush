@@ -98,6 +98,14 @@ Instructions here.
 			wantInstr: "# Spaced Delimiter",
 		},
 		{
+			name:      "nested metadata from another tool",
+			content:   "---\nname: nested-meta\ndescription: Metadata written for another tool.\nmetadata:\n  author: someone\n  version: 3\n  openclaw:\n    emoji: x\n    requires:\n      env: []\n---\n\n# Nested\n",
+			wantName:  "nested-meta",
+			wantDesc:  "Metadata written for another tool.",
+			wantMeta:  map[string]string{"author": "someone", "version": "3", "openclaw": `{"emoji":"x","requires":{"env":[]}}`},
+			wantInstr: "# Nested",
+		},
+		{
 			name:    "no frontmatter",
 			content: "# Just Markdown\n\nNo frontmatter here.",
 			wantErr: true,

@@ -55,7 +55,8 @@ type sideRow struct {
 	newTerminal bool
 	close       bool
 	session     int // -1 when not on a session
-	server      int // the port of the server row; 0 when not on one
+	onServer    bool
+	server      serverRow // the server row, when onServer
 	stopServer  bool
 }
 
@@ -117,8 +118,8 @@ func (h *Host) rowAt(x, y int) sideRow {
 	}
 	top := h.firstRow()
 	if shown, first := h.shownServers(); y >= first && y < first+len(shown) {
-		r.server = shown[y-first].port
-		r.stopServer = r.server == h.pickedServer && x >= listWidth-5 && x <= listWidth-2
+		r.onServer, r.server = true, shown[y-first]
+		r.stopServer = h.isPicked(r.server) && x >= listWidth-5 && x <= listWidth-2
 		return r
 	}
 	switch {
@@ -323,19 +324,21 @@ func (h *Host) drawList(scr uv.Screen, p palette) {
 		}
 		draw(scr, 0, y, inner, base.Foreground(p.waiting).Render(" "+h.notice))
 	}
-	picked, isPicked := h.picked()
-	for k, server := range shown {
-		h.drawServer(scr, server, top+k, inner, isPicked && server == picked, p)
+	_, isPicked := h.picked()
+	for k, row := range shown {
+		h.drawServer(scr, row, top+k, inner, h.isPicked(row), p)
 	}
 	if isPicked {
 		draw(scr, 0, h.height-1, inner, muted.Render(serverHint))
 	}
 }
 
-// drawServer draws a server's row: its named link with the port on the
-// right, and × while it is picked. The × keeps its room either way, so the
-// port doesn't move when the row is picked.
-func (h *Host) drawServer(scr uv.Screen, server hostServer, y, width int, picked bool, p palette) {
+// drawServer draws a server row: a server's named link with the port on
+// the right, or a folded program with its port count, and × while it is
+// picked. The × keeps its room either way, so the right side doesn't move
+// when the row is picked. An opened program's servers are indented under it
+// and named after the program holding each port.
+func (h *Host) drawServer(scr uv.Screen, row serverRow, y, width int, picked bool, p palette) {
 	bg := p.bg
 	if picked {
 		bg = p.selected
@@ -346,14 +349,29 @@ func (h *Host) drawServer(scr uv.Screen, server hostServer, y, width int, picked
 		bar = base.Foreground(p.accent).Render("▌")
 		closeMark = base.Foreground(p.text).Render("× ")
 	}
+	server := row.server
+	if row.ports > 0 {
+		arrow := "▸ "
+		if h.openFolds[server.fold()] {
+			arrow = "▾ "
+		}
+		label := base.Foreground(p.accent).Render(arrow + server.name)
+		count := base.Foreground(p.muted).Render(strconv.Itoa(row.ports) + " ports")
+		draw(scr, 0, y, width, bar+spread(base, label, count+base.Render(" ")+closeMark, width-1))
+		return
+	}
 	port := ":" + strconv.Itoa(server.port)
+	name, indent := server.name, ""
+	if row.child {
+		name, indent = server.owner, base.Render("  ")
+	}
 	label, right := "↗ localhost"+port, closeMark
-	if server.name != "" {
-		label = "↗ " + server.name
+	if name != "" {
+		label = "↗ " + name
 		right = base.Foreground(p.muted).Render(port) + base.Render(" ") + closeMark
 	}
 	link := base.Foreground(p.accent).Hyperlink(server.url()).Render(label)
-	draw(scr, 0, y, width, bar+spread(base, link, right, width-1))
+	draw(scr, 0, y, width, bar+spread(base, indent+link, right, width-1))
 }
 
 // drawListBlock draws session i as two lines: its mark and title, then its

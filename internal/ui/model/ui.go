@@ -338,6 +338,12 @@ type UI struct {
 	// Notification state
 	notifyBackend       notification.Backend
 	notifyWindowFocused bool
+	// memoryHigh is the last memory check's warning state; memoryWarning
+	// is the status text it put up, so it can be told apart and cleared.
+	memoryHigh bool
+	// layoutAttachments is whether the last layout had attachments.
+	layoutAttachments bool
+	memoryWarning     string
 	// custom commands & mcp commands
 	customCommands []commands.CustomCommand
 	mcpPrompts     []commands.MCPPrompt
@@ -377,6 +383,8 @@ type UI struct {
 	// discarded and re-fetched instead of clobbering newer state.
 	busyFetchGen uint64
 	pillsView    string
+	// skillTags are where the kept skills' × sit under the composer.
+	skillTags []skillTag
 
 	// Todo spinner
 	todoSpinner    spinner.Model
@@ -530,8 +538,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	// enable mouse support (default on)
 	ui.mouseEnabled = opts.TUI.Mouse == nil || *opts.TUI.Mouse
 
-	ui.attachments.SetKeptSource(ui.keptSkillChips)
-
 	return ui
 }
 
@@ -545,7 +551,7 @@ func (m *UI) Init() tea.Cmd {
 	}
 	// load the user commands async
 	m.logoShineStart = time.Now()
-	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs(), m.checkCLIUpdates(false), m.checkSelfUpdate(false), m.logoShineTick())
+	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs(), m.checkCLIUpdates(false), m.checkSelfUpdate(false), m.logoShineTick(), m.memoryCheckTick(), m.applySavedMemoryLimit())
 	// Prime the memoized LSP state off-thread.
 	if cmd := m.requestLSPRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)

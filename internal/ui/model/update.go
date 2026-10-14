@@ -117,9 +117,9 @@ func (m *UI) finishUpdate(msg tea.Msg) []tea.Cmd {
 	// at this point this can only handle [message.Attachment] message, and we
 	// should return all cmds anyway.
 	if m.attachments.Update(msg) {
-		cmds = append(cmds, m.turnOffRemovedKeptSkills())
 		m.frame.invalidate()
 	}
+	m.syncAttachmentsLayout()
 	// Any update may have put a spinner on screen (new message, tool update,
 	// scroll, session load); make sure the clock is running. This is the
 	// sole place the clock is armed so a tick never sits inside a caller's

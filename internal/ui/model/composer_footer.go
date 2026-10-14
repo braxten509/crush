@@ -3,6 +3,7 @@ package model
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,19 +23,73 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// compactUsage keeps the active model, context, and quota beside the composer.
-func (m *UI) compactUsage(width int) string {
-	if m.state != uiChat || !m.isCompact || !m.hasSession() {
+// composerFooter is the line under the composer: in a chat without the
+// sidebar, the active model, context and quota. The chat's kept skills
+// (also the ones picked before the chat starts) go to the status row, after
+// the mode badge, so they never push this line aside.
+func (m *UI) composerFooter(width int) string {
+	m.skillTags = m.skillTags[:0]
+	if m.state != uiChat && m.state != uiLanding {
+		m.status.SetSkills("")
 		return ""
 	}
-	// Indented so the stats start in the composer's text column.
-	footer := renderFooterItems(m.com.Styles, m.footerItems(), m.selectedLargeModel(), m.session,
-		m.compactionLimit(m.selectedLargeModel(), m.session), m.selectedCLILimits(), width-footerIndent)
-	if footer == "" {
+	m.status.SetSkills(m.keptSkillsFooter())
+	line := ""
+	if m.state == uiChat && m.isCompact && m.hasSession() {
+		// Unwrapped here; the whole line wraps below.
+		stats := renderFooterItems(m.com.Styles, m.footerItems(), m.selectedLargeModel(), m.session,
+			m.compactionLimit(m.selectedLargeModel(), m.session), m.selectedCLILimits(), math.MaxInt32)
+		switch {
+		case line == "":
+			line = stats
+		case stats != "":
+			line += m.com.Styles.ComposerFooter.Separator.Render(" · ") + stats
+		}
+	}
+	if line == "" {
 		return ""
 	}
+	// Indented so the footer starts in the composer's text column.
 	pad := strings.Repeat(" ", footerIndent)
-	return pad + strings.ReplaceAll(footer, "\n", "\n"+pad)
+	return pad + strings.ReplaceAll(ansi.Wrap(line, max(width-footerIndent, 1), ""), "\n", "\n"+pad)
+}
+
+// skillTag is where a kept skill's × sits on the status row, counted from
+// where the skills start.
+type skillTag struct {
+	id string
+	x  int
+}
+
+// keptSkillsFooter renders the chat's kept skills, each with an × that
+// turns it off, and remembers where each × is.
+func (m *UI) keptSkillsFooter() string {
+	s := m.com.Styles.ComposerFooter
+	var b strings.Builder
+	x := 0
+	for i, skill := range m.keptSkills() {
+		if i > 0 {
+			b.WriteString("  ")
+			x += 2
+		}
+		name := s.Skill.Render(skill.Name) + " "
+		b.WriteString(name + s.SkillRemove.Render(styles.RemoveIcon))
+		x += ansi.StringWidth(name)
+		m.skillTags = append(m.skillTags, skillTag{id: skill.ID, x: x})
+		x += ansi.StringWidth(styles.RemoveIcon)
+	}
+	return b.String()
+}
+
+// skillTagAt returns the kept skill whose × is at column x of the skills on
+// the status row.
+func (m *UI) skillTagAt(x int) (string, bool) {
+	for _, tag := range m.skillTags {
+		if x == tag.x {
+			return tag.id, true
+		}
+	}
+	return "", false
 }
 
 // footerIndent lines the stats up with the composer's text, after its

@@ -86,6 +86,10 @@ type ComposerFooterStyles struct {
 	LimitOther  lipgloss.Style
 	Resets      lipgloss.Style
 	Separator   lipgloss.Style
+	// Skill and SkillRemove draw a skill kept on for the chat and the ×
+	// that turns it off.
+	Skill       lipgloss.Style
+	SkillRemove lipgloss.Style
 }
 
 // ModelInfoStyles groups the ModelInfo styles of [Styles].
@@ -165,13 +169,15 @@ type StatusStyles struct {
 type PillsStyles struct {
 	Base               lipgloss.Style // Base pill style with padding
 	Focused            lipgloss.Style // Pill with visible rounded border
-	QueueItemPrefix    lipgloss.Style // Prefix for queue list items
-	QueueItemText      lipgloss.Style // Queue list item body text
+	QueueItemPrefix    lipgloss.Style // "›" before a queued message
+	QueueItemText      lipgloss.Style // Queued message text
+	QueueItemHint      lipgloss.Style // "waiting · sends next" beside the first
+	QueueRowBg         color.Color    // Queued messages' band, dimmer than the composer's
 	QueueLabel         lipgloss.Style // "N Queued" label text
 	QueueIconBase      lipgloss.Style // Base style for queue gradient triangles
 	QueueGradFromColor color.Color    // Start color for queue indicator gradient
 	QueueGradToColor   color.Color    // End color for queue indicator gradient
-	TodoLabel          lipgloss.Style // "To-Do" label
+	TodoLabel          lipgloss.Style // "TO-DO" label
 	TodoProgress       lipgloss.Style // Todo ratio (e.g. "2/5")
 	TodoCurrentTask    lipgloss.Style // Current in-progress task name
 	TodoSpinner        lipgloss.Style // Todo spinner style

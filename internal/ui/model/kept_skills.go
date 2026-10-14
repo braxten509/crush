@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
-	"github.com/charmbracelet/crush/internal/ui/attachments"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
@@ -55,17 +54,7 @@ func (m *UI) keptSkills() []session.KeptSkill {
 	return m.pendingKeptSkills
 }
 
-// keptSkillChips lists the kept skills for the attachment row.
-func (m *UI) keptSkillChips() []attachments.Kept {
-	kept := m.keptSkills()
-	chips := make([]attachments.Kept, 0, len(kept))
-	for _, skill := range kept {
-		chips = append(chips, attachments.Kept{ID: skill.ID, Name: skill.Name})
-	}
-	return chips
-}
-
-// keptSkillsListMsg carries the skill list for the "Skills for this chat"
+// keptSkillsListMsg carries the skill list for the "Toggle skills"
 // dialog.
 type keptSkillsListMsg struct {
 	entries []skills.CatalogEntry
@@ -73,7 +62,7 @@ type keptSkillsListMsg struct {
 }
 
 // openKeptSkillsDialog loads the skills off the UI goroutine, then opens the
-// "Skills for this chat" dialog.
+// "Toggle skills" dialog.
 func (m *UI) openKeptSkillsDialog() tea.Cmd {
 	if m.dialog.ContainsDialog(dialog.KeptSkillsID) {
 		m.dialog.BringToFront(dialog.KeptSkillsID)
@@ -120,7 +109,7 @@ func (m *UI) setKeptSkill(skill session.KeptSkill, on bool) tea.Cmd {
 	}
 }
 
-// syncKeptSkillsDialog makes an open "Skills for this chat" dialog follow
+// syncKeptSkillsDialog makes an open "Toggle skills" dialog follow
 // the chat's skills, such as ones the agent turned on or off.
 func (m *UI) syncKeptSkillsDialog() {
 	dia, ok := m.dialog.Dialog(dialog.KeptSkillsID).(*dialog.KeptSkills)
@@ -139,15 +128,10 @@ func (m *UI) syncKeptSkillsDialog() {
 	}
 }
 
-// turnOffRemovedKeptSkills turns off the kept skills whose chips the user
-// removed.
-func (m *UI) turnOffRemovedKeptSkills() tea.Cmd {
-	var cmds []tea.Cmd
-	for _, id := range m.attachments.TakeRemovedKept() {
-		if dia, ok := m.dialog.Dialog(dialog.KeptSkillsID).(*dialog.KeptSkills); ok {
-			dia.SetOn(id, false)
-		}
-		cmds = append(cmds, m.setKeptSkill(session.KeptSkill{ID: id}, false))
+// turnOffKeptSkill turns off a kept skill from its tag under the composer.
+func (m *UI) turnOffKeptSkill(id string) tea.Cmd {
+	if dia, ok := m.dialog.Dialog(dialog.KeptSkillsID).(*dialog.KeptSkills); ok {
+		dia.SetOn(id, false)
 	}
-	return tea.Batch(cmds...)
+	return m.setKeptSkill(session.KeptSkill{ID: id}, false)
 }

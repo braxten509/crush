@@ -298,7 +298,7 @@ func TestAutoExpandPillsIfReasonable(t *testing.T) {
 		}
 	})
 
-	t.Run("expands for prompt queue when no todos", func(t *testing.T) {
+	t.Run("stays closed for a prompt queue alone", func(t *testing.T) {
 		t.Parallel()
 
 		u := newTestUI()
@@ -308,11 +308,8 @@ func TestAutoExpandPillsIfReasonable(t *testing.T) {
 
 		u.autoExpandPillsIfReasonable()
 
-		if !u.pillsExpanded {
-			t.Fatal("expected pillsExpanded to be true for prompt queue")
-		}
-		if u.focusedPillSection != pillSectionQueue {
-			t.Fatalf("expected focusedPillSection to be pillSectionQueue, got %d", u.focusedPillSection)
+		if u.pillsExpanded {
+			t.Fatal("queued messages show above the composer; there is no section to open")
 		}
 	})
 

@@ -15,7 +15,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// KeptSkillsID is the identifier for the "Skills for this chat" dialog.
+// KeptSkillsID is the identifier for the "Toggle skills" dialog.
 const KeptSkillsID = "kept_skills"
 
 // keptSkillsMaxRows caps the visible rows; the rest scroll.
@@ -24,7 +24,7 @@ const keptSkillsMaxRows = 12
 // keptSkillsNote explains what turning a skill on does.
 const keptSkillsNote = "On skills are reminded every message and come back after compression."
 
-// KeptSkillItem is one skill in the "Skills for this chat" dialog.
+// KeptSkillItem is one skill in the "Toggle skills" dialog.
 type KeptSkillItem struct {
 	ID   string
 	Name string
@@ -90,7 +90,7 @@ type KeptSkills struct {
 
 var _ Dialog = (*KeptSkills)(nil)
 
-// NewKeptSkills creates the "Skills for this chat" dialog.
+// NewKeptSkills creates the "Toggle skills" dialog.
 func NewKeptSkills(com *common.Common, items []KeptSkillItem) *KeptSkills {
 	t := com.Styles
 	m := &KeptSkills{com: com, items: items}
@@ -248,7 +248,7 @@ func (m *KeptSkills) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	rc := NewRenderContext(t, m.width)
-	rc.Title = "Skills for this chat"
+	rc.Title = "Toggle skills"
 	rc.AddPart(t.Dialog.SecondaryText.Width(innerWidth).Render(keptSkillsNote))
 	rc.AddPart(t.Dialog.InputPrompt.Render(m.input.View()))
 	rc.AddPart(m.listView(innerWidth, rows))

@@ -458,6 +458,18 @@ func ParseTaskNotification(text string) (name, status string, ok bool) {
 	return field("name"), field("status"), true
 }
 
+// userSubAgentInstructions returns the user's own rules for starting
+// sub-agents, saved from the Sub-agent Instructions command, ready to close
+// the sub-agent block; "" when there are none. They are read on every call,
+// so an edit reaches open chats on their next message.
+func userSubAgentInstructions() string {
+	text := config.LoadSubAgentInstructions()
+	if text == "" {
+		return ""
+	}
+	return "\n\nThe user's own instructions for starting sub-agents follow. They decide when to use sub-agents and which provider, model, effort and options each gets; they take precedence over the guidance above and over any memory note or skill that says otherwise:\n<user_sub_agent_instructions>\n" + text + "\n</user_sub_agent_instructions>"
+}
+
 // instructions tell a session's agent how to use sub-agents.
 func (h *taskHub) instructions() string {
 	var clis strings.Builder
@@ -500,7 +512,7 @@ Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 
 Always run tests (test suites, test scripts, builds run to test) in the background, never in the foreground, using %[1]s bg -- 'timeout 600 <command>' for agent CLIs. This registers the job with Crush, makes it visible, and delivers a completion message. Use %[1]s bg --output <job-id> for output or %[1]s bg --stop <job-id> to stop it. Do not use nohup or a bare trailing ampersand for tracked jobs. Native API agents can use the bash tool's run_in_background option. Give every test command a time limit so a hung test ends on its own (for example "timeout 600 <command>", or the runner's own flag like "go test -timeout 10m"). Keep working while they run; check their output when you need the results instead of blocking on them, and if your tool tells you when a background command finishes, you can end your turn and continue then.
 Use %[1]s bg --service -- '<command>' for servers and watchers that should remain running after the work is complete. This keeps them tracked and stoppable without delaying the finish notification. Never mark tests, builds, or other finite work as services.
 
-Use sub-agents for independent work that can run in parallel (research, separate parts of a change, reviews, second opinions from another model). Do quick or tightly coupled work yourself. Only use them when the user asks for sub-agents, other models, or parallel work, or when the task clearly benefits.
+Use sub-agents for independent work that can run in parallel (research, separate parts of a change, reviews, second opinions from another model). Do quick or tightly coupled work yourself. Only use them when the user asks for sub-agents, other models, or parallel work, or when the task clearly benefits.%[7]s
 </crush_sub_agents>
 
 <crush_questions>
@@ -529,7 +541,7 @@ For secrets alone, run:
 That is shorthand for a one-question form with a secure_entry question: same form, same "Questions" result with only saved/cancelled. End your turn after opening it. Never read, print, diff, attach, commit, or send the populated file to tools/models. The program itself reads and edits the file locally.
 For multiple keys, prepare ALL placeholders before collecting any key, then ask for them together as several secure_entry questions in one form. By default each replaces the first remaining %%s. Use unique placeholders (or occurrence) to select a slot; unique markers are best. Replacement is literal, not printf or a shell expansion. Prepare valid quoting for the intended file format. Existing keys must never be read by you to edit another slot. Secure entry is local-terminal only, not available through the phone or server clients.
 Keep secrets in a secrets folder such as ~/.config/secrets. Crush blocks tool calls that read secrets folders, so when a task needs a secret, write a small helper program that reads the file itself and never prints it.
-</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName, h.checkInInstructions())
+</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName, h.checkInInstructions(), userSubAgentInstructions())
 }
 
 func firstLine(s string, n int) string {

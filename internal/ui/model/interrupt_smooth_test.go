@@ -36,7 +36,9 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 	u.updateLayoutAndSize()
 	require.Equal(t, []string{"first followup", "second followup"}, u.visiblePromptQueueItems(), "mid-turn prompts wait in the queue list")
 	require.Equal(t, -1, renderedRow(u.chat.list.Render(), "followup"), "and stay out of the chat")
-	composer := u.layout.editor
+	// The composer's text row and bottom stay put; the queued rows above
+	// it go.
+	composerText, composerBottom := u.layout.editor.Min.Y+u.composerTextTop(), u.layout.editor.Max.Y
 	start := time.Now()
 	cmd := u.handleKeyPressMsg(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl})
 	elapsed := time.Since(start)
@@ -50,7 +52,9 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 	require.NotEqual(t, -1, renderedRow(before, "second followup"), "the interrupt sends the held prompts, so they join the chat")
 	waiting := u.chat.waitingItem
 	require.NotNil(t, waiting)
-	require.Equal(t, composer, u.layout.editor)
+	require.Equal(t, composerText, u.layout.editor.Min.Y+u.composerTextTop())
+	require.Equal(t, composerBottom, u.layout.editor.Max.Y)
+	settled := u.layout.editor
 	require.Len(t, u.queue.pending, 2)
 	require.Len(t, u.queue.submitting, 2, "queued handoffs must not be canceled with the old worker")
 	require.Zero(t, u.visiblePromptQueueCount())
@@ -60,7 +64,7 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 		require.Contains(t, ansi.Strip(frame), "Working")
 		require.Equal(t, renderedRow(before, "first followup"), renderedRow(frame, "first followup"))
 		require.Equal(t, renderedRow(before, "second followup"), renderedRow(frame, "second followup"))
-		require.Equal(t, composer, u.layout.editor)
+		require.Equal(t, settled, u.layout.editor)
 	}
 	confirmed := u.queue.pending[len(u.queue.pending)-1].Clone()
 	confirmed.ID = "saved-second"
@@ -75,7 +79,7 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 	require.Same(t, waiting, u.chat.waitingItem, "late old-turn updates cannot remove Working")
 	require.Equal(t, renderedRow(before, "first followup"), renderedRow(u.chat.list.Render(), "first followup"))
 	require.Equal(t, renderedRow(before, "second followup"), renderedRow(u.chat.list.Render(), "second followup"))
-	require.Equal(t, composer, u.layout.editor)
+	require.Equal(t, settled, u.layout.editor)
 	toolIndex, userIndex := -1, -1
 	for i, item := range u.chat.flat {
 		if item.ID() == "late-tool" {

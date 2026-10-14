@@ -226,12 +226,8 @@ type AttachmentStyles struct {
 	Image  lipgloss.Style
 	Text   lipgloss.Style
 	Skill  lipgloss.Style
-	// KeptIcon and KeptName draw a skill kept on for the whole chat. They
-	// use the plan colors so they stand apart from one-off attachments.
-	KeptIcon lipgloss.Style
-	KeptName lipgloss.Style
-	// KeptDot and KeptText mark a skill that is on in the "Skills for
-	// this chat" list.
+	// KeptDot and KeptText mark a skill that is on in the "Toggle skills"
+	// list.
 	KeptDot  lipgloss.Style
 	KeptText lipgloss.Style
 	Remove   lipgloss.Style

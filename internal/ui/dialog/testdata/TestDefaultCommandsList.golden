@@ -16,10 +16,12 @@ remote | Remote Control |  | dialog.ActionOpenDialog{DialogID:remote} | Remote C
 update_clis | Update Agent CLIs |  | dialog.ActionCheckCLIUpdates{} | Update Agent CLIs upgrade version
 update_crush | Update Crush |  | dialog.ActionSelfUpdate{} | Update Crush upgrade upstream release
 skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install skills enable skills disable skills
-kept_skills | Skills for this chat |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Skills for this chat keep skills on remind skills every message bring skills back after compression
+kept_skills | Toggle skills |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Toggle skills keep skills on remind skills every message bring skills back after compression
 toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
 toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
 customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
+subagent_instructions | Sub-agent Instructions |  | dialog.ActionOpenDialog{DialogID:subagent_instructions} | Sub-agent Instructions subagents sub-agents spawn agents
+memory_limit | Memory Limit |  | dialog.ActionOpenDialog{DialogID:memory_limit} | Memory Limit ram memory swap
 switch_theme | Themes |  | dialog.ActionOpenDialog{DialogID:theme} | Themes
 toggle_mouse | Disable Mouse |  | dialog.ActionToggleMouseSupport{} | Disable Mouse
 quit | Quit | ctrl+c | tea.QuitMsg{} | Quit exit
@@ -54,10 +56,12 @@ remote | Remote Control |  | dialog.ActionOpenDialog{DialogID:remote} | Remote C
 update_clis | Update Agent CLIs |  | dialog.ActionCheckCLIUpdates{} | Update Agent CLIs upgrade version
 update_crush | Update Crush |  | dialog.ActionSelfUpdate{} | Update Crush upgrade upstream release
 skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install skills enable skills disable skills
-kept_skills | Skills for this chat |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Skills for this chat keep skills on remind skills every message bring skills back after compression
+kept_skills | Toggle skills |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Toggle skills keep skills on remind skills every message bring skills back after compression
 toggle_transparent | Use Crush Background |  | dialog.ActionToggleTransparentBackground{} | Use Crush Background background color transparent theme
 toggle_composer_focus | Let Tab Move Focus |  | dialog.ActionToggleComposerFocusOnly{} | Let Tab Move Focus tab focus
 customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
+subagent_instructions | Sub-agent Instructions |  | dialog.ActionOpenDialog{DialogID:subagent_instructions} | Sub-agent Instructions subagents sub-agents spawn agents
+memory_limit | Memory Limit |  | dialog.ActionOpenDialog{DialogID:memory_limit} | Memory Limit ram memory swap
 switch_theme | Themes |  | dialog.ActionOpenDialog{DialogID:theme} | Themes
 toggle_mouse | Enable Mouse |  | dialog.ActionToggleMouseSupport{} | Enable Mouse
 quit | Quit | ctrl+c | tea.QuitMsg{} | Quit exit
@@ -91,10 +95,12 @@ remote | Remote Control |  | dialog.ActionOpenDialog{DialogID:remote} | Remote C
 update_clis | Update Agent CLIs |  | dialog.ActionCheckCLIUpdates{} | Update Agent CLIs upgrade version
 update_crush | Update Crush |  | dialog.ActionSelfUpdate{} | Update Crush upgrade upstream release
 skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install skills enable skills disable skills
-kept_skills | Skills for this chat |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Skills for this chat keep skills on remind skills every message bring skills back after compression
+kept_skills | Toggle skills |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Toggle skills keep skills on remind skills every message bring skills back after compression
 toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
 toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
 customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
+subagent_instructions | Sub-agent Instructions |  | dialog.ActionOpenDialog{DialogID:subagent_instructions} | Sub-agent Instructions subagents sub-agents spawn agents
+memory_limit | Memory Limit |  | dialog.ActionOpenDialog{DialogID:memory_limit} | Memory Limit ram memory swap
 switch_theme | Themes |  | dialog.ActionOpenDialog{DialogID:theme} | Themes
 toggle_mouse | Disable Mouse |  | dialog.ActionToggleMouseSupport{} | Disable Mouse
 quit | Quit | ctrl+c | tea.QuitMsg{} | Quit exit
@@ -118,10 +124,12 @@ remote | Remote Control |  | dialog.ActionOpenDialog{DialogID:remote} | Remote C
 update_clis | Update Agent CLIs |  | dialog.ActionCheckCLIUpdates{} | Update Agent CLIs upgrade version
 update_crush | Update Crush |  | dialog.ActionSelfUpdate{} | Update Crush upgrade upstream release
 skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install skills enable skills disable skills
-kept_skills | Skills for this chat |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Skills for this chat keep skills on remind skills every message bring skills back after compression
+kept_skills | Toggle skills |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Toggle skills keep skills on remind skills every message bring skills back after compression
 toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
 toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
 customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
+subagent_instructions | Sub-agent Instructions |  | dialog.ActionOpenDialog{DialogID:subagent_instructions} | Sub-agent Instructions subagents sub-agents spawn agents
+memory_limit | Memory Limit |  | dialog.ActionOpenDialog{DialogID:memory_limit} | Memory Limit ram memory swap
 switch_theme | Themes |  | dialog.ActionOpenDialog{DialogID:theme} | Themes
 toggle_mouse | Disable Mouse |  | dialog.ActionToggleMouseSupport{} | Disable Mouse
 quit | Quit | ctrl+c | tea.QuitMsg{} | Quit exit

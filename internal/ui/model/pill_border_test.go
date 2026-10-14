@@ -4,38 +4,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/charmbracelet/crush/internal/session"
 )
 
-// roundedBorderRunes are chars that only appear when a pill has a visible
-// rounded border.
-const roundedBorderRunes = "╭╮╰╯"
-
-func hasRoundedBorder(s string) bool {
-	return strings.ContainsAny(s, roundedBorderRunes)
-}
-
-// queuePillHasBorder reports whether the "N Queued" pill is wrapped in a
-// rounded border by checking the line directly above the queue label for a
-// top border corner.
-func queuePillHasBorder(view string) bool {
-	lines := strings.Split(view, "\n")
-	for i, line := range lines {
-		if !strings.Contains(line, "Queued") {
-			continue
-		}
-		if i == 0 {
-			return false
-		}
-		return strings.ContainsAny(lines[i-1], "╭╮")
-	}
-	return false
-}
-
-// TestQueuePillAlwaysHasBorder guards CHARM-1678: the queued-prompts pill must
-// render with its rounded border regardless of panel expansion or which pill
-// section is nominally focused.
-func TestQueuePillAlwaysHasBorder(t *testing.T) {
+// TestTodoSectionHasNoBoxOrQueue checks the to-do section draws without
+// boxes and leaves queued messages to the composer, however it is opened
+// or focused.
+func TestTodoSectionHasNoBoxOrQueue(t *testing.T) {
 	incompleteTodos := []session.Todo{{Content: "a", Status: session.TodoStatusPending}}
 
 	cases := []struct {
@@ -43,29 +20,34 @@ func TestQueuePillAlwaysHasBorder(t *testing.T) {
 		expanded       bool
 		focusedSection pillSection
 		todos          []session.Todo
-		queue          int
 	}{
-		{"collapsed only queue", false, pillSectionTodos, nil, 2},
-		{"collapsed queue+todos", false, pillSectionTodos, incompleteTodos, 2},
-		{"expanded queue focused", true, pillSectionQueue, nil, 2},
-		{"expanded stale todos focus only queue", true, pillSectionTodos, nil, 2},
-		{"expanded todos focused queue+todos", true, pillSectionTodos, incompleteTodos, 2},
+		{"queue only", false, pillSectionTodos, nil},
+		{"collapsed queue+todos", false, pillSectionTodos, incompleteTodos},
+		{"expanded queue focused", true, pillSectionQueue, incompleteTodos},
+		{"expanded todos focused", true, pillSectionTodos, incompleteTodos},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			u := newTestUI()
 			u.session = &session.Session{ID: "s1", Todos: tc.todos}
-			u.queue.count = tc.queue
+			u.queue.count = 2
+			u.queue.items = []string{"queued one", "queued two"}
 			u.pillsExpanded = tc.expanded
 			u.focusedPillSection = tc.focusedSection
 			u.updateLayoutAndSize()
 			u.renderPills()
 
-			if !hasRoundedBorder(u.pillsView) {
-				t.Fatalf("expected a rounded border somewhere in pills view:\n%s", u.pillsView)
+			if strings.ContainsAny(u.pillsView, "╭╮╰╯") {
+				t.Fatalf("the to-do section has no box:\n%s", u.pillsView)
 			}
-			if !queuePillHasBorder(u.pillsView) {
-				t.Fatalf("expected the queue pill to have a border:\n%s", u.pillsView)
+			if strings.Contains(u.pillsView, "queued") {
+				t.Fatalf("queued messages belong above the composer:\n%s", u.pillsView)
+			}
+			if tc.todos == nil && u.pillsView != "" {
+				t.Fatalf("no to-dos, no section:\n%s", u.pillsView)
+			}
+			if tc.expanded && tc.todos != nil && !strings.Contains(ansi.Strip(u.pillsView), "• a") {
+				t.Fatalf("an open section lists the to-dos whichever part was focused:\n%s", u.pillsView)
 			}
 		})
 	}

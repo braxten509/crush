@@ -3,6 +3,7 @@ package model
 import (
 	"cmp"
 	"slices"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent"
@@ -38,7 +39,12 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 		st.Title = m.session.Title
 	}
 	for _, server := range m.taskRow.hostServers {
-		st.Servers = append(st.Servers, sessionhost.Server{Port: server.Port, Name: server.Title()})
+		st.Servers = append(st.Servers, sessionhost.Server{
+			Port:  server.Port,
+			Name:  server.Title(),
+			Owner: server.Owner,
+			Group: cmp.Or(server.Process.JobID, strconv.Itoa(server.Process.PID)),
+		})
 	}
 	if model := m.selectedLargeModel(); model != nil {
 		st.Model = model.CatwalkCfg.Name

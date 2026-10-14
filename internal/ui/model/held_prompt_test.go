@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/message"
@@ -53,14 +54,18 @@ func TestReleasedPromptIsReplacedBySavedCopy(t *testing.T) {
 	require.Equal(t, u.queue.pending[0].ID, u.chat.flat[1].ID(), "the other released row keeps its own ID")
 }
 
-// A held prompt's text shows above the composer without opening the panel,
-// so a message sent mid-turn never looks like it vanished.
-func TestHeldPromptTextIsListedWithoutExpanding(t *testing.T) {
+// A held prompt's text shows right above the composer, so a message sent
+// mid-turn never looks like it vanished.
+func TestHeldPromptTextIsListedAboveComposer(t *testing.T) {
 	u, _ := newSubmissionUI()
 	warmCaches(u, true)
 	u.sendMessage("only send should ask")
-	require.False(t, u.pillsExpanded)
 	u.updateLayoutAndSize()
-	require.Contains(t, ansi.Strip(u.pillsView), "only send should ask")
-	require.Equal(t, pillHeightWithBorder+1, u.pillsAreaHeight())
+	require.Zero(t, u.pillsAreaHeight(), "queued messages are not part of the to-do section")
+	rows := strings.Split(ansi.Strip(u.renderEditorView(60)), "\n")
+	require.Contains(t, rows[1], "› only send should ask", "the queued row sits under the attachments row")
+	require.Contains(t, rows[1], "waiting · sends next")
+	require.Equal(t, ansi.StringWidth(rows[2]), ansi.StringWidth(rows[1]), "it spans the composer band's width")
+	require.Equal(t, 3, u.composerTextTop(), "the composer text moves down one row")
+	require.Equal(t, u.textarea.Height()+editorHeightMargin+1, u.layoutEditorHeight())
 }

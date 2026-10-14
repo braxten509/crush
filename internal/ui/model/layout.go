@@ -34,6 +34,10 @@ const editorHeightMargin = 4
 // attachments row and the band's top padding.
 const editorTextTop = 2
 
+// composerTextTop is the composer text's row inside the editor: below the
+// attachments row, the queued messages and the band's top padding.
+func (m *UI) composerTextTop() int { return editorTextTop + m.queueRowCount() }
+
 // editorAttachmentsRow is the editor row that shows the attachments, directly
 // above the composer band. It is blank without attachments.
 const editorAttachmentsRow = 0
@@ -81,6 +85,7 @@ func (m *UI) toggleCompactMode() tea.Cmd {
 
 // updateLayoutAndSize updates the layout and sizes of UI components.
 func (m *UI) updateLayoutAndSize() {
+	m.layoutAttachments = m.hasAttachments()
 	// Determine if we should be in compact mode
 	if m.state == uiChat {
 		if m.forceCompactMode {
@@ -213,9 +218,13 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		// ------
 		// help
 		headerRect, mainRect := splitLandingHeader(appRect)
+		usageHeight := 0
+		if usage := m.composerFooter(area.Dx()); usage != "" {
+			usageHeight = lipgloss.Height(usage)
+		}
 		var editorRect image.Rectangle
 		layout.Vertical(
-			layout.Len(mainRect.Dy()-editorHeight),
+			layout.Len(mainRect.Dy()-editorHeight-usageHeight),
 			layout.Fill(1),
 		).Split(mainRect).Assign(&mainRect, &editorRect)
 		// The composer runs edge to edge, as in the chat (but the header and
@@ -224,7 +233,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		editorRect.Max.X = area.Max.X
 		uiLayout.header = headerRect
 		uiLayout.main = mainRect
-		uiLayout.editor = editorRect
+		uiLayout.editor, uiLayout.usage = splitUsage(editorRect, usageHeight)
 
 	case uiChat:
 		if m.isCompact {
@@ -241,7 +250,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 // for attachments and bottom spacing, or an active inline editor's.
 func (m *UI) layoutEditorHeight() int {
 	if m.activeInline == nil {
-		return m.textarea.Height() + editorHeightMargin
+		return m.textarea.Height() + editorHeightMargin + m.queueRowCount()
 	}
 	// The editor content width depends only on terminal width and layout
 	// (not on editor height), so passing the current frame's width to
@@ -322,6 +331,12 @@ func (m *UI) layoutChat(l *uiLayout, appRect image.Rectangle, editorHeight int) 
 	// grows to hold them.
 	tasksHeight := m.tasksHeight()
 	editorHeight += tasksHeight
+	// The kept skills sit under the composer; the stats are in the sidebar.
+	usageHeight := 0
+	if usage := m.composerFooter(appRect.Dx() - sidebarWidth); usage != "" {
+		usageHeight = lipgloss.Height(usage)
+	}
+	editorHeight += usageHeight
 
 	var mainRect, sideRect image.Rectangle
 	layout.Horizontal(
@@ -341,6 +356,16 @@ func (m *UI) layoutChat(l *uiLayout, appRect image.Rectangle, editorHeight int) 
 	// Add bottom margin to main
 	l.main.Max.Y -= 1
 	l.editor, l.tasks = splitTasks(editorRect, tasksHeight)
+	l.editor, l.usage = splitUsage(l.editor, usageHeight)
+}
+
+// splitUsage takes the line under the composer off the bottom of the editor
+// block.
+func splitUsage(editor image.Rectangle, usageHeight int) (editorRect, usageRect image.Rectangle) {
+	usageRect = editor
+	usageRect.Min.Y = max(editor.Min.Y, editor.Max.Y-usageHeight)
+	editor.Max.Y = usageRect.Min.Y
+	return editor, usageRect
 }
 
 // layoutCompactChat lays out the chat without its sidebar:
@@ -359,7 +384,7 @@ func (m *UI) layoutCompactChat(l *uiLayout, appRect image.Rectangle, editorHeigh
 	tasksHeight := m.tasksHeight()
 	editorHeight += tasksHeight
 	usageHeight := 0
-	if usage := m.compactUsage(appRect.Dx()); usage != "" {
+	if usage := m.composerFooter(appRect.Dx()); usage != "" {
 		usageHeight = lipgloss.Height(usage)
 	}
 	editorHeight += usageHeight
@@ -381,9 +406,7 @@ func (m *UI) layoutCompactChat(l *uiLayout, appRect image.Rectangle, editorHeigh
 	// Add bottom margin to main
 	l.main.Max.Y -= 1
 	l.editor, l.tasks = splitTasks(editorRect, tasksHeight)
-	l.usage = l.editor
-	l.usage.Min.Y = max(l.editor.Min.Y, l.editor.Max.Y-usageHeight)
-	l.editor.Max.Y = l.usage.Min.Y
+	l.editor, l.usage = splitUsage(l.editor, usageHeight)
 }
 
 // splitPills takes the pills panel off the bottom of the chat area, when

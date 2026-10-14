@@ -19,13 +19,14 @@ type Entry struct {
 // markedProcs and listeningPorts are replaced by the platform's readers.
 var (
 	markedProcs    = func(markers []string) map[int]Entry { return nil }
-	listeningPorts = func(pids []int) []int { return nil }
+	listeningPorts = func(pids []int) map[int]int { return nil }
 )
 
 // Marked lists the processes whose environment holds one of markers
 // exactly. It is nil where the process table can't be read.
 func Marked(markers []string) map[int]Entry { return markedProcs(markers) }
 
-// ListeningPorts returns the ports the given processes listen on for
-// connections from this computer. It is nil where sockets can't be read.
-func ListeningPorts(pids []int) []int { return listeningPorts(pids) }
+// ListeningPorts maps the ports the given processes listen on for
+// connections from this computer to the process listening on each. It is
+// nil where sockets can't be read.
+func ListeningPorts(pids []int) map[int]int { return listeningPorts(pids) }

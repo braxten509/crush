@@ -234,7 +234,7 @@ func (m *UI) handleCompletionsKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 // otherwise typing.
 func (m *UI) handleEditorKey(msg tea.KeyPressMsg) tea.Cmd {
 	if ok := m.attachments.Update(msg); ok {
-		return m.turnOffRemovedKeptSkills()
+		return nil
 	}
 
 	var cmds []tea.Cmd

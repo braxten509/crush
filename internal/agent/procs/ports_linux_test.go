@@ -25,9 +25,9 @@ func TestListeningInTableKeepsLocalListeners(t *testing.T) {
 		"   2: 0101A8C0:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 13 1\n" +
 		"   3: 0100007F:1436 0100007F:9999 01 00000000:00000000 00:00000000 00000000  1000        0 14 1\n" +
 		"   4: 0100007F:1437 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 99 1\n"
-	inodes := map[string]bool{"11": true, "12": true, "13": true, "14": true}
-	require.Equal(t, []int{0x1435, 0x1F90}, listeningInTable(table, inodes),
-		"loopback and any-address listeners count; a LAN-only one, a connection and another program's socket don't")
+	inodes := map[string]int{"11": 101, "12": 102, "13": 103, "14": 104}
+	require.Equal(t, map[int]int{0x1435: 101, 0x1F90: 102}, listeningInTable(table, inodes),
+		"loopback and any-address listeners count, each with its process; a LAN-only one, a connection and another program's socket don't")
 	require.True(t, localAddress("00000000000000000000000001000000"))
 	require.True(t, localAddress("0000000000000000FFFF00000100007F"))
 	require.False(t, localAddress("0000000000000000FFFF00000101A8C0"))

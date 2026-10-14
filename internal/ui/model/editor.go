@@ -103,7 +103,7 @@ func (m *UI) forwardMouseToTextarea(msg tea.MouseMsg) (bool, tea.Cmd) {
 
 	// The textarea is rendered inside layout.editor below the separator
 	// and attachments rows, which renderEditorView always reserves.
-	origin := image.Pt(m.layout.editor.Min.X, m.layout.editor.Min.Y+editorTextTop)
+	origin := image.Pt(m.layout.editor.Min.X, m.layout.editor.Min.Y+m.composerTextTop())
 
 	// The textarea occupies its own height starting at the origin.
 	area := image.Rectangle{Min: origin, Max: origin.Add(image.Pt(m.layout.editor.Dx(), m.textarea.Height()))}
@@ -364,7 +364,7 @@ func (m *UI) applyFileCompletion(msg fileCompletionMsg) tea.Cmd {
 		return nil
 	}
 	m.frame.invalidate()
-	return m.turnOffRemovedKeptSkills()
+	return nil
 }
 
 // insertMCPResourceCompletion inserts the selected resource into the textarea,
@@ -438,7 +438,7 @@ func (m *UI) completionsPosition() image.Point {
 	}
 	return image.Point{
 		X: cur.X + m.layout.editor.Min.X,
-		Y: m.layout.editor.Min.Y + editorTextTop - 1 + cur.Y,
+		Y: m.layout.editor.Min.Y + m.composerTextTop() - 1 + cur.Y,
 	}
 }
 

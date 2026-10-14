@@ -156,6 +156,13 @@ func blendTint(fg, bg color.Color, fraction float64) color.Color {
 	return gradient[i]
 }
 
+// neutralGray returns the gray with c's average brightness.
+func neutralGray(c color.Color) color.Color {
+	r, g, b, _ := c.RGBA()
+	v := uint8((r + g + b) / 3 >> 8)
+	return color.RGBA{R: v, G: v, B: v, A: 0xff}
+}
+
 // quickStyle builds the default Styles (that is, the default theme, Charmtone
 // Pantera) from a palette of semi-semanticly-named colors.
 //
@@ -616,6 +623,8 @@ func quickStyleSidebar(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss
 	s.ComposerFooter.LimitOther = lipgloss.NewStyle().Foreground(o.infoMoreSubtle)
 	s.ComposerFooter.Resets = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
 	s.ComposerFooter.Separator = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	s.ComposerFooter.Skill = lipgloss.NewStyle().Foreground(o.plan).Bold(true)
+	s.ComposerFooter.SkillRemove = lipgloss.NewStyle().Foreground(o.planMoreSubtle)
 
 	// ModelInfo
 	s.ModelInfo.Icon = lipgloss.NewStyle().Foreground(o.fgMostSubtle)

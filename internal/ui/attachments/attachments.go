@@ -39,17 +39,6 @@ type Attachments struct {
 	keyMap   Keymap
 	list     []message.Attachment
 	deleting bool
-	// keptSource lists the skills kept on for the whole chat. Their chips
-	// come first and stay after sending; removing one queues its ID for
-	// TakeRemovedKept instead of dropping it here.
-	keptSource  func() []Kept
-	removedKept []string
-}
-
-// Kept is a skill kept on for the whole chat.
-type Kept struct {
-	ID   string
-	Name string
 }
 
 func (m *Attachments) Renderer() *Renderer { return m.renderer }
@@ -58,35 +47,11 @@ func (m *Attachments) List() []message.Attachment { return m.list }
 func (m *Attachments) Reset()                     { m.list = nil }
 func (m *Attachments) Deleting() bool             { return m.deleting }
 
-// SetKeptSource sets where the kept skill chips come from.
-func (m *Attachments) SetKeptSource(source func() []Kept) { m.keptSource = source }
+// Count is the number of chips shown.
+func (m *Attachments) Count() int { return len(m.list) }
 
-func (m *Attachments) kept() []Kept {
-	if m.keptSource == nil {
-		return nil
-	}
-	return m.keptSource()
-}
-
-// Count is the number of chips shown: kept skills and attachments.
-func (m *Attachments) Count() int { return len(m.kept()) + len(m.list) }
-
-// TakeRemovedKept returns the IDs of kept skills the user removed since
-// the last call, so the caller can turn them off.
-func (m *Attachments) TakeRemovedKept() []string {
-	removed := m.removedKept
-	m.removedKept = nil
-	return removed
-}
-
-// remove drops the chip at index i of the combined kept + attachment row.
+// remove drops the chip at index i.
 func (m *Attachments) remove(i int) {
-	kept := m.kept()
-	if i < len(kept) {
-		m.removedKept = append(m.removedKept, kept[i].ID)
-		return
-	}
-	i -= len(kept)
 	if i < len(m.list) {
 		m.list = slices.Delete(m.list, i, i+1)
 	}
@@ -109,9 +74,6 @@ func (m *Attachments) Update(msg tea.Msg) bool {
 			return true
 		case m.deleting && key.Matches(msg, m.keyMap.DeleteAll):
 			m.deleting = false
-			for _, kept := range m.kept() {
-				m.removedKept = append(m.removedKept, kept.ID)
-			}
 			m.list = nil
 			return true
 		case m.deleting:
@@ -144,14 +106,8 @@ func (m *Attachments) HandleClick(x int) bool {
 }
 
 func (m *Attachments) Render(width int) string {
-	kept := m.kept()
-	chips := make([]message.Attachment, 0, len(kept)+len(m.list))
-	for _, k := range kept {
-		chips = append(chips, message.Attachment{FileName: k.Name})
-	}
-	chips = append(chips, m.list...)
 	// The editor is interactive, so the remove button is shown.
-	return m.renderer.render(chips, len(kept), m.deleting, true, width)
+	return m.renderer.Render(m.list, m.deleting, true, width)
 }
 
 // SetStyles updates the chip styles used when rendering.
@@ -202,11 +158,6 @@ type chipBounds struct {
 // should be false for attachments on already-posted messages, where
 // removal is not possible.
 func (r *Renderer) Render(attachments []message.Attachment, deleting, showRemove bool, width int) string {
-	return r.render(attachments, 0, deleting, showRemove, width)
-}
-
-// render draws the chips; the first kept of them are kept skills.
-func (r *Renderer) render(attachments []message.Attachment, kept int, deleting, showRemove bool, width int) string {
 	var chips []string
 	r.bounds = r.bounds[:0]
 	r.images = r.images[:0]
@@ -230,10 +181,6 @@ func (r *Renderer) render(attachments []message.Attachment, kept int, deleting, 
 
 		iconStr := r.icon(att).String()
 		nameStyle := r.styles.Normal
-		if i < kept {
-			iconStr = r.styles.KeptIcon.String()
-			nameStyle = r.styles.KeptName
-		}
 		if !showRemove {
 			nameStyle = nameStyle.MarginRight(1)
 		}

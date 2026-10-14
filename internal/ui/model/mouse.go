@@ -68,10 +68,15 @@ func (m *UI) clickComposer(msg tea.MouseClickMsg) (tea.Cmd, bool) {
 	if m.activeInline != nil {
 		return nil, false
 	}
+	if msg.Button == uv.MouseLeft && m.layout.status.Dy() > 0 && msg.Y == m.layout.status.Min.Y && m.status.msg.IsEmpty() {
+		if id, ok := m.skillTagAt(msg.X - m.layout.status.Min.X - m.status.skillsLeft()); ok {
+			return m.turnOffKeptSkill(id), true
+		}
+	}
 	if msg.Button == uv.MouseLeft && m.attachments.Count() > 0 && msg.Y == m.layout.editor.Min.Y+editorAttachmentsRow {
 		relX := msg.X - m.layout.editor.Min.X
 		if m.attachments.HandleClick(relX) {
-			return m.turnOffRemovedKeptSkills(), true
+			return nil, true
 		}
 		if attachment := m.attachments.Renderer().ImageAt(relX); attachment != nil {
 			m.imagePress = &imagePress{attachment: *attachment, at: image.Pt(msg.X, msg.Y)}

@@ -314,6 +314,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.memoryNotice(t.ctx, t.call.SessionID)
 	history, files := a.preparePrompt(msgs, t.largeModel.CatwalkCfg.SupportsImages, t.call.Attachments...)
 
 	startTime := time.Now()
@@ -350,6 +351,10 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 	t.cliModel, t.isCLI = t.largeModel.Model.(*cliagent.Model)
 	systemPrompt := a.systemPrompt.Get()
 	systemPrompt = withCurrentSkillPolicy(systemPrompt, currentSkillPolicy(a.cfg))
+	if note := memoryStatus().AgentNote(); note != "" && !t.isCLI {
+		// CLI agents get the note with their turn's text instead.
+		systemPrompt += "\n\n" + note
+	}
 	t.promptPrefix = a.systemPromptPrefix.Get()
 	if !t.isCLI && a.cfg != nil && a.cfg.Config().Options != nil && a.cfg.Config().Options.DisableInstructionFiles {
 		systemPrompt += "\n\n" + sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)

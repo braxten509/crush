@@ -127,3 +127,79 @@ func TestServerReadsBarePorts(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, []Server{{Port: 5173}, {Port: 8080, Name: "API"}}, st.Servers)
 }
+
+func TestServersFoldByProgram(t *testing.T) {
+	var opened []string
+	open := openLink
+	openLink = func(url string) { opened = append(opened, url) }
+	t.Cleanup(func() { openLink = open })
+	h := newTestHost(t, 120, 30, Status{Title: "One", Servers: []Server{
+		{Port: 5037, Name: "adb", Owner: "adb", Group: "10"},
+		{Port: 4400, Name: "node", Owner: "node", Group: "20"},
+		{Port: 8080, Name: "node", Owner: "java", Group: "20"},
+		{Port: 9150, Name: "node", Owner: "java", Group: "20"},
+	}})
+	click := func(y int) { h.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 5, Y: y}) }
+	shownLines := func() []string {
+		shown, top := h.shownServers()
+		return strings.Split(screenText(h), "\n")[top : top+len(shown)]
+	}
+
+	lines := shownLines()
+	require.Len(t, lines, 2, "the program with three ports folds into one row")
+	require.Contains(t, lines[0], "↗ adb")
+	require.Contains(t, lines[0], ":5037", "a program with one port stays a plain link")
+	require.Contains(t, lines[1], "▸ node")
+	require.Contains(t, lines[1], "3 ports")
+	require.NotContains(t, screenText(h), ":8080")
+
+	_, top := h.shownServers()
+	click(top + 1)
+	require.Equal(t, "1/20", h.pickedFold, "a click on the fold picks it")
+	lines = shownLines()
+	require.Len(t, lines, 5, "and opens it")
+	require.Contains(t, lines[1], "▾ node")
+	for i, want := range []string{"↗ node", "↗ java", "↗ java"} {
+		require.Contains(t, lines[2+i], "  "+want, "each port is indented and named after the program holding it")
+	}
+	require.Contains(t, lines[3], ":8080")
+	require.Empty(t, opened, "opening the fold opens no link")
+
+	_, top = h.shownServers()
+	click(top + 3)
+	require.Equal(t, 8080, h.pickedServer)
+	require.Empty(t, h.pickedFold)
+	click(top + 3)
+	require.Equal(t, []string{"http://localhost:8080"}, opened, "a second click on a port opens it")
+
+	h.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	h.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	require.Equal(t, "1/20", h.pickedFold, "the keys reach the fold")
+	press(h, "enter")
+	require.Len(t, shownLines(), 2, "enter folds it again")
+	require.Equal(t, "1/20", h.pickedFold, "and keeps it picked")
+
+	press(h, "x")
+	require.Empty(t, h.pickedFold)
+	got := make(chan string, 1)
+	go func() {
+		b := make([]byte, 64)
+		n, _ := io.ReadAtLeast(h.sessions[0].emu, b, len(stopServerSequence(4400)))
+		got <- string(b[:n])
+	}()
+	select {
+	case seq := <-got:
+		port, ok := ParseStopServer(seq)
+		require.True(t, ok)
+		require.Equal(t, 4400, port, "x on the fold stops its program through its first port")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the chat was not asked to stop the program")
+	}
+}
+
+func TestServerReadsOwnerAndGroup(t *testing.T) {
+	t.Parallel()
+	st, ok := parseStatus([]byte(`7373;{"servers":[{"port":8080,"name":"node","owner":"java","group":"42"}]}`))
+	require.True(t, ok)
+	require.Equal(t, []Server{{Port: 8080, Name: "node", Owner: "java", Group: "42"}}, st.Servers)
+}

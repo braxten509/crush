@@ -136,8 +136,6 @@ func quickStyleCompletions(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	s.Attachments.Text = attachmentIconStyle.SetString(TextIcon)
 	s.Attachments.Skill = attachmentIconStyle.SetString(SkillIcon)
 	s.Attachments.Normal = base.Padding(0, 1).Background(o.fgMoreSubtle).Foreground(o.fgBase)
-	s.Attachments.KeptIcon = base.Foreground(o.bgBase).Background(o.plan).Padding(0, 1).SetString("on")
-	s.Attachments.KeptName = base.Padding(0, 1).Background(o.planMoreSubtle).Foreground(o.fgBase)
 	s.Attachments.KeptDot = base.Foreground(o.plan).SetString("●")
 	s.Attachments.KeptText = base.Foreground(o.plan)
 	// Remove and Deleting share the same slot on the right side of a chip
@@ -152,13 +150,16 @@ func quickStyleCompletions(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	// Pills styles
 	s.Pills.Base = base.Padding(0, 1)
 	s.Pills.Focused = base.Padding(0, 1).BorderStyle(lipgloss.RoundedBorder()).BorderForeground(o.bgMostVisible)
-	s.Pills.QueueItemPrefix = lipgloss.NewStyle().Foreground(o.fgMoreSubtle).SetString("  •")
+	s.Pills.QueueItemPrefix = lipgloss.NewStyle().Foreground(o.fgMostSubtle).SetString("›")
 	s.Pills.QueueItemText = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
+	s.Pills.QueueItemHint = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	// A plain gray: a tinted one can land on a teal in 256-color terminals.
+	s.Pills.QueueRowBg = neutralGray(blendTint(o.bgLeastVisible, o.bgBase, 0.5))
 	s.Pills.QueueLabel = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Pills.QueueIconBase = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Pills.QueueGradFromColor = o.error
 	s.Pills.QueueGradToColor = o.secondary
-	s.Pills.TodoLabel = lipgloss.NewStyle().Foreground(o.fgBase)
+	s.Pills.TodoLabel = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
 	s.Pills.TodoProgress = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)
 	s.Pills.TodoCurrentTask = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Pills.TodoSpinner = lipgloss.NewStyle().Foreground(o.successMostSubtle)

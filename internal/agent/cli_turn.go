@@ -85,6 +85,9 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		if skillPolicy != "" {
 			text = skillPolicy + "\n\n" + text
 		}
+		if note := memoryStatus().AgentNote(); note != "" {
+			text = note + "\n\n" + text
+		}
 		turnedOff := func() []session.KeptSkill { return a.sessionTurnedOffSkills(ctx, call.SessionID) }
 		if kept := cliKeptSkillsText(call.SessionID, string(m.Kind), a.sessionKeptSkills(ctx, call.SessionID, true), turnedOff, resume == ""); kept != "" {
 			text = kept + "\n\n" + text

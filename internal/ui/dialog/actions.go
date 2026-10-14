@@ -52,6 +52,7 @@ type (
 	ActionToggleThinking          struct{}
 	ActionToggleFastMode          struct{}
 	ActionSetAutocompact          struct{ Tokens int64 }
+	ActionSetMemoryLimit          struct{ GB float64 }
 	ActionToggleUltracode         struct{}
 	ActionTogglePills             struct{}
 	ActionExternalEditor          struct{}
@@ -256,3 +257,6 @@ func (a ActionFilePickerSelected) Cmd() tea.Cmd {
 		}
 	}
 }
+
+// ActionSaveSubAgentInstructions saves the edited sub-agent instructions.
+type ActionSaveSubAgentInstructions struct{ Text string }

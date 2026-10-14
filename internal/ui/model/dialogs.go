@@ -55,6 +55,10 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		return m.openUsageDialog()
 	case dialog.AutocompactID:
 		return m.openAutocompactDialog()
+	case dialog.MemoryLimitID:
+		return m.openMemoryLimitDialog()
+	case dialog.SubAgentInstructionsID:
+		return m.openSubAgentInstructionsDialog()
 	case dialog.ReasoningID:
 		if cmd := m.openReasoningDialog(); cmd != nil {
 			cmds = append(cmds, cmd)

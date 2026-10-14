@@ -58,6 +58,11 @@ type Status struct {
 type Server struct {
 	Port int    `json:"port"`
 	Name string `json:"name,omitempty"`
+	// Owner is the program holding the port.
+	Owner string `json:"owner,omitempty"`
+	// Group names the background program the port is under; ports sharing
+	// one fold into a single row. Older sessions leave it empty.
+	Group string `json:"group,omitempty"`
 }
 
 // UnmarshalJSON also reads a bare port, which older sessions send.

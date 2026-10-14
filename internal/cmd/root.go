@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/event"
+	"github.com/charmbracelet/crush/internal/memlimit"
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -95,6 +96,10 @@ crush --continue
 crush --single
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Join the memory box shared by every Crush window before
+		// anything is started, so all of it counts toward the limit.
+		// Without a user systemd Crush simply runs unlimited.
+		_ = memlimit.Join(memlimit.Slice)
 		if code, guarded := runCrashGuarded(); guarded {
 			os.Exit(code)
 		}

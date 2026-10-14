@@ -84,11 +84,15 @@ type Host struct {
 	pictures screenPictures
 
 	hover int // hovered list row; -1 for none
-	// pickedServer is the port of the server picked in the list, which
-	// takes the keys until let go; 0 for none.
+	// pickedServer is the port of the server picked in the list, and
+	// pickedFold the folded program picked instead; the picked row takes
+	// the keys until let go. 0 and "" for none.
 	pickedServer int
-	confirm      *confirmClose
-	picker       *picker // the open new-session box, if any
+	pickedFold   string
+	// openFolds are the folded programs opened to list their servers.
+	openFolds map[string]bool
+	confirm   *confirmClose
+	picker    *picker // the open new-session box, if any
 	// capture: a mouse button went down over the session, so its motion
 	// and release go there even when the pointer leaves it.
 	capture bool

@@ -16,6 +16,7 @@ import (
 	"charm.land/x/vcr"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,8 @@ func TestMain(m *testing.M) {
 	// under a D-Bus activated service, the marker would make every test
 	// process look like a bus service and hide it from background listing.
 	os.Unsetenv("DBUS_STARTER_BUS_TYPE")
+	// Recorded prompts must not depend on how full this machine's memory is.
+	memoryStatus = func() memwatch.Status { return memwatch.Status{} }
 	m.Run()
 }
 

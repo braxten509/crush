@@ -628,7 +628,7 @@ func (c *Commands) appCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "update_clis", "Update Agent CLIs", "", ActionCheckCLIUpdates{}).WithAliases("upgrade", "version"),
 		NewCommandItem(c.com.Styles, "update_crush", "Update Crush", "", ActionSelfUpdate{}).WithAliases("upgrade", "upstream", "release"),
 		NewCommandItem(c.com.Styles, "skills", "Skills", "", ActionOpenDialog{SkillsID}).WithAliases("install skills", "enable skills", "disable skills"),
-		NewCommandItem(c.com.Styles, "kept_skills", "Skills for this chat", "", ActionOpenDialog{KeptSkillsID}).WithAliases("keep skills on", "remind skills every message", "bring skills back after compression"),
+		NewCommandItem(c.com.Styles, "kept_skills", "Toggle skills", "", ActionOpenDialog{KeptSkillsID}).WithAliases("keep skills on", "remind skills every message", "bring skills back after compression"),
 	)
 	return commands
 }
@@ -652,6 +652,8 @@ func (c *Commands) preferenceCommands(cfg *config.Config) []*CommandItem {
 	}
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_composer_focus", focusLabel, "", ActionToggleComposerFocusOnly{}).WithAliases("tab", "focus"))
 	commands = append(commands, NewCommandItem(c.com.Styles, "customize_composer", "Customize Composer", "", ActionCustomizeComposer{}).WithAliases("footer", "stats", "status"))
+	commands = append(commands, NewCommandItem(c.com.Styles, SubAgentInstructionsID, "Sub-agent Instructions", "", ActionOpenDialog{SubAgentInstructionsID}).WithAliases("subagents", "sub-agents", "spawn", "agents"))
+	commands = append(commands, NewCommandItem(c.com.Styles, MemoryLimitID, "Memory Limit", "", ActionOpenDialog{MemoryLimitID}).WithAliases("ram", "memory", "swap"))
 
 	commands = append(commands, NewCommandItem(c.com.Styles, "switch_theme", "Themes", "", ActionOpenDialog{ThemeID}))
 

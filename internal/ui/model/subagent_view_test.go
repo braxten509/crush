@@ -109,7 +109,7 @@ func TestSubagentStreamingRefreshKeepsScrollAndCoalesces(t *testing.T) {
 	u.closeSubagentView()
 }
 
-func TestCompactUsageShowsConfiguredCompactionTokens(t *testing.T) {
+func TestComposerFooterShowsConfiguredCompactionTokens(t *testing.T) {
 	t.Parallel()
 	ws := newLoadWorkspace()
 	ws.cfg.Options.AutoCompactTokenLimit = 325000
@@ -117,17 +117,17 @@ func TestCompactUsageShowsConfiguredCompactionTokens(t *testing.T) {
 	u.agentReady = false
 	u.forceCompactMode, u.isCompact = true, true
 	u.session = &session.Session{ID: "old", PromptTokens: 32000, CompletionTokens: 1250}
-	require.Equal(t, "  33.25k/325k tokens · Context 90% left", ansi.Strip(u.compactUsage(80)))
+	require.Equal(t, "  33.25k/325k tokens · Context 90% left", ansi.Strip(u.composerFooter(80)))
 	u.session.EstimatedUsage = true
-	require.Equal(t, "  ~33.25k/325k tokens · Context ~90% left", ansi.Strip(u.compactUsage(80)))
+	require.Equal(t, "  ~33.25k/325k tokens · Context ~90% left", ansi.Strip(u.composerFooter(80)))
 	u.updateLayoutAndSize()
 	require.Positive(t, u.layout.usage.Dy())
 	require.Equal(t, u.layout.editor.Max.Y, u.layout.usage.Min.Y)
 	u.isCompact = false
-	require.Empty(t, u.compactUsage(80))
+	require.Empty(t, u.composerFooter(80))
 	ws.cfg.Options = nil
 	u.isCompact = true
-	require.Contains(t, ansi.Strip(u.compactUsage(80)), "/400k tokens")
+	require.Contains(t, ansi.Strip(u.composerFooter(80)), "/400k tokens")
 }
 
 // A running sub-agent whose last step is done is still working out its next

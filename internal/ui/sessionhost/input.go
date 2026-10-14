@@ -161,8 +161,8 @@ func (h *Host) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			h.dragging = false
 		}
 	}
-	if _, ok := msg.(tea.MouseClickMsg); ok && (m.X >= side || h.rowAt(m.X, m.Y).server == 0) {
-		h.pickedServer = 0
+	if _, ok := msg.(tea.MouseClickMsg); ok && (m.X >= side || !h.rowAt(m.X, m.Y).onServer) {
+		h.unpick()
 	}
 	if m.X >= side || h.capture {
 		return h.forwardMouse(msg, side)
@@ -226,15 +226,14 @@ func (h *Host) clickSide(x, y int) {
 	case r.newTerminal:
 		h.openPickerFor(terminalSession)
 	case r.stopServer:
-		if server, ok := h.picked(); ok {
-			h.stopServer(server)
+		if row, ok := h.picked(); ok {
+			h.stopServer(row.server)
 		}
-	case r.server != 0 && r.server == h.pickedServer:
-		if server, ok := h.picked(); ok {
-			openLink(server.url())
-		}
-	case r.server != 0:
-		h.pickedServer = r.server
+	case r.onServer && (h.isPicked(r.server) || r.server.ports > 0):
+		h.pick(r.server)
+		h.useRow(r.server)
+	case r.onServer:
+		h.pick(r.server)
 	case r.session >= 0 && r.close:
 		h.askClose(r.session)
 	case r.session >= 0:

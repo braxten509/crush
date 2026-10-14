@@ -2,7 +2,6 @@ package procs
 
 import (
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 )
@@ -11,8 +10,8 @@ func init() { listeningPorts = linuxListeningPorts }
 
 // linuxListeningPorts matches the processes' open sockets against the
 // listening sockets in /proc/net.
-func linuxListeningPorts(pids []int) []int {
-	inodes := map[string]bool{}
+func linuxListeningPorts(pids []int) map[int]int {
+	inodes := map[string]int{} // socket inode → the process holding it
 	for _, pid := range pids {
 		dir := "/proc/" + strconv.Itoa(pid) + "/fd/"
 		entries, err := os.ReadDir(dir)
@@ -25,38 +24,41 @@ func linuxListeningPorts(pids []int) []int {
 				continue
 			}
 			if inode, ok := strings.CutPrefix(link, "socket:["); ok {
-				inodes[strings.TrimSuffix(inode, "]")] = true
+				inodes[strings.TrimSuffix(inode, "]")] = pid
 			}
 		}
 	}
 	if len(inodes) == 0 {
 		return nil
 	}
-	var ports []int
+	ports := map[int]int{}
 	for _, table := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
 		data, err := os.ReadFile(table)
 		if err != nil {
 			continue
 		}
-		for _, port := range listeningInTable(string(data), inodes) {
-			if !slices.Contains(ports, port) {
-				ports = append(ports, port)
+		for port, pid := range listeningInTable(string(data), inodes) {
+			if _, ok := ports[port]; !ok {
+				ports[port] = pid
 			}
 		}
 	}
-	slices.Sort(ports)
 	return ports
 }
 
 // listeningInTable reads a /proc/net/tcp table for the ports of listening
 // sockets among inodes that take connections from this computer: bound to
-// every address or to a loopback one.
-func listeningInTable(table string, inodes map[string]bool) []int {
+// every address or to a loopback one. Each port maps to its inode's process.
+func listeningInTable(table string, inodes map[string]int) map[int]int {
 	const listen = "0A"
-	var ports []int
+	ports := map[int]int{}
 	for _, line := range strings.Split(table, "\n")[1:] {
 		fields := strings.Fields(line)
-		if len(fields) < 10 || fields[3] != listen || !inodes[fields[9]] {
+		if len(fields) < 10 || fields[3] != listen {
+			continue
+		}
+		pid, ok := inodes[fields[9]]
+		if !ok {
 			continue
 		}
 		address, portHex, ok := strings.Cut(fields[1], ":")
@@ -64,7 +66,7 @@ func listeningInTable(table string, inodes map[string]bool) []int {
 			continue
 		}
 		if port, err := strconv.ParseInt(portHex, 16, 32); err == nil {
-			ports = append(ports, int(port))
+			ports[int(port)] = pid
 		}
 	}
 	return ports

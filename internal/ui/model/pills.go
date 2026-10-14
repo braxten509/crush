@@ -5,19 +5,20 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/chat"
+	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 )
 
 const (
-	// pillHeightWithBorder is the height of a pill including its border.
-	pillHeightWithBorder = 3
-	// maxTaskDisplayLength is the maximum length of a task name in the pill.
-	maxTaskDisplayLength = 40
+	// todoIndent puts the to-do section's text in the composer text's
+	// column, after its prompt mark.
+	todoIndent = 2
+	// todoRightMargin keeps the ctrl+t hint off the right edge.
+	todoRightMargin = 1
 )
 
 // pillSection represents which section of the pills panel is focused.
@@ -43,65 +44,39 @@ func hasInProgressTodo(todos []session.Todo) bool {
 	return false
 }
 
-// queuePill renders the queue count pill with gradient triangles. Pills always
-// render with a border; focus within the expanded panel is conveyed by the list
-// shown below the pills, not by hiding a pill's border.
-func queuePill(queue int, t *styles.Styles) string {
-	if queue <= 0 {
-		return ""
-	}
-	triangles := styles.ForegroundGrad(t.Pills.QueueIconBase, "▶▶▶▶▶▶▶▶▶", false, t.Pills.QueueGradFromColor, t.Pills.QueueGradToColor)
-	if queue < len(triangles) {
-		triangles = triangles[:queue]
-	}
-
-	text := t.Pills.QueueLabel.Render(fmt.Sprintf("%d Queued", queue))
-	content := fmt.Sprintf("%s %s", strings.Join(triangles, ""), text)
-	return t.Pills.Focused.Render(content)
-}
-
-// todoPill renders the todo progress pill with optional spinner and task name.
-func todoPill(todos []session.Todo, spinnerView string, panelFocused bool, t *styles.Styles) string {
-	if !hasIncompleteTodos(todos) {
-		return ""
-	}
-
+// todoHeader renders the to-do section's label row: "TO-DO 1/4", while
+// closed the step in progress, and the ctrl+t hint at the right edge.
+func todoHeader(todos []session.Todo, spinnerView string, expanded bool, t *styles.Styles, width int) string {
 	completed := 0
-	var currentTodo *session.Todo
+	var current *session.Todo
 	for i := range todos {
 		switch todos[i].Status {
 		case session.TodoStatusCompleted:
 			completed++
 		case session.TodoStatusInProgress:
-			if currentTodo == nil {
-				currentTodo = &todos[i]
+			if current == nil {
+				current = &todos[i]
 			}
 		}
 	}
-
-	total := len(todos)
-
-	label := t.Pills.TodoLabel.Render("To-Do")
-	progress := t.Pills.TodoProgress.Render(fmt.Sprintf("%d/%d", completed, total))
-
-	var content string
-	if panelFocused {
-		content = fmt.Sprintf("%s %s", label, progress)
-	} else if currentTodo != nil {
-		taskText := currentTodo.Content
-		if currentTodo.ActiveForm != "" {
-			taskText = currentTodo.ActiveForm
+	left := t.Pills.TodoLabel.Render("TO-DO") + " " + t.Pills.TodoProgress.Render(fmt.Sprintf("%d/%d", completed, len(todos)))
+	hintDesc := "hide"
+	if !expanded {
+		hintDesc = "show"
+		if current != nil {
+			task := current.Content
+			if current.ActiveForm != "" {
+				task = current.ActiveForm
+			}
+			left += t.Pills.TodoProgress.Render(" · ") + spinnerView + " " + t.Pills.TodoCurrentTask.Render(task)
 		}
-		if ansi.StringWidth(taskText) > maxTaskDisplayLength {
-			taskText = ansi.Truncate(taskText, maxTaskDisplayLength-1, "…")
-		}
-		task := t.Pills.TodoCurrentTask.Render(taskText)
-		content = fmt.Sprintf("%s %s %s  %s", spinnerView, label, progress, task)
-	} else {
-		content = fmt.Sprintf("%s %s", label, progress)
 	}
-
-	return t.Pills.Focused.Render(content)
+	hint := t.Pills.HelpKey.Render("ctrl+t") + " " + t.Pills.HelpText.Render(hintDesc)
+	room := width - ansi.StringWidth(hint) - 2
+	if ansi.StringWidth(left) > room {
+		left = ansi.Truncate(left, max(room, 0), "…")
+	}
+	return left + strings.Repeat(" ", max(width-ansi.StringWidth(left)-ansi.StringWidth(hint), 1)) + hint
 }
 
 // todoList renders the expanded todo list.
@@ -109,14 +84,12 @@ func todoList(sessionTodos []session.Todo, spinnerView string, t *styles.Styles,
 	return chat.FormatTodosList(t, sessionTodos, spinnerView, width)
 }
 
-// queueList renders the expanded queue items list.
-func queueList(queueItems []string, t *styles.Styles, width int) string {
-	if len(queueItems) == 0 {
-		return ""
-	}
-
-	var lines []string
-	for _, item := range queueItems {
+// queueRows renders the queued messages as dim rows on the composer's band
+// width, right above it, where they will be sent from. The first says it is
+// waiting and goes with the next step.
+func queueRows(queueItems []string, t *styles.Styles, width int) []string {
+	var rows []string
+	for i, item := range queueItems {
 		text := item
 		if name, status, ok := agent.ParseTaskNotification(item); ok {
 			text = "Result of task " + name
@@ -128,15 +101,32 @@ func queueList(queueItems []string, t *styles.Styles, width int) string {
 			}
 		}
 		prefix := t.Pills.QueueItemPrefix.Render() + " "
-		// One line per message: pillsAreaHeight counts one row each.
+		hint := ""
+		if i == 0 {
+			hint = t.Pills.QueueItemHint.Render("waiting · sends next") + " "
+		}
+		// One line per message: the composer counts one row each.
 		text = strings.Join(strings.Fields(text), " ")
-		if room := max(width-ansi.StringWidth(prefix), 1); ansi.StringWidth(text) > room {
+		if room := max(width-ansi.StringWidth(prefix)-ansi.StringWidth(hint)-2, 1); ansi.StringWidth(text) > room {
 			text = ansi.Truncate(text, room-1, "…")
 		}
-		lines = append(lines, prefix+t.Pills.QueueItemText.Render(text))
+		row := prefix + t.Pills.QueueItemText.Render(text)
+		if hint != "" {
+			row += strings.Repeat(" ", max(width-ansi.StringWidth(row)-ansi.StringWidth(hint), 1)) + hint
+		}
+		rows = append(rows, common.OnBand(row, width, t.Pills.QueueRowBg))
 	}
+	return rows
+}
 
-	return strings.Join(lines, "\n")
+// queueRowCount is how many queued message rows the composer shows above
+// its band; none while an inline editor (e.g. the question form) has its
+// place.
+func (m *UI) queueRowCount() int {
+	if !m.hasSession() || m.activeInline != nil {
+		return 0
+	}
+	return len(m.visiblePromptQueueItems())
 }
 
 // pillsHeightReasonableTerminalHeight is the minimum terminal height at which
@@ -155,8 +145,7 @@ func (m *UI) autoExpandPillsIfReasonable() tea.Cmd {
 	if m.height < pillsHeightReasonableTerminalHeight {
 		return nil
 	}
-	hasPills := hasIncompleteTodos(m.session.Todos) || m.visiblePromptQueueCount() > 0
-	if !hasPills {
+	if !hasIncompleteTodos(m.session.Todos) {
 		return nil
 	}
 	if m.pillsExpanded {
@@ -184,8 +173,7 @@ func (m *UI) togglePillsExpanded() tea.Cmd {
 	if !m.hasSession() {
 		return nil
 	}
-	hasPills := hasIncompleteTodos(m.session.Todos) || m.visiblePromptQueueCount() > 0
-	if !hasPills {
+	if !hasIncompleteTodos(m.session.Todos) {
 		return nil
 	}
 	m.pillsExpanded = !m.pillsExpanded
@@ -256,7 +244,8 @@ func (m *UI) effectiveFocusedSection() pillSection {
 	return m.focusedPillSection
 }
 
-// pillsAreaHeight calculates the total height needed for the pills area.
+// pillsAreaHeight is the to-do section's height: its label row, then the
+// list while open. Queued messages are drawn with the composer instead.
 func (m *UI) pillsAreaHeight() int {
 	if !m.hasSession() {
 		return 0
@@ -266,97 +255,54 @@ func (m *UI) pillsAreaHeight() int {
 	if m.activeInline != nil {
 		return 0
 	}
-	hasIncomplete := hasIncompleteTodos(m.session.Todos)
-	hasQueue := m.visiblePromptQueueCount() > 0
-	hasPills := hasIncomplete || hasQueue
-	if !hasPills {
+	if !hasIncompleteTodos(m.session.Todos) {
 		return 0
 	}
-
-	pillsAreaHeight := pillHeightWithBorder
-	if m.pillsExpanded && hasIncomplete && m.effectiveFocusedSection() == pillSectionTodos {
-		pillsAreaHeight += len(m.session.Todos)
+	height := 1
+	if m.pillsExpanded {
+		height += len(m.session.Todos)
 	}
-	// Queued messages are always listed, so a message sent mid-turn stays
-	// in sight until it joins the chat.
-	pillsAreaHeight += len(m.visiblePromptQueueItems())
-	return pillsAreaHeight
+	// The blank row between the to-dos and the composer holds the
+	// attachments when there are any; keep one free row above them.
+	if m.hasAttachments() {
+		height++
+	}
+	return height
 }
 
-// renderPills renders the pills panel and stores it in m.pillsView.
+func (m *UI) hasAttachments() bool {
+	return m.attachments != nil && len(m.attachments.List()) > 0
+}
+
+// syncAttachmentsLayout lays out again when attachments came or went, since
+// they add a row under the to-dos. Any handler may have changed them.
+func (m *UI) syncAttachmentsLayout() {
+	if m.hasAttachments() != m.layoutAttachments {
+		m.updateLayoutAndSize()
+	}
+}
+
+// renderPills renders the to-do section and stores it in m.pillsView. Its
+// text starts at the composer text's column.
 func (m *UI) renderPills() {
 	m.pillsView = ""
-	if !m.hasSession() {
+	if !m.hasSession() || m.activeInline != nil || !hasIncompleteTodos(m.session.Todos) {
 		return
 	}
-	// Suppress pills when an inline editor (e.g. question form) is active.
-	if m.activeInline != nil {
-		return
-	}
-
 	width := m.layout.pills.Dx()
 	if width <= 0 {
 		return
 	}
-
-	paddingLeft := 3
-	contentWidth := max(width-paddingLeft, 0)
-
-	hasIncomplete := hasIncompleteTodos(m.session.Todos)
-	hasQueue := m.visiblePromptQueueCount() > 0
-
-	if !hasIncomplete && !hasQueue {
-		return
-	}
+	contentWidth := max(width-todoIndent-todoRightMargin, 0)
 
 	t := m.com.Styles
-	effective := m.effectiveFocusedSection()
-	todosFocused := m.pillsExpanded && effective == pillSectionTodos
-
 	inProgressIcon := t.Tool.TodoInProgressIcon.Render(styles.SpinnerIcon)
 	if m.todoIsSpinning {
 		inProgressIcon = m.todoSpinner.View()
 	}
-
-	var pills []string
-	if hasIncomplete {
-		pills = append(pills, todoPill(m.session.Todos, inProgressIcon, m.pillsExpanded, t))
+	rows := []string{todoHeader(m.session.Todos, inProgressIcon, m.pillsExpanded, t, contentWidth)}
+	if m.pillsExpanded {
+		rows = append(rows, todoList(m.session.Todos, inProgressIcon, t, contentWidth))
 	}
-	if hasQueue {
-		pills = append(pills, queuePill(m.visiblePromptQueueCount(), t))
-	}
-
-	var lists []string
-	if todosFocused && hasIncomplete {
-		lists = append(lists, todoList(m.session.Todos, inProgressIcon, t, contentWidth))
-	}
-	// Render from the memoized queue (fetched off-thread, see
-	// workspace_cache.go): renderPills runs on the Update/View path and
-	// must never block on a workspace round-trip.
-	if list := queueList(m.visiblePromptQueueItems(), t, contentWidth); list != "" {
-		lists = append(lists, list)
-	}
-
-	if len(pills) == 0 {
-		return
-	}
-
-	pillsRow := lipgloss.JoinHorizontal(lipgloss.Top, pills...)
-
-	// ctrl+t only opens and closes the to-do list; queued messages are
-	// always listed.
-	if hasIncomplete {
-		helpDesc := "open"
-		if m.pillsExpanded {
-			helpDesc = "close"
-		}
-		helpKey := t.Pills.HelpKey.Render("ctrl+t")
-		helpText := t.Pills.HelpText.Render(helpDesc)
-		helpHint := lipgloss.JoinHorizontal(lipgloss.Center, helpKey, " ", helpText)
-		pillsRow = lipgloss.JoinHorizontal(lipgloss.Center, pillsRow, " ", helpHint)
-	}
-
-	pillsArea := lipgloss.JoinVertical(lipgloss.Left, append([]string{pillsRow}, lists...)...)
-
-	m.pillsView = t.Pills.Area.MaxWidth(width).PaddingLeft(paddingLeft).Render(pillsArea)
+	m.pillsView = t.Pills.Area.MaxWidth(width).PaddingLeft(todoIndent).Render(strings.Join(rows, "\n"))
 }

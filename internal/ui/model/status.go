@@ -32,6 +32,8 @@ type Status struct {
 	// inputMode and yolo drive the mode badge shown before the help hints.
 	inputMode uiInputMode
 	yolo      bool
+	// skills is the chat's kept skills, drawn after the mode badge.
+	skills string
 	// remote shows the Remote Control badge.
 	remote bool
 	// bandLeft and bandWidth place notices on the composer's band (zero
@@ -68,6 +70,20 @@ func (s *Status) ClearInfoMsg() {
 func (s *Status) SetMode(mode uiInputMode, yolo bool) {
 	s.inputMode = mode
 	s.yolo = yolo
+}
+
+// SetSkills sets the chat's kept skills, drawn after the mode badge.
+func (s *Status) SetSkills(skills string) {
+	s.skills = skills
+}
+
+// skillsLeft is the column where the skills start: after the badge, or
+// where the badge would be.
+func (s *Status) skillsLeft() int {
+	if badge := s.modeBadge(); badge != "" {
+		return badgeLeftInset + lipgloss.Width(badge) + 1
+	}
+	return badgeLeftInset
 }
 
 // SetRemote shows or hides the Remote Control badge.
@@ -122,10 +138,19 @@ func (s *Status) Draw(scr uv.Screen, area uv.Rectangle) {
 		helpStyle := s.com.Styles.Status.Help
 		helpWidth := area.Dx() - helpStyle.GetPaddingLeft() - helpStyle.GetPaddingRight()
 		badge := s.modeBadge()
+		lead := ""
 		if badge != "" {
-			// Shrink the hints so the badge does not push them past the
-			// status area.
-			helpWidth -= lipgloss.Width(badge) + 1 + badgeLeftInset
+			lead = badge + " "
+		}
+		if s.skills != "" {
+			// The badge's own padding and the space after it already
+			// separate it from the skills.
+			lead += s.skills + " "
+		}
+		if lead != "" {
+			// Shrink the hints so the badge and skills do not push them
+			// past the status area.
+			helpWidth -= lipgloss.Width(lead) + badgeLeftInset
 		}
 		s.help.SetWidth(max(0, helpWidth))
 		// ponytail: short hints hidden to save a row; ctrl+g still shows the full help.
@@ -133,12 +158,12 @@ func (s *Status) Draw(scr uv.Screen, area uv.Rectangle) {
 		if s.help.ShowAll {
 			helpView = helpStyle.Render(s.help.View(s.helpKm))
 		}
-		if badge != "" {
+		if lead != "" {
 			// Indent the rows after the first so the expanded help lines up
 			// with the hints on the badge row.
-			indent := strings.Repeat(" ", badgeLeftInset+lipgloss.Width(badge)+1)
+			indent := strings.Repeat(" ", badgeLeftInset+lipgloss.Width(lead))
 			helpView = strings.ReplaceAll(helpView, "\n", "\n"+indent)
-			helpView = strings.Repeat(" ", badgeLeftInset) + badge + " " + helpView
+			helpView = strings.Repeat(" ", badgeLeftInset) + lead + helpView
 		}
 		uv.NewStyledString(helpView).Draw(scr, area)
 	}

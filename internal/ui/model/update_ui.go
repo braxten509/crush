@@ -218,6 +218,8 @@ func (m *UI) handleTickMsg(msg tea.Msg) (tea.Cmd, bool) {
 		}
 	case bgProcsMsg:
 		cmds = append(cmds, m.handleBgProcs(msg))
+	case memoryCheckMsg:
+		cmds = append(cmds, m.handleMemoryCheck(msg))
 	case logoShineMsg:
 		cmds = append(cmds, m.handleLogoShine())
 	case frameGCMsg:

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,6 +13,9 @@ import (
 type Server struct {
 	Port    int
 	Process Process
+	// Owner is the program holding the port, which may be one Process
+	// started rather than Process itself.
+	Owner string
 }
 
 // Title names the server: its job's name, or else the program it runs.
@@ -35,13 +39,18 @@ func FindServers(processes []Process) (servers []Server, rest []Process) {
 	}
 	all := markedProcs(hubMarkers())
 	for _, p := range processes {
-		var ports []int
+		var owners map[int]int
 		if pids := processTree(p, all); len(pids) > 0 {
-			ports = procs.ListeningPorts(pids)
+			owners = procs.ListeningPorts(pids)
 		}
+		ports := slices.Sorted(maps.Keys(owners))
 		for _, port := range ports {
 			if !slices.ContainsFunc(servers, func(s Server) bool { return s.Port == port }) {
-				servers = append(servers, Server{Port: port, Process: p})
+				var owner string
+				if args := all[owners[port]].args; len(args) > 0 {
+					owner = filepath.Base(args[0])
+				}
+				servers = append(servers, Server{Port: port, Process: p, Owner: owner})
 			}
 		}
 		if len(ports) == 0 {

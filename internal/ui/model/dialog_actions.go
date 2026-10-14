@@ -351,6 +351,11 @@ func (m *UI) handlePaletteAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionSetAutocompact:
 		cmds = append(cmds, m.setAutocompact(msg.Tokens))
+	case dialog.ActionSetMemoryLimit:
+		cmds = append(cmds, m.setMemoryLimit(msg.GB))
+	case dialog.ActionSaveSubAgentInstructions:
+		m.dialog.CloseDialog(dialog.SubAgentInstructionsID)
+		cmds = append(cmds, saveSubAgentInstructionsCmd(msg.Text))
 	case dialog.ActionCheckCLIUpdates:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.checkCLIUpdates(true))

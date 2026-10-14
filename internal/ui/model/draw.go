@@ -83,6 +83,9 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			main.Draw(scr, layout.main)
 		}
 		m.drawComposer(scr, layout.editor, scr.Bounds().Dx())
+		if layout.usage.Dy() > 0 {
+			uv.NewStyledString(m.composerFooter(layout.usage.Dx())).Draw(scr, layout.usage)
+		}
 
 	case uiChat:
 		m.drawChat(scr, layout)
@@ -142,7 +145,7 @@ func (m *UI) drawChat(scr uv.Screen, layout uiLayout) {
 	}
 	m.drawComposer(scr, layout.editor, editorWidth)
 	if layout.usage.Dy() > 0 {
-		uv.NewStyledString(m.compactUsage(layout.usage.Dx())).Draw(scr, layout.usage)
+		uv.NewStyledString(m.composerFooter(layout.usage.Dx())).Draw(scr, layout.usage)
 	}
 	if layout.tasks.Dy() > 0 {
 		uv.NewStyledString(m.renderTasks(layout.tasks.Dx())).Draw(scr, layout.tasks)
@@ -199,8 +202,8 @@ func (m *UI) editorCursor() *tea.Cursor {
 
 	if m.textarea.Focused() {
 		cur := m.textarea.Cursor()
-		cur.X += m.layout.editor.Min.X                 // The composer's left edge
-		cur.Y += m.layout.editor.Min.Y + editorTextTop // Separator and attachments rows
+		cur.X += m.layout.editor.Min.X                       // The composer's left edge
+		cur.Y += m.layout.editor.Min.Y + m.composerTextTop() // Attachments, queued and padding rows
 		return cur
 	}
 	return nil
@@ -290,9 +293,10 @@ func (m *UI) applyProgressBar(v *tea.View) {
 }
 
 // renderEditorView renders the attachments row (blank without attachments,
-// keeping the composer apart from the chat), then the editor on its band:
-// a row of padding, the text, a row of padding, then the margin before the
-// status line. Every band row is filled to the text's full width.
+// keeping the composer apart from the chat), the queued messages, then the
+// editor on its band: a row of padding, the text, a row of padding, then the
+// margin before the status line. Every band row is filled to the text's full
+// width.
 func (m *UI) renderEditorView(width int) string {
 	var attachmentsView string
 	if m.attachments.Count() > 0 {
@@ -307,8 +311,11 @@ func (m *UI) renderEditorView(width int) string {
 	if !m.textarea.Focused() {
 		bg = m.com.Styles.Editor.Textarea.Blurred.Base.GetBackground()
 	}
-	band := make([]string, 0, len(rows)+3)
-	band = append(band, attachmentsView, common.OnBand("", bandWidth, bg))
+	band := []string{attachmentsView}
+	if m.queueRowCount() > 0 {
+		band = append(band, queueRows(m.visiblePromptQueueItems(), m.com.Styles, bandWidth)...)
+	}
+	band = append(band, common.OnBand("", bandWidth, bg))
 	for _, row := range rows {
 		band = append(band, common.OnBand(row, bandWidth, bg))
 	}

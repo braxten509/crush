@@ -187,3 +187,20 @@ func TestClipKeepsTheTail(t *testing.T) {
 	require.True(t, cut)
 	require.Len(t, out, detailMaxLines*2-1)
 }
+
+func TestBuildItemsWritingCommand(t *testing.T) {
+	t.Parallel()
+
+	msgs := []message.Message{
+		userMsg("u1", "run it"),
+		assistantMsg("a1", message.ToolCall{ID: "tc1", Name: "bash", Input: `{"command":"true"}`, Finished: true}),
+		toolMsg("t1", message.ToolResult{ToolCallID: "tc1", Content: "ok"}),
+		assistantMsg("a2"),
+	}
+	items := buildItems(msgs, chatState{busy: true})
+	require.Equal(t, "Thinking", items[len(items)-1].Activity)
+
+	msgs[3].Activity = "writing"
+	items = buildItems(msgs, chatState{busy: true})
+	require.Equal(t, "Writing command", items[len(items)-1].Activity)
+}

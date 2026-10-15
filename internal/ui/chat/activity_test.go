@@ -99,3 +99,24 @@ func TestActivityTimerVisibilityThreshold(t *testing.T) {
 	timer.update("Running a command", now.Add(11*time.Second))
 	require.Empty(t, timer.elapsed(now.Add(11*time.Second)))
 }
+
+func TestWritingCommandStatus(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	msg := &message.Message{ID: "preamble", Role: message.Assistant}
+	msg.AppendContent("I'll run the tests.")
+	msg.Activity, msg.ActivityAt = "writing", time.Now().Unix()
+	item := NewAssistantMessageItem(&sty, msg).(*AssistantMessageItem)
+	require.Contains(t, ansi.Strip(item.renderSpinning()), "Writing command")
+
+	call := message.ToolCall{ID: "done", Name: "bash", Input: `{"command":"true"}`, Finished: true}
+	tool := NewToolMessageItem(&sty, "message", call, nil, false, "")
+	tool.SetResult(&message.ToolResult{ToolCallID: call.ID, Content: "ok"})
+	thought := &message.Message{ID: "thought", Role: message.Assistant, Activity: "writing"}
+	g := NewToolGroupItem(&sty)
+	g.live, g.busy = true, true
+	g.SetChildren([]MessageItem{tool, NewAssistantMessageItem(&sty, thought)})
+	require.Equal(t, "Writing command", g.status())
+	thought.Activity = "thinking"
+	require.Equal(t, "Thinking", g.status())
+}

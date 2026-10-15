@@ -180,6 +180,9 @@ func (a *AssistantMessageItem) activityStatus(now time.Time) string {
 	if a.message.IsSummaryMessage || a.message.IsCompacting || a.compactingEarlier {
 		return "Compacting conversation"
 	}
+	if a.message.Activity == "writing" {
+		return "Writing command"
+	}
 	if a.message.Activity == "thinking" || a.message.IsThinking() {
 		return "Thinking"
 	}

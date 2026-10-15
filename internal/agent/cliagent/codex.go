@@ -22,6 +22,7 @@ import (
 type codexItem struct {
 	Type             string          `json:"type"`
 	ID               string          `json:"id"`
+	Phase            string          `json:"phase"`
 	Command          string          `json:"command"`
 	Cwd              string          `json:"cwd"`
 	Status           string          `json:"status"`
@@ -184,6 +185,10 @@ type codexRun struct {
 	contextRequested                              bool
 	compacting                                    bool
 	lastActivity                                  time.Time
+	// cue says what the model is likely doing once Codex goes quiet.
+	// Codex reports a tool call only once the model has written all of
+	// it, which can take a minute for a long patch.
+	cue writingCue
 
 	// Ctrl+B interrupts the turn: Codex keeps its commands running in
 	// their terminal sessions, and a new turn tells the model so.
@@ -330,10 +335,47 @@ func (r *codexRun) background() bool {
 	return true
 }
 
+// writingCue is what an item that just ended says about the model's next
+// output.
+type writingCue int
+
+const (
+	cueNone writingCue = iota
+	// cueNow follows a preamble ("I'll run the tests"): a tool call comes
+	// next.
+	cueNow
+	// cueQuiet follows a chunk of thinking: the model is writing a tool
+	// call unless another chunk arrives within codexWritingQuiet.
+	cueQuiet
+)
+
+// codexWritingQuiet is how long Codex stays silent after a chunk of
+// thinking before Crush says the model is writing. Thinking arrives in
+// chunks at most about 11 seconds apart (measured on GPT-6.1 Sol).
+var codexWritingQuiet = 15 * time.Second
+
 // readLoop handles the process's messages until the turn ends. done reports
 // that runCodex should return err; otherwise the process's output ended.
 func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
-	for raw := range lines {
+	quiet := time.NewTimer(codexWritingQuiet)
+	quiet.Stop()
+	defer quiet.Stop()
+	for {
+		var raw []byte
+		select {
+		case line, ok := <-lines:
+			if !ok {
+				return false, nil
+			}
+			raw = line
+		case <-quiet.C:
+			if r.ctx.Err() == nil {
+				if err := r.emitWriting(); err != nil {
+					return true, err
+				}
+			}
+			continue
+		}
 		var msg rpcMessage
 		if json.Unmarshal(raw, &msg) != nil {
 			continue
@@ -343,6 +385,7 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 		// Server-to-client requests: approvals. They block on the user, so
 		// answer them off the read loop.
 		if msg.Method != "" && id != "" {
+			quiet.Stop()
 			var params codexParams
 			_ = json.Unmarshal(msg.Params, &params)
 			go codexRequest(r.ctx, r.m, r.t, r.p, msg, params, r.changes[params.ItemID])
@@ -370,8 +413,32 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 		if done || err != nil {
 			return true, err
 		}
+		if strings.HasPrefix(msg.Method, "item/") {
+			if err := r.followCue(quiet); err != nil {
+				return true, err
+			}
+		}
 	}
-	return false, nil
+}
+
+// followCue acts on what the item that just ended says comes next. Any
+// other item means the model is visibly doing something, so the quiet timer
+// stops.
+func (r *codexRun) followCue(quiet *time.Timer) error {
+	cue := r.cue
+	r.cue = cueNone
+	quiet.Stop()
+	switch cue {
+	case cueNow:
+		return r.emitWriting()
+	case cueQuiet:
+		quiet.Reset(codexWritingQuiet)
+	}
+	return nil
+}
+
+func (r *codexRun) emitWriting() error {
+	return r.t.Emit(Event{Type: EventActivity, Activity: ActivityWriting})
 }
 
 // steer sends a message queued mid-turn to the running turn.

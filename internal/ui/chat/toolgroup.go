@@ -305,6 +305,9 @@ func (g *ToolGroupItem) status() string {
 			return ""
 		}
 		if last.isSpinning() {
+			if last.message.Activity == "writing" {
+				return "Writing command"
+			}
 			return "Thinking"
 		}
 	case ToolMessageItem:

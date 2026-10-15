@@ -72,6 +72,9 @@ type Step struct {
 // chatState is what the item builder needs besides the messages.
 type chatState struct {
 	busy bool
+	// writing is set while the agent's latest step is writing a tool call
+	// it hasn't sent yet.
+	writing bool
 	// waitingCall is the tool call waiting for a permission answer.
 	waitingCall string
 	workingDir  string
@@ -135,6 +138,10 @@ func buildItems(msgs []message.Message, st chatState) []Item {
 				entries = append(entries, entry{item: Item{ID: m.ID, Kind: "notice", Time: m.CreatedAt, Text: text, Tone: "plain"}})
 			}
 		}
+	}
+	if n := len(msgs); n > 0 {
+		m := msgs[n-1]
+		st.writing = st.busy && m.Role == message.Assistant && m.Activity == "writing" && !m.IsFinished() && len(m.ToolCalls()) == 0
 	}
 	return fold(entries, st)
 }
@@ -331,6 +338,9 @@ func fold(entries []entry, st chatState) []Item {
 		out[i].Summary = groupSummary(out[i].Steps)
 		if live {
 			out[i].Activity = groupActivity(out[i].Steps)
+			if st.writing && out[i].Activity == "Thinking" {
+				out[i].Activity = "Writing command"
+			}
 		}
 	}
 	return out

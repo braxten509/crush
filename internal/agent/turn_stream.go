@@ -28,10 +28,14 @@ func (t *turn) onCompacting(active bool) error {
 	return t.a.messages.Update(t.genCtx, *t.currentAssistant)
 }
 
-// onActivity records that an agent CLI is still working.
-func (t *turn) onActivity() error {
+// onActivity records that an agent CLI is still working and, when the CLI
+// says, what it is doing.
+func (t *turn) onActivity(activity string) error {
 	if t.currentAssistant == nil {
 		return nil
+	}
+	if activity != "" {
+		t.currentAssistant.Activity = activity
 	}
 	t.currentAssistant.ActivityAt = time.Now().Unix()
 	return t.a.messages.Update(t.genCtx, *t.currentAssistant)

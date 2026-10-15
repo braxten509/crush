@@ -299,6 +299,14 @@ func (r *codexRun) handleItemStarted(item codexItem) (err error) {
 func (r *codexRun) handleItemCompleted(item codexItem) (err error) {
 	failed := item.Status == "failed" || item.Status == "declined"
 	switch item.Type {
+	case "reasoning":
+		if !r.compacting {
+			r.cue = cueQuiet
+		}
+	case "agentMessage":
+		if !r.compacting && item.Phase == "commentary" {
+			r.cue = cueNow
+		}
 	case "contextCompaction":
 		r.compacting = false
 		err = r.t.Emit(Event{Type: EventCompacting})

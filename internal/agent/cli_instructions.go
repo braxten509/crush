@@ -37,4 +37,11 @@ before you start. Mark a step in progress when you begin it and completed as
 soon as it is done, not in a batch at the end. When the plan changes, update
 the list: add new steps and remove dropped ones. Keep exactly one step in
 progress while you work.
-</crush_todo_list>`
+</crush_todo_list>
+
+<crush_mid_turn_messages>
+Messages the user sends while you work arrive in the middle of your turn.
+Answer them, then keep working in the same turn. Writing "now back to the
+work" does not continue it; only further tool calls do. Stop only when the
+message asks you to stop or wait.
+</crush_mid_turn_messages>`

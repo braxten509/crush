@@ -343,7 +343,7 @@ func TestQueueBatchUnconfirmedSteeringRestoresOriginalsInOrder(t *testing.T) {
 		sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "repeat", SubmissionID: id, RunID: id, Attachments: []message.Attachment{image}})
 	}
 	text, images := s.steerWithImages()
-	require.Equal(t, "repeat\n\nrepeat", text)
+	require.Equal(t, midTurnNote+"repeat\n\nrepeat", text)
 	require.Len(t, images, 2)
 	sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "later", SubmissionID: "later"})
 	s.returnUnsteered()
@@ -384,7 +384,7 @@ func TestQueueBatchNativeConfirmationOwnsEveryOriginal(t *testing.T) {
 		sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "repeat", SubmissionID: id, RunID: id})
 	}
 	text := s.steer()
-	require.Equal(t, "repeat\n\nrepeat", text)
+	require.Equal(t, midTurnNote+"repeat\n\nrepeat", text)
 	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventUserMessage, Text: text}))
 	require.Len(t, consumed, 2)
 	msgs, err := env.messages.List(t.Context(), sess.ID)
@@ -620,7 +620,7 @@ func TestQueueBatchInterruptIncludesUnconfirmedNativeSteering(t *testing.T) {
 		require.NoError(t, err)
 	}
 	text := steps.steer()
-	require.Equal(t, "repeat\n\nrepeat", text)
+	require.Equal(t, midTurnNote+"repeat\n\nrepeat", text)
 	_, err = sa.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "third", SubmissionID: "three", RunID: "three"})
 	require.NoError(t, err)
 	sa.Interrupt(sess.ID)

@@ -256,3 +256,12 @@ func TestYoungDetachedProcessesAreBackground(t *testing.T) {
 	backgroundMinAge = 0
 	require.Len(t, BackgroundProcesses(), 1, "once it is old enough it is listed")
 }
+
+func TestCLIBackgroundProcessHoldsCompletionAlert(t *testing.T) {
+	noMinAge(t)
+	h := registerTestHub(t)
+	require.False(t, SessionHasRunningWork(t.Name()))
+	startDetached(t, h, t.Name())
+	require.True(t, SessionHasRunningWork(t.Name()), "a command the CLI backgrounded itself is still running work")
+	require.False(t, SessionHasRunningWork("other"))
+}

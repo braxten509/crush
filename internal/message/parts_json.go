@@ -1,8 +1,11 @@
 package message
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 )
 
 type partType string
@@ -115,4 +118,48 @@ func decodePart[T ContentPart](data json.RawMessage) (ContentPart, error) {
 		return nil, err
 	}
 	return part, nil
+}
+
+// reasoningJSON is ReasoningContent's stored form. Gemini's thought
+// signature is raw bytes, which a JSON string can't hold (invalid UTF-8
+// turns into U+FFFD), so it is stored as base64 in thought_signature_b64.
+type reasoningJSON struct {
+	reasoningFields
+	ThoughtSignature    string `json:"thought_signature,omitempty"`
+	ThoughtSignatureB64 string `json:"thought_signature_b64,omitempty"`
+}
+
+// reasoningFields has ReasoningContent's fields without its JSON methods.
+type reasoningFields ReasoningContent
+
+func (c ReasoningContent) MarshalJSON() ([]byte, error) {
+	stored := reasoningJSON{reasoningFields: reasoningFields(c)}
+	if c.ThoughtSignature != "" {
+		stored.ThoughtSignatureB64 = base64.StdEncoding.EncodeToString([]byte(c.ThoughtSignature))
+	}
+	return json.Marshal(stored)
+}
+
+func (c *ReasoningContent) UnmarshalJSON(data []byte) error {
+	var stored reasoningJSON
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return err
+	}
+	*c = ReasoningContent(stored.reasoningFields)
+	switch {
+	case stored.ThoughtSignatureB64 != "":
+		signature, err := base64.StdEncoding.DecodeString(stored.ThoughtSignatureB64)
+		if err != nil {
+			return fmt.Errorf("thought signature: %w", err)
+		}
+		c.ThoughtSignature = string(signature)
+	case !strings.ContainsRune(stored.ThoughtSignature, utf8.RuneError):
+		c.ThoughtSignature = stored.ThoughtSignature
+	default:
+		// Saved before base64: the bytes JSON couldn't hold were
+		// replaced, and Gemini rejects the whole request over a
+		// corrupted signature. Without one it still answers.
+		c.ThoughtSignature = ""
+	}
+	return nil
 }

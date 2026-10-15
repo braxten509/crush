@@ -64,3 +64,26 @@ func TestUnmarshalPartsEdgeCases(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+// Gemini's thought signatures are raw bytes; they must come back exactly,
+// and ones an older build already mangled are dropped so Gemini answers.
+func TestThoughtSignatureSurvivesStorage(t *testing.T) {
+	t.Parallel()
+
+	raw := string([]byte{0x12, 0xa4, 0x0b, 0x0a, 0xff, 0x01, 'i'})
+	parts := []ContentPart{ReasoningContent{Thinking: "plan", ThoughtSignature: raw, ToolID: "c1"}}
+	encoded, err := marshalParts(parts)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"thought_signature":`)
+	decoded, err := unmarshalParts(encoded)
+	require.NoError(t, err)
+	require.Equal(t, parts, decoded)
+
+	legacy := []byte(`[{"type":"reasoning","data":{"thinking":"plan","thought_signature":"\u0012\ufffd\u000b"}},` +
+		`{"type":"reasoning","data":{"thinking":"plan","thought_signature":"clean"}}]`)
+	decoded, err = unmarshalParts(legacy)
+	require.NoError(t, err)
+	require.Empty(t, decoded[0].(ReasoningContent).ThoughtSignature, "a mangled signature is dropped")
+	require.Equal(t, "plan", decoded[0].(ReasoningContent).Thinking)
+	require.Equal(t, "clean", decoded[1].(ReasoningContent).ThoughtSignature, "a signature JSON could hold is kept")
+}

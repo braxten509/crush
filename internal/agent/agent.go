@@ -394,7 +394,7 @@ func (a *sessionAgent) notifySessionFinished(call SessionAgentCall, sess session
 	if a.notify == nil || a.isSubAgent || sess.ParentSessionID != "" || call.NonInteractive {
 		return
 	}
-	if a.tasks.hasRunning(call.SessionID) {
+	if a.tasks.hasRunning(call.SessionID) || cliBackgroundRunning(call.SessionID) {
 		return
 	}
 	if assistant == nil || assistant.Role != message.Assistant || assistant.IsSummaryMessage || assistant.IsCompacting || assistant.FinishReason() != message.FinishReasonEndTurn {

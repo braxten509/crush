@@ -66,11 +66,11 @@ func TestCLISteer(t *testing.T) {
 	// their own step boundary once it takes them in.
 	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "one"})
 	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "two"})
-	require.Equal(t, "one\n\ntwo", s.steer())
+	require.Equal(t, midTurnNote+"one\n\ntwo", s.steer())
 	require.Empty(t, s.steer())
 	// They stay listed as queued until the CLI takes them in.
 	require.Equal(t, []string{"one", "two"}, sa.QueuedPromptsList(sess.ID))
-	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventUserMessage, Text: "one\n\ntwo"}))
+	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventUserMessage, Text: midTurnNote + "one\n\ntwo"}))
 	require.Zero(t, sa.QueuedPrompts(sess.ID))
 	require.Equal(t, 1, steps)
 	msgs, err := env.messages.List(t.Context(), sess.ID)
@@ -80,13 +80,13 @@ func TestCLISteer(t *testing.T) {
 
 	// A prompt the CLI never took in goes back to the front of the queue.
 	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "three"})
-	require.Equal(t, "three", s.steer())
+	require.Equal(t, midTurnNote+"three", s.steer())
 	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "four"})
 	s.returnUnsteered()
 	require.Equal(t, []string{"three", "four"}, sa.QueuedPromptsList(sess.ID))
 
 	// Unless the turn was canceled.
-	require.Equal(t, "three\n\nfour", s.steer())
+	require.Equal(t, midTurnNote+"three\n\nfour", s.steer())
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	s.ctx = ctx
@@ -96,7 +96,7 @@ func TestCLISteer(t *testing.T) {
 	// Clearing the queue hides a handed-over prompt and doesn't requeue it.
 	s.ctx = t.Context()
 	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "five"})
-	require.Equal(t, "five", s.steer())
+	require.Equal(t, midTurnNote+"five", s.steer())
 	sa.clearQueueAndNotify(sess.ID)
 	require.Zero(t, sa.QueuedPrompts(sess.ID))
 	s.returnUnsteered()
@@ -157,7 +157,7 @@ func TestCLISteerImagesWithoutBlockingFollowingText(t *testing.T) {
 	sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "look at this", Attachments: []message.Attachment{image}})
 	sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "also check the model"})
 	text, images := s.steerWithImages()
-	require.Equal(t, "look at this\n\nalso check the model", text)
+	require.Equal(t, midTurnNote+"look at this\n\nalso check the model", text)
 	require.Equal(t, []message.Attachment{image}, images)
 	// A failed or unacknowledged delivery must still restore both complete requests in order.
 	s.returnUnsteered()
@@ -165,4 +165,35 @@ func TestCLISteerImagesWithoutBlockingFollowingText(t *testing.T) {
 	require.Len(t, queued, 2)
 	require.Equal(t, image, queued[0].Attachments[0])
 	require.Equal(t, "also check the model", queued[1].Prompt)
+}
+
+// A message sent mid-work reaches the CLI with a note to keep working, so
+// the model does not answer it and end the turn, while the chat shows only
+// the user's own words.
+func TestCLISteeredPromptKeepsAgentWorking(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sa := NewSessionAgent(SessionAgentOptions{Sessions: env.sessions, Messages: env.messages}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "mid-turn")
+	require.NoError(t, err)
+	s := &cliSteps{running: toolRunningForSteer(), ctx: t.Context(), a: sa, sessionID: sess.ID, sc: fantasy.AgentStreamCall{
+		PrepareStep: func(ctx context.Context, _ fantasy.PrepareStepFunctionOptions) (context.Context, fantasy.PrepareStepResult, error) {
+			return ctx, fantasy.PrepareStepResult{}, nil
+		},
+		OnStepFinish: func(fantasy.StepResult) error { return nil },
+	}}
+	require.NoError(t, s.begin())
+
+	const question = "Will other users be able to use it?"
+	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: question})
+	text := s.steer()
+	require.Contains(t, text, "keep\ngoing with your current work in this same turn")
+	require.Equal(t, midTurnNote+question, text)
+
+	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventUserMessage, Text: text}))
+	msgs, err := env.messages.List(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, question, msgs[0].Content().String())
+	require.Contains(t, sharedCLIInstructions, "<crush_mid_turn_messages>")
 }

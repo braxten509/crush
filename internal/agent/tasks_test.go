@@ -79,12 +79,29 @@ func TestTaskWatcherUsesPinnedDirectory(t *testing.T) {
 	}
 }
 
-func TestAbacusAvailableForBackgroundTasks(t *testing.T) {
-	provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{{ID: "claude-opus-5-5-thinking"}}}
-	h := &taskHub{c: &coordinator{cfg: config.NewTestStore(&config.Config{Providers: csync.NewMapFrom(map[string]config.ProviderConfig{"abacus": provider})})}}
-	providers := h.taskProviders()
-	require.Len(t, providers, 1)
-	require.Equal(t, "abacus", taskProviderName(providers[0]))
+func TestAPIProvidersAvailableForBackgroundTasks(t *testing.T) {
+	t.Setenv("CRUSH_GLOBAL_CONFIG", t.TempDir())
+	h := &taskHub{c: &coordinator{cfg: config.NewTestStore(&config.Config{Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
+		"abacus":      {ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{{ID: "claude-opus-5-5-thinking"}}},
+		"gemini":      {ID: "gemini", Type: catwalk.TypeGoogle, Models: []catwalk.Model{{ID: "gemini-3.8-flash", ReasoningLevels: []string{"low", "medium", "high"}}}},
+		"claude-code": {ID: "claude-code", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus"}}},
+		"off":         {ID: "off", Type: catwalk.TypeOpenAI, Disable: true, Models: []catwalk.Model{{ID: "gpt"}}},
+		"empty":       {ID: "empty", Type: catwalk.TypeOpenAI},
+	})})}}
+	var names []string
+	for _, p := range h.taskProviders() {
+		names = append(names, taskProviderName(p))
+	}
+	require.Equal(t, []string{"abacus", "claude", "gemini"}, names, "API providers join the agent CLIs; disabled and model-less ones don't")
+
+	text := h.instructions()
+	require.Contains(t, text, "- gemini: gemini-3.8-flash (effort: low, medium, high) [API]\n")
+	require.Contains(t, text, "- claude: opus\n", "agent CLIs aren't marked as API services")
+	require.Contains(t, text, "never start a sub-agent on one unless the user asks for that provider")
+
+	gemini, _ := h.c.cfg.Config().Providers.Get("gemini")
+	_, err := taskModel(gemini, gemini.Models[0], TaskRequest{Fast: true})
+	require.ErrorContains(t, err, "not gemini")
 }
 
 func TestTaskNotificationParses(t *testing.T) {

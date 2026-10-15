@@ -247,15 +247,30 @@ func SessionHasUnfinishedWork(sessionID string) bool {
 
 // SessionHasRunningWork is the completion-alert gate: sub-agents or
 // background jobs (not services) still running, or ended with their result
-// not yet handed to the agent.
+// not yet handed to the agent, or commands the agent CLI backgrounded itself.
 func SessionHasRunningWork(sessionID string) bool {
 	if sessionID == "" {
 		return false
 	}
 	hubsMu.Lock()
-	defer hubsMu.Unlock()
 	for _, h := range hubs {
 		if h.hasRunning(sessionID) {
+			hubsMu.Unlock()
+			return true
+		}
+	}
+	hubsMu.Unlock()
+	return cliBackgroundRunning(sessionID)
+}
+
+// cliBackgroundRunning reports whether the session's agent CLI still runs a
+// command it moved to the background with its own tools rather than
+// `crush bg`, such as Claude Code's run_in_background. Crush lists those as
+// background processes, so they hold back the completion alert too. It
+// takes hubsMu, so callers must not hold it.
+func cliBackgroundRunning(sessionID string) bool {
+	for _, p := range BackgroundProcesses() {
+		if p.Session == sessionID {
 			return true
 		}
 	}
@@ -484,6 +499,9 @@ func (h *taskHub) instructions() string {
 		if levels := p.Models[0].ReasoningLevels; len(levels) > 0 {
 			fmt.Fprintf(&clis, " (effort: %s)", strings.Join(levels, ", "))
 		}
+		if !config.IsCLIProviderType(p.Type) {
+			clis.WriteString(" [API]")
+		}
 		clis.WriteString("\n")
 	}
 	bin, err := os.Executable()
@@ -491,7 +509,7 @@ func (h *taskHub) instructions() string {
 		bin = "crush"
 	}
 	return fmt.Sprintf(`<crush_sub_agents>
-You are running inside Crush, which can run sub-agents for you in the background, like Claude Code's background agents. Each sub-agent uses the chosen provider (an agent CLI or the Abacus API) in this same directory. It does not see this conversation, so give it a complete, self-contained task.
+You are running inside Crush, which can run sub-agents for you in the background, like Claude Code's background agents. Each sub-agent uses the chosen provider (an agent CLI or an API service) in this same directory. It does not see this conversation, so give it a complete, self-contained task.
 
 Start one with your shell tool. It returns right away with a task ID:
   %[1]s spawn --cli <cli> [--model <model>] [--effort <level>] [--fast] [--read-only] --name "<short title>" <<'EOF'
@@ -500,6 +518,7 @@ Start one with your shell tool. It returns right away with a task ID:
 
 Providers and models (the first model is the default), with their effort levels:
 %[2]s
+Providers marked [API] are API services billed per use: never start a sub-agent on one unless the user asks for that provider or one of its models.
 --effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode where supported (Claude Code, Codex, and Abacus OpenAI priority models). Abacus effort levels depend on the chosen model; recent Claude models accept low, medium, high, xhigh, max. --read-only runs the sub-agent where it can't change the project's files; use it for reviews, critiques and anything else that must only look. Run every review or second opinion from another model as a sub-agent like this, never through another tool or script that starts an agent CLI.
 Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there.%[6]s Stop one with: %[1]s spawn --stop <task-id>
 To give a finished sub-agent more work or corrections, continue it instead of starting a new one; it keeps its conversation and remembers its earlier work, and it shows in Crush as the same sub-agent:

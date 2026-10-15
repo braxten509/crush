@@ -128,6 +128,18 @@ func (s *cliSteps) pendingSteered() []string {
 	return prompts
 }
 
+// midTurnNote leads every prompt folded into a running turn. Without it the
+// model often answers the message and ends the turn, leaving its work
+// unfinished. The chat shows only the user's own words.
+const midTurnNote = `<crush_mid_turn_message>
+The user sent the message below while you were working. Answer it, then keep
+going with your current work in this same turn. Saying you will continue is
+not enough: keep using your tools until the work is done. If the message
+changes the plan, follow the new plan. Stop only if it asks you to stop or wait.
+</crush_mid_turn_message>
+
+`
+
 // steer takes the queued prompts for the CLI to fold into the running turn,
 // while one of its tools runs.
 func (s *cliSteps) steer() string {
@@ -186,6 +198,7 @@ func (s *cliSteps) steerCalls(images bool) (string, []message.Attachment) {
 	if strings.TrimSpace(text) == "" && len(attachments) > 0 {
 		text = "Please review the attached images."
 	}
+	text = midTurnNote + text
 	s.steerMu.Lock()
 	s.steered = append(s.steered, cliSteered{text: text, calls: fold})
 	s.steerMu.Unlock()

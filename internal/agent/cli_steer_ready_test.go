@@ -23,7 +23,7 @@ func TestQueuedPromptWakesCLISteering(t *testing.T) {
 	default:
 		t.Fatal("queue did not wake the running CLI")
 	}
-	require.Equal(t, "first\n\nsecond", s.steer())
+	require.Equal(t, midTurnNote+"first\n\nsecond", s.steer())
 	select {
 	case <-s.steerReady:
 		t.Fatal("notifications should coalesce while a drain is pending")

@@ -23,18 +23,21 @@ func cliName(t catwalk.Type) string {
 	return strings.TrimSuffix(s, "-code")
 }
 
+// taskProviderName is the name agents pass to `crush spawn --cli`: an agent
+// CLI's short name, or an API provider's ID.
 func taskProviderName(provider config.ProviderConfig) string {
-	if provider.ID == config.AbacusProviderID {
-		return provider.ID
+	if config.IsCLIProviderType(provider.Type) {
+		return cliName(provider.Type)
 	}
-	return cliName(provider.Type)
+	return provider.ID
 }
 
-// cliProviders lists the configured agent CLI providers.
+// taskProviders lists the configured providers a sub-agent can run on:
+// every agent CLI and every API provider.
 func (h *taskHub) taskProviders() []config.ProviderConfig {
 	var out []config.ProviderConfig
 	for _, p := range h.c.cfg.Config().Providers.Seq2() {
-		if (config.IsCLIProviderType(p.Type) || p.ID == config.AbacusProviderID) && !p.Disable && len(p.Models) > 0 {
+		if !p.Disable && len(p.Models) > 0 {
 			out = append(out, p)
 		}
 	}
@@ -222,7 +225,7 @@ func taskModel(provider config.ProviderConfig, model catwalk.Model, req TaskRequ
 	}
 	if req.Fast {
 		if provider.Type != config.TypeClaudeCode && !config.SupportsFastMode(provider, model) {
-			return selected, fmt.Errorf("fast mode is only for claude and codex, not %s", cliName(provider.Type))
+			return selected, fmt.Errorf("fast mode is only for claude and codex, not %s", taskProviderName(provider))
 		}
 		selected.ServiceTier = "fast"
 	}

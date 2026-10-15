@@ -76,7 +76,10 @@ func doRequest(ctx context.Context, method, baseURL, path, apiKey string, extraH
 
 // Config holds the provider configuration needed for model discovery.
 type Config struct {
-	ID           string
+	ID string
+	// Type is the provider's API type. Google providers list their models
+	// through the Gemini API instead of an OpenAI-style /models.
+	Type         catwalk.Type
 	BaseURL      string
 	APIKey       string
 	ExtraHeaders map[string]string
@@ -103,6 +106,9 @@ type modelsResponse struct {
 // Models whose IDs already appear in cfg.ExistingModels are skipped —
 // user-specified models take precedence.
 func DiscoverModels(ctx context.Context, cfg Config, resolver Resolver) ([]catwalk.Model, error) {
+	if cfg.Type == catwalk.TypeGoogle {
+		return discoverGeminiModels(ctx, cfg, resolver)
+	}
 	resp, err := doRequest(ctx, http.MethodGet, cfg.BaseURL, "/models", cfg.APIKey, cfg.ExtraHeaders, resolver, nil)
 	if err != nil {
 		return nil, fmt.Errorf("discover models for provider %s: %w", cfg.ID, err)

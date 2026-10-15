@@ -356,15 +356,16 @@ func (s *providerSetup) discoverCustomModels(ctx context.Context) map[string]dis
 		if s.known[id] || !needsModelDiscovery(pc) {
 			continue
 		}
+		providerType := cmp.Or(pc.Type, catwalk.TypeOpenAICompat)
 		cfg := discover.Config{
 			ID:             cmp.Or(pc.ID, id),
+			Type:           providerType,
 			BaseURL:        pc.BaseURL,
 			APIKey:         pc.APIKey,
 			ExtraHeaders:   pc.ExtraHeaders,
 			ExistingModels: pc.Models,
 			KnownProviders: s.catalog,
 		}
-		providerType := cmp.Or(pc.Type, catwalk.TypeOpenAICompat)
 		wg.Go(func() {
 			models, err := discover.DiscoverModels(discoverCtx, cfg, s.resolver)
 			if err == nil && len(models) > 0 {

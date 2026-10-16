@@ -233,6 +233,7 @@ func (t *turn) queueContinuation() {
 	}
 	t.skipRunComplete = true
 	t.queuedAgain = true
+	t.call.report.handOn()
 	existing = append(existing, t.call)
 	a.messageQueue.Set(t.call.SessionID, existing)
 	queueMu.Unlock()

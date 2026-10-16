@@ -83,6 +83,10 @@ type SessionAgentCall struct {
 	NonInteractive   bool
 	// reportOnly disables tool use during a bounded sub-agent report recovery.
 	reportOnly bool
+	// report, when set, receives the result of the turn that finally ends
+	// this call: a later continuation when the session was summarized with
+	// work left, or the queued turn when the session was busy.
+	report *reportBox
 	// sessionRun follows a headless prompt through the queue, even when
 	// the active turn that drains it started outside that session owner.
 	sessionRun              *sessionRun
@@ -323,6 +327,15 @@ func releaseQueuedCall(call SessionAgentCall, err error) {
 	if call.queuedSessionRunRelease != nil {
 		call.queuedSessionRunRelease(err)
 	}
+}
+
+// fillReports gives every original call's report box the result of the turn
+// that ended it.
+func fillReports(call SessionAgentCall, result *fantasy.AgentResult, err error) {
+	for _, original := range call.batch {
+		fillReports(original, result, err)
+	}
+	call.report.fill(result, err)
 }
 
 // persistCanceledTurn writes the user/assistant records for a turn that

@@ -305,7 +305,7 @@ func (s *sessionScheduler) drainQueueForStepLocked(sessionID string) (fold, canc
 	blocked := false
 	for _, call := range queued {
 		if s.canceledBySeq(sessionID, call.acceptSeq) || (call.sessionRun != nil && call.sessionRun.ctx.Err() != nil) {
-			if len(call.batch) > 0 || call.RunID != "" || call.SubmissionID != "" || call.OnComplete != nil || call.queuedSessionRunRelease != nil {
+			if len(call.batch) > 0 || call.RunID != "" || call.SubmissionID != "" || call.OnComplete != nil || call.queuedSessionRunRelease != nil || call.report != nil {
 				canceled = append(canceled, call)
 			}
 			continue
@@ -419,7 +419,7 @@ func (s *sessionScheduler) finishDispatch(ctx context.Context, sessionID string,
 func (s *sessionScheduler) publishCanceledQueueDrops(drops []SessionAgentCall) {
 	var needsCompletion bool
 	for _, d := range drops {
-		if len(d.batch) > 0 || d.RunID != "" || d.SubmissionID != "" || d.OnComplete != nil || d.queuedSessionRunRelease != nil {
+		if len(d.batch) > 0 || d.RunID != "" || d.SubmissionID != "" || d.OnComplete != nil || d.queuedSessionRunRelease != nil || d.report != nil {
 			needsCompletion = true
 			break
 		}
@@ -438,6 +438,7 @@ func (s *sessionScheduler) publishCanceledQueueDrops(drops []SessionAgentCall) {
 			})
 		}
 		releaseQueuedCall(d, context.Canceled)
+		fillReports(d, nil, context.Canceled)
 	}
 }
 

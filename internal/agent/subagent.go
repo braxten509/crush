@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"charm.land/fantasy"
@@ -136,7 +138,7 @@ func terminalFinishReason(result *fantasy.AgentResult) fantasy.FinishReason {
 // calls pending, and a missing report are errors. An unknown or other finish
 // reason with a report is not: providers differ in what they send.
 func runSubAgentReport(ctx context.Context, agent SessionAgent, call SessionAgentCall) (*fantasy.AgentResult, error) {
-	result, err := agent.Run(ctx, call)
+	result, err := runToReport(ctx, agent, call)
 	if err != nil {
 		return result, err
 	}
@@ -147,7 +149,7 @@ func runSubAgentReport(ctx context.Context, agent SessionAgent, call SessionAgen
 		call.Prompt = reportRecoveryPrompt
 		call.Attachments = nil
 		call.reportOnly = true
-		if result, err = agent.Run(ctx, call); err != nil {
+		if result, err = runToReport(ctx, agent, call); err != nil {
 			return result, err
 		}
 	}
@@ -195,4 +197,59 @@ func (c *coordinator) updateParentSessionCost(ctx context.Context, childSessionI
 	}
 
 	return nil
+}
+
+// reportBox carries the result of the turn that finally ends a call. A turn
+// summarized with work left hands its call on to a continuation that runs
+// after it returns, and the worker's real answer is in that later turn.
+type reportBox struct {
+	once     sync.Once
+	done     chan struct{}
+	handedOn atomic.Bool
+	result   *fantasy.AgentResult
+	err      error
+}
+
+func newReportBox() *reportBox { return &reportBox{done: make(chan struct{})} }
+
+// handOn records that a later turn, not this one, will end the call.
+func (b *reportBox) handOn() {
+	if b != nil {
+		b.handedOn.Store(true)
+	}
+}
+
+// fill keeps the first result; later ones (a batch's other originals) are
+// the same turn's.
+func (b *reportBox) fill(result *fantasy.AgentResult, err error) {
+	if b == nil {
+		return
+	}
+	b.once.Do(func() {
+		b.result, b.err = result, err
+		close(b.done)
+	})
+}
+
+// runToReport runs one worker call and returns the result of the turn that
+// finally ended it, waiting for a continuation when the call was handed on.
+// Stopping the worker (ctx) stops the wait.
+func runToReport(ctx context.Context, agent SessionAgent, call SessionAgentCall) (*fantasy.AgentResult, error) {
+	box := newReportBox()
+	call.report = box
+	result, err := agent.Run(ctx, call)
+	select {
+	case <-box.done:
+		return box.result, box.err
+	default:
+	}
+	if err != nil || !box.handedOn.Load() {
+		return result, err
+	}
+	select {
+	case <-box.done:
+		return box.result, box.err
+	case <-ctx.Done():
+		return result, ctx.Err()
+	}
 }

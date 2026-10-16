@@ -80,6 +80,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	defer func() {
 		if !t.queuedAgain {
 			releaseQueuedCall(t.call, retErr)
+			fillReports(t.call, result, retErr)
+			for _, consumed := range t.consumedCalls {
+				fillReports(consumed, result, retErr)
+			}
 		}
 	}()
 	if err := ValidateCall(t.call); err != nil {
@@ -173,6 +177,7 @@ func (t *turn) dispatch(ctx context.Context) dispatchOutcome {
 			}
 		}
 		t.queuedAgain = true
+		t.call.report.handOn()
 		a.enqueueCall(t.call)
 		if t.call.Accepted != nil {
 			t.call.Accepted.Close()

@@ -3,13 +3,21 @@ package discover
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"testing"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 )
@@ -60,6 +68,7 @@ func discoverGeminiModels(ctx context.Context, cfg Config, resolver Resolver) ([
 		existing[model.ID] = true
 	}
 	result := slices.Clone(cfg.ExistingModels)
+	var listed []catwalk.Model
 
 	pageToken := ""
 	for {
@@ -77,12 +86,129 @@ func discoverGeminiModels(ctx context.Context, cfg Config, resolver Resolver) ([
 				continue
 			}
 			existing[id] = true
-			result = append(result, geminiCatwalkModel(id, entry, known))
+			listed = append(listed, geminiCatwalkModel(id, entry, known))
 		}
 		if page.NextPageToken == "" || page.NextPageToken == pageToken {
-			return result, nil
+			break
 		}
 		pageToken = page.NextPageToken
+	}
+	// Google's list keeps models it no longer serves to this key (retired
+	// for new users, or only reachable through its Interactions API or a
+	// required tool), and marks them no differently. Ask each one.
+	usable := checkGeminiModels(ctx, baseURL, headers, resolver, listed)
+	for _, model := range listed {
+		if usable[model.ID] {
+			result = append(result, model)
+		}
+	}
+	return result, nil
+}
+
+// geminiCheckTTL is how long a model's answer to the check is trusted.
+const geminiCheckTTL = 7 * 24 * time.Hour
+
+// geminiCheckCachePath is where check results are kept between starts.
+// Empty keeps them in memory only, as tests do unless they set one.
+var geminiCheckCachePath = func() string {
+	if testing.Testing() {
+		return ""
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "crush", "gemini-model-checks.json")
+}
+
+type geminiCheck struct {
+	Usable  bool      `json:"usable"`
+	Checked time.Time `json:"checked"`
+}
+
+var geminiCheckMu sync.Mutex
+
+// checkGeminiModels reports which models answer a one-token request,
+// asking only those without a recent answer. A refusal (400, 403, 404)
+// hides a model; a rate limit, server error, timeout or network failure
+// keeps it listed and unrecorded, so it is asked again next time.
+// Results are kept per key, since Google's access differs between keys.
+func checkGeminiModels(ctx context.Context, baseURL string, headers map[string]string, resolver Resolver, models []catwalk.Model) map[string]bool {
+	geminiCheckMu.Lock()
+	defer geminiCheckMu.Unlock()
+	path := geminiCheckCachePath()
+	cache := map[string]map[string]geminiCheck{}
+	if path != "" {
+		if data, err := os.ReadFile(path); err == nil {
+			_ = json.Unmarshal(data, &cache)
+		}
+	}
+	sum := sha256.Sum256([]byte(baseURL + "\x00" + headers["x-goog-api-key"]))
+	scope := hex.EncodeToString(sum[:8])
+	checks := cache[scope]
+	if checks == nil {
+		checks = map[string]geminiCheck{}
+	}
+
+	usable := make(map[string]bool, len(models))
+	var stale []string
+	for _, model := range models {
+		if c, ok := checks[model.ID]; ok && time.Since(c.Checked) < geminiCheckTTL {
+			usable[model.ID] = c.Usable
+		} else {
+			usable[model.ID] = true
+			stale = append(stale, model.ID)
+		}
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	changed := false
+	for _, id := range stale {
+		wg.Go(func() {
+			refused, known := geminiRefuses(ctx, baseURL, id, headers, resolver)
+			mu.Lock()
+			defer mu.Unlock()
+			usable[id] = !refused
+			if known {
+				checks[id] = geminiCheck{Usable: !refused, Checked: time.Now()}
+				changed = true
+			}
+		})
+	}
+	wg.Wait()
+
+	if changed && path != "" {
+		cache[scope] = checks
+		if data, err := json.Marshal(cache); err == nil && os.MkdirAll(filepath.Dir(path), 0o700) == nil {
+			tmp := path + ".tmp"
+			if os.WriteFile(tmp, data, 0o600) == nil {
+				_ = os.Rename(tmp, path)
+			}
+		}
+	}
+	return usable
+}
+
+// geminiRefuses sends a model the smallest real request. known is false
+// when the answer says nothing about the model itself.
+func geminiRefuses(ctx context.Context, baseURL, id string, headers map[string]string, resolver Resolver) (refused, known bool) {
+	body := map[string]any{
+		"contents":         []any{map[string]any{"parts": []any{map[string]any{"text": "hi"}}}},
+		"generationConfig": map[string]any{"maxOutputTokens": 1},
+	}
+	resp, err := doRequest(ctx, http.MethodPost, baseURL, "/v1beta/models/"+url.PathEscape(id)+":generateContent", "", headers, resolver, body)
+	if err != nil {
+		return false, false
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return false, true
+	case resp.StatusCode == http.StatusBadRequest, resp.StatusCode == http.StatusForbidden, resp.StatusCode == http.StatusNotFound:
+		return true, true
+	default:
+		return false, false
 	}
 }
 

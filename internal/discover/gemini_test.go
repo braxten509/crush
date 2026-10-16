@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -12,9 +15,13 @@ import (
 
 func TestGeminiDiscoveryListsChatModels(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1beta/models", r.URL.Path)
 		require.Equal(t, "test-key", r.Header.Get("x-goog-api-key"))
 		require.Empty(t, r.Header.Get("Authorization"))
+		if strings.HasSuffix(r.URL.Path, ":generateContent") {
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
+		require.Equal(t, "/v1beta/models", r.URL.Path)
 		switch r.URL.Query().Get("pageToken") {
 		case "":
 			_, _ = w.Write([]byte(`{"models":[
@@ -87,4 +94,64 @@ func TestGeminiDiscoveryReportsHTTPErrors(t *testing.T) {
 	defer server.Close()
 	_, err := DiscoverModels(context.Background(), Config{ID: "gemini", Type: catwalk.TypeGoogle, BaseURL: server.URL, APIKey: "bad"}, &mockResolver{})
 	require.ErrorContains(t, err, "403")
+}
+
+func TestGeminiDiscoveryHidesModelsGoogleRefuses(t *testing.T) {
+	cache := filepath.Join(t.TempDir(), "checks.json")
+	old := geminiCheckCachePath
+	geminiCheckCachePath = func() string { return cache }
+	t.Cleanup(func() { geminiCheckCachePath = old })
+
+	var mu sync.Mutex
+	asked := map[string]int{}
+	busy := true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1beta/models" {
+			_, _ = w.Write([]byte(`{"models":[
+			 {"name":"models/gemini-works","thinking":true,"supportedGenerationMethods":["generateContent"]},
+			 {"name":"models/gemini-retired","thinking":true,"supportedGenerationMethods":["generateContent"]},
+			 {"name":"models/gemini-interactions-only","thinking":true,"supportedGenerationMethods":["generateContent"]},
+			 {"name":"models/gemini-busy","thinking":true,"supportedGenerationMethods":["generateContent"]}
+			]}`))
+			return
+		}
+		require.Equal(t, http.MethodPost, r.Method)
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1beta/models/"), ":generateContent")
+		mu.Lock()
+		asked[id]++
+		stillBusy := busy
+		mu.Unlock()
+		switch {
+		case id == "gemini-retired":
+			w.WriteHeader(http.StatusNotFound)
+		case id == "gemini-interactions-only":
+			w.WriteHeader(http.StatusBadRequest)
+		case id == "gemini-busy" && stillBusy:
+			w.WriteHeader(http.StatusTooManyRequests)
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer server.Close()
+
+	discoverIDs := func() []string {
+		models, err := DiscoverModels(context.Background(), Config{ID: "gemini", Type: catwalk.TypeGoogle, BaseURL: server.URL, APIKey: "k"}, &mockResolver{})
+		require.NoError(t, err)
+		ids := make([]string, len(models))
+		for i, model := range models {
+			ids[i] = model.ID
+		}
+		return ids
+	}
+
+	// A rate limit says nothing about the model: it stays listed.
+	require.Equal(t, []string{"gemini-works", "gemini-busy"}, discoverIDs())
+
+	// Known answers come from the saved checks; only the unanswered model is asked again.
+	mu.Lock()
+	busy = false
+	mu.Unlock()
+	require.Equal(t, []string{"gemini-works", "gemini-busy"}, discoverIDs())
+	require.Equal(t, map[string]int{"gemini-works": 1, "gemini-retired": 1, "gemini-interactions-only": 1, "gemini-busy": 2}, asked)
+	require.FileExists(t, cache)
 }

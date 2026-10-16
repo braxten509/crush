@@ -196,10 +196,10 @@ func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub Sessio
 		removeCheckIn := h.addCheckIn(snapshot.SessionID, checkInWork{id: snapshot.ID, name: snapshot.Name, started: snapshot.Started, ctx: runCtx, progress: func() string {
 			return h.subAgentProgress(runCtx, snapshot)
 		}})
-		result, err := sub.Run(runCtx, SessionAgentCall{
+		result, err := runSubAgentReport(runCtx, sub, SessionAgentCall{
 			SessionID:       t.ChildID,
 			Prompt:          prompt,
-			MaxOutputTokens: m.CatwalkCfg.DefaultMaxTokens,
+			MaxOutputTokens: subAgentMaxTokens(m),
 			NonInteractive:  true,
 			ProviderOptions: getProviderOptions(m, provider),
 		})

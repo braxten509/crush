@@ -81,6 +81,8 @@ type SessionAgentCall struct {
 	FrequencyPenalty *float64
 	PresencePenalty  *float64
 	NonInteractive   bool
+	// reportOnly disables tool use during a bounded sub-agent report recovery.
+	reportOnly bool
 	// sessionRun follows a headless prompt through the queue, even when
 	// the active turn that drains it started outside that session owner.
 	sessionRun              *sessionRun

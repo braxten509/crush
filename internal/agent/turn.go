@@ -455,6 +455,11 @@ func (t *turn) buildStreamCall(history []fantasy.Message, files []fantasy.FilePa
 		history = append(history, fantasy.Message{Role: fantasy.MessageRoleUser, Content: filesAsParts(files)})
 		files = nil
 	}
+	var toolChoice *fantasy.ToolChoice
+	if call.reportOnly {
+		none := fantasy.ToolChoiceNone
+		toolChoice = &none
+	}
 	return fantasy.AgentStreamCall{
 		Prompt:           prompt,
 		Files:            files,
@@ -462,6 +467,7 @@ func (t *turn) buildStreamCall(history []fantasy.Message, files []fantasy.FilePa
 		Headers:          sessionHeaders(call.SessionID),
 		ProviderOptions:  call.ProviderOptions,
 		MaxOutputTokens:  maxOutputTokens,
+		ToolChoice:       toolChoice,
 		TopP:             call.TopP,
 		Temperature:      call.Temperature,
 		PresencePenalty:  call.PresencePenalty,

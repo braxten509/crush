@@ -157,8 +157,10 @@ func TestLanguageModelAppliesDecoratorChain(t *testing.T) {
 	require.NoError(t, err)
 	credits, ok := lm.(*hyperCreditsModel)
 	require.True(t, ok, "hyper models refresh the credit balance, got %T", lm)
-	timed, ok := credits.LanguageModel.(requestTimeoutModel)
-	require.True(t, ok, "API models are bounded by the request timeout, got %T", credits.LanguageModel)
+	recovery, ok := credits.LanguageModel.(emptyStreamModel)
+	require.True(t, ok, "API models recover empty incomplete streams, got %T", credits.LanguageModel)
+	timed, ok := recovery.LanguageModel.(requestTimeoutModel)
+	require.True(t, ok, "API models are bounded by the request timeout, got %T", recovery.LanguageModel)
 	require.Same(t, inner, timed.LanguageModel)
 
 	cli, err := b.LanguageModel(t.Context(), stubProvider{inner}, config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode}, config.SelectedModel{Provider: "claude", Model: "m"})

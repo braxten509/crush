@@ -44,6 +44,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}
 
 	aiMsgs, _ := a.preparePrompt(msgs, largeModel.CatwalkCfg.SupportsImages)
+	aiMsgs = a.trimPreparedPrompt(sessionID, msgs, aiMsgs, largeModel, approxTokenCount(string(summaryPrompt))+approxTokenCount(systemPromptPrefix))
 
 	genCtx, cancel := context.WithCancel(ctx)
 	ac := &activeCancel{cancel: cancel}

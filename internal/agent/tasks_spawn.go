@@ -151,13 +151,17 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		RunComplete:          h.c.runComplete,
 	})
 	if !config.IsCLIProviderType(provider.Type) {
-		agentCfg := h.c.cfg.Config().Agents[config.AgentTask]
+		agentCfg := apiSubAgentConfig(h.c.cfg.Config().Agents, readOnly)
 		nativeTools, err := h.c.buildTools(ctx, agentCfg, true)
 		if err != nil {
 			return nil, Model{}, err
 		}
 		sub.SetTools(nativeTools)
-		p, err := taskPrompt(agentprompt.WithWorkingDir(h.c.cfg.WorkingDir()))
+		buildPrompt := taskPrompt
+		if !readOnly {
+			buildPrompt = coderPrompt
+		}
+		p, err := buildPrompt(agentprompt.WithWorkingDir(h.c.cfg.WorkingDir()))
 		if err != nil {
 			return nil, Model{}, err
 		}
@@ -168,6 +172,22 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		sub.SetSystemPrompt(text)
 	}
 	return sub, m, nil
+}
+
+// apiSubAgentConfig picks the tools of a sub-agent on an API provider. A
+// read-only one gets the task agent's look-only tools; any other one does
+// real work, so it gets the coder's tools like an agent CLI would, minus
+// nested helpers and MCP servers.
+func apiSubAgentConfig(agents map[string]config.Agent, readOnly bool) config.Agent {
+	if readOnly {
+		return agents[config.AgentTask]
+	}
+	cfg := agents[config.AgentCoder]
+	cfg.AllowedTools = slices.DeleteFunc(slices.Clone(cfg.AllowedTools), func(name string) bool {
+		return name == "agent" || name == "agentic_fetch"
+	})
+	cfg.AllowedMCP = map[string][]string{}
+	return cfg
 }
 
 // start runs a task in the background and returns its first snapshot. A

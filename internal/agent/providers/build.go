@@ -113,6 +113,7 @@ func (b Builder) LanguageModel(ctx context.Context, provider fantasy.Provider, p
 	}
 	if !config.IsCLIProviderType(providerCfg.Type) {
 		model = newRequestTimeoutModel(model, b.Config.Config().Options.GetRequestTimeout())
+		model = emptyStreamModel{LanguageModel: model}
 	}
 	if selected.Provider == hyper.Name {
 		model = newHyperCreditsModel(model, b.hyperAPIKey)

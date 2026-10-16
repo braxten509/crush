@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -200,12 +201,25 @@ func (t *turn) onRetry(err *fantasy.ProviderError, delay time.Duration) {
 	// On the final attempt (no more retries), any partial content
 	// stays in the message as useful context beneath the error.
 	t.currentAssistant.ResetStreamedContent()
+	t.currentAssistant.Activity = "retrying"
+	if err != nil && err.StatusCode == http.StatusTooManyRequests {
+		t.currentAssistant.Activity = "rate_limited"
+	}
+	t.currentAssistant.ActivityDetail = ""
+	t.currentAssistant.ActivityAt = time.Now().Unix()
 	if updateErr := t.a.messages.Update(t.genCtx, *t.currentAssistant); updateErr != nil {
 		slog.Error("Failed to reset message on retry", "error", updateErr)
 	}
 }
 
 func (t *turn) modelProvider() fantasy.LanguageModel {
+	if msg := t.currentAssistant; msg != nil && (msg.Activity == "retrying" || msg.Activity == "rate_limited") {
+		msg.Activity = ""
+		msg.ActivityAt = time.Now().Unix()
+		if err := t.a.messages.Update(t.genCtx, *msg); err != nil {
+			slog.Error("Failed to clear retry status", "error", err)
+		}
+	}
 	m := t.a.largeModel.Get()
 	slog.Info("ModelProvider called",
 		"provider", m.ModelCfg.Provider,

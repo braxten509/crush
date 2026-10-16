@@ -305,6 +305,9 @@ func (g *ToolGroupItem) status() string {
 			return ""
 		}
 		if last.isSpinning() {
+			if status := retryActivityStatus(last.message.Activity); status != "" {
+				return status
+			}
 			if last.message.Activity == "writing" {
 				return "Writing command"
 			}

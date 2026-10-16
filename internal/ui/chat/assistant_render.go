@@ -180,6 +180,9 @@ func (a *AssistantMessageItem) activityStatus(now time.Time) string {
 	if a.message.IsSummaryMessage || a.message.IsCompacting || a.compactingEarlier {
 		return "Compacting conversation"
 	}
+	if status := retryActivityStatus(a.message.Activity); status != "" {
+		return status
+	}
 	if a.message.Activity == "writing" {
 		return "Writing command"
 	}
@@ -190,6 +193,17 @@ func (a *AssistantMessageItem) activityStatus(now time.Time) string {
 		return "Responding"
 	}
 	return "Waiting for the model"
+}
+
+func retryActivityStatus(activity string) string {
+	switch activity {
+	case "rate_limited":
+		return "Rate limited — waiting to retry"
+	case "retrying":
+		return "Waiting to retry"
+	default:
+		return ""
+	}
 }
 
 func (a *AssistantMessageItem) syncActivity(now time.Time) string {

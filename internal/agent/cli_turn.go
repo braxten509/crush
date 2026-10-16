@@ -75,7 +75,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		if err != nil {
 			return nil, err
 		}
-		text, resume := cliHandoff(history, link, prompt)
+		text, resume := cliHandoffWithTranscript(history, link, prompt, a.transcriptDataDir(), call.SessionID)
 		if call.todoHandover != "" {
 			text = call.todoHandover + "\n\n" + text
 		}
@@ -130,7 +130,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			// The native session is gone; hand the whole conversation to a
 			// fresh one instead.
 			slog.Warn("Agent CLI could not resume its session; starting fresh", "cli", m.Kind, "session", resume)
-			turn.Prompt, turn.Resume = cliHandoff(history, cliagent.Link{}, prompt)
+			turn.Prompt, turn.Resume = cliHandoffWithTranscript(history, cliagent.Link{}, prompt, a.transcriptDataDir(), call.SessionID)
 			if skillPolicy != "" {
 				turn.Prompt = skillPolicy + "\n\n" + turn.Prompt
 			}
@@ -178,7 +178,7 @@ func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sess
 		return nil, nil
 	}
 	prompt = string(summaryPrompt) + "\n\n" + prompt + "\n\nDon't use any tools: reply with the summary only."
-	text, resume := cliHandoff(history, link, prompt)
+	text, resume := cliHandoffWithTranscript(history, link, prompt, a.transcriptDataDir(), sessionID)
 	if resume == "" {
 		return nil, nil
 	}

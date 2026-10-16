@@ -321,6 +321,10 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	}
 	a.memoryNotice(t.ctx, t.call.SessionID)
 	history, files := a.preparePrompt(msgs, t.largeModel.CatwalkCfg.SupportsImages, t.call.Attachments...)
+	if !t.isCLI {
+		overhead := approxTokenCount(systemPrompt) + approxTokenCount(t.promptPrefix) + approxTokenCount(t.call.Prompt) + int64(len(agentTools)*300)
+		history = a.trimPreparedPrompt(t.call.SessionID, msgs, history, t.largeModel, overhead)
+	}
 
 	startTime := time.Now()
 	a.eventPromptSent(t.call.SessionID)

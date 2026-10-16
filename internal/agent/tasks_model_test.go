@@ -42,3 +42,40 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 	require.True(t, agent.disableAutoSummarize)
 	require.Same(t, m.Model, agent.largeModel.Get().Model)
 }
+
+// An API sub-agent that isn't read-only must be able to change files and run
+// commands; a read-only one only looks.
+func TestAPISubAgentToolsFollowReadOnly(t *testing.T) {
+	env := testEnv(t)
+	providerCfg := config.ProviderConfig{ID: hyper.Name, Type: catwalk.TypeOpenAICompat, APIKey: "test-key"}
+	coord := newTestCoordinator(t, env, hyper.Name, providerCfg)
+	coord.permissions = env.permissions
+	coord.cfg.Config().SetupAgents()
+	model := catwalk.Model{ID: "test-model", ContextWindow: 100_000}
+	selected := config.SelectedModel{Provider: hyper.Name, Model: model.ID}
+	h := &taskHub{c: coord, dir: t.TempDir()}
+
+	names := func(readOnly bool) []string {
+		sub, _, err := h.subAgent(t.Context(), providerCfg, model, selected, readOnly)
+		require.NoError(t, err)
+		var out []string
+		for _, tool := range sub.(*sessionAgent).tools.Copy() {
+			out = append(out, tool.Info().Name)
+		}
+		return out
+	}
+
+	writer := names(false)
+	for _, want := range []string{"bash", "edit", "multiedit", "write", "view", "grep", "job_output"} {
+		require.Contains(t, writer, want)
+	}
+	for _, banned := range []string{"agent", "agentic_fetch", "question"} {
+		require.NotContains(t, writer, banned)
+	}
+
+	reader := names(true)
+	require.Contains(t, reader, "view")
+	for _, banned := range []string{"bash", "edit", "multiedit", "write", "download"} {
+		require.NotContains(t, reader, banned)
+	}
+}

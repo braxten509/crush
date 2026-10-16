@@ -154,8 +154,9 @@ func (t *viewTool) run(ctx context.Context, params ViewParams, call fantasy.Tool
 		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for accessing files outside working directory")
 	}
 
-	// Request permission for files outside working directory, unless it's a skill file.
-	if isOutsideWorkDir && !isSkillFile {
+	// Request permission for files outside working directory, unless it's a skill file
+	// or a Crush-generated transcript/spill file.
+	if isOutsideWorkDir && !isSkillFile && !isCrushSpillOrTranscript(absFilePath) {
 		granted, permReqErr := t.permissions.Request(
 			ctx,
 			permission.CreatePermissionRequest{
@@ -473,6 +474,11 @@ func isInSkillsPath(filePath string, skillsPaths []string) bool {
 	}
 
 	return false
+}
+
+func isCrushSpillOrTranscript(absFilePath string) bool {
+	parent := filepath.Base(filepath.Dir(absFilePath))
+	return parent == "transcripts" || parent == "shell-output"
 }
 
 // readBuiltinFile reads a file from the embedded builtin skills filesystem.

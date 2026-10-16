@@ -25,6 +25,7 @@ func TestClaudeNarrationIsText(t *testing.T) {
 `)
 	events, err := collect(t, "claude", "")
 	require.NoError(t, err)
+	events = withoutActivity(events)
 	require.Equal(t, []EventType{
 		EventSession, EventReasoning, EventText, EventText,
 		EventToolStart, EventToolCall, EventReasoning, EventText, EventText,
@@ -57,5 +58,5 @@ func TestClaudeUnfinishedThinkingIsPreserved(t *testing.T) {
 `)
 	events, err := collect(t, "claude", "")
 	require.NoError(t, err)
-	require.Equal(t, []Event{{Type: EventReasoning, Text: "Partial reasoning."}}, events)
+	require.Equal(t, []Event{{Type: EventReasoning, Text: "Partial reasoning."}}, withoutActivity(events))
 }

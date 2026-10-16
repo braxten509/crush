@@ -32,7 +32,10 @@ func TestToolGroupExpandedSingleActivity(t *testing.T) {
 	for _, width := range []int{40, 80, 120} {
 		rendered := ansi.Strip(g.RawRender(width))
 		require.Equal(t, 1, strings.Count(rendered, "Thinking"), rendered)
-		require.NotContains(t, rendered, "Deciding the next step.")
+		require.LessOrEqual(t, strings.Count(rendered, "Deciding"), 1, "only the header's thought line, cut to fit")
+		if width >= 80 {
+			require.Contains(t, strings.SplitN(rendered, "\n", 2)[0], "· Deciding the next step.")
+		}
 		require.Contains(t, rendered, "Bash")
 		require.Len(t, g.shown, 1)
 	}

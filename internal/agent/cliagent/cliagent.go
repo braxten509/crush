@@ -42,7 +42,7 @@ const (
 	EventSession                        // Session (native session ID)
 	EventUserMessage                    // Text (a steered message the CLI took in)
 	EventCompacting                     // Compacting (native context compaction status)
-	EventActivity                       // Provider event received, without content; Activity names what the model is doing, if known.
+	EventActivity                       // Provider event received, without content; Activity names what the model is doing, if known, and Text is the newest line of thinking the CLI holds back.
 	EventContextBudget                  // Native compaction boundary, not the full model window.
 	EventTodos                          // Input (the CLI's plan as Crush todos tool input)
 )
@@ -50,6 +50,9 @@ const (
 // ActivityWriting says the model is writing a tool call it hasn't sent yet,
 // such as a long command or patch.
 const ActivityWriting = "writing"
+
+// ActivityThinking says the model is thinking.
+const ActivityThinking = "thinking"
 
 // TextBreak is sent as text when a new text block starts. It separates two
 // of the model's messages that land in one step and is dropped otherwise.

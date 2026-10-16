@@ -21,6 +21,15 @@ type TUIOptions struct {
 	ComposerFooter []string `json:"composer_footer,omitempty" jsonschema:"description=Stats shown under the composer: model\\, settings\\, tokens\\, context\\, limit_5h\\, limit_weekly\\, limit_other\\, resets. Unset shows all but resets"`
 	// ComposerFocusOnly keeps keyboard focus on the composer.
 	ComposerFocusOnly bool `json:"composer_focus_only,omitempty" jsonschema:"description=Keep keyboard focus on the composer: Tab doesn't move focus and clicking the chat or sidebar doesn't take it. The chat still works with the mouse,default=false"`
+	// ThoughtLine shows the newest line of the model's thinking next to
+	// the busy status. Unset means on.
+	ThoughtLine *bool `json:"thought_line,omitempty" jsonschema:"description=Show the newest line of the model's thinking next to the busy status,default=true"`
+}
+
+// ShowsThoughtLine reports whether the busy status shows the newest line
+// of the model's thinking. The nil receiver and the unset pointer mean on.
+func (t *TUIOptions) ShowsThoughtLine() bool {
+	return t == nil || t.ThoughtLine == nil || *t.ThoughtLine
 }
 
 // FocusesComposerOnly reports whether keyboard focus stays on the composer.

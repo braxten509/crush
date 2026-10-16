@@ -8,6 +8,7 @@ func MessageFromDomain(m message.Message) Message {
 	msg := Message{
 		ActivityAt:              m.ActivityAt,
 		Activity:                m.Activity,
+		ActivityDetail:          m.ActivityDetail,
 		ID:                      m.ID,
 		SessionID:               m.SessionID,
 		Role:                    MessageRole(m.Role),
@@ -86,6 +87,7 @@ func MessageToDomain(m Message) message.Message {
 	msg := message.Message{
 		ActivityAt:              m.ActivityAt,
 		Activity:                m.Activity,
+		ActivityDetail:          m.ActivityDetail,
 		ID:                      m.ID,
 		SessionID:               m.SessionID,
 		Role:                    message.MessageRole(m.Role),

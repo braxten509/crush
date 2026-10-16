@@ -29,13 +29,14 @@ func (t *turn) onCompacting(active bool) error {
 }
 
 // onActivity records that an agent CLI is still working and, when the CLI
-// says, what it is doing.
-func (t *turn) onActivity(activity string) error {
+// says, what it is doing and the newest line of thinking it holds back.
+func (t *turn) onActivity(activity, detail string) error {
 	if t.currentAssistant == nil {
 		return nil
 	}
 	if activity != "" {
 		t.currentAssistant.Activity = activity
+		t.currentAssistant.ActivityDetail = detail
 	}
 	t.currentAssistant.ActivityAt = time.Now().Unix()
 	return t.a.messages.Update(t.genCtx, *t.currentAssistant)
@@ -122,6 +123,7 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 }
 
 func (t *turn) onReasoningStart(id string, reasoning fantasy.ReasoningContent) error {
+	t.currentAssistant.ActivityDetail = ""
 	t.currentAssistant.Activity = "thinking"
 	t.currentAssistant.ActivityAt = time.Now().Unix()
 	t.currentAssistant.FinishThinking()
@@ -130,6 +132,7 @@ func (t *turn) onReasoningStart(id string, reasoning fantasy.ReasoningContent) e
 }
 
 func (t *turn) onReasoningDelta(id string, text string) error {
+	t.currentAssistant.ActivityDetail = ""
 	t.currentAssistant.Activity = "thinking"
 	t.currentAssistant.ActivityAt = time.Now().Unix()
 	t.currentAssistant.AppendReasoningContent(text)
@@ -162,6 +165,7 @@ func (t *turn) onReasoningEnd(id string, reasoning fantasy.ReasoningContent) err
 }
 
 func (t *turn) onTextDelta(id string, text string) error {
+	t.currentAssistant.ActivityDetail = ""
 	t.currentAssistant.Activity = "responding"
 	t.currentAssistant.ActivityAt = time.Now().Unix()
 	// Strip leading newline from initial text content. This is is
@@ -182,6 +186,7 @@ func (t *turn) onToolInputStart(id string, toolName string) error {
 		ProviderExecuted: false,
 		Finished:         false,
 	}
+	t.currentAssistant.ActivityDetail = ""
 	t.currentAssistant.AddToolCall(toolCall)
 	// Use parent ctx instead of genCtx to ensure the update succeeds
 	// even if the request is canceled mid-stream

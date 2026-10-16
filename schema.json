@@ -515,6 +515,11 @@
           "minimum": 1000,
           "description": "Fallback compaction threshold for models without native compaction; defaults to 400000"
         },
+        "memory_limit_gb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Most memory (RAM and swap together) all Crush windows and everything they start may use"
+        },
         "context_paths": {
           "items": {
             "type": "string",
@@ -971,6 +976,11 @@
           "type": "boolean",
           "description": "Keep keyboard focus on the composer: Tab doesn't move focus and clicking the chat or sidebar doesn't take it. The chat still works with the mouse",
           "default": false
+        },
+        "thought_line": {
+          "type": "boolean",
+          "description": "Show the newest line of the model's thinking next to the busy status",
+          "default": true
         }
       },
       "additionalProperties": false,

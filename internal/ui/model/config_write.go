@@ -172,3 +172,28 @@ func (m *UI) toggleComposerFocusOnly() tea.Cmd {
 		return tea.Batch(append(cmds, util.ReportInfo(status))...)
 	})
 }
+
+// showThoughtLine reports whether busy lines show the newest line of the
+// model's thinking.
+func (m *UI) showThoughtLine() bool {
+	if m.com == nil || m.com.Workspace == nil {
+		return true
+	}
+	cfg := m.com.Config()
+	return cfg == nil || cfg.Options == nil || cfg.Options.TUI.ShowsThoughtLine()
+}
+
+// toggleThoughtLine flips options.tui.thought_line.
+func (m *UI) toggleThoughtLine() tea.Cmd {
+	newValue := !m.showThoughtLine()
+	return m.writeConfigField("options.tui.thought_line", newValue, func(err error) tea.Cmd {
+		if err != nil {
+			return util.ReportError(err)
+		}
+		status := "Busy status hides the model's thinking"
+		if newValue {
+			status = "Busy status shows the model's newest thought"
+		}
+		return util.ReportInfo(status)
+	})
+}

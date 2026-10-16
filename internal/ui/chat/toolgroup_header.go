@@ -165,7 +165,7 @@ func (g *ToolGroupItem) activitySuffix(status string) string {
 	}
 	if status != "" {
 		// Working: say what's happening now, not the whole command.
-		return g.sty.Tool.ParamKey.Render(" | ") + g.anim.Render()
+		return g.sty.Tool.ParamKey.Render(" | ") + g.anim.Render() + renderThoughtLine(g.sty, g.thoughtLine(status))
 	}
 	return ""
 }
@@ -291,4 +291,16 @@ func editedFile(t ToolMessageItem) string {
 		return ""
 	}
 	return p.FilePath
+}
+
+// thoughtLine is the newest line of the live step's thinking while the
+// group is thinking, or "".
+func (g *ToolGroupItem) thoughtLine(status string) string {
+	if status != "Thinking" || len(g.children) == 0 {
+		return ""
+	}
+	if last, ok := g.children[len(g.children)-1].(*AssistantMessageItem); ok {
+		return thoughtLine(last.message)
+	}
+	return ""
 }

@@ -218,6 +218,11 @@ func (a *AssistantMessageItem) RawRender(width int) string {
 	var spinner string
 	if a.isSpinning() {
 		spinner = a.renderSpinning()
+		if a.activity.key == "Thinking" {
+			if line := renderThoughtLine(a.sty, thoughtLine(a.message)); line != "" {
+				spinner = ansi.Truncate(spinner+line, cappedWidth, "…")
+			}
+		}
 	}
 
 	if a.message.IsCompacting || a.message.IsSummaryMessage {

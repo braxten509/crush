@@ -63,6 +63,7 @@ type (
 	}
 	ActionToggleTransparentBackground struct{}
 	ActionToggleComposerFocusOnly     struct{}
+	ActionToggleThoughtLine           struct{}
 	ActionCustomizeComposer           struct{}
 	ActionCheckCLIUpdates             struct{}
 	ActionSelfUpdate                  struct{}

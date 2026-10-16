@@ -24,7 +24,7 @@ func TestCommentaryKeepsAnimationClockAlive(t *testing.T) {
 
 	u.Update(neutralMsg{})
 	require.True(t, u.chat.animRunning, "text after a finished tool group must keep status alive")
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Working")
+	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 	before := item.Version()
 	for range 40 {
 		u.Update(animTickMsg{gen: u.chat.animGen})
@@ -37,5 +37,5 @@ func TestCommentaryKeepsAnimationClockAlive(t *testing.T) {
 	u.chat.SetAgentBusy(false)
 	u.Update(animTickMsg{gen: u.chat.animGen})
 	require.False(t, u.chat.animRunning)
-	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "Working")
+	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 }

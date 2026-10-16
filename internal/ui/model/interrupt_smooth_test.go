@@ -61,7 +61,7 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 	for i := 0; i < 8; i++ {
 		u.chat.Tick(animTickMsg{gen: u.chat.animGen})
 		frame := u.chat.list.Render()
-		require.Contains(t, ansi.Strip(frame), "Working")
+		require.Contains(t, ansi.Strip(frame), "Waiting for the model")
 		require.Equal(t, renderedRow(before, "first followup"), renderedRow(frame, "first followup"))
 		require.Equal(t, renderedRow(before, "second followup"), renderedRow(frame, "second followup"))
 		require.Equal(t, settled, u.layout.editor)
@@ -93,7 +93,7 @@ func TestCtrlEnterAcknowledgesImmediatelyWithoutMovingThePendingBatch(t *testing
 	u.appendSessionMessage(message.Message{ID: "batch-response", SessionID: "s1", Role: message.Assistant})
 	require.Nil(t, u.chat.waitingItem)
 	require.Same(t, waiting, u.chat.MessageItem("batch-response"), "the response adopts the existing Working animation")
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Working")
+	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 	require.Nil(t, u.handleKeyPressMsg(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl}), "repeat presses cannot interrupt the next batch")
 	require.IsType(t, agentInterruptedMsg{}, cmd())
 	require.Equal(t, 1, ws.interruptCalls)

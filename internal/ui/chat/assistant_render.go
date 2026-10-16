@@ -189,7 +189,7 @@ func (a *AssistantMessageItem) activityStatus(now time.Time) string {
 	if a.message.Activity == "responding" && now.Sub(time.Unix(a.message.ActivityAt, 0)) < 5*time.Second {
 		return "Responding"
 	}
-	return "Working"
+	return "Waiting for the model"
 }
 
 func (a *AssistantMessageItem) syncActivity(now time.Time) string {

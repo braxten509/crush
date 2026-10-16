@@ -185,6 +185,9 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 		// Echoes each user message as the model takes it in, which is how
 		// steered messages are confirmed.
 		"--replay-user-messages",
+		// Newer models omit thinking text unless asked for summaries,
+		// which the busy status shows a line of. The chat still hides it.
+		"--thinking-display", "summarized",
 		"--model", m.ID,
 	}
 	if key.effort != "" {

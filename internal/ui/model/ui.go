@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/attachments"
+	"github.com/charmbracelet/crush/internal/ui/chat"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
@@ -537,6 +538,8 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	ui.isTransparent = opts.TUI.IsTransparent()
 	// enable mouse support (default on)
 	ui.mouseEnabled = opts.TUI.Mouse == nil || *opts.TUI.Mouse
+	// busy lines follow the thought line setting as it changes
+	chat.SetThoughtLineSetting(ui.showThoughtLine)
 
 	return ui
 }

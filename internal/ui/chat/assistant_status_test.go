@@ -23,7 +23,7 @@ func TestAssistantStatusSurvivesCommentary(t *testing.T) {
 	require.True(t, item.Spinning(), "commentary does not finish a turn")
 	rendered := ansi.Strip(item.Render(80))
 	require.Contains(t, rendered, "I'm checking fresh and resumed chats.")
-	require.Contains(t, rendered, "Working")
+	require.Contains(t, rendered, "Waiting for the model")
 
 	before := item.Version()
 	require.True(t, item.Advance())
@@ -50,7 +50,7 @@ func TestAssistantStatusStopsOnTerminalResult(t *testing.T) {
 			item.SetMessage(msg)
 			require.False(t, item.Spinning())
 			require.True(t, item.Finished())
-			require.NotContains(t, ansi.Strip(item.Render(80)), "Working")
+			require.NotContains(t, ansi.Strip(item.Render(80)), "Waiting for the model")
 		})
 	}
 }

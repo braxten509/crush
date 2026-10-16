@@ -651,6 +651,12 @@ func (c *Commands) preferenceCommands(cfg *config.Config) []*CommandItem {
 		focusLabel = "Let Tab Move Focus"
 	}
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_composer_focus", focusLabel, "", ActionToggleComposerFocusOnly{}).WithAliases("tab", "focus"))
+	// Add the thought line toggle.
+	thoughtLabel := "Hide Thought Line"
+	if cfg != nil && cfg.Options != nil && !cfg.Options.TUI.ShowsThoughtLine() {
+		thoughtLabel = "Show Thought Line"
+	}
+	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_thought_line", thoughtLabel, "", ActionToggleThoughtLine{}).WithAliases("thinking", "thoughts", "status", "working"))
 	commands = append(commands, NewCommandItem(c.com.Styles, "customize_composer", "Customize Composer", "", ActionCustomizeComposer{}).WithAliases("footer", "stats", "status"))
 	commands = append(commands, NewCommandItem(c.com.Styles, SubAgentInstructionsID, "Sub-agent Instructions", "", ActionOpenDialog{SubAgentInstructionsID}).WithAliases("subagents", "sub-agents", "spawn", "agents"))
 	commands = append(commands, NewCommandItem(c.com.Styles, MemoryLimitID, "Memory Limit", "", ActionOpenDialog{MemoryLimitID}).WithAliases("ram", "memory", "swap"))

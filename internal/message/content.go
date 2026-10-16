@@ -192,6 +192,9 @@ type Message struct {
 	// ActivityAt records the last live provider event, not a timer tick.
 	ActivityAt int64
 	Activity   string
+	// ActivityDetail is the newest line of thinking a CLI holds back
+	// until the thought ends, so it isn't on screen yet.
+	ActivityDetail string
 	// PrismModelID and PrismModelName identify the model that actually
 	// served the turn, as reported by the Hyper Prism model router
 	// headers. Empty when the turn was not routed through Prism.

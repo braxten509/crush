@@ -21,15 +21,15 @@ func TestSubmittedMessageShowsWorkingBeforeDispatchAndHandsOff(t *testing.T) {
 	u.sendMessage("instant")
 	require.Empty(t, ws.submissions)
 	require.Len(t, u.chat.flat, 1, "Working is display-only")
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Working")
+	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 	require.NotNil(t, u.chat.EnsureAnimating())
 	confirmed := u.queue.pending[0].Clone()
 	confirmed.ID = "saved"
 	u.appendSessionMessage(confirmed)
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Working")
+	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 	u.appendSessionMessage(message.Message{ID: "assistant", SessionID: "s1", Role: message.Assistant})
 	require.Nil(t, u.chat.waitingItem, "the real assistant replaces the temporary status")
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Working")
+	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 	u.chat.SetAgentBusy(false)
 }
 
@@ -100,7 +100,7 @@ func TestCanceledPendingMessageDropsWorkingRow(t *testing.T) {
 	require.NotNil(t, u.chat.waitingItem)
 	u.interruptAgent()
 	require.Nil(t, u.chat.waitingItem)
-	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "Working")
+	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 }
 
 func TestSlowDispatchDoesNotLoseWorkingToAnIdleProbe(t *testing.T) {
@@ -110,7 +110,7 @@ func TestSlowDispatchDoesNotLoseWorkingToAnIdleProbe(t *testing.T) {
 	u.applyBusyState(busyStateMsg{gen: u.busyFetchGen, ready: true, agentBusy: false})
 	require.Empty(t, ws.submissions)
 	require.True(t, u.isAgentBusy())
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Working")
+	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 }
 
 func TestCancelBeforeDispatchPreventsThePromptBeingSent(t *testing.T) {

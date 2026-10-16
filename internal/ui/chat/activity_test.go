@@ -81,7 +81,7 @@ func TestAssistantDistinguishesThinkingAndWaiting(t *testing.T) {
 	sty := styles.CharmtonePantera()
 	msg := &message.Message{ID: "active", Role: message.Assistant}
 	item := NewAssistantMessageItem(&sty, msg).(*AssistantMessageItem)
-	require.Contains(t, ansi.Strip(item.renderSpinning()), "Working")
+	require.Contains(t, ansi.Strip(item.renderSpinning()), "Waiting for the model")
 	msg.AppendContent("I will check.")
 	msg.Activity, msg.ActivityAt = "thinking", time.Now().Unix()
 	require.Contains(t, ansi.Strip(item.renderSpinning()), "Thinking")

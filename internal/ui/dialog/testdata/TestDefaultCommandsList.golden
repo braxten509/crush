@@ -19,6 +19,7 @@ skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install s
 kept_skills | Toggle skills |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Toggle skills keep skills on remind skills every message bring skills back after compression
 toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
 toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
+toggle_thought_line | Hide Thought Line |  | dialog.ActionToggleThoughtLine{} | Hide Thought Line thinking thoughts status working
 customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
 subagent_instructions | Sub-agent Instructions |  | dialog.ActionOpenDialog{DialogID:subagent_instructions} | Sub-agent Instructions subagents sub-agents spawn agents
 memory_limit | Memory Limit |  | dialog.ActionOpenDialog{DialogID:memory_limit} | Memory Limit ram memory swap
@@ -59,6 +60,7 @@ skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install s
 kept_skills | Toggle skills |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Toggle skills keep skills on remind skills every message bring skills back after compression
 toggle_transparent | Use Crush Background |  | dialog.ActionToggleTransparentBackground{} | Use Crush Background background color transparent theme
 toggle_composer_focus | Let Tab Move Focus |  | dialog.ActionToggleComposerFocusOnly{} | Let Tab Move Focus tab focus
+toggle_thought_line | Hide Thought Line |  | dialog.ActionToggleThoughtLine{} | Hide Thought Line thinking thoughts status working
 customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
 subagent_instructions | Sub-agent Instructions |  | dialog.ActionOpenDialog{DialogID:subagent_instructions} | Sub-agent Instructions subagents sub-agents spawn agents
 memory_limit | Memory Limit |  | dialog.ActionOpenDialog{DialogID:memory_limit} | Memory Limit ram memory swap
@@ -98,6 +100,7 @@ skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install s
 kept_skills | Toggle skills |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Toggle skills keep skills on remind skills every message bring skills back after compression
 toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
 toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
+toggle_thought_line | Hide Thought Line |  | dialog.ActionToggleThoughtLine{} | Hide Thought Line thinking thoughts status working
 customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
 subagent_instructions | Sub-agent Instructions |  | dialog.ActionOpenDialog{DialogID:subagent_instructions} | Sub-agent Instructions subagents sub-agents spawn agents
 memory_limit | Memory Limit |  | dialog.ActionOpenDialog{DialogID:memory_limit} | Memory Limit ram memory swap
@@ -127,6 +130,7 @@ skills | Skills |  | dialog.ActionOpenDialog{DialogID:skills} | Skills install s
 kept_skills | Toggle skills |  | dialog.ActionOpenDialog{DialogID:kept_skills} | Toggle skills keep skills on remind skills every message bring skills back after compression
 toggle_transparent | Use Terminal Background |  | dialog.ActionToggleTransparentBackground{} | Use Terminal Background background color transparent theme
 toggle_composer_focus | Keep Focus on Composer |  | dialog.ActionToggleComposerFocusOnly{} | Keep Focus on Composer tab focus
+toggle_thought_line | Hide Thought Line |  | dialog.ActionToggleThoughtLine{} | Hide Thought Line thinking thoughts status working
 customize_composer | Customize Composer |  | dialog.ActionCustomizeComposer{} | Customize Composer footer stats status
 subagent_instructions | Sub-agent Instructions |  | dialog.ActionOpenDialog{DialogID:subagent_instructions} | Sub-agent Instructions subagents sub-agents spawn agents
 memory_limit | Memory Limit |  | dialog.ActionOpenDialog{DialogID:memory_limit} | Memory Limit ram memory swap

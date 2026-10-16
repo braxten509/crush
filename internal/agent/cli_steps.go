@@ -34,7 +34,7 @@ type cliSteps struct {
 	a            *sessionAgent
 	sessionID    string
 	onCompacting func(bool) error
-	onActivity   func(activity string) error
+	onActivity   func(activity, detail string) error
 	compacting   bool
 	// File content before each pending edit, by tool call ID.
 	edits map[string][2]string
@@ -300,7 +300,7 @@ func (s *cliSteps) handle(e cliagent.Event) error {
 	switch e.Type {
 	case cliagent.EventActivity:
 		if s.onActivity != nil {
-			return s.onActivity(e.Activity)
+			return s.onActivity(e.Activity, e.Text)
 		}
 		return nil
 	case cliagent.EventCompacting:

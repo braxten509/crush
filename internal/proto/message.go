@@ -24,6 +24,7 @@ type CreateMessageParams struct {
 type Message struct {
 	ActivityAt              int64         `json:"activity_at,omitempty"`
 	Activity                string        `json:"activity,omitempty"`
+	ActivityDetail          string        `json:"activity_detail,omitempty"`
 	ID                      string        `json:"id"`
 	Role                    MessageRole   `json:"role"`
 	SessionID               string        `json:"session_id"`

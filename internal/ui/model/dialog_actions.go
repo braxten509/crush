@@ -456,6 +456,8 @@ func (m *UI) handlePaletteToggle(action dialog.Action) (cmd tea.Cmd, ok bool) {
 		toggle = m.toggleAgentCPUs
 	case dialog.ActionToggleComposerFocusOnly:
 		toggle = m.toggleComposerFocusOnly
+	case dialog.ActionToggleThoughtLine:
+		toggle = m.toggleThoughtLine
 	default:
 		return nil, false
 	}

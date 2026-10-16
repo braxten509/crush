@@ -137,9 +137,18 @@ func (r *claudeRun) handleStreamEvent(line claudeLine) error {
 	if err := r.recordUsage(line); err != nil {
 		return err
 	}
+	if ev := line.Event; ev != nil && ev.Type == "content_block_start" && (ev.ContentBlock.Type == "thinking" || ev.ContentBlock.Type == "redacted_thinking") {
+		return r.t.Emit(Event{Type: EventActivity, Activity: ActivityThinking})
+	}
 	if ev := line.Event; ev != nil && ev.Type == "content_block_delta" && ev.Delta.Type == "thinking_delta" {
 		r.thinking.WriteString(ev.Delta.Thinking)
-		return nil
+		// The held thinking isn't on screen until it ends, so pass its
+		// newest line along. Summaries come in bursts with long pauses
+		// between, so each delta is passed on, as text deltas are.
+		if ev.Delta.Thinking == "" {
+			return nil
+		}
+		return r.t.Emit(Event{Type: EventActivity, Activity: ActivityThinking, Text: lastLine(r.thinking.String())})
 	}
 	return claudeStreamEvent(line.Event, r.t.Emit)
 }
@@ -245,4 +254,13 @@ func (r *claudeRun) handleResult(line claudeLine) (done bool, err error) {
 	}
 	r.finished = true
 	return true, nil
+}
+
+// lastLine is the last non-blank line of text, trimmed.
+func lastLine(text string) string {
+	text = strings.TrimRight(text, " \t\r\n")
+	if i := strings.LastIndexByte(text, '\n'); i >= 0 {
+		text = text[i+1:]
+	}
+	return strings.TrimSpace(text)
 }

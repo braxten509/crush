@@ -401,3 +401,41 @@ func notifyUnprompted(sessionID string) {
 		}
 	}
 }
+
+// helpersRunning holds the handlers [OnHelpersRunning] registered, one per
+// coordinator.
+var helpersRunning struct {
+	sync.Mutex
+	handlers []*func(sessionID string) (release func(), ok bool)
+}
+
+// OnHelpersRunning registers a handler for a Crush session whose CLI ended
+// its turn with helpers (sub-agents the CLI started itself) still working.
+// The handler that owns the session returns ok and a release func: until
+// it is called, a headless run on the session waits, so the helpers'
+// results are not lost. The returned func unregisters it.
+func OnHelpersRunning(handler func(sessionID string) (release func(), ok bool)) (remove func()) {
+	h := &handler
+	helpersRunning.Lock()
+	helpersRunning.handlers = append(helpersRunning.handlers, h)
+	helpersRunning.Unlock()
+	return func() {
+		helpersRunning.Lock()
+		defer helpersRunning.Unlock()
+		helpersRunning.handlers = slices.DeleteFunc(helpersRunning.handlers, func(x *func(string) (func(), bool)) bool { return x == h })
+	}
+}
+
+// holdForHelpers asks the handler that owns sessionID to keep its headless
+// run open, and returns the func that lets it go.
+func holdForHelpers(sessionID string) func() {
+	helpersRunning.Lock()
+	handlers := slices.Clone(helpersRunning.handlers)
+	helpersRunning.Unlock()
+	for _, h := range handlers {
+		if release, ok := (*h)(sessionID); ok {
+			return release
+		}
+	}
+	return func() {}
+}

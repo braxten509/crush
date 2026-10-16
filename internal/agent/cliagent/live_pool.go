@@ -19,8 +19,10 @@ type liveProc[K comparable] struct {
 	// once it stopped reading lines.
 	idle    chan struct{}
 	drained chan struct{}
-	dead    atomic.Bool
-	timer   *time.Timer
+	// ended is closed when the process's output ends while it is parked.
+	ended chan struct{}
+	dead  atomic.Bool
+	timer *time.Timer
 }
 
 func (l *liveProc[K]) live() *liveProc[K] { return l }
@@ -83,7 +85,7 @@ func (pool *livePool[K, L]) take(sessionID string, key K, resume string) L {
 // the process open past the idle timeout while it reports work running.
 func (pool *livePool[K, L]) keep(sessionID string, l L, onLine func([]byte) bool, busy func() bool) {
 	base := l.live()
-	base.idle, base.drained = make(chan struct{}), make(chan struct{})
+	base.idle, base.drained, base.ended = make(chan struct{}), make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(base.drained)
 		for {
@@ -93,6 +95,7 @@ func (pool *livePool[K, L]) keep(sessionID string, l L, onLine func([]byte) bool
 			case raw, ok := <-base.lines:
 				if !ok {
 					base.dead.Store(true)
+					close(base.ended)
 					<-base.idle
 					return
 				}

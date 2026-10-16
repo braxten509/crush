@@ -41,6 +41,8 @@ type claudeLine struct {
 	// task_started and task_notification (the task ended): which task.
 	TaskID         string `json:"task_id"`
 	IsBackgrounded bool   `json:"is_backgrounded"`
+	// task_started: what kind of task, such as local_agent or local_bash.
+	TaskType string `json:"task_type"`
 	// On a tool result: set when the command went on in the background.
 	ToolUseResult json.RawMessage `json:"tool_use_result"`
 }
@@ -111,10 +113,37 @@ type claudeLive struct {
 	liveProc[claudeKey]
 	native  string
 	pending [][]byte // a reply Claude started between turns, unread
-	// Tasks Claude has started and not reported ended, by task ID. Exiting
-	// would stop the background ones and lose their results.
+	// Tasks Claude has started and not reported ended, by task ID, true
+	// for helpers (sub-agents). Exiting would stop the background ones and
+	// lose their results.
 	tasksMu sync.Mutex
 	tasks   map[string]bool
+	// hold keeps a headless run open while helpers work; nil without one.
+	hold *helperHold
+}
+
+// helperHold is a headless run kept open for a session's helpers.
+type helperHold struct {
+	once    sync.Once
+	release func()
+	done    chan struct{}
+}
+
+func (h *helperHold) end() {
+	h.once.Do(func() {
+		close(h.done)
+		h.release()
+	})
+}
+
+// helperReplyGrace is how long a hold outlasts the last helper when Claude
+// does not start a reply to its results.
+var helperReplyGrace = 30 * time.Second
+
+// isHelperTask reports whether a task_type is one of Claude's own helpers
+// (local_agent, remote_agent), not a command it moved to the background.
+func isHelperTask(taskType string) bool {
+	return strings.HasSuffix(taskType, "_agent")
 }
 
 // track notes the tasks a line starts or ends.
@@ -129,9 +158,14 @@ func (l *claudeLive) track(line claudeLine) {
 		if l.tasks == nil {
 			l.tasks = map[string]bool{}
 		}
-		l.tasks[line.TaskID] = true
+		l.tasks[line.TaskID] = isHelperTask(line.TaskType)
 	case "task_notification":
 		delete(l.tasks, line.TaskID)
+		if h := l.hold; h != nil && !l.helpersBusyLocked() {
+			// Claude normally replies to the results at once, which hands
+			// the hold to that reply's turn; this lets go if it does not.
+			time.AfterFunc(helperReplyGrace, func() { l.letGo(h) })
+		}
 	}
 }
 
@@ -140,6 +174,57 @@ func (l *claudeLive) busy() bool {
 	l.tasksMu.Lock()
 	defer l.tasksMu.Unlock()
 	return len(l.tasks) > 0
+}
+
+// helpersBusyLocked reports whether a helper is still working; l.tasksMu
+// must be held.
+func (l *claudeLive) helpersBusyLocked() bool {
+	for _, helper := range l.tasks {
+		if helper {
+			return true
+		}
+	}
+	return false
+}
+
+// holdRun keeps a headless run on sessionID open while helpers Claude
+// started are working (see [OnHelpersRunning]). The hold ends when the next
+// turn takes the process, when the process ends, or a while after the last
+// helper with no reply.
+func (l *claudeLive) holdRun(sessionID string) {
+	l.tasksMu.Lock()
+	if l.hold != nil || !l.helpersBusyLocked() {
+		l.tasksMu.Unlock()
+		return
+	}
+	h := &helperHold{release: holdForHelpers(sessionID), done: make(chan struct{})}
+	l.hold = h
+	l.tasksMu.Unlock()
+	quit, ended := l.p.quit, l.ended
+	go func() {
+		select {
+		case <-quit:
+		case <-ended:
+		case <-h.done:
+			return
+		}
+		l.letGo(h)
+	}()
+}
+
+// letGo ends hold h, or the current hold when h is nil.
+func (l *claudeLive) letGo(h *helperHold) {
+	l.tasksMu.Lock()
+	if h == nil {
+		h = l.hold
+	}
+	if h != nil && l.hold == h {
+		l.hold = nil
+	}
+	l.tasksMu.Unlock()
+	if h != nil {
+		h.end()
+	}
 }
 
 type claudeTurn struct {
@@ -173,6 +258,7 @@ func keepClaude(sessionID string, l *claudeLive) {
 		}
 		return false
 	}, l.busy)
+	l.holdRun(sessionID)
 }
 
 func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
@@ -307,6 +393,10 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	var live *claudeLive
 	if keep {
 		live = claudeSessions.take(t.SessionID, key, t.Resume)
+		if live != nil {
+			// This turn now holds the session's run.
+			live.letGo(nil)
+		}
 	}
 	fresh := live == nil
 	if fresh && t.Continue {

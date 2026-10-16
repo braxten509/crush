@@ -183,12 +183,24 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 
 	c.mainAgent = agent
 	c.mainAgentName = config.AgentCoder
-	cliagent.OnUnprompted(func(sessionID string) bool {
+	c.watchCLIReplies()
+	return c, nil
+}
+
+// watchCLIReplies handles what a kept agent CLI does between turns: a reply
+// it starts on its own is shown in a turn, and the helpers it left running
+// keep a headless run open. The returned func stops it.
+func (c *coordinator) watchCLIReplies() (stop func()) {
+	owns := func(sessionID string) bool {
 		if c.sessions == nil {
 			return false
 		}
-		if _, err := c.sessions.Get(context.Background(), sessionID); err != nil {
-			return false // another workspace's session
+		_, err := c.sessions.Get(context.Background(), sessionID)
+		return err == nil // otherwise another workspace's session
+	}
+	removeUnprompted := cliagent.OnUnprompted(func(sessionID string) bool {
+		if !owns(sessionID) {
+			return false
 		}
 		ctx := message.WithHiddenUserMessage(withCLIContinue(context.Background()))
 		if _, err := c.Run(ctx, sessionID, "A background task finished."); err != nil && !errors.Is(err, context.Canceled) {
@@ -196,7 +208,17 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		}
 		return true
 	})
-	return c, nil
+	removeHelpers := cliagent.OnHelpersRunning(func(sessionID string) (func(), bool) {
+		if !owns(sessionID) || c.tasks == nil {
+			return nil, false
+		}
+		_, release := c.tasks.reserveFollowUp(sessionID)
+		return release, true
+	})
+	return func() {
+		removeUnprompted()
+		removeHelpers()
+	}
 }
 
 // activeAgent returns the coordinator's current main agent and its config

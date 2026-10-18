@@ -390,6 +390,9 @@ Kept current during the build. Percent = share of the phase table in section 4.
   - Item 7: the number texts share the terminal's `ValidateMemoryLimitGB`; the "abc" text and three notices stay copied (the terminal makes them in unexported code).
   - Recheck round 2 (t37, read-only) covers items 2-8 now; item 1 follows in round 3.
 
+- Phases 3-4 design fix round 2 committed (`26509d06`, 2,247 lines): Stop shows no notice (Esc posts `interrupt`), a permission notification with neither answer never closes the ask, and the small fixes. The designer also found that a `!` command, a summary and a branch move with a summary each run inside their own request, so nothing stopped them; the design adds `api_abort(callId)` and an `aborted` error (D40). S3 is being built from the earlier text and gets `api_abort` after its first pass. Recheck round 3 of 3 (t35) running.
+- Piece B recheck round 2 (t37): "ready to merge" for items 2-8, nothing blocking. Optional follow-up noted, not done: also forget ended helper records when helpers are listed, as jobs are.
+
 ### Owner decisions for the overnight run (2026-10-18, before bed)
 - Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
 - The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).

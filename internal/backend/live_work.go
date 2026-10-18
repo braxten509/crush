@@ -44,17 +44,24 @@ func (b *Backend) StopHelper(workspaceID, sessionID, helperID string) error {
 	return nil
 }
 
-// ListJobs lists the commands running in the background for the chat.
+// ListJobs lists the commands running in the background for the chat. It
+// reads every chat's jobs, as SessionBackgroundProcesses does, and forgets
+// the workspace's jobs that are gone from that list.
 func (b *Backend) ListJobs(workspaceID, sessionID string) ([]proto.Job, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	procs := agent.SessionBackgroundProcesses(sessionID)
-	out := make([]proto.Job, 0, len(procs))
+	gens := ws.live.jobGens()
+	all := agent.BackgroundProcesses()
+	ws.live.forgetEndedJobs(gens, all)
+	out := make([]proto.Job, 0)
 	ws.live.mu.Lock()
 	defer ws.live.mu.Unlock()
-	for _, p := range procs {
+	for _, p := range all {
+		if p.Session != sessionID {
+			continue
+		}
 		out = append(out, proto.Job{
 			PID:       p.PID,
 			JobID:     p.JobID,

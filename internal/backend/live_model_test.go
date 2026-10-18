@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -30,10 +31,13 @@ import (
 //     asks the hub for a helper whose prompt is live:hold:NAME-helper. The
 //     call after their results is held as NAME.
 //   - live:helper:NAME is live:spawn:NAME without the job.
+//   - live:start:NAME is live:helper:NAME, except that the helper request
+//     waits for the hub's answer, as `crush spawn` does, and the call after
+//     it ends the turn, so the helper outlives the turn.
 //   - A resumed helper's prompt continues its first one.
 //   - Any other prompt (a helper's result, a job notice) and every call
 //     without tools (a title) get a short answer, so that turn ends.
-var modelMarker = regexp.MustCompile(`live:(hold|spawn|helper):([a-z0-9-]+)`)
+var modelMarker = regexp.MustCompile(`live:(hold|spawn|helper|start):([a-z0-9-]+)`)
 
 // modelResumed starts the prompt a resumed helper gets (agent's
 // resumePrompt).
@@ -46,9 +50,11 @@ type fakeModel struct {
 
 	mu sync.Mutex
 	// held counts the calls of each NAME held open now; calls counts every
-	// call of each NAME so far.
+	// call of each NAME so far; tools names the tools the latest call of
+	// each NAME offered.
 	held  map[string]int
 	calls map[string]int
+	tools map[string][]string
 	// notices counts the turns no marker started: helper results and job
 	// notices.
 	notices int
@@ -58,7 +64,7 @@ type fakeModel struct {
 // it, so its cleanup runs last.
 func startFakeModel(t *testing.T) *fakeModel {
 	t.Helper()
-	f := &fakeModel{done: make(chan struct{}), held: map[string]int{}, calls: map[string]int{}}
+	f := &fakeModel{done: make(chan struct{}), held: map[string]int{}, calls: map[string]int{}, tools: map[string][]string{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(func() {
 		close(f.done)
@@ -109,7 +115,11 @@ func (f *fakeModel) serve(w http.ResponseWriter, r *http.Request) {
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
 		} `json:"messages"`
-		Tools []json.RawMessage `json:"tools"`
+		Tools []struct {
+			Function struct {
+				Name string `json:"name"`
+			} `json:"function"`
+		} `json:"tools"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -138,6 +148,15 @@ func (f *fakeModel) serve(w http.ResponseWriter, r *http.Request) {
 			afterTools = afterTools || m.Role == "tool"
 		}
 	}
+	if name != "" && len(req.Tools) > 0 {
+		names := make([]string, 0, len(req.Tools))
+		for _, tool := range req.Tools {
+			names = append(names, tool.Function.Name)
+		}
+		f.mu.Lock()
+		f.tools[name] = names
+		f.mu.Unlock()
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	switch {
 	case len(req.Tools) == 0:
@@ -151,7 +170,9 @@ func (f *fakeModel) serve(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.calls[name]++
 		f.mu.Unlock()
-		writeModelToolCalls(w, name, verb == "spawn")
+		writeModelToolCalls(w, name, verb)
+	case verb == "start":
+		writeModelText(w, "Started.")
 	default:
 		f.hold(w, r, name)
 	}
@@ -191,6 +212,13 @@ func (f *fakeModel) callsOf(name string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calls[name]
+}
+
+// toolsOf names the tools the latest call of name offered.
+func (f *fakeModel) toolsOf(name string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.tools[name])
 }
 
 // noticeCount is how many turns no marker started came so far.
@@ -247,15 +275,16 @@ func writeModelText(w http.ResponseWriter, text string) {
 	writeModelEnd(w, "stop")
 }
 
-// writeModelToolCalls answers live:spawn:NAME and live:helper:NAME: a
-// helper request and, with job, a background job, all through bash.
-func writeModelToolCalls(w http.ResponseWriter, name string, job bool) {
+// writeModelToolCalls answers live:spawn:NAME, live:helper:NAME and
+// live:start:NAME: a helper request and, for spawn, a background job, all
+// through bash.
+func writeModelToolCalls(w http.ResponseWriter, name, verb string) {
 	type toolCall struct {
 		id   string
 		args []byte
 	}
 	var calls []toolCall
-	if job {
+	if verb == "spawn" {
 		args, _ := json.Marshal(map[string]any{
 			"description":       "Start the " + name + " job",
 			"command":           "sleep 120",
@@ -264,10 +293,14 @@ func writeModelToolCalls(w http.ResponseWriter, name string, job bool) {
 		calls = append(calls, toolCall{"call_job_" + name, args})
 	}
 	request := fmt.Sprintf(`{"session":"%%s","cli":"fake","prompt":"live:hold:%s-helper","name":"%s-helper"}`, name, name)
+	command := fmt.Sprintf(`printf '%s' "$CRUSH_SESSION_ID" > "$CRUSH_TASKS_DIR/%s.tmp" && mv "$CRUSH_TASKS_DIR/%s.tmp" "$CRUSH_TASKS_DIR/%s.req"`,
+		request, name, name, name)
+	if verb == "start" {
+		command += fmt.Sprintf(` && until [ -e "$CRUSH_TASKS_DIR/%s.ack" ]; do sleep 0.1; done`, name)
+	}
 	helper, _ := json.Marshal(map[string]any{
 		"description": "Ask for the " + name + " helper",
-		"command": fmt.Sprintf(`printf '%s' "$CRUSH_SESSION_ID" > "$CRUSH_TASKS_DIR/%s.tmp" && mv "$CRUSH_TASKS_DIR/%s.tmp" "$CRUSH_TASKS_DIR/%s.req"`,
-			request, name, name, name),
+		"command":     command,
 	})
 	calls = append(calls, toolCall{"call_helper_" + name, helper})
 	for i, call := range calls {

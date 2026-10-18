@@ -18,7 +18,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/serverctl"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -26,17 +28,24 @@ import (
 )
 
 // connectionWatcher is the model of a headless program: it passes the
-// workspace's connection events on.
+// workspace's connection events and helper (task) events on.
 type connectionWatcher struct {
 	events chan<- workspace.ConnectionEvent
+	tasks  chan<- agent.Task
 }
 
 func (m connectionWatcher) Init() tea.Cmd { return nil }
 
 func (m connectionWatcher) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if ev, ok := msg.(workspace.ConnectionEvent); ok {
+	switch ev := msg.(type) {
+	case workspace.ConnectionEvent:
 		select {
 		case m.events <- ev:
+		default:
+		}
+	case pubsub.Event[agent.Task]:
+		select {
+		case m.tasks <- ev.Payload:
 		default:
 		}
 	}
@@ -47,12 +56,14 @@ func (m connectionWatcher) View() tea.View { return tea.NewView("") }
 
 // subscribeHeadless runs w's event subscription, as the terminal does,
 // with a program that has no input, output, renderer or signal handling,
-// and returns the connection events it gets. Cleanup shuts w down.
-func subscribeHeadless(t *testing.T, w *workspace.ClientWorkspace) <-chan workspace.ConnectionEvent {
+// and returns the connection and helper events it gets. Cleanup shuts w
+// down.
+func subscribeHeadless(t *testing.T, w *workspace.ClientWorkspace) (<-chan workspace.ConnectionEvent, <-chan agent.Task) {
 	t.Helper()
 	events := make(chan workspace.ConnectionEvent, 64)
+	tasks := make(chan agent.Task, 64)
 	ctx, cancel := context.WithCancel(context.Background())
-	prog := tea.NewProgram(connectionWatcher{events: events},
+	prog := tea.NewProgram(connectionWatcher{events: events, tasks: tasks},
 		tea.WithContext(ctx), tea.WithInput(nil), tea.WithOutput(io.Discard),
 		tea.WithoutRenderer(), tea.WithoutSignalHandler(), tea.WithoutSignals())
 	runDone := make(chan struct{})
@@ -75,7 +86,7 @@ func subscribeHeadless(t *testing.T, w *workspace.ClientWorkspace) <-chan worksp
 		cancel()
 		<-runDone
 	})
-	return events
+	return events, tasks
 }
 
 // waitForConnection waits for a connection event in state.
@@ -100,6 +111,7 @@ type app struct {
 	cw     *workspace.ClientWorkspace
 	ws     *proto.Workspace
 	events <-chan workspace.ConnectionEvent
+	tasks  <-chan agent.Task
 
 	ensures atomic.Int32
 	mu      sync.Mutex
@@ -121,7 +133,7 @@ func (p *engineProject) startApp(t *testing.T, h serverctl.EngineHandle) *app {
 		}
 		return err
 	})
-	a.events = subscribeHeadless(t, a.cw)
+	a.events, a.tasks = subscribeHeadless(t, a.cw)
 	return a
 }
 
@@ -159,12 +171,13 @@ func TestClientRecoversWhenEngineKilled(t *testing.T) {
 }
 
 // fakeModel is an OpenAI-compatible chat server for the provider "fake".
-// A helper's turn blocks until the test ends, so the helper keeps running;
-// any other turn answers at once.
+// A helper's turn blocks until finishHelpers or the test's end, so the
+// helper keeps running; any other turn answers at once.
 type fakeModel struct {
 	srv        *httptest.Server
 	parentHash atomic.Value // string: session.HashID of the parent chat
 	release    chan struct{}
+	releaseNow sync.Once
 	// helperCalls gets the x-session-id of every helper request.
 	helperCalls chan string
 }
@@ -178,10 +191,15 @@ func newFakeModel(t *testing.T) *fakeModel {
 	m.parentHash.Store("")
 	m.srv = httptest.NewServer(http.HandlerFunc(m.serve))
 	t.Cleanup(func() {
-		close(m.release)
+		m.finishHelpers()
 		m.srv.Close()
 	})
 	return m
+}
+
+// finishHelpers lets every waiting and later helper turn answer.
+func (m *fakeModel) finishHelpers() {
+	m.releaseNow.Do(func() { close(m.release) })
 }
 
 func (m *fakeModel) serve(w http.ResponseWriter, r *http.Request) {
@@ -324,9 +342,9 @@ func (p *engineProject) savedHelper(t *testing.T, childID string) (helperTask, b
 // Both apps recover on their own through one new engine, and that engine
 // runs the helper again, on its own chat and under the same task ID.
 //
-// The plan also wants both apps to get the helper's `helper` event. That
-// event is piece B's (5.3): the engine drops task events before B, so it
-// is not checked here.
+// Both apps also get the resumed helper's `helper` event (piece B, 5.3):
+// when it finishes, each app's event feed reports it done under the same
+// task ID.
 func TestTwoAppsRecoverAndHelperResumes(t *testing.T) {
 	model := newFakeModel(t)
 	p := newEngineProject(t, "")
@@ -378,4 +396,26 @@ func TestTwoAppsRecoverAndHelperResumes(t *testing.T) {
 	require.True(t, ok, "the resumed helper is saved")
 	require.Equal(t, task.ID, saved.ID, "the helper keeps its task ID")
 	require.Equal(t, info.PID, saved.Owner, "the new engine runs it")
+
+	model.finishHelpers()
+	for i, a := range apps {
+		waitForHelperDone(t, a.tasks, task.ID, 60*time.Second, i)
+	}
+}
+
+// waitForHelperDone waits for app i's helper event saying the helper with
+// id is done.
+func waitForHelperDone(t *testing.T, tasks <-chan agent.Task, id string, timeout time.Duration, i int) {
+	t.Helper()
+	deadline := time.After(timeout)
+	for {
+		select {
+		case task := <-tasks:
+			if task.ID == id && task.Status == agent.TaskDone {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("app %d got no helper event for %s ending done within %s", i, id, timeout)
+		}
+	}
 }

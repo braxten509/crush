@@ -224,6 +224,16 @@ func (h *taskHub) beginSessionRun(ctx context.Context, sessionID string) (*sessi
 	return r, true
 }
 
+// joinSessionRun joins the open run that owns sessionID, if there is one.
+func (h *taskHub) joinSessionRun(sessionID string) *sessionRun {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if r := h.sessionRuns[sessionID]; r != nil && r.reserve() {
+		return r
+	}
+	return nil
+}
+
 func (h *taskHub) endSessionRun(r *sessionRun) {
 	r.cancel()
 	r.mu.Lock()

@@ -375,10 +375,15 @@ func (h *taskHub) stopAll() {
 	}
 }
 
+// finish is finishRun for the task the hub lists as id; an unknown id does
+// nothing.
 func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	h.mu.Lock()
 	t := h.tasks[id]
 	h.mu.Unlock()
+	if t == nil {
+		return
+	}
 	h.finishRun(ctx, t, output, err)
 }
 

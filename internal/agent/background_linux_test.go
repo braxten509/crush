@@ -71,6 +71,11 @@ func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 }
 
 func TestBackgroundCountAfterCtrlB(t *testing.T) {
+	// The young-process guard reads derived start times, which a load spike
+	// while the boot time is first estimated shifts later for the whole run:
+	// the command could then look started after Ctrl+B and stay hidden.
+	// Without the guard, only the CLI's open call keeps it off the list.
+	noMinAge(t)
 	h := &taskHub{dir: t.TempDir()}
 	hubsMu.Lock()
 	hubs = append(hubs, h)
@@ -132,12 +137,12 @@ finally:
 	require.Eventually(t, func() bool {
 		procs := markedProcs(hubMarkers())
 		for _, p := range procs {
-			if isCommandRoot(p, procs) && commandText(p.args) == "sleep 30; true" {
+			if isCommandRoot(p, procs) && commandText(p.args) == "sleep 30; true" && isForegroundCommand(p, procs) {
 				return true
 			}
 		}
 		return false
-	}, 5*time.Second, 20*time.Millisecond)
+	}, 5*time.Second, 20*time.Millisecond, "the command runs as the CLI's open call")
 	require.Empty(t, BackgroundProcesses(), "the foreground command must not count as background")
 	require.True(t, cliagent.Background(t.Name()))
 	require.Eventually(t, func() bool {

@@ -3,9 +3,11 @@ package agent
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	"charm.land/fantasy"
 
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 )
 
@@ -33,6 +35,20 @@ func filterToolsForChannel(agentTools []fantasy.AgentTool, channel string, state
 		}
 	}
 	return filtered
+}
+
+// callTools is the agent's tool list for a call: scoped to its channel, and
+// without the interactive-only question tool for a non-interactive call. An
+// interactive coordinator's agents have that tool, but nothing answers a
+// [WithNonInteractive] prompt's questions.
+func (a *sessionAgent) callTools(call SessionAgentCall) []fantasy.AgentTool {
+	agentTools := filterToolsForChannel(a.tools.Copy(), call.Channel, mcp.GetStates())
+	if !call.NonInteractive {
+		return agentTools
+	}
+	return slices.DeleteFunc(agentTools, func(tool fantasy.AgentTool) bool {
+		return tool.Info().Name == tools.QuestionToolName
+	})
 }
 
 // toolMCPName looks through safety wrappers without removing them from the

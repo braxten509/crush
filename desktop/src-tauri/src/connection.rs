@@ -894,6 +894,11 @@ impl WindowConn {
             self.ring_if(due);
             let error = match self.join(&plan, attempt).await {
                 Ok(_) => return,
+                // A claim this try made is kept, not retired: the next try
+                // re-arms it under the same client id, the engine drops it after
+                // its create grace otherwise, and a retired id could never rejoin
+                // this engine (internal/backend/clients.go:70-99). The terminal
+                // too retires only when it exits (internal/workspace/client_events.go:319-324).
                 Err((e, _)) => e,
             };
             failures += 1;
@@ -1518,7 +1523,9 @@ mod tests {
 
     #[test]
     fn calls_while_reconnecting_give_engine_unavailable() {
-        let j = joined("conn-unavailable", TEST_TUNING);
+        // A 2 s first wait keeps the window reconnecting, never failed, until
+        // well after the calls below, even on a loaded machine.
+        let j = joined("conn-unavailable", Tuning { first_wait: Duration::from_secs(2), ..TEST_TUNING });
         j.conn.take();
         j.finder.fail.store(true, SeqCst);
         j.fake.end_streams();
@@ -1534,7 +1541,7 @@ mod tests {
             let e = run(j.conn.call(method, path, None, Some(json!({"prompt": "hi"})), call_id)).err().unwrap();
             assert_eq!(e.code, "engine_unavailable", "{method} {path}");
         }
-        assert!(started.elapsed() < Duration::from_millis(200), "at once");
+        assert!(started.elapsed() < Duration::from_secs(1), "at once, not after the rejoin 2 s later");
         // The shown chat is remembered for the rejoin.
         run(j.conn.set_current_session("s9")).unwrap();
         assert!(j.fake.seen().is_empty(), "nothing was sent");
@@ -1543,6 +1550,37 @@ mod tests {
         assert_eq!(states(&taken).last().unwrap().0, "connected");
         let reported: Vec<Value> = j.fake.seen().iter().filter(|s| s.path().ends_with("/current-session")).map(Seen::json).collect();
         assert_eq!(reported, [json!({"session_id": "s9"})]);
+    }
+
+    #[test]
+    fn a_failed_rejoin_keeps_its_claim_for_the_next_try() {
+        let j = joined("conn-keep-claim", TEST_TUNING);
+        j.conn.take();
+        // An engine that bars a retired client id from creating again, as the
+        // real one does, and whose first rejoin's stream fails after the create.
+        let retired = Arc::new(Mutex::new(Vec::<String>::new()));
+        let streams = Arc::new(AtomicUsize::new(0));
+        let (barred, opened) = (retired.clone(), streams.clone());
+        j.fake.set_handler(engine_with(WS, move |seen| {
+            if let Some(id) = seen.path().strip_prefix("/v1/clients/") {
+                barred.lock().unwrap().push(id.to_string());
+                return Some(Answer::Status(204));
+            }
+            let id = seen.json()["client_id"].as_str().unwrap_or_default().to_string();
+            if seen.line() == "POST /v1/workspaces" && barred.lock().unwrap().contains(&id) {
+                return Some(Answer::Json(409, json!({"message": "client retired", "code": "client_retired"})));
+            }
+            let first = seen.path().ends_with("/events") && opened.fetch_add(1, SeqCst) == 0;
+            first.then(|| Answer::Json(404, json!({"message": "workspace not found"})))
+        }));
+        j.fake.forget();
+        j.fake.end_streams();
+        let taken = take_until(&j.conn, "connected");
+        assert_eq!(states(&taken), pairs(&[("reconnecting", 1), ("reconnecting", 2), ("connected", 2)]));
+        assert!(retired.lock().unwrap().is_empty(), "no DELETE /v1/clients: the window's id must stay able to rejoin");
+        let creates: Vec<Value> =
+            j.fake.seen().iter().filter(|s| s.line() == "POST /v1/workspaces").map(|s| s.json()["client_id"].clone()).collect();
+        assert_eq!(creates, [json!(j.opened.client_id), json!(j.opened.client_id)], "both tries claim with the same id");
     }
 
     #[test]

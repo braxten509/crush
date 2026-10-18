@@ -138,6 +138,21 @@ func countStarts(t *testing.T, h *taskHub, id string) func() int {
 	return func() int { return int(n.Load()) }
 }
 
+// watchedJob starts a managed job of the chat on h, the way crush bg does,
+// without the bash tool's wait for early output.
+func watchedJob(t *testing.T, h *taskHub, sessionID, command string) *shell.BackgroundShell {
+	t.Helper()
+	jobs := shell.GetBackgroundShellManager()
+	job, err := jobs.Start(t.Context(), t.TempDir(), nil, command, "job", h.env(sessionID)...)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = jobs.Kill(job.ID)
+		_ = jobs.Remove(job.ID)
+	})
+	h.watchJob(t.Context(), func() {}, sessionID, uuid.NewString(), job, false)
+	return job
+}
+
 func replyOK(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
 	return fakeSessionReply(call, "ok"), nil
 }
@@ -351,7 +366,7 @@ func TestTeardownRacingResumeKeepsWork(t *testing.T) {
 	for round := range 200 {
 		h := resumeTestHub(t, c)
 		runningHelper(h, helperTask(parent, child))
-		job := startJob(t, h, parent.ID, "sleep 30")
+		job := watchedJob(t, h, parent.ID, "sleep 30")
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {

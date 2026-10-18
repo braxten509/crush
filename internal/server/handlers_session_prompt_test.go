@@ -46,6 +46,7 @@ func TestPromptPendingReachesEveryApp(t *testing.T) {
 	var chatHash atomic.Value
 	chatHash.Store("")
 	note := filepath.Join(project, "note.txt")
+	var writes atomic.Int32
 	m := newChatModel(t, func(r chatRequest) chatAnswer {
 		switch {
 		case r.title || r.sessionHash != chatHash.Load():
@@ -53,7 +54,9 @@ func TestPromptPendingReachesEveryApp(t *testing.T) {
 		case r.lastRole == "tool":
 			return chatAnswer{text: "done"}
 		default:
-			return chatAnswer{toolName: "write", toolArgs: fmt.Sprintf(`{"file_path":%q,"content":"hi"}`, note)}
+			// New content each time: a write that changes nothing asks
+			// for no permission.
+			return chatAnswer{toolName: "write", toolArgs: fmt.Sprintf(`{"file_path":%q,"content":"note %d"}`, note, writes.Add(1))}
 		}
 	})
 	ws, _ := newModelWorkspace(t, h, m, project)

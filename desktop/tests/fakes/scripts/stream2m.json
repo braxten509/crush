@@ -1,0 +1,265 @@
+{
+ "about": "P3.10's script. \"Stream for two minutes\" is the speed check's reply (p3_speed.py, desktop-design 2.9; p4_mid_reply.py streams it too): about 120 s at about 20 words a second, 12 tool calls, two Mermaid fences and a 30-row table; it edits only speed/session.go, a fresh copy it makes itself, so every run plays the same. The \"Seed turn ...\" turns answer at once for seed_chat.py; the four \"... from desktop\" and \"... terminal\" turns are the two-app check's (p3_two_apps.py).",
+ "turns": [
+  {
+   "when": "Stream for two minutes",
+   "title": "Session cookie review",
+   "steps": [
+    {
+     "delay_ms": 120,
+     "text": "# Reviewing the session cookie\n\nThe session package is small, which makes it a good place to see how a cookie travels from sign-in to every later request. Each request carries the cookie back, and the server reads it before any handler decides what the visitor may see. Nothing here stores state on the server, so the cookie itself is the whole session as far as the browser is concerned.\n\nThat design keeps deployments simple, because any copy of the service can answer any request without a shared store. The trade-off is that a stolen cookie works until it expires, so the lifetime and the flags matter more than usual. HttpOnly keeps scripts on the page from reading the value, which closes the most common way a token leaks.\n\nFirst, the file itself.\n\nHttpOnly keeps scripts on the page from reading the value, which closes the most common way a token leaks. Secure keeps the cookie off plain connections, so a coffee-shop network never sees it in the clear.",
+     "reasoning": "Read the file, map the uses, copy it, then change the copy.",
+     "tool_calls": [
+      {
+       "name": "view",
+       "arguments": {
+        "file_path": "auth/session.go"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## What the file does\n\nThat design keeps deployments simple, because any copy of the service can answer any request without a shared store. The trade-off is that a stolen cookie works until it expires, so the lifetime and the flags matter more than usual. HttpOnly keeps scripts on the page from reading the value, which closes the most common way a token leaks.\n\n- `NewCookie` builds the cookie with fixed flags.\n- `FromRequest` reads it back.\n- `Lifetime` sets the expiry for every cookie.\n\nBefore changing anything, it helps to list every place that builds or reads the cookie, so nothing drifts apart. The search below finds each use of the cookie name, which is the quickest map of the package's surface.\n\nStrict can surprise people who follow a link from their mail and land signed out, so it deserves a short note in the docs. The path is the whole site, which is right for a single application and too broad for a shared domain.",
+     "tool_calls": [
+      {
+       "name": "grep",
+       "arguments": {
+        "pattern": "Cookie",
+        "path": "auth"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## Where the cookie is used\n\nSecure keeps the cookie off plain connections, so a coffee-shop network never sees it in the clear. SameSite set to Strict means a link from another site arrives without the cookie, which blocks most forged requests. Strict can surprise people who follow a link from their mail and land signed out, so it deserves a short note in the docs.\n\nSmall, plain steps like these are easy to review, and each one leaves the project in a working state. The build output below uses colours the way a real tool would, so the window has something lively to draw.\n\nA shorter lifetime lowers the damage of a leak, at the cost of asking people to sign in more often. The reader returns an empty string when the cookie is missing, which lets callers treat both cases the same way.",
+     "tool_calls": [
+      {
+       "name": "bash",
+       "arguments": {
+        "command": "printf '\\033[1;32mok\\033[0m    auth/session.go\\n\\033[1;33mwarn\\033[0m  2 cookies without Domain\\n\\033[1;31mfail\\033[0m  0 checks\\n\\033[38;5;208m256-colour line\\033[0m and \\033[38;2;90;120;200mtrue-colour line\\033[0m\\n'",
+        "description": "Print a coloured status"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "### A scratch copy\n\nThe path is the whole site, which is right for a single application and too broad for a shared domain. Expiry comes from the package constant, so every cookie made today ends at the same moment tomorrow. A shorter lifetime lowers the damage of a leak, at the cost of asking people to sign in more often.\n\nA copy in a scratch folder keeps the original untouched while the new options take shape. Once the options exist, the old function can call the new one, so existing callers keep working unchanged.\n\nNothing here stores state on the server, so the cookie itself is the whole session as far as the browser is concerned. That design keeps deployments simple, because any copy of the service can answer any request without a shared store.",
+     "tool_calls": [
+      {
+       "name": "bash",
+       "arguments": {
+        "command": "mkdir -p speed && cp auth/session.go speed/session.go && echo copied auth/session.go to speed/session.go",
+        "description": "Make a scratch copy"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "The reader returns an empty string when the cookie is missing, which lets callers treat both cases the same way. That choice is friendly, but it hides the difference between a visitor who never signed in and a broken cookie. Tests can cover both paths with a recorded request, so no real browser is needed to check the behaviour.\n\nBefore changing anything, it helps to list every place that builds or reads the cookie, so nothing drifts apart. The search below finds each use of the cookie name, which is the quickest map of the package's surface. A copy in a scratch folder keeps the original untouched while the new options take shape.\n\nNow the copy, before the edit.\n\nThe search below finds each use of the cookie name, which is the quickest map of the package's surface. A copy in a scratch folder keeps the original untouched while the new options take shape.",
+     "tool_calls": [
+      {
+       "name": "view",
+       "arguments": {
+        "file_path": "speed/session.go"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## The new options\n\nThe plan adds an `Options` type and a second constructor:\n\n```go\ncookie := auth.NewCookieWith(token, time.Now(), auth.Options{Lax: true})\nhttp.SetCookie(w, cookie)\n```\n\nOnce the options exist, the old function can call the new one, so existing callers keep working unchanged. The diff stays readable when the new type comes first and the functions follow in the order people call them. After the edit, a quick count of lines confirms the copy grew the way the plan said it would.\n\nThe diff stays readable when the new type comes first and the functions follow in the order people call them. After the edit, a quick count of lines confirms the copy grew the way the plan said it would.\n\nTwo diagrams sketch the flow: one for signing in, one for a request that arrives with the cookie. None of this needs a network, which is why the checks run the same on a laptop and in a sealed test box.",
+     "tool_calls": [
+      {
+       "name": "edit",
+       "arguments": {
+        "file_path": "speed/session.go",
+        "old_string": "// NewCookie makes the session cookie for a signed-in user.\nfunc NewCookie(token string, now time.Time) *http.Cookie {\n\treturn &http.Cookie{\n\t\tName:     CookieName,\n\t\tValue:    token,\n\t\tPath:     \"/\",\n\t\tExpires:  now.Add(Lifetime),\n\t\tHttpOnly: true,\n\t\tSecure:   true,\n\t\tSameSite: http.SameSiteStrictMode,\n\t}\n}",
+        "new_string": "// Options tunes the session cookie. The zero value gives the defaults.\ntype Options struct {\n\t// Path limits the cookie to part of the site; \"/\" when empty.\n\tPath string\n\t// Domain shares the cookie with subdomains when set.\n\tDomain string\n\t// Lifetime overrides the package default when positive.\n\tLifetime time.Duration\n\t// Lax allows the cookie on top-level links from other sites.\n\tLax bool\n}\n\n// NewCookie makes the session cookie for a signed-in user.\nfunc NewCookie(token string, now time.Time) *http.Cookie {\n\treturn NewCookieWith(token, now, Options{})\n}\n\n// NewCookieWith makes the session cookie with the given options.\nfunc NewCookieWith(token string, now time.Time, opts Options) *http.Cookie {\n\tpath := opts.Path\n\tif path == \"\" {\n\t\tpath = \"/\"\n\t}\n\tlife := Lifetime\n\tif opts.Lifetime > 0 {\n\t\tlife = opts.Lifetime\n\t}\n\tsame := http.SameSiteStrictMode\n\tif opts.Lax {\n\t\tsame = http.SameSiteLaxMode\n\t}\n\treturn &http.Cookie{\n\t\tName:     CookieName,\n\t\tValue:    token,\n\t\tPath:     path,\n\t\tDomain:   opts.Domain,\n\t\tExpires:  now.Add(life),\n\t\tHttpOnly: true,\n\t\tSecure:   true,\n\t\tSameSite: same,\n\t}\n}"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## Signing in\n\n```mermaid\nflowchart TD\n    A[Sign-in form] --> B{Password ok?}\n    B -- yes --> C[NewCookie]\n    B -- no --> D[Show the error]\n    C --> E[Set-Cookie header]\n    E --> F[Browser keeps the cookie]\n```\n\nThe table further down lists each attribute with its default and the reason it was chosen. Two diagrams sketch the flow: one for signing in, one for a request that arrives with the cookie. None of this needs a network, which is why the checks run the same on a laptop and in a sealed test box.\n\nSameSite set to Strict means a link from another site arrives without the cookie, which blocks most forged requests. Strict can surprise people who follow a link from their mail and land signed out, so it deserves a short note in the docs.\n\nThat choice is friendly, but it hides the difference between a visitor who never signed in and a broken cookie. Tests can cover both paths with a recorded request, so no real browser is needed to check the behaviour.",
+     "tool_calls": [
+      {
+       "name": "grep",
+       "arguments": {
+        "pattern": "SameSite",
+        "include": "*.go"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## Building\n\nThe build output below uses colours the way a real tool would, so the window has something lively to draw. Progress bars that redraw in place are a good test of how output with carriage returns is collapsed. Reading the file again before the second edit keeps the tool's freshness check satisfied.\n\nProgress bars that redraw in place are a good test of how output with carriage returns is collapsed. Reading the file again before the second edit keeps the tool's freshness check satisfied.\n\nThe session package is small, which makes it a good place to see how a cookie travels from sign-in to every later request. Each request carries the cookie back, and the server reads it before any handler decides what the visitor may see.",
+     "tool_calls": [
+      {
+       "name": "bash",
+       "arguments": {
+        "command": "printf 'building \\033[36m[####      ]\\033[0m 40%%\\rbuilding \\033[36m[########  ]\\033[0m 80%%\\rbuilding \\033[36m[##########]\\033[0m 100%%\\n\\033[32mdone\\033[0m in 0.4s\\n'",
+        "description": "Show a progress bar"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## Attributes at a glance\n\n| Attribute | Default | Why | Status |\n|---|---|---|---|\n| Name | session | one short name | kept |\n| Value | token | opaque random text | kept |\n| Path | / | the whole site | option |\n| Domain | none | this host only | option |\n| Expires | now + 24h | one working day | option |\n| HttpOnly | true | no script access | kept |\n| Secure | true | TLS only | kept |\n| SameSite | Strict | no cross-site sends | option |\n| Max-Age | unset | Expires is enough | kept |\n| Partitioned | unset | no third-party use | kept |\n| Priority | unset | browser default | kept |\n| Size | under 4 KB | browser limit | kept |\n| Encoding | raw | token is URL safe | kept |\n| Rotation | on sign-in | fresh token each time | kept |\n| Sign-out | expire now | clears the browser copy | kept |\n| Clock skew | none | server time only | kept |\n| Renewal | none | sign in again | open |\n| Remember me | none | not offered | open |\n| Subdomains | no | Domain unset | option |\n| Lax links | no | Strict by default | option |\n| Tests | unit | recorded requests | kept |\n| Logging | never | tokens stay secret | kept |\n| Errors | empty string | missing or broken | open |\n| Headers | Set-Cookie | one per response | kept |\n| Proxies | trusted | TLS ends at proxy | open |\n| CSRF | SameSite | plus form tokens | kept |\n| Storage | none | stateless server | kept |\n| Revocation | none | wait for expiry | open |\n| Docs | README | one short section | kept |\n| Owner | auth package | single place | kept |\n\nThe table further down lists each attribute with its default and the reason it was chosen. Two diagrams sketch the flow: one for signing in, one for a request that arrives with the cookie.\n\nOnce the options exist, the old function can call the new one, so existing callers keep working unchanged.",
+     "tool_calls": [
+      {
+       "name": "view",
+       "arguments": {
+        "file_path": "README.md"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## Checking the result\n\nAfter the edit, a quick count of lines confirms the copy grew the way the plan said it would. The table further down lists each attribute with its default and the reason it was chosen. Two diagrams sketch the flow: one for signing in, one for a request that arrives with the cookie.\n\n1. The copy builds the same cookie by default.\n2. Options change only what they name.\n3. The original file is untouched.\n\nTests can cover both paths with a recorded request, so no real browser is needed to check the behaviour. Before changing anything, it helps to list every place that builds or reads the cookie, so nothing drifts apart.\n\nThe build output below uses colours the way a real tool would, so the window has something lively to draw. Progress bars that redraw in place are a good test of how output with carriage returns is collapsed.",
+     "tool_calls": [
+      {
+       "name": "bash",
+       "arguments": {
+        "command": "wc -l auth/session.go speed/session.go README.md",
+        "description": "Count lines"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## A request with the cookie\n\n```mermaid\nsequenceDiagram\n    participant Browser\n    participant Server\n    Browser->>Server: GET /account with the session cookie\n    Server->>Server: FromRequest reads the token\n    Server-->>Browser: 200 with the account page\n```\n\nEach request carries the cookie back, and the server reads it before any handler decides what the visitor may see. Nothing here stores state on the server, so the cookie itself is the whole session as far as the browser is concerned. That design keeps deployments simple, because any copy of the service can answer any request without a shared store.\n\nReading the file again before the second edit keeps the tool's freshness check satisfied.\n\nThe trade-off is that a stolen cookie works until it expires, so the lifetime and the flags matter more than usual. HttpOnly keeps scripts on the page from reading the value, which closes the most common way a token leaks.",
+     "tool_calls": [
+      {
+       "name": "view",
+       "arguments": {
+        "file_path": "speed/session.go",
+        "offset": 0,
+        "limit": 20
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## One more change\n\nExpiry comes from the package constant, so every cookie made today ends at the same moment tomorrow. A shorter lifetime lowers the damage of a leak, at the cost of asking people to sign in more often. The reader returns an empty string when the cookie is missing, which lets callers treat both cases the same way.\n\nThe last change shortens the lifetime, which is a one-line edit with a large effect on risk.\n\nAfter the edit, a quick count of lines confirms the copy grew the way the plan said it would.",
+     "tool_calls": [
+      {
+       "name": "edit",
+       "arguments": {
+        "file_path": "speed/session.go",
+        "old_string": "const Lifetime = 24 * time.Hour",
+        "new_string": "const Lifetime = 12 * time.Hour"
+       }
+      }
+     ]
+    },
+    {
+     "delay_ms": 120,
+     "text": "## Summary\n\nWith that, the scratch copy holds the whole proposal, ready to compare with the original side by side. The session package is small, which makes it a good place to see how a cookie travels from sign-in to every later request. Each request carries the cookie back, and the server reads it before any handler decides what the visitor may see.\n\nNothing here stores state on the server, so the cookie itself is the whole session as far as the browser is concerned. That design keeps deployments simple, because any copy of the service can answer any request without a shared store. The trade-off is that a stolen cookie works until it expires, so the lifetime and the flags matter more than usual.\n\nThe scratch copy in `speed/session.go` now holds the options and the shorter lifetime; the original file in `auth/` is unchanged.\n\nThe path is the whole site, which is right for a single application and too broad for a shared domain."
+    }
+   ]
+  },
+  {
+   "when": "Seed turn short",
+   "steps": [
+    {
+     "text": "Short seeded reply. The chat keeps going with steady, plain answers like this one."
+    }
+   ]
+  },
+  {
+   "when": "Seed turn medium",
+   "steps": [
+    {
+     "text": "Nothing here stores state on the server, so the cookie itself is the whole session as far as the browser is concerned. That design keeps deployments simple, because any copy of the service can answer any request without a shared store.\n\nThe trade-off is that a stolen cookie works until it expires, so the lifetime and the flags matter more than usual. HttpOnly keeps scripts on the page from reading the value, which closes the most common way a token leaks.\n\nSecure keeps the cookie off plain connections, so a coffee-shop network never sees it in the clear. SameSite set to Strict means a link from another site arrives without the cookie, which blocks most forged requests.\n\nThe constant `Lifetime` is the one place to change the expiry."
+    }
+   ]
+  },
+  {
+   "when": "Seed turn code",
+   "steps": [
+    {
+     "text": "A small helper for the tests:\n\n```go\nfunc signedIn(t *testing.T) *http.Request {\n\tt.Helper()\n\treq := httptest.NewRequest(\"GET\", \"/\", nil)\n\treq.AddCookie(auth.NewCookie(\"token\", time.Now()))\n\treturn req\n}\n```\n\nTests can cover both paths with a recorded request, so no real browser is needed to check the behaviour."
+    }
+   ]
+  },
+  {
+   "when": "Seed turn list",
+   "steps": [
+    {
+     "text": "Here is the plan:\n\n- read the package\n- list every use of the cookie\n- add the options\n- keep the old function working\n- shorten the lifetime\n\nThen, in order:\n\n1. write the tests\n2. make the change\n3. update the README"
+    }
+   ]
+  },
+  {
+   "when": "Seed turn tool",
+   "steps": [
+    {
+     "text": "Checking the file first.",
+     "tool_calls": [
+      {
+       "name": "view",
+       "arguments": {
+        "file_path": "auth/session.go"
+       }
+      }
+     ]
+    },
+    {
+     "text": "The session package keeps one cookie; nothing else needs to change."
+    }
+   ]
+  },
+  {
+   "when": "first from desktop",
+   "title": "first from desktop",
+   "steps": [
+    {
+     "delay_ms": 40,
+     "text": "First reply: the desktop's prompt reached the engine.\n\nBoth apps show this answer while it streams."
+    }
+   ]
+  },
+  {
+   "when": "second from terminal",
+   "steps": [
+    {
+     "delay_ms": 120,
+     "reasoning": "Plan a slow, steady answer.",
+     "text": "Second reply: streaming slowly so both apps can watch it grow.\n\nThe trade-off is that a stolen cookie works until it expires, so the lifetime and the flags matter more than usual. HttpOnly keeps scripts on the page from reading the value, which closes the most common way a token leaks. Secure keeps the cookie off plain connections, so a coffee-shop network never sees it in the clear. SameSite set to Strict means a link from another site arrives without the cookie, which blocks most forged requests. Strict can surprise people who follow a link from their mail and land signed out, so it deserves a short note in the docs. The path is the whole site, which is right for a single application and too broad for a shared domain. Expiry comes from the package constant, so every cookie made today ends at the same moment tomorrow. A shorter lifetime lowers the damage of a leak, at the cost of asking people to sign in more often. The reader returns an empty string when the cookie is missing, which lets callers treat both cases the same way. That choice is friendly, but it hides the difference between a visitor who never signed in and a broken cookie. Tests can cover both paths with a recorded request, so no real browser is needed to check the behaviour. Before changing anything, it helps to list every place that builds or reads the cookie, so nothing drifts apart. The search below finds each use of the cookie name, which is the quickest map of the package's surface.\n\nEnd of the second reply."
+    }
+   ]
+  },
+  {
+   "when": "third from desktop",
+   "steps": [
+    {
+     "delay_ms": 40,
+     "text": "Third reply: the held prompt ran after the terminal's turn finished."
+    }
+   ]
+  },
+  {
+   "when": "from the terminal",
+   "title": "from the terminal",
+   "steps": [
+    {
+     "delay_ms": 120,
+     "text": "Terminal chat reply: this new chat started in the terminal app.\n\nThe reader returns an empty string when the cookie is missing, which lets callers treat both cases the same way. That choice is friendly, but it hides the difference between a visitor who never signed in and a broken cookie. Tests can cover both paths with a recorded request, so no real browser is needed to check the behaviour. Before changing anything, it helps to list every place that builds or reads the cookie, so nothing drifts apart. The search below finds each use of the cookie name, which is the quickest map of the package's surface.\n\nEnd of the terminal chat reply."
+    }
+   ]
+  }
+ ],
+ "default": {
+  "text": "OK."
+ }
+}

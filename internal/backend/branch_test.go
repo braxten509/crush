@@ -235,12 +235,16 @@ func TestBranchWhileReplying(t *testing.T) {
 		bound = 2 * baseline
 	}
 	t.Logf("baseline copy of 1,000 messages took %v; the bound is %v", baseline, bound)
+	// Every wait from here on outlasts the bound: a machine slow enough to
+	// stretch the baseline is as slow for the rest. The held reply never
+	// ends by itself, so a call that waits for it still fails.
+	patience := bound + 10*time.Second
 
 	llm.hold()
 	require.NoError(t, b.SendMessage(ws.ID, clientID, proto.AgentMessage{SessionID: source.ID, Prompt: "Tell me about step 501"}))
 	select {
 	case <-llm.streaming:
-	case <-time.After(30 * time.Second):
+	case <-time.After(max(30*time.Second, patience)):
 		t.Fatal("the reply never started streaming")
 	}
 	msgs, err := ws.Messages.List(ctx, source.ID)
@@ -249,7 +253,7 @@ func TestBranchWhileReplying(t *testing.T) {
 	prompt, reply := msgs[1000], msgs[1001]
 	require.Equal(t, message.User, prompt.Role)
 	require.Equal(t, message.Assistant, reply.Role)
-	require.Eventually(t, func() bool { return len(updates.of(reply.ID)) >= 3 }, 10*time.Second, 5*time.Millisecond,
+	require.Eventually(t, func() bool { return len(updates.of(reply.ID)) >= 3 }, patience, 5*time.Millisecond,
 		"the reply writes as it streams")
 	require.True(t, ws.AgentCoordinator.IsSessionBusy(source.ID))
 
@@ -267,7 +271,7 @@ func TestBranchWhileReplying(t *testing.T) {
 	var mid result
 	select {
 	case mid = <-done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(patience):
 		t.Fatal("the branch call waited for the reply")
 	}
 	copyEnd := time.Now()
@@ -283,7 +287,7 @@ func TestBranchWhileReplying(t *testing.T) {
 		_ = ws.Messages.Flush(ctx, reply.ID)
 		m, err := ws.Messages.Get(ctx, reply.ID)
 		return err == nil && m.IsFinished() && strings.HasSuffix(m.Content().Text, " Done.")
-	}, 10*time.Second, 10*time.Millisecond, "the reply finishes in the source")
+	}, patience, 10*time.Millisecond, "the reply finishes in the source")
 	writes := updates.of(reply.ID)
 	require.True(t, writes[0].Before(copyStart) && writes[len(writes)-1].After(copyEnd), "the reply wrote before and after the copy")
 	stall := longestGap(writes, copyStart, copyEnd)
@@ -313,7 +317,7 @@ func TestBranchWhileReplying(t *testing.T) {
 		}
 		answer := msgs[1002]
 		return answer.Role == message.Assistant && answer.IsFinished() && answer.Content().Text == "Working Done."
-	}, 10*time.Second, 10*time.Millisecond, "the branch answers its first send")
+	}, patience, 10*time.Millisecond, "the branch answers its first send")
 	requests := llm.requests()
 	roles := requests[len(requests)-1]
 	t.Logf("the branch's request ended with the roles %v", roles[max(0, len(roles)-3):])

@@ -30,6 +30,9 @@ type dataDirOwnerInfo struct {
 	PID       int    `json:"pid"`
 	Version   string `json:"version,omitempty"`
 	StartedAt string `json:"started_at,omitempty"`
+	// Kind is "engine" when an engine wrote it ([LockProject]); the
+	// legacy server leaves it out.
+	Kind string `json:"kind,omitempty"`
 }
 
 // dataDirLock represents an acquired exclusive lock on a data
@@ -89,10 +92,17 @@ func skipDataDirLock() bool {
 // process's identifying information. It is called only after the lock
 // is held.
 func writeOwnerInfo(path string) error {
+	return writeOwnerInfoKind(path, "")
+}
+
+// writeOwnerInfoKind is writeOwnerInfo with the holder's kind ("" for the
+// legacy server).
+func writeOwnerInfoKind(path, kind string) error {
 	info := dataDirOwnerInfo{
 		PID:       os.Getpid(),
 		Version:   version.Version,
 		StartedAt: time.Now().UTC().Format(time.RFC3339),
+		Kind:      kind,
 	}
 	payload, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {

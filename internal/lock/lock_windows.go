@@ -41,9 +41,19 @@ func lockFile(ctx context.Context, f *os.File) (func(), error) {
 }
 
 func tryLockFile(f *os.File) (func(), error) {
+	return tryLockFileEx(f, uint32(windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY))
+}
+
+func tryLockFileShared(f *os.File) (func(), error) {
+	// Without LOCKFILE_EXCLUSIVE_LOCK the lock is shared.
+	return tryLockFileEx(f, uint32(windows.LOCKFILE_FAIL_IMMEDIATELY))
+}
+
+// tryLockFileEx takes the whole-file lock that flags describe without
+// waiting.
+func tryLockFileEx(f *os.File, flags uint32) (func(), error) {
 	h := windows.Handle(f.Fd())
 	ol := new(windows.Overlapped)
-	flags := uint32(windows.LOCKFILE_EXCLUSIVE_LOCK | windows.LOCKFILE_FAIL_IMMEDIATELY)
 	if err := windows.LockFileEx(h, flags, 0, math.MaxUint32, math.MaxUint32, ol); err != nil {
 		if errors.Is(err, windows.ERROR_LOCK_VIOLATION) || errors.Is(err, windows.ERROR_IO_PENDING) {
 			return nil, ErrContended

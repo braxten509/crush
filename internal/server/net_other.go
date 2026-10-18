@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -28,6 +29,10 @@ const staleSocketDialTimeout = 200 * time.Millisecond
 // was removed prior to binding so callers can log it. The operation
 // is idempotent: removing an absent file is a no-op, and a live
 // socket is never removed.
+//
+// A unix socket is made owner-only (0600) right after the bind, and on
+// Linux and Mac every connection from another user is refused
+// (engine-design.md 5.1 d).
 func listen(network, address string) (net.Listener, bool, error) {
 	var removedStale bool
 	if network == "unix" && address != "" {
@@ -56,6 +61,15 @@ func listen(network, address string) (net.Listener, bool, error) {
 	ln, err := net.Listen(network, address)
 	if err != nil {
 		return nil, removedStale, err
+	}
+	if network == "unix" {
+		if err := os.Chmod(address, 0o600); err != nil {
+			_ = ln.Close()
+			return nil, removedStale, err
+		}
+		if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+			ln = peerCheckListener{Listener: ln, uid: os.Getuid()}
+		}
 	}
 	return ln, removedStale, nil
 }

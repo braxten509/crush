@@ -108,6 +108,11 @@ Engine errors keep the engine's `code` (`proto.Error`, `internal/proto/proto.go:
 | `route_not_allowed` | the `api` command was asked for a route outside the list in section 1.3 |
 | `bad_path`, `too_big`, `not_a_file`, `is_a_directory` | `files.rs` |
 | `link_refused` | `opener.rs` refused a link (its message is the terminal's text, CHAT-102) |
+| `open_failed` | the system opener was not found or exited with an error (message "could not open link: exit status N", as the terminal shows it); P3.2 |
+| `clipboard_failed` | a clipboard write did not take (message "Failed to copy to clipboard", CHAT-090); P3.2 |
+| `settings_failed`, `bad_setting` | the settings file could not be written (also while it is broken: a broken file is never overwritten, the owner fixes it), or `settings_set` got an unknown key or a bad value; P3.2 |
+
+Screens show the `message` of any `AppError` they do not handle by code, so a new code is never silently dropped (links: P3.5; copy: `lib/copy.js`'s owner).
 | `not_built` | the S3 placeholder |
 
 #### 1.2.3 Finding `crush` and the version check (`crush_bin.rs`, `engine_cli.rs`, P3.1)
@@ -350,8 +355,8 @@ pub fn open(app: &tauri::AppHandle, url: &str, cwd: &str) -> AppResult<()>;
 **Files** (attachments, TYPE-011 to TYPE-014, TYPE-029):
 
 ```rust
-#[derive(serde::Serialize)] pub struct FileInfo { pub exists: bool, pub is_dir: bool, pub size: u64, pub mime: String }
-pub fn info(path: &str, cwd: &str) -> AppResult<FileInfo>;                   // mime from the infer crate, then the extension
+#[derive(serde::Serialize)] pub struct FileInfo { pub exists: bool, pub is_dir: bool, pub size: u64, pub mime: String, pub modified: u64 } // modified: Unix ms, 0 if unknown; TYPE-029 compares it (P3.7, editor.go:316-322)
+pub fn info(path: &str, cwd: &str) -> AppResult<FileInfo>;                   // mime from a port of Go's http.DetectContentType (the terminal's, paste.go:27-31), then the extension
 pub fn read(path: &str, cwd: &str, max_bytes: u64) -> AppResult<(String, String)>; // (mime, base64); too_big over max_bytes
 #[derive(serde::Serialize)] pub struct FileEntry { pub path: String, pub is_dir: bool } // path relative to cwd, "/" separators
 /// The `@` popup's file list (TYPE-026). Inside a Git work tree: `git ls-files --cached --others

@@ -48,8 +48,11 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	// A client is arriving: cancel any pending idle shutdown so we never
 	// hand back a workspace on a server that is about to tear itself down.
 	b.cancelShutdownLocked()
-	if ws, joined, err := b.joinExistingLocked(key, clientID, args); joined || err != nil {
+	if ws, joined, registered, err := b.joinExistingLocked(key, clientID, args); joined || err != nil {
 		b.mu.Unlock()
+		if registered {
+			b.clientJoined(ws, clientID)
+		}
 		if err != nil {
 			return nil, proto.Workspace{}, err
 		}
@@ -84,8 +87,11 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	}
 	// Re-check the index under the lock: a concurrent caller may have
 	// won the race between the initial unlock and here.
-	if existing, joined, err := b.joinExistingLocked(key, clientID, args); joined || err != nil {
+	if existing, joined, registered, err := b.joinExistingLocked(key, clientID, args); joined || err != nil {
 		b.mu.Unlock()
+		if registered {
+			b.clientJoined(existing, clientID)
+		}
 		ws.invokeShutdown()
 		if err != nil {
 			return nil, proto.Workspace{}, err
@@ -97,8 +103,11 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	// Register the originating client's hold while still holding
 	// b.mu so the workspace is observable with its claim from the
 	// moment it appears in the index.
-	b.registerClient(ws, clientID)
+	registered := b.registerClient(ws, clientID)
 	b.mu.Unlock()
+	if registered {
+		b.clientJoined(ws, clientID)
+	}
 
 	// Only logged: the workspace has no event subscribers yet (its
 	// clients attach after this returns), and the SSE stream carries no
@@ -115,30 +124,32 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 }
 
 // joinExistingLocked registers clientID on the live workspace already
-// indexed at key, reporting whether there was one. A stale index entry
-// (its workspace has since been removed) is cleaned up. Joining with a
-// different channel opt-in fails with [ErrChannelOptInMismatch].
+// indexed at key, reporting whether there was one, and whether
+// registerClient installed or re-armed a claim (the caller then runs the
+// joined hooks once b.mu is released). A stale index entry (its workspace
+// has since been removed) is cleaned up. Joining with a different channel
+// opt-in fails with [ErrChannelOptInMismatch].
 //
 // It must be called with b.mu held: teardown also acquires b.mu before
 // tearing a workspace down, so the workspace returned cannot be torn out
 // from under the caller between lookup and registerClient. Lock order is
 // b.mu -> ws.clientsMu.
-func (b *Backend) joinExistingLocked(key, clientID string, args proto.Workspace) (*Workspace, bool, error) {
+func (b *Backend) joinExistingLocked(key, clientID string, args proto.Workspace) (ws *Workspace, joined, registered bool, err error) {
 	existingID, ok := b.pathIndex[key]
 	if !ok {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 	ws, found := b.workspaces.Get(existingID)
 	if !found {
 		delete(b.pathIndex, key)
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 	if !stringSlicesEqual(ws.Cfg.Overrides().EnabledChannels, args.Channels) {
-		return nil, false, ErrChannelOptInMismatch
+		return nil, false, false, ErrChannelOptInMismatch
 	}
 	logFirstWinsMismatch(ws, args)
-	b.registerClient(ws, clientID)
-	return ws, true, nil
+	registered = b.registerClient(ws, clientID)
+	return ws, true, registered, nil
 }
 
 // settleCreate ends a create's pending claim on the server's lifetime.

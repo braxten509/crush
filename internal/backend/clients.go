@@ -155,30 +155,34 @@ func (b *Backend) releaseHold(workspaceID, clientID string) error {
 // back. The re-arm installs a fresh clientState rather than resetting the
 // old timer, so an already-fired timer racing this call fails expireHold's
 // identity check instead of killing the new claim.
-func (b *Backend) registerClient(ws *Workspace, clientID string) {
-	// CreateWorkspace calls this with b.mu held, and no hook may run under
-	// it, so the joined hooks run on a goroutine of their own once the
-	// claim is in place.
-	defer func() {
-		go b.runHooks(func(h clientHooks) {
-			if h.joined != nil {
-				h.joined(ws, clientID)
-			}
-		})
-	}()
+//
+// It reports whether it installed or re-armed a claim; the caller then
+// runs the joined hooks once it holds no lock ([Backend.clientJoined]).
+func (b *Backend) registerClient(ws *Workspace, clientID string) bool {
 	ws.clientsMu.Lock()
 	defer ws.clientsMu.Unlock()
 	if old, ok := ws.clients[clientID]; ok {
 		old.released = false
 		if old.holdTimer == nil {
 			// Live streams hold the claim; nothing to re-arm.
-			return
+			return false
 		}
 		old.holdTimer.Stop()
 		ws.clients[clientID] = b.newHeldClient(ws, clientID, old.currentSessionID, old.sessionReported, b.createGrace)
-		return
+		return true
 	}
 	ws.clients[clientID] = b.newHeldClient(ws, clientID, "", false, b.createGrace)
+	return true
+}
+
+// clientJoined runs the joined hooks for clientID, whose claim on ws was
+// just installed or re-armed. Callers hold no lock.
+func (b *Backend) clientJoined(ws *Workspace, clientID string) {
+	b.runHooks(func(h clientHooks) {
+		if h.joined != nil {
+			h.joined(ws, clientID)
+		}
+	})
 }
 
 // newHeldClient builds a clientState whose claim is held only by a timer

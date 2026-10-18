@@ -184,6 +184,9 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 			payload = ev.Payload
 		case ev, ok := <-engineEvents:
 			if !ok {
+				// It closes when the request ends, which can win the
+				// select over the Done case above.
+				c.server.logDebug(r, "Stopping event stream")
 				return
 			}
 			// Engine events are already addressed, so they skip

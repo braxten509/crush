@@ -41,7 +41,9 @@ func RegisterClientForTesting(b *Backend, ws *Workspace, clientID string) error 
 	if _, err := validateClientID(clientID); err != nil {
 		return err
 	}
-	b.registerClient(ws, clientID)
+	if b.registerClient(ws, clientID) {
+		b.clientJoined(ws, clientID)
+	}
 	return nil
 }
 

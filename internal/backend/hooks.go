@@ -33,7 +33,8 @@ type clientHooks struct {
 	// caller named no app.
 	agentInit func(ws *Workspace, clientID string, interactive bool)
 	// gone runs when clientID's claim on ws ended. workspaceEmpty reports
-	// that it was the last app, so the teardown follows.
+	// that it was the last app, so a teardown is attempted; it can still
+	// abort if another app joins first.
 	gone func(ws *Workspace, clientID string, reason GoneReason, workspaceEmpty bool)
 	// teardown runs when ws is torn down, before it shuts down.
 	teardown func(ws *Workspace)

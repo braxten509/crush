@@ -22,6 +22,10 @@ var testPhoneAddr = &net.TCPAddr{IP: net.IPv4(100, 64, 0, 7), Port: 40000}
 // come from the owner's own phone, so a test reads the share as the phone
 // does: GET url+"/v1/events" streams what the phone sees. Stop the server
 // when done; that closes the address too.
+//
+// It fakes the same-user gate: every connection looks like the owner's own
+// phone, so anything that can reach the address gets the owner's access.
+// Never call it outside tests.
 func StartTestShare(src Source, launchID string) (*Server, string, error) {
 	const owner = 1
 	whois := func(context.Context, string) (peer, error) {

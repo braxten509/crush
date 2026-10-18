@@ -55,6 +55,11 @@ func (h *shareHarness) secureSubmitPath(formID string) string {
 	return h.wsPath("/secure-forms/" + formID + "/submit")
 }
 
+// secureCancelPath is the cancel route of formID.
+func (h *shareHarness) secureCancelPath(formID string) string {
+	return h.wsPath("/secure-forms/" + formID + "/cancel")
+}
+
 // secureValues is a submit body that enters value into the field "key".
 func secureValues(value string) proto.SecureSubmit {
 	return proto.SecureSubmit{Values: map[string]string{"key": value}}
@@ -311,7 +316,7 @@ func TestSecureSubmitByNonRecipientRefused(t *testing.T) {
 	events.waitFor(t, pubsub.PayloadTypeSecureForm, &sent)
 
 	h.expectError(t, http.MethodPost, h.secureSubmitPath(sent.FormID), other, secureValues(secureSecret), http.StatusForbidden, "not_recipient")
-	h.expectError(t, http.MethodPost, h.wsPath("/secure-forms/"+sent.FormID+"/cancel"), other, nil, http.StatusForbidden, "not_recipient")
+	h.expectError(t, http.MethodPost, h.secureCancelPath(sent.FormID), other, nil, http.StatusForbidden, "not_recipient")
 	h.expectError(t, http.MethodPost, h.secureSubmitPath(uuid.NewString()), viewer, secureValues(secureSecret), http.StatusNotFound, "secure_form_not_found")
 	require.False(t, form.Closed())
 	data, err := os.ReadFile(dest)
@@ -357,7 +362,65 @@ func TestSecureFormClosedAnsweredElsewhere(t *testing.T) {
 	require.Equal(t, proto.SecureFormClosed{FormID: sent.FormID, Reason: "submitted"}, closed)
 	otherEvents.waitFor(t, pubsub.PayloadTypeSecureFormClosed, &closed)
 	require.Equal(t, proto.SecureFormClosed{FormID: sent.FormID, Reason: "answered_elsewhere"}, closed)
-	h.expectError(t, http.MethodPost, h.wsPath("/secure-forms/"+sent.FormID+"/cancel"), other, nil, http.StatusNotFound, "secure_form_not_found")
+	h.expectError(t, http.MethodPost, h.secureCancelPath(sent.FormID), other, nil, http.StatusNotFound, "secure_form_not_found")
+}
+
+// TestSecureFormCancelledByViewer: when one viewer cancels, it hears
+// cancelled and the other answered_elsewhere (5.8, Close); the asking code
+// gets a cancel and nothing is written.
+func TestSecureFormCancelledByViewer(t *testing.T) {
+	h := newSecureHarness(t)
+	other, otherEvents := h.stream(t)
+	canceller, cancellerEvents := h.stream(t)
+	h.view(t, other, "chat-1")
+	h.view(t, canceller, "chat-1")
+	dest := filepath.Join(t.TempDir(), "secret.env")
+	form := secureAsk(t, "chat-1", dest)
+	var sent proto.SecureForm
+	cancellerEvents.waitFor(t, pubsub.PayloadTypeSecureForm, &sent)
+	otherEvents.wait(t, pubsub.PayloadTypeSecureForm)
+
+	h.expectOK(t, http.MethodPost, h.secureCancelPath(sent.FormID), canceller, nil, nil)
+	result := secureResult(t, form)
+	require.True(t, result.Cancelled)
+	require.Equal(t, secureentry.StatusCancelled, result.Statuses["key"])
+	var cancelled proto.SecureFormClosed
+	cancellerEvents.waitFor(t, pubsub.PayloadTypeSecureFormClosed, &cancelled)
+	require.Equal(t, proto.SecureFormClosed{FormID: sent.FormID, Reason: "cancelled"}, cancelled)
+	var elsewhere proto.SecureFormClosed
+	otherEvents.waitFor(t, pubsub.PayloadTypeSecureFormClosed, &elsewhere)
+	require.Equal(t, proto.SecureFormClosed{FormID: sent.FormID, Reason: "answered_elsewhere"}, elsewhere)
+	data, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	require.Equal(t, "KEY=%s\n", string(data), "a cancel writes nothing")
+	h.expectError(t, http.MethodPost, h.secureCancelPath(sent.FormID), other, nil, http.StatusNotFound, "secure_form_not_found")
+}
+
+// TestSecureFormCancelledByAsker: when the asking code cancels the form, as
+// a cancelled turn does (5.8, Cancelled turn), no app acted, so every viewer
+// hears closed.
+func TestSecureFormCancelledByAsker(t *testing.T) {
+	h := newSecureHarness(t)
+	first, firstEvents := h.stream(t)
+	second, secondEvents := h.stream(t)
+	h.view(t, first, "chat-1")
+	h.view(t, second, "chat-1")
+	form := secureAsk(t, "chat-1", filepath.Join(t.TempDir(), "secret.env"))
+	var sent proto.SecureForm
+	firstEvents.waitFor(t, pubsub.PayloadTypeSecureForm, &sent)
+	secondEvents.wait(t, pubsub.PayloadTypeSecureForm)
+
+	form.Cancel()
+	for name, events := range map[string]*shareStream{"first": firstEvents, "second": secondEvents} {
+		var closed proto.SecureFormClosed
+		events.waitFor(t, pubsub.PayloadTypeSecureFormClosed, &closed)
+		require.Equal(t, proto.SecureFormClosed{FormID: sent.FormID, Reason: "closed"}, closed, name)
+	}
+	for _, clientID := range []string{first, second} {
+		var listed []proto.SecureForm
+		h.expectOK(t, http.MethodGet, h.wsPath("/secure-forms"), clientID, nil, &listed)
+		require.Empty(t, listed)
+	}
 }
 
 // secureTripwire is a request body that counts its reads.
@@ -385,7 +448,7 @@ func TestSecureRoutesRefuseNonUnixListener(t *testing.T) {
 	routes := []struct{ method, path string }{
 		{http.MethodGet, h.wsPath("/secure-forms")},
 		{http.MethodPost, h.secureSubmitPath(sent.FormID)},
-		{http.MethodPost, h.wsPath("/secure-forms/" + sent.FormID + "/cancel")},
+		{http.MethodPost, h.secureCancelPath(sent.FormID)},
 	}
 	tcp := httptest.NewServer(h.srv.Handler())
 	t.Cleanup(tcp.Close)

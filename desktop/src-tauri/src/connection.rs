@@ -291,6 +291,10 @@ const ROUTES: &[(&str, &str)] = &[
     ("POST", "sessions/{sid}/kept-skills"),
     ("POST", "agent"),
     ("POST", "agent/main"),
+    // The model restore after `config/model` (routes.go:98).
+    ("POST", "agent/update"),
+    // Error counts per code checker (routes.go:79).
+    ("GET", "lsps/{lsp}/diagnostics"),
     ("GET", "agent/sessions/{sid}"),
     ("GET", "agent/sessions/{sid}/prompts/queued"),
     ("GET", "agent/sessions/{sid}/prompts/list"),
@@ -1619,9 +1623,22 @@ mod tests {
 
     #[test]
     fn route_list() {
+        let mut design: Vec<(&str, &str)> =
+            DESIGN_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))).collect();
+        let mut listed = ROUTES.to_vec();
+        design.sort();
+        listed.sort();
+        assert_eq!(listed, design, "the route list is design 1.3's table, no more and no less");
         for (method, pattern) in ROUTES {
-            let path = pattern.replace("{sid}", "s-1").replace("{mid}", "m-1").replace("{kind}", "claude");
+            let path = pattern
+                .replace("{sid}", "s-1")
+                .replace("{mid}", "m-1")
+                .replace("{kind}", "claude")
+                .replace("{lsp}", "gopls");
             assert!(Route::find(method, &path).is_ok(), "{method} {path}");
+        }
+        for (method, path) in [("POST", "agent/update"), ("GET", "lsps/gopls/diagnostics")] {
+            assert!(Route::find(method, path).is_ok(), "{method} {path}");
         }
         for (method, path) in [
             // The workspace itself answers the environment.
@@ -1645,6 +1662,13 @@ mod tests {
             ("GET", "sessions/s-1/messages/m-1"),
             ("GET", "v1/version"),
             ("GET", "/v1/engine/x"),
+            // agent/update and the diagnostics, in no other method or shape.
+            ("GET", "agent/update"),
+            ("POST", "lsps/gopls/diagnostics"),
+            ("GET", "lsps/gopls"),
+            ("GET", "lsps//diagnostics"),
+            ("GET", "lsps/gopls/diagnostics/x"),
+            ("POST", "lsps/start"),
         ] {
             let e = Route::find(method, path).err().unwrap_or_else(|| panic!("{method} {path} was allowed"));
             assert_eq!(e.code, "route_not_allowed", "{method} {path}");
@@ -1660,6 +1684,10 @@ mod tests {
             "/v1/workspaces/ws%2F1/agent/sessions/s%201/prompts/list?details=true&path=src%2Fa%20b%26c.rs&client_id=c-1"
         );
         assert_eq!(Route::find("GET", "/v1/limits").unwrap().target("ws-1", None, "c-1"), "/v1/limits?client_id=c-1");
+        assert_eq!(
+            Route::find("GET", "lsps/my lsp/diagnostics").unwrap().target("ws-1", None, "c-1"),
+            "/v1/workspaces/ws-1/lsps/my%20lsp/diagnostics?client_id=c-1"
+        );
         // Through a joined window: refused before anything is sent, even while connected.
         let j = joined("conn-routes", TEST_TUNING);
         j.fake.forget();
@@ -1668,7 +1696,47 @@ mod tests {
         assert!(j.fake.seen().is_empty());
         let answer = run(j.conn.call("get", "sessions/s-1", None, None, None)).unwrap();
         assert_eq!(answer["echo"], format!("/v1/workspaces/ws-1/sessions/s-1?client_id={}", j.opened.client_id));
+        // The two routes P3.3 needs reach the engine.
+        run(j.conn.call("POST", "agent/update", None, None, None)).unwrap();
+        run(j.conn.call("GET", "lsps/gopls/diagnostics", None, None, None)).unwrap();
+        let seen = j.fake.seen();
+        let update = seen.iter().find(|s| s.line() == "POST /v1/workspaces/ws-1/agent/update").expect("agent/update reached the engine");
+        assert_eq!(update.header("content-length"), Some("0"), "a POST without a body still says its length");
+        assert_eq!(update.query("client_id").as_deref(), Some(j.opened.client_id.as_str()));
+        let diagnostics = seen.iter().find(|s| s.line() == "GET /v1/workspaces/ws-1/lsps/gopls/diagnostics").expect("the diagnostics reached the engine");
+        assert_eq!(diagnostics.query("client_id").as_deref(), Some(j.opened.client_id.as_str()));
     }
+
+    /// Design 1.3's route table, row by row (method, patterns).
+    const DESIGN_ROUTES: &[(&str, &[&str])] = &[
+        ("GET", &["/v1/version", "/v1/engine", "/v1/limits"]),
+        ("POST", &["/v1/limits/{kind}/refresh"]),
+        ("GET", &["config", "providers", "agent", "agent/default-small-model", "git/branch", "lsps", "mcp/states", "skills", "messages/user"]),
+        ("GET", &["sessions"]),
+        ("POST", &["sessions"]),
+        ("GET", &["sessions/{sid}"]),
+        ("PUT", &["sessions/{sid}"]),
+        ("DELETE", &["sessions/{sid}"]),
+        ("GET", &["sessions/{sid}/messages", "sessions/{sid}/messages/user", "sessions/{sid}/messages/{mid}/review", "sessions/{sid}/history", "sessions/{sid}/filetracker/files"]),
+        ("POST", &["sessions/{sid}/kept-skills"]),
+        ("POST", &["agent", "agent/main", "agent/update"]),
+        ("GET", &["lsps/{lsp}/diagnostics"]),
+        ("GET", &["agent/sessions/{sid}", "agent/sessions/{sid}/prompts/queued", "agent/sessions/{sid}/prompts/list"]),
+        ("POST", &["agent/sessions/{sid}/cancel", "agent/sessions/{sid}/interrupt", "agent/sessions/{sid}/prompts/clear", "agent/sessions/{sid}/prompts/recall", "agent/sessions/{sid}/shell"]),
+        ("POST", &["config/set", "config/remove", "config/model", "config/compact"]),
+        ("GET", &["permissions/skip"]),
+        ("POST", &["permissions/skip"]),
+        ("POST", &["permissions/grant"]),
+        ("GET", &["project/needs-init", "project/init-prompt"]),
+        ("POST", &["project/init"]),
+        ("POST", &["skills/read", "mcp/read-resource"]),
+        ("GET", &["filetracker/lastread"]),
+        ("POST", &["sessions/{sid}/branches"]),
+        ("GET", &["chat-links"]),
+        ("GET", &["sessions/{sid}/tree", "sessions/{sid}/tree/messages/{mid}"]),
+        ("POST", &["sessions/{sid}/tree/label", "sessions/{sid}/tree/switch", "sessions/{sid}/tree/navigate", "sessions/{sid}/tree/copy",
+            "sessions/{sid}/files/preview", "sessions/{sid}/files/undo-preview", "sessions/{sid}/files/undo"]),
+    ];
 
     #[test]
     fn public_workspace_drops_env_and_config() {

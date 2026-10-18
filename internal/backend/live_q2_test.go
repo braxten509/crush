@@ -5,17 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -391,6 +394,91 @@ func TestQ2DetachWithZeroGrace(t *testing.T) {
 	r.b.DetachClient(ws.ID, a2)
 	r.model.waitHeld(t, "a2", 0)
 	require.True(t, left(a2, GoneReleased), "after a release the drop fires gone(released)")
+}
+
+// hookHandler is a log handler that runs fn once, on the goroutine that
+// logs, for the first record match accepts. It drops every record.
+type hookHandler struct {
+	match func(slog.Record) bool
+	fn    func()
+	fired atomic.Bool
+}
+
+func (h *hookHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *hookHandler) Handle(_ context.Context, rec slog.Record) error {
+	if h.match(rec) && h.fired.CompareAndSwap(false, true) {
+		h.fn()
+	}
+	return nil
+}
+
+func (h *hookHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *hookHandler) WithGroup(string) slog.Handler      { return h }
+
+// onLastLeave runs fn on the departure path of clientID when it is the last
+// app, at liveGone's debug line: after the gone hooks began and before the
+// teardown they lead to takes the backend's lock, the window in which a
+// join aborts that teardown.
+func onLastLeave(t *testing.T, clientID string, fn func()) {
+	t.Helper()
+	prev := slog.Default()
+	slog.SetDefault(slog.New(&hookHandler{fn: fn, match: func(rec slog.Record) bool {
+		if rec.Message != "An app left a workspace" {
+			return false
+		}
+		client, last := false, false
+		rec.Attrs(func(a slog.Attr) bool {
+			switch a.Key {
+			case "client":
+				client = a.Value.String() == clientID
+			case "last":
+				last = a.Value.Kind() == slog.KindBool && a.Value.Bool()
+			}
+			return true
+		})
+		return client && last
+	}}))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+}
+
+// TestQ2WhenTeardownAborts: the last app leaves, so a teardown is
+// attempted, but another app joins before it runs and it aborts. The
+// leaver's work gets Q2 all the same instead of running on with no owner:
+// its turn stops, and its helper stops and stays saved, released, so the
+// app that joined takes it over once it starts its agent (Q1).
+func TestQ2WhenTeardownAborts(t *testing.T) {
+	r := newLiveRig(t)
+	a, joiner := newClientID(t), newClientID(t)
+	p := r.project(t)
+	ws := r.open(t, p, a)
+	c := r.chat(t, ws, "C")
+	helper := r.spawnHelper(t, ws, a, c, "a1")
+
+	onLastLeave(t, a, func() {
+		joined, _, err := r.b.CreateWorkspace(prototest.CreateRequest(proto.Workspace{
+			Path: p.dir, DataDir: p.dataDir, ClientID: joiner, YOLO: true,
+		}))
+		require.NoError(t, err)
+		require.Same(t, ws, joined, "the join lands before the teardown")
+	})
+	require.NoError(t, r.b.RetireClient(a))
+
+	got, err := r.b.GetWorkspace(ws.ID)
+	require.NoError(t, err, "the teardown aborted")
+	require.Same(t, ws, got)
+	r.model.waitHeld(t, "a1", 0)
+	r.model.waitHeld(t, "a1-helper", 0)
+	requireReleased(t, p, "tasks.json", helper.ID)
+	require.Empty(t, promptsOf(ws, a))
+
+	require.NoError(t, r.b.AttachClient(ws.ID, joiner))
+	require.NoError(t, r.b.InitAgent(context.Background(), ws.ID, joiner, true))
+	r.model.waitHeld(t, "a1-helper", 1)
+	task, ok := sessionTask(c, helper.Name)
+	require.True(t, ok)
+	require.Equal(t, agent.TaskRunning, task.Status)
+	require.Equal(t, joiner, task.StartedBy, "the app that joined owns it")
 }
 
 // TestQ2InterruptedHelperResumesOnNextJoin: a helper Q2 interrupted starts

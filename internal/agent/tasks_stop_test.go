@@ -60,3 +60,10 @@ func TestStopSessionTaskTellsParent(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+// TestFinishUnknownTaskIsNoop: finishing a task the hub does not list does
+// nothing, instead of reading a nil task.
+func TestFinishUnknownTaskIsNoop(t *testing.T) {
+	h := &taskHub{tasks: map[string]*Task{}}
+	require.NotPanics(t, func() { h.finish(t.Context(), "t9", "output", nil) })
+}

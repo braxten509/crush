@@ -89,7 +89,7 @@ func TestMemoryStatusRouteAndEvent(t *testing.T) {
 	require.Empty(t, got.Message)
 	require.Equal(t, totalRAM() > 0, got.Supported)
 	require.Equal(t, totalRAM(), got.TotalRAMBytes)
-	require.Equal(t, totalRAM()/2, got.LimitBytes, "with no saved or configured limit, half the RAM")
+	require.Zero(t, got.LimitBytes, "no saved limit is 0, though the box runs under half the RAM then")
 
 	b.checkMemory()
 	b.checkMemory()

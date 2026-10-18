@@ -83,8 +83,10 @@ func TestExplicitHostKeepsLegacyServer(t *testing.T) {
 // legacy server socket appears, and the engine's workspace stays.
 func TestLogoutJoinsLiveEngine(t *testing.T) {
 	p := newCmdProject(t)
+	// A sign-in lives in the global data config, where `crush login` and
+	// the logout's config.ScopeGlobal write.
 	expires := time.Now().Add(24 * time.Hour).Unix()
-	writeTestGlobalConfig(t, p.globalConfig, map[string]any{
+	signIn, err := json.Marshal(map[string]any{
 		"providers": map[string]any{
 			"hyper": map[string]any{
 				"api_key": "test-key",
@@ -95,6 +97,9 @@ func TestLogoutJoinsLiveEngine(t *testing.T) {
 			},
 		},
 	})
+	require.NoError(t, err)
+	signInFile := filepath.Join(p.globalData, "crush.json")
+	require.NoError(t, os.WriteFile(signInFile, signIn, 0o600))
 	ctx := t.Context()
 
 	h := p.ensure(t, p.cwd)
@@ -118,7 +123,7 @@ func TestLogoutJoinsLiveEngine(t *testing.T) {
 	require.NoError(t, err)
 	hyper, _ = cfg.Providers.Get("hyper")
 	require.Nil(t, hyper.OAuthToken, "the engine's loaded config forgot the sign-in")
-	data, err := os.ReadFile(filepath.Join(p.globalConfig, "crush.json"))
+	data, err := os.ReadFile(signInFile)
 	require.NoError(t, err)
 	var saved struct {
 		Providers map[string]map[string]json.RawMessage `json:"providers"`

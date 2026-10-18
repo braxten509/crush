@@ -57,6 +57,7 @@ type cmdProject struct {
 	socket       string // its engine socket
 	runtimeDir   string // XDG_RUNTIME_DIR
 	globalConfig string // the folder of the global crush.json
+	globalData   string // the folder of the global data crush.json, where sign-ins go
 
 	mu   sync.Mutex
 	pids []int // engines to kill at cleanup
@@ -75,9 +76,10 @@ func newCmdProject(t *testing.T) *cmdProject {
 		cwd:          filepath.Join(root, "p"),
 		runtimeDir:   filepath.Join(root, "r"),
 		globalConfig: filepath.Join(root, "g"),
+		globalData:   filepath.Join(root, "gd"),
 	}
 	home := filepath.Join(root, "h")
-	for _, dir := range []string{home, p.cwd, p.globalConfig, filepath.Join(root, "gd"), filepath.Join(root, "t")} {
+	for _, dir := range []string{home, p.cwd, p.globalConfig, p.globalData, filepath.Join(root, "t")} {
 		require.NoError(t, os.MkdirAll(dir, 0o700))
 	}
 	require.NoError(t, os.Mkdir(p.runtimeDir, 0o700))
@@ -90,7 +92,7 @@ func newCmdProject(t *testing.T) *cmdProject {
 	t.Setenv("XDG_RUNTIME_DIR", p.runtimeDir)
 	t.Setenv("TMPDIR", filepath.Join(root, "t"))
 	t.Setenv("CRUSH_GLOBAL_CONFIG", p.globalConfig)
-	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(root, "gd"))
+	t.Setenv("CRUSH_GLOBAL_DATA", p.globalData)
 	t.Setenv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 	t.Setenv("CRUSH_DISABLE_METRICS", "1")
 	t.Setenv("DO_NOT_TRACK", "1")

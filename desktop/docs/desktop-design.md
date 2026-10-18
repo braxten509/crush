@@ -1937,7 +1937,7 @@ Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` 
 
 - Rust: `main.rs`, `error.rs`, `state.rs`, `commands.rs`, `fixture.rs`, `Cargo.toml`;
 - build config: capabilities, `tauri.conf.json`, `package.json`, `vite.config.js`;
-- styles and shell components: `app.css`, `App.svelte`, `Conversation.svelte`, `OverlayHost.svelte`, `Icon.svelte`;
+- styles and shell components: `app.css`, `App.svelte`, `Frame.svelte` (its `panel` prop follows App's panel collapse), `Conversation.svelte`, `OverlayHost.svelte`, `Icon.svelte`;
 - shared JS: `main.js`, `plugins.js`, `wire.js`, `types.js`, `commands.js`, `events.js`, `keys.js`, `actions.js`, `dialogs.js`, `grace.js`, `tray.js`, `menu.js`, `decorations.js`, `probe.js`, `ui.svelte.js`;
 - harness: `sandbox.sh`, `run-in-sandbox.sh`, `check.sh`, `harness.py`.
 

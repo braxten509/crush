@@ -481,6 +481,40 @@ func TestQ2WhenTeardownAborts(t *testing.T) {
 	require.Equal(t, joiner, task.StartedBy, "the app that joined owns it")
 }
 
+// TestQ2RunsAtJoinAfterLastLeave: the last app's Q2 waits while the
+// teardown that follows may still go ahead, and an app that joins before
+// that teardown runs it. (The claim ends here without the teardown, as if
+// the teardown had not taken the backend's lock yet.)
+func TestQ2RunsAtJoinAfterLastLeave(t *testing.T) {
+	r := newLiveRig(t)
+	a, joiner := newClientID(t), newClientID(t)
+	p := r.project(t)
+	ws := r.open(t, p, a)
+	c := r.chat(t, ws, "C")
+	helper := r.spawnHelper(t, ws, a, c, "a1")
+
+	ws.clientsMu.Lock()
+	delete(ws.clients, a)
+	ws.clientsMu.Unlock()
+	r.b.clientGone(ws, a, GoneRetired, true)
+	time.Sleep(300 * time.Millisecond)
+	require.Equal(t, 1, r.model.heldNow("a1"), "no Q2 yet: a teardown that goes ahead stops the work itself")
+	require.Equal(t, 1, r.model.heldNow("a1-helper"))
+	s, ok := savedEntry(t, p, "tasks.json", helper.ID)
+	require.True(t, ok)
+	require.NotZero(t, s.Owner, "the helper is not released while its hub may be torn down")
+
+	joined, _, err := r.b.CreateWorkspace(prototest.CreateRequest(proto.Workspace{
+		Path: p.dir, DataDir: p.dataDir, ClientID: joiner, YOLO: true,
+	}))
+	require.NoError(t, err)
+	require.Same(t, ws, joined)
+	r.model.waitHeld(t, "a1", 0)
+	r.model.waitHeld(t, "a1-helper", 0)
+	requireReleased(t, p, "tasks.json", helper.ID)
+	require.Empty(t, promptsOf(ws, a))
+}
+
 // TestQ2InterruptedHelperResumesOnNextJoin: a helper Q2 interrupted starts
 // again when the next app joins and starts its agent, on its child chat,
 // with its task ID, owned by that app.

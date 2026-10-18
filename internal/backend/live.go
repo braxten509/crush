@@ -50,6 +50,10 @@ type liveState struct {
 	hooked bool
 	// closed is set at teardown: nothing is recorded after it.
 	closed bool
+	// pendingQ2 lists the apps that left as the last one. Their Q2 waits
+	// for the teardown that follows: it runs only if an app joins first,
+	// aborting that teardown (runPendingQ2).
+	pendingQ2 []string
 
 	// initMu makes InitAgent calls take turns; nonInteractive records that
 	// the coordinator running is a non-interactive one, which a start makes
@@ -98,10 +102,13 @@ func (b *Backend) liveHooks() clientHooks {
 }
 
 // liveJoined starts the engine-wide work a workspace needs: the limits
-// refresh at the first one, and the memory checks while any exists.
-func (b *Backend) liveJoined(*Workspace, string) {
+// refresh at the first one, and the memory checks while any exists. A join
+// also aborts the teardown the last app's departure began, so that app's Q2
+// runs now.
+func (b *Backend) liveJoined(ws *Workspace, _ string) {
 	b.liveEngine().limitsOnce.Do(b.startLimits)
 	b.startMemoryChecks()
+	b.runPendingQ2(ws)
 }
 
 // liveTeardown stops recording and watching for the workspace, and the
@@ -115,6 +122,7 @@ func (b *Backend) liveTeardown(ws *Workspace) {
 	hooked := l.hooked
 	l.hooked = false
 	l.prompts, l.lastSender, l.owners, l.workChats = nil, nil, nil, nil
+	l.pendingQ2 = nil
 	l.mu.Unlock()
 	if stop != nil {
 		stop()

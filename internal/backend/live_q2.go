@@ -264,18 +264,45 @@ func (b *Backend) liveAgentInit(ws *Workspace, clientID string, interactive bool
 }
 
 // liveGone runs Q2 for the app that left; while other apps stay, in the
-// background. For the last app it runs here, before the teardown that
-// follows: an app that joins before that teardown takes the backend's lock
-// aborts it, and the leaver's work must not run on with no owner. Run first,
-// it is done before a later workspace can resume a helper under the same
-// task ID; when the teardown goes ahead, the teardown stops the rest.
+// background. The last app's Q2 waits for the teardown that follows, which
+// stops its work, unless an app joins before that teardown takes the
+// backend's lock and aborts it: then Q2 runs, at that join or here, so the
+// leaver's work does not run on with no owner. Run before a teardown that
+// goes ahead, Q2 would release the leaver's helpers while the workspace's
+// helper hub is still listed, for a resume to restart on that dying hub.
 func (b *Backend) liveGone(ws *Workspace, clientID string, reason GoneReason, workspaceEmpty bool) {
 	slog.Debug("An app left a workspace", "workspace", ws.ID, "client", clientID, "reason", reason, "last", workspaceEmpty)
-	if workspaceEmpty {
-		b.applyQ2(ws, clientID)
+	if !workspaceEmpty {
+		go b.applyQ2(ws, clientID)
 		return
 	}
-	go b.applyQ2(ws, clientID)
+	l := &ws.live
+	l.mu.Lock()
+	if !l.closed {
+		l.pendingQ2 = append(l.pendingQ2, clientID)
+	}
+	l.mu.Unlock()
+	// An app that joined before the entry above already ran the joined
+	// hooks; its claim aborts the teardown all the same.
+	ws.clientsMu.Lock()
+	joined := len(ws.clients) > 0
+	ws.clientsMu.Unlock()
+	if joined {
+		b.runPendingQ2(ws)
+	}
+}
+
+// runPendingQ2 runs the Q2 of the last apps that left, now that an app
+// joined and so aborted their teardown. Each runs once.
+func (b *Backend) runPendingQ2(ws *Workspace) {
+	l := &ws.live
+	l.mu.Lock()
+	pending := l.pendingQ2
+	l.pendingQ2 = nil
+	l.mu.Unlock()
+	for _, leaving := range pending {
+		b.applyQ2(ws, leaving)
+	}
 }
 
 // viewers maps each chat root that another open app shows to that app.

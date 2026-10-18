@@ -21,7 +21,8 @@ import (
 // with the caller's expected revision checked under the chat lock.
 
 var (
-	// ErrFilePlanExpired refuses a plan_id the engine no longer keeps.
+	// ErrFilePlanExpired refuses a plan_id the engine no longer keeps, or a
+	// preview plan made before the chat's newest message.
 	ErrFilePlanExpired = errors.New("the file preview expired; open it again")
 	// ErrTreeMessageNotFound refuses a tree message read for a message that
 	// is not in the chat named.
@@ -397,8 +398,9 @@ func (b *Backend) keepPlan(ws *Workspace, plan *filehistory.Plan) (proto.FilePla
 }
 
 // UndoFiles applies a kept plan: a preview's restore or an undo. Each plan
-// is used once. A preview plan is refused when the chat's revision moved
-// since the preview; a busy chat keeps the plan for another try.
+// is used once. A preview plan is refused when the chat moved since the
+// preview: as expired after a new message, and as a revision conflict
+// after a branch change. A busy chat keeps the plan for another try.
 func (b *Backend) UndoFiles(ctx context.Context, workspaceID, sessionID, planID string) (proto.FileRestoreResult, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
@@ -420,6 +422,9 @@ func (b *Backend) UndoFiles(ctx context.Context, workspaceID, sessionID, planID 
 	}
 	applyCtx := ctx
 	if kept.plan.UndoID == "" {
+		if err := checkPlanHead(ctx, ws, kept.plan); err != nil {
+			return proto.FileRestoreResult{}, err
+		}
 		applyCtx = agent.WithTreeRevision(ctx, kept.plan.Revision)
 	}
 	result, err := restorer.UndoFiles(applyCtx, kept.plan)
@@ -430,4 +435,36 @@ func (b *Backend) UndoFiles(ctx context.Context, workspaceID, sessionID, planID 
 		return proto.FileRestoreResult{}, err
 	}
 	return proto.FileRestoreResultFromDomain(result), nil
+}
+
+// checkPlanHead refuses a preview plan whose chat got a new message since
+// the preview. A new message moves the head but not the revision, so the
+// plan can never apply again (filehistory.Apply refuses it), and it is
+// expired. A moved revision passes, for the tree guard to refuse.
+func checkPlanHead(ctx context.Context, ws *Workspace, plan *filehistory.Plan) error {
+	tree, err := treeService(ws)
+	if err != nil {
+		return err
+	}
+	// The head first: a branch change in between then still shows as a
+	// moved revision.
+	entries, err := tree.Tree(ctx, plan.SessionID)
+	if err != nil {
+		return err
+	}
+	head := ""
+	for _, entry := range entries {
+		if entry.Active {
+			head = entry.MessageID
+			break
+		}
+	}
+	revision, err := tree.TreeRevision(ctx, plan.SessionID)
+	if err != nil {
+		return err
+	}
+	if revision == plan.Revision && head != plan.Source {
+		return fmt.Errorf("the chat has new messages: %w", ErrFilePlanExpired)
+	}
+	return nil
 }

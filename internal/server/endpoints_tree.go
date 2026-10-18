@@ -107,8 +107,9 @@ func (c *controllerV1) treeEndpoints() []apigen.Endpoint {
 
 		route(c, rpc.UndoFiles, c.undoFiles).
 			Summary("Apply a kept file plan").
-			Description("Each plan is used once. An unknown or expired plan_id answers 409 "+
-				"plan_expired; a preview whose chat moved since answers 409 revision_conflict.").
+			Description("Each plan is used once. An unknown or expired plan_id, or a preview made "+
+				"before the chat's newest message, answers 409 plan_expired; a preview made before "+
+				"a branch change answers 409 revision_conflict.").
 			Tags("tree").
 			PathParam("id", "Workspace ID").
 			PathParam("sid", "Session ID").

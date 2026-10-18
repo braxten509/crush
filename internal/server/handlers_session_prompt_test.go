@@ -106,10 +106,11 @@ func TestPromptPendingReachesEveryApp(t *testing.T) {
 	require.NoError(t, apps[1].SetCurrentSession(ctx, ws.ID, chatD.ID))
 
 	// The phone hub's view: the events of the engine's Source.
-	var phoneMarks atomic.Int32
+	var phoneEvents, phoneMarks atomic.Int32
 	phone := remote.NewSource(workspace.NewAppWorkspace(ws.App, ws.App.Store())).Events(ctx)
 	go func() {
 		for ev := range phone {
+			phoneEvents.Add(1)
 			if _, isMark := ev.Payload.(proto.PromptPending); isMark {
 				phoneMarks.Add(1)
 			}
@@ -155,5 +156,6 @@ func TestPromptPendingReachesEveryApp(t *testing.T) {
 	require.Equal(t, http.StatusOK, status, string(body))
 	expect(false)
 
+	require.Positive(t, phoneEvents.Load(), "the phone's stream carried the turns' events")
 	require.Zero(t, phoneMarks.Load(), "the mark never reaches the phone")
 }

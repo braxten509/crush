@@ -380,7 +380,7 @@ All commands are registered in `main.rs` by S3. Arguments are the JS names (Taur
 |---|---|---|---|
 | `app_info` | — | `{version, probe, fixture, cwd, session, continue_last, ui_debug, platform}` | `fixture` is a boolean; `platform`: `"linux"` or `"macos"`. Extends today's `{version, probe}` (`main.rs:15-24`) |
 | `probe_write` | `json: string` | `null` | unchanged (`main.rs:26-33`) |
-| `probe_request` | — | `object \| null` | probe mode only: the JSON of `<probe file>.request.json`, else `null` (1.9); reads, never writes |
+| `probe_request` | — | `{request, opened} \| null` | probe mode only: `request` is the JSON of `<probe file>.request.json` (`null` when there is none) and `opened` the count of lines in `<probe file>.opened.jsonl`; else `null` (1.9); reads, never writes |
 | `engine_open` | `cwd: string` | `OpenResult` (1.2.6) | joins; starts the stream |
 | `engine_retry` | — | `null` | the "Try again" button of the failed state |
 | `engine_set_current_session` | `sessionId: string` | `null` | `""` clears (landing). Remembered for rejoins |
@@ -941,11 +941,11 @@ Two terminal keys change meaning, both by the plan: **Ctrl+K** is Sessions searc
 
 Rects are viewport pixels (`getBoundingClientRect`). The base snapshot's one `shell` rect (`probe.js:25-26`) stays on the 200 ms rhythm for the look checks, which never run during a measured stretch.
 
-**Asking for heavy fields.** The driver writes `<probe file>.request.json` with `{"id": N}`, a new number each time (`harness.py` `probe_heavy()`). Each 200 ms tick the probe calls the command `probe_request` (1.3), which returns that file's JSON in probe mode and `null` otherwise. When the id is new and no measured stretch runs, that tick computes every section's heavy fields once and writes them with `"request_id": N`; the driver waits for that id. During a measured stretch a request waits until the stretch ends, so heavy fields can never land inside a speed measurement.
+**Asking for heavy fields.** The driver writes `<probe file>.request.json` with `{"id": N}`, a new number each time (`harness.py` `probe_heavy()`). Each 200 ms tick the probe calls the command `probe_request` (1.3), which returns `{request, opened}` in probe mode (`request` is that file's JSON) and `null` otherwise. When the id is new and no measured stretch runs, that tick computes every section's heavy fields once and writes them with `"request_id": N`; the driver waits for that id. During a measured stretch a request waits until the stretch ends, so heavy fields can never land inside a speed measurement.
 
 **The frame meter and measured stretches.** The meter runs only in probe mode: one `requestAnimationFrame` loop records each frame's time since the last; a `keydown` listener records the time from each key to the next frame. Ctrl+Alt+F12 starts a measured stretch: it sets `frames_mark`, clears the counters and sets `measuring`. Pressing it again ends the stretch: `measuring` turns false and the counters keep their values for the driver to read. A driver ends the stretch before it reads `frames` (`p3_speed.py` step 3, 2.9), so the values it reads are final. Outside probe mode the key does nothing.
 
-Two more probe fields exist for checks that cannot read the screen another way: `clipboard.last` (the last text the app wrote through `clipboard_write`, with its time) and `opened` (the count of lines in `<probe>.opened.jsonl`). The sandbox has no `xclip` or `xsel`, but Python's GTK 3 bindings are in `/usr` (checked: `gi` loads GTK 3.24), so `tests/driver/clip.py` reads and sets the hidden screen's real clipboard (`get-text`, `set-text TEXT`, `set-image FILE`; a setter keeps owning the clipboard for up to 10 s). Copy checks compare both `clipboard.last` and `clip.py get-text`.
+Two more probe fields exist for checks that cannot read the screen another way: `clipboard.last` (the last text the app wrote through `clipboard_write`, with its time) and `opened` (the count of lines in `<probe>.opened.jsonl`; the page has no command that reads that file, so `probe_request`'s answer carries the count on every tick, and no command is added for it). The sandbox has no `xclip` or `xsel`, but Python's GTK 3 bindings are in `/usr` (checked: `gi` loads GTK 3.24), so `tests/driver/clip.py` reads and sets the hidden screen's real clipboard (`get-text`, `set-text TEXT`, `set-image FILE`; a setter keeps owning the clipboard for up to 10 s). Copy checks compare both `clipboard.last` and `clip.py get-text`.
 
 ### 1.10 Registries that later phases plug into (S3)
 
@@ -1645,9 +1645,9 @@ One exact proposal per new surface, in the Scholar's edition language of the bui
   --hl-attr: #6a3d12;
   --hl-meta: #5f5e5a;
 
-  /* The 16 program colors for this paper (every one 4.5:1 or more on --paper) */
+  /* The 16 program colors for this paper (every one 4.5:1 or more on --band, the code background they sit on, and on --paper) */
   --ansi-0: #0f0f0f;  --ansi-1: #a1261b;  --ansi-2: #3f6b22;  --ansi-3: #8a5a00;
-  --ansi-4: #1f4f8a;  --ansi-5: #7a3b7d;  --ansi-6: #1d6670;  --ansi-7: #6f6e6f;
+  --ansi-4: #1f4f8a;  --ansi-5: #7a3b7d;  --ansi-6: #1d6670;  --ansi-7: #6e6d6e;
   --ansi-8: #5f5e5a;  --ansi-9: #c2341f;  --ansi-10: #4a7827; --ansi-11: #946400;
   --ansi-12: #2d63b0; --ansi-13: #924a95; --ansi-14: #23727c; --ansi-15: #4a4947;
 
@@ -1658,7 +1658,7 @@ One exact proposal per new surface, in the Scholar's edition language of the bui
   --t-code: 400 calc(17 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
 ```
 
-Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` (inferred arithmetic; the S3 builder re-runs it with the design detector). H4 to H6 use `--t-label` small caps.
+Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` (inferred arithmetic; the S3 builder re-runs it with the design detector). The program colors are checked against `--band` `#f3f1e6`, the code background they are drawn on (code blocks and tool bodies), not only against `--paper`. S3's recheck (WCAG formula, since nothing draws them yet for the detector to measure): all 16 reach 4.5:1 on `--band`, the lowest being `--ansi-11` at 4.54:1 and `--ansi-7` at 4.55:1. `--ansi-7` was `#6f6e6f` (4.48:1 on `--band`); `#6e6d6e` is the decision of PLAN.md §15 (S3 report). H4 to H6 use `--t-label` small caps.
 
 ### 4.1 Markdown in replies
 
@@ -1892,7 +1892,7 @@ Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` 
 | `tests/run-in-sandbox.sh` | copies `tests/project/` to `/tmp/home/proj`, runs `git init`, writes its `crush.json` with the fake provider's port, sets `CRUSH_DESKTOP_CRUSH=$DESKTOP_CRUSH` and `CRUSH_DESKTOP_ENV_MARK=leak-<16 random hex digits>` (written to `tests/out/<driver>/env-mark` for the check of 2.9), starts the app with `--cwd /tmp/home/proj $DESKTOP_ARGS`, and saves the app's output to `tests/out/<driver>/app.log` |
 | `tests/check.sh`, `tests/build-crush.sh` | section 6.1 |
 | `tests/driver/harness.py` | shared helpers: `probe_section`, `probe_heavy` (1.9), `word_rect`, `select_words`, `right_click`, `type_text`, `key`, `wait_text`, `engine_get` (curl over the socket), `fake_ai_requests`, `step(row)` (names the screenshot) |
-| `tests/project/` | the throwaway project template: `README.md`, `auth/session.go`, `crush.json.in` (the fake `openai-compat` provider with models `fake-small` and `fake-large`, `options.notifications: "disabled"`) |
+| `tests/project/` | the throwaway project template: `README.md`, `auth/session.go`, `crush.json.in` (the fake `openai-compat` provider with models `fake-small` and `fake-large`, `options.notifications: "disabled"`), and `go.mod` (`module example.com/proj`), which keeps the template out of Crush's Go module (without it `auth/session.go` would be a package of Crush's `./...`) |
 
 **Placeholder components** (review finding 2). Paths are under `src/components/`. "Its own" means only the owner imports the file, so its props are the owner's choice; every other row's props are pinned. A piece may add files inside its own folders without listing them here.
 

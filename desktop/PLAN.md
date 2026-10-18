@@ -366,6 +366,18 @@ Kept current during the build. Percent = share of the phase table in section 4.
     - one shared `active_theme` across both apps;
     - Yep! closing the window.
   - Pass 2 and its review wait under the cost hold.
+- Sign-in break: t28 (piece B follow-ups) and t38 (demo) stopped when the Claude Code sign-in expired; both were continued once it worked again.
+- The owner saw the demo ("it looks great!") and said to keep going with the full project, then "Stop building the demo". The demo helper (t38) was stopped; its work was committed as it stood on `desktop-demo` (`a3360c88`): run it with `DEMO_SKIP_BUILD=1 ~/dev/crush-desktop-demo/desktop/demo.sh`. Open in it, not fixed: a second permission ask in one reply does not show, and Stop during a shell tool shows "context canceled" as an error. Both are passed to the phases 3-4 recheck so the real build covers them. The cost hold is lifted.
+- Phases 3-4 design recheck, round 2 of 3 (t35, Claude Fable 5.1, high, read-only) on `d54b0aec`, checked against the merged engine. Scaffold S3 and phases 5-6 pass 2 start after it (both build on its result).
+- Decisions on the phases 5-6 pass 1 open questions (away mode, each easy to change; for the morning):
+  - Q-P1 and Q-P2: keep the terminal's behavior (Ctrl+Y selects inside the palette; the palette's Toggle Yolo stays silent).
+  - Q-P3: the desktop shows corrected text ("...before initializing the project..."); the terminal's slip is left for the owner.
+  - Q-P4: the desktop replaces the longest placeholder names first; the terminal is unchanged (recorded as a difference).
+  - Terminal-tab libraries approved: `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-image`, `portable-pty`, the Tauri dialog, clipboard, opener and single-instance plugins, and `tauri-plugin-notification` (picked over `notify-rust` so notifications follow Tauri's permission model). Exact versions are pinned in scaffold S5.
+  - Theme: the desktop keeps its own theme setting; choosing a theme in one app never changes the other. Other option: share `active_theme` (rejected: picking the edition in the desktop would turn the terminal light). To change: say "share the theme".
+  - The warning mark's "!" color and the edition's inline code color: look choices, so the Opus max designer (t32) picks them in pass 2 (the "!" needs at least 4.5:1 contrast).
+  - "Yep!" closes the window, and the app ends with its last window. Inferred texts stay, marked inferred.
+
 ### Owner decisions for the overnight run (2026-10-18, before bed)
 - Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
 - The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).

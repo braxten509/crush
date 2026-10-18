@@ -47,7 +47,9 @@ func TestNonInteractivePromptOnInteractiveCoordinator(t *testing.T) {
 				case <-ctx.Done():
 					return
 				}
-				_, _ = c.Run(context.Background(), call.SessionID, "reply")
+				// As cliagent.OnUnprompted starts it: hidden, no submission ID.
+				replyCtx := withCLIContinue(message.WithHiddenUserMessage(context.Background()))
+				_, _ = c.Run(replyCtx, call.SessionID, "reply")
 			}()
 		}
 		return fakeSessionReply(call, call.Prompt), nil

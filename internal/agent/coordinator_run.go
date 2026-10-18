@@ -64,8 +64,12 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 		// turn the agent starts there on its own, such as an agent CLI's
 		// reply between turns, joins it, as on a non-interactive coordinator.
 		// Such a turn has no submission ID; an app's prompt always has one
-		// (backend.SendMessage) and runs as its own turn.
-		if message.SubmissionID(ctx) == "" {
+		// (backend.SendMessage) and runs as its own turn. The terminal's
+		// hidden prompt ("Implement the plan.") has none either, so a hidden
+		// turn joins only when it is an agent CLI's own reply.
+		agentStarted := message.SubmissionID(ctx) == "" &&
+			(!message.HiddenUserMessage(ctx) || ctx.Value(cliContinueKey{}) != nil)
+		if agentStarted {
 			run = c.tasks.joinSessionRun(sessionID)
 		}
 		if run == nil {

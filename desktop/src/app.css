@@ -71,6 +71,44 @@
   --t-key: 600 calc(21 * var(--px)) / calc(25 * var(--px)) var(--face-mono);
   --track-label: 0.04em;
   --track-path: 0.15em;
+
+  /* Errors, warnings and diffs */
+  --error-ink: #a1261b;        /* oxblood: ERROR tags, exit codes, failed counts; 7.0:1 on --paper */
+  --amber-ink: #8a5a00;        /* WARN text, "~" estimates in warnings; 5.6:1 on --paper (--amber stays for icons) */
+  --diff-add-bg: #eaf0dc;
+  --diff-add-gutter: #dce6c8;
+  --diff-add-ink: #2f5a1e;     /* "+N" counts, added squares; 7.6:1 */
+  --diff-del-bg: #f6e6df;
+  --diff-del-gutter: #efd5ca;  /* removed lines use --error-ink for "−N" */
+
+  /* Selection and small tints */
+  --selection: #e6d9a8;        /* ::selection in the timeline and fields */
+  --skill-tint: #ece6d2;       /* $skill words in the field */
+  --code-inline: #6a3d12;      /* inline code text; 8.6:1 */
+  --code-bg: var(--band);      /* code blocks and tool bodies */
+  --scrim: rgb(249 248 239 / 0.92);  /* image viewer and sheet backdrop: paper, no blur */
+
+  /* Code highlighting (highlight.js classes map onto these) */
+  --hl-keyword: var(--ink);    /* weight 600 */
+  --hl-string: #3f5f22;
+  --hl-number: #7a4a08;
+  --hl-comment: #5f5e5a;       /* italic; 5.7:1 on --band */
+  --hl-function: var(--link);
+  --hl-type: #3e4f7a;
+  --hl-attr: #6a3d12;
+  --hl-meta: #5f5e5a;
+
+  /* The 16 program colors for this paper (every one 4.5:1 or more on --paper) */
+  --ansi-0: #0f0f0f;  --ansi-1: #a1261b;  --ansi-2: #3f6b22;  --ansi-3: #8a5a00;
+  --ansi-4: #1f4f8a;  --ansi-5: #7a3b7d;  --ansi-6: #1d6670;  --ansi-7: #6f6e6f;
+  --ansi-8: #5f5e5a;  --ansi-9: #c2341f;  --ansi-10: #4a7827; --ansi-11: #946400;
+  --ansi-12: #2d63b0; --ansi-13: #924a95; --ansi-14: #23727c; --ansi-15: #4a4947;
+
+  /* Reading roles for Markdown */
+  --t-h1: 400 calc(30 * var(--px)) / calc(38 * var(--px)) var(--face-display);
+  --t-h2: 400 calc(25 * var(--px)) / calc(32 * var(--px)) var(--face-display);
+  --t-h3: 600 calc(21 * var(--px)) / calc(30 * var(--px)) var(--face-text);
+  --t-code: 400 calc(17 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
 }
 
 html {

@@ -1,14 +1,20 @@
 <script>
   // The window: a framed page of three columns (chats, the conversation, and the
   // project panel). The side columns can be dragged wider or narrower; the
-  // conversation takes the rest, and the widths are remembered.
+  // conversation takes the rest, and the widths are remembered. The engine gate
+  // stands in for the conversation until the engine is ready, and the overlay
+  // host draws the menu, the viewer, help, details and the sheets over it all.
+  import { onMount } from "svelte";
   import ChatList from "./components/ChatList.svelte";
   import ColumnDivider from "./components/ColumnDivider.svelte";
   import Conversation from "./components/Conversation.svelte";
   import Frame from "./components/Frame.svelte";
+  import OverlayHost from "./components/overlay/OverlayHost.svelte";
   import SidePanel from "./components/SidePanel.svelte";
+  import EngineGate from "./components/start/EngineGate.svelte";
   import { COLUMN_LIMITS, dragColumn, fitColumns, loadColumns, saveColumns } from "./lib/columns.js";
   import { sample } from "./lib/sample.js";
+  import { start } from "./lib/stores/connection.svelte.js";
 
   const storage = (() => {
     try {
@@ -45,6 +51,11 @@
     observer.observe(page);
     return () => observer.disconnect();
   });
+
+  // Join the engine once the page is up (connection.svelte.js).
+  onMount(() => {
+    start();
+  });
 </script>
 
 <div class="sheet" data-probe="shell">
@@ -64,7 +75,9 @@
       ondone={done}
     />
     <div class="column conversation-column">
-      <Conversation conversation={sample.conversation} />
+      <EngineGate>
+        <Conversation />
+      </EngineGate>
     </div>
     <ColumnDivider
       side="right"
@@ -81,6 +94,8 @@
     </div>
   </div>
 </div>
+
+<OverlayHost />
 
 <style>
   .sheet {

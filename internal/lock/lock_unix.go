@@ -35,7 +35,16 @@ func lockFile(ctx context.Context, f *os.File) (func(), error) {
 }
 
 func tryLockFile(f *os.File) (func(), error) {
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+	return tryFlock(f, unix.LOCK_EX)
+}
+
+func tryLockFileShared(f *os.File) (func(), error) {
+	return tryFlock(f, unix.LOCK_SH)
+}
+
+// tryFlock takes the flock of kind (LOCK_EX or LOCK_SH) without waiting.
+func tryFlock(f *os.File, kind int) (func(), error) {
+	if err := unix.Flock(int(f.Fd()), kind|unix.LOCK_NB); err != nil {
 		if errors.Is(err, unix.EWOULDBLOCK) {
 			return nil, ErrContended
 		}

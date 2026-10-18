@@ -60,6 +60,15 @@ var recoveryCreateTimeout = 30 * time.Second
 // loses whatever was published while the client was away, so every
 // re-established stream — even one that reconnects on the first try —
 // re-asserts the client's session and asks the UI to resync.
+//
+// On an engine connection a third failure needs more: an engine that
+// cannot be reached ([client.IsUnreachable]) has died, so the loop runs
+// the ensure function ([ClientWorkspace.SetEnsureEngine]) to start a new
+// one and resubscribes at once; the new engine's 404 then re-registers
+// the workspace. An ensure whose engine cannot be reached either counts
+// as failed too, after the same wait, so an engine that dies as soon as it
+// starts does not spin the loop. After [maxEnsureFailures] failed ensures
+// in a row the connection is reported stuck, with the last error.
 func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 	w.subStarted.Store(true)
 	defer close(w.subDone)
@@ -67,6 +76,10 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 	backoff := sseReconnectInitialBackoff
 	degraded := false
 	recoveryFailures := 0
+	ensureFailures := 0
+	// ensured is set from a successful ensure until the engine is heard
+	// from.
+	ensured := false
 	markDegraded := func(err error, stuck bool) {
 		if degraded && !stuck {
 			return
@@ -85,6 +98,40 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 			if w.subCtx.Err() != nil {
 				return
 			}
+			if ensure := w.ensureEngineFunc(); ensure != nil && client.IsUnreachable(err) {
+				markDegraded(err, false)
+				if ensured {
+					// The engine the last ensure reported is already
+					// gone: that ensure failed too.
+					ensured = false
+					ensureFailures++
+					slog.Error("The engine stopped right after it started; retrying",
+						"error", err, "failures", ensureFailures, "retry_in", backoff)
+					markDegraded(err, ensureFailures >= maxEnsureFailures)
+					if !w.sleepOrDone(backoff) {
+						return
+					}
+					backoff = min(backoff*2, sseReconnectMaxBackoff)
+				}
+				ensureErr := w.runEnsureEngine(ensure)
+				if w.subCtx.Err() != nil {
+					return
+				}
+				if ensureErr == nil {
+					ensured = true
+					continue
+				}
+				ensureFailures++
+				slog.Error("Failed to start the engine again; retrying",
+					"error", ensureErr, "failures", ensureFailures, "retry_in", backoff)
+				markDegraded(ensureErr, ensureFailures >= maxEnsureFailures)
+				if !w.sleepOrDone(backoff) {
+					return
+				}
+				backoff = min(backoff*2, sseReconnectMaxBackoff)
+				continue
+			}
+			ensured = false
 			markDegraded(err, false)
 			if !errors.Is(err, client.ErrNotFound) {
 				slog.Error("Failed to subscribe to workspace events; retrying",
@@ -107,9 +154,11 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 			continue
 		}
 
+		ensured = false
 		if degraded {
 			degraded = false
 			recoveryFailures = 0
+			ensureFailures = 0
 			w.afterReconnect(send)
 		}
 		backoff = sseReconnectInitialBackoff
@@ -180,8 +229,8 @@ func (w *ClientWorkspace) recoverWorkspace() error {
 
 // recreateArgs derives the CreateWorkspace request used for recovery from
 // the cached snapshot. The ID is dropped so the server can dedupe by
-// path or mint a fresh workspace, and Version carries this client's
-// version, matching the startup handshake.
+// path or mint a fresh workspace, and Version and Protocol carry this
+// client's, matching the startup handshake.
 func (w *ClientWorkspace) recreateArgs() proto.Workspace {
 	ws := w.cached()
 	return proto.Workspace{
@@ -192,6 +241,7 @@ func (w *ClientWorkspace) recreateArgs() proto.Workspace {
 		Channels: ws.Channels,
 		Env:      ws.Env,
 		Version:  version.Version,
+		Protocol: proto.ProtocolVersion,
 	}
 }
 

@@ -3,70 +3,89 @@ package serverctl
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/url"
 	"os"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/client"
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/version"
 )
 
-// restartIfStale checks whether the running server matches the current
-// client version. When they differ it asks the server to stand down and,
-// if it agrees, removes the stale socket so the caller can start a fresh
-// server.
+// checkEngine applies the version rules of engine-design.md 5.1 c to the
+// server or engine c talks to:
+//
+//  1. Another protocol (an engine from before the field reports 0): it is
+//     asked to stand down if idle. If it agrees, reuse is false and the
+//     caller waits for its socket to go and starts a new one. If it is
+//     busy, the error is [backend.ErrProtocolMismatch]: it is never reused.
+//  2. The same protocol but another version or build: it is asked to stand
+//     down if idle. If it agrees, reuse is false; if it is busy, it is
+//     reused, as before.
+//  3. Everything equal: reuse.
 //
 // The request is conditional and the server has the last word: it refuses
 // while it is hosting anything, because BuildID derives from the
 // executable's mtime, so any rebuild (including every `go run`) makes a
 // second session look like an upgrade and would otherwise kill the first
 // session's workspaces. Servers too old to understand the conditional
-// command are left running for the same reason — the request they do
-// understand is unconditional. They shut themselves down when they go
-// idle, and the next client then finds no socket and spawns a current one.
-//
-// It returns restarted=true only when the server accepted the shutdown and
-// the caller must spawn a replacement.
-func restartIfStale(ctx context.Context, hostURL *url.URL) (restarted bool, err error) {
-	c, err := client.NewClient("", hostURL.Scheme, hostURL.Host)
-	if err != nil {
-		return false, err
-	}
+// command are asked with the unconditional one only after listing their
+// workspaces shows they are idle.
+func checkEngine(ctx context.Context, c *client.Client) (reuse bool, err error) {
 	vi, err := c.VersionInfo(ctx)
 	if err != nil {
 		return false, err
 	}
-	if vi.Version == version.Version && vi.BuildID == version.BuildID {
-		return false, nil
-	}
 	versionFields := []any{
+		"server_protocol", vi.Protocol,
+		"client_protocol", proto.ProtocolVersion,
 		"server_version", vi.Version,
 		"client_version", version.Version,
 		"server_build_id", vi.BuildID,
 		"client_build_id", version.BuildID,
 	}
-	// Every refusal — in use, too old to be asked, or unreachable — leads to
-	// the same safe outcome: keep using the running server. The wrapped
-	// error says which it was.
-	if err := c.ShutdownServerIfIdle(ctx); err != nil {
-		if !errors.Is(err, client.ErrUnsupported) {
-			slog.Warn("Server version differs but it will not stand down; reusing it",
-				append(versionFields, "error", err)...)
+	if vi.Protocol != proto.ProtocolVersion {
+		if standDownIfIdle(ctx, c, versionFields) {
+			slog.Info("Server speaks another protocol and accepted shutdown, restarting", versionFields...)
 			return false, nil
 		}
+		return false, &ensureError{
+			kind: backend.ErrProtocolMismatch,
+			msg: fmt.Sprintf("The Crush engine for this project is busy and speaks protocol %d; this crush speaks %d. Wait for its work to finish or close the apps using it, then try again.",
+				vi.Protocol, proto.ProtocolVersion),
+		}
+	}
+	if vi.Version == version.Version && vi.BuildID == version.BuildID {
+		return true, nil
+	}
+	if standDownIfIdle(ctx, c, versionFields) {
+		slog.Info("Stale server accepted shutdown, restarting", versionFields...)
+		return false, nil
+	}
+	slog.Info("Server version differs but it is in use; reusing it", versionFields...)
+	return true, nil
+}
+
+// standDownIfIdle asks the server to shut down if it is idle and reports
+// whether it agreed. Every refusal — in use, too old to be asked while
+// busy, or unreachable — is logged and reported as false.
+func standDownIfIdle(ctx context.Context, c *client.Client, versionFields []any) bool {
+	err := c.ShutdownServerIfIdle(ctx)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, client.ErrUnsupported) {
 		// The server predates shutdown_if_idle. Fall back to the
 		// unconditional command, but only after verifying it is idle.
-		if !shutdownLegacyStaleServer(ctx, c, versionFields) {
-			return false, nil
-		}
+		return shutdownLegacyStaleServer(ctx, c, versionFields)
 	}
-	slog.Info("Stale server accepted shutdown, restarting", versionFields...)
-	if err := awaitSocketGone(ctx, hostURL); err != nil {
-		return true, err
-	}
-	return true, nil
+	slog.Warn("Server version differs but it will not stand down",
+		append(versionFields, "error", err)...)
+	return false
 }
 
 // shutdownLegacyStaleServer handles a stale server too old to understand the

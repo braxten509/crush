@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -21,18 +20,6 @@ import (
 // path. The macOS sun_path field is 104 bytes; Linux allows 108. We
 // use 104 so the resulting path is portable across both platforms.
 const maxUnixSocketPathLen = 104
-
-// socketDir returns the directory used for the Crush Unix socket.
-// It prefers $XDG_RUNTIME_DIR when set (systemd's per-user runtime
-// directory on Linux), and otherwise falls back to [os.TempDir],
-// which resolves to the per-user private $TMPDIR on macOS and to
-// /tmp on Linux.
-func socketDir() string {
-	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
-		return dir
-	}
-	return os.TempDir()
-}
 
 // ErrServerClosed is returned when the server is closed.
 var ErrServerClosed = http.ErrServerClosed
@@ -60,29 +47,34 @@ func ParseHostURL(host string) (*url.URL, error) {
 	}, nil
 }
 
-// DefaultHost returns the default server host.
+// defaultSocketName is the legacy shared server's socket in the private
+// socket folder.
+const defaultSocketName = "crush.sock"
+
+// DefaultHost returns the default server host: the legacy shared
+// server's address.
 //
-// On Windows the address is a named pipe under \\.\pipe\. On Unix
-// platforms the socket lives in the per-user runtime directory
-// returned by [socketDir] and is named crush-<uid>.sock, falling
-// back to crush.sock when the current uid cannot be determined. If
-// the composed path would exceed [maxUnixSocketPathLen] bytes (the
-// macOS sun_path limit), we fall back to /tmp/crush-<uid>.sock so
-// the socket remains bindable.
+// On Windows the address is a named pipe under \\.\pipe\, named
+// crush-<uid>.sock (crush.sock when the uid cannot be determined). On
+// Unix platforms it is unix://<PrivateSocketDir>/crush.sock, a socket in
+// a checked private folder (engine-design.md 5.1 d); the 104-byte limit is
+// checked for crush.sock itself. When no folder is private enough it
+// returns "": there is no safe default, and callers report
+// [PrivateSocketDir]'s error instead.
 func DefaultHost() string {
-	sock := "crush.sock"
-	usr, err := user.Current()
-	if err == nil && usr.Uid != "" {
-		sock = fmt.Sprintf("crush-%s.sock", usr.Uid)
-	}
 	if runtime.GOOS == "windows" {
+		sock := "crush.sock"
+		usr, err := user.Current()
+		if err == nil && usr.Uid != "" {
+			sock = fmt.Sprintf("crush-%s.sock", usr.Uid)
+		}
 		return fmt.Sprintf("npipe:////./pipe/%s", sock)
 	}
-	path := filepath.Join(socketDir(), sock)
-	if len(path) > maxUnixSocketPathLen {
-		path = filepath.Join("/tmp", sock)
+	dir, err := privateSocketDir(defaultSocketName)
+	if err != nil {
+		return ""
 	}
-	return "unix://" + path
+	return "unix://" + filepath.Join(dir, defaultSocketName)
 }
 
 // Server represents a Crush server bound to a specific address.
@@ -179,6 +171,8 @@ func (s *Server) ListenAndServe() error {
 	if removedStale && s.logger != nil {
 		s.logger.Warn("Removed stale socket before binding", "address", s.Addr)
 	}
+	// An engine waits for its first app from the moment it listens.
+	s.backend.ArmFirstJoinGrace()
 	return s.Serve(ln)
 }
 

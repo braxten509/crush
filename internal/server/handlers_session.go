@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
@@ -11,12 +13,17 @@ import (
 )
 
 // sessionToWire converts a session for a REST response, filling the
-// computed-on-read busy and presence fields from the workspace (a nil
-// workspace reports neither).
-func sessionToWire(ws *backend.Workspace, s session.Session) proto.Session {
+// computed-on-read fields: busy and presence from the workspace (a nil
+// workspace reports neither), unfinished helper or job work, and the
+// answer the chat waits for.
+func (c *controllerV1) sessionToWire(ctx context.Context, ws *backend.Workspace, s session.Session) proto.Session {
 	out := proto.SessionFromDomain(s)
 	out.IsBusy = isSessionBusy(ws, s.ID)
 	out.AttachedClients = attachedClients(ws, s.ID)
+	out.HasUnfinishedWork = agent.SessionHasUnfinishedWork(s.ID)
+	if ws != nil {
+		out.PendingPrompt = c.backend.PendingPrompt(ctx, ws.ID, s.ID)
+	}
 	return out
 }
 
@@ -49,7 +56,7 @@ func (c *controllerV1) sessionResult(r *http.Request, s session.Session, err err
 		return proto.Session{}, err
 	}
 	ws, _ := c.backend.GetWorkspace(r.PathValue("id"))
-	return sessionToWire(ws, s), nil
+	return c.sessionToWire(r.Context(), ws, s), nil
 }
 
 // listSessions lists the sessions of a workspace.
@@ -62,7 +69,7 @@ func (c *controllerV1) listSessions(r *http.Request, _ rpc.Empty) ([]proto.Sessi
 	ws, _ := c.backend.GetWorkspace(id)
 	result := make([]proto.Session, len(sessions))
 	for i, s := range sessions {
-		result[i] = sessionToWire(ws, s)
+		result[i] = c.sessionToWire(r.Context(), ws, s)
 	}
 	return result, nil
 }

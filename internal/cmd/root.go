@@ -17,7 +17,6 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/memlimit"
-	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/exitbanner"
@@ -37,7 +36,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().StringP("data-dir", "D", "", "Custom crush data directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
-	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific crush server host (for advanced users)")
+	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", "", "Connect to a specific crush server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().BoolP("yolo", "y", true, "Automatically accept all permissions (dangerous mode; default on, --yolo=false to disable)")
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")

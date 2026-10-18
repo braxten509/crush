@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -165,4 +166,81 @@ func TestFile_ConcurrentAcquirers(t *testing.T) {
 
 	require.Equal(t, n, finished)
 	require.Equal(t, 1, maxSeen, "lock must be mutually exclusive")
+}
+
+// tryWithin runs try in a goroutine and fails the test when it has not
+// returned within a second, so a lock call that waits instead of refusing
+// fails here instead of hanging the test.
+func tryWithin(t *testing.T, try func() (func(), error)) (func(), error) {
+	t.Helper()
+	type result struct {
+		release func()
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		release, err := try()
+		done <- result{release, err}
+	}()
+	select {
+	case r := <-done:
+		return r.release, r.err
+	case <-time.After(time.Second):
+		t.Fatal("the lock call waited instead of answering at once")
+		return nil, nil
+	}
+}
+
+// TestSharedLocksCoexist proves two shared holders, each on its own file
+// descriptor, hold the lock together (engine-design.md 5.10).
+func TestSharedLocksCoexist(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("the shared lock is tested on Linux and Mac")
+	}
+	path := filepath.Join(t.TempDir(), "test.lock")
+
+	first, err := tryWithin(t, func() (func(), error) { return TryFileShared(path) })
+	require.NoError(t, err)
+	t.Cleanup(first)
+
+	second, err := tryWithin(t, func() (func(), error) { return TryFileShared(path) })
+	require.NoError(t, err, "a second shared holder must get the lock too")
+	t.Cleanup(second)
+}
+
+// TestExclusiveBlocksShared proves a shared lock is refused at once while
+// an exclusive holder has the file, and granted once it lets go.
+func TestExclusiveBlocksShared(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "test.lock")
+
+	release, err := TryFile(path)
+	require.NoError(t, err)
+
+	_, err = tryWithin(t, func() (func(), error) { return TryFileShared(path) })
+	require.ErrorIs(t, err, ErrContended)
+
+	release()
+	shared, err := tryWithin(t, func() (func(), error) { return TryFileShared(path) })
+	require.NoError(t, err)
+	shared()
+}
+
+// TestSharedBlocksExclusive proves an exclusive lock is refused at once
+// while a shared holder has the file, and granted once it lets go.
+func TestSharedBlocksExclusive(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "test.lock")
+
+	shared, err := TryFileShared(path)
+	require.NoError(t, err)
+
+	_, err = tryWithin(t, func() (func(), error) { return TryFile(path) })
+	require.ErrorIs(t, err, ErrContended)
+
+	shared()
+	release, err := tryWithin(t, func() (func(), error) { return TryFile(path) })
+	require.NoError(t, err)
+	release()
 }

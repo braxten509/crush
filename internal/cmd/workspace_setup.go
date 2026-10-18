@@ -186,12 +186,22 @@ func localSkillsDiscoveryConfig(store *config.ConfigStore) skills.DiscoveryConfi
 // setupClientServerWorkspace connects to a server process and wraps the
 // result in a ClientWorkspace.
 func setupClientServerWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
-	c, protoWs, _, err := connectToServer(cmd)
+	conn, err := connectToServerOrEngine(cmd)
 	if err != nil {
 		return nil, nil, err
 	}
+	protoWs := conn.ws
 
-	clientWs := workspace.NewClientWorkspace(c, *protoWs)
+	clientWs := workspace.NewClientWorkspace(conn.client, *protoWs)
+	if conn.engine != nil {
+		// When the engine stops answering, find or start it again before
+		// re-creating the workspace (engine-design.md 5.14).
+		opts := *conn.engine
+		clientWs.SetEnsureEngine(func(ctx context.Context) error {
+			_, err := serverctl.EnsureEngine(ctx, opts)
+			return err
+		})
+	}
 
 	if protoWs.Config.IsConfigured() {
 		if err := clientWs.InitCoderAgent(cmd.Context()); err != nil {
@@ -208,30 +218,126 @@ func setupClientServerWorkspace(cmd *cobra.Command) (workspace.Workspace, func()
 // connectToServer ensures the server is running, creates a client and
 // workspace, and returns a cleanup function that deletes the workspace.
 func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func(), error) {
-	hostURL, err := server.ParseHostURL(clientHost)
+	conn, err := connectToServerOrEngine(cmd)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid host URL: %v", err)
+		return nil, nil, nil, err
+	}
+	return conn.client, conn.ws, conn.cleanup, nil
+}
+
+// serverConnection is a workspace connectToServerOrEngine created.
+type serverConnection struct {
+	client  *client.Client
+	ws      *proto.Workspace
+	cleanup func()
+	// engine is set when the workspace is on the project's engine: the
+	// options that find or start that engine again.
+	engine *serverctl.EnsureOptions
+}
+
+// connectToServerOrEngine picks where the workspace lives
+// (engine-design.md 5.2), creates it there, and returns a cleanup that
+// leaves it:
+//
+//  1. With CRUSH_CLIENT_SERVER=1 and no --host: the project's engine,
+//     started if needed.
+//  2. With the switch off and no --host (only `crush logout` gets here):
+//     the project's live engine, when FindEngine finds one. It never
+//     starts one.
+//  3. Otherwise the legacy server at --host, as before.
+func connectToServerOrEngine(cmd *cobra.Command) (*serverConnection, error) {
+	cwd, err := ResolveCwd(cmd)
+	if err != nil {
+		return nil, err
+	}
+	if cmd.Flags().Changed("host") {
+		return connectToLegacyServer(cmd, cwd)
+	}
+
+	// ResolveCwd changed into the folder, so this is its absolute form:
+	// the engine resolves the project from it.
+	absCwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current working directory: %v", err)
+	}
+	dataDir, _ := cmd.Flags().GetString("data-dir")
+	debug, _ := cmd.Flags().GetBool("debug")
+	opts := serverctl.EnsureOptions{Cwd: absCwd, DataDir: dataDir, Debug: debug}
+
+	if useClientServer() {
+		h, err := serverctl.EnsureEngine(cmd.Context(), opts)
+		if err != nil {
+			return nil, err
+		}
+		return connectToEngine(cmd, opts, h)
+	}
+	h, ok, err := serverctl.FindEngine(cmd.Context(), opts)
+	if err != nil {
+		slog.Warn("Failed to look for the project's engine; using the server", "error", err)
+	}
+	if ok {
+		return connectToEngine(cmd, opts, h)
+	}
+	return connectToLegacyServer(cmd, cwd)
+}
+
+// connectToEngine creates the workspace on the project's engine h. A
+// create that meets the engine's exit runs ensure again and retries.
+func connectToEngine(cmd *cobra.Command, opts serverctl.EnsureOptions, h serverctl.EngineHandle) (*serverConnection, error) {
+	c, err := client.NewClient(opts.Cwd, "unix", h.Socket)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := createClientWorkspace(cmd, c, opts.Cwd, func() error {
+		_, err := serverctl.EnsureEngine(cmd.Context(), opts)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	conn.engine = &opts
+	return conn, nil
+}
+
+// connectToLegacyServer creates the workspace on the server at --host,
+// starting or replacing that server as needed. Without --host it is the
+// default host, looked up only now: a flag default would look for (and
+// create) the socket folder in every crush command.
+func connectToLegacyServer(cmd *cobra.Command, cwd string) (*serverConnection, error) {
+	host := clientHost
+	if host == "" {
+		host = server.DefaultHost()
+	}
+	if host == "" {
+		return nil, errNoDefaultHost()
+	}
+	hostURL, err := server.ParseHostURL(host)
+	if err != nil {
+		return nil, fmt.Errorf("invalid host URL: %v", err)
 	}
 
 	debug, _ := cmd.Flags().GetBool("debug")
 
-	if err := serverctl.Ensure(cmd.Context(), hostURL, clientHost, debug); err != nil {
-		return nil, nil, nil, err
-	}
-
-	yolo, _ := cmd.Flags().GetBool("yolo")
-	channels, _ := cmd.Flags().GetStringSlice("channels")
-	dataDir, _ := cmd.Flags().GetString("data-dir")
-
-	cwd, err := ResolveCwd(cmd)
-	if err != nil {
-		return nil, nil, nil, err
+	if err := serverctl.Ensure(cmd.Context(), hostURL, host, debug); err != nil {
+		return nil, err
 	}
 
 	c, err := client.NewClient(cwd, hostURL.Scheme, hostURL.Host)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
+	return createClientWorkspace(cmd, c, cwd, func() error {
+		return serverctl.ReplaceExiting(cmd.Context(), hostURL, host)
+	})
+}
+
+// createClientWorkspace creates the workspace for cwd through c. replace
+// brings up a new server when the one c reached is exiting.
+func createClientWorkspace(cmd *cobra.Command, c *client.Client, cwd string, replace func() error) (*serverConnection, error) {
+	debug, _ := cmd.Flags().GetBool("debug")
+	yolo, _ := cmd.Flags().GetBool("yolo")
+	channels, _ := cmd.Flags().GetStringSlice("channels")
+	dataDir, _ := cmd.Flags().GetString("data-dir")
 
 	wsReq := proto.Workspace{
 		Path:     cwd,
@@ -240,14 +346,13 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 		YOLO:     yolo,
 		Channels: channels,
 		Version:  version.Version,
+		Protocol: proto.ProtocolVersion,
 		Env:      os.Environ(),
 	}
 
-	ws, err := serverctl.CreateWorkspace(cmd.Context(), c, wsReq, func() error {
-		return serverctl.ReplaceExiting(cmd.Context(), hostURL, clientHost)
-	})
+	ws, err := serverctl.CreateWorkspace(cmd.Context(), c, wsReq, replace)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	if shouldEnableMetrics(ws.Config) {
@@ -266,7 +371,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 			_ = c.DeleteWorkspace(context.Background(), ws.ID)
 		}
 	}
-	return c, ws, cleanup, nil
+	return &serverConnection{client: c, ws: ws, cleanup: cleanup}, nil
 }
 
 func shouldEnableMetrics(cfg *config.Config) bool {

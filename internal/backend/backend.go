@@ -131,6 +131,22 @@ type Backend struct {
 	createGrace time.Duration
 	lingerDelay time.Duration
 	detachGrace time.Duration
+
+	// engineDataDir is the canonical data folder of the one project an
+	// engine serves ([Backend.SetEngine]), or "" on the legacy server.
+	// Guarded by mu.
+	engineDataDir string
+	// firstJoinGrace is how long an engine waits for its first app
+	// ([Backend.ArmFirstJoinGrace]). Guarded by mu.
+	firstJoinGrace time.Duration
+	// startedAt is when the backend was created, for GET /v1/engine.
+	startedAt time.Time
+
+	// promptWatchersMu guards promptWatchers: the waiting-for-an-answer
+	// watcher of each workspace whose agent started (pending_prompts.go).
+	// It is keyed by the workspace and cleaned up by the teardown hook.
+	promptWatchersMu sync.Mutex
+	promptWatchers   map[*Workspace]*promptWatcher
 }
 
 // New creates a new [Backend]. The returned backend routes MCP channel
@@ -147,6 +163,9 @@ func New(ctx context.Context, cfg *config.ConfigStore, shutdownFn ShutdownFunc) 
 		createGrace: DefaultCreateGrace,
 		lingerDelay: idleShutdownDelayFromEnv(),
 		detachGrace: durationFromEnv("CRUSH_SERVER_DETACH_GRACE", DefaultDetachGrace),
+		startedAt:   time.Now(),
+
+		promptWatchers: make(map[*Workspace]*promptWatcher),
 	}
 	b.startChannelRouter()
 	return b

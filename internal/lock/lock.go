@@ -3,8 +3,10 @@
 // File acquires an exclusive lock on the file at path, blocking until
 // the context is cancelled (or its deadline elapses). TryFile does the
 // same but returns ErrContended immediately if the lock is already
-// held. In both cases the returned release function drops the lock and
-// closes the underlying file descriptor.
+// held. TryFileShared takes a shared lock without waiting: any number of
+// shared holders coexist, and they exclude every exclusive holder. In all
+// cases the returned release function drops the lock and closes the
+// underlying file descriptor.
 //
 // The lock is released automatically by the kernel on process
 // termination (including crash), so no stale-lock recovery is needed.
@@ -63,6 +65,28 @@ func TryFile(path string) (func(), error) {
 	}
 
 	release, err := tryLockFile(f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	return func() {
+		release()
+		f.Close()
+	}, nil
+}
+
+// TryFileShared is like TryFile but takes a shared lock: it coexists with
+// other shared holders and returns ErrContended immediately while an
+// exclusive holder has the file (and an exclusive TryFile fails while any
+// shared holder has it).
+func TryFileShared(path string) (func(), error) {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open lock file %q: %w", path, err)
+	}
+
+	release, err := tryLockFileShared(f)
 	if err != nil {
 		f.Close()
 		return nil, err

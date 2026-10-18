@@ -70,6 +70,13 @@ export class SourceMap {
   pointToSource(node, offset, side = "start") {
     if (!node) return null;
     if (!this.root.contains(node)) {
+      // A point in an element around the root: before or after the child that holds it.
+      if (node.contains(this.root)) {
+        let child = this.root;
+        while (child.parentNode !== node) child = child.parentNode;
+        const index = Array.prototype.indexOf.call(node.childNodes, child);
+        return offset <= index ? this.edge("start") : this.edge("end");
+      }
       const before = this.root.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_PRECEDING;
       return before ? this.edge("start") : this.edge("end");
     }

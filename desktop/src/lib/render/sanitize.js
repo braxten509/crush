@@ -77,6 +77,14 @@ export function decodeEntity(ref) {
   return value;
 }
 
+// Every character reference in text decoded (CommonMark decodes them in text,
+// link targets and titles, never in code).
+export const ENTITY_REF = /&(?:[A-Za-z][A-Za-z0-9]{1,31}|#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6});/g;
+export function decodeEntities(text) {
+  const s = String(text);
+  return s.includes("&") ? s.replace(ENTITY_REF, decodeEntity) : s;
+}
+
 // KaTeX's HTML and MathML, sanitized with DOMPurify's default profile.
 export function mathFragment(html) {
   if (!mathPurifier) return emptyFragment();

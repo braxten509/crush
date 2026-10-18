@@ -288,6 +288,31 @@ func waitEvent[T any](t *testing.T, events <-chan any, match func(pubsub.Event[T
 	}
 }
 
+// waitAll reads events until each match has accepted one, in any order:
+// engine-sent events and the app's own (sessions) reach the stream by
+// different paths.
+func waitAll(t *testing.T, events <-chan any, matches ...func(any) bool) {
+	t.Helper()
+	timeout := time.After(10 * time.Second)
+	for pending := slices.Clone(matches); len(pending) > 0; {
+		select {
+		case ev, ok := <-events:
+			require.True(t, ok, "the event stream ended")
+			pending = slices.DeleteFunc(pending, func(match func(any) bool) bool { return match(ev) })
+		case <-timeout:
+			t.Fatalf("%d expected events never came", len(pending))
+		}
+	}
+}
+
+// eventOf matches an event of type pubsub.Event[T] that match accepts.
+func eventOf[T any](match func(pubsub.Event[T]) bool) func(any) bool {
+	return func(ev any) bool {
+		e, ok := ev.(pubsub.Event[T])
+		return ok && match(e)
+	}
+}
+
 func byMessage(tree proto.Tree) map[string]proto.TreeEntry {
 	out := map[string]proto.TreeEntry{}
 	for _, entry := range tree.Entries {
@@ -486,18 +511,26 @@ func TestCopyAnnouncesNewChat(t *testing.T) {
 
 	cloned, err := e.c.CopyTree(ctx, e.id, chat.id, proto.TreeCopyRequest{ExpectedRevision: tree.Revision, Target: chat.a2})
 	require.NoError(t, err)
-	created := waitEvent(t, events, func(ev pubsub.Event[proto.Session]) bool {
-		return ev.Type == pubsub.CreatedEvent && ev.Payload.ID == cloned.SessionID
-	})
+	var created pubsub.Event[proto.Session]
+	waitAll(t, events,
+		eventOf(func(ev pubsub.Event[proto.Session]) bool {
+			if ev.Type != pubsub.CreatedEvent || ev.Payload.ID != cloned.SessionID {
+				return false
+			}
+			created = ev
+			return true
+		}),
+		eventOf(func(ev pubsub.Event[proto.TreeChanged]) bool {
+			return ev.Payload.SessionID == chat.id && ev.Payload.Revision == cloned.Revision
+		}),
+	)
 	require.Empty(t, created.Payload.ParentSessionID)
-	changed := waitEvent(t, events, func(ev pubsub.Event[proto.TreeChanged]) bool { return ev.Payload.SessionID == chat.id })
-	require.Equal(t, cloned.Revision, changed.Payload.Revision)
 
 	forked, err := e.c.CopyTree(ctx, e.id, chat.id, proto.TreeCopyRequest{ExpectedRevision: cloned.Revision, Target: chat.u3, Fork: true})
 	require.NoError(t, err)
-	waitEvent(t, events, func(ev pubsub.Event[proto.Session]) bool {
+	waitAll(t, events, eventOf(func(ev pubsub.Event[proto.Session]) bool {
 		return ev.Type == pubsub.CreatedEvent && ev.Payload.ID == forked.SessionID
-	})
+	}))
 }
 
 // A file preview's plan is applied by its plan_id once; a used or unknown
@@ -639,10 +672,19 @@ func TestBranchParentSessionIDEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, links, link)
 
-	waitEvent(t, events, func(ev pubsub.Event[proto.Session]) bool {
-		return ev.Type == pubsub.CreatedEvent && ev.Payload.ID == branch.Session.ID
-	})
-	linked := waitEvent(t, events, func(ev pubsub.Event[proto.ChatLink]) bool { return ev.Payload.ID == link.ID })
+	var linked pubsub.Event[proto.ChatLink]
+	waitAll(t, events,
+		eventOf(func(ev pubsub.Event[proto.Session]) bool {
+			return ev.Type == pubsub.CreatedEvent && ev.Payload.ID == branch.Session.ID
+		}),
+		eventOf(func(ev pubsub.Event[proto.ChatLink]) bool {
+			if ev.Payload.ID != link.ID {
+				return false
+			}
+			linked = ev
+			return true
+		}),
+	)
 	require.Equal(t, pubsub.CreatedEvent, linked.Type)
 	require.Equal(t, link, linked.Payload)
 }

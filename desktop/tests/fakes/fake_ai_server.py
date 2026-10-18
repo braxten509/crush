@@ -59,10 +59,12 @@ errors and their "times". It also checks each script's shape and that every
 turn is reached by its own "when" text, and runs built-in cases for the rest
 (timing, titles, files, beacons, the control call, non-streamed requests).
 With --engine CRUSH (inside tests/sandbox.sh only) it also runs real
-`crush run` turns against the server, the fake AI tools, the fake MCP server and
-the fake LSP server (see engine_checks below). Exit 0 only when all pass.
+`crush run` turns against the server, the fake AI tools, seed_chat.py through
+the engine's API, the fake MCP server and the fake LSP server (see
+engine_checks below); their logs are copied to tests/out/fake_ai_server/.
+Exit 0 only when all pass.
 """
-import argparse, hashlib, json, os, random, re, shutil, socket, subprocess, sys, tempfile, threading, time, uuid
+import argparse, hashlib, importlib.util, json, os, random, re, shutil, socket, subprocess, sys, tempfile, threading, time, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import request as urlrequest
 from urllib.error import HTTPError
@@ -933,6 +935,257 @@ def builtin_cases(r):
                 "built-in: the log marks title requests and dropped tool calls")
     finally:
         shutil.rmtree(folder, ignore_errors=True)
+
+
+# Engine checks (inside tests/sandbox.sh only) -------------------------------------
+
+DESKTOP = os.path.dirname(os.path.dirname(HERE))
+ECHO_TEXT = "echo check 42"
+# A script for the engine checks alone, served beside the real ones by the
+# checks' own server (it is never written to scripts/).
+ENGINE_CHECK_SCRIPT = {"turns": [{"when": "Engine check: call the echo tool", "steps": [
+    {"text": "Calling the echo tool.", "tool_calls": [{"name": "mcp_fake_echo", "arguments": {"text": ECHO_TEXT}}]},
+    {"text": "The echo tool answered."}]}], "default": {"text": "OK."}}
+TOOL_MODELS = [("claude", "claude-code/opus", "Claude Code"), ("codex", "codex-cli/gpt-6-luna", "Codex"),
+               ("grok", "grok-cli/grok-4.7", "Grok"), ("opencode", "opencode-cli/opencode-go/glm-5.3", "OpenCode"),
+               ("agy", "agy-cli/gemini-3.8-flash-low", "Antigravity")]
+BASIC_DONE = "Done: the README describes a throwaway project for the window checks."
+
+
+def read_jsonl(path):
+    entries = []
+    if os.path.exists(path):
+        with open(path) as f:
+            for line in f:
+                try:
+                    entries.append(json.loads(line))
+                except ValueError:
+                    pass
+    return entries
+
+
+def flat(text):
+    return " ".join((text or "").split())
+
+
+def load_module(name):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, name + ".py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def wait_for(read, ok, seconds):
+    """Calls read until ok(value) or the time is up; returns the last value."""
+    deadline = time.time() + seconds
+    while True:
+        value = read()
+        if ok(value) or time.time() > deadline:
+            return value
+        time.sleep(0.2)
+
+
+def engine_project(work, port, logs):
+    """tests/project copied into work, with the fake provider on port, the fake
+    MCP server (and a broken one) and the fake LSP server."""
+    proj = os.path.join(work, "proj")
+    shutil.copytree(os.path.join(DESKTOP, "tests", "project"), proj, ignore=shutil.ignore_patterns("crush.json.in"))
+    subprocess.run(["git", "-C", proj, "init", "-q"], check=True)
+    with open(os.path.join(DESKTOP, "tests", "project", "crush.json.in")) as f:
+        cfg = json.loads(f.read().replace("@PORT@", str(port)))
+    py = sys.executable
+    cfg["mcp"] = {
+        "fake": {"type": "stdio", "command": py, "args": ["-I", os.path.join(HERE, "fake_mcp.py"), "--push-on", logs["push"]],
+                 "env": {"FAKE_MCP_LOG": logs["mcp"]}, "channel_enabled": True},
+        "broken": {"type": "stdio", "command": py, "args": ["-I", os.path.join(HERE, "fake_mcp.py"), "--fail"]},
+    }
+    cfg["lsp"] = {"fake": {"command": py, "args": ["-I", os.path.join(HERE, "fake_lsp.py")], "filetypes": ["go"],
+                           "root_markers": ["go.mod"], "env": {"FAKE_LSP_LOG": logs["lsp"]}}}
+    with open(os.path.join(proj, "crush.json"), "w") as f:
+        json.dump(cfg, f, indent=2)
+    return proj
+
+
+def crush_run(crush, proj, env, prompt, model=None, timeout=180):
+    args = [crush, "run", "-q"] + (["-m", model] if model else []) + [prompt]
+    p = subprocess.run(args, cwd=proj, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    return p.returncode, p.stdout, p.stderr
+
+
+def turn_text(scripts, when):
+    for script in scripts.values():
+        for turn in script.get("turns", []):
+            if turn.get("when") == when:
+                return "".join(s.get("text", "") for s in turn.get("steps", []))
+    return ""
+
+
+def check_engine_turns(r, crush, proj, env, logs, scripts):
+    """`crush run` with the openai-compat provider: a seed turn, then stream2m
+    played at time scale 0, which must leave its edit in speed/session.go."""
+    code, out, err = crush_run(crush, proj, env, "Seed turn short 1")
+    want = flat(turn_text(scripts, "Seed turn short"))
+    r.check(code == 0 and want and want in flat(out), f"engine: a seed turn prints the script's reply (exit {code}{', ' + err.strip()[-200:] if code else ''})")
+    before = open(os.path.join(proj, "auth", "session.go")).read()
+    code, out, err = crush_run(crush, proj, env, "Stream for two minutes", timeout=400)
+    r.check(code == 0, f"engine: stream2m plays to the end at time scale 0 (exit {code}{', ' + err.strip()[-200:] if code else ''})")
+    played = sorted({e.get("step") for e in read_jsonl(logs["ai"])
+                     if e.get("kind") == "turn" and e.get("script") == "stream2m" and e.get("turn") == 0 and e.get("status") == 200})
+    r.check(played == list(range(13)), f"engine: the engine asked for all 13 stream2m steps (got {played})")
+    copy = os.path.join(proj, "speed", "session.go")
+    text = open(copy).read() if os.path.exists(copy) else ""
+    r.check("func NewCookieWith(" in text and "12 * time.Hour" in text,
+            "engine: stream2m's two edits landed in speed/session.go (the view before each edit, the copy, the edit arguments)")
+    r.check(open(os.path.join(proj, "auth", "session.go")).read() == before, "engine: stream2m left auth/session.go alone")
+    titles = [e for e in read_jsonl(logs["ai"]) if e.get("kind") == "title" and e.get("script") == "stream2m" and e.get("turn") == 0]
+    r.check(bool(titles), "engine: the engine asked for stream2m's title")
+
+
+def check_engine_tools(r, crush, proj, env, logs):
+    """One turn per fake AI tool with each stream, checked against the tool log."""
+    for tool, model, label in TOOL_MODELS:
+        for prompt, want in (("basic hello", BASIC_DONE), ("hello there", f"Reply from the fake {label}.")):
+            start = len(read_jsonl(logs["tools"]))
+            code, out, err = crush_run(crush, proj, env, prompt, model=model)
+            ok = r.check(code == 0 and want in out, f"engine: {tool} replays its {prompt.split()[0] if prompt.startswith('basic') else 'default'} stream "
+                         f"(exit {code}{', ' + err.strip()[-200:] if code else ''})")
+            if not ok or prompt != "basic hello":
+                continue
+            entries = [e for e in read_jsonl(logs["tools"])[start:] if e.get("tool") == tool]
+            lines = []
+            for e in entries:
+                try:
+                    lines.append(json.loads(e.get("stdin") or "null"))
+                except ValueError:
+                    pass
+            lines = [x for x in lines if isinstance(x, dict)]
+            methods = {x.get("method") for x in lines}
+            if tool == "claude":
+                shake = any((x.get("request") or {}).get("subtype") == "initialize" for x in lines) and any(x.get("type") == "user" for x in lines)
+            elif tool == "codex":
+                shake = {"initialize", "hooks/list", "thread/start", "turn/start"} <= methods
+            elif tool in ("grok", "opencode"):
+                shake = {"initialize", "session/new", "session/prompt"} <= methods and any(
+                    ((x.get("result") or {}).get("outcome") or {}).get("outcome") == "selected" for x in lines)
+            else:
+                shake = any(x.get("event") == "user" for x in lines)
+            r.check(any("args" in e for e in entries) and shake, f"engine: {tool}'s log has its start and protocol lines")
+
+
+def check_engine_api(r, crush, proj, env, logs):
+    """Through the project's engine, joined first and kept as an attached
+    client (as the desktop app is while a driver seeds): seed_chat.py, then the
+    seeded chat, MCP, LSP and the push over the engine's API."""
+    sc = load_module("seed_chat")
+    api = sc.Engine(sc.ensure(crush, proj))
+    client = str(uuid.uuid4())
+    ws = api.call("POST", "/v1/workspaces", {"path": proj, "data_dir": "", "version": "self-test", "protocol": 1,
+                                             "client_id": client, "yolo": True, "env": ["%s=%s" % kv for kv in env.items()]})
+    base, q = "/v1/workspaces/" + ws["id"], "?client_id=" + client
+    del ws  # holds the environment; never print it
+    events = api.follow_events(base + "/events" + q)
+    try:
+        api.call("POST", base + "/agent/init" + q, {"interactive": True}, timeout=120)
+        seed = subprocess.run([sys.executable, "-I", os.path.join(HERE, "seed_chat.py"), "--cwd", proj, "--items", "12",
+                               "--crush", crush, "--title", "Seeded for checks"], env=env, capture_output=True, text=True, timeout=400)
+        if not r.check(seed.returncode == 0, f"engine: seed_chat.py --items 12 succeeds ({seed.stderr.strip()[-300:]})"):
+            return
+        info = json.loads(seed.stdout)
+        r.check(info.get("turns") == 5 and info.get("messages") == 12,
+                f"engine: seed_chat made 5 turns and 12 messages (got {info.get('turns')} and {info.get('messages')})")
+        r.check(info.get("workspace_id") == base.rsplit("/", 1)[1], "engine: seed_chat joined the workspace the checks hold")
+        sid = info["session_id"]
+        seeded = next((s for s in api.call("GET", base + "/sessions") if s["id"] == sid), {})
+        r.check(seeded.get("title") == "Seeded for checks" and seeded.get("message_count") == 12,
+                f"engine: the seeded chat is listed with its title and 12 messages (got {seeded.get('title')!r}, {seeded.get('message_count')})")
+        roles = [m["role"] for m in api.call("GET", "%s/sessions/%s/messages" % (base, sid))]
+        r.check(roles == ["user", "assistant"] * 4 + ["user", "assistant", "tool", "assistant"],
+                f"engine: the seeded messages come in turn order (got {roles})")
+        asked = [e.get("last_user", "") for e in read_jsonl(logs["ai"]) if e.get("kind") == "turn" and "Seed turn" in e.get("last_user", "")]
+        kinds = [re.search(r"Seed turn (\w+) (\d+)", t).group(1, 2) for t in asked if re.search(r"Seed turn (\w+) (\d+)", t)]
+        r.check(("short", "1") in kinds and ("tool", "5") in kinds, "engine: the fake server answered the seeded prompts")
+
+        states = wait_for(lambda: api.call("GET", base + "/mcp/states"),
+                          lambda s: (s.get("fake") or {}).get("state") == "connected" and (s.get("broken") or {}).get("state") == "error", 20)
+        # The engine lists a server's resources only when asked to refresh
+        # them (the terminal's MCP command does), so the count needs this.
+        api.call("POST", base + "/mcp/refresh-resources" + q, {"name": "fake"})
+        states = wait_for(lambda: api.call("GET", base + "/mcp/states"), lambda s: (s.get("fake") or {}).get("resource_count") == 1, 10)
+        fake = states.get("fake") or {}
+        r.check(fake.get("state") == "connected" and fake.get("tool_count") == 1 and fake.get("resource_count") == 1
+                and not fake.get("prompt_count") and fake.get("channel") is True,
+                f"engine: the fake MCP server is connected with 1 tool, 0 prompts, 1 resource and its channel (got {fake})")
+        r.check((states.get("broken") or {}).get("state") == "error", f"engine: the broken MCP server is in error (got {states.get('broken')})")
+        contents = api.call("POST", base + "/mcp/read-resource" + q, {"name": "fake", "uri": "fake://notes/today.md"})
+        note = load_module("fake_mcp").NOTE
+        r.check(bool(contents) and contents[0].get("text") == note, "engine: the fake MCP resource reads back its text")
+
+        esid = api.call("POST", base + "/sessions" + q, {"title": "Echo check"})["id"]
+        api.call("POST", base + "/agent" + q, {"session_id": esid, "prompt": "Engine check: call the echo tool"})
+        done = wait_for(lambda: api.call("GET", "%s/sessions/%s" % (base, esid)), lambda s: s["message_count"] >= 4 and not s["is_busy"], 60)
+        calls = [m["in"] for m in read_jsonl(logs["mcp"]) if (m.get("in") or {}).get("method") == "tools/call"]
+        r.check(bool(calls) and calls[-1].get("params") == {"name": "echo", "arguments": {"text": ECHO_TEXT}},
+                f"engine: a turn calls mcp_fake_echo with its arguments (calls {calls})")
+        msgs = api.call("GET", "%s/sessions/%s/messages" % (base, esid))
+        r.check(done["message_count"] >= 4 and any(m["role"] == "tool" and ECHO_TEXT in json.dumps(m["parts"]) for m in msgs),
+                "engine: the echo tool's result is in the chat")
+
+        lsps = wait_for(lambda: api.call("GET", base + "/lsps"), lambda l: (l.get("fake") or {}).get("state") in (2, "ready"), 15)
+        r.check((lsps.get("fake") or {}).get("state") in (2, "ready"), f"engine: the fake LSP is ready (got {lsps.get('fake')})")
+        diags = wait_for(lambda: api.call("GET", base + "/lsps/fake/diagnostics"),
+                         lambda d: any(u.endswith("/auth/session.go") and len(v) == 2 for u, v in d.items()), 10)
+        found = next((v for u, v in diags.items() if u.endswith("/auth/session.go")), [])
+        r.check(sorted(d.get("severity") for d in found) == [1, 2],
+                f"engine: the fake LSP's error and warning reached the engine for the viewed auth/session.go (got {found})")
+
+        open(logs["push"], "w").close()
+        pushed = wait_for(lambda: [e for e in read_jsonl(logs["ai"]) if '<channel source="fake"' in e.get("last_user", "")], bool, 20)
+        r.check(bool(pushed) and "Build finished: 12 tests passed." in pushed[0]["last_user"],
+                "engine: the fake MCP channel push became a turn (the engine routes it)")
+        bound = wait_for(lambda: [s for s in api.call("GET", base + "/sessions") if s.get("channel") == "fake"], bool, 10)
+        r.check(bool(bound), "engine: the push's chat is bound to the fake channel")
+    finally:
+        try:
+            api.call("DELETE", "/v1/clients/" + client)
+        except (sc.ApiError, OSError):
+            pass
+        events.close()
+
+
+def engine_checks(r, crush, scripts):
+    """Real engine checks, inside tests/sandbox.sh only (it hides the owner's
+    files and screen): `crush run` turns against this server (a seed turn,
+    stream2m at time scale 0 with its edit landing), a turn per fake AI tool,
+    and through `crush engine ensure`: seed_chat.py, the seeded chat over the
+    engine's API, the fake MCP server (state, resource, echo called from a
+    turn, the channel push becoming a turn), a broken MCP server, and the
+    fake LSP server's diagnostics."""
+    if os.environ.get("HOME") != "/tmp/home" or not os.environ.get("DESKTOP_ROOT"):
+        r.check(False, "engine checks: run them inside tests/sandbox.sh")
+        return
+    crush = os.path.abspath(crush)
+    if not r.check(os.access(crush, os.X_OK), f"engine checks: {crush} is executable"):
+        return
+    work = tempfile.mkdtemp(prefix="engine-checks-", dir="/tmp")
+    logs = {name: os.path.join(work, name + ".jsonl") for name in ("ai", "tools", "mcp", "lsp")}
+    logs["push"] = os.path.join(work, "push-now")
+    srv = make_server(Fake({**scripts, "zz_engine_checks": ENGINE_CHECK_SCRIPT}, None, 0.0, logs["ai"]))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    env = dict(os.environ, FAKE_TOOL_LOG=logs["tools"])
+    try:
+        proj = engine_project(work, srv.server_address[1], logs)
+        check_engine_turns(r, crush, proj, env, logs, scripts)
+        check_engine_tools(r, crush, proj, env, logs)
+        check_engine_api(r, crush, proj, env, logs)
+    except Exception as e:  # a crash is a failed check, with its reason
+        r.check(False, f"engine checks stopped: {type(e).__name__}: {e}")
+    finally:
+        srv.shutdown()
+        out = os.path.join(DESKTOP, "tests", "out", "fake_ai_server")
+        os.makedirs(out, exist_ok=True)
+        for name in ("ai", "tools", "mcp", "lsp"):
+            if os.path.exists(logs[name]):
+                shutil.copy(logs[name], os.path.join(out, f"engine-{name}.jsonl"))
 
 
 def self_test(scripts_dir, engine=None):

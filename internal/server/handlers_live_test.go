@@ -310,21 +310,25 @@ func TestSetMemoryLimitMatchesTerminal(t *testing.T) {
 		return calls[len(calls)-1]
 	}
 
-	for value, text := range map[string]string{
-		"abc":  "Enter a number of GB, or leave it empty for no limit",
-		"-3":   "Enter a number of GB, or leave it empty for no limit",
-		"1":    "Enter at least 2 GB, or leave it empty for no limit",
-		"1 GB": "Enter at least 2 GB, or leave it empty for no limit",
-	} {
+	// The terminal's dialog checks a number with config.ValidateMemoryLimitGB
+	// (ui/dialog parseMemoryLimit, and ui/model setMemoryLimit), so those
+	// texts come from it. Its text for a value that is no number is made in
+	// that unexported parseMemoryLimit, out of reach, so it is copied here.
+	for value, gb := range map[string]float64{"-3": -3, "1": 1, "1 GB": 1} {
 		liveError(t, h, http.MethodPut, "/v1/memory/limit", proto.MemoryLimitRequest{Value: value},
-			http.StatusBadRequest, "bad_request", text)
+			http.StatusBadRequest, "bad_request", config.ValidateMemoryLimitGB(gb).Error())
 	}
+	liveError(t, h, http.MethodPut, "/v1/memory/limit", proto.MemoryLimitRequest{Value: "abc"},
+		http.StatusBadRequest, "bad_request", "Enter a number of GB, or leave it empty for no limit")
 	mu.Lock()
 	require.Empty(t, calls, "a refused value is neither saved nor applied")
 	mu.Unlock()
 	_, saved := config.SavedMemoryLimitGB()
 	require.False(t, saved)
 
+	// The notices are copies too: the terminal makes them in an unexported
+	// closure of ui/model setMemoryLimit, which also applies the limit to
+	// the real memory box.
 	for _, tc := range []struct {
 		value  string
 		gb     float64

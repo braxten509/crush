@@ -63,6 +63,13 @@ func ResumeInterruptedTasks() {
 	}
 }
 
+// saves reports whether work started with ctx is saved for a later resume:
+// not a non-interactive run's, which ends with its run, nor a
+// [WithNonInteractive] prompt's on an interactive coordinator.
+func (h *taskHub) saves(ctx context.Context) bool {
+	return h.c != nil && h.c.interactiveTurn(ctx)
+}
+
 // savedTasksPath is where this hub saves its running tasks, or "" when it
 // doesn't: non-interactive runs end with their tasks.
 func (h *taskHub) savedTasksPath() string {

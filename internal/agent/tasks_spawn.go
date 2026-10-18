@@ -231,7 +231,9 @@ func (h *taskHub) startRun(ctx context.Context, release func(), t *Task, sub Ses
 	t.StartedBy = owner
 	snapshot := *t
 	h.mu.Unlock()
-	h.remember(snapshot, provider.ID)
+	if h.saves(ctx) {
+		h.remember(snapshot, provider.ID)
+	}
 	h.publish(snapshot)
 
 	go func() {

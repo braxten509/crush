@@ -360,7 +360,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 	a := t.a
 	// Copy mutable fields under lock to avoid races with SetTools/SetModels.
-	agentTools := filterToolsForChannel(a.tools.Copy(), t.call.Channel, mcp.GetStates())
+	agentTools := a.callTools(t.call)
 	t.largeModel = a.largeModel.Get()
 	t.cliModel, t.isCLI = t.largeModel.Model.(*cliagent.Model)
 	systemPrompt := a.systemPrompt.Get()

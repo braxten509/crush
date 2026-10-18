@@ -42,9 +42,6 @@ func (h *taskHub) ask(req TaskRequest) error {
 	if err := r.Validate(); err != nil {
 		return err
 	}
-	if secure != nil && !h.c.interactive {
-		return errors.New("secure_entry questions need the local interactive Crush terminal, which this run doesn't have")
-	}
 	ctx, release := h.reserveFollowUp(req.Session)
 	started := false
 	defer func() {
@@ -52,6 +49,12 @@ func (h *taskHub) ask(req TaskRequest) error {
 			release()
 		}
 	}()
+	// A [WithNonInteractive] prompt's run gets no answers, as on a
+	// non-interactive coordinator.
+	interactive := h.c.interactiveTurn(ctx)
+	if secure != nil && !interactive {
+		return errors.New("secure_entry questions need the local interactive Crush terminal, which this run doesn't have")
+	}
 	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {
 		return fmt.Errorf("unknown session %q", req.Session)
 	}
@@ -90,7 +93,7 @@ func (h *taskHub) ask(req TaskRequest) error {
 			if err == nil && result.Cancelled {
 				err = question.ErrCancelled
 			}
-		case h.c.interactive:
+		case interactive:
 			answers, err = h.c.questions.Ask(ctx, r)
 		default:
 			err = question.ErrCancelled
@@ -102,7 +105,7 @@ func (h *taskHub) ask(req TaskRequest) error {
 		switch {
 		case errors.Is(err, question.ErrCancelled):
 			status, out = AskCancelled, "The user closed the questions without answering."
-			if !h.c.interactive {
+			if !interactive {
 				out = "Questions were cancelled because this non-interactive run cannot receive user answers. Continue without assuming an answer."
 			}
 		case err != nil:

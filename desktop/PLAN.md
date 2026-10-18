@@ -382,6 +382,14 @@ Kept current during the build. Percent = share of the phase table in section 4.
 - Scaffold S3 started (t39, Claude Opus 5.5 max, worktree `~/dev/crush-desktop-s3`, branch `desktop-s3` from `9e7f4fe7`) in parallel with that fix round. Why: the reviewer judged S3 ready as written, and the fixes change only behavior text the pieces read. Other option: wait for the fix round (rejected: it idles the build for no change to S3).
 - Phases 5-6 design pass 2 started (t32 continued) on `d54b0aec`, with the decisions above and the merged engine as the source of truth.
 
+- Piece B follow-ups (t28, round 1, `b8ae1109`): all eight committed; the builder's focused checks, race run, builds, vets, gofmt and ownership pass. Decisions (away mode, each easy to change):
+  - Item 1 redone: the builder's version let a non-interactive start reuse the interactive coordinator, which would let server-mode `crush run` hang on the `question` tool. A non-interactive start now gets its own coordinator beside the interactive one. Other option: accept the hang risk (rejected: a terminal regression).
+  - Item 2: the reviewer's suggested fix broke `TestRecreateWhileTeardownRuns` (a helper could restart on the dying workspace). Accepted the builder's version: the last app's Q2 waits; the teardown stops the work, or Q2 runs at the next join. Known narrow gap: the joining app leaves again before the teardown takes its lock.
+  - Item 3: `limit_bytes` counts the dialog's saved limit, else `options.memory_limit_gb` from the config files, else 0.
+  - Item 5: owner records are forgotten on a helper's end event or a job missing from the list. Known gap: a dropped end event keeps that record until its app leaves.
+  - Item 7: the number texts share the terminal's `ValidateMemoryLimitGB`; the "abc" text and three notices stay copied (the terminal makes them in unexported code).
+  - Recheck round 2 (t37, read-only) covers items 2-8 now; item 1 follows in round 3.
+
 ### Owner decisions for the overnight run (2026-10-18, before bed)
 - Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
 - The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).

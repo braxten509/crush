@@ -298,6 +298,17 @@ func (b *Backend) CopyTree(ctx context.Context, workspaceID, sessionID string, r
 	if err != nil {
 		return proto.TreeCopyResult{}, err
 	}
+	// The undo record of a file restore applied just before goes with the
+	// new chat, as message.CopyTree moves it in-process.
+	if req.UndoID != "" {
+		store, err := fileHistory(ws)
+		if err != nil {
+			return proto.TreeCopyResult{}, err
+		}
+		if err := store.MoveUndo(ctx, req.UndoID, newID); err != nil {
+			return proto.TreeCopyResult{}, err
+		}
+	}
 	if err := announce(ctx, ws, newID); err != nil {
 		return proto.TreeCopyResult{}, err
 	}

@@ -30,8 +30,8 @@ func treeHead(entries []message.TreeEntry) string {
 }
 
 // A ClientWorkspace does tree actions and file restores through the engine:
-// it sends the revision of its last tree read, and applies a file plan by
-// the plan ID it came with.
+// it sends the revision of its last tree read or change, and applies a file
+// plan by the plan ID it came with.
 func TestClientWorkspaceTreeAndFiles(t *testing.T) {
 	xdgIsolate(t)
 	t.Setenv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
@@ -89,9 +89,20 @@ func TestClientWorkspaceTreeAndFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "The coast.", msg.Content().Text)
 
-	// A move without a fresh read sends the revision of the last read: after
-	// one move it is stale, and the engine refuses.
+	// A change without a fresh read sends the revision the last change
+	// answered with, so changes in a row go through.
 	require.NoError(t, tree.SwitchTree(ctx, chat.ID, mountains))
+	require.NoError(t, tree.LabelTree(ctx, chat.ID, coast, "coast"))
+	require.NoError(t, tree.SwitchTree(ctx, chat.ID, coast))
+
+	// A change by another app in between makes that revision stale: the
+	// engine refuses until this app reads the tree again.
+	otherClient := rt.newClient(t, cwd)
+	otherInfo, err := otherClient.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: dataDir}))
+	require.NoError(t, err)
+	require.Equal(t, created.ID, otherInfo.ID)
+	other := workspace.NewClientWorkspace(otherClient, *otherInfo)
+	require.NoError(t, other.SwitchTree(ctx, chat.ID, mountains))
 	require.ErrorContains(t, tree.SwitchTree(ctx, chat.ID, coast), "the chat's branches changed")
 	_, err = tree.Tree(ctx, chat.ID)
 	require.NoError(t, err)

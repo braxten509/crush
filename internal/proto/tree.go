@@ -43,7 +43,8 @@ type TreeMoveRequest struct {
 type TreeCopyRequest struct {
 	ExpectedRevision int64  `json:"expected_revision"`
 	Target           string `json:"target"`
-	Fork             bool   `json:"fork"` // true = fork, false = clone
+	Fork             bool   `json:"fork"`              // true = fork, false = clone
+	UndoID           string `json:"undo_id,omitempty"` // the undo of a file restore applied just before; it goes with the new chat
 }
 
 // TreeResult is a chat's revision after a tree action.

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -28,6 +29,8 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/server"
+	"github.com/charmbracelet/crush/internal/workspace"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,12 +143,13 @@ func (l *treeLLM) serve(w http.ResponseWriter, r *http.Request) {
 // treeEngine is a real engine behind a test server, with one workspace
 // whose agent talks to a fake model, and the client of one app.
 type treeEngine struct {
-	c   *client.Client
-	ws  *backend.Workspace
-	id  string
-	url string
-	hc  *http.Client
-	llm *treeLLM
+	c    *client.Client
+	ws   *backend.Workspace
+	id   string
+	info proto.Workspace
+	url  string
+	hc   *http.Client
+	llm  *treeLLM
 }
 
 // newTreeEngine starts the engine. HOME and the XDG folders are temporary,
@@ -184,12 +188,18 @@ func newTreeEngine(t *testing.T) *treeEngine {
 	coder.AllowedTools = nil // the fake model never calls a tool
 	ws.Cfg.Config().Agents[config.AgentCoder] = coder
 	require.NoError(t, c.InitiateAgentProcessing(t.Context(), created.ID, false))
-	return &treeEngine{c: c, ws: ws, id: created.ID, url: hs.URL, hc: hs.Client(), llm: llm}
+	return &treeEngine{c: c, ws: ws, id: created.ID, info: *created, url: hs.URL, hc: hs.Client(), llm: llm}
 }
 
 // send calls a route directly as this engine's app and returns the status
 // and, for a refusal, its error body.
 func (e *treeEngine) send(t *testing.T, method, path string, body any) (int, proto.Error) {
+	t.Helper()
+	return e.sendAs(t, e.c.ClientID(), method, path, body)
+}
+
+// sendAs is send with clientID as the client_id, or with none for "".
+func (e *treeEngine) sendAs(t *testing.T, clientID, method, path string, body any) (int, proto.Error) {
 	t.Helper()
 	var reader io.Reader = http.NoBody
 	if body != nil {
@@ -197,7 +207,11 @@ func (e *treeEngine) send(t *testing.T, method, path string, body any) (int, pro
 		require.NoError(t, err)
 		reader = bytes.NewReader(data)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), method, e.url+path+"?client_id="+e.c.ClientID(), reader)
+	target := e.url + path
+	if clientID != "" {
+		target += "?client_id=" + url.QueryEscape(clientID)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), method, target, reader)
 	require.NoError(t, err)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -664,6 +678,58 @@ func TestFilePlanStaleAfterNewMessage(t *testing.T) {
 	require.Equal(t, "plan_expired", refusal.Code)
 	require.Equal(t, "v2\n", chat.read(t), "no file was restored")
 	require.Equal(t, before, e.tree(t, chat.id), "the chat did not change")
+}
+
+// A fork through a ClientWorkspace with an approved file restore takes the
+// restore's undo record along, as in-process: the new chat can undo the
+// restore, and the source chat has none left.
+func TestForkMovesUndoRecord(t *testing.T) {
+	e := newTreeEngine(t)
+	ctx := t.Context()
+	chat := e.notesChat(t)
+	ws := workspace.NewClientWorkspace(e.c, e.info)
+
+	plan, err := ws.PreviewFiles(ctx, chat.id, chat.first, true)
+	require.NoError(t, err)
+	require.Len(t, plan.Entries, 1)
+	request := &message.FileRestoreRequest{Plan: plan}
+	forked, prompt, err := ws.CopyTree(message.WithFileRestore(ctx, request), chat.id, chat.first, true)
+	require.NoError(t, err)
+	require.Equal(t, "Edit the notes", prompt)
+	require.Equal(t, 1, request.Result.Restored)
+	require.NotEmpty(t, request.Result.UndoID)
+	require.Equal(t, "v1\n", chat.read(t))
+
+	undo, err := ws.PreviewUndoFiles(ctx, forked)
+	require.NoError(t, err)
+	require.Equal(t, request.Result.UndoID, undo.UndoID)
+	_, err = ws.PreviewUndoFiles(ctx, chat.id)
+	require.ErrorContains(t, err, "There is no file restore to undo in this chat")
+}
+
+// The optional client_id of the tree routes: none passes, a malformed one
+// is a 400, and one whose app is not on the workspace a 409. A refused
+// call changes nothing.
+func TestTreeClientID(t *testing.T) {
+	e := newTreeEngine(t)
+	chat := e.treeChat(t)
+	for _, tc := range []struct {
+		name, clientID string
+		status         int
+		code           string
+	}{
+		{"malformed", "not-a-uuid", http.StatusBadRequest, "bad_request"},
+		{"app not on the workspace", uuid.NewString(), http.StatusConflict, "client_not_attached"},
+		{"none", "", http.StatusOK, ""},
+	} {
+		label := "label for " + tc.name
+		req := proto.TreeLabelRequest{ExpectedRevision: e.tree(t, chat.id).Revision, Target: chat.a2, Label: label}
+		status, refusal := e.sendAs(t, tc.clientID, http.MethodPost, rpc.LabelTree.URL(e.id, chat.id), req)
+		require.Equal(t, tc.status, status, tc.name)
+		require.Equal(t, tc.code, refusal.Code, tc.name)
+		labeled := byMessage(e.tree(t, chat.id))[chat.a2].Label == label
+		require.Equal(t, tc.status == http.StatusOK, labeled, tc.name)
+	}
 }
 
 // A tree message read names its chat: a message of another chat is 404.

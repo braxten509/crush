@@ -22,18 +22,20 @@ func TestNonInteractiveInitKeepsInteractiveCoordinator(t *testing.T) {
 	r.send(t, ws, a, c, "a2", "live:hold:a2")
 	requireQueued(t, ws, c, "a2")
 	before := ws.coordinator()
+	turnCalls, helperCalls := r.model.callsOf("a1"), r.model.callsOf(helper.Name)
 
 	require.NoError(t, r.b.InitAgent(context.Background(), ws.ID, "", false))
 
 	require.True(t, ws.coordinator() == before, "the interactive coordinator stays")
 	require.True(t, ws.coordinator().IsSessionBusy(c), "the turn runs on it")
 	require.Equal(t, 1, r.model.heldNow("a1"))
-	require.Equal(t, 1, r.model.callsOf("a1"), "and never restarts")
+	require.Equal(t, turnCalls, r.model.callsOf("a1"), "and never restarts")
 	requireQueued(t, ws, c, "a2")
 	task, ok := sessionTask(c, helper.Name)
 	require.True(t, ok)
 	require.Equal(t, agent.TaskRunning, task.Status)
 	require.Equal(t, 1, r.model.heldNow(helper.Name))
+	require.Equal(t, helperCalls, r.model.callsOf(helper.Name))
 
 	// The same helper hub: a new helper takes the hub's next task ID, not a
 	// second hub's first one.

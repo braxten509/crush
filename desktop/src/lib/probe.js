@@ -24,11 +24,15 @@ export function inlineCodeBlocked(doc = document, win = window) {
 export function snapshot(doc = document) {
   const shell = doc.querySelector('[data-probe="shell"]');
   const rect = shell ? shell.getBoundingClientRect() : null;
+  // Look captures wait for the fonts and the zoom, so they never catch a fallback face or a half-applied size.
+  const zoom = doc.documentElement?.style.getPropertyValue("--zoom") ?? "";
   return {
     ready: Boolean(shell),
     title: doc.title,
     heading: doc.querySelector("h1")?.textContent ?? "",
     shell: rect && { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+    fonts: doc.fonts?.status ?? null,
+    zoom: zoom === "" ? null : Number(zoom),
     inlineBlocked: inlineResult,
     at: Date.now(),
   };

@@ -97,7 +97,7 @@
 
   .new-chat {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     box-sizing: border-box;
     height: calc(52 * var(--px));
     margin: calc(22 * var(--px)) calc(20 * var(--px)) 0;
@@ -106,17 +106,18 @@
     background: var(--paper-raised);
     color: var(--ink);
   }
-  .new-chat :global(.icon) {
-    margin-top: calc(15 * var(--px));
-  }
   .new-chat .label {
-    margin: calc(12 * var(--px)) 0 0 calc(13 * var(--px));
+    /* Spectral's capitals sit high in their line box; one picture pixel down
+       centres them on the plus (measured in the real window, WebKitGTK). */
+    position: relative;
+    top: calc(1 * var(--px));
+    margin-left: calc(13 * var(--px));
     font: var(--t-button);
   }
 
   .search {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     box-sizing: border-box;
     height: calc(50 * var(--px));
     margin: calc(17 * var(--px)) calc(20 * var(--px)) 0;
@@ -125,14 +126,11 @@
     color: var(--ink);
     cursor: text;
   }
-  .search :global(.icon) {
-    margin-top: calc(14 * var(--px));
-  }
   .search input {
     flex: 1;
     min-width: 0;
     height: calc(26 * var(--px));
-    margin: calc(13 * var(--px)) 0 0 calc(12 * var(--px));
+    margin-left: calc(12 * var(--px));
     padding: 0;
     border: 0;
     outline: 0;
@@ -152,7 +150,6 @@
     outline-offset: calc(2 * var(--px));
   }
   .search kbd {
-    margin-top: calc(14 * var(--px));
     font: var(--t-small);
     color: var(--slate);
   }
@@ -205,17 +202,20 @@
     font: var(--t-meta);
     color: var(--slate);
   }
+  /* The time and the chevron sit on the row's middle line. */
   .row .time {
     position: absolute;
     right: calc(48 * var(--px));
-    top: calc(29 * var(--px));
+    top: 50%;
+    transform: translateY(-50%);
     font: var(--t-small);
     color: var(--slate);
   }
   .row :global(.chevron) {
     position: absolute;
     right: calc(19 * var(--px));
-    top: calc(37 * var(--px));
+    top: 50%;
+    transform: translateY(-50%);
     color: var(--ink);
   }
   .state {

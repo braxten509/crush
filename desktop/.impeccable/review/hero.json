@@ -3,14 +3,28 @@
   "stage": "hero",
   "id": "hero",
   "title": "First viewport",
-  "comp": {"path": ".impeccable/mocks/decision/edition.png", "width": 1600, "height": 992},
-  "components": [{
-    "id": "first-viewport",
-    "name": "First viewport",
-    "medium": "HTML / CSS",
-    "note": "Assembled first viewport, captured headless at 1600x992 (12/12 zoom). Differences the readings could not settle: the wordmark is the owner's original CRUSH AI (owner's choice in the comp round); two hairlines are drawn crisp at the comp's place; the SameSite=Strict link and the CURRENT header follow the real font's widths.",
-    "box": {"x": 0, "y": 0, "w": 1, "h": 1},
-    "preview": {"kind": "image", "path": ".impeccable/review/hero-repro.png"},
-    "dependencies": []
-  }]
+  "comp": {
+    "path": ".impeccable/mocks/decision/edition.png",
+    "width": 1600,
+    "height": 992
+  },
+  "components": [
+    {
+      "id": "first-viewport",
+      "name": "First viewport",
+      "medium": "HTML / CSS",
+      "note": "Assembled first viewport, captured in the real app window (WebKitGTK, what the app ships with) on a hidden screen at 1600x992, picture-size zoom (12/12); the app opens at Compact (8/12). Differences the readings could not settle: the wordmark is the owner's original CRUSH AI (the owner's pick in the comp round); two hairlines are drawn crisp where the comp shows a soft two-pixel line; the SameSite=Strict link, the CURRENT header and the model name keep the real font's letter widths; icons and labels in controls are centred by layout where the comp was 1-2 px off.",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+      },
+      "preview": {
+        "kind": "image",
+        "path": ".impeccable/review/hero-repro.png"
+      },
+      "dependencies": []
+    }
+  ]
 }

@@ -36,6 +36,15 @@ real desktop and nothing makes a sound:
   wrong check fails, and the owner's real Crush files stay unchanged
   (`tests/outside-check.py` compares fingerprints, never contents).
 - `pnpm test` runs the front-end unit tests.
+- `tests/sandbox.sh -s 1700x1100 tests/run-in-sandbox.sh look_real.py`
+  captures the real window (WebKitGTK, what the app ships with) at the
+  approved picture's size, 1600 x 992, at the default zoom and at picture
+  size, into `tests/out/look_real/`. Build first (`tests/build.sh`).
+- `tests/look/align_real.py IMAGE --zoom 8/12 --out DIR` measures alignment
+  on such a capture with the align skill's checker: the boxes come from the
+  same layout in headless Chromium (`tests/look/align-marks.js` names what is
+  measured), the pixels from the real window. `tests/look/capture.py`
+  captures the Chromium page itself.
 - `tests/go-test.sh [packages]` runs Crush's Go tests on the newest commit, in
   a separate checkout (`~/dev/crush-desktop-verify`), as a named
   `systemd-run` service with its own time limit (`GO_TEST_MAX_SEC`, default

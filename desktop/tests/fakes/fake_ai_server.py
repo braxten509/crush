@@ -1086,6 +1086,7 @@ def check_engine_api(r, crush, proj, env, logs):
     events = api.follow_events(base + "/events" + q)
     try:
         api.call("POST", base + "/agent/init" + q, {"interactive": True}, timeout=120)
+        before_seed = len(read_jsonl(logs["ai"]))
         seed = subprocess.run([sys.executable, "-I", os.path.join(HERE, "seed_chat.py"), "--cwd", proj, "--items", "12",
                                "--crush", crush, "--title", "Seeded for checks"], env=env, capture_output=True, text=True, timeout=400)
         if not r.check(seed.returncode == 0, f"engine: seed_chat.py --items 12 succeeds ({seed.stderr.strip()[-300:]})"):
@@ -1101,9 +1102,13 @@ def check_engine_api(r, crush, proj, env, logs):
         roles = [m["role"] for m in api.call("GET", "%s/sessions/%s/messages" % (base, sid))]
         r.check(roles == ["user", "assistant"] * 4 + ["user", "assistant", "tool", "assistant"],
                 f"engine: the seeded messages come in turn order (got {roles})")
-        asked = [e.get("last_user", "") for e in read_jsonl(logs["ai"]) if e.get("kind") == "turn" and "Seed turn" in e.get("last_user", "")]
-        kinds = [re.search(r"Seed turn (\w+) (\d+)", t).group(1, 2) for t in asked if re.search(r"Seed turn (\w+) (\d+)", t)]
-        r.check(("short", "1") in kinds and ("tool", "5") in kinds, "engine: the fake server answered the seeded prompts")
+        played = []
+        for e in read_jsonl(logs["ai"])[before_seed:]:
+            m = re.search(r"Seed turn (\w+) (\d+)", e.get("last_user", ""))
+            if e.get("kind") == "turn" and m and (not played or played[-1] != m.group(1, 2)):
+                played.append(m.group(1, 2))
+        want = [("short", "1"), ("medium", "2"), ("code", "3"), ("list", "4"), ("tool", "5")]
+        r.check(played == want, f"engine: the fake server played the five seed turns in order while seeding (got {played})")
 
         states = wait_for(lambda: api.call("GET", base + "/mcp/states"),
                           lambda s: (s.get("fake") or {}).get("state") == "connected" and (s.get("broken") or {}).get("state") == "error", 20)

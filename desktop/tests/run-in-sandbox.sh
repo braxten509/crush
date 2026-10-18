@@ -24,6 +24,13 @@ tar -C "$ROOT/tests/project" --exclude=crush.json.in -cf - . | tar -C "$PROJ" -x
 sed "s/@PORT@/$PORT/" "$ROOT/tests/project/crush.json.in" >"$PROJ/crush.json"
 git -C "$PROJ" init -q
 
+# The hidden screen's keymap gives Ctrl+Alt+F12 to the X server's console
+# switch, which the server keeps, so the page never sees the probe's
+# frame-meter key. Make F12 plain F12 at every level on this screen alone.
+for code in $(xmodmap -pke | awk '/= F12/ {print $2}'); do
+  xmodmap -e "keycode $code = F12 F12 F12 F12 F12 F12 F12"
+done
+
 MARK="leak-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 printf '%s\n' "$MARK" >"$OUT/env-mark"
 # $DESKTOP_ARGS is split into words on purpose (paths without spaces).

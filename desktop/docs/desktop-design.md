@@ -408,7 +408,8 @@ All commands are registered in `main.rs` by S3. Arguments are the JS names (Taur
 | GET, PUT, DELETE | `sessions/{sid}` | `routes.go:59-61` |
 | GET | `sessions/{sid}/messages`, `sessions/{sid}/messages/user`, `sessions/{sid}/messages/{mid}/review`, `sessions/{sid}/history`, `sessions/{sid}/filetracker/files` | `routes.go:63,65,64,62,71` |
 | POST | `sessions/{sid}/kept-skills` | `routes.go:66` |
-| POST | `agent` (send, 202), `agent/main` | `routes.go:96,99` |
+| POST | `agent` (send, 202), `agent/main`, `agent/update` (model restore after `config/model`) | `routes.go:96,99,98` |
+| GET | `lsps/{lsp}/diagnostics` (error counts per code checker) | `routes.go:79` |
 | GET | `agent/sessions/{sid}`, `agent/sessions/{sid}/prompts/queued`, `agent/sessions/{sid}/prompts/list` (with `details=true`) | `routes.go:100,102,106` |
 | POST | `agent/sessions/{sid}/cancel`, `…/interrupt`, `…/prompts/clear`, `…/prompts/recall`, `…/shell` (with `request_id`) | `routes.go:101,109,107,108,111`; 5.9 |
 | POST | `config/set`, `config/remove`, `config/model`, `config/compact` | `routes.go:117,118,119,120` |

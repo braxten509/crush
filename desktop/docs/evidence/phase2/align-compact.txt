@@ -1,0 +1,20 @@
+Alignment on the real window (WebKitGTK), first screen, compact zoom. Checker: align skill, screenshot mode, via tests/look/align_real.py.
+coverage_complete: False; candidates needing review: ['row-center:search']
+pair:new-chat/row/new-chat-icon/new-chat-text    passed=True  excluded=False center_offset_px=0.5 spread_px=None
+pair:search/row/search-icon/search-text          passed=True  excluded=False center_offset_px=-0.5 spread_px=None
+column:panel-label-text/start                    passed=True  excluded=False center_offset_px=None spread_px=0
+row-center:new-chat                              passed=True  excluded=False center_offset_px=-0.5 spread_px=None
+row-center:search                                passed=False excluded=False center_offset_px=1.0 spread_px=None
+row-center:day-today                             passed=False excluded=True  center_offset_px=0.0 spread_px=None
+row-center:chat-open                             passed=False excluded=True  center_offset_px=0.5 spread_px=None
+row-center:state-working                         passed=False excluded=True  center_offset_px=-0.5 spread_px=None
+row-center:state-waiting-for-permission          passed=False excluded=True  center_offset_px=0.0 spread_px=None
+row-center:tool-row                              passed=False excluded=True  center_offset_px=0.0 spread_px=None
+row-center:model-picker                          passed=True  excluded=False center_offset_px=0.0 spread_px=None
+row-center:send                                  passed=True  excluded=False center_offset_px=0.5 spread_px=None
+row-center:label-project                         passed=False excluded=True  center_offset_px=0.5 spread_px=None
+row-center:meter-context                         passed=False excluded=True  center_offset_px=0.5 spread_px=None
+row-center:meter-5-hour                          passed=False excluded=True  center_offset_px=0.5 spread_px=None
+row-center:value-86-near-the-limit               passed=False excluded=True  center_offset_px=-2.0 spread_px=None
+row-center:meter-week                            passed=False excluded=True  center_offset_px=0.5 spread_px=None
+row-center:label-visuals                         passed=False excluded=True  center_offset_px=0.5 spread_px=None

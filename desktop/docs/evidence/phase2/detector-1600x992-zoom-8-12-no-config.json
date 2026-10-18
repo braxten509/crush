@@ -1,0 +1,18 @@
+{
+ "command": "detect --json --viewport 1600x992 --no-config http://127.0.0.1:PORT/?zoom=8/12",
+ "at": "2026-10-18T11:13:49+00:00",
+ "exit": 2,
+ "result": [
+  {
+   "antipattern": "cream-palette",
+   "name": "Cream / beige palette",
+   "description": "A warm cream or beige page background has become the default \"tasteful\" AI surface, reached for by reflex. Choose a background that comes from a deliberate palette, not the safe warm off-white.",
+   "severity": "warning",
+   "category": "slop",
+   "file": "http://127.0.0.1:56897/?zoom=8/12",
+   "line": 0,
+   "snippet": "cream/beige page background rgb(249, 248, 239)",
+   "selector": "body"
+  }
+ ]
+}

@@ -195,7 +195,7 @@
     height: calc(29 * var(--px));
     border: calc(2 * var(--px)) solid var(--vermilion);
     background: var(--vermilion-wash);
-    color: var(--vermilion);
+    color: var(--vermilion-ink);
     font: var(--t-key);
     text-align: center;
     display: grid;

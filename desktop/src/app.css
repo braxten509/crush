@@ -31,6 +31,8 @@
   --vermilion: #e52b0e;
   --vermilion-fill: #e34524;
   --vermilion-wash: #faf5f0;
+  /* Vermilion letters: a shade darker, so small keys read at 4.5:1 on the wash and the paper. */
+  --vermilion-ink: #d9290d;
   --amber: #e0a523;
 
   /* Meters */
@@ -45,7 +47,9 @@
   --face-mono: "Inconsolata", ui-monospace, monospace;
   --face-brand: "Science Gothic", sans-serif;
 
-  /* Type roles: weight, size / line height, face (sizes in picture pixels) */
+  /* Type roles: weight, size / line height, face (sizes in picture pixels).
+     Small functional text never drops below 11 px, however far the window is
+     zoomed out; at picture size every role keeps the picture's size. */
   --t-title: 400 calc(42 * var(--px)) / calc(50 * var(--px)) var(--face-display);
   --t-project: 400 calc(32 * var(--px)) / calc(38 * var(--px)) var(--face-display);
   --t-figure: 400 calc(28 * var(--px)) / calc(34 * var(--px)) var(--face-text);
@@ -53,17 +57,17 @@
   --t-heading: 400 calc(21 * var(--px)) / calc(28 * var(--px)) var(--face-text);
   --t-item: 400 calc(21 * var(--px)) / calc(28 * var(--px)) var(--face-text);
   --t-branch: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
-  --t-meta: 400 calc(18 * var(--px)) / calc(24 * var(--px)) var(--face-text);
-  --t-small: 400 calc(17 * var(--px)) / calc(24 * var(--px)) var(--face-text);
+  --t-meta: 400 max(11px, calc(18 * var(--px))) / calc(24 * var(--px)) var(--face-text);
+  --t-small: 400 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-text);
   --t-body-small: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
   --t-field: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
   --t-composer: 400 calc(20 * var(--px)) / calc(26 * var(--px)) var(--face-text);
   --t-button: 500 calc(23 * var(--px)) / calc(30 * var(--px)) var(--face-text);
-  --t-label: 500 calc(15 * var(--px)) / calc(20 * var(--px)) var(--face-text);
-  --t-path: 400 calc(15 * var(--px)) / calc(20 * var(--px)) var(--face-text);
+  --t-label: 500 max(11px, calc(15 * var(--px))) / calc(20 * var(--px)) var(--face-text);
+  --t-path: 400 max(11px, calc(15 * var(--px))) / calc(20 * var(--px)) var(--face-text);
   --t-author: 700 calc(21 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
-  --t-stamp: 400 calc(18 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
-  --t-agent-mono: 400 calc(16 * var(--px)) / calc(22 * var(--px)) var(--face-mono);
+  --t-stamp: 400 max(11px, calc(18 * var(--px))) / calc(24 * var(--px)) var(--face-mono);
+  --t-agent-mono: 400 max(11px, calc(16 * var(--px))) / calc(22 * var(--px)) var(--face-mono);
   --t-key: 600 calc(21 * var(--px)) / calc(25 * var(--px)) var(--face-mono);
   --track-label: 0.04em;
   --track-path: 0.15em;

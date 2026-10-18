@@ -177,7 +177,20 @@ func (r *claudeRun) handleAssistant(line claudeLine) error {
 			return err
 		}
 	}
-	return nil
+	return r.emitMarker(line, MarkerForAssistant)
+}
+
+// emitMarker reports Claude's own ID for line, once the line's events are
+// handled, so it lands on the message they went to.
+func (r *claudeRun) emitMarker(line claudeLine, target string) error {
+	if line.UUID == "" || r.t.NoTools {
+		return nil
+	}
+	native := line.SessionID
+	if native == "" && r.live != nil {
+		native = r.live.native
+	}
+	return r.t.Emit(Event{Type: EventMarker, Marker: &Marker{Native: native, ID: line.UUID, Kind: MarkerMessage, For: target}})
 }
 
 func (r *claudeRun) handleUser(line claudeLine) error {
@@ -192,10 +205,12 @@ func (r *claudeRun) handleUser(line claudeLine) error {
 		}
 		return nil
 	}
+	results := 0
 	for _, b := range claudeBlocks(line.Message) {
 		if b.Type != "tool_result" {
 			continue
 		}
+		results++
 		call := r.calls[b.ToolUseID]
 		r.ctl.ctrlB.Store(false) // the command it was for is done
 		out := claudeResultText(b.Content)
@@ -213,7 +228,10 @@ func (r *claudeRun) handleUser(line claudeLine) error {
 			return err
 		}
 	}
-	return nil
+	if results == 0 {
+		return nil
+	}
+	return r.emitMarker(line, MarkerForTool)
 }
 
 // handleResult ends the turn on its result, unless a message steered in

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,28 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/message"
 )
+
+// ErrTreeRevisionChanged refuses a tree action made against a chat whose
+// branches changed since the caller read them (engine-design.md 5.6).
+var ErrTreeRevisionChanged = errors.New("the chat's branches changed")
+
+// ErrTreeBusy matches the guard's refusals while the chat has work running.
+var ErrTreeBusy = errors.New("chat busy")
+
+// treeBusyError is a busy refusal of the tree guard. Its text is the guard's
+// own, and errors.Is matches ErrTreeBusy.
+type treeBusyError struct{ msg string }
+
+func (e treeBusyError) Error() string        { return e.msg }
+func (e treeBusyError) Is(target error) bool { return target == ErrTreeBusy }
+
+type treeRevisionKey struct{}
+
+// WithTreeRevision makes withIdleTree refuse with ErrTreeRevisionChanged when,
+// with the chat lock held, the chat's revision differs from rev.
+func WithTreeRevision(ctx context.Context, rev int64) context.Context {
+	return context.WithValue(ctx, treeRevisionKey{}, rev)
+}
 
 // SwitchTree is an optional local-workspace capability. Keep the dispatch lock
 // through the switch, so a submitted/accepted prompt cannot cross the boundary.
@@ -26,23 +49,35 @@ func (c *coordinator) withIdleTree(ctx context.Context, sessionID string, operat
 	defer mu.Unlock()
 	accepted, _ := a.acceptedRuns.Get(sessionID)
 	if accepted > 0 || a.IsSessionBusy(sessionID) || a.QueuedPrompts(sessionID) > 0 {
-		return fmt.Errorf("wait for the reply and queued prompts to finish, or recall queued prompts first")
+		return treeBusyError{"wait for the reply and queued prompts to finish, or recall queued prompts first"}
 	}
 	// Completed and delivered records are safe; pending results are not.
 	for _, task := range SessionTasks(sessionID) {
 		if task.Status == TaskRunning || !task.Delivered {
-			return fmt.Errorf("wait for sub-agents and their results to finish; if delivery failed, start a new chat")
+			return treeBusyError{"wait for sub-agents and their results to finish; if delivery failed, start a new chat"}
 		}
 	}
 	if err := SessionBackgroundBlock(sessionID); err != nil {
-		return err
-	}
-	if err := cliagent.CloseForTree(sessionID); err != nil {
-		return err
+		return treeBusyError{err.Error()}
 	}
 	tree, ok := c.messages.(message.TreeService)
 	if !ok {
 		return fmt.Errorf("tree storage unavailable")
+	}
+	// Checked with the chat lock held, before anything changes: only a
+	// guarded action moves the head, so the revision cannot move until the
+	// lock is released.
+	if expected, ok := ctx.Value(treeRevisionKey{}).(int64); ok {
+		revision, err := tree.TreeRevision(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		if revision != expected {
+			return ErrTreeRevisionChanged
+		}
+	}
+	if err := cliagent.CloseForTree(sessionID); err != nil {
+		return treeBusyError{err.Error()}
 	}
 	return operation(a, tree)
 }

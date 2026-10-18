@@ -31,6 +31,9 @@ type claudeLine struct {
 	Errors            []string               `json:"errors"`
 	Origin            *struct{ Kind string } `json:"origin"`
 	IsReplay          bool                   `json:"isReplay"`
+	// UUID is Claude's own ID for the line, recorded as a marker on
+	// assistant lines and on user lines with tool results.
+	UUID string `json:"uuid"`
 	// Indexes into Message.Content, supplied by Claude Code for user-facing
 	// narration carried in thinking blocks. Unlisted blocks are reasoning.
 	NarrationBlockIndexes []int `json:"narration_block_indexes"`

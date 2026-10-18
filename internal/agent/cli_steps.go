@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
@@ -49,6 +50,12 @@ type cliSteps struct {
 	tools    int
 	steps    []fantasy.StepResult
 	native   string
+
+	// assistant is the open step's assistant message, from its step
+	// context. lastToolMessage reports the newest tool message the turn
+	// saved. Markers for the CLI's own IDs go on these.
+	assistant       string
+	lastToolMessage func() string
 
 	// Queued prompts handed to the CLI mid-turn, until it takes them in.
 	// steer runs on the driver's poller, the rest on its read loop.
@@ -239,8 +246,13 @@ func (s *cliSteps) returnUnsteered() {
 }
 
 func (s *cliSteps) begin() error {
-	if _, _, err := s.sc.PrepareStep(s.ctx, fantasy.PrepareStepFunctionOptions{StepNumber: len(s.steps)}); err != nil {
+	stepCtx, _, err := s.sc.PrepareStep(s.ctx, fantasy.PrepareStepFunctionOptions{StepNumber: len(s.steps)})
+	if err != nil {
 		return err
+	}
+	s.assistant = ""
+	if stepCtx != nil {
+		s.assistant, _ = stepCtx.Value(tools.MessageIDContextKey).(string)
 	}
 	s.open, s.content, s.usage, s.tools = true, nil, fantasy.Usage{}, 0
 	return nil
@@ -289,8 +301,48 @@ func (s *cliSteps) talk() error {
 	return s.begin()
 }
 
-// handle drives the turn's callbacks from one event of the agent CLI.
+// handle drives the turn's callbacks from one event of the agent CLI, then
+// records the event's marker once its own handler has succeeded.
 func (s *cliSteps) handle(e cliagent.Event) error {
+	if err := s.handleEvent(e); err != nil {
+		return err
+	}
+	if e.Marker != nil {
+		s.recordMarker(*e.Marker)
+	}
+	return nil
+}
+
+// recordMarker saves the CLI's own ID for a Crush message, so a branch can
+// fork the CLI's memory at its cut. A failed write never fails the turn.
+func (s *cliSteps) recordMarker(mk cliagent.Marker) {
+	if s.a == nil || s.m == nil || mk.Native == "" || mk.ID == "" {
+		return
+	}
+	recorder, ok := s.a.messages.(message.MarkerRecorder)
+	if !ok {
+		return
+	}
+	target := s.assistant
+	if mk.For == cliagent.MarkerForTool {
+		target = ""
+		if s.lastToolMessage != nil {
+			target = s.lastToolMessage()
+		}
+	}
+	if target == "" {
+		return
+	}
+	err := recorder.RecordMarker(context.WithoutCancel(s.ctx), db.MessageMarker{
+		MessageID: target, SessionID: s.sessionID, CLI: string(s.m.Kind),
+		NativeSession: mk.Native, Marker: mk.ID, MarkerKind: mk.Kind,
+	})
+	if err != nil {
+		slog.Warn("Failed to record agent CLI marker", "cli", s.m.Kind, "kind", mk.Kind, "error", err)
+	}
+}
+
+func (s *cliSteps) handleEvent(e cliagent.Event) error {
 	// Resume normal status on activity even if a CLI omits its end event.
 	if s.compacting && (e.Type == cliagent.EventText || e.Type == cliagent.EventReasoning || e.Type == cliagent.EventToolStart || e.Type == cliagent.EventToolCall || e.Type == cliagent.EventUserMessage) {
 		if err := s.setCompacting(false); err != nil {

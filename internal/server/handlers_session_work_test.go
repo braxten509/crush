@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,6 +43,16 @@ type chatModel struct {
 	respond func(chatRequest) chatAnswer
 	stop    chan struct{}
 	calls   atomic.Int64
+
+	mu   sync.Mutex
+	seen []string // one line per request, for failure reports
+}
+
+// requests describes the requests the model got.
+func (m *chatModel) requests() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return strings.Join(m.seen, "\n")
 }
 
 func newChatModel(t *testing.T, respond func(chatRequest) chatAnswer) *chatModel {
@@ -71,6 +82,10 @@ func (m *chatModel) serve(w http.ResponseWriter, r *http.Request) {
 		in.lastRole = req.Messages[n-1].Role
 	}
 	answer := m.respond(in)
+	m.mu.Lock()
+	m.seen = append(m.seen, fmt.Sprintf("%s %s title=%t messages=%d last=%s -> text=%q tool=%s",
+		r.URL.Path, in.sessionHash, in.title, len(req.Messages), in.lastRole, answer.text, answer.toolName))
+	m.mu.Unlock()
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	if answer.wait != nil {

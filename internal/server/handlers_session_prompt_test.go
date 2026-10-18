@@ -78,6 +78,27 @@ func TestPromptPendingReachesEveryApp(t *testing.T) {
 	require.NoError(t, err)
 	chatD, err := ws.Sessions.Create(ctx, "D")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		t.Logf("model requests:\n%s", m.requests())
+		msgs, err := ws.Messages.List(context.Background(), chatC.ID)
+		if err != nil {
+			return
+		}
+		for _, msg := range msgs {
+			calls := []string{}
+			for _, call := range msg.ToolCalls() {
+				calls = append(calls, call.Name+" "+call.Input)
+			}
+			results := []string{}
+			for _, res := range msg.ToolResults() {
+				results = append(results, res.Content)
+			}
+			t.Logf("message %s: %q calls=%v results=%v finish=%v", msg.Role, msg.Content().String(), calls, results, msg.FinishReason())
+		}
+	})
 	require.NoError(t, apps[0].SetCurrentSession(ctx, ws.ID, chatC.ID))
 	require.NoError(t, apps[1].SetCurrentSession(ctx, ws.ID, chatD.ID))
 

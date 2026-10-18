@@ -2940,6 +2940,15 @@ These were open questions in the first draft, or choices made since. Decision 1 
 12. **Secure-entry events carry each field's label only, never its file path** (5.8). The engine keeps the path and does every file check itself.
     - Reason: PLAN 5.8 says "only field names travel" (`PLAN.md:84`). The terminal's secure field never shows the path either: its only file texts are "Written to the file. The agent gets only this status." and "This file was already saved. Request this entry again to add it." (`ui/dialog/questionform/secure.go:310`, `313`). No checklist row needs the path: DLG-189 to DLG-201 name the label, the masked field, its keys and status texts, and file checks that run in the backend (DLG-201).
 
+### Changes made during the build (coordinator, 2026-10-18)
+
+13. **A fork through the engine carries the restore's undo ID** (5.6, piece C review). `proto.TreeCopyRequest` gains an optional `undo_id` (JSON `undo_id`, omitted when empty; an added optional field needs no protocol change, see 0.1). `ClientWorkspace.CopyTree` sends it from the restore result, and `Backend.CopyTree` moves that undo record to the new chat after a successful fork, as `message.CopyTree` does in-process (`internal/message/tree.go:144-148`).
+    - Reason: without it, "Undo Last File Restore" finds nothing in the new chat, although the restore notice tells the user to use it there.
+14. **Over the engine, restore-then-move is two guarded calls** (5.6). The app applies the restore plan (`UndoFiles`), then makes the move. If another app moves the chat, or it turns busy, between the two calls, the move is refused and the files stay restored; the user can undo the restore.
+    - Reason: in-process both run under one chat lock; doing the same over the engine would need a new combined route. The gap is two back-to-back requests, so it is rare and recoverable.
+15. **An app keeps the tree revision its own action returns** (5.6). Tree action results carry the new revision; `ClientWorkspace` stores it, so two actions in a row do not need a tree read in between. Another app's change in between still gives 409 `revision_conflict`.
+16. **An old file-restore preview answers 409 `plan_expired`** (5.6). A preview is made for the chat's head at that moment; a new message moves the head without changing the tree revision, and applying the old plan then answers 409 `plan_expired` (make a new preview), not a server error.
+
 ## Small additions that serve approved items
 
 The plan does not name these, but an approved item or checklist row needs each one.

@@ -10,17 +10,24 @@
 //   otherwise                         → overlay (the help sheet), then by ui.focus:
 //                                       popup and composer, slot, tray, timeline, panel or list;
 //                                       then global
+// So no other global key works while the menu, the viewer or a sheet is open,
+// as the terminal gives every key to its front dialog while one is open
+// (internal/ui/model/keypress.go:111-114). The one exception is the quit key:
+// Ctrl+C asks global before any other scope, and before a sheet's grace,
+// unless the quit sheet is open, as the terminal opens its quit dialog over
+// any dialog but itself (keypress.go:107-109).
 // While the tray has focus, lib/tray.js's own rules run first (a section's
 // onKey, then ← → ↑ Esc Tab). The zoom keys keep their own listener
 // (lib/zoom.js) and are never routed here. A sheet opened with a grace
 // swallows keys first (lib/grace.js).
-import { graceAbsorbs, dialogs } from "./dialogs.js";
+import { graceAbsorbs, dialogs, hasDialog } from "./dialogs.js";
 import { ui } from "./stores/ui.svelte.js";
 import { trayKey } from "./tray.js";
 import { ZOOM_DEFAULT, zoomForKey } from "./zoom.js";
 
 export const SCOPES = ["menu", "overlay", "popup", "slot", "tray", "composer", "timeline", "panel", "list", "global"];
 const FOCUS_SCOPES = new Set(["slot", "tray", "composer", "timeline", "panel", "list"]);
+const QUIT_KEY = "Ctrl+C"; // the terminal's keyMap.Quit (internal/ui/model/keys.go:95-97)
 
 const bindings = new Map(SCOPES.map((scope) => [scope, new Map()])); // scope → combo → handlers
 
@@ -42,14 +49,21 @@ export function bindKey(scope, combo, handler) {
   };
 }
 
-export function activeScopes() {
-  if (ui.menu) return ["menu"];
-  if (ui.viewer || dialogs.length > 0) return ["overlay"];
-  const scopes = ["overlay"];
+// The scopes a key with this combo asks, in order.
+export function activeScopes(combo = null) {
+  const quit = isQuit(combo);
+  const first = quit ? ["global"] : [];
+  if (ui.menu) return [...first, "menu"];
+  if (ui.viewer || dialogs.length > 0) return [...first, "overlay"];
+  const scopes = [...first, "overlay"];
   if (ui.focus === "composer") scopes.push("popup");
   if (FOCUS_SCOPES.has(ui.focus)) scopes.push(ui.focus);
-  scopes.push("global");
+  if (!quit) scopes.push("global");
   return scopes;
+}
+
+function isQuit(combo) {
+  return combo === QUIT_KEY && !hasDialog("quit");
 }
 
 // The combo string for a keydown event, in bindKey's spelling.
@@ -77,9 +91,9 @@ export function startKeys(win = window) {
 function onKeyDown(event) {
   if (event.defaultPrevented || event.isComposing) return;
   if (zoomForKey(event, ZOOM_DEFAULT) !== null) return;
-  if (graceAbsorbs(event)) return take(event);
   const combo = comboOf(event);
-  for (const scope of activeScopes()) {
+  if (!isQuit(combo) && graceAbsorbs(event)) return take(event);
+  for (const scope of activeScopes(combo)) {
     if (scope === "tray" && trayKey(event)) return take(event);
     for (const handler of bindings.get(scope).get(combo) ?? []) {
       if (handler(event) === true) return take(event);

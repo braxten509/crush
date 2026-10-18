@@ -39,7 +39,8 @@ impl AppError {
     /// Decodes the engine's error body, proto.Error {message, code, field}
     /// (internal/proto/proto.go:37-41). A body without a code gets the one the
     /// engine gives a plain error of that status (statusCode,
-    /// internal/server/errors.go:26-41).
+    /// internal/server/errors.go:26-41), and any other status `http_<status>`,
+    /// so the code is never empty.
     #[allow(dead_code)] // called by uds_http.rs (P3.1)
     pub fn from_engine(status: u16, body: &[u8]) -> Self {
         #[derive(serde::Deserialize)]
@@ -55,11 +56,7 @@ impl AppError {
             Ok(e) => (e.message, e.code, e.field.filter(|f| !f.is_empty())),
             Err(_) => (String::from_utf8_lossy(body).trim().to_string(), String::new(), None),
         };
-        let code = if code.is_empty() {
-            status_code(status).to_string()
-        } else {
-            code
-        };
+        let code = if code.is_empty() { status_code(status) } else { code };
         let message = if message.is_empty() {
             format!("the engine answered HTTP {status}")
         } else {
@@ -75,14 +72,14 @@ impl AppError {
 }
 
 #[allow(dead_code)] // used by from_engine
-fn status_code(status: u16) -> &'static str {
+fn status_code(status: u16) -> String {
     match status {
-        400 => "bad_request",
-        404 => "not_found",
-        409 => "conflict",
-        500 => "internal",
-        503 => "shutting_down",
-        _ => "",
+        400 => "bad_request".to_string(),
+        404 => "not_found".to_string(),
+        409 => "conflict".to_string(),
+        500 => "internal".to_string(),
+        503 => "shutting_down".to_string(),
+        _ => format!("http_{status}"),
     }
 }
 
@@ -117,7 +114,6 @@ mod tests {
             (409, "conflict"),
             (500, "internal"),
             (503, "shutting_down"),
-            (418, ""),
         ] {
             let e = AppError::from_engine(status, br#"{"message":"no"}"#);
             assert_eq!(e.code, code, "status {status}");
@@ -127,6 +123,18 @@ mod tests {
         assert_eq!(e.message, "the engine answered HTTP 502");
         let e = AppError::from_engine(500, b"plain text\n");
         assert_eq!((e.code.as_str(), e.message.as_str()), ("internal", "plain text"));
+    }
+
+    #[test]
+    fn from_engine_names_any_other_status_by_number() {
+        for status in [401, 418, 502] {
+            let e = AppError::from_engine(status, br#"{"message":"no"}"#);
+            assert_eq!(e.code, format!("http_{status}"));
+            assert_eq!(e.status, Some(status));
+        }
+        assert_eq!(AppError::from_engine(502, b"").code, "http_502");
+        let kept = AppError::from_engine(418, br#"{"message":"no","code":"teapot"}"#);
+        assert_eq!(kept.code, "teapot");
     }
 
     #[test]

@@ -1,15 +1,18 @@
 <script>
   // The page frame: one-pixel lines round the three columns, broken by a + mark
   // at each corner and where a column divider meets the top or bottom line.
-  // These elements sit straight in the page grid (see App.svelte).
+  // These elements sit straight in the page grid (see App.svelte). Without the
+  // panel (D11) the frame closes round the chat list and the conversation.
   import PlusMark from "./PlusMark.svelte";
 
-  const columns = [2, 4, 6];
-  const joins = [1, 3, 5, 7];
+  let { panel = true } = $props();
+
+  const columns = $derived(panel ? [2, 4, 6] : [2, 4]);
+  const joins = $derived(panel ? [1, 3, 5, 7] : [1, 3, 5]);
 </script>
 
 <span class="vertical" style:grid-column="1" aria-hidden="true"></span>
-<span class="vertical" style:grid-column="7" aria-hidden="true"></span>
+<span class="vertical" style:grid-column={panel ? "7" : "5"} aria-hidden="true"></span>
 {#each columns as column (column)}
   <span class="horizontal" style:grid-column={column} style:grid-row="1" aria-hidden="true"></span>
   <span class="horizontal" style:grid-column={column} style:grid-row="3" aria-hidden="true"></span>

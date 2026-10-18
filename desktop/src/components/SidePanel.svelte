@@ -1,10 +1,13 @@
 <script>
   // The right column: the project, the three usage meters (context, 5-hour and
   // week limits), and the visuals the agent drew for this chat: a flow and a table.
+  // Scaffold S3: the data comes from sample.js until piece P3.8 reads it from the
+  // stores (the panel takes no props).
+  import { sample } from "../lib/sample.js";
   import Icon from "./Icon.svelte";
   import Rule from "./Rule.svelte";
 
-  let { project, usage, visuals } = $props();
+  const { project, usage, visuals } = sample;
 
   // Meters share the width, with a one-pixel line in each gap. The usual three
   // keep the approved drawing's exact proportions; any other count shares evenly.

@@ -419,6 +419,8 @@ Kept current during the build. Percent = share of the phase table in section 4.
 
 - 2026-10-18: P3.3 (t44) found two engine routes its stores need that the fixed route list in phases 3-4 design 1.3 lacked: `POST agent/update` (model restore) and `GET lsps/{lsp}/diagnostics` (error counts). Both exist in `internal/rpc/routes.go:98,79`, are safe (no environment in the answer), and are now in the list; P3.1 (t42) adds them to `connection.rs`. Other option: leave model restore and the error counts out of phase 3.
 
+- 2026-10-18: phases 5-6 design final: t32 applied the 10 review findings (97f3212e); recheck (t41) closed all 10, "ready to build"; its two small new findings applied (868eab3c): the remote start lock is per workspace, and the `overSheet` key option is dropped because S3's router already lets Ctrl+C through over sheets (less to build; other option: keep it, harmless). Coordinator also allowed clippy's argument count on S3's `api` command and fixture (f8b5bf85) so phase 3 clippy runs are clean; S3's `sse.rs` placeholder warning goes away with P3.1.
+
 ### Owner decisions for the overnight run (2026-10-18, before bed)
 - Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
 - The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).

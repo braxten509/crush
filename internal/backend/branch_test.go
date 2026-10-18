@@ -227,11 +227,12 @@ func TestBranchWhileReplying(t *testing.T) {
 	}
 
 	// The baseline: the same chat copied three times with no reply running,
-	// each to a new branch. The fastest copy is the least disturbed by other
-	// work on the machine.
+	// each to a new branch from its own words, since highlights may not
+	// overlap. The fastest copy is the least disturbed by other work on the
+	// machine.
 	var baselines []time.Duration
-	for i := 1; i <= 3; i++ {
-		branch, took, err := branchAt(lastAnswer, "Answer 500", fmt.Sprintf("Baseline %d", i))
+	for i, highlight := range []string{"Answer 500", "and then", "some more"} {
+		branch, took, err := branchAt(lastAnswer, highlight, fmt.Sprintf("Baseline %d", i+1))
 		require.NoError(t, err)
 		require.Equal(t, 1000, branch.Copied)
 		baselines = append(baselines, took)

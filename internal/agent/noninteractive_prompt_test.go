@@ -94,6 +94,20 @@ func TestNonInteractivePromptOnInteractiveCoordinator(t *testing.T) {
 // there. It is an interactive call with its own answer, and the run's
 // answer stays the run's.
 func TestUserPromptDuringMarkedRunRunsOnItsOwn(t *testing.T) {
+	userPromptDuringMarkedRun(t, func(ctx context.Context) context.Context {
+		return message.WithSubmissionID(ctx, "typed")
+	})
+}
+
+// TestHiddenUserPromptDuringMarkedRunRunsOnItsOwn: the terminal's hidden
+// prompt, such as "Implement the plan." on leaving plan mode, has no
+// submission ID but is still the user's, so it does not join the run either.
+func TestHiddenUserPromptDuringMarkedRunRunsOnItsOwn(t *testing.T) {
+	userPromptDuringMarkedRun(t, message.WithHiddenUserMessage)
+}
+
+func userPromptDuringMarkedRun(t *testing.T, userCtx func(context.Context) context.Context) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	releases := make(chan func(), 1)
@@ -126,7 +140,7 @@ func TestUserPromptDuringMarkedRunRunsOnItsOwn(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("the marked prompt never ran")
 	}
-	result, err := c.Run(message.WithSubmissionID(ctx, "typed"), "session", "typed")
+	result, err := c.Run(userCtx(ctx), "session", "typed")
 	require.NoError(t, err)
 	require.Equal(t, "typed", result.Response.Content.Text())
 

@@ -30,6 +30,20 @@ const (
 	PayloadTypeUpdateAvailable        PayloadType = "update_available"
 	PayloadTypeQuestionRequest        PayloadType = "question_batch_request"
 	PayloadTypeQuestionNotification   PayloadType = "question_batch_notification"
+
+	// Events added for the desktop engine (engine-design.md, section 0.1).
+	PayloadTypeHelper              PayloadType = "helper"
+	PayloadTypeShellOutput         PayloadType = "shell_output"
+	PayloadTypeLimits              PayloadType = "limits"
+	PayloadTypeMemoryStatus        PayloadType = "memory_status"
+	PayloadTypeCLIUpdatesInstalled PayloadType = "cli_updates_installed"
+	PayloadTypeTreeChanged         PayloadType = "tree_changed"
+	PayloadTypeChatLink            PayloadType = "chat_link"
+	PayloadTypeRemoteAction        PayloadType = "remote_action"
+	PayloadTypeRemoteStatus        PayloadType = "remote_status"
+	PayloadTypeSecureForm          PayloadType = "secure_form"
+	PayloadTypeSecureFormClosed    PayloadType = "secure_form_closed"
+	PayloadTypePromptPending       PayloadType = "prompt_pending"
 )
 
 // Payload wraps a discriminated JSON payload with a type tag.

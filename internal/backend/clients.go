@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,7 +97,7 @@ func (b *Backend) RetireClient(clientID string) error {
 		b.retired = make(map[string]struct{})
 	}
 	b.retired[clientID] = struct{}{}
-	var orphaned []*Workspace
+	var left, orphaned []*Workspace
 	for _, ws := range b.workspaces.Seq2() {
 		ws.clientsMu.Lock()
 		if cs, ok := ws.clients[clientID]; ok {
@@ -104,6 +105,7 @@ func (b *Backend) RetireClient(clientID string) error {
 				cs.holdTimer.Stop()
 			}
 			delete(ws.clients, clientID)
+			left = append(left, ws)
 			if len(ws.clients) == 0 {
 				orphaned = append(orphaned, ws)
 			}
@@ -112,6 +114,9 @@ func (b *Backend) RetireClient(clientID string) error {
 	}
 	b.mu.Unlock()
 
+	for _, ws := range left {
+		b.clientGone(ws, clientID, GoneRetired, slices.Contains(orphaned, ws))
+	}
 	for _, ws := range orphaned {
 		b.teardown(ws)
 	}
@@ -151,6 +156,16 @@ func (b *Backend) releaseHold(workspaceID, clientID string) error {
 // old timer, so an already-fired timer racing this call fails expireHold's
 // identity check instead of killing the new claim.
 func (b *Backend) registerClient(ws *Workspace, clientID string) {
+	// CreateWorkspace calls this with b.mu held, and no hook may run under
+	// it, so the joined hooks run on a goroutine of their own once the
+	// claim is in place.
+	defer func() {
+		go b.runHooks(func(h clientHooks) {
+			if h.joined != nil {
+				h.joined(ws, clientID)
+			}
+		})
+	}()
 	ws.clientsMu.Lock()
 	defer ws.clientsMu.Unlock()
 	if old, ok := ws.clients[clientID]; ok {
@@ -190,6 +205,7 @@ func (b *Backend) expireHold(ws *Workspace, clientID string, timer *clientState)
 	delete(ws.clients, clientID)
 	teardown := len(ws.clients) == 0
 	ws.clientsMu.Unlock()
+	b.clientGone(ws, clientID, GoneExpired, teardown)
 	if teardown {
 		b.teardown(ws)
 	}
@@ -207,8 +223,10 @@ func (b *Backend) releaseHoldLocked(ws *Workspace, clientID string) {
 		cs.holdTimer = nil
 	}
 	teardown := false
+	deleted := false
 	if cs.streams == 0 {
 		delete(ws.clients, clientID)
+		deleted = true
 		teardown = len(ws.clients) == 0
 	} else {
 		// The client gave up its claim while streams are still open, which
@@ -217,6 +235,9 @@ func (b *Backend) releaseHoldLocked(ws *Workspace, clientID string) {
 		cs.released = true
 	}
 	ws.clientsMu.Unlock()
+	if deleted {
+		b.clientGone(ws, clientID, GoneReleased, teardown)
+	}
 	if teardown {
 		b.teardown(ws)
 	}
@@ -237,6 +258,7 @@ func (b *Backend) detachStream(ws *Workspace, clientID string) {
 		cs.streams--
 	}
 	teardown := false
+	var gone GoneReason // set when the claim ends here
 	if cs.streams == 0 && cs.holdTimer == nil {
 		if grace > 0 && !cs.released {
 			// The stream dropped without the client releasing its claim, so
@@ -247,14 +269,32 @@ func (b *Backend) detachStream(ws *Workspace, clientID string) {
 				b.expireHold(ws, clientID, cs)
 			})
 		} else {
+			gone = GoneExpired
+			if cs.released {
+				gone = GoneReleased
+			}
 			delete(ws.clients, clientID)
 			teardown = len(ws.clients) == 0
 		}
 	}
 	ws.clientsMu.Unlock()
+	if gone != "" {
+		b.clientGone(ws, clientID, gone, teardown)
+	}
 	if teardown {
 		b.teardown(ws)
 	}
+}
+
+// clientGone runs the gone hooks for clientID, whose claim on ws just
+// ended. workspaceEmpty reports that it was the last app. Callers hold no
+// lock.
+func (b *Backend) clientGone(ws *Workspace, clientID string, reason GoneReason, workspaceEmpty bool) {
+	b.runHooks(func(h clientHooks) {
+		if h.gone != nil {
+			h.gone(ws, clientID, reason, workspaceEmpty)
+		}
+	})
 }
 
 // SetCurrentSession records which session the given client is
@@ -300,6 +340,11 @@ func (b *Backend) SetCurrentSession(ctx context.Context, workspaceID, clientID, 
 	if sessionID != "" {
 		b.republishPendingPrompts(ctx, ws, sessionID)
 	}
+	b.runHooks(func(h clientHooks) {
+		if h.viewChanged != nil {
+			h.viewChanged(ws, clientID, sessionID)
+		}
+	})
 	return nil
 }
 

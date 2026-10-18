@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/google/uuid"
@@ -49,19 +50,19 @@ func TestBackend_WorkspaceSkillsIsolation(t *testing.T) {
 	cidA := uuid.New().String()
 	cidB := uuid.New().String()
 
-	wsA, _, err := b.CreateWorkspace(proto.Workspace{
+	wsA, _, err := b.CreateWorkspace(prototest.CreateRequest(proto.Workspace{
 		ClientID: cidA,
 		Path:     wdA,
 		DataDir:  filepath.Join(wdA, ".crush"),
-	})
+	}))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = b.DeleteWorkspace(wsA.ID, cidA) })
 
-	wsB, _, err := b.CreateWorkspace(proto.Workspace{
+	wsB, _, err := b.CreateWorkspace(prototest.CreateRequest(proto.Workspace{
 		ClientID: cidB,
 		Path:     wdB,
 		DataDir:  filepath.Join(wdB, ".crush"),
-	})
+	}))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = b.DeleteWorkspace(wsB.ID, cidB) })
 

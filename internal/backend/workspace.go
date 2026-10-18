@@ -96,6 +96,18 @@ type Workspace struct {
 	// embedded [app.App.Shutdown]; tests may override it to avoid
 	// driving a full [app.App] through shutdown.
 	shutdownFn func()
+
+	// streamMu guards streams: the apps' SSE streams that take engine-sent
+	// events ([Backend.SubscribeClient], [Backend.SendTo],
+	// [Backend.SendAll]). The map is made by the first subscribe.
+	streamMu sync.Mutex
+	streams  map[*clientStream]struct{}
+
+	// The build pieces' own state (engine-design.md, Build pieces): live
+	// work (B), tree actions (C) and phone sharing (D).
+	live  liveState
+	tree  treeState
+	share shareState
 }
 
 // invokeShutdown calls the workspace shutdown hook if set, falling

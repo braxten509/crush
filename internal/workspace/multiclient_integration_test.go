@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -78,11 +79,11 @@ func TestClientWorkspace_ConfigChangedRefreshesSiblingCache(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	wsProto, err := cA.CreateWorkspace(ctx, proto.Workspace{Path: cwd, DataDir: dataDir})
+	wsProto, err := cA.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: dataDir}))
 	require.NoError(t, err)
 	// Client B joins the same workspace by path; the server
 	// deduplicates and returns the existing workspace.
-	wsProtoB, err := cB.CreateWorkspace(ctx, proto.Workspace{Path: cwd, DataDir: dataDir})
+	wsProtoB, err := cB.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: dataDir}))
 	require.NoError(t, err)
 	require.Equal(t, wsProto.ID, wsProtoB.ID)
 
@@ -155,7 +156,7 @@ func TestClientWorkspace_ConfigChangedSignalArrives(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	wsProto, err := c.CreateWorkspace(ctx, proto.Workspace{Path: cwd, DataDir: dataDir})
+	wsProto, err := c.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: dataDir}))
 	require.NoError(t, err)
 
 	evc, err := c.SubscribeEvents(ctx, wsProto.ID)
@@ -202,9 +203,9 @@ func TestServer_ConcurrentSessionsSameDirShareOneWorkspace(t *testing.T) {
 	cA, cB := rt.newClient(t, cwd), rt.newClient(t, cwd)
 	ctx := t.Context()
 
-	wsA, err := cA.CreateWorkspace(ctx, proto.Workspace{Path: cwd, DataDir: dataDir})
+	wsA, err := cA.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: dataDir}))
 	require.NoError(t, err)
-	wsB, err := cB.CreateWorkspace(ctx, proto.Workspace{Path: cwd, DataDir: dataDir})
+	wsB, err := cB.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: dataDir}))
 	require.NoError(t, err)
 	require.Equal(t, wsA.ID, wsB.ID, "same directory must share one workspace")
 
@@ -227,9 +228,9 @@ func TestServer_ConcurrentSessionsDifferentDirsAreIndependent(t *testing.T) {
 	cA, cB := rt.newClient(t, cwdA), rt.newClient(t, cwdB)
 	ctx := t.Context()
 
-	wsA, err := cA.CreateWorkspace(ctx, proto.Workspace{Path: cwdA, DataDir: t.TempDir()})
+	wsA, err := cA.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwdA, DataDir: t.TempDir()}))
 	require.NoError(t, err)
-	wsB, err := cB.CreateWorkspace(ctx, proto.Workspace{Path: cwdB, DataDir: t.TempDir()})
+	wsB, err := cB.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwdB, DataDir: t.TempDir()}))
 	require.NoError(t, err)
 	require.NotEqual(t, wsA.ID, wsB.ID)
 
@@ -253,7 +254,7 @@ func TestServer_RefusesShutdownWhileWorkspaceLive(t *testing.T) {
 	cLive := rt.newClient(t, cwd)
 	ctx := t.Context()
 
-	ws, err := cLive.CreateWorkspace(ctx, proto.Workspace{Path: cwd, DataDir: t.TempDir()})
+	ws, err := cLive.CreateWorkspace(ctx, prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: t.TempDir()}))
 	require.NoError(t, err)
 
 	// A second client, standing in for one that found a version mismatch.
@@ -277,7 +278,7 @@ func TestServer_DetachGraceSurvivesStreamBlip(t *testing.T) {
 	cwd := t.TempDir()
 	c := rt.newClient(t, cwd)
 
-	ws, err := c.CreateWorkspace(t.Context(), proto.Workspace{Path: cwd, DataDir: t.TempDir()})
+	ws, err := c.CreateWorkspace(t.Context(), prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: t.TempDir()}))
 	require.NoError(t, err)
 
 	streamCtx, killStream := context.WithCancel(t.Context())
@@ -318,13 +319,13 @@ func TestClientWorkspace_RecoversAfterServerSideTeardown(t *testing.T) {
 	// is what made the 404s permanent instead of self-healing.
 	sibling := rt.newClient(t, t.TempDir())
 	siblingCwd := t.TempDir()
-	_, err := sibling.CreateWorkspace(t.Context(), proto.Workspace{
+	_, err := sibling.CreateWorkspace(t.Context(), prototest.CreateRequest(proto.Workspace{
 		Path: siblingCwd, DataDir: t.TempDir(),
-	})
+	}))
 	require.NoError(t, err)
 
 	c := rt.newClient(t, cwd)
-	wsProto, err := c.CreateWorkspace(t.Context(), proto.Workspace{Path: cwd, DataDir: dataDir})
+	wsProto, err := c.CreateWorkspace(t.Context(), prototest.CreateRequest(proto.Workspace{Path: cwd, DataDir: dataDir}))
 	require.NoError(t, err)
 	originalID := wsProto.ID
 

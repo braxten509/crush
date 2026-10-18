@@ -24,12 +24,20 @@ func (c *controllerV1) getAgentInfo(r *http.Request, _ rpc.Empty) (proto.AgentIn
 // clients are still watching. Only the explicit cancel endpoint should
 // be able to end a run.
 func (c *controllerV1) sendMessage(r *http.Request, msg proto.AgentMessage) (rpc.Empty, error) {
-	return rpc.Empty{}, c.backend.SendMessage(r.PathValue("id"), msg)
+	clientID, err := c.optionalClientID(r)
+	if err != nil {
+		return rpc.Empty{}, err
+	}
+	return rpc.Empty{}, c.backend.SendMessage(r.PathValue("id"), clientID, msg)
 }
 
 // initAgent initializes the coder agent. The body is optional.
 func (c *controllerV1) initAgent(r *http.Request, req proto.AgentInitRequest) (rpc.Empty, error) {
-	return rpc.Empty{}, c.backend.InitAgent(r.Context(), r.PathValue("id"), req.Interactive)
+	clientID, err := c.optionalClientID(r)
+	if err != nil {
+		return rpc.Empty{}, err
+	}
+	return rpc.Empty{}, c.backend.InitAgent(r.Context(), r.PathValue("id"), clientID, req.Interactive)
 }
 
 // updateAgent reloads the agent's model configuration.

@@ -29,11 +29,15 @@ type Workspace struct {
 	// creation time. Subsequent updates flow through the SSE event
 	// stream.
 	Skills []SkillState `json:"skills,omitempty"`
+	// Protocol is the app's ProtocolVersion, sent in a create request.
+	Protocol int `json:"protocol,omitempty"`
 }
 
 // Error represents an error response.
 type Error struct {
 	Message string `json:"message"`
+	Code    string `json:"code,omitempty"`  // stable machine-readable code (engine-design.md, section 0.1)
+	Field   string `json:"field,omitempty"` // secure-entry question ID for secure_field_error
 }
 
 // ConfigChanged is published whenever the workspace's configuration is

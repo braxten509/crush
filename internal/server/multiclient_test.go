@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -43,7 +44,7 @@ func TestPostWorkspaces_RejectsMissingClientID(t *testing.T) {
 	t.Parallel()
 	c := newTestController()
 
-	body, err := json.Marshal(proto.Workspace{Path: t.TempDir()})
+	body, err := json.Marshal(prototest.CreateRequest(proto.Workspace{Path: t.TempDir()}))
 	require.NoError(t, err)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/workspaces", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -61,7 +62,7 @@ func TestPostWorkspaces_RejectsMalformedClientID(t *testing.T) {
 	t.Parallel()
 	c := newTestController()
 
-	body, err := json.Marshal(proto.Workspace{Path: t.TempDir(), ClientID: "not-a-uuid"})
+	body, err := json.Marshal(prototest.CreateRequest(proto.Workspace{Path: t.TempDir(), ClientID: "not-a-uuid"}))
 	require.NoError(t, err)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/workspaces", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

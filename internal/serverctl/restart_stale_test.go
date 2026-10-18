@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/stretchr/testify/require"
 )
@@ -209,7 +210,7 @@ func TestCreateWorkspaceOnLiveServer_RetriesPastExitingServer(t *testing.T) {
 	c, err := client.NewClient(t.TempDir(), "tcp", u.Host)
 	require.NoError(t, err)
 
-	ws, err := CreateWorkspace(t.Context(), c, proto.Workspace{Path: t.TempDir()},
+	ws, err := CreateWorkspace(t.Context(), c, prototest.CreateRequest(proto.Workspace{Path: t.TempDir()}),
 		func() error {
 			mu.Lock()
 			replaced++
@@ -241,7 +242,7 @@ func TestCreateWorkspaceOnLiveServer_GivesUpOnOtherFailures(t *testing.T) {
 	c, err := client.NewClient(t.TempDir(), "tcp", u.Host)
 	require.NoError(t, err)
 
-	_, err = CreateWorkspace(t.Context(), c, proto.Workspace{Path: t.TempDir()},
+	_, err = CreateWorkspace(t.Context(), c, prototest.CreateRequest(proto.Workspace{Path: t.TempDir()}),
 		func() error {
 			t.Fatal("a non-lifecycle failure must not spawn a replacement server")
 			return nil

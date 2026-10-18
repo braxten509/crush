@@ -40,6 +40,11 @@ func (b *Backend) teardown(ws *Workspace) {
 	shutdownNow := b.scheduleShutdownIfIdleLocked()
 	b.mu.Unlock()
 
+	b.runHooks(func(h clientHooks) {
+		if h.teardown != nil {
+			h.teardown(ws)
+		}
+	})
 	ws.invokeShutdown()
 
 	if shutdownNow {

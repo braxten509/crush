@@ -24,6 +24,7 @@ func (c *Client) GetAgentInfo(ctx context.Context, id string) (*proto.AgentInfo,
 // InitiateAgentProcessing triggers agent initialization on the server.
 func (c *Client) InitiateAgentProcessing(ctx context.Context, id string, interactive bool) error {
 	_, err := newCall(c, rpc.InitAgent, "initiate session agent processing", "").at(id).
+		with(url.Values{"client_id": []string{c.clientID}}).
 		do(ctx, proto.AgentInitRequest{Interactive: interactive})
 	return err
 }
@@ -54,7 +55,8 @@ func (c *Client) SetMainAgent(ctx context.Context, id, agentID string) error {
 // prompt was not accepted. A transport failure is returned as is, since
 // the server may have accepted the prompt before the connection broke.
 func (c *Client) SendMessage(ctx context.Context, id string, sessionID, runID, channel, prompt string, attachments ...message.Attachment) error {
-	_, err := newCall(c, rpc.SendMessage, "send message to agent", "").at(id).do(ctx, proto.AgentMessage{
+	_, err := newCall(c, rpc.SendMessage, "send message to agent", "").at(id).
+		with(url.Values{"client_id": []string{c.clientID}}).do(ctx, proto.AgentMessage{
 		SubmissionID:      message.SubmissionID(ctx),
 		HiddenUserMessage: message.HiddenUserMessage(ctx),
 		SessionID:         sessionID,

@@ -2,6 +2,8 @@
 // started with `--probe <file>`, lets the page report what is on screen.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod batch;
+
 use serde::Serialize;
 use std::{fs, path::PathBuf};
 

@@ -46,15 +46,17 @@ fn copy_failed() -> AppError {
     AppError::new("clipboard_failed", "Failed to copy to clipboard")
 }
 
-/// The terminal's words for a paste with nothing to paste (TYPE-010).
+/// The terminal's words for a paste that read nothing (TYPE-010); it uses
+/// them for every failed read too (internal/ui/model/paste.go:173-177).
+#[cfg(not(target_os = "linux"))]
 fn read_failed() -> AppError {
     AppError::new("clipboard_failed", "Clipboard is empty or does not contain text")
 }
 
 #[cfg(target_os = "linux")]
 mod platform {
-    use super::{copy_failed, read_failed, WAIT};
-    use crate::error::AppResult;
+    use super::{copy_failed, WAIT};
+    use crate::error::{AppError, AppResult};
     use gtk::gdk::SELECTION_CLIPBOARD;
     use std::sync::mpsc;
 
@@ -76,11 +78,22 @@ mod platform {
     }
 
     pub fn read(app: &tauri::AppHandle) -> AppResult<Option<String>> {
-        let text = on_main(app, |done: Box<dyn FnOnce(Option<String>) + Send>| {
+        answered(on_main(app, |done: Box<dyn FnOnce(Option<String>) + Send>| {
             let clipboard = gtk::Clipboard::get(&SELECTION_CLIPBOARD);
             clipboard.request_text(move |_, text| done(text.map(str::to_string)));
-        });
-        text.ok_or_else(read_failed)
+        }))
+    }
+
+    /// A read's answer: the text, or None when the clipboard holds none. No
+    /// answer within WAIT is an error of its own: the terminal's words for a
+    /// failed read say the clipboard is empty, which would hide the timeout.
+    pub(super) fn answered(text: Option<Option<String>>) -> AppResult<Option<String>> {
+        text.ok_or_else(|| {
+            AppError::new(
+                "clipboard_failed",
+                format!("The clipboard did not answer within {} seconds", WAIT.as_secs()),
+            )
+        })
     }
 
     /// Runs `work` on the main thread (GTK lives there) and waits up to WAIT
@@ -127,7 +140,9 @@ mod platform {
         if text.is_empty() {
             return Ok(true);
         }
-        Ok(read(app)?.as_deref() == Some(text))
+        // A read-back that fails counts as a write that did not land: it is
+        // tried again, and in the end it is "Failed to copy to clipboard".
+        Ok(read(app).ok().flatten().as_deref() == Some(text))
     }
 
     pub fn read(_app: &tauri::AppHandle) -> AppResult<Option<String>> {
@@ -155,5 +170,22 @@ mod platform {
 
     pub fn read(_app: &tauri::AppHandle) -> AppResult<Option<String>> {
         Err(read_failed())
+    }
+}
+
+/// The real clipboard is never touched here; the window check in the
+/// sandbox writes and reads it.
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::platform::answered;
+
+    #[test]
+    fn a_read_without_an_answer_is_not_called_empty() {
+        let err = answered(None).unwrap_err();
+        assert_eq!(err.code, "clipboard_failed");
+        assert_eq!(err.message, "The clipboard did not answer within 5 seconds");
+        assert!(!err.message.contains("empty"), "{}", err.message);
+        assert_eq!(answered(Some(None)).unwrap(), None, "an empty clipboard is not an error");
+        assert_eq!(answered(Some(Some("x".to_string()))).unwrap(), Some("x".to_string()));
     }
 }

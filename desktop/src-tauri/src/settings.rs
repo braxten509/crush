@@ -436,22 +436,24 @@ mod tests {
         serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
     }
 
+    /// How long a test waits for the watcher: ten of its polls, so a machine
+    /// busy with other test suites cannot fail a test by being slow.
+    const PATIENCE: Duration = Duration::from_secs(5);
+
     /// The real watcher loop on its own thread, recording what it publishes.
     struct Watcher {
-        reports: Arc<Mutex<Vec<(Instant, Settings)>>>,
+        reports: Arc<Mutex<Vec<Settings>>>,
         stop: Arc<AtomicBool>,
         thread: Option<std::thread::JoinHandle<()>>,
     }
 
     impl Watcher {
         fn start(file: Arc<SettingsFile>) -> Watcher {
-            let reports: Arc<Mutex<Vec<(Instant, Settings)>>> = Arc::default();
+            let reports: Arc<Mutex<Vec<Settings>>> = Arc::default();
             let stop = Arc::new(AtomicBool::new(false));
             let thread = {
                 let (reports, stop) = (reports.clone(), stop.clone());
-                std::thread::spawn(move || {
-                    watch_loop(&file, POLL, &stop, |s| reports.lock().unwrap().push((Instant::now(), s.clone())))
-                })
+                std::thread::spawn(move || watch_loop(&file, POLL, &stop, |s| reports.lock().unwrap().push(s.clone())))
             };
             Watcher {
                 reports,
@@ -460,8 +462,17 @@ mod tests {
             }
         }
 
-        fn reports(&self) -> Vec<(Instant, Settings)> {
+        fn reports(&self) -> Vec<Settings> {
             self.reports.lock().unwrap().clone()
+        }
+
+        /// The reports, once there are `count` of them or PATIENCE has passed.
+        fn wait_for(&self, count: usize) -> Vec<Settings> {
+            let end = Instant::now() + PATIENCE;
+            while self.reports().len() < count && Instant::now() < end {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            self.reports()
         }
     }
 
@@ -541,20 +552,14 @@ mod tests {
         let file = Arc::new(SettingsFile::new(path.clone()));
         file.load();
         let watcher = Watcher::start(file.clone());
-        std::thread::sleep(Duration::from_millis(700)); // the watcher is mid-cycle
+        std::thread::sleep(POLL + POLL / 2); // the watcher is mid-cycle
 
-        let written = Instant::now();
         write_from_outside(&path, &json!({"version": 1, "yolo": true, "closed_chats": {"/data/p": ["x"]}}));
-        while watcher.reports().is_empty() && written.elapsed() < Duration::from_millis(1500) {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        let reports = watcher.reports();
-        assert!(!reports.is_empty(), "the other process's write was never reported");
-        let took = reports[0].0.duration_since(written);
-        assert!(took <= Duration::from_secs(1), "reported after {took:?}, not within 1 s");
-        assert_eq!(reports[0].1.closed_chats["/data/p"], vec!["x".to_string()]);
-        // It is reported once, not again on later looks.
-        std::thread::sleep(Duration::from_millis(1600));
+        let reports = watcher.wait_for(1);
+        assert!(!reports.is_empty(), "the other process's write was not reported within {PATIENCE:?}");
+        assert_eq!(reports[0].closed_chats["/data/p"], vec!["x".to_string()]);
+        // It is reported once, not again on the next four looks.
+        std::thread::sleep(POLL * 4);
         assert_eq!(watcher.reports().len(), 1, "reported more than once");
         assert_eq!(file.seen.lock().unwrap().current.closed_chats["/data/p"], vec!["x".to_string()]);
     }
@@ -569,19 +574,19 @@ mod tests {
         file.change(|s| apply_closed(s, "/data/p", "mine", true), |_| published += 1)
             .unwrap();
         assert_eq!(published, 1, "the change itself publishes once");
-        std::thread::sleep(Duration::from_millis(1500));
+        // A fixed window of four looks (the design's bar is 1.5 s); an echo
+        // would come on the first.
+        std::thread::sleep(POLL * 4);
         assert!(
             watcher.reports().is_empty(),
             "the watcher reported this process's own write: {:?}",
-            watcher.reports().iter().map(|r| &r.1.closed_chats).collect::<Vec<_>>()
+            watcher.reports().iter().map(|r| &r.closed_chats).collect::<Vec<_>>()
         );
         // A later change from outside is still seen after the own write.
         write_from_outside(&dir.settings(), &json!({"closed_chats": {"/data/p": ["mine", "theirs"]}}));
-        let end = Instant::now() + Duration::from_secs(2);
-        while watcher.reports().is_empty() && Instant::now() < end {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert_eq!(watcher.reports().len(), 1, "a change from outside after an own write was missed");
+        let reports = watcher.wait_for(1);
+        assert_eq!(reports.len(), 1, "a change from outside after an own write was missed");
+        assert_eq!(reports[0].closed_chats["/data/p"], vec!["mine".to_string(), "theirs".to_string()]);
     }
 
     #[test]

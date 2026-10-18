@@ -232,8 +232,9 @@ fn exit_text(status: std::process::ExitStatus) -> String {
     }
 }
 
-/// The parts of Go's net/url and path/filepath that linkTarget uses, ported
-/// so the same input gives the same result and the same error text.
+/// The parts of Go's net/url, net/netip and path/filepath (Go 1.27.1) that
+/// linkTarget uses, ported so the same input gives the same result and the
+/// same error text.
 mod go {
     /// What url.Parse gives linkTarget: the scheme (lower case), the host and
     /// the path, both unescaped (they may hold any bytes).
@@ -303,7 +304,7 @@ mod go {
                 Some(i) => (&after[..i], &after[i..]),
                 None => (after, ""),
             };
-            host = authority_host(authority)?;
+            host = authority_host(&scheme, authority)?;
             rest = tail;
         }
         let path = unescape(rest.as_bytes(), Mode::Path)?;
@@ -333,12 +334,15 @@ mod go {
     }
 
     /// parseAuthority: the host, after checking the user part.
-    fn authority_host(authority: &str) -> Result<Vec<u8>, String> {
+    fn authority_host(scheme: &str, authority: &str) -> Result<Vec<u8>, String> {
         let at = authority.rfind('@');
-        let host = host(match at {
-            Some(i) => &authority[i + 1..],
-            None => authority,
-        })?;
+        let host = host(
+            scheme,
+            match at {
+                Some(i) => &authority[i + 1..],
+                None => authority,
+            },
+        )?;
         if let Some(i) = at {
             let userinfo = &authority[..i];
             let allowed = |c: char| {
@@ -364,31 +368,204 @@ mod go {
         Ok(host)
     }
 
-    /// parseHost.
-    fn host(host: &str) -> Result<Vec<u8>, String> {
+    /// parseHost (Go 1.27.1, net/url/url.go:549-640): host[:port], or an IP
+    /// literal in brackets, which must be an IPv6 address.
+    fn host(scheme: &str, host: &str) -> Result<Vec<u8>, String> {
         let port_ok = |port: &str| port.is_empty() || (port.starts_with(':') && port[1..].bytes().all(|b| b.is_ascii_digit()));
-        if host.starts_with('[') {
-            let Some(i) = host.rfind(']') else {
-                return Err("missing ']' in host".to_string());
-            };
-            let colon_port = &host[i + 1..];
-            if !port_ok(colon_port) {
-                return Err(format!("invalid port {} after host", quote(colon_port.as_bytes())));
-            }
-            if let Some(zone) = host[..i].find("%25") {
-                let bytes = host.as_bytes();
-                let mut out = unescape(&bytes[..zone], Mode::Host)?;
-                out.extend(unescape(&bytes[zone..i], Mode::Zone)?);
-                out.extend(unescape(&bytes[i..], Mode::Host)?);
+        let bad_port = |port: &str| format!("invalid port {} after host", quote(port.as_bytes()));
+        match host.rfind('[') {
+            Some(0) => {
+                let Some(close) = host.rfind(']') else {
+                    return Err("missing ']' in host".to_string());
+                };
+                let colon_port = &host[close + 1..];
+                if !port_ok(colon_port) {
+                    return Err(bad_port(colon_port));
+                }
+                // "%25" starts an IPv6 zone, which may use more escapes than a host.
+                let name = &host.as_bytes()[1..close];
+                let mut unescaped = match name.windows(3).position(|w| w == b"%25") {
+                    Some(zone) => {
+                        let mut part = unescape(&name[..zone], Mode::Host)?;
+                        part.extend(unescape(&name[zone..], Mode::Zone)?);
+                        part
+                    }
+                    None => unescape(name, Mode::Host)?,
+                };
+                if parse_addr(&unescaped).map_err(|e| format!("invalid host: {e}"))? {
+                    // Only an IPv6 address may stand in brackets.
+                    return Err("invalid IP-literal".to_string());
+                }
+                let mut out = b"[".to_vec();
+                out.append(&mut unescaped);
+                out.push(b']');
+                out.extend_from_slice(colon_port.as_bytes());
                 return Ok(out);
             }
-        } else if let Some(i) = host.rfind(':') {
-            let colon_port = &host[i..];
-            if !port_ok(colon_port) {
-                return Err(format!("invalid port {} after host", quote(colon_port.as_bytes())));
+            Some(_) => return Err("invalid IP-literal".to_string()),
+            None => {}
+        }
+        if let (Some(first), Some(last)) = (host.find(':'), host.rfind(':')) {
+            // Since Go 1.26 a second colon is an error for http and https
+            // (GODEBUG urlstrictcolons, on for Crush's "go 1.27.0"); other
+            // schemes take the port after the last colon.
+            let i = if scheme == "http" || scheme == "https" { first } else { last };
+            if !port_ok(&host[i..]) {
+                return Err(bad_port(&host[i..]));
             }
         }
         unescape(host.as_bytes(), Mode::Host)
+    }
+
+    /// netip.ParseAddr (Go 1.27.1, net/netip/netip.go:114-343): Ok(true) for
+    /// an IPv4 address, Ok(false) for IPv6; Err holds Go's text.
+    fn parse_addr(s: &[u8]) -> Result<bool, String> {
+        for &c in s {
+            match c {
+                b'.' => return parse_ipv4_fields(s, 0, s.len()).map(|()| true),
+                b':' => return parse_ipv6(s).map(|()| false),
+                b'%' => return Err(addr_error(s, "missing IPv6 address", b"")),
+                _ => {}
+            }
+        }
+        Err(addr_error(s, "unable to parse IP", b""))
+    }
+
+    /// parseAddrError's text.
+    fn addr_error(input: &[u8], msg: &str, at: &[u8]) -> String {
+        if at.is_empty() {
+            format!("ParseAddr({}): {msg}", quote(input))
+        } else {
+            format!("ParseAddr({}): {msg} (at {})", quote(input), quote(at))
+        }
+    }
+
+    /// parseIPv4Fields: input[off..end] as four decimal fields.
+    fn parse_ipv4_fields(input: &[u8], off: usize, end: usize) -> Result<(), String> {
+        let s = &input[off..end];
+        let (mut val, mut pos, mut digits) = (0u32, 0, 0);
+        for (i, &c) in s.iter().enumerate() {
+            if c.is_ascii_digit() {
+                if digits == 1 && val == 0 {
+                    return Err(addr_error(input, "IPv4 field has octet with leading zero", b""));
+                }
+                val = val * 10 + u32::from(c - b'0');
+                digits += 1;
+                if val > 255 {
+                    return Err(addr_error(input, "IPv4 field has value >255", b""));
+                }
+            } else if c == b'.' {
+                if i == 0 || i == s.len() - 1 || s[i - 1] == b'.' {
+                    return Err(addr_error(input, "IPv4 field must have at least one digit", &s[i..]));
+                }
+                if pos == 3 {
+                    return Err(addr_error(input, "IPv4 address too long", b""));
+                }
+                pos += 1;
+                val = 0;
+                digits = 0;
+            } else {
+                return Err(addr_error(input, "unexpected character", &s[i..]));
+            }
+        }
+        if pos < 3 {
+            return Err(addr_error(input, "IPv4 address too short", b""));
+        }
+        Ok(())
+    }
+
+    /// parseIPv6: groups of up to four hex digits, at most one "::", an
+    /// optional IPv4 tail and an optional non-empty "%zone".
+    fn parse_ipv6(input: &[u8]) -> Result<(), String> {
+        let mut s = input;
+        let mut zone: &[u8] = b"";
+        if let Some(i) = s.iter().position(|&c| c == b'%') {
+            (s, zone) = (&s[..i], &s[i + 1..]);
+            if zone.is_empty() {
+                return Err(addr_error(input, "zone must be a non-empty string", b""));
+            }
+        }
+        let mut ellipsis = None;
+        if s.starts_with(b"::") {
+            ellipsis = Some(0);
+            s = &s[2..];
+            if s.is_empty() {
+                return Ok(());
+            }
+        }
+        let mut i = 0;
+        while i < 16 {
+            let (mut off, mut acc) = (0, 0u32);
+            while off < s.len() {
+                let Some(digit) = char::from(s[off]).to_digit(16) else {
+                    break;
+                };
+                acc = (acc << 4) + digit;
+                if off > 3 {
+                    return Err(addr_error(input, "each group must have 4 or less digits", s));
+                }
+                if acc > 0xFFFF {
+                    return Err(addr_error(input, "IPv6 field has value >=2^16", s));
+                }
+                off += 1;
+            }
+            if off == 0 {
+                return Err(addr_error(input, "each colon-separated field must have at least one digit", s));
+            }
+            if off < s.len() && s[off] == b'.' {
+                if ellipsis.is_none() && i != 12 {
+                    return Err(addr_error(
+                        input,
+                        "embedded IPv4 address must replace the final 2 fields of the address",
+                        s,
+                    ));
+                }
+                if i + 4 > 16 {
+                    return Err(addr_error(
+                        input,
+                        "too many hex fields to fit an embedded IPv4 at the end of the address",
+                        s,
+                    ));
+                }
+                let end = if zone.is_empty() { input.len() } else { input.len() - zone.len() - 1 };
+                parse_ipv4_fields(input, end - s.len(), end)?;
+                s = b"";
+                i += 4;
+                break;
+            }
+            i += 2;
+            s = &s[off..];
+            if s.is_empty() {
+                break;
+            }
+            if s[0] != b':' {
+                return Err(addr_error(input, "unexpected character, want colon", s));
+            } else if s.len() == 1 {
+                return Err(addr_error(input, "colon must be followed by more characters", s));
+            }
+            s = &s[1..];
+            if s[0] == b':' {
+                if ellipsis.is_some() {
+                    return Err(addr_error(input, "multiple :: in address", s));
+                }
+                ellipsis = Some(i);
+                s = &s[1..];
+                if s.is_empty() {
+                    break;
+                }
+            }
+        }
+        if !s.is_empty() {
+            return Err(addr_error(input, "trailing garbage after address", s));
+        }
+        if i < 16 {
+            if ellipsis.is_none() {
+                return Err(addr_error(input, "address string too short", b""));
+            }
+        } else if ellipsis.is_some() {
+            return Err(addr_error(input, "the :: must expand to at least one field of zeros", b""));
+        }
+        Ok(())
     }
 
     fn unhex(c: u8) -> u8 {
@@ -704,9 +881,29 @@ mod tests {
             (":x", "cannot open link: parse \":x\": missing protocol scheme".into()),
             ("java\nscript:alert(1)", "cannot open link: parse \"java\\nscript:alert(1)\": net/url: invalid control character in URL".into()),
             ("a\tb.txt", "cannot open link: parse \"a\\tb.txt\": net/url: invalid control character in URL".into()),
+            // IP literals (Go 1.27.1 url.go:549-606): only IPv6 in brackets,
+            // checked with netip.ParseAddr, whose words Go passes on.
+            ("http://[zz]/", "cannot open link: parse \"http://[zz]/\": invalid host: ParseAddr(\"zz\"): unable to parse IP".into()),
+            ("http://a[b]/", "cannot open link: parse \"http://a[b]/\": invalid IP-literal".into()),
+            ("http://[1.2.3.4]/", "cannot open link: parse \"http://[1.2.3.4]/\": invalid IP-literal".into()),
+            (
+                "http://[1::2::3]/",
+                "cannot open link: parse \"http://[1::2::3]/\": invalid host: ParseAddr(\"1::2::3\"): multiple :: in address (at \":3\")".into(),
+            ),
+            (
+                "http://[fe80::1%25]/",
+                "cannot open link: parse \"http://[fe80::1%25]/\": invalid host: ParseAddr(\"fe80::1%\"): zone must be a non-empty string".into(),
+            ),
+            // A second colon is an error for http and https only (urlstrictcolons).
+            ("http://a:1:2/", "cannot open link: parse \"http://a:1:2/\": invalid port \":1:2\" after host".into()),
+            ("file://a:1:2/x", "cannot open a file on another computer".into()),
         ];
         for (destination, want) in cases {
             assert_eq!(target(destination, dir).unwrap_err(), want, "{destination:?}");
+        }
+        // Valid IPv6 literals, with a port or a zone, are web links.
+        for destination in ["http://[::1]:8080/x", "http://[fe80::1%25en0]/", "http://[::ffff:1.2.3.4]/"] {
+            assert_eq!(link_target(destination, dir, None), Ok(LinkKind::Web), "{destination}");
         }
         // A first path segment with a colon is a scheme, as in Go.
         assert_eq!(target("notes.md:12", dir).unwrap_err(), "cannot open links of type \"notes.md\"");

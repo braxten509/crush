@@ -233,7 +233,8 @@ fn extension_type(path: &Path) -> Option<&'static str> {
     })
 }
 
-/// One of the patterns of Go's sniffSignatures (net/http/sniff.go).
+/// One of the patterns of Go's sniffSignatures (Go 1.27.1,
+/// net/http/internal/sniff.go:66-195).
 enum Sig {
     /// An HTML tag, any case, after leading white space, then a space or ">".
     Html(&'static [u8]),
@@ -302,7 +303,6 @@ const SIGNATURES: &[Sig] = &[
     Sig::Exact(b"\x89PNG\x0D\x0A\x1A\x0A", "image/png"),
     Sig::Exact(b"\xFF\xD8\xFF", "image/jpeg"),
     // Sound and video.
-    Sig::Masked { mask: b"\xFF\xFF\xFF\xFF", pat: b".snd", skip_ws: false, ct: "audio/basic" },
     Sig::Masked {
         mask: b"\xFF\xFF\xFF\xFF\x00\x00\x00\x00\xFF\xFF\xFF\xFF",
         pat: b"FORM\x00\x00\x00\x00AIFF",
@@ -554,10 +554,23 @@ struct Found {
     depth: usize,
 }
 
-/// The Git list as entries: each file (still on disk and not left out by the
-/// terminal's names) and the folders above it, down to max_depth. Over
-/// max_items, the shallowest entries are kept, as a walk would reach them first.
+/// The Git list as entries: each file and each folder above it, down to
+/// max_depth, that is still on disk and not left out by the terminal's names.
+/// Over max_items, the shallowest entries are kept, as a walk would reach them first.
 fn from_git(root: &Path, files: Vec<String>, max_depth: usize, max_items: usize) -> Vec<FileEntry> {
+    keep_present(git_candidates(files, max_depth), max_items, |path| {
+        let full = root.join(path);
+        // A tracked file deleted since is still in the index.
+        fs::symlink_metadata(&full).ok()?;
+        // A submodule, or a link to a folder, is a folder.
+        Some(fs::metadata(&full).is_ok_and(|m| m.is_dir()))
+    })
+}
+
+/// The Git list's possible entries, before anything is looked up on disk:
+/// each file whose folders and name the terminal lists, and the folders above
+/// it, down to max_depth; shallowest first, then in the terminal's order.
+fn git_candidates(files: Vec<String>, max_depth: usize) -> Vec<FileEntry> {
     let within = |depth: usize| max_depth == 0 || depth <= max_depth;
     let mut seen: HashSet<String> = HashSet::new();
     let mut found: Vec<Found> = Vec::new();
@@ -567,17 +580,7 @@ fn from_git(root: &Path, files: Vec<String>, max_depth: usize, max_items: usize)
             continue;
         }
         let (folders, name) = parts.split_at(parts.len() - 1);
-        if folders.iter().any(|f| ignored_folder(f)) {
-            continue;
-        }
-        let full = root.join(&file);
-        // A tracked file deleted since is still in the index.
-        if fs::symlink_metadata(&full).is_err() {
-            continue;
-        }
-        // A submodule, or a link to a folder, is a folder.
-        let is_dir = fs::metadata(&full).is_ok_and(|m| m.is_dir());
-        if ignored_name(name[0]) || (is_dir && ignored_folder(name[0])) {
+        if folders.iter().any(|f| ignored_folder(f)) || ignored_name(name[0]) {
             continue;
         }
         let depth = parts.len();
@@ -595,16 +598,38 @@ fn from_git(root: &Path, files: Vec<String>, max_depth: usize, max_items: usize)
         }
         if within(depth) && seen.insert(file.clone()) {
             found.push(Found {
-                entry: FileEntry { path: file, is_dir },
+                entry: FileEntry { path: file, is_dir: false },
                 depth,
             });
         }
     }
-    if max_items > 0 && found.len() > max_items {
-        found.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| sort_key(&a.entry).cmp(&sort_key(&b.entry))));
-        found.truncate(max_items);
-    }
+    found.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| sort_key(&a.entry).cmp(&sort_key(&b.entry))));
     found.into_iter().map(|f| f.entry).collect()
+}
+
+/// Looks the candidates up on disk one at a time, in their order, until
+/// max_items are kept (0: no limit), so a huge repository costs a look per
+/// entry shown, not per file. `look` gives None for a path that is gone, else
+/// whether it is a folder.
+fn keep_present(candidates: Vec<FileEntry>, max_items: usize, mut look: impl FnMut(&str) -> Option<bool>) -> Vec<FileEntry> {
+    let mut kept = Vec::new();
+    for candidate in candidates {
+        if max_items > 0 && kept.len() >= max_items {
+            break;
+        }
+        let Some(is_dir) = look(&candidate.path) else {
+            continue;
+        };
+        let name = candidate.path.rsplit('/').next().unwrap_or_default();
+        if is_dir && ignored_folder(name) {
+            continue;
+        }
+        kept.push(FileEntry {
+            path: candidate.path,
+            is_dir,
+        });
+    }
+    kept
 }
 
 /// Outside Git: a breadth-first walk from `root` (folders first in each
@@ -762,6 +787,8 @@ mod tests {
             (b"text then \x1a, a control byte", "application/octet-stream"),
             // ESC (0x1b) is allowed in text, so colored program output is text.
             (b"colored \x1b[31mred\x1b[0m\n", "text/plain; charset=utf-8"),
+            // Go 1.27.1's table has no ".snd" (audio/basic) row.
+            (b".snd files are old Sun audio\n", "text/plain; charset=utf-8"),
         ];
         for (data, want) in cases {
             assert_eq!(detect_content_type(data), want, "{:?}", String::from_utf8_lossy(data));
@@ -871,6 +898,37 @@ mod tests {
         // The shallowest entries are kept first.
         assert_eq!(paths(&list(&cwd, 0, 4).unwrap()), ["a.txt", "src/", "src/deep/", "z/"]);
         assert_eq!(list(&cwd, 0, 3).unwrap().len(), 3);
+    }
+
+    /// A huge repository: files below max_depth and the names the terminal
+    /// never lists are dropped before any look at the disk, and the looks stop
+    /// once max_items entries are kept.
+    #[test]
+    fn list_in_git_looks_at_the_disk_only_for_entries_it_keeps() {
+        let mut files: Vec<String> = (0..50)
+            .flat_map(|d| (0..40).map(move |f| format!("dir{d:02}/sub/file{f:02}.txt")))
+            .collect();
+        files.extend(["node_modules/x/index.js".to_string(), "debug.log".to_string()]);
+        let candidates = git_candidates(files.clone(), 2);
+        assert_eq!(candidates.len(), 100, "only the 50 + 50 folders lie within depth 2");
+        assert!(!candidates.iter().any(|c| c.path.starts_with("node_modules") || c.path == "debug.log"));
+        let mut looked = Vec::new();
+        let kept = keep_present(candidates, 30, |path| {
+            looked.push(path.to_string());
+            Some(true)
+        });
+        assert_eq!(kept.len(), 30);
+        assert_eq!(looked.len(), 30, "one look per kept entry, not {}", looked.len());
+        assert!(looked.iter().all(|p| !p.contains('/')), "the shallowest first: {looked:?}");
+        // Without a depth limit too; a path that is gone costs one look and is skipped.
+        let mut looks = 0;
+        let kept = keep_present(git_candidates(files, 0), 10, |path| {
+            looks += 1;
+            (path != "dir00").then_some(true)
+        });
+        assert_eq!(looks, 11);
+        assert_eq!(kept.first().map(|e| e.path.as_str()), Some("dir01"));
+        assert_eq!(kept.len(), 10);
     }
 
     #[test]

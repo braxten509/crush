@@ -265,7 +265,8 @@ func (b *Backend) liveAgentInit(ws *Workspace, clientID string, interactive bool
 
 // liveGone runs Q2 for an app that left while other apps stay. With no app
 // left, teardown does the full stop.
-func (b *Backend) liveGone(ws *Workspace, clientID string, _ GoneReason, workspaceEmpty bool) {
+func (b *Backend) liveGone(ws *Workspace, clientID string, reason GoneReason, workspaceEmpty bool) {
+	slog.Debug("An app left a workspace", "workspace", ws.ID, "client", clientID, "reason", reason, "last", workspaceEmpty)
 	if workspaceEmpty {
 		return
 	}

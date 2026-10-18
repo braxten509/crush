@@ -29,9 +29,15 @@ import (
 //   - live:spawn:NAME runs two bash calls: one starts a background job, one
 //     asks the hub for a helper whose prompt is live:hold:NAME-helper. The
 //     call after their results is held as NAME.
+//   - live:helper:NAME is live:spawn:NAME without the job.
+//   - A resumed helper's prompt continues its first one.
 //   - Any other prompt (a helper's result, a job notice) and every call
 //     without tools (a title) get a short answer, so that turn ends.
-var modelMarker = regexp.MustCompile(`live:(hold|spawn):([a-z0-9-]+)`)
+var modelMarker = regexp.MustCompile(`live:(hold|spawn|helper):([a-z0-9-]+)`)
+
+// modelResumed starts the prompt a resumed helper gets (agent's
+// resumePrompt).
+const modelResumed = "Crush restarted while you were working"
 
 // fakeModel serves the fake model and counts its calls.
 type fakeModel struct {
@@ -118,7 +124,14 @@ func (f *fakeModel) serve(w http.ResponseWriter, r *http.Request) {
 	var verb, name string
 	afterTools := false
 	if last >= 0 {
-		if m := modelMarker.FindStringSubmatch(modelText(req.Messages[last].Content)); m != nil {
+		text := modelText(req.Messages[last].Content)
+		m := modelMarker.FindStringSubmatch(text)
+		for i := last - 1; m == nil && i >= 0 && strings.Contains(text, modelResumed); i-- {
+			if req.Messages[i].Role == "user" {
+				m = modelMarker.FindStringSubmatch(modelText(req.Messages[i].Content))
+			}
+		}
+		if m != nil {
 			verb, name = m[1], m[2]
 		}
 		for _, m := range req.Messages[last+1:] {
@@ -134,11 +147,11 @@ func (f *fakeModel) serve(w http.ResponseWriter, r *http.Request) {
 		f.notices++
 		f.mu.Unlock()
 		writeModelText(w, "Noted.")
-	case verb == "spawn" && !afterTools:
+	case verb != "hold" && !afterTools:
 		f.mu.Lock()
 		f.calls[name]++
 		f.mu.Unlock()
-		writeModelToolCalls(w, name)
+		writeModelToolCalls(w, name, verb == "spawn")
 	default:
 		f.hold(w, r, name)
 	}
@@ -234,24 +247,30 @@ func writeModelText(w http.ResponseWriter, text string) {
 	writeModelEnd(w, "stop")
 }
 
-// writeModelToolCalls answers live:spawn:NAME: a background job and a
-// helper request, both through bash.
-func writeModelToolCalls(w http.ResponseWriter, name string) {
-	job, _ := json.Marshal(map[string]any{
-		"description":       "Start the " + name + " job",
-		"command":           "sleep 120",
-		"run_in_background": true,
-	})
+// writeModelToolCalls answers live:spawn:NAME and live:helper:NAME: a
+// helper request and, with job, a background job, all through bash.
+func writeModelToolCalls(w http.ResponseWriter, name string, job bool) {
+	type toolCall struct {
+		id   string
+		args []byte
+	}
+	var calls []toolCall
+	if job {
+		args, _ := json.Marshal(map[string]any{
+			"description":       "Start the " + name + " job",
+			"command":           "sleep 120",
+			"run_in_background": true,
+		})
+		calls = append(calls, toolCall{"call_job_" + name, args})
+	}
 	request := fmt.Sprintf(`{"session":"%%s","cli":"fake","prompt":"live:hold:%s-helper","name":"%s-helper"}`, name, name)
 	helper, _ := json.Marshal(map[string]any{
 		"description": "Ask for the " + name + " helper",
 		"command": fmt.Sprintf(`printf '%s' "$CRUSH_SESSION_ID" > "$CRUSH_TASKS_DIR/%s.tmp" && mv "$CRUSH_TASKS_DIR/%s.tmp" "$CRUSH_TASKS_DIR/%s.req"`,
 			request, name, name, name),
 	})
-	for i, call := range []struct {
-		id   string
-		args []byte
-	}{{"call_job_" + name, job}, {"call_helper_" + name, helper}} {
+	calls = append(calls, toolCall{"call_helper_" + name, helper})
+	for i, call := range calls {
 		delta := map[string]any{"tool_calls": []any{map[string]any{
 			"index": i, "id": call.id, "type": "function",
 			"function": map[string]any{"name": "bash", "arguments": string(call.args)},
@@ -367,6 +386,22 @@ func (r *liveRig) spawnWork(t *testing.T, ws *Workspace, app, chat, name string)
 		return okTask && okJob
 	}, 20*time.Second, 20*time.Millisecond, "the helper and the job of %s must run", name)
 	return task, job
+}
+
+// spawnHelper has app start a turn in chat that starts a helper, and waits
+// until the turn and the helper run.
+func (r *liveRig) spawnHelper(t *testing.T, ws *Workspace, app, chat, name string) agent.Task {
+	t.Helper()
+	r.send(t, ws, app, chat, name, "live:helper:"+name)
+	r.model.waitHeld(t, name, 1)
+	r.model.waitHeld(t, name+"-helper", 1)
+	var task agent.Task
+	require.Eventually(t, func() bool {
+		var ok bool
+		task, ok = sessionTask(chat, name+"-helper")
+		return ok
+	}, 20*time.Second, 20*time.Millisecond, "the helper of %s must run", name)
+	return task
 }
 
 // sessionTask finds a chat's helper by name.

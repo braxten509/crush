@@ -198,6 +198,8 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 		h.jobHandoffs[marker] = true
 	}
 	h.mu.Unlock()
+	// The job's owner is recorded by the hook (the backend keeps it).
+	workStarted(WorkStart{Kind: WorkJob, ID: job.ID, SessionID: sessionID})
 	h.rememberJob(job, sessionID, service)
 	spillDir := h.c.cfg.Config().Options.DataDirectory
 	go func() {
@@ -207,6 +209,7 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 			delete(h.backgroundShells, marker)
 			delete(h.backgroundServices, job.ID)
 			delete(h.jobHandoffs, marker)
+			delete(h.interrupting, job.ID)
 			h.mu.Unlock()
 		}()
 		removeCheckIn := func() {}
@@ -223,9 +226,11 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 			h.forgetJob(job.ID)
 			return
 		}
-		closing := func() bool { h.mu.Lock(); defer h.mu.Unlock(); return h.closing }
+		// InterruptJob's kill counts as a shutdown of this one job.
+		closing := func() bool { h.mu.Lock(); defer h.mu.Unlock(); return h.closing || h.interrupting[job.ID] }
 		if closing() {
-			// Shutdown killed the job; the next Crush reports it.
+			// Shutdown or InterruptJob killed the job; the next resume
+			// reports it.
 			h.interruptJob(job)
 			return
 		}
@@ -304,7 +309,7 @@ func managedBackgroundProcesses() []Process {
 		hub.mu.Lock()
 		for marker, job := range hub.backgroundShells {
 			if !job.IsDone() {
-				processes = append(processes, Process{JobID: job.ID, Command: job.Command, Name: job.Description, Started: job.Started, marker: marker})
+				processes = append(processes, Process{JobID: job.ID, Command: job.Command, Name: job.Description, Started: job.Started, Session: hub.backgroundOwners[job.ID], marker: marker})
 			}
 		}
 		hub.mu.Unlock()

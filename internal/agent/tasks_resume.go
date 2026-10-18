@@ -3,6 +3,7 @@ package agent
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -44,15 +45,21 @@ type savedTask struct {
 }
 
 // ResumeInterruptedTasks starts again the tasks an earlier Crush in each
-// project was running when it quit or crashed, and tells each agent which of
-// its background jobs that Crush cut off. Callers run it once the UI listens
-// for task events, so resumed tasks show up like new ones.
+// project was running when it quit or crashed, and the ones released since
+// (InterruptTask, or a workspace shutdown this process outlived), and tells
+// each agent which of its background jobs were cut off. Callers run it once
+// the UI listens for task events, so resumed tasks show up like new ones.
+// Every call claims again; a claim makes the next call skip what it took.
 func ResumeInterruptedTasks() {
 	hubsMu.Lock()
 	pending := slices.Clone(hubs)
 	hubsMu.Unlock()
 	for _, h := range pending {
-		h.resumeOnce.Do(func() { go h.resumeInterrupted(context.Background()) })
+		go func() {
+			h.resumeMu.Lock()
+			defer h.resumeMu.Unlock()
+			h.resumeInterrupted(context.Background())
+		}()
 	}
 }
 
@@ -116,8 +123,10 @@ func (h *taskHub) forget(childID string) {
 	}
 }
 
-// markInterrupted records when shutdown cut these tasks off.
-func (h *taskHub) markInterrupted(childIDs []string) {
+// releaseInterrupted records when these tasks were cut off and releases them
+// (owner 0), so the next resume in any Crush, this one included, starts them
+// again.
+func (h *taskHub) releaseInterrupted(childIDs []string) {
 	if len(childIDs) == 0 {
 		return
 	}
@@ -126,6 +135,7 @@ func (h *taskHub) markInterrupted(childIDs []string) {
 		for i := range saved {
 			if slices.Contains(childIDs, saved[i].ChildID) {
 				saved[i].Interrupted = now
+				saved[i].Owner = 0
 			}
 		}
 		return saved
@@ -135,9 +145,16 @@ func (h *taskHub) markInterrupted(childIDs []string) {
 	}
 }
 
-// claimInterrupted takes over the saved tasks whose Crush is gone and drops
-// the ones too old to resume. Tasks of a Crush that still runs, this one
-// included, are left alone.
+// released reports a saved entry no Crush owns: cut off and let go by
+// releaseInterrupted or interruptJob. It is checked before the owner,
+// because taskProcessAlive(0) is true.
+func released(owner int, interrupted time.Time) bool {
+	return owner == 0 && !interrupted.IsZero()
+}
+
+// claimInterrupted takes over the saved tasks that were released or whose
+// Crush is gone, and drops the ones too old to resume. Tasks of a Crush that
+// still runs them, this one included, are left alone.
 func (h *taskHub) claimInterrupted() ([]savedTask, error) {
 	self := os.Getpid()
 	var claimed []savedTask
@@ -145,7 +162,11 @@ func (h *taskHub) claimInterrupted() ([]savedTask, error) {
 		kept := saved[:0]
 		for _, s := range saved {
 			switch {
-			case s.Owner == self || taskProcessAlive(s.Owner):
+			case released(s.Owner, s.Interrupted) && time.Since(s.Interrupted) <= resumeWindow:
+				s.Owner = self
+				claimed = append(claimed, s)
+				kept = append(kept, s)
+			case !released(s.Owner, s.Interrupted) && (s.Owner == self || taskProcessAlive(s.Owner)):
 				kept = append(kept, s)
 			case time.Since(cmp.Or(s.Interrupted, s.Started)) > resumeWindow:
 				slog.Info("Not resuming an old interrupted sub-agent", "task", s.ID, "name", s.Name)
@@ -161,19 +182,45 @@ func (h *taskHub) claimInterrupted() ([]savedTask, error) {
 }
 
 func (h *taskHub) resumeInterrupted(ctx context.Context) {
+	// The closing check and the claims share one hold of h.mu, the lock
+	// under which stopAll sets closing and releases this hub's tasks: a
+	// claim either runs before that release, when this hub's own work still
+	// carries this process as its owner and is skipped, or not at all.
+	h.mu.Lock()
+	if h.closing {
+		h.mu.Unlock()
+		return
+	}
 	claimed, err := h.claimInterrupted()
 	if err != nil {
 		slog.Warn("Failed to read interrupted sub-agents", "error", err)
 	}
+	jobs, err := h.claimInterruptedJobs()
+	if err != nil {
+		slog.Warn("Failed to read interrupted background jobs", "error", err)
+	}
+	h.mu.Unlock()
+	h.resumeClaimed(ctx, claimed, jobs)
+}
+
+// resumeClaimed starts the claimed tasks again and reports the claimed jobs.
+// A task refused because the hub started closing since its claim is
+// released again for the next resume.
+func (h *taskHub) resumeClaimed(ctx context.Context, claimed []savedTask, jobs []savedJob) {
 	for _, s := range claimed {
 		if err := h.resume(ctx, s); err != nil {
+			if errors.Is(err, errHubClosing) {
+				// Closing since the claim: the next resume takes it.
+				h.releaseInterrupted([]string{s.ChildID})
+				continue
+			}
 			slog.Warn("Failed to resume an interrupted sub-agent", "task", s.ID, "name", s.Name, "error", err)
 			h.forget(s.ChildID)
 			continue
 		}
 		slog.Info("Resumed an interrupted sub-agent", "task", s.ID, "name", s.Name)
 	}
-	h.reportInterruptedJobs(ctx)
+	h.reportInterruptedJobs(ctx, jobs)
 }
 
 // resume runs a saved task again on its child session.
@@ -215,14 +262,15 @@ func (h *taskHub) resume(ctx context.Context, s savedTask) error {
 	t.Ended = time.Time{}
 	t.Effort = selected.ReasoningEffort
 	h.mu.Lock()
-	if _, taken := h.tasks[t.ID]; taken {
-		t.ID = "" // another resumed task already has it
+	if other, taken := h.tasks[t.ID]; taken && other.ChildID != t.ChildID {
+		t.ID = "" // another task already has it
 	} else if n, ok := taskNumber(t.ID); ok && n > h.seq {
 		h.seq = n
 	}
 	h.mu.Unlock()
-	h.start(ctx, func() {}, &t, sub, m, provider, resumePrompt)
-	return nil
+	// The same task interrupted in this process keeps its ID.
+	_, err = h.startRun(ctx, func() {}, &t, sub, m, provider, resumePrompt, true)
+	return err
 }
 
 // taskNumber reads the number of a task ID like "t12".

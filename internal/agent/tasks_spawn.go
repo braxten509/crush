@@ -104,7 +104,10 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, ReadOnly: req.ReadOnly, Status: TaskRunning, Started: time.Now(),
 	}
 	started = true
-	snapshot := h.start(ctx, release, t, sub, m, *provider, subAgentPrompt(prompt, req.ReadOnly))
+	snapshot, err := h.start(ctx, release, t, sub, m, *provider, subAgentPrompt(prompt, req.ReadOnly))
+	if err != nil {
+		return nil, err
+	}
 	return &snapshot, nil
 }
 
@@ -190,11 +193,26 @@ func apiSubAgentConfig(agents map[string]config.Agent, readOnly bool) config.Age
 	return cfg
 }
 
+// errHubClosing refuses to start a task on a hub whose Crush, or whose
+// project's workspace, is shutting down.
+var errHubClosing = errors.New("Crush is closing")
+
 // start runs a task in the background and returns its first snapshot. A
 // task without an ID gets the next one. release is called once the task's
-// result is delivered.
-func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub SessionAgent, m Model, provider config.ProviderConfig, prompt string) Task {
+// result is delivered. On a closing hub it starts nothing: it calls release
+// and returns errHubClosing.
+func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub SessionAgent, m Model, provider config.ProviderConfig, prompt string) (Task, error) {
+	return h.startRun(ctx, release, t, sub, m, provider, prompt, false)
+}
+
+// startRun is start; resumed marks a task ResumeInterruptedTasks restarts.
+func (h *taskHub) startRun(ctx context.Context, release func(), t *Task, sub SessionAgent, m Model, provider config.ProviderConfig, prompt string, resumed bool) (Task, error) {
 	h.mu.Lock()
+	if h.closing {
+		h.mu.Unlock()
+		release()
+		return Task{}, errHubClosing
+	}
 	if t.ID == "" {
 		h.seq++
 		t.ID = fmt.Sprintf("t%d", h.seq)
@@ -202,9 +220,15 @@ func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub Sessio
 	runCtx, cancel := context.WithCancel(ctx)
 	h.cancels[t.ID] = cancel
 	h.tasks[t.ID] = t
+	delete(h.interrupting, t.ID)
 	if run := h.sessionRuns[t.SessionID]; run != nil {
 		h.sessionRuns[t.ChildID] = run
 	}
+	h.mu.Unlock()
+	// Registered, and no event about it yet: the owner comes with the first.
+	owner := workStarted(WorkStart{Kind: WorkHelper, ID: t.ID, SessionID: t.SessionID, Resumed: resumed})
+	h.mu.Lock()
+	t.StartedBy = owner
 	snapshot := *t
 	h.mu.Unlock()
 	h.remember(snapshot, provider.ID)
@@ -224,9 +248,9 @@ func (h *taskHub) start(ctx context.Context, release func(), t *Task, sub Sessio
 			ProviderOptions: getProviderOptions(m, provider),
 		})
 		removeCheckIn()
-		h.finish(ctx, t.ID, subAgentOutput(result), err)
+		h.finishRun(ctx, t, subAgentOutput(result), err)
 	}()
-	return snapshot
+	return snapshot, nil
 }
 
 // taskModel is the model a sub-agent runs on, tuned as its request asks:

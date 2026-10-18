@@ -314,8 +314,11 @@ func logFirstWinsMismatch(existing *Workspace, args proto.Workspace) {
 		"requested_debug", args.Debug,
 		"existing_data_dir", existingCfg.Options.DataDirectory,
 		"requested_data_dir", args.DataDir,
-		"existing_env", existing.Env,
-		"requested_env", args.Env,
+		// The environments hold the clients' API keys: name only
+		// whether they differ and their sizes, never a value.
+		"env_differs", !stringSlicesEqual(existing.Env, args.Env),
+		"existing_env_count", len(existing.Env),
+		"requested_env_count", len(args.Env),
 		"existing_channels", existingChannels,
 		"requested_channels", args.Channels,
 	)

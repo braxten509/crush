@@ -127,6 +127,7 @@ pub fn events_take(app: AppHandle, window: Window) -> Vec<Value> {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // one argument per field of the `api` command (1.3)
 pub async fn api(
     app: AppHandle,
     window: Window,

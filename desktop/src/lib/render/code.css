@@ -1,0 +1,64 @@
+/* Code highlighting (desktop-design 1.7 item 7, 4.0): highlight.js classes onto the
+   --hl-* tokens of app.css. Used by Markdown code blocks and every code body. */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-section,
+.hljs-name {
+  color: var(--hl-keyword);
+  font-weight: 600;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-char.escape_,
+.hljs-symbol {
+  color: var(--hl-string);
+}
+.hljs-number,
+.hljs-literal {
+  color: var(--hl-number);
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+.hljs-title,
+.hljs-title.function_ {
+  color: var(--hl-function);
+}
+.hljs-type,
+.hljs-built_in,
+.hljs-title.class_ {
+  color: var(--hl-type);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--hl-attr);
+}
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-meta .hljs-string {
+  color: var(--hl-meta);
+  font-weight: 400;
+}
+.hljs-addition {
+  color: var(--diff-add-ink);
+}
+.hljs-deletion {
+  color: var(--error-ink);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+.hljs-link {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}

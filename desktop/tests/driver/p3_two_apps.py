@@ -30,7 +30,7 @@ makes (join, send, read), for running the terminal and engine half before the
 window's pieces are merged; it proves nothing about the window.
 Usage: tests/check.sh p3_two_apps.py [--stand-in]
 """
-import importlib.util, json, os, signal, subprocess, sys, time, uuid
+import ctypes, importlib.util, json, os, subprocess, sys, time, uuid
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 
@@ -87,6 +87,42 @@ def poll(read, ok, timeout, every=0.1):
         if time.time() - start > timeout:
             return False, value, time.time() - start
         time.sleep(every)
+
+
+class _ClientMessage(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_int), ("serial", ctypes.c_ulong), ("send_event", ctypes.c_int),
+                ("display", ctypes.c_void_p), ("window", ctypes.c_ulong), ("message_type", ctypes.c_ulong),
+                ("format", ctypes.c_int), ("data", ctypes.c_long * 5)]
+
+
+class _XEvent(ctypes.Union):
+    _fields_ = [("xclient", _ClientMessage), ("pad", ctypes.c_long * 24)]
+
+
+def ask_close(wid):
+    """Sends the window its close request (WM_DELETE_WINDOW), as a window
+    manager does for the close button. The hidden screen has no window
+    manager, so xdotool windowquit (_NET_CLOSE_WINDOW) reaches no one."""
+    x11 = ctypes.cdll.LoadLibrary("libX11.so.6")
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XInternAtom.restype = ctypes.c_ulong
+    x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+    x11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.POINTER(_XEvent)]
+    x11.XFlush.argtypes = x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+    dpy = x11.XOpenDisplay(None)
+    if not dpy:
+        return False
+    ev = _XEvent()
+    ev.xclient.type = 33  # ClientMessage
+    ev.xclient.window = wid
+    ev.xclient.message_type = x11.XInternAtom(dpy, b"WM_PROTOCOLS", 0)
+    ev.xclient.format = 32
+    ev.xclient.data[0] = x11.XInternAtom(dpy, b"WM_DELETE_WINDOW", 0)
+    sent = x11.XSendEvent(dpy, wid, 0, 0, ctypes.byref(ev)) != 0
+    x11.XFlush(dpy)
+    x11.XCloseDisplay(dpy)
+    return sent
 
 
 def engine_text(message):
@@ -206,7 +242,7 @@ class Window:
             pid = subprocess.run(["xdotool", "getwindowpid", wid], capture_output=True, text=True).stdout.strip()
             if pid.isdigit():
                 pids.add(int(pid))
-            subprocess.run(["xdotool", "windowquit", wid], capture_output=True)
+            ask_close(int(wid))
         gone, _, _ = poll(lambda: [p for p in pids if os.path.exists(f"/proc/{p}")], lambda alive: not alive, 10)
         return bool(pids) and gone
 

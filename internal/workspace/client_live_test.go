@@ -22,6 +22,7 @@ import (
 // every field, so the terminal's task row works (engine-design.md 5.3).
 func TestClientWorkspaceTranslatesHelperEvent(t *testing.T) {
 	xdgIsolate(t)
+	t.Setenv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 	rt := newRuntimeServer(t)
 	cwd := t.TempDir()
 	c := rt.newClient(t, cwd)
@@ -69,6 +70,7 @@ func TestClientWorkspaceTranslatesHelperEvent(t *testing.T) {
 // call reports false (engine-design.md 5.4).
 func TestClientWorkspaceAgentBackgroundUsesRoute(t *testing.T) {
 	xdgIsolate(t)
+	t.Setenv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 	rt := newRuntimeServer(t)
 	cwd := t.TempDir()
 	c := rt.newClient(t, cwd)

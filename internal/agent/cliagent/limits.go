@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -38,12 +40,106 @@ func (l Limit) Left() float64 {
 const limitRefresh = 3 * time.Minute
 
 // ponytail: in-process store, so the TUI only sees it in the default
-// (non client/server) mode.
+// (non client/server) mode. The engine reads it through Snapshot and
+// SetLimitsHook (engine-design.md 5.9 e).
 var limitStore struct {
 	sync.Mutex
 	byKind  map[catwalk.Type][]Limit
 	fetched map[catwalk.Type]time.Time
 	pending map[catwalk.Type]bool
+	// readAt is when the last reading arrived. Unlike fetched, which a
+	// failed refresh sets too as a backoff, it proves a reading exists.
+	readAt map[catwalk.Type]time.Time
+	// lastErr is the last failed refresh since the last reading.
+	lastErr map[catwalk.Type]string
+	// hook is told about every new reading and every failed refresh.
+	hook func(kind catwalk.Type)
+	// replaced is set while a test's fetchers stand in for the real ones.
+	replaced bool
+}
+
+// KindLimits is what the store knows about one CLI's usage limits.
+type KindLimits struct {
+	Kind    catwalk.Type
+	Limits  []Limit
+	ReadAt  time.Time // set only by setLimits
+	Err     string    // last refresh error since the last reading
+	Pending bool
+}
+
+// Snapshot returns the store's state for every CLI with a usage fetcher,
+// sorted by kind.
+func Snapshot() []KindLimits {
+	limitStore.Lock()
+	defer limitStore.Unlock()
+	kinds := slices.Sorted(maps.Keys(limitFetchers))
+	out := make([]KindLimits, 0, len(kinds))
+	for _, kind := range kinds {
+		out = append(out, KindLimits{
+			Kind:    kind,
+			Limits:  slices.Clone(limitStore.byKind[kind]),
+			ReadAt:  limitStore.readAt[kind],
+			Err:     limitStore.lastErr[kind],
+			Pending: limitStore.pending[kind],
+		})
+	}
+	return out
+}
+
+// SetLimitsHook installs fn, called after each new reading and each failed
+// refresh, with no lock held. nil uninstalls it.
+func SetLimitsHook(fn func(kind catwalk.Type)) {
+	limitStore.Lock()
+	defer limitStore.Unlock()
+	limitStore.hook = fn
+}
+
+// limitsChanged tells the hook, if one is installed, that kind changed.
+// Callers hold no store lock.
+func limitsChanged(kind catwalk.Type) {
+	limitStore.Lock()
+	fn := limitStore.hook
+	limitStore.Unlock()
+	if fn != nil {
+		fn(kind)
+	}
+}
+
+// SetLimitFetchersForTest makes fetchers the only usage fetchers, with an
+// empty store for them, until restore runs. Tests use it so that no real
+// CLI or account is asked.
+func SetLimitFetchersForTest(fetchers map[catwalk.Type]func(context.Context) ([]Limit, error)) (restore func()) {
+	limitStore.Lock()
+	defer limitStore.Unlock()
+	saved := limitFetchers
+	limitFetchers = maps.Clone(fetchers)
+	limitStore.replaced = true
+	for kind := range fetchers {
+		delete(limitStore.byKind, kind)
+		delete(limitStore.fetched, kind)
+		delete(limitStore.readAt, kind)
+		delete(limitStore.lastErr, kind)
+	}
+	return func() {
+		limitStore.Lock()
+		defer limitStore.Unlock()
+		limitFetchers = saved
+		limitStore.replaced = false
+		for kind := range fetchers {
+			delete(limitStore.byKind, kind)
+			delete(limitStore.fetched, kind)
+			delete(limitStore.readAt, kind)
+			delete(limitStore.lastErr, kind)
+		}
+	}
+}
+
+// LimitFetchersReplaced reports whether a test's fetchers stand in for the
+// real ones (SetLimitFetchersForTest).
+func LimitFetchersReplaced() bool {
+	limitStore.Lock()
+	defer limitStore.Unlock()
+	return limitStore.replaced
 }
 
 // Limits returns the last known usage limits of a CLI that apply to a
@@ -65,13 +161,22 @@ func setLimits(kind catwalk.Type, limits []Limit) {
 		return
 	}
 	limitStore.Lock()
-	defer limitStore.Unlock()
 	if limitStore.byKind == nil {
 		limitStore.byKind = map[catwalk.Type][]Limit{}
+	}
+	if limitStore.fetched == nil {
 		limitStore.fetched = map[catwalk.Type]time.Time{}
 	}
+	if limitStore.readAt == nil {
+		limitStore.readAt = map[catwalk.Type]time.Time{}
+	}
+	now := time.Now()
 	limitStore.byKind[kind] = limits
-	limitStore.fetched[kind] = time.Now()
+	limitStore.fetched[kind] = now
+	limitStore.readAt[kind] = now
+	delete(limitStore.lastErr, kind)
+	limitStore.Unlock()
+	limitsChanged(kind)
 }
 
 // RefreshLimits asks a CLI's service for its usage limits unless they are
@@ -89,11 +194,12 @@ func RefreshLimitsNow(ctx context.Context, kind catwalk.Type) error {
 }
 
 func refreshLimits(ctx context.Context, kind catwalk.Type, force bool) (bool, error) {
+	limitStore.Lock()
 	fetch := limitFetchers[kind]
 	if fetch == nil {
+		limitStore.Unlock()
 		return false, errors.New("This CLI does not report usage limits")
 	}
-	limitStore.Lock()
 	if limitStore.pending[kind] {
 		limitStore.Unlock()
 		return false, errors.New("Usage refresh is already in progress")
@@ -122,8 +228,13 @@ func refreshLimits(ctx context.Context, kind catwalk.Type, force bool) (bool, er
 		if limitStore.fetched == nil {
 			limitStore.fetched = map[catwalk.Type]time.Time{}
 		}
+		if limitStore.lastErr == nil {
+			limitStore.lastErr = map[catwalk.Type]string{}
+		}
 		limitStore.fetched[kind] = time.Now()
+		limitStore.lastErr[kind] = err.Error()
 		limitStore.Unlock()
+		limitsChanged(kind)
 		return false, err
 	}
 	setLimits(kind, limits)

@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
+	"github.com/google/uuid"
 	"github.com/pkg/browser"
 )
 
@@ -65,6 +66,10 @@ type ClientWorkspace struct {
 	// (engine-design.md 5.14). Set only for engine connections; unused
 	// until piece A.
 	ensureEngine func(context.Context) error
+
+	// shellOutputs feeds live `!` output to the commands waiting for it
+	// (engine-design.md 5.9 a).
+	shellOutputs shellOutputs
 }
 
 // SSE reconnect backoff bounds for the workspace event stream. Declared
@@ -240,19 +245,39 @@ func (w *ClientWorkspace) AgentRunChannel(ctx context.Context, channel, sessionI
 	return w.client.SendMessage(ctx, w.workspaceID(), sessionID, "", channel, prompt, attachments...)
 }
 
-// AgentRunShellCommand runs a user shell command on the server. Output is
-// not streamed in client mode, so onProgress is unused.
-func (w *ClientWorkspace) AgentRunShellCommand(ctx context.Context, sessionID, command string, termWidth int, _ func(string), isFirstMessage bool) (proto.ShellCommandResponse, error) {
-	return w.client.RunShellCommand(ctx, w.workspaceID(), sessionID, command, termWidth, isFirstMessage)
+// AgentRunShellCommand runs a user shell command on the server. With
+// onProgress, the command gets a new request ID and the engine's
+// shell_output events for it feed onProgress until the command returns;
+// the returned output stays the authoritative one.
+func (w *ClientWorkspace) AgentRunShellCommand(ctx context.Context, sessionID, command string, termWidth int, onProgress func(string), isFirstMessage bool) (proto.ShellCommandResponse, error) {
+	if onProgress == nil {
+		return w.client.RunShellCommand(ctx, w.workspaceID(), sessionID, command, termWidth, isFirstMessage)
+	}
+	requestID := uuid.NewString()
+	done := w.shellOutputs.wait(requestID, onProgress)
+	defer done()
+	return w.client.RunShellCommandLive(ctx, w.workspaceID(), sessionID, command, termWidth, isFirstMessage, requestID)
 }
 
 func (w *ClientWorkspace) AgentCancel(sessionID string) {
 	_ = w.client.CancelAgentSession(context.Background(), w.workspaceID(), sessionID)
 }
 
-// ponytail: in-process only, like sub-agents; add a server route if client
-// mode needs it.
-func (w *ClientWorkspace) AgentBackground(string) bool { return false }
+// AgentBackground moves the session's running command to the background
+// (Ctrl+B) through the engine. A failed call is logged and reports false.
+func (w *ClientWorkspace) AgentBackground(sessionID string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), agentBackgroundTimeout)
+	defer cancel()
+	moved, err := w.client.MoveToBackground(ctx, w.workspaceID(), sessionID)
+	if err != nil {
+		slog.Warn("Could not move the running command to the background", "error", err)
+		return false
+	}
+	return moved
+}
+
+// agentBackgroundTimeout bounds the Ctrl+B call, which the UI waits on.
+const agentBackgroundTimeout = 2 * time.Second
 
 func (w *ClientWorkspace) AgentInterrupt(sessionID string) {
 	_ = w.client.InterruptAgentSession(context.Background(), w.workspaceID(), sessionID)

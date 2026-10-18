@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/google/uuid"
 )
 
 // SendMessage validates and accepts a prompt for the workspace's agent,
@@ -46,6 +47,12 @@ func (b *Backend) SendMessage(workspaceID, clientID string, msg proto.AgentMessa
 		Attachments: proto.AttachmentsToMessage(msg.Attachments),
 	}); err != nil {
 		return err
+	}
+
+	// Every prompt gets a submission ID, so its app is known until its
+	// RunComplete (engine-design.md 5.5).
+	if msg.SubmissionID == "" {
+		msg.SubmissionID = uuid.NewString()
 	}
 
 	accept := ws.AgentCoordinator.BeginAccepted(msg.SessionID)
@@ -169,7 +176,6 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID, clientID string, i
 		if err := ws.InitCoderAgent(ctx); err != nil {
 			return err
 		}
-		agent.ResumeInterruptedTasks()
 	} else if err := ws.InitCoderAgentNonInteractive(ctx); err != nil {
 		return err
 	}
@@ -178,6 +184,10 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID, clientID string, i
 			h.agentInit(ws, clientID, interactive)
 		}
 	})
+	if interactive {
+		// After the hooks, so a resumed helper's owner is this app (5.5).
+		agent.ResumeInterruptedTasks()
+	}
 	return nil
 }
 
@@ -341,16 +351,32 @@ func (b *Backend) GetDefaultSmallModel(workspaceID, providerID string) (config.S
 // RunShellCommand runs a shell command in the workspace directory and
 // persists the command + output as a user message in the session.
 func (b *Backend) RunShellCommand(ctx context.Context, workspaceID string, req proto.ShellCommandRequest) (proto.ShellCommandResponse, error) {
+	return b.RunShellCommandLive(ctx, workspaceID, "", "", req)
+}
+
+// RunShellCommandLive is RunShellCommand with live output (engine-design.md
+// 5.9 a): with clientID and requestID both set, the output also goes to
+// that app as shell_output events while the command runs. The response
+// stays authoritative; the events are best effort.
+func (b *Backend) RunShellCommandLive(ctx context.Context, workspaceID, clientID, requestID string, req proto.ShellCommandRequest) (proto.ShellCommandResponse, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return proto.ShellCommandResponse{}, err
 	}
-	return ws.ops().RunShellCommand(ctx, ShellCommand{
+	cmd := ShellCommand{
 		SessionID:      req.SessionID,
 		Command:        req.Command,
 		Cwd:            ws.Path,
 		Env:            append(os.Environ(), ws.Env...),
 		TermWidth:      req.TermWidth,
 		IsFirstMessage: req.IsFirstMessage,
-	})
+	}
+	if clientID != "" && requestID != "" {
+		out := newShellStream(requestID, req.SessionID, func(o proto.ShellOutput) {
+			b.SendTo(workspaceID, clientID, EngineEvent{Type: pubsub.PayloadTypeShellOutput, Kind: pubsub.CreatedEvent, Payload: o})
+		})
+		defer out.close()
+		cmd.OnProgress = out.write
+	}
+	return ws.ops().RunShellCommand(ctx, cmd)
 }

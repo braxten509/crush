@@ -183,7 +183,7 @@ func (r *claudeRun) handleAssistant(line claudeLine) error {
 // emitMarker reports Claude's own ID for line, once the line's events are
 // handled, so it lands on the message they went to.
 func (r *claudeRun) emitMarker(line claudeLine, target string) error {
-	if line.UUID == "" || r.t.NoTools {
+	if line.UUID == "" || !r.t.marks() {
 		return nil
 	}
 	native := line.SessionID

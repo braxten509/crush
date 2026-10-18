@@ -230,7 +230,7 @@ func (r *codexRun) handleTurnCompleted(params codexParams) (done bool, err error
 // emitTurnMarker reports the Codex turn that just completed as Codex's own
 // ID for the reply so far: one marker per turn.
 func (r *codexRun) emitTurnMarker(turnID string) error {
-	if turnID == "" || r.threadID == "" || r.t.NoTools {
+	if turnID == "" || r.threadID == "" || !r.t.marks() {
 		return nil
 	}
 	return r.t.Emit(Event{Type: EventMarker, Marker: &Marker{Native: r.threadID, ID: turnID, Kind: MarkerTurn, For: MarkerForAssistant}})

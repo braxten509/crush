@@ -189,7 +189,7 @@ func agyStep(line agyLine, announced map[int]bool, emit func(Event) error) error
 // copy (Q3), so the marker is only recorded.
 func agyMarker(line agyLine, conversation string, t Turn) error {
 	s := line.StepUpdate
-	if t.NoTools || conversation == "" {
+	if !t.marks() || conversation == "" {
 		return nil
 	}
 	target := ""

@@ -69,6 +69,10 @@ const (
 	MarkerForTool      = "tool"
 )
 
+// marks reports whether a turn reports markers. Only a turn of a Crush
+// chat that keeps its native session has messages to mark.
+func (t Turn) marks() bool { return t.SessionID != "" && !t.NoTools }
+
 // ActivityWriting says the model is writing a tool call it hasn't sent yet,
 // such as a long command or patch.
 const ActivityWriting = "writing"

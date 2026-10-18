@@ -246,7 +246,7 @@ func (r *acpRun) countReplayed(msg rpcMessage) {
 // index Grok's own rewind works with.
 func (r *acpRun) emitPromptMarker() error {
 	id := r.session.Load()
-	if r.name != "grok" || r.t.NoTools || id == nil {
+	if r.name != "grok" || !r.t.marks() || id == nil {
 		return nil
 	}
 	r.steerMu.Lock()
@@ -259,7 +259,7 @@ func (r *acpRun) emitPromptMarker() error {
 // belongs to, once per message.
 func (r *acpRun) emitMessageMarker(u acpUpdate) error {
 	id := r.session.Load()
-	if r.name != "opencode" || r.t.NoTools || id == nil || u.SessionUpdate != "agent_message_chunk" ||
+	if r.name != "opencode" || !r.t.marks() || id == nil || u.SessionUpdate != "agent_message_chunk" ||
 		u.MessageID == "" || u.MessageID == r.lastMessage || acpText(u.Content) == "" {
 		return nil
 	}

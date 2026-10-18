@@ -47,6 +47,11 @@ type liveState struct {
 	// initSeq its place among every workspace's (initSeqs).
 	lastInit string
 	initSeq  uint64
+	// nonInteractiveApps lists the apps whose latest InitAgent was
+	// non-interactive, as server-mode `crush run`'s is: their prompts run as
+	// non-interactive ones (agent.WithNonInteractive) on the workspace's one
+	// coordinator.
+	nonInteractiveApps map[string]bool
 	// stopWatch ends the watchers of prompts and helpers that end; nil
 	// until they start. watchMu makes a second starter wait until the first
 	// subscribed.
@@ -128,7 +133,7 @@ func (b *Backend) liveTeardown(ws *Workspace) {
 	hooked := l.hooked
 	l.hooked = false
 	l.prompts, l.lastSender, l.owners, l.workChats, l.workGens = nil, nil, nil, nil, nil
-	l.pendingQ2 = nil
+	l.pendingQ2, l.nonInteractiveApps = nil, nil
 	l.mu.Unlock()
 	if stop != nil {
 		stop()

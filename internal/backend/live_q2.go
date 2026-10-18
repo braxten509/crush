@@ -316,16 +316,25 @@ func (b *Backend) watchEnds(ws *Workspace) {
 	}()
 }
 
-// liveAgentInit records the app of an interactive InitAgent, for resumed
-// helpers, and counts the workspace for the work hook.
+// liveAgentInit records whether an app's latest InitAgent was interactive,
+// for its prompts, and the app of an interactive one, for resumed helpers,
+// and counts the workspace for the work hook.
 func (b *Backend) liveAgentInit(ws *Workspace, clientID string, interactive bool) {
+	registered := clientID != "" && isRegistered(ws, clientID)
+	l := &ws.live
 	if !interactive {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		if registered && !l.closed {
+			if l.nonInteractiveApps == nil {
+				l.nonInteractiveApps = make(map[string]bool)
+			}
+			l.nonInteractiveApps[clientID] = true
+		}
 		return
 	}
 	// Before the work hook, so every helper it records has its end seen.
 	b.watchEnds(ws)
-	registered := clientID != "" && isRegistered(ws, clientID)
-	l := &ws.live
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.closed {
@@ -334,6 +343,7 @@ func (b *Backend) liveAgentInit(ws *Workspace, clientID string, interactive bool
 	if registered {
 		l.lastInit = clientID
 		l.initSeq = initSeqs.Add(1)
+		delete(l.nonInteractiveApps, clientID)
 	}
 	if !l.hooked {
 		l.hooked = true
@@ -353,11 +363,14 @@ func (b *Backend) liveAgentInit(ws *Workspace, clientID string, interactive bool
 // helper hub is still listed, for a resume to restart on that dying hub.
 func (b *Backend) liveGone(ws *Workspace, clientID string, reason GoneReason, workspaceEmpty bool) {
 	slog.Debug("An app left a workspace", "workspace", ws.ID, "client", clientID, "reason", reason, "last", workspaceEmpty)
+	l := &ws.live
+	l.mu.Lock()
+	delete(l.nonInteractiveApps, clientID)
+	l.mu.Unlock()
 	if !workspaceEmpty {
 		go b.applyQ2(ws, clientID)
 		return
 	}
-	l := &ws.live
 	l.mu.Lock()
 	if !l.closed {
 		l.pendingQ2 = append(l.pendingQ2, clientID)

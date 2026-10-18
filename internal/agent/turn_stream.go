@@ -14,7 +14,6 @@ import (
 	"charm.land/fantasy/providers/openai"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
@@ -55,12 +54,9 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 	}
 
 	// Use latest tools (updated by SetTools when MCP tools
-	// change), filtered for the session's channel and minus MCP
-	// servers disabled for this repository.
-	prepared.Tools = a.filterDisabledMCPTools(
-		callContext,
-		filterToolsForChannel(a.tools.Copy(), call.Channel, mcp.GetStates()),
-	)
+	// change), filtered for the call and minus MCP servers
+	// disabled for this repository.
+	prepared.Tools = a.filterDisabledMCPTools(callContext, a.callTools(call))
 
 	// Prompts queued during the turn join it at the next tool
 	// boundary: every step after the first follows tool results.

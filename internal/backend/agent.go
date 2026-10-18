@@ -71,7 +71,10 @@ func (b *Backend) SendMessage(workspaceID, clientID string, msg proto.AgentMessa
 			h.messageSent(ws, clientID, msg)
 		}
 	})
-	go b.runAgent(ws, msg, accept)
+	ws.live.mu.Lock()
+	nonInteractive := ws.live.nonInteractiveApps[clientID]
+	ws.live.mu.Unlock()
+	go b.runAgent(ws, msg, accept, nonInteractive)
 	return nil
 }
 
@@ -99,7 +102,11 @@ func (b *Backend) SendMessage(workspaceID, clientID string, msg proto.AgentMessa
 // notify.RunComplete event with that correlator. A run-complete marker
 // is also attached so the coordinator can report whether it published
 // the terminal event, letting runAgent avoid a duplicate fallback.
-func (b *Backend) runAgent(ws *Workspace, msg proto.AgentMessage, accept *agent.AcceptedRun) {
+//
+// nonInteractive marks the prompt of an app whose agent start was
+// non-interactive (agent.WithNonInteractive): the workspace's one
+// coordinator may be another app's interactive one.
+func (b *Backend) runAgent(ws *Workspace, msg proto.AgentMessage, accept *agent.AcceptedRun, nonInteractive bool) {
 	defer ws.runWG.Done()
 	defer accept.Close()
 
@@ -112,6 +119,9 @@ func (b *Backend) runAgent(ws *Workspace, msg proto.AgentMessage, accept *agent.
 		ctx = agent.WithRunID(ctx, msg.RunID)
 	}
 	ctx = agent.WithRunCompleteMarker(ctx)
+	if nonInteractive {
+		ctx = agent.WithNonInteractive(ctx)
+	}
 
 	if msg.Channel != "" {
 		ctx = agent.WithChannel(ctx, msg.Channel)
@@ -192,8 +202,10 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID, clientID string, i
 // (the one app.New started, or an earlier app's): a workspace has one
 // coordinator shared by every app (engine-design.md 5.2), so another app's
 // turns, queue and helpers stay on it, and no replaced coordinator's helper
-// hub is left listed to claim saved helpers. A non-interactive start makes
-// its own coordinator only when no interactive one runs.
+// hub is left listed to claim saved helpers. The prompts of an app whose
+// start was non-interactive run as non-interactive ones on it instead
+// (liveAgentInit, runAgent). A non-interactive start makes its own
+// coordinator only when no interactive one runs.
 func initCoder(ctx context.Context, ws *Workspace, interactive bool) error {
 	l := &ws.live
 	l.initMu.Lock()

@@ -200,7 +200,9 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 	h.mu.Unlock()
 	// The job's owner is recorded by the hook (the backend keeps it).
 	workStarted(WorkStart{Kind: WorkJob, ID: job.ID, SessionID: sessionID})
-	h.rememberJob(job, sessionID, service)
+	if h.saves(ctx) {
+		h.rememberJob(job, sessionID, service)
+	}
 	spillDir := h.c.cfg.Config().Options.DataDirectory
 	go func() {
 		defer release()

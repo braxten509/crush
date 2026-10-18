@@ -27,6 +27,24 @@ func (c *coordinator) RunAccepted(ctx context.Context, accept *AcceptedRun, sess
 	return c.run(ctx, accept, sessionID, prompt, attachments...)
 }
 
+type nonInteractiveKey struct{}
+
+// WithNonInteractive marks a prompt to an interactive coordinator as a
+// non-interactive one, as server-mode `crush run` sends it to a workspace
+// an app has open. It runs as a non-interactive coordinator's prompts do:
+// without interactive-only tools, after MCP servers connect, and in a run
+// that ends only after its helpers, jobs and questions. The run's follow-ups
+// keep the mark through its context.
+func WithNonInteractive(ctx context.Context) context.Context {
+	return context.WithValue(ctx, nonInteractiveKey{}, true)
+}
+
+// interactiveTurn reports whether work started with ctx is interactive:
+// the coordinator is, and ctx has no [WithNonInteractive] mark.
+func (c *coordinator) interactiveTurn(ctx context.Context) bool {
+	return c.interactive && ctx.Value(nonInteractiveKey{}) == nil
+}
+
 // run is the shared implementation behind Run and RunAccepted. When
 // accept is non-nil it is threaded onto the SessionAgentCall as
 // Accepted so sessionAgent.Run can consume the accept reservation under
@@ -36,10 +54,21 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if c.interactive || c.tasks == nil {
+	if c.tasks == nil {
 		return c.runTurn(ctx, accept, sessionID, prompt, attachments...)
 	}
-	run, owner := c.tasks.beginSessionRun(ctx, sessionID)
+	var run *sessionRun
+	owner := false
+	if c.interactiveTurn(ctx) {
+		// A marked prompt's run owns its chat until its follow-ups end, so an
+		// unmarked turn there, such as an agent CLI's reply between turns,
+		// joins it, as on a non-interactive coordinator.
+		if run = c.tasks.joinSessionRun(sessionID); run == nil {
+			return c.runTurn(ctx, accept, sessionID, prompt, attachments...)
+		}
+	} else {
+		run, owner = c.tasks.beginSessionRun(ctx, sessionID)
+	}
 	if !owner {
 		var turnCtx context.Context = sessionFollowUpContext{Context: run.ctx, values: ctx}
 		if sessionID != run.sessionID {
@@ -166,7 +195,7 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 	call.Attachments = attachments
 	call.OnComplete = onComplete
 	call.Accepted = accept
-	call.NonInteractive = !c.interactive
+	call.NonInteractive = !c.interactiveTurn(ctx)
 	call.sessionRun = sessionRun
 
 	beforeLoaded := c.skillTracker.LoadedNames()
@@ -218,7 +247,7 @@ func (c *coordinator) awaitTurnReady(ctx context.Context) error {
 	// mid-handshake cannot stall a headless run for minutes. Past the
 	// budget the turn proceeds without the stragglers; their tools simply
 	// stay absent from this run.
-	if !c.interactive {
+	if !c.interactiveTurn(ctx) {
 		if err := mcp.WaitForInitBudget(ctx, mcp.InitWaitBudget); err != nil {
 			return fmt.Errorf("failed to wait for MCP initialization: %w", err)
 		}

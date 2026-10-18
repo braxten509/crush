@@ -279,7 +279,9 @@ func (s *sessionScheduler) compatibleQueuedCalls(first, next SessionAgentCall) b
 	if first.CLIContinue || next.CLIContinue || first.NotRecallable || next.NotRecallable {
 		return false
 	}
-	if first.Channel != next.Channel {
+	// A non-interactive prompt never joins an interactive turn, whose tools
+	// it must not get, nor the reverse.
+	if first.NonInteractive != next.NonInteractive || first.Channel != next.Channel {
 		return false
 	}
 	if first.Channel != "" {

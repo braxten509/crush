@@ -60,10 +60,15 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	var run *sessionRun
 	owner := false
 	if c.interactiveTurn(ctx) {
-		// A marked prompt's run owns its chat until its follow-ups end, so an
-		// unmarked turn there, such as an agent CLI's reply between turns,
-		// joins it, as on a non-interactive coordinator.
-		if run = c.tasks.joinSessionRun(sessionID); run == nil {
+		// A marked prompt's run owns its chat until its follow-ups end, so a
+		// turn the agent starts there on its own, such as an agent CLI's
+		// reply between turns, joins it, as on a non-interactive coordinator.
+		// Such a turn has no submission ID; an app's prompt always has one
+		// (backend.SendMessage) and runs as its own turn.
+		if message.SubmissionID(ctx) == "" {
+			run = c.tasks.joinSessionRun(sessionID)
+		}
+		if run == nil {
 			return c.runTurn(ctx, accept, sessionID, prompt, attachments...)
 		}
 	} else {

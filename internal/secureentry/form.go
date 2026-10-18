@@ -26,6 +26,9 @@ type Form struct {
 	closed       bool
 	done         chan FormResult
 	closedSignal chan struct{}
+	// via is the attachment the form was delivered through. Guarded by
+	// broker.
+	via *attachment
 }
 
 // FormResult carries the ordinary answers and a fixed status per secure
@@ -91,15 +94,37 @@ var errChanged = errors.New("destination changed; cancel and ask again")
 
 func (*Form) String() string { return "secure question form" }
 
-// AttachForms connects the local TUI for secure question forms.
+// attachment is one AttachForms connection.
+type attachment struct {
+	deliver func(*Form)
+}
+
+// attached is the connection whose deliverer broker.deliverForm holds.
+// Guarded by broker.
+var attached *attachment
+
+// AttachForms connects the local TUI for secure question forms. The
+// returned detach undoes only this connection: once a later AttachForms
+// replaced it, detach leaves the newer deliverer in place, and it cancels
+// the open form only when that form came through this connection. So a
+// Crush engine workspace that closes while the next one for the project
+// starts cannot disconnect the new one.
 func AttachForms(deliver func(*Form)) func() {
+	a := &attachment{deliver: deliver}
 	broker.Lock()
 	broker.deliverForm = deliver
+	attached = a
 	broker.Unlock()
 	return func() {
 		broker.Lock()
-		broker.deliverForm = nil
+		if attached == a {
+			broker.deliverForm = nil
+			attached = nil
+		}
 		pending := broker.pending
+		if pending != nil && pending.via != a {
+			pending = nil
+		}
 		broker.Unlock()
 		if pending != nil {
 			pending.Cancel()
@@ -124,6 +149,7 @@ func OpenForm(session string, req question.Request, specs map[string]Spec) (*For
 		return nil, err
 	}
 	broker.pending = form
+	form.via = attached
 	go broker.deliverForm(form)
 	return form, nil
 }
@@ -210,6 +236,35 @@ func (g *fileGroup) locate() error {
 // Field returns the prepared slot of a secure question, or nil.
 func (f *Form) Field(questionID string) *Field {
 	return f.fields[questionID]
+}
+
+// FieldInfo describes one secure field for an app that shows the form. It
+// has no file path: the path stays inside the form.
+type FieldInfo struct {
+	QuestionID, Label string
+	// Saved and Available are what [Field.Saved] and [Field.Available]
+	// report.
+	Saved, Available bool
+}
+
+// Fields describes the form's secure fields, in question order.
+func (f *Form) Fields() []FieldInfo {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []FieldInfo
+	for _, q := range f.Request.Questions {
+		field := f.fields[q.ID]
+		if field == nil {
+			continue
+		}
+		out = append(out, FieldInfo{
+			QuestionID: field.QuestionID,
+			Label:      field.Label,
+			Saved:      field.saved,
+			Available:  !f.closed && !field.group.written,
+		})
+	}
+	return out
 }
 
 // Closed reports whether the form was submitted or cancelled.

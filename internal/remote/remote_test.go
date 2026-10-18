@@ -315,7 +315,7 @@ func newTestEnv(t *testing.T, from string) *testEnv {
 	}
 	srv, err := start(src, self{Host: "cachy", User: ownerUser, Online: true}, whois, func() (net.Listener, error) {
 		return net.Listen("tcp", "127.0.0.1:0")
-	})
+	}, "")
 	require.NoError(t, err)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.RemoteAddr = net.JoinHostPort(from, "40000")

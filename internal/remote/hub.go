@@ -47,7 +47,10 @@ type hub struct {
 	src  Source
 	host string
 	port int
-	wake chan struct{}
+	// launch is the launch id the share reports (Share.Launch). It is set
+	// before the hub runs and never changes.
+	launch string
+	wake   chan struct{}
 	// changes tells the TUI the phone list changed.
 	changes chan struct{}
 

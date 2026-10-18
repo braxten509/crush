@@ -111,28 +111,47 @@ type Server struct {
 
 // StartContext shares the window. It fails when Tailscale isn't running
 // here; ctx lets a dismissed setup cancel discovery before sharing starts.
+// The share reports the window's launch id, [LaunchID].
 func StartContext(ctx context.Context, src Source) (*Server, error) {
+	return StartShare(ctx, src, LaunchID())
+}
+
+// StartShare is StartContext with the share's own launch id: the hub keeps
+// it and reports it as [Share.Launch]. A Crush engine runs one share per
+// app, each with the id of the window the launcher opened, if any.
+func StartShare(ctx context.Context, src Source, launchID string) (*Server, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
+	me, whois, listen, err := discoverTailnet(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return start(src, me, whois, listen, launchID)
+}
+
+// discoverTailnet checks that Tailscale runs here and returns this
+// computer's tailnet identity, the device lookup and the listener a share
+// uses. A variable so tests can run shares without Tailscale.
+var discoverTailnet = func(ctx context.Context) (self, func(context.Context, string) (peer, error), func() (net.Listener, error), error) {
 	info := CheckSetup(ctx)
 	if info.State != SetupReady {
-		return nil, &SetupError{Info: info}
+		return self{}, nil, nil, &SetupError{Info: info}
 	}
 	api := newSystemAPI()
 	me, err := api.self(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("can't reach Tailscale on this computer: %w", err)
+		return self{}, nil, nil, fmt.Errorf("can't reach Tailscale on this computer: %w", err)
 	}
 	if !me.Online || !me.IPv4.IsValid() || me.User <= 0 {
-		return nil, errors.New("Tailscale is not connected on this computer")
+		return self{}, nil, nil, errors.New("Tailscale is not connected on this computer")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return self{}, nil, nil, err
 	}
-	return start(src, me, api.whois, func() (net.Listener, error) { return listenTailnet(me.IPv4) })
+	return me, api.whois, func() (net.Listener, error) { return listenTailnet(me.IPv4) }, nil
 }
 
-func start(src Source, me self, whois func(context.Context, string) (peer, error), listen func() (net.Listener, error)) (*Server, error) {
+func start(src Source, me self, whois func(context.Context, string) (peer, error), listen func() (net.Listener, error), launchID string) (*Server, error) {
 	ln, err := listen()
 	if err != nil {
 		return nil, err
@@ -153,6 +172,7 @@ func start(src Source, me self, whois func(context.Context, string) (peer, error
 		done:    make(chan struct{}),
 	}
 	s.hub = newHub(src, me.Host, port)
+	s.hub.launch = launchID
 	s.http = &http.Server{
 		Handler:           s.routes(),
 		ReadHeaderTimeout: 10 * time.Second,

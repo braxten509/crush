@@ -36,14 +36,15 @@ Daily use on a Linux desktop (KDE Plasma, high-refresh display) next to the term
 
 ## Brand Commitments
 
-- Name: Crush. Wordmark: "CRUSH" in heavy extended capitals with a gray "AI", as in `desktop/design/style-2.png`.
-- The charcoal and amber look of `desktop/design/style-2.png` is binding.
+- Name: Crush. Wordmark: "CRUSH" in heavy extended capitals with a gray "AI", as in `desktop/design/style-2.png`; on the Scholar's edition paper it is set in iron black.
+- The Scholar's edition look of `desktop/.impeccable/mocks/decision/edition.png` is binding (chosen 2026-10-18): bone paper, iron-black text in a book serif, small-caps labels, one-pixel hairlines with small + corners, and a thin vermilion rail of letter keys where a chat branches or tools ran. It replaced the charcoal and amber of `desktop/design/style-2.png`, which stays as an extra theme.
 - Banned: purple-to-blue gradients, glowing or glassy effects, emoji as icons, green as the main color, everything wrapped in rounded cards, generic AI sparkle icons, text or icons a few pixels off.
 - The terminal app's key shortcuts are kept wherever they make sense.
 
 ## Evidence on Hand
 
-- `desktop/design/style-2.png`: the approved mockup.
+- `desktop/.impeccable/mocks/decision/edition.png`: the approved mockup (2026-10-18).
+- `desktop/design/style-2.png`: the earlier mockup (charcoal and amber).
 - The terminal app's five built-in themes and the user theme files.
 - The planning demos in `~/dev/crush-gui-demos` (behavior reference only).
 

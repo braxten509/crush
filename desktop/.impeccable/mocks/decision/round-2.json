@@ -1,0 +1,72 @@
+{
+  "title": "Choose the visual world (safer re-roll)",
+  "question": "Three calmer directions, plus the standing exit. Keep one, ask for more or less of it, or re-roll.",
+  "seed": "seed:d55921922e855d5a",
+  "reroll": 1,
+  "register": "safer",
+  "mode": "operate",
+  "scope": "direction",
+  "channel": "Crush question form with pictures (owner's standing preference: look choices in the form, no pop-up pages)",
+  "ownerWords": "Round 1 answers: none of the three, show three different ones; less of it (calmer, closer to a normal app); paid GPT image. Competitor bar: Zed, plus \"A little more dazzle than these apps have.\"",
+  "kept": "The general design (three columns: chat list with branch tree, conversation, visuals panel with the limits row) stays; the world changes.",
+  "eliminated": ["riso", "transit", "ticket"],
+  "bar": {
+    "competitors": ["Zed"],
+    "note": "As tidy as Zed (aligned grid, even spacing, a real type scale), with a little more dazzle than Zed has."
+  },
+  "options": [
+    {
+      "id": "manual",
+      "kind": "grounded",
+      "label": "Standards Manual",
+      "lineage": "NASA Graphics Standards Manual (Danne & Blackburn, 1975)",
+      "thesis": "Crush run like a standards manual: a strict grid, Helvetica, black and white, and one red that only ever marks where you are.",
+      "palette": ["#111214", "#1a1b1e", "#2b2d31", "#f2f2f0", "#e03c31"],
+      "materials": ["flat near-black panels", "thin grey rules", "one red rule system"],
+      "viewport": "Standard three columns. A red logotype at top left; red marks the selected chat, its branch line, the branch words and the current flow step; the three usage numbers set large in bold Helvetica.",
+      "signature": "A single red rule system that shows where you are at every level.",
+      "risk": "Red usually means error, so real warnings must keep amber; Helvetica on black can feel cold.",
+      "comp": ".impeccable/mocks/decision/manual.png"
+    },
+    {
+      "id": "drawing",
+      "kind": "grounded",
+      "label": "Drawing Set",
+      "lineage": "engineering drawing sets: ISO title blocks, revision tables, blueprint linework",
+      "thesis": "Every chat is a sheet and every branch a revision with its letter.",
+      "palette": ["#0e1f33", "#13283f", "#3a5a80", "#e8eef5", "#ff5a4e"],
+      "materials": ["deep ink-blue panels", "fine pale linework, no grid", "narrow DIN-style sans", "coral revision triangles"],
+      "viewport": "Standard three columns in ink blue, messages unboxed on the panel. Revision triangles with letters mark each branch in the chat list and on the branch words.",
+      "redraw": "First draw added a literal drawing-sheet title block (invented date, NOT TO SCALE) and boxed every message, caused by the prompt's 'ruled title block' line; prompt corrected and redrawn once.",
+      "signature": "Branches as lettered revision triangles.",
+      "risk": "A lot of blue can feel cold or corporate; the triangles must stay small or they read as warning signs.",
+      "comp": ".impeccable/mocks/decision/drawing.png"
+    },
+    {
+      "id": "preprint",
+      "kind": "grounded",
+      "label": "Preprint",
+      "lineage": "LaTeX article class, Computer Modern, Tufte-style sidenotes",
+      "thesis": "Crush set like a preprint: calm paper, serif text, and every branch a numbered sidenote.",
+      "palette": ["#faf8f3", "#1a1a1a", "#6b6b6b", "#2b4acb", "#f7e36b"],
+      "materials": ["paper-white panels", "small-caps labels", "yellow highlighter mark on branch words"],
+      "viewport": "Standard three columns on paper white. The chat list numbers branches 1.1 and 1.2; the branch words carry a highlighter mark and a superscript pointing to a sidenote in the chat's margin.",
+      "signature": "Branches as numbered sidenotes from highlighted words.",
+      "risk": "Light theme; serif text can feel slow or like homework, and code reads worse in a serif world.",
+      "comp": ".impeccable/mocks/decision/preprint.png"
+    }
+  ],
+  "buildPath": {"value": "comp", "toggle": false, "note": "The brief pins the mockup-led workflow."},
+  "canon": true,
+  "canonCard": {
+    "kind": "canon",
+    "label": "Keep the current look",
+    "thesis": "The category standard, played straight: charcoal and amber, as in style-2, held to Zed's finish.",
+    "palette": ["#161719", "#242628", "#f4b744", "#e7e7e7"],
+    "materials": ["flat dark panels", "one amber accent"],
+    "viewport": "The approved style-2 mockup.",
+    "competitors": ["Zed"],
+    "risk": "What most AI chat apps look like.",
+    "comp": "design/style-2.png"
+  }
+}

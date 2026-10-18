@@ -1,0 +1,11 @@
+A desktop app screen for Crush, an AI coding chat app, shown edge to edge in landscape with crisp, readable text; no browser window, device, desk or tagline.
+
+A software student runs several AI coding agents at once and branches a chat from highlighted words. The open conversation leads; the chat list and a visuals panel flank it.
+
+Left: the Crush wordmark, a new-chat button, a search field and Today's chats: "Login keeps redirecting" (selected, Claude) with two nested branches, "Cookie lifetime" and "Is SameSite=Lax safe?"; "Card Wars stutter at 60 fps" (Codex, working); "Hermóðr sends mail twice" (Grok, waiting for permission).
+
+Middle: title "Login keeps redirecting", path crush-desktop / auth / session.go. You, 10:42: "Why does the login page keep sending me back after I sign in?" Claude, 10:43: "The session cookie uses SameSite=Strict, so the browser drops it on the redirect back from sign-in." The words "SameSite=Strict" are a link to a branch. A folded row: "Ran 4 tools · read session.go, ran tests". Claude: "Switching to Lax fixes the loop. All 12 tests pass." Typing box: "Ask Claude…", model "Opus 5.5 · max", send.
+
+Right: project crush-desktop with one row of three usage bars: Context 62%, 5-hour 86% (warning), Week 31%. Below, Visuals: a flow diagram Sign in → Check session cookie → Home, and a table: SameSite Strict → Lax; Lifetime 24 h.
+
+Look: NASA's 1975 graphics standards manual, applied to a dark working screen. Near-black panels split by thin grey rules; white Helvetica on a strict type scale with tabular figures; monospace for paths. A bold red Crush logotype, and red as the only accent, marking where you are: the selected chat, its branch line, the "SameSite=Strict" underline, the current flow step. Large bold usage numerals; the warning in amber. As tidy as the Zed editor. Flat colour; no gradients, glow, emoji or rounded cards.

@@ -1,0 +1,82 @@
+{
+  "title": "Choose the visual world",
+  "question": "The roll assigned Riso Zine. Keep it, take an alternate, or re-roll.",
+  "seed": "seed:d55921922e855d5a",
+  "mode": "operate",
+  "scope": "direction",
+  "channel": "Crush question form with pictures (owner's standing preference: look choices in the form, no pop-up pages)",
+  "ownerWords": "while I do think the general design is good, it does look too generic. Can you use GPT image gen or agy's nano banana to show me some more eccentric options? impeccable has a way for you to show me three options and then do more or less of what you showed",
+  "kept": "The general design (three columns: chat list with branch tree, conversation, visuals panel with the limits row) stays; the world changes.",
+  "options": [
+    {
+      "id": "riso",
+      "kind": "assigned",
+      "kicker": "THE ROLL",
+      "label": "Riso Zine",
+      "lineage": "risograph-printed student and indie zines",
+      "thesis": "Crush printed like a risograph zine: paper-light, two spot inks, and the branch you cut from a sentence printed in fluorescent pink.",
+      "palette": ["#f2eee3", "#1a1a1a", "#ff48b0", "#3255a4"],
+      "materials": ["newsprint", "two spot inks with slight misregistration on pink only"],
+      "viewport": "Standard three columns. Pink marks every way into a branch: the highlighted words, the branch path in the chat list, the selected chat. Blue carries AI names, times and secondary marks.",
+      "signature": "Overprinted fluorescent-pink highlight on branch words; the same ink draws the branch path in the left list.",
+      "raised": [
+        {"from": "notation-diagram-systems-orienteering-map", "raise": "Pink is reserved for branch paths and the current selection, like a course line that never decorates the terrain."},
+        {"from": "variable-font-specimen", "raise": "Hierarchy by type size and weight alone; messages are not boxed."},
+        {"from": "aww2-zoo-gardens-guide-map", "raise": "Flat, unmodulated ink: no halftone grain on working surfaces."},
+        {"from": "digital-design-canon-monochrome-product-marketing", "raise": "Every usage number shows when it was read."},
+        {"from": "pop-culture-shelf-vertical-video-feed-surface", "raise": "The next chat is one key away and already loaded."}
+      ],
+      "risk": "A light, paper-like app breaks a dark-desktop habit; pink is loud; the misregistration must stay subtle or text looks blurry.",
+      "comp": ".impeccable/mocks/decision/riso.png"
+    },
+    {
+      "id": "transit",
+      "kind": "pick",
+      "kicker": "IMPECCABLE’S PICK",
+      "label": "Transit Map",
+      "lineage": "Vignelli's 1972 New York subway diagram; Beck's Tube map",
+      "thesis": "Every chat is a line and every branch an interchange; each AI tool owns a line colour you learn in a day.",
+      "palette": ["#f7f5f0", "#111111", "#e8762b", "#1f5fbf", "#d7262d"],
+      "materials": ["flat line colour", "white interchange circles", "line bullets"],
+      "viewport": "Standard three columns; the chat list's branch tree drawn as a small line diagram; line bullets (coloured discs with a letter) mark each chat's AI everywhere.",
+      "signature": "The branch tree as a transit diagram with interchanges at branch points.",
+      "risk": "Familiar: branches as coloured lines is the git-graph picture many developer tools use, so it can read as a git client. This was my top-ranked candidate.",
+      "comp": ".impeccable/mocks/decision/transit.png"
+    },
+    {
+      "id": "ticket",
+      "kind": "challenger",
+      "catalogId": "vernacular-ephemera-jet-age-ticket-wallet",
+      "label": "Jet-Age Ticket",
+      "verdict": "competitive",
+      "lineage": "1960s airline ticket wallets",
+      "thesis": "Each chat is a journey in a ticket wallet: facts in hairline-ruled fare boxes, and states that stamp themselves.",
+      "palette": ["#ffffff", "#0d1b3d", "#d7262d", "#4b2e83"],
+      "materials": ["coupon stock", "hairline-ruled boxes", "rubber stamps"],
+      "viewport": "Standard three columns; navy left rail and headings; the right panel's facts in ruled boxes with tab-cap labels and carbon-purple numbers; states stamp themselves (HOLD for waiting, PASSED for tool runs, VOID for stopped replies).",
+      "case": "Holds product clarity better than the roll (every state gets a stamped word you can read at a glance); loses on how much it feels like the owner's own world.",
+      "risk": "Stamps and ruled boxes can tip into a travel costume; purple numbers next to navy need care.",
+      "comp": ".impeccable/mocks/decision/ticket.png",
+      "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-jet-age-ticket-wallet-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/vernacular-ephemera-jet-age-ticket-wallet.webp"
+    },
+    {"id": "specimen", "kind": "challenger", "catalogId": "variable-font-specimen", "label": "Type Specimen", "verdict": "declined", "case": "Loses both axes: type-foundry culture is not the owner's world, and a specimen's giant display letters fight a dense working screen.", "kept": "Hierarchy by type scale alone."},
+    {"id": "orienteering", "kind": "challenger", "catalogId": "notation-diagram-systems-orienteering-map", "label": "Orienteering Map", "verdict": "declined", "case": "Loses both axes: niche to the owner, and the terrain colours compete with chat content.", "kept": "One ink reserved for the active path."},
+    {"id": "monochrome", "kind": "challenger", "catalogId": "digital-design-canon-monochrome-product-marketing", "label": "Monochrome Product Page", "verdict": "declined", "case": "Fused, it is the category standard the canon card already offers; it only ties on clarity.", "kept": "Every number shows its proof (when it was read)."},
+    {"id": "zoo", "kind": "challenger", "catalogId": "aww2-zoo-gardens-guide-map", "label": "Zoo Guide Map", "verdict": "declined", "case": "Loses both axes: lobed shapes cannot hold three working columns, and its land colour is green (banned as the main colour).", "kept": "Flat ink, no grain."},
+    {"id": "feed", "kind": "challenger", "catalogId": "pop-culture-shelf-vertical-video-feed-surface", "label": "Vertical Video Feed", "verdict": "declined", "case": "Loses both axes: one item per screen cannot show the chat list, the chat and the visuals together.", "kept": "The next item is one step away and already loaded."}
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "comp", "toggle": false, "note": "The brief pins the mockup-led workflow."},
+  "canon": true,
+  "canonCard": {
+    "kind": "canon",
+    "label": "Keep the current look",
+    "thesis": "The category standard, played straight: charcoal and amber, as in style-2.",
+    "palette": ["#161719", "#242628", "#f4b744", "#e7e7e7"],
+    "materials": ["flat dark panels", "one amber accent"],
+    "viewport": "The approved style-2 mockup.",
+    "risk": "What most AI chat apps look like.",
+    "comp": "design/style-2.png"
+  }
+}

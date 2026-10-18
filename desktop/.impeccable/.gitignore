@@ -1,0 +1,5 @@
+# Derived or superseded design-tool output: regenerate it instead of committing it.
+build-style2-archive/
+build/inspect-*/
+# Third-party reference images downloaded from the design tool catalog: local reference only.
+mocks/decision/refs/

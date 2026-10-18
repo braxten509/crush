@@ -12,8 +12,8 @@ Reviews so far: the research was checked independently (findings folded in). Thi
 - **Per chat, always visible**: the model and effort in the typing box; context used plus 5-hour and weekly limits as bars at the top of the right panel. They move under the typing box when that panel is hidden.
 - **Branching** as in the demo, with each AI tool's memory copied exactly where the tool allows it.
 - **A visuals panel** for Mermaid diagrams (modern style), LaTeX, tables and images, with chips in the chat. Short math stays inline. Tool calls fold into one quiet line ("Ran 4 tools · …") that opens on click.
-- **The look of style-2.png** (charcoal and amber, compact). That screen gets rebuilt closely first, then the same style is extended to every screen. Same theme list, theme files and color editor as the terminal app; charcoal and amber is the default.
-- At the end: screenshots of the main screens next to style-2.png, an independent look review, the finished checklist with proof, and a note of the approved exceptions (section 12).
+- **The look of the Scholar's edition picture** (`.impeccable/mocks/decision/edition.png`, approved 2026-10-18; it replaced style-2.png): bone paper, iron-black text in a book serif, small-caps labels, one-pixel hairlines with small + corners, and a thin vermilion rail of letter keys where a chat branches or tools ran. That screen gets rebuilt closely first, then the same style is extended to every screen. The wordmark stays your original CRUSH with a gray AI. Same theme list, theme files and color editor as the terminal app; the edition's colors are the default, and charcoal and amber stays as an extra theme.
+- At the end: screenshots of the main screens next to the approved picture, an independent look review, the finished checklist with proof, and a note of the approved exceptions (section 12).
 
 ## 2. Picks (round 1, 2026-10-18)
 
@@ -27,7 +27,7 @@ Reviews so far: the research was checked independently (findings folded in). Thi
 | Q6 | Model, context and limits | Model and effort in the typing box; context and limit bars at the top of the right panel; under the typing box when that panel is hidden |
 | Q7 | Helpers, jobs, waiting messages | A tray above the typing box, shown only when something is there |
 | Q8 | "Allow this?" asks and question forms | Take the typing box's place until answered |
-| Q9 | Color themes | Same themes, theme files and color editor as the terminal app; charcoal and amber is the default |
+| Q9 | Color themes | Same themes, theme files and color editor as the terminal app; charcoal and amber is the default (changed 2026-10-18: the Scholar's edition colors are the default; charcoal and amber stays as an extra theme) |
 | Q10 | Left out | Mouse on/off switch; hidden terminal fix-ups; goodbye message; see-through background; one-chat start option |
 | Q11 | Mac version | GitHub builds it when you OK a push; the background-jobs list and crash clean-up stay Linux-only |
 
@@ -39,7 +39,8 @@ Reviews so far: the research was checked independently (findings folded in). Thi
   - `desktop/src-tauri/`: the Rust side (engine connection with the same crash recovery as 5.14, event batching, terminal tabs, notifications, clipboard, files, window state, crash guard, single-window handling).
   - `desktop/src/`: the Svelte screens.
   - `desktop/tests/`: the hidden-window runner, the fake AI server, the fake AI tools, and the checks.
-  - `desktop/design/style-2.png`: a copy of your picture, used as the target.
+  - `desktop/design/style-2.png`: a copy of your first picture (the target until 2026-10-18).
+  - `desktop/.impeccable/mocks/decision/edition.png`: the approved Scholar's edition picture, the target since 2026-10-18.
   - `desktop/PRODUCT.md`: the product summary (section 13; you confirm it in round 2).
   - `desktop/DESIGN.md` and `desktop/.impeccable/`: written at the end from the built app.
   - `desktop/PLAN.md`: this plan plus a progress record (status per phase, helper IDs, decisions, open findings).
@@ -60,7 +61,7 @@ Every phase ends with its checks passing and an independent read-only review. Th
 |---|---|---|
 | 0 Setup | 5% | Worktree, plan and checklist files, PRODUCT.md, and an app skeleton that builds and starts on a hidden screen. The test harness proves itself: the fake AI server answers from inside the sandbox, one check passes, and one deliberately broken check fails |
 | 1 Engine | 20% | Every engine gap in section 5 is closed, with server and client tests. Two-app tests pass. The whole Go test suite passes |
-| 2 Look | 10% | The style-2 screen is rebuilt with real parts. Match score is 72% or higher, alignment is measured, the design detector is clean, and you OK the side-by-side pictures |
+| 2 Look | 10% | The approved picture's screen (Scholar's edition) is rebuilt with real parts. Match score is 72% or higher, alignment is measured, the design detector is clean, and you OK the side-by-side pictures |
 | 3 Chat core | 15% | The chat, typing box and side-info rows pass in the real window. The terminal app (in shared-engine mode, using today's switch) and the desktop app show the same chat live. Streaming meets the speed bar in section 8 |
 | 4 Branching | 10% | Live checks for each AI tool are saved. Every branching behavior passes with a real mouse in the real window: closing, reopening from a link, restarting, branches of branches, and branching mid-reply |
 | 5 Dialogs and settings | 20% | Command, dialog, setting and theme rows pass. A setting changed in one app shows in the other |
@@ -153,7 +154,7 @@ Two wording notes: the terminal's folded tool line actually says "N actions"; th
 - **Outside-world protection:** the sandbox gives the app, the engine and the hidden terminal app their own throwaway home, config and data folders, and sees the rest of the computer read-only. After every run, a check confirms your real project list (`projects.json`) and config files are byte-for-byte unchanged and that the fake tools, not the real ones, were called.
 - **Both apps:** the terminal app runs in a hidden tmux inside the same sandbox, on the same throwaway data, on the same chat as the desktop app.
 - **Speed bar for streaming:** a scripted two-minute streamed reply with tool calls, run 3 times in the hidden window. In each run, 95% of screen frames arrive within 20 ms and typing stays responsive. A frame over 50 ms fails the check if it happens more than once in a run or at the same moment in two runs. That means a real repeated stall, not a one-off like the first diagram drawing.
-- **Look:** a match score against style-2, alignment measured at real size, the design detector, and an independent finish review. Looks get the most checking time: every phase that adds screens ends with an alignment pass (the align skill) and a real-size screenshot review of those screens, against the rules in the my-ui-design skill.
+- **Look:** a match score against the approved picture (Scholar's edition), alignment measured at real size, the design detector, and an independent finish review. Looks get the most checking time: every phase that adds screens ends with an alignment pass (the align skill) and a real-size screenshot review of those screens, against the rules in the my-ui-design skill.
 - **Silence:** test configs set notifications to "disabled", and the sandbox has no sound device.
 
 ## 9. Workers and reviewers
@@ -162,13 +163,13 @@ I coordinate and build connected pieces myself. Separate pieces (for example, en
 
 ## 10. Check-ins with you during the build
 
-- **Look choices with sketches.** style-2 and round 1 settle the main screen. Where a screen has more than one sensible look, I ask with sketch pictures in the question form before building it, a few at a time:
+- **Look choices with sketches.** The approved Scholar's edition picture and the look decisions in section 15 settle the main screen. Where a screen has more than one sensible look, I ask with sketch pictures in the question form before building it, a few at a time:
   - Phase 3: the right-click menu, visuals chips and cards, tool rows when opened, image viewer.
   - Phase 4: branch rows and nesting marks in the left list, how a link looks.
   - Phase 5: command palette, model picker, Sessions dialog, settings layout, theme editor, sign-in screens.
   - Phase 6: terminal tabs, helper view, crash notice, About panel.
-  - Where only one sensible look exists, I build it in the style-2 language without asking.
-- After phase 2: side-by-side pictures of the rebuilt screen and style-2 (yes or no).
+  - Where only one sensible look exists, I build it in the Scholar's edition language without asking.
+- After phase 2: side-by-side pictures of the rebuilt screen and the approved picture (yes or no).
 - Any change to this plan: I stop and ask.
 - At the end: your OK to merge, push (for the Mac build), install the new `crush`, and add the app menu entry.
 
@@ -202,7 +203,7 @@ I coordinate and build connected pieces myself. Separate pieces (for example, en
 - **User:** you. You use Crush heavily across many projects with several AI tools (Claude, Codex, Grok, OpenCode, AGY, API models), often with several chats at once, and sometimes from the phone.
 - **Purpose:** a desktop window that does everything the terminal app does and shares the same chats live. It adds what a terminal can't: branching from highlighted words, drawn visuals, and mouse-first navigation. Success means you can use either app on any chat at any time without losing work or features.
 - **What makes it different:** you branch a chat from a highlighted phrase with each AI tool's own memory copied exactly, while staying live with the terminal app on the same chat.
-- **Fixed rules:** the charcoal and amber look of style-2.png. Banned: purple-to-blue gradients, glow or glassy effects, emoji icons, a green main color, everything in rounded cards, AI sparkle icons, and misaligned text or icons. Original terminal shortcuts are kept where sensible.
+- **Fixed rules:** the Scholar's edition look of the approved picture (`.impeccable/mocks/decision/edition.png`) with your original CRUSH wordmark. Banned: purple-to-blue gradients, glow or glassy effects, emoji icons, a green main color, everything in rounded cards, AI sparkle icons, and misaligned text or icons. Original terminal shortcuts are kept where sensible.
 - **Principles:** nothing the terminal does is missing; both apps show one truth; tool work folds away so the conversation leads; branch memory matches the cut; everything is aligned, compact and consistent.
 - **Accessibility:** full keyboard use, visible focus, and readable contrast in every theme.
 
@@ -222,8 +223,8 @@ Kept current during the build. Percent = share of the phase table in section 4.
 |---|---|---|---|
 | Planning | (before 0) | done 2026-10-18 | research, picks, reviews and approval in section 14 |
 | 0 Setup | 5% | done 2026-10-18 (review t16 clean after one fix round) | `docs/evidence/phase0/`: harness self-test (sealed sandbox, pass, deliberate fail, real files unchanged), skeleton screenshot, unit tests |
-| 1 Engine | 20% | in progress: exact design (t17) | |
-| 2 Look | 10% | in progress: measuring the comp (`.impeccable/build/`) | |
+| 1 Engine | 20% | in progress: design done and reviewed (t18 final: ready to build); owner answered its questions; scaffold S next, then pieces A-D | `docs/engine-design.md` |
+| 2 Look | 10% | in progress: picture approved; measured (109 parts, no picture assets, faces chosen by font-match); owner approved the plan review (15 of 15, session `7367bf99`); first screen (hero) being built | `.impeccable/build/regions.json`, `spec.json`, `font-match/`, `.impeccable/review/components.json` |
 | 3 Chat core | 15% | not started | |
 | 4 Branching | 10% | not started | |
 | 5 Dialogs and settings | 20% | not started | |
@@ -236,9 +237,13 @@ Kept current during the build. Percent = share of the phase table in section 4.
 - Test sandbox (`desktop/tests/sandbox.sh`): read-only computer except `desktop/tests/out/`; the owner's home hidden except this worktree; own `/tmp` and `/run` (no session or system message bus, no Wayland or sound sockets); bare `/dev` (no sound card or GPU); own network (loopback only), process list, shared memory, host name and terminal session; throwaway home; clean environment; hidden X screen. The self-test proves each of these from inside.
 - Note: Crush's read-only sandbox for review helpers creates empty mount points in `/tmp` (`.git`, `.agents`, `.aws`, `.codex`). They are harmless here: the Go tests use their own temp folder, and `go-test.sh` checks the folders above it instead.
 
-### Look decisions (round 3, 2026-10-18)
+### Look decisions (rounds 3-4, 2026-10-18)
 - Window buttons: on Linux, KDE's own title bar and buttons (system window frame). On a Mac, the real Mac buttons sit top-left over the left bar, as in style-2.
 - Limit bars: the context, 5-hour and weekly bars sit in one row of three under the project name at the top of the right panel (under the typing box when that panel is hidden, per Q6).
+- Default size (round 4): Compact. The app opens at about two-thirds of the picture's size (chat text about 15 px). Ctrl + and Ctrl - change it in even steps; Ctrl 0 returns to this default. The app's own key handler does this (Tauri's built-in zoom keys always count from full size, so they are not used).
+- New look (rounds 5-7): the owner found style-2 too generic and asked for bolder options from the design tool's dice. Three rounds: riso zine, transit map and jet-age ticket (none); design manual, blueprint and research paper (liked the design manual and research paper); then the dice's chess book plus two dealt outside ideas. The owner chose the Scholar's edition, as drawn: bone paper, iron-black text in a book serif, small-caps labels, one-pixel hairlines with small + corners, and a thin vermilion rail of lettered keys where a chat branches or tools ran. The layout and the decisions above stay. Pictures: `.impeccable/mocks/decision/` (the last two rounds drawn with GPT Image 2.5 Sunburst at about $0.04 each; $0.37 in total). Comp round (2026-10-18): this picture plus a dense version and a margin-notes version; the owner kept this picture as picked (approved). Owner additions: each of the three columns can be widened or narrowed by dragging its edge and the others adjust (widths remembered, like the chat list's collapsed state); the wordmark stays the owner's original CRUSH with a gray AI, set in iron black on the paper. The owner approved the new plan wording; sections 1, 2 (Q9), 3, 4, 8, 10 and 13 now name this picture. Pictures cost $0.49 in total.
+- Measuring the picture (2026-10-18): 109 parts named and boxed to the pixel; nothing in it is a picture file, so the app draws every part in code (the three flow chart boxes are flagged for your check). The thin outer frame with + marks sits inside a bone margin, like crop marks on a printed page, so the app draws that margin and frame itself. The picture is the app at the "picture size" zoom step; the app still opens at Compact (two-thirds of it).
+- Type, measured with the design tool's font-match against the picture (not guessed): Charis SIL for the large lettering (chat title, project name, usage numbers; the tool's choice for the lead text), Spectral for all reading text (messages, chat and branch names, table cells, Visuals headings, placeholders) with Spectral SC for the small-caps labels, and Inconsolata for the monospace bits (bold author labels, times, the small tool names under branches). Spectral had the best average fit over 7 text parts and Inconsolata over 4 mono parts. The fonts ship inside the app (no web font service).
 
 ### Phase 0 record
 - Skeleton: Tauri 2.12.4, Svelte 5.57.2, Vite 8.3.4, Vitest 5.0.5. Release build passes (job 001). The app takes `--probe FILE` (writes what is on its screen every 200 ms) and `--version`.
@@ -254,7 +259,22 @@ Kept current during the build. Percent = share of the phase table in section 4.
 
 ### Helpers and reviews (build)
 - t16: phase 0 review (Claude Fable 5.1, high, read-only): 7 findings and 3 unproven claims, all fixed; re-check: all resolved, nothing broken. Its notes: a real Crush refreshing its provider list during a Go run would make the outside check fail safe; `/var/tmp/crush-test-tmp` holds about 1390 leftovers from older runs (owner's call); git does not work on the worktree inside the sandbox, so later test projects live in the throwaway home.
-- t17: engine design for phase 1 (Claude Opus 5.5, max), writes `desktop/docs/engine-design.md`; its review follows.
+- t17: engine design for phase 1 (Claude Opus 5.5, max): done. `desktop/docs/engine-design.md` (about 2,570 lines): items 5.1-5.14 with code facts, changes, rules, tests and risks; a scaffold S plus four build pieces A-D with separate files; ten open questions with built defaults; eleven places where the code contradicts the plan, each with a fix.
+- t18: review of the engine design (Claude Fable 5.1, high, read-only), started 2026-10-18. Cap: 3 review/fix rounds. Round 1 found 3 high (the terminal's server switch skipped the engine; teardown kept a dead hub; interrupted helpers were never released) and 7 medium findings.
+- t17 fix round 1 (2026-10-18): all findings addressed in the design file (now about 2,940 lines); open questions for the owner cut to 4, with 11 decisions recorded and their reasons; three partial disagreements argued with code.
+- t18 re-check, round 2 of 3 (2026-10-18): every round-1 finding fixed; the fixes brought 3 new medium problems (a closing project could lose helpers if reopened at the same moment; one app's Stop could cancel another app's just-sent message; `crush logout` failed while the desktop had that project open), plus two plan points for the owner (the lone-window lock moves to phase 7; secure-entry events must carry field names only).
+- t17 fix round 3 (2026-10-18): the three problems fixed (teardown takes the hub out of the list first and a closing hub never claims or starts work; Stop only interrupts and never cancels; logout joins a live engine); the two inferred code steps settled from the code; secure-entry events carry labels plus an open/saved/unavailable status per field (checklist DLG-196, DLG-198), never a path. Design now about 3,020 lines.
+- t18 final check, round 3 of 3 (2026-10-18): **ready to build**, no material findings. Its two small builder notes were applied to the design by the coordinator: use the existing `Form.Done()` instead of a new close accessor, and make the second `stopAll` pass harmless (new test `TestStopAllTwiceIsHarmless`).
+
+### Owner decisions for the overnight run (2026-10-18, before bed)
+- Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
+- The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).
+- Look choices in phases 3-6: decided by the coordinator in the Scholar's edition style, each with a note and a picture for the owner to change in the morning (replaces the section 10 sketch check-ins for this run).
+- After phase 2: keep building; the side-by-side pictures wait for the morning.
+- Plan changes, small or large: decide and record them here; the owner reviews them in the morning.
+- Engine design: one extra fix round was allowed if the final check found problems (not needed).
+- GPT pictures: up to $2 in total overnight.
+- Final steps: merge into `main`, push to GitHub (Mac build), install the new `crush`, and add the app menu entry, once every check and the final review pass.
 
 ### Open findings
 - none

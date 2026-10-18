@@ -1,0 +1,11 @@
+{
+  "prompt": "A desktop app screen for Crush, an AI coding chat app, shown edge to edge in landscape with crisp, readable text; no browser window, device or desk.\n\nA software student runs several AI coding agents at once and branches a chat from highlighted words. The open conversation leads; the chat list and a visuals panel flank it.\n\nLeft: the Crush wordmark, a new-chat button, a search field and Today's chats: \"Login keeps redirecting\" (selected, Claude) with two nested branches, \"Cookie lifetime\" and \"Is SameSite=Lax safe?\"; \"Card Wars stutter at 60 fps\" (Codex, working); \"Herm\u00f3\u00f0r sends mail twice\" (Grok, waiting for permission).\n\nMiddle: title \"Login keeps redirecting\", path crush-desktop / auth / session.go. You, 10:42: \"Why does the login page keep sending me back after I sign in?\" Claude, 10:43: \"The session cookie uses SameSite=Strict, so the browser drops it on the redirect back from sign-in.\" The words \"SameSite=Strict\" are a link to a branch. A folded row: \"Ran 4 tools \u00b7 read session.go, ran tests\". Claude: \"Switching to Lax fixes the loop. All 12 tests pass.\" Typing box: \"Ask Claude\u2026\", model \"Opus 5.5 \u00b7 max\", send.\n\nRight: project crush-desktop with one row of three usage bars: Context 62%, 5-hour 86% (warning), Week 31%. Below, Visuals: a flow diagram Sign in \u2192 Check session cookie \u2192 Home, and a table: SameSite Strict \u2192 Lax; Lifetime 24 h.\n\nThe two attached images are style inspiration, adapted into this real working app; do not copy their layout or content. States stamp themselves: the waiting chat is stamped HOLD and the folded tool row is stamped PASSED.",
+  "tool": "agy image generation (Nano Banana)",
+  "model": "unknown",
+  "size": "1376x768",
+  "references": [
+    ".impeccable/mocks/decision/refs/vernacular-ephemera-jet-age-ticket-wallet.png",
+    ".impeccable/mocks/decision/refs/vernacular-ephemera-jet-age-ticket-wallet-hero.png"
+  ],
+  "created": "2026-10-18T02:05:23-06:00"
+}

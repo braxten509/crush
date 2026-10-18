@@ -1,0 +1,11 @@
+A desktop app screen for Crush, an AI coding chat app, shown edge to edge in landscape with crisp, readable text; no browser window, device, desk or tagline.
+
+A software student runs several AI coding agents at once and branches a chat from highlighted words. This version reads like a page: the conversation sits on a centred reading measure with a wide annotation margin on its right.
+
+Left: the CRUSH wordmark, a new-chat button, a search field and Today's chats: "Login keeps redirecting" (selected, Claude) with two nested branches, "Cookie lifetime" and "Is SameSite=Lax safe?"; "Card Wars stutter at 60 fps" (Codex, working); "Hermóðr sends mail twice" (Grok, waiting for permission).
+
+Middle: title "Login keeps redirecting", path crush-desktop / auth / session.go. You, 10:42: "Why does the login page keep sending me back after I sign in?" Claude, 10:43: "The session cookie uses SameSite=Strict, so the browser drops it on the redirect back from sign-in." Beside that line, a margin note: "B · branch · Is SameSite=Lax safe? · 3 messages". A folded row: "Ran 4 tools · read session.go, ran tests", with margin note "C · 4 tools · 12 tests pass". Claude: "Switching to Lax fixes the loop." Typing box: "Ask Claude…", model "Opus 5.5 · max", send.
+
+Right, narrower: project crush-desktop, three usage readings in one row: Context 62%, 5-hour 86% (warning), Week 31%. Below, Visuals: a flow diagram Sign in → Check session cookie → Home.
+
+Look: a scholarly reference edition. Bone paper, iron-black ink, a Miller-style text serif, small-caps labels, one-pixel hairlines with tiny plus-mark corners. A thin vermilion rail down the conversation's left edge carries keys B and C, tied to their margin notes. Vermilion only for keys and send; the warning in amber. As tidy as the Zed editor. Flat colour; no gradients, glow, emoji or rounded cards.

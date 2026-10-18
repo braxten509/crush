@@ -1,0 +1,1429 @@
+{
+  "schemaVersion": 3,
+  "stage": "components",
+  "id": "components",
+  "title": "Plan and asset review · src/App.svelte",
+  "comp": {
+    "path": ".impeccable/mocks/decision/edition.png",
+    "width": 1600,
+    "height": 992
+  },
+  "specSha256": "cb529667ee036b46c249a07076cbd1ab04cd21b9af45de4cf1c9f73f6165bf24",
+  "components": [
+    {
+      "id": "flow-node-sign-in",
+      "name": "Flow node sign in",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.7144,
+        "y": 0.3962,
+        "w": 0.0631,
+        "h": 0.0877
+      },
+      "note": "flow chart step: 1px dark-grey box with square corners, laid out by code from the AI's data",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": true,
+      "dependencies": []
+    },
+    {
+      "id": "flow-node-check",
+      "name": "Flow node check",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.7981,
+        "y": 0.3962,
+        "w": 0.0875,
+        "h": 0.0877
+      },
+      "note": "flow chart step: 1px dark-grey box with square corners, laid out by code from the AI's data",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": true,
+      "dependencies": []
+    },
+    {
+      "id": "flow-node-home",
+      "name": "Flow node home",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.9063,
+        "y": 0.3962,
+        "w": 0.0625,
+        "h": 0.0887
+      },
+      "note": "flow chart step: 1px dark-grey box with square corners, laid out by code from the AI's data",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": true,
+      "dependencies": []
+    },
+    {
+      "id": "new-chat-icon",
+      "name": "New chat icon",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.0413,
+        "y": 0.126,
+        "w": 0.0131,
+        "h": 0.0222
+      },
+      "note": "thin iron-black plus sign at the left of the New chat button",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "search-icon",
+      "name": "Search icon",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.0381,
+        "y": 0.1946,
+        "w": 0.0131,
+        "h": 0.0222
+      },
+      "note": "thin iron-black magnifier icon at the left of the search field",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "chat-card-wars-state-icon",
+      "name": "Chat card wars state icon",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.1831,
+        "y": 0.5887,
+        "w": 0.0119,
+        "h": 0.0202
+      },
+      "note": "thin open circle in slate grey: the chat is working",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "chat-hermodr-state-icon",
+      "name": "Chat hermodr state icon",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.1306,
+        "y": 0.6714,
+        "w": 0.0125,
+        "h": 0.0202
+      },
+      "note": "thin clock outline in slate grey: the chat waits for permission",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "tool-row-triangle",
+      "name": "Tool row triangle",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.3169,
+        "y": 0.4617,
+        "w": 0.0063,
+        "h": 0.0161
+      },
+      "note": "small solid iron-black triangle pointing right: the tool row is folded",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "model-picker-caret",
+      "name": "Model picker caret",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.63,
+        "y": 0.9042,
+        "w": 0.0081,
+        "h": 0.0091
+      },
+      "note": "small solid iron-black down caret of the model picker",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "usage-context-bar",
+      "name": "Usage context bar",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.7144,
+        "y": 0.2258,
+        "w": 0.0737,
+        "h": 0.0171
+      },
+      "note": "context bar: graphite fill over a pale track in a 1px hairline",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "usage-5h-warning",
+      "name": "Usage 5h warning",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.8475,
+        "y": 0.1855,
+        "w": 0.0175,
+        "h": 0.0262
+      },
+      "note": "amber warning triangle with an exclamation mark: the 5-hour limit is close",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "usage-5h-bar",
+      "name": "Usage 5h bar",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.8069,
+        "y": 0.2258,
+        "w": 0.0731,
+        "h": 0.0171
+      },
+      "note": "5-hour bar: graphite fill over a pale track in a 1px hairline",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "usage-week-bar",
+      "name": "Usage week bar",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.8981,
+        "y": 0.2258,
+        "w": 0.0725,
+        "h": 0.0171
+      },
+      "note": "week bar: graphite fill over a pale track in a 1px hairline",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "flow-arrow-1",
+      "name": "Flow arrow 1",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.7762,
+        "y": 0.4335,
+        "w": 0.0206,
+        "h": 0.0151
+      },
+      "note": "thin iron-black arrow to the next step",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    },
+    {
+      "id": "flow-arrow-2",
+      "name": "Flow arrow 2",
+      "kind": "chrome",
+      "role": "plan",
+      "box": {
+        "x": 0.8844,
+        "y": 0.4335,
+        "w": 0.0206,
+        "h": 0.0151
+      },
+      "note": "thin iron-black arrow to the next step",
+      "medium": "code",
+      "preview": {
+        "kind": "comp-crop"
+      },
+      "codeDrawn": false,
+      "dependencies": []
+    }
+  ],
+  "codeRegions": [
+    {
+      "id": "frame-top",
+      "name": "Frame top",
+      "kind": "chrome",
+      "box": {
+        "x": 0.0138,
+        "y": 0.0111,
+        "w": 0.9744,
+        "h": 0.0192
+      },
+      "note": "1px mid-grey hairline along the app's top edge, with small plus marks at both corners and where each column edge meets it"
+    },
+    {
+      "id": "frame-bottom",
+      "name": "Frame bottom",
+      "kind": "chrome",
+      "box": {
+        "x": 0.0144,
+        "y": 0.9536,
+        "w": 0.9738,
+        "h": 0.0192
+      },
+      "note": "1px mid-grey hairline along the app's bottom edge, with small plus marks at both corners and where each column edge meets it"
+    },
+    {
+      "id": "frame-left",
+      "name": "Frame left",
+      "kind": "chrome",
+      "box": {
+        "x": 0.0181,
+        "y": 0.0302,
+        "w": 0.0025,
+        "h": 0.9204
+      },
+      "note": "1px mid-grey hairline down the app's left edge"
+    },
+    {
+      "id": "frame-right",
+      "name": "Frame right",
+      "kind": "chrome",
+      "box": {
+        "x": 0.9806,
+        "y": 0.0302,
+        "w": 0.0031,
+        "h": 0.9204
+      },
+      "note": "1px mid-grey hairline down the app's right edge"
+    },
+    {
+      "id": "column-divider-left",
+      "name": "Column divider left",
+      "kind": "chrome",
+      "box": {
+        "x": 0.2606,
+        "y": 0.0302,
+        "w": 0.0037,
+        "h": 0.9204
+      },
+      "note": "1px mid-grey hairline between the chat list and the conversation; the owner drags this edge to resize the columns"
+    },
+    {
+      "id": "column-divider-right",
+      "name": "Column divider right",
+      "kind": "chrome",
+      "box": {
+        "x": 0.6975,
+        "y": 0.0302,
+        "w": 0.0025,
+        "h": 0.9204
+      },
+      "note": "1px mid-grey hairline between the conversation and the right panel; the owner drags this edge to resize the columns"
+    },
+    {
+      "id": "wordmark",
+      "name": "Wordmark",
+      "kind": "text",
+      "box": {
+        "x": 0.0313,
+        "y": 0.0464,
+        "w": 0.0862,
+        "h": 0.0353
+      },
+      "note": "wordmark CRUSH in iron-black small-caps serif; owner-approved exception: the build sets the owner's original heavy extended CRUSH with a grey AI in iron black here"
+    },
+    {
+      "id": "new-chat",
+      "name": "New chat",
+      "kind": "control",
+      "box": {
+        "x": 0.0313,
+        "y": 0.1089,
+        "w": 0.2194,
+        "h": 0.0554
+      },
+      "note": "New chat button: 1px mid-grey hairline box with square corners on the bone ground"
+    },
+    {
+      "id": "new-chat-label",
+      "name": "New chat label",
+      "kind": "text",
+      "box": {
+        "x": 0.0631,
+        "y": 0.125,
+        "w": 0.06,
+        "h": 0.0212
+      },
+      "note": "button label 'New chat' in iron-black text serif"
+    },
+    {
+      "id": "search-field",
+      "name": "Search field",
+      "kind": "control",
+      "box": {
+        "x": 0.0313,
+        "y": 0.1794,
+        "w": 0.2194,
+        "h": 0.0524
+      },
+      "note": "search field: 1px mid-grey hairline box with square corners"
+    },
+    {
+      "id": "search-placeholder",
+      "name": "Search placeholder",
+      "kind": "text",
+      "box": {
+        "x": 0.0594,
+        "y": 0.1966,
+        "w": 0.0762,
+        "h": 0.0181
+      },
+      "note": "placeholder 'Search chats...' in slate-grey serif"
+    },
+    {
+      "id": "search-shortcut",
+      "name": "Search shortcut",
+      "kind": "text",
+      "box": {
+        "x": 0.2244,
+        "y": 0.1976,
+        "w": 0.0187,
+        "h": 0.0171
+      },
+      "note": "shortcut hint for search in slate grey; the comp writes the Mac key, the Linux build writes Ctrl K"
+    },
+    {
+      "id": "rule-under-search",
+      "name": "Rule under search",
+      "kind": "chrome",
+      "box": {
+        "x": 0.0231,
+        "y": 0.251,
+        "w": 0.2369,
+        "h": 0.0121
+      },
+      "note": "1px mid-grey hairline under the search field with small plus marks near both ends"
+    },
+    {
+      "id": "group-today",
+      "name": "Group today",
+      "kind": "text",
+      "box": {
+        "x": 0.0313,
+        "y": 0.2732,
+        "w": 0.0338,
+        "h": 0.0131
+      },
+      "note": "group label 'TODAY' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "chat-row-selected",
+      "name": "Chat row selected",
+      "kind": "control",
+      "box": {
+        "x": 0.02,
+        "y": 0.3024,
+        "w": 0.2425,
+        "h": 0.0837
+      },
+      "note": "selected chat row: a slightly darker bone band across the column between light hairlines, with a vermilion rule on its left edge"
+    },
+    {
+      "id": "chat-row-selected-rule",
+      "name": "Chat row selected rule",
+      "kind": "chrome",
+      "box": {
+        "x": 0.02,
+        "y": 0.3034,
+        "w": 0.0044,
+        "h": 0.0817
+      },
+      "note": "4px vermilion rule marking the selected chat"
+    },
+    {
+      "id": "chat-row-selected-title",
+      "name": "Chat row selected title",
+      "kind": "text",
+      "box": {
+        "x": 0.0331,
+        "y": 0.3196,
+        "w": 0.1331,
+        "h": 0.0252
+      },
+      "note": "chat name 'Login keeps redirecting' in iron-black text serif"
+    },
+    {
+      "id": "chat-row-selected-agent",
+      "name": "Chat row selected agent",
+      "kind": "text",
+      "box": {
+        "x": 0.0331,
+        "y": 0.3508,
+        "w": 0.0362,
+        "h": 0.0161
+      },
+      "note": "AI tool name 'Claude' in slate-grey serif"
+    },
+    {
+      "id": "chat-row-selected-time",
+      "name": "Chat row selected time",
+      "kind": "text",
+      "box": {
+        "x": 0.2081,
+        "y": 0.3387,
+        "w": 0.025,
+        "h": 0.0151
+      },
+      "note": "time '10:43' in slate grey"
+    },
+    {
+      "id": "chat-row-selected-chevron",
+      "name": "Chat row selected chevron",
+      "kind": "control",
+      "box": {
+        "x": 0.2419,
+        "y": 0.3417,
+        "w": 0.0088,
+        "h": 0.0091
+      },
+      "note": "small iron-black down chevron: this chat's branches are open"
+    },
+    {
+      "id": "branch-tree-lines",
+      "name": "Branch tree lines",
+      "kind": "chrome",
+      "box": {
+        "x": 0.04,
+        "y": 0.3841,
+        "w": 0.0112,
+        "h": 0.1109
+      },
+      "note": "thin mid-grey tree line down from the selected chat with short stubs to its two branches"
+    },
+    {
+      "id": "branch-1-title",
+      "name": "Branch 1 title",
+      "kind": "text",
+      "box": {
+        "x": 0.0594,
+        "y": 0.3972,
+        "w": 0.0806,
+        "h": 0.0192
+      },
+      "note": "branch name 'Cookie lifetime' in iron-black serif"
+    },
+    {
+      "id": "branch-1-agent",
+      "name": "Branch 1 agent",
+      "kind": "text",
+      "box": {
+        "x": 0.0594,
+        "y": 0.4264,
+        "w": 0.03,
+        "h": 0.0141
+      },
+      "note": "AI tool name 'Claude' in small slate-grey type"
+    },
+    {
+      "id": "branch-1-time",
+      "name": "Branch 1 time",
+      "kind": "text",
+      "box": {
+        "x": 0.2081,
+        "y": 0.4113,
+        "w": 0.025,
+        "h": 0.0161
+      },
+      "note": "time '10:55' in slate grey"
+    },
+    {
+      "id": "branch-2-title",
+      "name": "Branch 2 title",
+      "kind": "text",
+      "box": {
+        "x": 0.06,
+        "y": 0.4718,
+        "w": 0.12,
+        "h": 0.0181
+      },
+      "note": "branch name 'Is SameSite=Lax safe?' in iron-black serif"
+    },
+    {
+      "id": "branch-2-agent",
+      "name": "Branch 2 agent",
+      "kind": "text",
+      "box": {
+        "x": 0.0594,
+        "y": 0.5,
+        "w": 0.03,
+        "h": 0.0131
+      },
+      "note": "AI tool name 'Claude' in small slate-grey type"
+    },
+    {
+      "id": "branch-2-time",
+      "name": "Branch 2 time",
+      "kind": "text",
+      "box": {
+        "x": 0.2081,
+        "y": 0.4859,
+        "w": 0.025,
+        "h": 0.0151
+      },
+      "note": "time '11:12' in slate grey"
+    },
+    {
+      "id": "rule-after-branches",
+      "name": "Rule after branches",
+      "kind": "chrome",
+      "box": {
+        "x": 0.0194,
+        "y": 0.5363,
+        "w": 0.2431,
+        "h": 0.0111
+      },
+      "note": "1px mid-grey hairline between chats with a small plus mark near its left end"
+    },
+    {
+      "id": "chat-card-wars-title",
+      "name": "Chat card wars title",
+      "kind": "text",
+      "box": {
+        "x": 0.0331,
+        "y": 0.5565,
+        "w": 0.1506,
+        "h": 0.0252
+      },
+      "note": "chat name 'Card Wars stutter at 60 fps' in iron-black serif"
+    },
+    {
+      "id": "chat-card-wars-agent",
+      "name": "Chat card wars agent",
+      "kind": "text",
+      "box": {
+        "x": 0.0331,
+        "y": 0.5897,
+        "w": 0.0319,
+        "h": 0.0161
+      },
+      "note": "AI tool name 'Codex' in slate-grey serif"
+    },
+    {
+      "id": "chat-card-wars-state",
+      "name": "Chat card wars state",
+      "kind": "text",
+      "box": {
+        "x": 0.1994,
+        "y": 0.5897,
+        "w": 0.0481,
+        "h": 0.0202
+      },
+      "note": "state 'Working...' in slate-grey serif"
+    },
+    {
+      "id": "rule-between-chats",
+      "name": "Rule between chats",
+      "kind": "chrome",
+      "box": {
+        "x": 0.0194,
+        "y": 0.623,
+        "w": 0.2431,
+        "h": 0.004
+      },
+      "note": "1px mid-grey hairline between chats"
+    },
+    {
+      "id": "chat-hermodr-title",
+      "name": "Chat hermodr title",
+      "kind": "text",
+      "box": {
+        "x": 0.0331,
+        "y": 0.6381,
+        "w": 0.1475,
+        "h": 0.0202
+      },
+      "note": "chat name 'Hermóðr sends mail twice' in iron-black serif"
+    },
+    {
+      "id": "chat-hermodr-agent",
+      "name": "Chat hermodr agent",
+      "kind": "text",
+      "box": {
+        "x": 0.0331,
+        "y": 0.6724,
+        "w": 0.0262,
+        "h": 0.0171
+      },
+      "note": "AI tool name 'Grok' in slate-grey serif"
+    },
+    {
+      "id": "chat-hermodr-state",
+      "name": "Chat hermodr state",
+      "kind": "text",
+      "box": {
+        "x": 0.1475,
+        "y": 0.6734,
+        "w": 0.1013,
+        "h": 0.0202
+      },
+      "note": "state 'Waiting for permission' in slate-grey serif"
+    },
+    {
+      "id": "rule-end-of-list",
+      "name": "Rule end of list",
+      "kind": "chrome",
+      "box": {
+        "x": 0.0231,
+        "y": 0.7026,
+        "w": 0.2369,
+        "h": 0.0111
+      },
+      "note": "1px mid-grey hairline closing the chat list with small plus marks near both ends"
+    },
+    {
+      "id": "chat-title",
+      "name": "Chat title",
+      "kind": "text",
+      "box": {
+        "x": 0.2813,
+        "y": 0.0454,
+        "w": 0.2625,
+        "h": 0.0454
+      },
+      "note": "chat title 'Login keeps redirecting' in a large iron-black text serif"
+    },
+    {
+      "id": "chat-path",
+      "name": "Chat path",
+      "kind": "text",
+      "box": {
+        "x": 0.2819,
+        "y": 0.1018,
+        "w": 0.2281,
+        "h": 0.0141
+      },
+      "note": "path 'CRUSH-DESKTOP / AUTH / SESSION.GO' in small-caps letterspaced slate grey"
+    },
+    {
+      "id": "rule-under-header",
+      "name": "Rule under header",
+      "kind": "chrome",
+      "box": {
+        "x": 0.2669,
+        "y": 0.1371,
+        "w": 0.4288,
+        "h": 0.0161
+      },
+      "note": "1px mid-grey hairline under the chat header with small plus marks at both ends"
+    },
+    {
+      "id": "rail",
+      "name": "Rail",
+      "kind": "chrome",
+      "box": {
+        "x": 0.2781,
+        "y": 0.1411,
+        "w": 0.0069,
+        "h": 0.7248
+      },
+      "note": "thin vermilion rail down the conversation's left edge, from a small dot under the header rule to the rule above the typing box"
+    },
+    {
+      "id": "rail-key-b",
+      "name": "Rail key b",
+      "kind": "control",
+      "box": {
+        "x": 0.2744,
+        "y": 0.3427,
+        "w": 0.0175,
+        "h": 0.0313
+      },
+      "note": "rail key: 1px vermilion square with a vermilion letter B, on the rail beside the branch link"
+    },
+    {
+      "id": "rail-key-c",
+      "name": "Rail key c",
+      "kind": "control",
+      "box": {
+        "x": 0.2744,
+        "y": 0.4476,
+        "w": 0.0175,
+        "h": 0.0313
+      },
+      "note": "rail key: 1px vermilion square with a vermilion letter C, on the rail beside the folded tool row"
+    },
+    {
+      "id": "msg-1-author",
+      "name": "Msg 1 author",
+      "kind": "text",
+      "box": {
+        "x": 0.3031,
+        "y": 0.1734,
+        "w": 0.0225,
+        "h": 0.0151
+      },
+      "note": "author 'YOU' in bold letterspaced capitals, iron black"
+    },
+    {
+      "id": "msg-1-time",
+      "name": "Msg 1 time",
+      "kind": "text",
+      "box": {
+        "x": 0.34,
+        "y": 0.1744,
+        "w": 0.0281,
+        "h": 0.0141
+      },
+      "note": "time '10:42' in slate grey"
+    },
+    {
+      "id": "msg-1-box",
+      "name": "Msg 1 box",
+      "kind": "chrome",
+      "box": {
+        "x": 0.3031,
+        "y": 0.1966,
+        "w": 0.3812,
+        "h": 0.0665
+      },
+      "note": "the owner's message set in a 1px light-grey hairline box, square corners"
+    },
+    {
+      "id": "msg-1-text",
+      "name": "Msg 1 text",
+      "kind": "text",
+      "box": {
+        "x": 0.3119,
+        "y": 0.2198,
+        "w": 0.3438,
+        "h": 0.0252
+      },
+      "note": "message 'Why does the login page keep sending me back after I sign in?' in iron-black text serif"
+    },
+    {
+      "id": "msg-2-author",
+      "name": "Msg 2 author",
+      "kind": "text",
+      "box": {
+        "x": 0.3044,
+        "y": 0.3115,
+        "w": 0.0431,
+        "h": 0.0151
+      },
+      "note": "author 'CLAUDE' in bold letterspaced capitals, iron black"
+    },
+    {
+      "id": "msg-2-time",
+      "name": "Msg 2 time",
+      "kind": "text",
+      "box": {
+        "x": 0.3581,
+        "y": 0.3125,
+        "w": 0.0281,
+        "h": 0.0141
+      },
+      "note": "time '10:43' in slate grey"
+    },
+    {
+      "id": "msg-2-line-1a",
+      "name": "Msg 2 line 1a",
+      "kind": "text",
+      "box": {
+        "x": 0.3038,
+        "y": 0.3468,
+        "w": 0.1394,
+        "h": 0.0212
+      },
+      "note": "reply text 'The session cookie uses' in iron-black text serif"
+    },
+    {
+      "id": "msg-2-link",
+      "name": "Msg 2 link",
+      "kind": "control",
+      "box": {
+        "x": 0.4475,
+        "y": 0.3478,
+        "w": 0.0969,
+        "h": 0.0252
+      },
+      "note": "branch link 'SameSite=Strict' in dark teal-slate with a thin underline; branch B starts here"
+    },
+    {
+      "id": "msg-2-line-1b",
+      "name": "Msg 2 line 1b",
+      "kind": "text",
+      "box": {
+        "x": 0.5437,
+        "y": 0.3478,
+        "w": 0.0925,
+        "h": 0.0232
+      },
+      "note": "reply text ', so the browser' in iron-black text serif"
+    },
+    {
+      "id": "msg-2-line-2",
+      "name": "Msg 2 line 2",
+      "kind": "text",
+      "box": {
+        "x": 0.3038,
+        "y": 0.379,
+        "w": 0.2406,
+        "h": 0.0262
+      },
+      "note": "reply text 'drops it on the redirect back from sign-in.' in iron-black text serif"
+    },
+    {
+      "id": "tool-row",
+      "name": "Tool row",
+      "kind": "control",
+      "box": {
+        "x": 0.3038,
+        "y": 0.4466,
+        "w": 0.3806,
+        "h": 0.0464
+      },
+      "note": "folded tool row: 1px light-grey hairline box with square corners; opens on click"
+    },
+    {
+      "id": "tool-row-count",
+      "name": "Tool row count",
+      "kind": "text",
+      "box": {
+        "x": 0.3319,
+        "y": 0.4607,
+        "w": 0.0575,
+        "h": 0.0181
+      },
+      "note": "tool summary 'Ran 4 tools' in iron-black serif"
+    },
+    {
+      "id": "tool-row-dot",
+      "name": "Tool row dot",
+      "kind": "text",
+      "box": {
+        "x": 0.3944,
+        "y": 0.4677,
+        "w": 0.0037,
+        "h": 0.006
+      },
+      "note": "middle-dot separator in slate grey"
+    },
+    {
+      "id": "tool-row-detail",
+      "name": "Tool row detail",
+      "kind": "text",
+      "box": {
+        "x": 0.4031,
+        "y": 0.4607,
+        "w": 0.1263,
+        "h": 0.0222
+      },
+      "note": "tool detail 'read session.go, ran tests' in slate-grey serif"
+    },
+    {
+      "id": "msg-3-author",
+      "name": "Msg 3 author",
+      "kind": "text",
+      "box": {
+        "x": 0.3044,
+        "y": 0.5373,
+        "w": 0.0431,
+        "h": 0.0151
+      },
+      "note": "author 'CLAUDE' in bold letterspaced capitals, iron black"
+    },
+    {
+      "id": "msg-3-time",
+      "name": "Msg 3 time",
+      "kind": "text",
+      "box": {
+        "x": 0.3581,
+        "y": 0.5373,
+        "w": 0.0281,
+        "h": 0.0151
+      },
+      "note": "time '10:44' in slate grey"
+    },
+    {
+      "id": "msg-3-text",
+      "name": "Msg 3 text",
+      "kind": "text",
+      "box": {
+        "x": 0.305,
+        "y": 0.5706,
+        "w": 0.275,
+        "h": 0.0252
+      },
+      "note": "reply 'Switching to Lax fixes the loop. All 12 tests pass.' in iron-black text serif"
+    },
+    {
+      "id": "rule-above-typing",
+      "name": "Rule above typing",
+      "kind": "chrome",
+      "box": {
+        "x": 0.2662,
+        "y": 0.8518,
+        "w": 0.4294,
+        "h": 0.0171
+      },
+      "note": "1px mid-grey hairline above the typing area with small plus marks at both ends"
+    },
+    {
+      "id": "composer",
+      "name": "Composer",
+      "kind": "control",
+      "box": {
+        "x": 0.2744,
+        "y": 0.878,
+        "w": 0.3738,
+        "h": 0.0605
+      },
+      "note": "typing box: 1px mid-grey hairline box with square corners"
+    },
+    {
+      "id": "composer-placeholder",
+      "name": "Composer placeholder",
+      "kind": "text",
+      "box": {
+        "x": 0.285,
+        "y": 0.8982,
+        "w": 0.0719,
+        "h": 0.0181
+      },
+      "note": "placeholder 'Ask Claude...' in slate-grey serif"
+    },
+    {
+      "id": "composer-divider",
+      "name": "Composer divider",
+      "kind": "chrome",
+      "box": {
+        "x": 0.5431,
+        "y": 0.881,
+        "w": 0.0025,
+        "h": 0.0544
+      },
+      "note": "1px light-grey hairline that sets the model picker apart in the typing box"
+    },
+    {
+      "id": "model-picker-label",
+      "name": "Model picker label",
+      "kind": "control",
+      "box": {
+        "x": 0.5531,
+        "y": 0.9002,
+        "w": 0.07,
+        "h": 0.0202
+      },
+      "note": "model picker 'Opus 5.5 · max' in dark slate serif"
+    },
+    {
+      "id": "send-key",
+      "name": "Send key",
+      "kind": "control",
+      "box": {
+        "x": 0.65,
+        "y": 0.878,
+        "w": 0.0369,
+        "h": 0.0605
+      },
+      "note": "send key: solid vermilion square with a white paper-plane outline icon"
+    },
+    {
+      "id": "project-label",
+      "name": "Project label",
+      "kind": "text",
+      "box": {
+        "x": 0.715,
+        "y": 0.0494,
+        "w": 0.0413,
+        "h": 0.0141
+      },
+      "note": "label 'PROJECT' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "project-name",
+      "name": "Project name",
+      "kind": "text",
+      "box": {
+        "x": 0.7144,
+        "y": 0.0736,
+        "w": 0.1156,
+        "h": 0.0333
+      },
+      "note": "project name 'crush-desktop' in iron-black text serif"
+    },
+    {
+      "id": "rule-under-project",
+      "name": "Rule under project",
+      "kind": "chrome",
+      "box": {
+        "x": 0.7131,
+        "y": 0.119,
+        "w": 0.2575,
+        "h": 0.0091
+      },
+      "note": "1px mid-grey hairline under the project name with a small caret tick near its left end"
+    },
+    {
+      "id": "usage-context-label",
+      "name": "Usage context label",
+      "kind": "text",
+      "box": {
+        "x": 0.715,
+        "y": 0.1563,
+        "w": 0.05,
+        "h": 0.0141
+      },
+      "note": "label 'CONTEXT' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "usage-context-value",
+      "name": "Usage context value",
+      "kind": "text",
+      "box": {
+        "x": 0.715,
+        "y": 0.1865,
+        "w": 0.0313,
+        "h": 0.0242
+      },
+      "note": "reading '62%' in iron-black text serif"
+    },
+    {
+      "id": "usage-sep-1",
+      "name": "Usage sep 1",
+      "kind": "chrome",
+      "box": {
+        "x": 0.7963,
+        "y": 0.1462,
+        "w": 0.0019,
+        "h": 0.1139
+      },
+      "note": "1px vertical light hairline between usage readings"
+    },
+    {
+      "id": "usage-5h-label",
+      "name": "Usage 5h label",
+      "kind": "text",
+      "box": {
+        "x": 0.8075,
+        "y": 0.1563,
+        "w": 0.0406,
+        "h": 0.0141
+      },
+      "note": "label '5-HOUR' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "usage-5h-value",
+      "name": "Usage 5h value",
+      "kind": "text",
+      "box": {
+        "x": 0.8081,
+        "y": 0.1865,
+        "w": 0.0319,
+        "h": 0.0242
+      },
+      "note": "reading '86%' in iron-black text serif"
+    },
+    {
+      "id": "usage-sep-2",
+      "name": "Usage sep 2",
+      "kind": "chrome",
+      "box": {
+        "x": 0.8869,
+        "y": 0.1462,
+        "w": 0.0025,
+        "h": 0.1139
+      },
+      "note": "1px vertical light hairline between usage readings"
+    },
+    {
+      "id": "usage-week-label",
+      "name": "Usage week label",
+      "kind": "text",
+      "box": {
+        "x": 0.8988,
+        "y": 0.1563,
+        "w": 0.0306,
+        "h": 0.0141
+      },
+      "note": "label 'WEEK' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "usage-week-value",
+      "name": "Usage week value",
+      "kind": "text",
+      "box": {
+        "x": 0.8988,
+        "y": 0.1865,
+        "w": 0.0306,
+        "h": 0.0242
+      },
+      "note": "reading '31%' in iron-black text serif"
+    },
+    {
+      "id": "rule-under-usage",
+      "name": "Rule under usage",
+      "kind": "chrome",
+      "box": {
+        "x": 0.7025,
+        "y": 0.2752,
+        "w": 0.2769,
+        "h": 0.0111
+      },
+      "note": "1px mid-grey hairline under the usage row with small plus marks at both ends"
+    },
+    {
+      "id": "visuals-label",
+      "name": "Visuals label",
+      "kind": "text",
+      "box": {
+        "x": 0.7144,
+        "y": 0.3054,
+        "w": 0.0456,
+        "h": 0.0141
+      },
+      "note": "section label 'VISUALS' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "flow-heading",
+      "name": "Flow heading",
+      "kind": "text",
+      "box": {
+        "x": 0.7144,
+        "y": 0.3548,
+        "w": 0.07,
+        "h": 0.0232
+      },
+      "note": "visual title 'Sign-in flow' in iron-black text serif"
+    },
+    {
+      "id": "flow-node-sign-in-label",
+      "name": "Flow node sign in label",
+      "kind": "text",
+      "box": {
+        "x": 0.7275,
+        "y": 0.4325,
+        "w": 0.0362,
+        "h": 0.0232
+      },
+      "note": "step label 'Sign in' in iron-black serif"
+    },
+    {
+      "id": "flow-node-check-label",
+      "name": "Flow node check label",
+      "kind": "text",
+      "box": {
+        "x": 0.8056,
+        "y": 0.4173,
+        "w": 0.0706,
+        "h": 0.0444
+      },
+      "note": "step label 'Check session cookie' on two lines in iron-black serif"
+    },
+    {
+      "id": "flow-node-home-label",
+      "name": "Flow node home label",
+      "kind": "text",
+      "box": {
+        "x": 0.9206,
+        "y": 0.4335,
+        "w": 0.0319,
+        "h": 0.0171
+      },
+      "note": "step label 'Home' in iron-black serif"
+    },
+    {
+      "id": "rule-after-flow",
+      "name": "Rule after flow",
+      "kind": "chrome",
+      "box": {
+        "x": 0.7131,
+        "y": 0.5131,
+        "w": 0.2575,
+        "h": 0.0091
+      },
+      "note": "1px mid-grey hairline between visuals with a small caret tick near its left end"
+    },
+    {
+      "id": "table-heading",
+      "name": "Table heading",
+      "kind": "text",
+      "box": {
+        "x": 0.7144,
+        "y": 0.5423,
+        "w": 0.0856,
+        "h": 0.0242
+      },
+      "note": "visual title 'Cookie settings' in iron-black text serif"
+    },
+    {
+      "id": "settings-table",
+      "name": "Settings table",
+      "kind": "chrome",
+      "box": {
+        "x": 0.7144,
+        "y": 0.5837,
+        "w": 0.2556,
+        "h": 0.1492
+      },
+      "note": "three-column table ruled with 1px mid-grey hairlines, square corners"
+    },
+    {
+      "id": "table-th-property",
+      "name": "Table th property",
+      "kind": "text",
+      "box": {
+        "x": 0.7256,
+        "y": 0.6038,
+        "w": 0.055,
+        "h": 0.0131
+      },
+      "note": "header 'PROPERTY' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "table-th-current",
+      "name": "Table th current",
+      "kind": "text",
+      "box": {
+        "x": 0.8137,
+        "y": 0.6038,
+        "w": 0.0444,
+        "h": 0.0131
+      },
+      "note": "header 'CURRENT' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "table-th-fixed",
+      "name": "Table th fixed",
+      "kind": "text",
+      "box": {
+        "x": 0.8994,
+        "y": 0.6038,
+        "w": 0.0294,
+        "h": 0.0131
+      },
+      "note": "header 'FIXED' in small-caps letterspaced iron black"
+    },
+    {
+      "id": "table-samesite",
+      "name": "Table samesite",
+      "kind": "text",
+      "box": {
+        "x": 0.7256,
+        "y": 0.6472,
+        "w": 0.0475,
+        "h": 0.0181
+      },
+      "note": "cell 'SameSite' in iron-black serif"
+    },
+    {
+      "id": "table-samesite-current",
+      "name": "Table samesite current",
+      "kind": "text",
+      "box": {
+        "x": 0.8137,
+        "y": 0.6472,
+        "w": 0.0281,
+        "h": 0.0171
+      },
+      "note": "cell 'Strict' in iron-black serif"
+    },
+    {
+      "id": "table-samesite-fixed",
+      "name": "Table samesite fixed",
+      "kind": "text",
+      "box": {
+        "x": 0.8994,
+        "y": 0.6472,
+        "w": 0.02,
+        "h": 0.0171
+      },
+      "note": "cell 'Lax' in iron-black serif"
+    },
+    {
+      "id": "table-lifetime",
+      "name": "Table lifetime",
+      "kind": "text",
+      "box": {
+        "x": 0.7256,
+        "y": 0.6946,
+        "w": 0.0431,
+        "h": 0.0181
+      },
+      "note": "cell 'Lifetime' in iron-black serif"
+    },
+    {
+      "id": "table-lifetime-current",
+      "name": "Table lifetime current",
+      "kind": "text",
+      "box": {
+        "x": 0.8137,
+        "y": 0.6946,
+        "w": 0.0231,
+        "h": 0.0181
+      },
+      "note": "cell '24 h' in iron-black serif"
+    },
+    {
+      "id": "table-lifetime-fixed",
+      "name": "Table lifetime fixed",
+      "kind": "text",
+      "box": {
+        "x": 0.8994,
+        "y": 0.6946,
+        "w": 0.0231,
+        "h": 0.0181
+      },
+      "note": "cell '24 h' in iron-black serif"
+    }
+  ]
+}

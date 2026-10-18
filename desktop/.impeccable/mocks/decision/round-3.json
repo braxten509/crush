@@ -1,0 +1,99 @@
+{
+  "title": "Choose the visual world (re-roll 2, plain register)",
+  "question": "The dice's pick plus the two strongest dealt challengers, spread subtler / same / pushed further; the owner's two keepers stay on the table.",
+  "seed": "seed:d55921922e855d5a",
+  "reroll": 2,
+  "register": "plain",
+  "mode": "operate",
+  "scope": "direction",
+  "channel": "Crush question form with pictures (owner's standing preference: look choices in the form, no pop-up pages)",
+  "ownerWords": "I like Design Manual and Research paper, but I want to see trhee more - but don't discard these. Make sure you are using the dice from $impeccable / Give me one subtler, one about same level, and one pushed further",
+  "kept": "The general design (three columns: chat list with branch tree, conversation, visuals panel with the limits row) stays; the world changes.",
+  "eliminated": ["riso", "transit", "ticket", "drawing", "manual", "preprint"],
+  "keepers": [
+    {"id": "manual", "kind": "grounded", "fromRound": 2, "comp": ".impeccable/mocks/decision/manual.png"},
+    {"id": "preprint", "kind": "grounded", "fromRound": 2, "comp": ".impeccable/mocks/decision/preprint.png"}
+  ],
+  "candidates": "Seven fresh grounded candidates written before the roll, in ~/.cache/crush-gui-briefs/look-candidates.md: 1 O'Reilly animal books, 2 Dieter Rams / Braun, 3 Chess analysis books, 4 Isotype, 5 Shooting script with revision colours, 6 Swiss topographic map, 7 LEGO building instructions.",
+  "assignedIndex": 3,
+  "pickCard": "Omitted: optional, and the owner asked for three options from the dice.",
+  "spread": {"subtler": "chess", "same": "edition", "further": "airport"},
+  "bar": {
+    "competitors": ["Zed"],
+    "note": "As tidy as Zed (aligned grid, even spacing, a real type scale), with a little more dazzle than Zed has."
+  },
+  "options": [
+    {
+      "id": "chess",
+      "kind": "assigned",
+      "kicker": "THE ROLL",
+      "label": "Chess Book",
+      "lineage": "chess analysis books (Chess Informant, figurine notation)",
+      "thesis": "Crush set like a chess analysis book: a chat is the main line and every branch a variation hanging off it.",
+      "palette": ["#ffffff", "#111111", "#6b6b6b", "#b3261e"],
+      "materials": ["white page", "black ink", "compact grotesk with tabular figures"],
+      "viewport": "Standard three columns, nearly monochrome. The main chat bold in the chat list with its branches indented beneath as bracketed side lines; the selected chat inverted, white on black; one deep red only on things you can press.",
+      "signature": "Branches as variations off the main line.",
+      "raised": [
+        {"from": "ikeda-datamatics", "raise": "Selection is a full inversion (white on black), never a tinted row."},
+        {"from": "digital-design-canon-warm-consumer-app-surface", "raise": "The one saturated colour appears only on things you can press."},
+        {"from": "vernacular-ephemera-boarding-pass-and-gate-board", "raise": "A chat whose state changed keeps its mark until you open it."},
+        {"from": "notation-diagram-systems-star-atlas", "raise": "Every visual names the message it came from, like an atlas index pointing into its plate."}
+      ],
+      "risk": "Very plain; it can read as a normal app with little of the world showing.",
+      "redraw": "First draw dropped the signature (standard tree lines, no variation notation), so the world showed only as a colour scheme; prompt made the bracketed italic side lines explicit and redrew once.",
+      "comp": ".impeccable/mocks/decision/chess.png"
+    },
+    {
+      "id": "edition",
+      "kind": "challenger",
+      "catalogId": "rw-centre-rail-reference-setting",
+      "label": "Scholar's Edition",
+      "verdict": "competitive",
+      "lineage": "reference-setting editions drawn by a ruling engine",
+      "thesis": "Crush set like a fine reference edition: bone paper, hairline ruling, and a vermilion rail of keys marking where each chat branches.",
+      "palette": ["#f3eee3", "#1a1a1a", "#6b6b6b", "#b7b7b7", "#c23a2a"],
+      "materials": ["bone paper", "one-pixel hairlines with plus-mark corners", "vermilion rubric keys"],
+      "viewport": "Standard three columns on bone paper; a thin vermilion rail down the conversation's left edge carries lettered keys at branch points and tool runs.",
+      "case": "Beats the roll on audience identification (the owner reads papers and kept the Research paper style); ties on product clarity.",
+      "risk": "Light theme, and close in feeling to the Research paper keeper.",
+      "comp": ".impeccable/mocks/decision/edition.png",
+      "hero": "https://impeccable.style/worlds/cards/rw-centre-rail-reference-setting-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/rw-centre-rail-reference-setting.webp"
+    },
+    {
+      "id": "airport",
+      "kind": "challenger",
+      "catalogId": "wayfinding-cartography-signage-terminal-yellow-wayfinding",
+      "label": "Airport Signs",
+      "verdict": "competitive",
+      "lineage": "international airport sign systems (Schiphol yellow)",
+      "thesis": "Crush signed like an airport: yellow means wayfinding and nothing else, and every branch is a signed junction.",
+      "palette": ["#ffcc00", "#0b0b0b", "#1a1a1a", "#e6e6e6", "#ffffff"],
+      "materials": ["signal-yellow panel", "sign-black panels", "black arrow squares"],
+      "viewport": "Standard three columns: the chat list a signal-yellow panel (selected chat a black band), conversation and right panel sign-black; branches signed with arrow squares; usage numbers big like gate numbers.",
+      "case": "Beats the roll on product clarity (one message per band, only the choices ahead); ties on audience identification.",
+      "risk": "Loud; a large yellow area can tire the eyes in long sessions, and the warning colour must stay clearly apart from the yellow.",
+      "comp": ".impeccable/mocks/decision/airport.png",
+      "hero": "https://impeccable.style/worlds/cards/wayfinding-cartography-signage-terminal-yellow-wayfinding-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/wayfinding-cartography-signage-terminal-yellow-wayfinding.webp"
+    },
+    {"id": "datamatics", "kind": "challenger", "catalogId": "ikeda-datamatics", "label": "Datamatics", "verdict": "declined", "case": "Loses both axes: pure black and white with monospace everywhere drops AI identity and warning colour, and on a working chat screen it slides toward the terminal costume the brief rules out.", "kept": "Selection by full inversion."},
+    {"id": "warm-consumer", "kind": "challenger", "catalogId": "digital-design-canon-warm-consumer-app-surface", "label": "Warm Consumer App", "verdict": "declined", "case": "Loses both axes, and its soft-cornered cards break the owner's ban on everything in rounded cards.", "kept": "One saturated colour only where something can be pressed."},
+    {"id": "gate-board", "kind": "challenger", "catalogId": "vernacular-ephemera-boarding-pass-and-gate-board", "label": "Boarding Pass and Gate Board", "verdict": "declined", "case": "Loses both axes: the owner already passed on travel ephemera (the jet-age ticket), and its clarity only ties.", "kept": "A changed row stays marked until you have seen it."},
+    {"id": "star-atlas", "kind": "challenger", "catalogId": "notation-diagram-systems-star-atlas", "label": "Star Atlas", "verdict": "declined", "case": "Loses both axes: weak tie to the owner's world, and navy with amber sits close to the look the owner called generic.", "kept": "Every visual points back to its source, like an atlas index."}
+  ],
+  "buildPath": {"value": "comp", "toggle": false, "note": "The brief pins the mockup-led workflow; a pinned decision beats the roll's code-led default for operate surfaces."},
+  "canon": true,
+  "canonCard": {
+    "kind": "canon",
+    "label": "Keep the current look",
+    "thesis": "The category standard, played straight: charcoal and amber, as in style-2, held to Zed's finish.",
+    "palette": ["#161719", "#242628", "#f4b744", "#e7e7e7"],
+    "materials": ["flat dark panels", "one amber accent"],
+    "viewport": "The approved style-2 mockup.",
+    "competitors": ["Zed"],
+    "risk": "What most AI chat apps look like.",
+    "comp": "design/style-2.png"
+  }
+}

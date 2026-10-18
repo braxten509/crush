@@ -52,7 +52,8 @@ type liveState struct {
 	closed bool
 
 	// initMu makes InitAgent calls take turns; nonInteractive records that
-	// the last one replaced the coordinator with a non-interactive one.
+	// the coordinator running is a non-interactive one, which a start makes
+	// only while no interactive one runs.
 	initMu         sync.Mutex
 	nonInteractive bool
 }

@@ -187,24 +187,25 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID, clientID string, i
 	return nil
 }
 
-// initCoder starts the workspace's coder agent. An interactive start keeps
-// the interactive coordinator the workspace already runs (the one app.New
-// started, or an earlier app's): a workspace has one coordinator shared by
-// every app (engine-design.md 5.2), so another app's turns, queue and
-// helpers stay on it, and no replaced coordinator's helper hub is left
-// listed to claim saved helpers.
+// initCoder starts the workspace's coder agent. Every start, non-interactive
+// ones too, keeps the interactive coordinator the workspace already runs
+// (the one app.New started, or an earlier app's): a workspace has one
+// coordinator shared by every app (engine-design.md 5.2), so another app's
+// turns, queue and helpers stay on it, and no replaced coordinator's helper
+// hub is left listed to claim saved helpers. A non-interactive start makes
+// its own coordinator only when no interactive one runs.
 func initCoder(ctx context.Context, ws *Workspace, interactive bool) error {
 	l := &ws.live
 	l.initMu.Lock()
 	defer l.initMu.Unlock()
+	if ws.coordinator() != nil && !l.nonInteractive {
+		return nil
+	}
 	if !interactive {
 		if err := ws.InitCoderAgentNonInteractive(ctx); err != nil {
 			return err
 		}
 		l.nonInteractive = true
-		return nil
-	}
-	if ws.coordinator() != nil && !l.nonInteractive {
 		return nil
 	}
 	if err := ws.InitCoderAgent(ctx); err != nil {

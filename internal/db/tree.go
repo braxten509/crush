@@ -69,6 +69,17 @@ func (q *Queries) TreeRevision(ctx context.Context, sessionID string) (int64, er
 	return revision, err
 }
 
+// TreeHead returns the message a chat's head is on: "" when the head is
+// before the first message, or the chat has none.
+func (q *Queries) TreeHead(ctx context.Context, sessionID string) (string, error) {
+	var head sql.NullString
+	err := q.db.QueryRowContext(ctx, `SELECT message_id FROM tree_heads WHERE session_id=?`, sessionID).Scan(&head)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return head.String, err
+}
+
 // SwitchTree requires an idle, exclusively owned workspace. One transaction
 // changes both the cursor and compaction pointer; no transcript is rewritten.
 func (q *Queries) SwitchTree(ctx context.Context, sessionID, messageID string) error {

@@ -360,12 +360,11 @@ func (b *Backend) CopyTree(ctx context.Context, workspaceID, sessionID string, r
 	// restart none is known, and the record stays with the source chat.
 	if req.UndoID != "" {
 		if ws.tree.takeUndo(sessionID, req.UndoID) {
-			store, err := fileHistory(ws)
-			if err != nil {
-				return proto.TreeCopyResult{}, err
-			}
-			if err := store.MoveUndo(ctx, req.UndoID, newID); err != nil {
-				return proto.TreeCopyResult{}, err
+			// The copy is made: a failed move must not hide it. The record
+			// then stays with the source chat.
+			if err := moveUndo(ctx, ws, req.UndoID, newID); err != nil {
+				slog.Warn("Could not move the undo record to the copied chat; it stays with the source chat",
+					"session_id", sessionID, "new_session_id", newID, "undo_id", req.UndoID, "error", err)
 			}
 		} else {
 			slog.Warn("Copy names an undo record that is not this chat's last file restore; it stays where it is",
@@ -379,6 +378,15 @@ func (b *Backend) CopyTree(ctx context.Context, workspaceID, sessionID string, r
 		return proto.TreeCopyResult{}, err
 	}
 	return proto.TreeCopyResult{SessionID: newID, Prompt: prompt, Revision: revision}, nil
+}
+
+// moveUndo moves the undo record undoID to the chat sessionID.
+func moveUndo(ctx context.Context, ws *Workspace, undoID, sessionID string) error {
+	store, err := fileHistory(ws)
+	if err != nil {
+		return err
+	}
+	return store.MoveUndo(ctx, undoID, sessionID)
 }
 
 // announce publishes a created event for a chat written directly to the

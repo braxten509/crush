@@ -10,6 +10,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/google/uuid"
@@ -85,6 +86,60 @@ func TestNonInteractivePromptOnInteractiveCoordinator(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.Equal(t, map[string]bool{"main": true, "interactive": false, "reply": true}, nonInteractive)
+}
+
+// TestUserPromptDuringMarkedRunRunsOnItsOwn: an app's own prompt, which has
+// a submission ID as every app prompt does, sent to a chat whose marked
+// prompt's run is open does not join that run, unlike the agent's own turns
+// there. It is an interactive call with its own answer, and the run's
+// answer stays the run's.
+func TestUserPromptDuringMarkedRunRunsOnItsOwn(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	releases := make(chan func(), 1)
+	var mu sync.Mutex
+	nonInteractive := map[string]bool{}
+	var c *coordinator
+	c = sessionRunTestCoordinator(t, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		mu.Lock()
+		nonInteractive[call.Prompt] = call.NonInteractive
+		mu.Unlock()
+		if call.Prompt == "main" {
+			_, release := c.tasks.reserveFollowUp(call.SessionID)
+			releases <- release
+		}
+		return fakeSessionReply(call, call.Prompt), nil
+	})
+	c.interactive = true
+
+	done := make(chan *fantasy.AgentResult, 1)
+	go func() {
+		result, err := c.Run(WithNonInteractive(WithRunID(ctx, "run-main")), "session", "main")
+		if err != nil {
+			t.Errorf("run: %v", err)
+		}
+		done <- result
+	}()
+	var release func()
+	select {
+	case release = <-releases:
+	case <-ctx.Done():
+		t.Fatal("the marked prompt never ran")
+	}
+	result, err := c.Run(message.WithSubmissionID(ctx, "typed"), "session", "typed")
+	require.NoError(t, err)
+	require.Equal(t, "typed", result.Response.Content.Text())
+
+	release()
+	select {
+	case result := <-done:
+		require.Equal(t, "main", result.Response.Content.Text(), "the run's answer is its own")
+	case <-ctx.Done():
+		t.Fatal("the marked prompt's run did not end")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, map[string]bool{"main": true, "typed": false}, nonInteractive)
 }
 
 // TestNonInteractivePromptAskIsCancelled: `crush ask` from a marked prompt's

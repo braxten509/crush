@@ -153,7 +153,10 @@ func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 	}
 	h.mu.Unlock()
 	started = true
-	snapshot := h.start(ctx, release, &t, sub, m, provider, continuePreamble+prompt)
+	snapshot, err := h.start(ctx, release, &t, sub, m, provider, continuePreamble+prompt)
+	if err != nil {
+		return nil, err
+	}
 	return &snapshot, nil
 }
 

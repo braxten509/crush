@@ -67,7 +67,7 @@ func TestSavedTasksSurviveShutdownButNotTheirEnd(t *testing.T) {
 	require.Len(t, saved, 1)
 	require.Equal(t, "child-1", saved[0].ChildID)
 	require.Equal(t, "codex", saved[0].Provider)
-	require.Equal(t, os.Getpid(), saved[0].Owner)
+	require.Zero(t, saved[0].Owner, "shutdown releases the task, so a later resume in this process claims it too")
 	require.False(t, saved[0].Interrupted.IsZero(), "shutdown must record when it cut the task off")
 }
 

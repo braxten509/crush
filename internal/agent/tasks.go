@@ -69,6 +69,9 @@ type Task struct {
 	Started   time.Time  `json:"started"`
 	Ended     time.Time  `json:"ended"`
 	Delivered bool       `json:"delivered,omitempty"`
+	// StartedBy is the client ID of the app that owns the helper (see
+	// SetWorkStartHook); "" when no app does.
+	StartedBy string `json:"started_by,omitempty"`
 	// delivering covers the handoff to the parent, including work before
 	// Run accepts it. Unlike Delivered, it clears even if delivery fails.
 	delivering bool
@@ -130,8 +133,16 @@ type taskHub struct {
 	askSession string
 	// closing is set once Crush shuts down; tasks it cuts off stay saved.
 	closing bool
-	// resumeOnce starts the tasks an earlier Crush left unfinished.
-	resumeOnce sync.Once
+	// interrupting marks the tasks and jobs (by task ID and job ID) that
+	// InterruptTask and InterruptJob ended: like closing, their end is saved
+	// for a later resume instead of handed to the agent.
+	interrupting map[string]bool
+	// interruptedDetached marks the detached processes InterruptJob
+	// killed, so their end is not reported to the agent.
+	interruptedDetached map[detachedKey]bool
+	// resumeMu runs one resume of the tasks other hubs left unfinished at
+	// a time; every resume claims again.
+	resumeMu sync.Mutex
 	// sessionRuns owns non-interactive runs and their follow-up producers.
 	sessionRuns        map[string]*sessionRun
 	backgroundOwners   map[string]string
@@ -209,6 +220,33 @@ func StopTask(id string) error {
 	return fmt.Errorf("no task %q", id)
 }
 
+// ErrTaskNotInSession is StopSessionTask's answer for a helper that is not
+// in the chat.
+var ErrTaskNotInSession = errors.New("no such helper in this chat")
+
+// StopSessionTask is StopTask limited to one chat: same user-stop meaning
+// (the parent is told). It returns ErrTaskNotInSession when the helper is
+// not in sessionID. A helper that already ended is left as it is.
+func StopSessionTask(sessionID, id string) error {
+	hubsMu.Lock()
+	defer hubsMu.Unlock()
+	for _, h := range hubs {
+		h.mu.Lock()
+		t, ok := h.tasks[id]
+		ok = ok && t.SessionID == sessionID
+		if ok && t.Status == TaskRunning {
+			t.Status = TaskStopped
+			h.userStopped[id] = true
+			h.cancels[id]()
+		}
+		h.mu.Unlock()
+		if ok {
+			return nil
+		}
+	}
+	return ErrTaskNotInSession
+}
+
 // SessionTasks returns copies of a session's sub-agents, running or ended.
 func SessionTasks(sessionID string) []Task {
 	hubsMu.Lock()
@@ -266,11 +304,12 @@ func SessionHasRunningWork(sessionID string) bool {
 // cliBackgroundRunning reports whether the session's agent CLI still runs a
 // command it moved to the background with its own tools rather than
 // `crush bg`, such as Claude Code's run_in_background. Crush lists those as
-// background processes, so they hold back the completion alert too. It
-// takes hubsMu, so callers must not hold it.
+// background processes, so they hold back the completion alert too. Crush's
+// own jobs are listed with their session as well, but hasRunning judges
+// those, leaving services out. It takes hubsMu, so callers must not hold it.
 func cliBackgroundRunning(sessionID string) bool {
 	for _, p := range BackgroundProcesses() {
-		if p.Session == sessionID {
+		if p.JobID == "" && p.Session == sessionID {
 			return true
 		}
 	}
@@ -302,12 +341,18 @@ func (h *taskHub) stop(sessionID, id string) (*Task, error) {
 	return &snapshot, nil
 }
 
-// stopAll ends every task as Crush shuts down, and the request directory
-// with them. Running tasks stay saved, so the next Crush resumes them.
+// stopAll ends every task as its Crush, or its project's workspace, shuts
+// down, and the request directory with them. Running tasks stay saved and
+// released, so the next resume, in this process or the next Crush, starts
+// them again. It is safe to call twice.
 func (h *taskHub) stopAll() {
+	// Unlisted first: from here on no resume, stop or scan finds the hub.
+	// hubsMu is never held together with h.mu here.
+	hubsMu.Lock()
+	hubs = slices.DeleteFunc(hubs, func(other *taskHub) bool { return other == h })
+	hubsMu.Unlock()
 	_ = os.RemoveAll(h.dir)
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.closing = true
 	var interrupted []string
 	for id, t := range h.tasks {
@@ -317,17 +362,41 @@ func (h *taskHub) stopAll() {
 			interrupted = append(interrupted, t.ChildID)
 		}
 	}
-	h.markInterrupted(interrupted)
+	h.releaseInterrupted(interrupted)
 	for _, run := range h.sessionRuns {
 		run.cancel()
+	}
+	reaper := h.reaper
+	h.reaper = nil
+	h.mu.Unlock()
+	// Closing the pipe has the reaper stop what the hub's agents left.
+	if reaper != nil {
+		_ = reaper.Close()
 	}
 }
 
 func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	h.mu.Lock()
 	t := h.tasks[id]
+	h.mu.Unlock()
+	h.finishRun(ctx, t, output, err)
+}
+
+// finishRun ends the run of task t and hands its result to the parent. A run
+// that shutdown or InterruptTask cut off stays saved, and its parent is not
+// told. A run whose ID a resumed run of the same task took over meanwhile
+// does nothing: the resumed run is the one shown and awaited.
+func (h *taskHub) finishRun(ctx context.Context, t *Task, output string, err error) {
+	h.mu.Lock()
+	id := t.ID
+	if h.tasks[id] != t {
+		h.mu.Unlock()
+		return
+	}
 	stopped := t.Status == TaskStopped
-	tellParent := !stopped || h.userStopped[id]
+	interrupted := h.interrupting[id]
+	delete(h.interrupting, id)
+	tellParent := !interrupted && (!stopped || h.userStopped[id])
 	switch {
 	case stopped:
 	case err != nil:
@@ -340,7 +409,7 @@ func (h *taskHub) finish(ctx context.Context, id, output string, err error) {
 	t.awaitingHandoff = tellParent
 	delete(h.cancels, id)
 	snapshot := *t
-	closing := h.closing
+	closing := h.closing || interrupted
 	h.mu.Unlock()
 	defer func() {
 		h.mu.Lock()

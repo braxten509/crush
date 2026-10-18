@@ -83,10 +83,19 @@ func (c *controllerV1) summarizeSession(r *http.Request, _ rpc.Empty) (rpc.Empty
 }
 
 // runShellCommand runs a shell command in the workspace on behalf of the
-// session in the path.
+// session in the path. With client_id and request_id, that app also gets
+// the output live as shell_output events (engine-design.md 5.9 a).
 func (c *controllerV1) runShellCommand(r *http.Request, req proto.ShellCommandRequest) (proto.ShellCommandResponse, error) {
 	req.SessionID = r.PathValue("sid")
-	return c.backend.RunShellCommand(r.Context(), r.PathValue("id"), req)
+	clientID, err := c.liveClientID(r)
+	if err != nil {
+		return proto.ShellCommandResponse{}, err
+	}
+	requestID := r.URL.Query().Get("request_id")
+	if len(requestID) > maxRequestIDLen {
+		return proto.ShellCommandResponse{}, badRequest("request_id must be at most 64 characters")
+	}
+	return c.backend.RunShellCommandLive(r.Context(), r.PathValue("id"), clientID, requestID, req)
 }
 
 // getDefaultSmallModel returns the default small model for a provider.

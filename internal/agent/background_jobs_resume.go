@@ -78,7 +78,9 @@ func (h *taskHub) forgetJob(id string) {
 	}
 }
 
-// interruptJob records that shutdown cut the job off, with its last output.
+// interruptJob records that shutdown or InterruptJob cut the job off, with
+// its last output, and releases it (owner 0), so the next resume in any
+// Crush, this one included, reports it.
 func (h *taskHub) interruptJob(job *shell.BackgroundShell) {
 	stdout, stderr, _, _ := job.GetOutput()
 	output := strings.TrimSpace(stdout + "\n" + stderr)
@@ -91,6 +93,7 @@ func (h *taskHub) interruptJob(job *shell.BackgroundShell) {
 			if ownJob(job.ID)(saved[i]) {
 				saved[i].Interrupted = now
 				saved[i].Output = output
+				saved[i].Owner = 0
 			}
 		}
 		return saved
@@ -100,9 +103,10 @@ func (h *taskHub) interruptJob(job *shell.BackgroundShell) {
 	}
 }
 
-// claimInterruptedJobs takes the saved jobs whose Crush is gone, dropping
-// them from the file so only one Crush reports them, along with ones too old
-// to matter. Jobs of a Crush that still runs, this one included, stay.
+// claimInterruptedJobs takes the saved jobs that were released or whose
+// Crush is gone, dropping them from the file so only one Crush reports them,
+// along with ones too old to matter. Jobs of a Crush that still runs them,
+// this one included, stay.
 func (h *taskHub) claimInterruptedJobs() ([]savedJob, error) {
 	self := os.Getpid()
 	var claimed []savedJob
@@ -110,7 +114,9 @@ func (h *taskHub) claimInterruptedJobs() ([]savedJob, error) {
 		kept := saved[:0]
 		for _, s := range saved {
 			switch {
-			case s.Owner == self || taskProcessAlive(s.Owner):
+			case released(s.Owner, s.Interrupted) && time.Since(s.Interrupted) <= resumeWindow:
+				claimed = append(claimed, s)
+			case !released(s.Owner, s.Interrupted) && (s.Owner == self || taskProcessAlive(s.Owner)):
 				kept = append(kept, s)
 			case time.Since(cmp.Or(s.Interrupted, s.Started)) > resumeWindow:
 				slog.Info("Not reporting an old interrupted background job", "job", s.ID, "name", s.Name)
@@ -123,14 +129,9 @@ func (h *taskHub) claimInterruptedJobs() ([]savedJob, error) {
 	return claimed, err
 }
 
-// reportInterruptedJobs tells each session which of its jobs an earlier
-// Crush cut off, one message per session.
-func (h *taskHub) reportInterruptedJobs(ctx context.Context) {
-	claimed, err := h.claimInterruptedJobs()
-	if err != nil {
-		slog.Warn("Failed to read interrupted background jobs", "error", err)
-		return
-	}
+// reportInterruptedJobs tells each session which of its claimed jobs were
+// cut off, one message per session.
+func (h *taskHub) reportInterruptedJobs(ctx context.Context, claimed []savedJob) {
 	bySession := map[string][]savedJob{}
 	var order []string
 	for _, s := range claimed {

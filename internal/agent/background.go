@@ -135,6 +135,18 @@ func BackgroundProcesses() []Process {
 	return out
 }
 
+// SessionBackgroundProcesses lists the background processes of one chat:
+// BackgroundProcesses filtered by Session.
+func SessionBackgroundProcesses(sessionID string) []Process {
+	var out []Process
+	for _, p := range BackgroundProcesses() {
+		if p.Session == sessionID {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // isDetached reports whether p was left running by a command that already
 // ended (`nohup … &`, `setsid`): its parent is neither one of the marked
 // processes nor Crush, so it was reparented. CLI helpers and hooks always
@@ -209,6 +221,14 @@ func completedDetached(seen map[detachedKey]detachedProc, procs map[int]proc) ma
 
 func (h *taskHub) reportDetached(k detachedKey, d detachedProc, ended time.Time) {
 	if h.c == nil {
+		return
+	}
+	// InterruptJob killed it: its app left, so no agent waits for news.
+	h.mu.Lock()
+	interrupted := h.interruptedDetached[k]
+	delete(h.interruptedDetached, k)
+	h.mu.Unlock()
+	if interrupted {
 		return
 	}
 	if _, err := h.c.Run(context.Background(), d.session, detachedNotification(k, d, ended)); err != nil && !errors.Is(err, context.Canceled) {

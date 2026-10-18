@@ -107,7 +107,9 @@ func TestShutdownJobIsReportedByTheNextCrush(t *testing.T) {
 		saved[0].Owner = dead
 		return saved
 	}))
-	h.reportInterruptedJobs(t.Context())
+	claimed, err := h.claimInterruptedJobs()
+	require.NoError(t, err)
+	h.reportInterruptedJobs(t.Context(), claimed)
 	select {
 	case call := <-calls:
 		require.Equal(t, session.ID, call.SessionID)

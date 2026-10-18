@@ -108,6 +108,11 @@ Engine errors keep the engine's `code` (`proto.Error`, `internal/proto/proto.go:
 | `route_not_allowed` | the `api` command was asked for a route outside the list in section 1.3 |
 | `bad_path`, `too_big`, `not_a_file`, `is_a_directory` | `files.rs` |
 | `link_refused` | `opener.rs` refused a link (its message is the terminal's text, CHAT-102) |
+| `open_failed` | the system opener was not found or exited with an error (message "could not open link: exit status N", as the terminal shows it); P3.2 |
+| `clipboard_failed` | a clipboard write did not take (message "Failed to copy to clipboard", CHAT-090); P3.2 |
+| `settings_failed`, `bad_setting` | the settings file could not be written (also while it is broken: a broken file is never overwritten, the owner fixes it), or `settings_set` got an unknown key or a bad value; P3.2 |
+
+Screens show the `message` of any `AppError` they do not handle by code, so a new code is never silently dropped (links: P3.5; copy: `lib/copy.js`'s owner).
 | `not_built` | the S3 placeholder |
 
 #### 1.2.3 Finding `crush` and the version check (`crush_bin.rs`, `engine_cli.rs`, P3.1)
@@ -319,7 +324,7 @@ pub fn watch(app: tauri::AppHandle);
 - **Own writes do not echo.** A write stores the new file's inode, time and length as the last seen value inside the same mutex, and the content compare drops anything else that is equal, so this process never reports its own change twice.
 - **Odd files.** A missing file counts as the defaults (a file that appears later is a change). A file that fails to parse is ignored until it changes again; an atomic rename never leaves half a file, so only a hand edit can cause it.
 - **Why 500 ms.** B16's bar is 1 s; a just-missed poll plus the read stays near 0.5 s. The cost is one `stat` twice a second. No new library: `notify` was the other option, and one file does not need it.
-- **Rust tests** (`settings.rs`, P3.2; they call the path-taking inner functions, so no `AppHandle` is needed): `watch_sees_other_process_write` fails when a write made from outside by plain rename is not reported within 1 s, or is reported twice; `own_write_does_not_echo` fails when a `set_closed` is reported by the watcher at all within 1.5 s; `concurrent_changes_both_kept` fails when two handles that open the file separately (standing in for two processes) each add a different closed chat and one is lost.
+- **Rust tests** (`settings.rs`, P3.2; they call the path-taking inner functions, so no `AppHandle` is needed): `watch_sees_other_process_write` fails when a write made from outside by plain rename is not reported within 5 s (the watcher polls every 500 ms, so a report normally comes within 1 s; the test allows 5 s so a loaded machine cannot fail it), or is reported twice; `own_write_does_not_echo` fails when a `set_closed` is reported by the watcher at all within 2 s (four polls); `concurrent_changes_both_kept` fails when two handles that open the file separately (standing in for two processes) each add a different closed chat and one is lost.
 
 **Clipboard.** Writing goes through Rust so it works the same from keys, menus and auto-copy, without the web view's clipboard permission rules:
 
@@ -350,8 +355,8 @@ pub fn open(app: &tauri::AppHandle, url: &str, cwd: &str) -> AppResult<()>;
 **Files** (attachments, TYPE-011 to TYPE-014, TYPE-029):
 
 ```rust
-#[derive(serde::Serialize)] pub struct FileInfo { pub exists: bool, pub is_dir: bool, pub size: u64, pub mime: String }
-pub fn info(path: &str, cwd: &str) -> AppResult<FileInfo>;                   // mime from the infer crate, then the extension
+#[derive(serde::Serialize)] pub struct FileInfo { pub exists: bool, pub is_dir: bool, pub size: u64, pub mime: String, pub modified: u64 } // modified: Unix ms, 0 if unknown; TYPE-029 compares it (P3.7, editor.go:316-322)
+pub fn info(path: &str, cwd: &str) -> AppResult<FileInfo>;                   // mime from a port of Go's http.DetectContentType (the terminal's, paste.go:27-31), then the extension
 pub fn read(path: &str, cwd: &str, max_bytes: u64) -> AppResult<(String, String)>; // (mime, base64); too_big over max_bytes
 #[derive(serde::Serialize)] pub struct FileEntry { pub path: String, pub is_dir: bool } // path relative to cwd, "/" separators
 /// The `@` popup's file list (TYPE-026). Inside a Git work tree: `git ls-files --cached --others
@@ -408,7 +413,8 @@ All commands are registered in `main.rs` by S3. Arguments are the JS names (Taur
 | GET, PUT, DELETE | `sessions/{sid}` | `routes.go:59-61` |
 | GET | `sessions/{sid}/messages`, `sessions/{sid}/messages/user`, `sessions/{sid}/messages/{mid}/review`, `sessions/{sid}/history`, `sessions/{sid}/filetracker/files` | `routes.go:63,65,64,62,71` |
 | POST | `sessions/{sid}/kept-skills` | `routes.go:66` |
-| POST | `agent` (send, 202), `agent/main` | `routes.go:96,99` |
+| POST | `agent` (send, 202), `agent/main`, `agent/update` (model restore after `config/model`) | `routes.go:96,99,98` |
+| GET | `lsps/{lsp}/diagnostics` (error counts per code checker) | `routes.go:79` |
 | GET | `agent/sessions/{sid}`, `agent/sessions/{sid}/prompts/queued`, `agent/sessions/{sid}/prompts/list` (with `details=true`) | `routes.go:100,102,106` |
 | POST | `agent/sessions/{sid}/cancel`, `…/interrupt`, `…/prompts/clear`, `…/prompts/recall`, `…/shell` (with `request_id`) | `routes.go:101,109,107,108,111`; 5.9 |
 | POST | `config/set`, `config/remove`, `config/model`, `config/compact` | `routes.go:117,118,119,120` |
@@ -931,7 +937,7 @@ Two terminal keys change meaning, both by the plan: **Ctrl+K** is Sessions searc
 
 | Section | Owner | Every 200 ms (light) | Only when asked (heavy) |
 |---|---|---|---|
-| `connection` | P3.3 | `state, attempt, error, workspace_id, client_id, engine_version, fresh_engine, notices[]` | — |
+| `connection` | P3.3 | `state, attempt, error, workspace_id, client_id, engine_version, fresh_engine, engine{socket, pid}` (from the last `connected` event's `engine`; drivers read the socket for ground truth and the pid to kill the engine), `notices[]` | — |
 | `list` | P3.9 | `rows[{id, title, depth, selected, closed, state}], closed_count, search_hint` | `rows[].rect` |
 | `chat` | P3.5 | `id, title, path, busy, follow, status, scroll_offset, mounted` (the count of mounted items), `items[{key, kind, id, expanded, selected, letter}], messages[{id, role, finished, text}]` | `scroll_top` (read from the page), `items[].rect`, `words[{mid, i, text, rect}]` (first 400 visible words), `selection{text, items[]}`, `links[{session_id, mid, text, rects[]}]`, `animations` (the count from `document.getAnimations()`) |
 | `composer` | P3.7 | `value, focused, mode, placeholder, selection[start,end], attachments[{name, kind}], tray[{kind, text}], slot{kind, buttons[{label, selected}]}` | `slot.buttons[].rect` |
@@ -1143,7 +1149,7 @@ S3 splits today's `Conversation.svelte` (319 lines) into `ChatHead.svelte`, `tim
 | CHAT-103 | The activity mark (section 4.10) is a CSS animation: only mounted, visible marks run (the virtual list unmounts the rest); a reloaded idle chat shows no mark; `prefers-reduced-motion` stops it | ActivityMark | W idle chat after reload · fails when `document.getAnimations().length` is above 0 |
 | CHAT-104 | Two mark sizes: `line` (replies and tools, `calc(24 * var(--px))` wide) and `small` (groups, `calc(12 * var(--px))`) | ActivityMark | U props · fails when a group uses `line` |
 | CHAT-105 | Opening a long chat draws the bottom view in the first frame and measures the rest lazily; the scrollbar shows after the first full estimate | VirtualList | W `p3_long` open a 500-item chat with the frame meter on · fails when a frame over 50 ms happens more than once |
-| CHAT-106 | MCP channel pushes appear as turns the engine makes (the terminal skips its own handling when the server routes them, `agent_events.go:67-113`; inferred that the engine routes them in shared mode) | `messages.svelte.js` | W `fake_mcp.py` channel push with `--channels fake:demo` · fails when no turn appears |
+| CHAT-106 | MCP channel pushes appear as turns the engine makes (the terminal skips its own handling when the server routes them, `agent_events.go:67-113`; inferred that the engine routes them in shared mode) | `messages.svelte.js` | W `fake_mcp.py` channel push with `--channels server:fake` (the engine takes `server:<name>` or `<name>`, `internal/cmd/root.go:42`; MCP resource and prompt counts are 0 until `POST mcp/refresh-resources`) · fails when no turn appears |
 | CHAT-107 | Unified diff: two line-number columns, "+"/"−", hunk header "@@ -a,b +c,d @@", context; empty diff draws nothing; CRLF → LF; tabs → 4 spaces | DiffView (P3.6) · `lib/diff.js` (own Myers line diff, no new library) | U against the Go fixtures in `diffview/` tests · fails when a hunk differs |
 | CHAT-108 | Side by side when the diff's box is at least 120 mono characters wide (measured with `ch` of the diff font); deletes paired with the next inserts; blank cells for missing lines; an odd width gives the right side the extra pixel | DiffView; port of `diffview/split.go:21-73` | U pairing; W wide and narrow window · fails when the switch happens at another width |
 | CHAT-109 | Diff colors: tinted bands `--diff-add-bg`/`--diff-del-bg` with darker gutters `--diff-add-gutter`/`--diff-del-gutter` (section 4.0); themes may set their own (phase 5) | DiffView CSS | W screenshot pixel check on one added line · fails when the gutter is not darker than the code band |

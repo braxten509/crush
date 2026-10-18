@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stands in for a crush from before the engine command (desktop-design 2.9,
+# the crush_too_old row): every command is unknown, as cobra says it.
+echo "Error: unknown command \"$1\" for \"crush\"" >&2
+echo "Run 'crush --help' for usage." >&2
+exit 1

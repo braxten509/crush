@@ -25,7 +25,8 @@ if [ $# -lt 1 ]; then
 fi
 DRIVER="$1"; shift
 APP="$ROOT/src-tauri/target/release/crush-desktop"
-CRUSH="$ROOT/tests/out/bin/crush"
+# CHECK_CRUSH lets a driver run the app with another crush, such as tests/fakes/crush-wrap.
+CRUSH="${CHECK_CRUSH:-$ROOT/tests/out/bin/crush}"
 if [ ! -x "$APP" ]; then echo "FAIL no app build at $APP (run tests/build.sh)"; exit 1; fi
 if [ -z "$FIXTURE" ] && [ ! -x "$CRUSH" ]; then echo "FAIL no engine build at $CRUSH (run tests/build-crush.sh)"; exit 1; fi
 if [ -n "$FIXTURE" ] && [ ! -f "$FIXTURE" ]; then echo "FAIL no fixture at $FIXTURE"; exit 1; fi

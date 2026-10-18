@@ -22,15 +22,17 @@ impl EngineHttp {
         }
     }
 
-    /// `path_and_query` starts with "/v1/". Body is sent as JSON when Some.
+    /// `path_and_query` starts with "/v1/". Body is sent as JSON when Some, always with
+    /// `Content-Length` (`http_body_util::Full<Bytes>`), never chunked (1.2.4).
     /// 2xx → Ok(Reply). Other statuses → Err(AppError::from_engine). Connect refused or a missing
     /// socket → Err(code "engine_unavailable"). A break after the request was written → Err("transport").
+    /// `limit` None: no time limit (an `api` call with a `callId`, 1.3).
     pub async fn call(
         &self,
         method: &str,
         path_and_query: &str,
         body: Option<&serde_json::Value>,
-        limit: std::time::Duration,
+        limit: Option<std::time::Duration>,
     ) -> AppResult<Reply> {
         Err(AppError::not_built("uds_http::EngineHttp::call"))
     }

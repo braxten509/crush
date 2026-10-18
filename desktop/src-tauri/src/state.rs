@@ -69,6 +69,13 @@ pub fn append_json_line(path: &Path, value: &serde_json::Value) {
     }
 }
 
+/// The number of lines in a side file; 0 while it does not exist.
+pub fn count_lines(path: &Path) -> usize {
+    std::fs::read(path)
+        .map(|bytes| bytes.split(|&b| b == b'\n').filter(|line| !line.is_empty()).count())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +91,18 @@ mod tests {
             Some(PathBuf::from("/tmp/probe.json.request.json"))
         );
         assert_eq!(Launch::default().probe_side_file("api.jsonl"), None);
+    }
+
+    #[test]
+    fn side_file_lines_are_counted() {
+        let dir = std::env::temp_dir().join(format!("crush-desktop-count-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("probe.json.opened.jsonl");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(count_lines(&path), 0);
+        append_json_line(&path, &serde_json::json!({"url": "https://example.com/"}));
+        append_json_line(&path, &serde_json::json!({"refused_navigation": "http:"}));
+        assert_eq!(count_lines(&path), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

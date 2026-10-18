@@ -9,7 +9,9 @@
 // That tick writes every section's heavy fields under "heavy" with
 // "request_id": N; they stay until the next request. A request may also carry
 // "invoke": [{"command", "args"}], which the page runs once (the scaffold's
-// command check). No request is served while a measured stretch runs.
+// command check). No request is served while a measured stretch runs. The
+// same probe_request answer carries "opened", the count of lines in
+// "<probe file>.opened.jsonl", which every report includes.
 import { invoke } from "@tauri-apps/api/core";
 import { dialogs } from "./dialogs.js";
 import { lastClipboardWrite } from "./engine/commands.js";
@@ -121,14 +123,17 @@ function meterKey(event) {
 
 let lastRequestId = null;
 let heavy = { request_id: null, sections: null, invoke: null };
+let opened = 0;
 
 async function serveRequest() {
-  let request = null;
+  let answer = null;
   try {
-    request = await invoke("probe_request");
+    answer = await invoke("probe_request");
   } catch {
     return;
   }
+  opened = answer?.opened ?? opened;
+  const request = answer?.request;
   if (!request || request.id === undefined || request.id === lastRequestId || frames.measuring) return;
   lastRequestId = request.id;
   const out = {};
@@ -163,6 +168,7 @@ function report() {
   const out = snapshot();
   for (const [name, section] of sections) out[name] = guarded(section.light);
   out.clipboard = { last: lastClipboardWrite() };
+  out.opened = opened;
   out.request_id = heavy.request_id;
   out.heavy = heavy.sections;
   out.invoked = heavy.invoke;

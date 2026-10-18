@@ -34,6 +34,7 @@ pub async fn retry(app: &tauri::AppHandle, label: &str) -> AppResult<()> {
 }
 
 /// Generic call for the window (section 1.3, `api`): adds client_id, checks the route list.
+/// With `call_id`: no time limit, and the call is registered for `abort` until it ends (1.2.4).
 pub async fn call(
     app: &tauri::AppHandle,
     label: &str,
@@ -41,8 +42,16 @@ pub async fn call(
     path: &str,
     query: Option<serde_json::Map<String, serde_json::Value>>,
     body: Option<serde_json::Value>,
+    call_id: Option<String>,
 ) -> AppResult<serde_json::Value> {
     Err(AppError::not_built("connection::call"))
+}
+
+/// `api_abort` (1.3): aborts that window's running call with this id; false when none is
+/// running. The aborted call fails with code "aborted" (1.2.2). The placeholder runs no
+/// calls, so none is ever running.
+pub fn abort(app: &tauri::AppHandle, label: &str, call_id: &str) -> bool {
+    false
 }
 
 pub async fn set_current_session(
@@ -58,7 +67,8 @@ pub fn take(app: &tauri::AppHandle, label: &str) -> Vec<serde_json::Value> {
     Vec::new()
 }
 
-/// Window closing: DELETE /v1/clients/{client_id} (1 s limit, errors only logged), stop the reader.
+/// Window closing: abort every running call of that window (so its `!` commands end with it,
+/// 1.2.4), then DELETE /v1/clients/{client_id} (1 s limit, errors only logged), stop the reader.
 pub async fn close(app: &tauri::AppHandle, label: &str) {}
 
 /// Drops `env` and `config` and keeps every other field; the only way a workspace leaves

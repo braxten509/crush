@@ -19,6 +19,7 @@ export async function probe_write(json) {
   return invoke("probe_write", { json });
 }
 
+// Probe mode: {request, opened} (1.9); null otherwise.
 export async function probe_request() {
   return invoke("probe_request");
 }
@@ -42,8 +43,14 @@ export async function events_take() {
 
 // method: "GET" | "POST" | "PUT" | "DELETE"; path relative to the window's
 // workspace ("sessions") or absolute ("/v1/limits"); query and body optional.
-export async function api(method, path, query, body) {
-  return invoke("api", { method, path, query, body });
+// A call with a callId has no time limit and can be stopped with api_abort (1.2.4).
+export async function api(method, path, query, body, callId) {
+  return invoke("api", { method, path, query, body, callId });
+}
+
+// Stops the api call with this callId; false when it already ended.
+export async function api_abort(callId) {
+  return invoke("api_abort", { callId });
 }
 
 export async function settings_get() {

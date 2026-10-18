@@ -82,6 +82,7 @@ fn main() {
             commands::engine_set_current_session,
             commands::events_take,
             commands::api,
+            commands::api_abort,
             commands::settings_get,
             commands::settings_set,
             commands::closed_set,

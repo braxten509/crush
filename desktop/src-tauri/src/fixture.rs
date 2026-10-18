@@ -16,6 +16,7 @@
 //! - `api` GET answers `get[path]`, or 404 `not_found` when absent; `agent`
 //!   also answers GET "agent". Every other call is appended to
 //!   `<probe file>.api.jsonl` and answered with null.
+//! - `api_abort` answers false (no fixture call runs long) and is recorded too.
 //! - The entries of `events` reach the window's batcher at their `at_ms` after
 //!   `engine_open`, through the same doorbell as the engine's events, so the
 //!   frame loop and the stores run as they do with the engine.
@@ -152,6 +153,7 @@ impl Fixture {
         path: &str,
         query: Option<Map<String, Value>>,
         body: Option<Value>,
+        call_id: Option<String>,
     ) -> AppResult<Value> {
         if method.eq_ignore_ascii_case("GET") {
             return self.answer(path).ok_or_else(|| AppError {
@@ -161,11 +163,22 @@ impl Fixture {
                 status: Some(404),
             });
         }
+        let mut line = json!({"command": "api", "window": label, "method": method, "path": path, "query": query, "body": body});
+        if let Some(call_id) = call_id {
+            line["call_id"] = json!(call_id);
+        }
+        self.record(launch, line);
+        Ok(Value::Null)
+    }
+
+    /// `api_abort`: a fixture call never runs long, so none is running and the answer is
+    /// false (1.2.9). Recorded, so a check can see that the window asked to stop a call.
+    pub fn abort(&self, launch: &Launch, label: &str, call_id: &str) -> bool {
         self.record(
             launch,
-            json!({"command": "api", "window": label, "method": method, "path": path, "query": query, "body": body}),
+            json!({"command": "api_abort", "window": label, "call_id": call_id}),
         );
-        Ok(Value::Null)
+        false
     }
 
     /// `engine_set_current_session`: recorded, so a check can see which chat the window showed.
@@ -390,15 +403,15 @@ mod tests {
             players: Mutex::new(HashMap::new()),
         };
         let launch = Launch::default();
-        assert_eq!(fixture.api(&launch, "main", "GET", "sessions", None, None).unwrap(), json!([1]));
-        assert_eq!(
-            fixture.api(&launch, "main", "GET", "/v1/workspaces/w1/sessions", None, None).unwrap(),
-            json!([1])
-        );
-        assert_eq!(fixture.api(&launch, "main", "GET", "/v1/limits", None, None).unwrap(), json!({"clis": []}));
-        assert_eq!(fixture.api(&launch, "main", "GET", "agent", None, None).unwrap(), json!({"is_ready": true}));
-        let missing = fixture.api(&launch, "main", "GET", "config", None, None).unwrap_err();
+        let get = |path: &str| fixture.api(&launch, "main", "GET", path, None, None, None);
+        assert_eq!(get("sessions").unwrap(), json!([1]));
+        assert_eq!(get("/v1/workspaces/w1/sessions").unwrap(), json!([1]));
+        assert_eq!(get("/v1/limits").unwrap(), json!({"clis": []}));
+        assert_eq!(get("agent").unwrap(), json!({"is_ready": true}));
+        let missing = get("config").unwrap_err();
         assert_eq!((missing.code.as_str(), missing.status), ("not_found", Some(404)));
-        assert_eq!(fixture.api(&launch, "main", "POST", "agent", None, Some(json!({}))).unwrap(), Value::Null);
+        let post = fixture.api(&launch, "main", "POST", "agent", None, Some(json!({})), Some("c1".into()));
+        assert_eq!(post.unwrap(), Value::Null);
+        assert!(!fixture.abort(&launch, "main", "c1"));
     }
 }

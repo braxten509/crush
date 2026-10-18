@@ -8,7 +8,7 @@ use crate::error::AppResult;
 use crate::files::{self, FileEntry, FileInfo};
 use crate::fixture::Fixture;
 use crate::settings::{self, Settings};
-use crate::state::AppState;
+use crate::state::{count_lines, AppState};
 use crate::{clipboard, opener};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -53,15 +53,30 @@ pub fn probe_write(state: State<AppState>, json: String) -> Result<(), String> {
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
-/// Probe mode only: the JSON of `<probe file>.request.json`, else null (1.9). Reads, never writes.
+#[derive(Serialize)]
+pub struct ProbeRequest {
+    /// The JSON of `<probe file>.request.json`; null when there is none.
+    request: Option<Value>,
+    /// The number of lines in `<probe file>.opened.jsonl` (the probe's `opened`).
+    opened: usize,
+}
+
+/// Probe mode only: `{request, opened}`, else null (1.9). Reads, never writes.
 #[tauri::command(async)]
-pub fn probe_request(state: State<'_, AppState>) -> AppResult<Option<Value>> {
-    let Some(path) = state.launch.probe_side_file("request.json") else {
+pub fn probe_request(state: State<'_, AppState>) -> AppResult<Option<ProbeRequest>> {
+    let launch = &state.launch;
+    let (Some(request), Some(opened)) = (
+        launch.probe_side_file("request.json"),
+        launch.probe_side_file("opened.jsonl"),
+    ) else {
         return Ok(None);
     };
-    Ok(std::fs::read(path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok()))
+    Ok(Some(ProbeRequest {
+        request: std::fs::read(request)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok()),
+        opened: count_lines(&opened),
+    }))
 }
 
 #[tauri::command]
@@ -120,11 +135,21 @@ pub async fn api(
     path: String,
     query: Option<Map<String, Value>>,
     body: Option<Value>,
+    call_id: Option<String>,
 ) -> AppResult<Value> {
     if let Some(fixture) = app.try_state::<Fixture>() {
-        return fixture.api(&state.launch, window.label(), &method, &path, query, body);
+        return fixture.api(&state.launch, window.label(), &method, &path, query, body, call_id);
     }
-    connection::call(&app, window.label(), &method, &path, query, body).await
+    connection::call(&app, window.label(), &method, &path, query, body, call_id).await
+}
+
+/// Stops the `api` call that carries this `callId` (1.2.4); false when none is running.
+#[tauri::command]
+pub fn api_abort(app: AppHandle, window: Window, state: State<AppState>, call_id: String) -> bool {
+    if let Some(fixture) = app.try_state::<Fixture>() {
+        return fixture.abort(&state.launch, window.label(), &call_id);
+    }
+    connection::abort(&app, window.label(), &call_id)
 }
 
 #[tauri::command]

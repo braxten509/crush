@@ -2,4 +2,5 @@
 // 1.5.3). Scaffold S3: the pinned exports; piece P3.3 fills them, P3.7 draws
 // permission prompts and phase 5 draws question forms.
 
-export const prompts = $state({ permission: null, question: null, pendingByRoot: {} });
+export const prompts = $state({ permission: null, question: null, pendingByRoot: {},
+  callStatus: {} }); // tool_call_id → "permission" | "running", set by permission_notification

@@ -1,6 +1,7 @@
 //! The one error shape every command reports (desktop-design 1.2.2). The
 //! screens branch on `code`, never on `message`, which is plain words shown as
-//! is.
+//! is. The app's own codes are the table of 1.2.2 (for example `aborted`, a
+//! call stopped with `api_abort`); engine errors keep the engine's code.
 
 use serde::Serialize;
 

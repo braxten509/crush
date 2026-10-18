@@ -292,6 +292,11 @@ pub(crate) mod tests {
         assert_eq!(e.message, "Crush Desktop could not find crush on your PATH.");
         let e = version_within(&bin(dir.join("missing")), VERSION_LIMIT).err().unwrap();
         assert_eq!(e.code, "crush_not_found");
+        // tests/fakes/crush-old, the window checks' crush from before the engine command.
+        let old = bin(Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fakes/crush-old"));
+        let e = version_within(&old, VERSION_LIMIT).err().unwrap();
+        assert_eq!(e.code, "crush_too_old");
+        assert_eq!(e.message, format!("The crush at {} is too old for Crush Desktop: it has no engine command.", old.path.display()));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -75,7 +75,7 @@ func (b *Backend) memoryStatus(st memwatch.Status) proto.MemoryStatus {
 		Percent:       st.Percent,
 		High:          st.High,
 		Episode:       st.Episode,
-		LimitBytes:    b.memoryLimitBytes(ram),
+		LimitBytes:    b.memoryLimitBytes(),
 		TotalRAMBytes: ram,
 	}
 	if used, ok := memlimit.Usage(memlimit.Slice); ok {
@@ -90,19 +90,20 @@ func (b *Backend) memoryStatus(st memwatch.Status) proto.MemoryStatus {
 	return out
 }
 
-// memoryLimitBytes is the box's limit as the memory-limit dialog shows it:
-// the saved limit, else the configured one, else half of the RAM.
-func (b *Backend) memoryLimitBytes(ram uint64) uint64 {
+// memoryLimitBytes is the box's saved limit: the one the memory-limit dialog
+// saved, else the configured one. It is 0 when none is saved (the box then
+// runs under its default of half the RAM, which this does not report) or
+// when the saved one is no limit.
+func (b *Backend) memoryLimitBytes() uint64 {
 	if gb, ok := config.SavedMemoryLimitGB(); ok {
-		return (&config.Options{MemoryLimitGB: &gb}).MemoryLimitBytes(ram)
+		return config.GBToBytes(gb)
 	}
-	var opts *config.Options
 	if b.cfg != nil {
-		if cfg := b.cfg.Config(); cfg != nil {
-			opts = cfg.Options
+		if cfg := b.cfg.Config(); cfg != nil && cfg.Options != nil && cfg.Options.MemoryLimitGB != nil {
+			return config.GBToBytes(*cfg.Options.MemoryLimitGB)
 		}
 	}
-	return opts.MemoryLimitBytes(ram)
+	return 0
 }
 
 // ClaimMemoryNotice claims the memory pop-up: one shows per 10 minutes

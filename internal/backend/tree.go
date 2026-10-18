@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -37,10 +38,13 @@ const (
 )
 
 // treeState is piece C's state per workspace (tree actions and branch copy,
-// engine-design.md 5.6 and 5.11): the file plans handed out, by plan ID.
+// engine-design.md 5.6 and 5.11): the file plans handed out, by plan ID,
+// and the undo record of each chat's last file restore through UndoFiles,
+// by chat. Both live in memory only.
 type treeState struct {
 	mu    sync.Mutex
 	plans map[string]keptPlan
+	undos map[string]string
 }
 
 type keptPlan struct {
@@ -106,8 +110,45 @@ func (t *treeState) expireLocked(now time.Time) {
 	}
 }
 
-// treeHooks are piece C's client hooks.
-func (b *Backend) treeHooks() clientHooks { return clientHooks{} }
+// rememberUndo keeps undoID as the undo record of sessionID's last file
+// restore, in place of the one before; "" forgets it.
+func (t *treeState) rememberUndo(sessionID, undoID string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if undoID == "" {
+		delete(t.undos, sessionID)
+		return
+	}
+	if t.undos == nil {
+		t.undos = map[string]string{}
+	}
+	t.undos[sessionID] = undoID
+}
+
+// takeUndo reports whether undoID is the undo record of sessionID's last
+// file restore, and forgets it if so.
+func (t *treeState) takeUndo(sessionID, undoID string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if undoID == "" || t.undos[sessionID] != undoID {
+		return false
+	}
+	delete(t.undos, sessionID)
+	return true
+}
+
+// clear forgets every plan and undo record.
+func (t *treeState) clear() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.plans, t.undos = nil, nil
+}
+
+// treeHooks are piece C's client hooks: a torn-down workspace forgets its
+// plans and undo records.
+func (b *Backend) treeHooks() clientHooks {
+	return clientHooks{teardown: func(ws *Workspace) { ws.tree.clear() }}
+}
 
 // treeService is the workspace's tree storage.
 func treeService(ws *Workspace) (message.TreeService, error) {
@@ -127,17 +168,18 @@ func treeAgent(ws *Workspace) (agent.Coordinator, error) {
 	return ws.AgentCoordinator, nil
 }
 
-// treeChanged reads the chat's revision after a change and tells every app.
-func (b *Backend) treeChanged(ctx context.Context, ws *Workspace, tree message.TreeService, sessionID string) (int64, error) {
+// treeChanged tells every app that a chat's tree changed, with its revision
+// now.
+func (b *Backend) treeChanged(ctx context.Context, ws *Workspace, tree message.TreeService, sessionID string) error {
 	revision, err := tree.TreeRevision(ctx, sessionID)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	b.SendAll(ws.ID, EngineEvent{
 		Type: pubsub.PayloadTypeTreeChanged, Kind: pubsub.UpdatedEvent,
 		Payload: proto.TreeChanged{SessionID: sessionID, Revision: revision},
 	})
-	return revision, nil
+	return nil
 }
 
 // TreeClient checks the optional client_id of a tree or branch route: ""
@@ -202,7 +244,9 @@ func (b *Backend) TreeMessage(ctx context.Context, workspaceID, sessionID, messa
 }
 
 // LabelTree labels a message. A label does not move the head, so it runs
-// without the chat lock; the revision is compared just before.
+// without the chat lock; the revision is compared just before. A label
+// leaves the revision as it is, so the one compared is the answer: one
+// read after could include another app's change made since.
 func (b *Backend) LabelTree(ctx context.Context, workspaceID, sessionID string, req proto.TreeLabelRequest) (proto.TreeResult, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
@@ -222,8 +266,10 @@ func (b *Backend) LabelTree(ctx context.Context, workspaceID, sessionID string, 
 	if err := tree.LabelTree(ctx, sessionID, req.Target, req.Label); err != nil {
 		return proto.TreeResult{}, err
 	}
-	revision, err = b.treeChanged(ctx, ws, tree, sessionID)
-	return proto.TreeResult{Revision: revision}, err
+	if err := b.treeChanged(ctx, ws, tree, sessionID); err != nil {
+		return proto.TreeResult{}, err
+	}
+	return proto.TreeResult{Revision: revision}, nil
 }
 
 // SwitchTree moves a chat's head to another branch.
@@ -266,11 +312,17 @@ func (b *Backend) moveTree(ctx context.Context, workspaceID, sessionID string, r
 	if err != nil {
 		return proto.TreeResult{}, err
 	}
-	if err := move(coordinator, agent.WithTreeRevision(ctx, req.ExpectedRevision)); err != nil {
+	// The answer is the revision read under the chat lock, right after the
+	// move.
+	var revision int64
+	guarded := agent.WithTreeRevisionAfter(agent.WithTreeRevision(ctx, req.ExpectedRevision), &revision)
+	if err := move(coordinator, guarded); err != nil {
 		return proto.TreeResult{}, err
 	}
-	revision, err := b.treeChanged(ctx, ws, tree, sessionID)
-	return proto.TreeResult{Revision: revision}, err
+	if err := b.treeChanged(ctx, ws, tree, sessionID); err != nil {
+		return proto.TreeResult{}, err
+	}
+	return proto.TreeResult{Revision: revision}, nil
 }
 
 // CopyTree forks or clones a chat into a new one, which every app then sees
@@ -294,26 +346,39 @@ func (b *Backend) CopyTree(ctx context.Context, workspaceID, sessionID string, r
 	if !ok {
 		return proto.TreeCopyResult{}, fmt.Errorf("session trees need a local workspace")
 	}
-	newID, prompt, err := manager.CopyTree(agent.WithTreeRevision(ctx, req.ExpectedRevision), sessionID, req.Target, req.Fork)
+	// The answer is the source's revision read under the chat lock, right
+	// after the copy.
+	var revision int64
+	guarded := agent.WithTreeRevisionAfter(agent.WithTreeRevision(ctx, req.ExpectedRevision), &revision)
+	newID, prompt, err := manager.CopyTree(guarded, sessionID, req.Target, req.Fork)
 	if err != nil {
 		return proto.TreeCopyResult{}, err
 	}
 	// The undo record of a file restore applied just before goes with the
-	// new chat, as message.CopyTree moves it in-process.
+	// new chat, as message.CopyTree moves it in-process; but only the
+	// record of this chat's last restore through UndoFiles. After an engine
+	// restart none is known, and the record stays with the source chat.
 	if req.UndoID != "" {
-		store, err := fileHistory(ws)
-		if err != nil {
-			return proto.TreeCopyResult{}, err
-		}
-		if err := store.MoveUndo(ctx, req.UndoID, newID); err != nil {
-			return proto.TreeCopyResult{}, err
+		if ws.tree.takeUndo(sessionID, req.UndoID) {
+			store, err := fileHistory(ws)
+			if err != nil {
+				return proto.TreeCopyResult{}, err
+			}
+			if err := store.MoveUndo(ctx, req.UndoID, newID); err != nil {
+				return proto.TreeCopyResult{}, err
+			}
+		} else {
+			slog.Warn("Copy names an undo record that is not this chat's last file restore; it stays where it is",
+				"session_id", sessionID, "undo_id", req.UndoID)
 		}
 	}
 	if err := announce(ctx, ws, newID); err != nil {
 		return proto.TreeCopyResult{}, err
 	}
-	revision, err := b.treeChanged(ctx, ws, tree, sessionID)
-	return proto.TreeCopyResult{SessionID: newID, Prompt: prompt, Revision: revision}, err
+	if err := b.treeChanged(ctx, ws, tree, sessionID); err != nil {
+		return proto.TreeCopyResult{}, err
+	}
+	return proto.TreeCopyResult{SessionID: newID, Prompt: prompt, Revision: revision}, nil
 }
 
 // announce publishes a created event for a chat written directly to the
@@ -411,7 +476,9 @@ func (b *Backend) keepPlan(ws *Workspace, plan *filehistory.Plan) (proto.FilePla
 // UndoFiles applies a kept plan: a preview's restore or an undo. Each plan
 // is used once. A preview plan is refused when the chat moved since the
 // preview: as expired after a new message, and as a revision conflict
-// after a branch change. A busy chat keeps the plan for another try.
+// after a branch change; the tree guard checks both under the chat lock. A
+// busy chat keeps the plan for another try. The restore's undo record is
+// remembered for a copy of the chat to take along.
 func (b *Backend) UndoFiles(ctx context.Context, workspaceID, sessionID, planID string) (proto.FileRestoreResult, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
@@ -433,49 +500,20 @@ func (b *Backend) UndoFiles(ctx context.Context, workspaceID, sessionID, planID 
 	}
 	applyCtx := ctx
 	if kept.plan.UndoID == "" {
-		if err := checkPlanHead(ctx, ws, kept.plan); err != nil {
-			return proto.FileRestoreResult{}, err
-		}
-		applyCtx = agent.WithTreeRevision(ctx, kept.plan.Revision)
+		applyCtx = agent.WithTreeHead(agent.WithTreeRevision(ctx, kept.plan.Revision), kept.plan.Source)
 	}
 	result, err := restorer.UndoFiles(applyCtx, kept.plan)
-	if errors.Is(err, agent.ErrTreeBusy) {
+	switch {
+	case errors.Is(err, agent.ErrTreeBusy):
 		ws.tree.putBack(planID, kept, time.Now())
+	case errors.Is(err, agent.ErrTreeHeadMoved) && result.UndoID == "":
+		// A new message moved the head but not the revision, and nothing
+		// was restored: the plan can never apply again, so it expired.
+		err = fmt.Errorf("%w: %w", agent.ErrTreeHeadMoved, ErrFilePlanExpired)
 	}
 	if err != nil {
 		return proto.FileRestoreResult{}, err
 	}
+	ws.tree.rememberUndo(sessionID, result.UndoID)
 	return proto.FileRestoreResultFromDomain(result), nil
-}
-
-// checkPlanHead refuses a preview plan whose chat got a new message since
-// the preview. A new message moves the head but not the revision, so the
-// plan can never apply again (filehistory.Apply refuses it), and it is
-// expired. A moved revision passes, for the tree guard to refuse.
-func checkPlanHead(ctx context.Context, ws *Workspace, plan *filehistory.Plan) error {
-	tree, err := treeService(ws)
-	if err != nil {
-		return err
-	}
-	// The head first: a branch change in between then still shows as a
-	// moved revision.
-	entries, err := tree.Tree(ctx, plan.SessionID)
-	if err != nil {
-		return err
-	}
-	head := ""
-	for _, entry := range entries {
-		if entry.Active {
-			head = entry.MessageID
-			break
-		}
-	}
-	revision, err := tree.TreeRevision(ctx, plan.SessionID)
-	if err != nil {
-		return err
-	}
-	if revision == plan.Revision && head != plan.Source {
-		return fmt.Errorf("the chat has new messages: %w", ErrFilePlanExpired)
-	}
-	return nil
 }

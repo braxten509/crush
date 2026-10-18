@@ -18,6 +18,10 @@ var ErrTreeRevisionChanged = errors.New("the chat's branches changed")
 // ErrTreeBusy matches the guard's refusals while the chat has work running.
 var ErrTreeBusy = errors.New("chat busy")
 
+// ErrTreeHeadMoved refuses a tree action made for a head the chat has left:
+// a message landed since the caller looked (engine-design.md 5.6).
+var ErrTreeHeadMoved = errors.New("the chat has new messages")
+
 // treeBusyError is a busy refusal of the tree guard. Its text is the guard's
 // own, and errors.Is matches ErrTreeBusy.
 type treeBusyError struct{ msg string }
@@ -25,12 +29,31 @@ type treeBusyError struct{ msg string }
 func (e treeBusyError) Error() string        { return e.msg }
 func (e treeBusyError) Is(target error) bool { return target == ErrTreeBusy }
 
-type treeRevisionKey struct{}
+type (
+	treeRevisionKey      struct{}
+	treeHeadKey          struct{}
+	treeRevisionAfterKey struct{}
+)
 
 // WithTreeRevision makes withIdleTree refuse with ErrTreeRevisionChanged when,
 // with the chat lock held, the chat's revision differs from rev.
 func WithTreeRevision(ctx context.Context, rev int64) context.Context {
 	return context.WithValue(ctx, treeRevisionKey{}, rev)
+}
+
+// WithTreeHead makes withIdleTree refuse with ErrTreeHeadMoved when, with
+// the chat lock held, the chat's head is not head ("" for none). The
+// revision is checked first.
+func WithTreeHead(ctx context.Context, head string) context.Context {
+	return context.WithValue(ctx, treeHeadKey{}, head)
+}
+
+// WithTreeRevisionAfter makes withIdleTree store in *after the chat's
+// revision right after a successful action, read with the chat lock still
+// held. Every revision change takes that lock, so the value never includes
+// another app's change made just after.
+func WithTreeRevisionAfter(ctx context.Context, after *int64) context.Context {
+	return context.WithValue(ctx, treeRevisionAfterKey{}, after)
 }
 
 // SwitchTree is an optional local-workspace capability. Keep the dispatch lock
@@ -65,8 +88,9 @@ func (c *coordinator) withIdleTree(ctx context.Context, sessionID string, operat
 		return fmt.Errorf("tree storage unavailable")
 	}
 	// Checked with the chat lock held, before anything changes: only a
-	// guarded action moves the head, so the revision cannot move until the
-	// lock is released.
+	// guarded action changes the revision, so it cannot move until the lock
+	// is released. With the chat idle and the lock held, no prompt can add a
+	// message either; only a writer that skips the lock can move the head.
 	if expected, ok := ctx.Value(treeRevisionKey{}).(int64); ok {
 		revision, err := tree.TreeRevision(ctx, sessionID)
 		if err != nil {
@@ -76,10 +100,52 @@ func (c *coordinator) withIdleTree(ctx context.Context, sessionID string, operat
 			return ErrTreeRevisionChanged
 		}
 	}
+	head, checkHead := ctx.Value(treeHeadKey{}).(string)
+	if checkHead {
+		if err := checkTreeHead(ctx, tree, sessionID, head); err != nil {
+			return err
+		}
+	}
 	if err := cliagent.CloseForTree(sessionID); err != nil {
 		return treeBusyError{err.Error()}
 	}
-	return operation(a, tree)
+	if err := operation(a, tree); err != nil {
+		// A writer that skips the chat lock (a bang shell command) can still
+		// land a message while the action runs. If it failed and the head
+		// moved, say so along with the action's own error.
+		if checkHead && errors.Is(checkTreeHead(ctx, tree, sessionID, head), ErrTreeHeadMoved) {
+			return fmt.Errorf("%w (%w)", ErrTreeHeadMoved, err)
+		}
+		return err
+	}
+	if after, ok := ctx.Value(treeRevisionAfterKey{}).(*int64); ok && after != nil {
+		revision, err := tree.TreeRevision(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		*after = revision
+	}
+	return nil
+}
+
+// checkTreeHead refuses with ErrTreeHeadMoved when the chat's head is not
+// head ("" for none).
+func checkTreeHead(ctx context.Context, tree message.TreeService, sessionID, head string) error {
+	entries, err := tree.Tree(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	current := ""
+	for _, entry := range entries {
+		if entry.Active {
+			current = entry.MessageID
+			break
+		}
+	}
+	if current != head {
+		return ErrTreeHeadMoved
+	}
+	return nil
 }
 
 func (a *sessionAgent) treeCLILink(ctx context.Context, m *cliagent.Model, sessionID string) (cliagent.Link, error) {

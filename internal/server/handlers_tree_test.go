@@ -707,6 +707,48 @@ func TestForkMovesUndoRecord(t *testing.T) {
 	require.ErrorContains(t, err, "There is no file restore to undo in this chat")
 }
 
+// A copy takes an undo record along only when it is the record of the
+// source chat's last restore: one from another chat's restore stays where
+// it is, and both chats keep theirs.
+func TestCopyMovesOnlyItsOwnUndoRecord(t *testing.T) {
+	e := newTreeEngine(t)
+	ctx := t.Context()
+	restore := func(chat notesChat) string {
+		plan, err := e.c.PreviewFiles(ctx, e.id, chat.id, proto.FilePreviewRequest{Target: chat.edit})
+		require.NoError(t, err)
+		restored, err := e.c.UndoFiles(ctx, e.id, chat.id, plan.PlanID)
+		require.NoError(t, err)
+		require.NotEmpty(t, restored.UndoID)
+		return restored.UndoID
+	}
+	// undoOf is the undo record a chat has, or "" for none.
+	undoOf := func(sessionID string) string {
+		plan, err := e.c.PreviewUndoFiles(ctx, e.id, sessionID)
+		if err != nil {
+			require.ErrorContains(t, err, "There is no file restore to undo in this chat")
+			return ""
+		}
+		return plan.UndoID
+	}
+	a, b := e.notesChat(t), e.notesChat(t)
+	undoA, undoB := restore(a), restore(b)
+
+	// B's record named on a copy of A: the copy is made, nothing moves.
+	copied, err := e.c.CopyTree(ctx, e.id, a.id, proto.TreeCopyRequest{ExpectedRevision: e.tree(t, a.id).Revision, Target: a.edit, UndoID: undoB})
+	require.NoError(t, err)
+	require.NotEmpty(t, copied.SessionID)
+	require.Equal(t, undoA, undoOf(a.id))
+	require.Equal(t, undoB, undoOf(b.id))
+	require.Empty(t, undoOf(copied.SessionID))
+
+	// A's own record goes with the next copy.
+	copied, err = e.c.CopyTree(ctx, e.id, a.id, proto.TreeCopyRequest{ExpectedRevision: copied.Revision, Target: a.edit, UndoID: undoA})
+	require.NoError(t, err)
+	require.Equal(t, undoA, undoOf(copied.SessionID))
+	require.Empty(t, undoOf(a.id))
+	require.Equal(t, undoB, undoOf(b.id))
+}
+
 // The optional client_id of the tree routes: none passes, a malformed one
 // is a 400, and one whose app is not on the workspace a 409. A refused
 // call changes nothing.

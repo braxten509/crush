@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 2,
+  "stage": "hero",
+  "id": "hero",
+  "title": "First viewport",
+  "comp": {"path": ".impeccable/mocks/decision/edition.png", "width": 1600, "height": 992},
+  "components": [{
+    "id": "first-viewport",
+    "name": "First viewport",
+    "medium": "HTML / CSS",
+    "note": "Assembled first viewport, captured headless at 1600x992 (12/12 zoom). Differences the readings could not settle: the wordmark is the owner's original CRUSH AI (owner's choice in the comp round); two hairlines are drawn crisp at the comp's place; the SameSite=Strict link and the CURRENT header follow the real font's widths.",
+    "box": {"x": 0, "y": 0, "w": 1, "h": 1},
+    "preview": {"kind": "image", "path": ".impeccable/review/hero-repro.png"},
+    "dependencies": []
+  }]
+}

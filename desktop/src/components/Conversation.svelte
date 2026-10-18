@@ -279,7 +279,7 @@
     align-self: stretch;
     width: 1px;
     margin: calc(7 * var(--px)) 0;
-    background: var(--rule-faint);
+    background: var(--rule);
   }
   .model {
     display: flex;

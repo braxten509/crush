@@ -76,7 +76,7 @@ geo = window_geometry("Crush")
 check(geo is not None and geo[2] >= 1500 and geo[3] >= 900, f"app window is on the hidden screen at full size {geo}")
 p = wait_for(probe_path, lambda p: p.get("ready"))
 check(p.get("ready") is True, "app reports the shell is on screen")
-check(p.get("heading") == "Crush", f"app heading is Crush ({p.get('heading')!r})")
+check(p.get("heading") == "Crush AI", f"app heading is the Crush AI wordmark ({p.get('heading')!r})")
 sh = p.get("shell") or {}
 check(geo is not None and (sh.get("x"), sh.get("y"), sh.get("w"), sh.get("h")) == (0, 0, geo[2], geo[3]), f"shell fills the window exactly ({sh} vs window {geo})")
 check(p.get("inlineBlocked") is True, f"the window blocks injected inline code ({p.get('inlineBlocked')!r})")

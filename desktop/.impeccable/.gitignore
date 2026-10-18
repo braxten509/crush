@@ -3,3 +3,5 @@ build-style2-archive/
 build/inspect-*/
 # Third-party reference images downloaded from the design tool catalog: local reference only.
 mocks/decision/refs/
+# Comparison output the design tool regenerates on every record or advance.
+review/diff/

@@ -1,0 +1,135 @@
+/* Crush Desktop: the Scholar's edition look (.impeccable/mocks/decision/edition.png).
+   Bone paper, iron-black ink, book serifs, one-pixel rules with small + marks, and a vermilion rail.
+   Every size is written in picture pixels times --px, so the whole window zooms in twelfths
+   (lib/zoom.js; 12/12 is the approved picture, Compact 8/12 is the default). Hairlines stay one
+   real pixel at every zoom. */
+@import "./assets/fonts/fonts.css";
+
+:root {
+  --zoom: 0.6667;
+  --px: 0.0625rem;
+
+  /* Paper and ink */
+  --paper: #f9f8ef;
+  --paper-raised: #fbfaf2;
+  --band: #f3f1e6;
+  --ink: #0f0f0f;
+  --slate: #353533;
+  --link: #14323f;
+
+  /* Rules, from the frame down to the faintest box */
+  --rule-frame: #aaa9a3;
+  --rule: #b0afa9;
+  --rule-faint: #cfcec7;
+  --rule-control: #908f89;
+  --rule-table: #7a7973;
+  --rule-table-inner: #aaa9a3;
+  --mark: #6f6e6f;
+  --figure: #383634;
+
+  /* The one accent, and the warning colour */
+  --vermilion: #e52b0e;
+  --vermilion-fill: #e34524;
+  --vermilion-wash: #faf5f0;
+  --amber: #e0a523;
+
+  /* Meters */
+  --meter: #454640;
+  --meter-track: #edeee8;
+  --meter-edge: #bdbdb9;
+
+  /* Faces: Charis SIL for large lettering, Spectral for reading and labels,
+     Inconsolata for authors, times and keys, Science Gothic for the CRUSH wordmark. */
+  --face-display: "Charis SIL", Charter, Georgia, serif;
+  --face-text: "Spectral", Georgia, serif;
+  --face-mono: "Inconsolata", ui-monospace, monospace;
+  --face-brand: "Science Gothic", sans-serif;
+
+  /* Type roles: weight, size / line height, face (sizes in picture pixels) */
+  --t-title: 400 calc(42 * var(--px)) / calc(50 * var(--px)) var(--face-display);
+  --t-project: 400 calc(32 * var(--px)) / calc(38 * var(--px)) var(--face-display);
+  --t-figure: 400 calc(28 * var(--px)) / calc(34 * var(--px)) var(--face-text);
+  --t-reading: 400 calc(21 * var(--px)) / calc(33 * var(--px)) var(--face-text);
+  --t-heading: 400 calc(21 * var(--px)) / calc(28 * var(--px)) var(--face-text);
+  --t-item: 400 calc(21 * var(--px)) / calc(28 * var(--px)) var(--face-text);
+  --t-branch: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
+  --t-meta: 400 calc(18 * var(--px)) / calc(24 * var(--px)) var(--face-text);
+  --t-small: 400 calc(17 * var(--px)) / calc(24 * var(--px)) var(--face-text);
+  --t-body-small: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
+  --t-field: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
+  --t-composer: 400 calc(20 * var(--px)) / calc(26 * var(--px)) var(--face-text);
+  --t-button: 500 calc(23 * var(--px)) / calc(30 * var(--px)) var(--face-text);
+  --t-label: 500 calc(15 * var(--px)) / calc(20 * var(--px)) var(--face-text);
+  --t-path: 400 calc(15 * var(--px)) / calc(20 * var(--px)) var(--face-text);
+  --t-author: 700 calc(21 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
+  --t-stamp: 400 calc(18 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
+  --t-agent-mono: 400 calc(16 * var(--px)) / calc(22 * var(--px)) var(--face-mono);
+  --t-key: 600 calc(21 * var(--px)) / calc(25 * var(--px)) var(--face-mono);
+  --track-label: 0.04em;
+  --track-path: 0.15em;
+}
+
+html {
+  font-size: calc(16px * var(--zoom));
+  background: var(--paper);
+  color: var(--ink);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font: var(--t-reading);
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+h1,
+h2,
+h3,
+p,
+ol,
+ul,
+figure,
+dl,
+dd {
+  margin: 0;
+  padding: 0;
+}
+
+ol,
+ul {
+  list-style: none;
+}
+
+/* Keyboard focus is shown as a vermilion hairline, never a glow. */
+:focus-visible {
+  outline: 1px solid var(--vermilion);
+  outline-offset: calc(2 * var(--px));
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

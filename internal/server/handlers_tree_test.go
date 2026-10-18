@@ -533,30 +533,28 @@ func TestCopyAnnouncesNewChat(t *testing.T) {
 	}))
 }
 
-// A file preview's plan is applied by its plan_id once; a used or unknown
-// plan gives 409 plan_expired, and a plan older than the chat's last move
-// 409 revision_conflict. The undo of the restore works the same way.
-func TestFilePreviewUndoByPlanID(t *testing.T) {
-	e := newTreeEngine(t)
+// notesChat is a chat whose AI changed notes.txt from v1 to v2, which the
+// file now holds: first is the prompt, edit the answer whose tool made the
+// change.
+type notesChat struct{ id, first, edit, path string }
+
+// notesChat makes the chat. File history skips temporary folders, so the
+// file lives in a folder of the test's own.
+func (e *treeEngine) notesChat(t *testing.T) notesChat {
+	t.Helper()
 	ctx := t.Context()
-	// File history skips temporary folders, so the edited file lives in a
-	// folder of the test's own.
 	root, err := os.MkdirTemp(".", "tree-restore-")
 	require.NoError(t, err)
 	root, err = filepath.Abs(root)
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(root) })
-	path := filepath.Join(root, "notes.txt")
-	require.NoError(t, os.WriteFile(path, []byte("v2\n"), 0o644))
-	require.NoError(t, os.Chmod(path, 0o644))
-	read := func() string {
-		data, err := os.ReadFile(path)
-		require.NoError(t, err)
-		return string(data)
-	}
+	c := notesChat{path: filepath.Join(root, "notes.txt")}
+	require.NoError(t, os.WriteFile(c.path, []byte("v2\n"), 0o644))
+	require.NoError(t, os.Chmod(c.path, 0o644))
 
 	chat, err := e.ws.Sessions.Create(ctx, "Notes")
 	require.NoError(t, err)
+	c.id = chat.ID
 	add := func(role message.MessageRole, parts ...message.ContentPart) string {
 		m, err := e.ws.Messages.Create(ctx, chat.ID, message.CreateMessageParams{Role: role, Parts: parts})
 		require.NoError(t, err)
@@ -565,57 +563,107 @@ func TestFilePreviewUndoByPlanID(t *testing.T) {
 	state := func(text string) *filechange.State {
 		return &filechange.State{Content: text, Size: int64(len(text)), Mode: 0o644}
 	}
-	first := add(message.User, message.TextContent{Text: "Edit the notes"})
-	edit := add(message.Assistant, message.ToolCall{ID: "c1", Name: "edit", Input: "{}", Finished: true}, message.Finish{Reason: message.FinishReasonToolUse})
+	c.first = add(message.User, message.TextContent{Text: "Edit the notes"})
+	c.edit = add(message.Assistant, message.ToolCall{ID: "c1", Name: "edit", Input: "{}", Finished: true}, message.Finish{Reason: message.FinishReasonToolUse})
 	add(message.Tool, message.ToolResult{ToolCallID: "c1", Name: "edit", Content: "edited", Review: &filechange.Review{
-		Root: root, Changes: []filechange.Change{{Path: path, Order: 1, Before: state("v1\n"), After: state("v2\n")}},
+		Root: root, Changes: []filechange.Change{{Path: c.path, Order: 1, Before: state("v1\n"), After: state("v2\n")}},
 	}})
 	add(message.Assistant, message.TextContent{Text: "Done."}, message.Finish{Reason: message.FinishReasonEndTurn})
+	return c
+}
 
-	plan, err := e.c.PreviewFiles(ctx, e.id, chat.ID, proto.FilePreviewRequest{Target: edit})
+// read returns what notes.txt holds.
+func (c notesChat) read(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(c.path)
+	require.NoError(t, err)
+	return string(data)
+}
+
+// A file preview's plan is applied by its plan_id once; a used or unknown
+// plan gives 409 plan_expired, and a plan older than the chat's last move
+// 409 revision_conflict. The undo of the restore works the same way.
+func TestFilePreviewUndoByPlanID(t *testing.T) {
+	e := newTreeEngine(t)
+	ctx := t.Context()
+	chat := e.notesChat(t)
+
+	plan, err := e.c.PreviewFiles(ctx, e.id, chat.id, proto.FilePreviewRequest{Target: chat.edit})
 	require.NoError(t, err)
 	require.NotEmpty(t, plan.PlanID)
-	require.Equal(t, chat.ID, plan.SessionID)
-	require.Equal(t, edit, plan.Target)
+	require.Equal(t, chat.id, plan.SessionID)
+	require.Equal(t, chat.edit, plan.Target)
 	require.Len(t, plan.Entries, 1)
-	require.Equal(t, path, plan.Entries[0].Path)
+	require.Equal(t, chat.path, plan.Entries[0].Path)
 	require.Equal(t, "restore", plan.Entries[0].Action)
 	require.Empty(t, plan.Entries[0].Conflict)
 	require.Empty(t, plan.Entries[0].Unavailable)
 
-	restored, err := e.c.UndoFiles(ctx, e.id, chat.ID, plan.PlanID)
+	restored, err := e.c.UndoFiles(ctx, e.id, chat.id, plan.PlanID)
 	require.NoError(t, err)
 	require.Equal(t, 1, restored.Restored)
 	require.NotEmpty(t, restored.UndoID)
 	require.Equal(t, "Restored 1 files. Use Undo Last File Restore in the command palette to put them back.", restored.Notice)
-	require.Equal(t, "v1\n", read())
+	require.Equal(t, "v1\n", chat.read(t))
 
 	// A plan is used once; an unknown one is refused the same way.
 	for _, id := range []string{plan.PlanID, "no-such-plan"} {
-		status, refusal := e.send(t, http.MethodPost, rpc.UndoFiles.URL(e.id, chat.ID), proto.FileUndoRequest{PlanID: id})
+		status, refusal := e.send(t, http.MethodPost, rpc.UndoFiles.URL(e.id, chat.id), proto.FileUndoRequest{PlanID: id})
 		require.Equal(t, http.StatusConflict, status, id)
 		require.Equal(t, "plan_expired", refusal.Code, id)
 	}
-	require.Equal(t, "v1\n", read())
+	require.Equal(t, "v1\n", chat.read(t))
 
-	undo, err := e.c.PreviewUndoFiles(ctx, e.id, chat.ID)
+	undo, err := e.c.PreviewUndoFiles(ctx, e.id, chat.id)
 	require.NoError(t, err)
 	require.Equal(t, restored.UndoID, undo.UndoID)
 	require.Len(t, undo.Entries, 1)
-	undone, err := e.c.UndoFiles(ctx, e.id, chat.ID, undo.PlanID)
+	undone, err := e.c.UndoFiles(ctx, e.id, chat.id, undo.PlanID)
 	require.NoError(t, err)
 	require.Equal(t, 1, undone.Restored)
-	require.Equal(t, "v2\n", read())
+	require.Equal(t, "v2\n", chat.read(t))
 
 	// A preview made before the chat moved is refused, and kept files stay.
-	stale, err := e.c.PreviewFiles(ctx, e.id, chat.ID, proto.FilePreviewRequest{Target: edit})
+	stale, err := e.c.PreviewFiles(ctx, e.id, chat.id, proto.FilePreviewRequest{Target: chat.edit})
 	require.NoError(t, err)
-	_, err = e.c.SwitchTree(ctx, e.id, chat.ID, proto.TreeMoveRequest{ExpectedRevision: stale.Revision, Target: first})
+	_, err = e.c.SwitchTree(ctx, e.id, chat.id, proto.TreeMoveRequest{ExpectedRevision: stale.Revision, Target: chat.first})
 	require.NoError(t, err)
-	status, refusal := e.send(t, http.MethodPost, rpc.UndoFiles.URL(e.id, chat.ID), proto.FileUndoRequest{PlanID: stale.PlanID})
+	status, refusal := e.send(t, http.MethodPost, rpc.UndoFiles.URL(e.id, chat.id), proto.FileUndoRequest{PlanID: stale.PlanID})
 	require.Equal(t, http.StatusConflict, status)
 	require.Equal(t, "revision_conflict", refusal.Code)
-	require.Equal(t, "v2\n", read())
+	require.Equal(t, "v2\n", chat.read(t))
+}
+
+// A preview made before a new message is refused with 409 plan_expired: the
+// message moved the head but not the revision, so the plan can never apply.
+// No file is restored and the chat stays as it is.
+func TestFilePlanStaleAfterNewMessage(t *testing.T) {
+	e := newTreeEngine(t)
+	ctx := t.Context()
+	chat := e.notesChat(t)
+
+	plan, err := e.c.PreviewFiles(ctx, e.id, chat.id, proto.FilePreviewRequest{Target: chat.edit})
+	require.NoError(t, err)
+	require.Len(t, plan.Entries, 1)
+
+	require.NoError(t, e.c.SendMessage(ctx, e.id, chat.id, "", "", "Thanks"))
+	require.Eventually(t, func() bool {
+		tree, err := e.c.Tree(ctx, e.id, chat.id)
+		if err != nil || e.ws.AgentCoordinator.IsSessionBusy(chat.id) {
+			return false
+		}
+		last := tree.Entries[len(tree.Entries)-1]
+		return last.Active && textOf(last.Message) == "Working Done."
+	}, 10*time.Second, 20*time.Millisecond, "the reply never finished")
+	before := e.tree(t, chat.id)
+	require.Equal(t, plan.Revision, before.Revision, "a new message keeps the revision")
+	require.NotEqual(t, []string{plan.Source}, activeEntries(before), "a new message moves the head")
+
+	status, refusal := e.send(t, http.MethodPost, rpc.UndoFiles.URL(e.id, chat.id), proto.FileUndoRequest{PlanID: plan.PlanID})
+	require.Equal(t, http.StatusConflict, status)
+	require.Equal(t, "plan_expired", refusal.Code)
+	require.Equal(t, "v2\n", chat.read(t), "no file was restored")
+	require.Equal(t, before, e.tree(t, chat.id), "the chat did not change")
 }
 
 // A tree message read names its chat: a message of another chat is 404.

@@ -103,15 +103,12 @@ func newEngineProject(t *testing.T, idle string) *engineProject {
 	return p
 }
 
-// writeGlobalConfig writes the global crush.json: no catalog providers and
-// no network fetch for them, plus extra's top-level keys.
+// writeGlobalConfig writes the global crush.json: the embedded provider
+// catalog without a network refresh, plus extra's top-level keys.
 func writeGlobalConfig(t *testing.T, dir string, extra map[string]any) {
 	t.Helper()
 	cfg := map[string]any{
-		"options": map[string]any{
-			"disable_default_providers":    true,
-			"disable_provider_auto_update": true,
-		},
+		"options": map[string]any{"disable_provider_auto_update": true},
 	}
 	for k, v := range extra {
 		cfg[k] = v

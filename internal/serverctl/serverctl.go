@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/config"
 	crushlog "github.com/charmbracelet/crush/internal/log"
@@ -115,11 +116,24 @@ func Ensure(ctx context.Context, hostURL *url.URL, hostArg string, debug bool) e
 					break
 				}
 			}
-			restarted, err := restartIfStale(ctx, hostURL)
+			c, err := client.NewClient("", hostURL.Scheme, hostURL.Host)
 			if err != nil {
-				slog.Warn("Failed to check server version", "error", err)
+				return err
 			}
-			needsStart = restarted || err != nil
+			reuse, err := checkEngine(ctx, c)
+			switch {
+			case errors.Is(err, backend.ErrProtocolMismatch):
+				// A busy server of another protocol is never reused.
+				return err
+			case err != nil:
+				slog.Warn("Failed to check server version", "error", err)
+				needsStart = true
+			case !reuse:
+				if err := awaitSocketGone(ctx, hostURL); err != nil {
+					return err
+				}
+				needsStart = true
+			}
 		case errors.Is(statErr, fs.ErrNotExist):
 			needsStart = true
 		default:

@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/config"
 	crushlog "github.com/charmbracelet/crush/internal/log"
+	"github.com/charmbracelet/crush/internal/memlimit"
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/serverctl"
 	"github.com/charmbracelet/x/term"
@@ -28,8 +29,14 @@ var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Start the Crush server",
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		// Join the memory box shared by every Crush process first, so all
+		// of the server's work counts toward its limit.
+		_ = joinMemoryBox(memlimit.Slice)
 		_, crashDone := recordCrashes()
 		defer crashDone()
+		if serverHost == "" {
+			return errNoDefaultHost()
+		}
 		dataDir, err := cmd.Flags().GetString("data-dir")
 		if err != nil {
 			return fmt.Errorf("failed to get data directory: %v", err)
@@ -98,4 +105,14 @@ var serverCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// errNoDefaultHost explains an empty --host: server.DefaultHost found no
+// private folder for the socket.
+func errNoDefaultHost() error {
+	_, err := server.PrivateSocketDir()
+	if err == nil {
+		err = server.ErrNoPrivateSocketDir
+	}
+	return fmt.Errorf("no server host: %w", err)
 }

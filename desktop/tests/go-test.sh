@@ -12,9 +12,14 @@
 # Only committed work is tested: commit on the desktop branch first.
 # Usage: tests/go-test.sh [go test args...]   (default: ./...)
 # GO_TEST_MAX_SEC sets the time limit (default 1800 seconds).
+# CRUSH_TEST_SRC tests another worktree's newest commit with this runner
+# (default: the worktree this script is in).
+# Each run gets its own /tmp (a folder inside the run folder bound over /tmp),
+# so tests that use fixed /tmp paths (internal/agent's /tmp/crush-test/<test>)
+# cannot break another run that is going at the same time.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SRC="$(cd "$HERE/../.." && pwd)"
+SRC="${CRUSH_TEST_SRC:-$(cd "$HERE/../.." && pwd)}"
 VERIFY="${CRUSH_VERIFY_TREE:-$HOME/dev/crush-desktop-verify}"
 MAX_SEC="${GO_TEST_MAX_SEC:-1800}"
 commit="$(git -C "$SRC" rev-parse HEAD)"
@@ -39,12 +44,12 @@ cleanup() {
 }
 trap cleanup EXIT
 T_HOME="$RUN/home"
-mkdir -p "$T_HOME/.config" "$T_HOME/.local/share" "$T_HOME/.cache" "$T_HOME/.local/state" "$RUN/tmp"
+mkdir -p "$T_HOME/.config" "$T_HOME/.local/share" "$T_HOME/.cache" "$T_HOME/.local/state" "$RUN/tmp" "$RUN/slash-tmp"
 mkdir -m 0700 "$RUN/runtime"
 # A .git in any folder above the tests' temp folder makes Crush treat every
 # temp folder as part of a repository, which breaks the file-history tests.
-# (/tmp/.git does not matter: the tests never use /tmp. Crush's read-only
-# sandbox creates an empty /tmp/.git as a mount point.)
+# (/tmp/.git does not matter: each run sees its own empty /tmp. Crush's
+# read-only sandbox creates an empty /tmp/.git as a mount point.)
 dir="$RUN"
 while :; do
   if [ -e "$dir/.git" ]; then echo "a stray .git sits above the test temp folder: $dir/.git" >&2; exit 2; fi
@@ -63,6 +68,7 @@ echo "testing $(git -C "$VERIFY" log --oneline -1) as unit $unit (limit ${MAX_SE
 set +e
 systemd-run --user --wait --pipe --collect --quiet --unit="$unit" \
   -p AllowedCPUs=6-11,18-23 -p RuntimeMaxSec="$MAX_SEC" -p WorkingDirectory="$VERIFY" \
+  -p BindPaths="$RUN/slash-tmp:/tmp" \
   -E PATH="$PATH" -E HOME="$T_HOME" \
   -E XDG_CONFIG_HOME="$T_HOME/.config" -E XDG_DATA_HOME="$T_HOME/.local/share" \
   -E XDG_CACHE_HOME="$T_HOME/.cache" -E XDG_STATE_HOME="$T_HOME/.local/state" \

@@ -271,6 +271,8 @@ export class Builder {
     if (only && only.type === "image" && this.visuals.has(only)) return this.visualNode(only, shift(abs, off), false);
     const p = this.el("p");
     this.inline(token.tokens, shift(abs, off), p);
+    // A paragraph of raw inline tags only (<video></video>) shows nothing.
+    if (p.children.length === 0 && !p.textContent.trim()) return null;
     return p;
   }
 

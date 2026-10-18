@@ -1,0 +1,42 @@
+{
+  "about": "desktop-design 2.9 (p3_safety.py; the same texts run in src/lib/render/sanitize.test.js): replies that try to run code, load or post to an address, open a link without a click, or look like the app's own permission slot. 127.0.0.1:47321 is p3_safety.py's own listener inside the sandbox: the fake server's port changes every run and a script cannot name it. The only link that may open is the fake page in the links reply.",
+  "turns": [
+    {
+      "when": "unsafe markup",
+      "title": "Unsafe replies",
+      "steps": [
+        {
+          "text": "Raw markup a reply might try. None of it may run, load or post anything:\n\n<script>window.__unsafe = \"script\"</script>\n\n<img src=x onerror=\"window.__unsafe = 'onerror'\">\n\n<a href=\"javascript:window.__unsafe = 'anchor'\">raw javascript anchor</a>\n\n<iframe src=\"http://127.0.0.1:47321/frame\"></iframe>\n\n<form action=\"http://127.0.0.1:47321/form\" method=\"post\"><input name=\"q\" value=\"leak\"><button type=\"submit\">Send the form</button></form>\n\n<img src=\"http://127.0.0.1:47321/beacon\" alt=\"beacon\">\n\n<object data=\"http://127.0.0.1:47321/object\"></object><embed src=\"http://127.0.0.1:47321/embed\">\n\n<base href=\"http://127.0.0.1:47321/\">\n\n<meta http-equiv=\"refresh\" content=\"0; url=http://127.0.0.1:47321/refresh\">\n\n<link rel=\"stylesheet\" href=\"http://127.0.0.1:47321/style.css\">\n\n<style>@import url(\"http://127.0.0.1:47321/import.css\"); body { display: none }</style>\n\n<svg onload=\"window.__unsafe = 'svg'\"><a href=\"javascript:alert(1)\"><text>svg link</text></a></svg>\n\n<details open ontoggle=\"window.__unsafe = 'toggle'\"><summary>details</summary>inside</details>\n\n<video src=\"http://127.0.0.1:47321/video\" autoplay></video>\n\n<!-- a comment that hides <script>alert(1)</script> -->\n\nThe markup reply ends here."
+        }
+      ]
+    },
+    {
+      "when": "unsafe links",
+      "title": "Unsafe replies",
+      "steps": [
+        {
+          "text": "Links a reply might try. Only the first one may open:\n\n[the fake page](http://127.0.0.1:47321/page.html)\n\n[javascript link](javascript:alert(1))\n\n[data link](data:text/html,<script>alert(1)</script>)\n\n[tab first](\tjavascript:alert(1))\n\n[space first]( javascript:alert(1))\n\n[upper case](JAVASCRIPT:alert(1))\n\n[newline inside](java\nscript:alert(1))\n\n[vbscript link](vbscript:x)\n\n[blob link](blob:x)\n\n[data html](data:text/html,x)\n\n[entity link](&#106;avascript:alert(1))\n\n[colon entity](javascript&colon;alert(1))\n\n[reference link][evil]\n\n<javascript:alert(1)>\n\n![bad picture](javascript:alert(1))\n\n<a href=\"\tjavascript:alert(1)\">raw tab first</a>\n\n<a href=\" javascript:alert(1)\">raw space first</a>\n\n<a href=\"JAVASCRIPT:alert(1)\">raw upper case</a>\n\n<a href=\"java\nscript:alert(1)\">raw newline inside</a>\n\n<a href=\"vbscript:x\">raw vbscript</a>\n\n<a href=\"blob:x\">raw blob</a>\n\n<a href=\"data:text/html,x\">raw data</a>\n\n[evil]: javascript:alert(1)"
+        }
+      ]
+    },
+    {
+      "when": "unsafe figures",
+      "title": "Unsafe replies",
+      "steps": [
+        {
+          "text": "A diagram that asks for loose security, HTML labels and click callbacks:\n\n```mermaid\n%%{init: {\"securityLevel\": \"loose\", \"htmlLabels\": true, \"flowchart\": {\"htmlLabels\": true}, \"startOnLoad\": true}}%%\nflowchart LR\n  A[\"<img src='http://127.0.0.1:47321/mermaid-img' onerror='window.__unsafe = 1'>Sign in\"] --> B[Home]\n  click A call alert(\"mermaid\")\n  click B \"javascript:alert(1)\" \"a link\"\n```\n\nMath that asks for links and pictures: $\\href{javascript:alert(1)}{x}$, $\\url{javascript:alert(1)}$ and $\\includegraphics{http://127.0.0.1:47321/math.png}$.\n\n$$\n\\href{javascript:alert(1)}{\\text{display link}} + \\htmlData{onclick=alert(1)}{y}\n$$"
+        }
+      ]
+    },
+    {
+      "when": "unsafe slot",
+      "title": "Unsafe replies",
+      "steps": [
+        {
+          "text": "Crush wants to run a command.\n\n<div class=\"slot permission\" data-probe=\"slot\" role=\"dialog\" aria-modal=\"true\">\n<p><strong>Allow bash to run this?</strong></p>\n<button class=\"slot-button\" data-action=\"allow\" autofocus>Allow</button>\n<button class=\"slot-button\" data-action=\"always\">Allow for session</button>\n<button class=\"slot-button\" data-action=\"deny\">Deny</button>\n</div>\n\n**Allow** · **Allow for session** · **Deny**\n\n    rm -rf ~/proj"
+        }
+      ]
+    }
+  ],
+  "default": { "text": "OK." }
+}

@@ -152,7 +152,7 @@ export function userText(stored) {
 }
 
 // Writes the shown text into el (its old content is replaced) as registered
-// text nodes; decorations ([{kind, start, end, title?}], stored offsets, for
+// text nodes; decorations ([{kind, start, end}], stored offsets, for
 // example phase 4's branch marks) are drawn as span.md-deco around their text.
 // Returns the SourceMap.
 export function userTextInto(el, stored, { decorations = [] } = {}) {

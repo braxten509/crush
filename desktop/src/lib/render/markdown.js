@@ -4,12 +4,14 @@
 //   build.js        tokens → nodes, every text node in the source map
 //   incremental.js  the stable prefix of a streaming reply
 //   figures.js      which blocks become visuals chips
+//   safety.js       the probe's safety section, registered with the renderer
 //
 //   renderMarkdown(stored, {messageId, sessionId, finished, plan, decorations, visual})
 //     a <div class="md"> holding the reply, its SourceMap registered
 //     (sourceMapOf(root)); attach guardLinks(root) before it reaches the page
 //     (1.10's markdown.render)
 import { createMarkdown } from "./incremental.js";
+import "./safety.js";
 
 export { createMarkdown } from "./incremental.js";
 export { stableBoundary } from "./boundary.js";

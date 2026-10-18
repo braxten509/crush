@@ -312,8 +312,8 @@ function pointIn(map, unit, offset, side) {
 // Writes display text into parent as text nodes registered in map, split
 // where decorations begin and end. pieces: [{text, s0, s1}] in order; a piece
 // whose text and stored range have the same length maps one to one, any other
-// piece maps as a whole. decorations: [{kind, start, end, title?}] sorted by
-// start (indexes into map.decorations).
+// piece maps as a whole. decorations: [{kind, start, end}] sorted by start
+// (indexes into map.decorations).
 export function emitText(map, parent, pieces, decorations = map.decorations) {
   const doc = parent.ownerDocument;
   // Cut pieces at decoration edges (one-to-one pieces only; a whole piece
@@ -359,7 +359,6 @@ export function emitText(map, parent, pieces, decorations = map.decorations) {
       const span = doc.createElement("span");
       span.className = `md-deco md-deco-${String(deco.kind).replace(/[^a-z0-9-]/gi, "")}`;
       span.dataset.deco = String(groupDeco);
-      if (typeof deco.title === "string") span.title = deco.title;
       span.append(node);
       parent.append(span);
     } else parent.append(node);

@@ -225,10 +225,10 @@ Kept current during the build. Percent = share of the phase table in section 4.
 | 0 Setup | 5% | done 2026-10-18 (review t16 clean after one fix round) | `docs/evidence/phase0/`: harness self-test (sealed sandbox, pass, deliberate fail, real files unchanged), skeleton screenshot, unit tests |
 | 1 Engine | 20% | in progress: design done and reviewed (t18 final: ready to build); scaffold S merged (`2d31fcb7`); pieces A-D being built in their own worktrees (t27-t30) | `docs/engine-design.md` |
 | 2 Look | 10% | in progress: picture approved; measured (109 parts, no picture assets, faces chosen by font-match); owner approved the plan review (15 of 15, session `7367bf99`); first screen built (`9a03489f`), 85% match against the picture (the tool's bar is 72%); waits for the owner's first-screen review (see Phase 2 record) | `.impeccable/build/regions.json`, `spec.json`, `font-match/`, `.impeccable/review/hero-repro.png`, `.impeccable/review/diff/hero/` |
-| 3 Chat core | 15% | not started | |
-| 4 Branching | 10% | not started | |
-| 5 Dialogs and settings | 20% | not started | |
-| 6 Live work | 10% | not started | |
+| 3 Chat core | 15% | design being written (t31, with phase 4) | |
+| 4 Branching | 10% | design being written (t31, with phase 3) | |
+| 5 Dialogs and settings | 20% | design being written (t32, with phase 6; first pass) | |
+| 6 Live work | 10% | design being written (t32, with phase 5; first pass) | |
 | 7 Finish | 10% | not started | |
 
 ### Worktree and branch
@@ -289,6 +289,8 @@ Kept current during the build. Percent = share of the phase table in section 4.
 - Scaffold S (2026-10-18): built in its own worktree, reviewed read-only, one fix round, then merged into `desktop` (`0becafcb`, `ea3393d1`, merge `2d31fcb7`); the whole Go suite passed twice (97 packages) and `cargo check` passes.
 - t27-t30: engine pieces A-D (Claude Opus 5.5), each in its own worktree (`~/dev/crush-desktop-a` to `-d`), started 2026-10-18 after S. Each gets the whole Go suite (and D the Rust tests), a read-only review, at most 3 review/fix rounds, then a merge into `desktop`; all checks run again on `desktop` after the last merge.
 - t31: desktop design for phases 3 and 4 (Claude Opus 5.5, max), started 2026-10-18: `desktop/docs/desktop-design.md` with the app's architecture (Rust engine client, Tauri commands and events, stores, safe Markdown), every phase 3 and 4 checklist row with its check, one look proposal per new surface, and build pieces with a scaffold. A read-only review follows, as for the engine design. Phases 5 and 6 get their own design on top of it.
+- t32: desktop design for phases 5 and 6 (Claude Opus 5.5, max), started 2026-10-18 at 05:30: `desktop/docs/desktop-design-5-6.md` with a map of every CMD, DLG, SET, THEME, LIVE, NOTE, REM, UPD, LIST and MISC row, each surface's behavior and engine calls, the theme mapping (Q9), settings sync between the two apps, one look proposal per new surface, checks, harness needs and build pieces. Rows the phase 3-4 design owns (START, CHAT, TYPE, SIDE, permission prompts, the tree and restore dialogs, branch rows in the left list) are only listed there.
+- Decision (away mode, plan change): the phases 5-6 design starts now, alongside t31, instead of after it. Pass 1 writes everything that does not depend on t31's architecture and names what it needs from it as provisional contracts; pass 2 (the same helper, continued) maps those onto t31's reviewed architecture and settles file ownership against its pieces. Why: phases 5 and 6 are 30% of the job, and t31 was still reading code at 05:30, so waiting would idle the most work. Other option: wait for t31 as planned (about an hour later, with no second pass). Cost: one extra pass, and two designs may both cover a row; pass 2 settles each such row. To change: stop t32 and start the phases 5-6 design after t31's review.
 ### Owner decisions for the overnight run (2026-10-18, before bed)
 - Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
 - The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).

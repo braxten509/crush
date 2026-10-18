@@ -2,9 +2,17 @@ package backend
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/notify"
+	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,4 +53,96 @@ func TestNonInteractiveInitKeepsInteractiveCoordinator(t *testing.T) {
 	// And the queue drains on it.
 	require.NoError(t, r.b.Interrupt(ws.ID, c))
 	r.model.waitHeld(t, "a2", 1)
+}
+
+// TestNonInteractiveStartHasNoQuestionTool: a prompt from an app that
+// started its agent non-interactively, as `crush run` does on a server
+// (cmd/run.go runOnServer), gets no interactive-only question tool, which
+// only an interactive coordinator offers (agent/toolset.go builtinTools);
+// nothing would answer it. An interactive app's prompt in the same
+// workspace keeps the tool, and its turn runs on.
+func TestNonInteractiveStartHasNoQuestionTool(t *testing.T) {
+	r := newLiveRig(t)
+	desktop, run := newClientID(t), newClientID(t)
+	p := r.project(t)
+	ws := r.open(t, p, desktop)
+	c, d := r.chat(t, ws, "C"), r.chat(t, ws, "D")
+	r.hold(t, ws, desktop, c, "i1")
+	require.Contains(t, r.model.toolsOf("i1"), tools.QuestionToolName, "an interactive app's turn offers it")
+
+	r.joinNonInteractive(t, ws, p, run)
+	r.hold(t, ws, run, d, "n1")
+	require.NotContains(t, r.model.toolsOf("n1"), tools.QuestionToolName, "a non-interactive start's turn does not")
+	require.Equal(t, 1, r.model.heldNow("i1"), "the interactive turn runs on")
+}
+
+// TestInteractivePromptKeepsQuestionTool: only a non-interactive start's
+// own prompts lose the question tool. An interactive app's prompt sent
+// while one of them runs, in another chat on the same coordinator, keeps
+// it.
+func TestInteractivePromptKeepsQuestionTool(t *testing.T) {
+	r := newLiveRig(t)
+	desktop, run := newClientID(t), newClientID(t)
+	p := r.project(t)
+	ws := r.open(t, p, desktop)
+	c, d := r.chat(t, ws, "C"), r.chat(t, ws, "D")
+	r.joinNonInteractive(t, ws, p, run)
+	r.hold(t, ws, run, d, "n1")
+
+	r.hold(t, ws, desktop, c, "i1")
+	require.Contains(t, r.model.toolsOf("i1"), tools.QuestionToolName)
+}
+
+// TestNonInteractivePromptWaitsForHelper: a non-interactive start's prompt
+// ends only after its helper, as on a non-interactive coordinator: its
+// RunComplete, which `crush run` waits for, comes after the helper's result
+// turn, with that turn's answer. And, as for `crush run` without a server,
+// the helper is not saved for a later Crush to resume.
+func TestNonInteractivePromptWaitsForHelper(t *testing.T) {
+	r := newLiveRig(t)
+	desktop, run := newClientID(t), newClientID(t)
+	p := r.project(t)
+	ws := r.open(t, p, desktop)
+	d := r.chat(t, ws, "D")
+	r.joinNonInteractive(t, ws, p, run)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	completions := ws.RunCompletions().Subscribe(ctx)
+
+	require.NoError(t, r.b.SendMessage(ws.ID, run, proto.AgentMessage{
+		SessionID: d, SubmissionID: "n1", RunID: "run-n1", Prompt: "live:start:n1",
+	}))
+	r.model.waitHeld(t, "n1-helper", 1)
+	helper, ok := sessionTask(d, "n1-helper")
+	require.True(t, ok)
+	require.Eventually(t, func() bool { return !ws.coordinator().IsSessionBusy(d) }, 20*time.Second, 10*time.Millisecond,
+		"the turn ends while its helper runs")
+	saved, _ := os.ReadFile(filepath.Join(ws.Cfg.Config().Options.DataDirectory, "tasks.json"))
+	assert.NotContains(t, string(saved), helper.ChildID, "the helper is not saved for a resume")
+
+	require.NoError(t, agent.StopSessionTask(d, helper.ID))
+	var got notify.RunComplete
+	timeout := time.After(20 * time.Second)
+	for got.RunID != "run-n1" {
+		select {
+		case ev := <-completions:
+			got = ev.Payload
+		case <-timeout:
+			t.Fatal("no RunComplete for the prompt")
+		}
+	}
+	require.Equal(t, "Noted.", got.Text, "the run ends with its helper's result turn, not before it")
+}
+
+// joinNonInteractive joins p's workspace as app and starts the agent
+// non-interactively, as `crush run` does on a server (cmd/run.go
+// runOnServer).
+func (r *liveRig) joinNonInteractive(t *testing.T, ws *Workspace, p liveProject, app string) {
+	t.Helper()
+	joined, _, err := r.b.CreateWorkspace(prototest.CreateRequest(proto.Workspace{
+		Path: p.dir, DataDir: p.dataDir, ClientID: app, YOLO: true,
+	}))
+	require.NoError(t, err)
+	require.Same(t, ws, joined)
+	require.NoError(t, r.b.InitAgent(context.Background(), ws.ID, app, false))
 }

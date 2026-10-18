@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -20,13 +21,38 @@ type memoryChecker interface {
 	Recent(maxAge time.Duration) memwatch.Status
 }
 
-// The memory reader, the check interval and the RAM size; tests replace
-// them.
-var (
-	memoryWatcher    memoryChecker = memwatch.Default
-	memoryCheckEvery               = memwatch.CheckEvery
-	totalRAM                       = memwatch.TotalRAM
-)
+// memorySource is the memory reader and the check interval. Tests replace
+// them (setMemorySource) while other engines' checks may run, hence the
+// lock.
+var memorySource = struct {
+	sync.Mutex
+	watcher memoryChecker
+	every   time.Duration
+}{watcher: memwatch.Default, every: memwatch.CheckEvery}
+
+// memoryReader returns the memory reader and the check interval.
+func memoryReader() (memoryChecker, time.Duration) {
+	memorySource.Lock()
+	defer memorySource.Unlock()
+	return memorySource.watcher, memorySource.every
+}
+
+// setMemorySource makes w the memory reader and every the check interval
+// until restore runs.
+func setMemorySource(w memoryChecker, every time.Duration) (restore func()) {
+	memorySource.Lock()
+	defer memorySource.Unlock()
+	savedW, savedEvery := memorySource.watcher, memorySource.every
+	memorySource.watcher, memorySource.every = w, every
+	return func() {
+		memorySource.Lock()
+		defer memorySource.Unlock()
+		memorySource.watcher, memorySource.every = savedW, savedEvery
+	}
+}
+
+// totalRAM is the computer's RAM size.
+var totalRAM = memwatch.TotalRAM
 
 // memoryLimitInputError is a limit the dialog refuses. Its text is the
 // dialog's, and it is ErrMemoryLimitInvalid.
@@ -38,7 +64,8 @@ func (memoryLimitInputError) Is(target error) bool { return target == ErrMemoryL
 // MemoryStatus is the computer's memory use, as the last check (at most
 // memwatch.CheckEvery old) saw it, and the memory box's limit.
 func (b *Backend) MemoryStatus() proto.MemoryStatus {
-	return b.memoryStatus(memoryWatcher.Recent(memwatch.CheckEvery))
+	w, _ := memoryReader()
+	return b.memoryStatus(w.Recent(memwatch.CheckEvery))
 }
 
 func (b *Backend) memoryStatus(st memwatch.Status) proto.MemoryStatus {
@@ -108,7 +135,7 @@ func (b *Backend) SetMemoryLimit(value string) (proto.MemoryLimitResult, error) 
 	return res, nil
 }
 
-// startMemoryChecks runs a memory check every memoryCheckEvery while the
+// startMemoryChecks runs a memory check every check interval while the
 // engine has a workspace. It also keeps the agent's memory note current.
 func (b *Backend) startMemoryChecks() {
 	e := b.liveEngine()
@@ -119,8 +146,9 @@ func (b *Backend) startMemoryChecks() {
 	}
 	ctx, cancel := context.WithCancel(b.engineContext())
 	e.memStop = cancel
+	_, every := memoryReader()
 	go func() {
-		ticker := time.NewTicker(memoryCheckEvery)
+		ticker := time.NewTicker(every)
 		defer ticker.Stop()
 		for {
 			select {
@@ -153,7 +181,8 @@ func (b *Backend) checkMemory() {
 	e := b.liveEngine()
 	e.memCheck.Lock()
 	defer e.memCheck.Unlock()
-	st := memoryWatcher.Check()
+	w, _ := memoryReader()
+	st := w.Check()
 	prev, seen := e.memLast, e.memSeen
 	e.memLast, e.memSeen = st, true
 	if !seen || st.Percent == prev.Percent && st.High == prev.High && st.Episode == prev.Episode {

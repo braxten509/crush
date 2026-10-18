@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestManagedSkillTogglePersistsAndUpdatesVisibleCatalog(t *testing.T) {
 	require.NoError(t, err)
 	b := backend.New(t.Context(), store, nil)
 	clientID := uuid.NewString()
-	ws, _, err := b.CreateWorkspace(proto.Workspace{ClientID: clientID, Path: wd, DataDir: filepath.Join(wd, ".crush")})
+	ws, _, err := b.CreateWorkspace(prototest.CreateRequest(proto.Workspace{ClientID: clientID, Path: wd, DataDir: filepath.Join(wd, ".crush")}))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = b.DeleteWorkspace(ws.ID, clientID) })
 	installed, err := b.InstalledSkills(ws.ID)

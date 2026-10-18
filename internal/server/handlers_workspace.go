@@ -86,6 +86,15 @@ func (c *controllerV1) clientID(r *http.Request) (string, error) {
 	return cid, nil
 }
 
+// optionalClientID reads the optional client_id query parameter: "" when
+// it is absent, and a 400 error when it is not a valid UUID.
+func (c *controllerV1) optionalClientID(r *http.Request) (string, error) {
+	if r.URL.Query().Get("client_id") == "" {
+		return "", nil
+	}
+	return c.clientID(r)
+}
+
 // setCurrentSession records the calling client's current session
 // selection for the workspace. An empty session_id clears the entry
 // (e.g. the client is on the landing screen).
@@ -136,6 +145,13 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 		c.handleError(w, r, err)
 		return
 	}
+	// The engine's own events for this stream, subscribed before the
+	// attach for the same reason.
+	engineEvents, err := c.backend.SubscribeClient(r.Context(), id, clientID)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
 	if err := c.backend.AttachClient(id, clientID); err != nil {
 		c.handleError(w, r, err)
 		return
@@ -153,6 +169,7 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 	flusher.Flush()
 
 	for {
+		var payload any
 		select {
 		case <-r.Context().Done():
 			c.server.logDebug(r, "Stopping event stream")
@@ -164,18 +181,29 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 			if !c.deliverToClient(r.Context(), id, clientID, ev.Payload) {
 				continue
 			}
-			wrapped := wrapEvent(ev.Payload)
-			if wrapped == nil {
-				continue
+			payload = ev.Payload
+		case ev, ok := <-engineEvents:
+			if !ok {
+				// It closes when the request ends, which can win the
+				// select over the Done case above.
+				c.server.logDebug(r, "Stopping event stream")
+				return
 			}
-			data, err := json.Marshal(wrapped)
-			if err != nil {
-				c.server.logError(r, "Failed to marshal event", "error", err)
-				continue
-			}
-
-			fmt.Fprintf(w, "data: %s\n\n", data)
-			flusher.Flush()
+			// Engine events are already addressed, so they skip
+			// deliverToClient.
+			payload = ev
 		}
+		wrapped := wrapEvent(payload)
+		if wrapped == nil {
+			continue
+		}
+		data, err := json.Marshal(wrapped)
+		if err != nil {
+			c.server.logError(r, "Failed to marshal event", "error", err)
+			continue
+		}
+
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
 	}
 }

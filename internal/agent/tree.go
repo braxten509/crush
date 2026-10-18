@@ -8,7 +8,6 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // SwitchTree is an optional local-workspace capability. Keep the dispatch lock
@@ -35,14 +34,8 @@ func (c *coordinator) withIdleTree(ctx context.Context, sessionID string, operat
 			return fmt.Errorf("wait for sub-agents and their results to finish; if delivery failed, start a new chat")
 		}
 	}
-	if treeBackgroundPending() || len(BackgroundProcesses()) > 0 {
-		return fmt.Errorf("wait for background commands and their completion messages before switching branches")
-	}
-	jobs := shell.GetBackgroundShellManager()
-	for _, id := range jobs.List() {
-		if job, ok := jobs.Get(id); ok && !job.IsDone() {
-			return fmt.Errorf("wait for background commands before switching branches")
-		}
+	if err := SessionBackgroundBlock(sessionID); err != nil {
+		return err
 	}
 	if err := cliagent.CloseForTree(sessionID); err != nil {
 		return err

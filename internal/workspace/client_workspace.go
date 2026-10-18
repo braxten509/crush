@@ -60,6 +60,11 @@ type ClientWorkspace struct {
 	// herdrClient reports agent state to herdr when running inside
 	// a herdr-managed pane. Nil when not in a herdr environment.
 	herdrClient *herdr.Client
+
+	// ensureEngine starts the project's engine again after it was lost
+	// (engine-design.md 5.14). Set only for engine connections; unused
+	// until piece A.
+	ensureEngine func(context.Context) error
 }
 
 // SSE reconnect backoff bounds for the workspace event stream. Declared

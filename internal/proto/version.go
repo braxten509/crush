@@ -7,4 +7,6 @@ type VersionInfo struct {
 	BuildID   string `json:"build_id"`
 	GoVersion string `json:"go_version"`
 	Platform  string `json:"platform"`
+	// Protocol is the server's ProtocolVersion.
+	Protocol int `json:"protocol"`
 }

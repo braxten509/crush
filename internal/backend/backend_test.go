@@ -16,6 +16,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -639,7 +640,7 @@ func drainBackend(t *testing.T, b *Backend) {
 }
 
 func protoWS(path, dataDir, clientID string) proto.Workspace {
-	return proto.Workspace{Path: path, DataDir: dataDir, ClientID: clientID}
+	return prototest.CreateRequest(proto.Workspace{Path: path, DataDir: dataDir, ClientID: clientID})
 }
 
 // syncBuffer is a thread-safe buffer that can be safely read and written

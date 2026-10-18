@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -145,7 +146,7 @@ func newRealCreateHarness(t *testing.T) *e2eHarness {
 // workspace ID.
 func (h *e2eHarness) postWorkspace(t *testing.T, args proto.Workspace) proto.Workspace {
 	t.Helper()
-	body, err := json.Marshal(args)
+	body, err := json.Marshal(prototest.CreateRequest(args))
 	require.NoError(t, err)
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
 		h.httpSrv.URL+"/v1/workspaces", bytes.NewReader(body))

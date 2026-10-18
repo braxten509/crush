@@ -232,6 +232,7 @@ func (b *Backend) VersionInfo() proto.VersionInfo {
 		BuildID:   version.BuildID,
 		GoVersion: runtime.Version(),
 		Platform:  fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
+		Protocol:  proto.ProtocolVersion,
 	}
 }
 

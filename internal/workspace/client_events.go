@@ -3,7 +3,6 @@ package workspace
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -388,7 +387,6 @@ func (w *ClientWorkspace) translateEvent(ev any) tea.Msg {
 			IsDevelopment:  e.Payload.IsDevelopment,
 		}
 	default:
-		slog.Warn("Unknown event type in translateEvent", "type", fmt.Sprintf("%T", ev))
-		return nil
+		return w.translatePieceEvent(ev)
 	}
 }

@@ -109,45 +109,58 @@ func badRequest(msg string) error { return badRequestError{msg: msg} }
 // to the default 500 like any other unexpected error.
 func (c *controllerV1) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	c.server.logError(r, err.Error())
-	jsonError(w, errorStatus(err), err.Error())
+	status, code, field := errorInfo(err)
+	writeError(w, status, proto.Error{Message: err.Error(), Code: code, Field: field})
 }
 
-// errorStatus returns the HTTP status for a handler error.
-func errorStatus(err error) int {
+// errorInfo returns the HTTP status, the stable code and the field of the
+// error body for a handler error. The build pieces' errors are checked
+// first.
+func errorInfo(err error) (status int, code, field string) {
+	for _, e := range pieceErrors() {
+		if e.Match(err) {
+			if e.Field != nil {
+				field = e.Field(err)
+			}
+			return e.Status, e.Code, field
+		}
+	}
 	var bad badRequestError
 	switch {
 	case errors.As(err, &bad):
-		return http.StatusBadRequest
+		return http.StatusBadRequest, "bad_request", ""
 	case errors.Is(err, backend.ErrWorkspaceNotFound),
 		errors.Is(err, backend.ErrLSPClientNotFound):
-		return http.StatusNotFound
+		return http.StatusNotFound, "not_found", ""
 	case errors.Is(err, backend.ErrAgentNotInitialized),
 		errors.Is(err, backend.ErrPathRequired),
 		errors.Is(err, backend.ErrInvalidPermissionAction),
 		errors.Is(err, backend.ErrUnknownCommand),
 		errors.Is(err, backend.ErrInvalidClientID):
-		return http.StatusBadRequest
+		return http.StatusBadRequest, "bad_request", ""
 	case errors.Is(err, backend.ErrAgentBusy):
 		// Switching the main agent mid-run could strand the run's
 		// queued prompts on the previous agent; mirror the TUI's own
 		// busy guard for API callers.
-		return http.StatusConflict
+		return http.StatusConflict, "agent_busy", ""
 	case errors.Is(err, backend.ErrClientNotAttached):
 		// 409, not 404: the workspace exists, the caller just has no
 		// live stream yet. A 404 here is indistinguishable from
 		// "workspace gone" and would trip clients that treat 404 as
 		// the trigger for workspace recovery.
-		return http.StatusConflict
-	case errors.Is(err, backend.ErrWorkspaceClosing),
-		errors.Is(err, backend.ErrServerNotIdle),
-		errors.Is(err, backend.ErrClientRetired):
-		return http.StatusConflict
+		return http.StatusConflict, "client_not_attached", ""
+	case errors.Is(err, backend.ErrWorkspaceClosing):
+		return http.StatusConflict, "workspace_closing", ""
+	case errors.Is(err, backend.ErrServerNotIdle):
+		return http.StatusConflict, "server_not_idle", ""
+	case errors.Is(err, backend.ErrClientRetired):
+		return http.StatusConflict, "client_retired", ""
 	case errors.Is(err, backend.ErrServerShuttingDown):
 		// 503, not 409: the request is not wrong, this process is just
 		// leaving. Clients retry against its replacement.
-		return http.StatusServiceUnavailable
+		return http.StatusServiceUnavailable, "shutting_down", ""
 	default:
-		return http.StatusInternalServerError
+		return http.StatusInternalServerError, "internal", ""
 	}
 }
 
@@ -165,8 +178,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// jsonError writes message as a JSON error response, with the code that
+// goes with status.
 func jsonError(w http.ResponseWriter, status int, message string) {
+	writeError(w, status, proto.Error{Message: message, Code: statusCode(status)})
+}
+
+// writeError writes body as a JSON error response with the given status.
+func writeError(w http.ResponseWriter, status int, body proto.Error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(proto.Error{Message: message})
+	_ = json.NewEncoder(w).Encode(body)
 }

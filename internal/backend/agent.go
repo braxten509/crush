@@ -28,7 +28,9 @@ import (
 // agent.ValidateCall (ErrEmptyPrompt, ErrSessionMissing) when the prompt
 // or session is missing, and ErrWorkspaceClosing if the workspace is
 // being torn down.
-func (b *Backend) SendMessage(workspaceID string, msg proto.AgentMessage) error {
+//
+// clientID names the app that sent the prompt, or "" for none.
+func (b *Backend) SendMessage(workspaceID, clientID string, msg proto.AgentMessage) error {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
@@ -57,6 +59,11 @@ func (b *Backend) SendMessage(workspaceID string, msg proto.AgentMessage) error 
 	ws.runWG.Add(1)
 	ws.runMu.Unlock()
 
+	b.runHooks(func(h clientHooks) {
+		if h.messageSent != nil {
+			h.messageSent(ws, clientID, msg)
+		}
+	})
 	go b.runAgent(ws, msg, accept)
 	return nil
 }
@@ -150,8 +157,9 @@ func (b *Backend) GetAgentInfo(workspaceID string) (proto.AgentInfo, error) {
 	return agentInfo, nil
 }
 
-// InitAgent initializes the coder agent for the workspace.
-func (b *Backend) InitAgent(ctx context.Context, workspaceID string, interactive bool) error {
+// InitAgent initializes the coder agent for the workspace. clientID names
+// the app that asked, or "" for none.
+func (b *Backend) InitAgent(ctx context.Context, workspaceID, clientID string, interactive bool) error {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
@@ -162,9 +170,15 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID string, interactive
 			return err
 		}
 		agent.ResumeInterruptedTasks()
-		return nil
+	} else if err := ws.InitCoderAgentNonInteractive(ctx); err != nil {
+		return err
 	}
-	return ws.InitCoderAgentNonInteractive(ctx)
+	b.runHooks(func(h clientHooks) {
+		if h.agentInit != nil {
+			h.agentInit(ws, clientID, interactive)
+		}
+	})
+	return nil
 }
 
 // UpdateAgent reloads the agent model configuration.

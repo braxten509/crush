@@ -22,6 +22,10 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 		c.agentEndpoints(),
 		c.configEndpoints(),
 		c.mcpEndpoints(),
+		c.lifecycleEndpoints(),
+		c.liveEndpoints(),
+		c.treeEndpoints(),
+		c.shareEndpoints(),
 	)
 }
 
@@ -341,6 +345,7 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 				"disconnects and is only ended by the explicit cancel endpoint.").
 			Tags("agent").
 			PathParam("id", "Workspace ID").
+			QueryParam("client_id", "Client ID (UUID); records which app started the work").
 			Fails(400, 404, 409, 500).
 			Build(),
 
@@ -349,6 +354,7 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			Description("The request body is optional.").
 			Tags("agent").
 			PathParam("id", "Workspace ID").
+			QueryParam("client_id", "Client ID (UUID); records which app started the work").
 			Fails(400, 404, 500).
 			Build(),
 
@@ -449,6 +455,8 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			Tags("agent").
 			PathParam("id", "Workspace ID").
 			PathParam("sid", "Session ID").
+			QueryParam("client_id", "Client ID (UUID); records which app started the work").
+			QueryParam("request_id", "Live output events for this request go to client_id").
 			Fails(400, 404, 500).
 			Build(),
 

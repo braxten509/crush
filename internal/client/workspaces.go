@@ -175,8 +175,8 @@ func readEvents(ctx context.Context, body io.Reader, events chan any) {
 }
 
 // eventDecoders maps each SSE payload type to the decoder of its typed
-// pubsub event.
-var eventDecoders = map[pubsub.PayloadType]func(json.RawMessage) any{
+// pubsub event: today's events, plus the build pieces' (pieceEventDecoders).
+var eventDecoders = withPieceDecoders(map[pubsub.PayloadType]func(json.RawMessage) any{
 	pubsub.PayloadTypeLSPEvent:               decodeEventAs[proto.LSPEvent],
 	pubsub.PayloadTypeMCPEvent:               decodeEventAs[proto.MCPEvent],
 	pubsub.PayloadTypePermissionRequest:      decodeEventAs[proto.PermissionRequest],
@@ -191,7 +191,7 @@ var eventDecoders = map[pubsub.PayloadType]func(json.RawMessage) any{
 	pubsub.PayloadTypeSkillsEvent:            decodeEventAs[proto.SkillsEvent],
 	pubsub.PayloadTypeRunComplete:            decodeEventAs[proto.RunComplete],
 	pubsub.PayloadTypeUpdateAvailable:        decodeEventAs[proto.UpdateAvailable],
-}
+})
 
 // decodeEvent decodes an SSE envelope into its typed pubsub event. It
 // reports false for payload types this client does not know.

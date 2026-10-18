@@ -60,6 +60,13 @@ var recoveryCreateTimeout = 30 * time.Second
 // loses whatever was published while the client was away, so every
 // re-established stream — even one that reconnects on the first try —
 // re-asserts the client's session and asks the UI to resync.
+//
+// On an engine connection a third failure needs more: an engine that
+// cannot be reached ([client.IsUnreachable]) has died, so the loop runs
+// the ensure function ([ClientWorkspace.SetEnsureEngine]) to start a new
+// one and resubscribes at once; the new engine's 404 then re-registers
+// the workspace. After [maxEnsureFailures] failed ensures in a row the
+// connection is reported stuck, with the ensure error.
 func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 	w.subStarted.Store(true)
 	defer close(w.subDone)
@@ -67,6 +74,7 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 	backoff := sseReconnectInitialBackoff
 	degraded := false
 	recoveryFailures := 0
+	ensureFailures := 0
 	markDegraded := func(err error, stuck bool) {
 		if degraded && !stuck {
 			return
@@ -84,6 +92,26 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 		if err != nil {
 			if w.subCtx.Err() != nil {
 				return
+			}
+			if ensure := w.ensureEngineFunc(); ensure != nil && client.IsUnreachable(err) {
+				markDegraded(err, false)
+				ensureErr := w.runEnsureEngine(ensure)
+				if w.subCtx.Err() != nil {
+					return
+				}
+				if ensureErr == nil {
+					ensureFailures = 0
+					continue
+				}
+				ensureFailures++
+				slog.Error("Failed to start the engine again; retrying",
+					"error", ensureErr, "failures", ensureFailures, "retry_in", backoff)
+				markDegraded(ensureErr, ensureFailures >= maxEnsureFailures)
+				if !w.sleepOrDone(backoff) {
+					return
+				}
+				backoff = min(backoff*2, sseReconnectMaxBackoff)
+				continue
 			}
 			markDegraded(err, false)
 			if !errors.Is(err, client.ErrNotFound) {
@@ -110,6 +138,7 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 		if degraded {
 			degraded = false
 			recoveryFailures = 0
+			ensureFailures = 0
 			w.afterReconnect(send)
 		}
 		backoff = sseReconnectInitialBackoff
@@ -180,8 +209,8 @@ func (w *ClientWorkspace) recoverWorkspace() error {
 
 // recreateArgs derives the CreateWorkspace request used for recovery from
 // the cached snapshot. The ID is dropped so the server can dedupe by
-// path or mint a fresh workspace, and Version carries this client's
-// version, matching the startup handshake.
+// path or mint a fresh workspace, and Version and Protocol carry this
+// client's, matching the startup handshake.
 func (w *ClientWorkspace) recreateArgs() proto.Workspace {
 	ws := w.cached()
 	return proto.Workspace{
@@ -192,6 +221,7 @@ func (w *ClientWorkspace) recreateArgs() proto.Workspace {
 		Channels: ws.Channels,
 		Env:      ws.Env,
 		Version:  version.Version,
+		Protocol: proto.ProtocolVersion,
 	}
 }
 

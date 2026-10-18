@@ -25,9 +25,11 @@ func (c *Client) ListWorkspaces(ctx context.Context) ([]proto.Workspace, error) 
 	return newCall(c, rpc.ListWorkspaces, "list workspaces", "workspaces").get(ctx)
 }
 
-// CreateWorkspace creates a new workspace on the server.
+// CreateWorkspace creates a new workspace on the server. It sends this
+// client's ID and protocol version; the server refuses another protocol.
 func (c *Client) CreateWorkspace(ctx context.Context, ws proto.Workspace) (*proto.Workspace, error) {
 	ws.ClientID = c.clientID
+	ws.Protocol = proto.ProtocolVersion
 	created, err := newCall(c, rpc.CreateWorkspace, "create workspace", "workspace").do(ctx, ws)
 	if err != nil {
 		return nil, err

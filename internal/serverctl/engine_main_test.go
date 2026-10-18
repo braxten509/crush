@@ -44,10 +44,11 @@ const fakeEnginePID = 999999
 // and its ensure use (config, data, cache, runtime, temp) is under root,
 // which is short enough for the engine socket's path.
 type engineProject struct {
-	root    string
-	cwd     string // the project folder, without git
-	dataDir string // its canonical data folder
-	socket  string // its engine socket
+	root         string
+	cwd          string // the project folder, without git
+	dataDir      string // its canonical data folder
+	socket       string // its engine socket
+	globalConfig string // the folder of the global crush.json
 
 	mu      sync.Mutex
 	started []int // PIDs of engines this test's ensures started
@@ -91,7 +92,7 @@ func newEngineProject(t *testing.T, idle string) *engineProject {
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
 	writeGlobalConfig(t, globalConfig, nil)
 
-	p := &engineProject{root: root, cwd: filepath.Join(root, "p")}
+	p := &engineProject{root: root, cwd: filepath.Join(root, "p"), globalConfig: globalConfig}
 	require.NoError(t, os.Mkdir(p.cwd, 0o700))
 	resolved, err := config.ResolveDataDir(p.cwd, "")
 	require.NoError(t, err)

@@ -231,7 +231,7 @@ func (h *hub) shareLocked() Share {
 		Session: cur,
 		Focused: h.presence.Focused,
 		Phones:  len(h.clients),
-		Launch:  LaunchID(),
+		Launch:  h.launch,
 	}
 	if cur != "" {
 		s.Title = h.sess.Title

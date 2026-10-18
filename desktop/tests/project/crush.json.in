@@ -1,0 +1,19 @@
+{
+  "providers": {
+    "fake": {
+      "name": "Fake AI",
+      "type": "openai-compat",
+      "base_url": "http://127.0.0.1:@PORT@/v1",
+      "api_key": "fake-key",
+      "models": [
+        { "id": "fake-small", "name": "Fake Small", "context_window": 128000, "default_max_tokens": 4096 },
+        { "id": "fake-large", "name": "Fake Large", "context_window": 200000, "default_max_tokens": 8192 }
+      ]
+    }
+  },
+  "models": {
+    "large": { "model": "fake-large", "provider": "fake" },
+    "small": { "model": "fake-small", "provider": "fake" }
+  },
+  "options": { "notifications": "disabled" }
+}

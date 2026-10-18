@@ -11,6 +11,19 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["custom-protocol"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The engine client and desktop services (desktop-design 1.2). Each version is
+# the one Cargo.lock already holds as a dependency of Tauri.
+tokio = { version = "1.53.3", features = ["net", "io-util", "time", "sync", "rt", "fs"] }
+hyper = { version = "1.12.0", features = ["client", "http1"] }
+hyper-util = { version = "0.1.21", features = ["tokio"] }
+http-body-util = "0.1.5"
+bytes = "1.12.1"
+uuid = { version = "1.28.0", features = ["v4"] }
+dirs = "7.0.0"
+base64 = "0.22.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18.2"
 
 [profile.release]
 strip = true

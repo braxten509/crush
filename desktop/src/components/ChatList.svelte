@@ -1,11 +1,13 @@
 <script>
   // The left column: the wordmark, New chat, search, and the chats by day. The
   // open chat sits on a band with a vermilion edge; its branches hang below it
-  // on a thin tree.
+  // on a thin tree. Scaffold S3: the chats come from sample.js until piece P3.9
+  // reads them from the stores (the list takes no props).
+  import { sample } from "../lib/sample.js";
   import Icon from "./Icon.svelte";
   import Rule from "./Rule.svelte";
 
-  let { groups } = $props();
+  const groups = sample.chats.groups;
 </script>
 
 <nav class="chats" aria-label="Chats">

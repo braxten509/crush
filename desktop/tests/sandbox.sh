@@ -11,7 +11,9 @@
 # - a throwaway HOME and XDG folders under /tmp/home;
 # - the fake AI tools in tests/fakes/bin come first on PATH;
 # - a clean environment (env -i), so no CRUSH_* variables leak in from a chat;
-#   DESKTOP_APP (another app build to run) is the one setting passed through.
+#   the only settings passed through are DESKTOP_APP (another app build to run),
+#   DESKTOP_CRUSH (the crush binary the app should use) and DESKTOP_ARGS (more
+#   arguments for the app, such as --fixture FILE).
 # Usage: tests/sandbox.sh [-s WxH] command args...
 set -euo pipefail
 SIZE=1600x1000
@@ -35,4 +37,5 @@ exec bwrap --ro-bind / / --dev /dev --proc /proc \
   WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
   FAKE_TOOL_LOG=/tmp/fake-tools.jsonl FAKE_AI_LOG=/tmp/fake-ai.jsonl \
   DESKTOP_ROOT="$ROOT" OUTER_HOME="$HOME" ${DESKTOP_APP:+"DESKTOP_APP=$DESKTOP_APP"} \
+  ${DESKTOP_CRUSH:+"DESKTOP_CRUSH=$DESKTOP_CRUSH"} ${DESKTOP_ARGS:+"DESKTOP_ARGS=$DESKTOP_ARGS"} \
   bash -c 'mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" && exec xvfb-run -a -s "-screen 0 '"$SIZE"'x24 -nolisten tcp" "$@"' sandbox "$@"

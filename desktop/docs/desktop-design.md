@@ -93,7 +93,7 @@ impl AppError {
 pub type AppResult<T> = Result<T, AppError>;
 ```
 
-Engine errors keep the engine's `code` (`proto.Error`, `internal/proto/proto.go:37-41`; codes in engine design §0.1 "Errors", `engine-design.md:42-96`). When the body has no `code`, `from_engine` fills it by status the same way the engine does for plain errors: 400 `bad_request`, 404 `not_found`, 409 `conflict`, 500 `internal`, 503 `shutting_down`. App-side codes:
+Engine errors keep the engine's `code` (`proto.Error`, `internal/proto/proto.go:37-41`; codes in engine design §0.1 "Errors", `engine-design.md:42-96`). When the body has no `code`, `from_engine` fills it by status the same way the engine does for plain errors: 400 `bad_request`, 404 `not_found`, 409 `conflict`, 500 `internal`, 503 `shutting_down`; any other status gets `http_<status>` (for example `http_502`), so a code is never empty (`error.rs` test `from_engine_names_any_other_status_by_number`). App-side codes:
 
 | Code | When |
 |---|---|
@@ -368,7 +368,7 @@ pub fn list(cwd: &str, max_depth: u32, max_items: u32) -> AppResult<Vec<FileEntr
 - **State.** `AppState { windows: Mutex<HashMap<String /* window label */, Arc<connection::WindowConn>>>, settings: Mutex<settings::Settings>, launch: Launch }`, with `Launch { probe: Option<PathBuf>, fixture: Option<PathBuf>, cwd: PathBuf, session: Option<String>, continue_last: bool, data_dir: Option<String>, debug: bool, host: Option<String>, yolo: Option<bool>, channels: Vec<String>, ui_debug: bool }`. `ui_debug` is `CRUSH_UI_DEBUG == "true"` (PLAN.md:144).
 - **Fixture mode.** With `--fixture`, `commands.rs` sends `engine_open`, `engine_retry`, `engine_set_current_session`, `api`, `api_abort` and `events_take` to `fixture.rs` instead of `connection.rs` (section 6.3; a fixture call never runs long, so its `api_abort` returns `false`).
 - **Closing.** `on_window_event(CloseRequested)` calls `connection::close` for that label, which first aborts that window's running calls, so its `!` commands end with it (1.2.4). Q2 (what keeps running) is the engine's job (engine design §5.5).
-- **Navigation guard** (review finding 5). `main.rs` registers a small in-app plugin, `tauri::plugin::Builder::new("nav-guard").on_navigation(|_webview, url| …)` (Tauri 2.12.4 `src/plugin.rs:459`), which runs for every webview the app opens, including later phases' windows. It allows only the app's own pages, `url.scheme() == "tauri" && url.host_str() == Some("localhost")` (there is no dev server: `tauri.conf.json:7-9` has only `frontendDist`), and refuses every other navigation. A refusal is logged with the URL's scheme only; with `--probe` it is also appended to `<probe file>.opened.jsonl` as `{"refused_navigation":"<scheme>:"}`, so the safety corpus (2.9) sees a link that got past the screen's handler. No new-window handler is set: wry 0.57.0 hooks WebKitGTK's `create` signal only when one is given (`wry-0.57.0/src/webkitgtk/mod.rs:493-495`), and an unhandled `create` opens no window (WebKitGTK's default; inferred the same for WKWebView on a Mac, S3 confirms). `javascript:` URLs never run at all: the CSP's `script-src 'self'` has no `'unsafe-inline'` (`tauri.conf.json:24`).
+- **Navigation guard** (review finding 5). `main.rs` registers a small in-app plugin, `tauri::plugin::Builder::new("nav-guard").on_navigation(|_webview, url| …)` (Tauri 2.12.4 `src/plugin.rs:459`), which runs for every webview the app opens, including later phases' windows. It allows only the app's own pages, `url.scheme() == "tauri" && url.host_str() == Some("localhost")` (there is no dev server: `tauri.conf.json:7-9` has only `frontendDist`), and refuses every other navigation. A refusal is logged with the URL's scheme only; with `--probe` it is also appended to `<probe file>.opened.jsonl` as `{"refused_navigation":"<scheme>:"}`, so the safety corpus (2.9) sees a link that got past the screen's handler. No new-window handler is set: wry 0.57.0 hooks WebKitGTK's `create` signal only when one is given (`wry-0.57.0/src/webkitgtk/mod.rs:493-495`), and an unhandled `create` opens no window (WebKitGTK's default). On a Mac (WKWebView) two things could not be checked from Linux, where S3 was built and checked: that the app's pages load from `tauri://localhost` there too (on Linux every sandbox run shows the page through the guard), and that WKWebView opens no window when no new-window handler is set (inferred from WebKitGTK); the first Mac build must check both. `javascript:` URLs never run at all: the CSP's `script-src 'self'` has no `'unsafe-inline'` (`tauri.conf.json:24`).
 - **Settings watcher.** `main.rs` setup calls `settings::watch(app.handle().clone())` once (1.2.8).
 - Phases 5 and 6 open more windows (`crush-desktop --project DIR`, PLAN.md:143). Every command already takes the calling window, so a second window gets its own `WindowConn`, `client_id` and batcher without new commands.
 
@@ -380,7 +380,7 @@ All commands are registered in `main.rs` by S3. Arguments are the JS names (Taur
 |---|---|---|---|
 | `app_info` | — | `{version, probe, fixture, cwd, session, continue_last, ui_debug, platform}` | `fixture` is a boolean; `platform`: `"linux"` or `"macos"`. Extends today's `{version, probe}` (`main.rs:15-24`) |
 | `probe_write` | `json: string` | `null` | unchanged (`main.rs:26-33`) |
-| `probe_request` | — | `object \| null` | probe mode only: the JSON of `<probe file>.request.json`, else `null` (1.9); reads, never writes |
+| `probe_request` | — | `{request, opened} \| null` | probe mode only: `request` is the JSON of `<probe file>.request.json` (`null` when there is none) and `opened` the count of lines in `<probe file>.opened.jsonl`; else `null` (1.9); reads, never writes |
 | `engine_open` | `cwd: string` | `OpenResult` (1.2.6) | joins; starts the stream |
 | `engine_retry` | — | `null` | the "Try again" button of the failed state |
 | `engine_set_current_session` | `sessionId: string` | `null` | `""` clears (landing). Remembered for rejoins |
@@ -883,6 +883,8 @@ KaTeX's fonts and CSS are imported from `katex/dist/katex.min.css` so Vite copie
 
 `lib/keys.js` (S3) has one `keydown` listener on `window` (capture phase), a table of bindings by scope, and `bindKey(scope, combo, handler)` for pieces to attach handlers. Scopes, from most to least specific: `menu`, `overlay` (the viewer, the front sheet of the stack, help), `popup` (the `@` list, later the `$` list), `slot` (an inline prompt), `tray` (while the tray has focus, SIDE-033), `composer`, `timeline`, `panel`, `list`, `global`. The first scope that has the combo and whose handler returns `true` wins. The zoom keys keep their own listener (`src/lib/zoom.js:60-79`), which already runs first.
 
+**While the menu, the viewer or a sheet is open**, a key asks only `menu` (while the menu is open) or else `overlay`, so no `global` key works then (Ctrl+G, Ctrl+N, Ctrl+K, Ctrl+T and the rest), as the terminal gives every key to its front dialog while one is open (`internal/ui/model/keypress.go:111-114`, owner from `paneOwner`, `keypress.go:65-68`; the overlay hands it to the front dialog only, after the grace, `internal/ui/dialog/dialog.go:221-238`). The one exception is the quit key: **Ctrl+C asks `global` first, before every other scope and before a sheet's input grace, unless the quit sheet is anywhere in the stack**, as the terminal opens its quit dialog over any dialog but itself (`keypress.go:107-109`; Ctrl+C is `keyMap.Quit`, `keys.go:95-97`). The help sheet does not count as one of these: the terminal's full help is not a dialog (`keypress.go:578-579`), so with help open keys route as usual, `overlay` first. `keys.test.js` (S3) pins these rules.
+
 **The shortcut map** (terminal keys kept where sensible, `internal/ui/model/keys.go:93-341`; "→ phase n" means the key is reserved now and its action comes then):
 
 | Key | Scope | Action | Row |
@@ -941,11 +943,11 @@ Two terminal keys change meaning, both by the plan: **Ctrl+K** is Sessions searc
 
 Rects are viewport pixels (`getBoundingClientRect`). The base snapshot's one `shell` rect (`probe.js:25-26`) stays on the 200 ms rhythm for the look checks, which never run during a measured stretch.
 
-**Asking for heavy fields.** The driver writes `<probe file>.request.json` with `{"id": N}`, a new number each time (`harness.py` `probe_heavy()`). Each 200 ms tick the probe calls the command `probe_request` (1.3), which returns that file's JSON in probe mode and `null` otherwise. When the id is new and no measured stretch runs, that tick computes every section's heavy fields once and writes them with `"request_id": N`; the driver waits for that id. During a measured stretch a request waits until the stretch ends, so heavy fields can never land inside a speed measurement.
+**Asking for heavy fields.** The driver writes `<probe file>.request.json` with `{"id": N}`, a new number each time (`harness.py` `probe_heavy()`). Each 200 ms tick the probe calls the command `probe_request` (1.3), which returns `{request, opened}` in probe mode (`request` is that file's JSON) and `null` otherwise. When the id is new and no measured stretch runs, that tick computes every section's heavy fields once and writes them with `"request_id": N`; the driver waits for that id. During a measured stretch a request waits until the stretch ends, so heavy fields can never land inside a speed measurement.
 
 **The frame meter and measured stretches.** The meter runs only in probe mode: one `requestAnimationFrame` loop records each frame's time since the last; a `keydown` listener records the time from each key to the next frame. Ctrl+Alt+F12 starts a measured stretch: it sets `frames_mark`, clears the counters and sets `measuring`. Pressing it again ends the stretch: `measuring` turns false and the counters keep their values for the driver to read. A driver ends the stretch before it reads `frames` (`p3_speed.py` step 3, 2.9), so the values it reads are final. Outside probe mode the key does nothing.
 
-Two more probe fields exist for checks that cannot read the screen another way: `clipboard.last` (the last text the app wrote through `clipboard_write`, with its time) and `opened` (the count of lines in `<probe>.opened.jsonl`). The sandbox has no `xclip` or `xsel`, but Python's GTK 3 bindings are in `/usr` (checked: `gi` loads GTK 3.24), so `tests/driver/clip.py` reads and sets the hidden screen's real clipboard (`get-text`, `set-text TEXT`, `set-image FILE`; a setter keeps owning the clipboard for up to 10 s). Copy checks compare both `clipboard.last` and `clip.py get-text`.
+Two more probe fields exist for checks that cannot read the screen another way: `clipboard.last` (the last text the app wrote through `clipboard_write`, with its time) and `opened` (the count of lines in `<probe>.opened.jsonl`; the page has no command that reads that file, so `probe_request`'s answer carries the count on every tick, and no command is added for it). The sandbox has no `xclip` or `xsel`, but Python's GTK 3 bindings are in `/usr` (checked: `gi` loads GTK 3.24), so `tests/driver/clip.py` reads and sets the hidden screen's real clipboard (`get-text`, `set-text TEXT`, `set-image FILE`; a setter keeps owning the clipboard for up to 10 s). Copy checks compare both `clipboard.last` and `clip.py get-text`.
 
 ### 1.10 Registries that later phases plug into (S3)
 
@@ -1468,8 +1470,8 @@ export function upsertLink(link);          // chat_link created
 export function linksFor(messageId);       // decorations for the renderer: [{kind: "branch-link", start, end, data: link}]
 export function parentOf(sessionId);       // origin link's parent_session_id, or null (top level)
 
-// closed.svelte.js
-export const closed = $state({ ids: new Set() });   // from settings.closed_chats[engine data_dir]
+// closed.svelte.js (SvelteSet from svelte/reactivity: $state does not track a plain Set's add and delete)
+export const closed = $state({ ids: new SvelteSet() });   // from settings.closed_chats[engine data_dir]
 export async function close(sessionId);    // closed_set(project, id, true)
 export async function reopen(sessionId);   // closed_set(project, id, false)
 export function isClosed(sessionId);
@@ -1645,9 +1647,9 @@ One exact proposal per new surface, in the Scholar's edition language of the bui
   --hl-attr: #6a3d12;
   --hl-meta: #5f5e5a;
 
-  /* The 16 program colors for this paper (every one 4.5:1 or more on --paper) */
+  /* The 16 program colors for this paper (every one 4.5:1 or more on --band, the code background they sit on, and on --paper) */
   --ansi-0: #0f0f0f;  --ansi-1: #a1261b;  --ansi-2: #3f6b22;  --ansi-3: #8a5a00;
-  --ansi-4: #1f4f8a;  --ansi-5: #7a3b7d;  --ansi-6: #1d6670;  --ansi-7: #6f6e6f;
+  --ansi-4: #1f4f8a;  --ansi-5: #7a3b7d;  --ansi-6: #1d6670;  --ansi-7: #6e6d6e;
   --ansi-8: #5f5e5a;  --ansi-9: #c2341f;  --ansi-10: #4a7827; --ansi-11: #946400;
   --ansi-12: #2d63b0; --ansi-13: #924a95; --ansi-14: #23727c; --ansi-15: #4a4947;
 
@@ -1658,7 +1660,7 @@ One exact proposal per new surface, in the Scholar's edition language of the bui
   --t-code: 400 calc(17 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
 ```
 
-Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` (inferred arithmetic; the S3 builder re-runs it with the design detector). H4 to H6 use `--t-label` small caps.
+Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` (inferred arithmetic; the S3 builder re-runs it with the design detector). The program colors are checked against `--band` `#f3f1e6`, the code background they are drawn on (code blocks and tool bodies), not only against `--paper`. S3's recheck (WCAG formula, since nothing draws them yet for the detector to measure): all 16 reach 4.5:1 on `--band`, the lowest being `--ansi-11` at 4.54:1 and `--ansi-7` at 4.55:1. `--ansi-7` was `#6f6e6f` (4.48:1 on `--band`); `#6e6d6e` is the decision of PLAN.md §15 (S3 report). H4 to H6 use `--t-label` small caps.
 
 ### 4.1 Markdown in replies
 
@@ -1892,7 +1894,7 @@ Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` 
 | `tests/run-in-sandbox.sh` | copies `tests/project/` to `/tmp/home/proj`, runs `git init`, writes its `crush.json` with the fake provider's port, sets `CRUSH_DESKTOP_CRUSH=$DESKTOP_CRUSH` and `CRUSH_DESKTOP_ENV_MARK=leak-<16 random hex digits>` (written to `tests/out/<driver>/env-mark` for the check of 2.9), starts the app with `--cwd /tmp/home/proj $DESKTOP_ARGS`, and saves the app's output to `tests/out/<driver>/app.log` |
 | `tests/check.sh`, `tests/build-crush.sh` | section 6.1 |
 | `tests/driver/harness.py` | shared helpers: `probe_section`, `probe_heavy` (1.9), `word_rect`, `select_words`, `right_click`, `type_text`, `key`, `wait_text`, `engine_get` (curl over the socket), `fake_ai_requests`, `step(row)` (names the screenshot) |
-| `tests/project/` | the throwaway project template: `README.md`, `auth/session.go`, `crush.json.in` (the fake `openai-compat` provider with models `fake-small` and `fake-large`, `options.notifications: "disabled"`) |
+| `tests/project/` | the throwaway project template: `README.md`, `auth/session.go`, `crush.json.in` (the fake `openai-compat` provider with models `fake-small` and `fake-large`, `options.notifications: "disabled"`), and `go.mod` (`module example.com/proj`), which keeps the template out of Crush's Go module (without it `auth/session.go` would be a package of Crush's `./...`) |
 
 **Placeholder components** (review finding 2). Paths are under `src/components/`. "Its own" means only the owner imports the file, so its props are the owner's choice; every other row's props are pinned. A piece may add files inside its own folders without listing them here.
 
@@ -1902,7 +1904,7 @@ Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` 
 | `ChatHead.svelte` | S3 moves today's markup; P3.9; P4.1 adds the branch path line in phase 4 | `{session}` | Conversation |
 | `timeline/Timeline.svelte` | S3 moves today's markup; P3.5 | `{sessionId}` | Conversation |
 | `timeline/VirtualList.svelte` | P3.5 | its own | Timeline |
-| `timeline/ItemFrame.svelte` | P3.5 | `{item, selected, focused}` plus the item as its child | Timeline |
+| `timeline/ItemFrame.svelte` | P3.5 | `{item, selected, focused, children}`: `children` is the snippet with the item's own component; the piece must keep `{@render children()}` (S3's placeholder writes `{@render children?.()}`) | Timeline |
 | `timeline/UserItem.svelte`, `timeline/ReplyItem.svelte`, `timeline/NoticeItem.svelte`, `timeline/BannerItem.svelte`, `timeline/FooterItem.svelte`, `timeline/PendingItem.svelte` | P3.5 | `{item}` (1.5.6) | Timeline |
 | `timeline/StatusLine.svelte` | P3.5 | `{item}` (a StatusItem) | Timeline; ToolGroup (P3.6) for a working group's live status (CHAT-085) |
 | `timeline/ActivityMark.svelte` | P3.5 | `{size: "line" \| "small"}` | StatusLine; ToolHeader, ShellItem, ToolGroup (P3.6); TodoSection (P3.7) |
@@ -1924,7 +1926,8 @@ Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` 
 | `NoticeLine.svelte` | P3.8 | — (reads `ui.notice`) | Conversation |
 | `ChatList.svelte` | P3.9 (exists today); P4.1 in phase 4 | — (reads the stores) | App |
 | `list/ChatRow.svelte`, `list/ListFooter.svelte` | P3.9; P4.1 in phase 4 | `{row}` (a `listmodel.buildRows` row) | ChatList |
-| `start/EngineGate.svelte`, `start/Onboarding.svelte`, `start/InitPrompt.svelte`, `start/Landing.svelte`, `start/Opening.svelte` | P3.9 | — (read the stores) | App (EngineGate); Conversation, in the timeline's place (the rest) |
+| `start/EngineGate.svelte` | P3.9 | `{children}`: the snippet App passes, the conversation; the gate reads the stores, and the piece must keep `{@render children()}` where the conversation shows (S3's placeholder writes `{@render children?.()}`) | App |
+| `start/Onboarding.svelte`, `start/InitPrompt.svelte`, `start/Landing.svelte`, `start/Opening.svelte` | P3.9 | — (read the stores) | Conversation, in the timeline's place |
 | `render/MarkdownView.svelte` | P3.4 | `{text, messageId, sessionId, finished, plan}` | ReplyItem (P3.5) |
 | `render/VisualChip.svelte` | P3.4 | `{figureId, kind, title}` | MarkdownView |
 | `render/FigureView.svelte` | P3.4 | `{figure}` | VisualsSection (P3.8); MarkdownView while the panel is hidden (4.3) |
@@ -1934,7 +1937,7 @@ Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` 
 
 - Rust: `main.rs`, `error.rs`, `state.rs`, `commands.rs`, `fixture.rs`, `Cargo.toml`;
 - build config: capabilities, `tauri.conf.json`, `package.json`, `vite.config.js`;
-- styles and shell components: `app.css`, `App.svelte`, `Conversation.svelte`, `OverlayHost.svelte`, `Icon.svelte`;
+- styles and shell components: `app.css`, `App.svelte`, `Frame.svelte` (its `panel` prop follows App's panel collapse), `Conversation.svelte`, `OverlayHost.svelte`, `Icon.svelte`;
 - shared JS: `main.js`, `plugins.js`, `wire.js`, `types.js`, `commands.js`, `events.js`, `keys.js`, `actions.js`, `dialogs.js`, `grace.js`, `tray.js`, `menu.js`, `decorations.js`, `probe.js`, `ui.svelte.js`;
 - harness: `sandbox.sh`, `run-in-sandbox.sh`, `check.sh`, `harness.py`.
 

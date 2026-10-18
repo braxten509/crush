@@ -16,6 +16,7 @@ type TreeService interface {
 	SwitchTree(context.Context, string, string) error
 	LabelTree(context.Context, string, string, string) error
 	TreeRevision(context.Context, string) (int64, error)
+	TreeHead(context.Context, string) (string, error)
 	SwitchTreeNote(context.Context, string, string, BranchSummary) error
 	CopyTree(context.Context, string, string, bool) (string, string, error)
 }
@@ -33,6 +34,7 @@ type treeStorage interface {
 	SwitchTree(context.Context, string, string) error
 	LabelTree(context.Context, string, string, string) error
 	TreeRevision(context.Context, string) (int64, error)
+	TreeHead(context.Context, string) (string, error)
 }
 
 // FileRestoreFrom returns the approved file restore riding on ctx, or nil.
@@ -84,6 +86,16 @@ func (s *service) TreeRevision(ctx context.Context, id string) (int64, error) {
 		return 0, nil
 	}
 	return storage.TreeRevision(ctx, id)
+}
+
+// TreeHead returns the message the chat's head is on, "" for none, without
+// reading the tree.
+func (s *service) TreeHead(ctx context.Context, id string) (string, error) {
+	storage, ok := s.q.(treeStorage)
+	if !ok {
+		return "", errors.New("tree storage unavailable")
+	}
+	return storage.TreeHead(ctx, id)
 }
 
 type BranchSummary struct{ Text, Model, Provider, FromID, AncestorID string }

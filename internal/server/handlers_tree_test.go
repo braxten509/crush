@@ -22,6 +22,7 @@ import (
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -747,6 +748,45 @@ func TestCopyMovesOnlyItsOwnUndoRecord(t *testing.T) {
 	require.Equal(t, undoA, undoOf(copied.SessionID))
 	require.Empty(t, undoOf(a.id))
 	require.Equal(t, undoB, undoOf(b.id))
+}
+
+// When the undo record cannot move after the copy is made, the copy still
+// stands: the call succeeds, every app gets the new chat, and the record
+// stays with the source chat.
+func TestCopyStandsWhenUndoMoveFails(t *testing.T) {
+	e := newTreeEngine(t)
+	ctx := t.Context()
+	chat := e.notesChat(t)
+	plan, err := e.c.PreviewFiles(ctx, e.id, chat.id, proto.FilePreviewRequest{Target: chat.edit})
+	require.NoError(t, err)
+	restored, err := e.c.UndoFiles(ctx, e.id, chat.id, plan.PlanID)
+	require.NoError(t, err)
+	require.NotEmpty(t, restored.UndoID)
+
+	// From here on the engine's database refuses to move any undo record.
+	dataDir := e.ws.Cfg.Config().Options.DataDirectory
+	conn, err := db.Connect(ctx, dataDir) // the engine's own, shared connection
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = conn.ExecContext(context.Background(), `DROP TRIGGER IF EXISTS test_refuse_undo_move`)
+		_ = db.Release(dataDir)
+	})
+	_, err = conn.ExecContext(ctx, `CREATE TRIGGER test_refuse_undo_move BEFORE UPDATE ON file_history_undo
+ BEGIN SELECT RAISE(ABORT, 'this test refuses undo moves'); END`)
+	require.NoError(t, err)
+
+	events := e.subscribe(t)
+	copied, err := e.c.CopyTree(ctx, e.id, chat.id, proto.TreeCopyRequest{ExpectedRevision: e.tree(t, chat.id).Revision, Target: chat.edit, UndoID: restored.UndoID})
+	require.NoError(t, err)
+	require.NotEmpty(t, copied.SessionID)
+	waitAll(t, events, eventOf(func(ev pubsub.Event[proto.Session]) bool {
+		return ev.Type == pubsub.CreatedEvent && ev.Payload.ID == copied.SessionID
+	}))
+	undo, err := e.c.PreviewUndoFiles(ctx, e.id, chat.id)
+	require.NoError(t, err)
+	require.Equal(t, restored.UndoID, undo.UndoID, "the record stayed with the source chat")
+	_, err = e.c.PreviewUndoFiles(ctx, e.id, copied.SessionID)
+	require.ErrorContains(t, err, "There is no file restore to undo in this chat")
 }
 
 // The optional client_id of the tree routes: none passes, a malformed one

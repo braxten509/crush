@@ -147,3 +147,44 @@ func TestTreeNoteFailureIsAtomic(t *testing.T) {
 	require.Equal(t, "summary", msgs[0].Content().Text)
 	require.False(t, msgs[0].IsSummaryMessage, "branch notes must not hide destination ancestry")
 }
+
+// TreeHead reads the head without reading the tree: the newest message, a
+// message switched to, and "" before the first message or for a chat with
+// none. It agrees with the tree's own mark.
+func TestTreeHeadReadsTheHead(t *testing.T) {
+	svc, id := newTestService(t)
+	ctx := t.Context()
+	tree := svc.(TreeService)
+	head := func(sessionID string) string {
+		h, err := tree.TreeHead(ctx, sessionID)
+		require.NoError(t, err)
+		return h
+	}
+	marked := func() string {
+		entries, err := tree.Tree(ctx, id)
+		require.NoError(t, err)
+		for _, entry := range entries {
+			if entry.Active {
+				return entry.MessageID
+			}
+		}
+		return ""
+	}
+	create := func(text string, role MessageRole) Message {
+		msg, err := svc.Create(ctx, id, CreateMessageParams{Role: role, Parts: []ContentPart{TextContent{Text: text}}})
+		require.NoError(t, err)
+		return msg
+	}
+
+	require.Empty(t, head(id), "no message yet")
+	root := create("root", User)
+	reply := create("reply", Assistant)
+	require.Equal(t, reply.ID, head(id))
+	require.NoError(t, tree.SwitchTree(ctx, id, root.ID))
+	require.Equal(t, root.ID, head(id))
+	require.Equal(t, marked(), head(id))
+	require.NoError(t, tree.SwitchTree(ctx, id, ""))
+	require.Empty(t, head(id))
+	require.Equal(t, marked(), head(id))
+	require.Empty(t, head("no-such-chat"))
+}

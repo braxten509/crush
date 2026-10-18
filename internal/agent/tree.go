@@ -131,16 +131,9 @@ func (c *coordinator) withIdleTree(ctx context.Context, sessionID string, operat
 // checkTreeHead refuses with ErrTreeHeadMoved when the chat's head is not
 // head ("" for none).
 func checkTreeHead(ctx context.Context, tree message.TreeService, sessionID, head string) error {
-	entries, err := tree.Tree(ctx, sessionID)
+	current, err := tree.TreeHead(ctx, sessionID)
 	if err != nil {
 		return err
-	}
-	current := ""
-	for _, entry := range entries {
-		if entry.Active {
-			current = entry.MessageID
-			break
-		}
 	}
 	if current != head {
 		return ErrTreeHeadMoved

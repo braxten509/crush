@@ -38,12 +38,18 @@ type liveState struct {
 	owners map[workKey]string
 	// workChats maps a helper or job to the chat it works for.
 	workChats map[workKey]string
+	// workGens maps a helper or job to when it was last recorded (workGen
+	// counts the records), so that forgetting ended work never drops a
+	// record made while the agent was being asked whether it ended.
+	workGens map[workKey]uint64
+	workGen  uint64
 	// lastInit is the app of the latest interactive InitAgent, and
 	// initSeq its place among every workspace's (initSeqs).
 	lastInit string
 	initSeq  uint64
-	// stopWatch ends the completion watcher; nil until it starts.
-	// watchMu makes a second starter wait until the first subscribed.
+	// stopWatch ends the watchers of prompts and helpers that end; nil
+	// until they start. watchMu makes a second starter wait until the first
+	// subscribed.
 	stopWatch context.CancelFunc
 	watchMu   sync.Mutex
 	// hooked is set once the work hook counts this workspace.
@@ -121,7 +127,7 @@ func (b *Backend) liveTeardown(ws *Workspace) {
 	l.stopWatch = nil
 	hooked := l.hooked
 	l.hooked = false
-	l.prompts, l.lastSender, l.owners, l.workChats = nil, nil, nil, nil
+	l.prompts, l.lastSender, l.owners, l.workChats, l.workGens = nil, nil, nil, nil, nil
 	l.pendingQ2 = nil
 	l.mu.Unlock()
 	if stop != nil {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/pubsub"
 )
 
 // Ownership (Q2, engine-design.md 5.5): each prompt, helper and job records
@@ -91,6 +92,13 @@ func liveWorkStarted(w agent.WorkStart) string {
 		if !running {
 			continue
 		}
+		if w.Kind == agent.WorkJob {
+			// Each job start forgets the workspace's jobs that ended, so
+			// they don't pile up while no app lists the jobs.
+			if gens := ws.live.jobGens(); len(gens) > 0 {
+				ws.live.forgetEndedJobs(gens, agent.BackgroundProcesses())
+			}
+		}
 		ws.live.mu.Lock()
 		ws.live.recordLocked(key, w.SessionID, owner)
 		ws.live.mu.Unlock()
@@ -108,9 +116,65 @@ func (l *liveState) recordLocked(key workKey, sessionID, owner string) {
 	if l.owners == nil {
 		l.owners = make(map[workKey]string)
 		l.workChats = make(map[workKey]string)
+		l.workGens = make(map[workKey]uint64)
 	}
 	l.owners[key] = owner
 	l.workChats[key] = sessionID
+	l.workGen++
+	l.workGens[key] = l.workGen
+}
+
+// forgetLocked drops a helper or job. Callers hold l.mu.
+func (l *liveState) forgetLocked(key workKey) {
+	delete(l.owners, key)
+	delete(l.workChats, key)
+	delete(l.workGens, key)
+}
+
+// forgetEnded drops a helper whose event shows it ended, unless
+// stillRunning, called without l.mu, finds it running: a resumed run takes
+// over its task ID, and with it the record the resumed run made.
+func (l *liveState) forgetEnded(key workKey, stillRunning func() bool) {
+	l.mu.Lock()
+	gen, ok := l.workGens[key]
+	l.mu.Unlock()
+	if !ok || stillRunning() {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.workGens[key] == gen {
+		l.forgetLocked(key)
+	}
+}
+
+// jobGens snapshots the recorded jobs, for forgetEndedJobs.
+func (l *liveState) jobGens() map[workKey]uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	gens := make(map[workKey]uint64)
+	for key, gen := range l.workGens {
+		if key.kind == agent.WorkJob {
+			gens[key] = gen
+		}
+	}
+	return gens
+}
+
+// forgetEndedJobs drops the jobs of gens that procs, the job list read
+// after gens was taken, no longer has. A job recorded again since is kept.
+func (l *liveState) forgetEndedJobs(gens map[workKey]uint64, procs []agent.Process) {
+	listed := make(map[workKey]bool, len(procs))
+	for _, p := range procs {
+		listed[jobKey(p)] = true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for key, gen := range gens {
+		if !listed[key] && l.workGens[key] == gen {
+			l.forgetLocked(key)
+		}
+	}
 }
 
 // coordinator returns the workspace's agent coordinator, or nil.
@@ -180,7 +244,7 @@ func (b *Backend) liveMessageSent(ws *Workspace, clientID string, msg proto.Agen
 	}
 	// A prompt sent before the first interactive InitAgent still needs its
 	// RunComplete; the watcher subscribes before the prompt is stored.
-	b.watchCompletions(ws)
+	b.watchEnds(ws)
 	root, _ := rootSessionID(context.Background(), ws, msg.SessionID)
 	l := &ws.live
 	l.mu.Lock()
@@ -207,9 +271,11 @@ func (b *Backend) liveMessageSent(ws *Workspace, clientID string, msg proto.Agen
 	l.lastSender[root] = clientID
 }
 
-// watchCompletions starts the completion watcher once: it forgets each
-// prompt at its RunComplete. Teardown stops it.
-func (b *Backend) watchCompletions(ws *Workspace) {
+// watchEnds starts the watchers of work that ends, once: one forgets each
+// prompt at its RunComplete, the other each helper at its helper event with
+// an ended status. Teardown stops them. (A job is forgotten once it is gone
+// from the job list: see forgetEndedJobs.)
+func (b *Backend) watchEnds(ws *Workspace) {
 	if ws.App == nil || ws.RunCompletions() == nil {
 		return
 	}
@@ -224,14 +290,28 @@ func (b *Backend) watchCompletions(ws *Workspace) {
 	ctx, cancel := context.WithCancel(context.Background())
 	l.stopWatch = cancel
 	l.mu.Unlock()
-	events := ws.RunCompletions().Subscribe(ctx)
+	completions := ws.RunCompletions().Subscribe(ctx)
+	events := ws.App.Events(ctx)
 	go func() {
-		for ev := range events {
+		for ev := range completions {
 			if id := ev.Payload.SubmissionID; id != "" {
 				l.mu.Lock()
 				delete(l.prompts, id)
 				l.mu.Unlock()
 			}
+		}
+	}()
+	go func() {
+		for ev := range events {
+			task, ok := ev.Payload.(pubsub.Event[agent.Task])
+			if !ok || task.Payload.Status == agent.TaskRunning {
+				continue
+			}
+			t := task.Payload
+			l.forgetEnded(workKey{kind: agent.WorkHelper, id: t.ID}, func() bool {
+				_, running := runningTask(t.SessionID, t.ID)
+				return running
+			})
 		}
 	}()
 }
@@ -242,7 +322,8 @@ func (b *Backend) liveAgentInit(ws *Workspace, clientID string, interactive bool
 	if !interactive {
 		return
 	}
-	b.watchCompletions(ws)
+	// Before the work hook, so every helper it records has its end seen.
+	b.watchEnds(ws)
 	registered := clientID != "" && isRegistered(ws, clientID)
 	l := &ws.live
 	l.mu.Lock()
@@ -337,8 +418,7 @@ func (l *liveState) setOwner(key workKey, sessionID, owner string) {
 func (l *liveState) forget(key workKey) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	delete(l.owners, key)
-	delete(l.workChats, key)
+	l.forgetLocked(key)
 }
 
 // jobKey names a listed job: by its job ID, or for a process no hook saw

@@ -1,0 +1,22 @@
+{"method":"turn/started","params":{"threadId":"$SESSION","turn":{"id":"$TURN","items":[],"status":"inProgress"}}}
+{"method":"item/started","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"userMessage","id":"user_$UUID1","content":[{"type":"text","text":"$PROMPT"}]}}}
+{"method":"item/completed","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"userMessage","id":"user_$UUID1","content":[{"type":"text","text":"$PROMPT"}]}}}
+{"method":"item/started","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"reasoning","id":"rs_$UUID2","summary":[],"content":[]}}}
+{"method":"item/reasoning/summaryTextDelta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"rs_$UUID2","delta":"A basic check: reading the README is enough.","summaryIndex":0}}
+{"method":"item/completed","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"reasoning","id":"rs_$UUID2","summary":["A basic check: reading the README is enough."],"content":[]}}}
+{"method":"item/started","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"agentMessage","id":"msg_$UUID3","text":""}}}
+{"method":"item/agentMessage/delta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"msg_$UUID3","delta":"Let me read "}}
+{"method":"item/agentMessage/delta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"msg_$UUID3","delta":"the README."}}
+{"method":"item/completed","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"agentMessage","id":"msg_$UUID3","text":"Let me read the README.","phase":"commentary"}}}
+{"method":"item/started","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"commandExecution","id":"call_$UUID4","command":"/bin/bash -lc 'cat README.md'","cwd":"$CWD","status":"inProgress"}}}
+{"id":0,"method":"item/commandExecution/requestApproval","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"call_$UUID4","command":"/bin/bash -lc 'cat README.md'","cwd":"$CWD","reason":null}}
+{"method":"item/commandExecution/outputDelta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"call_$UUID4","delta":"# proj\n\nA throwaway project for the desktop app's window checks. `tests/run-in-sandbox.sh`\ncopies this folder to `/tmp/home/proj` inside the sandbox, runs `git init` and\nwrites `crush.json` from `crush.json.in` with the fake AI server's port.\n\nThe `auth` package keeps a sign-in session in a cookie.\n"}}
+{"method":"item/completed","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"commandExecution","id":"call_$UUID4","command":"/bin/bash -lc 'cat README.md'","cwd":"$CWD","status":"completed","aggregatedOutput":"# proj\n\nA throwaway project for the desktop app's window checks. `tests/run-in-sandbox.sh`\ncopies this folder to `/tmp/home/proj` inside the sandbox, runs `git init` and\nwrites `crush.json` from `crush.json.in` with the fake AI server's port.\n\nThe `auth` package keeps a sign-in session in a cookie.\n","exitCode":0,"durationMs":12}}}
+{"method":"item/started","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"agentMessage","id":"msg_$UUID5","text":""}}}
+{"method":"item/agentMessage/delta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"msg_$UUID5","delta":"Done: the README "}}
+{"method":"item/agentMessage/delta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"msg_$UUID5","delta":"describes a throwaway "}}
+{"method":"item/agentMessage/delta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"msg_$UUID5","delta":"project for the "}}
+{"method":"item/agentMessage/delta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"msg_$UUID5","delta":"window checks."}}
+{"method":"item/completed","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"agentMessage","id":"msg_$UUID5","text":"Done: the README describes a throwaway project for the window checks.","phase":"final_answer"}}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"$SESSION","turnId":"$TURN","tokenUsage":{"total":{"inputTokens":50,"cachedInputTokens":0,"outputTokens":12,"reasoningOutputTokens":4,"totalTokens":62},"last":{"inputTokens":50,"cachedInputTokens":0,"outputTokens":12,"reasoningOutputTokens":4,"totalTokens":62},"modelContextWindow":400000}}}
+{"method":"turn/completed","params":{"threadId":"$SESSION","turn":{"id":"$TURN","items":[],"status":"completed","error":null}}}

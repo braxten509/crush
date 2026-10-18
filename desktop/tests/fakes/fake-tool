@@ -1,16 +1,592 @@
 #!/usr/bin/env python3
-"""Stands in for the AI tool CLIs (claude, codex, grok, opencode, agy) in
-tests. It is reached through symlinks named after each tool, records how it
-was called in $FAKE_TOOL_LOG, and answers with a minimal canned reply."""
-import json, os, sys, time
+"""Stands in for the AI tool CLIs (claude, codex, grok, opencode, agy) in tests
+(desktop-design 6.2). It is reached through the symlinks in tests/fakes/bin,
+named after each tool, and:
+- logs how it was called ({tool, args, cwd, at}) and every stdin line
+  ({tool, stdin, at}) in $FAKE_TOOL_LOG;
+- speaks each tool's protocol the way Crush drives it (internal/agent/cliagent):
+  Claude Code's stream-json, Codex's app-server JSON-RPC, the Agent Client
+  Protocol for Grok and OpenCode, and AGY's print-mode stream-json;
+- replays a recorded stream per prompt from tests/fakes/streams/<tool>/<name>.jsonl,
+  <name> being the first word of the user's text (the prompt after the blocks
+  the engine puts first, such as <crush_skill_settings>; else the first word
+  of its last line; else "default"), then waits for stdin to close, as the Go fakes do
+  (cliagent_test.go:20-28); a kept Claude or Codex process serves every later
+  prompt the same way;
+- answers --version, model discovery (`codex app-server` model/list, Grok's
+  ACP initialize, `agy models`, `opencode models opencode-go`) and title
+  requests (a short title, never a stream).
 
-tool = os.path.basename(sys.argv[0])
-log = os.environ.get("FAKE_TOOL_LOG")
-if log:
-    with open(log, "a") as f:
-        f.write(json.dumps({"tool": tool, "args": sys.argv[1:], "cwd": os.getcwd(), "at": time.time()}) + "\n")
-if "--version" in sys.argv[1:]:
-    print(f"{tool} 0.0.0-fake")
+Stream files hold the tool's own output for one prompt, one JSON object per
+line, written from the formats the Go fakes pin (cliagent_test.go:43-63 for
+Claude, :74-86 for Codex, cli_more_test.go:18-34 for ACP, :87-95 for AGY), not
+from real sessions. In string values $SESSION is the native session (thread,
+conversation) ID, $TURN the turn ID, $PROMPT the prompt, $CWD the folder, $UUID
+a fresh UUID each time and $UUID1, $UUID2, ... one fresh UUID each per replay;
+an "id" of "$REQUEST" becomes the ID of the request that carried the prompt
+(ACP's session/prompt). A line {"_delay_ms": N} only waits; other lines wait
+$FAKE_TOOL_DELAY_MS (default 15) first.
+
+A request the fake sends (Claude's can_use_tool, ACP's session/request_permission,
+Codex's approval requests) waits for Crush's answer, and a denial turns that
+tool's result into an error. They are skipped where the real tool would not
+ask: Claude under --permission-mode bypassPermissions, Codex under approval
+policy "never". An interrupt (Claude's interrupt request, ACP's session/cancel,
+Codex's turn/interrupt, SIGINT for AGY) stops the replay the way the tool does.
+"""
+import json, os, re, signal, sys, threading, time, uuid
+
+TOOL = os.path.basename(sys.argv[0])
+ARGS = sys.argv[1:]
+HERE = os.path.dirname(os.path.realpath(__file__))
+STREAMS = os.environ.get("FAKE_TOOL_STREAMS") or os.path.join(HERE, "streams")
+LOG = os.environ.get("FAKE_TOOL_LOG")
+DELAY = float(os.environ.get("FAKE_TOOL_DELAY_MS", "15") or 0) / 1000.0
+TITLE_PREFIX = "Generate a concise title for the following content:"
+
+# The built-in model lists of internal/config/cli_providers.go, answered to
+# discovery so a discovered list matches the built-in one (Codex's with the
+# same reasoning levels, Grok's with none).
+EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"]
+CODEX_EFFORTS = {"gpt-6-luna": EFFORTS[:5]}
+MODELS = {
+    "codex": [("gpt-6-astra", "GPT-6 Astra"), ("gpt-6-sol", "GPT-6 Sol"), ("gpt-6-luna", "GPT-6 Luna"), ("gpt-5.6-terra", "GPT-5.6 Terra")],
+    "grok": [("grok-4.7", "Grok 4.7"), ("grok-4.7-build-fast", "Grok 4.7 Build Fast"), ("grok-4.6", "Grok 4.6"), ("grok-4.5", "Grok 4.5")],
+    "agy": [("gemini-3.1-pro-high", "Gemini 3.1 Pro (High)"), ("gemini-3.8-flash-high", "Gemini 3.8 Flash (High)"),
+            ("claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)"), ("gemini-3.8-flash-low", "Gemini 3.8 Flash (Low)")],
+    "opencode": [("opencode-go/glm-5.3", "glm-5.3"), ("opencode-go/kimi-k3", "kimi-k3"),
+                 ("opencode-go/deepseek-v4-pro", "deepseek-v4-pro"), ("opencode-go/glm-5.3-flash", "glm-5.3-flash")],
+}
+
+_out = threading.Lock()
+
+
+def log(entry):
+    if not LOG:
+        return
+    entry = {"tool": TOOL, **entry, "at": time.time()}
+    with _out, open(LOG, "a") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def send(obj):
+    data = json.dumps(obj, ensure_ascii=False) + "\n"
+    with _out:
+        try:
+            sys.stdout.write(data)
+            sys.stdout.flush()
+        except (BrokenPipeError, ValueError):
+            os._exit(0)
+
+
+def flag(name):
+    """The value after flag name in ARGS, or None."""
+    for i, a in enumerate(ARGS):
+        if a == name and i + 1 < len(ARGS):
+            return ARGS[i + 1]
+        if a.startswith(name + "="):
+            return a.split("=", 1)[1]
+    return None
+
+
+def first_word(text):
+    m = re.match(r"\W*([A-Za-z0-9][A-Za-z0-9_-]*)", text or "")
+    return m.group(1).lower() if m else None
+
+
+def stream_path(name):
+    return os.path.join(STREAMS, TOOL, name + ".jsonl")
+
+
+LEADING_BLOCK = re.compile(r"\s*<([A-Za-z_][\w-]*)[^>]*>.*?</\1>", re.S)
+
+
+def user_text(prompt):
+    """The user's own words: the prompt without the blocks the engine puts
+    before them (<crush_instruction_sources>, <crush_skill_settings>, ...)."""
+    text = prompt or ""
+    while True:
+        m = LEADING_BLOCK.match(text)
+        if not m:
+            return text.strip()
+        text = text[m.end():]
+
+
+def pick_stream(prompt):
+    text = user_text(prompt)
+    lines = [line for line in text.splitlines() if line.strip()]
+    for word in (first_word(text), first_word(lines[-1]) if lines else None):
+        if word and os.path.isfile(stream_path(word)):
+            return word
+    return "default"
+
+
+def load_stream(name):
+    try:
+        with open(stream_path(name)) as f:
+            return [json.loads(line) for line in f if line.strip()]
+    except OSError:
+        return None
+
+
+def title_of(prompt):
+    """A title for a title request, else None."""
+    i = (prompt or "").find(TITLE_PREFIX)
+    if i < 0:
+        return None
+    content = prompt[i + len(TITLE_PREFIX):]
+    cut = content.rfind("<think>")
+    if cut >= 0:
+        content = content[:cut]
+    return " ".join(content.split()[:6]) or "New chat"
+
+
+class Subs:
+    """The placeholders of one replay."""
+
+    def __init__(self, **values):
+        self.values = {"$" + k: v for k, v in values.items() if k != "PROMPT"}
+        self.prompt = values.get("PROMPT", "")
+        self.request = None
+        self.named = {}
+
+    def apply(self, value):
+        if isinstance(value, dict):
+            out = {k: self.apply(v) for k, v in value.items()}
+            if value.get("id") == "$REQUEST" and self.request is not None:
+                out["id"] = self.request
+            return out
+        if isinstance(value, list):
+            return [self.apply(v) for v in value]
+        if not isinstance(value, str):
+            return value
+        for key, val in self.values.items():
+            value = value.replace(key, val)
+
+        def fresh(m):
+            if not m.group(1):
+                return str(uuid.uuid4())
+            return self.named.setdefault(m.group(1), str(uuid.uuid4()))
+        value = re.sub(r"\$UUID(\d*)", fresh, value)
+        return value.replace("$PROMPT", self.prompt)
+
+
+class Replay(threading.Thread):
+    """Plays one stream's lines through a protocol's hooks."""
+
+    def __init__(self, proto, lines, subs):
+        super().__init__(daemon=True)
+        self.proto, self.lines, self.subs = proto, lines, subs
+        self.stopped = threading.Event()
+
+    def stop(self):
+        self.stopped.set()
+
+    def run(self):
+        for raw in self.lines:
+            if self.stopped.is_set():
+                break
+            obj = self.subs.apply(raw)
+            if isinstance(obj, dict) and obj and all(k.startswith("_") for k in obj):
+                if self.stopped.wait(float(obj.get("_delay_ms", 0)) / 1000.0):
+                    break
+                continue
+            if self.proto.skip(obj):
+                continue
+            obj = self.proto.adjust(obj)
+            if DELAY and self.stopped.wait(DELAY):
+                break
+            send(obj)
+            wait_id = self.proto.request_id(obj)
+            if wait_id is not None:
+                answer = self.proto.wait_answer(wait_id, self.stopped)
+                if answer is None:
+                    break
+                self.proto.on_answer(obj, answer)
+        self.proto.finished(self)
+
+
+class Proto:
+    """Shared request bookkeeping: requests the fake sent, waiting for answers."""
+
+    def __init__(self):
+        self.answers = {}
+        self.cond = threading.Condition()
+        self.replay = None
+        self.denied = {}
+
+    def skip(self, obj):
+        return False
+
+    def adjust(self, obj):
+        return obj
+
+    def request_id(self, obj):
+        return None
+
+    def answered(self, rid, answer):
+        with self.cond:
+            self.answers[json.dumps(rid)] = answer
+            self.cond.notify_all()
+
+    def wait_answer(self, rid, stopped):
+        key = json.dumps(rid)
+        with self.cond:
+            while key not in self.answers:
+                if stopped.is_set():
+                    return None
+                self.cond.wait(0.1)
+            return self.answers.pop(key)
+
+    def on_answer(self, obj, answer):
+        pass
+
+    def finished(self, replay):
+        pass
+
+    def busy(self):
+        return self.replay is not None and self.replay.is_alive()
+
+    def start(self, lines, subs):
+        self.replay = Replay(self, lines, subs)
+        self.replay.start()
+
+
+# Claude Code: stream-json (internal/agent/cliagent/claude.go) ------------------
+
+def claude_text(message):
+    content = (message or {}).get("content")
+    if isinstance(content, str):
+        return content
+    return "".join(b.get("text", "") for b in content or [] if isinstance(b, dict) and b.get("type") == "text")
+
+
+class Claude(Proto):
+    def __init__(self):
+        super().__init__()
+        self.session = flag("--resume") or str(uuid.uuid4())
+        self.bypass = flag("--permission-mode") == "bypassPermissions"
+        self.interrupted = False
+
+    def skip(self, obj):
+        req = obj.get("request") or {}
+        return obj.get("type") == "control_request" and req.get("subtype") == "can_use_tool" and self.bypass
+
+    def request_id(self, obj):
+        return obj.get("request_id") if obj.get("type") == "control_request" else None
+
+    def on_answer(self, obj, answer):
+        resp = answer.get("response") or {}
+        if resp.get("behavior") == "deny":
+            tool_use = (obj.get("request") or {}).get("tool_use_id")
+            self.denied[tool_use] = resp.get("message") or "The user denied this tool call."
+
+    def adjust(self, obj):
+        if obj.get("type") != "user" or obj.get("isReplay") or not self.denied:
+            return obj
+        content = (obj.get("message") or {}).get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in self.denied:
+                    block["content"] = self.denied.pop(block["tool_use_id"])
+                    block["is_error"] = True
+        return obj
+
+    def finished(self, replay):
+        if replay.stopped.is_set() and self.interrupted:
+            self.interrupted = False
+            send({"type": "result", "subtype": "error_during_execution", "is_error": False, "result": "", "session_id": self.session})
+
+    def control(self, rid, ok=True, error=None):
+        resp = {"subtype": "success", "request_id": rid, "response": {}} if ok else {"subtype": "error", "request_id": rid, "error": error}
+        send({"type": "control_response", "response": resp})
+
+    def on_line(self, obj):
+        kind = obj.get("type")
+        if kind == "control_request":
+            sub = (obj.get("request") or {}).get("subtype")
+            rid = obj.get("request_id")
+            if sub == "initialize":
+                self.control(rid)
+            elif sub == "interrupt":
+                self.control(rid)
+                if self.busy():
+                    self.interrupted = True
+                    self.replay.stop()
+            else:
+                self.control(rid, ok=False, error="not supported by the fake")
+        elif kind == "control_response":
+            resp = obj.get("response") or {}
+            self.answered(resp.get("request_id"), resp)
+        elif kind == "user":
+            text = claude_text(obj.get("message"))
+            if self.busy():
+                # A message steered in mid-turn: Claude takes it in at its next
+                # step and echoes it (--replay-user-messages).
+                send({"type": "user", "message": {"role": "user", "content": text}, "isReplay": True, "session_id": self.session})
+                return
+            title = title_of(text)
+            subs = Subs(SESSION=self.session, PROMPT=text, CWD=os.getcwd())
+            if title is not None:
+                lines = [{"type": "system", "subtype": "init", "session_id": "$SESSION"},
+                         {"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}},
+                         {"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": title}}},
+                         {"type": "result", "subtype": "success", "is_error": False, "result": title, "session_id": "$SESSION"}]
+            else:
+                lines = load_stream(pick_stream(text)) or [
+                    {"type": "system", "subtype": "init", "session_id": "$SESSION"},
+                    {"type": "result", "subtype": "success", "is_error": False, "result": "fake claude reply", "session_id": "$SESSION"}]
+            # --replay-user-messages echoes the prompt as Claude takes it in,
+            # right after the init line.
+            echo = {"type": "user", "message": {"role": "user", "content": "$PROMPT"}, "isReplay": True, "session_id": "$SESSION"}
+            at = next((i + 1 for i, line in enumerate(lines) if line.get("type") == "system" and line.get("subtype") == "init"), 0)
+            self.start(lines[:at] + [echo] + lines[at:], subs)
+
+
+# Codex: app-server JSON-RPC (internal/agent/cliagent/codex.go) ------------------
+
+class Codex(Proto):
+    def __init__(self):
+        super().__init__()
+        self.thread = None
+        self.approval = "on-request"
+        self.turn = None
+
+    def skip(self, obj):
+        return "method" in obj and "id" in obj and self.approval == "never"
+
+    def request_id(self, obj):
+        return obj["id"] if "method" in obj and "id" in obj else None
+
+    def on_answer(self, obj, answer):
+        if ((answer.get("result") or {}).get("decision")) != "accept":
+            item = (obj.get("params") or {}).get("itemId")
+            self.denied[item] = True
+
+    def adjust(self, obj):
+        if obj.get("method") == "item/completed" and self.denied:
+            item = (obj.get("params") or {}).get("item") or {}
+            if self.denied.pop(item.get("id"), False):
+                item["status"] = "declined"
+                if "aggregatedOutput" in item:
+                    item["aggregatedOutput"] = ""
+        return obj
+
+    def finished(self, replay):
+        if replay.stopped.is_set():
+            send({"method": "turn/completed", "params": {"turn": {"id": self.turn, "status": "interrupted"}}})
+
+    def on_line(self, obj):
+        method, rid, params = obj.get("method"), obj.get("id"), obj.get("params") or {}
+        if method is None and rid is not None:
+            self.answered(rid, obj)
+        elif method == "initialize":
+            send({"id": rid, "result": {"userAgent": "codex-fake/0.0.0"}})
+        elif method == "initialized":
+            pass
+        elif method == "hooks/list":
+            send({"id": rid, "result": {"data": []}})
+        elif method == "config/value/write":
+            send({"id": rid, "result": {}})
+        elif method == "model/list":
+            send({"id": rid, "result": {"data": [{"id": m, "displayName": n, "hidden": False, "inputModalities": ["text", "image"],
+                                                  "defaultReasoningEffort": "medium",
+                                                  "supportedReasoningEfforts": [{"reasoningEffort": e} for e in CODEX_EFFORTS.get(m, EFFORTS)]}
+                                                 for m, n in MODELS["codex"]]}})
+        elif method == "config/read":
+            send({"id": rid, "result": {"config": {}}})
+        elif method in ("thread/start", "thread/resume"):
+            self.approval = params.get("approvalPolicy") or self.approval
+            self.thread = params.get("threadId") if method == "thread/resume" else "th-" + uuid.uuid4().hex[:12]
+            send({"id": rid, "result": {"thread": {"id": self.thread}}})
+        elif method == "turn/start":
+            text = "".join(i.get("text", "") for i in params.get("input") or [] if isinstance(i, dict) and i.get("type") == "text")
+            self.turn = "tu-" + uuid.uuid4().hex[:12]
+            send({"id": rid, "result": {"turn": {"id": self.turn}}})
+            subs = Subs(SESSION=self.thread or "", TURN=self.turn, PROMPT=text, CWD=os.getcwd())
+            title = title_of(text)
+            if title is not None:
+                lines = [{"method": "item/started", "params": {"item": {"type": "agentMessage", "id": "m_$UUID1"}}},
+                         {"method": "item/agentMessage/delta", "params": {"itemId": "m_$UUID1", "delta": title}},
+                         {"method": "item/completed", "params": {"item": {"type": "agentMessage", "id": "m_$UUID1"}}},
+                         {"method": "turn/completed", "params": {"turn": {"id": "$TURN", "status": "completed"}}}]
+            else:
+                lines = load_stream(pick_stream(text)) or [{"method": "turn/completed", "params": {"turn": {"id": "$TURN", "status": "completed"}}}]
+            self.start(lines, subs)
+        elif method == "turn/interrupt":
+            send({"id": rid, "result": {}})
+            if self.busy():
+                self.replay.stop()
+        elif method == "turn/steer":
+            send({"id": rid, "result": {}})
+            text = "".join(i.get("text", "") for i in params.get("input") or [] if isinstance(i, dict) and i.get("type") == "text")
+            item = {"type": "userMessage", "id": "u_" + uuid.uuid4().hex[:12], "content": [{"type": "text", "text": text}]}
+            send({"method": "item/started", "params": {"item": item}})
+            send({"method": "item/completed", "params": {"item": item}})
+        elif method == "thread/backgroundTerminals/list":
+            send({"id": rid, "result": {"data": []}})
+        elif rid is not None:
+            send({"id": rid, "error": {"code": -32601, "message": "not supported by the fake"}})
+
+
+# Grok and OpenCode: the Agent Client Protocol (internal/agent/cliagent/acp.go) --
+
+def acp_text(prompt):
+    return "".join(p.get("text", "") for p in prompt or [] if isinstance(p, dict) and p.get("type") == "text")
+
+
+class ACP(Proto):
+    def __init__(self):
+        super().__init__()
+        self.session = None
+        self.prompt_id = None
+        self.steers = []
+        self.result_sent = False
+        self.cancelled = False
+
+    def request_id(self, obj):
+        return obj["id"] if "method" in obj and "id" in obj else None
+
+    def on_answer(self, obj, answer):
+        outcome = ((answer.get("result") or {}).get("outcome")) or {}
+        params = obj.get("params") or {}
+        kinds = {o.get("optionId"): o.get("kind") for o in params.get("options") or []}
+        if outcome.get("outcome") != "selected" or not str(kinds.get(outcome.get("optionId"), "")).startswith("allow"):
+            self.denied[(params.get("toolCall") or {}).get("toolCallId")] = True
+
+    def adjust(self, obj):
+        if "result" in obj and "method" not in obj:
+            self.result_sent = True
+        update = (obj.get("params") or {}).get("update") or {}
+        if update.get("sessionUpdate") == "tool_call_update" and update.get("status") == "completed" and self.denied.pop(update.get("toolCallId"), False):
+            update["status"] = "failed"
+            update["content"] = [{"type": "content", "content": {"type": "text", "text": "The user rejected this tool call."}}]
+        return obj
+
+    def finished(self, replay):
+        result = {"stopReason": "end_turn"}
+        if replay.stopped.is_set() and self.cancelled:
+            self.cancelled = False
+            send({"jsonrpc": "2.0", "id": self.prompt_id, "result": {"stopReason": "cancelled"}})
+            result = {"stopReason": "cancelled"}
+        elif not self.result_sent:
+            send({"jsonrpc": "2.0", "id": self.prompt_id, "result": result})
+        # OpenCode answers prompts steered into the turn with the turn's result.
+        for sid in self.steers:
+            send({"jsonrpc": "2.0", "id": sid, "result": result})
+        self.steers = []
+
+    def on_line(self, obj):
+        method, rid, params = obj.get("method"), obj.get("id"), obj.get("params") or {}
+        if method is None and rid is not None:
+            self.answered(rid, obj)
+        elif method == "initialize":
+            models = [{"modelId": m, "name": n, "_meta": {"totalContextTokens": 400000, "supportsReasoningEffort": False}}
+                      for m, n in MODELS.get(TOOL, [])]
+            send({"jsonrpc": "2.0", "id": rid, "result": {"protocolVersion": 1, "agentCapabilities": {"loadSession": True},
+                                                         "authMethods": [], "_meta": {"modelState": {"availableModels": models}}}})
+        elif method == "session/new":
+            self.session = "ses-" + uuid.uuid4().hex[:12]
+            send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": self.session}})
+        elif method == "session/load":
+            self.session = params.get("sessionId")
+            send({"jsonrpc": "2.0", "id": rid, "result": {}})
+        elif method == "session/set_model":
+            send({"jsonrpc": "2.0", "id": rid, "result": {}})
+        elif method == "session/prompt":
+            if self.busy():
+                self.steers.append(rid)
+                return
+            text = acp_text(params.get("prompt"))
+            self.prompt_id, self.result_sent = rid, False
+            subs = Subs(SESSION=self.session or params.get("sessionId") or "", PROMPT=text, CWD=os.getcwd())
+            subs.request = rid
+            title = title_of(text)
+            if title is not None:
+                lines = [{"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "$SESSION", "update": {
+                              "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": title}}}},
+                         {"jsonrpc": "2.0", "id": "$REQUEST", "result": {"stopReason": "end_turn"}}]
+            else:
+                lines = load_stream(pick_stream(text)) or []
+            self.start(lines, subs)
+        elif method == "session/cancel":
+            if self.busy():
+                self.cancelled = True
+                self.replay.stop()
+        elif rid is not None:
+            send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "not supported by the fake"}})
+
+
+# AGY: print mode stream-json (internal/agent/cliagent/agy.go) -------------------
+
+class AGY(Proto):
+    def __init__(self):
+        super().__init__()
+        self.session = flag("--conversation") or "conv-" + uuid.uuid4().hex[:12]
+
+    def on_line(self, obj):
+        if obj.get("event") != "user" or self.replay is not None:
+            return
+        content = (obj.get("message") or {}).get("content")
+        text = content if isinstance(content, str) else claude_text(obj.get("message"))
+        subs = Subs(SESSION=self.session, PROMPT=text, CWD=os.getcwd())
+        title = title_of(text)
+        if title is not None:
+            lines = [{"event": "init", "conversation_id": "$SESSION"},
+                     {"event": "step_update", "step_update": {"step_index": 1, "state": "ACTIVE", "step_type": "agent_response", "text_delta": title}},
+                     {"event": "step_update", "step_update": {"step_index": 1, "state": "DONE", "step_type": "agent_response"}},
+                     {"event": "result", "result": {"status": "SUCCESS", "response": title}}]
+        else:
+            lines = load_stream(pick_stream(text)) or [{"event": "init", "conversation_id": "$SESSION"},
+                                                       {"event": "result", "result": {"status": "SUCCESS"}}]
+        self.start(lines, subs)
+
+
+def serve(proto):
+    """Reads stdin lines until it closes, handing each to the protocol."""
+    for line in sys.stdin:
+        log({"stdin": line.rstrip("\n")})
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(obj, dict):
+            proto.on_line(obj)
+    if proto.replay is not None:
+        proto.replay.stop()
+    os._exit(0)
+
+
+def print_models(lines):
+    for line in lines:
+        print(line)
     sys.exit(0)
-# Later phases teach this script each tool's real reply format.
-print(json.dumps({"type": "result", "subtype": "success", "result": f"fake {tool} reply", "is_error": False}))
+
+
+def main():
+    log({"args": ARGS, "cwd": os.getcwd()})
+    if "--version" in ARGS:
+        print(f"{TOOL} 0.0.0-fake")
+        return 0
+    if TOOL == "claude" and ("-p" in ARGS or flag("--input-format") == "stream-json"):
+        serve(Claude())
+    elif TOOL == "codex" and ARGS[:1] == ["sandbox"] and "--" in ARGS:
+        # AGY's guarded sub-agents run inside `codex sandbox ... -- agy ...`.
+        rest = ARGS[ARGS.index("--") + 1:]
+        os.execvp(rest[0], rest)
+    elif TOOL == "codex" and ARGS[:1] == ["app-server"]:
+        serve(Codex())
+    elif TOOL in ("grok", "opencode") and ("stdio" in ARGS or ARGS[:1] == ["acp"]):
+        serve(ACP())
+    elif TOOL == "agy" and ARGS[:1] == ["models"]:
+        print_models(f"{m}\t{n}" for m, n in MODELS["agy"])
+    elif TOOL == "opencode" and ARGS[:1] == ["models"]:
+        print_models(m for m, _ in MODELS["opencode"])
+    elif TOOL == "agy" and (flag("--input-format") == "stream-json" or any(a.startswith("--print") for a in ARGS)):
+        signal.signal(signal.SIGINT, lambda *_: os._exit(130))
+        serve(AGY())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

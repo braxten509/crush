@@ -1,0 +1,12 @@
+{"event":"init","conversation_id":"$SESSION"}
+{"event":"step_update","step_update":{"step_index":0,"state":"ACTIVE","step_type":"agent_response","text_delta":"Let me read "}}
+{"event":"step_update","step_update":{"step_index":0,"state":"ACTIVE","step_type":"agent_response","text_delta":"the README."}}
+{"event":"step_update","step_update":{"step_index":0,"state":"DONE","step_type":"agent_response","usage":{"input_tokens":30,"output_tokens":8,"thinking_tokens":0,"cache_read_tokens":0}}}
+{"event":"step_update","step_update":{"step_index":1,"state":"ACTIVE","step_type":"tool","tool_name":"view_file","tool_info":{"parameters":{"AbsolutePath":"$CWD/README.md"}}}}
+{"event":"step_update","step_update":{"step_index":1,"state":"DONE","step_type":"tool","tool_name":"view_file","tool_info":{"parameters":{"AbsolutePath":"$CWD/README.md"},"output":"# proj\n\nA throwaway project for the desktop app's window checks. `tests/run-in-sandbox.sh`\ncopies this folder to `/tmp/home/proj` inside the sandbox, runs `git init` and\nwrites `crush.json` from `crush.json.in` with the fake AI server's port.\n\nThe `auth` package keeps a sign-in session in a cookie.\n"}}}
+{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"Done: the README "}}
+{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"describes a throwaway "}}
+{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"project for the "}}
+{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"window checks."}}
+{"event":"step_update","step_update":{"step_index":2,"state":"DONE","step_type":"agent_response","usage":{"input_tokens":30,"output_tokens":8,"thinking_tokens":0,"cache_read_tokens":0}}}
+{"event":"result","result":{"status":"SUCCESS","response":"Done: the README describes a throwaway project for the window checks."}}

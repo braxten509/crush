@@ -263,11 +263,16 @@ func (b *Backend) liveAgentInit(ws *Workspace, clientID string, interactive bool
 	}
 }
 
-// liveGone runs Q2 for an app that left while other apps stay. With no app
-// left, teardown does the full stop.
+// liveGone runs Q2 for the app that left; while other apps stay, in the
+// background. For the last app it runs here, before the teardown that
+// follows: an app that joins before that teardown takes the backend's lock
+// aborts it, and the leaver's work must not run on with no owner. Run first,
+// it is done before a later workspace can resume a helper under the same
+// task ID; when the teardown goes ahead, the teardown stops the rest.
 func (b *Backend) liveGone(ws *Workspace, clientID string, reason GoneReason, workspaceEmpty bool) {
 	slog.Debug("An app left a workspace", "workspace", ws.ID, "client", clientID, "reason", reason, "last", workspaceEmpty)
 	if workspaceEmpty {
+		b.applyQ2(ws, clientID)
 		return
 	}
 	go b.applyQ2(ws, clientID)

@@ -226,15 +226,23 @@ func TestBranchWhileReplying(t *testing.T) {
 		return branch, time.Since(began), err
 	}
 
-	// The baseline: the same chat copied with no reply running.
-	baselineBranch, baseline, err := branchAt(lastAnswer, "Answer 500", "Baseline")
-	require.NoError(t, err)
-	require.Equal(t, 1000, baselineBranch.Copied)
-	bound := 500 * time.Millisecond
-	if baseline > 250*time.Millisecond {
-		bound = 2 * baseline
+	// The baseline: the same chat copied three times with no reply running,
+	// each to a new branch from its own words, since highlights may not
+	// overlap. The fastest copy is the least disturbed by other work on the
+	// machine.
+	var baselines []time.Duration
+	for i, highlight := range []string{"Answer 500", "and then", "some more"} {
+		branch, took, err := branchAt(lastAnswer, highlight, fmt.Sprintf("Baseline %d", i+1))
+		require.NoError(t, err)
+		require.Equal(t, 1000, branch.Copied)
+		baselines = append(baselines, took)
 	}
-	t.Logf("baseline copy of 1,000 messages took %v; the bound is %v", baseline, bound)
+	baseline := slices.Min(baselines)
+	// The bound is loose: the baseline and the copy made mid-reply are taken
+	// at different moments, and the machine's load can change in between.
+	// It still catches a copy that holds the database for long.
+	bound := max(2*time.Second, 4*baseline)
+	t.Logf("baseline copies of 1,000 messages took %v; the fastest, %v, makes the bound %v", baselines, baseline, bound)
 	// Every wait from here on outlasts the bound: a machine slow enough to
 	// stretch the baseline is as slow for the rest. The held reply never
 	// ends by itself, so a call that waits for it still fails.

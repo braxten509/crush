@@ -93,7 +93,7 @@ impl AppError {
 pub type AppResult<T> = Result<T, AppError>;
 ```
 
-Engine errors keep the engine's `code` (`proto.Error`, `internal/proto/proto.go:37-41`; codes in engine design §0.1 "Errors", `engine-design.md:42-96`). When the body has no `code`, `from_engine` fills it by status the same way the engine does for plain errors: 400 `bad_request`, 404 `not_found`, 409 `conflict`, 500 `internal`, 503 `shutting_down`. App-side codes:
+Engine errors keep the engine's `code` (`proto.Error`, `internal/proto/proto.go:37-41`; codes in engine design §0.1 "Errors", `engine-design.md:42-96`). When the body has no `code`, `from_engine` fills it by status the same way the engine does for plain errors: 400 `bad_request`, 404 `not_found`, 409 `conflict`, 500 `internal`, 503 `shutting_down`; any other status gets `http_<status>` (for example `http_502`), so a code is never empty (`error.rs` test `from_engine_names_any_other_status_by_number`). App-side codes:
 
 | Code | When |
 |---|---|
@@ -368,7 +368,7 @@ pub fn list(cwd: &str, max_depth: u32, max_items: u32) -> AppResult<Vec<FileEntr
 - **State.** `AppState { windows: Mutex<HashMap<String /* window label */, Arc<connection::WindowConn>>>, settings: Mutex<settings::Settings>, launch: Launch }`, with `Launch { probe: Option<PathBuf>, fixture: Option<PathBuf>, cwd: PathBuf, session: Option<String>, continue_last: bool, data_dir: Option<String>, debug: bool, host: Option<String>, yolo: Option<bool>, channels: Vec<String>, ui_debug: bool }`. `ui_debug` is `CRUSH_UI_DEBUG == "true"` (PLAN.md:144).
 - **Fixture mode.** With `--fixture`, `commands.rs` sends `engine_open`, `engine_retry`, `engine_set_current_session`, `api`, `api_abort` and `events_take` to `fixture.rs` instead of `connection.rs` (section 6.3; a fixture call never runs long, so its `api_abort` returns `false`).
 - **Closing.** `on_window_event(CloseRequested)` calls `connection::close` for that label, which first aborts that window's running calls, so its `!` commands end with it (1.2.4). Q2 (what keeps running) is the engine's job (engine design §5.5).
-- **Navigation guard** (review finding 5). `main.rs` registers a small in-app plugin, `tauri::plugin::Builder::new("nav-guard").on_navigation(|_webview, url| …)` (Tauri 2.12.4 `src/plugin.rs:459`), which runs for every webview the app opens, including later phases' windows. It allows only the app's own pages, `url.scheme() == "tauri" && url.host_str() == Some("localhost")` (there is no dev server: `tauri.conf.json:7-9` has only `frontendDist`), and refuses every other navigation. A refusal is logged with the URL's scheme only; with `--probe` it is also appended to `<probe file>.opened.jsonl` as `{"refused_navigation":"<scheme>:"}`, so the safety corpus (2.9) sees a link that got past the screen's handler. No new-window handler is set: wry 0.57.0 hooks WebKitGTK's `create` signal only when one is given (`wry-0.57.0/src/webkitgtk/mod.rs:493-495`), and an unhandled `create` opens no window (WebKitGTK's default; inferred the same for WKWebView on a Mac, S3 confirms). `javascript:` URLs never run at all: the CSP's `script-src 'self'` has no `'unsafe-inline'` (`tauri.conf.json:24`).
+- **Navigation guard** (review finding 5). `main.rs` registers a small in-app plugin, `tauri::plugin::Builder::new("nav-guard").on_navigation(|_webview, url| …)` (Tauri 2.12.4 `src/plugin.rs:459`), which runs for every webview the app opens, including later phases' windows. It allows only the app's own pages, `url.scheme() == "tauri" && url.host_str() == Some("localhost")` (there is no dev server: `tauri.conf.json:7-9` has only `frontendDist`), and refuses every other navigation. A refusal is logged with the URL's scheme only; with `--probe` it is also appended to `<probe file>.opened.jsonl` as `{"refused_navigation":"<scheme>:"}`, so the safety corpus (2.9) sees a link that got past the screen's handler. No new-window handler is set: wry 0.57.0 hooks WebKitGTK's `create` signal only when one is given (`wry-0.57.0/src/webkitgtk/mod.rs:493-495`), and an unhandled `create` opens no window (WebKitGTK's default). On a Mac (WKWebView) two things could not be checked from Linux, where S3 was built and checked: that the app's pages load from `tauri://localhost` there too (on Linux every sandbox run shows the page through the guard), and that WKWebView opens no window when no new-window handler is set (inferred from WebKitGTK); the first Mac build must check both. `javascript:` URLs never run at all: the CSP's `script-src 'self'` has no `'unsafe-inline'` (`tauri.conf.json:24`).
 - **Settings watcher.** `main.rs` setup calls `settings::watch(app.handle().clone())` once (1.2.8).
 - Phases 5 and 6 open more windows (`crush-desktop --project DIR`, PLAN.md:143). Every command already takes the calling window, so a second window gets its own `WindowConn`, `client_id` and batcher without new commands.
 
@@ -882,6 +882,8 @@ KaTeX's fonts and CSS are imported from `katex/dist/katex.min.css` so Vite copie
 ### 1.8 Keyboard and focus
 
 `lib/keys.js` (S3) has one `keydown` listener on `window` (capture phase), a table of bindings by scope, and `bindKey(scope, combo, handler)` for pieces to attach handlers. Scopes, from most to least specific: `menu`, `overlay` (the viewer, the front sheet of the stack, help), `popup` (the `@` list, later the `$` list), `slot` (an inline prompt), `tray` (while the tray has focus, SIDE-033), `composer`, `timeline`, `panel`, `list`, `global`. The first scope that has the combo and whose handler returns `true` wins. The zoom keys keep their own listener (`src/lib/zoom.js:60-79`), which already runs first.
+
+**While the menu, the viewer or a sheet is open**, a key asks only `menu` (while the menu is open) or else `overlay`, so no `global` key works then (Ctrl+G, Ctrl+N, Ctrl+K, Ctrl+T and the rest), as the terminal gives every key to its front dialog while one is open (`internal/ui/model/keypress.go:111-114`, owner from `paneOwner`, `keypress.go:65-68`; the overlay hands it to the front dialog only, after the grace, `internal/ui/dialog/dialog.go:221-238`). The one exception is the quit key: **Ctrl+C asks `global` first, before every other scope and before a sheet's input grace, unless the quit sheet is anywhere in the stack**, as the terminal opens its quit dialog over any dialog but itself (`keypress.go:107-109`; Ctrl+C is `keyMap.Quit`, `keys.go:95-97`). The help sheet does not count as one of these: the terminal's full help is not a dialog (`keypress.go:578-579`), so with help open keys route as usual, `overlay` first. `keys.test.js` (S3) pins these rules.
 
 **The shortcut map** (terminal keys kept where sensible, `internal/ui/model/keys.go:93-341`; "→ phase n" means the key is reserved now and its action comes then):
 
@@ -1468,8 +1470,8 @@ export function upsertLink(link);          // chat_link created
 export function linksFor(messageId);       // decorations for the renderer: [{kind: "branch-link", start, end, data: link}]
 export function parentOf(sessionId);       // origin link's parent_session_id, or null (top level)
 
-// closed.svelte.js
-export const closed = $state({ ids: new Set() });   // from settings.closed_chats[engine data_dir]
+// closed.svelte.js (SvelteSet from svelte/reactivity: $state does not track a plain Set's add and delete)
+export const closed = $state({ ids: new SvelteSet() });   // from settings.closed_chats[engine data_dir]
 export async function close(sessionId);    // closed_set(project, id, true)
 export async function reopen(sessionId);   // closed_set(project, id, false)
 export function isClosed(sessionId);
@@ -1902,7 +1904,7 @@ Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` 
 | `ChatHead.svelte` | S3 moves today's markup; P3.9; P4.1 adds the branch path line in phase 4 | `{session}` | Conversation |
 | `timeline/Timeline.svelte` | S3 moves today's markup; P3.5 | `{sessionId}` | Conversation |
 | `timeline/VirtualList.svelte` | P3.5 | its own | Timeline |
-| `timeline/ItemFrame.svelte` | P3.5 | `{item, selected, focused}` plus the item as its child | Timeline |
+| `timeline/ItemFrame.svelte` | P3.5 | `{item, selected, focused, children}`: `children` is the snippet with the item's own component; the piece must keep `{@render children()}` (S3's placeholder writes `{@render children?.()}`) | Timeline |
 | `timeline/UserItem.svelte`, `timeline/ReplyItem.svelte`, `timeline/NoticeItem.svelte`, `timeline/BannerItem.svelte`, `timeline/FooterItem.svelte`, `timeline/PendingItem.svelte` | P3.5 | `{item}` (1.5.6) | Timeline |
 | `timeline/StatusLine.svelte` | P3.5 | `{item}` (a StatusItem) | Timeline; ToolGroup (P3.6) for a working group's live status (CHAT-085) |
 | `timeline/ActivityMark.svelte` | P3.5 | `{size: "line" \| "small"}` | StatusLine; ToolHeader, ShellItem, ToolGroup (P3.6); TodoSection (P3.7) |
@@ -1924,7 +1926,8 @@ Contrast values were computed from the WCAG formula against `--paper` `#f9f8ef` 
 | `NoticeLine.svelte` | P3.8 | — (reads `ui.notice`) | Conversation |
 | `ChatList.svelte` | P3.9 (exists today); P4.1 in phase 4 | — (reads the stores) | App |
 | `list/ChatRow.svelte`, `list/ListFooter.svelte` | P3.9; P4.1 in phase 4 | `{row}` (a `listmodel.buildRows` row) | ChatList |
-| `start/EngineGate.svelte`, `start/Onboarding.svelte`, `start/InitPrompt.svelte`, `start/Landing.svelte`, `start/Opening.svelte` | P3.9 | — (read the stores) | App (EngineGate); Conversation, in the timeline's place (the rest) |
+| `start/EngineGate.svelte` | P3.9 | `{children}`: the snippet App passes, the conversation; the gate reads the stores, and the piece must keep `{@render children()}` where the conversation shows (S3's placeholder writes `{@render children?.()}`) | App |
+| `start/Onboarding.svelte`, `start/InitPrompt.svelte`, `start/Landing.svelte`, `start/Opening.svelte` | P3.9 | — (read the stores) | Conversation, in the timeline's place |
 | `render/MarkdownView.svelte` | P3.4 | `{text, messageId, sessionId, finished, plan}` | ReplyItem (P3.5) |
 | `render/VisualChip.svelte` | P3.4 | `{figureId, kind, title}` | MarkdownView |
 | `render/FigureView.svelte` | P3.4 | `{figure}` | VisualsSection (P3.8); MarkdownView while the panel is hidden (4.3) |

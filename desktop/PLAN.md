@@ -378,6 +378,10 @@ Kept current during the build. Percent = share of the phase table in section 4.
   - The warning mark's "!" color and the edition's inline code color: look choices, so the Opus max designer (t32) picks them in pass 2 (the "!" needs at least 4.5:1 contrast).
   - "Yep!" closes the window, and the app ends with its last window. Inferred texts stay, marked inferred.
 
+- Phases 3-4 design recheck, round 2 (t35): "build after these fixes". All 14 round 1 findings closed. New: the design would lead builders into both demo problems: (1) an `agent_event` error or `run_complete` error after Stop must show no notice (Esc posts `interrupt` like the terminal; the Canceled banner shows it), and (2) a permission notification with neither `granted` nor `denied` is only the "requested" mark and must never close the ask. Plus a stale line citation, a speed check that never ends its measured stretch, and P4.4 needing P4.1. Sent to the designer (t31) as fix round 2, with the reviewer's fixes as the decisions; a W check is added for each demo problem.
+- Scaffold S3 started (t39, Claude Opus 5.5 max, worktree `~/dev/crush-desktop-s3`, branch `desktop-s3` from `9e7f4fe7`) in parallel with that fix round. Why: the reviewer judged S3 ready as written, and the fixes change only behavior text the pieces read. Other option: wait for the fix round (rejected: it idles the build for no change to S3).
+- Phases 5-6 design pass 2 started (t32 continued) on `d54b0aec`, with the decisions above and the merged engine as the source of truth.
+
 ### Owner decisions for the overnight run (2026-10-18, before bed)
 - Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
 - The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).

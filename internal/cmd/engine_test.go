@@ -415,10 +415,12 @@ func TestEngineListReportsUnsafeSocketFolder(t *testing.T) {
 	require.Contains(t, failure.Error["message"], "it is a symlink")
 	require.Contains(t, stderr, "it is a symlink")
 
+	// The error box capitalizes the message and wraps it.
 	_, stderr, code = runCrush(t, p.root, env, "server")
 	require.NotEqual(t, 0, code)
-	require.Contains(t, stderr, "no server host")
-	require.Contains(t, stderr, "it is a symlink")
+	flat := strings.ToLower(strings.Join(strings.Fields(stderr), " "))
+	require.Contains(t, flat, "no server host", "stderr: %s", stderr)
+	require.Contains(t, flat, "it is a symlink", "stderr: %s", stderr)
 }
 
 // TestEngineVersionTouchesNoSocketFolder: a command that needs no server,

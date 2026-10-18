@@ -50,6 +50,11 @@ type liveState struct {
 	hooked bool
 	// closed is set at teardown: nothing is recorded after it.
 	closed bool
+
+	// initMu makes InitAgent calls take turns; nonInteractive records that
+	// the last one replaced the coordinator with a non-interactive one.
+	initMu         sync.Mutex
+	nonInteractive bool
 }
 
 // promptInfo is one prompt an app sent.

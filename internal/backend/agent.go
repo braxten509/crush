@@ -172,11 +172,7 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID, clientID string, i
 		return err
 	}
 
-	if interactive {
-		if err := ws.InitCoderAgent(ctx); err != nil {
-			return err
-		}
-	} else if err := ws.InitCoderAgentNonInteractive(ctx); err != nil {
+	if err := initCoder(ctx, ws, interactive); err != nil {
 		return err
 	}
 	b.runHooks(func(h clientHooks) {
@@ -188,6 +184,33 @@ func (b *Backend) InitAgent(ctx context.Context, workspaceID, clientID string, i
 		// After the hooks, so a resumed helper's owner is this app (5.5).
 		agent.ResumeInterruptedTasks()
 	}
+	return nil
+}
+
+// initCoder starts the workspace's coder agent. An interactive start keeps
+// the interactive coordinator the workspace already runs (the one app.New
+// started, or an earlier app's): a workspace has one coordinator shared by
+// every app (engine-design.md 5.2), so another app's turns, queue and
+// helpers stay on it, and no replaced coordinator's helper hub is left
+// listed to claim saved helpers.
+func initCoder(ctx context.Context, ws *Workspace, interactive bool) error {
+	l := &ws.live
+	l.initMu.Lock()
+	defer l.initMu.Unlock()
+	if !interactive {
+		if err := ws.InitCoderAgentNonInteractive(ctx); err != nil {
+			return err
+		}
+		l.nonInteractive = true
+		return nil
+	}
+	if ws.coordinator() != nil && !l.nonInteractive {
+		return nil
+	}
+	if err := ws.InitCoderAgent(ctx); err != nil {
+		return err
+	}
+	l.nonInteractive = false
 	return nil
 }
 

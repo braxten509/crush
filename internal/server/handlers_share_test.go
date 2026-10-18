@@ -481,15 +481,16 @@ func TestRemoteOwnerOnlyRoutes(t *testing.T) {
 	h.expectError(t, http.MethodPost, stop, other, nil, http.StatusForbidden, "not_owner")
 	h.expectError(t, http.MethodPost, presence, other, proto.RemotePresence{SessionID: "x"}, http.StatusForbidden, "not_owner")
 	h.expectError(t, http.MethodPost, done, other, proto.RemoteActionDone{}, http.StatusForbidden, "not_owner")
-	var status proto.RemoteStatus
-	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), other, nil, &status)
-	require.Equal(t, proto.RemoteStatus{State: "off"}, status)
+	var otherStatus proto.RemoteStatus
+	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), other, nil, &otherStatus)
+	require.Equal(t, proto.RemoteStatus{State: "off"}, otherStatus)
 
 	h.expectOK(t, http.MethodPost, presence, owner, proto.RemotePresence{SessionID: "chat-1", Focused: true}, nil)
 	require.Equal(t, []remote.Presence{{SessionID: "chat-1", Focused: true}}, fake.presences())
 	h.expectError(t, http.MethodPost, done, owner, proto.RemoteActionDone{}, http.StatusNotFound, "action_not_found")
-	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &status)
-	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7373}, status)
+	var ownerStatus proto.RemoteStatus
+	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &ownerStatus)
+	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7373}, ownerStatus)
 	h.expectOK(t, http.MethodPost, stop, owner, nil, nil)
 	select {
 	case <-fake.Stopped():
@@ -568,15 +569,17 @@ func TestRemoteStatusEvents(t *testing.T) {
 	fake.status.Phones = []string{"Pixel"}
 	fake.mu.Unlock()
 	fake.phones <- struct{}{}
-	var status proto.RemoteStatus
-	ownerEvents.waitFor(t, pubsub.PayloadTypeRemoteStatus, &status)
-	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7373, Phones: []string{"Pixel"}}, status)
+	var changed proto.RemoteStatus
+	ownerEvents.waitFor(t, pubsub.PayloadTypeRemoteStatus, &changed)
+	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7373, Phones: []string{"Pixel"}}, changed)
 
 	fake.Stop() // the share stopped on its own
-	ownerEvents.waitFor(t, pubsub.PayloadTypeRemoteStatus, &status)
-	require.Equal(t, proto.RemoteStatus{State: "off"}, status)
-	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &status)
-	require.Equal(t, proto.RemoteStatus{State: "off"}, status)
+	var stopped proto.RemoteStatus
+	ownerEvents.waitFor(t, pubsub.PayloadTypeRemoteStatus, &stopped)
+	require.Equal(t, proto.RemoteStatus{State: "off"}, stopped)
+	var listed proto.RemoteStatus
+	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &listed)
+	require.Equal(t, proto.RemoteStatus{State: "off"}, listed)
 
 	h.mark()
 	otherEvents.quietUntilMarker(t, pubsub.PayloadTypeRemoteStatus)

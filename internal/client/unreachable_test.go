@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/stretchr/testify/require"
@@ -83,6 +84,35 @@ func TestIsUnreachable(t *testing.T) {
 	require.False(t, IsUnreachable(answerStatus(t, http.StatusInternalServerError, "internal")))
 	require.False(t, IsUnreachable(fmt.Errorf("dial: %w", timeoutError{})), "a timeout is not a dead engine")
 	require.False(t, IsUnreachable(errors.New("boom")))
+}
+
+// TestEventStreamEndsWhenEngineDies: an engine that dies mid-stream ends
+// the body with io.ErrUnexpectedEOF, not io.EOF. The events channel must
+// close, so the subscriber reconnects and recovers, instead of retrying
+// the dead body forever.
+func TestEventStreamEndsWhenEngineDies(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		// Drop the connection without ending the chunked body.
+		if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+			_ = conn.Close()
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c, err := NewClient(t.TempDir(), "tcp", strings.TrimPrefix(srv.URL, "http://"))
+	require.NoError(t, err)
+	events, err := c.SubscribeEvents(t.Context(), "ws-1")
+	require.NoError(t, err)
+	select {
+	case _, ok := <-events:
+		require.False(t, ok, "no event was sent")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the events channel did not close after the stream died")
+	}
 }
 
 func TestEngineInfoRoundTrip(t *testing.T) {

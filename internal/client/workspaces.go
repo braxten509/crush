@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -129,6 +128,11 @@ func (c *Client) SubscribeEvents(ctx context.Context, id string) (<-chan any, er
 
 // readEvents decodes the SSE stream into typed events until the stream
 // ends or ctx is cancelled.
+//
+// Any read error ends the stream too: a body that failed keeps failing,
+// and a server that died mid-stream (an engine killed, engine-design.md
+// 5.14) ends it with io.ErrUnexpectedEOF rather than io.EOF. Closing the
+// channel is what makes the subscriber reconnect and recover.
 func readEvents(ctx context.Context, body io.Reader, events chan any) {
 	scr := bufio.NewReader(body)
 	for {
@@ -137,16 +141,10 @@ func readEvents(ctx context.Context, body io.Reader, events chan any) {
 			return
 		}
 		if err != nil {
-			if ctx.Err() != nil {
-				return
+			if ctx.Err() == nil {
+				slog.Warn("Events stream ended", "error", err)
 			}
-			slog.Error("Reading from events stream", "error", err)
-			select {
-			case <-time.After(time.Second * 2):
-			case <-ctx.Done():
-				return
-			}
-			continue
+			return
 		}
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {

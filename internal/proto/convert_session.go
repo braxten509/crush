@@ -12,8 +12,8 @@ import (
 // stops the pairs from drifting apart.
 
 // SessionFromDomain converts a domain session into its wire form. The
-// computed-on-read fields (IsBusy, AttachedClients) are left zero for
-// the caller to fill in.
+// computed-on-read fields (IsBusy, AttachedClients, HasUnfinishedWork,
+// PendingPrompt) are left zero for the caller to fill in.
 func SessionFromDomain(s session.Session) Session {
 	return Session{
 		ID:               s.ID,
@@ -29,6 +29,8 @@ func SessionFromDomain(s session.Session) Session {
 		KeptSkills:       KeptSkillsFromDomain(s.KeptSkills),
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
+		ContextBudget:    ContextBudgetFromDomain(s.ContextBudget),
+		EstimatedUsage:   s.EstimatedUsage,
 	}
 }
 
@@ -53,6 +55,37 @@ func SessionToDomain(s Session) session.Session {
 		KeptSkills:       KeptSkillsToDomain(s.KeptSkills),
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
+		ContextBudget:    ContextBudgetToDomain(s.ContextBudget),
+		EstimatedUsage:   s.EstimatedUsage,
+	}
+}
+
+// ContextBudgetFromDomain converts a session's context budget into its
+// wire form. It returns nil when the budget has no provider, the state
+// session.Save treats as "no budget".
+func ContextBudgetFromDomain(b session.ContextBudget) *ContextBudget {
+	if b.Provider == "" {
+		return nil
+	}
+	return &ContextBudget{
+		Provider:  b.Provider,
+		Model:     b.Model,
+		Tokens:    b.Tokens,
+		Estimated: b.Estimated,
+	}
+}
+
+// ContextBudgetToDomain converts a wire context budget back. Nil maps to
+// the zero budget.
+func ContextBudgetToDomain(b *ContextBudget) session.ContextBudget {
+	if b == nil {
+		return session.ContextBudget{}
+	}
+	return session.ContextBudget{
+		Provider:  b.Provider,
+		Model:     b.Model,
+		Tokens:    b.Tokens,
+		Estimated: b.Estimated,
 	}
 }
 

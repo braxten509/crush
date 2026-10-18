@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -38,7 +39,8 @@ func (b *Backend) ListSessions(ctx context.Context, workspaceID string) ([]sessi
 }
 
 // GetAgentSession returns session metadata with the agent's busy
-// status.
+// status, whether helpers or jobs still owe the chat a result, and what
+// answer it waits for.
 func (b *Backend) GetAgentSession(ctx context.Context, workspaceID, sessionID string) (proto.AgentSession, error) {
 	o, err := b.ops(workspaceID)
 	if err != nil {
@@ -50,8 +52,10 @@ func (b *Backend) GetAgentSession(ctx context.Context, workspaceID, sessionID st
 	}
 	return proto.AgentSession{
 		Session: proto.Session{
-			ID:    se.ID,
-			Title: se.Title,
+			ID:                se.ID,
+			Title:             se.Title,
+			HasUnfinishedWork: agent.SessionHasUnfinishedWork(se.ID),
+			PendingPrompt:     b.PendingPrompt(ctx, workspaceID, se.ID),
 		},
 		IsBusy: o.IsSessionBusy(sessionID),
 	}, nil

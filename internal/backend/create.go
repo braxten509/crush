@@ -26,7 +26,14 @@ import (
 // the resulting workspace registers a creation hold on behalf of that
 // client which is released either by the first SSE attach (which
 // converts it into a stream claim) or by the grace window expiring.
+//
+// An app that speaks another protocol is refused first. An engine
+// ([Backend.SetEngine]) matches creates by the project's data folder
+// instead of the folder, and refuses other projects.
 func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Workspace, error) {
+	if err := checkProtocol(args); err != nil {
+		return nil, proto.Workspace{}, err
+	}
 	if args.Path == "" {
 		return nil, proto.Workspace{}, ErrPathRequired
 	}
@@ -35,9 +42,9 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 		return nil, proto.Workspace{}, err
 	}
 
-	key, err := resolveWorkspaceKey(args.Path)
+	key, err := b.workspaceKey(args)
 	if err != nil {
-		return nil, proto.Workspace{}, fmt.Errorf("failed to resolve workspace path: %w", err)
+		return nil, proto.Workspace{}, err
 	}
 
 	b.mu.Lock()
@@ -174,9 +181,18 @@ func (b *Backend) settleCreate() {
 // newWorkspace performs the slow part of creating a workspace: loading
 // its config, opening its database, discovering skills and starting its
 // app. It runs without b.mu held.
+//
+// On an engine the workspace uses the engine's data folder, and its
+// database is opened without the data-folder lock: the engine process
+// already holds the project lock, and a second flock from the same process
+// on a new file handle would conflict with it.
 func (b *Backend) newWorkspace(args proto.Workspace, key string) (*Workspace, error) {
 	id := uuid.New().String()
-	cfg, err := config.Init(args.Path, args.DataDir, args.Debug)
+	dataDir, lockDataDir := args.DataDir, true
+	if engineDir := b.EngineDataDir(); engineDir != "" {
+		dataDir, lockDataDir = engineDir, false
+	}
+	cfg, err := config.Init(args.Path, dataDir, args.Debug)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize config: %w", err)
 	}
@@ -194,7 +210,7 @@ func (b *Backend) newWorkspace(args proto.Workspace, key string) (*Workspace, er
 			slog.Warn("Failed to register project", "error", err)
 		}
 	}
-	conn, err := db.Connect(b.ctx, cfg.Config().Options.DataDirectory, db.WithDataDirLock(true))
+	conn, err := db.Connect(b.ctx, cfg.Config().Options.DataDirectory, db.WithDataDirLock(lockDataDir))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}

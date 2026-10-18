@@ -259,6 +259,31 @@ func TestEngineExitDelayIsTenSeconds(t *testing.T) {
 	require.Equal(t, 3*time.Second, b.lingerDelay)
 }
 
+func TestEngineFirstJoinGraceIsSixtySeconds(t *testing.T) {
+	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "")
+
+	legacy := New(context.Background(), nil, func() {})
+	legacy.ArmFirstJoinGrace()
+	legacy.mu.Lock()
+	require.Nil(t, legacy.shutdownTimer, "the legacy server waits for no first app")
+	legacy.mu.Unlock()
+
+	b := New(context.Background(), nil, func() {})
+	b.SetEngine("/project/.crush")
+	require.Equal(t, 60*time.Second, EngineFirstJoinGrace)
+	require.Equal(t, EngineFirstJoinGrace, b.firstJoinGrace)
+	b.ArmFirstJoinGrace()
+	b.mu.Lock()
+	require.NotNil(t, b.shutdownTimer, "the engine arms its idle shutdown")
+	b.cancelShutdownLocked()
+	b.mu.Unlock()
+
+	// Tests shorten it.
+	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "1s")
+	b.SetEngine("/project/.crush")
+	require.Equal(t, time.Second, b.firstJoinGrace)
+}
+
 func TestCreateRefusesProtocolMismatch(t *testing.T) {
 	t.Parallel()
 

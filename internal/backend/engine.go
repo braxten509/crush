@@ -27,12 +27,20 @@ var (
 // duration such as "2s", or a whole number of seconds.
 const EngineIdleShutdownDelay = 10 * time.Second
 
-// engineIdleShutdownDelayFromEnv returns the engine's idle delay, honoring
-// CRUSH_ENGINE_IDLE_TIMEOUT.
-func engineIdleShutdownDelayFromEnv() time.Duration {
-	v := os.Getenv("CRUSH_ENGINE_IDLE_TIMEOUT")
+// EngineFirstJoinGrace is how long an engine waits for its first app. An
+// engine no app joins in that time (the app crashed, or its ensure timed
+// out) exits instead of holding the project forever. It is longer than
+// [EngineIdleShutdownDelay] so that a slow first start (a login shell, the
+// config) is never cut off. CRUSH_ENGINE_FIRST_JOIN_GRACE overrides it
+// (tests), in the same forms as CRUSH_ENGINE_IDLE_TIMEOUT.
+const EngineFirstJoinGrace = 60 * time.Second
+
+// engineDelayFromEnv returns the engine delay the named environment
+// variable sets, a Go duration or a whole number of seconds, or def.
+func engineDelayFromEnv(name string, def time.Duration) time.Duration {
+	v := os.Getenv(name)
 	if v == "" {
-		return EngineIdleShutdownDelay
+		return def
 	}
 	if d, err := time.ParseDuration(v); err == nil && d >= 0 {
 		return d
@@ -40,19 +48,37 @@ func engineIdleShutdownDelayFromEnv() time.Duration {
 	if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
 		return time.Duration(secs) * time.Second
 	}
-	return EngineIdleShutdownDelay
+	return def
 }
 
 // SetEngine makes b the engine of one project, whose canonical data folder
 // is canonicalDataDir: every app of the project joins one workspace, keyed
 // by that folder, creates for other projects are refused, and the server
-// exits [EngineIdleShutdownDelay] after the last workspace goes. The legacy
-// server never calls it.
+// exits [EngineIdleShutdownDelay] after the last workspace goes, or
+// [EngineFirstJoinGrace] after it starts listening when no app joined
+// ([Backend.ArmFirstJoinGrace]). The legacy server never calls it.
 func (b *Backend) SetEngine(canonicalDataDir string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.engineDataDir = canonicalDataDir
-	b.lingerDelay = engineIdleShutdownDelayFromEnv()
+	b.lingerDelay = engineDelayFromEnv("CRUSH_ENGINE_IDLE_TIMEOUT", EngineIdleShutdownDelay)
+	b.firstJoinGrace = engineDelayFromEnv("CRUSH_ENGINE_FIRST_JOIN_GRACE", EngineFirstJoinGrace)
+}
+
+// ArmFirstJoinGrace arms the idle shutdown of an engine no app has joined
+// yet: unless a workspace is created within [EngineFirstJoinGrace], the
+// engine exits. The first create cancels it, as a create cancels every
+// idle shutdown; from then on the engine exits [EngineIdleShutdownDelay]
+// after its last workspace goes. The server calls it once it listens; on
+// the legacy server it does nothing.
+func (b *Backend) ArmFirstJoinGrace() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.engineDataDir == "" || b.shutdownFn == nil || b.shutdownTimer != nil ||
+		b.workspaces.Len() != 0 || b.pending != 0 {
+		return
+	}
+	b.shutdownTimer = time.AfterFunc(b.firstJoinGrace, b.maybeShutdown)
 }
 
 // EngineDataDir is the engine's canonical data folder, or "" on the legacy

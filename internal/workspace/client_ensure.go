@@ -10,7 +10,8 @@ import (
 var ensureEngineTimeout = 15 * time.Second
 
 // maxEnsureFailures is the number of failed ensures in a row after which
-// the connection is reported stuck. The loop keeps trying.
+// the connection is reported stuck; an ensure whose engine cannot be
+// reached right after it counts as failed. The loop keeps trying.
 const maxEnsureFailures = 3
 
 // SetEnsureEngine sets the function that starts the project's engine again

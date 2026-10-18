@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -70,15 +71,14 @@ func TestDefaultHost_XDGRuntimeDir(t *testing.T) {
 		"DefaultHost should return a unix:// URL, got %q", host)
 	path := strings.TrimPrefix(host, "unix://")
 
-	// The composed path may exceed maxUnixSocketPathLen and fall back
-	// to /tmp; only assert containment when it did not. Recompose the
-	// path under dir (rather than checking the returned path length,
-	// which is short again after a /tmp fallback) to decide whether a
-	// fallback happened. The socket is named crush-<uid>.sock.
-	composed := filepath.Join(dir, filepath.Base(path))
-	if len(composed) <= maxUnixSocketPathLen {
-		require.True(t, strings.HasPrefix(path, dir),
-			"socket path %q should live under %q", path, dir)
+	// XDG_RUNTIME_DIR is a candidate on Linux only, where the socket is
+	// <dir>/crush/crush.sock. That path may exceed maxUnixSocketPathLen,
+	// and then a temp folder is used; only assert containment when it fits.
+	// Compose it under dir (rather than checking the returned path length,
+	// which is short again after a fallback) to decide.
+	composed := filepath.Join(dir, "crush", defaultSocketName)
+	if runtime.GOOS == "linux" && len(composed) <= maxUnixSocketPathLen {
+		require.Equal(t, composed, path, "the socket should live under %q", dir)
 	}
 	require.True(t, strings.HasSuffix(path, ".sock"),
 		"socket path %q should end in .sock", path)

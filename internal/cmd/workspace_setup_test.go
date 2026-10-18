@@ -26,9 +26,9 @@ func TestClientServerEnvJoinsEngineWorkspace(t *testing.T) {
 	p := newCmdProject(t)
 	t.Setenv("CRUSH_CLIENT_SERVER", "1")
 	t.Chdir(p.cwd)
-	legacySocket := filepath.Join(p.root, "legacy.sock")
+	legacySocket := defaultSocket(t)
 
-	_, ws, cleanup, err := connectToServer(setupCmd(t, "unix://"+legacySocket))
+	_, ws, cleanup, err := connectToServer(setupCmd(t))
 	require.NoError(t, err)
 	t.Cleanup(cleanup)
 
@@ -49,15 +49,15 @@ func TestClientServerEnvJoinsEngineWorkspace(t *testing.T) {
 
 // TestExplicitHostKeepsLegacyServer: an explicit --host takes the legacy
 // server even with the switch on; so does connectToServer with the switch
-// off and no --host when no engine runs, as `crush logout` calls it. No
-// engine starts in either case.
+// off and no --host when no engine runs, as `crush logout` calls it, on
+// the default host, looked up only then. No engine starts in either case.
 func TestExplicitHostKeepsLegacyServer(t *testing.T) {
 	p := newCmdProject(t)
 	t.Chdir(p.cwd)
 
 	t.Setenv("CRUSH_CLIENT_SERVER", "1")
 	explicit := filepath.Join(p.root, "x.sock")
-	c, ws, cleanup, err := connectToServer(setupCmd(t, "unix://"+filepath.Join(p.root, "default.sock"), "--host", "unix://"+explicit))
+	c, ws, cleanup, err := connectToServer(setupCmd(t, "--host", "unix://"+explicit))
 	require.NoError(t, err)
 	require.NotEmpty(t, ws.ID)
 	require.FileExists(t, explicit, "the legacy server listens on --host")
@@ -66,8 +66,8 @@ func TestExplicitHostKeepsLegacyServer(t *testing.T) {
 	require.NoFileExists(t, p.socket, "no engine started")
 
 	t.Setenv("CRUSH_CLIENT_SERVER", "")
-	fallback := filepath.Join(p.root, "d.sock")
-	c, ws, cleanup, err = connectToServer(setupCmd(t, "unix://"+fallback))
+	fallback := defaultSocket(t)
+	c, ws, cleanup, err = connectToServer(setupCmd(t))
 	require.NoError(t, err)
 	require.NotEmpty(t, ws.ID)
 	require.FileExists(t, fallback, "the legacy server listens on the default host")
@@ -131,7 +131,7 @@ func TestLogoutJoinsLiveEngine(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &saved))
 	require.NotContains(t, saved.Providers["hyper"], "oauth")
 
-	require.NoFileExists(t, filepath.Join(p.runtimeDir, "crush", "crush.sock"), "no legacy server socket")
+	require.NoFileExists(t, defaultSocket(t), "no legacy server socket")
 	info, err := desktop.EngineInfo(ctx)
 	require.NoError(t, err)
 	require.Equal(t, h.PID, info.PID)
@@ -147,7 +147,7 @@ func TestSetupLocalAppTakesNoLockBeforePhase7(t *testing.T) {
 	require.ErrorIs(t, db.ProbeProjectLock(p.dataDir), db.ErrDataDirLocked, "the engine holds the project")
 	t.Chdir(p.cwd)
 
-	app, cleanup, err := setupLocalApp(setupCmd(t, ""))
+	app, cleanup, err := setupLocalApp(setupCmd(t))
 	require.NoError(t, err, "the lone window opens the project")
 	t.Cleanup(cleanup)
 	dataDir, err := filepath.EvalSymlinks(app.Store().Config().Options.DataDirectory)

@@ -300,19 +300,25 @@ func connectToEngine(cmd *cobra.Command, opts serverctl.EnsureOptions, h serverc
 }
 
 // connectToLegacyServer creates the workspace on the server at --host,
-// starting or replacing that server as needed.
+// starting or replacing that server as needed. Without --host it is the
+// default host, looked up only now: a flag default would look for (and
+// create) the socket folder in every crush command.
 func connectToLegacyServer(cmd *cobra.Command, cwd string) (*serverConnection, error) {
-	if clientHost == "" {
+	host := clientHost
+	if host == "" {
+		host = server.DefaultHost()
+	}
+	if host == "" {
 		return nil, errNoDefaultHost()
 	}
-	hostURL, err := server.ParseHostURL(clientHost)
+	hostURL, err := server.ParseHostURL(host)
 	if err != nil {
 		return nil, fmt.Errorf("invalid host URL: %v", err)
 	}
 
 	debug, _ := cmd.Flags().GetBool("debug")
 
-	if err := serverctl.Ensure(cmd.Context(), hostURL, clientHost, debug); err != nil {
+	if err := serverctl.Ensure(cmd.Context(), hostURL, host, debug); err != nil {
 		return nil, err
 	}
 
@@ -321,7 +327,7 @@ func connectToLegacyServer(cmd *cobra.Command, cwd string) (*serverConnection, e
 		return nil, err
 	}
 	return createClientWorkspace(cmd, c, cwd, func() error {
-		return serverctl.ReplaceExiting(cmd.Context(), hostURL, clientHost)
+		return serverctl.ReplaceExiting(cmd.Context(), hostURL, host)
 	})
 }
 

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -49,7 +50,7 @@ func TestMain(m *testing.M) {
 }
 
 // cmdProject is a project in a throwaway home: every folder crush uses is
-// under root, which is short enough for socket paths.
+// under root, which is short enough for socket paths (newCmdProject checks).
 type cmdProject struct {
 	root         string
 	cwd          string // the project folder, without git
@@ -67,7 +68,7 @@ type cmdProject struct {
 // started at cleanup.
 func newCmdProject(t *testing.T) *cmdProject {
 	t.Helper()
-	root, err := os.MkdirTemp("", "c")
+	root, err := os.MkdirTemp(testRootBase(), "c")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 
@@ -99,12 +100,83 @@ func newCmdProject(t *testing.T) *cmdProject {
 	t.Setenv("CRUSH_SKIP_DATADIR_LOCK", "")
 	t.Setenv("CRUSH_CLIENT_SERVER", "")
 	t.Setenv("CRUSH_ENGINE_IDLE_TIMEOUT", "")
+	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
 	writeTestGlobalConfig(t, p.globalConfig, nil)
 
+	socketDir := requireShortSocketFolder(t, p.runtimeDir, filepath.Join(root, "t"))
 	p.dataDir, p.socket = projectEngine(t, p.cwd)
+	require.Equal(t, socketDir, filepath.Dir(p.socket), "the engine socket is not in the test's socket folder")
 	t.Cleanup(func() { p.killEngines(t) })
 	return p
+}
+
+// testRootBase is the folder the tests' roots go in: the system temp
+// folder, but /tmp on macOS, whose own temp folder is long enough to push
+// an engine socket under it over the 104-byte limit.
+func testRootBase() string {
+	if runtime.GOOS == "darwin" {
+		return "/tmp"
+	}
+	return ""
+}
+
+// requireShortSocketFolder returns the test's socket folder, the one
+// PrivateSocketDir picks under runtimeDir (XDG_RUNTIME_DIR, Linux) or tmp
+// (TMPDIR). It fails, before anything looks for the folder, when an engine
+// socket in it would be over the 104-byte limit: PrivateSocketDir would
+// then fall back to the real /tmp/crush-<uid>.
+func requireShortSocketFolder(t *testing.T, runtimeDir, tmp string) string {
+	t.Helper()
+	dir := filepath.Join(tmp, fmt.Sprintf("crush-%d", os.Getuid()))
+	if runtime.GOOS == "linux" {
+		dir = filepath.Join(runtimeDir, "crush")
+	}
+	socket := filepath.Join(dir, "engine-0123456789abcdef.sock")
+	require.LessOrEqual(t, len(socket), 104,
+		"the test root is too long: the engine socket %s would be over 104 bytes, and the real /tmp/crush-%d would be used instead",
+		socket, os.Getuid())
+	return dir
+}
+
+// unsafeSocketEnv is the environment of a crush that finds no safe socket
+// folder: every candidate is a symlink.
+func unsafeSocketEnv(t *testing.T, root string) []string {
+	t.Helper()
+	unsafe := filepath.Join(root, "u")
+	target := filepath.Join(unsafe, "target")
+	runtimeDir := filepath.Join(unsafe, "r")
+	tmp := filepath.Join(unsafe, "t")
+	for _, dir := range []string{target, runtimeDir, tmp} {
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+	}
+	require.NoError(t, os.Symlink(target, filepath.Join(runtimeDir, "crush")))
+	require.NoError(t, os.Symlink(target, filepath.Join(tmp, fmt.Sprintf("crush-%d", os.Getuid()))))
+	return append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "TMPDIR="+tmp)
+}
+
+// defaultSocket is the legacy server's socket in the test's environment,
+// the one server.DefaultHost gives.
+func defaultSocket(t *testing.T) string {
+	t.Helper()
+	host := server.DefaultHost()
+	require.NotEmpty(t, host, "no default host")
+	u, err := server.ParseHostURL(host)
+	require.NoError(t, err)
+	require.Equal(t, "unix", u.Scheme)
+	return u.Host
+}
+
+// dirNames lists the names in dir.
+func dirNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	names := []string{}
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
 }
 
 // projectEngine returns the canonical data folder and engine socket of the
@@ -268,17 +340,7 @@ func TestEngineEnsureJSON(t *testing.T) {
 	require.Equal(t, first.PID, second.PID)
 
 	// Every socket folder candidate is a symlink, so none is safe.
-	unsafe := filepath.Join(p.root, "u")
-	target := filepath.Join(unsafe, "target")
-	runtimeDir := filepath.Join(unsafe, "r")
-	tmp := filepath.Join(unsafe, "t")
-	for _, dir := range []string{target, runtimeDir, tmp} {
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-	}
-	require.NoError(t, os.Symlink(target, filepath.Join(runtimeDir, "crush")))
-	require.NoError(t, os.Symlink(target, filepath.Join(tmp, fmt.Sprintf("crush-%d", os.Getuid()))))
-	env := append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "TMPDIR="+tmp)
-	stdout, stderr, code = runCrush(t, p.root, env, "engine", "ensure", "--cwd", p.cwd)
+	stdout, stderr, code = runCrush(t, p.root, unsafeSocketEnv(t, p.root), "engine", "ensure", "--cwd", p.cwd)
 	require.Equal(t, 6, code, "stderr: %s", stderr)
 	require.Equal(t, []string{"error"}, jsonKeys(t, stdout))
 	var failure struct {
@@ -334,10 +396,66 @@ func TestEngineListShowsLiveEngines(t *testing.T) {
 	require.Equal(t, "[]", strings.TrimSpace(stdout))
 }
 
+// TestEngineListReportsUnsafeSocketFolder: with no safe socket folder,
+// `crush engine list` fails as ensure does, with unsafe_socket_dir and
+// exit 6, instead of listing no engines. `crush server` without --host,
+// which looks for its default host only then, reports the same cause.
+func TestEngineListReportsUnsafeSocketFolder(t *testing.T) {
+	p := newCmdProject(t)
+	env := unsafeSocketEnv(t, p.root)
+
+	stdout, stderr, code := runCrush(t, p.root, env, "engine", "list")
+	require.Equal(t, 6, code, "stdout: %s\nstderr: %s", stdout, stderr)
+	require.Equal(t, []string{"error"}, jsonKeys(t, stdout))
+	var failure struct {
+		Error map[string]string `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &failure))
+	require.Equal(t, "unsafe_socket_dir", failure.Error["code"])
+	require.Contains(t, failure.Error["message"], "it is a symlink")
+	require.Contains(t, stderr, "it is a symlink")
+
+	_, stderr, code = runCrush(t, p.root, env, "server")
+	require.NotEqual(t, 0, code)
+	require.Contains(t, stderr, "no server host")
+	require.Contains(t, stderr, "it is a symlink")
+}
+
+// TestEngineVersionTouchesNoSocketFolder: a command that needs no server,
+// such as `crush engine version`, which the desktop app runs at start,
+// does not look for the socket folder: with an unsafe candidate it prints
+// no warning, and it creates no folder.
+func TestEngineVersionTouchesNoSocketFolder(t *testing.T) {
+	p := newCmdProject(t)
+	fresh := filepath.Join(p.root, "v")
+	runtimeDir, tmp, target := filepath.Join(fresh, "r"), filepath.Join(fresh, "t"), filepath.Join(fresh, "target")
+	for _, dir := range []string{runtimeDir, tmp, target} {
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+	}
+	// The first candidate is a symlink, which the folder check skips with a
+	// warning. On Linux the next one, in the temp folder, does not exist
+	// yet, and the check would create it.
+	unsafe := filepath.Join(runtimeDir, "crush")
+	if runtime.GOOS != "linux" {
+		unsafe = filepath.Join(tmp, fmt.Sprintf("crush-%d", os.Getuid()))
+	}
+	require.NoError(t, os.Symlink(target, unsafe))
+	runtimeBefore, tmpBefore := dirNames(t, runtimeDir), dirNames(t, tmp)
+
+	env := append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "TMPDIR="+tmp)
+	stdout, stderr, code := runCrush(t, p.root, env, "engine", "version")
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	require.Equal(t, []string{"protocol", "version"}, jsonKeys(t, stdout))
+	require.Empty(t, stderr)
+	require.Equal(t, runtimeBefore, dirNames(t, runtimeDir), "a socket folder was created")
+	require.Equal(t, tmpBefore, dirNames(t, tmp), "a socket folder was created")
+	require.Empty(t, dirNames(t, target))
+}
+
 // setupCmd is a command with the root flags connectToServer and
-// setupLocalApp read, parsed from args. host is the --host default, the
-// value server.DefaultHost gives the real command.
-func setupCmd(t *testing.T, host string, args ...string) *cobra.Command {
+// setupLocalApp read, parsed from args. --host has no default, as in the
+// real command.
+func setupCmd(t *testing.T, args ...string) *cobra.Command {
 	t.Helper()
 	old := clientHost
 	t.Cleanup(func() { clientHost = old })
@@ -346,7 +464,7 @@ func setupCmd(t *testing.T, host string, args ...string) *cobra.Command {
 	c.Flags().StringP("cwd", "c", "", "")
 	c.Flags().StringP("data-dir", "D", "", "")
 	c.Flags().BoolP("debug", "d", false, "")
-	c.Flags().StringVarP(&clientHost, "host", "H", host, "")
+	c.Flags().StringVarP(&clientHost, "host", "H", "", "")
 	c.Flags().BoolP("yolo", "y", true, "")
 	c.Flags().StringSlice("channels", nil, "")
 	require.NoError(t, c.ParseFlags(args))

@@ -100,12 +100,17 @@ var engineListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List this user's live engines as JSON",
 	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, _ []string) error {
+	Run: func(cmd *cobra.Command, _ []string) {
 		engines, err := liveEngines(cmd.Context())
 		if err != nil {
+			// As for ensure: no safe socket folder is unsafe_socket_dir,
+			// exit 6. [] only ever means that no engine runs.
 			fmt.Fprintln(cmd.ErrOrStderr(), "crush engine list:", err)
+			out, code := engineFailureOutput(err)
+			_ = writeEngineJSON(cmd.OutOrStdout(), out)
+			os.Exit(code)
 		}
-		return writeEngineJSON(cmd.OutOrStdout(), engines)
+		_ = writeEngineJSON(cmd.OutOrStdout(), engines)
 	},
 }
 
@@ -128,7 +133,8 @@ type engineEnsureSuccess struct {
 	Started  bool   `json:"started"`
 }
 
-// engineEnsureFailure is the error output of `crush engine ensure`.
+// engineEnsureFailure is the error output of `crush engine ensure` and
+// `crush engine list`.
 type engineEnsureFailure struct {
 	Error engineError `json:"error"`
 }
@@ -147,6 +153,12 @@ func engineEnsureOutput(h serverctl.EngineHandle, err error) (any, int) {
 			Version: h.Version, PID: h.PID, DataDir: h.DataDir, Started: h.Started,
 		}, 0
 	}
+	return engineFailureOutput(err)
+}
+
+// engineFailureOutput is what an engine command prints for err, and its
+// exit code.
+func engineFailureOutput(err error) (engineEnsureFailure, int) {
 	code, exit := "internal", engineExitOther
 	switch {
 	case errors.Is(err, backend.ErrProtocolMismatch):

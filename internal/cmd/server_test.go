@@ -25,11 +25,11 @@ func TestServerJoinsMemoryBox(t *testing.T) {
 	}
 	t.Cleanup(func() { joinMemoryBox = oldJoin })
 
-	// No private socket folder leaves --host empty.
+	// A --host that is not a host URL fails the server's first check.
 	oldHost := serverHost
-	serverHost = ""
+	serverHost = "not-a-url"
 	t.Cleanup(func() { serverHost = oldHost })
-	require.ErrorContains(t, serverCmd.RunE(serverCmd, nil), "no server host")
+	require.ErrorContains(t, serverCmd.RunE(serverCmd, nil), "invalid server host")
 	require.Equal(t, []string{memlimit.Slice}, joined, "crush server joins first")
 
 	require.EqualError(t, engineServeCmd.RunE(engineServeCmd, nil), "--data-dir is required")

@@ -171,6 +171,8 @@ func (s *Server) ListenAndServe() error {
 	if removedStale && s.logger != nil {
 		s.logger.Warn("Removed stale socket before binding", "address", s.Addr)
 	}
+	// An engine waits for its first app from the moment it listens.
+	s.backend.ArmFirstJoinGrace()
 	return s.Serve(ln)
 }
 

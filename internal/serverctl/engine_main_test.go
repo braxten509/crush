@@ -6,10 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"sync"
 	"syscall"
 	"testing"
@@ -42,7 +45,8 @@ const fakeEnginePID = 999999
 
 // engineProject is a project in a throwaway home: every folder an engine
 // and its ensure use (config, data, cache, runtime, temp) is under root,
-// which is short enough for the engine socket's path.
+// which is short enough for the engine socket's path (newEngineProject
+// checks).
 type engineProject struct {
 	root         string
 	cwd          string // the project folder, without git
@@ -59,7 +63,7 @@ type engineProject struct {
 // test started is killed at cleanup.
 func newEngineProject(t *testing.T, idle string) *engineProject {
 	t.Helper()
-	root, err := os.MkdirTemp("", "e")
+	root, err := os.MkdirTemp(testRootBase(), "e")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 
@@ -87,11 +91,13 @@ func newEngineProject(t *testing.T, idle string) *engineProject {
 	t.Setenv("CRUSH_SKIP_DATADIR_LOCK", "")
 	t.Setenv("CRUSH_CLIENT_SERVER", "")
 	t.Setenv("CRUSH_ENGINE_IDLE_TIMEOUT", idle)
+	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "")
 	// The engine joins the memory box first; no test may move a process
 	// into the user's real one.
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
 	writeGlobalConfig(t, globalConfig, nil)
 
+	socketDir := requireShortSocketFolder(t, runtimeDir, tmp)
 	p := &engineProject{root: root, cwd: filepath.Join(root, "p"), globalConfig: globalConfig}
 	require.NoError(t, os.Mkdir(p.cwd, 0o700))
 	resolved, err := config.ResolveDataDir(p.cwd, "")
@@ -100,8 +106,37 @@ func newEngineProject(t *testing.T, idle string) *engineProject {
 	require.NoError(t, err)
 	p.socket, err = server.EngineSocketPath(p.dataDir)
 	require.NoError(t, err)
+	require.Equal(t, socketDir, filepath.Dir(p.socket), "the engine socket is not in the test's socket folder")
 	t.Cleanup(func() { p.killEngines(t) })
 	return p
+}
+
+// testRootBase is the folder the tests' roots go in: the system temp
+// folder, but /tmp on macOS, whose own temp folder is long enough to push
+// an engine socket under it over the 104-byte limit.
+func testRootBase() string {
+	if runtime.GOOS == "darwin" {
+		return "/tmp"
+	}
+	return ""
+}
+
+// requireShortSocketFolder returns the test's socket folder, the one
+// PrivateSocketDir picks under runtimeDir (XDG_RUNTIME_DIR, Linux) or tmp
+// (TMPDIR). It fails, before anything looks for the folder, when an engine
+// socket in it would be over the 104-byte limit: PrivateSocketDir would
+// then fall back to the real /tmp/crush-<uid>.
+func requireShortSocketFolder(t *testing.T, runtimeDir, tmp string) string {
+	t.Helper()
+	dir := filepath.Join(tmp, fmt.Sprintf("crush-%d", os.Getuid()))
+	if runtime.GOOS == "linux" {
+		dir = filepath.Join(runtimeDir, "crush")
+	}
+	socket := filepath.Join(dir, "engine-0123456789abcdef.sock")
+	require.LessOrEqual(t, len(socket), 104,
+		"the test root is too long: the engine socket %s would be over 104 bytes, and the real /tmp/crush-%d would be used instead",
+		socket, os.Getuid())
+	return dir
 }
 
 // writeGlobalConfig writes the global crush.json: the embedded provider
@@ -137,6 +172,14 @@ func (p *engineProject) ensureWith(ctx context.Context, opts serverctl.EnsureOpt
 		p.mu.Unlock()
 	}
 	return h, err
+}
+
+// forget drops pid from the engines cleanup kills: that engine exited by
+// itself, and its PID may be reused.
+func (p *engineProject) forget(pid int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.started = slices.DeleteFunc(p.started, func(started int) bool { return started == pid })
 }
 
 // create joins the engine h as an app does. A create that meets the

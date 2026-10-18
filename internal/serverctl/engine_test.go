@@ -123,6 +123,45 @@ func TestReopenBeforeAndAfterIdleExit(t *testing.T) {
 	require.NoError(t, c3.RetireClient(ctx))
 }
 
+// TestEngineNoAppJoinsExits: an engine ensure started but no app joins
+// exits once the first-join grace passes, and lets go of the project.
+func TestEngineNoAppJoinsExits(t *testing.T) {
+	p := newEngineProject(t, "")
+	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "1s")
+	ctx := t.Context()
+
+	h, err := p.ensure(ctx)
+	require.NoError(t, err)
+	require.True(t, h.Started)
+	require.Eventually(t, func() bool { return processGone(h.PID) }, 10*time.Second, 50*time.Millisecond,
+		"the engine no app joined is still running")
+	p.forget(h.PID)
+	require.NoError(t, db.ProbeProjectLock(p.dataDir), "the engine let go of the project")
+	_, ok, err := serverctl.FindEngine(ctx, p.opts())
+	require.NoError(t, err)
+	require.False(t, ok, "an engine still answers")
+}
+
+// TestEngineJoinedWithinGraceStays: an app that joins within the
+// first-join grace keeps the engine running past it.
+func TestEngineJoinedWithinGraceStays(t *testing.T) {
+	p := newEngineProject(t, "")
+	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "2s")
+	ctx := t.Context()
+
+	h, err := p.ensure(ctx)
+	require.NoError(t, err)
+	require.True(t, h.Started)
+	c, ws := p.create(t, h)
+	time.Sleep(3 * time.Second)
+	require.False(t, processGone(h.PID), "the engine exited while an app was joined")
+	info, err := c.EngineInfo(ctx)
+	require.NoError(t, err)
+	require.Equal(t, h.PID, info.PID)
+	require.Equal(t, ws.ID, info.WorkspaceID)
+	require.False(t, info.Closing)
+}
+
 // TestCreateDuringExitRetriesThroughEnsure: the engine's exit latch closes
 // between ensure and create, so the create answers 503 shutting_down. The
 // create's retry runs ensure again, which treats the closing engine as

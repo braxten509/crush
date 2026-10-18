@@ -65,8 +65,10 @@ var recoveryCreateTimeout = 30 * time.Second
 // cannot be reached ([client.IsUnreachable]) has died, so the loop runs
 // the ensure function ([ClientWorkspace.SetEnsureEngine]) to start a new
 // one and resubscribes at once; the new engine's 404 then re-registers
-// the workspace. After [maxEnsureFailures] failed ensures in a row the
-// connection is reported stuck, with the ensure error.
+// the workspace. An ensure whose engine cannot be reached either counts
+// as failed too, after the same wait, so an engine that dies as soon as it
+// starts does not spin the loop. After [maxEnsureFailures] failed ensures
+// in a row the connection is reported stuck, with the last error.
 func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 	w.subStarted.Store(true)
 	defer close(w.subDone)
@@ -75,6 +77,9 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 	degraded := false
 	recoveryFailures := 0
 	ensureFailures := 0
+	// ensured is set from a successful ensure until the engine is heard
+	// from.
+	ensured := false
 	markDegraded := func(err error, stuck bool) {
 		if degraded && !stuck {
 			return
@@ -95,12 +100,25 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 			}
 			if ensure := w.ensureEngineFunc(); ensure != nil && client.IsUnreachable(err) {
 				markDegraded(err, false)
+				if ensured {
+					// The engine the last ensure reported is already
+					// gone: that ensure failed too.
+					ensured = false
+					ensureFailures++
+					slog.Error("The engine stopped right after it started; retrying",
+						"error", err, "failures", ensureFailures, "retry_in", backoff)
+					markDegraded(err, ensureFailures >= maxEnsureFailures)
+					if !w.sleepOrDone(backoff) {
+						return
+					}
+					backoff = min(backoff*2, sseReconnectMaxBackoff)
+				}
 				ensureErr := w.runEnsureEngine(ensure)
 				if w.subCtx.Err() != nil {
 					return
 				}
 				if ensureErr == nil {
-					ensureFailures = 0
+					ensured = true
 					continue
 				}
 				ensureFailures++
@@ -113,6 +131,7 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 				backoff = min(backoff*2, sseReconnectMaxBackoff)
 				continue
 			}
+			ensured = false
 			markDegraded(err, false)
 			if !errors.Is(err, client.ErrNotFound) {
 				slog.Error("Failed to subscribe to workspace events; retrying",
@@ -135,6 +154,7 @@ func (w *ClientWorkspace) runSubscription(send func(tea.Msg)) {
 			continue
 		}
 
+		ensured = false
 		if degraded {
 			degraded = false
 			recoveryFailures = 0

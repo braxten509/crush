@@ -18,10 +18,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// serverHost is the server's --host. Empty means the default host, which
+// is looked up only when the server starts: a flag default would look for
+// (and create) the socket folder in every crush command.
 var serverHost string
 
 func init() {
-	serverCmd.Flags().StringVarP(&serverHost, "host", "H", server.DefaultHost(), "Server host (TCP or Unix socket)")
+	serverCmd.Flags().StringVarP(&serverHost, "host", "H", "", "Server host (TCP or Unix socket)")
 	rootCmd.AddCommand(serverCmd)
 }
 
@@ -34,8 +37,16 @@ var serverCmd = &cobra.Command{
 		_ = joinMemoryBox(memlimit.Slice)
 		_, crashDone := recordCrashes()
 		defer crashDone()
-		if serverHost == "" {
+		host := serverHost
+		if host == "" {
+			host = server.DefaultHost()
+		}
+		if host == "" {
 			return errNoDefaultHost()
+		}
+		hostURL, err := server.ParseHostURL(host)
+		if err != nil {
+			return fmt.Errorf("invalid server host: %v", err)
 		}
 		dataDir, err := cmd.Flags().GetString("data-dir")
 		if err != nil {
@@ -51,11 +62,6 @@ var serverCmd = &cobra.Command{
 			return fmt.Errorf("failed to load configuration: %v", err)
 		}
 
-		hostURL, err := server.ParseHostURL(serverHost)
-		if err != nil {
-			return fmt.Errorf("invalid server host: %v", err)
-		}
-
 		logFile := serverctl.LogFile(hostURL)
 
 		if term.IsTerminal(os.Stderr.Fd()) {
@@ -66,7 +72,7 @@ var serverCmd = &cobra.Command{
 
 		srv := server.NewServer(cfg, hostURL.Scheme, hostURL.Host)
 		srv.SetLogger(slog.Default())
-		slog.Info("Starting Crush server...", "addr", serverHost)
+		slog.Info("Starting Crush server...", "addr", host)
 
 		errch := make(chan error, 1)
 		sigch := make(chan os.Signal, 1)
@@ -107,8 +113,8 @@ var serverCmd = &cobra.Command{
 	},
 }
 
-// errNoDefaultHost explains an empty --host: server.DefaultHost found no
-// private folder for the socket.
+// errNoDefaultHost explains why there is no host when --host was not
+// given: server.DefaultHost found no private folder for the socket.
 func errNoDefaultHost() error {
 	_, err := server.PrivateSocketDir()
 	if err == nil {

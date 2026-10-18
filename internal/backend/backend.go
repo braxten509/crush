@@ -136,6 +136,9 @@ type Backend struct {
 	// engine serves ([Backend.SetEngine]), or "" on the legacy server.
 	// Guarded by mu.
 	engineDataDir string
+	// firstJoinGrace is how long an engine waits for its first app
+	// ([Backend.ArmFirstJoinGrace]). Guarded by mu.
+	firstJoinGrace time.Duration
 	// startedAt is when the backend was created, for GET /v1/engine.
 	startedAt time.Time
 

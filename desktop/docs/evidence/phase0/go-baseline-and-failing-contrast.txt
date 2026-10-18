@@ -1,0 +1,17 @@
+Status: completed
+
+testing 6b2146f1 Let paid API helpers do real work; keep long chats within limits as unit crush-desktop-go-test-20261018-005151-736105 (limit 1800s)
+0 changed of 13 watched files
+summary: 97 packages passed, 0 failure lines, go test exit 0, outside-world check unchanged
+full log: /var/tmp/crush-desktop-go-logs/go-test-20261018-005151.log
+== baseline exit 0
+testing 6b2146f1 Let paid API helpers do real work; keep long chats within limits as unit crush-desktop-go-test-20261018-005349-743668 (limit 1800s)
+# ./internal/does-not-exist
+stat /home/braxtenchenay/dev/crush-desktop-verify/internal/does-not-exist: directory not found
+FAIL	./internal/does-not-exist [setup failed]
+FAIL
+0 changed of 13 watched files
+summary: 0 packages passed, 2 failure lines, go test exit 1, outside-world check unchanged
+full log: /var/tmp/crush-desktop-go-logs/go-test-20261018-005349.log
+== contrast exit 1 (must not be 0)
+

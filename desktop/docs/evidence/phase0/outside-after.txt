@@ -1,0 +1,14 @@
+PASS unchanged: /home/braxtenchenay/.config/crush/crush.json
+PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-abacus-hide
+PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-abacus-options-20261001T072801Z
+PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-anthropic
+PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-artificial-analysis
+PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-byu-mcp-202610162048
+PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-cloudflare
+PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-secrets-guard
+PASS unchanged: /home/braxtenchenay/.config/crush/crushrc
+PASS unchanged: /home/braxtenchenay/.local/share/crush/crush.json
+PASS unchanged: /home/braxtenchenay/.local/share/crush/projects.json
+PASS unchanged: /home/braxtenchenay/.local/share/crush/providers.json
+PASS unchanged: /home/braxtenchenay/.local/share/crush/remote-password
+0 changed of 13 watched files

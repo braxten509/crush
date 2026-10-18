@@ -1,0 +1,2 @@
+Go baseline on 6b2146f1 (job 008): 97 packages passed, 0 failure lines, go test exit 0
+log: /var/tmp/crush-desktop-go-logs/go-test-20261018-003607.log

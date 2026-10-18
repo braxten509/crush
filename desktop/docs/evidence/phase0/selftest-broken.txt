@@ -1,0 +1,18 @@
+PASS no sound card inside the sandbox
+PASS no desktop, sound or message-bus sockets inside the sandbox 
+PASS no real screen is reachable, only the hidden one :99 
+PASS the only network device is loopback ['lo']
+PASS no outside network inside the sandbox
+PASS the system message bus is not reachable
+PASS throwaway home and no Crush settings from outside
+PASS the owner's home folder is hidden except this worktree [['dev'], ['crush-desktop']]
+PASS fake AI server answers inside the sandbox
+PASS fake claude is first on PATH (/home/braxtenchenay/dev/crush-desktop/desktop/tests/fakes/bin/claude)
+PASS fake claude recorded its call
+PASS app window is on the hidden screen at full size (0, 0, 1586, 992)
+PASS app reports the shell is on screen
+PASS app heading is Crush ('Crush')
+PASS shell fills the window exactly ({'x': 0, 'y': 0, 'w': 1586, 'h': 992} vs window (0, 0, 1586, 992))
+PASS the window blocks injected inline code (True)
+FAIL deliberately broken check (must FAIL)
+1 FAILED

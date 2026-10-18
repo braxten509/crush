@@ -1,0 +1,37 @@
+Status: completed
+
+outside-world snapshot taken
+PASS normal self-test passes
+  PASS no sound card inside the sandbox
+  PASS no desktop, sound or message-bus sockets inside the sandbox 
+  PASS no real screen is reachable, only the hidden one :99 
+  PASS the only network device is loopback ['lo']
+  PASS no outside network inside the sandbox
+  PASS the system message bus is not reachable
+  PASS throwaway home and no Crush settings from outside
+  PASS the owner's home folder is hidden except this worktree [['dev'], ['crush-desktop']]
+  PASS fake AI server answers inside the sandbox
+  PASS fake claude is first on PATH (/home/braxtenchenay/dev/crush-desktop/desktop/tests/fakes/bin/claude)
+  PASS fake claude recorded its call
+  PASS app window is on the hidden screen at full size (0, 0, 1586, 992)
+  PASS app reports the shell is on screen
+  PASS app heading is Crush ('Crush')
+  PASS shell fills the window exactly ({'x': 0, 'y': 0, 'w': 1586, 'h': 992} vs window (0, 0, 1586, 992))
+  PASS the window blocks injected inline code (True)
+PASS deliberately broken check is reported as a failure (exit 1)
+  PASS unchanged: /home/braxtenchenay/.config/crush/crush.json
+  PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-abacus-hide
+  PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-abacus-options-20261001T072801Z
+  PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-anthropic
+  PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-artificial-analysis
+  PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-byu-mcp-202610162048
+  PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-cloudflare
+  PASS unchanged: /home/braxtenchenay/.config/crush/crush.json.before-secrets-guard
+  PASS unchanged: /home/braxtenchenay/.config/crush/crushrc
+  PASS unchanged: /home/braxtenchenay/.local/share/crush/crush.json
+  PASS unchanged: /home/braxtenchenay/.local/share/crush/projects.json
+  PASS unchanged: /home/braxtenchenay/.local/share/crush/providers.json
+  PASS unchanged: /home/braxtenchenay/.local/share/crush/remote-password
+  0 changed of 13 watched files
+SELFTEST OK
+

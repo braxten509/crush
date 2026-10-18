@@ -1,0 +1,260 @@
+# Crush Desktop: build plan
+
+Status: APPROVED by the owner on 2026-10-18 (round 2: plan, product summary and exceptions, all yes).
+Round-1 picks: every recommended option, plus all five leave-outs.
+Reviews so far: the research was checked independently (findings folded in). This plan was checked independently against your brief; all 19 requirements, 5 deliverables and "done means" lines map to a part of it, and its findings are folded in (section 14). The feature checklist was audited against the code, fixed and re-checked.
+
+## 1. What you get
+
+- **Crush Desktop**: a desktop app for Crush (a Tauri 2 window with Svelte screens) that builds and runs on Linux. GitHub builds the Mac version when you OK a push.
+- **Every terminal-app feature** in the desktop app, except the five you agreed to leave out. The full list is `CHECKLIST.md`: 862 rows: 953 rows the helpers found in the code, merged, plus 28 rows the audit added (`desktop/CHECKLIST.md`). Each row gets a desktop version, a check with a real mouse and keyboard in the real app window, and proof (the test name plus a screenshot).
+- **Both apps at once**, even on the same chat, live: one engine per project does the AI work and both apps show it.
+- **Per chat, always visible**: the model and effort in the typing box; context used plus 5-hour and weekly limits as bars at the top of the right panel. They move under the typing box when that panel is hidden.
+- **Branching** as in the demo, with each AI tool's memory copied exactly where the tool allows it.
+- **A visuals panel** for Mermaid diagrams (modern style), LaTeX, tables and images, with chips in the chat. Short math stays inline. Tool calls fold into one quiet line ("Ran 4 tools · …") that opens on click.
+- **The look of style-2.png** (charcoal and amber, compact). That screen gets rebuilt closely first, then the same style is extended to every screen. Same theme list, theme files and color editor as the terminal app; charcoal and amber is the default.
+- At the end: screenshots of the main screens next to style-2.png, an independent look review, the finished checklist with proof, and a note of the approved exceptions (section 12).
+
+## 2. Picks (round 1, 2026-10-18)
+
+| # | Topic | Pick |
+|---|---|---|
+| Q1 | How the apps share chats | One engine per project |
+| Q2 | Closing an app on a shared chat | Work keeps going if another open app shows that chat; otherwise it stops, like today |
+| Q3 | Branch memory | Exact where the tool allows. Codex and Grok: the nearest whole step plus a written note. AGY, older chats and any failure: a written copy |
+| Q4 | Where code lives | Inside the Crush project, on a side branch until ready |
+| Q5 | Screen toolkit | Svelte |
+| Q6 | Model, context and limits | Model and effort in the typing box; context and limit bars at the top of the right panel; under the typing box when that panel is hidden |
+| Q7 | Helpers, jobs, waiting messages | A tray above the typing box, shown only when something is there |
+| Q8 | "Allow this?" asks and question forms | Take the typing box's place until answered |
+| Q9 | Color themes | Same themes, theme files and color editor as the terminal app; charcoal and amber is the default |
+| Q10 | Left out | Mouse on/off switch; hidden terminal fix-ups; goodbye message; see-through background; one-chat start option |
+| Q11 | Mac version | GitHub builds it when you OK a push; the background-jobs list and crash clean-up stay Linux-only |
+
+## 3. Where changes happen (exact)
+
+- **Workspace.** `git -C ~/dev/crush fetch fork`, then a new Git worktree `~/dev/crush-desktop` (a second working folder of the same repository) on a new branch `desktop`, started from `main`. Your brief named the `cli-agents` branch, but `main` already contains every `cli-agents` commit and has 323 more (local `main` = `fork/main` = `6b2146f1` today), so the work starts from `main`. The main folder `~/dev/crush` (11 unsaved changes from another session) is never touched. New `main` changes come in by merging, never by rebasing.
+- **Go changes** on that branch, in `internal/`: `server`, `rpc`, `proto`, `client`, `workspace`, `backend`, `serverctl`, `db` (one new migration), `agent`, `agent/cliagent`, `message`, `remote`, `secureentry`, `ui`, `cmd`, `config`. Details are in section 5.
+- **New folder `desktop/`:**
+  - `desktop/src-tauri/`: the Rust side (engine connection with the same crash recovery as 5.14, event batching, terminal tabs, notifications, clipboard, files, window state, crash guard, single-window handling).
+  - `desktop/src/`: the Svelte screens.
+  - `desktop/tests/`: the hidden-window runner, the fake AI server, the fake AI tools, and the checks.
+  - `desktop/design/style-2.png`: a copy of your picture, used as the target.
+  - `desktop/PRODUCT.md`: the product summary (section 13; you confirm it in round 2).
+  - `desktop/DESIGN.md` and `desktop/.impeccable/`: written at the end from the built app.
+  - `desktop/PLAN.md`: this plan plus a progress record (status per phase, helper IDs, decisions, open findings).
+  - `desktop/CHECKLIST.md`: the checklist, with columns for the desktop version, the check, the proof and the status.
+  - `desktop/docs/evidence/`: saved proof (live AI-tool checks, screenshots, measurements).
+  - `desktop/README.md`: how to build, run and test.
+- **Mac build:** `.github/workflows/desktop-mac.yml`. It builds the Mac `crush` binary and the Mac app together, and only runs when you OK a push.
+- **Which `crush` the desktop app uses:** by default the `crush` on your PATH, the same one the terminal app uses, so both always speak the same version. A setting (and the `CRUSH_DESKTOP_CRUSH` environment variable, used by the tests) can point it at another `crush`, such as the worktree build. On start the app asks that `crush` for its version. If it's too old for the app (for example, today's installed `crush` before you install the new one), the app shows a plain message saying so and how to fix it.
+- **Commits** go on `desktop` after each phase passes its checks. Each of these waits for your OK: merging into `main`, pushing to GitHub, installing the new `crush` binary, and adding the app menu entry (with the 60+ fps preload).
+
+**Never touched:** the `~/dev/crush` working folder, your real chats, settings and project list (tests use throwaway folders; see section 8), `cli-sessions.json` and `~/.claude/projects` (never read), the real screen, the phone, notifications on your desktop, and paid API calls.
+
+## 4. Phases (share of the whole job)
+
+Every phase ends with its checks passing and an independent read-only review. The review/fix cap is 3 rounds per piece; at the cap I report what is still open instead of calling it done. Progress is reported as a percent of this table.
+
+| Phase | Share | Done when |
+|---|---|---|
+| 0 Setup | 5% | Worktree, plan and checklist files, PRODUCT.md, and an app skeleton that builds and starts on a hidden screen. The test harness proves itself: the fake AI server answers from inside the sandbox, one check passes, and one deliberately broken check fails |
+| 1 Engine | 20% | Every engine gap in section 5 is closed, with server and client tests. Two-app tests pass. The whole Go test suite passes |
+| 2 Look | 10% | The style-2 screen is rebuilt with real parts. Match score is 72% or higher, alignment is measured, the design detector is clean, and you OK the side-by-side pictures |
+| 3 Chat core | 15% | The chat, typing box and side-info rows pass in the real window. The terminal app (in shared-engine mode, using today's switch) and the desktop app show the same chat live. Streaming meets the speed bar in section 8 |
+| 4 Branching | 10% | Live checks for each AI tool are saved. Every branching behavior passes with a real mouse in the real window: closing, reopening from a link, restarting, branches of branches, and branching mid-reply |
+| 5 Dialogs and settings | 20% | Command, dialog, setting and theme rows pass. A setting changed in one app shows in the other |
+| 6 Live work | 10% | Helper, job, notice, phone-sharing, update and chat-list rows pass. Closing an app follows Q2 |
+| 7 Finish | 10% | The terminal app is switched to the shared engine (with a setting to go back), and its whole test suite passes in both modes. Full checklist sweep, final look review, DESIGN.md, the Mac build path and the docs are done |
+
+Order: 0 first. Then 1 and 2 run side by side. 3 starts once the engine has the per-project setup and the wire fixes (5.1, 5.2). 4 needs 5.11 and phase 3. 5 and 6 need their routes from phase 1. 7 comes last.
+
+## 5. Engine work (Go)
+
+1. **Wire fixes.** Context fields on the chat record and its converters. The memory limit (`memlimit.Join`) in `crush server`. An "unfinished work" flag. A protocol-version check: a mismatch is refused with a clear message, and an idle out-of-date engine is restarted. The engine's socket (its private address on this computer) gets owner-only permissions and a same-user check (Linux and Mac each have their own way to ask who is connecting). No world-readable `/tmp` fallback.
+2. **One engine per project.** A shared Go function "ensure engine" finds or starts the project's engine. The terminal app calls it directly; the desktop app calls it through a new command, `crush engine ensure --cwd DIR`, which prints the engine's address and version as JSON. `crush engine list` shows the running engines. The socket name comes from a hash of the project's data folder.
+   - **Inside an engine, apps join by project, not by folder.** Today the engine groups apps by the exact folder they started in, so the desktop app at the project's top folder and a terminal in a subfolder would get two separate AI workers on the same chats. Instead, every app on the same project joins one workspace. The first app's folder is where the AI works (the same "first one wins" rule the engine already uses for other settings). It stays that way until every app on that project has closed, even if the first app leaves earlier. A later app started in a different folder of that project shows a short notice naming the folder the AI works in. Test: two apps from different folders of one project get one workspace, one queue and one AI worker per chat.
+   - An engine exits 10 seconds after the last app leaves (today: 60). Tests: close the last app, reopen at 5 s and at 11 s; both reopen cleanly.
+3. **Helpers (sub-agents).** Events, plus list and stop routes, scoped to the chat.
+4. **Background jobs.** List and kill routes and a Ctrl+B route, scoped to the chat. The "is anything running?" checks before tree actions look only at that chat, not the whole program. Today, once chats share an engine, one chat's job would block branching in every other chat of the project.
+5. **Ownership (Q2).** Each run, helper and job records which app started it. When an app closes, or its connection stays dropped past the 10-second grace, its work keeps going for any chat another open app is showing. Everything else it started stops, like today. As today, helpers stopped this way resume the next time the project opens. Tests: a connection drop plus reconnect within the grace keeps the run going; a drop past it follows Q2.
+6. **Tree actions.** Routes for tree list, label, switch, navigate, fork and clone (with revision checks), plus file restore preview and undo, implemented for the client side.
+7. **Phone sharing (`/remote`)** runs in the engine and follows the chat of the app that started it, so it works from both apps. The launcher keeps working (section 7).
+8. **Secure entry.** A private channel per app: only field names travel, and values never appear in events or logs. It stays local and is never forwarded to the phone.
+9. **Smaller gaps.**
+   - Live `!` shell output events.
+   - A "$VAR is set" check.
+   - Memory-warning and update-check routes.
+   - A usage-limits route plus event. Limits are per account, so the desktop app shows the newest reading from any engine. An engine refreshes limits when it starts. Until the first reading arrives, the bars show "checking…" instead of zero.
+10. **Project lock.** The engine holds the project lock. A terminal window set to "work alone" holds a shared lock, so the engine and a lone window can never both run AI work on one project. When blocked, each side shows a clear message. After the switch-over, `crush run` also goes through the engine. `crush session` and `crush stats` only read or rename saved chats, as today.
+11. **Branch copy.** A new copy path that leaves the source chat untouched and works while the AI is still replying. It copies finished messages only, through the cut (section 6). It also copies review details, kept skills, context budgets, read-file records, to-dos and price fields; today's fork and clone get those too. A new table `chat_branches` stores each branch's parent chat, source message, and the highlighted text and its position. `sessions.parent_session_id` stays empty for branches: that column marks helper chats, which the chat lists hide. A new table `cli_message_markers` records each AI tool's own message or turn ID as replies arrive.
+12. **Event batching.** The app's Rust side merges rapid updates (one per screen frame) before the screens see them. The speed bar is in section 8.
+13. **Switch-over.** The terminal app uses the shared engine by default only in phase 7, after all of the above. A setting lets you go back. Tests: its whole suite runs in both modes, including the chat-list tabs and `crush run`; "go back" restores today's behavior end to end.
+14. **Engine crash recovery.** Today, an app that loses its engine only re-dials the same address, and nothing starts a new engine. New: an app that can't reach its engine runs "ensure engine" again, which starts a fresh one, and rejoins. Test: kill the engine while both apps are open on a chat with a helper running; both apps recover, and the helper resumes and shows again, per today's resume rules.
+
+## 6. Branching design
+
+- It builds on the existing fork and clone code (`CopyTree`), as your brief asked.
+- Right-clicking in a chat shows only our menu: Branch from here, Copy, Quote in reply, Copy whole message. As in the demo, you can branch from message text (yours or the AI's), not from tool output. A highlight that overlaps an existing link is refused. On a message still being written, "Branch from here" is greyed out with a hint.
+- **The cut.** The branch copies the chat through the end of the message holding the highlight. If that message is an AI reply that ran tools, the tool results come too, because the AI tools' own memory can only be cut there. If it's your own message, the branch ends with it, and the AI sees it, unanswered, before your next message.
+- **Opening.** It opens at once with the highlighted words quoted in the typing box. Its title is the highlighted words, shortened as in the demo, and auto-titling never replaces it.
+- **The left list.** Branches nest under their parent like folders; branches of branches nest deeper. The terminal app lists branches as normal chats.
+- **Closing.** Closing a chat hides it from the desktop app's left list and moves its children up a level. The closed state is saved in the desktop app's own settings file, so every desktop window agrees and it survives a restart. A closed chat comes back from its link, or from the Sessions search (Ctrl+K) for chats without a link. A deleted parent makes its branches top-level.
+- **Links.** The highlighted words become a link that reopens the branch, even after closing it or restarting the app. As in the demo, links inside the copied part of the chat come along into the branch, so sibling branches stay reachable from inside a branch. If the terminal app's tree view moves the parent away from the linked message, the link shows again when you move back.
+- **AI memory (Q3).** The tool's own memory is forked the first time you send in the branch:
+  - Claude: resume with a fork at the exact message.
+  - OpenCode: fork at the message after the cut, because its cut leaves out the named message.
+  - Codex and Grok: fork at the last whole turn; the rest of that turn goes in as a written note.
+  - AGY, older chats and any failure: the existing written-copy handoff.
+  - Abacus and other API models: the copied chat already is their exact memory.
+  - A chat that used several tools gets one fork per tool, as today's handoff does.
+- **First step of phase 4:** re-check each tool's fork support live (help output plus one tiny throwaway chat each). This uses a little subscription usage and makes no paid API calls. The proof is saved in `desktop/docs/evidence/`, not `/tmp`. It includes branching mid-reply and sending in the branch at once. The expected result is an exact fork at a finished point, or a clean written-copy fallback, with the source chat untouched. If a tool's fork doesn't behave as researched, that tool uses the written copy and I tell you.
+
+## 7. Desktop versions of terminal-only features
+
+The checklist marks 66 rows as terminal-only and 14 as partly. Each gets a desktop version below, except the five you agreed to leave out (section 12).
+
+| Terminal feature (checklist rows) | Desktop version |
+|---|---|
+| Session host: chat list, narrow strip, each chat's status, stopping a server (LIST-001, -002, -018, -032) | The left list with chats, branches, states (working, waiting, background) and server status. It can be collapsed, and remembers that. "Stop server" is a direct action |
+| Folder picker and its typing keys (LIST-006, -007 and the audit's new picker rows) | A text box with the same folder completion, recent folders, errors and keys, plus the system folder dialog |
+| Shell tabs, their clean environment and cursor (LIST-025, LIST-056, S5) | Terminal tabs built into the app (a terminal widget plus a pseudo-terminal on the Rust side), with the same cleaned environment, scrollback, selection, copy and paste |
+| Closing the real terminal (LIST-026) | The window's close handler, following the Q2 rule |
+| Paste, clipboard, focus and image passthrough; selection; copy rebuild; OSC 52 (LIST-022, -023, CHAT-088, -089, -090) | The system clipboard and normal selection. Copy keeps the original Markdown source (backticks, indentation), as the terminal does |
+| Shift+Enter, new line (LIST-024, TYPE-005) | Shift+Enter |
+| Smooth streaming, spinner, ANSI colors, text-drawn lines and buttons (CHAT-018, -045, -103, DLG-020) | Live text drawn as it arrives, a small quiet activity mark, colored tool output in the theme's 16 colors, real lines and buttons |
+| Wheel and scrollbar (CHAT-093, -094, SET-006) | Normal scrolling; a thin scrollbar in the theme colors, keeping the scrollbar setting (auto-hide, always, never) |
+| Images in chats, forms and previews; opening an image (CHAT-007, TYPE-037, DLG-187, DLG-253, MISC-007) | Real images; clicking opens them in the visuals panel or the image viewer |
+| Links (CHAT-102) | Web links open in your browser; file links open in your editor |
+| Logo (START-004) | The CRUSH AI wordmark as a drawn (SVG) logo |
+| External editor (TYPE-015, CMD-030) | "Open in editor" (Ctrl+O) runs `$VISUAL`/`$EDITOR` in a terminal tab; the text comes back to the typing box when you close it |
+| Suspend (CMD-064) | Minimize the window |
+| Crash guard and crash messages (START-020, MISC-025) | A crash notice with "Open report" and "Restart" |
+| Start-up flags and their errors (START-021) | `crush-desktop` takes the same `--cwd` and `-s` (open a chat) flags; a bad folder or an unknown or ambiguous chat ID shows the same message in a start-up notice, with the Sessions search open |
+| Version (MISC-023) | The About panel shows it; `crush-desktop --version` prints it |
+| Focus passing, covered pictures, pointer capture (LIST-052, -053, -055) | Each chat view knows whether it is shown and focused, so hidden chats still send their "finished" notifications; images and pointer capture work the normal desktop way |
+| Switching project relaunches Crush (DLG-117) | Opens the project in the same window. As in the terminal, this is blocked while the AI is busy |
+| Secure entry, local only, with its checks (DLG-190, -195, -201) | A masked field in the local app with the same limits and file-safety checks; never forwarded to the phone |
+| Notifications, their style and backends, bell, focus rule (DLG-277, -278, SET-015, NOTE-003, NOTE-004) | System notifications and the system alert sound, using the same settings; only when the window isn't focused; "disabled" is respected |
+| Window title (NOTE-001) | "Chat title · project" |
+| Program status, progress bar, clearing on focus (NOTE-007, -008, -009) | A badge and progress bar on the taskbar or dock icon, cleared when the window gets focus |
+| Composer-focus-only setting (SET-003) | Kept as a setting: when on, clicks and Tab never move focus out of the typing box |
+| Phone-sharing setup, launcher, launcher password, launcher window (REM-005, -015, -016, -017) | Setup runs in a terminal tab. The launcher setting and password live in Settings, with a new choice: "Phone opens new chats in: Terminal / Desktop app". With "Desktop app", the launcher starts `crush-desktop --project DIR`; if the app is already running, that becomes a new window in it; if not, the app starts. Like the terminal window today, the new window reads the launch ID the launcher gives it, shares itself with the phone through the engine, and reports the ID back, so the phone opens the right chat. "Terminal" (the default) works as today |
+| Debug square (MISC-002) | The same debug overlay, turned on the same way (`CRUSH_UI_DEBUG=true`) |
+| CLI commands that have screens (MISC-011 to -019) | `models`: the model picker. `session`: the chat list and Sessions dialog. `projects`: the project picker. New small screens: sign in / sign out (hyper, Copilot, ChatGPT, Grok), a log viewer, "Usage report" (opens the same report), an About panel with Crush's folders and version, and "Refresh provider list" |
+
+Two wording notes: the terminal's folded tool line actually says "N actions"; the desktop app uses your "Ran 4 tools · …" wording from style-2. A typed "/word" (such as `/remote`) still filters the command palette, as in the terminal; there are no other slash commands.
+
+## 8. How each piece is checked (checks that can fail)
+
+- **Go:** tests for every new route on the server and client sides. Two-app tests: both apps see the same messages, helpers, jobs and prompts on one chat; closing one follows Q2; two folders of one project share one AI worker. Branch-copy tests: the side tables are copied, the source is unchanged, and it works while the AI is busy. Lock, version and reconnect tests. Fake-tool tests prove each fork gets the right cut point. Then the whole suite (`go test ./...`), plus the race detector (it catches two parts touching the same data at once) on the server, backend and workspace parts. These run in the background through `crush bg` and `systemd-run` on CPUs 6-11 and 18-23, from the worktree, with time limits. `GOOS=darwin go build ./...` must pass too.
+- **Screens:** unit tests for the renderers, branching rules and stores.
+- **Real window:** the built app runs inside a sandbox (bubblewrap) with a hidden screen (Xvfb) and no network except the computer's own local address. xdotool drives it with a real mouse and keyboard. The app writes its state to a probe file, and a screenshot is saved per checklist row. A fake AI server gives scripted replies. Fake scripts named `claude`, `codex`, `grok`, `opencode` and `agy` come first on the sandbox's PATH and record the arguments they get.
+- **Outside-world protection:** the sandbox gives the app, the engine and the hidden terminal app their own throwaway home, config and data folders, and sees the rest of the computer read-only. After every run, a check confirms your real project list (`projects.json`) and config files are byte-for-byte unchanged and that the fake tools, not the real ones, were called.
+- **Both apps:** the terminal app runs in a hidden tmux inside the same sandbox, on the same throwaway data, on the same chat as the desktop app.
+- **Speed bar for streaming:** a scripted two-minute streamed reply with tool calls, run 3 times in the hidden window. In each run, 95% of screen frames arrive within 20 ms and typing stays responsive. A frame over 50 ms fails the check if it happens more than once in a run or at the same moment in two runs. That means a real repeated stall, not a one-off like the first diagram drawing.
+- **Look:** a match score against style-2, alignment measured at real size, the design detector, and an independent finish review. Looks get the most checking time: every phase that adds screens ends with an alignment pass (the align skill) and a real-size screenshot review of those screens, against the rules in the my-ui-design skill.
+- **Silence:** test configs set notifications to "disabled", and the sandbox has no sound device.
+
+## 9. Workers and reviewers
+
+I coordinate and build connected pieces myself. Separate pieces (for example, engine routes versus screens) can go to Claude Opus 5.5 or Sonnet 5.5 workers, each owning its own files. Reviews go to separate read-only Claude Fable 5.1 or Opus 5.5 runs. OpenCode models are the backup.
+
+## 10. Check-ins with you during the build
+
+- **Look choices with sketches.** style-2 and round 1 settle the main screen. Where a screen has more than one sensible look, I ask with sketch pictures in the question form before building it, a few at a time:
+  - Phase 3: the right-click menu, visuals chips and cards, tool rows when opened, image viewer.
+  - Phase 4: branch rows and nesting marks in the left list, how a link looks.
+  - Phase 5: command palette, model picker, Sessions dialog, settings layout, theme editor, sign-in screens.
+  - Phase 6: terminal tabs, helper view, crash notice, About panel.
+  - Where only one sensible look exists, I build it in the style-2 language without asking.
+- After phase 2: side-by-side pictures of the rebuilt screen and style-2 (yes or no).
+- Any change to this plan: I stop and ask.
+- At the end: your OK to merge, push (for the Mac build), install the new `crush`, and add the app menu entry.
+
+## 11. Risks
+
+- Size: 862 checklist rows, so the build is long.
+- The terminal app's shared-engine mode is used less today, so expect fixes while switching. Its whole test suite in both modes covers this. One real change: a terminal window in shared-engine mode depends on the engine staying up. If the engine crashes, both apps start a fresh one and rejoin (5.14), and work in flight follows today's resume rules.
+- Streaming speed in the Linux web view: handled by batching and held to the speed bar.
+- Hidden tool flags (such as Claude's exact fork) may change in a tool update. The written copy is the fallback, and a test catches the change.
+- The Mac app can't be tested on a real Mac here; the GitHub build and the Mac compile check are the evidence.
+
+## 12. Approved exceptions (for your yes)
+
+- **Left out of the desktop app (Q10):** the mouse on/off switch (CMD-054, SET-001); hidden terminal fix-ups (MISC-001 full-screen and key-release modes, MISC-003 background-color resend, MISC-004 capability and emoji-width probes, MISC-005 Konsole scroll marker, LIST-027 background probe); the goodbye message (MISC-006); the see-through background (CMD-047, SET-002); the one-chat start option (START-014, `--single`). The terminal app keeps all of them.
+- **Mac (Q11):** the background-jobs list and crash clean-up are Linux-only. The terminal app has the same gap on a Mac today.
+- **Command-line only:** `crush run` (MISC-009/010, for scripts; a new chat does the same job; same results, through the engine after the switch-over), `crush schema` (MISC-020, for code editors), `crush server` (MISC-021, it is the engine itself), `prune-diffs` (MISC-008, already automatic), `--version`/`--help`, and the secrets-guard hook (MISC-022, used by agents). They keep working unchanged. Agent-only commands (`spawn`, `ask`, `secure-entry`, `bg`, `skill`) keep working for agents in desktop chats.
+- **Terminal-app quirks found while checking the code:** a likely bug gets a small fix in both apps, listed in the final report. There are 7:
+  - Esc in a question-form note cancels the whole form.
+  - The `request_timeout` help text says 60 s, while the code uses 2 minutes.
+  - `.PNG` previews can't be selected.
+  - Mouse-wheel scrolling is dead in the Usage dialog and in the helper view (LIVE-007, DLG-287).
+  - The "esc clear selection" hint has no key behind it, and capital C/Y don't copy (CHAT-100).
+  - The "←/→ switch section" hint only half works (SIDE-033).
+
+  Deliberate-looking behaviors stay the same in both apps: Esc saves a checked API key, and Esc denies a permission ask.
+
+## 13. Product summary (becomes desktop/PRODUCT.md once you confirm it)
+
+- **Platform:** web (a desktop window with web screens).
+- **Stack:** Tauri 2 (Rust) with Svelte + Vite screens, inside the Crush repository (`desktop/`).
+- **User:** you. You use Crush heavily across many projects with several AI tools (Claude, Codex, Grok, OpenCode, AGY, API models), often with several chats at once, and sometimes from the phone.
+- **Purpose:** a desktop window that does everything the terminal app does and shares the same chats live. It adds what a terminal can't: branching from highlighted words, drawn visuals, and mouse-first navigation. Success means you can use either app on any chat at any time without losing work or features.
+- **What makes it different:** you branch a chat from a highlighted phrase with each AI tool's own memory copied exactly, while staying live with the terminal app on the same chat.
+- **Fixed rules:** the charcoal and amber look of style-2.png. Banned: purple-to-blue gradients, glow or glassy effects, emoji icons, a green main color, everything in rounded cards, AI sparkle icons, and misaligned text or icons. Original terminal shortcuts are kept where sensible.
+- **Principles:** nothing the terminal does is missing; both apps show one truth; tool work folds away so the conversation leads; branch memory matches the cut; everything is aligned, compact and consistent.
+- **Accessibility:** full keyboard use, visible focus, and readable contrast in every theme.
+
+## 14. Review log
+
+- Research review (2026-10-17): per-project engine instead of one for everything; switch the terminal app over last; branch copy that works mid-reply and copies the side tables; live tool checks before building branching.
+- Plan review (2026-10-18), 8 confirmed gaps, all fixed above: apps join by project, not folder (5.2); which `crush` the app uses (3); branch closed-state, copied links and `parent_session_id` (6); look-choice sketch asks per phase (10); Mac build contents and compile check (3, 8); outside-world protection check (8); row counts (1); speed bar, reconnect, limits-empty and reopen tests (5, 8).
+- Plan re-check (2026-10-18): all 8 gaps and 5 risks closed; final confirmation: nothing open. One new gap fixed: nothing restarts a crashed engine today, so 5.14 adds it with a test. Wording fixed for `crush run`, the first app's folder, the launcher's window ID and the speed bar's one-off frames.
+- One review claim was tested and found wrong: the sandbox does reach a local fake server (checked 2026-10-18: a server inside a no-network sandbox answered with status 200). The first-day harness check stays anyway.
+- Checklist audit (2026-10-18): about 95% complete; 14 missing features (mostly the chat-list folder picker) and 9 wrong rows. Fixed, plus a full read of the weak areas: 28 rows added, 15 corrected, 4 more likely terminal-app bugs found; every one of the 953 source rows still accounted for (checked by script). Re-check: all fixes confirmed; its last 4 small points applied.
+
+## 15. Progress record
+
+Kept current during the build. Percent = share of the phase table in section 4.
+
+| Phase | Share | Status | Evidence |
+|---|---|---|---|
+| Planning | (before 0) | done 2026-10-18 | research, picks, reviews and approval in section 14 |
+| 0 Setup | 5% | done 2026-10-18 (review t16 clean after one fix round) | `docs/evidence/phase0/`: harness self-test (sealed sandbox, pass, deliberate fail, real files unchanged), skeleton screenshot, unit tests |
+| 1 Engine | 20% | in progress: exact design (t17) | |
+| 2 Look | 10% | in progress: measuring the comp (`.impeccable/build/`) | |
+| 3 Chat core | 15% | not started | |
+| 4 Branching | 10% | not started | |
+| 5 Dialogs and settings | 20% | not started | |
+| 6 Live work | 10% | not started | |
+| 7 Finish | 10% | not started | |
+
+### Worktree and branch
+- Worktree `~/dev/crush-desktop`, branch `desktop`, created 2026-10-18 from `main` at `6b2146f1` (= `fork/main`).
+- Go tests run through `desktop/tests/go-test.sh` from a second, detached checkout `~/dev/crush-desktop-verify` that follows the newest `desktop` commit (only committed work is tested). A folder that an editor or agent watches breaks Crush's file-review tests, so the tests never run from the working folder itself. Each run is a named systemd service with its own time limit, a throwaway home, config, data, cache, runtime and temp folder, and no address for the real screen, Wayland or the session message bus (the service manager would otherwise pass them in). The outside-world check runs around every run. Logs go to `/var/tmp/crush-desktop-go-logs/`.
+- Test sandbox (`desktop/tests/sandbox.sh`): read-only computer except `desktop/tests/out/`; the owner's home hidden except this worktree; own `/tmp` and `/run` (no session or system message bus, no Wayland or sound sockets); bare `/dev` (no sound card or GPU); own network (loopback only), process list, shared memory, host name and terminal session; throwaway home; clean environment; hidden X screen. The self-test proves each of these from inside.
+- Note: Crush's read-only sandbox for review helpers creates empty mount points in `/tmp` (`.git`, `.agents`, `.aws`, `.codex`). They are harmless here: the Go tests use their own temp folder, and `go-test.sh` checks the folders above it instead.
+
+### Look decisions (round 3, 2026-10-18)
+- Window buttons: on Linux, KDE's own title bar and buttons (system window frame). On a Mac, the real Mac buttons sit top-left over the left bar, as in style-2.
+- Limit bars: the context, 5-hour and weekly bars sit in one row of three under the project name at the top of the right panel (under the typing box when that panel is hidden, per Q6).
+
+### Phase 0 record
+- Skeleton: Tauri 2.12.4, Svelte 5.57.2, Vite 8.3.4, Vitest 5.0.5. Release build passes (job 001). The app takes `--probe FILE` (writes what is on its screen every 200 ms) and `--version`.
+- Harness self-test `desktop/tests/selftest.sh`: all checks pass; the deliberately broken check fails; real Crush files unchanged (jobs 007, 00B; after the review fixes, job 00C).
+- Go baseline on `6b2146f1` before any engine change (job 008): 97 packages passed, no failures. Rerun in a throwaway home after the review fixes, plus a run that must fail: job 00D.
+- Review t16 (Claude Fable 5.1, high effort, read-only): phase 0 meets its done-line. Fixed: evidence logs renamed to `.txt` (the repository ignores `*.log`); the Go runner got its own time limit, a named service, a throwaway home and the outside check, and refuses stray Go files; the sandbox hides `/run` (system message bus) and the home folder, and separates shared memory, host name and terminal session; new self-test checks for loopback-only networking, the system bus, the hidden home and the exact shell size; the outside check now also covers every file in the two real Crush folders by size and date (no contents read). Deferred, with the phase that needs them: keep `index.html` free of inline `<style>` tags (Tauri would add a nonce and turn off `'unsafe-inline'` styles); phase 3 adds window focus for keyboard tests (no window manager on the hidden screen); phase 6 keeps symbol names in release builds for the crash guard; phase 7 adds the Mac `.icns` icon.
+- Safety decision (added in phase 0; the plan had no rule for it): the window gets a strict content rule (CSP) from the start: only the app's own scripts run, no inline scripts or event handlers, no plug-ins, frames or form posts, and pictures only from the app, local files (`asset:`), `data:` and `blob:`, never from the web. Phase 3 rules for showing AI text: Markdown is cleaned before it reaches the page (no raw HTML scripts, handlers or `javascript:` links), Mermaid runs with `securityLevel: "strict"`, KaTeX with `trust: false`, and links open in the system browser only after a click. Reason: AI replies become page content, and a crafted reply must not be able to press the app's buttons (send, approve) by itself.
+
+### Helpers and reviews (planning)
+- Research: t1 (main screen), t2 (dialogs), t3 (chat), t10 (settings), t6 (branch memory), t8 (sharing); research review t11.
+- Checklist: merge t12, audit t14 (+ re-check), fixes t15.
+- Plan review: t13 (+ two re-checks).
+
+### Helpers and reviews (build)
+- t16: phase 0 review (Claude Fable 5.1, high, read-only): 7 findings and 3 unproven claims, all fixed; re-check: all resolved, nothing broken. Its notes: a real Crush refreshing its provider list during a Go run would make the outside check fail safe; `/var/tmp/crush-test-tmp` holds about 1390 leftovers from older runs (owner's call); git does not work on the worktree inside the sandbox, so later test projects live in the throwaway home.
+- t17: engine design for phase 1 (Claude Opus 5.5, max), writes `desktop/docs/engine-design.md`; its review follows.
+
+### Open findings
+- none

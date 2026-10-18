@@ -1,0 +1,21 @@
+Status: completed
+
+-rwxr-xr-x 2 braxtenchenay braxtenchenay 7245176 Oct 18 00:38 src-tauri/target/release/crush-desktop
+    Finished `release` profile [optimized] target(s) in 59.48s
+== app WITHOUT the content rule (must fail only the inline-code check):
+PASS no sound card inside the sandbox
+PASS no desktop, sound or message-bus sockets inside the sandbox 
+PASS no real screen is reachable, only the hidden one :99 
+PASS no outside network inside the sandbox
+PASS throwaway home and no Crush settings from outside
+PASS fake AI server answers inside the sandbox
+PASS fake claude is first on PATH (/home/braxtenchenay/dev/crush-desktop/desktop/tests/fakes/bin/claude)
+PASS fake claude recorded its call
+PASS app window is on the hidden screen at full size (0, 0, 1586, 992)
+PASS app reports the shell is on screen
+PASS app heading is Crush ('Crush')
+PASS shell fills the window ({'x': 0, 'y': 0, 'w': 1586, 'h': 992})
+FAIL the window blocks injected inline code (False)
+1 FAILED
+exit 1
+

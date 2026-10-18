@@ -400,6 +400,8 @@ Kept current during the build. Percent = share of the phase table in section 4.
 
 - Piece B recheck round 3 (t37, the last): "ready to merge". Coordinator's whole checks on `8317db1b` (job 001) all pass: both builds, both vets, the suite (97 packages), the race detector (13). One low finding fixed before the merge (decision, away mode): a desktop user's own prompt typed into a chat with an open `crush run` must not join that run (it would die with the run, and its answer could become the run's output); only agent-started turns join. The builder adds a test; the coordinator checks the fix without a further review round (cap reached). Kept as a known limit: with auto-approve off, a `crush run` on an open project waits for the app's permission dialog.
 
+- 2026-10-18: all three helpers (t39 S3, t28 B join fix, t32 5-6 pass 2) stopped at once on the Claude session limit (resets 3:30pm). The coordinator waited rather than hand UI work to another model (owner rule: only Opus max makes UI). After the reset, each was continued where it stopped with a short resume note (briefs resume-t39/t28/t32.md).
+
 ### Owner decisions for the overnight run (2026-10-18, before bed)
 - Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
 - The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).

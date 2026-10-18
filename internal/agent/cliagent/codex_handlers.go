@@ -196,6 +196,9 @@ func (r *codexRun) handleTokenUsage(params codexParams) error {
 // commands to the background: then a follow-up turn starts once their
 // terminal sessions are known.
 func (r *codexRun) handleTurnCompleted(params codexParams) (done bool, err error) {
+	if err := r.emitTurnMarker(params.Turn.ID); err != nil {
+		return true, err
+	}
 	if params.Turn.Status == "interrupted" && r.movedToBg.Load() && r.ctx.Err() == nil {
 		r.movedToBg.Store(false)
 		r.active.Store(nil)
@@ -222,6 +225,15 @@ func (r *codexRun) handleTurnCompleted(params codexParams) (done bool, err error
 		return true, errors.New("Codex: " + e.Message)
 	}
 	return true, errors.New("Codex: turn " + params.Turn.Status)
+}
+
+// emitTurnMarker reports the Codex turn that just completed as Codex's own
+// ID for the reply so far: one marker per turn.
+func (r *codexRun) emitTurnMarker(turnID string) error {
+	if turnID == "" || r.threadID == "" || !r.t.marks() {
+		return nil
+	}
+	return r.t.Emit(Event{Type: EventMarker, Marker: &Marker{Native: r.threadID, ID: turnID, Kind: MarkerTurn, For: MarkerForAssistant}})
 }
 
 func (r *codexRun) handleItemStarted(item codexItem) (err error) {

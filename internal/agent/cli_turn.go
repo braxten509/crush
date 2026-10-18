@@ -54,7 +54,9 @@ func cliPromptWithAttachments(prompt string, attachments []message.Attachment) (
 // CLI. The CLI runs its own tool loop; this drives the same callbacks a
 // native turn would (one step per model response), so messages, usage,
 // permissions and rendering work exactly as they do for API models.
-func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string, onCompacting func(bool) error, onActivity func(activity, detail string) error) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
+// lastToolMessage reports the newest tool message the turn saved, for the
+// CLI's tool markers.
+func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string, onCompacting func(bool) error, onActivity func(activity, detail string) error, lastToolMessage func() string) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
 	showCompacting := onCompacting
 	onCompacting = func(active bool) error {
 		if active {
@@ -115,7 +117,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			text = memory + "\n\n" + text
 		}
 
-		s := &cliSteps{call: call, onQueuedInput: call.onQueuedInput, ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, onActivity: onActivity, steerReady: make(chan struct{}, 1)}
+		s := &cliSteps{call: call, onQueuedInput: call.onQueuedInput, ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, onActivity: onActivity, lastToolMessage: lastToolMessage, steerReady: make(chan struct{}, 1)}
 		if err := s.begin(); err != nil {
 			return nil, err
 		}

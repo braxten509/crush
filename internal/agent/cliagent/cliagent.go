@@ -45,7 +45,33 @@ const (
 	EventActivity                       // Provider event received, without content; Activity names what the model is doing, if known, and Text is the newest line of thinking the CLI holds back.
 	EventContextBudget                  // Native compaction boundary, not the full model window.
 	EventTodos                          // Input (the CLI's plan as Crush todos tool input)
+	EventMarker                         // Marker only: the CLI's own ID for what it said so far
 )
+
+// Marker is a CLI's own ID for a Crush message, recorded as replies arrive
+// so a branch can fork the CLI's memory at its cut (engine-design.md 5.11).
+// Any event can carry one; it is recorded once the event is handled.
+type Marker struct {
+	Native string // the tool's session or thread ID
+	ID     string // the tool's message ID, turn ID or prompt index
+	Kind   string // "message" | "turn" | "prompt_index" | "step"
+	For    string // "assistant" (the reply message) | "tool" (the latest tool-result message)
+}
+
+// Marker kinds and targets.
+const (
+	MarkerMessage     = "message"
+	MarkerTurn        = "turn"
+	MarkerPromptIndex = "prompt_index"
+	MarkerStep        = "step"
+
+	MarkerForAssistant = "assistant"
+	MarkerForTool      = "tool"
+)
+
+// marks reports whether a turn reports markers. Only a turn of a Crush
+// chat that keeps its native session has messages to mark.
+func (t Turn) marks() bool { return t.SessionID != "" && !t.NoTools }
 
 // ActivityWriting says the model is writing a tool call it hasn't sent yet,
 // such as a long command or patch.
@@ -76,6 +102,7 @@ type Event struct {
 	Usage            fantasy.Usage
 	Session          string
 	Activity         string
+	Marker           *Marker
 }
 
 // Turn is one user prompt sent to a CLI.

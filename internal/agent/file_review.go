@@ -25,6 +25,9 @@ type turnFileReview struct {
 	paths     map[string]string
 	messages  message.Service
 	sessionID string
+	// lastTool is the newest tool message save created, tracked tool or
+	// not, so an agent CLI's tool marker can go on it.
+	lastTool string
 }
 
 func (a *sessionAgent) startFileReview(ctx context.Context, sessionID string) *turnFileReview {
@@ -120,8 +123,11 @@ func (r *turnFileReview) save(ctx context.Context, result message.ToolResult) er
 	msg, err := r.messages.Create(ctx, r.sessionID, message.CreateMessageParams{
 		Role: message.Tool, Parts: []message.ContentPart{result},
 	})
-	if err == nil && r.trackers[result.ToolCallID] != nil {
-		r.results[result.ToolCallID] = msg.ID
+	if err == nil {
+		r.lastTool = msg.ID
+		if r.trackers[result.ToolCallID] != nil {
+			r.results[result.ToolCallID] = msg.ID
+		}
 	}
 	return err
 }

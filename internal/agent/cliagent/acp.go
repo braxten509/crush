@@ -36,6 +36,9 @@ type acpUpdate struct {
 	Locations     []struct {
 		Path string `json:"path"`
 	} `json:"locations"`
+	// MessageID names the agent's own message a chunk belongs to. OpenCode
+	// sets it on agent_message_chunk.
+	MessageID string `json:"messageId"`
 }
 
 type acpContent struct {
@@ -100,6 +103,15 @@ type acpRun struct {
 	boundary  bool   // a tool call ended since the last confirm
 	final     []byte // the turn's result, held while steered prompts are open
 	stopSteer func()
+
+	// Markers (engine-design.md 5.11). prompts counts the prompts the
+	// native session holds: those session/load replays, then each
+	// session/prompt sent. Grok's marker is that count at the end of a
+	// prompt. lastMessage is the OpenCode message last reported.
+	prompts      int
+	replayedUser bool   // the replay's last update was a user chunk
+	replayedID   string // its message ID, if any
+	lastMessage  string
 }
 
 // runACP drives an ACP agent started with args. setModel selects m.ID with
@@ -165,7 +177,10 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 			done, err = r.handleSteerResponse(id, msg)
 		case msg.Method == "":
 			done, err = r.handleResponse(id, msg)
-		case msg.Method != "session/update" || r.loading:
+		case msg.Method == "session/update" && r.loading:
+			r.countReplayed(msg)
+			continue
+		case msg.Method != "session/update":
 			continue
 		default:
 			err = r.handleUpdate(msg)
@@ -199,7 +214,57 @@ func (r *acpRun) steer(text string) {
 		delete(r.steerIDs, id)
 		r.steerMu.Unlock()
 		r.sent.take(text)
+		return
 	}
+	r.steerMu.Lock()
+	r.prompts++
+	r.steerMu.Unlock()
+}
+
+// countReplayed counts the user prompts session/load replays. A run of
+// user_message_chunk updates is one prompt, or several when their message
+// IDs differ.
+func (r *acpRun) countReplayed(msg rpcMessage) {
+	var params struct {
+		Update acpUpdate `json:"update"`
+	}
+	_ = json.Unmarshal(msg.Params, &params)
+	u := params.Update
+	if u.SessionUpdate != "user_message_chunk" {
+		r.replayedUser = false
+		return
+	}
+	r.steerMu.Lock()
+	if !r.replayedUser || (u.MessageID != "" && u.MessageID != r.replayedID) {
+		r.prompts++
+	}
+	r.steerMu.Unlock()
+	r.replayedUser, r.replayedID = true, u.MessageID
+}
+
+// emitPromptMarker reports Grok's prompt count once a prompt ended: the
+// index Grok's own rewind works with.
+func (r *acpRun) emitPromptMarker() error {
+	id := r.session.Load()
+	if r.name != "grok" || !r.t.marks() || id == nil {
+		return nil
+	}
+	r.steerMu.Lock()
+	count := r.prompts
+	r.steerMu.Unlock()
+	return r.t.Emit(Event{Type: EventMarker, Marker: &Marker{Native: *id, ID: strconv.Itoa(count), Kind: MarkerPromptIndex, For: MarkerForAssistant}})
+}
+
+// emitMessageMarker reports OpenCode's own ID for the message a text chunk
+// belongs to, once per message.
+func (r *acpRun) emitMessageMarker(u acpUpdate) error {
+	id := r.session.Load()
+	if r.name != "opencode" || !r.t.marks() || id == nil || u.SessionUpdate != "agent_message_chunk" ||
+		u.MessageID == "" || u.MessageID == r.lastMessage || acpText(u.Content) == "" {
+		return nil
+	}
+	r.lastMessage = u.MessageID
+	return r.t.Emit(Event{Type: EventMarker, Marker: &Marker{Native: *id, ID: u.MessageID, Kind: MarkerMessage, For: MarkerForAssistant}})
 }
 
 // confirm reports the steered prompts the agent took in.
@@ -283,9 +348,15 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 			"sessionId": sid,
 			"prompt":    []any{map[string]any{"type": "text", "text": withImagePaths(r.t.Prompt, r.t.Attachments)}},
 		}})
+		r.steerMu.Lock()
+		r.prompts++
+		r.steerMu.Unlock()
 		r.prompted.Store(true)
 	case acpPromptID:
 		r.stopSteer()
+		if err := r.emitPromptMarker(); err != nil {
+			return true, err
+		}
 		if r.openSteers() > 0 {
 			// Their answers follow; one may even run as its own turn.
 			r.final = msg.Result
@@ -319,7 +390,10 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 			return err
 		}
 	}
-	return acpHandleUpdate(params.Update, r.calls, r.t.Emit)
+	if err := acpHandleUpdate(params.Update, r.calls, r.t.Emit); err != nil {
+		return err
+	}
+	return r.emitMessageMarker(params.Update)
 }
 
 // acpFinish reports a finished session/prompt's usage and stop reason.

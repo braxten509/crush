@@ -335,7 +335,12 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	// callbacks from the CLI's events.
 	stream := agent.Stream
 	if t.isCLI {
-		stream = a.cliStream(t.cliModel, t.call, msgs, t.largeModel.ModelCfg.ReasoningEffort, t.onCompacting, t.onActivity)
+		stream = a.cliStream(t.cliModel, t.call, msgs, t.largeModel.ModelCfg.ReasoningEffort, t.onCompacting, t.onActivity, func() string {
+			if t.fileReview == nil {
+				return ""
+			}
+			return t.fileReview.lastTool
+		})
 	}
 	streamCall := t.buildStreamCall(history, files)
 	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID)

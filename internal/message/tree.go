@@ -35,6 +35,13 @@ type treeStorage interface {
 	TreeRevision(context.Context, string) (int64, error)
 }
 
+// FileRestoreFrom returns the approved file restore riding on ctx, or nil.
+// A workspace whose tree actions run in another process applies it itself.
+func FileRestoreFrom(ctx context.Context) *FileRestoreRequest {
+	request, _ := ctx.Value(restoreContextKey{}).(*FileRestoreRequest)
+	return request
+}
+
 func (s *service) Tree(ctx context.Context, id string) ([]TreeEntry, error) {
 	storage, ok := s.q.(treeStorage)
 	if !ok {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -27,6 +28,14 @@ var (
 func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, userPrompt string) {
 	if userPrompt == "" {
 		return
+	}
+	// A branch keeps the title it was made with: neither a generated title
+	// nor the fallback name replaces it. A failed lookup generates one, as
+	// before.
+	if bo, ok := a.messages.(message.BranchOrigins); ok {
+		if _, isBranch, err := bo.BranchOrigin(ctx, sessionID); err == nil && isBranch {
+			return
+		}
 	}
 
 	// Ensure the session always gets a title even if every path below

@@ -102,6 +102,7 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	_ = p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": withImagePaths(t.Prompt, t.Attachments)}})
 
 	announced := map[int]bool{}
+	conversation := t.Resume
 	for p.lines.Scan() {
 		if ctx.Err() != nil {
 			// Interrupted: let agy stop its commands and exit by itself;
@@ -118,11 +119,15 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			if t.Resume != "" && line.ConversationID != t.Resume {
 				return ErrResume
 			}
+			conversation = line.ConversationID
 			if err := t.Emit(Event{Type: EventSession, Session: line.ConversationID}); err != nil {
 				return err
 			}
 		case "step_update":
 			if err := agyStep(line, announced, t.Emit); err != nil {
+				return err
+			}
+			if err := agyMarker(line, conversation, t); err != nil {
 				return err
 			}
 		case "result":
@@ -177,6 +182,26 @@ func agyStep(line agyLine, announced map[int]bool, emit func(Event) error) error
 		}
 	}
 	return nil
+}
+
+// agyMarker reports the step index of a finished step: a reply on the reply
+// message, a tool on its result. AGY always resumes through the written
+// copy (Q3), so the marker is only recorded.
+func agyMarker(line agyLine, conversation string, t Turn) error {
+	s := line.StepUpdate
+	if !t.marks() || conversation == "" {
+		return nil
+	}
+	target := ""
+	switch {
+	case s.StepType == "agent_response" && s.State == "DONE":
+		target = MarkerForAssistant
+	case s.StepType == "tool" && (s.State == "DONE" || s.State == "ERROR"):
+		target = MarkerForTool
+	default:
+		return nil
+	}
+	return t.Emit(Event{Type: EventMarker, Marker: &Marker{Native: conversation, ID: strconv.Itoa(s.StepIndex), Kind: MarkerStep, For: target}})
 }
 
 // agyTool maps AGY's tools onto Crush's. AGY reports paths but not file

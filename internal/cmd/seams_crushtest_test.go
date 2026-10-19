@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/google/uuid"
@@ -66,7 +67,7 @@ func seamWorkspace(t *testing.T, b *backend.Backend) *backend.Workspace {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "crush.json"), cfg, 0o600))
 	app := uuid.NewString()
-	ws, _, err := b.CreateWorkspace(proto.Workspace{Path: dir, DataDir: t.TempDir(), ClientID: app})
+	ws, _, err := b.CreateWorkspace(prototest.CreateRequest(proto.Workspace{Path: dir, DataDir: t.TempDir(), ClientID: app}))
 	require.NoError(t, err)
 	dataDir := ws.Cfg.Config().Options.DataDirectory
 	backend.SetWorkspaceShutdownFnForTest(ws, func() { _ = db.Release(dataDir) })

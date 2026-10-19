@@ -944,6 +944,8 @@ Two terminal keys change meaning, both by the plan: **Ctrl+K** is Sessions searc
 | `panel` | P3.8 | `hidden, meters[{id, label, text, warn}], visuals[{id, kind, title}], sections[]` | `visuals[].rect` |
 | `menu` | P3.5 | `open, items[{label, disabled, hint}]` | `items[].rect` |
 | `overlay` | S3 | `viewer, dialogs[]` (the stack's ids, front last), `help, notice{kind, text}` | — |
+| `gate` | P3.9 | `state, title, body, fix, starting` (true while "Starting Crush…" shows), `button{label}` (null when none) | `button.rect` |
+| `notice` | P3.8 | `kind, text, action{label}` (the line NoticeLine draws now; `action` is null unless it has a button, such as SIDE-030's "Try again") | `action.rect` |
 | `frames` | S3 | `measuring, count, p95_ms, max_ms, over50_at[]` (ms since `frames_mark`), `input_over50_at[]`, `input_count` | — |
 | `safety` | P3.4 | `inline_blocked, csp_violations` (a counter fed by `securitypolicyviolation` events), `location` (`location.href`), `workspace_keys` (`Object.keys(conn.workspace)`, 2.9) | `handlers_found, scripts_found, bad_hrefs_found` (scans of the page) |
 
@@ -2055,7 +2057,8 @@ crush bg -- 'bash <WT>/desktop/tests/go-test.sh ./internal/agent/...'
 
 - **Picking the turn and step.** The server stays stateless: it takes the turn whose `when` matches the last user message, and the step whose index equals the number of assistant messages after that user message. Helper chats (Agent tool) get their own `when`.
 - **Streaming.** `delay_ms` spaces the chunks; `text` streams in chunks of 1-4 words; `tool_calls` stream as OpenAI deltas.
-- **Local files.** `GET /file.txt` and `GET /page.html` are served for Download and Fetch. Every other path is logged as a beacon, for the safety check.
+- **Local files.** `GET /file.txt` and `GET /page.html` are served for Download and Fetch. Every other path, GET or POST, is logged with `beacon: true`, for the safety check.
+- **Rules the self-test enforces on every script** (each piece that adds a script must keep them): a script and its turns and steps use only the keys shown above plus `about` (free text); every turn's `when` is not a substring of another script's `when` and contains none, and each turn is reached with every other script active as well as alone. Drivers activate the script whose turns they use.
 
 **Scripts:** `basic`, `markdown`, `tools` (view, edit, multiedit with one bad edit, write, bash with colors and a progress bar, grep, glob, ls, fetch, download, todos, MCP `echo`, a failing last tool), `errors` (500, 429 once, content filter), `visuals`, `unsafe`, `plan`, `agent` (Agent and Agentic Fetch), `stream2m`, `long`, `stop` (one step that calls bash with `sleep 30`; TYPE-046), `two_asks` (one reply whose first two steps each call bash, so with YOLO off it asks twice; DLG-119).
 

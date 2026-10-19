@@ -272,8 +272,10 @@
     setTop(scroller.scrollHeight);
   }
 
+  // Runs once: its cleanup (the component going away) drops every kept row,
+  // so it must track nothing; the sizes it reads change all the time.
   $effect(() => {
-    readSizes();
+    untrack(readSizes);
     resizer.observe(scroller);
     resizer.observe(canvas);
     return () => {

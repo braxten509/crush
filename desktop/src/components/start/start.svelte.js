@@ -2,15 +2,16 @@
 // (the app's version, START-002's question, which providers are set up), the
 // chat a launch names (-s / -C, START-006 and START-021), and the init answer.
 // EngineGate calls watchStart() once; the screens read `start` and screen().
-import { untrack } from "svelte";
+import { tick, untrack } from "svelte";
 import { api } from "../../lib/engine/api.js";
 import { app_info } from "../../lib/engine/commands.js";
 import { probeSection } from "../../lib/probe.js";
 import { resolveSessionId } from "../../lib/sessionid.js";
 import { conn } from "../../lib/stores/connection.svelte.js";
+import { focusField } from "../../lib/stores/composer.svelte.js";
 import { addPending, finishPending } from "../../lib/stores/messages.svelte.js";
 import { ensureSession, openChat, sessions } from "../../lib/stores/sessions.svelte.js";
-import { notify } from "../../lib/stores/ui.svelte.js";
+import { notify, ui } from "../../lib/stores/ui.svelte.js";
 import { ws } from "../../lib/stores/workspace.svelte.js";
 import { focusSearch } from "../list/listfocus.js";
 import { startMarks } from "./marks.js";
@@ -300,6 +301,18 @@ export function watchStart() {
     });
     $effect(() => {
       if (start.launch === "pending" && (sessions.currentId || sessions.opening)) start.launch = "done";
+    });
+    // Focus starts in the typing box, as the terminal's editor has it
+    // (internal/ui/model/ui.go:521-530): once the screens settle on a chat or
+    // the landing page, the field takes the page's focus while nothing else
+    // holds it. The init prompt's answer focuses it itself (InitPrompt).
+    $effect(() => {
+      const s = screen();
+      if (s !== "chat" && s !== "landing") return;
+      tick().then(() => {
+        const el = document.activeElement;
+        if (ui.focus === "composer" && (!el || el === document.body || el === document.documentElement)) focusField();
+      });
     });
   });
   return watching;

@@ -126,16 +126,21 @@ export const api = {
     return post(`${run(sid)}/interrupt`);
   },
   clearQueue: (sid) => post(`${run(sid)}/prompts/clear`),
-  // The newest editable queued prompt (an AgentMessage), or null.
-  async recallQueued(sid) {
+  // The newest editable queued prompt (an AgentMessage), or null. The token
+  // stays until acknowledgeRecall, so an answer given up on comes back on the
+  // next try. Sent with callId: abort(callId) stops it (1.2.4).
+  recallQueued(sid, callId) {
     if (!recallTokens.has(sid)) recallTokens.set(sid, uuid());
+    return post(`${run(sid)}/prompts/recall`, undefined, { request_id: recallTokens.get(sid) }, callId);
+  },
+  // The recalled answer is safely in the composer: the engine may drop its
+  // copy. A failed acknowledgement keeps the engine's copy and never turns
+  // the answer into an error.
+  acknowledgeRecall(sid) {
     const token = recallTokens.get(sid);
-    const prompt = await post(`${run(sid)}/prompts/recall`, undefined, { request_id: token });
-    if (recallTokens.get(sid) === token) recallTokens.delete(sid);
-    // Delivered: the engine may drop its copy. A failed acknowledgement keeps
-    // the engine's copy and never turns this answer into an error.
+    if (!token) return;
+    recallTokens.delete(sid);
     post(`${run(sid)}/prompts/recall`, undefined, { request_id: token, acknowledge: "true" }).catch(() => {});
-    return prompt;
   },
   // Sent with callId = requestId: no time limit, and abort(requestId) stops it (1.2.4).
   runShell: (sid, { command, term_width, is_first_message }, requestId) =>

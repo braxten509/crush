@@ -1,5 +1,5 @@
-// Piece P3.6's registrations (desktop-design 1.10): the Changes sheet, the
-// timeline keys that act on a selected tool group, tool or shell item, and
+// Piece P3.6's registrations (desktop-design 1.10): the Changes sheet, a
+// standalone tool's copy text for selections, the timeline keys that act on a selected tool group, tool or shell item, and
 // the probe's "tools" section.
 //
 // Keys (1.8, timeline scope), for the selected item when it is one of ours
@@ -11,14 +11,22 @@
 //   Shift+← H, Shift+→ L  side-scroll a shell's output or a group's diffs
 //                         (CHAT-043)
 import ChangesSheet from "../../components/sheets/ChangesSheet.svelte";
+import { registerItemCopy } from "../copy.js";
 import { registerDialog } from "../dialogs.js";
 import { bindKey } from "../keys.js";
 import { probeSection } from "../probe.js";
+import { prompts } from "../stores/prompts.svelte.js";
 import { ui } from "../stores/ui.svelte.js";
+import { TOOL_COPIED, toolCopyText } from "../tools/copy.js";
 import { itemActions } from "../tools/open.svelte.js";
 import { probeRead } from "../tools/probe.js";
+import { toolStatus } from "../tools/status.js";
 
 registerDialog("changes", ChangesSheet);
+
+// A standalone tool (Question, Agent, Agentic Fetch) inside a timeline
+// selection copies as its c/y text (CHAT-056, CHAT-087; lib/copy.js wholeText).
+registerItemCopy("tool", (item) => ({ text: toolCopyText(item.call, toolStatus(item.call, prompts.callStatus)), notice: TOOL_COPIED }));
 
 function selected() {
   return ui.selectedItem ? itemActions(ui.selectedItem) : null;

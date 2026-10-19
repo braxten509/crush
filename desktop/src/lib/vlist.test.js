@@ -1,7 +1,15 @@
 // The virtual list's arithmetic (desktop-design 1.6 items 2 and 8): what is
 // mounted for a long selection (CHAT-087), the anchor that keeps the view
-// still (CHAT-092, CHAT-099), the rhythm between items and the estimates.
-import { describe, expect, test } from "vitest";
+// still (CHAT-092, CHAT-099), the rhythm between items and the estimates;
+// and the list itself in the page model: its rows outlive a size change.
+// @vitest-environment jsdom
+import { flushSync, mount, unmount } from "svelte";
+import { describe, expect, test, vi } from "vitest";
+import VirtualList from "../components/timeline/VirtualList.svelte";
+// This file runs in the node project (vite.config.js is frozen); the page
+// model needs Svelte's browser build to mount.
+vi.mock("svelte", () => import("../../node_modules/svelte/src/index-client.js"));
+
 import {
   anchorAt,
   atBottom,
@@ -172,5 +180,51 @@ describe("rhythm and estimates (the picture's Timeline CSS; 1.6 item 2)", () => 
     expect(h.get(grown, 500)).toBe(210);
     h.keep(new Set());
     expect(h.size).toBe(0);
+  });
+});
+
+describe("VirtualList", () => {
+  test("rows keep their text through the first load, a window resize and a column drag", () => {
+    const observers = [];
+    globalThis.ResizeObserver = class {
+      constructor(fn) {
+        this.fn = fn;
+        observers.push(this);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    // jsdom has no layout: the view is 600 px tall and the column 700 px wide.
+    const size = { height: 600, width: 700 };
+    const proto = HTMLElement.prototype;
+    Object.defineProperty(proto, "clientHeight", { configurable: true, get: () => size.height });
+    Object.defineProperty(proto, "clientWidth", { configurable: true, get: () => size.width });
+    const items = ["first message", "second message", "third message"].map((text, i) => ({ kind: "notice", key: `n${i}`, version: 1, text }));
+    const target = document.createElement("div");
+    document.body.append(target);
+    const list = mount(VirtualList, { target, props: { items } });
+    flushSync();
+    const scroller = target.querySelector(".scroller");
+    const canvas = target.querySelector(".canvas");
+    const resize = (node) => observers.forEach((o) => o.fn([{ target: node, contentRect: { height: 0 } }]));
+    const text = () => canvas.textContent;
+    try {
+      expect(text()).toContain("first message");
+      resize(scroller);
+      expect(text()).toContain("second message");
+      size.height = 400;
+      resize(scroller);
+      expect(text()).toContain("second message");
+      size.width = 520;
+      resize(canvas);
+      expect(text()).toContain("third message");
+    } finally {
+      unmount(list);
+      target.remove();
+      delete globalThis.ResizeObserver;
+      delete proto.clientHeight; // back to jsdom's own, on Element
+      delete proto.clientWidth;
+    }
   });
 });

@@ -245,6 +245,13 @@ def joined(app, timeout=45):
     return (p.get("connection") or {}).get("state") == "connected"
 
 
+def engine_of(app, path, timeout=45):
+    """The engine this window joined and its workspace id for path: each data
+    folder (a project's .crush by default) has an engine of its own."""
+    api = pc.engine_api(pc.join_outcome(app, timeout))
+    return api, (pc.workspace_for(api, path) if api else None)
+
+
 def screen_is(app, want, timeout=15):
     ok, start = wait_on(app, "start", lambda s: s.get("screen") == want, timeout)
     return ok, start.get("screen")
@@ -492,10 +499,10 @@ def engine_run():
             check(joined(app), "a window on a second fresh folder joins")
             ok = answer_no(app)
             check(ok, "n goes to the landing page")
-            wid = pc.workspace_for(api, other)
-            needs = api.call("GET", f"/v1/workspaces/{wid}/project/needs-init") if wid else {}
-            check(bool(wid) and not (needs or {}).get("needs_init"), f"and the folder is marked initialized ({needs})")
-            check(len(api.call("GET", f"/v1/workspaces/{wid}/sessions") or []) == 0 if wid else False, "and no chat was made")
+            other_api, wid = engine_of(app, other)
+            needs = (other_api.call("GET", f"/v1/workspaces/{wid}/project/needs-init") if wid else None) or {}
+            check(bool(wid) and needs.get("needs_init") is False, f"and the folder is marked initialized ({needs})")
+            check(len(other_api.call("GET", f"/v1/workspaces/{wid}/sessions") or []) == 0 if wid else False, "and no chat was made")
             close(app)
 
         with step("LIST-033", out_dir):
@@ -739,8 +746,9 @@ def engine_run():
             landing = start.get("landing") or {}
             cols = landing.get("columns") or {}
             check(ok, f"the broken server's row says its error ({(cols.get('mcps') or {}).get('rows')})")
-            wid = pc.workspace_for(api, path)
-            eng = lambda p: api.call("GET", f"/v1/workspaces/{wid}/{p}")
+            mcp_api, wid = engine_of(app, path)
+            check(bool(wid), f"the window's engine has the project ({wid})")
+            eng = lambda p: mcp_api.call("GET", f"/v1/workspaces/{wid}/{p}") if wid else None
             check(any(r.startswith("fakelsp") for r in (cols.get("lsps") or {}).get("rows") or []), f"the LSP column fills ({(cols.get('lsps') or {}).get('rows')})")
             skills = eng("skills") or []
             sk = cols.get("skills") or {}

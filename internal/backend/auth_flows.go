@@ -216,8 +216,10 @@ func (b *Backend) runAuthFlow(a *authFlow) {
 		}
 		waited <- err
 	}()
-	// The flow's Wait ends with its context. Whatever it or a pasted code
-	// brings, one claim decides whether it is saved.
+	// The context's end also ends the flow, so a provider Wait that never
+	// returns can't keep the flow, its record or its listener alive. A
+	// token that is taken anyway is saved only if the claim below finds
+	// the context still live.
 	var token *oauth.Token
 	select {
 	case token = <-a.tokens:
@@ -227,6 +229,9 @@ func (b *Backend) runAuthFlow(a *authFlow) {
 			return
 		}
 		token = <-a.tokens
+	case <-a.ctx.Done():
+		b.failAuthFlow(a, authWaitError(a.ctx, a.ctx.Err()))
+		return
 	}
 	// A flow cancelled or out of time meanwhile never saves, even with a
 	// token at hand.

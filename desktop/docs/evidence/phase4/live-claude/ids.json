@@ -1,0 +1,125 @@
+{
+ "tool": "claude",
+ "marker_kind": "message uuid",
+ "version": "2.1.303 (Claude Code)",
+ "model": "haiku",
+ "source": "ea378b68-1e3c-4d1e-bfae-f3b0297ccb09",
+ "alpha_marker": "804f7e14-a404-499f-81cf-d1ba69c92ec7",
+ "beta_marker": "e5b9aa40-9069-4978-ba6e-343fd38331a2",
+ "step2": {
+  "alpha": {
+   "native": "ea378b68-1e3c-4d1e-bfae-f3b0297ccb09",
+   "text": "ALPHA",
+   "assistant_uuids": [
+    "804f7e14-a404-499f-81cf-d1ba69c92ec7"
+   ],
+   "user_uuids": [
+    "f8ff1f7b-5190-45bf-9340-130cbc05b2b7"
+   ],
+   "t_start": 0.001,
+   "t_init": 0.601,
+   "error": false,
+   "t_end": 2.093,
+   "marker": "804f7e14-a404-499f-81cf-d1ba69c92ec7"
+  },
+  "beta": {
+   "native": "ea378b68-1e3c-4d1e-bfae-f3b0297ccb09",
+   "text": "BETA",
+   "assistant_uuids": [
+    "e5b9aa40-9069-4978-ba6e-343fd38331a2"
+   ],
+   "user_uuids": [
+    "23a1add9-754d-429e-bb43-7d26a381c0fc"
+   ],
+   "t_start": 2.658,
+   "t_init": 3.334,
+   "error": false,
+   "t_end": 4.073,
+   "marker": "e5b9aa40-9069-4978-ba6e-343fd38331a2"
+  },
+  "same_session": true
+ },
+ "fork_call": "claude --resume ea378b68-1e3c-4d1e-bfae-f3b0297ccb09 --fork-session --resume-session-at 804f7e14-a404-499f-81cf-d1ba69c92ec7 (with the stream-json print flags)",
+ "step3": {
+  "native": "8f3d9aab-bb4e-4c32-a567-603171e26484",
+  "text": "You asked me to say only \"ALPHA,\" so that's the only word I said.",
+  "assistant_uuids": [
+   "cfbf3be0-5c90-41a4-b7de-c3dc69108c6b"
+  ],
+  "user_uuids": [
+   "e7eed4c7-71ea-47bc-b13b-0e41a7df15ea"
+  ],
+  "t_start": 0.001,
+  "t_init": 0.681,
+  "error": false,
+  "t_end": 2.126,
+  "marker": "cfbf3be0-5c90-41a4-b7de-c3dc69108c6b",
+  "fork_call": "claude --resume ea378b68-1e3c-4d1e-bfae-f3b0297ccb09 --fork-session --resume-session-at 804f7e14-a404-499f-81cf-d1ba69c92ec7 (with the stream-json print flags)",
+  "t_fork": 0.681
+ },
+ "step4": {
+  "native": "ea378b68-1e3c-4d1e-bfae-f3b0297ccb09",
+  "text": "You said \"ALPHA\" first, then \"BETA.\" I replied with \"ALPHA\" and then \"BETA.\"",
+  "assistant_uuids": [
+   "d0c97ad0-4288-4f0e-9676-7e4d93cac13a"
+  ],
+  "user_uuids": [
+   "780e1b6d-8f76-4ea6-a9c4-4c9ec0370598"
+  ],
+  "t_start": 0.001,
+  "t_init": 0.649,
+  "error": false,
+  "t_end": 1.479,
+  "marker": "d0c97ad0-4288-4f0e-9676-7e4d93cac13a"
+ },
+ "step5": {
+  "source": {
+   "native": "ea378b68-1e3c-4d1e-bfae-f3b0297ccb09",
+   "text": "1. This is the first whole number, and it begins the count.\n2. Two is the only even prime number.\n3. Three sides make a triangle, the simplest polygon.\n4. Four is the smallest composite number that is a perfect square.\n5. Five is the number of fingers on one hand.\n6. Six is the smallest perfect number, equal to the sum of its proper divisors.\n7. Seven is the number of days in a week.\n8. Eight is the number of bits in a byte.\n9. Nine is the largest single-digit number.\n10. Ten is the base of our everyday number system.\n11. Eleven is the first repunit greater than one, written as 11 in base ten.\n12. Twelve is the number of months in a year.\n13. Thirteen is the first number after twelve that is prime.\n14. Fourteen is the number of lines in a classic sonnet.\n15. Fifteen is the number of minutes in a quarter of an hour.\n16. Sixteen is the number of values a single hexadecimal digit can hold.\n17. Seventeen is a prime number that appears in the Fermat primes sequence.\n18. Eighteen is the number of holes on a standard golf course's front nine plus nine more.\n19. Nineteen is the number of years in the Metonic cycle.\n20. Twenty is the number of sides on a standard icosahedron.",
+   "assistant_uuids": [
+    "9fd15fe8-90d7-4c00-886d-ef1314f3f687"
+   ],
+   "user_uuids": [
+    "25b7c2bf-a13d-4bca-89db-dff1561e4e31"
+   ],
+   "t_start": 0.001,
+   "t_init": 0.682,
+   "error": false,
+   "t_end": 3.888,
+   "marker": "9fd15fe8-90d7-4c00-886d-ef1314f3f687"
+  },
+  "branch": {
+   "native": "f3b3248d-2dec-424c-853a-601a3f4b19da",
+   "text": "You asked me to say only \"ALPHA,\" and that's the only word I said.",
+   "assistant_uuids": [
+    "e76d5e8a-c520-465b-8a11-fce1b96ae754"
+   ],
+   "user_uuids": [
+    "e848915f-1e9f-40d6-bf11-0fbace8af4b8"
+   ],
+   "t_start": 1.826,
+   "t_init": 2.487,
+   "error": false,
+   "t_end": 4.219,
+   "marker": "e76d5e8a-c520-465b-8a11-fce1b96ae754",
+   "fork_call": "claude --resume ea378b68-1e3c-4d1e-bfae-f3b0297ccb09 --fork-session --resume-session-at 804f7e14-a404-499f-81cf-d1ba69c92ec7 (with the stream-json print flags)",
+   "t_fork": 2.487
+  },
+  "branch_started_at": 1.825,
+  "branch_forked_at": 2.487,
+  "source_ended_at": 3.888,
+  "count_prompt": "Count slowly from 1 to 20, one number per line. After each number, add one short sentence about it."
+ },
+ "verdicts": {
+  "1": "pass",
+  "2": "pass",
+  "3": "pass",
+  "4": "pass",
+  "5": "pass",
+  "5_detail": {
+   "source_counted_to_20": true,
+   "branch_alpha_only": true,
+   "fork_made_while_source_streaming": true
+  }
+ }
+}

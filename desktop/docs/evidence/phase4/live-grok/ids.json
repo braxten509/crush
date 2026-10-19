@@ -1,0 +1,391 @@
+{
+ "tool": "grok",
+ "marker_kind": "prompt index (Crush's count of prompts after the turn)",
+ "version": "grok 1.0.62 (1474f9cbdd91) [stable]",
+ "model": "grok-4.7",
+ "source": "01a15358-9271-7600-91db-66eacba9c62c",
+ "alpha_marker": 1,
+ "beta_marker": 2,
+ "step2": {
+  "alpha": {
+   "native": "01a15358-9271-7600-91db-66eacba9c62c",
+   "text": "ALPHA",
+   "message_ids": [],
+   "result": {
+    "stopReason": "end_turn",
+    "_meta": {
+     "sessionId": "01a15358-9271-7600-91db-66eacba9c62c",
+     "requestId": "88a6e153-04a8-42fc-996a-8d9c0caa5cc9",
+     "promptId": "88a6e153-04a8-42fc-996a-8d9c0caa5cc9",
+     "totalTokens": 21302,
+     "modelId": "grok-4.7",
+     "inputTokens": 21129,
+     "outputTokens": 164,
+     "cachedReadTokens": 9088,
+     "reasoningTokens": 163,
+     "usage": {
+      "inputTokens": 21129,
+      "outputTokens": 164,
+      "totalTokens": 21293,
+      "cachedReadTokens": 9088,
+      "cacheCreationTokens": 0,
+      "reasoningTokens": 163,
+      "modelCalls": 1,
+      "apiDurationMs": 2572,
+      "costUsdTicks": 296100000,
+      "modelUsage": {
+       "grok-4.7": {
+        "inputTokens": 21129,
+        "outputTokens": 164,
+        "totalTokens": 21293,
+        "cachedReadTokens": 9088,
+        "cacheCreationTokens": 0,
+        "reasoningTokens": 163,
+        "modelCalls": 1,
+        "apiDurationMs": 2572,
+        "costUsdTicks": 296100000
+       }
+      },
+      "numTurns": 1
+     }
+    }
+   },
+   "error": null,
+   "t_start": 0.553,
+   "t_end": 4.838,
+   "prompt_index": 1,
+   "marker": 1
+  },
+  "beta": {
+   "native": "01a15358-9271-7600-91db-66eacba9c62c",
+   "text": "BETA",
+   "message_ids": [],
+   "result": {
+    "stopReason": "end_turn",
+    "_meta": {
+     "sessionId": "01a15358-9271-7600-91db-66eacba9c62c",
+     "requestId": "7f5766d3-637d-4069-9f20-3a6f7958b9b3",
+     "promptId": "7f5766d3-637d-4069-9f20-3a6f7958b9b3",
+     "totalTokens": 21611,
+     "modelId": "grok-4.7",
+     "inputTokens": 21566,
+     "outputTokens": 36,
+     "cachedReadTokens": 21248,
+     "reasoningTokens": 35,
+     "usage": {
+      "inputTokens": 21566,
+      "outputTokens": 36,
+      "totalTokens": 21602,
+      "cachedReadTokens": 21248,
+      "cacheCreationTokens": 0,
+      "reasoningTokens": 35,
+      "modelCalls": 1,
+      "apiDurationMs": 3331,
+      "costUsdTicks": 114760000,
+      "modelUsage": {
+       "grok-4.7": {
+        "inputTokens": 21566,
+        "outputTokens": 36,
+        "totalTokens": 21602,
+        "cachedReadTokens": 21248,
+        "cacheCreationTokens": 0,
+        "reasoningTokens": 35,
+        "modelCalls": 1,
+        "apiDurationMs": 3331,
+        "costUsdTicks": 114760000
+       }
+      },
+      "numTurns": 1
+     }
+    }
+   },
+   "error": null,
+   "t_start": 4.838,
+   "t_end": 9.673,
+   "prompt_index": 2,
+   "marker": 2
+  },
+  "same_session": true
+ },
+ "fork_call": "_x.ai/session/fork {\"sourceSessionId\": \"<source>\", \"sourceCwd\": \"/var/tmp/crush-desktop-live/grok\", \"newCwd\": \"/var/tmp/crush-desktop-live/grok\", \"targetPromptIndex\": \"<0-based prompt index>\"}, then session/load of newSessionId",
+ "step3": {
+  "t_start": 0.0,
+  "calibration": {
+   "0": 8,
+   "1": 11,
+   "2": 11,
+   "3": 11
+  },
+  "target_prompt_index": 0,
+  "t_fork": 2.1,
+  "fork_result": {
+   "newSessionId": "01a15358-cb0d-7481-9e94-e61c6ef07fcb",
+   "chatMessagesCopied": 8,
+   "updatesCopied": 8,
+   "planStateCopied": false,
+   "newCwd": "/var/tmp/crush-desktop-live/grok",
+   "parentSessionId": "01a15358-9271-7600-91db-66eacba9c62c"
+  },
+  "fork_call": "_x.ai/session/fork {\"sourceSessionId\": \"<source>\", \"sourceCwd\": \"/var/tmp/crush-desktop-live/grok\", \"newCwd\": \"/var/tmp/crush-desktop-live/grok\", \"targetPromptIndex\": \"<0-based prompt index>\"}, then session/load of newSessionId",
+  "native": "01a15358-cb0d-7481-9e94-e61c6ef07fcb",
+  "text": "ALPHA",
+  "message_ids": [],
+  "result": {
+   "stopReason": "end_turn",
+   "_meta": {
+    "sessionId": "01a15358-cb0d-7481-9e94-e61c6ef07fcb",
+    "requestId": "35c8f473-188a-46e9-b4a0-8566cb77e6ed",
+    "promptId": "35c8f473-188a-46e9-b4a0-8566cb77e6ed",
+    "totalTokens": 21926,
+    "modelId": "grok-4.7",
+    "inputTokens": 21799,
+    "outputTokens": 120,
+    "cachedReadTokens": 2304,
+    "reasoningTokens": 119,
+    "usage": {
+     "inputTokens": 21799,
+     "outputTokens": 120,
+     "totalTokens": 21919,
+     "cachedReadTokens": 2304,
+     "cacheCreationTokens": 0,
+     "reasoningTokens": 119,
+     "modelCalls": 1,
+     "apiDurationMs": 2373,
+     "costUsdTicks": 408620000,
+     "modelUsage": {
+      "grok-4.7": {
+       "inputTokens": 21799,
+       "outputTokens": 120,
+       "totalTokens": 21919,
+       "cachedReadTokens": 2304,
+       "cacheCreationTokens": 0,
+       "reasoningTokens": 119,
+       "modelCalls": 1,
+       "apiDurationMs": 2373,
+       "costUsdTicks": 408620000
+      }
+     },
+     "numTurns": 1
+    }
+   }
+  },
+  "error": null,
+  "t_end": 7.15
+ },
+ "step4": {
+  "native": "01a15358-9271-7600-91db-66eacba9c62c",
+  "text": "ALPHA and BETA.",
+  "message_ids": [],
+  "result": {
+   "stopReason": "end_turn",
+   "_meta": {
+    "sessionId": "01a15358-9271-7600-91db-66eacba9c62c",
+    "requestId": "2e77c6b0-3164-40f9-9534-8364b9b4adb1",
+    "promptId": "2e77c6b0-3164-40f9-9534-8364b9b4adb1",
+    "totalTokens": 21855,
+    "modelId": "grok-4.7",
+    "inputTokens": 21699,
+    "outputTokens": 147,
+    "cachedReadTokens": 21504,
+    "reasoningTokens": 143,
+    "usage": {
+     "inputTokens": 21699,
+     "outputTokens": 147,
+     "totalTokens": 21846,
+     "cachedReadTokens": 21504,
+     "cacheCreationTokens": 0,
+     "reasoningTokens": 143,
+     "modelCalls": 1,
+     "apiDurationMs": 2194,
+     "costUsdTicks": 120240000,
+     "modelUsage": {
+      "grok-4.7": {
+       "inputTokens": 21699,
+       "outputTokens": 147,
+       "totalTokens": 21846,
+       "cachedReadTokens": 21504,
+       "cacheCreationTokens": 0,
+       "reasoningTokens": 143,
+       "modelCalls": 1,
+       "apiDurationMs": 2194,
+       "costUsdTicks": 120240000
+      }
+     },
+     "numTurns": 1
+    }
+   }
+  },
+  "error": null,
+  "t_start": 0.0,
+  "t_end": 7.972
+ },
+ "step5": {
+  "source": {
+   "native": "01a15358-9271-7600-91db-66eacba9c62c",
+   "text": "1\nOne is the first counting number.\n\n2\nTwo is the only even prime.\n\n3\nThree is the first odd prime.\n\n4\nFour is two squared.\n\n5\nFive is the number of fingers on one hand.\n\n6\nSix is the smallest perfect number.\n\n7\nSeven is often treated as a lucky number.\n\n8\nEight is two cubed.\n\n9\nNine is three squared.\n\n10\nTen is the base of the decimal system.\n\n11\nEleven is the first two-digit prime.\n\n12\nTwelve is a dozen.\n\n13\nThirteen is a well-known unlucky number.\n\n14\nFourteen is twice seven.\n\n15\nFifteen is three times five.\n\n16\nSixteen is four squared.\n\n17\nSeventeen is a prime number.\n\n18\nEighteen is the age of adulthood in many places.\n\n19\nNineteen is the last teen number.\n\n20\nTwenty is four times five.",
+   "message_ids": [],
+   "result": {
+    "stopReason": "end_turn",
+    "_meta": {
+     "sessionId": "01a15358-9271-7600-91db-66eacba9c62c",
+     "requestId": "aaaa1e65-1236-42cb-a738-4a40efde6508",
+     "promptId": "aaaa1e65-1236-42cb-a738-4a40efde6508",
+     "totalTokens": 22407,
+     "modelId": "grok-4.7",
+     "inputTokens": 21966,
+     "outputTokens": 432,
+     "cachedReadTokens": 21760,
+     "reasoningTokens": 252,
+     "usage": {
+      "inputTokens": 21966,
+      "outputTokens": 432,
+      "totalTokens": 22398,
+      "cachedReadTokens": 21760,
+      "cacheCreationTokens": 0,
+      "reasoningTokens": 252,
+      "modelCalls": 1,
+      "apiDurationMs": 11659,
+      "costUsdTicks": 138840000,
+      "modelUsage": {
+       "grok-4.7": {
+        "inputTokens": 21966,
+        "outputTokens": 432,
+        "totalTokens": 22398,
+        "cachedReadTokens": 21760,
+        "cacheCreationTokens": 0,
+        "reasoningTokens": 252,
+        "modelCalls": 1,
+        "apiDurationMs": 11659,
+        "costUsdTicks": 138840000
+       }
+      },
+      "numTurns": 1
+     }
+    }
+   },
+   "error": null,
+   "mid_prompt": {
+    "text": "Say the word GAMMA.",
+    "sent_at": 4.731,
+    "answered_at": 18.957,
+    "result": {
+     "stopReason": "end_turn",
+     "_meta": {
+      "sessionId": "01a15358-9271-7600-91db-66eacba9c62c",
+      "requestId": "23987982-5cff-4312-8598-e9d928e14243",
+      "promptId": "23987982-5cff-4312-8598-e9d928e14243",
+      "totalTokens": 22587,
+      "modelId": "grok-4.7",
+      "inputTokens": 22544,
+      "outputTokens": 34,
+      "cachedReadTokens": 22272,
+      "reasoningTokens": 32,
+      "usage": {
+       "inputTokens": 22544,
+       "outputTokens": 34,
+       "totalTokens": 22578,
+       "cachedReadTokens": 22272,
+       "cacheCreationTokens": 0,
+       "reasoningTokens": 32,
+       "modelCalls": 1,
+       "apiDurationMs": 3490,
+       "costUsdTicks": 118840000,
+       "modelUsage": {
+        "grok-4.7": {
+         "inputTokens": 22544,
+         "outputTokens": 34,
+         "totalTokens": 22578,
+         "cachedReadTokens": 22272,
+         "cacheCreationTokens": 0,
+         "reasoningTokens": 32,
+         "modelCalls": 1,
+         "apiDurationMs": 3490,
+         "costUsdTicks": 118840000
+        }
+       },
+       "numTurns": 1
+      }
+     }
+    },
+    "error": null,
+    "answer": "GAMMA"
+   },
+   "t_start": 0.0,
+   "t_end": 22.076
+  },
+  "branch": {
+   "t_start": 11.688,
+   "target_prompt_index": 0,
+   "t_fork": 12.304,
+   "fork_result": {
+    "newSessionId": "01a15359-3aeb-7423-afda-7fe7b1b8a798",
+    "chatMessagesCopied": 8,
+    "updatesCopied": 8,
+    "planStateCopied": false,
+    "newCwd": "/var/tmp/crush-desktop-live/grok",
+    "parentSessionId": "01a15358-9271-7600-91db-66eacba9c62c"
+   },
+   "fork_call": "_x.ai/session/fork {\"sourceSessionId\": \"<source>\", \"sourceCwd\": \"/var/tmp/crush-desktop-live/grok\", \"newCwd\": \"/var/tmp/crush-desktop-live/grok\", \"targetPromptIndex\": \"<0-based prompt index>\"}, then session/load of newSessionId",
+   "native": "01a15359-3aeb-7423-afda-7fe7b1b8a798",
+   "text": "ALPHA",
+   "message_ids": [],
+   "result": {
+    "stopReason": "end_turn",
+    "_meta": {
+     "sessionId": "01a15359-3aeb-7423-afda-7fe7b1b8a798",
+     "requestId": "8ba75ffd-cb11-43fd-abb1-47423a1cbbbe",
+     "promptId": "8ba75ffd-cb11-43fd-abb1-47423a1cbbbe",
+     "totalTokens": 21852,
+     "modelId": "grok-4.7",
+     "inputTokens": 21795,
+     "outputTokens": 50,
+     "cachedReadTokens": 9088,
+     "reasoningTokens": 49,
+     "usage": {
+      "inputTokens": 21795,
+      "outputTokens": 50,
+      "totalTokens": 21845,
+      "cachedReadTokens": 9088,
+      "cacheCreationTokens": 0,
+      "reasoningTokens": 49,
+      "modelCalls": 1,
+      "apiDurationMs": 3933,
+      "costUsdTicks": 302580000,
+      "modelUsage": {
+       "grok-4.7": {
+        "inputTokens": 21795,
+        "outputTokens": 50,
+        "totalTokens": 21845,
+        "cachedReadTokens": 9088,
+        "cacheCreationTokens": 0,
+        "reasoningTokens": 49,
+        "modelCalls": 1,
+        "apiDurationMs": 3933,
+        "costUsdTicks": 302580000
+       }
+      },
+      "numTurns": 1
+     }
+    }
+   },
+   "error": null,
+   "t_end": 18.432
+  },
+  "branch_started_at": 11.688,
+  "branch_forked_at": 12.304,
+  "source_ended_at": 22.076,
+  "count_prompt": "Count slowly from 1 to 20, one number per line. After each number, add one short sentence about it."
+ },
+ "verdicts": {
+  "1": "pass",
+  "2": "pass",
+  "3": "pass",
+  "4": "pass",
+  "5": "pass",
+  "5_detail": {
+   "source_counted_to_20": true,
+   "branch_alpha_only": true,
+   "fork_made_while_source_streaming": true
+  }
+ }
+}

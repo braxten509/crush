@@ -23,7 +23,8 @@
 //          anchors          [{text, href, rect}] every link drawn from a reply
 //          refused          [{text, rect}] every link turned into text
 //          chips            [{figure, kind, title, rect}] the visuals chips
-//          figures          [{figure, kind, state}] the figures on the page
+//          figures          [{figure, kind, state, inline}] the figures on the
+//                           page; inline when drawn in a reply (panel hidden)
 //          focus            {tag, href, text} of the focused element, or null
 //
 // The counter starts when the renderer is first imported, before the probe's
@@ -151,6 +152,7 @@ export function scanPage(doc = document) {
       figure: view.dataset.figure ?? null,
       kind: view.dataset.kind ?? null,
       state: view.dataset.state ?? null,
+      inline: view.closest(".md") !== null,
     })),
     focus: focusOf(doc),
   };

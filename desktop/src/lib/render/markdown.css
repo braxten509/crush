@@ -264,14 +264,17 @@
   text-transform: uppercase;
   color: var(--slate);
 }
-/* The dot sits on the title's letters' middle, as on the tool row: vertical-align
-   middle in a box set in the title's type. */
+/* The dot sits on the title's letters' middle, as on the tool row (vertical-align
+   middle in a box set in the title's type), raised one picture px so it also sits
+   on the middle of the small capitals before it (measured on the WebKit capture). */
 .md-chip-dotbox {
   font: var(--t-small);
 }
 .md-chip-dot {
   display: inline-block;
   vertical-align: middle;
+  position: relative;
+  top: calc(-1 * var(--px));
   width: calc(4 * var(--px));
   height: calc(4 * var(--px));
   margin: 0 calc(10 * var(--px)) 0 calc(9 * var(--px));

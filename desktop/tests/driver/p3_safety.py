@@ -23,10 +23,10 @@ Steps (each one PASS or FAIL, with a screenshot in tests/out/p3_safety/):
            open (the safety section's links_asked) and add lines to
            <probe>.opened.jsonl; no refused navigation; the page never moves;
            the field holds no dropped address
-  diagram  with the right panel hidden (a narrow window, SIDE-002) the
-           figures draw in the chat: the Mermaid figure draws (strict) or
-           shows its source with the fallback line, and the content rule
-           still saw nothing
+  diagram  the Mermaid figure draws (strict) or shows its source with the
+           fallback line, in VISUALS and again in the chat with the right
+           panel hidden (picture size in a 900 px window, SIDE-002); the
+           content rule still saw nothing and the scans stay clean
   env      the workspace keys hold neither env nor config; the run's
            environment mark (and the fixture's own secret) never appears in a
            probe write, opened.jsonl, the app's api log, its output or any
@@ -341,35 +341,55 @@ with step("safety-links", out_dir):
     check(seen["locations"] == {start_location}, f"the page never moved ({sorted(seen['locations'])})")
     check(hits == [], f"nothing reached the listener ({hits})")
 
-with step("safety-diagram", out_dir):
-    heavy, _ = safety_heavy()
-    figures = [f for f in heavy.get("figures") or [] if f.get("kind") == "diagram"]
-    narrowed = False
-    if not figures:
-        # The right panel hides in a narrow window (SIDE-002); the figures then draw in the chat.
-        xdo("windowsize", wid, 900, start_h)
-        narrowed = True
+def diagrams(heavy, inline):
+    return [f for f in heavy.get("figures") or [] if f.get("kind") == "diagram" and bool(f.get("inline")) == inline]
+
+
+def check_diagram(inline):
+    """The Mermaid figure in VISUALS or, with the panel hidden, in the chat."""
+    where = "in the chat" if inline else "in VISUALS"
     end = time.time() + 30
-    while time.time() < end:
+    while True:
         heavy, _ = safety_heavy()
-        figures = [f for f in heavy.get("figures") or [] if f.get("kind") == "diagram"]
-        if figures and all(f.get("state") in ("drawn", "fallback") for f in figures):
+        figures = diagrams(heavy, inline)
+        if (figures and all(f.get("state") in ("drawn", "fallback") for f in figures)) or time.time() > end:
             break
         time.sleep(0.5)
     states = [f.get("state") for f in figures]
-    check(bool(figures) and all(s in ("drawn", "fallback") for s in states), f"the Mermaid figure draws or shows its source with the fallback line ({states})")
+    check(bool(figures) and all(s in ("drawn", "fallback") for s in states), f"{where}: the Mermaid figure draws or shows its source with the fallback line ({states})")
     if "fallback" in states:
-        note("the diagram fell back to its source")
+        note(f"{where}: the diagram fell back to its source")
     light = probe_section(probe_path, "safety") or {}
-    check(light.get("csp_violations") == 0, f"csp_violations still 0 after the figures drew ({light.get('csp_violations')}; {heavy.get('violations')})")
+    check(light.get("csp_violations") == 0, f"{where}: csp_violations still 0 with the figures drawn ({light.get('csp_violations')}; {heavy.get('violations')})")
     for field in ("scripts_found", "handlers_found", "bad_hrefs_found", "controls_found"):
-        check(heavy.get(field) == 0, f"{field} 0 with the figures drawn ({heavy.get(field)})")
-    check(hits == [], f"nothing reached the listener ({hits})")
-    shot_path = os.path.join(out_dir, "safety-diagram-inline.png")
-    subprocess.run(["import", "-window", "root", shot_path], check=False)
-    if narrowed:
-        xdo("windowsize", wid, start_w, start_h)
-        time.sleep(1.0)
+        check(heavy.get(field) == 0, f"{where}: {field} 0 with the figures drawn ({heavy.get(field)})")
+    check(hits == [], f"{where}: nothing reached the listener ({hits})")
+
+
+def zoom_is(target):
+    p = wait_for(probe_path, lambda p: p.get("zoom") is not None and abs(p["zoom"] - target) < 1e-6)
+    return p.get("zoom") is not None and abs(p["zoom"] - target) < 1e-6
+
+
+with step("safety-diagram", out_dir):
+    if diagrams(safety_heavy()[0], False):
+        check_diagram(False)
+    else:
+        note("no figure in VISUALS (nothing draws the panel's figures in this build)")
+    # The right panel hides when the page is under 1,060 picture px wide (SIDE-002); the
+    # window's least width is 900, so at picture size (Ctrl = four times from 8/12).
+    xdo("windowfocus", "--sync", wid)
+    for _ in range(4):
+        key("ctrl+equal")
+        time.sleep(0.2)
+    check(zoom_is(1.0), "picture size (12/12) after four Ctrl = presses")
+    xdo("windowsize", wid, 900, start_h)
+    check_diagram(True)
+    subprocess.run(["import", "-window", wid, os.path.join(out_dir, "safety-diagram-inline.png")], check=False)
+    key("ctrl+0")
+    xdo("windowsize", wid, start_w, start_h)
+    check(zoom_is(8 / 12), "Ctrl 0 returns to Compact (8/12)")
+    time.sleep(1.0)
 
 with step("safety-env", out_dir):
     light = probe_section(probe_path, "safety") or {}

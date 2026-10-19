@@ -127,8 +127,11 @@
   .remove:hover {
     color: var(--ink);
   }
+  /* The digit's line is exactly the place's height: a taller line box overflows
+     the 16 px place, and WebKit then aligns it to the top, not the middle. */
   .number {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+    line-height: calc(16 * var(--px));
   }
 </style>

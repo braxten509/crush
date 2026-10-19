@@ -257,9 +257,12 @@
   .caption-dotbox {
     font: var(--t-small);
   }
+  /* Up one picture px from the title's x-height middle, as on the chip (markdown.css). */
   .caption-dot {
     display: inline-block;
     vertical-align: middle;
+    position: relative;
+    top: calc(-1 * var(--px));
     width: calc(4 * var(--px));
     height: calc(4 * var(--px));
     margin: 0 calc(10 * var(--px)) 0 calc(9 * var(--px));

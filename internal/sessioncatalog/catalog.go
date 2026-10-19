@@ -20,7 +20,8 @@ import (
 type Catalog struct {
 	Directory, DataDirectory string
 	// Shown lists chats an app shows right now. Listing never discards
-	// them, even when they are old empty drafts.
+	// them, even when they are old empty drafts. Listing only ever
+	// discards drafts in DataDirectory's own database.
 	Shown []string
 }
 

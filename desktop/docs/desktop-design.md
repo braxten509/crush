@@ -561,7 +561,7 @@ export const limits = $state({ byKind: {} });       // kind → CLILimits with t
 
 // prompts.svelte.js (P3.3; P3.7 draws permission prompts, phase 5 draws question forms)
 export const prompts = $state({ permission: null, question: null, pendingByRoot: {},
-  callStatus: {} });                                 // tool_call_id → "permission" | "running", set by permission_notification
+  callStatus: {} });                                 // tool_call_id → "permission" | "running" | "cancelled", set by permission_notification; "cancelled" when the run is stopped, and it stays (later notifications do not undo it)
                                                     // (1.5.3); lib/tools/status.js reads it (CHAT-047, CHAT-049); a result overrides it
 
 // composer.svelte.js (P3.7)
@@ -651,7 +651,7 @@ Why the message shape. A `$state` object proxies every plain object put into it,
 | `lsp_event`, `mcp_event` | workspace | LSP and MCP rows (SIDE-009, SIDE-010) |
 | `skills_event` | workspace | skills (SIDE-011); later the `$` catalog (TYPE-031, deferred, 2.3) |
 | `config_changed` | workspace | re-read config and agent info |
-| `agent_event` | messages | `error`: no notice, as in the terminal (`internal/ui/model/agent_events.go:167-170`). The engine sends it only for a run that failed for a reason other than a stop (`internal/backend/agent.go:121-129`), and the run's assistant message already carries the outcome in its finish part, drawn by CHAT-027's error banner (a stop finishes with reason `canceled`, `internal/agent/turn_finish.go:150-151`, drawn by CHAT-025's Canceled banner). `summarize` → compaction state (CHAT-029) |
+| `agent_event` | messages | `error`: no notice, as in the terminal (`internal/ui/model/agent_events.go:167-170`). The engine sends it only for a run that failed for a reason other than a stop (`internal/backend/agent.go:121-129`), and the run's assistant message already carries the outcome in its finish part, drawn by CHAT-027's error banner (a stop finishes with reason `canceled`, `internal/agent/turn_finish.go:150-151`, drawn by CHAT-025's Canceled banner). no `summarize` handler: the engine never publishes one (only `herdr/translate.go` reads it); CHAT-029 follows the summarize call and the message finish instead |
 | `run_complete` | sessions, queue, composer | busy off, live flag off, queue refresh, send settled (TYPE-048): with `cancelled: true`, this window's pending item for that `submission_id` is removed; with a non-empty `error` and no `cancelled`, the pending item is checked against the saved messages and goes back to the field only when its prompt was never saved (`internal/ui/model/update_workspace.go:33-38`, `pending_prompt.go:82-148`). Neither ever shows a notice: a stop sends `error: "context canceled"` together with `cancelled: true` (`internal/agent/turn.go:274-276`), and a failed reply already shows its banner |
 | `permission_request`, `question_batch_request`, `question_batch_notification`, `prompt_pending` | prompts | stored; permission prompts drawn in the composer slot (P3.7, section 2.7); question forms by phase 5 in the same slot |
 | `permission_notification` | prompts | neither `granted` nor `denied`: the "requested" mark (`internal/permission/permission.go:216-219`; the engine sends it just before the request itself, `:281`, but the two can arrive in either order, `engine-design.md:107`). It sets `callStatus[tool_call_id] = "permission"` (CHAT-049 "Requesting permission...") and never closes the slot. `granted`: `"running"`; `denied`: stays `"permission"` until the tool's result shows the denial (CHAT-050), as the terminal does (`internal/ui/model/agent_events.go:130-137`). The slot closes only on `granted` or `denied` whose `tool_call_id` equals the shown request's (`agent_events.go:143-150`; DLG-119) |
@@ -833,7 +833,7 @@ A live shell item keeps its key `shell:<request id>` until the saved `shell_comm
 | `panel/VisualsSection.svelte` (P3.8) | `FigureView` `{figure}`; `extractFigures` | `src/components/render/FigureView.svelte`, `src/lib/render/figures.js` (P3.4) |
 | `lib/timeline.js` (P3.5) | `composer.shells` | `src/lib/stores/composer.svelte.js` (P3.7) |
 | `HelpSheet.svelte` (P3.8) | `hasChips()` | `src/lib/stores/composer.svelte.js` (P3.7) |
-| `lib/tools/status.js` (P3.6) | `prompts.callStatus` (`tool_call_id` → `"permission"` or `"running"`, set by `permission_notification`, 1.5.3) for CHAT-047 and CHAT-049 | `src/lib/stores/prompts.svelte.js` (P3.3) |
+| `lib/tools/status.js` (P3.6) | `prompts.callStatus` (`tool_call_id` → `"permission"`, `"running"` or `"cancelled"`, 1.5.3; `"cancelled"` maps to ToolCallView status `"cancelled"`) for CHAT-047 and CHAT-049 | `src/lib/stores/prompts.svelte.js` (P3.3) |
 
 ### 1.6 Long chats: the speed design
 
@@ -944,6 +944,8 @@ Two terminal keys change meaning, both by the plan: **Ctrl+K** is Sessions searc
 | `panel` | P3.8 | `hidden, meters[{id, label, text, warn}], visuals[{id, kind, title}], sections[]` | `visuals[].rect` |
 | `menu` | P3.5 | `open, items[{label, disabled, hint}]` | `items[].rect` |
 | `overlay` | S3 | `viewer, dialogs[]` (the stack's ids, front last), `help, notice{kind, text}` | — |
+| `gate` | P3.9 | `state, title, body, fix, starting` (true while "Starting Crush…" shows), `button{label}` (null when none) | `button.rect` |
+| `notice` | P3.8 | `kind, text, action{label}` (the line NoticeLine draws now; `action` is null unless it has a button, such as SIDE-030's "Try again") | `action.rect` |
 | `frames` | S3 | `measuring, count, p95_ms, max_ms, over50_at[]` (ms since `frames_mark`), `input_over50_at[]`, `input_count` | — |
 | `safety` | P3.4 | `inline_blocked, csp_violations` (a counter fed by `securitypolicyviolation` events), `location` (`location.href`), `workspace_keys` (`Object.keys(conn.workspace)`, 2.9) | `handlers_found, scripts_found, bad_hrefs_found` (scans of the page) |
 
@@ -1238,7 +1240,7 @@ Q6 (PLAN.md:27) places the terminal's footer and sidebar facts: model and effort
 | SIDE-004 | No desktop surface: the terminal draws this header only where compact mode is always off (`layout.go:51-54`), so it never shows | — | none needed; recorded as dead terminal code |
 | SIDE-005 | The right panel: PROJECT and the project name, the meters, then a scrolling body with VISUALS, FILES, LSP, MCP, SKILLS. The chat title is in the chat head, the folder and branch in its path line, the logo in the left column, the model in the model button (decision D12) | SidePanel (P3.8) | W · fails when a section is missing or the body doesn't scroll with 30 skills |
 | SIDE-006 | The model button shows "Model · effort" (picture: "Opus 5.5 · max"); its hover and focus detail shows provider, "Thinking", "Thinking On", "Thinking Off" or "Reasoning <effort>", "· FAST", "· Ultracode", context used and cost (with "~" when estimated); "Unknown" until the agent is ready. Clicking it opens `openDialog("models")` (phase 5) | ModelButton (P3.7) · `ws.agent`, `sessions` | U the label from `AgentInfo`; W hover · fails when a word differs from the port of `sidebar.go:25-86` |
-| SIDE-007 | The 5-HOUR and WEEK meters show used percent; the amber warning icon when less than 20% is left; the detail shows "5h N% left · resets 2h41m"; "checking…" until the first `limits` reading (5.9); refreshed on `limits` events and on model change | Meters · `limits.svelte.js` (P3.3) | W with a fake CLI limits reading · fails when the warning shows at 20% left or more |
+| SIDE-007 | The 5-HOUR and WEEK meters show used percent; the amber warning icon when less than 20% is left; the detail shows "5h N% left · resets 2h41m"; "checking…" until the first `limits` reading (5.9); refreshed on `limits` events and on model change, and, like the terminal (`internal/ui/model/polling.go:15`, `cliagent/limits.go:40,207`), every 60 s while the window is visible and the shown chat is idle, for the current provider's kind only when its reading is older than 3 min (the engine's refresh route skips its own throttle, `handlers_live.go:149`) | Meters · `limits.svelte.js` (P3.3) | W with a fake CLI limits reading · fails when the warning shows at 20% left or more |
 | SIDE-008 | FILES: relative paths with "+N" / "−N", "…and N more", "None"; unchanged files left out; reloaded on `file` events | FilesSection · `lib/modified.js` (P3.8) · `api.history`; port of `session.go:66-73,151-299` | U; W after an edit tool · fails when the counts differ from the diff |
 | SIDE-009 | LSP rows: offline icon when unstarted or stopped, "starting...", ready with error, warning, hint and info counts, "error: …", "disabled", "None" (there is no LSP dialog); refreshed on `lsp_event` plus a 5 s backstop | LspSection · `ws.lsps`; port of `lsp.go:19-201` | W with `tests/fakes/fake_lsp.py` (one error, one warning) · fails when the counts differ |
 | SIDE-010 | MCP rows: "starting...", connected with "N tools / N prompts / N resources" and "channel", "error: …", "needs authentication", "disabled", offline; "Docker MCP" named so; a failed read keeps the old rows | McpSection · `ws.mcps`; port of `mcp.go:20-262` | W with `fake_mcp.py` (and one broken server) · fails when a state text differs |
@@ -2055,7 +2057,8 @@ crush bg -- 'bash <WT>/desktop/tests/go-test.sh ./internal/agent/...'
 
 - **Picking the turn and step.** The server stays stateless: it takes the turn whose `when` matches the last user message, and the step whose index equals the number of assistant messages after that user message. Helper chats (Agent tool) get their own `when`.
 - **Streaming.** `delay_ms` spaces the chunks; `text` streams in chunks of 1-4 words; `tool_calls` stream as OpenAI deltas.
-- **Local files.** `GET /file.txt` and `GET /page.html` are served for Download and Fetch. Every other path is logged as a beacon, for the safety check.
+- **Local files.** `GET /file.txt` and `GET /page.html` are served for Download and Fetch. Every other path, GET or POST, is logged with `beacon: true`, for the safety check.
+- **Rules the self-test enforces on every script** (each piece that adds a script must keep them): a script and its turns and steps use only the keys shown above plus `about` (free text); every turn's `when` is not a substring of another script's `when` and contains none, and each turn is reached with every other script active as well as alone. Drivers activate the script whose turns they use.
 
 **Scripts:** `basic`, `markdown`, `tools` (view, edit, multiedit with one bad edit, write, bash with colors and a progress bar, grep, glob, ls, fetch, download, todos, MCP `echo`, a failing last tool), `errors` (500, 429 once, content filter), `visuals`, `unsafe`, `plan`, `agent` (Agent and Agentic Fetch), `stream2m`, `long`, `stop` (one step that calls bash with `sleep 30`; TYPE-046), `two_asks` (one reply whose first two steps each call bash, so with YOLO off it asks twice; DLG-119).
 
@@ -2205,6 +2208,7 @@ tmux -L crushtest send-keys -t tui "second from terminal" Enter
 | D38 | Closing a chat by key is the action `chat.close`; its key (`alt+w`) is the phases 5-6 design's, with LIST-014 | bind a key here | `plugins/branch.js` |
 | D39 | The × and `chat.close` close a chat at once, with no "Close “title”?" box: closing only hides it (PLAN.md:103), stops nothing and is undone from its link or Ctrl+K (C19) | the session host's box for chats too (LIST-014, LIST-015, LIST-043) | `plugins/branch.js` opens a box through `openDialog` |
 | D40 | Calls whose work runs inside the request (a `!` command, a move with a summary) carry a `callId`: no time limit, and `api_abort` closes them. That is the only way to stop a `!` command over the engine, and the clean way to stop a summary (`POST …/cancel` also ends one, but answers with an error text, 1.2.4; TYPE-021, DLG-100). A move with a summary has no time cap on purpose: the terminal caps it at 5 minutes (`internal/ui/model/tree.go:137`); here the owner's Esc is the limit | a `shell_run` and `shell_stop` command pair just for `!` commands | `connection.rs`, `uds_http.rs`, `commands.rs` |
+| D41 | Busy rule (c), as built by P3.3: a loaded chat counts as busy from an unfinished assistant message only when a live event showed that message unfinished, so a chat stopped mid-reply never stays busy for good (the terminal's ghost-spinner guard, `session_load.go:498-506`); a chat opened mid-stream reads idle until its next chunk | any unfinished assistant message in a loaded chat means busy (a chat killed mid-reply would show busy forever) | `messages.svelte.js`, `sessions.svelte.js` |
 
 ---
 

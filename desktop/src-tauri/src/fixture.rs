@@ -145,6 +145,7 @@ impl Fixture {
     }
 
     /// `api`: GET from the recording, everything else recorded and answered with null.
+    #[allow(clippy::too_many_arguments)] // mirrors connection::call
     pub fn api(
         &self,
         launch: &Launch,

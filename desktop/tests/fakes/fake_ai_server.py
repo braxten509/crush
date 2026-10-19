@@ -71,6 +71,7 @@ engine_checks below); their logs are copied to tests/out/fake_ai_server/.
 Exit 0 only when all pass.
 """
 import argparse, hashlib, importlib.util, json, os, random, re, shutil, socket, subprocess, sys, tempfile, threading, time, uuid
+import http.client as http_client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import request as urlrequest
 from urllib.error import HTTPError
@@ -333,11 +334,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b""
+        path = self.path.split("?", 1)[0]
+        if path != "/_fake/control" and not path.rstrip("/").endswith("/chat/completions"):
+            # Logged before the body is read, so any body (a form, [], null) is a beacon.
+            entry = self._base("POST")
+            entry.update({"kind": "beacon", "beacon": True, "status": 404})
+            self.fake.log(entry)
+            return self._send(404, {"error": {"message": "not found"}})
         try:
             body = json.loads(raw or b"{}")
         except ValueError:
             body = {}
-        path = self.path.split("?", 1)[0]
+        if not isinstance(body, dict):
+            body = {}
         if path == "/_fake/control":
             entry = self._base("POST")
             entry["kind"] = "control"
@@ -359,10 +368,6 @@ class Handler(BaseHTTPRequestHandler):
         entry.update({"model": body.get("model"), "stream": bool(body.get("stream", False)),
                       "messages": len(messages), "tools": len(body.get("tools") or []),
                       "last_user": text[:200], "session": self.headers.get("x-session-id", "")})
-        if not path.rstrip("/").endswith("/chat/completions"):
-            entry.update({"kind": "beacon", "beacon": True, "status": 404})
-            self.fake.log(entry)
-            return self._send(404, {"error": {"message": "not found"}})
         choice = self.fake.pick(messages)
         step = dict(choice["step"])
         entry.update({"kind": choice["kind"], "script": choice["script"], "turn": choice["turn"], "step": choice["step_index"]})
@@ -954,17 +959,30 @@ def builtin_cases(r):
         r.check(status == 404, "built-in: any other GET answers 404")
         status, _, _ = http(port, "POST", "/form", {"x": 1})
         r.check(status == 404, "built-in: a POST to any other path answers 404")
+        for kind in ("list", "null"):
+            req = urlrequest.Request(f"http://127.0.0.1:{port}/form?body={kind}", data=b"[]" if kind == "list" else b"null",
+                                     method="POST", headers={"Content-Type": "application/json"})
+            try:
+                with urlrequest.urlopen(req, timeout=10) as resp:
+                    status = resp.status
+            except HTTPError as e:
+                status = e.code
+            except (OSError, http_client.HTTPException) as e:
+                status = f"no answer ({type(e).__name__})"
+            r.check(status == 404, f"built-in: a POST to another path with the JSON body {'[]' if kind == 'list' else 'null'} answers 404 ({status})")
         srv.shutdown()
         entries = [json.loads(line) for line in open(log)]
         r.check(any(e.get("path") == "/beacon?x=1" and e.get("beacon") is True for e in entries),
                 "built-in: the other GET is logged as a beacon")
         r.check(any(e.get("path") == "/form" and e.get("method") == "POST" and e.get("beacon") is True for e in entries),
                 "built-in: the other POST is logged as a beacon too")
+        r.check(all(any(e.get("path") == f"/form?body={kind}" and e.get("beacon") is True for e in entries) for kind in ("list", "null")),
+                "built-in: the other POSTs with [] and null bodies are logged as beacons too")
         r.check(not any(e.get("beacon") for e in entries if e.get("path") in ("/file.txt", "/page.html", "/v1/models", "/_fake/control")),
                 "built-in: files, models and control are never beacons")
         posts = [e for e in entries if e.get("method") == "POST" and e.get("kind") != "control"]
-        r.check(all(isinstance(e.get("messages"), int) and "last_user" in e and "status" in e for e in posts),
-                "built-in: every request is logged with its message count, last user message and status")
+        r.check(all(isinstance(e.get("messages"), int) and "last_user" in e and "status" in e for e in posts if not e.get("beacon")),
+                "built-in: every model request is logged with its message count, last user message and status")
         r.check(any(e.get("kind") == "title" for e in posts) and any(e.get("tools_dropped") for e in posts),
                 "built-in: the log marks title requests and dropped tool calls")
         r.check(any(e.get("kind") == "title" and e.get("script") == "a" and e.get("turn") == 0 for e in posts),

@@ -67,7 +67,7 @@ Usage: tests/check.sh p3_connect.py [--stand-in]
        python3 -I tests/driver/p3_connect.py --self-check
 p3_reconnect.py uses this file's helpers (AppRun, wait_section, press_button, not_run, ...).
 """
-import ctypes, importlib.util, json, os, shlex, shutil, signal, subprocess, sys, tempfile, time
+import contextlib, ctypes, importlib.util, io, json, os, shlex, shutil, signal, subprocess, sys, tempfile, time
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 
@@ -197,15 +197,20 @@ def watch_notice(run, test, row, timeout):
 def press_button(run, section, field, owner, row):
     """A real click on a section's "Try again" button by its heavy rect (1.9).
     NOT RUN when the probe has no such section (owner is not in this build); a
-    failed check when the section has no "Try again" button with a rect."""
-    report = probe_heavy(run.probe, 20)
+    failed check when the section has no "Try again" button with a rect, or
+    when the click cannot be made."""
+    return press_found(run, probe_heavy(run.probe, 20), section, field, owner, row)
+
+
+def press_found(run, report, section, field, owner, row):
+    """press_button() on a probe_heavy() report already read."""
     if section not in report:
         not_run(row, f"the probe has no {section} section ({owner} is not in this build), so \"{TRY_AGAIN}\" could not be pressed")
         return False
     label, rect = button_of(report, section, field)
     if not check(label == TRY_AGAIN and bool(rect), f"the {section}'s button is \"{TRY_AGAIN}\" with a rect ({label}, {rect})"):
         return False
-    return run.click(rect)
+    return check(run.click(rect), f"\"{TRY_AGAIN}\" is clicked in the app's window (at the middle of {rect})")
 
 
 def join_times(samples):
@@ -247,6 +252,16 @@ def starting_findings(first, long_join=False):
         found.append((took >= 1000, f"the slowed join lasts over 1 s ({took} ms)"))
         found.append((first["starting"] is not None, f"a join of {took} ms shows \"{STARTING}\" (gate.starting turns true)"))
     return took, found
+
+
+def starting_cleared(run, row, timeout=3):
+    """Window: once joined, gate.starting must say false, explicitly (a missing
+    field is not false). Answers True or False, or None with a NOT RUN line
+    when no write had a gate section."""
+    held, _ = wait_section(run, "gate", lambda g: g.get("starting") is False, timeout)
+    if held is None:
+        not_run(row, "the probe has no gate section once joined (P3.9 is not in this build), so gate.starting could not be read")
+    return held
 
 
 def check_starting(first, label, row, long_join=False):
@@ -538,6 +553,20 @@ def sample_join(run, timeout=45):
     return join_times(samples)
 
 
+def caught(call):
+    """For --self-check: runs call() with the lines its own check() and not_run()
+    print caught, then undoes the failures they counted. Answers (result, the
+    FAIL and NOT RUN lines)."""
+    import harness
+    counts, rows = (harness.failures, harness._step_failures), len(NOT_RUN)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        result = call()
+    harness.failures, harness._step_failures = counts
+    del NOT_RUN[rows:]
+    return result, [line for line in out.getvalue().splitlines() if line.startswith(("FAIL", "NOT RUN"))]
+
+
 def self_check():
     """--self-check: the helpers that read the gate and notice sections and the
     400 ms rule, on made-up probe reports. No app runs."""
@@ -562,6 +591,19 @@ def self_check():
           "button: the notice's comes from notice.action and heavy notice.action.rect")
     check(button_of({"gate": {"button": None}, "heavy": {"gate": {"button": None}}}, "gate", "button") == (None, None), "button: none when the gate has none")
     check(button_of({"gate": {"button": {"label": TRY_AGAIN}}}, "gate", "button") == (TRY_AGAIN, None), "button: no rect without heavy fields")
+
+    found = {"gate": {"button": {"label": TRY_AGAIN}}, "heavy": {"gate": {"button": {"rect": rect}}}}
+    clicks = lambda ok: type("Run", (), {"click": lambda self, r: ok})()
+    press = lambda run, report: caught(lambda: press_found(run, report, "gate", "button", "P3.9", "self-check press"))
+    pressed, lines = press(clicks(True), found)
+    check(pressed is True and not lines, f"press: a button with a rect and a click that lands passes ({lines})")
+    pressed, lines = press(clicks(False), found)
+    check(pressed is False and any(line.startswith("FAIL") and "clicked" in line for line in lines),
+          f"press: a click that cannot be made records a FAIL ({lines})")
+    pressed, lines = press(clicks(True), {"gate": {"button": {"label": TRY_AGAIN}}, "heavy": {"gate": {"button": None}}})
+    check(pressed is False and any(line.startswith("FAIL") for line in lines), f"press: a button without a rect records a FAIL ({lines})")
+    pressed, lines = press(clicks(True), {"connection": {}})
+    check(pressed is False and any(line.startswith("NOT RUN") for line in lines), f"press: no gate section is NOT RUN ({lines})")
 
     idle, shown = {"starting": False}, {"starting": True}
     passes = lambda result: result is not None and all(ok for ok, _ in result[1])
@@ -590,6 +632,15 @@ def self_check():
         check(wait_section(run, "gate", lambda g: g.get("title") == "Crush not found", 0.3)[0] is False, "probe file: a gate that never does answers False")
         write({"connection": {"state": "connecting"}})
         check(wait_section(run, "gate", lambda g: True, 0.3) == (None, None), "probe file: no gate section answers None (NOT RUN)")
+        cleared, lines = caught(lambda: starting_cleared(run, "self-check cleared", 0.3))
+        check(cleared is None and any(line.startswith("NOT RUN") for line in lines),
+              f"once joined: no gate section is NOT RUN, not a pass ({lines})")
+        write({"gate": {"state": "connected", "title": None}})
+        check(starting_cleared(run, "self-check cleared", 0.3) is False, "once joined: a gate without the starting field fails")
+        write({"gate": {"state": "connected", "starting": True}})
+        check(starting_cleared(run, "self-check cleared", 0.3) is False, "once joined: gate.starting still true fails")
+        write({"gate": {"state": "connected", "starting": False}})
+        check(starting_cleared(run, "self-check cleared", 0.3) is True, "once joined: gate.starting false passes")
 
 
 def main():
@@ -695,8 +746,9 @@ def main():
             else:
                 took = check_starting(sample_join(cold), "a slowed join that starts a new engine", "connect-4-starting: gate.starting", long_join=True)
                 if took is not None:
-                    gone, _ = wait_section(cold, "gate", lambda g: g.get("starting") is not True, 3)
-                    check(gone is not False, "once joined gate.starting is false (the text is gone)")
+                    cleared = starting_cleared(cold, "connect-4-starting: gate.starting once joined")
+                    if cleared is not None:
+                        check(cleared, "once joined gate.starting is false (the text is gone)")
             check(cold.close(), "it closes")
 
         with step("connect-5-not-found", out_dir):

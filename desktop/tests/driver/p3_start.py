@@ -34,7 +34,8 @@ Engine run, on the fresh /tmp/home/proj: tests/check.sh p3_start.py
                 and `session ID "<p>" is ambiguous (N matches)` show as error
                 notices with the chat-list search focused.
   START-008     --cwd /tmp/home/missing: the gate's body is the terminal's
-                words and no engine starts.
+                words and no engine starts. Then a crush whose engine start
+                answers late holds "Starting Crush…" for the gate's captures.
   START-007     a broken MCP server says its error; LSPs, skills, the model and
                 the branch still fill.
   START-017     a global large model and the project's: the project's shows.
@@ -67,7 +68,7 @@ and align-<surface>.json (the probe's marks); then, outside the sandbox
 builds each surface's manifest with align_real.py's manifest_for() and runs
 align.py --self-review on it.
 """
-import importlib.util, json, os, re, shutil, signal, struct, subprocess, sys, time, types, uuid
+import importlib.util, json, os, re, shlex, shutil, signal, struct, subprocess, sys, time, types, uuid
 from datetime import datetime, timedelta, date
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -401,6 +402,21 @@ def answer_no(app):
     return screen_is(app, "landing", 15)[0]
 
 
+def list_edges(h, label):
+    """The align skill's companion geometry check (its glyph checker does not
+    compare backgrounds): every row's box, the open chat's band among them,
+    spans the column's full width, and New chat and the search share both
+    edges."""
+    lh = h.get("list") or {}
+    col = lh.get("column") or {}
+    rects = [(r["id"], r["rect"]) for r in lh.get("rows") or [] if r.get("rect")]
+    off = [rid for rid, r in rects if not col or abs(r["x"] - col["x"]) > 0.5 or abs(r["x"] + r["w"] - col["x"] - col["w"]) > 0.5]
+    check(bool(rects) and not off, f"{label}: every row and the open chat's band span the list's full width {off or ''}")
+    nc, sr = lh.get("new_chat") or {}, lh.get("search") or {}
+    check(bool(nc and sr) and abs(nc["x"] - sr["x"]) <= 0.5 and abs(nc["x"] + nc["w"] - sr["x"] - sr["w"]) <= 0.5,
+          f"{label}: New chat and the search share both edges ({nc.get('x')}, {sr.get('x')}; {nc.get('w')}, {sr.get('w')})")
+
+
 def landing_checks(app, label):
     """CHAT-001's rules on the landing block's content box, and START-005."""
     h, report = heavy(app)
@@ -445,6 +461,10 @@ def engine_run():
                 check(init.get(field) == value, f"init {field}: {init.get(field)!r}")
             place(main)
             save_align_both(main, "init", "The init prompt")
+            h, _ = heavy(main)
+            yes, no = (((h.get("start") or {}).get("init") or {}).get(k) or {} for k in ("yes", "no"))
+            check(bool(yes and no) and abs(yes["y"] - no["y"]) <= 0.5 and abs(yes["h"] - no["h"]) <= 0.5 and abs(yes["w"] - no["w"]) <= 0.5,
+                  f"the two buttons share their top and bottom edges and width ({yes}, {no})")
             focus(main)
             for k, after in (("Tab", "no"), ("Left", "yes"), ("Right", "no"), ("Tab", "yes")):
                 key(k)
@@ -597,7 +617,8 @@ def engine_run():
                     check(head.get("title") == "Five hundred items", f"the head names the chat being opened ({head.get('title')!r})")
                     ok, start = wait_on(main, "start", lambda s: re.fullmatch(r"[1-9]\d*s", (s.get("opening") or {}).get("elapsed") or "") is not None, 4)
                     check(ok, f"after 1 s the seconds show ({(start.get('opening') or {}).get('elapsed')!r})")
-                    save_align(main, "opening", "The opening line")
+                    save_align_both(main, "opening", "The opening line")
+                    check((section(main, "start").get("opening") or {}).get("label") == "Opening Five hundred items…", "the line still shows after the captures")
                     main.click(rect_short)
                     ok, start = wait_on(main, "start", lambda s: (s.get("opening") or {}).get("label") == "Opening Short chat…", 5)
                     check(ok, f"a second switch takes the line: {(start.get('opening') or {}).get('label')!r}")
@@ -729,6 +750,20 @@ def engine_run():
             check(pc.engines() == before, "and no engine starts")
             place(app)
             save_align_both(app, "gate", "The engine gate", "gate")
+            close(app)
+            # The gate's other look, for its captures: "Starting Crush…" with the
+            # mark, held by a crush whose engine start answers 12 s late (under
+            # the app's 20 s limit, engine_cli.rs ENSURE_LIMIT).
+            slow = pc.wrapper(os.path.join(HOMEDIR, "slow-start", "crush"),
+                              "# A crush whose engine start answers 12 s late (p3_start.py, START-008's captures).\n"
+                              f"[ \"$1 $2\" = \"engine ensure\" ] && sleep 12\nexec {shlex.quote(CRUSH)} \"$@\"\n")
+            app = AppRun("starting", out_dir, pc.make_project(os.path.join(HOMEDIR, "proj-slow"), port), env={"CRUSH_DESKTOP_CRUSH": slow})
+            extra.append(app)
+            ok, gate = wait_on(app, "gate", lambda g: g.get("starting") is True, 10)
+            if check(ok, f"a slow engine start shows \"Starting Crush…\" (gate.starting {gate.get('starting')})"):
+                place(app)
+                save_align_both(app, "gate-starting", "The gate's starting line", "gate")
+                check(section(app, "gate").get("starting") is True, "it still shows after the captures (they are of that state)")
             close(app)
 
         with step("START-007", out_dir):
@@ -940,6 +975,7 @@ def fixture_run():
             place(app)
             save_align_both(app, "list", "The chat list", "list")
             h, report = heavy(app)
+            list_edges(h, "full width")
             col = (h.get("list") or {}).get("column") or {}
             z = report.get("zoom") or 8 / 12
             box = window(app)
@@ -963,6 +999,7 @@ def fixture_run():
                     if t and t["x"] + t["w"] > col["x"] + col["w"]:
                         touching.append(r["id"] + " (past the column)")
                 check(not touching, f"no row's time touches its title {touching or ''}")
+                list_edges(h, "narrowest")
                 save_align(app, "list-narrow", "The chat list at its narrowest", "list")
 
         with step("LIST-short", out_dir):

@@ -143,7 +143,13 @@ func symlinkTarget(path string) (string, error) {
 			return "", err
 		}
 		if !filepath.IsAbs(link) {
-			link = filepath.Join(filepath.Dir(path), link)
+			// A relative link is read from the folder the link really
+			// sits in, which may be reached through a symlinked folder.
+			dir, err := filepath.EvalSymlinks(filepath.Dir(path))
+			if err != nil {
+				return "", err
+			}
+			link = filepath.Join(dir, link)
 		}
 		path = link
 	}

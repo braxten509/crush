@@ -65,6 +65,27 @@ func TestThemeFile_SaveThroughDanglingSymlink(t *testing.T) {
 	require.Equal(t, "gruvbox-dark", loaded.Base)
 }
 
+// TestThemeFile_SaveThroughSymlinkedFolder: a relative file link inside a
+// symlinked themes folder is read from the real folder, so the save
+// writes the file the link names there.
+func TestThemeFile_SaveThroughSymlinkedFolder(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	realThemes := filepath.Join(root, "b", "themes")
+	require.NoError(t, os.MkdirAll(realThemes, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "a"), 0o755))
+	require.NoError(t, os.Symlink(realThemes, filepath.Join(root, "a", "themes")))
+	require.NoError(t, os.Symlink(filepath.Join("..", "real.json"), filepath.Join(realThemes, "mine.json")))
+
+	require.NoError(t, SaveThemeFile(filepath.Join(root, "a", "themes", "mine.json"), &ThemeFile{Base: "gruvbox-dark"}))
+
+	loaded, err := LoadThemeFile(filepath.Join(root, "b", "real.json"))
+	require.NoError(t, err, "the link's real target was written")
+	require.Equal(t, "gruvbox-dark", loaded.Base)
+	_, err = os.Lstat(filepath.Join(root, "a", "real.json"))
+	require.True(t, os.IsNotExist(err), "nothing is written beside the folder link")
+}
+
 func TestThemeFile_LoadInvalidJSON(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

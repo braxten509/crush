@@ -1,10 +1,51 @@
-//! The system folder dialog (desktop-design-5-6 2.21). Placeholder from
-//! scaffold S5; LST owns this file (7.3).
+//! The system folder dialog (desktop-design-5-6 2.21, 6.4 `folder_pick`):
+//! the folder picker's "Browse…". The dialog (tauri-plugin-dialog) opens at
+//! `start` and blocks the command's worker thread, never the main one (the
+//! command is async), until a folder is picked or the dialog is cancelled.
+//!
+//! Test runs only: with `--probe` and `CRUSH_DESKTOP_TEST_PICK_FOLDER` set,
+//! that path is the answer and no dialog opens (8.4), so nothing appears on
+//! the screen.
 
 use crate::error::{AppError, AppResult};
-use tauri::AppHandle;
+use crate::state::AppState;
+use std::path::Path;
+use tauri::{AppHandle, Manager};
+use tauri_plugin_dialog::DialogExt;
+
+/// The stand-in for the dialog's answer, honored only with `--probe`.
+const TEST_PICK: &str = "CRUSH_DESKTOP_TEST_PICK_FOLDER";
 
 /// `folder_pick`: a path, or None when cancelled.
-pub fn pick(_app: &AppHandle, _start: &str) -> AppResult<Option<String>> {
-    Err(AppError::not_built("folder_pick"))
+pub fn pick(app: &AppHandle, start: &str) -> AppResult<Option<String>> {
+    let probe = app
+        .try_state::<AppState>()
+        .is_some_and(|state| state.launch.probe.is_some());
+    if let Some(path) = test_answer(probe, std::env::var(TEST_PICK).ok()) {
+        return Ok(Some(path));
+    }
+    let mut dialog = app.dialog().file().set_title("Choose a folder");
+    if Path::new(start).is_dir() {
+        dialog = dialog.set_directory(start);
+    }
+    match dialog.blocking_pick_folder() {
+        None => Ok(None),
+        Some(picked) => picked
+            .into_path()
+            .map(|path| Some(path.to_string_lossy().into_owned()))
+            .map_err(|e| {
+                AppError::new(
+                    "folder_pick_failed",
+                    format!("The folder dialog gave no folder that can be used: {e}"),
+                )
+            }),
+    }
+}
+
+/// The stand-in answer: the variable's value, in a probe run only.
+fn test_answer(probe: bool, value: Option<String>) -> Option<String> {
+    if !probe {
+        return None;
+    }
+    value.filter(|path| !path.is_empty())
 }

@@ -1,0 +1,1425 @@
+{
+ "about": "LST's list fixture (tests/driver/p6_leftlist.py; desktop-design-5-6 2.20 to 2.23). Every *_at time is a local wall-clock time on its day around 2026-10-18 (the anchor); the driver moves the days so the anchor day is today. Today: a chat that keeps working (spin), one the list starts as working and whose first read says it finished (done, so it turns unread), one waiting for permission, one in the background, a ready one, an untitled one and one with a picture (a view tool's image); yesterday one; then 24 older notes so the list scrolls. GET servers is G-18's answer: a named job's port (web :8000), a job holding two ports (dev: node :5173, esbuild :5174) and a plain process's port with no name (8100). At 4 s another app creates the chat fresh, which has no record to read, so it stays unknown.",
+ "anchor": 1792346400,
+ "workspace": {
+  "id": "ws-leftlist",
+  "path": "/tmp/home/proj",
+  "yolo": true,
+  "debug": false,
+  "data_dir": "/tmp/home/proj/.crush",
+  "version": "fixture",
+  "channels": [],
+  "skills": [],
+  "protocol": 1
+ },
+ "agent": {
+  "is_busy": false,
+  "is_ready": true,
+  "model": {
+   "id": "fake-large",
+   "name": "Fake Large",
+   "context_window": 200000,
+   "can_reason": true,
+   "reasoning_levels": [
+    "low",
+    "medium",
+    "high"
+   ],
+   "default_reasoning_effort": "medium",
+   "supports_attachments": false
+  },
+  "model_cfg": {
+   "model": "fake-large",
+   "provider": "fake",
+   "reasoning_effort": "high"
+  }
+ },
+ "get": {
+  "chat-links": [],
+  "/v1/limits": {
+   "clis": []
+  },
+  "config": {
+   "models": {
+    "large": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    },
+    "small": {
+     "model": "fake-small",
+     "provider": "fake"
+    }
+   },
+   "providers": {
+    "fake": {
+     "name": "Fake AI",
+     "type": "openai-compat"
+    }
+   },
+   "options": {
+    "notifications": "disabled",
+    "initialize_as": "AGENTS.md"
+   }
+  },
+  "agent/default-small-model": {
+   "model": "fake-small",
+   "provider": "fake"
+  },
+  "providers": [],
+  "git/branch": {
+   "branch": "main"
+  },
+  "project/needs-init": {
+   "needs_init": false
+  },
+  "permissions/skip": {
+   "skip": true
+  },
+  "lsps": {},
+  "mcp/states": {},
+  "skills": [],
+  "sessions": [
+   {
+    "id": "spin",
+    "parent_session_id": "",
+    "title": "Spinner check",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792353000,
+    "updated_at": 1792353600,
+    "is_busy": true,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "done",
+    "parent_session_id": "",
+    "title": "Finished while hidden",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792352400,
+    "updated_at": 1792353000,
+    "is_busy": true,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "wait",
+    "parent_session_id": "",
+    "title": "Needs permission",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792351800,
+    "updated_at": 1792352400,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": "permission"
+   },
+   {
+    "id": "bg",
+    "parent_session_id": "",
+    "title": "Server in background",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792351200,
+    "updated_at": 1792351800,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": true,
+    "pending_prompt": ""
+   },
+   {
+    "id": "ready",
+    "parent_session_id": "",
+    "title": "Plain ready chat",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792350600,
+    "updated_at": 1792351200,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "untitled",
+    "parent_session_id": "",
+    "title": "",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792350000,
+    "updated_at": 1792350600,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "pic",
+    "parent_session_id": "",
+    "title": "Picture chat",
+    "message_count": 4,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792349400,
+    "updated_at": 1792350000,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "yday",
+    "parent_session_id": "",
+    "title": "Yesterday's notes",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792263000,
+    "updated_at": 1792263600,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-01",
+    "parent_session_id": "",
+    "title": "Note 01",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1791485400,
+    "updated_at": 1791486000,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-02",
+    "parent_session_id": "",
+    "title": "Note 02",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1791399000,
+    "updated_at": 1791399600,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-03",
+    "parent_session_id": "",
+    "title": "Note 03",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1791312600,
+    "updated_at": 1791313200,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-04",
+    "parent_session_id": "",
+    "title": "Note 04",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1791226200,
+    "updated_at": 1791226800,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-05",
+    "parent_session_id": "",
+    "title": "Note 05",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1791139800,
+    "updated_at": 1791140400,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-06",
+    "parent_session_id": "",
+    "title": "Note 06",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1791053400,
+    "updated_at": 1791054000,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-07",
+    "parent_session_id": "",
+    "title": "Note 07",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790967000,
+    "updated_at": 1790967600,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-08",
+    "parent_session_id": "",
+    "title": "Note 08",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790880600,
+    "updated_at": 1790881200,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-09",
+    "parent_session_id": "",
+    "title": "Note 09",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790794200,
+    "updated_at": 1790794800,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-10",
+    "parent_session_id": "",
+    "title": "Note 10",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790707800,
+    "updated_at": 1790708400,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-11",
+    "parent_session_id": "",
+    "title": "Note 11",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790621400,
+    "updated_at": 1790622000,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-12",
+    "parent_session_id": "",
+    "title": "Note 12",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790535000,
+    "updated_at": 1790535600,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-13",
+    "parent_session_id": "",
+    "title": "Note 13",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790448600,
+    "updated_at": 1790449200,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-14",
+    "parent_session_id": "",
+    "title": "Note 14",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790362200,
+    "updated_at": 1790362800,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-15",
+    "parent_session_id": "",
+    "title": "Note 15",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790275800,
+    "updated_at": 1790276400,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-16",
+    "parent_session_id": "",
+    "title": "Note 16",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790189400,
+    "updated_at": 1790190000,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-17",
+    "parent_session_id": "",
+    "title": "Note 17",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790103000,
+    "updated_at": 1790103600,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-18",
+    "parent_session_id": "",
+    "title": "Note 18",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1790016600,
+    "updated_at": 1790017200,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-19",
+    "parent_session_id": "",
+    "title": "Note 19",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1789930200,
+    "updated_at": 1789930800,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-20",
+    "parent_session_id": "",
+    "title": "Note 20",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1789843800,
+    "updated_at": 1789844400,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-21",
+    "parent_session_id": "",
+    "title": "Note 21",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1789757400,
+    "updated_at": 1789758000,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-22",
+    "parent_session_id": "",
+    "title": "Note 22",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1789671000,
+    "updated_at": 1789671600,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-23",
+    "parent_session_id": "",
+    "title": "Note 23",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1789584600,
+    "updated_at": 1789585200,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "note-24",
+    "parent_session_id": "",
+    "title": "Note 24",
+    "message_count": 2,
+    "prompt_tokens": 900,
+    "completion_tokens": 200,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1789498200,
+    "updated_at": 1789498800,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "fake",
+     "model": "fake-large",
+     "tokens": 1100,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   }
+  ],
+  "sessions/spin": {
+   "id": "spin",
+   "parent_session_id": "",
+   "title": "Spinner check",
+   "message_count": 2,
+   "prompt_tokens": 900,
+   "completion_tokens": 200,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792353000,
+   "updated_at": 1792353600,
+   "is_busy": true,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "fake",
+    "model": "fake-large",
+    "tokens": 1100,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/done": {
+   "id": "done",
+   "parent_session_id": "",
+   "title": "Finished while hidden",
+   "message_count": 2,
+   "prompt_tokens": 900,
+   "completion_tokens": 200,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792352400,
+   "updated_at": 1792353000,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "fake",
+    "model": "fake-large",
+    "tokens": 1100,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/wait": {
+   "id": "wait",
+   "parent_session_id": "",
+   "title": "Needs permission",
+   "message_count": 2,
+   "prompt_tokens": 900,
+   "completion_tokens": 200,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792351800,
+   "updated_at": 1792352400,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "fake",
+    "model": "fake-large",
+    "tokens": 1100,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": "permission"
+  },
+  "sessions/bg": {
+   "id": "bg",
+   "parent_session_id": "",
+   "title": "Server in background",
+   "message_count": 2,
+   "prompt_tokens": 900,
+   "completion_tokens": 200,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792351200,
+   "updated_at": 1792351800,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "fake",
+    "model": "fake-large",
+    "tokens": 1100,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": true,
+   "pending_prompt": ""
+  },
+  "sessions/ready": {
+   "id": "ready",
+   "parent_session_id": "",
+   "title": "Plain ready chat",
+   "message_count": 2,
+   "prompt_tokens": 900,
+   "completion_tokens": 200,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792350600,
+   "updated_at": 1792351200,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "fake",
+    "model": "fake-large",
+    "tokens": 1100,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/untitled": {
+   "id": "untitled",
+   "parent_session_id": "",
+   "title": "",
+   "message_count": 2,
+   "prompt_tokens": 900,
+   "completion_tokens": 200,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792350000,
+   "updated_at": 1792350600,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "fake",
+    "model": "fake-large",
+    "tokens": 1100,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/pic": {
+   "id": "pic",
+   "parent_session_id": "",
+   "title": "Picture chat",
+   "message_count": 4,
+   "prompt_tokens": 900,
+   "completion_tokens": 200,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792349400,
+   "updated_at": 1792350000,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "fake",
+    "model": "fake-large",
+    "tokens": 1100,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/yday": {
+   "id": "yday",
+   "parent_session_id": "",
+   "title": "Yesterday's notes",
+   "message_count": 2,
+   "prompt_tokens": 900,
+   "completion_tokens": 200,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792263000,
+   "updated_at": 1792263600,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "fake",
+    "model": "fake-large",
+    "tokens": 1100,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/done/messages": [
+   {
+    "id": "done-m1",
+    "role": "user",
+    "session_id": "done",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "About Finished while hidden?"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792352940,
+    "updated_at": 1792352940
+   },
+   {
+    "id": "done-m2",
+    "role": "assistant",
+    "session_id": "done",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Here is what I found."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792353000
+      }
+     }
+    ],
+    "model": "fake-large",
+    "provider": "fake",
+    "created_at": 1792352950,
+    "updated_at": 1792353000
+   }
+  ],
+  "sessions/wait/messages": [
+   {
+    "id": "wait-m1",
+    "role": "user",
+    "session_id": "wait",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "About Needs permission?"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792352340,
+    "updated_at": 1792352340
+   },
+   {
+    "id": "wait-m2",
+    "role": "assistant",
+    "session_id": "wait",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Here is what I found."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792352400
+      }
+     }
+    ],
+    "model": "fake-large",
+    "provider": "fake",
+    "created_at": 1792352350,
+    "updated_at": 1792352400
+   }
+  ],
+  "sessions/bg/messages": [
+   {
+    "id": "bg-m1",
+    "role": "user",
+    "session_id": "bg",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "About Server in background?"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792351740,
+    "updated_at": 1792351740
+   },
+   {
+    "id": "bg-m2",
+    "role": "assistant",
+    "session_id": "bg",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Here is what I found."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792351800
+      }
+     }
+    ],
+    "model": "fake-large",
+    "provider": "fake",
+    "created_at": 1792351750,
+    "updated_at": 1792351800
+   }
+  ],
+  "sessions/ready/messages": [
+   {
+    "id": "ready-m1",
+    "role": "user",
+    "session_id": "ready",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "About Plain ready chat?"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792351140,
+    "updated_at": 1792351140
+   },
+   {
+    "id": "ready-m2",
+    "role": "assistant",
+    "session_id": "ready",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Here is what I found."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792351200
+      }
+     }
+    ],
+    "model": "fake-large",
+    "provider": "fake",
+    "created_at": 1792351150,
+    "updated_at": 1792351200
+   }
+  ],
+  "sessions/untitled/messages": [
+   {
+    "id": "untitled-m1",
+    "role": "user",
+    "session_id": "untitled",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "About this?"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792350540,
+    "updated_at": 1792350540
+   },
+   {
+    "id": "untitled-m2",
+    "role": "assistant",
+    "session_id": "untitled",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Here is what I found."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792350600
+      }
+     }
+    ],
+    "model": "fake-large",
+    "provider": "fake",
+    "created_at": 1792350550,
+    "updated_at": 1792350600
+   }
+  ],
+  "sessions/yday/messages": [
+   {
+    "id": "yday-m1",
+    "role": "user",
+    "session_id": "yday",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "About Yesterday's notes?"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792263540,
+    "updated_at": 1792263540
+   },
+   {
+    "id": "yday-m2",
+    "role": "assistant",
+    "session_id": "yday",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Here is what I found."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792263600
+      }
+     }
+    ],
+    "model": "fake-large",
+    "provider": "fake",
+    "created_at": 1792263550,
+    "updated_at": 1792263600
+   }
+  ],
+  "sessions/pic/messages": [
+   {
+    "id": "pic-m1",
+    "role": "user",
+    "session_id": "pic",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Show me the chart."
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792349880,
+    "updated_at": 1792349880
+   },
+   {
+    "id": "pic-m2",
+    "role": "assistant",
+    "session_id": "pic",
+    "parts": [
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "pic-call-1",
+       "name": "view",
+       "input": "{\"file_path\": \"/tmp/home/proj/chart.png\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "tool_use",
+       "time": 1792349900
+      }
+     }
+    ],
+    "model": "fake-large",
+    "provider": "fake",
+    "created_at": 1792349890,
+    "updated_at": 1792349900
+   },
+   {
+    "id": "pic-m3",
+    "role": "tool",
+    "session_id": "pic",
+    "parts": [
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "pic-call-1",
+       "name": "view",
+       "content": "Image read: chart.png",
+       "data": "iVBORw0KGgoAAAANSUhEUgAAAPAAAACMCAIAAADN17N/AAABV0lEQVR42u3dMRJAMBBA0Y1xLDoV56XScRS9xgGUagWC9y6QmcyfnVSbtK1LwFcUrgBBg6BB0CBoBA2CBkGDoEHQCBoEDYIGQYOgETQIGgQNggZBI2gQNAgaBA2CRtAgaBA0CBoOpSvI39i1Tx3d9IMJDYIGQYOgETQIGgQNggZBI2gQNAgaBA2CRtAgaBA0CBpBg6BB0CBoEDSCBkGDoEHQIGgEDWH76EtUdfPU0fM0Cs6EBkEjaBA0CBoEDYJG0CBoEDQIGgSNoEHQIGgQNAgaQYOgQdAgaBA0ggZBg6BB0CBoBA2ChnjJ9lGbPDGhQdAgaAQNggZBg6BB0AgaBA2CBkGDoBE0CBoEDYIGQSNoEDQIGgQNgkbQIGgQNAgaBI2gQdAgaBA0ggZBg6DhYmlbl8jyFxWI8z/smND8aUKDNzQIGgQNgkbQIGgQNAgaBI2gQdBwox3KBRVxvCBHQQAAAABJRU5ErkJggg==",
+       "mime_type": "image/png",
+       "metadata": "{}",
+       "is_error": false
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792349910,
+    "updated_at": 1792349910
+   },
+   {
+    "id": "pic-m4",
+    "role": "assistant",
+    "session_id": "pic",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Here is the chart."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792350000
+      }
+     }
+    ],
+    "model": "fake-large",
+    "provider": "fake",
+    "created_at": 1792349920,
+    "updated_at": 1792350000
+   }
+  ],
+  "servers": [
+   {
+    "port": 8000,
+    "program": "python3",
+    "name": "web",
+    "command": "python3 -m http.server 8000",
+    "job_id": "job-web",
+    "session_id": "ready"
+   },
+   {
+    "port": 5173,
+    "program": "node",
+    "name": "dev",
+    "command": "npm run dev",
+    "job_id": "job-dev",
+    "session_id": "bg"
+   },
+   {
+    "port": 5174,
+    "program": "esbuild",
+    "name": "dev",
+    "command": "npm run dev",
+    "job_id": "job-dev",
+    "session_id": "bg"
+   },
+   {
+    "port": 8100,
+    "program": "nc",
+    "name": "",
+    "command": "",
+    "pid": 4242,
+    "session_id": "wait"
+   }
+  ]
+ },
+ "events": [
+  {
+   "at_ms": 4000,
+   "entries": [
+    {
+     "kind": "event",
+     "type": "session",
+     "event": "created",
+     "payload": {
+      "id": "fresh",
+      "parent_session_id": "",
+      "title": "Fresh from the terminal",
+      "message_count": 0,
+      "prompt_tokens": 900,
+      "completion_tokens": 200,
+      "summary_message_id": "",
+      "cost": 0,
+      "created_at": 1792353600,
+      "updated_at": 1792354200,
+      "is_busy": false,
+      "attached_clients": 0,
+      "context_budget": {
+       "provider": "fake",
+       "model": "fake-large",
+       "tokens": 1100,
+       "estimated": false
+      },
+      "estimated_usage": false,
+      "has_unfinished_work": false,
+      "pending_prompt": ""
+     }
+    }
+   ]
+  }
+ ]
+}

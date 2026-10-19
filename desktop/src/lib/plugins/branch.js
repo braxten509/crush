@@ -176,7 +176,9 @@ function shownLinks() {
     let entry = out.get(key);
     if (!entry) {
       const frame = span.closest("[data-key]");
-      entry = { link_id: decoration.data?.id ?? "", session_id: decoration.data?.session_id ?? "", mid: decoration.data?.source_message_id ?? "", item: frame?.dataset.key ?? "", text: "", title: span.title || linkTitle(decoration.data?.session_id), rects: [] };
+      const sid = decoration.data?.session_id ?? "";
+      // title: what a hover sets now; title_attr: what the last hover left on the span.
+      entry = { link_id: decoration.data?.id ?? "", session_id: sid, mid: decoration.data?.source_message_id ?? "", item: frame?.dataset.key ?? "", text: "", title: linkTitle(sid), title_attr: span.title, rects: [] };
       out.set(key, entry);
     }
     entry.text += span.textContent;

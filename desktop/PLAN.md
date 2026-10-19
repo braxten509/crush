@@ -459,5 +459,11 @@ Kept current during the build. Percent = share of the phase table in section 4.
 - GPT pictures: up to $2 in total overnight.
 - Final steps: merge into `main`, push to GitHub (Mac build), install the new `crush`, and add the app menu entry, once every check and the final review pass.
 
+### Owner decisions (2026-10-19, morning)
+- Ready to use means the whole plan: phases 4, 5, 6 and 7, then the final review and the final steps.
+- Lighter ultrabuild: one independent review per phase (on the merged phase), not one per piece. The review/fix cap stays 3 rounds per phase.
+- Test budget (ultrabuild updated the same day): automated tests only for logic that can break silently; one real-window check per user flow at the phase level, not a driver per piece; one deliberate break per new test file. Every brief names its budget.
+- Wave 2 (P3.5-P3.9) was stopped once each piece's app code was saved and its unit tests and build passed; their unfinished per-piece window drivers were dropped. All five merged into `desktop` without conflicts; the phase 3 review covers them together.
+
 ### Open findings
 - none

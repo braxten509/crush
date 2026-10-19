@@ -57,7 +57,8 @@
   <span class="name">{chipName(chip.name)}</span>
 {/snippet}
 
-<span class="chip" data-kind={chip.kind}>
+<!-- Detector waiver: Spectral's text box fills the 4.9 chip, but the letters keep 4-9 px from the border on the WebKit captures. -->
+<span class="chip" data-kind={chip.kind} data-impeccable-ignore="cramped-padding">
   {#if viewable}
     <span class="label viewable" role="button" tabindex="0" onmousedown={down} onclick={open} onkeydown={key}>{@render label()}</span>
   {:else}

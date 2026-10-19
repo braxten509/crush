@@ -3,6 +3,7 @@ package cliagent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -297,7 +298,9 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	}
 	b, _ := json.Marshal(settings)
 	args = append(args, "--settings", string(b))
-	if t.Resume != "" {
+	if t.Fork != nil {
+		args = append(args, claudeForkArgs(*t.Fork)...)
+	} else if t.Resume != "" {
 		args = append(args, "--resume", t.Resume)
 	}
 	if m.Guarded && !t.NoTools {
@@ -451,6 +454,9 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if fresh && !r.started && t.Fork != nil {
+		return fmt.Errorf("%w: %v", ErrNoFork, exitError("claude", p))
 	}
 	if fresh && !r.started && t.Resume != "" {
 		return ErrResume

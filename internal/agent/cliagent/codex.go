@@ -239,16 +239,19 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 		defer onBackground(t.SessionID, r.background)()
 	}
 
-	if done, err := r.readLoop(lines); done {
-		return err
+	done, err := r.readLoop(lines)
+	if !done && ctx.Err() != nil {
+		err = ctx.Err()
+	} else if !done && live != nil {
+		err = errors.New("Codex: the kept process ended")
+	} else if !done {
+		err = exitError("codex", p)
 	}
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if err != nil && t.Fork != nil && r.threadID == "" && ctx.Err() == nil {
+		// The fork failed before the branch's thread existed.
+		return fmt.Errorf("%w: %v", ErrNoFork, err)
 	}
-	if live != nil {
-		return errors.New("Codex: the kept process ended")
-	}
-	return exitError("codex", p)
+	return err
 }
 
 // newCodexRun prepares a Codex turn, picking the approval policy and
@@ -477,7 +480,9 @@ func (r *codexRun) startThread() {
 		params["serviceTier"] = r.m.ServiceTier
 	}
 	method := "thread/start"
-	if r.t.Resume != "" {
+	if r.t.Fork != nil {
+		method, params = "thread/fork", codexForkParams(*r.t.Fork, params)
+	} else if r.t.Resume != "" {
 		method, params["threadId"] = "thread/resume", r.t.Resume
 	} else if r.t.NoTools {
 		params["ephemeral"] = true

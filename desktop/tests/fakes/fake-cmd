@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""Stands in for the system programs the app and its children call in tests
+(desktop-design-5-6 7.1, 8.2): the sound players, docker and the browser
+openers. It is reached through the symlinks in tests/fakes/bin, named after
+each program, so nothing plays and no browser opens. Each call:
+- appends {cmd, args, cwd, at} as one JSON line to $FAKE_CMD_LOG (when set);
+- exits 1 when its name is in $FAKE_CMD_FAIL (a comma list);
+- else prints $FAKE_CMD_STDOUT_<NAME> (the name upper-cased, "-" as "_")
+  when set, and otherwise prints nothing; and exits 0.
+Standard library only."""
+import json, os, sys, time
+
+
+def main():
+    name = os.path.basename(sys.argv[0])
+    log = os.environ.get("FAKE_CMD_LOG")
+    if log:
+        line = json.dumps({"cmd": name, "args": sys.argv[1:], "cwd": os.getcwd(), "at": time.time()})
+        with open(log, "a") as f:
+            f.write(line + "\n")
+    failing = [n.strip() for n in os.environ.get("FAKE_CMD_FAIL", "").split(",")]
+    if name in failing:
+        return 1
+    out = os.environ.get("FAKE_CMD_STDOUT_" + name.upper().replace("-", "_"))
+    if out is not None:
+        sys.stdout.write(out)
+        sys.stdout.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

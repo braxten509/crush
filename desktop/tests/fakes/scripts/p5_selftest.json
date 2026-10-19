@@ -1,0 +1,15 @@
+{
+  "about": "desktop-design-5-6 8.6 step 6 (p5_selftest.py): one bash step that prints the tasks folder and the app's crush path from the engine's shell, which LIVE's scripts rely on (8.4).",
+  "turns": [
+    {
+      "when": "harness self-test environment",
+      "steps": [
+        {
+          "tool_calls": [{ "name": "bash", "arguments": { "command": "echo \"TASKS[$CRUSH_TASKS_DIR] DESKTOP[$CRUSH_DESKTOP_CRUSH]\"", "description": "Print the tasks folder and the app's crush" } }]
+        },
+        { "text": "Printed both." }
+      ]
+    }
+  ],
+  "default": { "text": "OK." }
+}

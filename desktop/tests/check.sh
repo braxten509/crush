@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs one window driver in the sandbox (desktop-design 6.1).
-# Usage: tests/check.sh [--fixture FILE] [--size WxH] DRIVER.py [driver args]
-# Without --fixture the app joins the engine built by tests/build-crush.sh;
+# Usage: tests/check.sh [--no-app] [--fixture FILE] [--size WxH] DRIVER.py [driver args]
+# --no-app goes on to tests/run-in-sandbox.sh: the driver starts the app
+# itself (tests/driver/apps.py, desktop-design-5-6 8.2). Without --fixture the app joins the engine built by tests/build-crush.sh;
 # with it, the app plays the recorded engine in FILE (6.3). The owner's real
 # Crush files are fingerprinted before and checked after (tests/outside-check.py).
 # Exits with the driver's code (or 1 when the outside check fails); the
@@ -12,15 +13,17 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 FIXTURE=""
 SIZE=""
+NO_APP=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --fixture) FIXTURE="$(realpath "$2")"; shift 2 ;;
     --size) SIZE="$2"; shift 2 ;;
+    --no-app) NO_APP="--no-app"; shift ;;
     *) break ;;
   esac
 done
 if [ $# -lt 1 ]; then
-  echo "usage: tests/check.sh [--fixture FILE] [--size WxH] DRIVER.py [driver args]" >&2
+  echo "usage: tests/check.sh [--no-app] [--fixture FILE] [--size WxH] DRIVER.py [driver args]" >&2
   exit 2
 fi
 DRIVER="$1"; shift
@@ -39,7 +42,7 @@ python3 -I tests/outside-check.py snapshot "$snap"
 
 export DESKTOP_ARGS="${FIXTURE:+--fixture $FIXTURE}"
 if [ -x "$CRUSH" ]; then export DESKTOP_CRUSH="$CRUSH"; fi
-tests/sandbox.sh ${SIZE:+-s "$SIZE"} tests/run-in-sandbox.sh "$DRIVER" "$@" 2>&1 | tee "$OUT/check.log"
+tests/sandbox.sh ${SIZE:+-s "$SIZE"} tests/run-in-sandbox.sh $NO_APP "$DRIVER" "$@" 2>&1 | tee "$OUT/check.log"
 code=${PIPESTATUS[0]}
 
 if ! python3 -I tests/outside-check.py verify "$snap" >"$OUT/outside-after.log" 2>&1; then

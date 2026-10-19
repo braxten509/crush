@@ -213,6 +213,10 @@ type UI struct {
 	// theme tracks the applied theme and any preview; see theme.go.
 	theme themeController
 
+	// configRefreshGen counts config refreshes; a theme load or main
+	// agent read started by an older one is dropped. See config_refresh.go.
+	configRefreshGen uint64
+
 	focus uiFocusState
 	state uiState
 	mode  uiInputMode

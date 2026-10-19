@@ -19,6 +19,7 @@ import (
 
 // themeReloadedMsg carries a theme loaded after a config refresh.
 type themeReloadedMsg struct {
+	gen            uint64
 	name, revision string
 	styles         styles.Styles
 	err            error
@@ -26,6 +27,7 @@ type themeReloadedMsg struct {
 
 // mainAgentMsg carries the engine's main agent after a config refresh.
 type mainAgentMsg struct {
+	gen   uint64
 	agent string
 }
 
@@ -41,10 +43,14 @@ func (m *UI) handleConfigRefreshMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case workspace.ConfigRefreshedMsg:
 		return m.applyConfigRefresh(), true
 	case themeReloadedMsg:
-		m.applyReloadedTheme(msg)
+		if msg.gen == m.configRefreshGen {
+			m.applyReloadedTheme(msg)
+		}
 		return nil, true
 	case mainAgentMsg:
-		m.followMainAgent(msg.agent)
+		if msg.gen == m.configRefreshGen {
+			m.followMainAgent(msg.agent)
+		}
 		return nil, true
 	}
 	return nil, false
@@ -58,6 +64,8 @@ func (m *UI) applyConfigRefresh() tea.Cmd {
 		return nil
 	}
 	tui := cfg.Options.TUI
+	m.configRefreshGen++
+	gen := m.configRefreshGen
 	var cmds []tea.Cmd
 	if m.chat != nil && m.chat.scrollbarMode != tui.Scrollbar {
 		m.chat.scrollbarMode = tui.Scrollbar
@@ -81,7 +89,7 @@ func (m *UI) applyConfigRefresh() tea.Cmd {
 	if m.theme.preview == nil && (!strings.EqualFold(name, m.theme.shown) || revision != m.theme.revision) {
 		cmds = append(cmds, func() tea.Msg {
 			s, err := styles.LoadTheme(name)
-			return themeReloadedMsg{name: name, revision: revision, styles: s, err: err}
+			return themeReloadedMsg{gen: gen, name: name, revision: revision, styles: s, err: err}
 		})
 	}
 	if namer, ok := m.com.Workspace.(mainAgentNamer); ok {
@@ -90,7 +98,7 @@ func (m *UI) applyConfigRefresh() tea.Cmd {
 			if err != nil {
 				return nil
 			}
-			return mainAgentMsg{agent: agent}
+			return mainAgentMsg{gen: gen, agent: agent}
 		})
 	}
 	return tea.Batch(cmds...)

@@ -1,0 +1,72 @@
+{
+ "workspace": {
+  "id": "ws-kit",
+  "path": "/tmp/home/proj",
+  "yolo": false,
+  "debug": false,
+  "data_dir": "/tmp/home/proj/.crush",
+  "version": "fixture",
+  "channels": [],
+  "skills": [],
+  "protocol": 1
+ },
+ "agent": {
+  "is_busy": false,
+  "is_ready": true,
+  "model": {
+   "id": "fake-large",
+   "name": "Fake Large",
+   "context_window": 200000,
+   "can_reason": true,
+   "reasoning_levels": ["low", "medium", "high"],
+   "default_reasoning_effort": "medium",
+   "supports_attachments": false
+  },
+  "model_cfg": {
+   "model": "fake-large",
+   "provider": "fake",
+   "reasoning_effort": "high"
+  }
+ },
+ "get": {
+  "sessions": [],
+  "chat-links": [],
+  "/v1/limits": {
+   "clis": []
+  },
+  "config": {
+   "models": {
+    "large": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    },
+    "small": {
+     "model": "fake-small",
+     "provider": "fake"
+    }
+   },
+   "options": {
+    "notifications": "disabled"
+   }
+  },
+  "agent/default-small-model": {
+   "model": "fake-small",
+   "provider": "fake"
+  },
+  "providers": [],
+  "git/branch": {
+   "branch": "main"
+  },
+  "project/needs-init": {
+   "needs_init": false
+  },
+  "permissions/skip": {
+   "skip": false
+  },
+  "lsps": {},
+  "mcp/states": {},
+  "skills": []
+ },
+ "events": []
+}

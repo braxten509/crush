@@ -1,12 +1,490 @@
-<script>
-  // The shared sheet frame (desktop-design-5-6 2.1, look 5.1). Placeholder
-  // from scaffold S5 with the pinned props; KIT owns it (7.3).
-  //   id, title, width: "small" | "standard" | "wide", maxHeight?, controls?
-  //   (a snippet beside the title), help: [{key, text, disabled?}], onKey?
-  //   (the front sheet's keys), docked?, children
-  let { id, title, width = "standard", maxHeight = null, controls = null, help = [], onKey = null, docked = false, children } = $props();
+<script module>
+  // The shared sheet frame (desktop-design-5-6 2.1, DLG-001 to DLG-003,
+  // DLG-007, DLG-008; look 5.1). Every sheet draws itself in one: the title
+  // line (title, and title-side controls on the right that hide whole when
+  // they cannot sit beside the title, internal/ui/dialog/common.go:106-118),
+  // a rule with + marks, the body, and the help footer. The frame is centered
+  // in the window and never comes closer than 24 to its edges; the body
+  // scrolls inside, and a resize re-centers and re-fits it in the same frame
+  // (dialog.go:263-274). An onboarding sheet sits at the bottom left of the
+  // main column, 24 from its edges (dialog.go:281-299, common.go:151-153); a
+  // docked one (the Themes sheet and editor) runs down the window's right
+  // edge.
+  //
+  // Opening moves the focus to the first field, else the list; Tab stays
+  // inside (lib/kit/sheetkeys.js); a sheet that comes back to the front takes
+  // the focus back where it was; closing gives the focus back to where it was
+  // before the sheet opened, the typing box by default (2.0 rule 9). Only the
+  // front sheet hears keys: onKey(event, combo) first, then its kit parts,
+  // then Esc and Alt+Esc close it.
+  //   id, title, width: "small" | "standard" | "wide" (520, 760, 1040),
+  //   maxHeight? (picture px), controls? (a snippet beside the title; buttons
+  //   in it get the small-caps label look, the active one marked with
+  //   aria-pressed="true"), help: [{key, text, disabled?}], onKey?, docked?,
+  //   onboarding?, children
+  // `section(label)`, exported, draws a section header: a small-caps label
+  // followed by a rule (DLG-020).
+  import Rule from "../Rule.svelte";
+
+  export { section };
 </script>
 
-<div class="sheet-placeholder" role="dialog" aria-label={title} data-sheet={id} data-width={width} data-docked={docked ? "true" : undefined}>
-  {@render children?.()}
+<script>
+  import { onMount, tick } from "svelte";
+  import { dialogs, frontDialog } from "../../lib/dialogs.js";
+  import { focusables, setSheet } from "../../lib/kit/sheetkeys.js";
+  import { focusField } from "../../lib/stores/composer.svelte.js";
+  import { ws } from "../../lib/stores/workspace.svelte.js";
+  import PlusMark from "../PlusMark.svelte";
+  import HelpFooter from "./HelpFooter.svelte";
+  import Scrollbar from "./Scrollbar.svelte";
+
+  const WIDTHS = { small: 520, standard: 760, wide: 1040 };
+  const EDGE = 24; // picture px a sheet keeps from the window's edges
+  const CONTROLS_GAP = 24; // the least room between the title and its controls
+
+  let {
+    id,
+    title,
+    width = "standard",
+    maxHeight = null,
+    controls = null,
+    help = [],
+    onKey = null,
+    docked = false,
+    onboarding = false,
+    children,
+  } = $props();
+
+  const uid = $props.id();
+  let frame = $state(null);
+  let line = $state(null);
+  let heading = $state(null);
+  let side = $state(null);
+  let body = $state(null);
+  let controlsFit = $state(true);
+  let spot = $state(null); // the onboarding place: {left, bottom, width, height} in CSS px
+  let fontsLoaded = $state(0);
+
+  const isFront = $derived(frontDialog() === id);
+  const barMode = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
+  const pictureWidth = $derived(WIDTHS[width] ?? WIDTHS.standard);
+
+  function scale() {
+    return parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
+  }
+
+  // -- Focus --
+
+  let opener = null;
+  let lastFocus = null;
+
+  function focusInside() {
+    if (!frame) return;
+    const keep = lastFocus && lastFocus.isConnected && frame.contains(lastFocus) && !lastFocus.disabled ? lastFocus : null;
+    const target =
+      keep ??
+      frame.querySelector("input:not([disabled]), textarea:not([disabled])") ??
+      frame.querySelector("[data-kit-list] [role='listbox']") ??
+      focusables(frame)[0] ??
+      frame;
+    target.focus({ preventScroll: true });
+  }
+
+  function giveBack(back) {
+    const usable = back?.isConnected && !back.closest("[inert]");
+    if (dialogs.length > 0) {
+      // The sheet now in front takes its own focus back; the opener is in it.
+      if (usable) back.focus({ preventScroll: true });
+      return;
+    }
+    if (usable) back.focus({ preventScroll: true });
+    else focusField();
+  }
+
+  onMount(() => {
+    const active = document.activeElement;
+    opener = active instanceof HTMLElement && active !== document.body && !frame.contains(active) ? active : null;
+    focusInside();
+    const off = setSheet(id, { onKey: () => onKey, root: () => frame, report, heavy });
+    return () => {
+      off();
+      const back = opener;
+      queueMicrotask(() => giveBack(back));
+    };
+  });
+
+  // Back in front (the sheet over it closed, or it was opened again).
+  $effect(() => {
+    if (!isFront || !frame) return;
+    tick().then(() => {
+      if (frame && !frame.contains(document.activeElement)) focusInside();
+    });
+  });
+
+  // -- Title-side controls: beside the title with room to spare, or hidden --
+
+  function fitControls() {
+    if (!line || !heading || !side) {
+      controlsFit = true;
+      return;
+    }
+    controlsFit = heading.scrollWidth + CONTROLS_GAP * scale() + side.scrollWidth <= line.clientWidth;
+  }
+
+  $effect(() => {
+    void title;
+    void fontsLoaded;
+    if (!line) return;
+    fitControls();
+    const observer = new ResizeObserver(fitControls);
+    observer.observe(line);
+    if (side) observer.observe(side);
+    return () => observer.disconnect();
+  });
+
+  $effect(() => {
+    const fonts = document.fonts;
+    if (!fonts) return;
+    const loaded = () => fontsLoaded++;
+    fonts.addEventListener?.("loadingdone", loaded);
+    fonts.ready?.then(loaded);
+    return () => fonts.removeEventListener?.("loadingdone", loaded);
+  });
+
+  // -- Onboarding place: the main column's bottom left --
+
+  function placeOnboarding() {
+    const main = document.querySelector("main.conversation");
+    const r = main?.getBoundingClientRect() ?? { left: 0, top: 0, width: innerWidth, height: innerHeight, bottom: innerHeight };
+    const edge = EDGE * scale();
+    spot = { left: r.left + edge, bottom: innerHeight - r.bottom + edge, width: Math.max(0, r.width - 2 * edge), height: Math.max(0, r.height - 2 * edge) };
+  }
+
+  $effect(() => {
+    if (!onboarding) {
+      spot = null;
+      return;
+    }
+    placeOnboarding();
+    const main = document.querySelector("main.conversation");
+    const observer = new ResizeObserver(placeOnboarding);
+    if (main) observer.observe(main);
+    window.addEventListener("resize", placeOnboarding);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", placeOnboarding);
+    };
+  });
+
+  // -- The probe (plugins/kit.js reads these through lib/kit/sheetkeys.js) --
+
+  function report() {
+    return {
+      title,
+      width,
+      docked: Boolean(docked),
+      onboarding: Boolean(onboarding),
+      max_height: maxHeight,
+      controls: controls ? (controlsFit ? "shown" : "hidden") : null,
+      focus: focusName(),
+    };
+  }
+
+  function focusName() {
+    const active = document.activeElement;
+    if (!frame || !active || !frame.contains(active)) return null;
+    if (active.closest("[data-kit-field]")) return "field";
+    if (active.closest("[data-kit-area]")) return "area";
+    if (active.closest("[data-kit-list]")) return "list";
+    if (active.dataset?.button) return `button:${active.dataset.button}`;
+    return active.tagName.toLowerCase();
+  }
+
+  function rectOf(el) {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  }
+
+  function heavy() {
+    const titleRange = document.createRange();
+    if (heading) titleRange.selectNodeContents(heading);
+    const text = heading ? titleRange.getBoundingClientRect() : null;
+    return {
+      frame: rectOf(frame),
+      title: rectOf(heading),
+      title_text: text ? { x: text.x, y: text.y, w: Math.min(text.width, heading.clientWidth), h: text.height } : null,
+      title_cut: heading ? heading.scrollWidth > heading.clientWidth + 0.5 : false,
+      title_line: rectOf(line),
+      controls: side ? { rect: rectOf(side), visible: controlsFit && getComputedStyle(side).visibility !== "hidden" } : null,
+      rule: rectOf(frame?.querySelector(".kit-title-rule")),
+      rule_marks: [...(frame?.querySelector(".kit-title-rule")?.querySelectorAll(".plus") ?? [])].map(rectOf),
+      body: rectOf(body),
+      body_scroll: body ? { scroll_height: body.scrollHeight, client_height: body.clientHeight } : null,
+      help: rectOf(frame?.querySelector("[data-kit-help]")),
+      corners: [...(frame?.querySelectorAll(":scope > .corner") ?? [])].map(rectOf),
+      edges: [...(frame?.querySelectorAll(":scope > .edge") ?? [])].map(rectOf),
+      background: frame ? getComputedStyle(frame).backgroundColor : null,
+      window: { w: innerWidth, h: innerHeight, px: scale() },
+    };
+  }
+</script>
+
+{#snippet section(label)}
+  <div class="kit-section">
+    <h3 class="kit-section-label">{label}</h3>
+    <Rule class="kit-section-rule" />
+  </div>
+{/snippet}
+
+<div
+  class="place"
+  class:docked
+  class:onboarding={Boolean(onboarding && spot)}
+  style:left={onboarding && spot ? `${spot.left}px` : null}
+  style:bottom={onboarding && spot ? `${spot.bottom}px` : null}
+  style:width={onboarding && spot ? `${spot.width}px` : null}
+  style:height={onboarding && spot ? `${spot.height}px` : null}
+>
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="frame"
+    class:capped={maxHeight !== null && maxHeight !== undefined}
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby={uid}
+    tabindex="-1"
+    data-sheet={id}
+    data-kit-sheet
+    data-front={isFront ? "true" : "false"}
+    style:--sheet-w={pictureWidth}
+    style:--sheet-h={maxHeight}
+    bind:this={frame}
+    onfocusin={(event) => (lastFocus = event.target)}
+  >
+    {#if !docked}
+      <span class="edge top" aria-hidden="true"></span>
+      <span class="edge bottom" aria-hidden="true"></span>
+      <span class="edge left" aria-hidden="true"></span>
+      <span class="edge right" aria-hidden="true"></span>
+      <span class="corner tl" aria-hidden="true"><PlusMark arm={8} /></span>
+      <span class="corner tr" aria-hidden="true"><PlusMark arm={8} /></span>
+      <span class="corner bl" aria-hidden="true"><PlusMark arm={8} /></span>
+      <span class="corner br" aria-hidden="true"><PlusMark arm={8} /></span>
+    {/if}
+
+    <div class="title-line" bind:this={line} data-kit-title>
+      <h2 class="title" id={uid} bind:this={heading}>{title}</h2>
+      {#if controls}
+        <div class="controls" class:hidden={!controlsFit} aria-hidden={controlsFit ? undefined : "true"} bind:this={side} data-kit-controls>
+          {@render controls()}
+        </div>
+      {/if}
+    </div>
+    <Rule marks="both" class="kit-title-rule" />
+
+    <div class="body" bind:this={body} data-kit-body>
+      {@render children?.()}
+    </div>
+    <Scrollbar target={body} mode={barMode} />
+
+    {#if help && help.length > 0}
+      <div class="foot">
+        <HelpFooter pairs={help} />
+      </div>
+    {/if}
+  </div>
 </div>
+
+<style>
+  /* The room a sheet may take: the window less 24 on each side. */
+  .place {
+    position: absolute;
+    inset: calc(24 * var(--px));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .place.docked {
+    inset: 0;
+    align-items: stretch;
+    justify-content: flex-end;
+  }
+  .place.onboarding {
+    inset: auto;
+    align-items: flex-end;
+    justify-content: flex-start;
+  }
+
+  .frame {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: min(calc(var(--sheet-w) * var(--px)), 100%);
+    max-height: 100%;
+    padding: calc(22 * var(--px)) 0 calc(20 * var(--px));
+    background: var(--paper);
+    color: var(--ink);
+    pointer-events: auto;
+    outline: none;
+  }
+  .frame.capped {
+    max-height: min(calc(var(--sheet-h) * var(--px)), 100%);
+  }
+  .docked .frame {
+    height: 100%;
+    max-height: none;
+    border-left: 1px solid var(--rule-frame);
+  }
+
+  /* The page frame's drawing (Frame.svelte): hairlines that stop 11 short of
+     each corner, and a + mark with 8 arms at each corner. */
+  .edge {
+    position: absolute;
+    background: var(--rule-frame);
+    pointer-events: none;
+  }
+  .edge.top,
+  .edge.bottom {
+    left: calc(11 * var(--px));
+    right: calc(11 * var(--px));
+    height: 1px;
+  }
+  .edge.top {
+    top: 0;
+  }
+  .edge.bottom {
+    bottom: 0;
+  }
+  .edge.left,
+  .edge.right {
+    top: calc(11 * var(--px));
+    bottom: calc(11 * var(--px));
+    width: 1px;
+  }
+  .edge.left {
+    left: 0;
+  }
+  .edge.right {
+    right: 0;
+  }
+  .corner {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+  }
+  .corner.tl {
+    left: 0;
+    top: 0;
+  }
+  .corner.tr {
+    right: 0;
+    top: 0;
+  }
+  .corner.bl {
+    left: 0;
+    bottom: 0;
+  }
+  .corner.br {
+    right: 0;
+    bottom: 0;
+  }
+  .corner :global(.plus) {
+    left: 0;
+    top: 0;
+  }
+
+  /* Title line: the title, and its controls on the right on its baseline. */
+  .title-line {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: baseline;
+    min-height: calc(38 * var(--px));
+    padding: 0 calc(26 * var(--px));
+  }
+  .title {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    font: var(--t-project);
+    color: var(--ink);
+    white-space: pre;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .controls {
+    display: flex;
+    flex: none;
+    align-items: baseline;
+    gap: calc(18 * var(--px));
+    margin-left: calc(24 * var(--px));
+  }
+  .controls.hidden {
+    position: absolute;
+    right: calc(26 * var(--px));
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .controls :global(button) {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: var(--t-label);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--slate);
+    white-space: nowrap;
+  }
+  .controls :global(button[aria-pressed="true"]),
+  .controls :global(button[aria-current="true"]) {
+    color: var(--ink);
+    text-decoration-line: underline;
+    text-decoration-thickness: calc(2 * var(--px));
+    text-decoration-color: var(--ink);
+    text-underline-offset: calc(5 * var(--px));
+  }
+  .frame :global(.rule.kit-title-rule) {
+    margin-top: calc(18 * var(--px));
+  }
+
+  .body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    padding: calc(17 * var(--px)) calc(26 * var(--px)) 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .foot {
+    flex: none;
+    margin-top: calc(20 * var(--px));
+    padding: 0 calc(26 * var(--px));
+  }
+
+  /* A section header: a small-caps label followed by a rule (DLG-020). Global,
+     so a sheet may also write the markup itself. */
+  :global(.kit-section) {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: calc(14 * var(--px));
+    margin: calc(14 * var(--px)) 0 calc(13 * var(--px));
+  }
+  :global(.kit-section-label) {
+    flex: none;
+    margin: 0;
+    font: var(--t-label);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  :global(.kit-section > .rule.kit-section-rule) {
+    flex: 1 1 auto;
+  }
+</style>

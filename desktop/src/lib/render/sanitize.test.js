@@ -11,7 +11,7 @@ import { createMarkdown, renderMarkdown } from "./markdown.js";
 import { renderMath } from "./math.js";
 import { MERMAID_CONFIG, renderDiagram, resetMermaidForTests } from "./mermaid.js";
 import { addressAllowed, scanPage } from "./safety.js";
-import { stripTags, svgFragment } from "./sanitize.js";
+import { decodeEntity, entityCacheSize, stripTags, svgFragment } from "./sanitize.js";
 
 const reply = Object.fromEntries(script.turns.map((turn) => [turn.when, turn.steps.map((step) => step.text).join("")]));
 const REPLIES = Object.entries(reply);
@@ -214,6 +214,25 @@ describe("raw markup shows as its words", () => {
     expect(stripTags("<script>alert(1)</script>after")).toBe("after");
     expect(stripTags("<style>p{}</style><iframe>inside</iframe><b>bold</b>")).toBe("bold");
     expect(stripTags("&lt;b&gt; stays text")).toBe("<b> stays text");
+  });
+
+  test("the character-reference cache keeps recognized names only", () => {
+    const before = entityCacheSize();
+    expect(decodeEntity("&ffllig;")).toBe("ﬄ");
+    const known = entityCacheSize();
+    expect(known - before).toBeLessThanOrEqual(1);
+    expect(known).toBeGreaterThan(0);
+    // A reply full of made-up names or numbers decodes them (or leaves them
+    // as written) without the cache growing.
+    for (let i = 0; i < 500; i++) {
+      expect(decodeEntity(`&made${i}up;`)).toBe(`&made${i}up;`);
+      expect(decodeEntity(`&#${0x4e00 + i};`)).toBe(String.fromCodePoint(0x4e00 + i));
+    }
+    expect(decodeEntity("&ampx;")).toBe("&ampx;");
+    expect(entityCacheSize()).toBe(known);
+    expect(decodeEntity("&ffllig;")).toBe("ﬄ");
+    // A name whose character is the semicolon itself is still a name.
+    expect(decodeEntity("&semi;")).toBe(";");
   });
 });
 

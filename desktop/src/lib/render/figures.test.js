@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import { extractFigures, pictureOf, visualBlocks } from "./figures.js";
 import { lexMarkdown } from "./lex.js";
 import { renderMarkdown } from "./markdown.js";
+import { drawTable } from "./table.js";
 
 const TEXT = [
   "Intro with an inline ![first shot](./shots/one%20a.png) picture.",
@@ -116,6 +117,40 @@ describe("extractFigures", () => {
     expect(extractFigures("s", "m", "| t |\n|---|\n| 1 |").map((f) => f.kind)).toEqual(["table"]);
   });
 
+  test("a table's reference links bring the reply's definitions along", () => {
+    const text = [
+      "> Specs: [spec]: https://example.com/not-a-definition",
+      ">",
+      "> [Spec]: https://example.com/spec",
+      "",
+      "| Doc | Link |",
+      "|---|---|",
+      "| Guide | [manual][ref] |",
+      "| Spec | [spec] |",
+      "",
+      "| Plain | Table |",
+      "|---|---|",
+      "| no | links |",
+      "",
+      "The end.",
+      "",
+      "[ref]: https://example.com/manual",
+      "[unused]: https://example.com/unused",
+    ].join("\n");
+    const [linked, plain] = extractFigures("s", "m", text);
+    const holder = drawTable(linked.source);
+    expect([...holder.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["manual", "https://example.com/manual"],
+      ["spec", "https://example.com/spec"],
+    ]);
+    expect(holder.textContent).not.toContain("[manual][ref]");
+    expect(holder.querySelector("table").textContent).not.toContain("example.com");
+    // Only the definitions the table uses come along; a table that uses none
+    // keeps its own text.
+    expect(linked.source).not.toContain("unused");
+    expect(plain.source).toBe("| Plain | Table |\n|---|---|\n| no | links |");
+  });
+
   test("plan markers and \\r\\n do not change the ids", () => {
     const plain = extractFigures("s", "m", "Plan\n\n$$\nx\n$$\n");
     const marked = extractFigures("s", "m", "<!-- CRUSH_PLAN_START -->\r\nPlan\r\n\r\n$$\r\nx\r\n$$\r\n<!-- CRUSH_PLAN_READY -->");
@@ -134,6 +169,18 @@ describe("pictureOf", () => {
     expect(pictureOf("~/pics/a.png")).toMatchObject({ kind: "file", name: "a.png" });
     for (const refused of ["javascript:alert(1)", "data:text/html,x", "vbscript:x", "file://other-host/x.png", "", "   "]) {
       expect(pictureOf(refused)).toBeNull();
+    }
+  });
+
+  test("a file address with a broken %-escape is a refused picture, not an error", () => {
+    // %ZZ is no escape at all; %FF decodes to a byte that is not UTF-8.
+    for (const bad of ["%ZZ", "%FF"]) {
+      const text = `Before ![bad shot](file:///tmp/${bad}.png) after.\n\n$$\nx\n$$`;
+      expect(pictureOf(`file:///tmp/${bad}.png`)).toBeNull();
+      expect(extractFigures("s", "m", text).map((f) => [f.id, f.kind])).toEqual([["m:0", "math"]]);
+      const root = renderMarkdown(text, { messageId: "m", sessionId: "s" });
+      expect(root.querySelector(".md-chip[data-kind=picture]")).toBeNull();
+      expect(root.textContent).toContain("Before bad shot after.");
     }
   });
 });

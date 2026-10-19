@@ -21,7 +21,7 @@ import { highlight } from "./code.js";
 import { KIND_LABEL, figureOf, visualBlocks } from "./figures.js";
 import { makeAnchor, safeHref } from "./links.js";
 import { renderMath } from "./math.js";
-import { ENTITY_REF, decodeEntities, decodeEntity, stripTags } from "./sanitize.js";
+import { ENTITY_REF, decodeEntities, decodeEntity, htmlTextUnits, stripTags } from "./sanitize.js";
 import { emitText } from "./sourcemap.js";
 import "./markdown.css";
 
@@ -72,21 +72,6 @@ export function alignLines(derived, raw) {
     if (i < dLines.length - 1) d++;
     base += src.length + 1;
   }
-  return map;
-}
-
-// Characters of derived text found in order in raw (an HTML block's text).
-function alignGreedy(text, raw) {
-  const map = new Int32Array(text.length + 1);
-  let j = 0;
-  for (let i = 0; i < text.length; i++) {
-    const k = raw.indexOf(text[i], j);
-    if (k >= 0) {
-      map[i] = k;
-      j = k + 1;
-    } else map[i] = j;
-  }
-  map[text.length] = j;
   return map;
 }
 
@@ -345,17 +330,42 @@ export class Builder {
     const text = stripTags(token.raw);
     if (!text) return null;
     const p = this.el("p", "md-html");
-    const map = alignGreedy(text, token.raw);
+    // stripTags' text lined up, one code unit at a time, with the characters of
+    // the raw HTML that show (tags left out); a decoded reference keeps the
+    // range of the whole reference.
+    const units = htmlTextUnits(token.raw);
+    const chars = [];
+    units.forEach((unit, u) => {
+      for (let c = 0; c < unit.text.length; c++) chars.push([unit.text[c], u]);
+    });
     const pieces = [];
+    let j = 0;
+    let after = 0; // raw offset after the last character found
+    let lastUnit = -1;
     for (let k = 0; k < text.length; k++) {
-      const a = abs(map[k]);
-      const s0 = this.S(a);
-      const s1 = Math.max(s0, this.S(a + 1));
+      let m = j;
+      while (m < chars.length && chars[m][0] !== text[k]) m++;
+      let unit = -1;
+      let s0;
+      let s1;
+      if (m < chars.length) {
+        unit = chars[m][1];
+        j = m + 1;
+        const { start, end } = units[unit];
+        s0 = this.S(abs(start));
+        s1 = Math.max(s0, this.S(abs(end - 1) + 1));
+        after = end;
+      } else {
+        // Not in the scan (the parser read something differently): an empty range.
+        s0 = s1 = this.S(abs(after));
+      }
       const last = pieces[pieces.length - 1];
-      if (last && s1 - s0 === 1 && last.text.length === last.s1 - last.s0 && last.s1 === s0) {
+      if (last && unit >= 0 && unit === lastUnit) last.text += text[k];
+      else if (last && s1 - s0 === 1 && last.text.length === last.s1 - last.s0 && last.s1 === s0) {
         last.text += text[k];
         last.s1 = s1;
       } else pieces.push({ text: text[k], s0, s1 });
+      lastUnit = unit;
     }
     emitText(this.map, p, pieces);
     return p;

@@ -8,7 +8,9 @@
 //   visualBlocks(tokens)    [{token, top, index, kind, title, source, src?, host?}]
 //                           in source order; top is the top-level block that holds it.
 //                           Pictures inside links or tables, and pictures whose
-//                           address is refused, are not visuals.
+//                           address is refused, are not visuals. A table's
+//                           source carries the reply's link definitions its
+//                           reference links use.
 //   extractFigures(sessionId, messageId, text, {finished})
 //                           Figure[] (lib/types.js), pure; for a message still
 //                           streaming (finished false) only blocks before the
@@ -58,8 +60,17 @@ export function pictureOf(target) {
     case "https:":
       return { kind: "web", src, host: url.host, name: name(url.pathname) };
     case "file:": {
-      const path = /^file:/i.test(src) ? decodeURIComponent(url.pathname) : src;
       if (/^file:/i.test(src) && url.host && url.host !== "localhost") return null;
+      let path = src;
+      if (/^file:/i.test(src)) {
+        // A broken %-escape ("%ZZ", or "%FF", which is not UTF-8) names no
+        // file: the picture is refused and shows as its words.
+        try {
+          path = decodeURIComponent(url.pathname);
+        } catch {
+          return null;
+        }
+      }
       return { kind: "file", src: path, name: name(path) };
     }
     default:
@@ -87,9 +98,49 @@ function tableTitle(token) {
     .join(" · ");
 }
 
-// The visual a token is, or null.
-function visualOf(token) {
-  if (token.type === "table") return { kind: "table", title: tableTitle(token), source: token.raw };
+// A link label as marked matches it: whitespace runs as one space, the ends
+// trimmed, the case folded.
+const labelKey = (label) => label.replace(/\s+/g, " ").trim().toLowerCase().toUpperCase().toLowerCase();
+
+// The reply's link definitions ("[ref]: https://…") by label, wherever they
+// stand (quotes and list items too); marked keeps the first of each label.
+function definitionsOf(tokens, out = new Map()) {
+  for (const token of tokens ?? []) {
+    if (token.type === "def") {
+      if (!out.has(token.tag)) out.set(token.tag, token.raw.trim());
+    } else if (token.type === "list") for (const item of token.items) definitionsOf(item.tokens, out);
+    else if (token.tokens) definitionsOf(token.tokens, out);
+  }
+  return out;
+}
+
+// The labels inline tokens' reference links and pictures resolved through:
+// "[text][label]", "[label][]" and "[label]".
+function labelsOf(tokens, out) {
+  for (const t of tokens ?? []) {
+    if ((t.type === "link" || t.type === "image") && /^!?\[/.test(t.raw) && t.raw.endsWith("]")) {
+      const full = /\]\[((?:\\.|[^[\]\\])+)\]$/.exec(t.raw)?.[1];
+      out.add(labelKey(full ?? t.raw.replace(/^!?\[/, "").replace(/\](?:\[\])?$/, "")));
+    }
+    if (t.tokens) labelsOf(t.tokens, out);
+  }
+  return out;
+}
+
+// A table figure's source: its Markdown, then (after a blank line) the reply's
+// definitions its reference links use. The panel draws the table from this
+// source alone, so "[manual][ref]" needs "[ref]: <address>" along to be a link.
+function tableSource(token, definitions) {
+  const labels = new Set();
+  for (const cell of [...token.header, ...token.rows.flat()]) labelsOf(cell.tokens, labels);
+  const used = [...labels].map((label) => definitions().get(label)).filter(Boolean);
+  return used.length ? `${token.raw.replace(/\n+$/, "")}\n\n${used.join("\n")}` : token.raw;
+}
+
+// The visual a token is, or null. definitions() gives the reply's link
+// definitions (read once, when a table first needs them).
+function visualOf(token, definitions) {
+  if (token.type === "table") return { kind: "table", title: tableTitle(token), source: tableSource(token, definitions) };
   if (token.type === "mathBlock") return { kind: "math", title: mathTitle(token.text), source: token.text };
   if (token.type === "code") {
     const lang = fenceLang(token);
@@ -110,12 +161,14 @@ function visualOf(token) {
 
 export function visualBlocks(tokens) {
   const out = [];
+  let definitions = null;
+  const definitionsOnce = () => (definitions ??= definitionsOf(tokens));
   const walk = (list, top, inLink) => {
     if (!list) return;
     for (let i = 0; i < list.length; i++) {
       const token = list[i];
       const t = top ?? i;
-      const visual = inLink ? null : visualOf(token);
+      const visual = inLink ? null : visualOf(token, definitionsOnce);
       if (visual) out.push({ token, top: t, index: out.length, ...visual });
       else if (token.type === "list") for (const item of token.items) walk(item.tokens, t, inLink);
       else if (token.tokens) walk(token.tokens, t, inLink || token.type === "link");

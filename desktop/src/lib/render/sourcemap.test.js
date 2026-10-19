@@ -152,6 +152,31 @@ describe("rangeToSource", () => {
     expect(cut("Jerry")).toBe("Jerry");
   });
 
+  test("raw HTML: its words point past the tags; an entity keeps its whole reference", () => {
+    const cut = (stored, word, nth = 0) => {
+      const root = renderMarkdown(stored);
+      const r = sourceMapOf(root).rangeToSource(rangeOf(root, word, nth));
+      return stored.slice(r.start, r.end);
+    };
+    // Plain HTML whose tag name shares the word's first letters.
+    expect(cut("<div>dividend</div>", "dividend")).toBe("dividend");
+    expect(cut("Before.\n\n<div>dividend</div>", "divi")).toBe("divi");
+    // Nested tags: each word is its own characters; across a tag the tag comes along.
+    const nested = "<section>\n<div><p>first <b>bold</b> last</p></div>\n</section>";
+    expect(cut(nested, "first")).toBe("first");
+    expect(cut(nested, "bold")).toBe("bold");
+    expect(cut(nested, "last")).toBe("last");
+    expect(cut(nested, "first bold last")).toBe("first <b>bold</b> last");
+    // An entity: the decoded character stands for the whole reference.
+    expect(cut("<div>Tom &amp; Jerry &copy; 2026</div>", "&")).toBe("&amp;");
+    expect(cut("<div>Tom &amp; Jerry &copy; 2026</div>", "©")).toBe("&copy;");
+    expect(cut("<div>Tom &amp; Jerry &copy; 2026</div>", "Jerry © 2026")).toBe("Jerry &copy; 2026");
+    // A ">" inside a quoted attribute, a comment and a style element's content are not text.
+    const tricky = '<div title="a>word">word<!-- word --><style>p{content:"word"}</style> tail &amp; end</div>';
+    expect(cut(tricky, "word")).toBe("word");
+    expect(cut(tricky, "tail & end")).toBe("tail &amp; end");
+  });
+
   test("atoms: a task box, inline math and a chip come whole", () => {
     const stored = "- [x] done $a^2$ now\n\n| t | u |\n|---|---|\n| 1 | 2 |";
     const root = renderMarkdown(stored);

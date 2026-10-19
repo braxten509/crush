@@ -27,8 +27,8 @@ WORKTREE="$(dirname "$ROOT")"
 mkdir -p "$ROOT/tests/out"
 uid="$(id -u)"
 SANDBOX_PATH="$ROOT/tests/fakes/bin"
-if [ -n "${DESKTOP_CRUSH:-}" ] && [ "$(basename "$DESKTOP_CRUSH")" = crush ]; then
-  SANDBOX_PATH="$SANDBOX_PATH:$(dirname "$DESKTOP_CRUSH")"
+if [ -n "${DESKTOP_CRUSH:-}" ] && [ -f "$DESKTOP_CRUSH" ] && [ "$(basename "$DESKTOP_CRUSH")" = crush ]; then
+  SANDBOX_PATH="$SANDBOX_PATH:$(cd "$(dirname "$DESKTOP_CRUSH")" && pwd)"
 fi
 exec bwrap --ro-bind / / --dev /dev --proc /proc \
   --tmpfs /tmp \

@@ -5,7 +5,8 @@
 // opened with {grace: true} absorbs keys for a moment (lib/grace.js); like the
 // terminal, the grace belongs to the front sheet and ends when another sheet
 // opens over it or it closes. A sheet registered with {veil: false} (the
-// docked Themes sheet and theme editor, desktop-design-5-6 2.13) has no veil
+// docked Themes sheet and theme editor, desktop-design-5-6 2.13, and the
+// Changes sheet, which draws its own lighter scrim, DLG-308) has no veil
 // behind it while it is in front; the page behind stays inert.
 import { SvelteMap } from "svelte/reactivity";
 import { createGrace, noteClosed } from "./grace.js";

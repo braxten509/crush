@@ -349,6 +349,40 @@ describe("events and reads", () => {
     expect(logged).toHaveBeenCalledWith("skills read failed", { code: "transport", message: "down" });
   });
 
+  it("a failed LSP read still runs the follow-up an event queued during it", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => logged.mockRestore());
+    const reads = [];
+    h.routes.set("GET lsps", () => new Promise((resolve, reject) => reads.push({ resolve, reject })));
+    await deliver(ev("lsp_event", "updated", {})); // A
+    await deliver(ev("lsp_event", "updated", {})); // B, while A's read is pending
+    expect(reads).toHaveLength(1);
+    reads[0].reject({ code: "transport", message: "down" });
+    await settle();
+    expect(reads).toHaveLength(2);
+    reads[1].resolve({ gopls: { name: "gopls", state: "ready" } });
+    await settle();
+    expect(workspace.ws.lsps.gopls.state).toBe("ready");
+    expect(logged).toHaveBeenCalledWith("LSP read failed", { code: "transport", message: "down" });
+  });
+
+  it("a failed MCP read still runs the follow-up an event queued during it", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => logged.mockRestore());
+    const reads = [];
+    h.routes.set("GET mcp/states", () => new Promise((resolve, reject) => reads.push({ resolve, reject })));
+    await deliver(ev("mcp_event", "updated", { type: "state_changed", name: "github" })); // A
+    await deliver(ev("mcp_event", "updated", { type: "state_changed", name: "github" })); // B, while A's read is pending
+    expect(reads).toHaveLength(1);
+    reads[0].reject({ code: "transport", message: "down" });
+    await settle();
+    expect(reads).toHaveLength(2);
+    reads[1].resolve({ github: { name: "github", state: "connected", tool_count: 4 } });
+    await settle();
+    expect(workspace.ws.mcps.github.tool_count).toBe(4);
+    expect(logged).toHaveBeenCalledWith("MCP read failed", { code: "transport", message: "down" });
+  });
+
   it("the Git branch answer is {branch}", async () => {
     h.routes.set("GET git/branch", { branch: "main" });
     await workspace.loadBranch();

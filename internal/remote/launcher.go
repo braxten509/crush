@@ -79,11 +79,28 @@ func SetPassword(file, password string) error {
 // Crush; CRUSH_LAUNCH_COMMAND (a shell command line) replaces it.
 type LaunchCommand func(id string) (*exec.Cmd, error)
 
-// DefaultLaunchCommand opens a Konsole window running crush in home.
-func DefaultLaunchCommand(crush, home string) LaunchCommand {
+// Launch targets, the values of options.remote_launch_target (G-17).
+const (
+	LaunchTargetTerminal = "terminal"
+	LaunchTargetDesktop  = "desktop"
+)
+
+// DesktopAppCommand is the desktop app's command.
+const DesktopAppCommand = "crush-desktop"
+
+// DefaultLaunchCommand opens a Konsole window running crush in home, or,
+// when target (asked at each launch; nil means the terminal) says
+// "desktop", the desktop app on home.
+func DefaultLaunchCommand(crush, home string, target func() string) LaunchCommand {
 	return func(id string) (*exec.Cmd, error) {
 		var cmd *exec.Cmd
-		if line := strings.TrimSpace(os.Getenv("CRUSH_LAUNCH_COMMAND")); line != "" {
+		if target != nil && target() == LaunchTargetDesktop {
+			desktop, err := exec.LookPath(DesktopAppCommand)
+			if err != nil {
+				return nil, errors.New("The Crush desktop app isn't installed on this computer")
+			}
+			cmd = exec.Command(desktop, "--project", home)
+		} else if line := strings.TrimSpace(os.Getenv("CRUSH_LAUNCH_COMMAND")); line != "" {
 			cmd = exec.Command("sh", "-c", line)
 		} else {
 			konsole, err := exec.LookPath("konsole")

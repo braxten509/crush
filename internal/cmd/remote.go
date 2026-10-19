@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -88,7 +89,9 @@ var remoteLauncherCmd = &cobra.Command{
 password from "crush remote password", the phone opens a new Konsole window
 running Crush in your home folder, shared with the phone. Only your own
 Tailscale devices are answered. Set CRUSH_LAUNCH_COMMAND to replace the
-Konsole command (a shell command line; $CRUSH_EXE is this Crush).`,
+Konsole command (a shell command line; $CRUSH_EXE is this Crush). With
+options.remote_launch_target set to "desktop", read at each launch, it opens the
+desktop app (crush-desktop --project HOME) instead.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		// The crush on PATH, so a self-update (which replaces that file) is
@@ -105,11 +108,26 @@ Konsole command (a shell command line; $CRUSH_EXE is this Crush).`,
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return remote.RunLauncher(ctx, remotePasswordFile(), remote.DefaultLaunchCommand(exe, home))
+		return remote.RunLauncher(ctx, remotePasswordFile(), remote.DefaultLaunchCommand(exe, home, remoteLaunchTarget))
 	},
 }
 
 func init() {
 	remoteCmd.AddCommand(remotePasswordCmd, remoteLauncherCmd, remoteSetupCmd)
 	rootCmd.AddCommand(remoteCmd)
+}
+
+// remoteLaunchTarget reads options.remote_launch_target from the global
+// config at each launch, so a change in the desktop app's settings applies
+// to the next window without restarting the launcher service (G-17).
+func remoteLaunchTarget() string {
+	o, err := config.GlobalOptions(context.Background())
+	if err != nil {
+		slog.Warn("Could not read the launch target; opening a terminal", "error", err)
+		return remote.LaunchTargetTerminal
+	}
+	if o.RemoteLaunchTarget == remote.LaunchTargetDesktop {
+		return remote.LaunchTargetDesktop
+	}
+	return remote.LaunchTargetTerminal
 }

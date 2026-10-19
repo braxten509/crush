@@ -175,6 +175,9 @@ type Options struct {
 	// the other CPUs stay free for the desktop. See the cpuaffinity package.
 	AgentCPUsEnabled bool   `json:"agent_cpus_enabled,omitempty" jsonschema:"description=Run Crush and everything it starts (agents\\, sub-agents\\, background jobs\\, dev servers) on only some CPUs so the rest stay free for the desktop. Linux only,default=false"`
 	AgentCPUs        string `json:"agent_cpus,omitempty" jsonschema:"description=CPU list used by agent_cpus_enabled. Empty picks the last group of CPUs sharing a cache (or the upper half of the cores),example=6-11\\,18-23"`
+	// RemoteLaunchTarget is what the phone launcher opens: "terminal" (the
+	// default) or "desktop" (desktop design 5-6, G-17).
+	RemoteLaunchTarget string `json:"remote_launch_target,omitempty" jsonschema:"description=What crush remote launcher opens for the phone: a terminal window or the desktop app,enum=terminal,enum=desktop,default=terminal"`
 }
 
 // DefaultCheckInInterval is how often Crush wakes the agent with a progress

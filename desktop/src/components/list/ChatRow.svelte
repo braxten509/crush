@@ -7,10 +7,27 @@
   // long title ends before the time instead of under it. The state shares the
   // agent's line and the agent gives way to it. Rows deeper than the top use
   // the built branch look (phase 4 nests branches, 4.8).
+  //
+  // Every row reserves a close slot on the title's first line, centred on the
+  // chevron's column (4.8, review finding 13): the × shows in it while the
+  // row is hovered, focused or selected, and nothing else on the row moves.
+  // The × is the row button's sibling (a button cannot hold a button).
   import Icon from "../Icon.svelte";
+  import { closeChat } from "../../lib/stores/closed.svelte.js";
   import { openChat } from "../../lib/stores/sessions.svelte.js";
 
   let { row } = $props();
+  let rowButton = $state(null);
+
+  function close(event) {
+    event.stopPropagation();
+    closeChat(row.id).catch((error) => console.error("closing a chat failed", error));
+  }
+
+  // ↑ and ↓ on the × move from its row, as from the row itself (the list's keys).
+  function closeKey(event) {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") rowButton?.focus();
+  }
 
   const STATE_ICONS = { working: "working", waiting: "clock", background: "gear" };
 </script>
@@ -24,6 +41,7 @@
   style:--depth={Math.min(row.depth, 6)}
 >
   <button
+    bind:this={rowButton}
     class="row"
     class:has-state={row.state !== ""}
     type="button"
@@ -48,6 +66,9 @@
     {#if row.branches > 0}
       <Icon name="chevron" class="chevron" />
     {/if}
+  </button>
+  <button class="close" type="button" aria-label="Close {row.title}" onclick={close} onkeydown={closeKey}>
+    <Icon name="close" size={12} />
   </button>
 </li>
 
@@ -211,5 +232,37 @@
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: calc(4 * var(--px));
+  }
+
+  /* The close slot: a 28 px square hit area centred on the chevron's column
+     (right 19 + 13 / 2 = 25.5 from the row's right edge) and on the title's
+     first line (26 from the row's top on chat and branch rows alike; the
+     selected row's top line adds 1 real px). */
+  .close {
+    position: absolute;
+    top: calc(12 * var(--px));
+    right: calc(11.5 * var(--px));
+    display: grid;
+    place-items: center;
+    width: calc(28 * var(--px));
+    height: calc(28 * var(--px));
+    padding: 0;
+    color: var(--slate);
+    visibility: hidden;
+  }
+  .selected .close {
+    top: calc(12 * var(--px) + 1px);
+  }
+  .chat:hover .close,
+  .chat:focus-within .close,
+  .selected .close {
+    visibility: visible;
+  }
+  .close:hover {
+    color: var(--ink);
+  }
+  .close:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(-2 * var(--px));
   }
 </style>

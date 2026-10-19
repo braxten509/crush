@@ -27,6 +27,9 @@ var (
 	// reloads (G-9).
 	RefreshProviders = Op[Empty, proto.ProvidersRefresh]{Method: post, Path: "/v1/providers/refresh"}
 
+	// HyperCredits fetches the Hyper credits balance (G-25).
+	HyperCredits = Op[Empty, proto.HyperCredits]{Method: get, Path: "/v1/hyper/credits"}
+
 	// SetCPUAffinity turns the agent CPUs on or off for the engine (G-16).
 	SetCPUAffinity = Op[proto.CPUAffinityRequest, proto.CPUAffinity]{Method: post, Path: "/v1/cpu-affinity"}
 )

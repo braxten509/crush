@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/skills"
@@ -143,6 +146,63 @@ func TestSkillsSearchRoute(t *testing.T) {
 	liveError(t, g.h, http.MethodGet, g.path("/skills/search?q=broken"), nil, http.StatusBadGateway, "search_failed",
 		"skill download: HTTP 503")
 	require.Equal(t, []string{"pdf", "broken"}, queries, "a short query is not sent")
+}
+
+// hyperCreditsChildEnv runs TestHyperCreditsRoute's scenario in a child
+// process: hyper.BaseURL is read once per process.
+const hyperCreditsChildEnv = "CRUSH_G56_HYPER_CREDITS_CHILD"
+
+// TestHyperCreditsRoute: with no Hyper the credits are null; with an
+// expired Hyper sign-in the route refreshes the token first, then fetches
+// the balance with the new one, as the terminal does (G-25).
+func TestHyperCreditsRoute(t *testing.T) {
+	if os.Getenv(hyperCreditsChildEnv) == "1" {
+		runHyperCredits(t)
+		return
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestHyperCreditsRoute$", "-test.v")
+	cmd.Env = append(os.Environ(), hyperCreditsChildEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	require.Contains(t, string(out), "--- PASS: TestHyperCreditsRoute")
+}
+
+func runHyperCredits(t *testing.T) {
+	var exchanges, fetches atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token/exchange":
+			exchanges.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "fresh", "refresh_token": "rotated", "expires_in": 3600})
+		case "/v1/credits":
+			fetches.Add(1)
+			if r.Header.Get("Authorization") != "Bearer fresh" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(`{"balance":1234}`))
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("HYPER_URL", srv.URL)
+
+	g := newG56Workspace(t)
+	none := liveJSON[map[string]any](t, g.h, http.MethodGet, "/v1/hyper/credits", nil, http.StatusOK)
+	require.Equal(t, map[string]any{"credits": nil}, none, "no Hyper, no credits")
+	require.Zero(t, fetches.Load())
+
+	expired := &oauth.Token{AccessToken: "stale", RefreshToken: "r1", ExpiresIn: 3600, ExpiresAt: time.Now().Add(-time.Hour).Unix()}
+	require.NoError(t, g.h.backend.SetProviderAPIKey(g.ws.ID, config.ScopeGlobal, "hyper", expired))
+
+	got := liveJSON[proto.HyperCredits](t, g.h, http.MethodGet, "/v1/hyper/credits", nil, http.StatusOK)
+	require.NotNil(t, got.Credits)
+	require.Equal(t, 1234, *got.Credits)
+	require.Equal(t, int32(1), exchanges.Load(), "the expired token was refreshed first")
+	require.Equal(t, int32(1), fetches.Load())
 }
 
 // TestCommandsRouteMatchesLoader:the commands route lists what the

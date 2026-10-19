@@ -54,6 +54,12 @@ type ProviderRefreshResult struct {
 	Error  string `json:"error,omitempty"`
 }
 
+// HyperCredits is the Hyper credits balance; Credits is null when Hyper is
+// not configured or shows no balance (G-25).
+type HyperCredits struct {
+	Credits *int `json:"credits"`
+}
+
 // CPUAffinityRequest turns the agent CPUs on or off (G-16).
 type CPUAffinityRequest struct {
 	Enabled bool `json:"enabled"`

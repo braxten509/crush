@@ -67,6 +67,16 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Tags("config").
 			Build(),
 
+		route(c, rpc.HyperCredits, c.hyperCredits).
+			Summary("Get the Hyper credits").
+			Description("Fetches the Hyper credits balance as the terminal does: an expired OAuth " +
+				"token is refreshed first, then hyper.FetchCredits runs. credits is null when Hyper " +
+				"is not configured or the account shows no balance; a failed fetch answers 502 " +
+				"credits_failed.").
+			Tags("config").
+			Fails(502).
+			Build(),
+
 		route(c, rpc.SetCPUAffinity, c.setCPUAffinity).
 			Summary("Turn the agent CPUs on or off").
 			Description("Saves options.agent_cpus_enabled and moves the engine and everything it "+
@@ -214,6 +224,7 @@ func desktopErrors() []apiError {
 		{Match: is(backend.ErrThemePalette), Status: http.StatusUnprocessableEntity, Code: "invalid_palette"},
 		{Match: is(backend.ErrSkillsQuery), Status: http.StatusBadRequest, Code: "bad_request"},
 		{Match: is(backend.ErrSkillsSearch), Status: http.StatusBadGateway, Code: "search_failed"},
+		{Match: is(backend.ErrHyperCredits), Status: http.StatusBadGateway, Code: "credits_failed"},
 		{Match: is(backend.ErrAuthFlowNotFound), Status: http.StatusNotFound, Code: "auth_flow_not_found"},
 		{Match: is(backend.ErrAuthPlatform), Status: http.StatusBadRequest, Code: "bad_request"},
 		{Match: is(backend.ErrAuthNoCode), Status: http.StatusBadRequest, Code: "bad_request"},

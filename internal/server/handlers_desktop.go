@@ -39,6 +39,11 @@ func (c *controllerV1) refreshProviders(r *http.Request, _ rpc.Empty) (proto.Pro
 	return c.backend.RefreshProviders(r.Context()), nil
 }
 
+// hyperCredits fetches the Hyper credits balance.
+func (c *controllerV1) hyperCredits(r *http.Request, _ rpc.Empty) (proto.HyperCredits, error) {
+	return c.backend.HyperCredits(r.Context())
+}
+
 // setCPUAffinity turns the agent CPUs on or off.
 func (c *controllerV1) setCPUAffinity(_ *http.Request, req proto.CPUAffinityRequest) (proto.CPUAffinity, error) {
 	return c.backend.SetCPUAffinity(req.Enabled)

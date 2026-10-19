@@ -2,9 +2,9 @@
   // A secure entry field (desktop-design-5-6 2.7 "Field"; DLG-191 to
   // DLG-196, DLG-199): KIT's masked Field (bullets, the terminal's editing
   // keys, `[` and `]` typed as text) with the status line under it. The value
-  // is bound to the form and lives nowhere else. A paste goes in as it is,
-  // only one trailing newline stripped, so a value with a line break or a
-  // control character gets the engine's error rather than being changed
+  // is bound to the form and lives nowhere else. A paste goes in as it is
+  // (validation strips one trailing newline), so a value with a line break
+  // or a control character gets the engine's error rather than being changed
   // (DLG-193, DLG-195); the form drops pastes while a sheet covers it
   // (DLG-200). A field the engine saved or can no longer take shows only its
   // status.
@@ -20,7 +20,9 @@
     event.stopPropagation();
     const input = event.target;
     if (locked || input?.tagName !== "INPUT") return;
-    const text = (event.clipboardData?.getData("text/plain") ?? "").replace(/\r?\n$/, "");
+    // As it is: the one trailing newline the engine allows is stripped once,
+    // at validation and submit (lib/ask/secure.js).
+    const text = event.clipboardData?.getData("text/plain") ?? "";
     const start = input.selectionStart ?? value.length;
     const end = input.selectionEnd ?? value.length;
     value = value.slice(0, start) + text + value.slice(end);

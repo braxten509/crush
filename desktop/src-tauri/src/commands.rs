@@ -203,10 +203,19 @@ pub async fn api(
 /// a provider keeps what decides a group, a sheet or a label, plus
 /// `has_api_key`, `has_oauth` and the token's expiry times.
 fn redact_answer(method: &str, path: &str, mut value: Value) -> Value {
+    let route = path.trim_start_matches('/');
+    // The Copilot import answers with the imported token itself: only
+    // whether it worked crosses (handlers_config.go:49).
+    if method == "POST" && route == "config/import-copilot" {
+        if let Some(fields) = value.as_object_mut() {
+            fields.retain(|key, _| key == "success" || key == "imported" || key == "ok");
+        }
+        return value;
+    }
     if method != "GET" {
         return value;
     }
-    match path.trim_start_matches('/') {
+    match route {
         "config" => redact_config(&mut value),
         "providers" => {
             if let Some(list) = value.as_array_mut() {
@@ -259,7 +268,8 @@ fn redact_config(config: &mut Value) {
             }
         }
     }
-    for key in ["hooks", "tools"] {
+    // `env` holds the engine's startup environment values (config.go:109).
+    for key in ["hooks", "tools", "env"] {
         root.remove(key);
     }
 }

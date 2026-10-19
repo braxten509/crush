@@ -3,12 +3,13 @@
 // silently either way.
 import { api } from "../engine/api.js";
 import { prompts } from "../stores/prompts.svelte.js";
-import { closeSlot, notify } from "../stores/ui.svelte.js";
+import { closeSlot, notify, ui } from "../stores/ui.svelte.js";
 import { answerBody } from "./form.js";
 
+// Only this request's form closes: a newer one that arrived meanwhile stays.
 function done(request) {
   if (prompts.question?.id === request.id) prompts.question = null;
-  closeSlot("question");
+  if (ui.slot?.kind === "question" && ui.slot.props?.request?.id === request.id) closeSlot("question");
 }
 
 export async function submitAnswers(request, answers) {

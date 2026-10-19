@@ -456,7 +456,10 @@
               {#if k === "yes_no"}
                 <div class="yesno">
                   {#each [["yes", "Yes"], ["no", "No"]] as [id, label] (id)}
-                    <button type="button" class="pill" class:on={(id === "no") === st.no} tabindex="-1" onclick={() => answered(respond(it, states[i], { yes: id === "yes" }))}>{label}</button>
+                    <button type="button" class="pill" class:on={(id === "no") === st.no} tabindex="-1" onclick={() => {
+                      states[i].no = id !== "yes";
+                      answered(respond(it, states[i], { yes: id === "yes" }));
+                    }}>{label}</button>
                   {/each}
                 </div>
               {:else if k === "single_choice" || k === "multi_choice"}

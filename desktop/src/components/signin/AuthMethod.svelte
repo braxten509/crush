@@ -9,6 +9,7 @@
   // within 400 ms confirms (auth_method.go:36, :134).
   //   providerId, providerName?, reAuthenticate?, onboarding?, model?,
   //   modelType?, onDone(result: "done" | "cancelled")
+  import { onDestroy } from "svelte";
   import Sheet from "../kit/Sheet.svelte";
   import { closeDialog, openDialog } from "../../lib/dialogs.js";
   import { configuredProvider, pickSheet } from "../../lib/signin/flows.js";
@@ -31,8 +32,12 @@
     { key: "esc", text: "back" },
   ];
 
+  let gone = false;
+  onDestroy(() => (gone = true));
+
   (async () => {
     const configured = await configuredProvider(props.providerId);
+    if (gone) return; // closed while the provider was read: nothing opens
     const sheet = pickSheet(props.providerId, configured, props.model);
     if (sheet === ID) {
       ready = true;

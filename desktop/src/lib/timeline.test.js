@@ -10,6 +10,7 @@ import {
   footerText,
   hypercredits,
   keyLetters,
+  noticeParts,
   parseSkill,
   ranTools,
   REFUSAL_DETAILS,
@@ -85,6 +86,27 @@ describe("your messages (CHAT-002 to CHAT-007)", () => {
     expect(taskNotice("Questions", "answered")).toEqual({ notice: "answers", state: "answered", name: "Questions", text: "Your answers to the questions: answered" });
     expect(taskNotice("Questions", "cancelled")).toMatchObject({ notice: "answers", state: "cancelled" });
     expect(taskNotice("Questions", "done")).toMatchObject({ notice: "task", text: "Task Questions finished" });
+  });
+
+  test.each([
+    [{ notice: "skill", state: "", name: "teach", text: "Explains things" }, { icon: "skill", tone: "ink", before: "Loaded Skill → ", strong: "teach", after: " · Explains things" }],
+    [{ notice: "skill", state: "", name: "teach", text: "" }, { icon: "skill", before: "Loaded Skill → ", strong: "teach", after: "" }],
+    [{ notice: "task", state: "done", name: "Fixer", text: "Task Fixer finished" }, { icon: "check", tone: "ink", before: "Task ", strong: "Fixer", after: " finished" }],
+    [{ notice: "task", state: "failed", name: "Fixer", text: "Task Fixer failed" }, { icon: "cross", tone: "error", before: "Task ", strong: "Fixer", after: " failed" }],
+    [{ notice: "task", state: "stopped", name: "Fixer", text: "Task Fixer stopped" }, { icon: "dot", tone: "muted", after: " stopped" }],
+    [{ notice: "task", state: "running", name: "Fixer", text: "Still running: Fixer" }, { icon: "dot", tone: "ink", before: "Still running: ", strong: "Fixer", after: "" }],
+    [{ notice: "answers", state: "answered", name: "Questions", text: "" }, { icon: "check", before: "Your answers to the questions: ", strong: "answered" }],
+    [{ notice: "answers", state: "cancelled", name: "Questions", text: "" }, { icon: "dot", tone: "muted", strong: "cancelled" }],
+    [{ notice: "system", state: "on", name: "teach", text: "teach turned on by the agent" }, { icon: "half-circle", tone: "ink", before: "", strong: "teach", after: " turned on by the agent" }],
+    [{ notice: "system", state: "off", name: "teach", text: "teach turned off by you" }, { icon: "circle", tone: "muted", strong: "teach", after: " turned off by you" }],
+    [{ notice: "system", state: "", name: "", text: "Memory was refreshed" }, { icon: "half-circle", before: "Memory was refreshed", strong: "", after: "" }],
+  ])("the line of %j (CHAT-008 to CHAT-011)", (item, want) => {
+    expect(noticeParts(item)).toMatchObject(want);
+  });
+
+  test("your message carries its time for the byline", () => {
+    const m = user("u1", "hi");
+    expect(build([m]).items[0].time).toBe(m.created_at);
   });
 
   test("system notices (CHAT-011; system_notice_test.go:14-29)", () => {

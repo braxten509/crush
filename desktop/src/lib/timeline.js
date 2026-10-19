@@ -102,6 +102,32 @@ export function systemNotice(text) {
   return { notice: "system", state: rest.startsWith("off") ? "off" : "on", name: text.slice(0, at), text };
 }
 
+// How a notice item is drawn (desktop-design 4.4; CHAT-008 to CHAT-011): its
+// drawn icon, the icon's tone ("ink", "muted" or "error") and its one line
+// split around the part in ink at weight 600, as the terminal styles them
+// (user.go:138-175, tool_output.go:120-128; ✓ IconSuccess, × IconError,
+// ● IconPending and IconCancelled, ◐ and ○ for system notices).
+export function noticeParts(item) {
+  const { notice, state, name, text } = item;
+  const line = (icon, tone, before, strong, after = "") => ({ icon, tone, before, strong, after });
+  switch (notice) {
+    case "skill":
+      return line("skill", "ink", "Loaded Skill → ", name, text ? ` · ${text}` : "");
+    case "answers":
+      return state === "cancelled"
+        ? line("dot", "muted", "Your answers to the questions: ", state)
+        : line("check", "ink", "Your answers to the questions: ", state);
+    case "task":
+      if (state === "running") return line("dot", "ink", "Still running: ", name);
+      if (state === "failed") return line("cross", "error", "Task ", name, " failed");
+      if (state === "stopped") return line("dot", "muted", "Task ", name, " stopped");
+      return line("check", "ink", "Task ", name, " finished");
+    default:
+      if (!state) return line("half-circle", "ink", text, "");
+      return line(state === "off" ? "circle" : "half-circle", state === "off" ? "muted" : "ink", "", name, text.slice(name.length));
+  }
+}
+
 // -- Chips (CHAT-006) --
 
 const chipsOf = new WeakMap(); // message → ChipView[]
@@ -463,7 +489,9 @@ export function buildTimeline(input, state = createTimelineState()) {
     switch (e.t) {
       case "user": {
         const letter = letterFor("user", e.m.id);
-        items.push(keep(state, seen, e.key, [e.m, letter], () => ({ ...base("user", e.m.id), letter, text: textOf(e.m), chips: chipsFor(e.m) })));
+        // time: the byline's (the picture shows it; UserItem in 1.5.6 has no
+        // field for it, so the item carries it beside the pinned ones).
+        items.push(keep(state, seen, e.key, [e.m, letter], () => ({ ...base("user", e.m.id), letter, text: textOf(e.m), chips: chipsFor(e.m), time: e.m.created_at ?? 0 })));
         break;
       }
       case "notice":

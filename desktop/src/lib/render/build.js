@@ -1,9 +1,10 @@
 // Markdown tokens → page nodes (CHAT-014, CHAT-017; desktop-design 1.7 items
 // 1-4, 4.1). marked gives tokens only; this builds every element itself with
 // createElement and text nodes, never from an HTML string. Elements it makes:
-// p h1-h6 ul ol li blockquote pre code a em strong del br hr span (img only in
-// figures, from data: and blob:). Attributes: class, href (checked by
-// links.js), draggable and rel on anchors, data-* for its own bookkeeping.
+// p h1-h6 ul ol li blockquote pre code a em strong del br hr span, and table
+// thead tbody tr th td for a figure (img only in figures, from data: and
+// blob:). Attributes: class (alignment too), href (checked by links.js),
+// draggable and rel on anchors, data-* for its own bookkeeping.
 //
 // Every text node is registered in the root's SourceMap with the stored
 // offsets of its characters; inline marks, links and code spans are registered
@@ -14,6 +15,7 @@
 //     .setVisuals(tokens, base)   numbers the visuals among tokens from base
 //     .block(token, start)        the node for one top-level token at lexed
 //                                 offset start, or null
+//     .table(token, abs)          a table token as a <table> (figures)
 //   alignLines(derived, raw)      offsets of a container's inner text → its raw
 import { highlight } from "./code.js";
 import { KIND_LABEL, figureOf, visualBlocks } from "./figures.js";
@@ -294,6 +296,42 @@ export class Builder {
       at = off + item.raw.length;
     });
     return list;
+  }
+
+  // A table drawn as a table, for the panel's figure (the chat shows a chip):
+  // the header cells in thead, the rows in tbody, a column's alignment as a
+  // class. A cell is found in its line by its text, so its inline marks map
+  // to their own characters.
+  table(token, abs) {
+    const lines = token.raw.split("\n");
+    const starts = [];
+    let at = 0;
+    for (const line of lines) {
+      starts.push(at);
+      at += line.length + 1;
+    }
+    const row = (cells, line, tag) => {
+      const tr = this.el("tr");
+      const text = lines[line] ?? "";
+      let cursor = 0;
+      cells.forEach((cell, i) => {
+        const align = token.align?.[i];
+        const node = this.el(tag, align ? `md-align-${align}` : "");
+        const found = text.indexOf(cell.text, cursor);
+        const off = found >= 0 ? found : cursor;
+        cursor = off + cell.text.length;
+        this.inline(cell.tokens, shift(abs, (starts[line] ?? 0) + off), node);
+        tr.append(node);
+      });
+      return tr;
+    };
+    const table = this.el("table", "md-table");
+    const head = this.el("thead");
+    head.append(row(token.header, 0, "th"));
+    const body = this.el("tbody");
+    token.rows.forEach((cells, r) => body.append(row(cells, r + 2, "td")));
+    table.append(head, body);
+    return table;
   }
 
   taskBox(token, abs) {

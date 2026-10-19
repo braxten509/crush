@@ -112,6 +112,7 @@ func QuestionsFromDomain(qs []question.Question) []QuestionItem {
 			Question:    q.Text,
 			Description: q.Description,
 			Choices:     choices,
+			Selected:    q.Selected,
 		}
 	}
 	return out
@@ -140,6 +141,7 @@ func QuestionsToDomain(qs []QuestionItem) []question.Question {
 			Text:        q.Question,
 			Description: q.Description,
 			Choices:     choices,
+			Selected:    q.Selected,
 		}
 	}
 	return out
@@ -388,6 +390,9 @@ func AgentEventFromDomain(n notify.Notification) AgentEvent {
 	}
 	if n.Type == notify.TypeAgentError {
 		out.Type = AgentEventTypeError
+	}
+	if n.Type == notify.TypeReAuthenticate {
+		out.ProviderID = n.ProviderID
 	}
 	return out
 }

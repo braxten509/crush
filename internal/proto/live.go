@@ -74,6 +74,12 @@ type BackgroundResult struct {
 type AgentCapabilities struct {
 	Kind          string `json:"kind"`           // catwalk type of the current coder model; "" when none
 	CanBackground bool   `json:"can_background"` // cliagent.CanBackground(kind)
+
+	// What the coder model supports, as the terminal's switches read it
+	// (config.SupportsFastMode, SupportsUltracode, SupportsThinkingToggle).
+	SupportsFast           bool `json:"supports_fast,omitempty"`
+	SupportsUltracode      bool `json:"supports_ultracode,omitempty"`
+	SupportsThinkingToggle bool `json:"supports_thinking_toggle,omitempty"`
 }
 
 // ShellOutput is live output of a `!` command, sent to the app that ran it.

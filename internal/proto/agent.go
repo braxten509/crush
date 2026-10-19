@@ -52,6 +52,10 @@ type AgentEvent struct {
 	// result's failure text travels through Error, like TypeAgentError.
 	AWSSOCommand string `json:"aws_sso_command,omitempty"`
 	AWSSOURL     string `json:"aws_sso_url,omitempty"`
+
+	// ProviderID names the provider to sign in to again, for
+	// re_authenticate.
+	ProviderID string `json:"provider_id,omitempty"`
 }
 
 // MarshalJSON implements the [json.Marshaler] interface.

@@ -137,6 +137,8 @@ type ShareServer interface {
 	Stopped() <-chan struct{}
 	// SetPresence tells the phone what the owner's window shows.
 	SetPresence(proto.RemotePresence)
+	// SetLaunch changes the launch ID the share reports to the launcher.
+	SetLaunch(id string)
 	Status() ShareStatus
 	// Stop ends the share and disconnects every phone.
 	Stop()
@@ -245,7 +247,9 @@ func (pa *pendingAction) fail(err error) {
 }
 
 // StartRemote starts clientID's phone share, or returns its running share's
-// status: one share per app. A setup step answers state "setup" with its
+// status: one share per app. A repeat start with a launch ID makes the
+// running share report that ID, so the launcher finds the window again; an
+// empty one changes nothing. A setup step answers state "setup" with its
 // info; any other failure answers state "off" with the error.
 func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, launchID string) (proto.RemoteStatus, error) {
 	ws, err := b.shareWorkspace(workspaceID, clientID)
@@ -263,6 +267,9 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, launch
 	case closed:
 		return proto.RemoteStatus{}, ErrWorkspaceClosing
 	case running != nil:
+		if launchID != "" {
+			running.srv.SetLaunch(launchID)
+		}
 		return running.status(), nil
 	}
 	if start == nil {

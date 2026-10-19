@@ -381,6 +381,8 @@ func (f *shareFakeRemote) SetPresence(p remote.Presence) {
 	f.presence = append(f.presence, p)
 }
 
+func (f *shareFakeRemote) SetLaunch(string) {}
+
 func (f *shareFakeRemote) Status() remote.Status {
 	f.mu.Lock()
 	defer f.mu.Unlock()

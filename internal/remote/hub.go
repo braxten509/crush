@@ -48,7 +48,7 @@ type hub struct {
 	host string
 	port int
 	// launch is the launch id the share reports (Share.Launch). It is set
-	// before the hub runs and never changes.
+	// before the hub runs; afterwards only setLaunch changes it, under mu.
 	launch string
 	wake   chan struct{}
 	// changes tells the TUI the phone list changed.
@@ -155,6 +155,18 @@ func (h *hub) setPresence(p Presence) {
 	h.mu.Lock()
 	changed := h.presence != p
 	h.presence = p
+	h.mu.Unlock()
+	if changed {
+		h.poke()
+	}
+}
+
+// setLaunch changes the launch id the share reports and wakes the hub, so
+// connected phones get the changed share field.
+func (h *hub) setLaunch(id string) {
+	h.mu.Lock()
+	changed := h.launch != id
+	h.launch = id
 	h.mu.Unlock()
 	if changed {
 		h.poke()

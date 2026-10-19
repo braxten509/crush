@@ -212,6 +212,10 @@ func (s *Server) Stopped() <-chan struct{} { return s.stopped }
 // SetPresence updates what the phone knows about the window.
 func (s *Server) SetPresence(p Presence) { s.hub.setPresence(p) }
 
+// SetLaunch changes the launch id the share reports (Share.Launch), for a
+// window the launcher asked to share again.
+func (s *Server) SetLaunch(id string) { s.hub.setLaunch(id) }
+
 // Status describes the share for the TUI.
 func (s *Server) Status() Status {
 	return Status{Host: s.host, Addr: s.ln.Addr().String(), Phones: s.hub.phones()}

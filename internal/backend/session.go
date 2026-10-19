@@ -136,13 +136,14 @@ func (b *Backend) LoadMessageReview(ctx context.Context, workspaceID, sessionID,
 	return o.LoadMessageReview(ctx, sessionID, messageID)
 }
 
-// ListSavedSessions lists saved chats across every project.
+// ListSavedSessions lists saved chats across every project. Empty drafts
+// an app on the workspace shows are never discarded.
 func (b *Backend) ListSavedSessions(ctx context.Context, workspaceID, selected string) ([]session.Session, error) {
-	o, err := b.ops(workspaceID)
+	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	return o.ListSavedSessions(ctx, selected)
+	return ws.ops().ListSavedSessionsShown(ctx, selected, ws.shownSessions())
 }
 
 // ChangeSavedSession renames, deletes, or (with DiscardEmpty) discards

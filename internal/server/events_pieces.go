@@ -16,6 +16,7 @@ func wrapPieceEvent(ev any) *pubsub.Payload {
 		wrapLiveEvent,
 		wrapTreeEvent,
 		wrapShareEvent,
+		wrapDesktopEvent,
 	} {
 		if p, ok := wrap(ev); ok {
 			return p

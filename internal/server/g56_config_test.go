@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/backend"
+	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/google/uuid"
@@ -88,4 +90,42 @@ func mustWorkspace(t *testing.T, g *g56Workspace) *backend.Workspace {
 	ws, err := g.h.backend.GetWorkspace(g.ws.ID)
 	require.NoError(t, err)
 	return ws
+}
+
+// TestWorkspaceCarriesConfigPath: the workspace record names the global
+// data config file (G-6).
+func TestWorkspaceCarriesConfigPath(t *testing.T) {
+	g := newG56Workspace(t)
+	require.Equal(t, config.GlobalConfigData(), g.ws.ConfigPath, "the create answer carries config_path")
+	got := liveJSON[proto.Workspace](t, g.h, http.MethodGet, g.path(""), nil, http.StatusOK)
+	require.Equal(t, config.GlobalConfigData(), got.ConfigPath, "GET workspace carries config_path")
+}
+
+// TestDraftCleanupSkipsShownDrafts: listing saved chats discards old empty
+// drafts, but never one another app shows (G-11).
+func TestDraftCleanupSkipsShownDrafts(t *testing.T) {
+	g := newG56Workspace(t)
+	other := uuid.NewString()
+	g.h.subscribeLiveSSE(t, g.ws.ID, g.app)
+	g.h.subscribeLiveSSE(t, g.ws.ID, other)
+	g.h.waitForAttachedOn(t, mustWorkspace(t, g), 2)
+
+	shown := liveJSON[proto.Session](t, g.h, http.MethodPost, g.path("/sessions"), proto.Session{Title: "shown"}, http.StatusOK)
+	hidden := liveJSON[proto.Session](t, g.h, http.MethodPost, g.path("/sessions"), proto.Session{Title: "hidden"}, http.StatusOK)
+	conn, err := db.Connect(t.Context(), g.ws.DataDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Release(g.ws.DataDir) })
+	old := time.Now().Add(-time.Hour).Unix()
+	_, err = conn.ExecContext(t.Context(), "UPDATE sessions SET created_at=? WHERE id IN (?, ?)", old, shown.ID, hidden.ID)
+	require.NoError(t, err)
+	g.h.setCurrentSession(t, t.Context(), g.ws.ID, other, shown.ID)
+
+	liveJSON[[]proto.Session](t, g.h, http.MethodGet, g.path("/saved-sessions"), nil, http.StatusOK)
+	exists := func(id string) bool {
+		var found bool
+		require.NoError(t, conn.QueryRowContext(t.Context(), "SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?)", id).Scan(&found))
+		return found
+	}
+	require.True(t, exists(shown.ID), "a draft another app shows is kept")
+	require.False(t, exists(hidden.ID), "an old empty draft nobody shows is still discarded")
 }

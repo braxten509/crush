@@ -103,6 +103,7 @@ type remoteShareServer interface {
 	PhonesChanged() <-chan struct{}
 	Stopped() <-chan struct{}
 	SetPresence(remote.Presence)
+	SetLaunch(string)
 	Status() remote.Status
 	Stop()
 }
@@ -142,6 +143,7 @@ func (s *engineShare) Actions() <-chan *backend.ShareAction { return s.actions }
 func (s *engineShare) PhonesChanged() <-chan struct{}       { return s.srv.PhonesChanged() }
 func (s *engineShare) Stopped() <-chan struct{}             { return s.srv.Stopped() }
 func (s *engineShare) Stop()                                { s.srv.Stop() }
+func (s *engineShare) SetLaunch(id string)                  { s.srv.SetLaunch(id) }
 
 func (s *engineShare) SetPresence(p proto.RemotePresence) {
 	s.srv.SetPresence(remote.Presence{SessionID: p.SessionID, Focused: p.Focused, Plan: p.Plan})

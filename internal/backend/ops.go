@@ -116,6 +116,14 @@ func (o Ops) ListSavedSessions(ctx context.Context, selected string) ([]session.
 	return o.savedSessions().List(ctx, selected)
 }
 
+// ListSavedSessionsShown is ListSavedSessions that also keeps the drafts
+// an app shows right now.
+func (o Ops) ListSavedSessionsShown(ctx context.Context, selected string, shown []string) ([]session.Session, error) {
+	catalog := o.savedSessions()
+	catalog.Shown = shown
+	return catalog.List(ctx, selected)
+}
+
 // ChangeSavedSession renames or deletes a saved chat. Chats stored in
 // this workspace's own data directory go through the session service so
 // its subscribers see the change; chats of other projects are edited in

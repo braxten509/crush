@@ -453,7 +453,7 @@ func Fix(ctx context.Context, dir, tag string, clashes []string, failure string,
 		args = append(args, "--reasoning-effort", "high", "--fast")
 	}
 	args = append(args, FixPrompt(tag, clashes, failure))
-	if err := run(ctx, dir, log, args...); err != nil {
+	if err := fixAgent(ctx, dir, log, args); err != nil {
 		return fmt.Errorf("the agent stopped: %w", err)
 	}
 	if Staged(ctx, dir, tag) == "" {

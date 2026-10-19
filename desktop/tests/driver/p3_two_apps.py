@@ -258,7 +258,8 @@ class Window:
         return bool(self.section("chat").get("busy"))
 
     def queued(self):
-        return [t.get("text", "") for t in self.section("composer").get("tray") or []]
+        # The queue section's rows (TYPE-044); composer.tray holds only the sections' headers.
+        return [t.get("text", "") for t in self.section("composer").get("queue") or []]
 
     def rows(self):
         return self.section("list").get("rows") or []

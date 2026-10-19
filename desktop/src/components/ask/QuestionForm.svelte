@@ -28,6 +28,7 @@
   import { cancelQuestions, submitAnswers } from "../../lib/ask/answers.js";
   import { CUSTOM_MAX, FREE_MAX, initialState, isAnswered, NOTE_MAX, respond, summaryLine, tabLabels, typeOf } from "../../lib/ask/form.js";
   import { statusText, valueError } from "../../lib/ask/secure.js";
+  import { dialogs } from "../../lib/dialogs.js";
   import { bindKey, comboOf as comboFor } from "../../lib/keys.js";
   import { attachSlot, focusTimeline } from "../../lib/stores/composer.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
@@ -61,27 +62,38 @@
   const collapsed = $derived(!focused && tall);
   const answeredCount = $derived(items.filter((it, i) => answeredAt(i)).length);
   const unanswered = $derived(items.length - answeredCount);
-  const pictureChoice = $derived.by(() => {
-    if (!item?.choices?.some((c) => c.image)) return null;
-    const at = hovered >= 0 ? hovered : (state?.cursor ?? 0);
-    return item.choices[at] ?? null;
-  });
+
+  // A page's picture: the hovered row's on the active page, else the cursor's.
+  function pictureOf(i) {
+    const it = items[i];
+    if (!it?.choices?.some((c) => c.image)) return null;
+    const at = i === active && hovered >= 0 ? hovered : (states[i]?.cursor ?? 0);
+    return it.choices[at] ?? { image: "" };
+  }
 
   function answeredAt(i) {
     const it = items[i];
-    if (typeOf(it) === "secure_entry") return secureValues[it.id] !== "" || fieldOf(it.id)?.status === "saved";
+    if (typeOf(it) === "secure_entry") return secureValues[it.id] !== "" || settled(it.id);
     return isAnswered(answers[i]);
   }
 
   const fieldOf = (questionId) => secure?.fields?.find((f) => f.question_id === questionId) ?? null;
+  // A secure field the engine already saved, or can no longer take: no value is asked for.
+  const settled = (questionId) => ["saved", "unavailable"].includes(fieldOf(questionId)?.status);
+
+  // The limits of 2.6 (DLG-166, DLG-173), whatever way the text came in.
+  $effect(() => {
+    for (const st of states) {
+      if (st.custom.length > CUSTOM_MAX) st.custom = st.custom.slice(0, CUSTOM_MAX);
+      if (st.text.length > FREE_MAX) st.text = st.text.slice(0, FREE_MAX);
+    }
+  });
 
   // -- Moving between tabs (form.go:370-400) --
 
+  // The live answer always replaces the stored one, so an erased answer is gone (form.go:378).
   function snapshot() {
-    if (active < items.length && typeOf(items[active]) !== "secure_entry") {
-      const resp = respond(items[active], states[active]);
-      if (resp) answers[active] = resp;
-    }
+    if (active < items.length && typeOf(items[active]) !== "secure_entry") answers[active] = respond(items[active], states[active]);
   }
 
   function switchTab(to) {
@@ -97,8 +109,8 @@
   async function focusActive() {
     await tick();
     if (!root) return;
-    if (kind === "free_text") root.querySelector(".free textarea")?.focus();
-    else if (kind === "secure_entry") root.querySelector(".secure input")?.focus();
+    if (kind === "free_text") root.querySelector(".page.active .free textarea")?.focus();
+    else if (kind === "secure_entry") root.querySelector(".page.active .secure input")?.focus();
     else root.focus({ preventScroll: true });
   }
 
@@ -115,7 +127,7 @@
     if (sending) return;
     if (secure) {
       for (const it of items) {
-        if (typeOf(it) !== "secure_entry" || fieldOf(it.id)?.status === "saved") continue;
+        if (typeOf(it) !== "secure_entry" || settled(it.id)) continue;
         const problem = valueError(secureValues[it.id]);
         if (problem) {
           secureErrors = { [it.id]: problem };
@@ -132,7 +144,7 @@
         local.onSubmit($state.snapshot(answers));
       } else if (secure) {
         const values = {};
-        for (const [id, value] of Object.entries(secureValues)) if (value !== "" && fieldOf(id)?.status !== "saved") values[id] = value.replace(/\r?\n$/, "");
+        for (const [id, value] of Object.entries(secureValues)) if (value !== "" && !settled(id)) values[id] = value.replace(/\r?\n$/, "");
         const problem = await secure.onSubmit(answers, values);
         for (const id of Object.keys(values)) values[id] = "";
         if (problem?.questionId) {
@@ -170,7 +182,7 @@
     const key = kind === "yes_no" || state.cursor >= choices.length ? item.id : choices[state.cursor].id;
     noteKey = key;
     noteText = state.notes[key] ?? "";
-    tick().then(() => root?.querySelector(".note input")?.focus());
+    tick().then(() => root?.querySelector(".page.active .note input")?.focus());
   }
 
   function saveNote() {
@@ -191,15 +203,22 @@
   function choiceKey(combo, event) {
     const choices = item.choices ?? [];
     const rows = choices.length + 1; // the "Something else?" row last
-    const onCustom = state.cursor === choices.length;
+    const realArrow = combo === "ArrowUp" || combo === "ArrowDown";
+    // Typing in "Something else?": only real arrows and Enter act; typed J/K and digits stay text.
+    const editing = state.cursor === choices.length && inEditor();
+    if (editing && !realArrow && combo !== "Enter") return false;
+    // The hovered row is the target, as the terminal adopts it before acting (multi.go:100).
+    if (!editing && hovered >= 0 && hovered < choices.length) {
+      states[active].cursor = hovered;
+      hovered = -1;
+    }
+    const onCustom = states[active].cursor === choices.length;
     const move = (to) => {
       states[active].cursor = ((to % rows) + rows) % rows;
       hovered = -1;
-      if (states[active].cursor === choices.length) tick().then(() => root?.querySelector(".custom input")?.focus());
+      if (states[active].cursor === choices.length) tick().then(() => root?.querySelector(".page.active .custom textarea")?.focus());
       else if (inEditor()) root?.focus({ preventScroll: true });
     };
-    const realArrow = combo === "ArrowUp" || combo === "ArrowDown";
-    if (onCustom && inEditor() && !realArrow && combo !== "Enter") return false; // typed J/K stay text
     switch (combo) {
       case "ArrowUp":
       case "k":
@@ -210,16 +229,15 @@
         move(state.cursor + 1);
         return true;
       case "Space":
-        if (kind === "multi_choice" && !onCustom) states[active].picked[state.cursor] = !state.picked[state.cursor];
+        if (kind === "multi_choice" && !onCustom) states[active].picked[states[active].cursor] = !states[active].picked[states[active].cursor];
         return kind === "multi_choice";
       case "Enter": {
         if (kind === "single_choice") {
-          if (onCustom && state.custom.trim() === "") return true;
-          if (hovered >= 0 && !onCustom) states[active].cursor = hovered;
+          if (onCustom && states[active].custom.trim() === "") return true;
           answered(respond(item, states[active]));
           return true;
         }
-        if (onCustom && state.custom.trim() === "" && inEditor()) return true;
+        if (onCustom && states[active].custom.trim() === "" && inEditor()) return true;
         answered(respond(item, states[active]));
         return true;
       }
@@ -227,7 +245,7 @@
         const digit = /^[1-9]$/.test(combo) ? Number(combo) - 1 : -1;
         if (digit >= 0 && digit < choices.length) {
           states[active].cursor = digit;
-          if (kind === "multi_choice") states[active].picked[digit] = !state.picked[digit];
+          if (kind === "multi_choice") states[active].picked[digit] = !states[active].picked[digit];
           return true;
         }
         return false;
@@ -294,7 +312,7 @@
           return true;
         }
         if (combo === "Ctrl+J") {
-          const area = root?.querySelector(".free textarea");
+          const area = root?.querySelector(".page.active .free textarea");
           if (area) {
             const at = area.selectionStart;
             states[active].text = `${state.text.slice(0, at)}\n${state.text.slice(area.selectionEnd)}`.slice(0, FREE_MAX);
@@ -306,7 +324,7 @@
       case "secure_entry":
         if (combo === "Enter") {
           const problem = valueError(secureValues[item.id]);
-          if (problem && fieldOf(item.id)?.status !== "saved") secureErrors = { [item.id]: problem };
+          if (problem && !settled(item.id)) secureErrors = { [item.id]: problem };
           else {
             secureErrors = {};
             answered(null);
@@ -335,7 +353,9 @@
     }
   }
 
-  // The tallest page decides the height, so a tab switch never moves the chat (form_draw.go:15-35).
+  // Every page sits in one grid cell (only the active one shows), so the
+  // tallest page decides the height and a tab switch never moves the chat
+  // (form_draw.go:15-35).
   function measure() {
     if (!root || collapsed) return;
     const column = root.closest("main")?.clientHeight ?? innerHeight;
@@ -355,10 +375,29 @@
     focusActive();
     const observer = new ResizeObserver(measure);
     if (root) observer.observe(root);
+    // DLG-200: while any sheet covers the window, a paste (or a middle-click
+    // paste) goes nowhere, so a secret never lands in the sheet.
+    const covered = () => dialogs.length > 0;
+    const dropPaste = (event) => {
+      if (!covered()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const dropMiddle = (event) => {
+      if (event.button === 1 && covered()) event.preventDefault();
+    };
+    if (secure) {
+      window.addEventListener("paste", dropPaste, true);
+      window.addEventListener("mousedown", dropMiddle, true);
+      window.addEventListener("auxclick", dropMiddle, true);
+    }
     return () => {
       off();
       detach();
       observer.disconnect();
+      window.removeEventListener("paste", dropPaste, true);
+      window.removeEventListener("mousedown", dropMiddle, true);
+      window.removeEventListener("auxclick", dropMiddle, true);
       if (local && !finished) local.onGone?.();
       for (const id of Object.keys(secureValues)) secureValues[id] = "";
     };
@@ -373,12 +412,16 @@
   }
 
   function clickChoice(at) {
-    if (kind === "multi_choice") {
-      states[active].cursor = at;
-      states[active].picked[at] = !state.picked[at];
-    } else {
-      states[active].cursor = at; // a click selects without advancing (DLG-162)
-    }
+    states[active].cursor = at; // a click selects without advancing (DLG-162)
+    if (kind === "multi_choice") states[active].picked[at] = !states[active].picked[at];
+    if (inEditor()) root?.focus({ preventScroll: true });
+  }
+
+  // Focus in "Something else?" (a click, or Tab inside the form) puts the cursor there.
+  function customFocused() {
+    const choices = items[active]?.choices ?? [];
+    states[active].cursor = choices.length;
+    hovered = -1;
   }
 </script>
 
@@ -398,72 +441,82 @@
         {/each}
       </div>
     {/if}
-    {#if item}
-      <p class="question">{item.question}</p>
-      {#if item.description}
-        <div class="description"><MarkdownView text={item.description} messageId="" sessionId={sessions.currentId ?? ""} finished={true} plan="none" /></div>
-      {/if}
-      <div class="page" class:with-picture={Boolean(pictureChoice)}>
-        <div class="answers">
-          {#if kind === "yes_no"}
-            <div class="yesno">
-              {#each [["yes", "Yes"], ["no", "No"]] as [id, label] (id)}
-                <button type="button" class="pill" class:on={(id === "no") === state.no} tabindex="-1" onclick={() => answered(respond(item, states[active], { yes: id === "yes" }))}>{label}</button>
-              {/each}
-            </div>
-          {:else if kind === "single_choice" || kind === "multi_choice"}
-            <div class="choices" onmouseleave={() => (hovered = -1)}>
-              {#each item.choices ?? [] as choice, at (choice.id)}
-                <div class="choice" class:cursor={at === (hovered >= 0 ? hovered : state.cursor)} onmouseenter={() => (hovered = at)} onclick={() => clickChoice(at)} role="option" aria-selected={kind === "multi_choice" ? state.picked[at] : at === state.cursor} tabindex="-1">
-                  <span class="mark" class:check={kind === "multi_choice"} class:on={kind === "multi_choice" ? state.picked[at] : at === state.cursor}></span>
-                  <span class="label">{choice.label}</span>
-                  {#if choice.description}<span class="detail"> · {choice.description}</span>{/if}
+    <div class="pages">
+      {#each items as it, i (it.id)}
+        {@const st = states[i]}
+        {@const k = typeOf(it)}
+        {@const picture = pictureOf(i)}
+        <div class="page" class:active={i === active} aria-hidden={i !== active} inert={i !== active}>
+          <p class="question">{it.question}</p>
+          {#if it.description}
+            <div class="description"><MarkdownView text={it.description} messageId="" sessionId={sessions.currentId ?? ""} finished={true} plan="none" /></div>
+          {/if}
+          <div class="body" class:with-picture={Boolean(picture)}>
+            <div class="answers">
+              {#if k === "yes_no"}
+                <div class="yesno">
+                  {#each [["yes", "Yes"], ["no", "No"]] as [id, label] (id)}
+                    <button type="button" class="pill" class:on={(id === "no") === st.no} tabindex="-1" onclick={() => answered(respond(it, states[i], { yes: id === "yes" }))}>{label}</button>
+                  {/each}
                 </div>
-                {#if noteKey === choice.id}
-                  <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>
-                {:else if state.notes[choice.id]}
-                  <p class="note-text">Note: {state.notes[choice.id]}</p>
-                {/if}
-              {/each}
-              <div class="custom" class:cursor={state.cursor === (item.choices ?? []).length}>
-                <Field bind:value={states[active].custom} placeholder="Something else?" label="Something else" />
-              </div>
+              {:else if k === "single_choice" || k === "multi_choice"}
+                <div class="choices" onmouseleave={() => (hovered = -1)}>
+                  {#each it.choices ?? [] as choice, at (choice.id)}
+                    <div class="choice" class:cursor={at === (i === active && hovered >= 0 ? hovered : st.cursor)} onmouseenter={() => (hovered = at)} onclick={() => clickChoice(at)} role="option" aria-selected={k === "multi_choice" ? st.picked[at] : at === st.cursor} tabindex="-1">
+                      <span class="mark" class:check={k === "multi_choice"} class:on={k === "multi_choice" ? st.picked[at] : at === st.cursor}></span>
+                      <span class="label">{choice.label}</span>
+                      {#if choice.description}<span class="detail"> · {choice.description}</span>{/if}
+                    </div>
+                    {#if i === active && noteKey === choice.id}
+                      <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>
+                    {:else if st.notes[choice.id]}
+                      <p class="note-text">Note: {st.notes[choice.id]}</p>
+                    {/if}
+                  {/each}
+                  <div class="custom" class:cursor={st.cursor === (it.choices ?? []).length} onfocusin={customFocused}>
+                    <Area bind:value={states[i].custom} minLines={1} maxLines={4} placeholder="Something else?" label="Something else" />
+                  </div>
+                </div>
+              {:else if k === "free_text"}
+                <div class="free"><Area bind:value={states[i].text} minLines={1} maxLines={6} placeholder="Type your answer..." label="Your answer" /></div>
+              {:else if k === "secure_entry"}
+                <div class="secure">
+                  <SecureField bind:value={secureValues[it.id]} status={statusText(fieldOf(it.id), secureValues[it.id] !== "")} locked={settled(it.id)} error={secureErrors[it.id] ?? ""} />
+                </div>
+              {/if}
+              {#if i === active && noteKey === it.id}
+                <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>
+              {/if}
             </div>
-          {:else if kind === "free_text"}
-            <div class="free"><Area bind:value={states[active].text} minLines={1} maxLines={6} placeholder="Type your answer..." label="Your answer" /></div>
-          {:else if kind === "secure_entry"}
-            <div class="secure">
-              <SecureField bind:value={secureValues[item.id]} status={statusText(fieldOf(item.id), secureValues[item.id] !== "")} saved={fieldOf(item.id)?.status === "saved"} error={secureErrors[item.id] ?? ""} />
-            </div>
-          {/if}
-          {#if noteKey === item.id}
-            <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>
-          {/if}
+            {#if picture}
+              <Picture path={picture.image} />
+            {/if}
+          </div>
         </div>
-        {#if pictureChoice}
-          <Picture path={pictureChoice.image} />
-        {/if}
-      </div>
-    {:else}
-      <p class="question heading">{request.confirm_title || "Ready to go?"}</p>
-      {#if request.confirm_description}<p class="confirm-description">{request.confirm_description}</p>{/if}
-      <ul class="summary">
-        {#each items as it, i (it.id)}
-          <li>{summaryLine(it, answers[i], typeOf(it) === "secure_entry" ? statusText(fieldOf(it.id), secureValues[it.id] !== "") : "")}</li>
-        {/each}
-      </ul>
-      {#if unanswered > 0}
-        <p class="warn"><span class="tag">WARN</span> {unanswered} question(s) unanswered</p>
+      {/each}
+      {#if hasConfirm}
+        <div class="page" class:active={active === confirmTab} aria-hidden={active !== confirmTab} inert={active !== confirmTab}>
+          <p class="question heading">{request.confirm_title || "Ready to go?"}</p>
+          {#if request.confirm_description}<p class="confirm-description">{request.confirm_description}</p>{/if}
+          <ul class="summary">
+            {#each items as it, i (it.id)}
+              <li>{summaryLine(it, answers[i], typeOf(it) === "secure_entry" ? statusText(fieldOf(it.id), secureValues[it.id] !== "") : "")}</li>
+            {/each}
+          </ul>
+          {#if unanswered > 0}
+            <p class="warn"><span class="tag">WARN</span> {unanswered} question(s) unanswered</p>
+          {/if}
+          <Buttons
+            buttons={[
+              { id: "yup", label: "Yup!", key: "y" },
+              { id: "notyet", label: "Not yet", key: "n" },
+            ]}
+            bind:selected={confirmChoice}
+            onPress={(id) => (id === "yup" ? submit() : back())}
+          />
+        </div>
       {/if}
-      <Buttons
-        buttons={[
-          { id: "yup", label: "Yup!", key: "y" },
-          { id: "notyet", label: "Not yet", key: "n" },
-        ]}
-        bind:selected={confirmChoice}
-        onPress={(id) => (id === "yup" ? submit() : back())}
-      />
-    {/if}
+    </div>
   {/if}
 </div>
 
@@ -542,13 +595,27 @@
     color: var(--slate);
     user-select: text;
   }
+  .pages {
+    display: grid;
+  }
   .page {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    gap: calc(10 * var(--px));
+    min-width: 0;
+    visibility: hidden;
+  }
+  .page.active {
+    visibility: visible;
+  }
+  .body {
     display: flex;
     flex-direction: column;
     gap: calc(16 * var(--px));
   }
   @container (min-width: 900px) {
-    .page.with-picture {
+    .body.with-picture {
       flex-direction: row;
     }
   }

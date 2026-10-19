@@ -16,6 +16,10 @@ use std::path::{Path, PathBuf};
 
 const FILE_NAME: &str = "projects.json";
 
+/// One read-change-write of the file at a time in this app (every window
+/// shares the process).
+static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[derive(Serialize)]
 pub struct Projects {
     /// `{path, data_dir, last_accessed, saved}` each, as `crush projects --json`.
@@ -31,6 +35,7 @@ pub fn list() -> AppResult<Projects> {
 /// `project_save`: marks the folder saved (MarkSaved, projects.go), adding
 /// an entry at the top when it has none.
 pub fn save(path: &str) -> AppResult<()> {
+    let _held = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let file = file_path();
     let mut doc = load(&file)?;
     mark_saved(&mut doc, path, &now());
@@ -40,6 +45,7 @@ pub fn save(path: &str) -> AppResult<()> {
 /// `project_remove`: the entry stops being saved (Unsave, projects.go); the
 /// folder and its record stay, so it can still show in Recent.
 pub fn remove(path: &str) -> AppResult<()> {
+    let _held = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let file = file_path();
     let mut doc = load(&file)?;
     if unsave(&mut doc, path) {
@@ -156,12 +162,22 @@ fn write(file: &Path, doc: &Value) -> AppResult<()> {
     let dir = file.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(fail)?;
     let data = serde_json::to_vec_pretty(doc).map_err(|e| AppError::new("projects_unwritable", e.to_string()))?;
-    let tmp = dir.join(format!(".{FILE_NAME}.{}.tmp", std::process::id()));
+    // A fresh name each time, created only if it does not exist (never
+    // through a link left at that name), so two writers never share it.
+    let tmp = dir.join(format!(".{FILE_NAME}.{}.{}.tmp", std::process::id(), uuid::Uuid::new_v4().simple()));
     {
         use std::os::unix::fs::OpenOptionsExt;
-        let mut out = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp).map_err(fail)?;
-        out.write_all(&data).map_err(fail)?;
-        out.sync_all().map_err(fail)?;
+        let written = (|| {
+            let mut out = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
+            out.write_all(&data)?;
+            out.sync_all()
+        })();
+        if let Err(e) = written {
+            if e.kind() != std::io::ErrorKind::AlreadyExists {
+                let _ = std::fs::remove_file(&tmp);
+            }
+            return Err(fail(e));
+        }
     }
     std::fs::rename(&tmp, file).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);

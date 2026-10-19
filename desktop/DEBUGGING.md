@@ -18,6 +18,11 @@ Owner instruction: the coordinator builds wave 2 itself, with no sub-agents, **n
   - Not done: the question arrival sound and notification (2.6, 2.18) wait for SYS (wave 3). Multi choice preselection waits for G-13 (the engine sends no `selected` list). The narrow-window "N/M" tab label is not built.
   - Known leftover: LIVE's Ctrl+C binding takes the key in the helper view even with no selection, so the quit sheet does not open there.
 - **Checks that did run:** `pnpm test` 83 files / 1889 tests, `pnpm build` with no warnings, `cargo test` 98. None of them exercise wave 2's code.
+- **Review t87 (Codex Sol 6.1 high) and the coordinator's fixes**, all 16 fixed by the coordinator with no new tests:
+  - High: provider keys and sign-in tokens reached the page in GET config (now cut in Rust before the answer crosses, `commands.rs` `redact_answer`, which also drops MCP/LSP env, headers and commands, and the catalog's key templates); a secret could be pasted into a sheet covering a secure form (the form now drops every paste and middle click while a sheet is open); palette prompts ran as shell commands in "!" mode (new `sendPromptText` in `composer.svelte.js` sends them as prompts and leaves the draft alone); a cancelled MCP prompt could still send (fetches now carry a ticket, and closing the palette or the arguments sheet cancels).
+  - Medium: `projects.json` temp file shared between writers (now a unique name, created fresh, and one write at a time); Esc during a slow sign-in start left the flow running; re-authentication ignored the coder model (API-key users got the subscription sheet); question choices ignored hover and the "Something else?" focus; an erased answer was kept; a pasted secret was changed (line breaks to spaces); unavailable secure fields blocked the submit; an old secure-forms list could reopen a closed form; Sessions rename/delete could act on another row.
+  - Low: tabs of different heights moved the chat (pages now share one grid cell); the palette needed a double click (KIT's `FilterList` got a `hoverRuns` option).
+  - Files outside wave 2's own folders touched by these fixes: `src-tauri/src/commands.rs` (S5), `src/lib/stores/composer.svelte.js` (P3.7), `src/components/kit/FilterList.svelte` (KIT).
 
 ## Phases 5-6, wave 1 (KIT, TERM, LST, LIVE), 2026-10-19
 

@@ -755,6 +755,19 @@ const wire = (attachments) =>
   attachments.map((a) => ({ file_path: a.path || a.name, file_name: a.name, mime_type: a.mime, content: a.base64 }));
 
 // sendMessageInternal (send.go:63-148).
+// Phase 5's palette (custom commands, MCP prompts, Initialize Project): the
+// text goes out as a prompt, never as a shell command, and the draft stays
+// as it is (the terminal's sendMessage(content), dialog_actions.go:298).
+export async function sendPromptText(content) {
+  if (!ws.agent?.is_ready) {
+    notify("error", NOT_READY);
+    return false;
+  }
+  const sent = await sendMessage(content);
+  loadHistory();
+  return sent;
+}
+
 async function sendMessage(content, attachments = [], { hidden = false } = {}) {
   if (!ws.agent?.is_ready) {
     notify("error", NOT_READY);

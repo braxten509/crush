@@ -7,12 +7,12 @@
   // '<Title>' is missing." on its field and focuses it. While an MCP prompt
   // is generated the footer says so and Esc cancels.
   //   title, args: [{id, title, description, required}], onSubmit(values)
-  import { tick, untrack } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
   import Field from "../kit/Field.svelte";
   import Sheet from "../kit/Sheet.svelte";
   import Icon from "../Icon.svelte";
   import { closeDialog } from "../../lib/dialogs.js";
-  import { palette } from "../../lib/palette/store.svelte.js";
+  import { cancelPrompt, palette } from "../../lib/palette/store.svelte.js";
 
   const ID = "arguments";
 
@@ -38,6 +38,11 @@
     document.querySelectorAll(`[data-sheet="${ID}"] input`)[focused]?.focus();
   }
 
+  // The sheet closing any other way also cancels its fetch.
+  onDestroy(() => {
+    if (palette.generating) cancelPrompt();
+  });
+
   function submit() {
     errors = {};
     for (const [at, arg] of args.entries()) {
@@ -53,7 +58,7 @@
   function onKey(event, combo) {
     if (palette.generating) {
       if (combo === "Escape" || combo === "Alt+Escape") {
-        palette.generating = false;
+        cancelPrompt();
         closeDialog(ID);
       }
       return true;

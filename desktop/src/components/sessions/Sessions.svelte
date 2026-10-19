@@ -34,6 +34,8 @@
   let rows = $state([]);
   let selected = $state(-1);
   let mode = $state("normal"); // "normal" | "rename" | "delete" (sessions.go's sessionsMode)
+  let target = null; // the chat id that entered rename or delete; the action is for it alone
+  let lockedAt = -1; // the selection while a mode runs: clicks do not move it (2.5)
   let renameText = $state("");
   let loaded = $state(false);
   let list = $state(null);
@@ -114,13 +116,34 @@
     const row = chosen();
     if (!row) return;
     renameText = row.Title ?? "";
-    mode = "rename";
+    enter("rename", row);
   }
 
-  async function saveRename() {
-    const row = chosen();
-    const title = renameText.trim();
+  function enter(next, row) {
+    target = row.ID;
+    lockedAt = selected;
+    mode = next;
+  }
+
+  function leave() {
     mode = "normal";
+    target = null;
+  }
+
+  const targetRow = () => rows.find((row) => row.ID === target) ?? null;
+
+  // A click during rename or delete does not change the row (2.5).
+  $effect(() => {
+    if (mode !== "normal" && selected !== lockedAt) {
+      const at = rows.findIndex((row) => row.ID === target);
+      if (at >= 0) selected = lockedAt = at;
+    }
+  });
+
+  async function saveRename() {
+    const row = targetRow();
+    const title = renameText.trim();
+    leave();
     if (!row || title === "" || title === row.Title) return;
     const at = rows.indexOf(row);
     rows[at] = { ...row, Title: title };
@@ -139,12 +162,12 @@
       notify("warn", BUSY);
       return;
     }
-    mode = "delete";
+    enter("delete", row);
   }
 
   async function confirmDelete() {
-    const row = chosen();
-    mode = "normal";
+    const row = targetRow();
+    leave();
     if (!row) return;
     const at = rows.indexOf(row);
     rows = rows.filter((r) => r !== row);
@@ -162,7 +185,7 @@
   function onKey(event, combo) {
     if (mode === "delete") {
       if (combo === "y" || combo === "Shift+Y" || combo === "Enter") confirmDelete();
-      else if (combo === "n" || combo === "Shift+N" || combo === "Escape" || combo === "Alt+Escape") mode = "normal";
+      else if (combo === "n" || combo === "Shift+N" || combo === "Escape" || combo === "Alt+Escape") leave();
       return true;
     }
     if (mode === "rename") {
@@ -171,7 +194,7 @@
         return true;
       }
       if (combo === "Escape" || combo === "Alt+Escape") {
-        mode = "normal";
+        leave();
         return true;
       }
       // The row's field keeps every other key; the list does not move.
@@ -218,10 +241,13 @@
       const at = rows.findIndex((row) => row.ID === record?.id);
       if (at < 0) return;
       if (kind === "deleted") {
+        // The chat being renamed or deleted went away elsewhere: the question ends.
+        if (record.id === target) leave();
         const keep = rows[selected]?.ID;
         rows = rows.filter((_, i) => i !== at);
         const again = rows.findIndex((row) => row.ID === keep);
         selected = again >= 0 ? again : rows.length === 0 ? -1 : Math.min(at, rows.length - 1);
+        lockedAt = selected;
       } else if (kind === "updated" && typeof record.title === "string") {
         rows[at] = { ...rows[at], Title: record.title, UpdatedAt: record.updated_at ?? rows[at].UpdatedAt };
       }

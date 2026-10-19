@@ -2,26 +2,37 @@
   // A secure entry field (desktop-design-5-6 2.7 "Field"; DLG-191 to
   // DLG-196, DLG-199): KIT's masked Field (bullets, the terminal's editing
   // keys, `[` and `]` typed as text) with the status line under it. The value
-  // is bound to the form and lives nowhere else. While a sheet covers the
-  // window a paste is dropped (DLG-200). A saved field takes no typing.
-  //   value (bindable), status (the status text), saved?, error?
+  // is bound to the form and lives nowhere else. A paste goes in as it is,
+  // only one trailing newline stripped, so a value with a line break or a
+  // control character gets the engine's error rather than being changed
+  // (DLG-193, DLG-195); the form drops pastes while a sheet covers it
+  // (DLG-200). A field the engine saved or can no longer take shows only its
+  // status.
+  //   value (bindable), status (the status text), locked?, error?
+  import { tick } from "svelte";
   import Field from "../kit/Field.svelte";
-  import { dialogs } from "../../lib/dialogs.js";
 
-  let { value = $bindable(""), status = "", saved = false, error = "" } = $props();
+  let { value = $bindable(""), status = "", locked = false, error = "" } = $props();
 
-  function onpaste(event) {
-    if (dialogs.length > 0 || saved) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
+  async function onpaste(event) {
+    // Before Field's own paste, which would turn line breaks into spaces.
+    event.preventDefault();
+    event.stopPropagation();
+    const input = event.target;
+    if (locked || input?.tagName !== "INPUT") return;
+    const text = (event.clipboardData?.getData("text/plain") ?? "").replace(/\r?\n$/, "");
+    const start = input.selectionStart ?? value.length;
+    const end = input.selectionEnd ?? value.length;
+    value = value.slice(0, start) + text + value.slice(end);
+    await tick();
+    input.setSelectionRange(start + text.length, start + text.length);
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="secure-field" onpastecapture={onpaste} onmousedowncapture={(event) => event.target.tagName === "INPUT" && event.preventDefault()}>
-  {#if saved}
-    <p class="saved">Saved</p>
+  {#if locked}
+    <p class="locked">{status}</p>
   {:else}
     <Field bind:value masked placeholder="Enter secret…" label="Secret value" {error} />
     <p class="status">{status}</p>
@@ -34,7 +45,7 @@
     font: var(--t-small);
     color: var(--slate);
   }
-  .saved {
+  .locked {
     margin: 0;
     color: var(--ink);
   }

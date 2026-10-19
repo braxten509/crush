@@ -22,7 +22,9 @@
   //   snippet row(item, index, {matched, selected}); without it the row draws
   //   the title and the info), title?(item) (the title shown, filterText by
   //   default), info?(item), detail?(item) (a second line), onChoose?(item,
-  //   index), empty? (the line shown with no rows), label? (accessible name)
+  //   index), empty? (the line shown with no rows), label? (accessible name),
+  //   hoverRuns? (the palette's mouse, CMD-013: hover selects, one click
+  //   chooses)
   // Methods: move(delta, {wrap}), selectFirst(), selectLast(), chosen(),
   // visibleIndexes().
   import { tick, untrack } from "svelte";
@@ -48,6 +50,7 @@
     onChoose = null,
     empty = "",
     label = "",
+    hoverRuns = false,
   } = $props();
 
   let root = $state(null);
@@ -184,6 +187,11 @@
 
   let lastClick = { index: -1, at: 0 };
   function onRowClick(index) {
+    if (hoverRuns) {
+      selected = index;
+      if (onChoose) onChoose(items[index], index);
+      return;
+    }
     const now = Date.now();
     const again = lastClick.index === index && now - lastClick.at <= DOUBLE_CLICK_MS;
     lastClick = { index, at: now };
@@ -347,6 +355,7 @@
           data-index={entry.index}
           onmousedown={(event) => event.preventDefault()}
           onclick={() => onRowClick(entry.index)}
+          onmouseenter={() => hoverRuns && (selected = entry.index)}
           onkeydown={() => {}}
         >
           {#if row}

@@ -11,6 +11,26 @@ export const palette = $state({
 });
 
 let open = 0;
+let promptSeq = 0;
+
+// One MCP prompt fetch at a time: → its ticket; `current(ticket)` is false once
+// it was cancelled or another started (DLG-263).
+export function startPrompt() {
+  palette.generating = true;
+  return ++promptSeq;
+}
+
+export const promptCurrent = (ticket) => ticket === promptSeq && palette.generating;
+
+export function finishPrompt(ticket) {
+  if (ticket === promptSeq) palette.generating = false;
+}
+
+// Esc, or the sheet that showed it closing.
+export function cancelPrompt() {
+  promptSeq += 1;
+  palette.generating = false;
+}
 
 export async function readCommands() {
   const [commands, prompts] = await Promise.allSettled([api.customCommands(), api.mcpPrompts()]);

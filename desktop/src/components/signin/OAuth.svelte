@@ -67,9 +67,17 @@
 
   (async () => {
     try {
-      flow = await startFlow(platform.platform, onState);
+      const started = await startFlow(platform.platform, onState);
+      if (finished) {
+        // Esc came while the flow was starting: stop it now.
+        api.cancelAuthFlow(started.flow_id).catch(() => {});
+        stopListening(started.flow_id);
+        return;
+      }
+      flow = started;
       if (state === "initializing") state = "display";
     } catch (e) {
+      if (finished) return;
       state = "error";
       error = e?.message ?? String(e);
     }

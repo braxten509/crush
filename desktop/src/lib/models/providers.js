@@ -1,8 +1,8 @@
 // The configured providers as the model picker and sign-in sheets need them
-// (desktop-design-5-6 2.3, 2.4): GET …/config carries every provider's key
-// and sign-in token, so only what decides a group, a sheet or a label is kept
-// here, never a credential (workspace.svelte.js's pickConfig keeps no
-// providers at all, for the same reason).
+// (desktop-design-5-6 2.3, 2.4). The Rust side cuts every credential out of
+// GET …/config before the answer reaches the page (commands.rs
+// redact_answer): a provider comes with has_api_key, has_oauth and the
+// token's expiry times (oauth_times) instead of the key and the token.
 import { api } from "../engine/api.js";
 
 const MODEL_FIELDS = ["id", "name", "can_reason", "reasoning_levels", "default_reasoning_effort", "default_max_tokens", "supports_attachments", "context_window"];
@@ -30,9 +30,9 @@ export function safeProvider(id, cfg) {
     name: typeof cfg?.name === "string" ? cfg.name : "",
     type: typeof cfg?.type === "string" ? cfg.type : "",
     disable: cfg?.disable === true,
-    has_api_key: typeof cfg?.api_key === "string" && cfg.api_key !== "",
-    has_oauth: Boolean(cfg?.oauth),
-    oauth_expired: Boolean(cfg?.oauth) && oauthExpired(cfg.oauth),
+    has_api_key: cfg?.has_api_key === true,
+    has_oauth: cfg?.has_oauth === true,
+    oauth_expired: cfg?.has_oauth === true && oauthExpired(cfg.oauth_times),
     models: pickModels(cfg?.models) ?? [],
     chatgpt_models: pickModels(cfg?.chatgpt_models),
     grok_models: pickModels(cfg?.grok_models),

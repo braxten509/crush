@@ -13,12 +13,13 @@
   import FilterList from "../kit/FilterList.svelte";
   import Sheet from "../kit/Sheet.svelte";
   import Icon from "../Icon.svelte";
-  import { closeDialog, openDialog } from "../../lib/dialogs.js";
+  import { closeDialog, hasDialog, openDialog } from "../../lib/dialogs.js";
   import { api } from "../../lib/engine/api.js";
   import { initProject, sendPrompt, summarize, toggleYolo } from "../../lib/palette/actions.js";
   import { commandArguments, fillArguments, promptArguments } from "../../lib/palette/customcommands.js";
   import { entryFilter, systemEntries } from "../../lib/palette/entries.js";
-  import { palette, watchCommands } from "../../lib/palette/store.svelte.js";
+  import { cancelPrompt, finishPrompt, palette, promptCurrent, startPrompt, watchCommands } from "../../lib/palette/store.svelte.js";
+  import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { attachSkill } from "../../lib/stores/composer.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
 
@@ -119,17 +120,18 @@
   }
 
   async function fetchPrompt(prompt, values) {
-    palette.generating = true;
+    const ticket = startPrompt();
+    const sid = sessions.currentId;
     try {
       const answer = await api.getMcpPrompt({ client_id: prompt.client_id, prompt_id: prompt.prompt_id, args: values });
-      if (!palette.generating) return; // cancelled
+      if (!promptCurrent(ticket) || sessions.currentId !== sid) return; // cancelled, replaced, or another chat
       closeDialog("arguments");
       closeDialog(ID);
       if (answer?.prompt) sendPrompt(answer.prompt);
     } catch (error) {
-      notify("error", error?.message ?? String(error));
+      if (promptCurrent(ticket)) notify("error", error?.message ?? String(error));
     } finally {
-      palette.generating = false;
+      finishPrompt(ticket);
     }
   }
 
@@ -184,7 +186,15 @@
     }
   }
 
-  onMount(() => watchCommands());
+  onMount(() => {
+    const stop = watchCommands();
+    return () => {
+      stop();
+      // Esc while "Generating Prompt..." shows cancels the fetch (DLG-263); a
+      // fetch the arguments sheet started belongs to that sheet.
+      if (palette.generating && !hasDialog("arguments")) cancelPrompt();
+    };
+  });
 </script>
 
 <Sheet id={ID} title="Commands" width="standard" maxHeight={640} help={palette.generating ? [] : help} {onKey} controls={categories.length > 1 ? controls : null}>
@@ -200,6 +210,7 @@
     {query}
     bind:selected
     onChoose={(entry) => run(entry)}
+    hoverRuns
     label="Commands"
   />
   {#if palette.generating}

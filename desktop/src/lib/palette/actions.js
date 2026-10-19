@@ -4,7 +4,7 @@
 import { windowBusy } from "../busy.js";
 import { closeWindow } from "../closing.js";
 import { api, uuid } from "../engine/api.js";
-import { send, setText } from "../stores/composer.svelte.js";
+import { sendPromptText } from "../stores/composer.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 
@@ -51,11 +51,10 @@ export async function initProject() {
   }
 }
 
-// A prompt the palette sends: it goes through the typing box's send, as
-// the user's own message would.
+// A prompt the palette sends: always a prompt (never a shell command, even
+// in "!" mode), and the draft in the typing box is left alone.
 export async function sendPrompt(text) {
-  setText(text);
-  return send();
+  return sendPromptText(text);
 }
 
 // CMD-056.

@@ -51,9 +51,13 @@ onEvent("agent_event", (_kind, event) => {
     }
     case "re_authenticate": {
       // G-10 names the provider; without it, the coder model's provider.
-      const providerId = event.provider_id || ws.agent?.model_cfg?.provider || "";
+      const coder = ws.agent?.model_cfg ?? null;
+      const providerId = event.provider_id || coder?.provider || "";
       if (!providerId) return;
-      openDialog("auth_method", { providerId, reAuthenticate: true, onDone: () => {} }, { grace: true });
+      // The coder's selected model decides the method, as the terminal passes
+      // it (agent_events.go:208): an API-key user gets the key sheet.
+      const model = coder?.provider === providerId ? coder : null;
+      openDialog("auth_method", { providerId, reAuthenticate: true, model, modelType: "large", onDone: () => {} }, { grace: true });
       return;
     }
     default:

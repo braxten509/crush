@@ -188,10 +188,80 @@ pub async fn api(
     body: Option<Value>,
     call_id: Option<String>,
 ) -> AppResult<Value> {
-    if let Some(fixture) = app.try_state::<Fixture>() {
-        return fixture.api(&state.launch, window.label(), &method, &path, query, body, call_id);
+    let answer = if let Some(fixture) = app.try_state::<Fixture>() {
+        fixture.api(&state.launch, window.label(), &method, &path, query, body, call_id)
+    } else {
+        connection::call(&app, window.label(), &method, &path, query, body, call_id).await
+    };
+    answer.map(|value| redact_answer(&method, &path, value))
+}
+
+/// GET …/config carries every provider's key and sign-in token, and MCP and
+/// LSP entries carry env, headers and command lines; GET …/providers carries
+/// the catalog's key templates and headers. None of it may reach the page
+/// (desktop-design-5-6 6.1), so it is cut here, before the answer crosses:
+/// a provider keeps what decides a group, a sheet or a label, plus
+/// `has_api_key`, `has_oauth` and the token's expiry times.
+fn redact_answer(method: &str, path: &str, mut value: Value) -> Value {
+    if method != "GET" {
+        return value;
     }
-    connection::call(&app, window.label(), &method, &path, query, body, call_id).await
+    match path.trim_start_matches('/') {
+        "config" => redact_config(&mut value),
+        "providers" => {
+            if let Some(list) = value.as_array_mut() {
+                for provider in list.iter_mut().filter_map(Value::as_object_mut) {
+                    for key in ["api_key", "api_endpoint", "default_headers"] {
+                        provider.remove(key);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    value
+}
+
+fn redact_config(config: &mut Value) {
+    const PROVIDER_KEEP: &[&str] = &["id", "name", "type", "disable", "models", "chatgpt_models", "grok_models", "discover_models", "flat_rate"];
+    const ENTRY_KEEP: &[&str] = &["type", "disabled", "timeout"];
+    let Some(root) = config.as_object_mut() else { return };
+    if let Some(providers) = root.get_mut("providers").and_then(Value::as_object_mut) {
+        for provider in providers.values_mut() {
+            let Some(fields) = provider.as_object_mut() else {
+                *provider = Value::Null;
+                continue;
+            };
+            let has_key = fields.get("api_key").and_then(Value::as_str).is_some_and(|k| !k.is_empty());
+            let oauth = fields.get("oauth").and_then(Value::as_object).map(|token| {
+                let mut kept = Map::new();
+                for key in ["expires_at", "expires_in"] {
+                    if let Some(v) = token.get(key) {
+                        kept.insert(key.to_string(), v.clone());
+                    }
+                }
+                Value::Object(kept)
+            });
+            fields.retain(|key, _| PROVIDER_KEEP.contains(&key.as_str()));
+            fields.insert("has_api_key".into(), Value::Bool(has_key));
+            fields.insert("has_oauth".into(), Value::Bool(oauth.is_some()));
+            if let Some(token) = oauth {
+                fields.insert("oauth_times".into(), token);
+            }
+        }
+    }
+    for section in ["mcp", "lsp"] {
+        if let Some(entries) = root.get_mut(section).and_then(Value::as_object_mut) {
+            for entry in entries.values_mut() {
+                if let Some(fields) = entry.as_object_mut() {
+                    fields.retain(|key, _| ENTRY_KEEP.contains(&key.as_str()));
+                }
+            }
+        }
+    }
+    for key in ["hooks", "tools"] {
+        root.remove(key);
+    }
 }
 
 /// Stops the `api` call that carries this `callId` (1.2.4); false when none is running.

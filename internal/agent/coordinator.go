@@ -77,6 +77,8 @@ type coordinator struct {
 	runComplete pubsub.Publisher[notify.RunComplete]
 	interactive bool
 	tasks       *taskHub
+	// limitRetries continues chats whose usage limit resets.
+	limitRetries limitRetries
 
 	// agentMu guards mainAgent and mainAgentName: SetMainAgent runs on
 	// HTTP handler goroutines while runs, cancels, and probes read the

@@ -33,6 +33,9 @@ func (c *coordinator) RunAccepted(ctx context.Context, accept *AcceptedRun, sess
 // dispatchMu; when nil (the in-process/local path) no accept tracking
 // applies.
 func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
+	// Anything new in the chat replaces a planned usage-limit retry; if
+	// it hits the limit too, it plans its own.
+	c.limitRetries.drop(sessionID)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -172,6 +175,7 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 	beforeLoaded := c.skillTracker.LoadedNames()
 	result, originalErr := agent.Run(ctx, call)
 	logTurnSkillUsage(sessionID, prompt, c.activeSkills, c.skillTracker, beforeLoaded)
+	c.planLimitRetry(sessionID, originalErr)
 
 	// Notify only if still unauthorized after retry — a successful
 	// retry means the user doesn't need to re-authenticate. AWS SSO is

@@ -156,6 +156,21 @@ func (c *Completions) Open(depth, limit int) tea.Cmd {
 	}
 }
 
+// SetSkills fills the popup with skills, listed by name.
+func (c *Completions) SetSkills(skills []SkillCompletionValue) {
+	items := make([]list.FilterableItem, 0, len(skills))
+	for _, skill := range skills {
+		items = append(items, NewCompletionItem(
+			skill.Name,
+			skill,
+			c.normalStyle,
+			c.focusedStyle,
+			c.matchStyle,
+		))
+	}
+	c.setItems(items)
+}
+
 // SetItems sets the files and MCP resources and rebuilds the merged list.
 func (c *Completions) SetItems(files []FileCompletionValue, resources []ResourceCompletionValue) {
 	items := make([]list.FilterableItem, 0, len(files)+len(resources))
@@ -183,7 +198,11 @@ func (c *Completions) SetItems(files []FileCompletionValue, resources []Resource
 		)
 		items = append(items, item)
 	}
+	c.setItems(items)
+}
 
+// setItems opens the popup on items, none filtered out yet.
+func (c *Completions) setItems(items []list.FilterableItem) {
 	c.open = true
 	c.query = ""
 	c.allItems = items
@@ -382,6 +401,11 @@ func (c *Completions) selectCurrent(keepOpen bool) tea.Msg {
 		}
 	case FileCompletionValue:
 		return SelectionMsg[FileCompletionValue]{
+			Value:    item,
+			KeepOpen: keepOpen,
+		}
+	case SkillCompletionValue:
+		return SelectionMsg[SkillCompletionValue]{
 			Value:    item,
 			KeepOpen: keepOpen,
 		}

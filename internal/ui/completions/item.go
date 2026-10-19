@@ -23,6 +23,11 @@ type ResourceCompletionValue struct {
 	MIMEType string
 }
 
+// SkillCompletionValue is a skill offered after a $ typed in the prompt.
+type SkillCompletionValue struct {
+	Name string
+}
+
 // CompletionItem represents an item in the completions list.
 type CompletionItem struct {
 	*list.Versioned

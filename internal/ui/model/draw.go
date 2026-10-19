@@ -302,7 +302,7 @@ func (m *UI) renderEditorView(width int) string {
 	if m.attachments.Count() > 0 {
 		attachmentsView = m.attachments.Render(width)
 	}
-	rows := strings.Split(m.textarea.View(), "\n")
+	rows := m.composerSkillHighlight(strings.Split(m.textarea.View(), "\n"))
 	bandWidth := 0
 	for _, row := range rows {
 		bandWidth = max(bandWidth, ansi.StringWidth(row))

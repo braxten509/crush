@@ -80,6 +80,8 @@ type (
 	// userCommandsLoadedMsg is sent when user commands are loaded.
 	userCommandsLoadedMsg struct {
 		Commands []commands.CustomCommand
+		// Skills are the visible skills, for $name mentions.
+		Skills []skills.CatalogEntry
 	}
 	// mcpPromptsLoadedMsg is sent when mcp prompts are loaded.
 	mcpPromptsLoadedMsg struct {
@@ -331,6 +333,9 @@ type UI struct {
 
 	// skills
 	skillStates []*skills.SkillState
+	// skillCatalog is the visible skills, refreshed with the custom
+	// commands; $name mentions in the prompt are matched against it.
+	skillCatalog []skills.CatalogEntry
 
 	// logoFrame is the wordmark's animation frame; see logoshine.go.
 	// logoShineStart times its cycles.

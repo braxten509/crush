@@ -380,7 +380,7 @@ func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
 		if !m.agentReady {
 			return nil, errors.New("the agent is not ready yet")
 		}
-		return m.sendMessage(a.Text, a.Attachments...), nil
+		return m.sendPrompt(a.Text, a.Attachments), nil
 	case remote.ActCancel:
 		return m.cancelAgent(), nil
 	case remote.ActInterrupt:

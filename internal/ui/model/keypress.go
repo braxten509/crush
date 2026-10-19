@@ -223,6 +223,14 @@ func (m *UI) handleCompletionsKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		if !selection.KeepOpen {
 			m.mention.close()
 		}
+	case completions.SelectionMsg[completions.SkillCompletionValue]:
+		prevHeight := m.textarea.Height()
+		if m.insertCompletionText(skillMentionPrefix + selection.Value.Name) {
+			cmd = m.handleTextareaHeightChange(prevHeight)
+		}
+		if !selection.KeepOpen {
+			m.mention.close()
+		}
 	case completions.ClosedMsg:
 		m.mention.open = false
 	}
@@ -360,7 +368,7 @@ func (m *UI) submitEditor() (cmd tea.Cmd, done bool) {
 
 	m.randomizePlaceholders()
 	m.historyReset()
-	return tea.Batch(m.sendMessage(value, attachments...), m.loadPromptHistory()), true
+	return tea.Batch(m.sendPrompt(value, attachments), m.loadPromptHistory()), true
 }
 
 // openExternalEditor opens the prompt in the user's editor, unless the
@@ -392,10 +400,17 @@ func (m *UI) typeInEditor(msg tea.KeyPressMsg) []tea.Cmd {
 	curValue := m.textarea.Value()
 	curIdx := len(curValue)
 
-	// Trigger completions on @.
+	// Trigger completions on @, and on $ for skills (not in shell mode,
+	// where $ starts a variable).
 	if m.mention.triggers(msg.String(), curValue) {
-		depth, limit := m.com.Config().Options.TUI.Completions.Limits()
-		cmds = append(cmds, m.mention.begin(curIdx, m.completionsPosition(), depth, limit))
+		if msg.String() == skillMentionPrefix {
+			if skills := skillCompletionValues(m.skillCatalog); !m.bangMode && len(skills) > 0 {
+				m.mention.beginSkills(curIdx, m.completionsPosition(), skills)
+			}
+		} else {
+			depth, limit := m.com.Config().Options.TUI.Completions.Limits()
+			cmds = append(cmds, m.mention.begin(curIdx, m.completionsPosition(), depth, limit))
+		}
 	}
 
 	// remove the details if they are open when user starts typing
@@ -413,8 +428,8 @@ func (m *UI) typeInEditor(msg tea.KeyPressMsg) []tea.Cmd {
 	m.updateHistoryDraft(curValue)
 
 	// After updating textarea, check if we need to filter completions.
-	// Skip filtering on the initial @ keystroke since items are loading async.
-	if m.mention.open && msg.String() != "@" {
+	// follow skips the keystroke that opened the popup.
+	if m.mention.open {
 		m.mention.follow(msg.String(), m.textarea.Value(), m.textareaWord())
 	}
 	return cmds

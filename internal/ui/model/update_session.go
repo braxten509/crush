@@ -49,6 +49,8 @@ func (m *UI) handleSessionMsg(msg tea.Msg) (tea.Cmd, bool) {
 		}
 	case userCommandsLoadedMsg:
 		m.customCommands = msg.Commands
+		m.skillCatalog = msg.Skills
+		m.frame.invalidate()
 		dia := m.dialog.Dialog(dialog.CommandsID)
 		if dia == nil {
 			break

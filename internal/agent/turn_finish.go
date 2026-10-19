@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"charm.land/fantasy"
@@ -60,6 +61,13 @@ func (t *turn) handleStreamError(result *fantasy.AgentResult, err error) (*fanta
 		return nil, err
 	}
 	reason, title, details := classifyRunError(err, isHyper, t.largeModel.CatwalkCfg.Name)
+	// Interactive chats continue on their own once a usage limit resets
+	// (coordinator.planLimitRetry); say when.
+	if !t.call.NonInteractive && !a.isSubAgent {
+		if at, ok := limitRetryTime(err, time.Now()); ok {
+			details = strings.TrimSpace(details + "\n\n" + limitRetryNote(at))
+		}
+	}
 	t.currentAssistant.AddFinish(reason, title, details)
 	// Note: we use the cleanup context here because the genCtx has been
 	// cancelled.

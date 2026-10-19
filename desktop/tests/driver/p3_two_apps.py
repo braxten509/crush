@@ -273,8 +273,19 @@ class Window:
             if pid.isdigit():
                 pids.add(int(pid))
             ask_close(int(wid))
-        gone, _, _ = poll(lambda: [p for p in pids if os.path.exists(f"/proc/{p}")], lambda alive: not alive, 10)
+        gone, _, _ = poll(lambda: [p for p in pids if self.running(p)], lambda alive: not alive, 10)
         return bool(pids) and gone
+
+    def running(self, pid):
+        """Whether pid still runs. An app started by relaunch is this driver's
+        child: it stays a zombie (its /proc entry kept) until reaped here."""
+        if self.proc and self.proc.pid == pid:
+            return self.proc.poll() is None
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+        except OSError:
+            return False
 
     def relaunch(self, sid, log_name="app-again.log"):
         since = time.time()

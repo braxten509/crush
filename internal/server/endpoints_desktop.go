@@ -129,7 +129,7 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Tags("auth").
 			PathParam("id", "Workspace ID").
 			Fails(400, 403, 404).
-			Handle(c.handleVerifyKey), // DELIBERATE BREAK (G-5)
+			Handle(c.localOnly(c.handleVerifyKey)),
 
 		route(c, rpc.ListThemes, c.listThemes).
 			Summary("List themes").

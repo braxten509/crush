@@ -268,7 +268,7 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, launch
 		return proto.RemoteStatus{}, ErrWorkspaceClosing
 	case running != nil:
 		if launchID != "" {
-			_ = launchID // DELIBERATE BREAK (G-26b)
+			running.srv.SetLaunch(launchID)
 		}
 		return running.status(), nil
 	}

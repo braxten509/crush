@@ -63,40 +63,43 @@ function turn(field) {
   newest.set(field, reads);
   return reads;
 }
-async function latest(field, read) {
+// write(answer) runs in the same step as the turn check, with no await
+// between them, so nothing (a dropFiles, a newer read) can slip in.
+async function latest(field, read, write) {
   const mine = turn(field);
   const value = await read();
-  return newest.get(field) === mine ? { value } : null;
+  if (newest.get(field) === mine) write(value);
 }
 
 export async function loadConfig() {
-  const read = await latest("config", () => api.config());
-  if (read) ws.config = pickConfig(read.value);
+  await latest("config", () => api.config(), (config) => {
+    ws.config = pickConfig(config);
+  });
 }
 
 export async function loadAgent() {
-  const read = await latest("agent", () => api.agentInfo());
-  if (!read) return;
-  const agent = read.value;
-  ws.agent = agent ?? null;
-  if (agent?.is_ready) agentProviderChanged(agent.model_cfg?.provider ?? "");
+  await latest("agent", () => api.agentInfo(), (agent) => {
+    ws.agent = agent ?? null;
+    if (agent?.is_ready) agentProviderChanged(agent.model_cfg?.provider ?? "");
+  });
 }
 
 export async function loadProviders() {
-  const read = await latest("providers", () => api.providers());
-  if (read) ws.providers = Array.isArray(read.value) ? read.value.map(pickProvider).filter(Boolean) : [];
+  await latest("providers", () => api.providers(), (list) => {
+    ws.providers = Array.isArray(list) ? list.map(pickProvider).filter(Boolean) : [];
+  });
 }
 
 export async function loadSkills() {
-  const read = await latest("skills", () => api.skills());
-  if (read) ws.skills = Array.isArray(read.value) ? read.value : [];
+  await latest("skills", () => api.skills(), (list) => {
+    ws.skills = Array.isArray(list) ? list : [];
+  });
 }
 
 export async function loadBranch() {
-  const read = await latest("branch", () => api.gitBranch());
-  if (!read) return;
-  const answer = read.value;
-  ws.branch = typeof answer === "string" ? answer : (answer?.branch ?? "");
+  await latest("branch", () => api.gitBranch(), (answer) => {
+    ws.branch = typeof answer === "string" ? answer : (answer?.branch ?? "");
+  });
 }
 
 // LSP rows (SIDE-009), as internal/ui/model/lsp.go:45-84: each read takes
@@ -169,8 +172,7 @@ function byVersion(a, b) {
 }
 
 export async function loadFiles(sid) {
-  const read = await latest(`files:${sid}`, () => api.history(sid));
-  if (read) store(sid, read.value);
+  await latest(`files:${sid}`, () => api.history(sid), (list) => store(sid, list));
   return ws.files[sid] ?? [];
 }
 

@@ -213,6 +213,47 @@ describe("events and reads", () => {
       await settle();
     }
 
+    // The answer is checked and stored with nothing in between: whatever runs
+    // after any number of microtasks of a landing read sees it stored or not.
+    const micro = async (n) => {
+      for (let i = 0; i < n; i += 1) await null;
+    };
+
+    it("a list dropped while its read lands stays dropped, at every point of the landing", async () => {
+      for (let k = 0; k < 12; k += 1) {
+        const reads = slow("GET sessions/s1/history");
+        const loading = workspace.loadFiles("s1");
+        reads[0]([f1]);
+        await micro(k);
+        workspace.dropFiles("s1");
+        await loading;
+        await settle();
+        expect(workspace.ws.files.s1, `dropped after ${k} microtasks`).toBeUndefined();
+      }
+    });
+
+    const fields = [
+      { field: "config", route: "GET config", load: () => workspace.loadConfig(), value: () => workspace.ws.config, old: older, now: newer },
+      { field: "files", route: "GET sessions/s1/history", load: () => workspace.loadFiles("s1"), value: () => workspace.ws.files.s1, old: [f1], now: [f1, f2] },
+    ];
+    for (const { field, route, load, value, old, now } of fields) {
+      it(`${field}: once a newer read starts, an older one never stores its answer, at every point of its landing`, async () => {
+        for (let k = 0; k < 12; k += 1) {
+          const reads = slow(route);
+          const first = load();
+          reads[0](old);
+          await micro(k);
+          const before = value();
+          const second = load(); // a newer read starts
+          await first;
+          await settle();
+          expect(value(), `newer read started after ${k} microtasks`).toBe(before);
+          reads[1](now);
+          await second;
+        }
+      });
+    }
+
     for (const order of ["the newer read lands first", "the older read lands first"]) {
       it(`config: a config_changed read, then a resync's read; ${order}`, async () => {
         const reads = slow("GET config");

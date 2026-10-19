@@ -9,7 +9,7 @@
   import Sheet, { section } from "../kit/Sheet.svelte";
   import { openDialog, closeDialog } from "../../lib/dialogs.js";
   import { runAction } from "../../lib/actions.js";
-  import { remotePasswordExists } from "../../lib/engine/commands.js";
+  import { crushDirs, remotePasswordExists } from "../../lib/engine/commands.js";
   import { refreshModels, modelData } from "../../lib/models/store.svelte.js";
   import { platform } from "../../lib/palette/entries.js";
   import { signIn, signOut } from "../../lib/signin/accounts.js";
@@ -95,10 +95,16 @@
     refreshModels();
   }
 
+  let configDirs = $state([]);
+
   onMount(() => {
     refreshModels();
     remotePasswordExists()
       .then((exists) => (hasPassword = exists))
+      .catch(() => {});
+    // The config folders, as About shows them (2.13, 2.28).
+    crushDirs()
+      .then((dirs) => (configDirs = (dirs?.lines ?? []).slice(0, 2)))
       .catch(() => {});
   });
 </script>
@@ -206,7 +212,7 @@
       <button type="button" class="act" onclick={() => runAction("providers.refresh")}>Refresh</button>
     </div>
 
-    <p class="quiet">Other settings are read from crush.json and crushrc.</p>
+    <p class="quiet">Other settings are read from crush.json and crushrc{configDirs.length ? ` in ${configDirs.join(" and ")}` : ""}.</p>
   </div>
 </Sheet>
 

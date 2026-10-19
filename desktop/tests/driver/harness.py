@@ -88,6 +88,20 @@ def probe_section(path, name, timeout=20):
 _request_ids = itertools.count(int(time.time() * 1000))
 
 
+def probe_eval(path, script, timeout=20):
+    """Runs script in the page through the app (probe mode only) and returns
+    what it put in window.__probeEval: report["evaluated"]."""
+    with open(path + ".eval.js.tmp", "w") as f:
+        f.write(script)
+    os.replace(path + ".eval.js.tmp", path + ".eval.js")
+    rid = next(_request_ids)
+    side = path + ".request.json"
+    with open(side + ".tmp", "w") as f:
+        json.dump({"id": rid, "eval": True}, f)
+    os.replace(side + ".tmp", side)
+    return wait_for(path, lambda p: p.get("request_id") == rid, timeout).get("evaluated")
+
+
 def probe_heavy(path, timeout=20, invoke=None):
     """Asks the page for its heavy fields (rects, words, selection, scans) and
     returns the whole report once it answers: report["heavy"][section] holds

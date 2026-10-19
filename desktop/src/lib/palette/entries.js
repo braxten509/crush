@@ -110,7 +110,7 @@ export function systemEntries({ summarize, toggleYolo, initProject }) {
     },
     action("customize_composer", "Customize Composer", "composer.customize", { aliases: ["footer", "stats", "status"] }),
     sheet("subagent_instructions", "Sub-agent Instructions", "subagent_instructions", { aliases: ["subagents", "sub-agents", "spawn", "agents"] }),
-    sheet("memory_limit", "Memory Limit", "memory_limit", { aliases: ["ram", "memory", "swap"] }),
+    sheet("memory_limit", "Memory Limit", "memory_limit", { aliases: ["ram", "memory", "swap"], when: () => platform.linux }),
     sheet("switch_theme", "Themes", "theme"),
     {
       ...action("toggle_agent_cpus", "", "cpus.toggle", { aliases: ["cpu", "cores", "stutter"], when: () => platform.linux }),

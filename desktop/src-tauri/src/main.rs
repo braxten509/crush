@@ -116,6 +116,8 @@ fn main() {
             commands::app_info,
             commands::probe_write,
             commands::probe_request,
+            commands::probe_eval,
+            commands::updates_claim,
             commands::engine_open,
             commands::engine_retry,
             commands::engine_set_current_session,

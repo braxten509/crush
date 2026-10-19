@@ -13,7 +13,8 @@
 // same probe_request answer carries "opened", the count of lines in
 // "<probe file>.opened.jsonl", which every report includes.
 import { invoke } from "@tauri-apps/api/core";
-import { dialogs } from "./dialogs.js";
+import { closeDialog, dialogs, openDialog } from "./dialogs.js";
+import { runAction } from "./actions.js";
 import { app_info, lastClipboardWrite } from "./engine/commands.js";
 import { ui } from "./stores/ui.svelte.js";
 
@@ -122,7 +123,7 @@ function meterKey(event) {
 }
 
 let lastRequestId = null;
-let heavy = { request_id: null, sections: null, invoke: null };
+let heavy = { request_id: null, sections: null, invoke: null, evaluated: null };
 let opened = 0;
 
 async function serveRequest() {
@@ -153,7 +154,23 @@ async function serveRequest() {
       }
     }
   }
-  heavy = { request_id: request.id, sections: out, invoke: invoked };
+  heavy = { request_id: request.id, sections: out, invoke: invoked, evaluated: request.eval ? await evaluate() : null };
+}
+
+// Runs <probe file>.eval.js through the app (the page's CSP forbids eval)
+// and waits for the script's window.__probeEval.
+async function evaluate() {
+  window.__probeEval = undefined;
+  try {
+    await invoke("probe_eval");
+  } catch (error) {
+    return { error: String(error) };
+  }
+  const end = performance.now() + 5000;
+  while (window.__probeEval === undefined && performance.now() < end) {
+    await new Promise((done) => setTimeout(done, 20));
+  }
+  return window.__probeEval ?? { error: "the script did not report" };
 }
 
 function guarded(fn) {
@@ -172,6 +189,7 @@ function report() {
   out.request_id = heavy.request_id;
   out.heavy = heavy.sections;
   out.invoked = heavy.invoke;
+  out.evaluated = heavy.evaluated;
   return out;
 }
 
@@ -183,6 +201,8 @@ export async function startProbe() {
     return; // Not running inside the app window (unit tests, plain browser).
   }
   if (!enabled) return;
+  // For scripts run through probe_eval (the look checks open each screen).
+  window.__probe = { openDialog, closeDialog, runAction };
   inlineResult = inlineCodeBlocked();
   probeSection("overlay", () => ({
     viewer: ui.viewer ?? null,

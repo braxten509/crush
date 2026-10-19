@@ -10,20 +10,21 @@ use tauri::window::{ProgressBarState, ProgressBarStatus};
 use tauri::UserAttentionType;
 use tauri::{AppHandle, Manager};
 
-/// Applies the app-wide badge count, progress and attention.
-pub fn apply(app: &AppHandle, badge: Option<u32>, progress: Option<&str>, attention: bool) -> AppResult<()> {
+/// Applies the app-wide badge count and progress, and asks for attention on
+/// the window labelled `attention` alone: the one that became blocked.
+pub fn apply(app: &AppHandle, badge: Option<u32>, progress: Option<&str>, attention: Option<&str>) -> AppResult<()> {
     let state = app.state::<crate::state::AppState>();
     if let Some(file) = state.launch.probe_side_file("alerts.jsonl") {
-        crate::state::append_json_line(&file, &json!({ "kind": "taskbar", "badge": badge, "progress": progress, "attention": attention }));
+        crate::state::append_json_line(&file, &json!({ "kind": "taskbar", "badge": badge, "progress": progress, "attention": attention.is_some(), "window": attention }));
     }
     let progress_state = || ProgressBarState {
         status: Some(if progress.is_some() { ProgressBarStatus::Indeterminate } else { ProgressBarStatus::None }),
         progress: None,
     };
-    for window in app.webview_windows().values() {
+    for (label, window) in app.webview_windows() {
         let _ = window.set_badge_count(badge.filter(|n| *n > 0).map(i64::from));
         let _ = window.set_progress_bar(progress_state());
-        if attention && !window.is_focused().unwrap_or(false) {
+        if attention == Some(label.as_str()) && !window.is_focused().unwrap_or(false) {
             let _ = window.request_user_attention(Some(UserAttentionType::Informational));
         }
     }

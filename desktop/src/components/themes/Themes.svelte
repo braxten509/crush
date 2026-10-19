@@ -206,7 +206,10 @@
   }
 
   function onKey(event, combo) {
-    if (choosing) return combo !== "Escape" && combo !== "Alt+Escape";
+    // While Apply saves, every key waits, Esc too: closing now would undo
+    // the preview a moment before the saved theme lands. The sheet closes
+    // when the save is done.
+    if (choosing) return true;
     if (mode === "delete") {
       if (combo === "y" || combo === "Shift+Y" || combo === "Enter") confirmDelete();
       else if (combo === "n" || combo === "Shift+N" || combo === "Escape" || combo === "Alt+Escape") {

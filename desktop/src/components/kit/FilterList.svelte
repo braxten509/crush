@@ -24,7 +24,9 @@
   //   default), info?(item), detail?(item) (a second line), onChoose?(item,
   //   index), empty? (the line shown with no rows), label? (accessible name),
   //   hoverRuns? (the palette's mouse, CMD-013: hover selects, one click
-  //   chooses)
+  //   chooses), maxRows? (the list is no taller than that many rows, with
+  //   the group headings among them), below (bindable: how many rows sit
+  //   wholly below the scrolled view, for a "↓ N more" line)
   // Methods: move(delta, {wrap}), selectFirst(), selectLast(), chosen(),
   // visibleIndexes().
   import { tick, untrack } from "svelte";
@@ -51,6 +53,8 @@
     empty = "",
     label = "",
     hoverRuns = false,
+    maxRows = null,
+    below = $bindable(0),
   } = $props();
 
   let root = $state(null);
@@ -61,6 +65,7 @@
   let fontsLoaded = $state(0);
   let fadeTop = $state(false);
   let fadeBottom = $state(false);
+  let cap = $state(null); // the scroller's height limit in CSS px, with maxRows
 
   const barMode = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
   const titleOf = (item) => String((title ? title(item) : filterText(item)) ?? "");
@@ -220,13 +225,31 @@
     if (!scroller) return;
     fadeTop = scroller.scrollTop > 0.5;
     fadeBottom = scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 0.5;
+    const bottom = scroller.getBoundingClientRect().bottom;
+    below = [...scroller.querySelectorAll("[data-index]")].filter((el) => el.getBoundingClientRect().top >= bottom - 0.5).length;
+  }
+
+  // The height of the first maxRows rows and the headings among them.
+  function measureCap() {
+    if (!maxRows || !scroller) return (cap = null);
+    const first = scroller.firstElementChild;
+    const rows = [...scroller.querySelectorAll("[data-index]")];
+    const last = rows[Math.min(maxRows, rows.length) - 1];
+    cap = first && last && rows.length > maxRows ? last.getBoundingClientRect().bottom - first.getBoundingClientRect().top : null;
   }
 
   function measureRow() {
     if (!scroller) return;
     rowWidth = Math.max(0, scroller.clientWidth - 2 * 26 * scale());
+    measureCap();
     updateFades();
   }
+
+  // New rows (a query, a reload) change the cap and what is below the view.
+  $effect(() => {
+    void order.length;
+    if (scroller) tick().then(measureRow);
+  });
 
   $effect(() => {
     if (!scroller) return;
@@ -337,7 +360,7 @@
 </script>
 
 <div class="filter-list" data-kit-list bind:this={root}>
-  <ul class="scroller" role="listbox" aria-label={label || "Items"} tabindex="-1" bind:this={scroller} onscroll={updateFades}>
+  <ul class="scroller" role="listbox" aria-label={label || "Items"} tabindex="-1" bind:this={scroller} onscroll={updateFades} style:max-height={cap === null ? null : `${cap}px`}>
     {#each sections as section (section.key)}
       {#if section.label}
         <li class="group" role="presentation" data-group>{section.label}</li>

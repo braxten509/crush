@@ -1,0 +1,67 @@
+name: desktop-mac
+# Builds the Mac version of Crush Desktop together with the Mac `crush` it
+# runs (desktop/PLAN.md, "Mac build"). It can't be tried on a real Mac where
+# the app is made, so this build and the Mac compile check are its evidence.
+# The app finds `crush` on the login shell's PATH (desktop-design 1.2.3):
+# put the `crush` artifact on PATH (chmod +x: artifacts lose it), then open
+# the app from the dmg.
+on:
+  push:
+    branches: [main, desktop]
+    paths:
+      - "desktop/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - "main.go"
+      - ".github/workflows/desktop-mac.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build crush
+        env:
+          CGO_ENABLED: "0"
+        run: go build -o dist/crush .
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Install pnpm
+        run: npm install -g pnpm@12.13.0
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Build the screens
+        working-directory: desktop
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Rust tests
+        working-directory: desktop/src-tauri
+        run: cargo test --release
+      - name: Build the app
+        working-directory: desktop
+        # tauri.macos.conf.json turns bundling on for the Mac (app and dmg).
+        run: pnpm dlx @tauri-apps/cli@2 build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crush-desktop-mac
+          path: |
+            desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/release/bundle/macos/*.app
+            dist/crush
+          if-no-files-found: error

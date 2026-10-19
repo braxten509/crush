@@ -6,7 +6,7 @@
 // automatic checks run once per app start in the first window.
 import { askYesNo } from "../ask/localform.js";
 import { api } from "../engine/api.js";
-import { app_info, selfupdateInstall, selfupdateRun } from "../engine/commands.js";
+import { selfupdateInstall, selfupdateRun, updatesClaim } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { notify } from "../stores/ui.svelte.js";
 
@@ -88,8 +88,12 @@ function installed(done) {
   const results = done?.results ?? [];
   const passed = results.filter((r) => !r.error).map((r) => `${r.name} ${r.latest}`);
   const failed = results.filter((r) => r.error).map((r) => `${r.name}: ${r.error}`);
-  let text = passed.length > 0 ? `Updated ${passed.join(", ")}` : "No CLI was updated";
-  if (failed.length > 0) text += `; failed: ${failed.join("; ")}`;
+  // As the terminal words it (cliupdate.go:171-188).
+  const parts = [];
+  if (passed.length > 0) parts.push(`Updated ${joinNames(passed)}`);
+  if (failed.length > 0) parts.push(`failed: ${failed.join("; ")}`);
+  const text = parts.join("; ").replaceAll("\n", "; ");
+  if (!text) return;
   notify(failed.length > 0 ? "error" : "success", text, NOTICE_MS);
 }
 
@@ -210,13 +214,12 @@ export function startUpdates() {
   started = true;
   onEvent("update_available", (_kind, event) => upstream(event));
   onEvent("cli_updates_installed", (_kind, done) => installed(done));
-  const first = app_info().then(
-    (info) => info?.first_window === true,
-    () => false,
-  );
+  // The first window to connect runs the automatic checks, once per app
+  // start, even when the window opened first closed before it was ready.
   onEvent("connection", async (_kind, ev) => {
-    if (ev?.state !== "connected" || checked || !(await first) || checked) return;
+    if (ev?.state !== "connected" || checked) return;
     checked = true;
+    if (!(await updatesClaim().catch(() => false))) return;
     checkClis(false).finally(() => checkCrush(false));
   });
 }

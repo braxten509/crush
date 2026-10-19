@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State, Window};
+use tauri::{AppHandle, Manager, State, WebviewWindow, Window};
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct AppInfo {
@@ -129,6 +129,26 @@ pub fn probe_request(state: State<'_, AppState>) -> AppResult<Option<ProbeReques
     }))
 }
 
+/// True to the first window that asks, once per app start: that window runs
+/// the automatic update checks when it is ready (desktop-design-5-6 2.19),
+/// whichever window that turns out to be.
+#[tauri::command]
+pub fn updates_claim() -> bool {
+    static CLAIMED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    !CLAIMED.swap(true, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Probe mode only: runs `<probe file>.eval.js` in the calling window, for
+/// the alignment check, which reads the real page's boxes (8.6). The page's
+/// CSP forbids eval; a script the app itself runs is not held to it. The
+/// script reports through `window.__probeEval`, which the probe passes on.
+#[tauri::command]
+pub fn probe_eval(window: WebviewWindow, state: State<AppState>) -> Result<(), String> {
+    let path = state.launch.probe_side_file("eval.js").ok_or("not started with --probe")?;
+    let script = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    window.eval(script).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn engine_open(
     app: AppHandle,
@@ -173,7 +193,13 @@ pub fn events_take(app: AppHandle, window: Window) -> Vec<Value> {
     if let Some(fixture) = app.try_state::<Fixture>() {
         return fixture.take(window.label());
     }
-    connection::take(&app, window.label())
+    let mut events = connection::take(&app, window.label());
+    // An MCP server's error is built from its URL, which may carry a
+    // password (6.1); events carry it near the top.
+    for event in &mut events {
+        scrub_errors(event, 3);
+    }
+    events
 }
 
 #[tauri::command]
@@ -228,6 +254,8 @@ fn redact_answer(method: &str, path: &str, mut value: Value) -> Value {
                 }
             }
         }
+        // Each server's error text may name its URL with a password in it.
+        "mcp/states" => scrub_errors(&mut value, 3),
         "providers" => {
             if let Some(list) = value.as_array_mut() {
                 for provider in list.iter_mut().filter_map(Value::as_object_mut) {
@@ -243,6 +271,44 @@ fn redact_answer(method: &str, path: &str, mut value: Value) -> Value {
 }
 
 /// `scheme://host[:port]/path` of a URL: no user part, query or fragment.
+/// Takes passwords out of the URLs in every "error" string down to depth
+/// levels: the user part and the query of each `scheme://` word go.
+fn scrub_errors(value: &mut Value, depth: usize) {
+    match value {
+        Value::Object(fields) => {
+            for (key, field) in fields.iter_mut() {
+                match field {
+                    Value::String(text) if key == "error" => *text = scrub_urls(text),
+                    _ if depth > 0 => scrub_errors(field, depth - 1),
+                    _ => {}
+                }
+            }
+        }
+        Value::Array(items) if depth > 0 => items.iter_mut().for_each(|item| scrub_errors(item, depth - 1)),
+        _ => {}
+    }
+}
+
+/// `text` with each URL in it cut to scheme, host and path (bare_url).
+fn scrub_urls(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("://") {
+        // The scheme is the letters right before "://".
+        let start = rest[..at].rfind(|c: char| !(c.is_ascii_alphanumeric() || "+-.".contains(c))).map_or(0, |i| i + 1);
+        let end = rest[at..].find(|c: char| c.is_whitespace() || "\"'<>`".contains(c)).map_or(rest.len(), |i| at + i);
+        // Punctuation that ends the sentence is not part of the URL.
+        let end = start + rest[start..end].trim_end_matches([':', ',', ';', '.', ')']).len();
+        out.push_str(&rest[..start]);
+        let word = &rest[start..end];
+        let bare = bare_url(word);
+        out.push_str(if bare.is_empty() { word } else { &bare });
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn bare_url(url: &str) -> String {
     let url = url.split(['?', '#']).next().unwrap_or("");
     let Some((scheme, rest)) = url.split_once("://") else { return String::new() };
@@ -589,6 +655,20 @@ pub fn dir_list(path: String) -> AppResult<dirlist::DirList> {
 #[tauri::command(async)]
 pub fn folder_pick(app: AppHandle, start: String) -> AppResult<Option<String>> {
     folderdialog::pick(&app, &start)
+}
+
+#[cfg(test)]
+mod scrub_tests {
+    use super::*;
+
+    #[test]
+    fn errors_lose_url_passwords() {
+        let mut v = serde_json::json!({"a": {"state": "error", "error": "dial https://u:secret@host.dev/sse?key=k2: refused"}, "list": [{"error": "plain"}]});
+        scrub_errors(&mut v, 3);
+        assert_eq!(v["a"]["error"], "dial https://host.dev/sse: refused");
+        assert_eq!(v["list"][0]["error"], "plain");
+        assert_eq!(scrub_urls("x \"ws://a:b@h/p\" y"), "x \"ws://h/p\" y");
+    }
 }
 
 #[cfg(test)]

@@ -221,6 +221,11 @@ export async function selfupdateInstall() {
 }
 
 // → {lines, log, crashes}
+// True to the first window that asks, once per app start (2.19).
+export async function updatesClaim() {
+  return invoke("updates_claim");
+}
+
 export async function crushDirs() {
   return invoke("crush_dirs");
 }

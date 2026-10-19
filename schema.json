@@ -684,6 +684,24 @@
           "examples": [
             "6-11,18-23"
           ]
+        },
+        "remote_launch_target": {
+          "type": "string",
+          "enum": [
+            "terminal",
+            "desktop"
+          ],
+          "description": "What crush remote launcher opens for the phone: a terminal window or the desktop app",
+          "default": "terminal"
+        },
+        "engine": {
+          "type": "string",
+          "enum": [
+            "shared",
+            "alone"
+          ],
+          "description": "Where a terminal window runs its chats: shared joins the project's engine (so the desktop app and other windows show the same chats live), alone runs them inside the window",
+          "default": "shared"
         }
       },
       "additionalProperties": false,

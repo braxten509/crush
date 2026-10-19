@@ -85,7 +85,8 @@
     let gone = false;
     const channel = new Channel();
     channel.onmessage = (message) => {
-      if (!gone && following) add(message?.lines);
+      // Kept while not following too; only the scrolling stops.
+      if (!gone) add(message?.lines);
     };
     (async () => {
       try {

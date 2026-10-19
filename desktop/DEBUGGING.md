@@ -2,6 +2,21 @@
 
 What the build process (PLAN.md, the ultrabuild review and test rules) called for but was skipped, cut short or left open. Newest first. Each item says what is missing and where it would be done. Details and decisions stay in PLAN.md; this file is the to-do list of gaps.
 
+## Phase 7, terminal switch-over (engine design 5.13), 2026-10-19
+
+Written by the coordinator (Claude Opus 5.5, high effort), in the same way as waves 2 and 3. Four tests were written (`internal/cmd/workspace_setup_test.go`: alone mode takes the shared lock, alone mode starts no engine, shared mode uses ensure, CRUSH_CLIENT_SERVER still decides), and the whole Go suite runs in both modes (`CRUSH_ENGINE=shared` and `alone` through `tests/go-test.sh`).
+
+- **Not one code path.** The design asks the terminal UI to reach jobs, helpers and usage limits only through the workspace. Instead a window that works alone still calls the agent globals exactly as before, and only a shared window goes through the engine (`internal/ui/common/livework.go`). This keeps "go back" identical to today's behavior, but the two paths can drift.
+- **No deliberate breaks, no review yet.** The four tests were not broken on purpose to show they can fail. The phone sharing, secret-entry and limits paths of a shared window have no tests; the final review reads them.
+- **Shared window gaps, left as they are:**
+  - A secret-entry form that is already open for a chat is not fetched when the window switches to that chat. Only forms that open after the switch show.
+  - Prompt alerts in a shared window use the engine's texts, not the terminal's own.
+  - An engine started by the phone launcher's window may inherit `remote.LaunchEnv` from that window.
+  - The window's own phone requests (new chat, yolo, mode) run in the window. Everything else the phone asks runs in the engine, so a busy window can't refuse those.
+- **Mac build path, not yet run.** `.github/workflows/desktop-mac.yml` builds the Mac `crush`, runs `cargo test` and builds the app and dmg on `macos-latest`; it first runs on the push after phase 7. The Mac title bar is the standard one: the design's Mac buttons over the left bar (style-2) were not built, because the page has no room for them and nothing here can check them. The `.icns` icon is made from the 512 px PNG (the 1024 px slot is that image scaled up). `GOOS=darwin go build ./...` passes; the Rust side has no Mac compile check here (no Mac target or SDK).
+- **Alignment pass.** `tests/look/align_real.py` (Chromium boxes on the design mock) is replaced for the real app by `align_app.py` with `driver/look_align.py`, which reads the boxes from the real WebKit page through a probe-only `probe_eval` command. The old script and `align-marks.js` are left in place (deleting them needs the owner's OK). Dialogs not measured: reasoning and projects (they close at once with one model without levels and one project), auth_method (needs a provider state), changes (needs a message's tool calls).
+- **The "go back" setting has no screen.** `options.engine` is set in crush.json or through `CRUSH_ENGINE`. The desktop app's settings screen does not show it, because the desktop app always uses the engine.
+
 ## Phases 5-6, wave 2 (PAL, MOD, AUTH, SES, ASK), 2026-10-19
 
 Owner instruction: the coordinator builds wave 2 itself, with no sub-agents, **no tests and no ultrabuild process** (no plan review, no independent review, no deliberate breaks, no window drivers, no look checks).
@@ -65,6 +80,25 @@ The owner asked for this wave to be written like wave 2, and for this note.
   14. Esc in the Skills sheet did not stop an install or search. Those calls now carry a call ID and are aborted when the sheet closes.
   15. Permission and question alerts never fired for a chat no window shows (the engine sends those prompts only to windows showing the chat). Alerts now also follow `prompt_pending`, which every window gets. Their texts differ from the design: "Permission required in \"<chat>\"" and "Questions in \"<chat>\" need your input" (the mark has no tool name or count).
   16. Two windows could claim one crash report, and a window could take another window's web view crash. `crash_pending` now holds one lock for the whole claim and takes the caller's own web view report.
+- **Fourth review (t94, Step 5 Preview through OpenCode Go, read-only):** all 16 findings of t90 confirmed fixed, 17 new ones. The first try (t93) ran out on DeepInfra's hidden reasoning; a parallel MiMo V2.6 Pro review (t95) was asked for as well. Not real or not changed:
+  1. `crush remote password --stdin` and `crush self-update run --tag --json` are missing: true only of the `crush` installed today (a main build). This branch's `crush` has both; the install step replaces it. Until then the desktop app run against an older `crush` cannot set the launcher password or run updates.
+  7. The picture picker reopens where it was left, not the project folder: design 6.6 chose that on purpose, though design 2.10 and the terminal start in the project folder. Left as design 6.6 says.
+  8. `has_checkout` on a skipped check: the engine always sets it, and only the AI tools check is skipped within the hour.
+  13. `alerts.rs` sends its players' output nowhere, so only `remote.rs` needed the fix.
+- Fixed, without tests (the wave's rule):
+  3. Toggle skills now caps its list at 12 rows (FilterList's new `maxRows`) and counts the filtered rows below the view for "↓ N more" (FilterList's new bindable `below`).
+  4. In Global scope a server this repository turned off shows "enabled", as the terminal.
+  5. The memory warning beeps with style Bell instead of a pop-up.
+  6. Settings' last line names the config folders from `crush dirs`.
+  9. The automatic update checks run in whichever window connects first (new `updates_claim` command), not only the window that opened first.
+  10. MCP error texts lose any password in the URLs they name (`scrub_errors` on `GET mcp/states` and on every event), with a Rust test.
+  11. The taskbar asks for attention on the blocked window only.
+  12. The update notice joins names with " and " and shows nothing when nothing was updated, as the terminal.
+  13. `remote.rs` reads crush's output while it runs, so a full pipe cannot stall it.
+  14. Keys wait while a theme is being applied; the sheet closes when the save is done.
+  15. Log lines that arrive while following is off are kept; only the scrolling stops.
+  16. Check-in minutes accepts 0 (off).
+  17. "Memory Limit" in the command palette is Linux only, as the Settings row.
 
 ## Phases 5-6, wave 1 (KIT, TERM, LST, LIVE), 2026-10-19
 
@@ -145,5 +179,5 @@ Other open items from wave 1:
 
 ## Later by plan (not skipped, listed so nothing is lost)
 
-- Phase 7: shared-engine switch-over, checklist sweep, look review (with a fixed `align_real.py`), DESIGN.md, Mac build path (never built or run on a Mac), docs, OpenCode live fork check.
+- Phase 7: checklist sweep, look review (with a fixed `align_real.py`), DESIGN.md, Mac build path (never built or run on a Mac), docs, OpenCode live fork check.
 - Final Fable review of the whole app; then merge to main, push, install and the app-menu entry.

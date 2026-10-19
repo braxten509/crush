@@ -34,7 +34,10 @@
       // unless this repository turned it on (toggles.go:38-40).
       const locallyDisabled = disabledHere.has(name) || (globallyDisabled && !enabledHere.has(name));
       const off = scope === "local" ? locallyDisabled : globallyDisabled;
-      let text = statusText(states[name], { locallyDisabled });
+      // Global scope labels the config flag: a server this repository turned
+      // off is still "enabled" there (toggles.go:312-328).
+      let text = statusText(states[name], { locallyDisabled: scope === "local" ? locallyDisabled : globallyDisabled });
+      if (scope === "global" && !globallyDisabled && locallyDisabled) text = "enabled";
       if (starting.has(name) && !off) text = "starting";
       return { name, off, text };
     }),

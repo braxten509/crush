@@ -17,6 +17,7 @@
 
   const ID = "kept_skills";
   const MAX_ROWS = 12;
+  let below = $state(0); // filtered rows under the list's view (kept_skills.go:329)
 
   let query = $state("");
   let selected = $state(0);
@@ -78,9 +79,11 @@
     onChoose={(row) => cycle(row)}
     empty={query ? "No skills match." : "No skills found."}
     label="Skills"
+    maxRows={MAX_ROWS}
+    bind:below
   />
-  {#if items.length > MAX_ROWS}
-    <p class="more">↓ {items.length - MAX_ROWS} more</p>
+  {#if below > 0}
+    <p class="more">↓ {below} more</p>
   {/if}
 </Sheet>
 

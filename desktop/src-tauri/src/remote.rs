@@ -57,6 +57,18 @@ fn run(app: &AppHandle, first: &str, second: &str) -> AppResult<PasswordSet> {
         lines.fill(0);
         written.map_err(|e| AppError::new("crush_failed", format!("could not talk to crush: {e}")))?;
     }
+    // Read both pipes while it runs, so a full pipe never stalls crush.
+    let reader = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_string(&mut text);
+            }
+            text
+        })
+    };
+    let out = reader(child.stdout.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let err = reader(child.stderr.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
     let started = Instant::now();
     let status = loop {
         match child.try_wait() {
@@ -70,14 +82,8 @@ fn run(app: &AppHandle, first: &str, second: &str) -> AppResult<PasswordSet> {
             Err(e) => return Err(AppError::new("crush_failed", e.to_string())),
         }
     };
-    let mut out = String::new();
-    let mut err = String::new();
-    if let Some(mut stdout) = child.stdout.take() {
-        let _ = stdout.read_to_string(&mut out);
-    }
-    if let Some(mut stderr) = child.stderr.take() {
-        let _ = stderr.read_to_string(&mut err);
-    }
+    let out = out.join().unwrap_or_default();
+    let err = err.join().unwrap_or_default();
     let last = |text: &str| text.lines().map(str::trim).filter(|l| !l.is_empty()).last().unwrap_or("").to_string();
     if status.success() {
         let message = last(&out);

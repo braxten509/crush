@@ -108,7 +108,8 @@ export function startAlerts() {
     raise({ sessionId: form?.session_id, sound: "message-new-instant" });
   });
   // The memory pop-up: one window wins the claim per episode; sent even
-  // while focused, not with style "disabled" (memory_warning.go:51-78).
+  // while focused, not with style "disabled", a beep with "bell"
+  // (memory_warning.go:51-78).
   let high = false;
   const memory = async (status) => {
     const rise = status?.supported === true && status.high === true && !high;
@@ -116,7 +117,10 @@ export function startAlerts() {
     if (!rise || style() === "disabled") return;
     try {
       const answer = await api.claimMemoryNotice(status.episode);
-      if (answer?.claimed) alertNotify("Crush · Memory almost full", status.message ?? "").catch(() => {});
+      if (!answer?.claimed) return;
+      // Through the chosen style, as the terminal's backend: Bell beeps.
+      if (style() === "bell") alertSound("bell").catch(() => {});
+      else alertNotify("Crush · Memory almost full", status.message ?? "").catch(() => {});
     } catch {
       // No claim: another window shows it.
     }

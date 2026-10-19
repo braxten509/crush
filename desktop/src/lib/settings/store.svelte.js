@@ -93,8 +93,9 @@ export async function setAgentCpus(list) {
 
 export async function setCheckInMinutes(text) {
   const minutes = Number(String(text).trim());
-  if (!Number.isInteger(minutes) || minutes < 1) {
-    notify("error", "Enter a whole number of minutes");
+  // 0 turns check-ins off (options.check_in_minutes).
+  if (String(text).trim() === "" || !Number.isInteger(minutes) || minutes < 0) {
+    notify("error", "Enter a whole number of minutes (0 turns check-ins off)");
     return false;
   }
   try {

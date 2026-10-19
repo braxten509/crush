@@ -134,7 +134,7 @@ export async function saveAutoCompact(value) {
   try {
     await setOption("options.auto_compact_token_limit", value);
     await api.updateAgent();
-    notify("info", `Fallback compaction set to ${value.toLocaleString("en-US")} tokens`);
+    notify("info", `Fallback compaction set to ${value} tokens`);
     return true;
   } catch (error) {
     notify("error", errorText(error));

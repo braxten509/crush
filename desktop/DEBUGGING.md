@@ -40,6 +40,24 @@ Left open:
 - The background row can show the old chat's jobs for up to 1 s after a switch; a shared window counts services as unfinished work in the session host.
 - Mac, unconfirmed until the first Mac run: PTY tabs use `poll(2)` on the PTY, which macOS may not support for devices (a tab would close at once; fix would be `select`); socket paths in tests may pass macOS's 104-byte limit; the workflow's pnpm and unpinned Tauri CLI versions.
 
+## Wave 3 second review (MiMo V2.6 Pro, t95), 2026-10-19
+
+It read the state before the t94 fixes; all 16 earlier findings were confirmed fixed. Of its 14 new findings, 4 (Settings paths, taskbar attention, Toggle skills "↓ N more", MCP Global column) were already fixed by t94, and 1 (palette toggle titles) was already right in `palette/entries.js`.
+
+Fixed:
+- The phone setup step runs once at a time, and "Check again" and the 2 s re-check wait while it runs (`RemoteSetup.svelte`, as the terminal's setupBusy).
+- Docker is checked again each time the command palette opens, not only on connect.
+- The badge's "blocked" no longer counts a secure form, as the terminal's program status.
+- The phone's yolo action answers "Agent is busy, please wait..." in plan mode while busy, instead of claiming success.
+- The fallback compaction notice prints the plain number, as the terminal.
+- Design REM-010 now says what the code and the terminal do: the phone's new chat works only while the window shows its new chat.
+
+Left open:
+- The upstream update notice still shows in every open window (the design sends it to one).
+- "Checking for a new Crush release…" shows after the check answers (whether this Crush has a fork checkout comes from the same call).
+- Enter in the memory limit sheet while it is still loading is dropped; after Enter saves a Settings field, a later config change can overwrite text still being typed (the saved value is right).
+- Wave 3 registers no probe sections (part of the known "no tests" gap for wave 3).
+
 ## Tests added later for waves 2 and 3 (2026-10-19, owner-approved plan)
 
 Risk-based only (logic that could break unnoticed), 36 checks in 9 files, each file shown to fail once on a deliberate break and then restored: secret hiding in `commands.rs` (`redact_answer`, 3 new Rust tests beside the scrub test), question-form answers (`ask/form.test.js`), theme color math and readability (`themes/tokens.test.js`), model picker groups (`models/groups.test.js`), custom command arguments (`palette/customcommands.test.js`), Sessions ages and project rule (`sessions/match.test.js`), log lines (`system/loglines.test.js`), picture picker rules (`pictures/picker.test.js`), and the two fixed phone-sharing bugs (`remote/share.test.js`). No app code changed; no real bug found (two first failures were test mistakes: a provider not built the way the app reads it, and a promise about argument values the terminal does not keep either). Still without tests, on purpose: glue, wording, layout, alerts, badge, title, settings setters, sign-in mapping, and FilterList's row cap (jsdom measures no layout).

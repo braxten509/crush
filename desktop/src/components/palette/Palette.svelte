@@ -21,6 +21,7 @@
   import { cancelPrompt, finishPrompt, palette, promptCurrent, startPrompt, watchCommands } from "../../lib/palette/store.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { attachSkill } from "../../lib/stores/composer.svelte.js";
+  import { checkDocker } from "../../lib/extensions/store.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
 
   const ID = "commands";
@@ -188,6 +189,7 @@
 
   onMount(() => {
     const stop = watchCommands();
+    checkDocker(); // the palette asks for Docker when it opens (commands.go:138)
     return () => {
       stop();
       // Esc while "Generating Prompt..." shows cancels the fetch (DLG-263); a

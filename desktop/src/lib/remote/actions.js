@@ -4,6 +4,7 @@
 import { runAction } from "../actions.js";
 import { windowBusy } from "../busy.js";
 import { api } from "../engine/api.js";
+import { composer } from "../stores/composer.svelte.js";
 import { ensureSession, sessions } from "../stores/sessions.svelte.js";
 
 const BUSY = "Agent is busy, please wait...";
@@ -33,6 +34,7 @@ export async function runRemoteAction(action) {
         return done(id, { session_id: sid });
       }
       case "yolo":
+        if (composer.input === "plan" && (windowBusy() || composer.switching)) return done(id, { error: BUSY });
         runAction("yolo.toggle");
         return done(id, {});
       case "mode":

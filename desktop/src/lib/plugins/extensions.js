@@ -33,7 +33,8 @@ async function docker(enable) {
 registerAction({ id: "docker.enable", title: "Enable Docker MCP Catalog", enabled: () => !dockerConfigured() && ext.dockerAvailable, run: () => docker(true) });
 registerAction({ id: "docker.disable", title: "Disable Docker MCP Catalog", enabled: () => dockerConfigured(), run: () => docker(false) });
 
-// The palette asks for Docker's availability when it opens (commands.go:138).
+// Docker's availability is asked on connect and each time the palette opens
+// (commands.go:138; Palette.svelte).
 onEvent("connection", (_kind, ev) => {
   if (ev?.state === "connected") checkDocker();
 });

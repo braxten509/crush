@@ -10,7 +10,6 @@ import { alertWindowState } from "../engine/commands.js";
 import { projectDir } from "../stores/composer.svelte.js";
 import { prompts } from "../stores/prompts.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
-import { ui } from "../stores/ui.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
 import { onFocusGain, windowFocus } from "./focus.js";
 
@@ -21,7 +20,7 @@ export const markError = () => (marks.error = true);
 export const focusChanged = () => (marks.focused = windowFocus.focused);
 
 function stateNow() {
-  const blocked = Boolean(prompts.permission || prompts.question || ui.slot?.kind === "secure" || dialogs.some((d) => d.id === "aws_sso"));
+  const blocked = Boolean(prompts.permission || prompts.question || dialogs.some((d) => d.id === "aws_sso"));
   if (blocked) return "blocked";
   if (windowBusy() && ws.config?.options?.progress !== false) return "working";
   if (marks.error) return "error";

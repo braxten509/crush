@@ -1502,8 +1502,8 @@ The terminal's client-mode refusal "Remote Control needs Crush running in this t
 
 **Phone actions the window runs (REM-010).** `remote_action` events with `kind` "new_chat_send", "yolo" or "mode"; every other kind runs in the engine (engine design 5.7, "Who runs each action"). The window answers each with `POST …/remote/actions/{action_id}/done` within 25 s:
 
-- `new_chat_send`: the window creates its new chat as typing would (`runAction("chat.new")`, then `ensureSession()`, P3.9 and P3.3), shows it, and answers `{session_id}`; the engine then sends the text and the uploads.
-- `yolo`: `runAction("yolo.toggle")` (P3.7), which also leaves plan mode (`input_mode.go:43-54`, `:126-134`), then `{}`.
+- `new_chat_send`: only while the window shows its new chat (the session check below), the window makes that chat as typing would (`ensureSession()`, P3.3), and answers `{session_id}`; the engine then sends the text and the uploads. As the terminal's engine path (`internal/ui/model/remote_engine.go`), it does not leave a shown chat first.
+- `yolo`: `runAction("yolo.toggle")` (P3.7), which also leaves plan mode (`input_mode.go:43-54`, `:126-134`), then `{}`; in plan mode while the window is busy or switching it answers `{error: "Agent is busy, please wait..."}`, as the terminal.
 - `mode`: `runAction("mode.cycle")` (P3.7), then `{}`; while the window is busy it answers `{error: "Agent is busy, please wait..."}` (`internal/ui/model/remote.go:407-410`, `:434`).
 - `session_id` not the shown chat → `{error: "the Crush window switched to another chat"}` (`remote.go:375-377`).
 

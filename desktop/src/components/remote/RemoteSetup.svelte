@@ -19,6 +19,7 @@
   const ID = "remote_setup";
 
   let stepFailed = $state(false);
+  let stepping = $state(false); // a setup step is running
   let selected = $state("check");
   let timer = null;
   let left = false;
@@ -56,24 +57,32 @@
     untrack(() => (selected = first));
   });
 
-  // Checks again every 2 s while the engine says setup (remote.go:227-253).
+  // Checks again every 2 s while the engine says setup (remote.go:227-253),
+  // but not while a setup step runs.
   $effect(() => {
-    const again = share.state === "setup" && setup?.state !== "unsupported";
+    const again = share.state === "setup" && setup?.state !== "unsupported" && !stepping;
     clearInterval(timer);
     if (again) timer = setInterval(() => share.state === "setup" && startShare(), 2000);
   });
 
+  // One setup step at a time, and no check while it runs (setupBusy,
+  // remote.go:227-229, 264-267).
   async function runStep() {
     const action = setup?.action;
-    if (!action) return;
+    if (!action || stepping) return;
+    stepping = true;
     stepFailed = false;
     clearInterval(timer);
-    const tab = openTerminal({ cwd: projectDir(), argv: ["crush", "remote", "setup", action], title: "Remote setup" });
-    showTerminal(tab.id);
-    const exit = await tab.exited;
-    if (left) return;
-    if (exit?.code === 0) startShare();
-    else stepFailed = true;
+    try {
+      const tab = openTerminal({ cwd: projectDir(), argv: ["crush", "remote", "setup", action], title: "Remote setup" });
+      showTerminal(tab.id);
+      const exit = await tab.exited;
+      if (left) return;
+      if (exit?.code === 0) startShare();
+      else stepFailed = true;
+    } finally {
+      stepping = false;
+    }
   }
 
   function press(id) {
@@ -81,6 +90,7 @@
       cancelStart();
       closeDialog(ID);
     } else if (id === "check") {
+      if (stepping) return;
       stepFailed = false;
       startShare();
     } else if (id === "step") runStep();

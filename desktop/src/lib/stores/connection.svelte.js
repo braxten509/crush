@@ -184,9 +184,9 @@ onEvent("connection", (_kind, ev) => {
   conn.state = ev.state;
   conn.attempt = ev.attempt ?? 0;
   if (ev.workspace) conn.workspace = ev.workspace;
-  if (ev.engine) conn.engine = ev.engine;
   if (ev.state === "failed") conn.error = ev.error ? plainError(ev.error) : conn.error;
   if (ev.state === "connected") {
+    if (ev.engine) conn.engine = ev.engine; // the engine of this join (Ensured, 1.2.6)
     conn.error = null;
     conn.freshEngine = ev.fresh_engine === true;
     joinedOnce = true;
@@ -208,5 +208,8 @@ probeSection("connection", () => ({
   client_id: conn.clientId,
   engine_version: conn.version?.version ?? conn.engine?.version ?? "",
   fresh_engine: conn.freshEngine,
+  // The last connected event's engine: drivers read the socket for ground
+  // truth and kill the pid (1.9).
+  engine: { socket: conn.engine?.socket ?? "", pid: conn.engine?.pid ?? 0 },
   notices: conn.notices.map((n) => ({ kind: n.kind, text: n.text })),
 }));

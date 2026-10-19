@@ -314,7 +314,29 @@ it("the probe's connection section has the pinned fields (1.9)", async () => {
     client_id: "client-1",
     engine_version: "v0.70.0",
     fresh_engine: false,
+    engine: { socket: "", pid: 0 },
     notices: [{ kind: "info", text: "hello" }],
   });
+  vi.doUnmock("../probe.js");
+});
+
+it("the probe's engine is the last connected event's socket and pid (1.9)", async () => {
+  const sections = [];
+  vi.resetModules();
+  vi.doMock("../probe.js", () => ({ probeSection: (name, light) => sections.push({ name, light }) }));
+  const events = await import("../engine/events.js");
+  await import("./connection.svelte.js");
+  await events.startEvents();
+  await settle();
+  const engine = () => sections.find((s) => s.name === "connection").light().engine;
+  const ensured = (pid) => ({ address: "unix:///run/crush.sock", socket: "/run/crush.sock", protocol: 1, version: "v0.70.0", pid, data_dir: "/d", started: true });
+  expect(engine()).toEqual({ socket: "", pid: 0 });
+  await deliver(ev("connection", "updated", { state: "connected", attempt: 0, resync: false, fresh_engine: false, engine: ensured(42) }));
+  expect(engine()).toEqual({ socket: "/run/crush.sock", pid: 42 });
+  await deliver(ev("connection", "updated", { state: "reconnecting", attempt: 1 }));
+  expect(engine()).toEqual({ socket: "/run/crush.sock", pid: 42 });
+  // A new engine after a restart: same socket, another pid.
+  await deliver(ev("connection", "updated", { state: "connected", attempt: 1, resync: true, fresh_engine: true, engine: ensured(77) }));
+  expect(engine()).toEqual({ socket: "/run/crush.sock", pid: 77 });
   vi.doUnmock("../probe.js");
 });

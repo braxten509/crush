@@ -1,0 +1,253 @@
+{
+ "live_now": "2026-10-19T12:00:00Z",
+ "workspace": {
+  "id": "ws-live",
+  "path": "/tmp/home/proj",
+  "yolo": true,
+  "debug": false,
+  "data_dir": "/tmp/home/proj/.crush",
+  "version": "fixture",
+  "channels": [],
+  "skills": [],
+  "protocol": 1
+ },
+ "agent": {
+  "is_busy": false,
+  "is_ready": true,
+  "model": {
+   "id": "sonnet",
+   "name": "Sonnet 5.5",
+   "context_window": 200000,
+   "can_reason": true,
+   "reasoning_levels": ["low", "medium", "high"],
+   "default_reasoning_effort": "high",
+   "supports_attachments": true
+  },
+  "model_cfg": {
+   "model": "sonnet",
+   "provider": "claude-code",
+   "reasoning_effort": "high"
+  }
+ },
+ "get": {
+  "config": {
+   "models": {
+    "large": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
+    "small": {"model": "sonnet", "provider": "claude-code"}
+   },
+   "options": {"notifications": "disabled"}
+  },
+  "agent/default-small-model": {"model": "sonnet", "provider": "claude-code"},
+  "agent/capabilities": {"kind": "claude-code", "can_background": true},
+  "providers": [],
+  "git/branch": {"branch": "main"},
+  "project/needs-init": {"needs_init": false},
+  "permissions/skip": {"skip": true},
+  "lsps": {},
+  "mcp/states": {},
+  "skills": [],
+  "chat-links": [],
+  "/v1/limits": {"clis": []},
+  "/v1/memory": {"supported": true, "percent": 40, "high": false, "episode": 0, "limit_bytes": 0, "box_used_bytes": 0, "total_ram_bytes": 17179869184},
+  "servers": [],
+  "sessions": [
+   {
+    "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "parent_session_id": "",
+    "title": "Map the payments API",
+    "message_count": 2,
+    "prompt_tokens": 18400,
+    "completion_tokens": 2100,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792409400,
+    "updated_at": 1792411140,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 18400, "estimated": false},
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
+    "parent_session_id": "",
+    "title": "Release notes draft",
+    "message_count": 2,
+    "prompt_tokens": 9200,
+    "completion_tokens": 800,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792408800,
+    "updated_at": 1792410540,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 9200, "estimated": false},
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   }
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01": {
+   "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+   "parent_session_id": "",
+   "title": "Map the payments API",
+   "message_count": 2,
+   "prompt_tokens": 18400,
+   "completion_tokens": 2100,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792409400,
+   "updated_at": 1792411140,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 18400, "estimated": false},
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01/messages": [
+   {
+    "id": "m1",
+    "role": "user",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "parts": [{"type": "text", "data": {"text": "Map the payments API and tell me where refunds are written."}}],
+    "model": "",
+    "provider": "",
+    "created_at": 1792409600,
+    "updated_at": 1792409600
+   },
+   {
+    "id": "m2",
+    "role": "assistant",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "parts": [
+     {"type": "text", "data": {"text": "A read-only helper is mapping the API now; a second one runs the linter."}},
+     {"type": "finish", "data": {"reason": "end_turn", "time": 1792409650}}
+    ],
+    "model": "sonnet",
+    "provider": "claude-code",
+    "created_at": 1792409650,
+    "updated_at": 1792409650
+   }
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01/jobs": [],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11": {
+   "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11",
+   "parent_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+   "title": "explore-api",
+   "message_count": 25,
+   "prompt_tokens": 42000,
+   "completion_tokens": 5300,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792409700,
+   "updated_at": 1792410180,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {"provider": "claude-code", "model": "haiku", "tokens": 42000, "estimated": false},
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11/messages": [
+   {"id": "c0", "role": "user", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Map the payments API: routes, handlers and the webhook retries. Read only."}}], "model": "", "provider": "", "created_at": 1792409700, "updated_at": 1792409700},
+   {"id": "c1", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 1. Charges go through the ledger first and the card network second. When the network times out, the ledger entry stays open until the reconciler closes it about five minutes later."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409720}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409720, "updated_at": 1792409720},
+   {"id": "c2", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 2. Webhooks are signed with the merchant secret and retried with backoff: one second, then four, then sixteen, up to eight tries. A delivery that still fails lands in the dead-letter table."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409740}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409740, "updated_at": 1792409740},
+   {"id": "c3", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 3. The idempotency keys live for twenty-four hours. A repeated key with a different body answers 409 and the original charge stays untouched. The retry rules are in the [payments guide](https://example.com/payments-guide)."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409760}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409760, "updated_at": 1792409760},
+   {"id": "c4", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 4. The payments service keeps its routes in api/routes.go. Each route checks the merchant key, then hands the request to a handler in api/handlers. The refund route is the only one that writes twice."}}, {"type": "tool_call", "data": {"id": "call-rg", "name": "bash", "input": "{\"command\": \"rg -n 'ledger.Write' api/handlers\", \"description\": \"Find the ledger writes\"}", "finished": true}}, {"type": "finish", "data": {"reason": "tool_use", "time": 1792409780}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409780, "updated_at": 1792409780},
+   {"id": "c4-tools", "role": "tool", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "tool_result", "data": {"tool_call_id": "call-rg", "name": "bash", "content": "api/handlers/refund.go:41:\tledger.Write(ctx, refund)\napi/handlers/refund.go:58:\tledger.Write(ctx, refund)\napi/handlers/charge.go:77:\tledger.Write(ctx, charge)", "metadata": "{}", "is_error": false}}], "model": "", "provider": "", "created_at": 1792409781, "updated_at": 1792409781},
+   {"id": "c5", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 5. Charges go through the ledger first and the card network second. When the network times out, the ledger entry stays open until the reconciler closes it about five minutes later."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409800}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409800, "updated_at": 1792409800},
+   {"id": "c6", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 6. Webhooks are signed with the merchant secret and retried with backoff: one second, then four, then sixteen, up to eight tries. A delivery that still fails lands in the dead-letter table."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409820}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409820, "updated_at": 1792409820},
+   {"id": "c7", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 7. The idempotency keys live for twenty-four hours. A repeated key with a different body answers 409 and the original charge stays untouched."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409840}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409840, "updated_at": 1792409840},
+   {"id": "c8", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 8. The payments service keeps its routes in api/routes.go. Each route checks the merchant key, then hands the request to a handler in api/handlers. The refund route is the only one that writes twice."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409860}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409860, "updated_at": 1792409860},
+   {"id": "c9", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 9. Charges go through the ledger first and the card network second. When the network times out, the ledger entry stays open until the reconciler closes it about five minutes later."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409880}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409880, "updated_at": 1792409880},
+   {"id": "c10", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 10. Webhooks are signed with the merchant secret and retried with backoff: one second, then four, then sixteen, up to eight tries. A delivery that still fails lands in the dead-letter table."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409900}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409900, "updated_at": 1792409900},
+   {"id": "c11", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 11. The idempotency keys live for twenty-four hours. A repeated key with a different body answers 409 and the original charge stays untouched."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409920}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409920, "updated_at": 1792409920},
+   {"id": "c12", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 12. The payments service keeps its routes in api/routes.go. Each route checks the merchant key, then hands the request to a handler in api/handlers. The refund route is the only one that writes twice."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409940}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409940, "updated_at": 1792409940},
+   {"id": "c13", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 13. Charges go through the ledger first and the card network second. When the network times out, the ledger entry stays open until the reconciler closes it about five minutes later."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409960}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409960, "updated_at": 1792409960},
+   {"id": "c14", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 14. Webhooks are signed with the merchant secret and retried with backoff: one second, then four, then sixteen, up to eight tries. A delivery that still fails lands in the dead-letter table."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792409980}}], "model": "haiku", "provider": "claude-code", "created_at": 1792409980, "updated_at": 1792409980},
+   {"id": "c15", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 15. The idempotency keys live for twenty-four hours. A repeated key with a different body answers 409 and the original charge stays untouched."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410000}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410000, "updated_at": 1792410000},
+   {"id": "c16", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 16. The payments service keeps its routes in api/routes.go. Each route checks the merchant key, then hands the request to a handler in api/handlers. The refund route is the only one that writes twice."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410020}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410020, "updated_at": 1792410020},
+   {"id": "c17", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 17. Charges go through the ledger first and the card network second. When the network times out, the ledger entry stays open until the reconciler closes it about five minutes later."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410040}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410040, "updated_at": 1792410040},
+   {"id": "c18", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 18. Webhooks are signed with the merchant secret and retried with backoff: one second, then four, then sixteen, up to eight tries. A delivery that still fails lands in the dead-letter table."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410060}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410060, "updated_at": 1792410060},
+   {"id": "c19", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 19. The idempotency keys live for twenty-four hours. A repeated key with a different body answers 409 and the original charge stays untouched."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410080}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410080, "updated_at": 1792410080},
+   {"id": "c20", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 20. The payments service keeps its routes in api/routes.go. Each route checks the merchant key, then hands the request to a handler in api/handlers. The refund route is the only one that writes twice."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410100}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410100, "updated_at": 1792410100},
+   {"id": "c21", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 21. Charges go through the ledger first and the card network second. When the network times out, the ledger entry stays open until the reconciler closes it about five minutes later."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410120}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410120, "updated_at": 1792410120},
+   {"id": "c22", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 22. Webhooks are signed with the merchant secret and retried with backoff: one second, then four, then sixteen, up to eight tries. A delivery that still fails lands in the dead-letter table."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410140}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410140, "updated_at": 1792410140},
+   {"id": "c23", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 23. The idempotency keys live for twenty-four hours. A repeated key with a different body answers 409 and the original charge stays untouched."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410160}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410160, "updated_at": 1792410160},
+   {"id": "c24", "role": "assistant", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "parts": [{"type": "text", "data": {"text": "Step 24. In short: alphaword marks where refunds are written twice, and omegaword marks where the reconciler closes them."}}, {"type": "finish", "data": {"reason": "end_turn", "time": 1792410180}}], "model": "haiku", "provider": "claude-code", "created_at": 1792410180, "updated_at": 1792410180}
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02": {
+   "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
+   "parent_session_id": "",
+   "title": "Release notes draft",
+   "message_count": 2,
+   "prompt_tokens": 9200,
+   "completion_tokens": 800,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792408800,
+   "updated_at": 1792410540,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 9200, "estimated": false},
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/messages": [
+   {
+    "id": "r1",
+    "role": "user",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
+    "parts": [{"type": "text", "data": {"text": "Draft the release notes for 2.4."}}],
+    "model": "",
+    "provider": "",
+    "created_at": 1792408900,
+    "updated_at": 1792408900
+   },
+   {
+    "id": "r2",
+    "role": "assistant",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
+    "parts": [
+     {"type": "text", "data": {"text": "Here is a first draft of the 2.4 notes."}},
+     {"type": "finish", "data": {"reason": "end_turn", "time": 1792408920}}
+    ],
+    "model": "sonnet",
+    "provider": "claude-code",
+    "created_at": 1792408920,
+    "updated_at": 1792408920
+   }
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/helpers": [],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/jobs": []
+ },
+ "events": [
+  {"at_ms": 1500, "entries": [
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t21", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "name": "explore-api", "cli": "claude", "model": "haiku", "effort": "low", "read_only": true, "status": "running", "started": "2026-10-19T11:58:30Z"}},
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t22", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "", "name": "lint-check", "cli": "codex", "model": "gpt-5.5-mini", "status": "running", "started": "2026-10-19T11:59:40Z"}}
+  ]},
+  {"at_ms": 3000, "entries": [
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t21", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "name": "explore-api", "cli": "claude", "model": "haiku", "effort": "low", "read_only": true, "status": "running", "started": "2026-10-19T11:58:30Z"}},
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t22", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "", "name": "lint-check", "cli": "codex", "model": "gpt-5.5-mini", "status": "running", "started": "2026-10-19T11:59:40Z"}}
+  ]},
+  {"at_ms": 4500, "entries": [
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t21", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "name": "explore-api", "cli": "claude", "model": "haiku", "effort": "low", "read_only": true, "status": "running", "started": "2026-10-19T11:58:30Z"}},
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t22", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "", "name": "lint-check", "cli": "codex", "model": "gpt-5.5-mini", "status": "running", "started": "2026-10-19T11:59:40Z"}}
+  ]},
+  {"at_ms": 22000, "entries": [
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t21", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "name": "explore-api", "cli": "claude", "model": "haiku", "effort": "low", "read_only": true, "status": "done", "started": "2026-10-19T11:58:30Z", "ended": "2026-10-19T12:00:00Z"}}
+  ]},
+  {"at_ms": 25000, "entries": [
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t21", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "name": "explore-api", "cli": "claude", "model": "haiku", "effort": "low", "read_only": true, "status": "failed", "started": "2026-10-19T11:58:30Z", "ended": "2026-10-19T12:00:00Z"}}
+  ]},
+  {"at_ms": 28000, "entries": [
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t21", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "name": "explore-api", "cli": "claude", "model": "haiku", "effort": "low", "read_only": true, "status": "stopped", "started": "2026-10-19T11:58:30Z", "ended": "2026-10-19T12:00:00Z"}}
+  ]},
+  {"at_ms": 31000, "entries": [
+   {"kind": "event", "type": "helper", "event": "updated", "payload": {"id": "t21", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01", "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11", "name": "explore-api", "cli": "claude", "model": "haiku", "effort": "low", "read_only": true, "status": "running", "started": "2026-10-19T11:58:30Z"}}
+  ]}
+ ]
+}

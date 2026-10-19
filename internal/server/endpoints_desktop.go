@@ -85,7 +85,7 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 				"terminal's text. Linux only. Answers only on the engine's unix socket.").
 			Tags("system").
 			Fails(400, 403, 404, 500).
-			Handle(c.localOnly(serve(c, rpc.SetCPUAffinity, c.setCPUAffinity))),
+			Handle(serve(c, rpc.SetCPUAffinity, c.setCPUAffinity)),
 
 		apigen.For(rpc.StartAuthFlow).
 			Summary("Start a sign-in").

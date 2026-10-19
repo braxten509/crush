@@ -75,7 +75,9 @@ func (o Ops) RecallQueuedPrompt(sessionID string) (*message.QueuedPrompt, error)
 
 // SetMainAgent switches the active agent (coder or plan). It is
 // rejected while the agent is running so a switch can never strand a
-// run's queued prompts on the previous agent.
+// run's queued prompts on the previous agent. A successful switch runs
+// the ConfigChanged hook, so every app on the project re-reads its agent
+// info; a refused one publishes nothing.
 func (o Ops) SetMainAgent(agentID string) error {
 	if o.App.AgentCoordinator == nil {
 		return ErrAgentNotInitialized
@@ -83,7 +85,11 @@ func (o Ops) SetMainAgent(agentID string) error {
 	if o.App.AgentCoordinator.IsBusy() {
 		return ErrAgentBusy
 	}
-	return o.App.AgentCoordinator.SetMainAgent(agentID)
+	if err := o.App.AgentCoordinator.SetMainAgent(agentID); err != nil {
+		return err
+	}
+	o.configChanged()
+	return nil
 }
 
 // Summarize summarizes a session.

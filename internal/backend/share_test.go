@@ -210,6 +210,7 @@ func (c *shareTestCoordinator) Run(context.Context, string, string, ...message.A
 }
 
 func (c *shareTestCoordinator) SetMainAgent(string) error                       { return nil }
+func (*shareTestCoordinator) MainAgentName() string { return "coder" }
 func (c *shareTestCoordinator) BeginAccepted(string) *agent.AcceptedRun         { return nil }
 func (c *shareTestCoordinator) Cancel(string)                                   {}
 func (c *shareTestCoordinator) CancelAll()                                      {}

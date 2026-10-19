@@ -169,6 +169,7 @@ func (b *Backend) GetAgentInfo(workspaceID string) (proto.AgentInfo, error) {
 			ModelCfg: m.ModelCfg,
 			IsBusy:   ws.AgentCoordinator.IsBusy(),
 			IsReady:  true,
+			Agent:    ws.AgentCoordinator.MainAgentName(),
 		}
 	}
 	return agentInfo, nil

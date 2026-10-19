@@ -125,6 +125,9 @@ type AgentInfo struct {
 	IsReady  bool                 `json:"is_ready"`
 	Model    catwalk.Model        `json:"model"`
 	ModelCfg config.SelectedModel `json:"model_cfg"`
+	// Agent names the main agent: "coder" or "plan", "" while no
+	// coordinator runs.
+	Agent string `json:"agent"`
 }
 
 // IsZero checks if the AgentInfo is zero-valued.

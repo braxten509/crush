@@ -447,6 +447,7 @@ func (a *shareFakeAgent) Run(context.Context, string, string, ...message.Attachm
 }
 
 func (a *shareFakeAgent) SetMainAgent(string) error                       { return nil }
+func (*shareFakeAgent) MainAgentName() string { return "coder" }
 func (a *shareFakeAgent) BeginAccepted(string) *agent.AcceptedRun         { return nil }
 func (a *shareFakeAgent) Cancel(string)                                   {}
 func (a *shareFakeAgent) Interrupt(string)                                {}

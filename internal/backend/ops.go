@@ -40,12 +40,22 @@ type Ops struct {
 	// their config snapshot; in-process frontends read the store
 	// directly and leave it nil.
 	ConfigChanged func()
+	// ConfigEvent, when set, only tells the apps the config changed,
+	// without the MCP re-init ConfigChanged runs. The MCP toggles use it.
+	ConfigEvent func()
 }
 
 // configChanged runs the ConfigChanged hook, if any.
 func (o Ops) configChanged() {
 	if o.ConfigChanged != nil {
 		o.ConfigChanged()
+	}
+}
+
+// configEvent runs the ConfigEvent hook, if any.
+func (o Ops) configEvent() {
+	if o.ConfigEvent != nil {
+		o.ConfigEvent()
 	}
 }
 
@@ -258,6 +268,7 @@ func (w *Workspace) ops() Ops {
 		Cfg:           w.Cfg,
 		Skills:        w.Skills,
 		ConfigChanged: func() { publishConfigChanged(w) },
+		ConfigEvent:   func() { sendConfigChanged(w) },
 	}
 }
 

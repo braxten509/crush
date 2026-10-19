@@ -26,8 +26,21 @@ func publishConfigChanged(ws *Workspace) {
 	// triggered the write. Run async so unrelated config writes (model
 	// switches, API keys) don't block on MCP reconciliation. Bound to the
 	// workspace ctx so teardown cancels any in-flight init.
-	go mcptools.Reinitialize(ws.ctx, ws.Cfg)
+	if ws.Cfg != nil {
+		go mcptools.Reinitialize(ws.ctx, ws.Cfg)
+	}
 
+	sendConfigChanged(ws)
+}
+
+// sendConfigChanged publishes only the ConfigChanged event, without the
+// MCP re-init of [publishConfigChanged]. The MCP toggles use it: they
+// apply themselves, and a re-init from the config alone would undo a
+// repository-scoped override.
+func sendConfigChanged(ws *Workspace) {
+	if ws == nil || ws.App == nil {
+		return
+	}
 	ws.SendEvent(pubsub.Event[proto.ConfigChanged]{
 		Type:    pubsub.UpdatedEvent,
 		Payload: proto.ConfigChanged{WorkspaceID: ws.ID},

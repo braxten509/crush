@@ -16,6 +16,10 @@ var (
 	// (G-18).
 	ListServers = Op[Empty, []proto.ServerPort]{Method: get, Path: "/v1/workspaces/{id}/servers"}
 
+	// RefreshProviders runs `crush update-providers` for each source, then
+	// reloads (G-9).
+	RefreshProviders = Op[Empty, proto.ProvidersRefresh]{Method: post, Path: "/v1/providers/refresh"}
+
 	// SetCPUAffinity turns the agent CPUs on or off for the engine (G-16).
 	SetCPUAffinity = Op[proto.CPUAffinityRequest, proto.CPUAffinity]{Method: post, Path: "/v1/cpu-affinity"}
 )

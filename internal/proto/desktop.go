@@ -42,6 +42,18 @@ type ServerPort struct {
 	SessionID string `json:"session_id"`
 }
 
+// ProvidersRefresh answers a provider refresh (G-9).
+type ProvidersRefresh struct {
+	Results []ProviderRefreshResult `json:"results"`
+}
+
+// ProviderRefreshResult is one source's outcome: "catwalk" or "hyper".
+type ProviderRefreshResult struct {
+	Source string `json:"source"`
+	OK     bool   `json:"ok"`
+	Error  string `json:"error,omitempty"`
+}
+
 // CPUAffinityRequest turns the agent CPUs on or off (G-16).
 type CPUAffinityRequest struct {
 	Enabled bool `json:"enabled"`

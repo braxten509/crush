@@ -48,6 +48,14 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Build(),
 
+		route(c, rpc.RefreshProviders, c.refreshProviders).
+			Summary("Refresh the provider catalogs").
+			Description("Runs what `crush update-providers` runs for the catwalk and hyper sources, " +
+				"then reloads every workspace's config and sends config_changed. Each source's " +
+				"outcome is in results, with the error text when it failed.").
+			Tags("config").
+			Build(),
+
 		route(c, rpc.SetCPUAffinity, c.setCPUAffinity).
 			Summary("Turn the agent CPUs on or off").
 			Description("Saves options.agent_cpus_enabled and moves the engine and everything it "+

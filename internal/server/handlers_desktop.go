@@ -28,6 +28,11 @@ func (c *controllerV1) listServers(r *http.Request, _ rpc.Empty) ([]proto.Server
 	return c.backend.ListServers(r.Context(), r.PathValue("id"))
 }
 
+// refreshProviders refreshes the provider catalogs.
+func (c *controllerV1) refreshProviders(r *http.Request, _ rpc.Empty) (proto.ProvidersRefresh, error) {
+	return c.backend.RefreshProviders(r.Context()), nil
+}
+
 // setCPUAffinity turns the agent CPUs on or off.
 func (c *controllerV1) setCPUAffinity(_ *http.Request, req proto.CPUAffinityRequest) (proto.CPUAffinity, error) {
 	return c.backend.SetCPUAffinity(req.Enabled)

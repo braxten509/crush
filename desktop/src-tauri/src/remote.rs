@@ -84,7 +84,7 @@ fn run(app: &AppHandle, first: &str, second: &str) -> AppResult<PasswordSet> {
     };
     let out = out.join().unwrap_or_default();
     let err = err.join().unwrap_or_default();
-    let last = |text: &str| text.lines().map(str::trim).filter(|l| !l.is_empty()).last().unwrap_or("").to_string();
+    let last = |text: &str| text.lines().map(str::trim).filter(|l| !l.is_empty()).next_back().unwrap_or("").to_string();
     if status.success() {
         let message = last(&out);
         Ok(PasswordSet { ok: true, message: if message.is_empty() { "Password set. The phone asks for it before it opens a new Crush window here.".into() } else { message } })

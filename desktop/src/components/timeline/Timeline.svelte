@@ -66,8 +66,8 @@
 
   let { sessionId, readOnly = false } = $props();
 
-  // A single click on an item's toggle waits this long for a second click
-  // (CHAT-101); a mouse selection is copied this long after it ends (CHAT-091).
+  // A mouse selection is copied this long after it ends (CHAT-091), so a
+  // double click's word is what gets copied.
   const DOUBLE_CLICK_MS = 400;
   const DRAG_SLOP = 4;
   const READING_LINE = 33; // --t-reading's line, picture px: ↑/k and ↓/j scroll one (CHAT-096)
@@ -218,7 +218,6 @@
 
   let press = null; // {x, y, dragged} of the primary press that started in the timeline
   let copyTimer = null;
-  let held = null; // {toggle, timer}: a single click waiting to open or close an item
   let replaying = false;
 
   function keyAt(target) {
@@ -263,9 +262,10 @@
   }
 
   // An item's toggle (its first control with aria-expanded, drawn by the
-  // item) opens or closes on a single click: the click waits 400 ms, and a
-  // second click (a double click selecting a word) cancels it. A click made
-  // by a key (detail 0) acts at once.
+  // item) opens or closes at once on a single click (owner, 2026-10-19: the
+  // old 400 ms wait for a double click made every toggle feel slow). The
+  // later clicks of a double click, a drag and a click that ends a text
+  // selection are held back, so they select text and toggle nothing.
   function onClickCapture(event) {
     if (replaying) return;
     const toggle = event.target?.closest?.("[aria-expanded]");
@@ -273,21 +273,10 @@
     const control = event.target.closest("button, a, input, textarea, select, [role='button']");
     if (control && control !== toggle && toggle.contains(control)) return;
     if (event.detail === 0) return;
-    event.stopPropagation();
-    event.preventDefault();
-    if (held) {
-      clearTimeout(held.timer);
-      held = null;
-      return;
+    if (event.detail > 1 || press?.dragged || !selectionCollapsed()) {
+      event.stopPropagation();
+      event.preventDefault();
     }
-    if (event.detail > 1 || press?.dragged || !selectionCollapsed()) return;
-    held = {
-      toggle,
-      timer: setTimeout(() => {
-        held = null;
-        clickToggle(toggle);
-      }, DOUBLE_CLICK_MS),
-    };
   }
 
   function clickToggle(toggle) {
@@ -636,7 +625,6 @@
       window.removeEventListener("mouseup", onMouseUp, true);
       window.removeEventListener("mousemove", onMouseMove, true);
       clearTimeout(copyTimer);
-      if (held) clearTimeout(held.timer);
       if (shownProbe?.light === probeLight) shownProbe = null;
     };
   });

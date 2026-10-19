@@ -1,70 +1,41 @@
-// CHAT-101 for tool rows: a lone click toggles after the double-click
-// interval; a double click, a drag or another button toggles nothing;
+// CHAT-101 for tool rows: a lone click toggles at once; the extra clicks of a
+// double click, a drag or another button toggle nothing;
 // CHAT-090: the copy notice and its failure.
 import { describe, expect, it } from "vitest";
 import { copyWithNotice, COPY_FAILED } from "./clip.js";
-import { DOUBLE_CLICK_MS, singleClick } from "./click.js";
-
-function fakeTimers() {
-  const due = new Map();
-  let next = 1;
-  return {
-    set(fn, ms) {
-      due.set(next, { fn, ms });
-      return next++;
-    },
-    clear(id) {
-      due.delete(id);
-    },
-    run() {
-      const all = [...due.values()];
-      due.clear();
-      for (const t of all) t.fn();
-      return all.map((t) => t.ms);
-    },
-  };
-}
+import { singleClick } from "./click.js";
 
 const at = (x, y, fields = {}) => ({ button: 0, clientX: x, clientY: y, detail: 1, ...fields });
 
 describe("single click", () => {
-  it("toggles once, after the double-click interval", () => {
-    const timers = fakeTimers();
+  it("toggles at once on a lone click", () => {
     const runs = [];
-    const click = singleClick(() => runs.push("toggle"), timers);
+    const click = singleClick(() => runs.push("toggle"));
     click.onpointerdown(at(10, 10));
     click.onclick(at(11, 10));
-    expect(runs).toEqual([]);
-    expect(timers.run()).toEqual([DOUBLE_CLICK_MS]);
     expect(runs).toEqual(["toggle"]);
-    expect(DOUBLE_CLICK_MS).toBe(400);
   });
-  it("does nothing for a double click", () => {
-    const timers = fakeTimers();
+  it("toggles once for a double click: the second click only selects", () => {
     const runs = [];
-    const click = singleClick(() => runs.push("toggle"), timers);
+    const click = singleClick(() => runs.push("toggle"));
     click.onpointerdown(at(10, 10));
     click.onclick(at(10, 10));
     click.onpointerdown(at(10, 10));
     click.onclick(at(10, 10, { detail: 2 }));
-    timers.run();
-    expect(runs).toEqual([]);
+    expect(runs).toEqual(["toggle"]);
   });
   it("does nothing after a drag or for another button", () => {
-    const timers = fakeTimers();
     const runs = [];
-    const click = singleClick(() => runs.push("toggle"), timers);
+    const click = singleClick(() => runs.push("toggle"));
     click.onpointerdown(at(10, 10));
     click.onclick(at(60, 10));
     click.onpointerdown(at(10, 10, { button: 1 }));
     click.onclick(at(10, 10, { button: 1 }));
-    timers.run();
     expect(runs).toEqual([]);
   });
   it("runs at once for a keyboard click", () => {
-    const timers = fakeTimers();
     const runs = [];
-    singleClick(() => runs.push("toggle"), timers).onclick({ button: 0, clientX: 0, clientY: 0, detail: 0 });
+    singleClick(() => runs.push("toggle")).onclick({ button: 0, clientX: 0, clientY: 0, detail: 0 });
     expect(runs).toEqual(["toggle"]);
   });
 });

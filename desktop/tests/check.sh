@@ -40,7 +40,8 @@ mkdir -p "$OUT"
 snap="$OUT/outside-before.json"
 python3 -I tests/outside-check.py snapshot "$snap"
 
-export DESKTOP_ARGS="${FIXTURE:+--fixture $FIXTURE}"
+# CHECK_ARGS adds app arguments, such as -s CHAT to open a chat.
+export DESKTOP_ARGS="${FIXTURE:+--fixture $FIXTURE}${CHECK_ARGS:+ $CHECK_ARGS}"
 if [ -x "$CRUSH" ]; then export DESKTOP_CRUSH="$CRUSH"; fi
 tests/sandbox.sh ${SIZE:+-s "$SIZE"} tests/run-in-sandbox.sh $NO_APP "$DRIVER" "$@" 2>&1 | tee "$OUT/check.log"
 code=${PIPESTATUS[0]}

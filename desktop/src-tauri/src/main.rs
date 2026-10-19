@@ -4,6 +4,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod alerts;
+mod applog;
 mod batch;
 mod clipboard;
 mod commands;
@@ -25,6 +26,7 @@ mod logs;
 mod opener;
 mod projects;
 mod pty;
+mod refresh;
 mod remote;
 mod selfupdate;
 mod settings;
@@ -54,6 +56,7 @@ fn main() {
         println!("crush-desktop {}", env!("CARGO_PKG_VERSION"));
         return;
     }
+    applog::write("info", "app", &format!("start crush-desktop {}", env!("CARGO_PKG_VERSION")));
     let here = std::env::current_dir().unwrap_or_default();
     let ui_debug = std::env::var("CRUSH_UI_DEBUG").is_ok_and(|v| v == "true");
     let launch = match parse_launch(&args, &here, ui_debug) {
@@ -96,6 +99,7 @@ fn main() {
             settings::watch(app.handle().clone());
             if let Some(window) = app.get_webview_window(windows::FIRST) {
                 crash::watch_webview(&window);
+                refresh::full_rate(&window);
             }
             Ok(())
         })
@@ -118,6 +122,8 @@ fn main() {
             commands::probe_request,
             commands::probe_eval,
             commands::updates_claim,
+            refresh::frame_rate_report,
+            applog::app_log,
             commands::engine_open,
             commands::engine_retry,
             commands::engine_set_current_session,

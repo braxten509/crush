@@ -271,6 +271,7 @@ pub fn open(
             match built {
                 Ok(window) => {
                     crate::crash::watch_webview(&window);
+                    crate::refresh::full_rate(&window);
                     Ok(Opened { label, created: true })
                 }
                 Err(e) => {

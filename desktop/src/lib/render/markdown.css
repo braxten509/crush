@@ -11,10 +11,8 @@
   background: var(--selection);
 }
 
-/* Prose keeps the picture's reading width; code blocks and chips may use the column. */
-.md > :is(p, .md-h, ul, ol, blockquote, .md-html, .md-rule) {
-  max-width: calc(540 * var(--px));
-}
+/* Prose uses the column's full width, like code blocks and chips (owner,
+   2026-10-19); the column's own padding keeps it off the edges. */
 
 /* calc(14 * var(--px)) between blocks; more above a heading than below it. */
 .md > * + *,

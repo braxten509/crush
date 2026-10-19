@@ -533,4 +533,10 @@ describe("the chat's last model (LIST-035)", () => {
     expect(JSON.stringify(ws.config)).not.toContain("sk-secret");
     expect(JSON.stringify(S.sessions)).not.toContain("sk-secret");
   });
+
+  it("a failed rebuild shows its error, as the terminal reports it", async () => {
+    h.routes.set("POST agent/update", () => Promise.reject({ code: "internal", message: "failed to update agent model" }));
+    await openWithLastModel("codex-cli", "gpt-6-sol", config({ provider: "claude-code", model: "opus" }, { "codex-cli": cliProvider(["gpt-6-sol"]) }));
+    expect(h.notices).toEqual([{ kind: "error", text: "failed to update agent model" }]);
+  });
 });

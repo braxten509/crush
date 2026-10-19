@@ -104,16 +104,22 @@ describe("paths and bodies (desktop-design 1.5.2, the routes of 1.3)", () => {
     expect(last().query).toEqual({ session_id: "chat-7", path: "README.md" });
   });
 
-  it("puts ids into one path segment each", async () => {
-    await api.getSession("a/../b");
-    expect(last().path).toBe("sessions/a%2F..%2Fb");
-    await api.messages("x?y#z %");
-    expect(last().path).toBe("sessions/x%3Fy%23z%20%25/messages");
+  it("puts ids into one path segment each, as they are: Rust encodes every part (connection.rs Route::target)", async () => {
     // An agent tool's chat id keeps its "$$" (internal/session/session.go:545-547).
     await api.messages("m1$$call_1");
     expect(last().path).toBe("sessions/m1$$call_1/messages");
+    await api.messages("x?y#z %");
+    expect(last().path).toBe("sessions/x?y#z %/messages");
     await api.getSession("é😀");
-    expect(last().path).toBe(`sessions/${encodeURIComponent("é😀")}`);
+    expect(last().path).toBe("sessions/é😀");
+    await api.lspDiagnostics("my lsp");
+    expect(last().path).toBe("lsps/my lsp/diagnostics");
+    // A "/" would make several parts (here GET sessions/{sid}/messages): it
+    // goes as "..", which Rust refuses.
+    await api.getSession("x/messages");
+    expect(last().path).toBe("sessions/..");
+    await api.messages("a/../b");
+    expect(last().path).toBe("sessions/../messages");
   });
 
   it("answers with the engine's JSON", async () => {

@@ -5,10 +5,12 @@
 // (1.3). Failures reject with the AppError of commands.js.
 import * as commands from "./commands.js";
 
-// One path segment: characters a segment may hold as is (RFC 3986 pchar, so
-// an agent tool's chat id "<mid>$$<tool call id>" stays readable) are kept;
-// everything else, "/" "?" "#" "%" included, is percent-encoded.
-const seg = (value) => String(value).replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@]/gu, (c) => encodeURIComponent(c));
+// One path segment. Rust splits the path at "/" and percent-encodes every
+// part itself (connection.rs Route::find and Route::target), so a value goes
+// as it is: encoding it here would encode it twice. A value with "/" would be
+// read as several parts, which could name another route, so it goes as "..",
+// a part Rust always refuses (route_not_allowed), as it refuses "" and ".".
+const seg = (value) => (String(value).includes("/") ? ".." : String(value));
 const chat = (sid) => `sessions/${seg(sid)}`;
 const run = (sid) => `agent/sessions/${seg(sid)}`;
 

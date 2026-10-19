@@ -555,8 +555,6 @@ async function restoreModel(sid) {
   try {
     await api.updateAgent();
   } catch (error) {
-    // POST agent/update is not on connection.rs's route list yet (desktop-design 1.3).
-    if (error?.code === "route_not_allowed") console.error("model restore: agent/update refused", errorText(error));
-    else notify("error", errorText(error));
+    notify("error", errorText(error)); // util.ReportError, model_select.go:91-95
   }
 }

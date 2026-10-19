@@ -777,13 +777,15 @@ def engine_run():
             extra.append(app)
             check(joined(app), "a window on a project with a broken MCP server joins")
             check(answer_no(app), "its init prompt is answered (No)")
-            ok, start = wait_on(app, "start", lambda s: any(r.startswith("broken error") for r in (((s.get("landing") or {}).get("columns") or {}).get("mcps") or {}).get("rows") or []), 20)
-            landing = start.get("landing") or {}
-            cols = landing.get("columns") or {}
-            check(ok, f"the broken server's row says its error ({(cols.get('mcps') or {}).get('rows')})")
             mcp_api, wid = engine_of(app, path)
             check(bool(wid), f"the window's engine has the project ({wid})")
             eng = lambda p: mcp_api.call("GET", f"/v1/workspaces/{wid}/{p}") if wid else None
+            _, broken, _ = poll(lambda: (eng("mcp/states") or {}).get("broken") or {}, lambda b: b.get("state") == "error", 20, 0.3)
+            want = f"broken error: {broken.get('error')}"
+            ok, start = wait_on(app, "start", lambda s: want in ((((s.get("landing") or {}).get("columns") or {}).get("mcps") or {}).get("rows") or []), 20)
+            landing = start.get("landing") or {}
+            cols = landing.get("columns") or {}
+            check(ok and bool(broken.get("error")), f"the broken server's row says its error as the engine has it ({(cols.get('mcps') or {}).get('rows')}; engine {broken.get('error')!r})")
             check(any(r.startswith("fakelsp") for r in (cols.get("lsps") or {}).get("rows") or []), f"the LSP column fills ({(cols.get('lsps') or {}).get('rows')})")
             skills = eng("skills") or []
             sk = cols.get("skills") or {}

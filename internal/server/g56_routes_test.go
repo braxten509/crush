@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +19,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,6 +117,32 @@ func restoreModelCatalog(t *testing.T, list []catwalk.Provider) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "providers.json"), data, 0o600))
 	require.NoError(t, config.UpdateProviders(filepath.Join(dir, "providers.json")))
 	require.NoError(t, config.ReloadModelCatalog())
+}
+
+// TestSkillsSearchRoute: the route answers with skills.sh's own JSON for
+// the search, refuses a one-letter query as the terminal does, and passes
+// a failed search's text on (G-14, through the G-24 seam's setter).
+func TestSkillsSearchRoute(t *testing.T) {
+	g := newG56Workspace(t)
+	var queries []string
+	t.Cleanup(backend.SetSkillsSearchForTest(func(_ context.Context, q string) ([]skills.DirectorySkill, error) {
+		queries = append(queries, q)
+		if q == "broken" {
+			return nil, errors.New("skill download: HTTP 503")
+		}
+		return []skills.DirectorySkill{{ID: "acme/tools/pdf", Name: "pdf", Source: "acme/tools", SkillID: "pdf", Installs: 42}}, nil
+	}))
+
+	code, data := liveCall(t, g.h, http.MethodGet, g.path("/skills/search?q=pdf"), nil)
+	require.Equal(t, http.StatusOK, code, "%s", data)
+	require.JSONEq(t, `[{"id":"acme/tools/pdf","name":"pdf","source":"acme/tools","skillId":"pdf","installs":42}]`, string(data))
+	require.Equal(t, []string{"pdf"}, queries)
+
+	liveError(t, g.h, http.MethodGet, g.path("/skills/search?q=p"), nil, http.StatusBadRequest, "bad_request",
+		"type at least two characters to search skills.sh")
+	liveError(t, g.h, http.MethodGet, g.path("/skills/search?q=broken"), nil, http.StatusBadGateway, "search_failed",
+		"skill download: HTTP 503")
+	require.Equal(t, []string{"pdf", "broken"}, queries, "a short query is not sent")
 }
 
 // TestCommandsRouteMatchesLoader:the commands route lists what the

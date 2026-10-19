@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
+	"github.com/charmbracelet/crush/internal/skills"
 )
 
 // Handlers of the desktop app's phase 5-6 routes (G56).
@@ -26,6 +27,11 @@ func (c *controllerV1) customCommands(r *http.Request, _ rpc.Empty) ([]proto.Cus
 // listServers lists the ports the chats' background work listens on.
 func (c *controllerV1) listServers(r *http.Request, _ rpc.Empty) ([]proto.ServerPort, error) {
 	return c.backend.ListServers(r.Context(), r.PathValue("id"))
+}
+
+// searchSkills searches skills.sh.
+func (c *controllerV1) searchSkills(r *http.Request, _ rpc.Empty) ([]skills.DirectorySkill, error) {
+	return c.backend.SearchSkills(r.Context(), r.PathValue("id"), r.URL.Query().Get("q"))
 }
 
 // refreshProviders refreshes the provider catalogs.

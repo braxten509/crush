@@ -48,6 +48,17 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Build(),
 
+		route(c, rpc.SearchSkills, c.searchSkills).
+			Summary("Search skills.sh").
+			Description("Runs the skills.sh search of the terminal's skill browser and returns "+
+				"its results as skills.sh sends them. A query under two characters answers 400; a "+
+				"failed search answers 502 search_failed with the terminal's text.").
+			Tags("skills").
+			PathParam("id", "Workspace ID").
+			RequiredQueryParam("q", "Search text").
+			Fails(400, 404, 502).
+			Build(),
+
 		route(c, rpc.RefreshProviders, c.refreshProviders).
 			Summary("Refresh the provider catalogs").
 			Description("Runs what `crush update-providers` runs for the catwalk and hyper sources, " +
@@ -201,6 +212,8 @@ func desktopErrors() []apiError {
 		{Match: is(backend.ErrThemeInvalid), Status: http.StatusBadRequest, Code: "bad_request"},
 		{Match: is(backend.ErrThemeNotFound), Status: http.StatusNotFound, Code: "theme_not_found"},
 		{Match: is(backend.ErrThemePalette), Status: http.StatusUnprocessableEntity, Code: "invalid_palette"},
+		{Match: is(backend.ErrSkillsQuery), Status: http.StatusBadRequest, Code: "bad_request"},
+		{Match: is(backend.ErrSkillsSearch), Status: http.StatusBadGateway, Code: "search_failed"},
 		{Match: is(backend.ErrAuthFlowNotFound), Status: http.StatusNotFound, Code: "auth_flow_not_found"},
 		{Match: is(backend.ErrAuthPlatform), Status: http.StatusBadRequest, Code: "bad_request"},
 		{Match: is(backend.ErrAuthNoCode), Status: http.StatusBadRequest, Code: "bad_request"},

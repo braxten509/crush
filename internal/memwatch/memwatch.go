@@ -247,7 +247,10 @@ func biggest(procs []Program, n int) []Program {
 
 // TotalRAM is the computer's RAM in bytes, or 0 where it can't be read.
 func TotalRAM() uint64 {
-	u, err := readUsage()
+	Default.mu.Lock()
+	read := Default.usage
+	Default.mu.Unlock()
+	u, err := read()
 	if err != nil {
 		return 0
 	}

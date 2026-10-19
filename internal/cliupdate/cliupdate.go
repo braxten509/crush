@@ -54,6 +54,9 @@ var versionRe = regexp.MustCompile(`\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?`)
 // Check looks up every installed CLI in parallel and returns those with a
 // newer release, in [CLIs] order. Errors are per CLI and don't stop the rest.
 func Check(ctx context.Context) ([]Update, []error) {
+	if updates, ok := testCheck(ctx); ok {
+		return updates, nil
+	}
 	type result struct {
 		update *Update
 		err    error
@@ -103,6 +106,9 @@ func check(ctx context.Context, c CLI, path string) (*Update, error) {
 
 // Install runs the CLI's own updater and returns its output on failure.
 func Install(ctx context.Context, u Update) error {
+	if ok, err := testInstall(u); ok {
+		return err
+	}
 	out, err := run(ctx, 10*time.Minute, u.Path, u.args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w: %s", u.Name, err, lastLine(out))

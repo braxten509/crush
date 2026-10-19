@@ -245,6 +245,9 @@ func Execute() {
 	// warnings/diagnostics instead of logging them as a side effect.
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 
+	// Test seams, only in crushtest builds (seams_crushtest.go).
+	installTestSeams()
+
 	// NOTE: very hacky: we create a colorprofile writer with STDOUT, then make
 	// it forward to a bytes.Buffer, write the colored heartbit to it, and then
 	// finally prepend it in the version template.

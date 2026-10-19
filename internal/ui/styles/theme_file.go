@@ -79,10 +79,43 @@ func SaveThemeFile(path string, tf *ThemeFile) error {
 		return fmt.Errorf("create theme directory: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeThemeFileAtomic(path, data); err != nil {
 		return fmt.Errorf("write theme file: %w", err)
 	}
 	return nil
+}
+
+// writeThemeFileAtomic writes data to a temporary file beside path and
+// renames it over path, so a reader never sees a half-written theme. The
+// file keeps its permissions (0644 when new) and a symlink keeps pointing
+// at the file it named.
+func writeThemeFileAtomic(path string, data []byte) error {
+	if target, err := filepath.EvalSymlinks(path); err == nil {
+		path = target
+	}
+	perm := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		perm = info.Mode().Perm()
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Chmod(perm)
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 // themeDirsOverride allows tests to replace the default theme directories.

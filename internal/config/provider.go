@@ -23,9 +23,19 @@ import (
 
 var (
 	providerOnce sync.Once
+	// providerMu guards providerList. The list is never changed in place:
+	// writers store a new slice, so a list a reader got stays as it was.
+	providerMu   sync.RWMutex
 	providerList []catwalk.Provider
 	providerErr  error
 )
+
+// catalogSnapshot returns the current model catalog.
+func catalogSnapshot() []catwalk.Provider {
+	providerMu.RLock()
+	defer providerMu.RUnlock()
+	return providerList
+}
 
 // file to cache provider data. It resolves through GlobalConfigData so the
 // catalog follows CRUSH_GLOBAL_DATA like the rest of the data directory.
@@ -175,7 +185,7 @@ func Providers(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, er
 // ModelCatalog returns metadata from the completed provider load; it neither
 // enables providers nor starts another network request.
 func ModelCatalog() []catwalk.Provider {
-	return providerList
+	return catalogSnapshot()
 }
 
 func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, error) {
@@ -251,14 +261,16 @@ func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider,
 
 		wg.Wait()
 
+		list := slices.Collect(collected.Seq())
 		if hyperProvider.ID != "" {
-			providerList = append([]catwalk.Provider{hyperProvider}, slices.Collect(collected.Seq())...)
-		} else {
-			providerList = slices.Collect(collected.Seq())
+			list = append([]catwalk.Provider{hyperProvider}, list...)
 		}
+		providerMu.Lock()
+		providerList = list
+		providerMu.Unlock()
 		providerErr = errors.Join(catwalkErr, hyperErr)
 	})
-	return providerList, providerErr
+	return catalogSnapshot(), providerErr
 }
 
 // UpdateProviderInList replaces a provider in the memoized provider list
@@ -266,9 +278,13 @@ func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider,
 // provider (e.g. Hyper after OAuth) so that all callers of Providers()
 // see the updated entry without needing to reset sync.Once.
 func UpdateProviderInList(provider catwalk.Provider) {
+	providerMu.Lock()
+	defer providerMu.Unlock()
 	for i, p := range providerList {
 		if p.ID == provider.ID {
-			providerList[i] = provider
+			list := slices.Clone(providerList)
+			list[i] = provider
+			providerList = list
 			return
 		}
 	}

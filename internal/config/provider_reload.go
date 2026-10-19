@@ -13,6 +13,8 @@ import (
 // (desktop design 5-6, G-9). A catalog that was not cached is left as it
 // is.
 func ReloadModelCatalog() error {
+	providerMu.Lock()
+	defer providerMu.Unlock()
 	isHyper := func(p catwalk.Provider) bool { return string(p.ID) == "hyper" }
 	var list []catwalk.Provider
 	if p, _, err := providers.NewCache[catwalk.Provider](cachePathFor("hyper")).Get(); err == nil && p.ID != "" {

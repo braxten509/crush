@@ -271,6 +271,35 @@ function hostOf(url) {
   }
 }
 
+// The extras after the summary (CHAT-082, toolgroup_header.go:42-47):
+// " · N backgrounded", then " · N failed" (the failed count in --error-ink).
+export function groupExtras(t) {
+  const out = [];
+  if (t.moved > 0) out.push({ text: `${t.moved} backgrounded`, tone: "" });
+  if (t.failed > 0) out.push({ text: `${t.failed} failed`, tone: "error" });
+  return out;
+}
+
+// Everything a group's row says (toolgroup_header.go header): the count, the
+// mark, the change summary or (done, nothing changed) the verbs, the extras,
+// and whether the Changes button shows (the terminal's clickable count:
+// captured changes or a saved summary). status: the live words, "" when
+// the group is not working.
+export function groupRow({ groupKey, calls, marks = {}, status = "", working = false }) {
+  const t = tally(calls, marks);
+  const changes = groupChanges(groupKey, calls);
+  const stored = storedSummary(calls);
+  const summary = changeSummary({ status, changes, edited: t.edited, stored });
+  return {
+    count: countLabel(t.tools),
+    mark: groupMark({ working: working || status !== "", calls, marks }),
+    summary,
+    verbs: summary || status !== "" ? "" : toolVerbs(calls),
+    extras: groupExtras(t),
+    hasChanges: changes.length > 0 || stored.label !== "",
+  };
+}
+
 // headerIcon: the activity mark while the group works or a step still
 // streams; else the last tool decides: a cross when it failed, a gear when
 // it went on in the background, and no mark when done (CHAT-081).

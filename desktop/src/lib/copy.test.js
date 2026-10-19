@@ -202,6 +202,24 @@ describe("the middle of a long selection is never read from the page (CHAT-087)"
   });
 });
 
+describe("a selection across an Agent tool (CHAT-056, CHAT-087)", () => {
+  test("the tool's copy text comes along, its row mounted or not", async () => {
+    await import("./plugins/tools.js");
+    const call = { id: "c1", name: "agent", input: '{"prompt":"find the bug"}', result: { tool_call_id: "c1", content: "Found it.", is_error: false } };
+    const items = [reply("r0", "Before the agent."), { kind: "tool", key: "tool:c1", messageId: "r0", version: 1, call }, reply("r1", "After the agent.")];
+    const want = "## Agent Tool Call\n\n### Parameters:\n\n**Task:**\nfind the bug\n\n### Result:\n\n```markdown\nFound it.\n```";
+    const copyWith = (mounted) => {
+      const root = page(items, mounted);
+      const start = find(root, "r0", "Before");
+      const end = find(root, "r1", "agent");
+      return copySelection(select(root, start, [end[0], end[1] + 5]), items);
+    };
+    for (const mounted of [() => true, (item) => item.kind !== "tool"]) {
+      expect(copyWith(mounted)).toBe(`Before the agent.\n\n${want}\n\nAfter the agent`);
+    }
+  });
+});
+
 describe("c/y on an item (CHAT-012, CHAT-030, CHAT-100)", () => {
   test("a user message copies its text as sent; a reply its visible text", () => {
     expect(itemCopy(user("u1", "  hello `x`  "))).toEqual({ text: "  hello `x`  ", notice: "Message copied to clipboard" });

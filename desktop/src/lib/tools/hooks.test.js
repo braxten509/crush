@@ -1,7 +1,7 @@
 // CHAT-055 hook lines and CHAT-072 question rows (ports of
 // chat/tool_hooks.go and chat/question.go with question_test.go).
 import { describe, expect, it } from "vitest";
-import { hookDetail, hookLines, isLikelyPath, MAX_HOOK_NAME, truncateHookName } from "./hooks.js";
+import { callHookLines, hookDetail, hookLines, isLikelyPath, MAX_HOOK_NAME, truncateHookName } from "./hooks.js";
 import { answerParts, questionBlocks, questionBody, questionSummary } from "./question.js";
 
 const meta = (hooks) => JSON.stringify({ hook: { hook_count: hooks.length, decision: "allow", hooks } });
@@ -21,6 +21,14 @@ describe("hook lines", () => {
       { name: "guard", matcher: "", detail: { text: "Denied", tone: "denied", reason: "no rm" }, denied: true },
       { name: "wakatime", matcher: "", detail: { text: "OK", tone: "ok", rewrote: "" }, denied: false },
     ]);
+  });
+  it("reads a call's hooks list first, else its result's metadata", () => {
+    const fromMeta = { hooks: [], result: { metadata: meta([{ name: "gofmt", decision: "allow" }]) } };
+    expect(callHookLines(fromMeta).map((h) => h.name)).toEqual(["gofmt"]);
+    const listed = { hooks: [{ name: "guard", decision: "deny", reason: "no" }], result: { metadata: meta([{ name: "gofmt" }]) } };
+    expect(callHookLines(listed)).toEqual([{ name: "guard", matcher: "", detail: { text: "Denied", tone: "denied", reason: "no" }, denied: true }]);
+    expect(callHookLines({ hooks: [], result: null })).toEqual([]);
+    expect(callHookLines({})).toEqual([]);
   });
   it("shows nothing without hooks or with unreadable metadata", () => {
     expect(hookLines("")).toEqual([]);

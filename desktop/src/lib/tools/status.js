@@ -17,8 +17,9 @@ const BASH_META = {
 
 // movedToBackground (bash.go:112-125): a bash result whose command went on
 // running in the background: a Crush job, or a CLI command moved there.
-export function movedToBackground(result) {
-  if (!result || result.name !== "bash") return false;
+// name is the call's tool name (a ToolCallView result does not carry one).
+export function movedToBackground(result, name = result?.name) {
+  if (!result || name !== "bash") return false;
   const { value: meta, ok } = decode(result.metadata ?? "", BASH_META);
   if (!ok) return false;
   return meta.background && (meta.shell_id !== "" || meta.end_time === 0);
@@ -32,7 +33,7 @@ export function toolStatus(call, marks = {}) {
   const result = call?.result;
   if (result) {
     if (result.is_error) return "error";
-    return movedToBackground(result) ? "background" : "done";
+    return movedToBackground(result, call.name ?? result.name) ? "background" : "done";
   }
   const mark = marks?.[call?.id];
   if (call?.status === "cancelled" || mark === "cancelled") return "cancelled";

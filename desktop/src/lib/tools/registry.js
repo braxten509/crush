@@ -255,7 +255,7 @@ function bashView(input, result, status, workingDir, compact) {
   let command = params.command.replaceAll("\t", "    ");
   const prefix = `cd ${workingDir} && `;
   if (command.startsWith(prefix)) command = command.slice(prefix.length);
-  withParams(view, [command, ...(params.run_in_background || movedToBackground(result) ? ["background", "true"] : [])]);
+  withParams(view, [command, ...(params.run_in_background || movedToBackground(result, "bash") ? ["background", "true"] : [])]);
   view.mainLang = "bash";
   view.wrap = !compact;
   if (compact) return view;
@@ -511,6 +511,18 @@ function splitN(s, sep, n) {
   }
   out.push(rest);
   return out;
+}
+
+// The "+N −N" at a tool line's right end (desktop-design 4.6): an edit,
+// multi-edit or write that succeeded, from its metadata; null otherwise.
+export function lineCounts(call) {
+  const result = call?.result;
+  if (!result || result.is_error) return null;
+  const shape = { edit: META.edit, multiedit: META.multiedit, write: META.write }[call.name];
+  if (!shape) return null;
+  const { value, ok } = decode(result.metadata ?? "", shape);
+  if (!ok || (value.additions === 0 && value.removals === 0)) return null;
+  return { adds: value.additions, dels: value.removals };
 }
 
 // The name a tool's line shows, as plain text ("Bash", "Github → Issues",

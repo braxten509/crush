@@ -56,10 +56,25 @@ export function hookLines(metadata) {
   if (!metadata) return [];
   const { value, ok } = decode(metadata, { hook: hookField });
   if (!ok || !value.hook || value.hook.hooks.length === 0) return [];
-  return value.hook.hooks.map((h) => ({
+  return value.hook.hooks.map(lineOf);
+}
+
+function lineOf(h) {
+  return {
     name: truncateHookName(h.name.replaceAll("\n", "¶"), MAX_HOOK_NAME),
     matcher: h.matcher,
     detail: hookDetail(h),
     denied: h.decision === "deny",
-  }));
+  };
+}
+
+// The lines of a ToolCallView: its hooks list when the timeline filled it,
+// else the hooks in its result's metadata.
+export function callHookLines(call) {
+  const list = Array.isArray(call?.hooks) ? call.hooks : [];
+  if (list.length > 0) {
+    const { value, ok } = decodeAs(list, ["array", HOOK_INFO]);
+    if (ok) return value.map(lineOf);
+  }
+  return hookLines(call?.result?.metadata ?? "");
 }

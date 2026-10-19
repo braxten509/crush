@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { cells } from "../diff.js";
 import { truncate } from "./go.js";
-import { nameText, pairsFit, pairsText, pendingName, splitParams, toolView } from "./registry.js";
+import { lineCounts, nameText, pairsFit, pairsText, pendingName, splitParams, toolView } from "./registry.js";
 import { statusMark } from "./status.js";
 
 const ICONS = { check: "✓", cross: "×", dot: "●", activity: "●" };
@@ -326,6 +326,17 @@ describe("files (file.go)", () => {
   it("calls a denial a warning", () => {
     const result = { content: "User denied permission", metadata: "", is_error: true };
     expect(toolView({ name: "glob", input: `{"pattern":"*"}`, result }, { status: "error" }).body).toEqual([{ type: "error", tag: "WARN", text: "User denied permission" }]);
+  });
+  it("counts the lines an edit, multi-edit or write changed (4.6)", () => {
+    const ok = (meta) => ({ content: "ok", metadata: JSON.stringify(meta), is_error: false });
+    expect(lineCounts({ name: "edit", result: ok({ additions: 3, removals: 1 }) })).toEqual({ adds: 3, dels: 1 });
+    expect(lineCounts({ name: "multiedit", result: ok({ additions: 0, removals: 2 }) })).toEqual({ adds: 0, dels: 2 });
+    expect(lineCounts({ name: "write", result: ok({ additions: 5, removals: 0 }) })).toEqual({ adds: 5, dels: 0 });
+    expect(lineCounts({ name: "edit", result: ok({ additions: 0, removals: 0 }) })).toBeNull();
+    expect(lineCounts({ name: "edit", result: { ...ok({ additions: 3 }), is_error: true } })).toBeNull();
+    expect(lineCounts({ name: "edit", result: null })).toBeNull();
+    expect(lineCounts({ name: "bash", result: ok({ additions: 3 }) })).toBeNull();
+    expect(lineCounts({ name: "edit", result: { content: "", metadata: "{", is_error: false } })).toBeNull();
   });
 });
 

@@ -33,6 +33,12 @@ describe("tool status", () => {
     expect(movedToBackground({ ...moved, metadata: JSON.stringify({ background: true, end_time: 5 }) })).toBe(false);
     expect(movedToBackground({ ...moved, name: "job_output" })).toBe(false);
     expect(movedToBackground({ ...moved, metadata: "{" })).toBe(false);
+    // A ToolCallView result carries no name: the call's name decides.
+    const nameless = { content: "x", metadata: JSON.stringify({ background: true }), is_error: false };
+    expect(movedToBackground(nameless)).toBe(false);
+    expect(movedToBackground(nameless, "bash")).toBe(true);
+    expect(toolStatus(call({ result: nameless }))).toBe("background");
+    expect(toolStatus(call({ name: "view", result: nameless }))).toBe("done");
   });
   it("lets a stop mark win over the timeline's status, then permission and running marks", () => {
     expect(toolStatus(call({}), { c: "cancelled" })).toBe("cancelled");

@@ -33,7 +33,7 @@ export function tally(calls, marks = {}) {
   for (const call of calls) {
     out.tools++;
     if (toolStatus(call, marks) === "error") out.failed++;
-    if (movedToBackground(call.result)) out.moved++;
+    if (movedToBackground(call.result, call.name)) out.moved++;
     const f = editedFile(call);
     if (f !== "" && !seen.has(f) && !hiddenReviewPath(f, "")) {
       seen.add(f);
@@ -309,7 +309,7 @@ export function groupMark({ working, calls, marks = {} }) {
   for (let i = calls.length - 1; i >= 0; i--) {
     const status = toolStatus(calls[i], marks);
     if (status === "error") return "cross";
-    if (movedToBackground(calls[i].result)) return "gear";
+    if (movedToBackground(calls[i].result, calls[i].name)) return "gear";
     break;
   }
   return null;

@@ -77,7 +77,10 @@ type testSeams struct {
 	// each platform's sign-in: its URL and code, then after after_ms the
 	// result, "ok" or the error. With code set, the sign-in takes a pasted
 	// code (code_entry) and finishes when that code is sent; after_ms 0
-	// then waits for it. Saving a sign-in fetches no model catalog (G-24).
+	// then waits for it. With late set, a sign-in that is cancelled or runs
+	// out of time still hands over a token, as a slow provider might.
+	// timeout_ms shortens the sign-in time limit. Saving a sign-in fetches
+	// no model catalog (G-24).
 	Auth *struct {
 		VerifyKey map[string]string `json:"verify_key"`
 		Flows     map[string]struct {
@@ -86,7 +89,9 @@ type testSeams struct {
 			Result   string `json:"result"`
 			AfterMS  int    `json:"after_ms"`
 			Code     string `json:"code"`
+			Late     bool   `json:"late"`
 		} `json:"flows"`
+		TimeoutMS int `json:"timeout_ms"`
 	} `json:"auth"`
 	// SkillsSearch are the skills.sh results by query; other queries find
 	// nothing (G-24).
@@ -192,13 +197,16 @@ func loadTestSeams(path string) (restore func(), err error) {
 	if a := seams.Auth; a != nil {
 		flows, verify := a.Flows, a.VerifyKey
 		restores = append(restores, config.SkipLoginCatalogsForTest())
+		if a.TimeoutMS > 0 {
+			restores = append(restores, backend.SetAuthTimeoutForTest(time.Duration(a.TimeoutMS)*time.Millisecond))
+		}
 		restores = append(restores, backend.SetAuthForTest(
 			func(platform string) (login.Flow, error) {
 				f, ok := flows[platform]
 				if !ok {
 					return nil, fmt.Errorf("no seam sign-in for %s", platform)
 				}
-				flow := &seamFlow{url: f.URL, userCode: f.UserCode, result: f.Result, after: time.Duration(f.AfterMS) * time.Millisecond}
+				flow := &seamFlow{url: f.URL, userCode: f.UserCode, result: f.Result, after: time.Duration(f.AfterMS) * time.Millisecond, late: f.Late}
 				if f.Code != "" {
 					return &seamCodeFlow{seamFlow: flow, code: f.Code}, nil
 				}
@@ -249,10 +257,12 @@ func seamLimits(raw json.RawMessage) (func(context.Context) ([]cliagent.Limit, e
 }
 
 // seamFlow is a sign-in that shows its URL and code, then after a while
-// succeeds or fails as the seam says.
+// succeeds or fails as the seam says. A late one hands over its token even
+// when it is cancelled or runs out of time first.
 type seamFlow struct {
 	url, userCode, result string
 	after                 time.Duration
+	late                  bool
 }
 
 func (f *seamFlow) Start(context.Context) (string, string, error) { return f.url, f.userCode, nil }
@@ -261,6 +271,9 @@ func (f *seamFlow) Wait(ctx context.Context) (*oauth.Token, error) {
 	select {
 	case <-time.After(f.after):
 	case <-ctx.Done():
+		if f.late {
+			return seamToken(), nil
+		}
 		return nil, ctx.Err()
 	}
 	if f.result != "ok" {

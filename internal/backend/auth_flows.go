@@ -40,8 +40,17 @@ var (
 	ErrAuthProvider = errors.New("provider not found")
 )
 
-// authFlowTimeout bounds a sign-in, as `crush login` does.
-const authFlowTimeout = 10 * time.Minute
+// authFlowTimeout bounds a sign-in, as `crush login` does; the crushtest
+// seams shorten it.
+var authFlowTimeout = 10 * time.Minute
+
+// SetAuthTimeoutForTest shortens the sign-in time limit and returns a
+// function that restores it.
+func SetAuthTimeoutForTest(d time.Duration) func() {
+	prev := authFlowTimeout
+	authFlowTimeout = d
+	return func() { authFlowTimeout = prev }
+}
 
 // hyperMinimumWait is how long Hyper's start takes at least, so its
 // "Initializing..." is seen (internal/ui/dialog/auth/oauth_hyper.go:36).
@@ -117,11 +126,16 @@ const (
 	authFlowOver
 )
 
-// claim moves a running flow to next and reports whether it did.
+// claim moves a running flow to next and reports whether it did. A flow
+// whose context is done (cancelled, out of time, or its workspace gone)
+// can't move to saving, even with a token at hand.
 func (a *authFlow) claim(next authFlowState) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.state != authFlowRunning {
+		return false
+	}
+	if next == authFlowSavingState && a.ctx.Err() != nil {
 		return false
 	}
 	a.state = next
@@ -202,6 +216,8 @@ func (b *Backend) runAuthFlow(a *authFlow) {
 		}
 		waited <- err
 	}()
+	// The flow's Wait ends with its context. Whatever it or a pasted code
+	// brings, one claim decides whether it is saved.
 	var token *oauth.Token
 	select {
 	case token = <-a.tokens:
@@ -211,12 +227,11 @@ func (b *Backend) runAuthFlow(a *authFlow) {
 			return
 		}
 		token = <-a.tokens
-	case <-a.ctx.Done():
-		b.failAuthFlow(a, authWaitError(a.ctx, a.ctx.Err()))
-		return
 	}
-	// A flow cancelled meanwhile never saves, even with a token at hand.
+	// A flow cancelled or out of time meanwhile never saves, even with a
+	// token at hand.
 	if !a.claim(authFlowSavingState) {
+		b.failAuthFlow(a, authWaitError(a.ctx, a.ctx.Err()))
 		return
 	}
 	b.sendAuthFlow(a, proto.AuthFlowSaving, "")

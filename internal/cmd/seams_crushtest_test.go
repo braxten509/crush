@@ -5,6 +5,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -237,20 +238,32 @@ func TestSeamAuthGrokCode(t *testing.T) {
 	}, 10*time.Second, 20*time.Millisecond, "the pasted code finished the sign-in")
 }
 
-// TestSeamAuthCancel: a cancelled sign-in saves nothing, even when its
-// token arrives right after (G-5, through the auth seam).
+// TestSeamAuthCancel: a sign-in that was cancelled, or ran out of time,
+// saves nothing, even when its provider hands over a token after that
+// (G-5, through the auth seam's late flows).
 func TestSeamAuthCancel(t *testing.T) {
-	useSeams(t, `{"auth":{"flows":{"copilot":{"url":"https://github.com/login/device","user_code":"ABCD-1234","result":"ok","after_ms":200}}}}`)
+	useSeams(t, `{"auth":{"timeout_ms":300,"flows":{
+		"copilot":{"url":"https://github.com/login/device","user_code":"ABCD-1234","result":"ok","after_ms":60000,"late":true},
+		"openai":{"url":"https://auth.openai.com/authorize","result":"ok","after_ms":60000,"late":true}}}}`)
 	b := newSeamBackend(t)
 	ws := seamWorkspace(t, b)
 
-	flow, err := b.StartAuthFlow(ws.ID, "copilot")
+	cancelled, err := b.StartAuthFlow(ws.ID, "copilot")
 	require.NoError(t, err)
-	require.NoError(t, b.CancelAuthFlow(flow.FlowID))
-	require.ErrorIs(t, b.CancelAuthFlow(flow.FlowID), backend.ErrAuthFlowNotFound, "the flow is gone")
-	time.Sleep(600 * time.Millisecond)
-	pc, found := ws.Cfg.Config().Providers.Get("copilot")
-	require.False(t, found && pc.OAuthToken != nil, "a cancelled sign-in saves nothing")
+	require.NoError(t, b.CancelAuthFlow(cancelled.FlowID))
+	require.ErrorIs(t, b.CancelAuthFlow(cancelled.FlowID), backend.ErrAuthFlowNotFound, "the flow is gone")
+
+	expired, err := b.StartAuthFlow(ws.ID, "openai")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return errors.Is(b.CancelAuthFlow(expired.FlowID), backend.ErrAuthFlowNotFound)
+	}, 10*time.Second, 20*time.Millisecond, "the flow ends when its time is up")
+
+	time.Sleep(300 * time.Millisecond)
+	for _, id := range []string{"copilot", "openai"} {
+		pc, found := ws.Cfg.Config().Providers.Get(id)
+		require.False(t, found && pc.OAuthToken != nil, "%s: a token handed over after the end is not saved", id)
+	}
 }
 
 // TestSeamSkillsSearch: the skills_search seam answers skills.sh searches

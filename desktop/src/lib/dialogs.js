@@ -4,11 +4,14 @@
 // veil, front last, and makes every sheet but the front one inert. A sheet
 // opened with {grace: true} absorbs keys for a moment (lib/grace.js); like the
 // terminal, the grace belongs to the front sheet and ends when another sheet
-// opens over it or it closes.
+// opens over it or it closes. A sheet registered with {veil: false} (the
+// docked Themes sheet and theme editor, desktop-design-5-6 2.13, and the
+// Changes sheet, which draws its own lighter scrim, DLG-308) has no veil
+// behind it while it is in front; the page behind stays inert.
 import { SvelteMap } from "svelte/reactivity";
 import { createGrace, noteClosed } from "./grace.js";
 
-const components = new Map(); // id → Component
+const components = new Map(); // id → {component, veil}
 const stack = new SvelteMap(); // id → {id, component, props}, in stack order (front last)
 let frontGrace = null;
 
@@ -16,15 +19,15 @@ let frontGrace = null;
 // it run again when the stack changes.
 export const dialogs = liveList(() => [...stack.values()]);
 
-export function registerDialog(id, Component) {
-  components.set(id, Component);
+export function registerDialog(id, Component, { veil = true } = {}) {
+  components.set(id, { component: Component, veil });
 }
 
 // Pushes the sheet (true), or brings an open one to the front (false). An id
 // nobody registered logs and returns false.
 export function openDialog(id, props = {}, { grace = false } = {}) {
-  const component = components.get(id);
-  if (!component) {
+  const registered = components.get(id);
+  if (!registered) {
     console.warn(`openDialog: no sheet is registered as "${id}"`);
     return false;
   }
@@ -32,7 +35,7 @@ export function openDialog(id, props = {}, { grace = false } = {}) {
     bringToFront(id);
     return false;
   }
-  stack.set(id, { id, component, props });
+  stack.set(id, { id, component: registered.component, props, veil: registered.veil });
   frontGrace = grace ? createGrace(id) : null;
   return true;
 }

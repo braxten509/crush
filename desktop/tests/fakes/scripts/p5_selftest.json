@@ -1,0 +1,15 @@
+{
+  "about": "desktop-design-5-6 8.6 step 6 (p5_selftest.py): one bash step that prints, from the engine's shell, the tasks folder, the crush a plain `crush` finds (the sandbox's test build, which LIVE's scripts call, 8.4) and $CRUSH_DESKTOP_CRUSH, which the app keeps from the engine and must print empty.",
+  "turns": [
+    {
+      "when": "harness self-test environment",
+      "steps": [
+        {
+          "tool_calls": [{ "name": "bash", "arguments": { "command": "echo \"TASKS[$CRUSH_TASKS_DIR] CRUSH[$(command -v crush)] DESKTOP[$CRUSH_DESKTOP_CRUSH]\"", "description": "Print the tasks folder and crush" } }]
+        },
+        { "text": "Printed them." }
+      ]
+    }
+  ],
+  "default": { "text": "OK." }
+}

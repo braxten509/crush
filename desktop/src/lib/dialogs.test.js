@@ -143,4 +143,25 @@ describe("OverlayHost draws the stack", () => {
     flushSync();
     expect(target.querySelector(".veil")).toBe(null);
   });
+
+  // A {veil: false} sheet in front leaves the veil bare (no scrim); any other
+  // front sheet gets the scrim, whatever lies beneath it.
+  it("draws no scrim only while a {veil: false} sheet is in front", async () => {
+    const { default: Sheet } = await import("../components/sheets/ChangesSheet.svelte");
+    lib.registerDialog("bare", Sheet, { veil: false });
+    const veil = () => {
+      const el = target.querySelector(".veil");
+      return [el.dataset.veil, el.classList.contains("bare")];
+    };
+    lib.openDialog("a");
+    flushSync();
+    expect(veil()).toEqual(["veil", false]);
+    lib.openDialog("bare");
+    flushSync();
+    expect(veil()).toEqual(["none", true]);
+    expect(sheets()).toEqual([["a", true], ["bare", false]]);
+    lib.bringToFront("a");
+    flushSync();
+    expect(veil()).toEqual(["veil", false]);
+  });
 });

@@ -17,6 +17,9 @@
   // state is kept by group id for the window's life (CHAT-080).
   //   item  a ToolGroupItem (lib/types.js); scaffold S3's sample item
   //         {count, summary} without calls still draws as before
+  //
+  // Under a working group, the registered tool hint (lib/toolhints.js;
+  // LIVE's 60-second hint, desktop-design-5-6 6.3) when it gives one.
   import { onDestroy } from "svelte";
   import { openDialog } from "../../lib/dialogs.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
@@ -32,6 +35,7 @@
   import { SHELL_STEP } from "../../lib/tools/shell.js";
   import { groupRow } from "../../lib/tools/summary.js";
   import { toolView } from "../../lib/tools/registry.js";
+  import { toolHint } from "../../lib/toolhints.js";
   import Icon from "../Icon.svelte";
   import ActivityMark from "../timeline/ActivityMark.svelte";
   import StatusLine from "../timeline/StatusLine.svelte";
@@ -76,6 +80,7 @@
     return out;
   });
   const mark = $derived(row && !live ? row.mark : null);
+  const hint = $derived(!sample && item.working ? toolHint(item) : null);
 
   const earlier = $derived(open && !allShown.has(openKey) ? Math.max(0, calls.length - SHOWN) : 0);
   const shownCalls = $derived(earlier > 0 ? calls.slice(earlier) : calls);
@@ -214,6 +219,9 @@
         {/each}
       </div>
     {/if}
+    {#if hint !== null}
+      <p class="hint">{hint}</p>
+    {/if}
   {/if}
 </div>
 
@@ -342,5 +350,10 @@
   }
   .earlier:hover {
     color: var(--ink);
+  }
+  .hint {
+    margin-top: calc(6 * var(--px));
+    font: var(--t-small);
+    color: var(--slate);
   }
 </style>

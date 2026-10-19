@@ -1075,6 +1075,20 @@ async function switchInput(target, { continueSid = "" } = {}) {
   return true;
 }
 
+// G-26 (desktop-design-5-6 7.1, TYPE-002's order): on every agent-info read
+// the mode follows the engine's main agent, so a switch another app made shows
+// here too: "plan" gives plan, "coder" gives YOLO while the skip switch is on,
+// else normal. "" (no coordinator yet) changes nothing, nor does a read while
+// this window switches or the field is in bang mode.
+function followAgent(agent) {
+  if (agent !== "plan" && agent !== "coder") return;
+  if (composer.switching || draftOf().bang) return;
+  const input = agent === "plan" ? "plan" : "code";
+  if (composer.input === input) return;
+  composer.input = input;
+  syncMode();
+}
+
 // Shift+Tab (toggleInputMode, input_mode.go:16-36).
 export async function cycleMode() {
   const steps = cycleSteps({ plan: composer.input === "plan", skip: composer.yolo, cycleYolo, busy: working(), switching: composer.switching });
@@ -1221,6 +1235,10 @@ export function startComposer({ connected = () => conn.state === "connected" } =
     $effect(() => {
       const sid = sessions.currentId;
       untrack(() => chatShown(sid));
+    });
+    $effect(() => {
+      const info = ws.agent;
+      untrack(() => followAgent(info?.agent));
     });
     $effect(() => {
       const sid = sessions.currentId;

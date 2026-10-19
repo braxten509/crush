@@ -40,6 +40,11 @@ pub struct Launch {
     pub channels: Vec<String>,
     /// CRUSH_UI_DEBUG == "true" (PLAN.md:144).
     pub ui_debug: bool,
+    /// --launch-id: the phone launch the first window shares for (REM-017; main.rs
+    /// adds it when CRUSH_REMOTE_LAUNCH is set).
+    pub launch_id: Option<String>,
+    /// --new-chat: the first window starts a new chat (LIST-049).
+    pub new_chat: bool,
 }
 
 impl Launch {

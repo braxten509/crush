@@ -141,6 +141,10 @@ fn bad_setting(message: impl Into<String>) -> AppError {
 enum KeyChange {
     CrushPath(Option<String>),
     Yolo(bool),
+    /// Phases 5 and 6 (desktop-design-5-6 6.1, 7.1), kept beside the others in
+    /// the file: `theme` (a theme name; "" is the default, 3.3) and
+    /// `list_collapsed` (2.20).
+    Other(&'static str, Value),
 }
 
 impl KeyChange {
@@ -157,6 +161,14 @@ impl KeyChange {
                 Value::Bool(on) => Ok(KeyChange::Yolo(on)),
                 _ => Err(bad_setting("yolo takes true or false.")),
             },
+            "theme" => match value {
+                Value::String(name) => Ok(KeyChange::Other("theme", Value::String(name.trim().to_string()))),
+                _ => Err(bad_setting("theme takes the name of a theme, or \"\" for the default.")),
+            },
+            "list_collapsed" => match value {
+                Value::Bool(on) => Ok(KeyChange::Other("list_collapsed", Value::Bool(on))),
+                _ => Err(bad_setting("list_collapsed takes true or false.")),
+            },
             other => Err(bad_setting(format!("{other} is not a setting Crush Desktop can change."))),
         }
     }
@@ -165,6 +177,9 @@ impl KeyChange {
         match self {
             KeyChange::CrushPath(path) => settings.crush_path = path.clone(),
             KeyChange::Yolo(on) => settings.yolo = *on,
+            KeyChange::Other(key, value) => {
+                settings.other.insert(key.to_string(), value.clone());
+            }
         }
     }
 }
@@ -653,7 +668,7 @@ mod tests {
         assert_eq!(KeyChange::parse("crush_path", json!(null)).unwrap(), KeyChange::CrushPath(None));
         assert_eq!(KeyChange::parse("crush_path", json!("  ")).unwrap(), KeyChange::CrushPath(None));
         assert_eq!(KeyChange::parse("yolo", json!(false)).unwrap(), KeyChange::Yolo(false));
-        for (key, value) in [("yolo", json!("no")), ("crush_path", json!(3)), ("closed_chats", json!({})), ("theme", json!("x"))] {
+        for (key, value) in [("yolo", json!("no")), ("crush_path", json!(3)), ("closed_chats", json!({})), ("theme", json!(3)), ("list_collapsed", json!("yes"))] {
             let err = KeyChange::parse(key, value).unwrap_err();
             assert_eq!(err.code, "bad_setting", "{key}");
         }

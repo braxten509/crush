@@ -690,7 +690,7 @@ Each surface lists: what the desktop does, the terminal facts it copies (file:li
 
 | Call | Behavior | Terminal fact |
 |---|---|---|
-| `registerDialog(id, Component, {veil = true})` | Once per sheet, from its piece's plugin file; `veil: false` only for the docked Themes sheet and theme editor (S5) | — |
+| `registerDialog(id, Component, {veil = true})` | Once per sheet, from its piece's plugin file; `veil: false` only for the docked Themes sheet and theme editor (S5) and the Changes sheet, which draws its own lighter scrim (DLG-308) | — |
 | `openDialog(id, props, {grace})` | Pushes a sheet. If a sheet with the same `id` is open, brings it to the front instead and returns `false`. | `dialog.go:108-113`, `:209`; reopen brings forward `internal/ui/model/dialogs.go:31` |
 | `bringToFront(id)` | Moves the sheet to the top. | `dialog.go:209` |
 | `closeDialog(id)` | Removes that sheet wherever it is. | `dialog.go:156` |
@@ -1910,7 +1910,7 @@ One proposal per surface, for the coordinator to decide and record: look choices
 
 ### 5.1 Sheet frame and kit
 
-- **Veil.** S3's `OverlayHost` covers the window behind the front sheet with `--scrim` (3.1; 3-4 design §4.0); no blur. The docked Themes sheet and theme editor have no veil (`{veil: false}`, 5.14, 7.1).
+- **Veil.** S3's `OverlayHost` covers the window behind the front sheet with `--scrim` (3.1; 3-4 design §4.0); no blur. The docked Themes sheet and theme editor have no veil (`{veil: false}`, 5.14, 7.1); nor does the Changes sheet, which draws its own lighter scrim that closes it on an outside click (DLG-308).
 - **Frame.** Background `--paper`. Four 1px `--rule-frame` lines that stop 11 short of each corner, and a + mark with 8 arms at each corner in `--mark` (the page frame's drawing, `desktop/src/components/Frame.svelte:21-22`, `:32-57`; `PlusMark.svelte:20`). Padding 26 left and right, 22 top, 20 bottom. Widths: small 520, standard 760, wide 1040; at most the window minus 24 per side (2.1).
 - **Title line.** Title in `--t-project` `--ink`, 38 high. Title-side controls on the same line, right-aligned, bottom-aligned to the title's baseline: small-caps labels in `--t-label` with `--track-label`, 18 apart; the active one `--ink` with a 2 `--ink` underline 5 below the baseline, the others `--slate`.
 - **Rule under the title.** `components/Rule.svelte` with `marks="both"`, 18 below the title line, spanning the frame's inner width plus the padding (the chat list's `under-search` rule).
@@ -2418,7 +2418,7 @@ Fifteen app pieces, the scaffold S5 and the Go piece G56. Paths are relative to 
 | `src/lib/stores/composer.svelte.js` | P3.7 | mode follows `AgentInfo.agent` on every agent-info read, unless in bang mode: `"plan"` gives `plan`; `"coder"` gives `yolo` while the skip switch is on, else `normal` (TYPE-002's order); `""` changes nothing (G-26; the agent info is re-read on every `config_changed`, 3-4 design §1.5.3) |
 | `src/components/Icon.svelte` | S3 | `warning`: the "!" stroke and dot fill `var(--on-amber)` instead of `var(--paper)` (`Icon.svelte:60-61`; 3.6); `working`: the ring in `var(--icon-ring, var(--rule-control))` and a quarter arc in `var(--icon-arc, var(--busy))` (`stroke-dasharray` 12 36) whose offset is `-6 * ticker.frame` (look 5.2; a parent sets both properties to `--mark` for the background mark); new `terminal` (look 5.2's terminal mark) and `arrow-up-right` (server rows, look 5.17) |
 | `src/App.svelte` | S3 | left column: `leftlist/Strip.svelte` instead of `ChatList` while `leftList.strip`; middle column: `MainHost` over `Conversation`, which stays mounted inside a `hidden` wrapper while `mainView.current` is set, so its draft and scroll survive; `system/DebugOverlay.svelte` when `app_info().ui_debug` |
-| `src/components/overlay/OverlayHost.svelte` | S3 | no veil behind a front sheet registered with `{veil: false}` (the docked Themes sheet and theme editor, 2.13); the page behind stays inert |
+| `src/components/overlay/OverlayHost.svelte` | S3 | no veil behind a front sheet registered with `{veil: false}` (the docked Themes sheet and theme editor, 2.13, and the Changes sheet with its own scrim, DLG-308); the page behind stays inert |
 | `src/lib/dialogs.js` | S3 | `registerDialog(id, Component, {veil = true} = {})` |
 | `src/lib/keys.js` | S3 | (1) the scope `main`, between `tray` and `composer`, active while `ui.focus === "main"`; while the main view is a terminal tab, no scope after `main` runs, and a key no binding took is left to the page (the terminal widget). (2) The combo `"*"`: any key, tried after the scope's exact combos. (3) The terminal-tab exception to S3's quit key: while a terminal tab has focus, Ctrl+C does not ask `global` first (`keys.js:52-67`, `:91-96`), so it reaches the shell like any key no binding took. The Ctrl+C binding itself is PAL's, a plain `global` binding (2.24). (4) Ctrl+K opens the Sessions sheet, `openDialog("sessions")`, instead of focusing the chat-list search (3-4 design §1.8: "its results are phase 5"; 2.2); if phase 3 made that binding in P3.9's `plugins/list.js` rather than here, S5 changes it there |
 | `src/lib/types.js` | S3 | `SlotEntry.kind` gains `"secure"` (if S3 left it out) and `"update"`; the type `MainViewEntry {kind: "helper" \| "terminal", component, props}` |

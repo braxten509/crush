@@ -103,3 +103,45 @@ describe("keys while the menu, the viewer or a sheet is open (desktop-design 1.8
     expect(keys.activeScopes("Ctrl+N")).toEqual(["overlay", "timeline", "global"]);
   });
 });
+
+describe("the main column's view and any-key handlers (desktop-design-5-6 7.1)", () => {
+  it("puts main between tray and composer, asked while the helper or terminal view has the focus", async () => {
+    expect(keys.SCOPES.slice(keys.SCOPES.indexOf("tray"), keys.SCOPES.indexOf("composer") + 1)).toEqual(["tray", "main", "composer"]);
+    const { showMain } = await import("./mainview.js");
+    showMain({ kind: "helper", component: {} });
+    expect(ui.focus).toBe("main");
+    expect(keys.activeScopes("Ctrl+N")).toEqual(["overlay", "main", "global"]);
+    expect(keys.activeScopes("Ctrl+C")).toEqual(["global", "overlay", "main"]);
+  });
+
+  it("leaves a terminal tab's unbound keys and Ctrl+C to the page, asking no global key", async () => {
+    const quit = vi.fn(() => true);
+    const newChat = vi.fn(() => true);
+    keys.bindKey("global", "Ctrl+C", quit);
+    keys.bindKey("global", "Ctrl+N", newChat);
+    const { showMain } = await import("./mainview.js");
+    showMain({ kind: "terminal", component: {} });
+    expect(keys.activeScopes("Ctrl+C")).toEqual(["overlay", "main"]);
+    expect(press("c", { ctrlKey: true })).toBe(false);
+    expect(press("n", { ctrlKey: true })).toBe(false);
+    expect(press("x")).toBe(false);
+    expect([quit.mock.calls.length, newChat.mock.calls.length]).toEqual([0, 0]);
+    const tabKey = vi.fn(() => true);
+    keys.bindKey("main", "Ctrl+Shift+T", tabKey);
+    expect(press("T", { ctrlKey: true, shiftKey: true, code: "KeyT" })).toBe(true);
+    expect(tabKey).toHaveBeenCalledTimes(1);
+  });
+
+  it("tries a scope's \"*\" handlers after its exact combos", () => {
+    const order = [];
+    let exactTakes = true;
+    keys.bindKey("overlay", "*", () => (order.push("any"), true));
+    keys.bindKey("overlay", "Escape", () => (order.push("exact"), exactTakes));
+    expect(press("Escape")).toBe(true);
+    expect(order).toEqual(["exact"]);
+    exactTakes = false;
+    expect(press("Escape")).toBe(true);
+    expect(press("q")).toBe(true);
+    expect(order).toEqual(["exact", "exact", "any", "any"]);
+  });
+});

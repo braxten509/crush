@@ -183,6 +183,86 @@ export const api = {
   previewFiles: (sid, req) => post(`${chat(sid)}/files/preview`, req),
   previewUndoFiles: (sid) => post(`${chat(sid)}/files/undo-preview`),
   undoFiles: (sid, plan_id) => post(`${chat(sid)}/files/undo`, { plan_id }),
+
+  // Phases 5 and 6 (desktop-design-5-6 6.5; scaffold S5). The G-n routes are G56's.
+  // A secret (a key, a secure form's answers) goes only through apiSecret:
+  // secure-forms/{fid}/submit, config/provider-key and auth/verify-key.
+  apiSecret: (path, body) => commands.apiSecret(path, body),
+
+  customCommands: () => get("commands"),
+  mcpPrompts: () => get("mcp/prompts"),
+  getMcpPrompt: ({ client_id, prompt_id, args }) => post("mcp/get-prompt", { client_id, prompt_id, args }),
+  // Runs inside the request: no time limit, and abort(callId) stops it.
+  summarize: (sid, callId) => post(`${run(sid)}/summarize`, undefined, undefined, callId),
+  capabilities: () => get("agent/capabilities"),
+  refreshOAuth: (scope, provider_id) => post("config/refresh-oauth", { scope: scopeOf(scope), provider_id }),
+  importCopilot: () => post("config/import-copilot"),
+  initAgent: () => post("agent/init", { interactive: true }),
+  refreshProviders: () => post("/v1/providers/refresh"),
+
+  startAuthFlow: ({ platform }) => post("auth/flows", { platform }),
+  sendAuthCode: (flow_id, code) => post(`auth/flows/${seg(flow_id)}/code`, { code }),
+  cancelAuthFlow: (flow_id) => post(`auth/flows/${seg(flow_id)}/cancel`),
+
+  // [session.Session] with PascalCase keys; selected: the shown chat's id.
+  savedSessions: (selected) => get("saved-sessions", selected ? { selected } : undefined),
+  // session.CatalogChange {DiscardEmpty, Session, Remove}.
+  changeSavedSession: (change) => post("saved-sessions", change),
+
+  answerQuestions: (answer) => post("questions/answer", answer),
+  cancelQuestions: () => post("questions/cancel"),
+  pendingQuestion: (sid) => get("questions/pending", { session_id: sid }),
+  secureForms: () => get("secure-forms"),
+  cancelSecureForm: (form_id) => post(`secure-forms/${seg(form_id)}/cancel`),
+
+  installedSkills: () => get("skills/installed"),
+  manageSkill: (request) => post("skills/manage", request),
+  searchSkills: (q) => get("skills/search", { q }),
+  mcpDisabled: () => get("mcp/disabled"),
+  setMcpDisabled: ({ name, disabled }) => post("mcp/disabled", { name, disabled }),
+  mcpEnabled: () => get("mcp/enabled"),
+  setMcpConfigDisabled: ({ name, disabled }) => post("mcp/config-disabled", { name, disabled }),
+  mcpPendingAuth: () => get("mcp/pending-auth"),
+  mcpAuthUrl: (name) => get("mcp/auth-url", { name }),
+  // Runs inside the request: no time limit, and abort(callId) stops it.
+  mcpAuth: (name, callId) => post("mcp/auth", { name }, undefined, callId),
+  dockerMcp: (enable) => post(enable ? "mcp/docker/enable" : "mcp/docker/disable"),
+
+  memory: () => get("/v1/memory"),
+  setMemoryLimit: (value) => commands.api("PUT", "/v1/memory/limit", undefined, { value }),
+  // The engine claims its current episode (internal/server/handlers_live.go:94);
+  // the caller names the episode it saw.
+  claimMemoryNotice: (_episode) => post("/v1/memory/claim-notice"),
+  setCpuAffinity: (enabled) => post("/v1/cpu-affinity", { enabled }),
+
+  themes: () => get("/v1/themes"),
+  theme: (name) => get(`/v1/themes/${seg(name)}`),
+  resolveTheme: ({ base, palette }) => post("/v1/themes/resolve", { base, palette }),
+  saveTheme: (name, { base, palette }) => commands.api("PUT", `/v1/themes/${seg(name)}`, undefined, { base, palette }),
+  createTheme: ({ name, base }) => post("/v1/themes", { name, base }),
+  renameTheme: (name, new_name) => post(`/v1/themes/${seg(name)}/rename`, { new_name }),
+  deleteTheme: (name) => commands.api("DELETE", `/v1/themes/${seg(name)}`),
+  revertTheme: (name) => post(`/v1/themes/${seg(name)}/revert`),
+
+  helpers: (sid) => get(`${chat(sid)}/helpers`),
+  stopHelper: (sid, hid) => post(`${chat(sid)}/helpers/${seg(hid)}/stop`),
+  jobs: (sid) => get(`${chat(sid)}/jobs`),
+  // ref: a JobRef {job_id?, pid?}.
+  killJob: (sid, ref) => post(`${chat(sid)}/jobs/kill`, ref),
+  background: (sid) => post(`${chat(sid)}/background`),
+  servers: () => get("servers"),
+
+  startRemote: ({ launch_id } = {}) => post("remote/start", launch_id ? { launch_id } : {}),
+  stopRemote: () => post("remote/stop"),
+  remote: () => get("remote"),
+  remotePresence: (presence) => post("remote/presence", presence),
+  remoteActionDone: (aid, done) => post(`remote/actions/${seg(aid)}/done`, done),
+
+  cliUpdates: () => get("/v1/updates/clis"),
+  declineCliUpdates: (bins) => post("/v1/updates/clis/decline", { bins }),
+  installCliUpdates: (bins) => post("/v1/updates/clis/install", { bins }),
+  crushUpdate: () => get("/v1/updates/crush"),
+  declineCrushUpdate: (tag) => post("/v1/updates/crush/decline", { tag }),
 };
 
 // engine_set_current_session; "" clears it (the landing page).

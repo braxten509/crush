@@ -104,6 +104,21 @@
   --ansi-8: #5f5e5a;  --ansi-9: #c2341f;  --ansi-10: #4a7827; --ansi-11: #946400;
   --ansi-12: #2d63b0; --ansi-13: #924a95; --ansi-14: #23727c; --ansi-15: #4a4947;
 
+  /* Phases 5 and 6 (desktop-design-5-6 3.1, the tokens S5 adds), with the Scholar's edition values */
+  --on-amber: #0f0f0f;         /* the warning icon's "!": fg_base or bg_base, whichever reads on --amber; 8.7:1 */
+  --choice: #14323f;           /* selected choice marks, the text caret */
+  --on-accent: #f9f8ef;        /* icons on --vermilion-fill (Send); text on --info-strong tags */
+  --keyword: #7c4a1e;          /* key names in sign-in texts ("enter") */
+  --attention: #a64b00;        /* the WARN tag fill; the needs-authentication dot */
+  --busy: #8a5a00;             /* the working mark's arc, the helpers mark */
+  --info-strong: #2f5d73;      /* the helper tag fill */
+  --info-soft: #4b6b78;        /* secondary row details: job command and pid, MCP tool names */
+  --plan: #2f5d73;             /* the On and Toggleable squares of Toggle skills */
+  --control-rest: #fbfaf2;     /* a sheet button at rest */
+  --control-hover: #f3f1e6;    /* a hovered button or row */
+  --control-disabled: #edeee8; /* a disabled button */
+  --disabled-band: #edeee8;    /* a disabled row that is selected (pickers) */
+
   /* Reading roles for Markdown */
   --t-h1: 400 calc(30 * var(--px)) / calc(38 * var(--px)) var(--face-display);
   --t-h2: 400 calc(25 * var(--px)) / calc(32 * var(--px)) var(--face-display);

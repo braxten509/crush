@@ -22,7 +22,8 @@ import { itemActions } from "../tools/open.svelte.js";
 import { probeRead } from "../tools/probe.js";
 import { toolStatus } from "../tools/status.js";
 
-registerDialog("changes", ChangesSheet);
+// The Changes sheet draws its own scrim (outside clicks close it, DLG-308).
+registerDialog("changes", ChangesSheet, { veil: false });
 
 // A standalone tool (Question, Agent, Agentic Fetch) inside a timeline
 // selection copies as its c/y text (CHAT-056, CHAT-087; lib/copy.js wholeText).

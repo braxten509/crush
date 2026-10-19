@@ -21,6 +21,20 @@ pub struct AppError {
 
 pub type AppResult<T> = Result<T, AppError>;
 
+/// The codes phases 5 and 6 add (desktop-design-5-6 6.4).
+#[allow(dead_code)] // each is used by the piece that owns its command (7.3)
+pub mod codes {
+    /// `api_secret` was asked for a route that takes no secret.
+    pub const SECRET_ROUTE: &str = "secret_route";
+    pub const PTY_FAILED: &str = "pty_failed";
+    pub const NO_SUCH_PTY: &str = "no_such_pty";
+    pub const NO_EDITOR: &str = "no_editor";
+    pub const NOT_A_FOLDER: &str = "not_a_folder";
+    pub const DIALOG_FAILED: &str = "dialog_failed";
+    pub const NOTIFY_FAILED: &str = "notify_failed";
+    pub const UPDATE_RUNNING: &str = "update_running";
+}
+
 impl AppError {
     pub fn new(code: &str, message: impl Into<String>) -> Self {
         AppError {

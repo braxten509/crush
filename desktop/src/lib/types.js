@@ -50,6 +50,9 @@
  *   id is "<message id>:<index>" (desktop-design 1.5.6, "Figure ids and who registers them")
  *
  * @typedef {{kind:"file"|"picture"|"text", name:string, mime:string, path?:string, base64:string}} Attachment
- * @typedef {{kind:"permission"|"plan"|"customize"|"question"|"secure", component:any, props:object}} SlotEntry
+ * @typedef {{kind:"permission"|"plan"|"customize"|"question"|"secure"|"update", component:any, props:object}} SlotEntry
+ *   ("update": SYS's yes/no offers through ASK's askYesNo, desktop-design-5-6 2.19)
+ * @typedef {{kind:"helper"|"terminal", component:any, props:object}} MainViewEntry
+ *   what lib/mainview.js shows in the middle column instead of the chat (desktop-design-5-6 6.4)
  * @typedef {import("./engine/wire.js").Review} Review
  */

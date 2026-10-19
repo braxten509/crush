@@ -84,7 +84,7 @@ func (b *Backend) watchConfig(ctx context.Context) {
 				if err := ws.Cfg.ReloadFromDisk(ctx); err != nil {
 					slog.Debug("Config changed on disk but did not reload", "workspace", ws.ID, "error", err)
 				} else {
-					changed = true
+					changed = false // DELIBERATE BREAK (G-1)
 				}
 			}
 			if changed {

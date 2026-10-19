@@ -37,7 +37,7 @@ func (b *Backend) ListServers(ctx context.Context, workspaceID string) ([]proto.
 			Program:   s.Owner,
 			Name:      s.Title(),
 			Command:   s.Process.Command,
-			JobID:     s.Process.JobID,
+			// DELIBERATE BREAK (G-18): no job ID
 			PID:       s.Process.PID,
 			SessionID: s.Process.Session,
 		})

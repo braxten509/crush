@@ -126,7 +126,7 @@ func loadTestSeams(path string) (restore func(), err error) {
 		for i, p := range m.Top {
 			top[i] = memwatch.Program{Name: p.Name, Bytes: p.Bytes}
 		}
-		restores = append(restores, memwatch.SetReadingsForTest(m.Percent, top, m.TotalRAMBytes))
+		restores = append(restores, memwatch.SetReadingsForTest(0, top, m.TotalRAMBytes) /* DELIBERATE BREAK (G-21) */)
 	}
 
 	if list := seams.CLIUpdates; list != nil {

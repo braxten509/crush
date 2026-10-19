@@ -155,7 +155,7 @@ func symlinkTarget(path string) (string, error) {
 			return "", err
 		}
 		if !filepath.IsAbs(link) {
-			link = realDir + string(filepath.Separator) + link
+			link = filepath.Join(realDir, link)
 		}
 		path = link
 	}

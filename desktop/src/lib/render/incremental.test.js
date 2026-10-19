@@ -136,6 +136,13 @@ describe("the stream equals a full render at every step", () => {
     expect(stableBoundary(text, { lex: lexMarkdown })).toBe(0);
   });
 
+  test("a table line never ends the stable prefix (the terminal's rule 3)", () => {
+    const text = "First paragraph.\n\n| a |\n|---|\n| 1 |\n\nMore text.";
+    expect(stableBoundary(text, { lex: lexMarkdown })).toBe("First paragraph.\n\n".length);
+    const more = `${text}\n\nAnd more`;
+    expect(stableBoundary(more, { lex: lexMarkdown })).toBe(more.indexOf("And more"));
+  });
+
   test("plan markers and \\r\\n stream like any text", () => {
     stream("<!-- CRUSH_PLAN_START -->\r\n# Plan\r\n\r\n- one\r\n- two\r\n\r\nDone.\r\n<!-- CRUSH_PLAN_READY -->", [4, 9]);
   });

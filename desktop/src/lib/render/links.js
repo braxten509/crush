@@ -10,7 +10,7 @@
 //   makeAnchor(doc, href)   an anchor for a kept target: href as written (the
 //                           opener needs ~ and :line:col), draggable="false",
 //                           rel="noreferrer", never target
-//   guardLinks(root, open)  catches click, auxclick, the middle button's press,
+//   guardLinks(root, open)  catches click, auxclick,
 //                           dragstart, Enter and the native context menu on
 //                           anchors inside root; returns a function that removes
 //                           the listeners. open(href) runs only after a real
@@ -86,9 +86,12 @@ export function guardLinks(root, open = openLink, { trust = (event) => event.isT
   };
 
   const onMouseDown = (event) => {
+    // The middle button's press keeps its default (1.7 item 3 cancels only its
+    // auxclick, which stops "open in new window"): the press moves the caret
+    // out of a focused typing box, so WebKitGTK's paste on the middle release
+    // finds nothing to paste into. Cancelling the press kept the caret there,
+    // and WebKitGTK 2.54 then crashed the app on the release.
     if (event.button === 0) press = { x: event.clientX, y: event.clientY, dragged: false };
-    // The middle button: no autoscroll, no paste, no "open in new window".
-    else if (event.button === 1 && anchorOf(event)) event.preventDefault();
   };
 
   const onMouseMove = (event) => {

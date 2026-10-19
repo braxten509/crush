@@ -152,7 +152,8 @@ describe("guardLinks", () => {
       const aux = mouse("auxclick", { button });
       a.dispatchEvent(aux);
       expect(aux.defaultPrevented).toBe(true);
-      if (button === 1) expect(down.defaultPrevented).toBe(true);
+      // The press keeps its default: it moves the caret out of the typing box (WebKitGTK's middle paste).
+      expect(down.defaultPrevented).toBe(false);
       const click = mouse("click", { button });
       a.dispatchEvent(click);
       expect(click.defaultPrevented).toBe(true);

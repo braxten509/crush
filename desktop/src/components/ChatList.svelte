@@ -1,74 +1,205 @@
 <script>
-  // The left column: the wordmark, New chat, search, and the chats by day. The
-  // open chat sits on a band with a vermilion edge; its branches hang below it
-  // on a thin tree. Scaffold S3: the chats come from sample.js until piece P3.9
-  // reads them from the stores (the list takes no props).
-  import { sample } from "../lib/sample.js";
+  // The left column: the wordmark, New chat, the search, and the project's
+  // chats by day, newest first (sessions.order). The open chat sits on a band
+  // with a vermilion edge; a row says what its chat is doing (LIST-012) in the
+  // time's place. The search filters by title (Ctrl+K focuses it). Phase 4
+  // hangs branches under their chats (listmodel.js is ready for it) and adds
+  // the closed count above the end rule. The header keeps its size and the
+  // rows scroll under it, so nothing is squeezed in a short window.
+  import { onMount } from "svelte";
+  import { buildRows } from "../lib/listmodel.js";
+  import { probeSection } from "../lib/probe.js";
+  import { isClosed } from "../lib/stores/closed.svelte.js";
+  import { focusField } from "../lib/stores/composer.svelte.js";
+  import { busy, sessions } from "../lib/stores/sessions.svelte.js";
+  import { setFocus } from "../lib/stores/ui.svelte.js";
+  import { ws } from "../lib/stores/workspace.svelte.js";
   import Icon from "./Icon.svelte";
+  import ChatRow from "./list/ChatRow.svelte";
+  import { searchFocused, setSearchField } from "./list/listfocus.js";
+  import ListFooter from "./list/ListFooter.svelte";
+  import { startNewChat } from "./list/newchat.js";
+  import { listMarks } from "./start/marks.js";
+  import { start } from "./start/start.svelte.js";
+  import { providerName } from "./start/startmodel.js";
   import Rule from "./Rule.svelte";
 
-  const groups = sample.chats.groups;
+  let query = $state("");
+  let field = $state(null);
+  let nav = $state(null);
+
+  // The day groups and times move on as the clock does.
+  let now = $state(Date.now());
+  onMount(() => {
+    const timer = setInterval(() => (now = Date.now()), 60_000);
+    return () => clearInterval(timer);
+  });
+
+  $effect(() => {
+    setSearchField(field);
+    return () => setSearchField(null);
+  });
+
+  // The open chat's row stays in view when the chat changes.
+  $effect(() => {
+    const id = sessions.currentId;
+    if (!id || !nav) return;
+    queueMicrotask(() => nav?.querySelector(`.scroll [data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" }));
+  });
+
+  // The row's agent line names the chat's provider (configured name, else the
+  // catalog's, else its id).
+  const agentOf = (s) => {
+    const id = s?.context_budget?.provider;
+    return id ? providerName(id, start.providerNames, ws.providers) : "";
+  };
+
+  const built = $derived(
+    buildRows(
+      sessions.order.map((id) => sessions.byId[id]),
+      {
+        isClosed,
+        selectedId: sessions.currentId,
+        busy,
+        query,
+        now,
+        timeOf: (s) => Math.max(s?.updated_at ?? 0, sessions.activity[s?.id] ?? 0),
+        agentOf,
+      },
+    ),
+  );
+
+  // Day groups for drawing: each day's label and the rows under it.
+  const groups = $derived.by(() => {
+    const out = [];
+    for (const item of built.items) {
+      if (item.kind === "day") out.push({ key: `${out.length}:${item.label}`, label: item.label, rows: [] });
+      else if (out.length) out[out.length - 1].rows.push(item);
+    }
+    return out;
+  });
+
+  const searchHint = $derived(start.platform === "macos" ? "⌘K" : "Ctrl K");
+
+  // The list's own keys while it has the focus: ↑ ↓ move between the rows
+  // (↓ from the search goes to the first), Enter in the search opens the
+  // first match, Esc clears the search, then goes back to the composer.
+  function rowButtons() {
+    return [...(nav?.querySelectorAll(".scroll .row") ?? [])];
+  }
+
+  function onKey(event) {
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    const buttons = rowButtons();
+    const at = buttons.indexOf(document.activeElement);
+    const inSearch = document.activeElement === field;
+    if (event.key === "ArrowDown") {
+      const next = inSearch ? buttons[0] : buttons[at + 1];
+      if (next) next.focus();
+      if (next || at >= 0) event.preventDefault();
+    } else if (event.key === "ArrowUp") {
+      if (at > 0) buttons[at - 1].focus();
+      else if (at === 0) field?.focus();
+      if (at >= 0) event.preventDefault();
+    } else if (event.key === "Enter" && inSearch) {
+      buttons[0]?.click();
+      event.preventDefault();
+    } else if (event.key === "Escape") {
+      if (inSearch && query) query = "";
+      else focusField();
+      event.preventDefault();
+    }
+  }
+
+  function rectOf(el) {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  }
+
+  // 1.9: the rows as drawn. state is the words the row shows ("" for none).
+  probeSection(
+    "list",
+    () => ({
+      rows: built.rows.map((r) => ({ id: r.id, title: r.title, depth: r.depth, selected: r.selected, closed: r.closed, state: r.state, state_kind: r.stateKind, time: r.time, agent: r.agent })),
+      closed_count: built.closedCount,
+      search_hint: searchHint,
+      search_focused: searchFocused(),
+      query,
+      empty: built.empty,
+      days: groups.map((g) => g.label),
+    }),
+    () => ({
+      rows: built.rows.map((r) => {
+        const li = nav?.querySelector(`.scroll [data-id="${CSS.escape(r.id)}"]`);
+        return {
+          id: r.id,
+          rect: rectOf(li),
+          band: rectOf(li?.querySelector(".row")), // the button: its background is the open chat's band
+          title: rectOf(li?.querySelector(".title")),
+          title_text: textRect(li?.querySelector(".title")),
+          time: rectOf(li?.querySelector(".time")),
+          state: rectOf(li?.querySelector(".state")),
+        };
+      }),
+      column: rectOf(nav),
+      new_chat: rectOf(nav?.querySelector(".new-chat")),
+      search: rectOf(nav?.querySelector(".search")),
+      scroll: rectOf(nav?.querySelector(".scroll")),
+      empty: rectOf(nav?.querySelector(".empty")),
+      align: listMarks(),
+    }),
+  );
+
+  // The text as drawn, not its element's box: a cut title ends at its "…",
+  // the content box's right edge (its right padding stays empty).
+  function textRect(el) {
+    if (!el) return null;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const r = range.getBoundingClientRect();
+    if (!r.width) return null;
+    const box = el.getBoundingClientRect();
+    const contentRight = box.left + el.clientLeft + el.clientWidth - (parseFloat(getComputedStyle(el).paddingRight) || 0);
+    return { x: r.x, y: r.y, w: Math.min(r.right, contentRight) - r.x, h: r.height };
+  }
 </script>
 
-<nav class="chats" aria-label="Chats">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<nav class="chats" aria-label="Chats" bind:this={nav} onfocusin={() => setFocus("list")} onkeydown={onKey}>
   <h1 class="wordmark"><span class="crush">Crush</span> <span class="ai">AI</span></h1>
 
-  <button class="new-chat" type="button">
+  <button class="new-chat" type="button" onclick={startNewChat}>
     <Icon name="plus" />
     <span class="label">New chat</span>
   </button>
 
   <label class="search">
     <Icon name="search" />
-    <input type="search" placeholder="Search chats…" aria-label="Search chats" />
-    <kbd>⌘K</kbd>
+    <input type="search" placeholder="Search chats…" aria-label="Search chats" bind:this={field} bind:value={query} />
+    <kbd>{searchHint}</kbd>
   </label>
 
   <Rule marks="both" class="under-search" />
 
-  {#each groups as group (group.label)}
-    <section class="group" aria-label={group.label}>
-      <h2 class="day">{group.label}</h2>
-      <ul class="list">
-        {#each group.chats as chat (chat.id)}
-          <li class="chat" class:selected={chat.selected} class:expanded={chat.branches && chat.expanded}>
-            <button class="row" type="button" aria-current={chat.selected ? "page" : undefined} aria-expanded={chat.branches ? chat.expanded : undefined}>
-              <span class="title">{chat.title}</span>
-              <span class="agent">{chat.agent}</span>
-              {#if chat.time}
-                <span class="time">{chat.time}</span>
-              {/if}
-              {#if chat.branches}
-                <Icon name="chevron" class="chevron" />
-              {/if}
-              {#if chat.state}
-                <span class="state {chat.state.kind}">
-                  <Icon name={chat.state.kind === "working" ? "working" : "clock"} />
-                  <span>{chat.state.text}</span>
-                </span>
-              {/if}
-            </button>
-            {#if chat.branches && chat.expanded}
-              <ul class="branches" aria-label="Branches of {chat.title}">
-                {#each chat.branches as branch (branch.id)}
-                  <li class="branch">
-                    <button class="branch-row" type="button">
-                      <span class="title">{branch.title}</span>
-                      <span class="agent">{branch.agent}</span>
-                      <span class="time">{branch.time}</span>
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-              <Rule marks="start" class="after-branches" />
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    </section>
-  {/each}
+  <div class="scroll">
+    {#if built.empty}
+      <p class="empty">{built.empty}</p>
+    {/if}
+    {#each groups as group (group.key)}
+      <section class="group" aria-label={group.label}>
+        <h2 class="day">{group.label}</h2>
+        <ul class="list">
+          {#each group.rows as row (row.id)}
+            <ChatRow {row} />
+          {/each}
+        </ul>
+      </section>
+    {/each}
 
-  <Rule marks="both" class="end-of-list" />
+    <ListFooter count={built.closedCount} />
+    {#if !built.empty}<Rule marks="both" class="end-of-list" />{/if}
+  </div>
 </nav>
 
 <style>
@@ -80,6 +211,13 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+  }
+  /* The header keeps its size; only the rows give way (and scroll). */
+  .wordmark,
+  .new-chat,
+  .search,
+  .chats :global(.rule.under-search) {
+    flex: none;
   }
 
   .wordmark {
@@ -115,6 +253,11 @@
     top: calc(1 * var(--px));
     margin-left: calc(13 * var(--px));
     font: var(--t-button);
+  }
+  .new-chat:hover .label {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: calc(4 * var(--px));
   }
 
   .search {
@@ -152,178 +295,44 @@
     outline-offset: calc(2 * var(--px));
   }
   .search kbd {
+    flex: none;
+    margin-left: calc(8 * var(--px));
     font: var(--t-small);
     color: var(--slate);
+    white-space: nowrap;
   }
 
   .chats :global(.rule.under-search) {
     margin-top: calc(25 * var(--px));
   }
 
-  .day {
+  .scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .day,
+  .empty {
     margin: calc(14 * var(--px)) 0 0 calc(20 * var(--px));
+  }
+  .day {
     font: var(--t-label);
     letter-spacing: var(--track-label);
     text-transform: uppercase;
+  }
+  .empty {
+    font: var(--t-small);
+    color: var(--slate);
   }
 
   .list {
     margin-top: calc(13 * var(--px));
   }
 
-  /* A chat row: title over agent, time on the right, state on the agent line. */
-  .chat + .chat {
-    border-top: 1px solid var(--rule);
-  }
-  .chat.expanded + .chat {
-    border-top: 0;
-  }
-  /* Rows are flex columns so the button does not centre its text vertically. */
-  .row {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    box-sizing: border-box;
-    width: 100%;
-    height: calc(81 * var(--px));
-    padding: calc(12 * var(--px)) 0 0 calc(23 * var(--px));
-  }
-  .row .title {
-    display: block;
-    font: var(--t-item);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    padding-right: calc(80 * var(--px));
-  }
-  .row .agent {
-    display: block;
-    margin-top: calc(5 * var(--px));
-    font: var(--t-meta);
-    color: var(--slate);
-  }
-  /* The time and the chevron sit on the row's middle line. */
-  .row .time {
-    position: absolute;
-    right: calc(48 * var(--px));
-    top: 50%;
-    transform: translateY(-50%);
-    font: var(--t-small);
-    color: var(--slate);
-  }
-  .row :global(.chevron) {
-    position: absolute;
-    right: calc(19 * var(--px));
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--ink);
-  }
-  .state {
-    position: absolute;
-    right: calc(24 * var(--px));
-    top: calc(45 * var(--px));
-    display: flex;
-    align-items: center;
-    gap: calc(8 * var(--px));
-    font: var(--t-small);
-    color: var(--slate);
-  }
-
-  /* The open chat: a band between faint lines, with a vermilion edge. */
-  .selected .row {
-    background: var(--band);
-    border-top: 1px solid var(--rule-faint);
-    border-bottom: 1px solid var(--rule-faint);
-    height: calc(77 * var(--px) + 2px);
-  }
-  .selected .row .agent {
-    margin-top: calc(3 * var(--px));
-  }
-  .selected .row::before {
-    content: "";
-    position: absolute;
-    left: calc(3 * var(--px));
-    top: -1px;
-    bottom: -1px;
-    width: calc(4 * var(--px));
-    background: var(--vermilion);
-  }
-
-  /* Branches hang from a thin tree under the open chat. */
-  .branches {
-    padding-bottom: calc(12 * var(--px));
-  }
-  .branch {
-    position: relative;
-  }
-  .branch::before {
-    content: "";
-    position: absolute;
-    left: calc(35 * var(--px));
-    top: 0;
-    bottom: 0;
-    width: max(1px, calc(1.5 * var(--px)));
-    background: var(--figure);
-  }
-  .branch:last-child::before {
-    bottom: auto;
-    height: calc(35 * var(--px));
-  }
-  .branch::after {
-    content: "";
-    position: absolute;
-    left: calc(35 * var(--px));
-    top: calc(34 * var(--px));
-    width: calc(16 * var(--px));
-    height: max(1px, calc(1.5 * var(--px)));
-    background: var(--figure);
-  }
-  .branch-row {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    box-sizing: border-box;
-    width: 100%;
-    height: calc(72 * var(--px));
-    padding: calc(13 * var(--px)) 0 0 calc(64 * var(--px));
-  }
-  .branch-row .title {
-    display: block;
-    font: var(--t-branch);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    padding-right: calc(80 * var(--px));
-  }
-  .branch-row .agent {
-    display: block;
-    font: var(--t-agent-mono);
-    line-height: calc(20 * var(--px));
-    color: var(--slate);
-  }
-  .branch-row .time {
-    position: absolute;
-    right: calc(48 * var(--px));
-    top: calc(25 * var(--px));
-    font: var(--t-small);
-    color: var(--slate);
-  }
-
-  .chats :global(.rule.after-branches) {
-    color: var(--rule-frame);
-  }
   .chats :global(.rule.end-of-list) {
     margin-top: 0;
-  }
-
-  .row:hover .title,
-  .branch-row:hover .title {
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: calc(4 * var(--px));
   }
 </style>

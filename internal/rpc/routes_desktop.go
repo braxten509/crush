@@ -8,4 +8,7 @@ import "github.com/charmbracelet/crush/internal/proto"
 var (
 	// PendingQuestion returns the question form a chat waits on (G-12).
 	PendingQuestion = Op[Empty, proto.QuestionRequest]{Method: get, Path: "/v1/workspaces/{id}/questions/pending"}
+
+	// SetCPUAffinity turns the agent CPUs on or off for the engine (G-16).
+	SetCPUAffinity = Op[proto.CPUAffinityRequest, proto.CPUAffinity]{Method: post, Path: "/v1/cpu-affinity"}
 )

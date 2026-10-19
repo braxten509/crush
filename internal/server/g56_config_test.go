@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -82,6 +83,46 @@ func TestSkipAndMCPTogglesPublishConfigChanged(t *testing.T) {
 		require.True(t, ok, "%s must send config_changed", step.name)
 		require.Equal(t, g.ws.ID, ev.Payload.WorkspaceID)
 	}
+}
+
+// TestConfigWatchPublishesOnOutsideWrite: a config file another engine (or
+// a hand edit) changed is reloaded within seconds and the apps get
+// config_changed (G-1).
+func TestConfigWatchPublishesOnOutsideWrite(t *testing.T) {
+	g := newG56Workspace(t)
+	events := g.h.subscribeLiveSSE(t, g.ws.ID, g.app)
+	g.h.waitForAttachedOn(t, mustWorkspace(t, g), 1)
+	compact := func() bool {
+		tui := mustWorkspace(t, g).Cfg.Config().Options.TUI
+		return tui != nil && tui.CompactMode
+	}
+	require.False(t, compact())
+
+	path := config.GlobalConfigData()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{"options":{"tui":{"compact_mode":true}}}`), 0o600))
+
+	ev, ok := nextLive[proto.ConfigChanged](t, events, pubsub.PayloadTypeConfigChanged, 5*time.Second)
+	require.True(t, ok, "an outside write sends config_changed")
+	require.Equal(t, g.ws.ID, ev.Payload.WorkspaceID)
+	require.True(t, compact(), "the engine reloaded the file")
+}
+
+// TestConfigWatchSeesThemeFile: a theme file written by another app sends
+// config_changed (G-1).
+func TestConfigWatchSeesThemeFile(t *testing.T) {
+	g := newG56Workspace(t)
+	events := g.h.subscribeLiveSSE(t, g.ws.ID, g.app)
+	g.h.waitForAttachedOn(t, mustWorkspace(t, g), 1)
+	// Let the watch take its first look at the themes folder.
+	time.Sleep(1500 * time.Millisecond)
+
+	path, err := styles.ThemePath("outside")
+	require.NoError(t, err)
+	require.NoError(t, styles.SaveThemeFile(path, &styles.ThemeFile{Base: "graphite", Palette: styles.Palette{BgBase: "#101010"}}))
+
+	_, ok := nextLive[proto.ConfigChanged](t, events, pubsub.PayloadTypeConfigChanged, 5*time.Second)
+	require.True(t, ok, "a new theme file sends config_changed")
 }
 
 // mustWorkspace returns the backend's record of g's workspace.

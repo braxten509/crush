@@ -622,6 +622,40 @@ export function closeSlot(kind);                     // closes only when that ki
 export function revealInChat(target);                // sets ui.scrollTo; a figure heading's click uses it (4.3)
 ```
 
+**Exports of the P3.3 stores (as built, `desktop-p3-3` at bac469cb).** Screen pieces call only these names; "(store use)" marks exports only the stores themselves call.
+
+*messages.svelte.js*
+- `ChatMessages`: one per loaded chat: `status` ("idle"|"loading"|"ready"|"error"), `error`, `ids` (chat order, replaced whole), `byId` (SvelteMap mid → Message as sent), `active` (Set of assistant ids a live event showed unfinished).
+- `messages`: `{bySession: sid → ChatMessages (agent chats "<mid>$$<tcid>" too), pending: submissionId → {submissionId, sessionId, text, attachments, held, state: "working"|"uncertain", acknowledged, createdAt}, returned: sid → [{text, attachments}]}`.
+- `interrupted`: SvelteSet of message ids this window interrupted.
+- `isFinished(m)`; `agentChatId(messageId, toolCallId)` → `"<messageId>$$<toolCallId>"`; `parseAgentChatId(sid)` → `{messageId, toolCallId}` or null; `chatOf(mid)` → the loaded chat holding mid, or "".
+- `load(sid)` → Promise<boolean>: reads the messages, buffering that chat's events meanwhile; true when the snapshot landed, false when the chat was dropped meanwhile, rejects when the read failed; then loads its agent chats. `unload(sid)`; `readyChat(sid)` → an empty chat counted as loaded (one this window just made).
+- `withInterrupt(m)` → m, or for an interrupted message without a finish part a copy with a canceled finish part (one copy per object); draw this, never the stored one. `isInterrupted(mid)`; `isHiddenInterruptedStep(m, shownBefore)` → true for a tools-only step of an interrupted run first shown after the interrupt.
+- `addPending({sessionId, text, attachments, held, submissionId})` → submissionId; the send must carry it as `submission_id` (its 202 sets `acknowledged`). `pendingFor(sid)` (shown in the timeline, send order); `heldFor(sid)` (tray queue only); `markUncertain(submissionId)` ("This message may not have been sent", TYPE-048); `takePending(submissionId)`; `releaseHeld(sid)`; `returnDraft(sid, {text, attachments})` ("" is the landing page); `takeReturned(sid)`; `finishPending(submissionId, restore)`; `resolvePending(submissionId, restoreIfMissing)` → Promise<void> (after a failed run: a saved prompt stays, a missing one goes back; a failed read shows an error notice).
+- Store use: `applyMessage(event, m)`; `interruptChat(sid)` (runs inside `api.interrupt(sid)`).
+
+*sessions.svelte.js*
+- `sessions`: `{byId, order (newest first), currentId, loaded, live: sid → true, opening: null|{id, title, startedAt}, sent: sid → {run_id: true}, activity: sid → updated_at}`.
+- `rootOf(sid)` → the top-level chat (helper, title or agent chat), or "". `busy(id)`: busy rule (a)-(d) above (D41).
+- `openChat(id)` → Promise<boolean>: true when the chat shows; a newer switch wins; a failure keeps the window where it was with "Couldn't load this chat: …" and Try again; a failed file-history read still opens it, with the warning "Couldn't read this chat's file history".
+- `newChat()` → Promise<boolean>: to the landing state; false when no chat is shown, or (with the busy warning) when the shown chat is busy. `ensureSession()` → Promise<string>: the shown chat's id; on the landing page it creates "New Session" first (concurrent calls share one create).
+- `deferSend({run(sid), text, attachments, hidden, shell})` → true when held for the chat being opened (TYPE-049); if the open fails the prompt goes back to the shown chat's field (a shell command is not run, with a warning).
+- `deleteChat(id)` → Promise (rejects on failure; this window's own delete shows no "deleted elsewhere" notice). `loadSessions({since})`; `openLaunchChat({session, continueLast})` (`-s` / `-C`, START-006, only while nothing is shown or opening).
+- Store use: `readStart`, `upsertSession(s, {fromEvent, since})`, `removeSession`, `settleBusy`, `noteChatMessage(sid, kind, m, {loaded})`, `markPromptPending(root, value)`.
+
+*limits.svelte.js*
+- `limits`: `{byKind: kind → CLILimits}` (newest read_at per kind). `limitsFor(kind, model)` → `{kind, state, readAt, error, windows}` or null ("checking…"). `leftPercent(window, now)` → 0-100 (past its reset: 100). `readTime(value)` → `[ms, ns]` or null (Go RFC 3339 with nanoseconds; Go's zero time is null). `loadLimits()`.
+- Store use: `applyLimits`, `agentProviderChanged`, `startLimitsPoll({idle})`, `stopLimitsPoll()` (the connection store runs the 60 s poll while connected; a kind is asked again at most every 3 min).
+
+*prompts.svelte.js*
+- `prompts`: `{permission, question, pendingByRoot: root → {permission, question}, callStatus: tool_call_id → "permission"|"running"|"cancelled"}`. `clearPermission(toolCallId)` (this window answered: closes the shown request at once).
+- Store use: `seedMarks(root, pendingPrompt)`, `keepPromptsFor(root)`.
+
+*workspace.svelte.js*
+- `ws`: `{config, agent, providers, lsps: name → info + diagnostics {error, warning, information, hint}, mcps, skills, files: sid → File[], branch}`. `pickConfig(config)` (models, recent_models, options, permissions; mcp and lsp entries only {type, disabled}); `pickProvider(provider)` (without api_key, api_endpoint, default_headers).
+- `loadConfig`, `loadAgent`, `loadProviders`, `loadSkills`, `loadBranch`, `loadMcps`, `loadLsps` → Promise<void> (a failure rejects and keeps the old value; LSP and MCP reads never overlap); `loadFiles(sid)` → Promise<File[]> (by version, then created_at).
+- Store use: `setFiles`, `dropFiles`, `startWorkspace({currentChat, connected})`, `stopWorkspace()`.
+
 Why the message shape. A `$state` object proxies every plain object put into it, so a 1,000-message chat kept that way makes Svelte wrap every part at load (review finding 10). Svelte proxies only plain objects and arrays (`svelte/src/internal/client/proxy.js:53`), so a `ChatMessages` instance stays as it is, its `ids` is a raw array that is replaced, and its `byId` map stores each message as the engine sent it. `lib/timeline.js` caches the items it builds per Message object in a `WeakMap`; an update replaces the object, so only that message is rebuilt.
 
 **Applying a batch.** `events.js` hands each entry, in order, to the handlers registered for its `type` (`onEvent(type, fn)`), and `resync` entries (and `connection` events with `resync: true`) to every function registered with `onResync(fn)`. Registration happens at module load of each store, so no store edits another's file. Rules:
@@ -944,6 +978,8 @@ Two terminal keys change meaning, both by the plan: **Ctrl+K** is Sessions searc
 | `panel` | P3.8 | `hidden, meters[{id, label, text, warn}], visuals[{id, kind, title}], sections[]` | `visuals[].rect` |
 | `menu` | P3.5 | `open, items[{label, disabled, hint}]` | `items[].rect` |
 | `overlay` | S3 | `viewer, dialogs[]` (the stack's ids, front last), `help, notice{kind, text}` | — |
+| `gate` | P3.9 | `state, title, body, fix, starting` (true while "Starting Crush…" shows), `button{label}` (null when none) | `button.rect` |
+| `notice` | P3.8 | `kind, text, action{label}` (the line NoticeLine draws now; `action` is null unless it has a button, such as SIDE-030's "Try again") | `action.rect` |
 | `frames` | S3 | `measuring, count, p95_ms, max_ms, over50_at[]` (ms since `frames_mark`), `input_over50_at[]`, `input_count` | — |
 | `safety` | P3.4 | `inline_blocked, csp_violations` (a counter fed by `securitypolicyviolation` events), `location` (`location.href`), `workspace_keys` (`Object.keys(conn.workspace)`, 2.9) | `handlers_found, scripts_found, bad_hrefs_found` (scans of the page) |
 
@@ -1398,7 +1434,7 @@ A run passes when: p95 of frame times is 20 ms or less; at most one frame is ove
 
 **Losing the engine (`p3_reconnect.py`).** While script `basic` streams, the driver kills the engine (`kill -9` on the pid in `connection.engine.pid`). Expected: the reconnecting notice; a new engine from `ensure`; "Reconnected to the Crush server."; the chat reloads with every finished message the engine has; the field kept its text and sends again. A second case makes `ensure` fail 3 times (the wrapper `tests/fakes/crush-wrap` fails `ensure` while `/tmp/fail-ensure` exists): the failed notice and "Try again" show; removing the file and pressing Try again reconnects. Fails when the state is not `connected` within 15 s, or messages are missing or doubled against the engine's list.
 
-**Safety (`p3_safety.py`).** Script `unsafe` sends replies with: raw `<script>`, `<img src=x onerror=…>`, `<a href="javascript:…">`, `[x](javascript:alert(1))`, `[x](data:text/html,…)`, an `<iframe>`, a `<form>` posting to the fake server, an `<img>` pointing at `http://127.0.0.1:<fake port>/beacon`, a Mermaid fence with `%%{init: {"securityLevel": "loose"}}%%` and a `click` callback, KaTeX `\href{javascript:alert(1)}{x}` and `\url{…}`, and a reply that tries to look like the permission slot. Expected: the probe's `safety` section reports `scripts_found 0`, `handlers_found 0` (no `on*` attribute anywhere in the timeline), `bad_hrefs_found 0`, `csp_violations 0`; `<probe>.opened.jsonl` stays empty; the fake server's log has no `/beacon` request; the Mermaid figure draws (strict) or shows its source with the fallback line; the fake slot is plain text inside the reply. Then the driver clicks each link once: only the `http` one adds a line to `opened.jsonl`. Fails on any other outcome. The same script runs in U (`render/sanitize.test.js`) against the renderer in Node with a DOM shim (`jsdom`, the dev dependency S3 pins, 5.1; open question O8).
+**Safety (`p3_safety.py`).** Script `unsafe` sends replies with: raw `<script>`, `<img src=x onerror=…>`, `<a href="javascript:…">`, `[x](javascript:alert(1))`, `[x](data:text/html,…)`, an `<iframe>`, a `<form>` posting to the fake server, an `<img>` pointing at `http://127.0.0.1:<fake port>/beacon`, a Mermaid fence with `%%{init: {"securityLevel": "loose"}}%%` and a `click` callback, KaTeX `\href{javascript:alert(1)}{x}` and `\url{…}`, and a reply that tries to look like the permission slot. Expected: the probe's `safety` section reports `scripts_found 0`, `handlers_found 0` (no `on*` attribute anywhere in the timeline), `bad_hrefs_found 0`, `csp_violations 0`; `<probe>.opened.jsonl` stays empty; the fake server's log has no `/beacon` request; the hostile Mermaid figure draws (strict) or shows its source with the fallback line, while every known-valid diagram (one per diagram kind the renderer supports) draws as SVG both inline and in the panel, and a fallback there fails the check (the fallback is for bad input only, so a broken Mermaid import cannot pass); the fake slot is plain text inside the reply. Then the driver clicks each link once: only the `http` one adds a line to `opened.jsonl`. Fails on any other outcome. The same script runs in U (`render/sanitize.test.js`) against the renderer in Node with a DOM shim (`jsdom`, the dev dependency S3 pins, 5.1; open question O8).
 
 The corpus also holds the link cases of review finding 5, each in a Markdown link and in a raw `<a>`: `\tjavascript:alert(1)` (a tab first), ` javascript:alert(1)` (a space first), `JAVASCRIPT:alert(1)`, `java\nscript:alert(1)` (a newline inside, raw form), `vbscript:x`, `blob:x` and `data:text/html,x`. Every one must become plain text (U: no `href` on any anchor the renderer builds for them). In the window, on one allowed `http` link and on each refused text:
 
@@ -2055,7 +2091,8 @@ crush bg -- 'bash <WT>/desktop/tests/go-test.sh ./internal/agent/...'
 
 - **Picking the turn and step.** The server stays stateless: it takes the turn whose `when` matches the last user message, and the step whose index equals the number of assistant messages after that user message. Helper chats (Agent tool) get their own `when`.
 - **Streaming.** `delay_ms` spaces the chunks; `text` streams in chunks of 1-4 words; `tool_calls` stream as OpenAI deltas.
-- **Local files.** `GET /file.txt` and `GET /page.html` are served for Download and Fetch. Every other path is logged as a beacon, for the safety check.
+- **Local files.** `GET /file.txt` and `GET /page.html` are served for Download and Fetch. Every other path, GET or POST, is logged with `beacon: true`, for the safety check.
+- **Rules the self-test enforces on every script** (each piece that adds a script must keep them): a script and its turns and steps use only the keys shown above plus `about` (free text); every turn's `when` is not a substring of another script's `when` and contains none, and each turn is reached with every other script active as well as alone. Drivers activate the script whose turns they use.
 
 **Scripts:** `basic`, `markdown`, `tools` (view, edit, multiedit with one bad edit, write, bash with colors and a progress bar, grep, glob, ls, fetch, download, todos, MCP `echo`, a failing last tool), `errors` (500, 429 once, content filter), `visuals`, `unsafe`, `plan`, `agent` (Agent and Agentic Fetch), `stream2m`, `long`, `stop` (one step that calls bash with `sleep 30`; TYPE-046), `two_asks` (one reply whose first two steps each call bash, so with YOLO off it asks twice; DLG-119).
 

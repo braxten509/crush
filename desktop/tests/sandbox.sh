@@ -9,7 +9,9 @@
 #   sandbox's own loopback, own process list, shared memory, host name and
 #   terminal session;
 # - a throwaway HOME and XDG folders under /tmp/home;
-# - the fake AI tools in tests/fakes/bin come first on PATH;
+# - the fake AI tools in tests/fakes/bin come first on PATH, then, when
+#   DESKTOP_CRUSH names a file called crush, its folder (tests/out/bin), so an
+#   agent's plain `crush` finds the test build (desktop-design-5-6 8.4);
 # - a clean environment (env -i), so no CRUSH_* variables leak in from a chat;
 #   the only settings passed through are DESKTOP_APP (another app build to run),
 #   DESKTOP_CRUSH (the crush binary the app should use) and DESKTOP_ARGS (more
@@ -24,6 +26,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKTREE="$(dirname "$ROOT")"
 mkdir -p "$ROOT/tests/out"
 uid="$(id -u)"
+SANDBOX_PATH="$ROOT/tests/fakes/bin"
+if [ -n "${DESKTOP_CRUSH:-}" ] && [ "$(basename "$DESKTOP_CRUSH")" = crush ]; then
+  SANDBOX_PATH="$SANDBOX_PATH:$(dirname "$DESKTOP_CRUSH")"
+fi
 exec bwrap --ro-bind / / --dev /dev --proc /proc \
   --tmpfs /tmp \
   --tmpfs /run --dir /run/user --perms 0700 --tmpfs "/run/user/$uid" \
@@ -31,7 +37,7 @@ exec bwrap --ro-bind / / --dev /dev --proc /proc \
   --bind "$ROOT/tests/out" "$ROOT/tests/out" \
   --unshare-net --unshare-pid --unshare-ipc --unshare-uts --new-session --die-with-parent \
   -- env -i \
-  PATH="$ROOT/tests/fakes/bin:$PATH" \
+  PATH="$SANDBOX_PATH:$PATH" \
   HOME=/tmp/home USER="${USER:-tester}" LANG="${LANG:-C.UTF-8}" TERM=xterm-256color \
   XDG_CONFIG_HOME=/tmp/home/.config XDG_DATA_HOME=/tmp/home/.local/share \
   XDG_CACHE_HOME=/tmp/home/.cache XDG_STATE_HOME=/tmp/home/.local/state \

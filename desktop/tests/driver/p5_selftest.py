@@ -10,8 +10,10 @@ check 3). It passes only when all of these hold in one sandbox run:
      FAKE_CMD_STDOUT_DOCKER=x makes docker print x
   4  Term starts tests/out/bin/crush and capture-pane shows its screen within 10 s
   5  a seams file with a memory seam makes GET /v1/memory report high: true
-  6  scripts/p5_selftest.json's bash step prints $CRUSH_TASKS_DIR and
-     $CRUSH_DESKTOP_CRUSH, both set, in the tool result
+  6  scripts/p5_selftest.json's bash step shows, in the tool result,
+     $CRUSH_TASKS_DIR set, `command -v crush` resolving to the sandbox's test
+     build (DESKTOP_CRUSH, put on PATH by tests/sandbox.sh) and
+     $CRUSH_DESKTOP_CRUSH empty (the app keeps it from the engine)
   7  window_open for /tmp/home/proj2 opens a second window: /tmp/probe.json.w2
      shows it connected, while /tmp/probe.json still shows the first project
   8  a check written to fail (this driver with --broken) is reported as a failure
@@ -159,10 +161,14 @@ def main():
             with open(os.path.join(out_dir, "shell-env.txt"), "w") as f:
                 f.write(found or "")
             tasks = re.search(r"TASKS\[(/[^\]]*)\]", found or "")
-            desktop = re.search(r"DESKTOP\[(/[^\]]*)\]", found or "")
+            crush = re.search(r"CRUSH\[([^\]]*)\]", found or "")
+            desktop = re.search(r"DESKTOP\[([^\]]*)\]", found or "")
+            want = os.path.realpath(os.environ.get("DESKTOP_CRUSH", ""))
+            got = os.path.realpath(crush.group(1)) if crush and crush.group(1) else ""
             check(found is not None, "the bash step's tool result arrives")
             check(bool(tasks), "$CRUSH_TASKS_DIR is set in the engine's shell")
-            check(bool(desktop), "$CRUSH_DESKTOP_CRUSH is set in the engine's shell")
+            check(bool(got) and got == want, f"command -v crush finds the sandbox's test build ({got or 'nothing'})")
+            check(bool(desktop) and desktop.group(1) == "", "$CRUSH_DESKTOP_CRUSH is empty in the engine's shell")
 
         with step("7-second-window", out_dir):
             apps.second_project()

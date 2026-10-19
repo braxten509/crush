@@ -750,6 +750,35 @@ func TestFirstWinsMismatch_LogsOnFlagDifferences(t *testing.T) {
 	}
 }
 
+// TestFirstWinsMismatch_NeverLogsEnvValues: the environment a client
+// sends holds its API keys, so the mismatch line names only that the
+// environments differ, never a value from either one.
+func TestFirstWinsMismatch_NeverLogsEnvValues(t *testing.T) {
+	xdgIsolated(t)
+	cwd := t.TempDir()
+	dataDir := t.TempDir()
+
+	buf := captureDebugLogs(t)
+	b := New(context.Background(), nil, func() {})
+	b.SetCreateGrace(2 * time.Second)
+	t.Cleanup(func() { drainBackend(t, b) })
+
+	argsA := protoWS(cwd, dataDir, uuid.New().String())
+	argsA.Env = []string{"FIRST_KEY=first-secret-value"}
+	_, _, err := b.CreateWorkspace(argsA)
+	require.NoError(t, err)
+
+	argsB := protoWS(cwd, dataDir, uuid.New().String())
+	argsB.Env = []string{"SECOND_KEY=second-secret-value"}
+	_, _, err = b.CreateWorkspace(argsB)
+	require.NoError(t, err)
+
+	logs := buf.String()
+	require.Contains(t, logs, "Workspace flag mismatch on duplicate create")
+	require.NotContains(t, logs, "first-secret-value")
+	require.NotContains(t, logs, "second-secret-value")
+}
+
 // TestFirstWinsMismatch_NoLogWhenIdentical confirms identical args
 // do not emit the mismatch log line.
 func TestFirstWinsMismatch_NoLogWhenIdentical(t *testing.T) {

@@ -108,6 +108,11 @@ Engine errors keep the engine's `code` (`proto.Error`, `internal/proto/proto.go:
 | `route_not_allowed` | the `api` command was asked for a route outside the list in section 1.3 |
 | `bad_path`, `too_big`, `not_a_file`, `is_a_directory` | `files.rs` |
 | `link_refused` | `opener.rs` refused a link (its message is the terminal's text, CHAT-102) |
+| `open_failed` | the system opener was not found or exited with an error (message "could not open link: exit status N", as the terminal shows it); P3.2 |
+| `clipboard_failed` | a clipboard write did not take (message "Failed to copy to clipboard", CHAT-090); P3.2 |
+| `settings_failed`, `bad_setting` | the settings file could not be written (also while it is broken: a broken file is never overwritten, the owner fixes it), or `settings_set` got an unknown key or a bad value; P3.2 |
+
+Screens show the `message` of any `AppError` they do not handle by code, so a new code is never silently dropped (links: P3.5; copy: `lib/copy.js`'s owner).
 | `not_built` | the S3 placeholder |
 
 #### 1.2.3 Finding `crush` and the version check (`crush_bin.rs`, `engine_cli.rs`, P3.1)
@@ -319,7 +324,7 @@ pub fn watch(app: tauri::AppHandle);
 - **Own writes do not echo.** A write stores the new file's inode, time and length as the last seen value inside the same mutex, and the content compare drops anything else that is equal, so this process never reports its own change twice.
 - **Odd files.** A missing file counts as the defaults (a file that appears later is a change). A file that fails to parse is ignored until it changes again; an atomic rename never leaves half a file, so only a hand edit can cause it.
 - **Why 500 ms.** B16's bar is 1 s; a just-missed poll plus the read stays near 0.5 s. The cost is one `stat` twice a second. No new library: `notify` was the other option, and one file does not need it.
-- **Rust tests** (`settings.rs`, P3.2; they call the path-taking inner functions, so no `AppHandle` is needed): `watch_sees_other_process_write` fails when a write made from outside by plain rename is not reported within 1 s, or is reported twice; `own_write_does_not_echo` fails when a `set_closed` is reported by the watcher at all within 1.5 s; `concurrent_changes_both_kept` fails when two handles that open the file separately (standing in for two processes) each add a different closed chat and one is lost.
+- **Rust tests** (`settings.rs`, P3.2; they call the path-taking inner functions, so no `AppHandle` is needed): `watch_sees_other_process_write` fails when a write made from outside by plain rename is not reported within 5 s (the watcher polls every 500 ms, so a report normally comes within 1 s; the test allows 5 s so a loaded machine cannot fail it), or is reported twice; `own_write_does_not_echo` fails when a `set_closed` is reported by the watcher at all within 2 s (four polls); `concurrent_changes_both_kept` fails when two handles that open the file separately (standing in for two processes) each add a different closed chat and one is lost.
 
 **Clipboard.** Writing goes through Rust so it works the same from keys, menus and auto-copy, without the web view's clipboard permission rules:
 
@@ -350,8 +355,8 @@ pub fn open(app: &tauri::AppHandle, url: &str, cwd: &str) -> AppResult<()>;
 **Files** (attachments, TYPE-011 to TYPE-014, TYPE-029):
 
 ```rust
-#[derive(serde::Serialize)] pub struct FileInfo { pub exists: bool, pub is_dir: bool, pub size: u64, pub mime: String }
-pub fn info(path: &str, cwd: &str) -> AppResult<FileInfo>;                   // mime from the infer crate, then the extension
+#[derive(serde::Serialize)] pub struct FileInfo { pub exists: bool, pub is_dir: bool, pub size: u64, pub mime: String, pub modified: u64 } // modified: Unix ms, 0 if unknown; TYPE-029 compares it (P3.7, editor.go:316-322)
+pub fn info(path: &str, cwd: &str) -> AppResult<FileInfo>;                   // mime from a port of Go's http.DetectContentType (the terminal's, paste.go:27-31), then the extension
 pub fn read(path: &str, cwd: &str, max_bytes: u64) -> AppResult<(String, String)>; // (mime, base64); too_big over max_bytes
 #[derive(serde::Serialize)] pub struct FileEntry { pub path: String, pub is_dir: bool } // path relative to cwd, "/" separators
 /// The `@` popup's file list (TYPE-026). Inside a Git work tree: `git ls-files --cached --others
@@ -408,7 +413,8 @@ All commands are registered in `main.rs` by S3. Arguments are the JS names (Taur
 | GET, PUT, DELETE | `sessions/{sid}` | `routes.go:59-61` |
 | GET | `sessions/{sid}/messages`, `sessions/{sid}/messages/user`, `sessions/{sid}/messages/{mid}/review`, `sessions/{sid}/history`, `sessions/{sid}/filetracker/files` | `routes.go:63,65,64,62,71` |
 | POST | `sessions/{sid}/kept-skills` | `routes.go:66` |
-| POST | `agent` (send, 202), `agent/main` | `routes.go:96,99` |
+| POST | `agent` (send, 202), `agent/main`, `agent/update` (model restore after `config/model`) | `routes.go:96,99,98` |
+| GET | `lsps/{lsp}/diagnostics` (error counts per code checker) | `routes.go:79` |
 | GET | `agent/sessions/{sid}`, `agent/sessions/{sid}/prompts/queued`, `agent/sessions/{sid}/prompts/list` (with `details=true`) | `routes.go:100,102,106` |
 | POST | `agent/sessions/{sid}/cancel`, `…/interrupt`, `…/prompts/clear`, `…/prompts/recall`, `…/shell` (with `request_id`) | `routes.go:101,109,107,108,111`; 5.9 |
 | POST | `config/set`, `config/remove`, `config/model`, `config/compact` | `routes.go:117,118,119,120` |
@@ -555,7 +561,7 @@ export const limits = $state({ byKind: {} });       // kind → CLILimits with t
 
 // prompts.svelte.js (P3.3; P3.7 draws permission prompts, phase 5 draws question forms)
 export const prompts = $state({ permission: null, question: null, pendingByRoot: {},
-  callStatus: {} });                                 // tool_call_id → "permission" | "running", set by permission_notification
+  callStatus: {} });                                 // tool_call_id → "permission" | "running" | "cancelled", set by permission_notification; "cancelled" when the run is stopped, and it stays (later notifications do not undo it)
                                                     // (1.5.3); lib/tools/status.js reads it (CHAT-047, CHAT-049); a result overrides it
 
 // composer.svelte.js (P3.7)
@@ -645,7 +651,7 @@ Why the message shape. A `$state` object proxies every plain object put into it,
 | `lsp_event`, `mcp_event` | workspace | LSP and MCP rows (SIDE-009, SIDE-010) |
 | `skills_event` | workspace | skills (SIDE-011); later the `$` catalog (TYPE-031, deferred, 2.3) |
 | `config_changed` | workspace | re-read config and agent info |
-| `agent_event` | messages | `error`: no notice, as in the terminal (`internal/ui/model/agent_events.go:167-170`). The engine sends it only for a run that failed for a reason other than a stop (`internal/backend/agent.go:121-129`), and the run's assistant message already carries the outcome in its finish part, drawn by CHAT-027's error banner (a stop finishes with reason `canceled`, `internal/agent/turn_finish.go:150-151`, drawn by CHAT-025's Canceled banner). `summarize` → compaction state (CHAT-029) |
+| `agent_event` | messages | `error`: no notice, as in the terminal (`internal/ui/model/agent_events.go:167-170`). The engine sends it only for a run that failed for a reason other than a stop (`internal/backend/agent.go:121-129`), and the run's assistant message already carries the outcome in its finish part, drawn by CHAT-027's error banner (a stop finishes with reason `canceled`, `internal/agent/turn_finish.go:150-151`, drawn by CHAT-025's Canceled banner). no `summarize` handler: the engine never publishes one (only `herdr/translate.go` reads it); CHAT-029 follows the summarize call and the message finish instead |
 | `run_complete` | sessions, queue, composer | busy off, live flag off, queue refresh, send settled (TYPE-048): with `cancelled: true`, this window's pending item for that `submission_id` is removed; with a non-empty `error` and no `cancelled`, the pending item is checked against the saved messages and goes back to the field only when its prompt was never saved (`internal/ui/model/update_workspace.go:33-38`, `pending_prompt.go:82-148`). Neither ever shows a notice: a stop sends `error: "context canceled"` together with `cancelled: true` (`internal/agent/turn.go:274-276`), and a failed reply already shows its banner |
 | `permission_request`, `question_batch_request`, `question_batch_notification`, `prompt_pending` | prompts | stored; permission prompts drawn in the composer slot (P3.7, section 2.7); question forms by phase 5 in the same slot |
 | `permission_notification` | prompts | neither `granted` nor `denied`: the "requested" mark (`internal/permission/permission.go:216-219`; the engine sends it just before the request itself, `:281`, but the two can arrive in either order, `engine-design.md:107`). It sets `callStatus[tool_call_id] = "permission"` (CHAT-049 "Requesting permission...") and never closes the slot. `granted`: `"running"`; `denied`: stays `"permission"` until the tool's result shows the denial (CHAT-050), as the terminal does (`internal/ui/model/agent_events.go:130-137`). The slot closes only on `granted` or `denied` whose `tool_call_id` equals the shown request's (`agent_events.go:143-150`; DLG-119) |
@@ -827,7 +833,7 @@ A live shell item keeps its key `shell:<request id>` until the saved `shell_comm
 | `panel/VisualsSection.svelte` (P3.8) | `FigureView` `{figure}`; `extractFigures` | `src/components/render/FigureView.svelte`, `src/lib/render/figures.js` (P3.4) |
 | `lib/timeline.js` (P3.5) | `composer.shells` | `src/lib/stores/composer.svelte.js` (P3.7) |
 | `HelpSheet.svelte` (P3.8) | `hasChips()` | `src/lib/stores/composer.svelte.js` (P3.7) |
-| `lib/tools/status.js` (P3.6) | `prompts.callStatus` (`tool_call_id` → `"permission"` or `"running"`, set by `permission_notification`, 1.5.3) for CHAT-047 and CHAT-049 | `src/lib/stores/prompts.svelte.js` (P3.3) |
+| `lib/tools/status.js` (P3.6) | `prompts.callStatus` (`tool_call_id` → `"permission"`, `"running"` or `"cancelled"`, 1.5.3; `"cancelled"` maps to ToolCallView status `"cancelled"`) for CHAT-047 and CHAT-049 | `src/lib/stores/prompts.svelte.js` (P3.3) |
 
 ### 1.6 Long chats: the speed design
 
@@ -931,13 +937,15 @@ Two terminal keys change meaning, both by the plan: **Ctrl+K** is Sessions searc
 
 | Section | Owner | Every 200 ms (light) | Only when asked (heavy) |
 |---|---|---|---|
-| `connection` | P3.3 | `state, attempt, error, workspace_id, client_id, engine_version, fresh_engine, notices[]` | — |
+| `connection` | P3.3 | `state, attempt, error, workspace_id, client_id, engine_version, fresh_engine, engine{socket, pid}` (from the last `connected` event's `engine`; drivers read the socket for ground truth and the pid to kill the engine), `notices[]` | — |
 | `list` | P3.9 | `rows[{id, title, depth, selected, closed, state}], closed_count, search_hint` | `rows[].rect` |
 | `chat` | P3.5 | `id, title, path, busy, follow, status, scroll_offset, mounted` (the count of mounted items), `items[{key, kind, id, expanded, selected, letter}], messages[{id, role, finished, text}]` | `scroll_top` (read from the page), `items[].rect`, `words[{mid, i, text, rect}]` (first 400 visible words), `selection{text, items[]}`, `links[{session_id, mid, text, rects[]}]`, `animations` (the count from `document.getAnimations()`) |
 | `composer` | P3.7 | `value, focused, mode, placeholder, selection[start,end], attachments[{name, kind}], tray[{kind, text}], slot{kind, buttons[{label, selected}]}` | `slot.buttons[].rect` |
 | `panel` | P3.8 | `hidden, meters[{id, label, text, warn}], visuals[{id, kind, title}], sections[]` | `visuals[].rect` |
 | `menu` | P3.5 | `open, items[{label, disabled, hint}]` | `items[].rect` |
 | `overlay` | S3 | `viewer, dialogs[]` (the stack's ids, front last), `help, notice{kind, text}` | — |
+| `gate` | P3.9 | `state, title, body, fix, starting` (true while "Starting Crush…" shows), `button{label}` (null when none) | `button.rect` |
+| `notice` | P3.8 | `kind, text, action{label}` (the line NoticeLine draws now; `action` is null unless it has a button, such as SIDE-030's "Try again") | `action.rect` |
 | `frames` | S3 | `measuring, count, p95_ms, max_ms, over50_at[]` (ms since `frames_mark`), `input_over50_at[]`, `input_count` | — |
 | `safety` | P3.4 | `inline_blocked, csp_violations` (a counter fed by `securitypolicyviolation` events), `location` (`location.href`), `workspace_keys` (`Object.keys(conn.workspace)`, 2.9) | `handlers_found, scripts_found, bad_hrefs_found` (scans of the page) |
 
@@ -1143,7 +1151,7 @@ S3 splits today's `Conversation.svelte` (319 lines) into `ChatHead.svelte`, `tim
 | CHAT-103 | The activity mark (section 4.10) is a CSS animation: only mounted, visible marks run (the virtual list unmounts the rest); a reloaded idle chat shows no mark; `prefers-reduced-motion` stops it | ActivityMark | W idle chat after reload · fails when `document.getAnimations().length` is above 0 |
 | CHAT-104 | Two mark sizes: `line` (replies and tools, `calc(24 * var(--px))` wide) and `small` (groups, `calc(12 * var(--px))`) | ActivityMark | U props · fails when a group uses `line` |
 | CHAT-105 | Opening a long chat draws the bottom view in the first frame and measures the rest lazily; the scrollbar shows after the first full estimate | VirtualList | W `p3_long` open a 500-item chat with the frame meter on · fails when a frame over 50 ms happens more than once |
-| CHAT-106 | MCP channel pushes appear as turns the engine makes (the terminal skips its own handling when the server routes them, `agent_events.go:67-113`; inferred that the engine routes them in shared mode) | `messages.svelte.js` | W `fake_mcp.py` channel push with `--channels fake:demo` · fails when no turn appears |
+| CHAT-106 | MCP channel pushes appear as turns the engine makes (the terminal skips its own handling when the server routes them, `agent_events.go:67-113`; inferred that the engine routes them in shared mode) | `messages.svelte.js` | W `fake_mcp.py` channel push with `--channels server:fake` (the engine takes `server:<name>` or `<name>`, `internal/cmd/root.go:42`; MCP resource and prompt counts are 0 until `POST mcp/refresh-resources`) · fails when no turn appears |
 | CHAT-107 | Unified diff: two line-number columns, "+"/"−", hunk header "@@ -a,b +c,d @@", context; empty diff draws nothing; CRLF → LF; tabs → 4 spaces | DiffView (P3.6) · `lib/diff.js` (own Myers line diff, no new library) | U against the Go fixtures in `diffview/` tests · fails when a hunk differs |
 | CHAT-108 | Side by side when the diff's box is at least 120 mono characters wide (measured with `ch` of the diff font); deletes paired with the next inserts; blank cells for missing lines; an odd width gives the right side the extra pixel | DiffView; port of `diffview/split.go:21-73` | U pairing; W wide and narrow window · fails when the switch happens at another width |
 | CHAT-109 | Diff colors: tinted bands `--diff-add-bg`/`--diff-del-bg` with darker gutters `--diff-add-gutter`/`--diff-del-gutter` (section 4.0); themes may set their own (phase 5) | DiffView CSS | W screenshot pixel check on one added line · fails when the gutter is not darker than the code band |
@@ -1232,7 +1240,7 @@ Q6 (PLAN.md:27) places the terminal's footer and sidebar facts: model and effort
 | SIDE-004 | No desktop surface: the terminal draws this header only where compact mode is always off (`layout.go:51-54`), so it never shows | — | none needed; recorded as dead terminal code |
 | SIDE-005 | The right panel: PROJECT and the project name, the meters, then a scrolling body with VISUALS, FILES, LSP, MCP, SKILLS. The chat title is in the chat head, the folder and branch in its path line, the logo in the left column, the model in the model button (decision D12) | SidePanel (P3.8) | W · fails when a section is missing or the body doesn't scroll with 30 skills |
 | SIDE-006 | The model button shows "Model · effort" (picture: "Opus 5.5 · max"); its hover and focus detail shows provider, "Thinking", "Thinking On", "Thinking Off" or "Reasoning <effort>", "· FAST", "· Ultracode", context used and cost (with "~" when estimated); "Unknown" until the agent is ready. Clicking it opens `openDialog("models")` (phase 5) | ModelButton (P3.7) · `ws.agent`, `sessions` | U the label from `AgentInfo`; W hover · fails when a word differs from the port of `sidebar.go:25-86` |
-| SIDE-007 | The 5-HOUR and WEEK meters show used percent; the amber warning icon when less than 20% is left; the detail shows "5h N% left · resets 2h41m"; "checking…" until the first `limits` reading (5.9); refreshed on `limits` events and on model change | Meters · `limits.svelte.js` (P3.3) | W with a fake CLI limits reading · fails when the warning shows at 20% left or more |
+| SIDE-007 | The 5-HOUR and WEEK meters show used percent; the amber warning icon when less than 20% is left; the detail shows "5h N% left · resets 2h41m"; "checking…" until the first `limits` reading (5.9); refreshed on `limits` events and on model change, and, like the terminal (`internal/ui/model/polling.go:15`, `cliagent/limits.go:40,207`), every 60 s while the window is visible and the shown chat is idle, for the current provider's kind only when its reading is older than 3 min (the engine's refresh route skips its own throttle, `handlers_live.go:149`) | Meters · `limits.svelte.js` (P3.3) | W with a fake CLI limits reading · fails when the warning shows at 20% left or more |
 | SIDE-008 | FILES: relative paths with "+N" / "−N", "…and N more", "None"; unchanged files left out; reloaded on `file` events | FilesSection · `lib/modified.js` (P3.8) · `api.history`; port of `session.go:66-73,151-299` | U; W after an edit tool · fails when the counts differ from the diff |
 | SIDE-009 | LSP rows: offline icon when unstarted or stopped, "starting...", ready with error, warning, hint and info counts, "error: …", "disabled", "None" (there is no LSP dialog); refreshed on `lsp_event` plus a 5 s backstop | LspSection · `ws.lsps`; port of `lsp.go:19-201` | W with `tests/fakes/fake_lsp.py` (one error, one warning) · fails when the counts differ |
 | SIDE-010 | MCP rows: "starting...", connected with "N tools / N prompts / N resources" and "channel", "error: …", "needs authentication", "disabled", offline; "Docker MCP" named so; a failed read keeps the old rows | McpSection · `ws.mcps`; port of `mcp.go:20-262` | W with `fake_mcp.py` (and one broken server) · fails when a state text differs |
@@ -1392,7 +1400,7 @@ A run passes when: p95 of frame times is 20 ms or less; at most one frame is ove
 
 **Losing the engine (`p3_reconnect.py`).** While script `basic` streams, the driver kills the engine (`kill -9` on the pid in `connection.engine.pid`). Expected: the reconnecting notice; a new engine from `ensure`; "Reconnected to the Crush server."; the chat reloads with every finished message the engine has; the field kept its text and sends again. A second case makes `ensure` fail 3 times (the wrapper `tests/fakes/crush-wrap` fails `ensure` while `/tmp/fail-ensure` exists): the failed notice and "Try again" show; removing the file and pressing Try again reconnects. Fails when the state is not `connected` within 15 s, or messages are missing or doubled against the engine's list.
 
-**Safety (`p3_safety.py`).** Script `unsafe` sends replies with: raw `<script>`, `<img src=x onerror=…>`, `<a href="javascript:…">`, `[x](javascript:alert(1))`, `[x](data:text/html,…)`, an `<iframe>`, a `<form>` posting to the fake server, an `<img>` pointing at `http://127.0.0.1:<fake port>/beacon`, a Mermaid fence with `%%{init: {"securityLevel": "loose"}}%%` and a `click` callback, KaTeX `\href{javascript:alert(1)}{x}` and `\url{…}`, and a reply that tries to look like the permission slot. Expected: the probe's `safety` section reports `scripts_found 0`, `handlers_found 0` (no `on*` attribute anywhere in the timeline), `bad_hrefs_found 0`, `csp_violations 0`; `<probe>.opened.jsonl` stays empty; the fake server's log has no `/beacon` request; the Mermaid figure draws (strict) or shows its source with the fallback line; the fake slot is plain text inside the reply. Then the driver clicks each link once: only the `http` one adds a line to `opened.jsonl`. Fails on any other outcome. The same script runs in U (`render/sanitize.test.js`) against the renderer in Node with a DOM shim (`jsdom`, the dev dependency S3 pins, 5.1; open question O8).
+**Safety (`p3_safety.py`).** Script `unsafe` sends replies with: raw `<script>`, `<img src=x onerror=…>`, `<a href="javascript:…">`, `[x](javascript:alert(1))`, `[x](data:text/html,…)`, an `<iframe>`, a `<form>` posting to the fake server, an `<img>` pointing at `http://127.0.0.1:<fake port>/beacon`, a Mermaid fence with `%%{init: {"securityLevel": "loose"}}%%` and a `click` callback, KaTeX `\href{javascript:alert(1)}{x}` and `\url{…}`, and a reply that tries to look like the permission slot. Expected: the probe's `safety` section reports `scripts_found 0`, `handlers_found 0` (no `on*` attribute anywhere in the timeline), `bad_hrefs_found 0`, `csp_violations 0`; `<probe>.opened.jsonl` stays empty; the fake server's log has no `/beacon` request; the hostile Mermaid figure draws (strict) or shows its source with the fallback line, while every known-valid diagram (one per diagram kind the renderer supports) draws as SVG both inline and in the panel, and a fallback there fails the check (the fallback is for bad input only, so a broken Mermaid import cannot pass); the fake slot is plain text inside the reply. Then the driver clicks each link once: only the `http` one adds a line to `opened.jsonl`. Fails on any other outcome. The same script runs in U (`render/sanitize.test.js`) against the renderer in Node with a DOM shim (`jsdom`, the dev dependency S3 pins, 5.1; open question O8).
 
 The corpus also holds the link cases of review finding 5, each in a Markdown link and in a raw `<a>`: `\tjavascript:alert(1)` (a tab first), ` javascript:alert(1)` (a space first), `JAVASCRIPT:alert(1)`, `java\nscript:alert(1)` (a newline inside, raw form), `vbscript:x`, `blob:x` and `data:text/html,x`. Every one must become plain text (U: no `href` on any anchor the renderer builds for them). In the window, on one allowed `http` link and on each refused text:
 
@@ -2049,7 +2057,8 @@ crush bg -- 'bash <WT>/desktop/tests/go-test.sh ./internal/agent/...'
 
 - **Picking the turn and step.** The server stays stateless: it takes the turn whose `when` matches the last user message, and the step whose index equals the number of assistant messages after that user message. Helper chats (Agent tool) get their own `when`.
 - **Streaming.** `delay_ms` spaces the chunks; `text` streams in chunks of 1-4 words; `tool_calls` stream as OpenAI deltas.
-- **Local files.** `GET /file.txt` and `GET /page.html` are served for Download and Fetch. Every other path is logged as a beacon, for the safety check.
+- **Local files.** `GET /file.txt` and `GET /page.html` are served for Download and Fetch. Every other path, GET or POST, is logged with `beacon: true`, for the safety check.
+- **Rules the self-test enforces on every script** (each piece that adds a script must keep them): a script and its turns and steps use only the keys shown above plus `about` (free text); every turn's `when` is not a substring of another script's `when` and contains none, and each turn is reached with every other script active as well as alone. Drivers activate the script whose turns they use.
 
 **Scripts:** `basic`, `markdown`, `tools` (view, edit, multiedit with one bad edit, write, bash with colors and a progress bar, grep, glob, ls, fetch, download, todos, MCP `echo`, a failing last tool), `errors` (500, 429 once, content filter), `visuals`, `unsafe`, `plan`, `agent` (Agent and Agentic Fetch), `stream2m`, `long`, `stop` (one step that calls bash with `sleep 30`; TYPE-046), `two_asks` (one reply whose first two steps each call bash, so with YOLO off it asks twice; DLG-119).
 
@@ -2199,6 +2208,7 @@ tmux -L crushtest send-keys -t tui "second from terminal" Enter
 | D38 | Closing a chat by key is the action `chat.close`; its key (`alt+w`) is the phases 5-6 design's, with LIST-014 | bind a key here | `plugins/branch.js` |
 | D39 | The × and `chat.close` close a chat at once, with no "Close “title”?" box: closing only hides it (PLAN.md:103), stops nothing and is undone from its link or Ctrl+K (C19) | the session host's box for chats too (LIST-014, LIST-015, LIST-043) | `plugins/branch.js` opens a box through `openDialog` |
 | D40 | Calls whose work runs inside the request (a `!` command, a move with a summary) carry a `callId`: no time limit, and `api_abort` closes them. That is the only way to stop a `!` command over the engine, and the clean way to stop a summary (`POST …/cancel` also ends one, but answers with an error text, 1.2.4; TYPE-021, DLG-100). A move with a summary has no time cap on purpose: the terminal caps it at 5 minutes (`internal/ui/model/tree.go:137`); here the owner's Esc is the limit | a `shell_run` and `shell_stop` command pair just for `!` commands | `connection.rs`, `uds_http.rs`, `commands.rs` |
+| D41 | Busy rule (c), as built by P3.3: a loaded chat counts as busy from an unfinished assistant message only when a live event showed that message unfinished, so a chat stopped mid-reply never stays busy for good (the terminal's ghost-spinner guard, `session_load.go:498-506`); a chat opened mid-stream reads idle until its next chunk | any unfinished assistant message in a loaded chat means busy (a chat killed mid-reply would show busy forever) | `messages.svelte.js`, `sessions.svelte.js` |
 
 ---
 

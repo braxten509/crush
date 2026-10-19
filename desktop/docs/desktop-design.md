@@ -626,7 +626,7 @@ export function revealInChat(target);                // sets ui.scrollTo; a figu
 
 *messages.svelte.js*
 - `ChatMessages`: one per loaded chat: `status` ("idle"|"loading"|"ready"|"error"), `error`, `ids` (chat order, replaced whole), `byId` (SvelteMap mid → Message as sent), `active` (Set of assistant ids a live event showed unfinished).
-- `messages`: `{bySession: sid → ChatMessages (agent chats "<mid>$$<tcid>" too), pending: submissionId → {submissionId, sessionId, text, attachments, held, state: "working"|"uncertain", acknowledged, createdAt}, returned: sid → [{text, attachments}]}`.
+- `messages`: `{bySession: sid → ChatMessages (agent chats "<mid>$$<tcid>" too), pending: submissionId → {submissionId, sessionId, text, attachments, held, queued, state: "working"|"uncertain", acknowledged, createdAt}, returned: sid → [{text, attachments}]}` (`queued`: sent while the chat was busy, kept after release; an interrupt counts items that are `acknowledged` or `queued`, as `send.go:259`).
 - `interrupted`: SvelteSet of message ids this window interrupted.
 - `isFinished(m)`; `agentChatId(messageId, toolCallId)` → `"<messageId>$$<toolCallId>"`; `parseAgentChatId(sid)` → `{messageId, toolCallId}` or null; `chatOf(mid)` → the loaded chat holding mid, or "".
 - `load(sid)` → Promise<boolean>: reads the messages, buffering that chat's events meanwhile; true when the snapshot landed, false when the chat was dropped meanwhile, rejects when the read failed; then loads its agent chats. `unload(sid)`; `readyChat(sid)` → an empty chat counted as loaded (one this window just made).

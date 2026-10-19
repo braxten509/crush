@@ -92,3 +92,177 @@ export async function file_read(path, cwd, maxBytes) {
 export async function files_list(cwd, maxDepth, maxItems) {
   return invoke("files_list", { cwd, maxDepth, maxItems });
 }
+
+// -- Phases 5 and 6 (desktop-design-5-6 6.4; scaffold S5) --
+// Named in camelCase, as 7.1 pins them. A command whose owner has not built
+// it yet rejects with {code: "not_built"}. Streams take a Channel
+// (@tauri-apps/api/core), never window events.
+
+// A POST that carries a secret, only to secure-forms/{fid}/submit,
+// config/provider-key and auth/verify-key (else "secret_route"); the value
+// never passes through api, a log or the probe.
+export async function apiSecret(path, body) {
+  return invoke("api_secret", { path, body });
+}
+
+// → {label, created}: focuses the window that shows projectDir, else opens one.
+export async function windowOpen(projectDir, sessionId, newChat, launchId) {
+  return invoke("window_open", { projectDir, sessionId, newChat, launchId });
+}
+
+// After the window's close steps (lib/closing.js); the last window ends the app.
+export async function windowClose() {
+  return invoke("window_close");
+}
+
+// Leaves this window's engine and records the new folder; the page then reloads.
+export async function projectSwitch(projectDir) {
+  return invoke("project_switch", { projectDir });
+}
+
+// onData: a Channel that gets {data: <base64>} batches, then {exit: {code, signal}}. → {id, pid}
+export async function ptySpawn(cwd, argv, cols, rows, onData) {
+  return invoke("pty_spawn", { cwd, argv, cols, rows, onData });
+}
+
+export async function ptyWrite(id, data) {
+  return invoke("pty_write", { id, data });
+}
+
+export async function ptyResize(id, cols, rows) {
+  return invoke("pty_resize", { id, cols, rows });
+}
+
+export async function ptyCwd(id) {
+  return invoke("pty_cwd", { id });
+}
+
+export async function ptyClose(id) {
+  return invoke("pty_close", { id });
+}
+
+export async function ptyCloseAll() {
+  return invoke("pty_close_all");
+}
+
+// → {path, argv}
+export async function editorPrepare(text, line, column) {
+  return invoke("editor_prepare", { text, line, column });
+}
+
+// → {text}
+export async function editorFinish(path) {
+  return invoke("editor_finish", { path });
+}
+
+// → {sent, error?}
+export async function alertNotify(title, body) {
+  return invoke("alert_notify", { title, body });
+}
+
+// → {player} (null when none worked)
+export async function alertSound(id) {
+  return invoke("alert_sound", { id });
+}
+
+// state: "idle" | "working" | "blocked" | "done" | "error".
+export async function alertWindowState(state, projectDir, sessionId, focused) {
+  return invoke("alert_window_state", { state, projectDir, sessionId, focused });
+}
+
+// → the label of the window that handles that chat's alert.
+export async function alertHandler(projectDir, sessionId) {
+  return invoke("alert_handler", { projectDir, sessionId });
+}
+
+// → {path, kind: "panic" | "webview"} or null.
+export async function crashPending() {
+  return invoke("crash_pending");
+}
+
+export async function crashRestart() {
+  return invoke("crash_restart");
+}
+
+// → {lines, truncated, missing}
+export async function logsTail(lines) {
+  return invoke("logs_tail", { lines });
+}
+
+// onLines: a Channel. → {followId}
+export async function logsFollow(onLines) {
+  return invoke("logs_follow", { onLines });
+}
+
+export async function logsUnfollow(followId) {
+  return invoke("logs_unfollow", { followId });
+}
+
+// → {ok, firstLine, logPath, version?}
+export async function selfupdateRun(tag) {
+  return invoke("selfupdate_run", { tag });
+}
+
+export async function selfupdateInstall() {
+  return invoke("selfupdate_install");
+}
+
+// → {lines}
+export async function crushDirs() {
+  return invoke("crush_dirs");
+}
+
+// → {ok, lines}
+export async function crushStats() {
+  return invoke("crush_stats");
+}
+
+// → {ok, version?, error?}
+export async function dockerMcpVersion() {
+  return invoke("docker_mcp_version");
+}
+
+// → {projects: [{path, data_dir, last_accessed, saved}]}
+export async function projectsList() {
+  return invoke("projects_list");
+}
+
+export async function projectSave(path) {
+  return invoke("project_save", { path });
+}
+
+export async function projectRemove(path) {
+  return invoke("project_remove", { path });
+}
+
+// → string[]
+export async function recentFolders(limit) {
+  return invoke("recent_folders", { limit });
+}
+
+export async function subagentInstructionsRead() {
+  return invoke("subagent_instructions_read");
+}
+
+export async function subagentInstructionsWrite(text) {
+  return invoke("subagent_instructions_write", { text });
+}
+
+export async function remotePasswordExists() {
+  return invoke("remote_password_exists");
+}
+
+// → {ok, message}; neither value is kept or logged.
+export async function remotePasswordSet(first, second) {
+  return invoke("remote_password_set", { first, second });
+}
+
+// → {path, entries: [{name, is_dir, is_symlink, readable}]}
+export async function dirList(path) {
+  return invoke("dir_list", { path });
+}
+
+// → a path, or null when cancelled.
+export async function folderPick(start) {
+  return invoke("folder_pick", { start });
+}

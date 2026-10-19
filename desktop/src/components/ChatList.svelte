@@ -6,7 +6,16 @@
   // hangs branches under their chats (listmodel.js is ready for it) and adds
   // the closed count above the end rule. The header keeps its size and the
   // rows scroll under it, so nothing is squeezed in a short window.
+  //
+  // Phases 5 and 6 (desktop-design-5-6 7.1, 2.5): registered list sections
+  // draw under the search's rule ("header"), after the chat rows ("rows") and
+  // above the end rule ("footer"). The search hands off to the Sessions
+  // sheet: a typed character, Enter or a click in it opens the sheet with the
+  // box's text in its filter and empties the box. While no Sessions sheet is
+  // registered (SES), the box filters the list as before.
   import { onMount } from "svelte";
+  import { hasDialog, openDialog } from "../lib/dialogs.js";
+  import { listSections } from "../lib/listsections.js";
   import { buildRows } from "../lib/listmodel.js";
   import { probeSection } from "../lib/probe.js";
   import { isClosed } from "../lib/stores/closed.svelte.js";
@@ -90,6 +99,18 @@
     return [...(nav?.querySelectorAll(".scroll .row") ?? [])];
   }
 
+  // True when the Sessions sheet took the box's text.
+  function handOff() {
+    openDialog("sessions", { query });
+    if (!hasDialog("sessions")) return false;
+    query = "";
+    return true;
+  }
+
+  function onSearchInput(event) {
+    if (event.inputType?.startsWith("insert")) handOff();
+  }
+
   function onKey(event) {
     if (event.ctrlKey || event.altKey || event.metaKey) return;
     const buttons = rowButtons();
@@ -104,7 +125,7 @@
       else if (at === 0) field?.focus();
       if (at >= 0) event.preventDefault();
     } else if (event.key === "Enter" && inSearch) {
-      buttons[0]?.click();
+      if (!handOff()) buttons[0]?.click();
       event.preventDefault();
     } else if (event.key === "Escape") {
       if (inSearch && query) query = "";
@@ -178,11 +199,23 @@
 
   <label class="search">
     <Icon name="search" />
-    <input type="search" placeholder="Search chats…" aria-label="Search chats" bind:this={field} bind:value={query} />
+    <input
+      type="search"
+      placeholder="Search chats…"
+      aria-label="Search chats"
+      bind:this={field}
+      bind:value={query}
+      oninput={onSearchInput}
+      onclick={handOff}
+    />
     <kbd>{searchHint}</kbd>
   </label>
 
   <Rule marks="both" class="under-search" />
+
+  {#each listSections("header") as entry (entry.id)}
+    <entry.component />
+  {/each}
 
   <div class="scroll">
     {#if built.empty}
@@ -199,7 +232,14 @@
       </section>
     {/each}
 
+    {#each listSections("rows") as entry (entry.id)}
+      <entry.component />
+    {/each}
+
     <ListFooter count={built.closedCount} />
+    {#each listSections("footer") as entry (entry.id)}
+      <entry.component />
+    {/each}
     {#if !built.empty}<Rule marks="both" class="end-of-list" />{/if}
   </div>
 </nav>

@@ -4,7 +4,9 @@
   // last; every sheet but the front one is inert, so neither keys nor clicks
   // reach it), the picture viewer, and the right-click menu on top. Each
   // surface draws and places itself; the veil only holds the sheets and keeps
-  // the page underneath from being clicked.
+  // the page underneath from being clicked. A front sheet registered with
+  // {veil: false} (the docked Themes sheet and editor) is marked bare: no
+  // veil behind it, while the page behind stays inert (desktop-design-5-6 2.13).
   import { dialogs, frontDialog } from "../../lib/dialogs.js";
   import { ui } from "../../lib/stores/ui.svelte.js";
   import HelpSheet from "../HelpSheet.svelte";
@@ -13,13 +15,14 @@
   import ContextMenu from "../timeline/ContextMenu.svelte";
 
   const front = $derived(frontDialog());
+  const bare = $derived(dialogs.find((entry) => entry.id === front)?.veil === false);
 </script>
 
 <HelpSheet />
 <DetailsOverlay />
 
 {#if dialogs.length > 0}
-  <div class="veil">
+  <div class="veil" class:bare data-veil={bare ? "none" : "veil"}>
     {#each dialogs as entry (entry.id)}
       <div class="sheet" data-dialog={entry.id} inert={entry.id === front ? undefined : true}>
         <entry.component {...entry.props} />

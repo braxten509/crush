@@ -4,6 +4,13 @@
   // are hidden from screen readers and their text sits next to them. `size`
   // (picture pixels) scales an icon whose longer side is not that size, for
   // example a 16 px icon drawn at 12.
+  //
+  // The working mark (desktop-design-5-6 look 5.2) is a ring in --icon-ring
+  // with a quarter arc in --icon-arc that steps every 100 ms on the wall
+  // clock (lib/ticker.svelte.js); a parent sets both to --mark for the
+  // background mark. Reduced motion: the arc stands still.
+  import { ticker } from "../lib/ticker.svelte.js";
+
   let { name, class: extra = "", size = null } = $props();
 
   const icons = {
@@ -32,6 +39,8 @@
     "half-circle": { w: 16, h: 16 },
     circle: { w: 16, h: 16 },
     offline: { w: 16, h: 16 },
+    terminal: { w: 16, h: 16 },
+    "arrow-up-right": { w: 16, h: 16 },
   };
   const box = $derived(icons[name]);
   const scale = $derived(size ? size / Math.max(box.w, box.h) : 1);
@@ -51,14 +60,25 @@
     <circle cx="7.75" cy="7.75" r="6.75" fill="none" stroke="currentColor" stroke-width="1.75" />
     <path d="M12.6 12.6 19 19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
   {:else if name === "working"}
-    <circle cx="9" cy="9" r="7.6" fill="none" stroke="currentColor" stroke-width="1.6" />
+    <circle cx="9" cy="9" r="7.6" fill="none" stroke="var(--icon-ring, var(--rule-control))" stroke-width="1.6" />
+    <circle
+      cx="9"
+      cy="9"
+      r="7.6"
+      fill="none"
+      stroke="var(--icon-arc, var(--busy))"
+      stroke-width="1.6"
+      stroke-dasharray="12 36"
+      stroke-dashoffset={-6 * ticker.frame}
+      transform="rotate(-90 9 9)"
+    />
   {:else if name === "clock"}
     <circle cx="10" cy="10" r="8.6" fill="none" stroke="currentColor" stroke-width="1.6" />
     <path d="M10 5.2V10l3.4 2.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
   {:else if name === "warning"}
     <path d="M10.9 1.6a1.8 1.8 0 0 1 3.2 0l10.5 19.6a1.8 1.8 0 0 1-1.6 2.6H2a1.8 1.8 0 0 1-1.6-2.6z" fill="var(--amber)" />
-    <path d="M12.5 8.4v7" fill="none" stroke="var(--paper)" stroke-width="2.4" stroke-linecap="round" />
-    <circle cx="12.5" cy="19.4" r="1.35" fill="var(--paper)" />
+    <path d="M12.5 8.4v7" fill="none" stroke="var(--on-amber)" stroke-width="2.4" stroke-linecap="round" />
+    <circle cx="12.5" cy="19.4" r="1.35" fill="var(--on-amber)" />
   {:else if name === "send"}
     <path d="M29.6 1.4 1.6 9.3l10.8 4.4 4.8 10.1z M29.6 1.4 12.4 13.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
   {:else if name === "chevron"}
@@ -107,6 +127,11 @@
   {:else if name === "offline"}
     <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6" />
     <path d="M3.6 3.6l8.8 8.8" fill="none" stroke="currentColor" stroke-width="1.6" />
+  {:else if name === "terminal"}
+    <!-- The terminal's "›" row mark and ">_" button: a 6×10 chevron, then a 7-long underscore. -->
+    <path d="M1.5 3l6 5-6 5M8 13h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+  {:else if name === "arrow-up-right"}
+    <path d="M4.5 11.5l7-7M5.5 4.5h6v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
   {/if}
 </svg>
 

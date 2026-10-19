@@ -3,21 +3,36 @@
 // screen) and may add `--fixture <file>` (a recorded engine, 6.3).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod alerts;
 mod batch;
 mod clipboard;
 mod commands;
+mod configfiles;
 mod connection;
+mod crash;
 mod crush_bin;
+mod crushinfo;
+mod dirlist;
+mod docker;
+mod editor;
 mod engine_cli;
 mod error;
 mod files;
 mod fixture;
+mod folderdialog;
 mod login_env;
+mod logs;
 mod opener;
+mod projects;
+mod pty;
+mod remote;
+mod selfupdate;
 mod settings;
 mod sse;
 mod state;
+mod taskbar;
 mod uds_http;
+mod windows;
 
 use state::{AppState, Launch};
 use std::path::{Path, PathBuf};
@@ -25,6 +40,15 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 fn main() {
+    crash::install();
+    // REM-017: a phone launch names itself in CRUSH_REMOTE_LAUNCH. The process
+    // starts again with `--launch-id` in its arguments and the variable gone,
+    // before any thread starts, so the single-instance hand-off (which carries
+    // only arguments) keeps the launch.
+    #[cfg(unix)]
+    if let Some(id) = std::env::var_os("CRUSH_REMOTE_LAUNCH") {
+        relaunch_with_launch_id(id);
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--version") {
         println!("crush-desktop {}", env!("CARGO_PKG_VERSION"));
@@ -47,30 +71,41 @@ fn main() {
         }
     };
     let opened_log = launch.probe_side_file("opened.jsonl");
+    let first_window = windows::WindowLaunch::first(&launch);
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(windows::handoff))
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(nav_guard(opened_log))
         .manage(AppState {
             windows: Mutex::default(),
             settings: Mutex::new(settings::load()),
             launch,
-        });
+        })
+        .manage(windows::Windows::new(first_window))
+        .manage(pty::Ptys::default())
+        .manage(editor::Edits::default())
+        .manage(alerts::Alerts::default())
+        .manage(logs::Follows::default())
+        .manage(selfupdate::Runner::default());
     if let Some(fixture) = fixture {
         builder = builder.manage(fixture);
     }
     builder
         .setup(|app| {
             settings::watch(app.handle().clone());
+            if let Some(window) = app.get_webview_window(windows::FIRST) {
+                crash::watch_webview(&window);
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Leave the engine first (DELETE /v1/clients/{id}, 1.2.6), then close.
+                // The page runs its close steps and calls window_close, which
+                // leaves the engine (DELETE /v1/clients/{id}, 1.2.6) before the
+                // window goes; after 10 s Rust closes it anyway (6.4).
                 api.prevent_close();
-                let window = window.clone();
-                tauri::async_runtime::spawn(async move {
-                    window_closing(&window).await;
-                    let _ = window.destroy();
-                });
+                windows::close_requested(window.app_handle(), window.label());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -92,21 +127,67 @@ fn main() {
             commands::file_info,
             commands::file_read,
             commands::files_list,
+            commands::api_secret,
+            commands::window_open,
+            commands::window_close,
+            commands::project_switch,
+            commands::pty_spawn,
+            commands::pty_write,
+            commands::pty_resize,
+            commands::pty_cwd,
+            commands::pty_close,
+            commands::pty_close_all,
+            commands::editor_prepare,
+            commands::editor_finish,
+            commands::alert_notify,
+            commands::alert_sound,
+            commands::alert_window_state,
+            commands::alert_handler,
+            commands::crash_pending,
+            commands::crash_restart,
+            commands::logs_tail,
+            commands::logs_follow,
+            commands::logs_unfollow,
+            commands::selfupdate_run,
+            commands::selfupdate_install,
+            commands::crush_dirs,
+            commands::crush_stats,
+            commands::docker_mcp_version,
+            commands::projects_list,
+            commands::project_save,
+            commands::project_remove,
+            commands::recent_folders,
+            commands::subagent_instructions_read,
+            commands::subagent_instructions_write,
+            commands::remote_password_exists,
+            commands::remote_password_set,
+            commands::dir_list,
+            commands::folder_pick,
         ])
         .run(tauri::generate_context!())
         .expect("Crush Desktop could not start");
 }
 
-/// The window's engine connection (or fixture player) ends with the window.
-/// Q2 (what keeps running) is the engine's job.
-async fn window_closing(window: &tauri::Window) {
-    let app = window.app_handle().clone();
-    let label = window.label().to_string();
-    if let Some(fixture) = app.try_state::<fixture::Fixture>() {
-        fixture.close(&label);
-        return;
+/// Starts this program again with `--launch-id <id>` added and
+/// CRUSH_REMOTE_LAUNCH removed. Returns only when that fails; the process then
+/// goes on without the launch ID.
+#[cfg(unix)]
+fn relaunch_with_launch_id(id: std::ffi::OsString) {
+    use std::os::unix::process::CommandExt;
+    let exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(e) => {
+            eprintln!("crush-desktop: cannot find this program to take the phone launch: {e}");
+            return;
+        }
+    };
+    let mut args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if !id.is_empty() {
+        args.push("--launch-id".into());
+        args.push(id);
     }
-    connection::close(&app, &label).await;
+    let e = std::process::Command::new(exe).args(args).env_remove("CRUSH_REMOTE_LAUNCH").exec();
+    eprintln!("crush-desktop: could not start again for the phone launch: {e}");
 }
 
 /// The navigation guard (1.2.9): every webview the app opens, now and in later
@@ -133,8 +214,10 @@ fn nav_allowed(url: &tauri::Url) -> bool {
     url.scheme() == "tauri" && url.host_str() == Some("localhost")
 }
 
-/// Reads the command line: the terminal's flags (internal/cmd/root.go:37-48)
-/// plus the test-only --probe and --fixture. Unknown arguments are ignored.
+/// Reads the command line: the terminal's flags (internal/cmd/root.go:37-48),
+/// the desktop's --project, --launch-id and --new-chat (desktop-design-5-6
+/// 7.1; a second process hands these over, windows::handoff), plus the
+/// test-only --probe and --fixture. Unknown arguments are ignored.
 fn parse_launch(args: &[String], here: &Path, ui_debug: bool) -> Result<Launch, String> {
     let mut launch = Launch {
         cwd: here.to_path_buf(),
@@ -180,6 +263,10 @@ fn parse_launch(args: &[String], here: &Path, ui_debug: bool) -> Result<Launch, 
             "--probe" => launch.probe = Some(PathBuf::from(value("--probe")?)),
             "--fixture" => launch.fixture = Some(PathBuf::from(value("--fixture")?)),
             "-c" | "--cwd" => launch.cwd = here.join(value("--cwd")?),
+            // The first window's folder, the same as --cwd (PLAN.md:143).
+            "--project" => launch.cwd = here.join(value("--project")?),
+            "--launch-id" => launch.launch_id = Some(value("--launch-id")?),
+            "--new-chat" => launch.new_chat = switch("--new-chat")?,
             "-s" | "--session" => launch.session = Some(value("--session")?),
             "-C" | "--continue" => launch.continue_last = switch("--continue")?,
             "-D" | "--data-dir" => launch.data_dir = Some(value("--data-dir")?),
@@ -254,6 +341,8 @@ mod tests {
                 yolo: Some(false),
                 channels: vec!["a:b".into(), "c:d".into(), "e:f".into()],
                 ui_debug: false,
+                launch_id: None,
+                new_chat: false,
             }
         );
         let launch = parse(&["--cwd=/abs", "-C", "-y", "--session-less"]).unwrap();

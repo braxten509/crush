@@ -5,15 +5,26 @@
   // when the window is too small for it or in compact mode (D11). The engine gate
   // stands in for the conversation until the engine is ready, and the overlay
   // host draws the menu, the viewer, help, details and the sheets over it all.
+  // Phases 5 and 6 (desktop-design-5-6 7.1): the left column shows the narrow
+  // strip instead of the list while leftList.strip; a helper's chat or a
+  // terminal tab (mainView.current) takes the conversation's place while the
+  // conversation stays mounted, hidden, so its draft and scroll survive; and
+  // the debug overlay shows with CRUSH_UI_DEBUG=true.
   import { onMount, untrack } from "svelte";
   import ChatList from "./components/ChatList.svelte";
   import ColumnDivider from "./components/ColumnDivider.svelte";
   import Conversation from "./components/Conversation.svelte";
   import Frame from "./components/Frame.svelte";
+  import Strip from "./components/leftlist/Strip.svelte";
+  import MainHost from "./components/MainHost.svelte";
   import OverlayHost from "./components/overlay/OverlayHost.svelte";
   import SidePanel from "./components/SidePanel.svelte";
   import EngineGate from "./components/start/EngineGate.svelte";
+  import DebugOverlay from "./components/system/DebugOverlay.svelte";
   import { COLUMN_LIMITS, dragColumn, fitColumns, loadColumns, saveColumns } from "./lib/columns.js";
+  import { app_info } from "./lib/engine/commands.js";
+  import { leftList } from "./lib/leftlist/store.svelte.js";
+  import { mainView } from "./lib/mainview.js";
   import { focusField } from "./lib/stores/composer.svelte.js";
   import { start } from "./lib/stores/connection.svelte.js";
   import { setPanelHidden, ui } from "./lib/stores/ui.svelte.js";
@@ -36,6 +47,7 @@
 
   let widths = $state(loadColumns(storage));
   let page = $state();
+  let uiDebug = $state(false);
 
   // CSS pixels per picture pixel (the zoom).
   function scale() {
@@ -87,6 +99,9 @@
   // Join the engine once the page is up (connection.svelte.js).
   onMount(() => {
     start();
+    app_info()
+      .then((info) => (uiDebug = info?.ui_debug === true))
+      .catch(() => {});
   });
 </script>
 
@@ -100,7 +115,11 @@
   >
     <Frame panel={!ui.panelHidden} />
     <div class="column chats-column">
-      <ChatList />
+      {#if leftList.strip}
+        <Strip />
+      {:else}
+        <ChatList />
+      {/if}
     </div>
     <ColumnDivider
       side="left"
@@ -113,9 +132,14 @@
       ondone={done}
     />
     <div class="column conversation-column">
-      <EngineGate>
-        <Conversation />
-      </EngineGate>
+      {#if mainView.current}
+        <MainHost />
+      {/if}
+      <div class="conversation-keep" hidden={mainView.current ? true : undefined}>
+        <EngineGate>
+          <Conversation />
+        </EngineGate>
+      </div>
     </div>
     {#if !ui.panelHidden}
       <ColumnDivider
@@ -136,6 +160,10 @@
 </div>
 
 <OverlayHost />
+
+{#if uiDebug}
+  <DebugOverlay />
+{/if}
 
 <style>
   .sheet {
@@ -171,6 +199,17 @@
     min-height: 0;
   }
   .column > :global(*) {
+    flex: 1;
+  }
+  /* The conversation's wrapper takes no box of its own, so the column lays the
+     conversation out as before; hidden, it keeps the conversation mounted. */
+  .conversation-keep {
+    display: contents;
+  }
+  .conversation-keep[hidden] {
+    display: none;
+  }
+  .conversation-keep > :global(*) {
     flex: 1;
   }
   .chats-column {

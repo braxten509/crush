@@ -8,8 +8,13 @@
 //   a right-click menu is open        → menu
 //   the viewer or a sheet is open     → overlay
 //   otherwise                         → overlay (the help sheet), then by ui.focus:
-//                                       popup and composer, slot, tray, timeline, panel or list;
+//                                       popup and composer, slot, tray, main, timeline, panel or list;
 //                                       then global
+// "main" is the middle column's helper or terminal view (lib/mainview.js,
+// desktop-design-5-6 7.1). While that view is a terminal tab, no scope after
+// main runs and a key no binding took is left to the page (the terminal
+// widget), Ctrl+C included: it does not ask global first, so it reaches the
+// shell like any other key.
 // So no other global key works while the menu, the viewer or a sheet is open,
 // as the terminal gives every key to its front dialog while one is open
 // (internal/ui/model/keypress.go:111-114). The one exception is the quit key:
@@ -20,14 +25,19 @@
 // onKey, then ← → ↑ Esc Tab). The zoom keys keep their own listener
 // (lib/zoom.js) and are never routed here. A sheet opened with a grace
 // swallows keys first (lib/grace.js).
+//
+// The combo "*" is any key: a scope's "*" handlers are tried after its exact
+// combos (KIT's sheet keys, desktop-design-5-6 2.1).
 import { graceAbsorbs, dialogs, hasDialog } from "./dialogs.js";
+import { mainView } from "./mainview.js";
 import { ui } from "./stores/ui.svelte.js";
 import { trayKey } from "./tray.js";
 import { ZOOM_DEFAULT, zoomForKey } from "./zoom.js";
 
-export const SCOPES = ["menu", "overlay", "popup", "slot", "tray", "composer", "timeline", "panel", "list", "global"];
-const FOCUS_SCOPES = new Set(["slot", "tray", "composer", "timeline", "panel", "list"]);
+export const SCOPES = ["menu", "overlay", "popup", "slot", "tray", "main", "composer", "timeline", "panel", "list", "global"];
+const FOCUS_SCOPES = new Set(["slot", "tray", "main", "composer", "timeline", "panel", "list"]);
 const QUIT_KEY = "Ctrl+C"; // the terminal's keyMap.Quit (internal/ui/model/keys.go:95-97)
+const ANY = "*";
 
 const bindings = new Map(SCOPES.map((scope) => [scope, new Map()])); // scope → combo → handlers
 
@@ -39,7 +49,7 @@ const bindings = new Map(SCOPES.map((scope) => [scope, new Map()])); // scope �
 export function bindKey(scope, combo, handler) {
   const table = bindings.get(scope);
   if (!table) throw new Error(`bindKey: unknown scope "${scope}"`);
-  const key = normalizeCombo(combo);
+  const key = combo === ANY ? ANY : normalizeCombo(combo);
   if (!table.has(key)) table.set(key, []);
   table.get(key).push(handler);
   return () => {
@@ -58,12 +68,17 @@ export function activeScopes(combo = null) {
   const scopes = [...first, "overlay"];
   if (ui.focus === "composer") scopes.push("popup");
   if (FOCUS_SCOPES.has(ui.focus)) scopes.push(ui.focus);
-  if (!quit) scopes.push("global");
+  if (!quit && !terminalFocused()) scopes.push("global");
   return scopes;
 }
 
+// A terminal tab has the focus: its keys belong to the shell.
+function terminalFocused() {
+  return ui.focus === "main" && mainView.current?.kind === "terminal";
+}
+
 function isQuit(combo) {
-  return combo === QUIT_KEY && !hasDialog("quit");
+  return combo === QUIT_KEY && !hasDialog("quit") && !terminalFocused();
 }
 
 // The combo string for a keydown event, in bindKey's spelling.
@@ -95,7 +110,8 @@ function onKeyDown(event) {
   if (!isQuit(combo) && graceAbsorbs(event)) return take(event);
   for (const scope of activeScopes(combo)) {
     if (scope === "tray" && trayKey(event)) return take(event);
-    for (const handler of bindings.get(scope).get(combo) ?? []) {
+    const table = bindings.get(scope);
+    for (const handler of [...(table.get(combo) ?? []), ...(table.get(ANY) ?? [])]) {
       if (handler(event) === true) return take(event);
     }
   }
@@ -172,7 +188,7 @@ export const shortcuts = [
   { keys: ["Ctrl+T", "Ctrl+Space"], scope: "global", action: "show or hide to-dos", row: "SIDE-032" },
   { keys: ["Ctrl+D"], scope: "global", action: "session details (when the side panel is hidden)", row: "SIDE-003" },
   { keys: ["Ctrl+N"], scope: "global", action: "new chat", row: "LIST-033" },
-  { keys: ["Ctrl+K"], scope: "global", action: "focus the chat-list search", row: "PLAN.md:103" },
+  { keys: ["Ctrl+K"], scope: "global", action: "open the Sessions sheet", row: "PLAN.md:103" },
   { keys: ["Ctrl+End"], scope: "timeline composer", action: "jump to the bottom and follow", row: "CHAT-098" },
   { keys: ["ArrowUp", "ArrowDown", "k", "j"], scope: "timeline", action: "one line; selection follows", row: "CHAT-096" },
   { keys: ["Shift+ArrowUp", "Shift+ArrowDown", "K", "J"], scope: "timeline", action: "one item", row: "CHAT-096" },

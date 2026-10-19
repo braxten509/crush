@@ -172,6 +172,16 @@ impl Fixture {
         Ok(Value::Null)
     }
 
+    /// `api_secret` (desktop-design-5-6 6.4): records only the route and the
+    /// body's top-level key names, `{"secret": path, "keys": [...]}`, never a
+    /// value, and answers null.
+    pub fn api_secret(&self, launch: &Launch, path: &str, body: &Value) -> AppResult<Value> {
+        crate::connection::check_secret_route(path)?;
+        let keys: Vec<&String> = body.as_object().map(|map| map.keys().collect()).unwrap_or_default();
+        self.record(launch, json!({"secret": path, "keys": keys}));
+        Ok(Value::Null)
+    }
+
     /// `api_abort`: a fixture call never runs long, so none is running and the answer is
     /// false (1.2.9). Recorded, so a check can see that the window asked to stop a call.
     pub fn abort(&self, launch: &Launch, label: &str, call_id: &str) -> bool {

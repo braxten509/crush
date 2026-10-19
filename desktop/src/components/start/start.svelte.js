@@ -3,6 +3,7 @@
 // chat a launch names (-s / -C, START-006 and START-021), and the init answer.
 // EngineGate calls watchStart() once; the screens read `start` and screen().
 import { tick, untrack } from "svelte";
+import { hasDialog, openDialog } from "../../lib/dialogs.js";
 import { api } from "../../lib/engine/api.js";
 import { app_info } from "../../lib/engine/commands.js";
 import { probeSection } from "../../lib/probe.js";
@@ -139,8 +140,13 @@ async function resolveLaunch(id) {
   }
   start.launch = "done";
   notify("error", found.error, LAUNCH_NOTICE_MS);
-  // Phase 5 opens the Sessions dialog here instead (PLAN.md:134).
-  queueMicrotask(() => focusSearch());
+  // The Sessions sheet with the given ID in its filter (PLAN.md:134;
+  // desktop-design-5-6 2.5); the chat-list search while no Sessions sheet is
+  // registered (SES).
+  queueMicrotask(() => {
+    openDialog("sessions", { query: id });
+    if (!hasDialog("sessions")) focusSearch();
+  });
 }
 
 // START-002 (initializeProject and skipInitializeProject,

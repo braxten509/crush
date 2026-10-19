@@ -5,7 +5,7 @@
 // change it.
 
 export const ui = $state({
-  focus: "composer", // "composer" | "timeline" | "panel" | "list" | "tray" | "slot" (the key scopes of 1.8)
+  focus: "composer", // "composer" | "timeline" | "panel" | "list" | "tray" | "slot" | "main" (the key scopes of 1.8; "main": the main column's helper or terminal view, desktop-design-5-6 7.1)
   selectedItem: null, // a timeline item key
   menu: null, // the open right-click menu (P3.5 decides its shape)
   viewer: null, // the picture in the viewer, e.g. {path}
@@ -37,9 +37,13 @@ export function notify(kind, text, ttlMs = 5000, action = null) {
   return id;
 }
 
-export function clearNotice() {
+// Clears the notice line. Given a text, only while that text shows, so a
+// sticky notice (ttlMs 0) is cleared without touching a newer one.
+export function clearNotice(text) {
+  if (text !== undefined && ui.notice?.text !== text) return false;
   clearTimeout(noticeTimer);
   ui.notice = null;
+  return true;
 }
 
 export function openMenu(menu) {
@@ -84,13 +88,15 @@ export function setPanelHidden(hidden) {
 }
 
 // Puts a form in the typing box's place. Refuses (false) while another kind
-// holds the slot, except that "permission" and "question" replace "plan" and
-// "customize". The same kind replaces itself (a newer request).
+// holds the slot, except that "permission", "question" and "secure" replace
+// "plan", "customize" and "update"; "update" replaces nothing
+// (desktop-design-5-6 7.1). The same kind replaces itself (a newer request).
+const URGENT = new Set(["permission", "question", "secure"]);
+const YIELDS = new Set(["plan", "customize", "update"]);
 export function openSlot({ kind, component, props = {} }) {
   const holder = ui.slot?.kind;
   if (holder && holder !== kind) {
-    const urgent = kind === "permission" || kind === "question";
-    if (!(urgent && (holder === "plan" || holder === "customize"))) return false;
+    if (!(URGENT.has(kind) && YIELDS.has(holder))) return false;
   }
   ui.slot = { kind, component, props };
   return true;

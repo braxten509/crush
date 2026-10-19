@@ -17,7 +17,7 @@ use crate::error::{AppError, AppResult};
 use crate::sse::LineSplitter;
 use crate::state::{AppState, Launch};
 use crate::uds_http::{ByteStream, EngineHttp, Reply};
-use crate::{fixture, login_env};
+use crate::{fixture, login_env, windows};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::future::Future;
@@ -328,7 +328,72 @@ const ROUTES: &[(&str, &str)] = &[
     ("POST", "sessions/{sid}/files/preview"),
     ("POST", "sessions/{sid}/files/undo-preview"),
     ("POST", "sessions/{sid}/files/undo"),
+    // Phases 5 and 6 (desktop-design-5-6 6.5; the G-n routes are G56's).
+    ("GET", "commands"),
+    ("GET", "mcp/prompts"),
+    ("POST", "mcp/get-prompt"),
+    ("POST", "agent/sessions/{sid}/summarize"),
+    ("GET", "agent/capabilities"),
+    ("POST", "config/refresh-oauth"),
+    ("POST", "config/import-copilot"),
+    ("POST", "agent/init"),
+    ("POST", "/v1/providers/refresh"),
+    ("POST", "auth/flows"),
+    ("POST", "auth/flows/{flow_id}/code"),
+    ("POST", "auth/flows/{flow_id}/cancel"),
+    ("GET", "saved-sessions"),
+    ("POST", "saved-sessions"),
+    ("POST", "questions/answer"),
+    ("POST", "questions/cancel"),
+    ("GET", "questions/pending"),
+    ("GET", "secure-forms"),
+    ("POST", "secure-forms/{fid}/cancel"),
+    ("GET", "skills/installed"),
+    ("POST", "skills/manage"),
+    ("GET", "skills/search"),
+    ("GET", "mcp/disabled"),
+    ("POST", "mcp/disabled"),
+    ("GET", "mcp/enabled"),
+    ("POST", "mcp/config-disabled"),
+    ("GET", "mcp/pending-auth"),
+    ("GET", "mcp/auth-url"),
+    ("POST", "mcp/auth"),
+    ("POST", "mcp/docker/enable"),
+    ("POST", "mcp/docker/disable"),
+    ("GET", "/v1/memory"),
+    ("PUT", "/v1/memory/limit"),
+    ("POST", "/v1/memory/claim-notice"),
+    ("POST", "/v1/cpu-affinity"),
+    ("GET", "/v1/themes"),
+    ("GET", "/v1/themes/{name}"),
+    ("POST", "/v1/themes/resolve"),
+    ("PUT", "/v1/themes/{name}"),
+    ("POST", "/v1/themes"),
+    ("POST", "/v1/themes/{name}/rename"),
+    ("DELETE", "/v1/themes/{name}"),
+    ("POST", "/v1/themes/{name}/revert"),
+    ("GET", "sessions/{sid}/helpers"),
+    ("POST", "sessions/{sid}/helpers/{hid}/stop"),
+    ("GET", "sessions/{sid}/jobs"),
+    ("POST", "sessions/{sid}/jobs/kill"),
+    ("POST", "sessions/{sid}/background"),
+    ("GET", "servers"),
+    ("POST", "remote/start"),
+    ("POST", "remote/stop"),
+    ("GET", "remote"),
+    ("POST", "remote/presence"),
+    ("POST", "remote/actions/{aid}/done"),
+    ("GET", "/v1/updates/clis"),
+    ("POST", "/v1/updates/clis/decline"),
+    ("POST", "/v1/updates/clis/install"),
+    ("GET", "/v1/updates/crush"),
+    ("POST", "/v1/updates/crush/decline"),
 ];
+
+/// The only routes `api_secret` posts to (6.4): a secure form's answers,
+/// a provider key, and G-5's key check. `api` never reaches them, so a
+/// secret never travels through it.
+const SECRET_ROUTES: &[&str] = &["secure-forms/{fid}/submit", "config/provider-key", "auth/verify-key"];
 
 /// A path the route list allows, split into its parts.
 #[derive(Debug)]
@@ -340,15 +405,26 @@ struct Route {
 impl Route {
     fn find(method: &str, path: &str) -> AppResult<Route> {
         let refused = || AppError::new("route_not_allowed", format!("Crush Desktop does not call {method} {path}."));
+        Route::matching(method, path, ROUTES).ok_or_else(refused)
+    }
+
+    /// `api_secret`'s routes: POST, relative, and only these (6.4).
+    fn secret(path: &str) -> AppResult<Route> {
+        let patterns: Vec<(&str, &str)> = SECRET_ROUTES.iter().map(|p| ("POST", *p)).collect();
+        Route::matching("POST", path, &patterns)
+            .ok_or_else(|| AppError::new("secret_route", format!("Crush Desktop sends no secret to {path}.")))
+    }
+
+    fn matching(method: &str, path: &str, routes: &[(&str, &str)]) -> Option<Route> {
         let (absolute, rest) = match path.strip_prefix('/') {
             Some(rest) => (true, rest),
             None => (false, path),
         };
         let parts: Vec<&str> = rest.split('/').collect();
         if parts.iter().any(|p| p.is_empty() || *p == "." || *p == "..") {
-            return Err(refused());
+            return None;
         }
-        let listed = ROUTES.iter().any(|(m, pattern)| {
+        let listed = routes.iter().any(|(m, pattern)| {
             let (p_absolute, p_rest) = match pattern.strip_prefix('/') {
                 Some(rest) => (true, rest),
                 None => (false, *pattern),
@@ -359,10 +435,7 @@ impl Route {
                 && pattern.len() == parts.len()
                 && pattern.iter().zip(&parts).all(|(p, s)| p.starts_with('{') || p == s)
         });
-        if !listed {
-            return Err(refused());
-        }
-        Ok(Route {
+        listed.then(|| Route {
             absolute,
             parts: parts.into_iter().map(String::from).collect(),
         })
@@ -544,7 +617,10 @@ impl WindowConn {
     }
 
     fn log(&self, what: &str) {
-        eprintln!("crush-desktop: [{}] {what}", self.label);
+        let line = format!("crush-desktop: [{}] {what}", self.label);
+        #[cfg(test)]
+        tests::LOGGED.lock().unwrap().push(line.clone());
+        eprintln!("{line}");
     }
 
     fn debug_log(&self, what: &str) {
@@ -986,6 +1062,40 @@ impl WindowConn {
         result.map(|reply| reply.body)
     }
 
+    /// `api_secret` (6.4): a POST to one of the secret routes with `body`, the
+    /// JSON bytes, sent with its `Content-Length` through the same
+    /// `EngineHttp::call`. The bytes and the copy made for the call are
+    /// overwritten with zeros when it ends, either way. Nothing of the body
+    /// reaches a log line or an error: an engine error keeps the engine's
+    /// code and message only.
+    async fn call_secret(self: &Arc<Self>, path: &str, body: &mut [u8]) -> AppResult<Value> {
+        let result = self.send_secret(path, body).await;
+        wipe(body);
+        result
+    }
+
+    async fn send_secret(self: &Arc<Self>, path: &str, body: &[u8]) -> AppResult<Value> {
+        let route = Route::secret(path)?;
+        let (link, client_id, generation) = self.ready()?;
+        let target = route.target(&link.workspace_id, None, &client_id);
+        let mut value: Value = serde_json::from_slice(body)
+            .map_err(|_| AppError::new("bad_request", "The secret's body is not JSON."))?;
+        let started = Instant::now();
+        let result = link.http.call("POST", &target, Some(&value), Some(self.tuning.call_limit)).await;
+        wipe_value(&mut value);
+        let took = started.elapsed().as_millis();
+        match &result {
+            Ok(reply) => self.debug_log(&format!("POST {path}: {} in {took} ms", reply.status)),
+            Err(e) => {
+                self.debug_log(&format!("POST {path}: {} in {took} ms", e.code));
+                if lost_engine(e) {
+                    self.lost(generation, &e.code);
+                }
+            }
+        }
+        result.map(|reply| reply.body)
+    }
+
     /// A call with a `callId`: no time limit, and `abort` stops it until it ends (1.2.4).
     async fn call_with_id(&self, id: String, http: Arc<EngineHttp>, method: String, target: String, body: Option<Value>) -> AppResult<Reply> {
         let serial = CALL_SERIAL.fetch_add(1, Ordering::Relaxed);
@@ -1139,6 +1249,32 @@ fn closed() -> AppError {
     AppError::new("aborted", "The window closed.")
 }
 
+/// Overwrites a secret's bytes with zeros. `black_box` keeps the writes from
+/// being dropped as dead stores before the memory is freed.
+pub fn wipe(bytes: &mut [u8]) {
+    bytes.fill(0);
+    std::hint::black_box(&*bytes);
+}
+
+/// Overwrites every string in a JSON value with zeros, in place (the key
+/// names stay: they name fields, never hold a secret).
+pub fn wipe_value(value: &mut Value) {
+    match value {
+        Value::String(text) => {
+            let mut bytes = std::mem::take(text).into_bytes();
+            wipe(&mut bytes);
+        }
+        Value::Array(items) => items.iter_mut().for_each(wipe_value),
+        Value::Object(map) => map.values_mut().for_each(wipe_value),
+        _ => {}
+    }
+}
+
+/// `api_secret`'s route check, for the fixture player too: `secret_route` for any other path.
+pub fn check_secret_route(path: &str) -> AppResult<()> {
+    Route::secret(path).map(|_| ())
+}
+
 // The commands' side (1.3): one connection per window label in AppState.
 
 fn connection(app: &tauri::AppHandle, label: &str) -> Option<Arc<WindowConn>> {
@@ -1149,7 +1285,19 @@ fn connection(app: &tauri::AppHandle, label: &str) -> Option<Arc<WindowConn>> {
 /// "Try again" after a failure. Idempotent: a second call while connected returns the same result.
 pub async fn open(app: &tauri::AppHandle, label: &str, cwd: &str) -> AppResult<OpenResult> {
     let state = app.state::<AppState>();
-    let launch = state.launch.clone();
+    let mut launch = state.launch.clone();
+    // A window other than the first joins the folder it was opened for
+    // (windows.rs); `-D` names the first window's project only, so it applies
+    // while the first window still shows its start folder.
+    let window = windows::launch_for(app, label);
+    let cwd = match &window {
+        Some(w) if label != windows::FIRST => w.cwd.to_string_lossy().into_owned(),
+        _ => cwd.to_string(),
+    };
+    let first_at_start = label == windows::FIRST && window.as_ref().is_none_or(|w| w.cwd == launch.cwd);
+    if !first_at_start {
+        launch.data_dir = None;
+    }
     let (crush_path, settings_yolo) = {
         let settings = state.settings.lock().unwrap();
         (settings.crush_path.clone(), settings.yolo)
@@ -1168,7 +1316,7 @@ pub async fn open(app: &tauri::AppHandle, label: &str, cwd: &str) -> AppResult<O
             .clone()
     };
     let env: EnvSource = Arc::new(login_env::login_env);
-    let plan = async move { plan_for(&launch, settings_yolo, cwd, env, crush_check(crush_path)).await };
+    let plan = async move { plan_for(&launch, settings_yolo, &cwd, env, crush_check(crush_path)).await };
     conn.open(plan).await
 }
 
@@ -1213,6 +1361,24 @@ pub fn take(app: &tauri::AppHandle, label: &str) -> Vec<serde_json::Value> {
     connection(app, label).map(|conn| conn.take()).unwrap_or_default()
 }
 
+/// `api_secret` (6.4): `body` is the JSON bytes; they are overwritten with zeros
+/// when the call ends, either way, and appear in no log line or error.
+pub async fn call_secret(app: &tauri::AppHandle, label: &str, path: &str, mut body: Vec<u8>) -> AppResult<Value> {
+    let result = match connection(app, label) {
+        Some(conn) => conn.call_secret(path, &mut body).await,
+        None => check_secret_route(path).and(Err(not_open())),
+    };
+    wipe(&mut body);
+    result
+}
+
+/// The engine this window joined (its `data_dir` names the project's log
+/// folder, 2.28); None before the first join.
+#[allow(dead_code)] // SYS's logs.rs reads it
+pub fn ensured(app: &tauri::AppHandle, label: &str) -> Option<Ensured> {
+    connection(app, label)?.inner().opened.as_ref().map(|opened| opened.engine.clone())
+}
+
 /// Window closing: abort every running call of that window (so its `!` commands end with it,
 /// 1.2.4), then DELETE /v1/clients/{client_id} (1 s limit, errors only logged), stop the reader.
 pub async fn close(app: &tauri::AppHandle, label: &str) {
@@ -1234,6 +1400,9 @@ mod tests {
     fn run<T>(f: impl Future<Output = T>) -> T {
         tauri::async_runtime::block_on(f)
     }
+
+    /// Every line `WindowConn::log` wrote during the tests.
+    pub(super) static LOGGED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
     /// The app's rhythm, with calls cut off sooner so a stuck test fails fast.
     const TEST_TUNING: Tuning = Tuning {
@@ -1666,13 +1835,20 @@ mod tests {
         let mut listed = ROUTES.to_vec();
         design.sort();
         listed.sort();
-        assert_eq!(listed, design, "the route list is design 1.3's table, no more and no less");
+        design.extend(DESIGN_5_6_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))));
+        design.sort();
+        assert_eq!(listed, design, "the route list is design 1.3's table and 5-6's 6.5, no more and no less");
         for (method, pattern) in ROUTES {
             let path = pattern
                 .replace("{sid}", "s-1")
                 .replace("{mid}", "m-1")
                 .replace("{kind}", "claude")
-                .replace("{lsp}", "gopls");
+                .replace("{lsp}", "gopls")
+            .replace("{flow_id}", "f-1")
+            .replace("{fid}", "form-1")
+            .replace("{name}", "scholars-edition")
+            .replace("{hid}", "h-1")
+            .replace("{aid}", "a-1");
             assert!(Route::find(method, &path).is_ok(), "{method} {path}");
         }
         for (method, path) in [("POST", "agent/update"), ("GET", "lsps/gopls/diagnostics")] {
@@ -1689,7 +1865,6 @@ mod tests {
             ("GET", ""),
             ("GET", "/"),
             ("GET", "events"),
-            ("POST", "agent/init"),
             ("POST", "current-session"),
             ("POST", "config"),
             ("PATCH", "sessions/s-1"),
@@ -1775,6 +1950,149 @@ mod tests {
         ("POST", &["sessions/{sid}/tree/label", "sessions/{sid}/tree/switch", "sessions/{sid}/tree/navigate", "sessions/{sid}/tree/copy",
             "sessions/{sid}/files/preview", "sessions/{sid}/files/undo-preview", "sessions/{sid}/files/undo"]),
     ];
+
+    /// desktop-design-5-6 6.5's routes (the functions not marked P3.3), row by row.
+    const DESIGN_5_6_ROUTES: &[(&str, &[&str])] = &[
+        ("GET", &["commands", "mcp/prompts", "agent/capabilities", "saved-sessions", "questions/pending", "secure-forms",
+            "skills/installed", "skills/search", "mcp/disabled", "mcp/enabled", "mcp/pending-auth", "mcp/auth-url",
+            "sessions/{sid}/helpers", "sessions/{sid}/jobs", "servers", "remote"]),
+        ("POST", &["mcp/get-prompt", "agent/sessions/{sid}/summarize", "config/refresh-oauth", "config/import-copilot", "agent/init",
+            "auth/flows", "auth/flows/{flow_id}/code", "auth/flows/{flow_id}/cancel", "saved-sessions", "questions/answer",
+            "questions/cancel", "secure-forms/{fid}/cancel", "skills/manage", "mcp/disabled", "mcp/config-disabled", "mcp/auth",
+            "mcp/docker/enable", "mcp/docker/disable", "sessions/{sid}/helpers/{hid}/stop", "sessions/{sid}/jobs/kill",
+            "sessions/{sid}/background", "remote/start", "remote/stop", "remote/presence", "remote/actions/{aid}/done"]),
+        ("GET", &["/v1/memory", "/v1/themes", "/v1/themes/{name}", "/v1/updates/clis", "/v1/updates/crush"]),
+        ("POST", &["/v1/providers/refresh", "/v1/memory/claim-notice", "/v1/cpu-affinity", "/v1/themes/resolve", "/v1/themes",
+            "/v1/themes/{name}/rename", "/v1/themes/{name}/revert", "/v1/updates/clis/decline", "/v1/updates/clis/install",
+            "/v1/updates/crush/decline"]),
+        ("PUT", &["/v1/memory/limit", "/v1/themes/{name}"]),
+        ("DELETE", &["/v1/themes/{name}"]),
+    ];
+
+    #[test]
+    fn route_list_has_5_6_routes() {
+        for (method, patterns) in DESIGN_5_6_ROUTES {
+            for pattern in *patterns {
+                assert!(ROUTES.contains(&(*method, *pattern)), "{method} {pattern} is missing from the route list");
+            }
+        }
+        // They reach the engine through a joined window, with this window's client_id.
+        let j = joined("conn-routes-56", TEST_TUNING);
+        j.fake.forget();
+        run(j.conn.call("GET", "skills/search", Some(Map::from_iter([("q".to_string(), json!("go"))])), None, None)).unwrap();
+        run(j.conn.call("PUT", "/v1/themes/my-theme", None, Some(json!({"base": "scholars-edition", "palette": {}})), None)).unwrap();
+        run(j.conn.call("POST", "sessions/s-1/helpers/h-1/stop", None, None, None)).unwrap();
+        let lines = lines(&j.fake.seen());
+        assert!(lines.contains(&"GET /v1/workspaces/ws-1/skills/search".to_string()), "{lines:?}");
+        assert!(lines.contains(&"PUT /v1/themes/my-theme".to_string()), "{lines:?}");
+        assert!(lines.contains(&"POST /v1/workspaces/ws-1/sessions/s-1/helpers/h-1/stop".to_string()), "{lines:?}");
+        // The secret routes are not among them.
+        for path in ["secure-forms/form-1/submit", "config/provider-key", "auth/verify-key"] {
+            assert_eq!(Route::find("POST", path).err().map(|e| e.code), Some("route_not_allowed".to_string()), "{path}");
+        }
+    }
+
+    const MARKER: &str = "sk-s5-marker-7f3a";
+
+    fn secret_body() -> Vec<u8> {
+        serde_json::to_vec(&json!({"provider_id": "openai", "api_key": MARKER, "nested": {"values": [MARKER]}})).unwrap()
+    }
+
+    #[test]
+    fn call_secret_never_logs() {
+        let j = {
+            let fake = FakeEngine::start("conn-secret-logs", engine(WS));
+            let finder = FakeFinder::new(&fake);
+            let (conn, rings) = window(TEST_TUNING, true);
+            let opened = run(conn.open(std::future::ready(Ok(plan(finder.clone()))))).unwrap();
+            Joined { fake, finder, conn, rings, opened }
+        };
+        LOGGED.lock().unwrap().clear();
+        // A refused key: the engine's error keeps its code and message only.
+        j.fake.set_handler(engine_with(WS, |seen| {
+            seen.path().ends_with("/auth/verify-key").then(|| Answer::Json(400, json!({"message": "invalid key", "code": "invalid_key"})))
+        }));
+        let mut body = secret_body();
+        let e = run(j.conn.call_secret("auth/verify-key", &mut body)).err().unwrap();
+        assert_eq!((e.code.as_str(), e.message.as_str()), ("invalid_key", "invalid key"));
+        // An accepted one, a refused route and a body that is not JSON.
+        let mut body = secret_body();
+        run(j.conn.call_secret("config/provider-key", &mut body)).unwrap();
+        let mut body = secret_body();
+        let refused = run(j.conn.call_secret("config/set", &mut body)).err().unwrap();
+        let mut broken = format!("{{\"api_key\": \"{MARKER}").into_bytes();
+        let unparsed = run(j.conn.call_secret("config/provider-key", &mut broken)).err().unwrap();
+        let logged = LOGGED.lock().unwrap().clone();
+        assert!(logged.iter().any(|line| line.contains("POST auth/verify-key")), "the call was logged by route: {logged:?}");
+        for text in logged.iter().chain([&e.message, &refused.message, &unparsed.message, &format!("{e:?}{refused:?}{unparsed:?}")]) {
+            assert!(!text.contains(MARKER), "the secret leaked: {text}");
+        }
+        // The fixture player records the route and the key names, never a value.
+        let dir = scratch("conn-secret-fixture");
+        std::fs::write(dir.join("fixture.json"), "{}").unwrap();
+        let fixture = fixture::Fixture::load(&dir.join("fixture.json")).unwrap();
+        let launch = Launch { probe: Some(dir.join("probe.json")), ..Default::default() };
+        let body: Value = serde_json::from_slice(&secret_body()).unwrap();
+        assert_eq!(fixture.api_secret(&launch, "config/provider-key", &body).unwrap(), Value::Null);
+        assert_eq!(fixture.api_secret(&launch, "config/set", &body).err().map(|e| e.code), Some("secret_route".into()));
+        let recorded = std::fs::read_to_string(dir.join("probe.json.api.jsonl")).unwrap();
+        let line: Value = serde_json::from_str(recorded.trim()).unwrap();
+        assert_eq!(line["secret"], "config/provider-key");
+        assert_eq!(line["keys"], json!(["api_key", "nested", "provider_id"]));
+        assert!(!recorded.contains(MARKER), "{recorded}");
+    }
+
+    #[test]
+    fn call_secret_zeroes_body() {
+        let j = joined("conn-secret-zero", TEST_TUNING);
+        let mut body = secret_body();
+        run(j.conn.call_secret("config/provider-key", &mut body)).unwrap();
+        assert!(!body.is_empty() && body.iter().all(|&b| b == 0), "the body was overwritten with zeros");
+        // Also when the call fails, and when the route is refused before anything is sent.
+        j.fake.set_handler(engine_with(WS, |seen| seen.path().ends_with("/provider-key").then_some(Answer::Status(500))));
+        let mut body = secret_body();
+        assert!(run(j.conn.call_secret("config/provider-key", &mut body)).is_err());
+        assert!(body.iter().all(|&b| b == 0));
+        let mut body = secret_body();
+        assert!(run(j.conn.call_secret("sessions", &mut body)).is_err());
+        assert!(body.iter().all(|&b| b == 0));
+        // The parsed copy is zeroed in place too.
+        let mut value = json!({"api_key": MARKER, "list": [MARKER, 3]});
+        wipe_value(&mut value);
+        assert_eq!(value, json!({"api_key": "", "list": ["", 3]}));
+    }
+
+    #[test]
+    fn call_secret_sends_content_length() {
+        let j = joined("conn-secret-length", TEST_TUNING);
+        j.fake.forget();
+        let sent: Value = serde_json::from_slice(&secret_body()).unwrap();
+        let mut body = secret_body();
+        run(j.conn.call_secret("secure-forms/form-1/submit", &mut body)).unwrap();
+        let seen = j.fake.seen();
+        let submit = seen.iter().find(|s| s.path().ends_with("/secure-forms/form-1/submit")).expect("the submit reached the engine");
+        assert_eq!(submit.method, "POST");
+        let length = serde_json::to_vec(&sent).unwrap().len().to_string();
+        assert_eq!(submit.header("content-length"), Some(length.as_str()));
+        assert!(!submit.chunked && submit.header("transfer-encoding").is_none());
+        assert_eq!(submit.json(), sent);
+        assert_eq!(submit.query("client_id").as_deref(), Some(j.opened.client_id.as_str()));
+    }
+
+    #[test]
+    fn secret_route_refused() {
+        let j = joined("conn-secret-route", TEST_TUNING);
+        j.fake.forget();
+        for path in ["config/set", "sessions", "/v1/memory", "secure-forms/form-1/cancel", "secure-forms/../config/provider-key", "auth/verify-key/x", "/config/provider-key"] {
+            let mut body = secret_body();
+            let e = run(j.conn.call_secret(path, &mut body)).err().unwrap_or_else(|| panic!("{path} was allowed"));
+            assert_eq!(e.code, "secret_route", "{path}");
+        }
+        assert!(j.fake.seen().is_empty(), "nothing was sent");
+        for path in ["secure-forms/form-1/submit", "config/provider-key", "auth/verify-key"] {
+            assert!(check_secret_route(path).is_ok(), "{path}");
+        }
+    }
 
     #[test]
     fn public_workspace_drops_env_and_config() {

@@ -170,7 +170,7 @@
     display: grid;
     place-items: center;
     background: var(--vermilion-fill);
-    color: var(--paper);
+    color: var(--on-accent);
     border-radius: calc(2 * var(--px));
   }
   .send :global(.icon) {

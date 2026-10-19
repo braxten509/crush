@@ -12,7 +12,12 @@
   // chevron's column (4.8, review finding 13): the × shows in it while the
   // row is hovered, focused or selected, and nothing else on the row moves.
   // The × is the row button's sibling (a button cannot hold a button).
+  //
+  // A row with none of phase 3's states draws the first registered phase 6
+  // state (lib/rowstates.js: LST's unread, ready and unknown,
+  // desktop-design-5-6 2.20) in the same slot: its icon and text.
   import Icon from "../Icon.svelte";
+  import { rowState } from "../../lib/rowstates.js";
   import { closeChat } from "../../lib/stores/closed.svelte.js";
   import { openChat } from "../../lib/stores/sessions.svelte.js";
 
@@ -30,6 +35,8 @@
   }
 
   const STATE_ICONS = { working: "working", waiting: "clock", background: "gear" };
+
+  const extra = $derived(row.state ? null : rowState(row.id));
 </script>
 
 <li
@@ -43,7 +50,7 @@
   <button
     bind:this={rowButton}
     class="row"
-    class:has-state={row.state !== ""}
+    class:has-state={row.state !== "" || extra !== null}
     type="button"
     aria-current={row.selected ? "page" : undefined}
     aria-expanded={row.branches > 0 ? row.expanded : undefined}
@@ -57,9 +64,14 @@
           <Icon name={STATE_ICONS[row.stateKind] ?? "working"} />
           <span>{row.state}</span>
         </span>
+      {:else if extra}
+        <span class="state registered">
+          <Icon name={extra.icon} />
+          <span>{extra.text}</span>
+        </span>
       {/if}
     </span>
-    {#if !row.state && row.time}
+    {#if !row.state && !extra && row.time}
       <span class="time-room" aria-hidden="true">{row.time}</span>
       <span class="time">{row.time}</span>
     {/if}

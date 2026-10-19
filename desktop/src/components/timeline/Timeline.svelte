@@ -29,6 +29,12 @@
   // measured from the layout: the end follows `.rule.above-composer`'s bottom
   // edge (the composer block starts there), so a taller composer (chips
   // queued, a slot form) never lets the rail run into it.
+  //
+  // readOnly (a helper's chat in the main column, desktop-design-5-6 7.1):
+  // no rail, no item selection or letters, no right-click menu (so no entry
+  // that changes the chat), no timeline keys and no focus hand-off to the
+  // typing box; it follows its own bottom, apart from the window's timeline.
+  // The owner scrolls it with scrollLines(n), scrollPages(n) and scrollEnd().
   import { flushSync, onMount, untrack } from "svelte";
   import { runAction } from "../../lib/actions.js";
   import { COPIED_SELECTION, copySelection, itemCopy, writeClipboard } from "../../lib/copy.js";
@@ -58,7 +64,7 @@
   import { focusTray } from "../../lib/tray.js";
   import VirtualList from "./VirtualList.svelte";
 
-  let { sessionId } = $props();
+  let { sessionId, readOnly = false } = $props();
 
   // A single click on an item's toggle waits this long for a second click
   // (CHAT-101); a mouse selection is copied this long after it ends (CHAT-091).
@@ -70,6 +76,13 @@
   let list = $state(null); // the VirtualList
   let pins = $state.raw([]); // the keys holding the text selection's ends (CHAT-087)
   let tick = $state(0); // bumped when a status word expires ("Responding", CHAT-019)
+  let ownFollow = $state(true); // readOnly: this timeline's own follow, apart from ui.follow
+  const follow = $derived(readOnly ? ownFollow : ui.follow);
+
+  function setFollowed(on) {
+    if (readOnly) ownFollow = on;
+    else setFollow(on);
+  }
 
   // -- Items --
 
@@ -109,6 +122,8 @@
     );
   });
   const items = $derived(built.items);
+  // What the virtual list draws: readOnly items carry no key letters.
+  const drawn = $derived(readOnly ? items.map((item) => (item.letter ? { ...item, letter: "" } : item)) : items);
   const indexOf = $derived(new Map(items.map((item, i) => [item.key, i])));
   const scrollbar = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
   const focusOnly = $derived(ws.config?.options?.tui?.composer_focus_only === true);
@@ -132,8 +147,8 @@
   $effect.pre(() => {
     sessionId;
     untrack(() => {
-      setFollow(true);
-      if (ui.selectedItem) selectItem(null);
+      setFollowed(true);
+      if (!readOnly && ui.selectedItem) selectItem(null);
       pins = [];
     });
   });
@@ -143,7 +158,7 @@
   $effect(() => {
     const list = items;
     const key = ui.selectedItem;
-    if (!key || !shown) return;
+    if (readOnly || !key || !shown) return;
     untrack(() => {
       const next = carrySelection(key, list);
       if (next !== key) selectItem(next);
@@ -160,7 +175,7 @@
     untrack(() => {
       const before = lastFocus;
       lastFocus = focus;
-      if (focus !== "timeline" || !ready) return;
+      if (readOnly || focus !== "timeline" || !ready) return;
       const inside = root?.contains(document.activeElement);
       // Tab from the typing box selects the last item (keypress.go:262-267);
       // focus coming back from the panel keeps the selection.
@@ -190,6 +205,7 @@
   // focus goes back to the typing box once the press (and its copy) is over.
   let refocusAfterPress = false;
   function onFocusIn() {
+    if (readOnly) return;
     if (focusOnly) {
       if (press) refocusAfterPress = true;
       else focusField();
@@ -213,7 +229,7 @@
 
   function onMouseDown(event) {
     if (event.button === 0) press = { x: event.clientX, y: event.clientY, dragged: false };
-    if (event.button !== 0 && event.button !== 2) return;
+    if (readOnly || (event.button !== 0 && event.button !== 2)) return;
     const key = keyAt(event.target);
     if (key && isSelectable(items[indexOf.get(key)]) && ui.selectedItem !== key) selectItem(key);
   }
@@ -310,7 +326,7 @@
 
   function onContextMenu(event) {
     event.preventDefault();
-    if (!shown) return;
+    if (!shown || readOnly) return;
     const key = keyAt(event.target);
     if (key && isSelectable(items[indexOf.get(key)])) selectItem(key);
     openMenuAt(event.clientX, event.clientY, key);
@@ -343,8 +359,8 @@
   // at the bottom.
   function scrollBy(dy) {
     const bottom = list.scrollByPx(dy);
-    if (dy < 0) setFollow(false);
-    else if (bottom) setFollow(true);
+    if (dy < 0) setFollowed(false);
+    else if (bottom) setFollowed(true);
   }
 
   function selectedIndex() {
@@ -361,7 +377,7 @@
   function showSelected() {
     const key = ui.selectedItem;
     if (key && !list.keyInView(key)) list.scrollToKey(key);
-    setFollow(list.atEnd());
+    setFollowed(list.atEnd());
   }
 
   function selectStep(dir) {
@@ -392,7 +408,7 @@
   // transcript.go:14-28, chat_scroll.go:249-272). With nothing selected only
   // a focused timeline picks one.
   function onScrolled({ up }) {
-    if (!list) return;
+    if (!list || readOnly) return;
     const key = ui.selectedItem;
     if (key && list.keyInView(key)) return;
     if (!key && ui.focus !== "timeline") return;
@@ -405,7 +421,7 @@
   }
 
   function onFollow(on) {
-    setFollow(on);
+    setFollowed(on);
   }
 
   // The focused control inside an item (a link, a tool's button) keeps its own keys.
@@ -525,12 +541,12 @@
     // Top and bottom (keypress.go:500-506).
     [["g", "Home"], () => {
       list.scrollToTop();
-      setFollow(false);
+      setFollowed(false);
       const i = items.findIndex(isSelectable);
       select(i);
     }],
     [["G", "End"], () => {
-      setFollow(true);
+      setFollowed(true);
       list.scrollToBottom();
       selectLast();
     }],
@@ -550,8 +566,22 @@
 
   // Ctrl+End: the bottom, following (CHAT-098), from the timeline and the typing box.
   function jumpToEnd() {
-    setFollow(true);
+    setFollowed(true);
     list.scrollToBottom();
+  }
+
+  // For a readOnly timeline's owner (LIVE's helper view, desktop-design-5-6 7.1):
+  // n reading lines or pages (negative: up), and the bottom, following.
+  export function scrollLines(n) {
+    if (shown && list) scrollBy(n * line());
+  }
+
+  export function scrollPages(n) {
+    if (shown && list) scrollBy(n * page());
+  }
+
+  export function scrollEnd() {
+    if (shown && list) jumpToEnd();
   }
 
   // -- The rail's end --
@@ -588,14 +618,16 @@
     measureRail();
 
     const unbind = [];
-    for (const [combos, fn] of TIMELINE_KEYS) for (const combo of combos) unbind.push(bindKey("timeline", combo, chatKey(fn)));
-    for (const scope of ["timeline", "composer"]) unbind.push(bindKey(scope, "Ctrl+End", chatKey(jumpToEnd)));
+    if (!readOnly) {
+      for (const [combos, fn] of TIMELINE_KEYS) for (const combo of combos) unbind.push(bindKey("timeline", combo, chatKey(fn)));
+      for (const scope of ["timeline", "composer"]) unbind.push(bindKey(scope, "Ctrl+End", chatKey(jumpToEnd)));
+    }
     unbind.push(bindKey("global", "Ctrl+C", chatKey(copyTimelineSelection)));
 
     document.addEventListener("selectionchange", onSelectionChange);
     window.addEventListener("mouseup", onMouseUp, true);
     window.addEventListener("mousemove", onMouseMove, true);
-    shownProbe = { light: probeLight, heavy: probeHeavy };
+    if (!readOnly) shownProbe = { light: probeLight, heavy: probeHeavy };
     return () => {
       sizes.disconnect();
       parts.disconnect();
@@ -630,7 +662,7 @@
 
   $effect(() => {
     const target = ui.scrollTo;
-    if (!target || !shown || !list) return;
+    if (readOnly || !target || !shown || !list) return;
     untrack(() => {
       if (target.sessionId === sessionId) reveal(target);
       clearScrollTo();
@@ -641,7 +673,7 @@
     const item =
       items.find((it) => it.messageId === messageId && (it.kind === "reply" || it.kind === "user")) ?? items.find((it) => it.messageId === messageId);
     if (!item) return;
-    setFollow(false);
+    setFollowed(false);
     list.scrollKeyToTop(item.key);
     if (!figureId) return;
     const chip = [...(list.frameOf(item.key)?.querySelectorAll("[data-figure]") ?? [])].find((el) => el.dataset.figure === figureId);
@@ -773,7 +805,7 @@
   }
 </script>
 
-{#if railBottom !== null}
+{#if railBottom !== null && !readOnly}
   <div class="rail" bind:this={rail} style:bottom="{railBottom}px" aria-hidden="true"></div>
 {/if}
 
@@ -782,11 +814,11 @@
     {#key sessionId}
       <VirtualList
         bind:this={list}
-        {items}
-        selectedKey={ui.selectedItem}
-        focusKey={focusOnly ? null : tabKey}
+        items={drawn}
+        selectedKey={readOnly ? null : ui.selectedItem}
+        focusKey={readOnly || focusOnly ? null : tabKey}
         pinnedKeys={pins}
-        follow={ui.follow}
+        {follow}
         {scrollbar}
         onfollow={onFollow}
         onscrolled={onScrolled}

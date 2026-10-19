@@ -616,13 +616,12 @@ func TestSourceChatUntouchedByFork(t *testing.T) {
 	require.Equal(t, "cs1", before.Native)
 	msgs := r.messages(source)
 	branch := r.branch(source, role(t, msgs, message.Assistant, 1))
+	r.calls()
 	r.send(branch, "Third")
+	require.Equal(t, []string{"--resume cs1 --fork-session --resume-session-at u1"}, forkFlags(argv(r.calls())),
+		"the branch's first send forks the source session")
 	r.send(branch, "Fourth")
-	for _, a := range argv(r.calls()) {
-		if strings.Contains(a, "--resume cs1") {
-			require.Contains(t, a, "--fork-session", "the source session is only forked, never resumed")
-		}
-	}
+	require.NotContains(t, strings.Join(argv(r.calls()), "\n"), "--resume cs1", "the source session is only forked, never resumed")
 	require.Equal(t, before, r.model.Links.Get(source, config.TypeClaudeCode))
 	require.Equal(t, roles(msgs), roles(r.messages(source)))
 

@@ -375,6 +375,29 @@ func TestCopyBranchLinksComeAlong(t *testing.T) {
 	require.Error(t, err)
 }
 
+// The copy checks for overlapping links in its own transaction: a link that
+// lands after Branch's other checks still refuses it, and the refused copy
+// writes nothing.
+func TestCopyBranchRefusesOverlapInItsTransaction(t *testing.T) {
+	s := newBranchStore(t)
+	c := s.toolChat(t, "src")
+	first := s.branch(t, c.a2, "the plan", "Plan")
+	path, err := s.q.TreeAncestry(t.Context(), "src", c.a2.ID)
+	require.NoError(t, err)
+
+	_, err = s.q.CopyBranch(t.Context(), db.BranchCopy{
+		Source: "src", MessageIDs: path, NewID: "late", Title: "Late",
+		Origin: db.ChatLink{SourceMessageID: c.a2.ID, HighlightText: "plan", HighlightStart: 12, HighlightEnd: 16},
+	})
+	require.ErrorIs(t, err, db.ErrHighlightOverlapsLink)
+	_, err = s.q.GetSessionByID(t.Context(), "late")
+	require.ErrorIs(t, err, sql.ErrNoRows, "the refused copy made no chat")
+	links, err := s.q.LinksOnMessage(t.Context(), c.a2.ID)
+	require.NoError(t, err)
+	require.Len(t, links, 1)
+	require.Equal(t, first.LinkID, links[0].ID)
+}
+
 func TestDeletingParentMakesBranchTopLevel(t *testing.T) {
 	s := newBranchStore(t)
 	c := s.toolChat(t, "src")

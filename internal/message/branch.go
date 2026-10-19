@@ -37,9 +37,10 @@ type BranchService interface {
 }
 
 var (
-	ErrBadCut                = errors.New("bad cut")
-	ErrCutNotFinished        = errors.New("cut not finished")
-	ErrHighlightOverlapsLink = errors.New("highlight overlaps a link")
+	ErrBadCut         = errors.New("bad cut")
+	ErrCutNotFinished = errors.New("cut not finished")
+	// The copy checks it in its own transaction (db.CopyBranch).
+	ErrHighlightOverlapsLink = db.ErrHighlightOverlapsLink
 )
 
 // BranchOrigins reports whether a chat is a branch. The message service
@@ -69,7 +70,6 @@ func (e branchError) Is(target error) bool { return target == e.kind }
 type branchStorage interface {
 	CopyBranch(context.Context, db.BranchCopy) (map[string]string, error)
 	BranchOrigin(context.Context, string) (db.ChatLink, bool, error)
-	LinksOnMessage(context.Context, string) ([]db.ChatLink, error)
 	ChatLinks(context.Context) ([]db.ChatLink, error)
 	TreeAncestry(context.Context, string, string) ([]string, error)
 	TreeNodes(context.Context, string) ([]db.TreeNode, error)
@@ -109,16 +109,6 @@ func (s *service) Branch(ctx context.Context, req BranchRequest) (BranchResult, 
 	}
 	if m.Role == Assistant && !m.IsFinished() {
 		return BranchResult{}, branchError{ErrCutNotFinished, "this reply is still being written"}
-	}
-	links, err := storage.LinksOnMessage(ctx, m.ID)
-	if err != nil {
-		return BranchResult{}, err
-	}
-	for _, l := range links {
-		// Half-open ranges: [0,5) and [5,9) only touch.
-		if l.HighlightStart < req.HighlightEnd && req.HighlightStart < l.HighlightEnd {
-			return BranchResult{}, ErrHighlightOverlapsLink
-		}
 	}
 	path, err := storage.TreeAncestry(ctx, req.SessionID, m.ID)
 	if err != nil {

@@ -96,6 +96,10 @@ describe("newest read_at wins per kind (SIDE-007, engine design 5.9)", () => {
     expect(limits.limits.byKind["grok-cli"].windows[0].used).toBe(30);
     limits.applyLimits(reading("grok-cli", "2026-10-18T12:44:00.000000003+02:00", 50));
     expect(limits.limits.byKind["grok-cli"].windows[0].used).toBe(50);
+    // 11:44 at +02:00 is 09:44 UTC, older than the stored 10:44 UTC.
+    limits.applyLimits(reading("grok-cli", "2026-10-18T11:44:00+02:00", 60));
+    expect(limits.limits.byKind["grok-cli"].windows[0].used).toBe(50);
+    expect(limits.readTime("2026-10-18T12:44:00-01:30")).toEqual([Date.parse("2026-10-18T14:14:00Z"), 0]);
     expect(limits.readTime("2026-10-18T10:44:00.123456789Z")).toEqual([Date.parse("2026-10-18T10:44:00.123Z"), 456789]);
     expect(limits.readTime("0001-01-01T00:00:00Z")).toBeNull();
     expect(limits.readTime("yesterday")).toBeNull();

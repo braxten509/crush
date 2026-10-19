@@ -442,8 +442,13 @@ describe("deleted, new and first chats (LIST-037, LIST-033, TYPE-041)", () => {
 
   it("a deleted event for an unknown chat does nothing", async () => {
     await withList(chat("s1"));
+    openable("s1", []);
+    await S.openChat("s1");
     await deliver(ev("session", "deleted", { id: "nope" }));
     expect(S.sessions.order).toEqual(["s1"]);
+    expect(S.sessions.currentId).toBe("s1");
+    expect(M.messages.bySession.s1.status).toBe("ready");
+    expect(ui.ui.notice).toBeNull();
   });
 
   it("New chat while busy warns and stays; otherwise the landing state", async () => {

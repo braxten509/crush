@@ -229,9 +229,12 @@ describe("the 5.2 notices (engine-design.md:545-550)", () => {
 });
 
 describe("losing the engine (SIDE-030)", () => {
+  let joinNotices = [];
   beforeEach(async () => {
     await C.start();
+    // Rust's first connected event (resync false) follows the join's answer.
     await deliver(ev("connection", "updated", { state: "connected", attempt: 0, resync: false, fresh_engine: false }));
+    joinNotices = [...h.notices];
     h.notices.length = 0;
   });
 
@@ -257,18 +260,19 @@ describe("losing the engine (SIDE-030)", () => {
 
   it("a chat that was opening is opened again", async () => {
     S.upsertSession({ id: "s1", title: "One", updated_at: 1 });
-    let answer;
+    let fail;
     h.routes.set("GET sessions/s1", { id: "s1", title: "One", updated_at: 1 });
     h.routes.set("GET sessions/s1/history", []);
-    h.routes.set("GET sessions/s1/messages", () => new Promise((resolve) => (answer = resolve)));
+    h.routes.set("GET sessions/s1/messages", () => new Promise((_resolve, reject) => (fail = reject)));
     S.openChat("s1");
     await settle();
     h.routes.set("GET sessions", [{ id: "s1", title: "One", updated_at: 1 }]);
     h.routes.set("GET sessions/s1/messages", []);
     await deliver(ev("connection", "updated", { state: "reconnecting", attempt: 1 }), ev("connection", "updated", { state: "connected", resync: true }));
-    answer([]);
+    fail({ code: "transport", message: "socket closed" }); // the first read died with the old connection
     await settle();
     expect(S.sessions.currentId).toBe("s1");
+    expect(h.calls.filter((c) => c.path === "sessions/s1/messages")).toHaveLength(2);
   });
 
   it("failed: the error notice for a minute with Try again, which asks Rust to reconnect", async () => {
@@ -283,7 +287,8 @@ describe("losing the engine (SIDE-030)", () => {
   });
 
   it("the first connected event shows no notice", async () => {
-    expect(h.notices).toEqual([]);
+    expect(joinNotices).toEqual([]);
+    expect(C.conn.notices).toEqual([]);
   });
 });
 

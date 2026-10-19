@@ -158,9 +158,9 @@ describe("events and reads", () => {
 
   it("LSP rows count diagnostics by severity; a failed count is zeros", async () => {
     h.routes.set("GET lsps", { gopls: { name: "gopls", state: 2 }, ts: { name: "ts", state: 1 } });
-    h.routes.set("GET lsps/gopls/diagnostics", { "file:///a.go": [{ severity: 1 }, { severity: 2 }, { severity: 2 }], "file:///b.go": [{ severity: 4 }, { severity: 3 }] });
+    h.routes.set("GET lsps/gopls/diagnostics", { "file:///a.go": [{ severity: 1 }, { severity: 2 }, { severity: 2 }], "file:///b.go": [{ severity: 4 }, { severity: 3 }, { severity: 3 }, { severity: 3 }] });
     await workspace.loadLsps();
-    expect(workspace.ws.lsps.gopls.diagnostics).toEqual({ error: 1, warning: 2, information: 1, hint: 1 });
+    expect(workspace.ws.lsps.gopls.diagnostics).toEqual({ error: 1, warning: 2, information: 3, hint: 1 });
     expect(workspace.ws.lsps.ts.diagnostics).toEqual({ error: 0, warning: 0, information: 0, hint: 0 });
     expect(workspace.ws.lsps.gopls.state).toBe(2);
   });

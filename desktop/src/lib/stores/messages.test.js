@@ -472,6 +472,8 @@ describe("tree_changed", () => {
     h.routes.set("GET sessions/s1/messages", [msg("m1", { finished: true }), msg("m2", { finished: true, at: 3 })]);
     await deliver(ev("tree_changed", "updated", { session_id: "s2", revision: 4 }));
     expect(chatOf().ids).toEqual(["m1"]);
+    expect(h.calls.filter((c) => c.path === "sessions/s2/messages")).toHaveLength(0); // s2 is known but not shown
+    expect(chatOf("s2")).toBeUndefined();
     await deliver(ev("tree_changed", "updated", { session_id: "s1", revision: 4 }));
     expect(chatOf().ids).toEqual(["m1", "m2"]);
   });

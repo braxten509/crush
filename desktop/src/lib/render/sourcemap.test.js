@@ -177,6 +177,46 @@ describe("rangeToSource", () => {
     expect(cut(tricky, "tail & end")).toBe("tail &amp; end");
   });
 
+  test("raw HTML: comments close where the HTML parser closes them", () => {
+    const range = (stored, word) => {
+      const root = renderMarkdown(stored);
+      expect(root.textContent).toContain(word);
+      return sourceMapOf(root).rangeToSource(rangeOf(root, word));
+    };
+    // "<!-->" and "<!--->" are whole (empty) comments; "--!>" closes one too.
+    for (const stored of ["<div><!-->hello</div>", "<div><!--->hello</div>", "<div><!-- a --!>hello</div>", "<div><!---->hello</div>"]) {
+      const r = range(stored, "hello");
+      expect([r?.start, r?.end], stored).toEqual([stored.indexOf("hello"), stored.indexOf("hello") + 5]);
+    }
+  });
+
+  test("raw HTML: a letter that grows when lowercased does not shift the positions", () => {
+    // "İ" lowercases to two characters; the visible "visible" is the second one.
+    const stored = "<div>İ<script>visible</script>visible</div>";
+    const root = renderMarkdown(stored);
+    const r = sourceMapOf(root).rangeToSource(rangeOf(root, "visible"));
+    expect([r.start, r.end]).toEqual([30, 37]);
+    expect(stored.slice(r.start, r.end)).toBe("visible");
+  });
+
+  test("raw HTML: a hidden element ends only at its own end tag, in any case", () => {
+    // "</scripts>" is still script text; "</Script>" ends it.
+    const stored = "<div><SCRIPT>a</scripts>visible</Script>visible</div>";
+    const root = renderMarkdown(stored);
+    expect(root.textContent.trim()).toBe("visible");
+    const r = sourceMapOf(root).rangeToSource(rangeOf(root, "visible"));
+    expect([r?.start, r?.end]).toEqual([40, 47]);
+  });
+
+  test('raw HTML: a "</" at the very end is text', () => {
+    // The HTML parser shows a "</" that the input ends on as the two characters.
+    const stored = "<div>a</";
+    const root = renderMarkdown(stored);
+    expect(root.textContent).toContain("a</");
+    const r = sourceMapOf(root).rangeToSource(rangeOf(root, "a</"));
+    expect([r?.start, r?.end]).toEqual([5, 8]);
+  });
+
   test("atoms: a task box, inline math and a chip come whole", () => {
     const stored = "- [x] done $a^2$ now\n\n| t | u |\n|---|---|\n| 1 | 2 |";
     const root = renderMarkdown(stored);

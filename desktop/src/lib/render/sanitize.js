@@ -52,18 +52,22 @@ export function stripTags(html) {
 // builder lines stripTags' text up with these, so a selection of an HTML
 // block's words maps to those words and never into a tag.
 export function htmlTextUnits(html) {
+  // Every search runs on raw itself: a lowercased copy can be longer ("İ" is
+  // two characters lowercased), and its positions would not be raw's.
   const raw = String(html);
-  const lower = raw.toLowerCase();
   const units = [];
   let k = 0;
   while (k < raw.length) {
     if (raw[k] === "<") {
       const end = markupEnd(raw, k);
       if (end > k) {
-        const name = /^<([a-z][a-z0-9-]*)/.exec(lower.slice(k, k + 40))?.[1];
+        const name = /^<([A-Za-z][A-Za-z0-9-]*)/.exec(raw.slice(k, k + 40))?.[1].toLowerCase();
         k = end;
         if (name && SKIP_CONTENT.includes(name)) {
-          const close = name === "plaintext" ? -1 : lower.indexOf(`</${name}`, k);
+          // The parser's end tag: "</name" in any case, then a space, "/" or ">".
+          const closeTag = new RegExp(`</${name}(?=[\\t\\n\\f\\r />])`, "gi");
+          closeTag.lastIndex = k;
+          const close = name === "plaintext" ? -1 : (closeTag.exec(raw)?.index ?? -1);
           k = close < 0 ? raw.length : markupEnd(raw, close);
         }
         continue;
@@ -87,12 +91,20 @@ export function htmlTextUnits(html) {
 // is text (the HTML tokenizer's rule: a tag needs a letter after "<" or "</").
 function markupEnd(raw, k) {
   if (raw.startsWith("<!--", k)) {
-    const close = raw.indexOf("-->", k + 4);
-    return close < 0 ? raw.length : close + 3;
+    // The HTML parser's comment rules: "<!-->" and "<!--->" are whole (empty)
+    // comments; any other comment ends at the first "-->" or "--!>", or at the end.
+    if (raw.startsWith(">", k + 4)) return k + 5;
+    if (raw.startsWith("->", k + 4)) return k + 6;
+    const close = /--!?>/g;
+    close.lastIndex = k + 4;
+    const found = close.exec(raw);
+    return found ? found.index + found[0].length : raw.length;
   }
   const next = raw[k + 1] ?? "";
   const tag = /[A-Za-z]/.test(next) || (next === "/" && /[A-Za-z]/.test(raw[k + 2] ?? ""));
   if (!tag && next !== "!" && next !== "?" && next !== "/") return k;
+  // A "</" that the input ends on is text too.
+  if (next === "/" && k + 2 === raw.length) return k;
   // To the first ">" outside a quoted attribute value.
   let quote = null;
   let afterEquals = false;

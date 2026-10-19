@@ -21,3 +21,9 @@ export function focusSearch() {
 export function searchFocused() {
   return Boolean(field) && document.activeElement === field;
 }
+
+// The words in the search ("" when the list is not drawn): closing the shown
+// chat opens the next chat the filtered list shows (closed.svelte.js).
+export function searchQuery() {
+  return field?.isConnected ? field.value : "";
+}

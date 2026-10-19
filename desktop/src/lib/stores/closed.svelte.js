@@ -117,23 +117,25 @@ export function isClosed(sessionId) {
   return closed.ids.has(sessionId);
 }
 
-// The chats the list shows, top to bottom, without the search.
-export function listedChats() {
+// The chats the list shows, top to bottom; with the search's words, the
+// matches the search shows.
+export function listedChats(query = "") {
   return buildRows(
     sessions.order.map((id) => sessions.byId[id]),
-    { parentOf, isClosed, selectedId: sessions.currentId },
+    { parentOf, isClosed, selectedId: sessions.currentId, query },
   ).rows.map((row) => row.id);
 }
 
 // The list's ×: closes the chat; the shown chat makes way for the first chat
-// still listed, or the landing state when none is left (D15), busy or not
-// (newChat would refuse a busy chat; its reply carries on unseen).
-export async function closeChat(sessionId) {
+// the list still shows (with the search's words, the first match left), or
+// the landing state when none is left (D15), busy or not (newChat would
+// refuse a busy chat; its reply carries on unseen).
+export async function closeChat(sessionId, { query = "" } = {}) {
   if (!sessionId) return false;
   const wasShown = sessions.currentId === sessionId;
   const done = await close(sessionId);
   if (!done || !wasShown || sessions.currentId !== sessionId) return done;
-  const next = listedChats().find((id) => id !== sessionId);
+  const next = listedChats(query).find((id) => id !== sessionId);
   if (next) await openChat(next);
   else showLanding();
   return true;

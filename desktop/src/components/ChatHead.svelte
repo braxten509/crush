@@ -1,7 +1,7 @@
 <script>
   // The middle column's head (desktop-design 2.1). On a chat: its title and
   // the path line, the project's folder and Git branch in the built path
-  // style; on a branch, "BRANCHED FROM <parent title>" with the parent's
+  // style; on a branch, "Branched from <parent title>" with the parent's
   // title as a link that opens it, reopening it first when it is closed (4.8,
   // 3.3; demo core.js:101). While a chat opens: that chat's title. On the
   // start screens (landing, init, onboarding): the CRUSH AI wordmark with
@@ -40,7 +40,7 @@
   $effect(() => {
     shown.head = brand
       ? { wordmark: hyper ? "HYPERCRUSH AI" : "CRUSH AI", charm: start.version ? `Charm™ · v${start.version}` : "Charm™" }
-      : { title, path: parent ? `BRANCHED FROM ${parent.title}` : path, parent: parent?.id ?? "" };
+      : { title, path: parent ? `Branched from ${parent.title}` : path, parent: parent?.id ?? "" };
     return () => {
       shown.head = null;
     };

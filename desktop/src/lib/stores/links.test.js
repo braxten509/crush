@@ -252,6 +252,20 @@ describe("closing (3.3, 4.8)", () => {
     expect(S.sessions.currentId).toBe("");
   });
 
+  it("with words in the search, closing the shown chat opens the next chat the search shows, else the landing state", async () => {
+    const list = [chat("s1", { title: "Login flow", updated_at: 5 }), chat("s2", { title: "Billing", updated_at: 4 }), chat("s3", { title: "Login page", updated_at: 3 })];
+    await withList(...list);
+    for (const s of list) {
+      openable(s.id);
+      h.routes.set(`GET sessions/${s.id}`, s);
+    }
+    await S.openChat("s1");
+    await C.closeChat("s1", { query: "login" });
+    expect(S.sessions.currentId).toBe("s3"); // s2 is first in the whole list, but the search hides it
+    await C.closeChat("s3", { query: "login" });
+    expect(S.sessions.currentId).toBe("");
+  });
+
   it("closing the last listed chat while its reply runs still leaves the landing state, with no busy notice", async () => {
     await withList(chat("s1"));
     openable("s1");

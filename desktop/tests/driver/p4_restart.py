@@ -5,8 +5,9 @@ and nesting are the same after quitting the app and starting it again.
          a five-turn chat S, opened from its row
   B11    in the real window: a branch B from the medium reply's words, a branch
          D of B, a sibling C from the short reply's words, then C closed with its
-         ×; with D open, the list (ids, titles, depths), the closed set, the
-         footer and the links are noted. The window is closed the way its close
+         × while open (the window opens the list's first chat, S); with D open,
+         the list (ids, titles, depths), the closed set, the footer and the
+         links are noted. The window is closed the way its close
          button closes it (WM_DELETE_WINDOW; the hidden screen has no window
          manager) and the app exits. It starts again with -s D: the list, the
          closed set, the footer and the links equal the noted ones, and S still
@@ -83,7 +84,7 @@ def list_rows(app, rows, names, titles):
         if not name:
             continue
         if r.get("close_shown") and r.get("close_glyph"):
-            out.append({"id": f"close-{name}", "label": f"{name}: the × slot", "rect": px_box(app, r["close"]), "source": "src/components/list/ChatRow.svelte:241",
+            out.append({"id": f"close-{name}", "label": f"{name}: the × slot", "rect": px_box(app, r["close"]), "source": "src/components/list/ChatRow.svelte:248",
                         "elements": [{"id": f"x-{name}", "kind": "icon", "label": "×", "rect": px_box(app, r["close_glyph"], LOOK_ICON), "column": "right-icons", "column_anchor": "center"}]})
         elements = []
         if r.get("chevron"):
@@ -93,7 +94,7 @@ def list_rows(app, rows, names, titles):
             elements.append({"id": f"title-{name}", "kind": "text", "text_kind": "variable", "label": "Title", "text": titles.get(r["id"], ""), "rect": px_box(app, title, LOOK_TEXT)})
         if r.get("time"):
             elements.append({"id": f"time-{name}", "kind": "text", "text_kind": "variable", "label": "Time", "text": "time", "rect": px_box(app, r["time"], LOOK_TEXT)})
-        out.append({"id": f"row-{name}", "label": f"{name}'s row", "rect": px_box(app, r["row"]), "source": "src/components/list/ChatRow.svelte:91", "elements": elements})
+        out.append({"id": f"row-{name}", "label": f"{name}'s row", "rect": px_box(app, r["row"]), "source": "src/components/list/ChatRow.svelte:92", "elements": elements})
     return out
 
 
@@ -245,6 +246,8 @@ def main():
             app.click_rect(row["close"])
             ok, _, _ = pb.poll(lambda: app.branch().get("closed") or [], lambda ids: C in ids, 5)
             check(ok, "C is closed with its ×")
+            ok, _, _ = pb.poll(app.chat_id, lambda c: c == S, 5)
+            check(ok, f"the open C makes way for the list's first chat, S ({app.chat_id()!r})")
             # D's row shows once B is open (the open chat's line is expanded).
             check(app.open_chat(B) and app.open_chat(D), "D is open, so S and B are expanded")
             app.park()

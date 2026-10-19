@@ -123,7 +123,7 @@
   probeSection(
     "list",
     () => ({
-      rows: built.rows.map((r) => ({ id: r.id, title: r.title, depth: r.depth, selected: r.selected, closed: r.closed, state: r.state, state_kind: r.stateKind, time: r.time, agent: r.agent })),
+      rows: built.rows.map((r) => ({ id: r.id, title: r.title, depth: r.depth, selected: r.selected, state: r.state, state_kind: r.stateKind, time: r.time, agent: r.agent })),
       closed_count: built.closedCount,
       search_hint: searchHint,
       search_focused: searchFocused(),

@@ -38,9 +38,11 @@ over its socket. Each step is named after its row and saves <ROW>.png.
          chevron's rects move by at most 1 real px, the × shows in the
          reserved slot only when hovered or selected; a click on the hovered
          row's chevron opens B and does not close it; the selected row is as
-         tall as the plain one; its × hides B, B's branch moves up to depth 1,
-         the footer says "1 closed · links reopen them", the window opens S,
-         and the settings file holds the closing
+         tall as the plain one; with "the" in the search (it hides S, the
+         list's first chat) its × opens the first chat the search still
+         shows; it hides B, B's branch moves up to depth 1, the footer says
+         "1 closed · links reopen them", and the settings file holds the
+         closing
   B10    clicking the link in S opens B and lists it again
   B15    the engine's tree switch moves S's head off the linked reply: the
          link goes; switching back shows it again
@@ -859,8 +861,9 @@ def main():
                 raise RuntimeError("B's row has no chevron")
             app.click(chev["x"] + chev["w"] / 2, chev["y"] + chev["h"] / 2)
             ok, _, _ = poll(app.chat_id, lambda c: c == B, 5)
-            row_b = app.row(B)
-            check(ok and bool(row_b) and not row_b.get("closed"), f"a click on the hovered row's chevron selects the row (B opens) and does not close it ({app.chat_id()}, {row_b})")
+            closed_now = app.branch().get("closed") or []
+            check(ok and bool(app.row(B)) and B not in closed_now,
+                  f"a click on the hovered row's chevron selects the row (B opens) and does not close it ({app.chat_id()}, listed {bool(app.row(B))}, closed {closed_now})")
             time.sleep(0.4)
             selected_hover = row_of(app.heavy(), B)
             app.park()
@@ -880,15 +883,26 @@ def main():
                 check(dx <= 1.0 and dy <= 1.5, f"the × sits in the reserved slot: on the chevron's column ({dx:.2f} px) and the title's first line ({dy:.2f} px)")
             check((selected or {}).get("close_label") == f"Close {s['B_title']}", f"the × is a button named Close <title> ({(selected or {}).get('close_label')!r})")
             shot(out_dir, "B9-selected")
-            app.click_rect(selected["close"])
-            ok, rows, _ = poll(app.rows, lambda rs: not any(r.get("id") == B for r in rs), 5)
-            check(ok, "its × hides B")
+            # With words in the search, the × opens the first chat the search
+            # still shows: "the" shows B and hides S, the whole list's first.
+            app.focus()
+            key("ctrl+k")
+            type_text("the")
+            ok, listed, _ = poll(lambda: app.section("list"), lambda l: l.get("query") == "the" and any(r.get("id") == B for r in l.get("rows") or []), 5)
+            ids = [r.get("id") for r in listed.get("rows") or []]
+            want = next((x for x in ids if x != B), "")
+            check(ok and S not in ids, f"\"the\" in the search shows B and hides S ({ids})")
+            app.click_rect((row_of(app.heavy(), B) or {}).get("close"))
+            ok, _, _ = poll(app.chat_id, lambda c: c == want, 5)
+            check(ok, f"its × opens the first chat the search still shows, {want or 'the landing state'}, not S ({app.chat_id()!r})")
+            key("ctrl+k")
+            key("Escape")
+            ok, rows, _ = poll(app.rows, lambda rs: any(r.get("id") == S for r in rs) and not any(r.get("id") == B for r in rs), 5)
+            check(ok, "its × hides B (the search cleared again)")
             depth = {r.get("id"): r.get("depth") for r in rows}
             check(depth.get(D) == 1, f"B's branch moves up to depth 1, under S ({depth.get(D)})")
             ok, footer, _ = poll(lambda: (app.heavy().get("branch") or {}).get("footer"), lambda f: bool(f) and f.get("text") == "1 closed · links reopen them", 5)
             check(ok, f"the footer says \"1 closed · links reopen them\" ({(footer or {}).get('text')!r})")
-            ok, _, _ = poll(app.chat_id, lambda c: c == S, 5)
-            check(ok, f"the window opens the first chat still listed, S ({app.chat_id()})")
             closed_sets = settings_closed()
             check(any(B in ids for ids in closed_sets.values()), f"the settings file holds the closing ({ {k: len(v) for k, v in closed_sets.items()} })")
         if stop_after("B9"):

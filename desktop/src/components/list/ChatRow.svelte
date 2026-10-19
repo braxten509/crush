@@ -15,13 +15,14 @@
   import Icon from "../Icon.svelte";
   import { closeChat } from "../../lib/stores/closed.svelte.js";
   import { openChat } from "../../lib/stores/sessions.svelte.js";
+  import { searchQuery } from "./listfocus.js";
 
   let { row } = $props();
   let rowButton = $state(null);
 
   function close(event) {
     event.stopPropagation();
-    closeChat(row.id).catch((error) => console.error("closing a chat failed", error));
+    closeChat(row.id, { query: searchQuery() }).catch((error) => console.error("closing a chat failed", error));
   }
 
   // ↑ and ↓ on the × move from its row, as from the row itself (the list's keys).

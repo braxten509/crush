@@ -9,6 +9,7 @@
 // its typing box, the caret at the end; a refused branch shows a notice and
 // leaves the selection as it was.
 import { tick } from "svelte";
+import { searchQuery } from "../../components/list/listfocus.js";
 import { registerAction } from "../actions.js";
 import { HINTS, branchErrorText, branchTitle, canBranch, cutOfRange, quoteDraft } from "../branch.js";
 import { registerDecorationHandler, registerDecorationSource } from "../decorations.js";
@@ -160,7 +161,7 @@ registerAction({
   id: "chat.close",
   title: "Close Chat",
   enabled: () => Boolean(closeTarget()),
-  run: () => closeChat(closeTarget()),
+  run: () => closeChat(closeTarget(), { query: searchQuery() }),
 });
 
 // -- The probe (1.9) --

@@ -86,6 +86,35 @@ func TestThemeFile_SaveThroughSymlinkedFolder(t *testing.T) {
 	require.True(t, os.IsNotExist(err), "nothing is written beside the folder link")
 }
 
+// TestThemeFile_SaveFollowsSymlinkBeforeDotDot: a link whose text is
+// alias/../real.json, with alias a symlink to another folder, names
+// real.json beside that folder's parent, as the system resolves it: the
+// symlink is followed before the "..". The file beside the link is left
+// alone.
+func TestThemeFile_SaveFollowsSymlinkBeforeDotDot(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	a, b := filepath.Join(root, "a"), filepath.Join(root, "b")
+	require.NoError(t, os.MkdirAll(a, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(b, "deep"), 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(b, "deep"), filepath.Join(a, "alias")))
+	require.NoError(t, os.Symlink("alias/../real.json", filepath.Join(a, "mine.json")))
+	const sentinel = "sentinel: must stay unchanged\n"
+	require.NoError(t, os.WriteFile(filepath.Join(a, "real.json"), []byte(sentinel), 0o644))
+
+	require.NoError(t, SaveThemeFile(filepath.Join(a, "mine.json"), &ThemeFile{Base: "gruvbox-dark"}))
+
+	kept, err := os.ReadFile(filepath.Join(a, "real.json"))
+	require.NoError(t, err)
+	require.Equal(t, sentinel, string(kept), "the file beside the link is untouched")
+	loaded, err := LoadThemeFile(filepath.Join(b, "real.json"))
+	require.NoError(t, err, "the save landed where the system resolves the link")
+	require.Equal(t, "gruvbox-dark", loaded.Base)
+	info, err := os.Lstat(filepath.Join(a, "mine.json"))
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink, "the link is still a link")
+}
+
 func TestThemeFile_LoadInvalidJSON(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

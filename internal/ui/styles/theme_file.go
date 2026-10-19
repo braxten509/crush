@@ -124,10 +124,22 @@ func writeThemeFileAtomic(path string, data []byte) error {
 const maxSymlinks = 40
 
 // symlinkTarget follows path's symlinks to the file they finally name,
-// whether or not that file exists yet; a path that is no symlink is
-// returned as it is.
+// whether or not that file exists yet, in the order the system does. Each
+// step resolves the folder part of the path as written (not cleaned, so a
+// symlink is followed before a ".." after it) with filepath.EvalSymlinks,
+// which walks it component by component, and then looks at the last name
+// alone. A relative link continues from the real folder its link sits in.
 func symlinkTarget(path string) (string, error) {
 	for range maxSymlinks {
+		dir, name := ".", path
+		if i := strings.LastIndexByte(path, filepath.Separator); i >= 0 {
+			dir, name = path[:i+1], path[i+1:]
+		}
+		realDir, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(realDir, name)
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
 			return path, nil
@@ -143,13 +155,7 @@ func symlinkTarget(path string) (string, error) {
 			return "", err
 		}
 		if !filepath.IsAbs(link) {
-			// A relative link is read from the folder the link really
-			// sits in, which may be reached through a symlinked folder.
-			dir, err := filepath.EvalSymlinks(filepath.Dir(path))
-			if err != nil {
-				return "", err
-			}
-			link = filepath.Join(dir, link)
+			link = realDir + string(filepath.Separator) + link
 		}
 		path = link
 	}

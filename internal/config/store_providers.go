@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"charm.land/catwalk/pkg/catwalk"
 	hyperp "github.com/charmbracelet/crush/internal/agent/hyper"
@@ -40,11 +41,14 @@ func (s *ConfigStore) RefetchHyperProvider(ctx context.Context) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	// Replace or insert the Hyper entry in knownProviders.
+	// Replace or insert the Hyper entry in knownProviders, in a new list:
+	// a list KnownProviders handed out never changes under its reader.
 	found := false
 	for i, p := range s.knownProviders {
 		if string(p.ID) == string(hyperProvider.ID) {
-			s.knownProviders[i] = hyperProvider
+			list := slices.Clone(s.knownProviders)
+			list[i] = hyperProvider
+			s.knownProviders = list
 			found = true
 			break
 		}
@@ -210,7 +214,7 @@ func (s *ConfigStore) setProviderCredential(providerID string, apply func(*Provi
 	providerConfig, exists := cfg.Providers.Get(providerID)
 	if !exists {
 		var foundProvider *catwalk.Provider
-		for _, p := range s.knownProviders {
+		for _, p := range s.KnownProviders() {
 			if string(p.ID) == providerID {
 				foundProvider = &p
 				break

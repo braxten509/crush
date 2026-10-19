@@ -30,11 +30,13 @@ var (
 	providerErr  error
 )
 
-// catalogSnapshot returns the current model catalog.
+// catalogSnapshot returns a copy of the current model catalog, detached
+// from providerList, so a caller that keeps or changes it (a store's
+// known providers) never touches the shared list.
 func catalogSnapshot() []catwalk.Provider {
 	providerMu.RLock()
 	defer providerMu.RUnlock()
-	return providerList
+	return slices.Clone(providerList)
 }
 
 // file to cache provider data. It resolves through GlobalConfigData so the

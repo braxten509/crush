@@ -165,6 +165,18 @@ function inkRect(el) {
   return r.width ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
 }
 
+// One text node's letters (without its outer white space), or its first
+// letter alone: the look checks' text run and reference glyph.
+function lettersRect(node, firstOnly = false) {
+  const at = node?.data.search(/\S/) ?? -1;
+  if (at < 0) return null;
+  const range = document.createRange();
+  range.setStart(node, at);
+  range.setEnd(node, firstOnly ? at + 1 : node.data.trimEnd().length);
+  const r = range.getBoundingClientRect();
+  return r.width ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+}
+
 // The drawn links: one entry per decoration, with all its spans' rects.
 function shownLinks() {
   const out = new Map();
@@ -197,7 +209,9 @@ probeSection(
   }),
   () => {
     const nav = document.querySelector("nav.chats");
-    const head = document.querySelector("header.head .path");
+    const header = document.querySelector("header.head");
+    const head = header?.querySelector(".path");
+    const words = head?.firstChild?.nodeType === Node.TEXT_NODE ? head.firstChild : null;
     const footer = nav?.querySelector(".footer");
     return {
       shown: shownLinks(),
@@ -216,8 +230,20 @@ probeSection(
           close_label: close?.getAttribute("aria-label") ?? "",
         };
       }),
-      footer: footer ? { text: footer.textContent.trim(), rect: rectOf(footer) } : null,
-      head: head ? { text: head.textContent.trim(), rect: rectOf(head), link: rectOf(head.querySelector(".parent")) } : null,
+      // ink, day: the footer's letters and the day label's, which share a left edge.
+      footer: footer ? { text: footer.textContent.trim(), rect: rectOf(footer), ink: inkRect(footer), day: inkRect(nav.querySelector(".day")) } : null,
+      // words, glyph: "Branched from" and its first letter; link_text: the parent's title.
+      head: head
+        ? {
+            text: head.textContent.trim(),
+            rect: rectOf(head),
+            title: rectOf(header.querySelector(".title")),
+            link: rectOf(head.querySelector(".parent")),
+            link_text: inkRect(head.querySelector(".parent")),
+            words: lettersRect(words),
+            glyph: lettersRect(words, true),
+          }
+        : null,
     };
   },
 );

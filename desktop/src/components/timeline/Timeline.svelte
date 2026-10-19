@@ -47,6 +47,7 @@
   } from "../../lib/selection.js";
   import { composer, focusField, interruptAndSend, stop } from "../../lib/stores/composer.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
+  import { linksFor } from "../../lib/stores/links.svelte.js";
   import { isFinished, messages, pendingFor } from "../../lib/stores/messages.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { busy, sessions } from "../../lib/stores/sessions.svelte.js";
@@ -101,7 +102,7 @@
         callMarks: prompts.callStatus,
         providers: ws.providers,
         thoughtLine: thoughtLineEnabled(ws.config),
-        hasKey: null, // phase 4: items holding a branch link get a key
+        hasKey: (mid) => linksFor(mid).length > 0, // phase 4: items holding a branch link get a key
         now: Date.now(),
       },
       stateFor(sessionId),

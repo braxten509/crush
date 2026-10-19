@@ -9,24 +9,38 @@
   // Placed by UserItem and PendingItem.
   import { untrack } from "svelte";
   import Chip from "../render/Chip.svelte";
+  import { decorationHandler, decorationsFor } from "../../lib/decorations.js";
   import { safeHref } from "../../lib/render/links.js";
+  import { sourceMapOf } from "../../lib/render/sourcemap.js";
   import { userTextInto } from "../../lib/render/usertext.js";
 
-  let { text, chips = [] } = $props();
+  let { text, chips = [], messageId = "" } = $props();
 
   let body;
 
   $effect(() => {
     const stored = text;
-    untrack(() => userTextInto(body, stored));
+    const decorations = messageId ? decorationsFor(messageId) : [];
+    untrack(() => userTextInto(body, stored, { decorations }));
   });
+
+  // A click on a decoration (a branch link) goes to its kind's handler; a
+  // click that ends a selection does not.
+  function onclick(event) {
+    const span = event.target.closest?.(".md-deco");
+    if (!span || !body?.contains(span)) return;
+    if (body.ownerDocument.getSelection?.()?.isCollapsed === false) return;
+    const decoration = sourceMapOf(body)?.decorations[Number(span.dataset.deco)];
+    if (decoration) decorationHandler(decoration.kind)?.(decoration, event);
+  }
 
   // A picture the page cannot show (a web address): its chip opens the browser.
   const webLink = (chip) => (chip.kind === "picture" && !chip.viewable && /^https?:/i.test(chip.src ?? "") ? safeHref(chip.src) : null);
 </script>
 
 <div class="box">
-  <div class="text" bind:this={body}></div>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="text" bind:this={body} {onclick}></div>
   {#if chips.length > 0}
     <div class="chips">
       {#each chips as chip, i (i)}

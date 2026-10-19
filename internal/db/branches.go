@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -30,12 +31,18 @@ type BranchCopy struct {
 	Origin     ChatLink // filled except ID, SessionID and CreatedAt
 }
 
+// ErrHighlightOverlapsLink refuses a branch whose highlight overlaps a link
+// already on its message.
+var ErrHighlightOverlapsLink = errors.New("highlight overlaps a link")
+
 // CopyBranch copies MessageIDs into a new top-level chat in one transaction,
 // with the extras listed below, and inserts the origin link. It returns the
 // map from old to new message IDs.
 //
 // The extras are the ones every copy brings (copyMessages and
 // copyChatExtras). The source chat's rows, head and revision are only read.
+// The overlap check runs in the same transaction, so two branches cut over
+// the same words at once cannot both land.
 func (q *Queries) CopyBranch(ctx context.Context, c BranchCopy) (map[string]string, error) {
 	conn, ok := q.db.(*sql.DB)
 	if !ok {
@@ -59,6 +66,15 @@ func (q *Queries) CopyBranch(ctx context.Context, c BranchCopy) (map[string]stri
 	}
 	if owned != len(c.MessageIDs) {
 		return nil, fmt.Errorf("the cut holds messages of another chat")
+	}
+	// Half-open ranges: [0,5) and [5,9) only touch.
+	var overlaps int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM chat_branches WHERE source_message_id=? AND highlight_start<? AND ?<highlight_end`,
+		c.Origin.SourceMessageID, c.Origin.HighlightEnd, c.Origin.HighlightStart).Scan(&overlaps); err != nil {
+		return nil, err
+	}
+	if overlaps > 0 {
+		return nil, ErrHighlightOverlapsLink
 	}
 	if _, err := New(tx).CreateSession(ctx, CreateSessionParams{ID: c.NewID, Title: c.Title}); err != nil {
 		return nil, err

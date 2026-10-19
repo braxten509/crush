@@ -10,6 +10,7 @@
   import { buildRows } from "../lib/listmodel.js";
   import { probeSection } from "../lib/probe.js";
   import { isClosed } from "../lib/stores/closed.svelte.js";
+  import { parentOf } from "../lib/stores/links.svelte.js";
   import { focusField } from "../lib/stores/composer.svelte.js";
   import { busy, sessions } from "../lib/stores/sessions.svelte.js";
   import { setFocus } from "../lib/stores/ui.svelte.js";
@@ -58,6 +59,7 @@
     buildRows(
       sessions.order.map((id) => sessions.byId[id]),
       {
+        parentOf,
         isClosed,
         selectedId: sessions.currentId,
         busy,
@@ -121,7 +123,7 @@
   probeSection(
     "list",
     () => ({
-      rows: built.rows.map((r) => ({ id: r.id, title: r.title, depth: r.depth, selected: r.selected, closed: r.closed, state: r.state, state_kind: r.stateKind, time: r.time, agent: r.agent })),
+      rows: built.rows.map((r) => ({ id: r.id, title: r.title, depth: r.depth, selected: r.selected, state: r.state, state_kind: r.stateKind, time: r.time, agent: r.agent })),
       closed_count: built.closedCount,
       search_hint: searchHint,
       search_focused: searchFocused(),

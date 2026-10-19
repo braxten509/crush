@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -222,6 +223,90 @@ func TestVerifyKey(t *testing.T) {
 	pc, _ := mustWorkspace(t, g).Cfg.Config().Providers.Get("fake")
 	require.Equal(t, "test-key", pc.APIKey, "a checked key is not saved")
 	require.NotContains(t, logs.String(), "g56-key", "no key in the logs")
+}
+
+// secretFlow is a sign-in whose provider answers hold a secret: its start
+// fails, its token exchange fails, or its pasted code is refused, each
+// with the secret in the error.
+type secretFlow struct {
+	startErr, waitErr, codeErr error
+}
+
+func (f *secretFlow) Start(context.Context) (string, string, error) {
+	return "https://login.test/browser", "", f.startErr
+}
+
+func (f *secretFlow) Wait(ctx context.Context) (*oauth.Token, error) {
+	if f.waitErr != nil {
+		return nil, f.waitErr
+	}
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (f *secretFlow) Close()          {}
+func (f *secretFlow) TakesCode() bool { return f.codeErr != nil }
+func (f *secretFlow) CompleteWithCode(context.Context, string) (*oauth.Token, error) {
+	return nil, f.codeErr
+}
+
+// TestAuthFlowErrorsHideSecrets: what a provider answers on a failed
+// sign-in (a token exchange's body, a start error, a refused code) and a
+// pasted code reach no event, log line or answer; the apps get fixed
+// texts (G-5).
+func TestAuthFlowErrorsHideSecrets(t *testing.T) {
+	g := newG56Workspace(t)
+	logs := captureLogs(t, g)
+	u := newUnixCaller(t, g)
+	events := g.h.subscribeLiveSSE(t, g.ws.ID, g.app)
+	g.h.waitForAttachedOn(t, mustWorkspace(t, g), 1)
+
+	const marker = "G56-SECRET-MARKER"
+	var next *secretFlow
+	t.Cleanup(backend.SetAuthForTest(func(string) (login.Flow, error) { return next, nil }, nil))
+	var answers strings.Builder
+	call := func(path string, body any) (int, []byte) {
+		code, out := u.call(t, http.MethodPost, g.path(path), body)
+		answers.Write(out)
+		return code, out
+	}
+	failed := func(flowID string) string {
+		t.Helper()
+		for {
+			ev, ok := nextLive[proto.AuthFlowEvent](t, events, pubsub.PayloadTypeAuthFlow, 10*time.Second)
+			require.True(t, ok)
+			require.NotContains(t, ev.Payload.Error, marker)
+			if ev.Payload.FlowID == flowID && ev.Payload.State == proto.AuthFlowFailed {
+				return ev.Payload.Error
+			}
+		}
+	}
+
+	next = &secretFlow{startErr: errors.New("start refused: " + marker)}
+	code, out := call("/auth/flows", proto.AuthFlowRequest{Platform: "hyper"})
+	require.Equal(t, http.StatusBadGateway, code, "%s", out)
+	require.Contains(t, string(out), "failed to initiate device auth")
+
+	next = &secretFlow{waitErr: &oauth.TokenExchangeError{StatusCode: 400, Body: `{"error":"` + marker + `"}`}}
+	code, out = call("/auth/flows", proto.AuthFlowRequest{Platform: "copilot"})
+	require.Equal(t, http.StatusOK, code, "%s", out)
+	var flow proto.AuthFlow
+	require.NoError(t, json.Unmarshal(out, &flow))
+	require.Equal(t, "token exchange failed", failed(flow.FlowID))
+
+	next = &secretFlow{codeErr: errors.New("code refused: " + marker)}
+	code, out = call("/auth/flows", proto.AuthFlowRequest{Platform: "grok"})
+	require.Equal(t, http.StatusOK, code, "%s", out)
+	require.NoError(t, json.Unmarshal(out, &flow))
+	require.True(t, flow.CodeEntry)
+	code, out = call("/auth/flows/"+flow.FlowID+"/code", map[string]any{"code": 7, "note": marker})
+	require.Equal(t, http.StatusBadRequest, code, "a malformed body: %s", out)
+	code, out = call("/auth/flows/"+flow.FlowID+"/code", proto.AuthCodeRequest{Code: marker})
+	require.Equal(t, http.StatusOK, code, "%s", out)
+	require.Equal(t, "the code was not accepted", failed(flow.FlowID))
+
+	require.NotContains(t, answers.String(), marker, "no answer holds the secret")
+	require.NotContains(t, logs.String(), marker, "no log line holds the secret")
 }
 
 // TestAuthRoutesRefuseTCP: on a TCP listener every sign-in route answers

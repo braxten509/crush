@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/login"
 	"github.com/charmbracelet/crush/internal/oauth"
+	"github.com/charmbracelet/crush/internal/oauth/copilot"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/google/uuid"
@@ -28,6 +29,10 @@ var (
 	ErrAuthPlatform = errors.New("unknown platform")
 	// ErrAuthNoCode is a code sent to a flow that takes none.
 	ErrAuthNoCode = errors.New("this sign-in takes no code")
+	// ErrAuthStart is a sign-in that could not start.
+	ErrAuthStart = errors.New("sign-in start")
+	// ErrAuthFlowSaving is a cancel that came after the token was taken.
+	ErrAuthFlowSaving = errors.New("the sign-in is already saving")
 	// ErrAuthProvider is a provider the key check does not know.
 	ErrAuthProvider = errors.New("provider not found")
 )
@@ -71,6 +76,30 @@ type authFlow struct {
 	// tokens takes a token from a pasted code.
 	tokens chan *oauth.Token
 	once   sync.Once
+
+	// mu guards state: one claim decides whether the flow saves, fails or
+	// is cancelled, so a cancelled flow never saves.
+	mu    sync.Mutex
+	state authFlowState
+}
+
+type authFlowState int
+
+const (
+	authFlowRunning authFlowState = iota
+	authFlowSavingState
+	authFlowOver
+)
+
+// claim moves a running flow to next and reports whether it did.
+func (a *authFlow) claim(next authFlowState) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.state != authFlowRunning {
+		return false
+	}
+	a.state = next
+	return true
 }
 
 // authFlows are the engine's running sign-ins.
@@ -83,7 +112,8 @@ func (b *Backend) authFlows() *authFlows { return &b.desktopEngine().auth }
 
 // StartAuthFlow starts platform's sign-in for the workspace and returns
 // the URL and code to show. The flow then runs on its own and reports
-// through auth_flow events until it is done, failed or cancelled.
+// through auth_flow events until it is done, failed or cancelled; it ends
+// with the workspace at the latest.
 func (b *Backend) StartAuthFlow(workspaceID, platform string) (proto.AuthFlow, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
@@ -98,7 +128,11 @@ func (b *Backend) StartAuthFlow(workspaceID, platform string) (proto.AuthFlow, e
 	if err != nil {
 		return proto.AuthFlow{}, fmt.Errorf("%w: %s", ErrAuthPlatform, platform)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), authFlowTimeout)
+	parent := ws.ctx
+	if parent == nil {
+		parent = b.ctx
+	}
+	ctx, cancel := context.WithTimeout(parent, authFlowTimeout)
 	start := time.Now()
 	url, userCode, err := f.Start(ctx)
 	if platform == login.PlatformHyper {
@@ -109,7 +143,8 @@ func (b *Backend) StartAuthFlow(workspaceID, platform string) (proto.AuthFlow, e
 	if err != nil {
 		cancel()
 		f.Close()
-		return proto.AuthFlow{}, err
+		// The provider's answer is not passed on: it may hold secrets.
+		return proto.AuthFlow{}, authStartError(platform)
 	}
 	a := &authFlow{
 		id: uuid.NewString(), workspaceID: ws.ID, platform: platform,
@@ -129,7 +164,7 @@ func (b *Backend) StartAuthFlow(workspaceID, platform string) (proto.AuthFlow, e
 // runAuthFlow waits for the user, then saves the token.
 func (b *Backend) runAuthFlow(a *authFlow) {
 	defer b.endAuthFlow(a)
-	b.sendAuthFlow(a, proto.AuthFlowWaiting, nil)
+	b.sendAuthFlow(a, proto.AuthFlowWaiting, "")
 	waited := make(chan error, 1)
 	go func() {
 		token, err := a.flow.Wait(a.ctx)
@@ -146,25 +181,35 @@ func (b *Backend) runAuthFlow(a *authFlow) {
 	case token = <-a.tokens:
 	case err := <-waited:
 		if err != nil {
-			if errors.Is(a.ctx.Err(), context.Canceled) {
-				return // cancelled: nobody waits for it.
-			}
-			b.sendAuthFlow(a, proto.AuthFlowFailed, err)
+			b.failAuthFlow(a, authWaitError(a.ctx, err))
 			return
 		}
 		token = <-a.tokens
 	case <-a.ctx.Done():
-		if errors.Is(a.ctx.Err(), context.DeadlineExceeded) {
-			b.sendAuthFlow(a, proto.AuthFlowFailed, a.ctx.Err())
-		}
+		b.failAuthFlow(a, authWaitError(a.ctx, a.ctx.Err()))
 		return
 	}
-	b.sendAuthFlow(a, proto.AuthFlowSaving, nil)
+	// A flow cancelled meanwhile never saves, even with a token at hand.
+	if !a.claim(authFlowSavingState) {
+		return
+	}
+	b.sendAuthFlow(a, proto.AuthFlowSaving, "")
 	if err := b.SetProviderAPIKey(a.workspaceID, config.ScopeGlobal, login.ProviderID(a.platform), token); err != nil {
-		b.sendAuthFlow(a, proto.AuthFlowFailed, fmt.Errorf("failed to save API key: %w", err))
+		b.sendAuthFlow(a, proto.AuthFlowFailed, "failed to save API key")
 		return
 	}
-	b.sendAuthFlow(a, proto.AuthFlowDone, nil)
+	b.sendAuthFlow(a, proto.AuthFlowDone, "")
+}
+
+// failAuthFlow reports a running flow as failed with a safe text. A flow
+// already cancelled or saving reports nothing more.
+func (b *Backend) failAuthFlow(a *authFlow, text string) {
+	if !a.claim(authFlowOver) {
+		return
+	}
+	if text != "" {
+		b.sendAuthFlow(a, proto.AuthFlowFailed, text)
+	}
 }
 
 // SendAuthCode finishes a flow with a code pasted from the provider's
@@ -181,7 +226,7 @@ func (b *Backend) SendAuthCode(flowID, code string) error {
 		token, err := login.CompleteWithCode(a.ctx, a.flow, code)
 		if err != nil {
 			if a.ctx.Err() == nil {
-				b.sendAuthFlow(a, proto.AuthFlowFailed, err)
+				b.failAuthFlow(a, "the code was not accepted")
 				b.endAuthFlow(a)
 			}
 			return
@@ -195,14 +240,53 @@ func (b *Backend) SendAuthCode(flowID, code string) error {
 }
 
 // CancelAuthFlow stops a flow. No event follows: whoever cancelled it
-// closed its sheet.
+// closed its sheet. A flow already saving its token can't be cancelled.
 func (b *Backend) CancelAuthFlow(flowID string) error {
 	a, ok := b.authFlow(flowID)
 	if !ok {
 		return ErrAuthFlowNotFound
 	}
+	if !a.claim(authFlowOver) {
+		a.mu.Lock()
+		saving := a.state == authFlowSavingState
+		a.mu.Unlock()
+		if saving {
+			return ErrAuthFlowSaving
+		}
+		return ErrAuthFlowNotFound
+	}
 	b.endAuthFlow(a)
 	return nil
+}
+
+// authStartError is the terminal's text for a sign-in that could not
+// start (internal/ui/dialog/auth/oauth_hyper.go, oauth_grok.go), without
+// the provider's answer.
+func authStartError(platform string) error {
+	text := "failed to initiate device auth"
+	if platform == login.PlatformOpenAI || platform == login.PlatformGrok {
+		text = "failed to start browser auth"
+	}
+	return kindErr(ErrAuthStart, errors.New(text))
+}
+
+// authWaitError is a safe text for a sign-in that ended without a token:
+// provider answers (a token exchange's body) are never passed on. A
+// cancelled flow gets "".
+func authWaitError(ctx context.Context, err error) string {
+	var exchange *oauth.TokenExchangeError
+	switch {
+	case errors.Is(ctx.Err(), context.Canceled):
+		return ""
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return "authentication timed out"
+	case errors.Is(err, copilot.ErrNotAvailable):
+		return "GitHub Copilot is unavailable for this account"
+	case errors.As(err, &exchange):
+		return "token exchange failed"
+	default:
+		return "authentication failed"
+	}
 }
 
 // VerifyAPIKey tests key against the provider as the terminal's API key
@@ -258,15 +342,13 @@ func (b *Backend) endAuthFlow(a *authFlow) {
 	})
 }
 
-// sendAuthFlow reports a flow's state to the apps of its workspace.
-func (b *Backend) sendAuthFlow(a *authFlow, state string, err error) {
+// sendAuthFlow reports a flow's state to the apps of its workspace. text
+// is one of the fixed texts above, never a provider's answer.
+func (b *Backend) sendAuthFlow(a *authFlow, state, text string) {
 	ws, getErr := b.GetWorkspace(a.workspaceID)
 	if getErr != nil || ws.App == nil {
 		return
 	}
-	ev := proto.AuthFlowEvent{FlowID: a.id, State: state}
-	if err != nil {
-		ev.Error = err.Error()
-	}
+	ev := proto.AuthFlowEvent{FlowID: a.id, State: state, Error: text}
 	ws.SendEvent(pubsub.Event[proto.AuthFlowEvent]{Type: pubsub.UpdatedEvent, Payload: ev})
 }

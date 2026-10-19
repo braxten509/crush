@@ -97,28 +97,29 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 				"unix socket; nothing of it is logged.").
 			Tags("auth").
 			PathParam("id", "Workspace ID").
-			Fails(400, 403, 404, 500).
+			Fails(400, 403, 404, 500, 502).
 			Handle(c.localOnly(serve(c, rpc.StartAuthFlow, c.startAuthFlow))),
 
 		apigen.For(rpc.SendAuthCode).
 			Summary("Finish a sign-in with a code").
 			Description("Sends the code pasted from the provider's page (Grok's browser flow). The "+
 				"outcome arrives as auth_flow; a wrong code fails the flow. Answers only on the "+
-				"engine's unix socket.").
+				"engine's unix socket; nothing of the body is logged.").
 			Tags("auth").
 			PathParam("id", "Workspace ID").
 			PathParam("flow_id", "Sign-in flow ID").
 			Fails(400, 403, 404).
-			Handle(c.localOnly(serve(c, rpc.SendAuthCode, c.sendAuthCode))),
+			Handle(c.localOnly(c.handleSendAuthCode)),
 
 		apigen.For(rpc.CancelAuthFlow).
 			Summary("Cancel a sign-in").
-			Description("Stops a running sign-in; no event follows. Answers only on the engine's "+
-				"unix socket.").
+			Description("Stops a running sign-in; no event follows and nothing is saved. A flow "+
+				"already saving its token answers 409 auth_flow_saving. Answers only on the "+
+				"engine's unix socket.").
 			Tags("auth").
 			PathParam("id", "Workspace ID").
 			PathParam("flow_id", "Sign-in flow ID").
-			Fails(403, 404).
+			Fails(403, 404, 409).
 			Handle(c.localOnly(serve(c, rpc.CancelAuthFlow, c.cancelAuthFlow))),
 
 		apigen.For(rpc.VerifyKey).
@@ -226,6 +227,8 @@ func desktopErrors() []apiError {
 		{Match: is(backend.ErrSkillsSearch), Status: http.StatusBadGateway, Code: "search_failed"},
 		{Match: is(backend.ErrHyperCredits), Status: http.StatusBadGateway, Code: "credits_failed"},
 		{Match: is(backend.ErrAuthFlowNotFound), Status: http.StatusNotFound, Code: "auth_flow_not_found"},
+		{Match: is(backend.ErrAuthFlowSaving), Status: http.StatusConflict, Code: "auth_flow_saving"},
+		{Match: is(backend.ErrAuthStart), Status: http.StatusBadGateway, Code: "auth_failed"},
 		{Match: is(backend.ErrAuthPlatform), Status: http.StatusBadRequest, Code: "bad_request"},
 		{Match: is(backend.ErrAuthNoCode), Status: http.StatusBadRequest, Code: "bad_request"},
 		{Match: is(backend.ErrAuthProvider), Status: http.StatusNotFound, Code: "provider_not_found"},

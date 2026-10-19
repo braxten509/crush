@@ -35,12 +35,28 @@ func (c *controllerV1) startAuthFlow(r *http.Request, req proto.AuthFlowRequest)
 	return c.backend.StartAuthFlow(r.PathValue("id"), req.Platform)
 }
 
-// sendAuthCode finishes a sign-in with a pasted code.
-func (c *controllerV1) sendAuthCode(r *http.Request, req proto.AuthCodeRequest) (rpc.Empty, error) {
-	if req.Code == "" {
-		return rpc.Empty{}, badRequest("code is required")
+// authCodeMaxBody caps a pasted code's body.
+const authCodeMaxBody = 16 << 10
+
+// handleSendAuthCode finishes a sign-in with a pasted code. It decodes the
+// body itself so that nothing of it, not even a decode error, is logged.
+func (c *controllerV1) handleSendAuthCode(w http.ResponseWriter, r *http.Request) {
+	var req proto.AuthCodeRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, authCodeMaxBody)).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "could not read the code")
+		return
 	}
-	return rpc.Empty{}, c.backend.SendAuthCode(r.PathValue("flow_id"), req.Code)
+	if req.Code == "" {
+		jsonError(w, http.StatusBadRequest, "code is required")
+		return
+	}
+	err := c.backend.SendAuthCode(r.PathValue("flow_id"), req.Code)
+	req.Code = ""
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	w.WriteHeader(rpc.SendAuthCode.SuccessStatus())
 }
 
 // cancelAuthFlow stops a sign-in.

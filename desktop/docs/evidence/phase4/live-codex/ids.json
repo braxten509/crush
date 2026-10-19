@@ -1,0 +1,85 @@
+{
+ "tool": "codex",
+ "marker_kind": "turn id",
+ "version": "codex-cli 0.163.0",
+ "model": "gpt-6.1-sol",
+ "source": "01a15355-42f9-7921-9928-9b4e7e5d2b27",
+ "alpha_marker": "01a15355-4369-7722-a00f-b10c7e11c843",
+ "beta_marker": "01a15355-53b4-79b0-999e-cc04c6d148aa",
+ "step2": {
+  "alpha": {
+   "t_start": 0.495,
+   "native": "01a15355-42f9-7921-9928-9b4e7e5d2b27",
+   "marker": "01a15355-4369-7722-a00f-b10c7e11c843",
+   "text": "ALPHA",
+   "status": "completed",
+   "t_end": 4.781
+  },
+  "beta": {
+   "t_start": 4.781,
+   "native": "01a15355-42f9-7921-9928-9b4e7e5d2b27",
+   "marker": "01a15355-53b4-79b0-999e-cc04c6d148aa",
+   "text": "BETA",
+   "status": "completed",
+   "t_end": 8.147
+  },
+  "same_session": true
+ },
+ "fork_call": "thread/fork {\"threadId\": \"<source thread>\", \"lastTurnId\": \"<cut turn id>\"}",
+ "step3": {
+  "t_start": 0.0,
+  "t_fork": 0.754,
+  "native": "01a15355-6353-7982-96b8-41718d5cf2b7",
+  "fork_turns_copied": 1,
+  "fork_call": "thread/fork {\"threadId\": \"<source thread>\", \"lastTurnId\": \"<cut turn id>\"}",
+  "marker": "01a15355-63ec-7e53-8442-3f7c7e5e91c7",
+  "text": "ALPHA",
+  "status": "completed",
+  "t_end": 4.881
+ },
+ "step4": {
+  "t_start": 0.0,
+  "native": "01a15355-42f9-7921-9928-9b4e7e5d2b27",
+  "marker": "01a15355-7690-79b0-aebd-7481fde11c50",
+  "text": "ALPHA and BETA.",
+  "status": "completed",
+  "t_end": 4.45
+ },
+ "step5": {
+  "source": {
+   "t_start": 0.0,
+   "native": "01a15355-42f9-7921-9928-9b4e7e5d2b27",
+   "marker": "01a15355-87ff-7b52-8203-331a7857cbb9",
+   "text": "1 \u2014 One is the first positive integer.\n2 \u2014 Two is the only even prime number.\n3 \u2014 Three sides form a triangle.\n4 \u2014 Four sides form a square.\n5 \u2014 Five fingers make up a typical hand.\n6 \u2014 Six faces cover a cube.\n7 \u2014 Seven days make a week.\n8 \u2014 Eight legs belong to a spider.\n9 \u2014 Nine is three squared.\n10 \u2014 Ten years make a decade.\n11 \u2014 Eleven is a prime number.\n12 \u2014 Twelve items make a dozen.\n13 \u2014 Thirteen comes just after twelve.\n14 \u2014 Fourteen days make two weeks.\n15 \u2014 Fifteen minutes make a quarter hour.\n16 \u2014 Sixteen is four squared.\n17 \u2014 Seventeen is a prime number.\n18 \u2014 Eighteen is twice nine.\n19 \u2014 Nineteen comes just before twenty.\n20 \u2014 Twenty years make two decades.",
+   "status": "completed",
+   "t_end": 8.207
+  },
+  "branch": {
+   "t_start": 3.891,
+   "t_fork": 4.549,
+   "native": "01a15355-96fb-76f2-a2c0-677f888b3bda",
+   "fork_turns_copied": 1,
+   "fork_call": "thread/fork {\"threadId\": \"<source thread>\", \"lastTurnId\": \"<cut turn id>\"}",
+   "marker": "01a15355-9772-7740-a080-6565e1d8d2fa",
+   "text": "ALPHA",
+   "status": "completed",
+   "t_end": 8.514
+  },
+  "branch_started_at": 3.891,
+  "branch_forked_at": 4.549,
+  "source_ended_at": 8.207,
+  "count_prompt": "Count slowly from 1 to 20, one number per line. After each number, add one short sentence about it."
+ },
+ "verdicts": {
+  "1": "pass",
+  "2": "pass",
+  "3": "pass",
+  "4": "pass",
+  "5": "pass",
+  "5_detail": {
+   "source_counted_to_20": true,
+   "branch_alpha_only": true,
+   "fork_made_while_source_streaming": true
+  }
+ }
+}

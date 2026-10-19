@@ -1,0 +1,22 @@
+Deliberate break of the step-3 judge (P4.3 test budget: one deliberate break).
+
+The live-claude evidence was copied to /var/tmp/crush-desktop-live/break/ and the
+branch's saved step-3 answer in 03-fork.jsonl was replaced with
+"I said ALPHA and then BETA." The real evidence and code were left as they are.
+
+$ python3 desktop/tests/live/fork_live.py --judge-only /var/tmp/crush-desktop-live/break
+{
+ "1": "pass",
+ "2": "pass",
+ "3": "fail",
+ "4": "pass",
+ "5": "pass",
+ "5_detail": {
+  "source_counted_to_20": true,
+  "branch_alpha_only": true,
+  "fork_made_while_source_streaming": true
+ }
+}
+(exit code 1)
+
+The same judge on the real desktop/docs/evidence/phase4/live-claude gives "3": "pass".

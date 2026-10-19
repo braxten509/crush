@@ -1,0 +1,38 @@
+{
+ "tool": "agy",
+ "marker_kind": "step_index of the finished agent_response step",
+ "version": "1.4.2",
+ "model": "gemini-3.8-flash-low",
+ "source": "583806b6-732a-4416-a299-70b4f80406fc",
+ "alpha_marker": 1,
+ "beta_marker": 4,
+ "step2": {
+  "alpha": {
+   "native": "583806b6-732a-4416-a299-70b4f80406fc",
+   "text": "ALPHA\n",
+   "markers": [
+    1
+   ],
+   "t_start": 0.001,
+   "status": "SUCCESS",
+   "t_end": 9.067,
+   "marker": 1
+  },
+  "beta": {
+   "native": "583806b6-732a-4416-a299-70b4f80406fc",
+   "text": "BETA\n",
+   "markers": [
+    4
+   ],
+   "t_start": 9.331,
+   "status": "SUCCESS",
+   "t_end": 14.82,
+   "marker": 4
+  },
+  "same_session": true
+ },
+ "verdicts": {
+  "1": "pass",
+  "2": "pass"
+ }
+}

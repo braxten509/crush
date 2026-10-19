@@ -1,0 +1,88 @@
+{
+ "tool": "opencode",
+ "marker_kind": "OpenCode message id (agent_message_chunk messageId)",
+ "version": "1.19.3",
+ "model": "opencode-go/deepseek-v4.1-flash",
+ "source": "ses_eaca51922ffeuRK5zfGBvaRpbN",
+ "alpha_marker": null,
+ "beta_marker": null,
+ "step2": {
+  "alpha": {
+   "native": "ses_eaca51922ffeuRK5zfGBvaRpbN",
+   "text": "",
+   "message_ids": [],
+   "result": null,
+   "error": {
+    "code": -32603,
+    "message": "Internal error: This API key has expired. Create a new API key in OpenCode Console and replace it in your client or secret store. Signing in again will not renew this key.",
+    "data": {
+     "service": "session",
+     "errorName": "APIError"
+    }
+   },
+   "t_start": 4.911,
+   "t_end": 6.249,
+   "prompt_index": 1,
+   "marker": null
+  },
+  "beta": {
+   "native": "ses_eaca51922ffeuRK5zfGBvaRpbN",
+   "text": "",
+   "message_ids": [],
+   "result": null,
+   "error": {
+    "code": -32603,
+    "message": "Internal error: This API key has expired. Create a new API key in OpenCode Console and replace it in your client or secret store. Signing in again will not renew this key.",
+    "data": {
+     "service": "session",
+     "errorName": "APIError"
+    }
+   },
+   "t_start": 6.249,
+   "t_end": 6.923,
+   "prompt_index": 2,
+   "marker": null
+  },
+  "same_session": true
+ },
+ "fork_probe_no_model": {
+  "source_messages": [
+   [
+    "msg_1535ae6f9001pNmteTJG4GoXSK",
+    "user"
+   ],
+   [
+    "msg_1535ae707001EOx0td0pviDS7M",
+    "assistant"
+   ],
+   [
+    "msg_1535aec2f0018cwreGpC7vKIkg",
+    "user"
+   ],
+   [
+    "msg_1535aec36001YVbsO8qr1Q3ZD9",
+    "assistant"
+   ]
+  ],
+  "http_fork_at": "msg_1535aec2f0018cwreGpC7vKIkg",
+  "http_fork_kept": [
+   [
+    "msg_1535af317001QgsyBAfHr7WAyn",
+    "user"
+   ],
+   [
+    "msg_1535af31a001qi0Nd95KtRgnBQ",
+    "assistant"
+   ]
+  ],
+  "http_fork_kept_only_before_cut": true,
+  "acp_fork_session": "ses_eaca4d221ffex5AfOeZhBuuHxt"
+ },
+ "verdicts": {
+  "1": "pass",
+  "2": "fail",
+  "3": "missing",
+  "4": "missing",
+  "5": "missing"
+ }
+}

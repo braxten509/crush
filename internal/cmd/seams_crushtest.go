@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/cliupdate"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/login"
 	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/oauth"
@@ -74,7 +75,9 @@ type testSeams struct {
 	Limits map[string]json.RawMessage `json:"limits"`
 	// Auth answers the key checks ("ok" or the error) by provider and runs
 	// each platform's sign-in: its URL and code, then after after_ms the
-	// result, "ok" or the error (G-24).
+	// result, "ok" or the error. With code set, the sign-in takes a pasted
+	// code (code_entry) and finishes when that code is sent; after_ms 0
+	// then waits for it. Saving a sign-in fetches no model catalog (G-24).
 	Auth *struct {
 		VerifyKey map[string]string `json:"verify_key"`
 		Flows     map[string]struct {
@@ -82,6 +85,7 @@ type testSeams struct {
 			UserCode string `json:"user_code"`
 			Result   string `json:"result"`
 			AfterMS  int    `json:"after_ms"`
+			Code     string `json:"code"`
 		} `json:"flows"`
 	} `json:"auth"`
 	// SkillsSearch are the skills.sh results by query; other queries find
@@ -187,13 +191,18 @@ func loadTestSeams(path string) (restore func(), err error) {
 
 	if a := seams.Auth; a != nil {
 		flows, verify := a.Flows, a.VerifyKey
+		restores = append(restores, config.SkipLoginCatalogsForTest())
 		restores = append(restores, backend.SetAuthForTest(
 			func(platform string) (login.Flow, error) {
 				f, ok := flows[platform]
 				if !ok {
 					return nil, fmt.Errorf("no seam sign-in for %s", platform)
 				}
-				return &seamFlow{url: f.URL, userCode: f.UserCode, result: f.Result, after: time.Duration(f.AfterMS) * time.Millisecond}, nil
+				flow := &seamFlow{url: f.URL, userCode: f.UserCode, result: f.Result, after: time.Duration(f.AfterMS) * time.Millisecond}
+				if f.Code != "" {
+					return &seamCodeFlow{seamFlow: flow, code: f.Code}, nil
+				}
+				return flow, nil
 			},
 			func(providerID, _ string) error {
 				result, ok := verify[providerID]
@@ -257,10 +266,39 @@ func (f *seamFlow) Wait(ctx context.Context) (*oauth.Token, error) {
 	if f.result != "ok" {
 		return nil, errors.New(f.result)
 	}
-	return &oauth.Token{
-		AccessToken: "crushtest-access", RefreshToken: "crushtest-refresh",
-		ExpiresIn: 3600, ExpiresAt: time.Now().Add(time.Hour).Unix(),
-	}, nil
+	return seamToken(), nil
 }
 
 func (f *seamFlow) Close() {}
+
+// seamCodeFlow is a seamFlow that also finishes with its pasted code; with
+// no after_ms it waits for the code alone.
+type seamCodeFlow struct {
+	*seamFlow
+	code string
+}
+
+func (f *seamCodeFlow) Wait(ctx context.Context) (*oauth.Token, error) {
+	if f.after == 0 {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return f.seamFlow.Wait(ctx)
+}
+
+func (f *seamCodeFlow) TakesCode() bool { return true }
+
+func (f *seamCodeFlow) CompleteWithCode(_ context.Context, input string) (*oauth.Token, error) {
+	if input != f.code {
+		return nil, errors.New("the code was not accepted")
+	}
+	return seamToken(), nil
+}
+
+// seamToken is the stand-in sign-in's token.
+func seamToken() *oauth.Token {
+	return &oauth.Token{
+		AccessToken: "crushtest-access", RefreshToken: "crushtest-refresh",
+		ExpiresIn: 3600, ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}
+}

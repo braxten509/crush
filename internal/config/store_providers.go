@@ -238,6 +238,9 @@ func (s *ConfigStore) setProviderCredential(providerID string, apply func(*Provi
 // refreshCatalogsAfterAuth fetches the model catalogs a new credential
 // unlocks, so the latest models are available without restarting.
 func (s *ConfigStore) refreshCatalogsAfterAuth(scope Scope, providerID string, isToken bool) {
+	if loginCatalogsSkipped.Load() {
+		return
+	}
 	// After authenticating with Hyper, re-fetch the provider catalog.
 	if providerID == "hyper" {
 		if refetchErr := s.RefetchHyperProvider(context.Background()); refetchErr != nil {

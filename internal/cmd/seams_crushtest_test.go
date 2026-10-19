@@ -78,14 +78,33 @@ func seamWorkspace(t *testing.T, b *backend.Backend) *backend.Workspace {
 // TestSeamMemory: the memory seam makes the engine report the given
 // memory state (G-21).
 func TestSeamMemory(t *testing.T) {
-	useSeams(t, `{"memory":{"percent":93,"top":[{"name":"firefox","bytes":3221225472},{"name":"crush","bytes":1073741824}],"total_ram_bytes":17179869184}}`)
-	st := newSeamBackend(t).MemoryStatus()
-	require.Equal(t, 93, st.Percent)
-	require.True(t, st.High)
-	require.Equal(t, uint64(17179869184), st.TotalRAMBytes)
-	require.Equal(t, []proto.MemoryProgram{{Name: "firefox", Bytes: 3221225472}, {Name: "crush", Bytes: 1073741824}}, st.Top)
-	require.Equal(t, uint64(17179869184), memwatch.TotalRAM())
+	if os.Getenv(seamStartChildEnv) == "1" {
+		// The child: crush starts as it always does, and reads the seams
+		// file CRUSH_TEST_SEAMS names on the way.
+		os.Args = []string{"crush", "--version"}
+		Execute()
+		st := newSeamBackend(t).MemoryStatus()
+		require.Equal(t, 93, st.Percent)
+		require.True(t, st.High)
+		require.Equal(t, uint64(17179869184), st.TotalRAMBytes)
+		require.Equal(t, []proto.MemoryProgram{{Name: "firefox", Bytes: 3221225472}, {Name: "crush", Bytes: 1073741824}}, st.Top)
+		require.Equal(t, uint64(17179869184), memwatch.TotalRAM())
+		return
+	}
+	path := filepath.Join(t.TempDir(), "seams.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"memory":{"percent":93,"top":[{"name":"firefox","bytes":3221225472},{"name":"crush","bytes":1073741824}],"total_ram_bytes":17179869184}}`), 0o600))
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSeamMemory$", "-test.v")
+	cmd.Env = append(os.Environ(), seamStartChildEnv+"=1", testSeamsEnv+"="+path, "HOME="+t.TempDir())
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	require.Contains(t, string(out), "--- PASS: TestSeamMemory")
 }
+
+// seamStartChildEnv runs TestSeamMemory's check in a child process that
+// starts crush through Execute, the real startup path.
+const seamStartChildEnv = "CRUSH_G56_SEAM_START_CHILD"
 
 // TestSeamUpdates: the cli_updates and crush_release seams answer the
 // update checks and installs with no CLI run and no network (G-22).
@@ -199,6 +218,39 @@ func TestSeamAuth(t *testing.T) {
 	saved, err := os.ReadFile(ws.Cfg.GlobalDataPath())
 	require.NoError(t, err)
 	require.Contains(t, string(saved), "crushtest-refresh", "saved in the global data config, as crush login saves it")
+}
+
+// TestSeamAuthGrokCode: a Grok sign-in from the auth seam takes a pasted
+// code; the right one finishes it and the token is saved (G-24).
+func TestSeamAuthGrokCode(t *testing.T) {
+	useSeams(t, `{"auth":{"flows":{"grok":{"url":"https://accounts.x.ai/oauth","result":"ok","code":"G56-CODE"}}}}`)
+	b := newSeamBackend(t)
+	ws := seamWorkspace(t, b)
+
+	flow, err := b.StartAuthFlow(ws.ID, "grok")
+	require.NoError(t, err)
+	require.True(t, flow.CodeEntry)
+	require.NoError(t, b.SendAuthCode(flow.FlowID, "G56-CODE"))
+	require.Eventually(t, func() bool {
+		pc, found := ws.Cfg.Config().Providers.Get("xai")
+		return found && pc.OAuthToken != nil && pc.OAuthToken.AccessToken == "crushtest-access"
+	}, 10*time.Second, 20*time.Millisecond, "the pasted code finished the sign-in")
+}
+
+// TestSeamAuthCancel: a cancelled sign-in saves nothing, even when its
+// token arrives right after (G-5, through the auth seam).
+func TestSeamAuthCancel(t *testing.T) {
+	useSeams(t, `{"auth":{"flows":{"copilot":{"url":"https://github.com/login/device","user_code":"ABCD-1234","result":"ok","after_ms":200}}}}`)
+	b := newSeamBackend(t)
+	ws := seamWorkspace(t, b)
+
+	flow, err := b.StartAuthFlow(ws.ID, "copilot")
+	require.NoError(t, err)
+	require.NoError(t, b.CancelAuthFlow(flow.FlowID))
+	require.ErrorIs(t, b.CancelAuthFlow(flow.FlowID), backend.ErrAuthFlowNotFound, "the flow is gone")
+	time.Sleep(600 * time.Millisecond)
+	pc, found := ws.Cfg.Config().Providers.Get("copilot")
+	require.False(t, found && pc.OAuthToken != nil, "a cancelled sign-in saves nothing")
 }
 
 // TestSeamSkillsSearch: the skills_search seam answers skills.sh searches

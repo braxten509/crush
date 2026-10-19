@@ -29,11 +29,15 @@ func TestCPUAffinityRoute(t *testing.T) {
 	t.Cleanup(func() { _, _ = cpuaffinity.Apply(cpuaffinity.FormatList(allowed)) })
 
 	g := newG56Workspace(t)
+	u := newUnixCaller(t, g)
 	store := mustWorkspace(t, g).Cfg
 	agentCPUs := cpuaffinity.FormatList(allowed[:1])
 	require.NoError(t, store.SetConfigField(config.ScopeGlobal, "options.agent_cpus", agentCPUs))
 
-	on := liveJSON[proto.CPUAffinity](t, g.h, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true}, http.StatusOK)
+	liveError(t, g.h, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true}, http.StatusForbidden, "local_only", "")
+	require.False(t, store.Config().Options.AgentCPUsEnabled, "a TCP request changes nothing")
+
+	on := unixJSON[proto.CPUAffinity](t, u, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true}, http.StatusOK)
 	require.Equal(t, agentCPUs, on.CPUs)
 	require.True(t, store.Config().Options.AgentCPUsEnabled, "the setting is saved")
 	var now unix.CPUSet
@@ -41,7 +45,7 @@ func TestCPUAffinityRoute(t *testing.T) {
 	require.Equal(t, 1, now.Count(), "the engine runs on the agent CPUs only")
 	require.True(t, now.IsSet(allowed[0]))
 
-	off := liveJSON[proto.CPUAffinity](t, g.h, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: false}, http.StatusOK)
+	off := unixJSON[proto.CPUAffinity](t, u, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: false}, http.StatusOK)
 	require.Empty(t, off.CPUs)
 	require.False(t, store.Config().Options.AgentCPUsEnabled)
 	require.NoError(t, unix.SchedGetaffinity(0, &now))
@@ -50,5 +54,7 @@ func TestCPUAffinityRoute(t *testing.T) {
 	}
 
 	require.NoError(t, store.SetConfigField(config.ScopeGlobal, "options.agent_cpus", "100000"))
-	liveError(t, g.h, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true}, http.StatusBadRequest, "bad_request", "")
+	code, out := u.call(t, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true})
+	require.Equal(t, http.StatusBadRequest, code, "%s", out)
+	require.Contains(t, string(out), `"code":"bad_request"`)
 }

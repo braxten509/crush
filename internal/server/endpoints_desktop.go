@@ -77,15 +77,15 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Fails(502).
 			Build(),
 
-		route(c, rpc.SetCPUAffinity, c.setCPUAffinity).
+		apigen.For(rpc.SetCPUAffinity).
 			Summary("Turn the agent CPUs on or off").
 			Description("Saves options.agent_cpus_enabled and moves the engine and everything it "+
 				"started onto options.agent_cpus, or back onto every CPU, as the terminal's toggle "+
 				"does. cpus is the list applied, \"\" when off. A failed move answers 400 with the "+
-				"terminal's text. Linux only.").
+				"terminal's text. Linux only. Answers only on the engine's unix socket.").
 			Tags("system").
-			Fails(400, 404, 500).
-			Build(),
+			Fails(400, 403, 404, 500).
+			Handle(c.localOnly(serve(c, rpc.SetCPUAffinity, c.setCPUAffinity))),
 
 		apigen.For(rpc.StartAuthFlow).
 			Summary("Start a sign-in").

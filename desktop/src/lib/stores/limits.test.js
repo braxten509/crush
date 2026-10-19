@@ -187,9 +187,9 @@ describe("polled like the terminal (SIDE-007; polling.go:15, cliagent/limits.go:
     await showing(iso("10:44:00"));
     limits.applyLimits(reading("claude-code", iso("10:50:00"))); // the answer
     limits.startLimitsPoll({ idle: () => true });
-    await minutes(2); // 10:52
+    await minutes(2.5); // 10:52:30
     limits.applyLimits(reading("claude-code", iso("10:52:30"))); // a turn reports its own
-    await minutes(3); // 10:55: asked 5 min ago, but read 2.5 min ago
+    await minutes(2.5); // 10:55: asked 5 min ago, but read 2.5 min ago
     expect(refreshes()).toEqual([ASK]);
     await minutes(1); // 10:56: read 3.5 min ago
     expect(refreshes()).toEqual([ASK, ASK]);

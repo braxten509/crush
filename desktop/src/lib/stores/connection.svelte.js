@@ -5,10 +5,10 @@
 import { app_info, engine_open, engine_retry } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { probeSection } from "../probe.js";
-import { loadLimits } from "./limits.svelte.js";
+import { loadLimits, startLimitsPoll, stopLimitsPoll } from "./limits.svelte.js";
 import "./messages.svelte.js";
 import "./prompts.svelte.js";
-import { loadSessions, openLaunchChat, sessions } from "./sessions.svelte.js";
+import { busy, loadSessions, openLaunchChat, sessions } from "./sessions.svelte.js";
 import { notify } from "./ui.svelte.js";
 import { startWorkspace } from "./workspace.svelte.js";
 
@@ -94,6 +94,14 @@ function quietly(promise, what) {
   return Promise.resolve(promise).catch((error) => console.error(`${what} read failed`, error));
 }
 
+// The limits poll (SIDE-007) runs while connected and asks only while the
+// shown chat is idle, as the terminal's isAgentBusy (internal/ui/model/
+// send.go:23-31) is about the current session.
+function pollLimits() {
+  if (conn.state === "connected") startLimitsPoll({ idle: () => !busy(sessions.currentId) });
+  else stopLimitsPoll();
+}
+
 // START-007: the stores load in parallel and each may fail alone. The chat
 // list comes first for -s and -C (START-006).
 function seed() {
@@ -103,7 +111,7 @@ function seed() {
       "chat list",
     ),
     quietly(loadLimits(), "limits"),
-    startWorkspace({ currentChat: () => sessions.currentId }),
+    startWorkspace({ currentChat: () => sessions.currentId, connected: () => conn.state === "connected" }),
   ]);
 }
 
@@ -130,6 +138,7 @@ async function join() {
   }
   applyOpen(opened);
   joinedOnce = true;
+  pollLimits();
   await seed();
   return true;
 }
@@ -191,6 +200,7 @@ onEvent("connection", (_kind, ev) => {
     conn.freshEngine = ev.fresh_engine === true;
     joinedOnce = true;
   }
+  pollLimits();
   if (ev.state === "reconnecting") {
     note("warn", "Lost connection to the Crush server — reconnecting…", 30_000);
   } else if (ev.state === "failed" && joinedOnce) {

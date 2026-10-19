@@ -194,6 +194,40 @@ describe("events and reads", () => {
     expect(workspace.ws.mcps.github.tool_count).toBe(3);
   });
 
+  it("a resync holds file, skills and config events until its reads land, so the newer state wins", async () => {
+    h.routes.set("GET sessions/s1/history", []);
+    await workspace.startWorkspace({ currentChat: () => "s1" });
+    await workspace.loadFiles("s1");
+    const wait = () => {
+      let resolve;
+      const promise = new Promise((yes) => (resolve = yes));
+      return { promise, resolve };
+    };
+    const history = wait();
+    const skills = wait();
+    const config = wait();
+    h.routes.set("GET sessions/s1/history", () => history.promise);
+    h.routes.set("GET skills", () => skills.promise);
+    h.routes.set("GET config", () => config.promise);
+    await deliver({ kind: "resync" });
+    // Meanwhile a file is saved, a skill is added and the model changes.
+    h.routes.set("GET skills", [{ name: "new-skill" }]);
+    h.routes.set("GET config", { models: { large: { provider: "codex-cli", model: "gpt-6-sol" } } });
+    await deliver(
+      ev("file", "created", { id: "f2", session_id: "s1", path: "/p/b.go", version: 0, created_at: 20 }),
+      ev("skills_event", "updated", {}),
+      ev("config_changed", "updated", { workspace_id: "w" }),
+    );
+    // The resync's reads answer with what the engine had before those events.
+    history.resolve([{ id: "f1", session_id: "s1", path: "/p/a.go", version: 0, created_at: 10 }]);
+    skills.resolve([{ name: "old-skill" }]);
+    config.resolve({ models: { large: { provider: "claude-code", model: "opus" } } });
+    await settle();
+    expect(workspace.ws.files.s1.map((f) => f.id)).toEqual(["f1", "f2"]);
+    expect(workspace.ws.skills).toEqual([{ name: "new-skill" }]);
+    expect(workspace.ws.config.models.large.provider).toBe("codex-cli");
+  });
+
   it("skills_event reads the skills again", async () => {
     h.routes.set("GET skills", [{ name: "crush-config" }]);
     await deliver(ev("skills_event", "updated", {}));
@@ -221,6 +255,27 @@ describe("events and reads", () => {
       await vi.advanceTimersByTimeAsync(10000);
       expect(count("git/branch")).toBe(branchReads + 1);
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the two 5 s reads run only while connected", async () => {
+    vi.useFakeTimers();
+    try {
+      h.routes.set("GET git/branch", { branch: "main" });
+      h.routes.set("GET lsps", {});
+      let up = false;
+      workspace.startWorkspace({ connected: () => up });
+      const reads = () => h.calls.filter((c) => c.path === "git/branch" || c.path === "lsps").length;
+      const atStart = reads();
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(reads()).toBe(atStart);
+      up = true;
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(h.calls.filter((c) => c.path === "git/branch")).toHaveLength(2);
+      expect(h.calls.filter((c) => c.path === "lsps")).toHaveLength(2);
+    } finally {
+      workspace.stopWorkspace();
       vi.useRealTimers();
     }
   });

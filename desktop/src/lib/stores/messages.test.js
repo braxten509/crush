@@ -331,12 +331,32 @@ describe("interrupted runs (CHAT-026)", () => {
   it("with prompts to send next the chat stays busy and held prompts join the chat", async () => {
     await running();
     const held = M.addPending({ sessionId: "s1", text: "next one", held: true });
+    await api.send({ session_id: "s1", prompt: "next one", submission_id: held }); // the engine took it (202)
     expect(M.heldFor("s1").map((p) => p.submissionId)).toEqual([held]);
     await api.interrupt("s1");
     expect(M.heldFor("s1")).toEqual([]);
     expect(M.pendingFor("s1").map((p) => p.text)).toEqual(["next one"]);
+    expect(S.busy("s1")).toBe(true);
     // The reply itself stopped; the queue keeps the chat going.
     expect(M.isInterrupted("a2")).toBe(true);
+  });
+
+  it("Enter then Esc before the 202: a send still in flight keeps nothing going (send.go:257-270)", async () => {
+    await running();
+    const held = M.addPending({ sessionId: "s1", text: "next one", held: true });
+    const accepted = later();
+    h.routes.set("POST agent", () => accepted.promise);
+    const sending = api.send({ session_id: "s1", prompt: "next one", submission_id: held });
+    await api.interrupt("s1");
+    expect(M.heldFor("s1").map((p) => p.submissionId)).toEqual([held]); // not released as "continuing"
+    expect(S.busy("s1")).toBe(false);
+    accepted.resolve(null);
+    await sending;
+    await settle();
+    // Once the engine took it, the next Esc sends it on.
+    await api.interrupt("s1");
+    expect(M.heldFor("s1")).toEqual([]);
+    expect(M.pendingFor("s1").map((p) => p.submissionId)).toEqual([held]);
   });
 
   it("a step that only called tools stays hidden when it first shows after the interrupt", async () => {
@@ -457,6 +477,33 @@ describe("agent tools' chats (CHAT-078)", () => {
     slow.resolve([msg("a1", { calls: [["call-1", "agent"]] })]);
     await loading;
     expect(chatOf("a1$$call-1").ids).toEqual(["n1"]);
+  });
+
+  it("while a load runs, held agent events keep only the latest per message, so they stay bounded", async () => {
+    const slow = later();
+    h.routes.set("GET sessions/s1/messages", () => slow.promise);
+    h.routes.set("GET sessions/a1$$call-1/messages", () => later().promise);
+    h.routes.set("GET sessions/a1$$call-2/messages", () => later().promise);
+    const loading = M.load("s1");
+    await settle();
+    // Two agents stream at once, chunk after chunk.
+    const chunks = [];
+    for (let i = 1; i <= 40; i += 1) {
+      chunks.push(ev("message", "updated", msg("n1", { sid: "a1$$call-1", text: `one ${i}`, at: 5 })));
+      chunks.push(ev("message", "updated", msg("n2", { sid: "a1$$call-2", text: `two ${i}`, at: 5 })));
+    }
+    await deliver(...chunks);
+    const { SvelteMap } = await import("svelte/reactivity");
+    const set = vi.spyOn(SvelteMap.prototype, "set");
+    try {
+      slow.resolve([msg("a1", { calls: [["call-1", "agent"], ["call-2", "agent"]] })]);
+      await loading;
+      expect(set.mock.calls.filter(([id]) => id === "n1" || id === "n2")).toHaveLength(2); // one replay each
+    } finally {
+      set.mockRestore();
+    }
+    expect(textOf(chatOf("a1$$call-1").byId.get("n1"))).toBe("one 40");
+    expect(textOf(chatOf("a1$$call-2").byId.get("n2"))).toBe("two 40");
   });
 
   it("an agent's event with no parent anywhere is dropped", async () => {

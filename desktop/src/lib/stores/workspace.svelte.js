@@ -3,7 +3,7 @@
 // and read again on the events that change it and on every resync; a failed
 // read keeps what the store had.
 import { api } from "../engine/api.js";
-import { onEvent, onResync } from "../engine/events.js";
+import { onEvent, onResync, withHeld } from "../engine/events.js";
 import { agentProviderChanged } from "./limits.svelte.js";
 
 export const ws = $state({
@@ -182,29 +182,40 @@ onEvent("skills_event", () => quietly(loadSkills(), "skills"));
 // two stores never load each other).
 let shownChat = () => "";
 
-onResync(async () => {
-  const sid = shownChat();
-  await Promise.all([
-    quietly(loadConfig(), "config"),
-    quietly(loadAgent(), "agent"),
-    quietly(loadLsps(), "LSP"),
-    quietly(loadMcps(), "MCP"),
-    quietly(loadSkills(), "skills"),
-    sid ? quietly(loadFiles(sid), "files") : null,
-  ]);
-});
+// The events that change what these reads give wait until the reads land
+// (1.5.4), so a read the engine answered before an event never overwrites it,
+// and the read an event starts lands after the resync's own. LSP and MCP
+// reads never overlap anyway (loadLsps, loadMcps).
+onResync(() =>
+  withHeld(["file", "skills_event", "config_changed"], async () => {
+    const sid = shownChat();
+    await Promise.all([
+      quietly(loadConfig(), "config"),
+      quietly(loadAgent(), "agent"),
+      quietly(loadLsps(), "LSP"),
+      quietly(loadMcps(), "MCP"),
+      quietly(loadSkills(), "skills"),
+      sid ? quietly(loadFiles(sid), "files") : null,
+    ]);
+  }),
+);
 
 // The workspace reads of START-007 and the two timers: the LSP backstop
 // (5 s, lsp.go:19-26, which covers events lost across a reconnect) and the
-// Git branch, read every 5 s while the window is visible (SIDE-013).
+// Git branch, read every 5 s while the window is visible (SIDE-013). Both
+// read only while connected(), which the connection store gives.
 const timers = [];
-export function startWorkspace({ currentChat = () => "" } = {}) {
+export function startWorkspace({ currentChat = () => "", connected = () => true } = {}) {
   shownChat = currentChat;
   stopWorkspace();
-  timers.push(setInterval(() => quietly(loadLsps(), "LSP"), 5000));
   timers.push(
     setInterval(() => {
-      if (globalThis.document?.visibilityState !== "hidden") quietly(loadBranch(), "Git branch");
+      if (connected()) quietly(loadLsps(), "LSP");
+    }, 5000),
+  );
+  timers.push(
+    setInterval(() => {
+      if (connected() && globalThis.document?.visibilityState !== "hidden") quietly(loadBranch(), "Git branch");
     }, 5000),
   );
   return Promise.all([

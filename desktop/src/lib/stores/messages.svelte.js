@@ -3,7 +3,7 @@
 // kept exactly as the engine sent them; what an interrupt changes on screen is
 // a copy (withInterrupt), so the stored object stays the event's.
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { api, onInterrupt, uuid } from "../engine/api.js";
+import { api, onInterrupt, onSend, uuid } from "../engine/api.js";
 import { onEvent, onResync } from "../engine/events.js";
 import { prompts } from "./prompts.svelte.js";
 import { queue } from "./queue.svelte.js";
@@ -122,7 +122,12 @@ function settle(m) {
 // -- Loading (LIST-034, LIST-036) --
 
 const loads = new Map(); // sid → {events, promise}: the newest load of that chat
-let heldAgentEvents = []; // agent chats' events that came before their parent message, kept while loads run
+// Agent chats' events that came before their parent message, kept while loads
+// run: message id → its latest event, as a buffer keeps only the latest of a
+// message's updates (buffer below), so streaming agents cannot grow it. A
+// message keeps the place of its first event, so a parent's events stay
+// ahead of its own agents'.
+const heldAgentEvents = new Map();
 
 // GET messages; buffers that chat's events meanwhile; replays them on the
 // snapshot. A newer load of the same chat supersedes this one (it keeps the
@@ -271,7 +276,7 @@ function applyAgentChatMessage(kind, m) {
   const sid = m.session_id;
   if (!messages.bySession[sid] && !loads.has(sid)) {
     if (!parentChat(sid)) {
-      if (loads.size > 0) heldAgentEvents.push({ kind, m });
+      if (loads.size > 0) heldAgentEvents.set(m.id, { kind, m });
       return;
     }
     readyChat(sid);
@@ -287,11 +292,11 @@ function applyAgentChatMessage(kind, m) {
 }
 
 function retryHeldAgentEvents() {
-  if (heldAgentEvents.length === 0) return;
-  const held = heldAgentEvents;
-  heldAgentEvents = [];
+  if (heldAgentEvents.size === 0) return;
+  const held = [...heldAgentEvents.values()];
+  heldAgentEvents.clear();
   for (const { kind, m } of held) applyAgentChatMessage(kind, m);
-  if (loads.size === 0) heldAgentEvents = [];
+  if (loads.size === 0) heldAgentEvents.clear();
 }
 
 // -- Events --
@@ -366,8 +371,10 @@ export function isHiddenInterruptedStep(m, shownBefore) {
 
 // Runs just before this window posts the interrupt: the run's unfinished
 // replies and its tools without a result stop at once; with prompts to send
-// next (queued in the engine or held here) the chat stays busy and the held
-// ones join the chat, else it is idle now.
+// next (queued in the engine, or this window's that the engine took) the chat
+// stays busy and the held ones join the chat, else it is idle now. A send
+// still waiting for its 202 counts for nothing, as the terminal cancels the
+// submissions in flight (send.go:257-270).
 export function interruptChat(sid) {
   const chat = messages.bySession[sid];
   if (chat) {
@@ -386,7 +393,7 @@ export function interruptChat(sid) {
     }
     if ([...chat.active].some((id) => interrupted.has(id))) chat.active = new Set([...chat.active].filter((id) => !interrupted.has(id)));
   }
-  const continuing = (queue.bySession?.[sid]?.count ?? 0) > 0 || Object.values(messages.pending).some((p) => p.sessionId === sid);
+  const continuing = (queue.bySession?.[sid]?.count ?? 0) > 0 || Object.values(messages.pending).some((p) => p.sessionId === sid && p.acknowledged);
   if (continuing) releaseHeld(sid);
   else settleBusy(sid);
 }
@@ -399,9 +406,21 @@ onInterrupt(interruptChat);
 // when it was held: sent while the chat was busy, TYPE-044) until its saved
 // copy arrives. Returns its submission id, which the send carries.
 export function addPending({ sessionId, text = "", attachments = [], held = false, submissionId = uuid() }) {
-  messages.pending[submissionId] = { submissionId, sessionId, text, attachments, held, state: "working", createdAt: Date.now() };
+  messages.pending[submissionId] = { submissionId, sessionId, text, attachments, held, state: "working", acknowledged: false, createdAt: Date.now() };
   return submissionId;
 }
+
+// acknowledged: the send carrying this submission id got its 202 (interruptChat).
+onSend((body, call) => {
+  const id = body?.submission_id;
+  if (!id) return;
+  Promise.resolve(call).then(
+    () => {
+      if (messages.pending[id]) messages.pending[id].acknowledged = true;
+    },
+    () => {},
+  );
+});
 
 function pendingOf(sid, held) {
   return Object.values(messages.pending)

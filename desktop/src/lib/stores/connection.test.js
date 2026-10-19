@@ -100,6 +100,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   W.stopWorkspace();
+  L.stopLimitsPoll();
   vi.unstubAllGlobals();
 });
 
@@ -290,6 +291,69 @@ describe("losing the engine (SIDE-030)", () => {
     expect(joinNotices).toEqual([]);
     expect(C.conn.notices).toEqual([]);
   });
+});
+
+it("the limits poll runs while connected and asks only while the shown chat is idle (SIDE-007)", async () => {
+  vi.useFakeTimers({ now: Date.parse("2026-10-18T10:50:00Z") });
+  const flush = async () => {
+    for (let i = 0; i < 10; i += 1) await vi.advanceTimersByTimeAsync(0);
+  };
+  const send = async (...entries) => {
+    h.entries.push(...entries);
+    h.ring?.();
+    await flush();
+  };
+  const minutes = (n) => vi.advanceTimersByTimeAsync(n * 60_000);
+  const asks = () => h.calls.filter((c) => c.method === "POST" && c.path === "/v1/limits/claude-code/refresh").length;
+  try {
+    h.routes.set("GET /v1/limits", { clis: [{ kind: "claude-code", state: "ready", read_at: "2026-10-18T10:40:00Z", windows: [] }] });
+    h.routes.set("GET agent", { is_ready: true, is_busy: false, model_cfg: { provider: "claude-code", model: "opus" } });
+    await C.start();
+    await flush();
+    expect(asks()).toBe(1); // the provider's first read
+    await minutes(3); // 10:53
+    expect(asks()).toBe(2);
+    await send(ev("connection", "updated", { state: "reconnecting", attempt: 1 }));
+    await minutes(10); // stopped while not connected
+    expect(asks()).toBe(2);
+    await send(ev("connection", "updated", { state: "connected", attempt: 0, resync: true }));
+    S.sessions.currentId = "s1";
+    S.sessions.live.s1 = true; // the shown chat runs
+    await minutes(5);
+    expect(asks()).toBe(2);
+    delete S.sessions.live.s1;
+    await minutes(1);
+    expect(asks()).toBe(3);
+  } finally {
+    L.stopLimitsPoll();
+    W.stopWorkspace();
+    vi.useRealTimers();
+  }
+});
+
+it("the LSP and Git 5 s reads run only while connected (SIDE-009, SIDE-013)", async () => {
+  vi.useFakeTimers();
+  const flush = async () => {
+    for (let i = 0; i < 10; i += 1) await vi.advanceTimersByTimeAsync(0);
+  };
+  const reads = () => h.calls.filter((c) => c.path === "lsps" || c.path === "git/branch").length;
+  try {
+    await C.start();
+    await flush();
+    const joined = reads();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(reads()).toBe(joined + 2);
+    h.entries.push(ev("connection", "updated", { state: "reconnecting", attempt: 1 }));
+    h.ring?.();
+    await flush();
+    const lost = reads();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(reads()).toBe(lost);
+  } finally {
+    L.stopLimitsPoll();
+    W.stopWorkspace();
+    vi.useRealTimers();
+  }
 });
 
 it("the probe's connection section has the pinned fields (1.9)", async () => {

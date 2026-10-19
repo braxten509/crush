@@ -67,13 +67,47 @@ export function agentProviderChanged(provider) {
   refreshLimitsFor(provider);
 }
 
+const askedAt = new Map(); // kind → when this window last asked for a refresh (ms)
+
 function refreshLimitsFor(kind) {
   if (!loaded) {
     wanted = kind;
     return;
   }
   if (!limits.byKind[kind]) return;
+  askedAt.set(kind, Date.now());
   api.refreshLimits(kind).catch((error) => console.error("limits refresh failed", error));
+}
+
+// The terminal's poll (internal/ui/model/polling.go:15, update_ui.go:268-280):
+// every 60 s while the window is visible and the shown chat is idle, the
+// current provider's kind is refreshed once its reading is 3 min old
+// (cliagent/limits.go:40,207). The engine's refresh route skips that throttle
+// (internal/server/handlers_live.go:149), so the page keeps it: a kind is also
+// asked again only 3 min after this window last asked, as cliagent backs off a
+// failed fetch like a success (limits.go:224-228), since a failure keeps the
+// old read_at. A kind without read_at is not polled. connection.svelte.js runs
+// the poll while connected; idle() tells whether the shown chat is idle.
+const POLL_MS = 60_000;
+const STALE_MS = 3 * 60_000;
+let poll = null;
+
+export function startLimitsPoll({ idle = () => true } = {}) {
+  stopLimitsPoll();
+  poll = setInterval(() => {
+    if (globalThis.document?.visibilityState === "hidden" || !idle()) return;
+    const kind = lastProvider;
+    const read = readTime(limits.byKind[kind]?.read_at);
+    const now = Date.now();
+    if (!read || now - read[0] < STALE_MS) return;
+    if (askedAt.has(kind) && now - askedAt.get(kind) < STALE_MS) return;
+    refreshLimitsFor(kind);
+  }, POLL_MS);
+}
+
+export function stopLimitsPoll() {
+  clearInterval(poll);
+  poll = null;
 }
 
 // The windows that apply to a model, as cliagent.Limits does

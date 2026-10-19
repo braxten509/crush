@@ -391,12 +391,14 @@ describe("opening a chat (LIST-034, TYPE-049)", () => {
     expect(M.takeReturned("old").map((d) => d.text)).toEqual(["for gone"]);
   });
 
-  it("a history read that fails still opens the chat, with no files", async () => {
+  it("a history read that fails still opens the chat, with no files and a warning", async () => {
     await withList(chat("s1"));
     h.routes.set("GET sessions/s1", chat("s1"));
     h.routes.set("GET sessions/s1/messages", []);
     expect(await S.openChat("s1")).toBe(true);
+    expect(S.sessions.currentId).toBe("s1");
     expect(ws.files.s1).toEqual([]);
+    expect(h.notices).toEqual([{ kind: "warn", text: "Couldn't read this chat's file history" }]);
   });
 
   it("-s opens that chat and -C the newest one (START-006)", async () => {

@@ -418,9 +418,11 @@ export async function openChat(id) {
   const since = readStart();
   // The file history only fills FILES (SIDE-008): unlike the terminal's load,
   // which fails as a whole (session.go:115-117), a failed history read opens
-  // the chat with no files.
+  // the chat with no files and a warning.
+  let historyFailed = false;
   const history = api.history(id).catch((error) => {
     console.error("file history read failed", errorText(error));
+    historyFailed = true;
     return [];
   });
   const [read, files, loaded] = await Promise.allSettled([api.getSession(id), history, load(id)]);
@@ -442,6 +444,7 @@ export async function openChat(id) {
   if (loaded.value !== true) return false; // the chat went away while it loaded
   upsertSession(read.value, { since });
   setFiles(id, files.value);
+  if (historyFailed) notify("warn", "Couldn't read this chat's file history");
   const old = sessions.currentId;
   sessions.currentId = id;
   if (sessions.opening?.id === id) sessions.opening = null;

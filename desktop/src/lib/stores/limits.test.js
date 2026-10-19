@@ -159,6 +159,82 @@ it("a change before the snapshot waits for it", async () => {
   expect(refreshes()).toEqual(["/v1/limits/claude-code/refresh"]);
 });
 
+describe("polled like the terminal (SIDE-007; polling.go:15, cliagent/limits.go:40,207)", () => {
+  const iso = (time) => `2026-10-18T${time}Z`;
+  const ASK = "/v1/limits/claude-code/refresh";
+  const minutes = (n) => vi.advanceTimersByTimeAsync(n * 60_000);
+
+  beforeEach(() => {
+    vi.useFakeTimers({ now: Date.parse(iso("10:50:00")) });
+  });
+  afterEach(() => {
+    try {
+      limits.stopLimitsPoll();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The snapshot, then the agent's provider: the model change asks once, now.
+  async function showing(readAt) {
+    h.routes.set("GET /v1/limits", { clis: [reading("claude-code", readAt), reading("codex-cli", iso("10:00:00"))] });
+    await limits.loadLimits();
+    limits.agentProviderChanged("claude-code");
+    expect(refreshes()).toEqual([ASK]);
+  }
+
+  it("every 60 s, the current kind once its reading is 3 min old", async () => {
+    await showing(iso("10:44:00"));
+    limits.applyLimits(reading("claude-code", iso("10:50:00"))); // the answer
+    limits.startLimitsPoll({ idle: () => true });
+    await minutes(2); // 10:52
+    limits.applyLimits(reading("claude-code", iso("10:52:30"))); // a turn reports its own
+    await minutes(3); // 10:55: asked 5 min ago, but read 2.5 min ago
+    expect(refreshes()).toEqual([ASK]);
+    await minutes(1); // 10:56: read 3.5 min ago
+    expect(refreshes()).toEqual([ASK, ASK]);
+  });
+
+  it("a failed refresh keeps the old read_at, so the next ask waits 3 min after the last one (cliagent/limits.go:224-228)", async () => {
+    await showing(iso("10:40:00"));
+    limits.applyLimits(reading("claude-code", iso("10:40:00"), 10, { error: "claude: usage endpoint down" })); // the failed answer
+    limits.startLimitsPoll({ idle: () => true });
+    await minutes(2); // 10:52
+    expect(refreshes()).toEqual([ASK]);
+    await minutes(1); // 10:53
+    expect(refreshes()).toEqual([ASK, ASK]);
+    await minutes(2); // 10:55
+    expect(refreshes()).toEqual([ASK, ASK]);
+    await minutes(1); // 10:56
+    expect(refreshes()).toEqual([ASK, ASK, ASK]);
+  });
+
+  it("no ask while the window is hidden or the shown chat is busy, and none once stopped", async () => {
+    await showing(iso("10:40:00"));
+    let busy = true;
+    limits.startLimitsPoll({ idle: () => !busy });
+    await minutes(3); // 10:53: busy
+    expect(refreshes()).toEqual([ASK]);
+    busy = false;
+    vi.stubGlobal("document", { visibilityState: "hidden" });
+    await minutes(1); // 10:54: hidden
+    expect(refreshes()).toEqual([ASK]);
+    vi.stubGlobal("document", { visibilityState: "visible" });
+    await minutes(1); // 10:55
+    expect(refreshes()).toEqual([ASK, ASK]);
+    limits.stopLimitsPoll();
+    await minutes(10);
+    expect(refreshes()).toEqual([ASK, ASK]);
+  });
+
+  it("a kind without read_at is not polled", async () => {
+    await showing(null);
+    limits.startLimitsPoll({ idle: () => true });
+    await minutes(10);
+    expect(refreshes()).toEqual([ASK]);
+  });
+});
+
 describe("what the meters read", () => {
   it("keeps the windows for every model and for this one (cliagent.Limits)", () => {
     limits.applyLimits({

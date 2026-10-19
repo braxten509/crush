@@ -1,0 +1,362 @@
+{
+ "workspace": {
+  "id": "ws-unsafe",
+  "path": "/tmp/home/proj",
+  "yolo": true,
+  "debug": false,
+  "data_dir": "/tmp/home/proj/.crush",
+  "version": "fixture",
+  "channels": [],
+  "skills": [],
+  "protocol": 1,
+  "env": {
+   "CRUSH_FIXTURE_SECRET": "leak-fixture-5e1f0c2d9a7b3e48",
+   "PATH": "/usr/bin"
+  },
+  "config": {
+   "providers": {
+    "fake": {
+     "api_key": "leak-fixture-5e1f0c2d9a7b3e48"
+    }
+   }
+  }
+ },
+ "agent": {
+  "is_busy": false,
+  "is_ready": true,
+  "model": {
+   "id": "opus",
+   "name": "Opus 5.5",
+   "context_window": 200000,
+   "can_reason": true,
+   "reasoning_levels": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "default_reasoning_effort": "high",
+   "supports_attachments": true
+  },
+  "model_cfg": {
+   "model": "opus",
+   "provider": "claude-code",
+   "reasoning_effort": "max"
+  }
+ },
+ "get": {
+  "sessions": [
+   {
+    "id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parent_session_id": "",
+    "title": "Unsafe replies",
+    "message_count": 10,
+    "prompt_tokens": 2400,
+    "completion_tokens": 0,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792400000,
+    "updated_at": 1792400305,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "claude-code",
+     "model": "opus",
+     "tokens": 2400,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   }
+  ],
+  "sessions/5afe0000-0000-4000-8000-0000000000a1": {
+   "id": "5afe0000-0000-4000-8000-0000000000a1",
+   "parent_session_id": "",
+   "title": "Unsafe replies",
+   "message_count": 10,
+   "prompt_tokens": 2400,
+   "completion_tokens": 0,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792400000,
+   "updated_at": 1792400305,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "claude-code",
+    "model": "opus",
+    "tokens": 2400,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/5afe0000-0000-4000-8000-0000000000a1/messages": [
+   {
+    "id": "u1",
+    "role": "user",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "unsafe markup"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792400060,
+    "updated_at": 1792400060
+   },
+   {
+    "id": "a1",
+    "role": "assistant",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Raw markup a reply might try. None of it may run, load or post anything:\n\n<script>window.__unsafe = \"script\"</script>\n\n<img src=x onerror=\"window.__unsafe = 'onerror'\">\n\n<a href=\"javascript:window.__unsafe = 'anchor'\">raw javascript anchor</a>\n\n<iframe src=\"http://127.0.0.1:47321/frame\"></iframe>\n\n<form action=\"http://127.0.0.1:47321/form\" method=\"post\"><input name=\"q\" value=\"leak\"><button type=\"submit\">Send the form</button></form>\n\n<img src=\"http://127.0.0.1:47321/beacon\" alt=\"beacon\">\n\n<object data=\"http://127.0.0.1:47321/object\"></object><embed src=\"http://127.0.0.1:47321/embed\">\n\n<base href=\"http://127.0.0.1:47321/\">\n\n<meta http-equiv=\"refresh\" content=\"0; url=http://127.0.0.1:47321/refresh\">\n\n<link rel=\"stylesheet\" href=\"http://127.0.0.1:47321/style.css\">\n\n<style>@import url(\"http://127.0.0.1:47321/import.css\"); body { display: none }</style>\n\n<svg onload=\"window.__unsafe = 'svg'\"><a href=\"javascript:alert(1)\"><text>svg link</text></a></svg>\n\n<details open ontoggle=\"window.__unsafe = 'toggle'\"><summary>details</summary>inside</details>\n\n<video src=\"http://127.0.0.1:47321/video\" autoplay></video>\n\n<!-- a comment that hides <script>alert(1)</script> -->\n\nThe markup reply ends here."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792400065
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792400061,
+    "updated_at": 1792400065
+   },
+   {
+    "id": "u2",
+    "role": "user",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "unsafe links"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792400120,
+    "updated_at": 1792400120
+   },
+   {
+    "id": "a2",
+    "role": "assistant",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Links a reply might try. Only the first one may open:\n\n[the fake page](http://127.0.0.1:47321/page.html)\n\n[javascript link](javascript:alert(1))\n\n[data link](data:text/html,<script>alert(1)</script>)\n\n[tab first](\tjavascript:alert(1))\n\n[space first]( javascript:alert(1))\n\n[upper case](JAVASCRIPT:alert(1))\n\n[newline inside](java\nscript:alert(1))\n\n[vbscript link](vbscript:x)\n\n[blob link](blob:x)\n\n[data html](data:text/html,x)\n\n[entity link](&#106;avascript:alert(1))\n\n[colon entity](javascript&colon;alert(1))\n\n[reference link][evil]\n\n<javascript:alert(1)>\n\n![bad picture](javascript:alert(1))\n\n<a href=\"\tjavascript:alert(1)\">raw tab first</a>\n\n<a href=\" javascript:alert(1)\">raw space first</a>\n\n<a href=\"JAVASCRIPT:alert(1)\">raw upper case</a>\n\n<a href=\"java\nscript:alert(1)\">raw newline inside</a>\n\n<a href=\"vbscript:x\">raw vbscript</a>\n\n<a href=\"blob:x\">raw blob</a>\n\n<a href=\"data:text/html,x\">raw data</a>\n\n[evil]: javascript:alert(1)"
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792400125
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792400121,
+    "updated_at": 1792400125
+   },
+   {
+    "id": "u3",
+    "role": "user",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "unsafe figures"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792400180,
+    "updated_at": 1792400180
+   },
+   {
+    "id": "a3",
+    "role": "assistant",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "A diagram that asks for loose security, HTML labels and click callbacks:\n\n```mermaid\n%%{init: {\"securityLevel\": \"loose\", \"htmlLabels\": true, \"flowchart\": {\"htmlLabels\": true}, \"startOnLoad\": true}}%%\nflowchart LR\n  A[\"<img src='http://127.0.0.1:47321/mermaid-img' onerror='window.__unsafe = 1'>Sign in\"] --> B[Home]\n  click A call alert(\"mermaid\")\n  click B \"javascript:alert(1)\" \"a link\"\n```\n\nMath that asks for links and pictures: $\\href{javascript:alert(1)}{x}$, $\\url{javascript:alert(1)}$ and $\\includegraphics{http://127.0.0.1:47321/math.png}$.\n\n$$\n\\href{javascript:alert(1)}{\\text{display link}} + \\htmlData{onclick=alert(1)}{y}\n$$"
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792400185
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792400181,
+    "updated_at": 1792400185
+   },
+   {
+    "id": "u4",
+    "role": "user",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "unsafe slot"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792400240,
+    "updated_at": 1792400240
+   },
+   {
+    "id": "a4",
+    "role": "assistant",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Crush wants to run a command.\n\n<div class=\"slot permission\" data-probe=\"slot\" role=\"dialog\" aria-modal=\"true\">\n<p><strong>Allow bash to run this?</strong></p>\n<button class=\"slot-button\" data-action=\"allow\" autofocus>Allow</button>\n<button class=\"slot-button\" data-action=\"always\">Allow for session</button>\n<button class=\"slot-button\" data-action=\"deny\">Deny</button>\n</div>\n\n**Allow** · **Allow for session** · **Deny**\n\n    rm -rf ~/proj"
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792400245
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792400241,
+    "updated_at": 1792400245
+   },
+   {
+    "id": "u5",
+    "role": "user",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "unsafe diagrams"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792400300,
+    "updated_at": 1792400300
+   },
+   {
+    "id": "a5",
+    "role": "assistant",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Diagrams of every kind the renderer draws, one each. Every one of them must draw as a picture, here and in the panel; only the hostile diagram may fall back to its source.\n\n```mermaid\n---\ntitle: Valid flowchart-v2\n---\nflowchart LR\n  A[Write] --> B{Ready?}\n  B -->|yes| C[Ship]\n  B -->|no| A\n```\n\n```mermaid\n---\ntitle: Valid sequence\n---\nsequenceDiagram\n  participant Y as You\n  participant A as App\n  Y->>A: Send a prompt\n  A-->>Y: Draw the reply\n```\n\n```mermaid\n---\ntitle: Valid classDiagram\n---\nclassDiagram\n  class Chat {\n    +String title\n    +send(text)\n  }\n  class Message\n  Chat \"1\" --> \"*\" Message\n```\n\n```mermaid\n---\ntitle: Valid stateDiagram\n---\nstateDiagram-v2\n  [*] --> Idle\n  Idle --> Busy: send\n  Busy --> Idle: done\n```\n\n```mermaid\n---\ntitle: Valid er\n---\nerDiagram\n  SESSION ||--o{ MESSAGE : holds\n  SESSION {\n    string id\n    string title\n  }\n```\n\n```mermaid\n---\ntitle: Valid journey\n---\njourney\n  section Start\n    Open the app: 5: You\n    Pick a folder: 3: You\n```\n\n```mermaid\n---\ntitle: Valid gantt\n---\ngantt\n  dateFormat YYYY-MM-DD\n  section Build\n    Renderers: a1, 2026-10-01, 5d\n    Panel: after a1, 3d\n```\n\n```mermaid\n---\ntitle: Valid pie\n---\npie\n  \"Text\" : 60\n  \"Code\" : 30\n  \"Figures\" : 10\n```\n\n```mermaid\n---\ntitle: Valid quadrantChart\n---\nquadrantChart\n  x-axis Low effort --> High effort\n  y-axis Low value --> High value\n  quadrant-1 Plan\n  quadrant-2 Do now\n  quadrant-3 Skip\n  quadrant-4 Later\n  Renderers: [0.3, 0.8]\n  Panel: [0.7, 0.6]\n```\n\n```mermaid\n---\ntitle: Valid requirement\n---\nrequirementDiagram\n  requirement safe_links {\n    id: 1\n    text: Links open after a click\n    risk: high\n    verifymethod: test\n  }\n  element safety_check {\n    type: driver\n  }\n  safety_check - verifies -> safe_links\n```\n\n```mermaid\n---\ntitle: Valid gitGraph\n---\ngitGraph\n  commit\n  branch renderers\n  checkout renderers\n  commit\n  checkout main\n  merge renderers\n```\n\n```mermaid\n---\ntitle: Valid c4\n---\nC4Context\n  Person(you, \"You\")\n  System(app, \"Crush Desktop\")\n  System_Ext(engine, \"Crush engine\")\n  Rel(you, app, \"Uses\")\n  Rel(app, engine, \"Talks to\")\n```\n\n```mermaid\n---\ntitle: Valid mindmap\n---\nmindmap\n  root((Renderers))\n    Markdown\n      Links\n      Tables\n    Figures\n      Math\n      Diagrams\n```\n\n```mermaid\n---\ntitle: Valid timeline\n---\ntimeline\n  Wave 1 : Engine client : Services : Renderers\n  Wave 2 : Timeline : Panel\n```\n\n```mermaid\n---\ntitle: Valid sankey\n---\nsankey-beta\nPrompts,Replies,40\nPrompts,Tools,20\nTools,Replies,15\n```\n\n```mermaid\n---\ntitle: Valid xychart\n---\nxychart-beta\n  x-axis [Mon, Tue, Wed, Thu]\n  y-axis \"Replies\" 0 --> 50\n  bar [12, 30, 22, 41]\n  line [12, 30, 22, 41]\n```\n\n```mermaid\n---\ntitle: Valid block\n---\nblock-beta\n  columns 3\n  a[\"Chat\"] b[\"Panel\"] c[\"Composer\"]\n```\n\n```mermaid\n---\ntitle: Valid packet\n---\npacket-beta\n  0-15: \"Source port\"\n  16-31: \"Destination port\"\n  32-63: \"Sequence number\"\n```\n\n```mermaid\n---\ntitle: Valid kanban\n---\nkanban\n  todo[To do]\n    t1[Write the check]\n  doing[Doing]\n    t2[Draw the diagrams]\n  done[Done]\n    t3[Merge desktop]\n```\n\n```mermaid\n---\ntitle: Valid architecture\n---\narchitecture-beta\n  group app(cloud)[Desktop]\n  service ui(server)[Window] in app\n  service engine(database)[Engine] in app\n  ui:R --> L:engine\n```\n\n```mermaid\n---\ntitle: Valid radar\n---\nradar-beta\n  axis a[\"Speed\"], b[\"Care\"], c[\"Reach\"]\n  curve x[\"Renderer\"]{4, 5, 3}\n  max 5\n```\n\n```mermaid\n---\ntitle: Valid treemap\n---\ntreemap-beta\n\"Replies\"\n    \"Text\": 60\n    \"Figures\"\n        \"Tables\": 10\n        \"Math\": 5\n```\n\n```mermaid\n---\ntitle: Valid info\n---\ninfo\n```\n\n```mermaid\n---\ntitle: Valid ishikawa\n---\nishikawa-beta\n  Slow replies\n    Network\n      Long waits\n    Code\n      Big lists\n```\n\n```mermaid\n---\ntitle: Valid venn\n---\nvenn-beta\n  set A[\"Readers\"]\n  set B[\"Writers\"]\n  union A,B[\"Both\"]\n```\n\n```mermaid\n---\ntitle: Valid treeView\n---\ntreeView-beta\n  desktop\n    src\n      lib\n    tests\n```\n\n```mermaid\n---\ntitle: Valid usecase\n---\nusecase-beta\n  actor User\n  User --> open(Open a chat)\n  User --> send(Send a prompt)\n```\n\n```mermaid\n---\ntitle: Valid wardley\n---\nwardley-beta\n  anchor Reader [0.95, 0.63]\n  component Reply [0.79, 0.61]\n  component Renderer [0.63, 0.81]\n  Reader -> Reply\n  Reply -> Renderer\n```\n\n```mermaid\n---\ntitle: Valid cynefin\n---\ncynefin-beta\n  complex\n    \"Design the panel\"\n  complicated\n    \"Map the selection\"\n  clear\n    \"Run the tests\"\n  chaotic\n    \"Fix the outage\"\n  complex --> complicated : \"understood\"\n```\n\n```mermaid\n---\ntitle: Valid railroad\n---\nrailroad-beta\n  number = sequence(optional(terminal(\"-\")), oneOrMore(nonterminal(\"digit\")));\n```\n\n```mermaid\n---\ntitle: Valid railroadEbnf\n---\nrailroad-ebnf-beta\n  number = [ \"-\" ] , digit , { digit } ;\n  digit = \"0\" | \"1\" | \"2\" ;\n```\n\n```mermaid\n---\ntitle: Valid railroadAbnf\n---\nrailroad-abnf-beta\n  number = [\"-\"] 1*digit ;\n  digit = \"0\" / \"1\" / \"2\" ;\n```\n\n```mermaid\n---\ntitle: Valid railroadPeg\n---\nrailroad-peg-beta\n  number <- \"-\"? digit+ ;\n  digit <- \"0\" / \"1\" / \"2\" ;\n```\n\n```mermaid\n---\ntitle: Valid agentflow\n---\nagentflow-beta\n  flow Main\n    A[Ask] --> B[Answer]\n  end\n```\n\n```mermaid\n---\ntitle: Valid swimlane\n---\nswimlane-beta LR\n  subgraph You\n    A[Write a prompt]\n  end\n  subgraph App\n    B[Draw the reply]\n  end\n  A --> B\n```\n\n```mermaid\n---\ntitle: Valid eventmodeling\n---\neventmodeling\n  tf 01 cmd SendPrompt\n  tf 02 evt PromptSent ->> 01\n  tf 03 rmo Timeline ->> 02\n```\n\n```mermaid\n---\ntitle: Valid flowchart-elk\n---\nflowchart-elk LR\n  A[Write] --> B[Read]\n```\n\nThe diagrams reply ends here."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792400305,
+       "text": ""
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792400301,
+    "updated_at": 1792400305
+   }
+  ],
+  "chat-links": [],
+  "/v1/limits": {
+   "clis": [
+    {
+     "kind": "claude-code",
+     "state": "ready",
+     "read_at": "2026-10-18T10:44:00Z",
+     "windows": [
+      {
+       "name": "5h",
+       "used": 86,
+       "resets_at": "2026-10-18T13:25:00Z"
+      },
+      {
+       "name": "Weekly",
+       "used": 31,
+       "resets_at": "2026-10-22T08:00:00Z"
+      }
+     ]
+    }
+   ]
+  },
+  "config": {
+   "models": {
+    "large": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    },
+    "small": {
+     "model": "opus",
+     "provider": "claude-code"
+    }
+   },
+   "options": {
+    "notifications": "disabled"
+   }
+  },
+  "agent/default-small-model": {
+   "model": "opus",
+   "provider": "claude-code"
+  },
+  "providers": [],
+  "git/branch": {
+   "branch": "main"
+  },
+  "project/needs-init": {
+   "needs_init": false
+  },
+  "permissions/skip": {
+   "skip": true
+  },
+  "lsps": {},
+  "mcp/states": {},
+  "skills": []
+ },
+ "events": []
+}

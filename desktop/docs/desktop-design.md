@@ -978,7 +978,7 @@ Two terminal keys change meaning, both by the plan: **Ctrl+K** is Sessions searc
 | Section | Owner | Every 200 ms (light) | Only when asked (heavy) |
 |---|---|---|---|
 | `connection` | P3.3 | `state, attempt, error, workspace_id, client_id, engine_version, fresh_engine, engine{socket, pid}` (from the last `connected` event's `engine`; drivers read the socket for ground truth and the pid to kill the engine), `notices[]` | — |
-| `list` | P3.9 | `rows[{id, title, depth, selected, closed, state}], closed_count, search_hint` | `rows[].rect` |
+| `list` | P3.9 | `rows[{id, title, depth, selected, state}] (a closed chat is never a row; `branch.closed` lists them), closed_count, search_hint` | `rows[].rect` |
 | `chat` | P3.5 | `id, title, path, busy, follow, status, scroll_offset, mounted` (the count of mounted items), `items[{key, kind, id, expanded, selected, letter}], messages[{id, role, finished, text}]` | `scroll_top` (read from the page), `items[].rect`, `words[{mid, i, text, rect}]` (first 400 visible words), `selection{text, items[]}`, `links[{session_id, mid, text, rects[]}]`, `animations` (the count from `document.getAnimations()`) |
 | `composer` | P3.7 | `value, focused, mode, placeholder, selection[start,end], attachments[{name, kind}], tray[{kind, text}], slot{kind, buttons[{label, selected}]}` | `slot.buttons[].rect` |
 | `panel` | P3.8 | `hidden, meters[{id, label, text, warn}], visuals[{id, kind, title}], sections[]` | `visuals[].rect` |

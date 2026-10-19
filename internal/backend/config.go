@@ -54,9 +54,13 @@ type MCPResourceContents = proto.MCPResourceContents
 // SetConfigField sets a key/value pair in the config file for the
 // given scope.
 func (b *Backend) SetConfigField(workspaceID string, scope config.Scope, key string, value any) error {
-	o, err := b.ops(workspaceID)
+	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
+	}
+	o := ws.ops()
+	if isCPUSetting(key) {
+		return b.writeCPUSetting(ws, func() error { return o.SetConfigField(scope, key, value) })
 	}
 	return o.SetConfigField(scope, key, value)
 }
@@ -64,9 +68,13 @@ func (b *Backend) SetConfigField(workspaceID string, scope config.Scope, key str
 // RemoveConfigField removes a key from the config file for the given
 // scope.
 func (b *Backend) RemoveConfigField(workspaceID string, scope config.Scope, key string) error {
-	o, err := b.ops(workspaceID)
+	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
+	}
+	o := ws.ops()
+	if isCPUSetting(key) {
+		return b.writeCPUSetting(ws, func() error { return o.RemoveConfigField(scope, key) })
 	}
 	return o.RemoveConfigField(scope, key)
 }

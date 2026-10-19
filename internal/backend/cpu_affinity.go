@@ -30,12 +30,16 @@ func (b *Backend) cpuState() *cpuState { return &b.desktopEngine().cpu }
 
 // SetCPUAffinity turns the agent CPUs on or off as the terminal's toggle
 // does: it saves options.agent_cpus_enabled, then moves the engine and
-// everything it started. cpus is the list applied, "" when off.
+// everything it started. cpus is the list applied, "" when off. The save
+// and the move hold one lock, so no other CPU write lands between them.
 func (b *Backend) SetCPUAffinity(enabled bool) (proto.CPUAffinity, error) {
 	store := b.themeConfigStore()
 	if store == nil {
 		return proto.CPUAffinity{}, ErrWorkspaceNotFound
 	}
+	st := b.cpuState()
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	if err := store.SetConfigField(config.ScopeGlobal, "options.agent_cpus_enabled", enabled); err != nil {
 		return proto.CPUAffinity{}, err
 	}
@@ -46,9 +50,6 @@ func (b *Backend) SetCPUAffinity(enabled bool) (proto.CPUAffinity, error) {
 	if o := store.Config().Options; o != nil {
 		cpus = o.AgentCPUs
 	}
-	st := b.cpuState()
-	st.mu.Lock()
-	defer st.mu.Unlock()
 	if !enabled {
 		if err := cpuaffinity.Reset(); err != nil {
 			return proto.CPUAffinity{}, kindErr(ErrCPUAffinity, err)
@@ -64,10 +65,45 @@ func (b *Backend) SetCPUAffinity(enabled bool) (proto.CPUAffinity, error) {
 	return proto.CPUAffinity{CPUs: list}, nil
 }
 
+// isCPUSetting reports whether a config write to key can change the CPU
+// setting: options.agent_cpus_enabled, options.agent_cpus, or their
+// parent.
+func isCPUSetting(key string) bool {
+	switch key {
+	case "options", "options.agent_cpus_enabled", "options.agent_cpus":
+		return true
+	}
+	return false
+}
+
+// writeCPUSetting runs a config write to a CPU setting and then applies
+// the saved setting, both under the CPU lock, so the engine's CPUs follow
+// writes through the ordinary config routes too.
+func (b *Backend) writeCPUSetting(ws *Workspace, write func() error) error {
+	st := b.cpuState()
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if err := write(); err != nil {
+		return err
+	}
+	b.applyCPUAffinityLocked(ws)
+	return nil
+}
+
 // applyCPUAffinity applies ws's saved CPU setting when it differs from
 // what the engine applied last. A first call with the setting off moves
 // nothing: the engine started on every CPU.
 func (b *Backend) applyCPUAffinity(ws *Workspace) {
+	st := b.cpuState()
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	b.applyCPUAffinityLocked(ws)
+}
+
+// applyCPUAffinityLocked is [Backend.applyCPUAffinity] with the CPU lock
+// held. It reads the setting under the lock, so the last apply sees the
+// last write.
+func (b *Backend) applyCPUAffinityLocked(ws *Workspace) {
 	if ws == nil || ws.Cfg == nil || !cpuaffinity.Supported() {
 		return
 	}
@@ -80,8 +116,6 @@ func (b *Backend) applyCPUAffinity(ws *Workspace) {
 		want = "on:" + o.AgentCPUs
 	}
 	st := b.cpuState()
-	st.mu.Lock()
-	defer st.mu.Unlock()
 	if st.applied == want || (st.applied == "" && want == "off") {
 		st.applied = want
 		return

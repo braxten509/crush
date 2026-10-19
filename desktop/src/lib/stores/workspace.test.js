@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 // The real event loop (events.js) with fake Tauri calls (see prompts.test.js).
 const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], ring: null }));
@@ -314,6 +314,73 @@ describe("events and reads", () => {
     h.routes.set("GET skills", [{ name: "crush-config" }]);
     await deliver(ev("skills_event", "updated", {}));
     expect(workspace.ws.skills).toEqual([{ name: "crush-config" }]);
+  });
+
+  it("100 skills_events during a pending read give at most 2 reads, and the last answer wins", async () => {
+    const answers = [];
+    h.routes.set("GET skills", () => new Promise((resolve) => answers.push(resolve)));
+    await deliver(ev("skills_event", "updated", {}));
+    expect(answers).toHaveLength(1);
+    await deliver(...Array.from({ length: 100 }, () => ev("skills_event", "updated", {})));
+    expect(answers).toHaveLength(1);
+    answers[0]([{ name: "first" }]);
+    await settle();
+    expect(answers).toHaveLength(2);
+    answers[1]([{ name: "last" }]);
+    await settle();
+    expect(answers).toHaveLength(2);
+    expect(workspace.ws.skills).toEqual([{ name: "last" }]);
+  });
+
+  it("a failed skills read still runs the follow-up an event queued during it", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => logged.mockRestore());
+    const reads = [];
+    h.routes.set("GET skills", () => new Promise((resolve, reject) => reads.push({ resolve, reject })));
+    await deliver(ev("skills_event", "updated", {})); // A
+    await deliver(ev("skills_event", "updated", {})); // B, while A's read is pending
+    expect(reads).toHaveLength(1);
+    reads[0].reject({ code: "transport", message: "down" });
+    await settle();
+    expect(reads).toHaveLength(2);
+    reads[1].resolve([{ name: "after-failure" }]);
+    await settle();
+    expect(workspace.ws.skills).toEqual([{ name: "after-failure" }]);
+    expect(logged).toHaveBeenCalledWith("skills read failed", { code: "transport", message: "down" });
+  });
+
+  it("a failed LSP read still runs the follow-up an event queued during it", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => logged.mockRestore());
+    const reads = [];
+    h.routes.set("GET lsps", () => new Promise((resolve, reject) => reads.push({ resolve, reject })));
+    await deliver(ev("lsp_event", "updated", {})); // A
+    await deliver(ev("lsp_event", "updated", {})); // B, while A's read is pending
+    expect(reads).toHaveLength(1);
+    reads[0].reject({ code: "transport", message: "down" });
+    await settle();
+    expect(reads).toHaveLength(2);
+    reads[1].resolve({ gopls: { name: "gopls", state: "ready" } });
+    await settle();
+    expect(workspace.ws.lsps.gopls.state).toBe("ready");
+    expect(logged).toHaveBeenCalledWith("LSP read failed", { code: "transport", message: "down" });
+  });
+
+  it("a failed MCP read still runs the follow-up an event queued during it", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => logged.mockRestore());
+    const reads = [];
+    h.routes.set("GET mcp/states", () => new Promise((resolve, reject) => reads.push({ resolve, reject })));
+    await deliver(ev("mcp_event", "updated", { type: "state_changed", name: "github" })); // A
+    await deliver(ev("mcp_event", "updated", { type: "state_changed", name: "github" })); // B, while A's read is pending
+    expect(reads).toHaveLength(1);
+    reads[0].reject({ code: "transport", message: "down" });
+    await settle();
+    expect(reads).toHaveLength(2);
+    reads[1].resolve({ github: { name: "github", state: "connected", tool_count: 4 } });
+    await settle();
+    expect(workspace.ws.mcps.github.tool_count).toBe(4);
+    expect(logged).toHaveBeenCalledWith("MCP read failed", { code: "transport", message: "down" });
   });
 
   it("the Git branch answer is {branch}", async () => {

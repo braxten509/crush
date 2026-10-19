@@ -5,9 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,6 +131,97 @@ func TestManager_ConcurrentWorkspacesAreIsolated(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		// Expected — B's stream is isolated.
 	}
+}
+
+// drainEvents counts the events already queued on ch. Publish enqueues
+// synchronously, so everything sent before the call is counted.
+func drainEvents(ch <-chan pubsub.Event[Event]) int {
+	n := 0
+	for {
+		select {
+		case <-ch:
+			n++
+		case <-time.After(50 * time.Millisecond):
+			return n
+		}
+	}
+}
+
+func writeTestSkill(t *testing.T, dir, name, desc string) {
+	t.Helper()
+	skillDir := filepath.Join(dir, name)
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, SkillFileName),
+		[]byte("---\nname: "+name+"\ndescription: "+desc+"\n---\nx\n"), 0o644))
+}
+
+// Refresh runs on every skills list read; an unchanged discovery must
+// not publish again, or clients that reload on each event loop with
+// the engine.
+func TestManager_RefreshPublishesOnlyOnChange(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	writeTestSkill(t, tmp, "steady-skill", "First description.")
+	cfg := DiscoveryConfig{SkillsPaths: []string{tmp}}
+
+	mgr := NewManager(nil, nil, nil)
+	t.Cleanup(mgr.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	ch := mgr.SubscribeEvents(ctx)
+
+	mgr.Refresh(cfg)
+	mgr.Refresh(cfg)
+	require.Equal(t, 1, drainEvents(ch), "same discovery twice must publish exactly once")
+
+	// Same name, path and state; only the skill itself changed.
+	writeTestSkill(t, tmp, "steady-skill", "Second description.")
+	mgr.Refresh(cfg)
+	require.Equal(t, 1, drainEvents(ch), "a changed skill must publish again")
+
+	writeTestSkill(t, tmp, "added-skill", "New skill.")
+	mgr.Refresh(cfg)
+	mgr.Refresh(cfg)
+	require.Equal(t, 1, drainEvents(ch), "an added skill publishes once")
+}
+
+func TestManager_SetEnabledPublishes(t *testing.T) {
+	// Not parallel - isolates config.Init from the host via t.Setenv.
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(hostHome, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(hostHome, ".local", "share"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(hostHome, ".cache"))
+	t.Setenv("CRUSH_GLOBAL_CONFIG", "")
+	t.Setenv("CRUSH_GLOBAL_DATA", "")
+	t.Setenv("CRUSH_SKILLS_DIR", t.TempDir())
+
+	wd := t.TempDir()
+	writeTestSkill(t, filepath.Join(wd, ".agents", "skills"), "toggle-skill", "Toggled in this test.")
+	store, err := config.Init(wd, "", false)
+	require.NoError(t, err)
+
+	mgr := NewManager(nil, nil, nil, WithWorkingDir(wd))
+	t.Cleanup(mgr.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	ch := mgr.SubscribeEvents(ctx)
+
+	mgr.Refresh(ConfigDiscovery(store))
+	require.Equal(t, 1, drainEvents(ch))
+	active := func() bool {
+		return slices.ContainsFunc(mgr.ActiveSkills(), func(s *Skill) bool { return s.Name == "toggle-skill" })
+	}
+	require.True(t, active())
+
+	require.NoError(t, SetEnabled(store, mgr, "toggle-skill", false))
+	require.False(t, active())
+	require.Equal(t, 1, drainEvents(ch), "disabling a skill must publish")
+
+	require.NoError(t, SetEnabled(store, mgr, "toggle-skill", true))
+	require.True(t, active())
+	require.Equal(t, 1, drainEvents(ch), "enabling a skill must publish")
 }
 
 func TestDiscoverFromConfig(t *testing.T) {

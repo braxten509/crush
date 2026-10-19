@@ -126,6 +126,14 @@ async function countDiagnostics(name) {
   return counts;
 }
 
+async function readLsps() {
+  const states = (await api.lsps()) ?? {};
+  const names = Object.keys(states);
+  const counts = await Promise.all(names.map(countDiagnostics));
+  ws.lsps = Object.fromEntries(names.map((name, i) => [name, { ...states[name], diagnostics: counts[i] }]));
+}
+
+// A failed read is logged and the one queued after it still runs.
 const lspRead = { running: false, again: false };
 export async function loadLsps() {
   if (lspRead.running) {
@@ -136,17 +144,19 @@ export async function loadLsps() {
   try {
     do {
       lspRead.again = false;
-      const states = (await api.lsps()) ?? {};
-      const names = Object.keys(states);
-      const counts = await Promise.all(names.map(countDiagnostics));
-      ws.lsps = Object.fromEntries(names.map((name, i) => [name, { ...states[name], diagnostics: counts[i] }]));
+      await quietly(readLsps(), "LSP");
     } while (lspRead.again);
   } finally {
     lspRead.running = false;
   }
 }
 
-// MCP rows (SIDE-010); a failed read keeps the old rows.
+// MCP rows (SIDE-010); a failed read keeps the old rows, is logged, and the
+// one queued after it still runs.
+async function readMcps() {
+  ws.mcps = (await api.mcpStates()) ?? {};
+}
+
 const mcpRead = { running: false, again: false };
 export async function loadMcps() {
   if (mcpRead.running) {
@@ -157,7 +167,7 @@ export async function loadMcps() {
   try {
     do {
       mcpRead.again = false;
-      ws.mcps = (await api.mcpStates()) ?? {};
+      await quietly(readMcps(), "MCP");
     } while (mcpRead.again);
   } finally {
     mcpRead.running = false;
@@ -215,9 +225,31 @@ onEvent("config_changed", () => {
   quietly(loadConfig(), "config");
   quietly(loadAgent(), "agent");
 });
-onEvent("lsp_event", () => quietly(loadLsps(), "LSP"));
-onEvent("mcp_event", () => quietly(loadMcps(), "MCP"));
-onEvent("skills_event", () => quietly(loadSkills(), "skills"));
+onEvent("lsp_event", () => loadLsps());
+onEvent("mcp_event", () => loadMcps());
+onEvent("skills_event", () => reloadSkills());
+
+// skills_event reads never overlap: events during one collapse into one more
+// read after it. A skills read used to publish skills_event itself, so every
+// read an event started brought another event (and with two windows, two).
+// A failed read is logged and the follow-up still runs: the engine sends no
+// second event for an unchanged list, so a dropped one would leave it stale.
+const skillsRead = { running: false, again: false };
+async function reloadSkills() {
+  if (skillsRead.running) {
+    skillsRead.again = true;
+    return;
+  }
+  skillsRead.running = true;
+  try {
+    do {
+      skillsRead.again = false;
+      await quietly(loadSkills(), "skills");
+    } while (skillsRead.again);
+  } finally {
+    skillsRead.running = false;
+  }
+}
 
 // The shown chat id, given by the sessions store at start (no import, so the
 // two stores never load each other).

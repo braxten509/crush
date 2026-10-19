@@ -1,0 +1,9 @@
+{"method":"turn/started","params":{"threadId":"$SESSION","turn":{"id":"$TURN","items":[],"status":"inProgress"}}}
+{"method":"item/started","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"userMessage","id":"user_$UUID1","content":[{"type":"text","text":"$PROMPT"}]}}}
+{"method":"item/completed","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"userMessage","id":"user_$UUID1","content":[{"type":"text","text":"$PROMPT"}]}}}
+{"method":"item/started","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"agentMessage","id":"msg_$UUID2","text":""}}}
+{"method":"item/agentMessage/delta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"msg_$UUID2","delta":"Reply from the "}}
+{"method":"item/agentMessage/delta","params":{"threadId":"$SESSION","turnId":"$TURN","itemId":"msg_$UUID2","delta":"fake Codex."}}
+{"method":"item/completed","params":{"threadId":"$SESSION","turnId":"$TURN","item":{"type":"agentMessage","id":"msg_$UUID2","text":"Reply from the fake Codex.","phase":"final_answer"}}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"$SESSION","turnId":"$TURN","tokenUsage":{"total":{"inputTokens":50,"cachedInputTokens":0,"outputTokens":12,"reasoningOutputTokens":4,"totalTokens":62},"last":{"inputTokens":50,"cachedInputTokens":0,"outputTokens":12,"reasoningOutputTokens":4,"totalTokens":62},"modelContextWindow":null}}}
+{"method":"turn/completed","params":{"threadId":"$SESSION","turn":{"id":"$TURN","items":[],"status":"completed","error":null}}}

@@ -27,6 +27,26 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Fails(400, 404).
 			Build(),
 
+		route(c, rpc.CustomCommands, c.customCommands).
+			Summary("List custom commands").
+			Description("The custom commands (Markdown files in the user's and the project's "+
+				"commands folders) and the user-invocable skills, as the terminal's palette lists "+
+				"them under User. skill is null for a command.").
+			Tags("commands").
+			PathParam("id", "Workspace ID").
+			Fails(404, 500).
+			Build(),
+
+		route(c, rpc.ListServers, c.listServers).
+			Summary("List the chats' server ports").
+			Description("The TCP ports this computer's background work of every chat of the "+
+				"project listens on, one row per port: the program holding it, the job's name "+
+				"(or its program), its command and the chat. There is no event: apps poll.").
+			Tags("jobs").
+			PathParam("id", "Workspace ID").
+			Fails(404, 500).
+			Build(),
+
 		route(c, rpc.SetCPUAffinity, c.setCPUAffinity).
 			Summary("Turn the agent CPUs on or off").
 			Description("Saves options.agent_cpus_enabled and moves the engine and everything it "+

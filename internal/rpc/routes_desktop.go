@@ -9,6 +9,13 @@ var (
 	// PendingQuestion returns the question form a chat waits on (G-12).
 	PendingQuestion = Op[Empty, proto.QuestionRequest]{Method: get, Path: "/v1/workspaces/{id}/questions/pending"}
 
+	// CustomCommands lists the palette's custom commands and skills (G-7).
+	CustomCommands = Op[Empty, []proto.CustomCommand]{Method: get, Path: "/v1/workspaces/{id}/commands"}
+
+	// ListServers lists the ports the chats' background work listens on
+	// (G-18).
+	ListServers = Op[Empty, []proto.ServerPort]{Method: get, Path: "/v1/workspaces/{id}/servers"}
+
 	// SetCPUAffinity turns the agent CPUs on or off for the engine (G-16).
 	SetCPUAffinity = Op[proto.CPUAffinityRequest, proto.CPUAffinity]{Method: post, Path: "/v1/cpu-affinity"}
 )

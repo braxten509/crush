@@ -163,8 +163,13 @@ func liveModelEnd(w http.ResponseWriter, finish string) {
 func liveModelToolCalls(w http.ResponseWriter, name string, job, helper bool) {
 	var calls [][2]string
 	if job {
+		command := "sleep 120"
+		if strings.HasPrefix(name, "listen") {
+			// A job that listens on a local port, like a dev server (G-18).
+			command = `python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(); time.sleep(120)'`
+		}
 		args, _ := json.Marshal(map[string]any{
-			"description": "Start the " + name + " job", "command": "sleep 120", "run_in_background": true,
+			"description": "Start the " + name + " job", "command": command, "run_in_background": true,
 		})
 		calls = append(calls, [2]string{"call_job_" + name, string(args)})
 	}

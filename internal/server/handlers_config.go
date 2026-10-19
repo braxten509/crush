@@ -12,7 +12,7 @@ import (
 // setConfigField sets a configuration field. Over TCP, a write that would
 // change the CPU setting answers 403 local_only and changes nothing.
 func (c *controllerV1) setConfigField(r *http.Request, req proto.ConfigSetRequest) (rpc.Empty, error) {
-	return rpc.Empty{}, c.backend.SetConfigFieldAs(r.PathValue("id"), true, req.Scope, req.Key, req.Value)
+	return rpc.Empty{}, c.backend.SetConfigFieldAs(r.PathValue("id"), secureLocalOnly(r) == nil, req.Scope, req.Key, req.Value)
 }
 
 // removeConfigField removes a configuration field, with the CPU rule of

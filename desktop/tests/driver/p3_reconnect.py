@@ -486,6 +486,10 @@ def main():
                 kept = [s["field"] for s in samples if s["field"] != KEPT]
                 check(not kept and side.field() == KEPT, f"the field kept its text the whole time ({kept[:3]})")
 
+        if not sid:
+            check(False, "reconnect-3 to 7 compare the chat reconnect-1 should have opened, and there is none; stopping here")
+            return
+
         with step("reconnect-3-reload", out_dir):
             agree, why = False, "no read"
             for _ in range(50):

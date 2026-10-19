@@ -8,16 +8,13 @@ import { closeMain, mainView } from "../mainview.js";
 import { isClosed } from "../stores/closed.svelte.js";
 import { parentOf } from "../stores/links.svelte.js";
 import { busy, openChat, sessions } from "../stores/sessions.svelte.js";
-import { showTerminal, terminals } from "../terminal/tabs.svelte.js";
+import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
 import { leftList } from "./store.svelte.js";
 
-// This window's terminal tabs in list order: the order the list keeps (moves
-// and drags), then tabs opened since, at the end.
+// This window's terminal tabs in list order: TERM's own tab order, which the
+// list's moves and drags change (moveTab), so a close picks the same next row.
 export function orderedTerminals() {
-  const byId = new Map(terminals.map((tab) => [tab.id, tab]));
-  const kept = leftList.terminalOrder.filter((id) => byId.has(id));
-  const added = terminals.map((tab) => tab.id).filter((id) => !kept.includes(id));
-  return [...kept, ...added].map((id) => byId.get(id));
+  return terminals;
 }
 
 export function chatRows(now = Date.now()) {
@@ -74,15 +71,7 @@ export function showNumber(n) {
 // input.go:262-286). Chats keep the list's day order, so only terminal tabs
 // move (2.20, inferred).
 export function moveTerminal(id, to) {
-  const order = orderedTerminals().map((tab) => tab.id);
-  const from = order.indexOf(id);
-  if (from < 0) return false;
-  const target = Math.min(Math.max(to, 0), order.length - 1);
-  if (target === from) return false;
-  order.splice(from, 1);
-  order.splice(target, 0, id);
-  leftList.terminalOrder = order;
-  return true;
+  return moveTab(id, to);
 }
 
 // Alt+Shift+↑ and Alt+Shift+↓: the shown row one place, within its group.

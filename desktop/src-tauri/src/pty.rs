@@ -15,7 +15,7 @@ use base64::Engine as _;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write};
 use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
@@ -64,6 +64,11 @@ const CRUSH_NAMES: [&str; 5] = [
 #[derive(Default)]
 pub struct Ptys {
     tabs: Mutex<HashMap<String, Arc<Tab>>>,
+    /// Windows whose tabs `pty_close_all` ended. A start still on its way
+    /// when the window closed is refused here (window labels are never
+    /// reused), so no shell outlives its window (2.25, 6.4). Locked after
+    /// `tabs`, never before.
+    closed: Mutex<HashSet<String>>,
     next: AtomicU64,
 }
 
@@ -193,7 +198,17 @@ pub fn spawn(
     });
     let ptys = app.state::<Ptys>();
     let id = (ptys.next.fetch_add(1, Ordering::SeqCst) + 1).to_string();
-    ptys.tabs.lock().unwrap().insert(id.clone(), tab.clone());
+    {
+        let mut all = ptys.tabs.lock().unwrap();
+        if ptys.closed.lock().unwrap().contains(label) {
+            drop(all);
+            signal(-(pid as i32), SIGKILL);
+            signal(pid as i32, SIGKILL);
+            let _ = child.wait();
+            return Err(fail("the window closed".to_string()));
+        }
+        all.insert(id.clone(), tab.clone());
+    }
 
     // The writer: the page's input, in order, without holding up the caller
     // while a program is slow to read (session.go:355-357).
@@ -285,6 +300,7 @@ pub fn close_all(app: &AppHandle, label: &str) -> AppResult<()> {
     let tabs: Vec<Arc<Tab>> = {
         let ptys = app.state::<Ptys>();
         let all = ptys.tabs.lock().unwrap();
+        ptys.closed.lock().unwrap().insert(label.to_string());
         all.values().filter(|tab| tab.label == label).cloned().collect()
     };
     for tab in &tabs {

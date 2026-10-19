@@ -221,6 +221,9 @@
       try {
         const tab = await openTerminal({ cwd: dir });
         if (!tab?.id) throw new Error("no terminal tab");
+        // The tab exists at once; whether its shell started comes later.
+        const start = await tab.started;
+        if (start?.error) throw new Error(start.error);
       } catch (error) {
         console.error("Could not start a terminal", error?.message ?? error);
         leftList.failure = "Couldn't start the terminal.";

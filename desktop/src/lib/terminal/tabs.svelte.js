@@ -26,7 +26,7 @@ export const terminals = $state([]); // [{id, title, cwd, exited, state, error}]
 const tabs = new Map(); // id → the tab's own parts (below)
 let count = 0;
 let home = "";
-let hostName = ""; // no command names this computer; /proc decides on Linux (terminal.go:91-98)
+let hostName = ""; // this computer's name (app_info's host), for OSC 7 (terminal.go:100-115)
 const status = $state({ windowFocused: typeof document === "undefined" ? false : document.hasFocus() });
 
 // The xterm modules, loaded on the first tab.
@@ -41,9 +41,11 @@ function loadXterm() {
 // -- The interface (7.4) --
 
 // Opens a tab running argv (else the user's shell) in cwd, titled title
-// ("Terminal", terminal.go:50), shows it at once, and returns {id, exited}.
-// A failed start shows its error in the tab (look 5.18) and resolves exited
-// with {code: null, error}.
+// ("Terminal", terminal.go:50), shows it at once, and returns {id, exited,
+// started}. A failed start shows its error in the tab (look 5.18), resolves
+// exited with {code: null, error} and started with {error}; started resolves
+// with {error: null} once the shell runs (or the tab closed first), so the
+// folder picker's failure line can follow it (LIST-048).
 export function openTerminal({ cwd, argv = null, title = "Terminal" } = {}) {
   return openTab({ cwd, argv, title });
 }
@@ -57,6 +59,18 @@ export function showTerminal(id) {
     return;
   }
   showMain({ kind: "terminal", component: TerminalTab, props: { id } });
+}
+
+// The list's moves and drags (LIST-009): `terminals` is the one tab order,
+// so the tab shown after a close is the row that followed it (host.go:412-441).
+export function moveTab(id, to) {
+  const from = terminals.findIndex((entry) => entry.id === id);
+  if (from < 0) return false;
+  const target = Math.min(Math.max(to, 0), terminals.length - 1);
+  if (target === from) return false;
+  const [entry] = terminals.splice(from, 1);
+  terminals.splice(target, 0, entry);
+  return true;
 }
 
 // Alt+W or the row's ×: the close box (TERM's sheet terminal_close) over the
@@ -113,8 +127,9 @@ export function closeTerminal(id) {
 // 5); otherwise the next tab, else the one before (host.go:409-438).
 export function openTab({ cwd, argv = null, title = "Terminal", backToChat = false, after = null }) {
   const id = `term-${++count}`;
-  let resolveExited;
+  let resolveExited, resolveStarted;
   const exited = new Promise((resolve) => (resolveExited = resolve));
+  const started = new Promise((resolve) => (resolveStarted = resolve));
   terminals.push({ id, title, cwd: cwd ?? "", exited, state: "starting", error: "" });
   const tab = {
     id,
@@ -123,6 +138,7 @@ export function openTab({ cwd, argv = null, title = "Terminal", backToChat = fal
     backToChat,
     exited,
     resolveExited,
+    resolveStarted,
     after: null, // the work that waits for the end (the editor's file)
     term: null,
     fit: null,
@@ -148,7 +164,7 @@ export function openTab({ cwd, argv = null, title = "Terminal", backToChat = fal
   tab.created = create(tab);
   showTerminal(id);
   start(tab, cwd);
-  return { id, exited };
+  return { id, exited, started };
 }
 
 // -- Starting --
@@ -177,13 +193,18 @@ async function start(tab, cwd) {
   // The view sizes the grid first; a tab that is not shown starts at 80×24.
   await Promise.race([tab.sized, sleep(1000)]);
   if (tab.closed) return finishStart(tab, null);
-  if (!home) home = (await app_info().catch(() => null))?.home ?? "";
+  if (!home) {
+    const info = await app_info().catch(() => null);
+    home = info?.home ?? "";
+    hostName = info?.host ?? "";
+  }
   const channel = new Channel();
   channel.onmessage = (message) => fromPty(tab, message);
   try {
     const spawned = await ptySpawn(cwd, tab.argv, tab.term.cols, tab.term.rows, channel);
     tab.ptyId = spawned.id;
     tab.pid = spawned.pid;
+    tab.resolveStarted({ error: null });
     if (tab.closed) {
       ptyClose(spawned.id).catch(() => {});
       return;
@@ -205,6 +226,7 @@ function finishStart(tab, error) {
     tab.entry.error = error;
   }
   tab.gone = true;
+  tab.resolveStarted({ error });
   tab.resolveExited({ code: null, error: error ?? "closed" });
 }
 

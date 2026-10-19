@@ -19,7 +19,7 @@ import { onEvent, onResync } from "../engine/events.js";
 import { bindKey } from "../keys.js";
 import { isShown, listRows, moveShown, orderedTerminals, showNumber, shownTerminal } from "../leftlist/numbers.js";
 import { SERVER_HINT, foldOf, isPicked, readServers, rowTexts, serverKey, shownRows, unpick } from "../leftlist/servers.js";
-import { anyWorking, chatOfEvent, chatState, forgetChat, phase3Kind, pollWorking, readSoon, rowStateOf, unknown } from "../leftlist/states.js";
+import { chatOfEvent, chatState, forgetChat, phase3Kind, pollWorking, readSoon, rowStateOf, unknown } from "../leftlist/states.js";
 import { applySettings, leftList, openPicker, toggleList, watch } from "../leftlist/store.svelte.js";
 import { forget, noteState, unread } from "../leftlist/unread.js";
 import { DRAFT_STEP, closeThisWindow, discardDraft } from "../leftlist/windowclose.js";
@@ -67,7 +67,8 @@ listKey("Alt+W", closeShown);
 listKey("Alt+Shift+ArrowUp", () => (moveShown(-1), true));
 listKey("Alt+Shift+ArrowDown", () => (moveShown(1), true));
 for (let n = 1; n <= 9; n += 1) listKey(`Alt+${n}`, () => (showNumber(n), true));
-bindKey("global", "Ctrl+Shift+W", closeThisWindow);
+// Also while a terminal has the focus, when "global" is not asked (LIST-026).
+listKey("Ctrl+Shift+W", closeThisWindow);
 // A picked server row takes its keys first; any other key lets go of it.
 bindKey("list", "*", serverKey);
 
@@ -116,9 +117,12 @@ onResync(() => {
   for (const id of [...unknown]) readSoon(id);
 });
 
-// Every 1 s, the chats that work or run in the background.
+// Every 1 s, the chats that work or run in the background. The timer runs
+// while connected and pollWorking picks those chats on each tick: an effect
+// that read the chat records would restart it on every event-driven read,
+// and a busy chat's reads could then put the checks off for good (2.20).
 watch(() => {
-  if (conn.state !== "connected" || !anyWorking()) return;
+  if (conn.state !== "connected") return;
   const timer = setInterval(pollWorking, 1000);
   return () => clearInterval(timer);
 });

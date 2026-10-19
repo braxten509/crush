@@ -38,6 +38,9 @@ pub struct AppInfo {
     launch_id: Option<String>,
     new_chat: bool,
     home: String,
+    /// This computer's name, as Go's os.Hostname gives it: a terminal's
+    /// OSC 7 folder report may name it (terminal.go:100-115).
+    host: String,
 }
 
 #[tauri::command]
@@ -63,7 +66,23 @@ fn info_for(launch: &Launch, opened: &WindowLaunch, first_window: bool, launch_i
         launch_id,
         new_chat: opened.new_chat,
         home: dirs::home_dir().map(|h| h.to_string_lossy().into_owned()).unwrap_or_default(),
+        host: host_name(),
     }
+}
+
+extern "C" {
+    fn gethostname(name: *mut std::ffi::c_char, len: usize) -> std::ffi::c_int;
+}
+
+/// gethostname(2), or "" when it fails.
+fn host_name() -> String {
+    let mut buf = [0u8; 256];
+    // SAFETY: the buffer is writable for its whole length.
+    if unsafe { gethostname(buf.as_mut_ptr().cast(), buf.len()) } != 0 {
+        return String::new();
+    }
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[..end]).into_owned()
 }
 
 /// The first window writes the probe file, every other window `<probe file>.<label>` (8.2).

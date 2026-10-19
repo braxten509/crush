@@ -3,9 +3,9 @@
 //! `start` and blocks the command's worker thread, never the main one (the
 //! command is async), until a folder is picked or the dialog is cancelled.
 //!
-//! Test runs only: with `--probe` and `CRUSH_DESKTOP_TEST_PICK_FOLDER` set,
-//! that path is the answer and no dialog opens (8.4), so nothing appears on
-//! the screen.
+//! Test runs (`--probe`) never open the dialog (8.4), so nothing appears on
+//! the screen and no command waits on an answer nobody gives: the answer is
+//! `CRUSH_DESKTOP_TEST_PICK_FOLDER`'s path, or a cancel when it is unset.
 
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -21,8 +21,8 @@ pub fn pick(app: &AppHandle, start: &str) -> AppResult<Option<String>> {
     let probe = app
         .try_state::<AppState>()
         .is_some_and(|state| state.launch.probe.is_some());
-    if let Some(path) = test_answer(probe, std::env::var(TEST_PICK).ok()) {
-        return Ok(Some(path));
+    if probe {
+        return Ok(test_answer(std::env::var(TEST_PICK).ok()));
     }
     let mut dialog = app.dialog().file().set_title("Choose a folder");
     if Path::new(start).is_dir() {
@@ -42,10 +42,7 @@ pub fn pick(app: &AppHandle, start: &str) -> AppResult<Option<String>> {
     }
 }
 
-/// The stand-in answer: the variable's value, in a probe run only.
-fn test_answer(probe: bool, value: Option<String>) -> Option<String> {
-    if !probe {
-        return None;
-    }
+/// A probe run's answer: the variable's value, or a cancel when it is unset.
+fn test_answer(value: Option<String>) -> Option<String> {
     value.filter(|path| !path.is_empty())
 }

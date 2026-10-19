@@ -18,8 +18,10 @@ export const mainView = {
 };
 
 // Shows the view; close() takes it away again, unless another view replaced it.
-export function showMain({ kind, component, props = {} }) {
-  const entry = { kind, component, props };
+// key: a view whose parts are fixed when it mounts (a helper's chat) gives
+// one, and a different key mounts it anew instead of reusing it.
+export function showMain({ kind, component, props = {}, key = null }) {
+  const entry = { kind, component, props, key };
   state.set("current", entry);
   setFocus("main");
   return {

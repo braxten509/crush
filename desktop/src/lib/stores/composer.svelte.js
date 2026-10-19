@@ -172,6 +172,16 @@ export function setText(text) {
   history.edited(text);
 }
 
+// The external editor's result for a chat that is no longer shown (2.26
+// step 5): it goes into that chat's own draft, shell mode following a
+// leading "!" as applyEditorText's does for the shown chat.
+export function setDraftOf(sid, text) {
+  const draft = draftFor(sid);
+  draft.bang = text.startsWith("!");
+  draft.text = draft.bang ? text.slice(1) : text;
+  draft.bangEmpty = draft.bang && draft.text === "";
+}
+
 // Phase 5's file picker uses it too (Add Image, DLG-255).
 export function addAttachment(attachment) {
   if (!attachment) return;

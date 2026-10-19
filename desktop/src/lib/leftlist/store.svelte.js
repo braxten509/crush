@@ -15,7 +15,6 @@ export const leftList = $state({
   failure: "", // the list's bottom line: "Couldn't start a session." or "Couldn't start the terminal."
   picker: null, // the folder picker while it is open (lib/leftlist/picker.js)
   home: "", // the home folder (app_info), written "~" in the picker
-  terminalOrder: [], // this window's terminal tab ids in list order (not saved)
   dragging: "", // the terminal tab a drag is moving
   servers: [], // the listening ports of the project's chats, each once, in list order (servers.js)
   openFolds: {}, // fold → true: a program's row opened to show its servers

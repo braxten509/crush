@@ -108,13 +108,6 @@ export function pollWorking() {
   }
 }
 
-export function anyWorking() {
-  return sessions.order.some((id) => {
-    const kind = phase3Kind(id);
-    return kind === "working" || kind === "background";
-  });
-}
-
 // The chat an engine event names (1.4.2 payloads).
 export function chatOfEvent(type, payload) {
   switch (type) {

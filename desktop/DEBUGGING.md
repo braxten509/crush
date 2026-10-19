@@ -2,6 +2,16 @@
 
 What the build process (PLAN.md, the ultrabuild review and test rules) called for but was skipped, cut short or left open. Newest first. Each item says what is missing and where it would be done. Details and decisions stay in PLAN.md; this file is the to-do list of gaps.
 
+## Phases 5-6, wave 2 (PAL, MOD, AUTH, SES, ASK), 2026-10-19
+
+Owner instruction: the coordinator builds wave 2 itself, with no sub-agents, **no tests and no ultrabuild process** (no plan review, no independent review, no deliberate breaks, no window drivers, no look checks).
+
+- **Written by Claude Opus at high effort, not max.** The plan called for max effort on brand-new screens; wave 2 was written by the coordinator (Claude Opus 5.5) running at high effort.
+- **No tests at all.** None of the design's `u:`, `r:` or `w:` checks for PAL, MOD, AUTH, SES or ASK were written. The only evidence is that the existing unit tests, `cargo test` and `pnpm build` still pass.
+- **No review.** No reviewer read wave 2's code.
+- **No builder report.** No row-by-row list of what each piece covers or where it differs from the design; whatever the coordinator records in PLAN.md is all there is.
+- **P4.4** (tree and restore dialogs) still waits; it was not part of this request.
+
 ## Phases 5-6, wave 1 (KIT, TERM, LST, LIVE), 2026-10-19
 
 The owner stopped the four builders (t82 to t85) once their app code was written and they were only working on tests. Their work was committed as work in progress and merged into `desktop` without the usual checks: KIT `e5a7ef50`, TERM `831a0b98`, LST `658b508d`, LIVE `bc8d07c5`.
@@ -36,7 +46,21 @@ Other open items from wave 1:
 - **Strip width fix unproven.** `ccc760e7` (left column 64 wide and divider fixed while the strip shows) passed unit tests and the build only; LST's `w:lst.collapse_strip` was meant to prove it in the window and never ran.
 - **S5 focus bug fixed only on TERM's side.** S5's `closeMain()` focuses the typing box while it is still hidden; TERM refocuses after the redraw in `src/lib/terminal/tabs.svelte.js`. Any other piece that closes the main view (LIVE's helper view) still hits the S5 bug. Proper fix belongs in `src/lib/mainview.js` (S5).
 - **SHELL / PATH note unchecked.** If a driver sets `SHELL`, `login_env.rs` may rebuild PATH so plain `crush` no longer finds the test build (S5 re-review note e). TERM and LIVE were asked to check it; neither reported.
-- **Merged before review.** Review t86 (Sol 6.1 high) started after the merge, not before. Full checks on the merged tree: job 00D. Early findings from t86: a terminal that fails to start never reaches the left list's failure line; the external editor can put its text into another chat's draft after a chat switch.
+- **Merged before review.** Review t86 (Sol 6.1 high) started after the merge, not before. Full checks on the merged tree: job 00D.
+- **Review t86 findings, fixed by the coordinator without tests or re-review** (owner: "you make the fixes"). None of these fixes has a test, a deliberate break, a window check or a second review:
+  1. (high) The external editor's text could land in another chat's draft after a chat switch. Now the chat it came from gets it (`editor.js`, new `setDraftOf` in `composer.svelte.js`).
+  2. (high) A terminal still starting when its window closed could outlive the window. `pty_close_all` now marks the window closed and a later start is killed and refused (`pty.rs`). Window labels are never reused, so the mark stays.
+  3. (medium) In a button row, ← / → moved the look of the selection but not the focus, so Enter could press the other button. Focus now follows (`kit/Buttons.svelte`).
+  4. (medium) The left list's 1 s state checks restarted on every chat read and could be put off forever. The timer now runs while connected (`plugins/leftlist.js`; `anyWorking` removed).
+  5. (medium) After a terminal row was dragged, closing a tab showed the wrong neighbour. The list and TERM now share one order: `terminals` itself, moved by TERM's new `moveTab` (`leftlist/numbers.js`, `tabs.svelte.js`; `leftList.terminalOrder` removed).
+  6. (medium) OSC 7 folder reports naming this computer were ignored (no host name). `app_info` now gives `host` (gethostname) and TERM uses it.
+  7. (medium) A terminal that failed to start never showed "Couldn't start the terminal." `openTerminal` now also returns `started`, and the folder picker waits for it.
+  8. (medium) Ctrl+Shift+W did nothing while a terminal had the focus. Now bound in the `main` scope too.
+  9. (medium) The background/helper sheet hid its scrollbar, so KIT's bar never showed. The hiding CSS is removed (`live/Background.svelte`).
+  10. (medium) Picking another helper while one was shown kept the first helper's chat. `showMain` takes a `key` and the host mounts the view anew when it changes; the helper view passes `helper:<id>`.
+  11. (medium) The left list's `app_info` call used up the one-time launch ID that SHARE needs. `commands.js` keeps the first launch ID seen; SHARE must use `takeLaunchId()`. `probe.js` now goes through the same wrapper.
+  - Interfaces changed for later pieces: `openTerminal` returns `{id, exited, started}`; `showMain` takes `key`; `app_info` has `host`; `takeLaunchId()` is new. Design 6.4 / 7.4 were not updated.
+- **Full checks found a hang.** `s5_commands` failed on the merged tree (job 00D): LST's `folder_pick` opened a real folder dialog in test runs when `CRUSH_DESKTOP_TEST_PICK_FOLDER` was unset, and every probe command waited on it. Test runs now never open the dialog (unset means cancel). Rerun pending.
 - **Coordinator statement corrected.** PLAN.md (stop entry) says KIT's fuzzy and help-fit tests had their breaks shown; only the fuzzy break was seen in the builder's status.
 
 ## S5 (phase 5-6 scaffold)

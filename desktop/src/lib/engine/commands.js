@@ -11,8 +11,21 @@ export function lastClipboardWrite() {
   return lastClipboard;
 }
 
+// app_info gives the window's launch ID once (6.4) and many parts call it, so
+// the first ID seen is kept here for whichever part takes it (SHARE, 7.3).
+let launchId = null;
 export async function app_info() {
-  return invoke("app_info");
+  const info = await invoke("app_info");
+  if (info?.launch_id) launchId = info.launch_id;
+  return info;
+}
+
+// The window's launch ID, once; null when there was none or it was taken.
+export async function takeLaunchId() {
+  if (launchId === null) await app_info().catch(() => null);
+  const id = launchId;
+  launchId = null;
+  return id;
 }
 
 export async function probe_write(json) {

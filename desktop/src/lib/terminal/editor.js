@@ -6,7 +6,8 @@
 
 import { windowBusy } from "../busy.js";
 import { editorFinish, editorPrepare } from "../engine/commands.js";
-import { backspaceLeavesBang, composer, draftOf, fieldElement, projectDir, setText, typed } from "../stores/composer.svelte.js";
+import { backspaceLeavesBang, composer, draftOf, fieldElement, projectDir, setDraftOf, setText, typed } from "../stores/composer.svelte.js";
+import { sessions } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { openTab } from "./tabs.svelte.js";
 
@@ -27,6 +28,9 @@ export async function openExternalEditor() {
     notify("warn", BUSY);
     return;
   }
+  // The chat the text came from gets the result back, even if another chat
+  // is shown by then (2.26 steps 2 and 5).
+  const sid = sessions.currentId ?? "";
   const draft = draftOf();
   // "!" in front while the box is in shell mode (keypress.go:372-375); the
   // caret is the box's, without the "!", as the terminal's is.
@@ -43,10 +47,10 @@ export async function openExternalEditor() {
   }
   // The editor runs in a tab of its own, shown at once (2.26 step 4); when
   // it ends or its tab is closed, the file comes back (step 5).
-  openTab({ cwd: projectDir(), argv: prepared.argv, title: "Editor", backToChat: true, after: (exited) => finish(exited, prepared.path) });
+  openTab({ cwd: projectDir(), argv: prepared.argv, title: "Editor", backToChat: true, after: (exited) => finish(exited, prepared.path, sid) });
 }
 
-async function finish(exited, path) {
+async function finish(exited, path, sid) {
   const end = await exited;
   let result;
   try {
@@ -62,7 +66,8 @@ async function finish(exited, path) {
     notify("error", end.signal ? `signal: ${String(end.signal).toLowerCase()}` : `exit status ${end.code}`);
     return;
   }
-  applyEditorText(result.text);
+  if ((sessions.currentId ?? "") === sid) applyEditorText(result.text);
+  else setDraftOf(sid, result.text);
 }
 
 // openEditorMsg (update_ui.go:161-166): the text replaces the typing box's,

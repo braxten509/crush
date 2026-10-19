@@ -14,7 +14,7 @@
 // "<probe file>.opened.jsonl", which every report includes.
 import { invoke } from "@tauri-apps/api/core";
 import { dialogs } from "./dialogs.js";
-import { lastClipboardWrite } from "./engine/commands.js";
+import { app_info, lastClipboardWrite } from "./engine/commands.js";
 import { ui } from "./stores/ui.svelte.js";
 
 let inlineResult = null;
@@ -178,7 +178,7 @@ function report() {
 export async function startProbe() {
   let enabled = false;
   try {
-    enabled = (await invoke("app_info")).probe;
+    enabled = (await app_info()).probe;
   } catch {
     return; // Not running inside the app window (unit tests, plain browser).
   }

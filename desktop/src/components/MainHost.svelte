@@ -10,7 +10,9 @@
 
 {#if view}
   <div class="main-view" data-main-view={view.kind}>
-    <view.component {...view.props} />
+    {#key view.key ?? view.kind}
+      <view.component {...view.props} />
+    {/key}
   </div>
 {/if}
 

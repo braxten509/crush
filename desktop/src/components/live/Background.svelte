@@ -96,7 +96,7 @@
     const helper = row?.helper;
     if (!helper?.child_session_id || ui.slot || helper.session_id !== sessions.currentId) return false;
     closeDialog(SHEET.helpers);
-    showMain({ kind: "helper", component: HelperView, props: { helper } });
+    showMain({ kind: "helper", component: HelperView, props: { helper }, key: `helper:${helper.id}` });
     return true;
   }
 
@@ -216,10 +216,6 @@
   .list {
     max-height: calc(8 * 64 * var(--px));
     overflow-y: auto;
-    scrollbar-width: none;
-  }
-  .list::-webkit-scrollbar {
-    display: none;
   }
   /* Two-line rows 64 high (look 5.1): the mark and the name on the first line,
      the info 5 below it, and the action's slot kept at the right end. */

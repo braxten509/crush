@@ -17,10 +17,10 @@ describe("the main column's view (desktop-design-5-6 6.4)", () => {
   it("shows one view at a time and gives it the focus", () => {
     expect(mv.mainView.current).toBe(null);
     mv.showMain({ kind: "helper", component: "H", props: { sessionId: "c1" } });
-    expect(mv.mainView.current).toEqual({ kind: "helper", component: "H", props: { sessionId: "c1" } });
+    expect(mv.mainView.current).toEqual({ kind: "helper", component: "H", props: { sessionId: "c1" }, key: null });
     expect(ui.focus).toBe("main");
     mv.showMain({ kind: "terminal", component: "T" });
-    expect(mv.mainView.current).toEqual({ kind: "terminal", component: "T", props: {} });
+    expect(mv.mainView.current).toEqual({ kind: "terminal", component: "T", props: {}, key: null });
   });
 
   it("closes through its handle only while it is the one shown, and gives the focus back to the typing box", () => {

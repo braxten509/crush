@@ -40,6 +40,9 @@
     const at = usable.findIndex((b) => b.id === selected);
     const next = at < 0 ? (delta > 0 ? 0 : usable.length - 1) : (at + delta + usable.length) % usable.length;
     selected = usable[next].id;
+    // Focus inside the row follows the selection, so Enter presses the
+    // button that looks selected (2.1, 5.1).
+    if (row?.contains(document.activeElement)) [...row.querySelectorAll("[data-button]")].find((el) => el.dataset.button === String(selected))?.focus();
     return true;
   }
 

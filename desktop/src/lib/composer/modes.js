@@ -88,6 +88,13 @@ export function modelLabel(agent, items = null) {
   return parts.join(" · ");
 }
 
+// The model button's words (SIDE-006): "Unknown" until the agent has a model;
+// then the label, which may be empty when the footer items hide both parts.
+export function modelButtonText(agent, items = null) {
+  if (!agent?.model && !agent?.model_cfg) return "Unknown";
+  return modelLabel(agent, items);
+}
+
 // "exit" or "quit" asks to quit (TYPE-007, keypress.go:342-345).
 export function isQuitWord(text) {
   const value = String(text ?? "").trim();

@@ -7,7 +7,7 @@ import TodoSection from "../../components/composer/TodoSection.svelte";
 import { registerAction } from "../actions.js";
 import { deleteModeKey } from "../composer/chips.js";
 import { atEnd, onFirstLine, onLastLine } from "../composer/history.js";
-import { modelLabel } from "../composer/modes.js";
+import { modelButtonText } from "../composer/modes.js";
 import { hasIncomplete, queueRows, todoHeader } from "../composer/trayrows.js";
 import { bindKey } from "../keys.js";
 import { probeSection } from "../probe.js";
@@ -264,7 +264,7 @@ probeSection(
       todos_open: todos.open,
       queue: queueRows(queued()),
       slot: ui.slot && { kind: ui.slot.kind, buttons: C.composer.slotButtons.map((b) => ({ label: b.label, selected: b.selected })) },
-      model: modelLabel(ws.agent, ws.config?.options?.tui?.composer_footer) || "Unknown",
+      model: modelButtonText(ws.agent, ws.config?.options?.tui?.composer_footer),
       input: C.composer.input,
       yolo: C.composer.yolo,
       switching: C.composer.switching,

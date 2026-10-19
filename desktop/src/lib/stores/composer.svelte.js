@@ -8,7 +8,7 @@
 // are lib/composer's; this store runs them against the engine and the field.
 // The field (Field.svelte) registers its textarea, so the caret can follow
 // what the store puts in it; the slot's form registers how to focus it.
-import { tick, untrack } from "svelte";
+import { untrack } from "svelte";
 import { openDialog } from "../dialogs.js";
 import { api, uuid } from "../engine/api.js";
 import { clipboard_read, clipboard_write, file_info, file_read, files_list } from "../engine/commands.js";
@@ -54,6 +54,8 @@ export const composer = $state({
   picks: pickPlaceholders(), // this round's ready and working placeholders (TYPE-003)
   pendingKept: [], // [{ id, name, by_agent }]: skills turned on before the chat exists (TYPE-041)
   slotButtons: [], // the slot form's buttons [{ label, selected }], for the probe (1.9)
+  slotFull: false, // the permission prompt covers the middle column (DLG-138)
+  slotTall: false, // the slot form takes all of its 60%: a diff (contentViewportHeight, permissions.go:365-373)
 });
 
 const NOT_READY = "coder agent is not initialized"; // workspace.ErrAgentNotInitialized (internal/workspace/workspace.go:34)
@@ -119,12 +121,14 @@ function selection() {
   return field ? [field.selectionStart ?? length, field.selectionEnd ?? length] : [length, length];
 }
 
-// Puts value in chat sid's field and the caret at `at` once the field shows it.
-async function place(value, at = value.length, sid = sessions.currentId) {
+// Puts value in chat sid's field and the caret at `at`. The element is set at
+// once too: a change the store does not see as one (a "!" typed into an empty
+// field leaves the stored text empty) would otherwise stay on screen.
+function place(value, at = value.length, sid = sessions.currentId) {
   draftFor(sid).text = value;
-  if (sid !== sessions.currentId) return;
-  await tick();
-  if (field && sessions.currentId === sid && field.value === value) field.setSelectionRange(at, at);
+  if (!field || sid !== sessions.currentId) return;
+  if (field.value !== value) field.value = value;
+  field.setSelectionRange(at, at);
 }
 
 // -- Mode mark and placeholder (TYPE-002, TYPE-003) --
@@ -424,9 +428,11 @@ export function caretMoved() {
 let fileList = []; // every row of the open popup, as files_list gave them
 let listTurn = 0;
 
-function workDir() {
+// The project's folder (the engine's working directory for this window).
+export function projectDir() {
   return conn.workspace?.path || conn.project.path || conn.project.cwd || "";
 }
+const workDir = projectDir;
 
 // options.tui.completions (Completions.Limits, internal/config/options.go:87-89).
 function completionLimits() {
@@ -485,6 +491,12 @@ export function movePopup(direction) {
   const popup = composer.popup;
   if (!popup) return;
   popup.focused = moveFocus(popup.focused, popup.rows.length, direction);
+}
+
+// The pointer rests on a row (TYPE-061).
+export function focusRow(index) {
+  const popup = composer.popup;
+  if (popup && index >= 0 && index < popup.rows.length && popup.focused !== index) popup.focused = index;
 }
 
 let reads = []; // absolute paths picked before the chat exists (sessionFileReads)

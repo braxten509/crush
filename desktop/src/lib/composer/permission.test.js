@@ -6,6 +6,8 @@ import {
   forcedFull,
   headerLines,
   hints,
+  homeOf,
+  plainDiff,
   prettyPath,
   promptKey,
   startsSplit,
@@ -175,5 +177,23 @@ describe("keys (DLG-130 to DLG-138, permissions.go:225-293)", () => {
   it("shows only the hints that apply", () => {
     expect(hints({ diff: false, scrollable: false })).toBe("a allow · s allow for session · d deny");
     expect(hints({ diff: true, scrollable: true })).toBe("a allow · s allow for session · d deny · shift+↑↓ scroll · t split/unified · f full screen");
+  });
+});
+
+describe("the home folder and the plain diff", () => {
+  it("finds the home folder in the project's path", () => {
+    expect(homeOf("/home/u/project")).toBe("/home/u");
+    expect(homeOf("/Users/ana/src/app")).toBe("/Users/ana");
+    expect(homeOf("/root")).toBe("/root");
+    expect(homeOf("/srv/project")).toBe("");
+    expect(homeOf("/homestead/x")).toBe("");
+    expect(prettyPath("/home/u/project/a.go", homeOf("/home/u/project"))).toBe("~/project/a.go");
+  });
+
+  it("lists the changed lines between the unchanged start and end", () => {
+    expect(plainDiff({ before: "a\nb\nc\n", after: "a\nB\nc\n" })).toBe("- b\n+ B");
+    expect(plainDiff({ before: "", after: "x\r\ny" })).toBe("+ x\n+ y");
+    expect(plainDiff({ before: "same", after: "same" })).toBe("");
+    expect(plainDiff({ before: "a\nb", after: "a\nb\nc" })).toBe("+ c");
   });
 });

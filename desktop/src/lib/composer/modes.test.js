@@ -10,6 +10,7 @@ import {
   cycleSteps,
   isQuitWord,
   markOf,
+  modelButtonText,
   modelLabel,
   pickPlaceholders,
   placeholderFor,
@@ -98,6 +99,13 @@ describe("modelLabel (SIDE-006, composer_footer.go:255-290)", () => {
   it("is empty before the agent has a model", () => {
     expect(modelLabel(null)).toBe("");
     expect(modelLabel({ is_ready: false })).toBe("");
+  });
+
+  it("gives the button Unknown until then, and never for hidden footer items", () => {
+    expect(modelButtonText(null)).toBe("Unknown");
+    expect(modelButtonText({ is_ready: false })).toBe("Unknown");
+    expect(modelButtonText(agent)).toBe("Opus 5.5 · max");
+    expect(modelButtonText(agent, [])).toBe("");
   });
 });
 

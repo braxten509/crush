@@ -54,6 +54,13 @@ export function toolLabel(toolName) {
   return toolName;
 }
 
+// The window does not know the home folder; the project's path shows it
+// for the usual places (/home/<user>, /Users/<user>, /root). "" when not.
+export function homeOf(path) {
+  const match = /^(\/home\/[^/]+|\/Users\/[^/]+|\/root)(?=\/|$)/.exec(String(path ?? ""));
+  return match ? match[1] : "";
+}
+
 // home.Short (internal/home/home.go:34-45), the terminal's fsext.PrettyPath.
 export function prettyPath(path, home) {
   const text = String(path ?? "");
@@ -175,6 +182,24 @@ function defaultContent(request) {
   const text = parts.map((part) => part.text).join("");
   if (text === "") return null;
   return { kind: "text", parts, text };
+}
+
+// A diff as plain text, for as long as DiffView draws nothing (P3.6's piece
+// not merged, 5.2): the lines between the unchanged start and end, the old
+// ones with "- ", the new ones with "+ ". Line ends are LF.
+export function plainDiff({ before = "", after = "" } = {}) {
+  const lines = (text) => (text === "" ? [] : String(text).replaceAll("\r\n", "\n").split("\n"));
+  const old = lines(before);
+  const now = lines(after);
+  let start = 0;
+  while (start < old.length && start < now.length && old[start] === now[start]) start += 1;
+  let endOld = old.length;
+  let endNow = now.length;
+  while (endOld > start && endNow > start && old[endOld - 1] === now[endNow - 1]) {
+    endOld -= 1;
+    endNow -= 1;
+  }
+  return [...old.slice(start, endOld).map((line) => `- ${line}`), ...now.slice(start, endNow).map((line) => `+ ${line}`)].join("\n");
 }
 
 // Whether a diff starts split: options.tui.diff_mode when set, else the

@@ -371,10 +371,11 @@ export function isHiddenInterruptedStep(m, shownBefore) {
 
 // Runs just before this window posts the interrupt: the run's unfinished
 // replies and its tools without a result stop at once; with prompts to send
-// next (queued in the engine, or this window's that the engine took) the chat
-// stays busy and the held ones join the chat, else it is idle now. A send
-// still waiting for its 202 counts for nothing, as the terminal cancels the
-// submissions in flight (send.go:257-270).
+// next (queued in the engine, or this window's that the engine took or that
+// were sent while the chat was busy, `queued`) the chat stays busy and the held ones join
+// the chat, else it is idle now. As the terminal cancels only the submissions
+// in flight that were not queued (send.go:257-270), a send that would start a
+// run and still waits for its 202 counts for nothing; a held one counts.
 export function interruptChat(sid) {
   const chat = messages.bySession[sid];
   if (chat) {
@@ -393,7 +394,7 @@ export function interruptChat(sid) {
     }
     if ([...chat.active].some((id) => interrupted.has(id))) chat.active = new Set([...chat.active].filter((id) => !interrupted.has(id)));
   }
-  const continuing = (queue.bySession?.[sid]?.count ?? 0) > 0 || Object.values(messages.pending).some((p) => p.sessionId === sid && p.acknowledged);
+  const continuing = (queue.bySession?.[sid]?.count ?? 0) > 0 || Object.values(messages.pending).some((p) => p.sessionId === sid && (p.acknowledged || p.queued));
   if (continuing) releaseHeld(sid);
   else settleBusy(sid);
 }
@@ -406,11 +407,13 @@ onInterrupt(interruptChat);
 // when it was held: sent while the chat was busy, TYPE-044) until its saved
 // copy arrives. Returns its submission id, which the send carries.
 export function addPending({ sessionId, text = "", attachments = [], held = false, submissionId = uuid() }) {
-  messages.pending[submissionId] = { submissionId, sessionId, text, attachments, held, state: "working", acknowledged: false, createdAt: Date.now() };
+  messages.pending[submissionId] = { submissionId, sessionId, text, attachments, held, queued: held, state: "working", acknowledged: false, createdAt: Date.now() };
   return submissionId;
 }
 
-// acknowledged: the send carrying this submission id got its 202 (interruptChat).
+// queued: sent while the chat was busy; it stays when the item is released
+// (the terminal's submission.queued, prompt_queue.go:47-52). acknowledged: the
+// send carrying this submission id got its 202. interruptChat reads both.
 onSend((body, call) => {
   const id = body?.submission_id;
   if (!id) return;

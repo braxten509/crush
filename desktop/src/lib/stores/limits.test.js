@@ -227,11 +227,13 @@ describe("polled like the terminal (SIDE-007; polling.go:15, cliagent/limits.go:
     expect(refreshes()).toEqual([ASK, ASK]);
   });
 
-  it("a kind without read_at is not polled", async () => {
+  it("a kind without read_at is polled like a stale one, 3 min after the last ask (the terminal's throttle on the last fetch)", async () => {
     await showing(null);
     limits.startLimitsPoll({ idle: () => true });
-    await minutes(10);
+    await minutes(2); // 10:52
     expect(refreshes()).toEqual([ASK]);
+    await minutes(1); // 10:53
+    expect(refreshes()).toEqual([ASK, ASK]);
   });
 });
 

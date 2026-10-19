@@ -401,6 +401,22 @@ describe("opening a chat (LIST-034, TYPE-049)", () => {
     expect(h.notices).toEqual([{ kind: "warn", text: "Couldn't read this chat's file history" }]);
   });
 
+  it("a file event during the open's history read is not lost (1.5.4)", async () => {
+    await withList(chat("s1"));
+    h.routes.set("GET sessions/s1", chat("s1"));
+    h.routes.set("GET sessions/s1/messages", []);
+    let answer;
+    h.routes.set("GET sessions/s1/history", () => new Promise((resolve) => (answer = resolve)));
+    const opening = S.openChat("s1");
+    await settle();
+    await deliver(ev("file", "created", { id: "f2", session_id: "s1", path: "/p/b.go", version: 0, created_at: 20 }));
+    // The read answers with what the engine had before that event.
+    answer([{ id: "f1", session_id: "s1", path: "/p/a.go", version: 0, created_at: 10 }]);
+    expect(await opening).toBe(true);
+    await settle();
+    expect(ws.files.s1.map((f) => f.id)).toEqual(["f1", "f2"]);
+  });
+
   it("-s opens that chat and -C the newest one (START-006)", async () => {
     await withList(chat("new", { updated_at: 9 }), chat("old", { updated_at: 1 }));
     openable("new", []);

@@ -403,8 +403,21 @@ function showLanding() {
 // internal/ui/model/session.go:86-133, session_load.go:265-353): the chat's
 // record, file history and messages are read at once; a newer switch wins; a
 // failure keeps the window where it was. Resolves true when the chat shows.
+// File events wait until the chat's file history is set, as in the resync
+// (1.5.4): a history the engine read before an event never overwrites it, and
+// an event for a chat with no list yet is not dropped.
 export async function openChat(id) {
   if (!id) return false;
+  let filesSet;
+  withHeld(["file"], () => new Promise((resolve) => (filesSet = resolve)));
+  try {
+    return await showChat(id);
+  } finally {
+    filesSet();
+  }
+}
+
+async function showChat(id) {
   openSeq += 1;
   const seq = openSeq;
   if (id !== sessions.currentId) {

@@ -341,22 +341,34 @@ describe("interrupted runs (CHAT-026)", () => {
     expect(M.isInterrupted("a2")).toBe(true);
   });
 
-  it("Enter then Esc before the 202: a send still in flight keeps nothing going (send.go:257-270)", async () => {
+  it("Enter on an idle chat, then Esc before the 202: that send keeps nothing going (send.go:257-270)", async () => {
+    await loaded("s1", [msg("u1", { role: "user", text: "hi", at: 1 }), msg("a1", { text: "done", at: 2, finished: true })]);
+    S.sessions.currentId = "s1";
+    const id = M.addPending({ sessionId: "s1", text: "another" });
+    const accepted = later();
+    h.routes.set("POST agent", () => accepted.promise);
+    const sending = api.send({ session_id: "s1", prompt: "another", submission_id: id });
+    expect(S.busy("s1")).toBe(true);
+    await api.interrupt("s1");
+    expect(S.busy("s1")).toBe(false);
+    accepted.resolve(null);
+    await sending;
+  });
+
+  it("a prompt sent while busy and still waiting for its 202 keeps the chat going, as queued (send.go:259)", async () => {
     await running();
     const held = M.addPending({ sessionId: "s1", text: "next one", held: true });
     const accepted = later();
     h.routes.set("POST agent", () => accepted.promise);
     const sending = api.send({ session_id: "s1", prompt: "next one", submission_id: held });
     await api.interrupt("s1");
-    expect(M.heldFor("s1").map((p) => p.submissionId)).toEqual([held]); // not released as "continuing"
-    expect(S.busy("s1")).toBe(false);
-    accepted.resolve(null);
-    await sending;
-    await settle();
-    // Once the engine took it, the next Esc sends it on.
-    await api.interrupt("s1");
     expect(M.heldFor("s1")).toEqual([]);
     expect(M.pendingFor("s1").map((p) => p.submissionId)).toEqual([held]);
+    expect(S.busy("s1")).toBe(true);
+    await api.interrupt("s1"); // once released it is still a queued send
+    expect(S.busy("s1")).toBe(true);
+    accepted.resolve(null);
+    await sending;
   });
 
   it("a step that only called tools stays hidden when it first shows after the interrupt", async () => {

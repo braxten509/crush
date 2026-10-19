@@ -86,7 +86,8 @@ function refreshLimitsFor(kind) {
 // (internal/server/handlers_live.go:149), so the page keeps it: a kind is also
 // asked again only 3 min after this window last asked, as cliagent backs off a
 // failed fetch like a success (limits.go:224-228), since a failure keeps the
-// old read_at. A kind without read_at is not polled. connection.svelte.js runs
+// old read_at. A kind without read_at counts as stale, as the terminal's
+// throttle is on the last fetch, not on a reading. connection.svelte.js runs
 // the poll while connected; idle() tells whether the shown chat is idle.
 const POLL_MS = 60_000;
 const STALE_MS = 3 * 60_000;
@@ -99,7 +100,7 @@ export function startLimitsPoll({ idle = () => true } = {}) {
     const kind = lastProvider;
     const read = readTime(limits.byKind[kind]?.read_at);
     const now = Date.now();
-    if (!read || now - read[0] < STALE_MS) return;
+    if (read && now - read[0] < STALE_MS) return;
     if (askedAt.has(kind) && now - askedAt.get(kind) < STALE_MS) return;
     refreshLimitsFor(kind);
   }, POLL_MS);

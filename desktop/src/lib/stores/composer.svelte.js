@@ -33,7 +33,7 @@ import {
 import { planReadyPresent } from "../render/plan.js";
 import { conn } from "./connection.svelte.js";
 import { addPending, finishPending, markUncertain, messages, resolvePending, returnDraft, takeReturned } from "./messages.svelte.js";
-import { queue, recall as recallQueued, refresh as refreshQueue } from "./queue.svelte.js";
+import { queue, recall as recallQueued, recalled, refresh as refreshQueue } from "./queue.svelte.js";
 import { busy, deferSend, ensureSession, sessions, upsertSession } from "./sessions.svelte.js";
 import { notify, setFocus, ui } from "./ui.svelte.js";
 import { loadAgent, ws } from "./workspace.svelte.js";
@@ -345,6 +345,7 @@ async function recallQueuedPrompt(sid) {
   if (prompt) {
     finishPending(prompt.submissionId, false);
     returnDraft(sid, { text: prompt.text, attachments: prompt.attachments });
+    recalled(sid);
   }
   if (sid !== sessions.currentId) return true;
   if (prompt) {

@@ -8,6 +8,9 @@ vi.mock("./commands.js", () => ({
   engine_set_current_session: vi.fn(async () => null),
 }));
 
+// The queue store (TYPE-019) loads the event loop, which asks for the window.
+vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ listen: async () => () => {} }) }));
+
 const commands = await import("./commands.js");
 const { api, onInterrupt, onSend, setCurrentSession, uuid } = await import("./api.js");
 
@@ -168,9 +171,12 @@ describe("interrupt", () => {
 });
 
 describe("recallQueued (the route requires request_id: internal/server/handlers_agent.go:110-130)", () => {
-  it("sends a token, then acknowledges it once the prompt arrived", async () => {
+  it("sends a token, then acknowledges it once the prompt is delivered", async () => {
     commands.api.mockImplementation(async (method, path, query) => (query?.acknowledge ? null : { prompt: "queued text" }));
-    expect(await api.recallQueued("S1")).toEqual({ prompt: "queued text" });
+    expect(await api.recallQueued("S1", "call1")).toEqual({ prompt: "queued text" });
+    expect(commands.api.mock.calls).toHaveLength(1);
+    expect(commands.api.mock.calls[0][4]).toBe("call1");
+    api.acknowledgeRecall("S1");
     const [recall, ack] = commands.api.mock.calls;
     expect(recall.slice(0, 3)).toEqual(["POST", "agent/sessions/S1/prompts/recall", { request_id: expect.stringMatching(UUID) }]);
     expect(ack.slice(0, 3)).toEqual(["POST", "agent/sessions/S1/prompts/recall", { request_id: recall[2].request_id, acknowledge: "true" }]);
@@ -183,8 +189,9 @@ describe("recallQueued (the route requires request_id: internal/server/handlers_
     commands.api.mockImplementation(async () => ({ prompt: "p" }));
     await api.recallQueued("S2");
     expect(commands.api.mock.calls[1][2].request_id).toBe(first);
+    api.acknowledgeRecall("S2");
     await api.recallQueued("S2");
-    expect(commands.api.mock.calls.at(-2)[2].request_id).not.toBe(first);
+    expect(commands.api.mock.calls.at(-1)[2].request_id).not.toBe(first);
   });
 
   it("never turns a failed acknowledgement into an error", async () => {
@@ -193,6 +200,45 @@ describe("recallQueued (the route requires request_id: internal/server/handlers_
       return { prompt: "p" };
     });
     await expect(api.recallQueued("S3")).resolves.toEqual({ prompt: "p" });
+    expect(() => api.acknowledgeRecall("S3")).not.toThrow();
+    await Promise.resolve();
+  });
+});
+
+describe("a recall that outlives its 10 s (TYPE-019)", () => {
+  it("timeout, then a late answer, then a retry: the prompt and its attachments come back", async () => {
+    // The engine of internal/backend/agent.go:313-348: a token's first recall
+    // withdraws the prompt and keeps it; the same token gets it again until
+    // acknowledged, and a new token finds the queue empty.
+    const waiting = [{ prompt: "held text", attachments: [{ file_name: "a.txt", mime_type: "text/plain", content: "aGk=" }], submission_id: "sub1" }];
+    const kept = new Map();
+    let late = null;
+    commands.api.mockImplementation(async (method, path, query) => {
+      if (!path.endsWith("/prompts/recall")) return null;
+      if (query.acknowledge) {
+        kept.set(query.request_id, null);
+        return null;
+      }
+      if (!kept.has(query.request_id)) kept.set(query.request_id, waiting.shift() ?? null);
+      if (kept.size === 1 && !late) return new Promise((resolve) => (late = () => resolve(kept.get(query.request_id))));
+      return kept.get(query.request_id);
+    });
+    commands.api_abort.mockImplementation(async () => false); // the answer was already on its way
+    const { recall } = await import("../stores/queue.svelte.js");
+    vi.useFakeTimers();
+    try {
+      const first = recall("SQ");
+      const failed = expect(first).rejects.toMatchObject({ code: "timeout" });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await failed;
+      late();
+      await vi.advanceTimersByTimeAsync(0);
+      const again = await recall("SQ");
+      expect(again).toMatchObject({ text: "held text", submissionId: "sub1" });
+      expect(again.attachments).toEqual([{ kind: expect.any(String), name: "a.txt", mime: "text/plain", path: "", base64: "aGk=" }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

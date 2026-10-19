@@ -316,6 +316,22 @@ describe("events and reads", () => {
     expect(workspace.ws.skills).toEqual([{ name: "crush-config" }]);
   });
 
+  it("100 skills_events during a pending read give at most 2 reads, and the last answer wins", async () => {
+    const answers = [];
+    h.routes.set("GET skills", () => new Promise((resolve) => answers.push(resolve)));
+    await deliver(ev("skills_event", "updated", {}));
+    expect(answers).toHaveLength(1);
+    await deliver(...Array.from({ length: 100 }, () => ev("skills_event", "updated", {})));
+    expect(answers).toHaveLength(1);
+    answers[0]([{ name: "first" }]);
+    await settle();
+    expect(answers).toHaveLength(2);
+    answers[1]([{ name: "last" }]);
+    await settle();
+    expect(answers).toHaveLength(2);
+    expect(workspace.ws.skills).toEqual([{ name: "last" }]);
+  });
+
   it("the Git branch answer is {branch}", async () => {
     h.routes.set("GET git/branch", { branch: "main" });
     await workspace.loadBranch();

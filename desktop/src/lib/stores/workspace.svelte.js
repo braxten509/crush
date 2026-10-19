@@ -217,7 +217,27 @@ onEvent("config_changed", () => {
 });
 onEvent("lsp_event", () => quietly(loadLsps(), "LSP"));
 onEvent("mcp_event", () => quietly(loadMcps(), "MCP"));
-onEvent("skills_event", () => quietly(loadSkills(), "skills"));
+onEvent("skills_event", () => quietly(reloadSkills(), "skills"));
+
+// skills_event reads never overlap: events during one collapse into one more
+// read after it. A skills read used to publish skills_event itself, so every
+// read an event started brought another event (and with two windows, two).
+const skillsRead = { running: false, again: false };
+async function reloadSkills() {
+  if (skillsRead.running) {
+    skillsRead.again = true;
+    return;
+  }
+  skillsRead.running = true;
+  try {
+    do {
+      skillsRead.again = false;
+      await loadSkills();
+    } while (skillsRead.again);
+  } finally {
+    skillsRead.running = false;
+  }
+}
 
 // The shown chat id, given by the sessions store at start (no import, so the
 // two stores never load each other).

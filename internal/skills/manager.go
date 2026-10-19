@@ -2,6 +2,7 @@ package skills
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -27,6 +28,11 @@ type Manager struct {
 	allSkills    []*Skill
 	activeSkills []*Skill
 	states       []*SkillState
+	// published is set once PublishStates has sent an event;
+	// publishedAll and publishedActive are the skill lists it saw then.
+	published       bool
+	publishedAll    []*Skill
+	publishedActive []*Skill
 
 	// resolvedPaths are the expanded SkillsPaths used during discovery.
 	// Stored so Catalog/ReadContent can label skills without
@@ -141,8 +147,21 @@ func (m *Manager) SetLatestStates(states []*SkillState) {
 // point, keeping Manager.States(), workspaceToProto, and (when
 // WithGlobalMirror is set) skills.GetLatestStates consistent with what
 // subscribers observe.
+//
+// Refresh runs on every skills list read, so nothing is republished
+// while the states and the skill lists (which carry enabled/disabled,
+// unlike the states) are unchanged: clients that reload skills on each
+// event would otherwise loop with the engine. The first publish always
+// goes out.
 func (m *Manager) PublishStates(states []*SkillState) {
 	m.mu.Lock()
+	if m.published && sameStates(m.states, states) &&
+		sameSkills(m.publishedAll, m.allSkills) && sameSkills(m.publishedActive, m.activeSkills) {
+		m.mu.Unlock()
+		return
+	}
+	m.published = true
+	m.publishedAll, m.publishedActive = m.allSkills, m.activeSkills
 	m.states = cloneStates(states)
 	m.mu.Unlock()
 	if m.globalMirror {
@@ -152,6 +171,28 @@ func (m *Manager) PublishStates(states []*SkillState) {
 	if m.globalMirror {
 		PublishStates(states)
 	}
+}
+
+// sameStates reports whether two snapshots hold the same states in the
+// same order. Errors compare by message because discovery builds a new
+// error value on every run.
+func sameStates(a, b []*SkillState) bool {
+	return slices.EqualFunc(a, b, func(x, y *SkillState) bool {
+		return x.Name == y.Name && x.Path == y.Path && x.State == y.State && errText(x.Err) == errText(y.Err)
+	})
+}
+
+// sameSkills compares skill lists by value; Refresh builds new Skill
+// values on every run.
+func sameSkills(a, b []*Skill) bool {
+	return slices.EqualFunc(a, b, func(x, y *Skill) bool { return reflect.DeepEqual(x, y) })
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // SubscribeEvents returns a channel of discovery events for the

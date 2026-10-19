@@ -5,7 +5,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,6 +21,7 @@ import (
 	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/proto/prototest"
+	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/google/uuid"
@@ -240,7 +240,8 @@ func TestSeamAuthGrokCode(t *testing.T) {
 
 // TestSeamAuthCancel: a sign-in that was cancelled, or ran out of time,
 // saves nothing, even when its provider hands over a token after that
-// (G-5, through the auth seam's late flows).
+// (G-5, through the auth seam's late flows). The time-out is only watched
+// for, through the flow's own events, never caused by the test.
 func TestSeamAuthCancel(t *testing.T) {
 	useSeams(t, `{"auth":{"timeout_ms":300,"flows":{
 		"copilot":{"url":"https://github.com/login/device","user_code":"ABCD-1234","result":"ok","after_ms":60000,"late":true},
@@ -253,13 +254,25 @@ func TestSeamAuthCancel(t *testing.T) {
 	require.NoError(t, b.CancelAuthFlow(cancelled.FlowID))
 	require.ErrorIs(t, b.CancelAuthFlow(cancelled.FlowID), backend.ErrAuthFlowNotFound, "the flow is gone")
 
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	events := ws.App.Events(ctx)
 	expired, err := b.StartAuthFlow(ws.ID, "openai")
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		return errors.Is(b.CancelAuthFlow(expired.FlowID), backend.ErrAuthFlowNotFound)
-	}, 10*time.Second, 20*time.Millisecond, "the flow ends when its time is up")
+	timedOut := false
+	for deadline := time.After(10 * time.Second); !timedOut; {
+		select {
+		case ev := <-events:
+			if e, ok := ev.Payload.(pubsub.Event[proto.AuthFlowEvent]); ok && e.Payload.FlowID == expired.FlowID {
+				require.NotEqual(t, proto.AuthFlowSaving, e.Payload.State, "a timed-out sign-in does not save")
+				timedOut = e.Payload.State == proto.AuthFlowFailed && e.Payload.Error == "authentication timed out"
+			}
+		case <-deadline:
+			t.Fatal("no time-out reported")
+		}
+	}
 
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond) // the late tokens have been handed over by now
 	for _, id := range []string{"copilot", "openai"} {
 		pc, found := ws.Cfg.Config().Providers.Get(id)
 		require.False(t, found && pc.OAuthToken != nil, "%s: a token handed over after the end is not saved", id)

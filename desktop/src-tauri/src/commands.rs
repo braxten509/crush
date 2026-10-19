@@ -270,7 +270,6 @@ fn redact_answer(method: &str, path: &str, mut value: Value) -> Value {
     value
 }
 
-/// `scheme://host[:port]/path` of a URL: no user part, query or fragment.
 /// Takes passwords out of the URLs in every "error" string down to depth
 /// levels: the user part and the query of each `scheme://` word go.
 fn scrub_errors(value: &mut Value, depth: usize) {
@@ -309,6 +308,7 @@ fn scrub_urls(text: &str) -> String {
     out
 }
 
+/// `scheme://host[:port]/path` of a URL: no user part, query or fragment.
 fn bare_url(url: &str) -> String {
     let url = url.split(['?', '#']).next().unwrap_or("");
     let Some((scheme, rest)) = url.split_once("://") else { return String::new() };
@@ -660,6 +660,50 @@ pub fn folder_pick(app: AppHandle, start: String) -> AppResult<Option<String>> {
 #[cfg(test)]
 mod scrub_tests {
     use super::*;
+    use serde_json::json;
+
+    // Nothing secret in GET config crosses: keys, tokens, env, headers,
+    // commands; what decides a label does.
+    #[test]
+    fn config_keeps_no_secrets() {
+        let config = json!({
+            "providers": {"openai": {"id": "openai", "name": "OpenAI", "api_key": "sk-secret", "api_endpoint": "https://x",
+                "extra_headers": {"Authorization": "Bearer t"}, "oauth": {"access_token": "at", "refresh_token": "rt", "expires_at": 9}}},
+            "mcp": {"srv": {"type": "http", "url": "https://u:p@h/", "headers": {"k": "v"}, "env": {"K": "v"}, "disabled": true}},
+            "lsp": {"go": {"command": "gopls", "env": {"K": "v"}, "timeout": 5}},
+            "env": {"HOME": "/h"}, "hooks": {"x": 1}, "tools": {"y": 2}, "options": {"engine": "shared"}
+        });
+        let out = redact_answer("GET", "/config", config);
+        let text = out.to_string();
+        for secret in ["sk-secret", "Bearer t", "\"at\"", "\"rt\"", "u:p@", "gopls", "\"HOME\"", "https://x"] {
+            assert!(!text.contains(secret), "{secret} crossed: {text}");
+        }
+        let p = &out["providers"]["openai"];
+        assert_eq!(p["has_api_key"], true);
+        assert_eq!(p["has_oauth"], true);
+        assert_eq!(p["oauth_times"], json!({"expires_at": 9}));
+        assert_eq!(out["mcp"]["srv"], json!({"type": "http", "disabled": true}));
+        assert_eq!(out["lsp"]["go"], json!({"timeout": 5}));
+        assert_eq!(out["options"]["engine"], "shared", "plain options still cross");
+    }
+
+    #[test]
+    fn providers_and_imports_lose_keys() {
+        let out = redact_answer("GET", "providers", json!([{"id": "a", "api_key": "k", "api_endpoint": "e", "default_headers": {"h": "v"}}]));
+        assert_eq!(out, json!([{"id": "a"}]));
+        let out = redact_answer("POST", "config/import-copilot", json!({"success": true, "token": "gho_secret"}));
+        assert_eq!(out, json!({"success": true}));
+        let out = redact_answer("GET", "mcp/pending-auth", json!([{"name": "s", "url": "https://u:pw@host/sse?key=k#f"}]));
+        assert_eq!(out[0]["url"], "https://host/sse");
+    }
+
+    // Other routes and methods pass unchanged.
+    #[test]
+    fn other_answers_pass() {
+        let v = json!({"api_key": "visible-on-purpose"});
+        assert_eq!(redact_answer("GET", "sessions", v.clone()), v);
+        assert_eq!(redact_answer("POST", "config", v.clone()), v);
+    }
 
     #[test]
     fn errors_lose_url_passwords() {

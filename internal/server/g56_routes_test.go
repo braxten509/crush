@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -18,8 +19,10 @@ import (
 func TestServersRoute(t *testing.T) {
 	l := newLiveWork(t)
 	chat := l.chat(t, "web")
-	job := l.job(t, chat, "listen-web")
+	l.start(t, chat, "job", "listen-web")
 
+	// Until the job's start returns (about 1 s), its process is listed on
+	// its own, without the job's ID and name.
 	var got []proto.ServerPort
 	require.Eventually(t, func() bool {
 		all := liveJSON[[]proto.ServerPort](t, l.h, http.MethodGet, "/v1/workspaces/"+l.ws.ID+"/servers", nil, http.StatusOK)
@@ -30,14 +33,15 @@ func TestServersRoute(t *testing.T) {
 				got = append(got, s)
 			}
 		}
-		return len(got) == 1
+		return len(got) == 1 && got[0].JobID != ""
 	}, 20*time.Second, 100*time.Millisecond, "the listening job shows up")
+	jobs := agent.SessionBackgroundProcesses(chat)
+	require.Len(t, jobs, 1)
 	require.Positive(t, got[0].Port)
-	require.Equal(t, chat, got[0].SessionID)
-	require.Equal(t, job.JobID, got[0].JobID)
-	require.Equal(t, job.Command, got[0].Command)
+	require.Equal(t, jobs[0].JobID, got[0].JobID)
+	require.Equal(t, "python3 -m http.server 0 --bind 127.0.0.1", got[0].Command)
 	require.Equal(t, "listen-web", got[0].Name)
-	require.Contains(t, got[0].Program, "python")
+	require.Equal(t, "python3", got[0].Program)
 }
 
 // TestCommandsRouteMatchesLoader:the commands route lists what the

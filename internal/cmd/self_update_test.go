@@ -31,14 +31,12 @@ func TestSelfUpdateRunJSON(t *testing.T) {
 	} {
 		t.Setenv(name, value)
 	}
-	// Only git and go: the test run then skips systemd-run.
+	// A stand-in systemd-run runs the wrapped command here, so the test run
+	// starts no transient unit.
 	bin := t.TempDir()
-	for _, tool := range []string{"git", "go"} {
-		path, err := exec.LookPath(tool)
-		require.NoError(t, err)
-		require.NoError(t, os.Symlink(path, filepath.Join(bin, tool)))
-	}
-	t.Setenv("PATH", bin)
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "systemd-run"),
+		[]byte("#!/bin/sh\nwhile [ \"$1\" != go ]; do shift; done\nexec \"$@\"\n"), 0o755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	checkout := selfUpdateFixture(t, filepath.Join(home, "dev", "crush"))
 	require.Equal(t, checkout, selfupdate.Dir())

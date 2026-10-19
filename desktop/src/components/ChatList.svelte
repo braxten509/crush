@@ -135,6 +135,7 @@
         return {
           id: r.id,
           rect: rectOf(li),
+          band: rectOf(li?.querySelector(".row")), // the button: its background is the open chat's band
           title: rectOf(li?.querySelector(".title")),
           title_text: textRect(li?.querySelector(".title")),
           time: rectOf(li?.querySelector(".time")),

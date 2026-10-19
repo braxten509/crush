@@ -29,12 +29,22 @@ function box(el) {
   return physical(b);
 }
 
-// The text itself (the union of its line boxes), not its element's box.
+// The text itself (the union of its line boxes), not its element's box; kept
+// within that box, since a font whose glyph area is taller than its line (the
+// landing's wordmark, line-height 1) reaches into the lines above and below,
+// and the checker then finds their ink in this text's region.
 function textBox(el) {
   const range = document.createRange();
   range.selectNodeContents(el);
   const parts = [...range.getClientRects()].filter((r) => r.width && r.height);
-  return parts.length ? physical(union(parts)) : null;
+  if (!parts.length) return null;
+  const u = union(parts);
+  const b = el.getBoundingClientRect();
+  const x0 = Math.max(u.x, b.left);
+  const y0 = Math.max(u.y, b.top);
+  const x1 = Math.min(u.x + u.width, b.right);
+  const y1 = Math.min(u.y + u.height, b.bottom);
+  return physical(x1 > x0 && y1 > y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : u);
 }
 
 // The first meaningful letter or digit, as the align skill picks it.

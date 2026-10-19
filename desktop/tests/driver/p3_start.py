@@ -158,9 +158,23 @@ def align_main(out_dir):
         manifest = align_real.manifest_for(collected, name, os.path.basename(image), png_size(image))
         with open(os.path.join(work, "align.json"), "w") as f:
             json.dump(manifest, f, indent=1)
-        code = subprocess.run([sys.executable, os.path.join(align_real.ALIGN, "align.py"), os.path.join(work, "align.json"),
-                               "--out", os.path.join(work, "results"), "--self-review"]).returncode
-        print(("PASS " if code == 0 else "FAIL ") + f"align {name} (exit {code}; {work}/results)", flush=True)
+        run = subprocess.run([sys.executable, os.path.join(align_real.ALIGN, "align.py"), os.path.join(work, "align.json"),
+                              "--out", os.path.join(work, "results"), "--self-review"], capture_output=True, text=True)
+        print(run.stdout + run.stderr, end="", flush=True)
+        code = run.returncode
+        # An element the checker could not measure is a hole in the coverage,
+        # not a pass (the skill: inspect exclusions, the exit code alone does
+        # not certify coverage); variable text is left out by rule and is not
+        # listed here.
+        dropped = []
+        for line in run.stdout.splitlines():
+            if line.startswith("{") and '"excluded_elements"' in line:
+                dropped += json.loads(line).get("excluded_elements") or []
+        for d in dropped:
+            print(f"FAIL align {name}: {d.get('element')} could not be measured: {d.get('reason')}", flush=True)
+        if dropped:
+            code = max(code, 1)
+        print(("PASS " if code == 0 else "FAIL ") + f"align {name} (exit {run.returncode}; {work}/results)", flush=True)
         worst = max(worst, code)
     return worst
 
@@ -404,12 +418,12 @@ def answer_no(app):
 
 def list_edges(h, label):
     """The align skill's companion geometry check (its glyph checker does not
-    compare backgrounds): every row's box, the open chat's band among them,
-    spans the column's full width, and New chat and the search share both
-    edges."""
+    compare backgrounds): every row's button, whose background is the open
+    chat's band, spans the column's full width, and New chat and the search
+    share both edges."""
     lh = h.get("list") or {}
     col = lh.get("column") or {}
-    rects = [(r["id"], r["rect"]) for r in lh.get("rows") or [] if r.get("rect")]
+    rects = [(r["id"], r["band"]) for r in lh.get("rows") or [] if r.get("band")]
     off = [rid for rid, r in rects if not col or abs(r["x"] - col["x"]) > 0.5 or abs(r["x"] + r["w"] - col["x"] - col["w"]) > 0.5]
     check(bool(rects) and not off, f"{label}: every row and the open chat's band span the list's full width {off or ''}")
     nc, sr = lh.get("new_chat") or {}, lh.get("search") or {}

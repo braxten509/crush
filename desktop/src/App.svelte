@@ -21,6 +21,7 @@
   import SidePanel from "./components/SidePanel.svelte";
   import EngineGate from "./components/start/EngineGate.svelte";
   import DebugOverlay from "./components/system/DebugOverlay.svelte";
+  import "./lib/closing.js"; // the window's close steps answer close-requested
   import { COLUMN_LIMITS, dragColumn, fitColumns, loadColumns, saveColumns } from "./lib/columns.js";
   import { app_info } from "./lib/engine/commands.js";
   import { leftList } from "./lib/leftlist/store.svelte.js";

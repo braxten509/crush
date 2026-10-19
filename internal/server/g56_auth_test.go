@@ -9,13 +9,16 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/backend"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/login"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -198,6 +201,23 @@ func TestVerifyKey(t *testing.T) {
 
 	code, out := u.call(t, http.MethodPost, path, proto.VerifyKeyRequest{ProviderID: "nobody", APIKey: "x"})
 	require.Equal(t, http.StatusNotFound, code, "%s", out)
+
+	// A Google check puts the key in the address it asks; a failed one
+	// must not send it back.
+	const marker = "G56keyMARKER/+="
+	mustWorkspace(t, g).Cfg.Config().Providers.Set("gmarker", config.ProviderConfig{
+		ID: "gmarker", Name: "G56 Google", Type: catwalk.TypeGoogle, BaseURL: "http://127.0.0.1:9",
+	})
+	code, out = u.call(t, http.MethodPost, path, proto.VerifyKeyRequest{ProviderID: "gmarker", APIKey: marker})
+	require.Equal(t, http.StatusOK, code, "%s", out)
+	var google proto.VerifyKey
+	require.NoError(t, json.Unmarshal(out, &google))
+	require.False(t, google.OK)
+	require.Contains(t, google.Error, "failed to create request for provider gmarker")
+	for _, form := range []string{marker, url.QueryEscape(marker), "G56keyMARKER"} {
+		require.NotContains(t, string(out), form, "the key is not in the answer")
+		require.NotContains(t, logs.String(), form, "the key is not in the logs")
+	}
 
 	pc, _ := mustWorkspace(t, g).Cfg.Config().Providers.Get("fake")
 	require.Equal(t, "test-key", pc.APIKey, "a checked key is not saved")

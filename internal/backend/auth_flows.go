@@ -219,7 +219,7 @@ func (b *Backend) VerifyAPIKey(workspaceID, providerID, apiKey string) (proto.Ve
 	}
 	provider.APIKey = apiKey
 	if err := verifyAPIKey(provider, ws.Cfg.Resolver()); err != nil {
-		return proto.VerifyKey{Error: err.Error()}, nil
+		return proto.VerifyKey{Error: redactSecrets(err.Error(), apiKey)}, nil
 	}
 	return proto.VerifyKey{OK: true}, nil
 }

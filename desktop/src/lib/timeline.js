@@ -80,17 +80,154 @@ export function taskNotice(name, status) {
 // and description, or null when the XML does not parse (the text then shows
 // as typed).
 export function parseSkill(text) {
-  if (typeof DOMParser === "undefined") return null;
-  let doc;
+  let fields;
   try {
-    doc = new DOMParser().parseFromString(text, "application/xml");
+    fields = readXmlFields(String(text ?? ""));
   } catch {
     return null;
   }
-  const root = doc?.documentElement;
-  if (!root || root.nodeName !== "loaded_skill" || doc.getElementsByTagName("parsererror").length > 0) return null;
-  const child = (tag) => [...root.children].find((el) => el.nodeName === tag)?.textContent ?? "";
-  return { name: child("name"), description: child("description") };
+  return { name: fields.name ?? "", description: fields.description ?? "" };
+}
+
+// What xml.Unmarshal reads into skillInvocation (internal/ui/chat/user.go:
+// 19-24): the first element, and of each direct child its own character data
+// (CDATA too, entities decoded, \r\n as \n; text of deeper elements is
+// skipped); the last child of a name wins; what follows the element is not
+// read. Strict like Go's decoder: a bad entity, a bare "&", a character XML
+// does not allow, an unclosed or mismatched element or a broken comment
+// throws. Written out here because only lib/render/sanitize.js may parse
+// markup (desktop-design 1.7 item 9).
+const XML_ENTITIES = { lt: "<", gt: ">", amp: "&", apos: "'", quot: '"' };
+const XML_NAME_START = /[A-Za-z_:À-￿]/;
+const XML_NAME_CHAR = /[-A-Za-z0-9_:.·À-￿]/;
+
+function xmlChar(cp) {
+  return cp === 0x9 || cp === 0xa || cp === 0xd || (cp >= 0x20 && cp <= 0xd7ff) || (cp >= 0xe000 && cp <= 0xfffd) || (cp >= 0x10000 && cp <= 0x10ffff);
+}
+
+function readXmlFields(src) {
+  let i = 0;
+  const fail = () => {
+    throw new Error("xml");
+  };
+  const space = () => {
+    while (i < src.length && " \t\r\n".includes(src[i])) i++;
+  };
+  const name = () => {
+    if (!XML_NAME_START.test(src[i] ?? "")) fail();
+    const start = i++;
+    while (i < src.length && XML_NAME_CHAR.test(src[i])) i++;
+    return src.slice(start, i);
+  };
+  const entity = () => {
+    const end = src.indexOf(";", i);
+    if (end < 0) fail();
+    const ref = src.slice(i + 1, end);
+    let cp;
+    if (/^#x[0-9A-Fa-f]+$/.test(ref)) cp = parseInt(ref.slice(2), 16);
+    else if (/^#[0-9]+$/.test(ref)) cp = parseInt(ref.slice(1), 10);
+    else if (Object.hasOwn(XML_ENTITIES, ref)) {
+      i = end + 1;
+      return XML_ENTITIES[ref];
+    } else fail();
+    if (!xmlChar(cp)) fail();
+    i = end + 1;
+    return String.fromCodePoint(cp);
+  };
+  const attributes = () => {
+    for (;;) {
+      const before = i;
+      space();
+      if (src[i] === ">" || src.startsWith("/>", i)) return;
+      if (i === before) fail();
+      name();
+      space();
+      if (src[i] !== "=") fail();
+      i++;
+      space();
+      const quote = src[i];
+      if (quote !== '"' && quote !== "'") fail();
+      i++;
+      while (src[i] !== quote) {
+        if (i >= src.length || src[i] === "<") fail();
+        if (src[i] === "&") entity();
+        else i++;
+      }
+      i++;
+    }
+  };
+  // The content after the start tag of `tag`, through its end tag: text goes
+  // to onText, each child element (with its own text) to onChild.
+  const content = (tag, onChild, onText) => {
+    for (;;) {
+      if (i >= src.length) fail();
+      if (src[i] !== "<") {
+        let data = "";
+        while (i < src.length && src[i] !== "<") {
+          if (src[i] === "&") {
+            data += entity();
+            continue;
+          }
+          if (src.startsWith("]]>", i)) fail();
+          const cp = src.codePointAt(i);
+          if (!xmlChar(cp)) fail();
+          const ch = String.fromCodePoint(cp);
+          data += ch;
+          i += ch.length;
+        }
+        onText?.(data.replace(/\r\n?/g, "\n"));
+        continue;
+      }
+      if (src.startsWith("</", i)) {
+        i += 2;
+        const end = name();
+        space();
+        if (src[i] !== ">" || end !== tag) fail();
+        i++;
+        return;
+      }
+      const skipTo = (close, from) => {
+        const at = src.indexOf(close, from);
+        if (at < 0) fail();
+        return at;
+      };
+      if (src.startsWith("<!--", i)) {
+        i = skipTo("-->", i + 4) + 3;
+      } else if (src.startsWith("<![CDATA[", i)) {
+        const at = skipTo("]]>", i + 9);
+        onText?.(src.slice(i + 9, at).replace(/\r\n?/g, "\n"));
+        i = at + 3;
+      } else if (src.startsWith("<?", i)) {
+        i = skipTo("?>", i + 2) + 2;
+      } else if (src.startsWith("<!", i)) {
+        i = skipTo(">", i + 2) + 1;
+      } else {
+        i++;
+        const child = name();
+        attributes();
+        let own = "";
+        if (src.startsWith("/>", i)) i += 2;
+        else {
+          if (src[i] !== ">") fail();
+          i++;
+          content(child, null, (data) => (own += data));
+        }
+        onChild?.(child.slice(child.indexOf(":") + 1), own);
+      }
+    }
+  };
+  const fields = Object.create(null);
+  if (src[i] !== "<") fail();
+  i++;
+  const root = name();
+  attributes();
+  if (src.startsWith("/>", i)) return fields;
+  if (src[i] !== ">") fail();
+  i++;
+  content(root, (child, own) => {
+    fields[child] = own;
+  });
+  return fields;
 }
 
 // A system notice (renderSystemNotice, user.go:162-175): "<name> turned on|off

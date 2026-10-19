@@ -9,8 +9,10 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 const { invoke } = await import("@tauri-apps/api/core");
-const { copyBlocks, copySelection, copyVisible, itemCopy, registerItemCopy, wholeText, writeClipboard } = await import("./copy.js");
+const { copyBlocks, copySelection, copyVisible, itemCopy, messageItemFor, quoteLines, registerItemCopy, wholeText, withQuote, writeClipboard } = await import("./copy.js");
 const { lastClipboardWrite } = await import("./engine/commands.js");
+const { menuItems } = await import("./menu.js");
+await import("./plugins/timeline.js");
 const { renderMarkdown } = await import("./render/markdown.js");
 const { PLAN_READY_MARKER, PLAN_START_MARKER } = await import("./render/plan.js");
 const { userTextInto } = await import("./render/usertext.js");
@@ -218,6 +220,56 @@ describe("c/y on an item (CHAT-012, CHAT-030, CHAT-100)", () => {
     registerItemCopy("tools", () => ({ text: "## Bash Tool Call", notice: "Tool content copied to clipboard" }));
     expect(itemCopy(group)).toEqual({ text: "## Bash Tool Call", notice: "Tool content copied to clipboard" });
     expect(itemCopy({ kind: "footer", key: "footer:a", text: "x", saved: "" })).toBeNull();
+  });
+});
+
+describe("the right-click menu (4.2, D14)", () => {
+  test("Quote in reply puts \"> \" before every line, then a blank line", () => {
+    expect(quoteLines("  first\nsecond\r\n\nthird  ")).toBe("> first\n> second\n> \n> third\n\n");
+    expect(quoteLines(" \n ")).toBe("");
+  });
+
+  test("a quote starts a block of its own after typed text", () => {
+    expect(withQuote("", "> a\n\n")).toBe("> a\n\n");
+    expect(withQuote("Look:", "> a\n\n")).toBe("Look:\n\n> a\n\n");
+    expect(withQuote("Look:\n", "> a\n\n")).toBe("Look:\n\n> a\n\n");
+    expect(withQuote("Look:\n\n", "> a\n\n")).toBe("Look:\n\n> a\n\n");
+  });
+
+  test("a reply's banner, footer or status stands for the reply; tool rows are not messages", () => {
+    const r = reply("r1", "Hi");
+    const items = [user("u1", "q"), r, { kind: "banner", key: "banner:r1", messageId: "r1" }, { kind: "footer", key: "footer:r1", messageId: "r1" }, { kind: "tools", key: "group:c1", messageId: "r1" }, { kind: "status", key: "status:waiting:x", messageId: "" }];
+    expect(messageItemFor(items[2], items)).toBe(r);
+    expect(messageItemFor(items[3], items)).toBe(r);
+    expect(messageItemFor(items[4], items)).toBeNull();
+    expect(messageItemFor(items[5], items)).toBeNull();
+    expect(messageItemFor(items[0], items)).toBe(items[0]);
+  });
+
+  test("three entries in order; Copy and Quote need a timeline selection; Copy whole message any message", () => {
+    const items = [user("u1", "hello"), reply("r1", "Use **this**."), { kind: "tools", key: "group:c1", messageId: "r1", calls: [] }];
+    const none = menuItems({ sessionId: "s", key: "r1", item: items[1], message: null, range: null, text: "", items });
+    expect(none.map((e) => [e.label, e.disabled, e.hint])).toEqual([
+      ["Copy", true, ""],
+      ["Quote in reply", true, ""],
+      ["Copy whole message", false, ""],
+    ]);
+    const range = document.createRange();
+    const some = menuItems({ sessionId: "s", key: "group:c1", item: items[2], message: null, range, text: "words", items });
+    expect(some.map((e) => e.disabled)).toEqual([false, false, true]);
+  });
+
+  test("Copy copies the selection's source; Copy whole message the message's text", async () => {
+    invoke.mockReset();
+    invoke.mockResolvedValue(null);
+    const items = [reply("r1", "Use **this** `code`.")];
+    const entries = menuItems({ sessionId: "s", key: "r1", item: items[0], message: null, range: document.createRange(), text: "`code`", items });
+    entries[0].run();
+    await Promise.resolve();
+    expect(invoke).toHaveBeenLastCalledWith("clipboard_write", { text: "`code`" });
+    entries[2].run();
+    await Promise.resolve();
+    expect(invoke).toHaveBeenLastCalledWith("clipboard_write", { text: "Use this code." });
   });
 });
 

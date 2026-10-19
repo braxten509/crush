@@ -71,6 +71,32 @@ describe("your messages (CHAT-002 to CHAT-007)", () => {
     expect(parseSkill("<loaded_skill><name>a & b</name></loaded_skill>")).toBe(null);
   });
 
+  // What Go's xml.Unmarshal makes of these (encoding/xml, strict).
+  test.each([
+    ["CDATA and character references", "<loaded_skill><name><![CDATA[a<b]]></name><description>&#65;&#x42;&quot;&apos;&lt;&gt;</description></loaded_skill>", { name: "a<b", description: "AB\"'<>" }],
+    ["text of deeper elements is skipped", "<loaded_skill><name>te<b>XX</b>ach</name></loaded_skill>", { name: "teach", description: "" }],
+    ["comments, attributes and other children", "<loaded_skill><!-- c --><name id='1' x=\"y\">teach</name><other>o</other></loaded_skill>", { name: "teach", description: "" }],
+    ["the last child of a name wins", "<loaded_skill><name>a</name><name>b</name></loaded_skill>", { name: "b", description: "" }],
+    ["what follows the element is not read", "<loaded_skill><name>a</name></loaded_skill> trailing & junk <", { name: "a", description: "" }],
+    ["\\r\\n becomes \\n", "<loaded_skill><description>one\r\ntwo\rthree</description></loaded_skill>", { name: "", description: "one\ntwo\nthree" }],
+    ["an empty child", "<loaded_skill><name/><description></description></loaded_skill>", { name: "", description: "" }],
+  ])("skill XML: %s", (_case, xml, want) => {
+    expect(parseSkill(xml)).toEqual(want);
+  });
+
+  test.each([
+    ["an unknown entity", "<loaded_skill><name>&nbsp;</name></loaded_skill>"],
+    ["a character XML does not allow", "<loaded_skill><name>a\u0001b</name></loaded_skill>"],
+    ["a character reference XML does not allow", "<loaded_skill><name>&#0;</name></loaded_skill>"],
+    ["a mismatched end tag", "<loaded_skill><name>a</nam></loaded_skill>"],
+    ["an unclosed comment", "<loaded_skill><!-- c <name>a</name></loaded_skill>"],
+    ["an attribute without quotes", "<loaded_skill><name id=1>a</name></loaded_skill>"],
+    ["]]> outside CDATA", "<loaded_skill><name>a]]>b</name></loaded_skill>"],
+    ["no end", "<loaded_skill><name>a</name>"],
+  ])("skill XML that Go refuses: %s", (_case, xml) => {
+    expect(parseSkill(xml)).toBe(null);
+  });
+
   test.each([
     ["done", { notice: "task", state: "done", text: "Task Fixer finished" }],
     ["failed", { notice: "task", state: "failed", text: "Task Fixer failed" }],

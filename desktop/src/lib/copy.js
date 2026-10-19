@@ -179,6 +179,40 @@ function noticeLine(item) {
   return `${p.before}${p.strong}${p.after}`;
 }
 
+// -- The right-click menu (4.2): Quote in reply, Copy whole message --
+
+// "> " before every line of the selected text, then a blank line (decision
+// D14; the demo trims the words first, core.js:325). lib/branch.js (P4.1)
+// names the same rule quoteInReply.
+export function quoteLines(text) {
+  const body = String(text ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!body) return "";
+  return `${body
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n")}\n\n`;
+}
+
+// The field's text with a quote after what is already typed; the quote starts
+// a block of its own.
+export function withQuote(draft, quote) {
+  const before = String(draft ?? "");
+  if (!before) return quote;
+  return before + (before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n") + quote;
+}
+
+const MESSAGE_KINDS = new Set(["user", "pending", "reply", "notice"]);
+
+// The message a right-click lands on: a message's own item, or for a reply's
+// banner, footer or live status the reply it belongs to. Tool rows and shell
+// output are not messages (PLAN.md:99), so they give null.
+export function messageItemFor(item, items = []) {
+  if (!item) return null;
+  if (MESSAGE_KINDS.has(item.kind)) return item;
+  if (!item.messageId || !["banner", "footer", "status"].includes(item.kind)) return null;
+  return items.find((it) => it.messageId === item.messageId && (it.kind === "reply" || it.kind === "user")) ?? null;
+}
+
 // -- A selection (CHAT-087, CHAT-088) --
 
 // An item's whole text when a selection passes over it: the source of a

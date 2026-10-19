@@ -345,6 +345,18 @@
     return scroller ? scroller.scrollTop : 0;
   }
 
+  // The offset the list last set or saw, without reading the page (the
+  // probe's light fields, 1.9).
+  export function lastOffset() {
+    return top;
+  }
+
+  // Whether the thumb shows now (CHAT-094): "default" while scrolling and 2 s
+  // after, or while it is dragged.
+  export function barShowing() {
+    return scrollbar === "always" || (scrollbar === "default" && (barShown || dragging));
+  }
+
   export function viewportHeight() {
     return scroller ? scroller.clientHeight : 0;
   }
@@ -414,6 +426,11 @@
     return entry?.attached ? (entry.container.firstElementChild ?? null) : null;
   }
 
+  // The item's frame while it is drawn, on the page or kept off it, else null.
+  export function drawnFrameOf(key) {
+    return cache.get(key)?.container.firstElementChild ?? null;
+  }
+
   export function mountedCount() {
     return attached;
   }
@@ -424,6 +441,8 @@
   }
 </script>
 
+<!-- The press handler only watches the native scrollbar's column (CHAT-095). -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="scroller"
   class:bar-never={scrollbar === "never"}

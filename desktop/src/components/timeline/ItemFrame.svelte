@@ -10,6 +10,8 @@
   let { item, selected, focused, children } = $props();
 </script>
 
+<!-- The feed pattern makes each article focusable (WAI-ARIA APG, Feed). -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class="frame"
   role="article"

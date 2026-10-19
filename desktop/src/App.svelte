@@ -37,6 +37,9 @@
   // or in compact mode.
   const PANEL_ROOM = COLUMN_LIMITS.left.min + COLUMN_LIMITS.right.min + COLUMN_LIMITS.middleMin;
   const PANEL_MIN_HEIGHT = 640;
+  // The left list's narrow strip is 64 picture px wide and cannot be dragged
+  // (desktop-design-5-6 5.2 "Strip"); the list's own width is kept for when it opens.
+  const STRIP_WIDTH = 64;
 
   const storage = (() => {
     try {
@@ -111,7 +114,7 @@
     class="page"
     class:panel-hidden={ui.panelHidden}
     bind:this={page}
-    style:--left={widths.left}
+    style:--left={leftList.strip ? STRIP_WIDTH : widths.left}
     style:--right={widths.right}
   >
     <Frame panel={!ui.panelHidden} />
@@ -126,6 +129,7 @@
       side="left"
       column="3"
       label="Resize the chat list"
+      fixed={leftList.strip}
       value={widths.left}
       min={COLUMN_LIMITS.left.min}
       max={COLUMN_LIMITS.left.max}

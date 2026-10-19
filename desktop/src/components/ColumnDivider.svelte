@@ -1,7 +1,8 @@
 <script>
   // A column divider that can be dragged (or moved with the arrow keys) to
   // resize the column beside it. At rest it is just the frame's one-pixel line.
-  let { side, label, value, min, max, column, ondrag, ondone } = $props();
+  // A fixed divider (the left list's narrow strip) is only that line.
+  let { side, label, value, min, max, column, ondrag, ondone, fixed = false } = $props();
 
   let dragging = $state(false);
   let lastX = 0;
@@ -12,7 +13,7 @@
   }
 
   function down(event) {
-    if (event.button !== 0) return;
+    if (fixed || event.button !== 0) return;
     dragging = true;
     lastX = event.clientX;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -32,6 +33,7 @@
     ondone();
   }
   function key(event) {
+    if (fixed) return;
     const step = event.shiftKey ? 40 : 8;
     if (event.key === "ArrowLeft") ondrag(side, -step);
     else if (event.key === "ArrowRight") ondrag(side, step);
@@ -44,14 +46,15 @@
 <div
   class="divider"
   class:dragging
+  class:fixed
   style:grid-column={column}
   role="separator"
   aria-orientation="vertical"
-  aria-label={label}
-  aria-valuenow={value}
-  aria-valuemin={min}
-  aria-valuemax={max}
-  tabindex="0"
+  aria-label={fixed ? undefined : label}
+  aria-valuenow={fixed ? undefined : value}
+  aria-valuemin={fixed ? undefined : min}
+  aria-valuemax={fixed ? undefined : max}
+  tabindex={fixed ? undefined : 0}
   onpointerdown={down}
   onpointermove={move}
   onpointerup={up}
@@ -86,7 +89,10 @@
     top: calc(11 * var(--px));
     bottom: calc(14 * var(--px));
   }
-  .divider:hover::before,
+  .divider.fixed {
+    cursor: default;
+  }
+  .divider:not(.fixed):hover::before,
   .divider.dragging::before {
     background: var(--rule-control);
   }

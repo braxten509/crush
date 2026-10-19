@@ -95,8 +95,9 @@
     try {
       await api.saveTheme(themeName, { base, palette: paletteOut() });
       saved = true;
+      // The preview ends first: loadCurrent does nothing while previewing.
+      endPreview();
       if (themeName === chosenTheme()) await loadCurrent({ force: true });
-      else endPreview();
       notify("info", "Theme saved");
       closeDialog(ID);
       onSaved?.();

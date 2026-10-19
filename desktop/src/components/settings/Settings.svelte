@@ -41,7 +41,8 @@
   let checkIn = $state(String(options().check_in_minutes ?? DEFAULT_CHECK_IN));
   let cpus = $state(String(options().agent_cpus ?? ""));
   let hasPassword = $state(false);
-  let editing = $state(""); // the field being typed in: "check_in" | "cpus" | ""
+  let editing = $state(""); // the focused field: "check_in" | "cpus" | ""
+  let atFocus = ""; // its text when it took the focus
 
   // A field not being typed in follows the config, so leaving it untouched
   // never writes an old value over a change made elsewhere.
@@ -68,12 +69,14 @@
   // A field saves on Enter and when it loses the focus.
   async function saveCheckIn() {
     editing = "";
+    if (checkIn === atFocus) return; // focused but not changed: nothing to save
     if (String(options().check_in_minutes ?? DEFAULT_CHECK_IN) === checkIn.trim()) return;
     if (!(await setCheckInMinutes(checkIn))) checkIn = String(options().check_in_minutes ?? DEFAULT_CHECK_IN);
   }
 
   async function saveCpus() {
     editing = "";
+    if (cpus === atFocus) return;
     if (String(options().agent_cpus ?? "") === cpus.trim()) return;
     await setAgentCpus(cpus);
   }
@@ -142,7 +145,7 @@
     </div>
     <div class="row">
       <span class="name">Check-in messages every</span>
-      <span class="field"><input type="text" inputmode="numeric" bind:value={checkIn} onfocus={() => (editing = "check_in")} onblur={saveCheckIn} aria-label="Check-in minutes" /> minutes</span>
+      <span class="field"><input type="text" inputmode="numeric" bind:value={checkIn} onfocus={() => ((editing = "check_in"), (atFocus = checkIn))} onblur={saveCheckIn} aria-label="Check-in minutes" /> minutes</span>
     </div>
     <div class="row">
       <span class="name">Sub-agent instructions</span>
@@ -162,7 +165,7 @@
       </div>
       <div class="row">
         <span class="name">CPUs for AI work</span>
-        <span class="field"><input type="text" bind:value={cpus} onfocus={() => (editing = "cpus")} onblur={saveCpus} placeholder="detect" aria-label="CPUs for AI work" /></span>
+        <span class="field"><input type="text" bind:value={cpus} onfocus={() => ((editing = "cpus"), (atFocus = cpus))} onblur={saveCpus} placeholder="detect" aria-label="CPUs for AI work" /></span>
       </div>
     {/if}
 

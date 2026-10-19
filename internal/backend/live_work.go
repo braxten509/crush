@@ -110,9 +110,18 @@ func (b *Backend) AgentCapabilities(workspaceID string) (proto.AgentCapabilities
 	if c == nil {
 		return proto.AgentCapabilities{}, nil
 	}
-	provider := c.Model().ModelCfg.Provider
-	return proto.AgentCapabilities{
+	model := c.Model()
+	provider := model.ModelCfg.Provider
+	caps := proto.AgentCapabilities{
 		Kind:          provider,
 		CanBackground: cliagent.CanBackground(catwalk.Type(provider)) || provider == config.AbacusProviderID,
-	}, nil
+	}
+	if cfg := shareConfig(ws); cfg != nil && cfg.Providers != nil {
+		if pc, ok := cfg.Providers.Get(provider); ok {
+			caps.SupportsFast = config.SupportsFastMode(pc, model.CatwalkCfg)
+			caps.SupportsUltracode = config.SupportsUltracode(pc, model.CatwalkCfg)
+			caps.SupportsThinkingToggle = config.SupportsThinkingToggle(pc, model.CatwalkCfg)
+		}
+	}
+	return caps, nil
 }

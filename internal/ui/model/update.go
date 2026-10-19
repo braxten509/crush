@@ -81,6 +81,9 @@ func (m *UI) routeMsg(msg tea.Msg, endedScrollbarDrag bool) (tea.Cmd, updateFlow
 	if cmd, flow, ok := m.handleTerminalMsg(msg); ok {
 		return cmd, flow
 	}
+	if cmd, ok := m.handleConfigRefreshMsg(msg); ok {
+		return cmd, flowContinue
+	}
 	if cmd, flow, ok := m.handleWorkspaceEvent(msg); ok {
 		return cmd, flow
 	}

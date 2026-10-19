@@ -381,6 +381,8 @@ func (f *shareFakeRemote) SetPresence(p remote.Presence) {
 	f.presence = append(f.presence, p)
 }
 
+func (f *shareFakeRemote) SetLaunch(string) {}
+
 func (f *shareFakeRemote) Status() remote.Status {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -447,6 +449,7 @@ func (a *shareFakeAgent) Run(context.Context, string, string, ...message.Attachm
 }
 
 func (a *shareFakeAgent) SetMainAgent(string) error                       { return nil }
+func (*shareFakeAgent) MainAgentName() string                             { return "coder" }
 func (a *shareFakeAgent) BeginAccepted(string) *agent.AcceptedRun         { return nil }
 func (a *shareFakeAgent) Cancel(string)                                   {}
 func (a *shareFakeAgent) Interrupt(string)                                {}

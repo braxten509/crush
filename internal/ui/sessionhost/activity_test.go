@@ -38,7 +38,7 @@ func TestActivitySpinnerKeepsColorsAndTextInPlace(t *testing.T) {
 			Status{Title: "Background", State: StateBackground},
 			Status{Title: "Ready", State: StateReady},
 		)
-		h.applyTheme("graphite")
+		h.applyTheme("graphite", "")
 		columns := func() []int {
 			var at []int
 			for _, line := range strings.Split(screenText(h), "\n") {

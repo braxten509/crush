@@ -459,10 +459,12 @@ func graphiteOpts() quickStyleOpts {
 
 // builtinThemes maps theme names to their quickStyleOpts palette definitions.
 var builtinThemes = map[string]func() quickStyleOpts{
+	"charcoal-amber":    charcoalAmberOpts,
 	"charmtone-panther": charmtoneOpts,
 	"claude-code":       claudeCodeOpts,
 	"graphite":          graphiteOpts,
 	"gruvbox-dark":      gruvboxDarkOpts,
+	"scholars-edition":  scholarsEditionOpts,
 	"terminal":          terminalOpts,
 }
 
@@ -472,6 +474,7 @@ var builtinThemes = map[string]func() quickStyleOpts{
 var builtinThemeOverrides = map[string]func(Styles) Styles{
 	"charmtone-panther": charmtoneOverrides,
 	"gruvbox-dark":      gruvboxDarkOverrides,
+	"scholars-edition":  scholarsEditionOverrides,
 }
 
 // deprecatedThemeNames maps legacy built-in theme names to their current

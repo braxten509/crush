@@ -31,6 +31,9 @@ type Workspace struct {
 	Skills []SkillState `json:"skills,omitempty"`
 	// Protocol is the app's ProtocolVersion, sent in a create request.
 	Protocol int `json:"protocol,omitempty"`
+	// ConfigPath is the global data config file, where API keys and
+	// global settings are written. Filled by the server.
+	ConfigPath string `json:"config_path,omitempty"`
 }
 
 // Error represents an error response.
@@ -125,6 +128,9 @@ type AgentInfo struct {
 	IsReady  bool                 `json:"is_ready"`
 	Model    catwalk.Model        `json:"model"`
 	ModelCfg config.SelectedModel `json:"model_cfg"`
+	// Agent names the main agent: "coder" or "plan", "" while no
+	// coordinator runs.
+	Agent string `json:"agent"`
 }
 
 // IsZero checks if the AgentInfo is zero-valued.
@@ -238,6 +244,9 @@ type QuestionItem struct {
 	Question    string           `json:"question"`
 	Description string           `json:"description,omitempty"`
 	Choices     []QuestionChoice `json:"choices,omitempty"`
+	// Selected lists the choice IDs a multi_choice question opens with
+	// checked.
+	Selected []string `json:"selected,omitempty"`
 }
 
 // QuestionChoice is a selectable option.

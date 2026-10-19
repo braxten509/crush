@@ -122,7 +122,7 @@ func TestPasswordIsStoredAsAHashOwnerOnly(t *testing.T) {
 
 func TestDefaultLaunchCommandPassesTheLaunchID(t *testing.T) {
 	t.Setenv("CRUSH_LAUNCH_COMMAND", `echo "$CRUSH_REMOTE_LAUNCH $CRUSH_EXE"`)
-	cmd, err := DefaultLaunchCommand("/bin/crush", t.TempDir())("abc123")
+	cmd, err := DefaultLaunchCommand("/bin/crush", t.TempDir(), nil)("abc123")
 	require.NoError(t, err)
 	out, err := cmd.Output()
 	require.NoError(t, err)

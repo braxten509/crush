@@ -26,6 +26,7 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 		c.liveEndpoints(),
 		c.treeEndpoints(),
 		c.shareEndpoints(),
+		c.desktopEndpoints(),
 	)
 }
 
@@ -476,16 +477,22 @@ func (c *controllerV1) configEndpoints() []apigen.Endpoint {
 	return []apigen.Endpoint{
 		route(c, rpc.SetConfigField, c.setConfigField).
 			Summary("Set a config field").
+			Description("A write that could change options.agent_cpus_enabled or "+
+				"options.agent_cpus, in any spelling the loader reads, answers 403 local_only, "+
+				"changing nothing, unless it came in on the engine's unix socket.").
 			Tags("config").
 			PathParam("id", "Workspace ID").
-			Fails(400, 404, 500).
+			Fails(400, 403, 404, 500).
 			Build(),
 
 		route(c, rpc.RemoveConfigField, c.removeConfigField).
 			Summary("Remove a config field").
+			Description("A removal that could change options.agent_cpus_enabled or "+
+				"options.agent_cpus, in any spelling the loader reads, answers 403 local_only, "+
+				"changing nothing, unless it came in on the engine's unix socket.").
 			Tags("config").
 			PathParam("id", "Workspace ID").
-			Fails(400, 404, 500).
+			Fails(400, 403, 404, 500).
 			Build(),
 
 		route(c, rpc.UpdatePreferredModel, c.updatePreferredModel).

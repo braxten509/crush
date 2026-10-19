@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -145,27 +144,8 @@ func (m *UI) startSelfUpdate(release *selfupdate.Release) tea.Cmd {
 	m.selfUpdateRunning = true
 	m.status.SetInfoMsg(util.InfoMsg{Type: util.InfoTypeUpdate, Msg: fmt.Sprintf("Updating Crush to %s in the background: saving changes, merging, building and testing…", release.Tag), TTL: time.Hour})
 	return func() tea.Msg {
-		ctx := context.Background()
-		log, err := selfupdate.CreateLog()
-		if err != nil {
-			return selfUpdateBuiltMsg{release: release, err: err}
-		}
-		defer log.Close()
-		clashes, err := selfupdate.Merge(ctx, release.Dir, release.Tag)
-		if err != nil {
-			return selfUpdateBuiltMsg{release: release, err: err}
-		}
-		if len(clashes) > 0 {
-			fmt.Fprintf(log, "Clashes in %s; an AI agent is fixing them.\n", strings.Join(clashes, ", "))
-			err = selfupdate.Fix(ctx, release.Dir, release.Tag, clashes, "", log)
-		} else if err = selfupdate.Build(ctx, release.Dir, release.Tag, log); err != nil && !errors.Is(err, selfupdate.ErrDirty) {
-			fmt.Fprintf(log, "%v\nAn AI agent is fixing this.\n", err)
-			err = selfupdate.Fix(ctx, release.Dir, release.Tag, nil, err.Error(), log)
-		}
-		if err != nil {
-			return selfUpdateBuiltMsg{release: release, fixed: clashes, err: err}
-		}
-		return selfUpdateBuiltMsg{release: release, fixed: clashes, version: selfupdate.Staged(ctx, release.Dir, release.Tag)}
+		fixed, version, err := selfupdate.Run(context.Background(), release.Dir, release.Tag)
+		return selfUpdateBuiltMsg{release: release, fixed: fixed, version: version, err: err}
 	}
 }
 

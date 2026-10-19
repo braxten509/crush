@@ -31,7 +31,7 @@ var (
 // isTailnetAddr reports whether a is a Tailscale address.
 func isTailnetAddr(a netip.Addr) bool {
 	a = a.Unmap()
-	return tailnetV4.Contains(a) || tailnetV6.Contains(a)
+	return tailnetV4.Contains(a) || tailnetV6.Contains(a) || isTestTailnetAddr(a)
 }
 
 // localAPI talks to the local tailscaled.
@@ -48,6 +48,9 @@ type tailnetAPI interface {
 // macOS GUI variants expose LocalAPI through their CLI, rather than the
 // Linux Unix socket. Never substitute an unauthenticated network API.
 func newSystemAPI() tailnetAPI {
+	if api, ok := testTailnetAPI(); ok {
+		return api
+	}
 	if runtime.GOOS == "darwin" {
 		return cliAPI{}
 	}

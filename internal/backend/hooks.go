@@ -40,10 +40,10 @@ type clientHooks struct {
 	teardown func(ws *Workspace)
 }
 
-// allHooks returns the hooks of every piece: lifecycle, live, tree and
-// share.
+// allHooks returns the hooks of every piece: lifecycle, live, tree,
+// share and the desktop's phase 5-6 gaps.
 func (b *Backend) allHooks() []clientHooks {
-	return []clientHooks{b.lifecycleHooks(), b.liveHooks(), b.treeHooks(), b.shareHooks()}
+	return []clientHooks{b.lifecycleHooks(), b.liveHooks(), b.treeHooks(), b.shareHooks(), b.desktopHooks()}
 }
 
 // runHooks calls fn with each piece's hooks, in the order of allHooks. It

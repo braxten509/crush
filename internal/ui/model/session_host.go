@@ -32,6 +32,7 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 	st := sessionhost.Status{
 		Dir:                   m.com.Workspace.WorkingDir(),
 		Theme:                 common.ThemeNameFromConfig(m.com.Config()),
+		ThemeRevision:         m.theme.revision,
 		State:                 sessionhost.StateReady,
 		UseTerminalBackground: m.isTransparent,
 	}

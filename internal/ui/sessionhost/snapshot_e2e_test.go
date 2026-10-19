@@ -33,7 +33,7 @@ func TestActivitySnapshots(t *testing.T) {
 			Status{Title: "Unread answer", State: StateReady},
 		)
 		h.sessions[4].unread = true
-		h.applyTheme("graphite")
+		h.applyTheme("graphite", "")
 		for frame := range activityFrames {
 			h.activityFrame = frame
 			emu := vt.NewSafeEmulator(width, h.height)

@@ -34,6 +34,7 @@ type shareTestServer struct {
 	mu       sync.Mutex
 	status   ShareStatus
 	presence []proto.RemotePresence
+	launch   string
 }
 
 func newShareTestServer() *shareTestServer {
@@ -53,6 +54,19 @@ func (s *shareTestServer) SetPresence(p proto.RemotePresence) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.presence = append(s.presence, p)
+}
+
+func (s *shareTestServer) SetLaunch(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.launch = id
+}
+
+// reportedLaunch is the launch ID the share reports.
+func (s *shareTestServer) reportedLaunch() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.launch
 }
 
 func (s *shareTestServer) Status() ShareStatus {
@@ -210,6 +224,7 @@ func (c *shareTestCoordinator) Run(context.Context, string, string, ...message.A
 }
 
 func (c *shareTestCoordinator) SetMainAgent(string) error                       { return nil }
+func (*shareTestCoordinator) MainAgentName() string                             { return "coder" }
 func (c *shareTestCoordinator) BeginAccepted(string) *agent.AcceptedRun         { return nil }
 func (c *shareTestCoordinator) Cancel(string)                                   {}
 func (c *shareTestCoordinator) CancelAll()                                      {}

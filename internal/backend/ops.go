@@ -40,12 +40,22 @@ type Ops struct {
 	// their config snapshot; in-process frontends read the store
 	// directly and leave it nil.
 	ConfigChanged func()
+	// ConfigEvent, when set, only tells the apps the config changed,
+	// without the MCP re-init ConfigChanged runs. The MCP toggles use it.
+	ConfigEvent func()
 }
 
 // configChanged runs the ConfigChanged hook, if any.
 func (o Ops) configChanged() {
 	if o.ConfigChanged != nil {
 		o.ConfigChanged()
+	}
+}
+
+// configEvent runs the ConfigEvent hook, if any.
+func (o Ops) configEvent() {
+	if o.ConfigEvent != nil {
+		o.ConfigEvent()
 	}
 }
 
@@ -104,6 +114,14 @@ func (o Ops) savedSessions() sessioncatalog.Catalog {
 // ListSavedSessions lists saved chats across every project.
 func (o Ops) ListSavedSessions(ctx context.Context, selected string) ([]session.Session, error) {
 	return o.savedSessions().List(ctx, selected)
+}
+
+// ListSavedSessionsShown is ListSavedSessions that also keeps the drafts
+// an app shows right now.
+func (o Ops) ListSavedSessionsShown(ctx context.Context, selected string, shown []string) ([]session.Session, error) {
+	catalog := o.savedSessions()
+	catalog.Shown = shown
+	return catalog.List(ctx, selected)
 }
 
 // ChangeSavedSession renames or deletes a saved chat. Chats stored in
@@ -258,6 +276,7 @@ func (w *Workspace) ops() Ops {
 		Cfg:           w.Cfg,
 		Skills:        w.Skills,
 		ConfigChanged: func() { publishConfigChanged(w) },
+		ConfigEvent:   func() { sendConfigChanged(w) },
 	}
 }
 

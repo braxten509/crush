@@ -290,6 +290,9 @@ func (w *ClientWorkspace) consumeEvents(evc <-chan any, send func(tea.Msg)) {
 
 		if _, ok := ev.(pubsub.Event[proto.ConfigChanged]); ok {
 			w.refreshWorkspace()
+			if send != nil {
+				send(ConfigRefreshedMsg{})
+			}
 			continue
 		}
 		translated := w.translateEvent(ev)

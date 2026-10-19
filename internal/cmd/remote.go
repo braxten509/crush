@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -49,18 +53,32 @@ var remotePasswordCmd = &cobra.Command{
 	Short: "Set the password the phone needs to open a new Crush window",
 	Long: `Set the password the Pocket Agents app asks for before it opens a new Crush
 window on this computer (in your home folder, shared with the phone). Only a
-bcrypt hash is stored. Type it here; it is never passed as an argument.`,
+bcrypt hash is stored. Type it here; it is never passed as an argument. With
+--stdin it is read twice, one line each, from standard input instead.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		fd := int(os.Stdin.Fd())
-		if !term.IsTerminal(fd) {
-			return errors.New("run this in a terminal, so the password can be typed without showing")
-		}
-		read := func(prompt string) (string, error) {
-			fmt.Fprint(cmd.OutOrStdout(), prompt)
-			b, err := term.ReadPassword(fd)
-			fmt.Fprintln(cmd.OutOrStdout())
-			return string(b), err
+		var read func(prompt string) (string, error)
+		if fromStdin, _ := cmd.Flags().GetBool("stdin"); fromStdin {
+			// The desktop app sends the two entries as two lines (G-20).
+			lines := bufio.NewReader(cmd.InOrStdin())
+			read = func(string) (string, error) {
+				line, err := lines.ReadString('\n')
+				if err != nil && (err != io.EOF || line == "") {
+					return "", errors.New("expected the password twice, one line each, on standard input")
+				}
+				return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), nil
+			}
+		} else {
+			fd := int(os.Stdin.Fd())
+			if !term.IsTerminal(fd) {
+				return errors.New("run this in a terminal, so the password can be typed without showing")
+			}
+			read = func(prompt string) (string, error) {
+				fmt.Fprint(cmd.OutOrStdout(), prompt)
+				b, err := term.ReadPassword(fd)
+				fmt.Fprintln(cmd.OutOrStdout())
+				return string(b), err
+			}
 		}
 		first, err := read("New password: ")
 		if err != nil {
@@ -88,7 +106,9 @@ var remoteLauncherCmd = &cobra.Command{
 password from "crush remote password", the phone opens a new Konsole window
 running Crush in your home folder, shared with the phone. Only your own
 Tailscale devices are answered. Set CRUSH_LAUNCH_COMMAND to replace the
-Konsole command (a shell command line; $CRUSH_EXE is this Crush).`,
+Konsole command (a shell command line; $CRUSH_EXE is this Crush). With
+options.remote_launch_target set to "desktop", read at each launch, it opens the
+desktop app (crush-desktop --project HOME) instead.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		// The crush on PATH, so a self-update (which replaces that file) is
@@ -105,11 +125,27 @@ Konsole command (a shell command line; $CRUSH_EXE is this Crush).`,
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return remote.RunLauncher(ctx, remotePasswordFile(), remote.DefaultLaunchCommand(exe, home))
+		return remote.RunLauncher(ctx, remotePasswordFile(), remote.DefaultLaunchCommand(exe, home, remoteLaunchTarget))
 	},
 }
 
 func init() {
+	remotePasswordCmd.Flags().Bool("stdin", false, "Read the password twice, one line each, from standard input (for the desktop app)")
 	remoteCmd.AddCommand(remotePasswordCmd, remoteLauncherCmd, remoteSetupCmd)
 	rootCmd.AddCommand(remoteCmd)
+}
+
+// remoteLaunchTarget reads options.remote_launch_target from the global
+// config at each launch, so a change in the desktop app's settings applies
+// to the next window without restarting the launcher service (G-17).
+func remoteLaunchTarget() string {
+	o, err := config.GlobalOptions(context.Background())
+	if err != nil {
+		slog.Warn("Could not read the launch target; opening a terminal", "error", err)
+		return remote.LaunchTargetTerminal
+	}
+	if o.RemoteLaunchTarget == remote.LaunchTargetDesktop {
+		return remote.LaunchTargetDesktop
+	}
+	return remote.LaunchTargetTerminal
 }

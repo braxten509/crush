@@ -64,6 +64,13 @@ func (c *blockingCoordinator) Summarize(context.Context, string) error          
 func (c *blockingCoordinator) Model() agent.Model                                { return agent.Model{} }
 func (c *blockingCoordinator) UpdateModels(context.Context) error                { return nil }
 func (c *blockingCoordinator) GenerateTitle(context.Context, string, string)     {}
+func (c *blockingCoordinator) MainAgentName() string {
+	if name, ok := c.lastMainAgentSet.Load().(string); ok {
+		return name
+	}
+	return "coder"
+}
+
 func (c *blockingCoordinator) SetMainAgent(agentName string) error {
 	c.lastMainAgentSet.Store(agentName)
 	return c.setMainAgentErr
@@ -81,7 +88,10 @@ func insertAgentWorkspace(t *testing.T, b *Backend, coord agent.Coordinator) *Wo
 		clients:      make(map[string]*clientState),
 		shutdownFn:   func() {},
 	}
-	ws.App = &app.App{AgentCoordinator: coord}
+	// A real event broker: a main-agent switch sends config_changed.
+	ws.App = app.NewForTest(context.Background())
+	ws.App.AgentCoordinator = coord
+	t.Cleanup(ws.App.ShutdownForTest)
 	ws.ctx, ws.cancel = context.WithCancel(b.ctx)
 	b.mu.Lock()
 	b.workspaces.Set(ws.ID, ws)

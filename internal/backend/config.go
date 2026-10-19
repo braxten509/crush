@@ -26,8 +26,21 @@ func publishConfigChanged(ws *Workspace) {
 	// triggered the write. Run async so unrelated config writes (model
 	// switches, API keys) don't block on MCP reconciliation. Bound to the
 	// workspace ctx so teardown cancels any in-flight init.
-	go mcptools.Reinitialize(ws.ctx, ws.Cfg)
+	if ws.Cfg != nil {
+		go mcptools.Reinitialize(ws.ctx, ws.Cfg)
+	}
 
+	sendConfigChanged(ws)
+}
+
+// sendConfigChanged publishes only the ConfigChanged event, without the
+// MCP re-init of [publishConfigChanged]. The MCP toggles use it: they
+// apply themselves, and a re-init from the config alone would undo a
+// repository-scoped override.
+func sendConfigChanged(ws *Workspace) {
+	if ws == nil || ws.App == nil {
+		return
+	}
 	ws.SendEvent(pubsub.Event[proto.ConfigChanged]{
 		Type:    pubsub.UpdatedEvent,
 		Payload: proto.ConfigChanged{WorkspaceID: ws.ID},
@@ -41,21 +54,58 @@ type MCPResourceContents = proto.MCPResourceContents
 // SetConfigField sets a key/value pair in the config file for the
 // given scope.
 func (b *Backend) SetConfigField(workspaceID string, scope config.Scope, key string, value any) error {
-	o, err := b.ops(workspaceID)
+	return b.SetConfigFieldAs(workspaceID, true, scope, key, value)
+}
+
+// SetConfigFieldAs is [Backend.SetConfigField] for a caller that came in
+// on the engine's unix socket (local) or not. A caller that is not local
+// may not move the engine's CPUs: a write that could change
+// options.agent_cpus_enabled or options.agent_cpus in scope's file, by any
+// spelling the loader accepts, is refused with [ErrLocalOnly] before
+// anything changes. The check is part of the locked write itself.
+func (b *Backend) SetConfigFieldAs(workspaceID string, local bool, scope config.Scope, key string, value any) error {
+	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
-	return o.SetConfigField(scope, key, value)
+	o := ws.ops()
+	if !local {
+		return b.writeConfig(ws, func() error {
+			return o.mutateConfig(func() error { return ws.Cfg.SetConfigFieldGuarded(scope, key, value, refuseCPUChange) })
+		})
+	}
+	return b.writeConfig(ws, func() error { return o.SetConfigField(scope, key, value) })
+}
+
+// refuseCPUChange refuses a config edit that could change the CPU setting.
+func refuseCPUChange(before, after []byte) error {
+	if config.CPUSettingChanged(before, after) {
+		return ErrLocalOnly
+	}
+	return nil
 }
 
 // RemoveConfigField removes a key from the config file for the given
 // scope.
 func (b *Backend) RemoveConfigField(workspaceID string, scope config.Scope, key string) error {
-	o, err := b.ops(workspaceID)
+	return b.RemoveConfigFieldAs(workspaceID, true, scope, key)
+}
+
+// RemoveConfigFieldAs is [Backend.RemoveConfigField] for a caller that
+// came in on the engine's unix socket (local) or not, with the CPU rule of
+// [Backend.SetConfigFieldAs].
+func (b *Backend) RemoveConfigFieldAs(workspaceID string, local bool, scope config.Scope, key string) error {
+	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
-	return o.RemoveConfigField(scope, key)
+	o := ws.ops()
+	if !local {
+		return b.writeConfig(ws, func() error {
+			return o.mutateConfig(func() error { return ws.Cfg.RemoveConfigFieldGuarded(scope, key, refuseCPUChange) })
+		})
+	}
+	return b.writeConfig(ws, func() error { return o.RemoveConfigField(scope, key) })
 }
 
 // UpdatePreferredModel updates the preferred model for the given type

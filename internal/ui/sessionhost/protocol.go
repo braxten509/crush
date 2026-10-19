@@ -44,10 +44,13 @@ const (
 
 // Status is what a session tells the host about itself.
 type Status struct {
-	Title                 string `json:"title,omitempty"`
-	Dir                   string `json:"dir,omitempty"`
-	Model                 string `json:"model,omitempty"`
-	Theme                 string `json:"theme,omitempty"`
+	Title string `json:"title,omitempty"`
+	Dir   string `json:"dir,omitempty"`
+	Model string `json:"model,omitempty"`
+	Theme string `json:"theme,omitempty"`
+	// ThemeRevision is the theme file's revision, so the host reloads the
+	// theme when its colors changed on disk.
+	ThemeRevision         string `json:"theme_revision,omitempty"`
 	State                 State  `json:"state,omitempty"`
 	UseTerminalBackground bool   `json:"use_terminal_background,omitempty"`
 	// Servers are the ports the session's background work listens on.
@@ -77,7 +80,7 @@ func (s *Server) UnmarshalJSON(data []byte) error {
 
 // Equal reports whether s and o say the same.
 func (s Status) Equal(o Status) bool {
-	return s.Title == o.Title && s.Dir == o.Dir && s.Model == o.Model && s.Theme == o.Theme &&
+	return s.Title == o.Title && s.Dir == o.Dir && s.Model == o.Model && s.Theme == o.Theme && s.ThemeRevision == o.ThemeRevision &&
 		s.State == o.State && s.UseTerminalBackground == o.UseTerminalBackground &&
 		slices.Equal(s.Servers, o.Servers)
 }

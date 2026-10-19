@@ -3,7 +3,6 @@ package providers
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -59,15 +58,33 @@ func TestConnection(e Endpoint, resolver resolve.VariableResolver) error {
 	switch catwalk.InferenceProvider(e.ID) {
 	case catwalk.InferenceProviderZAI:
 		if resp.StatusCode == http.StatusUnauthorized {
-			return fmt.Errorf("failed to connect to provider %s: %s", e.ID, resp.Status)
+			return &StatusError{Provider: e.ID, StatusCode: resp.StatusCode, Status: resp.Status}
 		}
 	default:
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("failed to connect to provider %s: %s", e.ID, resp.Status)
+			return &StatusError{Provider: e.ID, StatusCode: resp.StatusCode, Status: resp.Status}
 		}
 	}
 	return nil
 }
+
+// StatusError is a connection test the provider refused. Status is the
+// provider's own status line, so it is untrusted text.
+type StatusError struct {
+	Provider   string
+	StatusCode int
+	Status     string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("failed to connect to provider %s: %s", e.Provider, e.Status)
+}
+
+// KeyFormatError is a key judged by its format alone, without a request.
+// Its text is Crush's own.
+type KeyFormatError struct{ text string }
+
+func (e *KeyFormatError) Error() string { return e.text }
 
 // connectionTestRequest picks the URL and headers that test the
 // endpoint's API key. When checked is true the key was judged without a
@@ -84,7 +101,7 @@ func connectionTestRequest(e Endpoint, apiKey string, resolver resolve.VariableR
 		// NOTE: Alibaba has no good endpoint we can use to validate the API key.
 		// Let's at least check the pattern.
 		if !strings.HasPrefix(apiKey, "sk-") {
-			return "", nil, true, fmt.Errorf("invalid API key format for provider %s", e.ID)
+			return "", nil, true, &KeyFormatError{fmt.Sprintf("invalid API key format for provider %s", e.ID)}
 		}
 		return "", nil, true, nil
 	}
@@ -128,13 +145,13 @@ func connectionTestRequest(e Endpoint, apiKey string, resolver resolve.VariableR
 		if strings.HasPrefix(apiKey, "ABSK") { // Bedrock API keys
 			return "", nil, true, nil
 		}
-		return "", nil, true, errors.New("not a valid bedrock api key")
+		return "", nil, true, &KeyFormatError{"not a valid bedrock api key"}
 	case catwalk.TypeVercel:
 		// NOTE: Vercel does not validate API keys on the `/models` endpoint.
 		if strings.HasPrefix(apiKey, "vck_") { // Vercel API keys
 			return "", nil, true, nil
 		}
-		return "", nil, true, errors.New("not a valid vercel api key")
+		return "", nil, true, &KeyFormatError{"not a valid vercel api key"}
 	}
 	return testURL, headers, false, nil
 }

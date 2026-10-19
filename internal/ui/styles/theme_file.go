@@ -79,10 +79,87 @@ func SaveThemeFile(path string, tf *ThemeFile) error {
 		return fmt.Errorf("create theme directory: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeThemeFileAtomic(path, data); err != nil {
 		return fmt.Errorf("write theme file: %w", err)
 	}
 	return nil
+}
+
+// writeThemeFileAtomic writes data to a temporary file beside path and
+// renames it over path, so a reader never sees a half-written theme. The
+// file keeps its permissions (0644 when new) and a symlink keeps pointing
+// at the file it named, which is created when it does not exist yet, as
+// os.WriteFile did.
+func writeThemeFileAtomic(path string, data []byte) error {
+	path, err := symlinkTarget(path)
+	if err != nil {
+		return err
+	}
+	perm := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		perm = info.Mode().Perm()
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Chmod(perm)
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
+}
+
+// maxSymlinks bounds a chain of symlinks, as the kernel does.
+const maxSymlinks = 40
+
+// symlinkTarget follows path's symlinks to the file they finally name,
+// whether or not that file exists yet, in the order the system does. Each
+// step resolves the folder part of the path as written (not cleaned, so a
+// symlink is followed before a ".." after it) with filepath.EvalSymlinks,
+// which walks it component by component, and then looks at the last name
+// alone. A relative link continues from the real folder its link sits in.
+func symlinkTarget(path string) (string, error) {
+	for range maxSymlinks {
+		dir, name := ".", path
+		if i := strings.LastIndexByte(path, filepath.Separator); i >= 0 {
+			dir, name = path[:i+1], path[i+1:]
+		}
+		realDir, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(realDir, name)
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			return path, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			return path, nil
+		}
+		link, err := os.Readlink(path)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(link) {
+			link = realDir + string(filepath.Separator) + link
+		}
+		path = link
+	}
+	return "", fmt.Errorf("%s: too many levels of symbolic links", path)
 }
 
 // themeDirsOverride allows tests to replace the default theme directories.

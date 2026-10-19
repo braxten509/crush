@@ -9,14 +9,16 @@ import (
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
 
-// setConfigField sets a configuration field.
+// setConfigField sets a configuration field. Over TCP, a write that would
+// change the CPU setting answers 403 local_only and changes nothing.
 func (c *controllerV1) setConfigField(r *http.Request, req proto.ConfigSetRequest) (rpc.Empty, error) {
-	return rpc.Empty{}, c.backend.SetConfigField(r.PathValue("id"), req.Scope, req.Key, req.Value)
+	return rpc.Empty{}, c.backend.SetConfigFieldAs(r.PathValue("id"), secureLocalOnly(r) == nil, req.Scope, req.Key, req.Value)
 }
 
-// removeConfigField removes a configuration field.
+// removeConfigField removes a configuration field, with the CPU rule of
+// setConfigField.
 func (c *controllerV1) removeConfigField(r *http.Request, req proto.ConfigRemoveRequest) (rpc.Empty, error) {
-	return rpc.Empty{}, c.backend.RemoveConfigField(r.PathValue("id"), req.Scope, req.Key)
+	return rpc.Empty{}, c.backend.RemoveConfigFieldAs(r.PathValue("id"), secureLocalOnly(r) == nil, req.Scope, req.Key)
 }
 
 // updatePreferredModel sets the preferred model.

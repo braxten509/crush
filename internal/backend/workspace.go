@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -156,6 +157,20 @@ func (w *Workspace) Shutdown() {
 	}
 }
 
+// shownSessions lists the sessions some client with a live stream shows
+// (each with AttachedClientsForSession > 0).
+func (w *Workspace) shownSessions() []string {
+	w.clientsMu.Lock()
+	defer w.clientsMu.Unlock()
+	var shown []string
+	for _, cs := range w.clients {
+		if cs.streams > 0 && cs.currentSessionID != "" && !slices.Contains(shown, cs.currentSessionID) {
+			shown = append(shown, cs.currentSessionID)
+		}
+	}
+	return shown
+}
+
 // AttachedClientsForSession returns the number of clients in this
 // workspace whose currentSessionID equals sessionID and which have at
 // least one live SSE stream. Hold-only clients (streams == 0) do not
@@ -185,6 +200,8 @@ func workspaceToProto(ws *Workspace) proto.Workspace {
 		Config:   cfg,
 		Env:      ws.Env,
 		Version:  version.Version,
+
+		ConfigPath: ws.Cfg.GlobalDataPath(),
 	}
 	if ws.Skills != nil {
 		out.Skills = proto.SkillStatesFromDomain(ws.Skills.States())

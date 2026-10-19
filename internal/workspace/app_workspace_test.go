@@ -21,6 +21,8 @@ type busyCoordinator struct {
 
 func (c *busyCoordinator) IsBusy() bool { return c.busy }
 
+func (c *busyCoordinator) MainAgentName() string { return c.setTo }
+
 func (c *busyCoordinator) SetMainAgent(name string) error {
 	c.called = true
 	c.setTo = name

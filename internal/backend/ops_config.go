@@ -154,7 +154,11 @@ func (o Ops) SetMCPServerDisabled(ctx context.Context, name string, disabled boo
 	if err := o.App.Sessions.SetMCPServerDisabled(ctx, name, disabled); err != nil {
 		return err
 	}
-	return mcptools.SetLocalDisabled(ctx, o.Cfg, name, disabled)
+	if err := mcptools.SetLocalDisabled(ctx, o.Cfg, name, disabled); err != nil {
+		return err
+	}
+	o.configEvent()
+	return nil
 }
 
 // SetMCPServerConfigDisabled toggles an MCP server's disabled flag in
@@ -165,7 +169,11 @@ func (o Ops) SetMCPServerConfigDisabled(ctx context.Context, name string, disabl
 	if err != nil {
 		return err
 	}
-	return mcptools.SetConfigDisabled(ctx, o.Cfg, config.ScopeGlobal, name, disabled, override)
+	if err := mcptools.SetConfigDisabled(ctx, o.Cfg, config.ScopeGlobal, name, disabled, override); err != nil {
+		return err
+	}
+	o.configEvent()
+	return nil
 }
 
 // StartMCPServer starts the named MCP server even when its config entry

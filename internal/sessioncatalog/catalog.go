@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/db"
@@ -16,7 +17,13 @@ import (
 )
 
 // Catalog uses the registered project locations, never a scan of the home folder.
-type Catalog struct{ Directory, DataDirectory string }
+type Catalog struct {
+	Directory, DataDirectory string
+	// Shown lists chats an app shows right now. Listing never discards
+	// them, even when they are old empty drafts. Listing only ever
+	// discards drafts in DataDirectory's own database.
+	Shown []string
+}
 
 func (c Catalog) locations() ([]projects.Project, error) {
 	known, err := projects.List()
@@ -59,7 +66,7 @@ func (c Catalog) List(ctx context.Context, selected string) ([]session.Session, 
 		} else if err != nil {
 			return nil, err
 		}
-		entries, err := catalogProject(ctx, project.Path, data, selected)
+		entries, err := catalogProject(ctx, project.Path, data, selected, c.Shown)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
@@ -80,13 +87,13 @@ func (c Catalog) List(ctx context.Context, selected string) ([]session.Session, 
 	return result, nil
 }
 
-func catalogProject(ctx context.Context, directory, data, selected string) ([]session.Session, error) {
+func catalogProject(ctx context.Context, directory, data, selected string, shown []string) ([]session.Session, error) {
 	conn, err := db.Connect(ctx, data)
 	if err != nil {
 		return nil, err
 	}
 	defer db.Release(data)
-	if err := discardEmptyBefore(ctx, conn, time.Now().Add(-5*time.Minute).Unix(), selected); err != nil {
+	if err := discardEmptyBefore(ctx, conn, time.Now().Add(-5*time.Minute).Unix(), selected, shown...); err != nil {
 		slog.Warn("Could not discard abandoned empty chats", "directory", directory, "error", err)
 	}
 	rows, err := conn.QueryContext(ctx, `SELECT s.id, s.title, s.message_count, s.created_at, s.updated_at
@@ -108,12 +115,20 @@ func catalogProject(ctx context.Context, directory, data, selected string) ([]se
 	return result, rows.Err()
 }
 
-func discardEmptyBefore(ctx context.Context, conn *sql.DB, before int64, selected string) error {
+func discardEmptyBefore(ctx context.Context, conn *sql.DB, before int64, selected string, shown ...string) error {
+	args := []any{selected, before}
+	keep := ""
+	if len(shown) > 0 {
+		keep = " AND id NOT IN (?" + strings.Repeat(",?", len(shown)-1) + ")"
+		for _, id := range shown {
+			args = append(args, id)
+		}
+	}
 	_, err := conn.ExecContext(ctx, `DELETE FROM sessions WHERE parent_session_id IS NULL
- AND id != ? AND created_at < ?
+ AND id != ? AND created_at < ?`+keep+`
  AND NOT EXISTS (SELECT 1 FROM messages WHERE session_id=sessions.id AND role='user')
  AND NOT EXISTS (SELECT 1 FROM messages WHERE session_id=sessions.id AND role='assistant' AND finished_at IS NULL)
- AND NOT EXISTS (SELECT 1 FROM sessions child WHERE child.parent_session_id=sessions.id)`, selected, before)
+ AND NOT EXISTS (SELECT 1 FROM sessions child WHERE child.parent_session_id=sessions.id)`, args...)
 	return err
 }
 

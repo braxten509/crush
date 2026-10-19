@@ -2,6 +2,8 @@ package backend
 
 import (
 	"context"
+	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
@@ -136,13 +138,34 @@ func (b *Backend) LoadMessageReview(ctx context.Context, workspaceID, sessionID,
 	return o.LoadMessageReview(ctx, sessionID, messageID)
 }
 
-// ListSavedSessions lists saved chats across every project.
+// ListSavedSessions lists the workspace's saved chats; old empty drafts
+// in its own database are discarded. An empty draft that an app shows on
+// any of this engine's workspaces using that database is never discarded.
 func (b *Backend) ListSavedSessions(ctx context.Context, workspaceID, selected string) ([]session.Session, error) {
-	o, err := b.ops(workspaceID)
+	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	return o.ListSavedSessions(ctx, selected)
+	o := ws.ops()
+	return o.ListSavedSessionsShown(ctx, selected, b.shownInDataDir(o.savedSessions().DataDirectory))
+}
+
+// shownInDataDir lists the chats apps show on every workspace whose data
+// directory is dir.
+func (b *Backend) shownInDataDir(dir string) []string {
+	var shown []string
+	for _, other := range b.workspaces.Seq2() {
+		if other.Cfg == nil || other.Cfg.Config().Options == nil ||
+			filepath.Clean(other.Cfg.Config().Options.DataDirectory) != filepath.Clean(dir) {
+			continue
+		}
+		for _, id := range other.shownSessions() {
+			if !slices.Contains(shown, id) {
+				shown = append(shown, id)
+			}
+		}
+	}
+	return shown
 }
 
 // ChangeSavedSession renames, deletes, or (with DiscardEmpty) discards

@@ -213,6 +213,10 @@ type UI struct {
 	// theme tracks the applied theme and any preview; see theme.go.
 	theme themeController
 
+	// configRefreshGen counts config refreshes; a theme load or main
+	// agent read started by an older one is dropped. See config_refresh.go.
+	configRefreshGen uint64
+
 	focus uiFocusState
 	state uiState
 	mode  uiInputMode
@@ -492,6 +496,8 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	if cfg := com.Config(); cfg != nil {
 		ui.theme.key = styles.ThemeKeyForProvider(cfg.Models[config.SelectedModelTypeLarge].Provider)
 		ui.theme.userSelected = common.ThemeNameFromConfig(cfg) != ""
+		ui.theme.shown = common.ThemeNameFromConfig(cfg)
+		ui.theme.revision = styles.ThemeFileRevision(ui.theme.shown)
 	}
 
 	// Seed the yolo cache once at construction; afterwards it is kept

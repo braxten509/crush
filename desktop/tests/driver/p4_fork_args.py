@@ -154,7 +154,9 @@ def run_tool(engine, tool, provider, model):
     start = len(log_lines())
     engine.send(branch, "Third")
     calls = [e for e in log_lines()[start:] if e.get("tool") == tool]
-    argv = [e["args"] for e in calls if "args" in e]
+    # Model discovery (`agy models`, `--version`) may start the tool too;
+    # only turn processes count.
+    argv = [e["args"] for e in calls if "args" in e and e["args"][:1] != ["models"] and "--version" not in e["args"]]
     prompt = prompt_text(calls)
 
     if tool == "claude":

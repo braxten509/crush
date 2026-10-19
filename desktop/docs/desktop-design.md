@@ -1418,7 +1418,7 @@ After joining, the 5.2 notices: `The AI works in <path>, the folder the first wi
 **Two apps on one chat (`p3_two_apps.py`, the phase 3 done-line, PLAN.md:65).**
 
 1. Build the terminal app from the worktree into `desktop/tests/out/bin/crush` (the coordinator's recipe, PLAN.md:317) and use the same binary as the desktop's engine (`DESKTOP_CRUSH`).
-2. Start the desktop on `/tmp/home/proj` with script `basic`; send "first from desktop".
+2. Start the desktop on `/tmp/home/proj` with script `stream2m` (the script whose turns the driver uses, 6.2); send "first from desktop".
 3. Start the terminal app in a hidden tmux on the same chat: `tmux -L crushtest -f /dev/null new-session -d -s tui -x 200 -y 50 "env CRUSH_CLIENT_SERVER=1 $CRUSH --cwd /tmp/home/proj -s $SID"` (`CRUSH_CLIENT_SERVER` is today's switch, `internal/cmd/workspace_setup.go:46-49`; after piece A it goes through `ensure` and joins the same engine).
 4. Within 5 s, `tmux capture-pane -p -t tui` shows "first from desktop" and the reply's first line.
 5. `tmux send-keys -t tui "second from terminal" Enter`; within 5 s the desktop probe's `chat.messages` has that prompt and its streamed reply, in the same order as `GET sessions/{sid}/messages` read with `curl --unix-socket` (the ground truth).

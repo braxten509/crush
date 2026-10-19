@@ -93,7 +93,7 @@ describe("the kinds the renderer draws", () => {
     for (const [i, fence] of fences.entries()) {
       expect((await mermaid.parse(fence))?.diagramType, DIAGRAM_KINDS[i]).toBe(DIAGRAM_KINDS[i]);
     }
-  });
+  }, 30_000); // loading Mermaid takes seconds when the machine is busy
 });
 
 describe("whenIdle", () => {

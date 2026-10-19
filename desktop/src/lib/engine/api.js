@@ -258,10 +258,10 @@ export const api = {
   remotePresence: (presence) => post("remote/presence", presence),
   remoteActionDone: (aid, done) => post(`remote/actions/${seg(aid)}/done`, done),
 
-  cliUpdates: () => get("/v1/updates/clis"),
+  cliUpdates: (manual = false) => get("/v1/updates/clis", { manual: String(manual) }),
   declineCliUpdates: (bins) => post("/v1/updates/clis/decline", { bins }),
   installCliUpdates: (bins) => post("/v1/updates/clis/install", { bins }),
-  crushUpdate: () => get("/v1/updates/crush"),
+  crushUpdate: (manual = false) => get("/v1/updates/crush", { manual: String(manual) }),
   declineCrushUpdate: (tag) => post("/v1/updates/crush/decline", { tag }),
 };
 

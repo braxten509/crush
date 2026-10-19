@@ -8,7 +8,7 @@ Owner instruction: the coordinator builds wave 2 itself, with no sub-agents, **n
 
 - **Written by Claude Opus at high effort, not max.** The plan called for max effort on brand-new screens; wave 2 was written by the coordinator (Claude Opus 5.5) running at high effort.
 - **No tests at all.** None of the design's `u:`, `r:` or `w:` checks for PAL, MOD, AUTH, SES or ASK were written. The only evidence is that the existing unit tests, `cargo test` and `pnpm build` still pass.
-- **No review.** No reviewer read wave 2's code.
+- **Reviewed only after it was written.** No reviewer read wave 2 while it was built; three Sol 6.1 high reviews (t87, t88, t89) read it afterwards (below).
 - **No builder report.** No row-by-row list of what each piece covers or where it differs from the design; whatever the coordinator records in PLAN.md is all there is.
 - **P4.4** (tree and restore dialogs) still waits; it was not part of this request.
 - **Places it differs from the design's file plan** (not checked by anyone):
@@ -23,7 +23,31 @@ Owner instruction: the coordinator builds wave 2 itself, with no sub-agents, **n
   - Medium: `projects.json` temp file shared between writers (now a unique name, created fresh, and one write at a time); Esc during a slow sign-in start left the flow running; re-authentication ignored the coder model (API-key users got the subscription sheet); question choices ignored hover and the "Something else?" focus; an erased answer was kept; a pasted secret was changed (line breaks to spaces); unavailable secure fields blocked the submit; an old secure-forms list could reopen a closed form; Sessions rename/delete could act on another row.
   - Low: tabs of different heights moved the chat (pages now share one grid cell); the palette needed a double click (KIT's `FilterList` got a `hoverRuns` option).
   - Files outside wave 2's own folders touched by these fixes: `src-tauri/src/commands.rs` (S5), `src/lib/stores/composer.svelte.js` (P3.7), `src/components/kit/FilterList.svelte` (KIT).
-- **Second review t88 (Codex Sol 6.1 high), after the fixes:** 14 of the 16 confirmed fixed, 2 partly. New: 2 high, 4 medium, all fixed by the coordinator, no new tests: config's top-level `env` (startup environment values) still reached the page (now dropped too); the Copilot import answered with its token through the plain call (`redact_answer` now keeps only `success` for `config/import-copilot`); clicking Yes in a batch recorded No; an older answer's completion closed a newer question form; Esc while the sign-in method sheet was still reading could open sign-in anyway; a pasted secret with two trailing newlines lost both (now only validation strips one). No third review was asked for.
+- **Second review t88 (Codex Sol 6.1 high), after the fixes:** 14 of the 16 confirmed fixed, 2 partly. New: 2 high, 4 medium, all fixed by the coordinator, no new tests: config's top-level `env` (startup environment values) still reached the page (now dropped too); the Copilot import answered with its token through the plain call (`redact_answer` now keeps only `success` for `config/import-copilot`); clicking Yes in a batch recorded No; an older answer's completion closed a newer question form; Esc while the sign-in method sheet was still reading could open sign-in anyway; a pasted secret with two trailing newlines lost both (now only validation strips one). Then the owner asked for a third one (below).
+- **Third review t89 (Codex Sol 6.1 high).** 5 findings, all fixed by the coordinator, no new tests, no fourth review:
+  1. A question notice for another batch could clear the shown question. The notice now has to name the shown `batch_id`, and each notice is counted (`questionNoticeCount` in `prompts.svelte.js`).
+  2. A slow read of the waiting question could bring back a form that a later notice had already closed. The read is dropped when a notice arrived meanwhile (`ask/store.svelte.js`).
+  3. The API key sheet could save a key that was edited after it was checked. An edit clears the check, and Save checks the key again (`signin/ApiKey.svelte`, `verifiedKey`).
+  4. Opening a choice's note with the mouse over another row used the old row. It now takes the hovered row (`QuestionForm.svelte`, `openNote`).
+  5. Selecting text in a choice with the mouse also picked the choice. A click while text is selected is ignored (`clickChoice`).
+
+## Phases 5-6, wave 3 (EXT, SET, THM, VIEW, SHARE, SYS), 2026-10-19
+
+The owner asked for this wave to be written like wave 2, and for this note.
+
+- **Written by Claude Opus at high effort, not max.** The coordinator (Claude Opus 5.5) wrote all six pieces itself at high effort. The plan called for max effort on brand-new screens.
+- **No tests at all.** None of the design's `u:`, `r:` or `w:` checks for EXT, SET, THM, VIEW, SHARE or SYS were written. There is no window driver, no deliberate break and no look picture for any wave 3 screen.
+- **No ultrabuild, no builder report.** No piece briefs, no separate builders, no row-by-row list of what is covered.
+- **Evidence:** only that the existing unit tests, `pnpm build` and `cargo test` still pass. None of them exercise wave 3's code.
+- **Places it differs from the design** (not checked by anyone):
+  - SYS update checks run in the app's first window (`app_info().first_window`), not "the focused one, else the first window opened".
+  - The crash notice's Restart only reloads the window after a web view crash; after a panic the notice already shows in the restarted app, so Restart just closes it.
+  - `crush_dirs` also answers with the log file and the crash folder (`log`, `crashes`) for About; design 6.4 lists only the folder lines.
+  - The memory pop-up is also checked once when a window joins (`GET /v1/memory`), not only on `memory_status` events, so a window that opens while memory is already high still claims the episode.
+  - The log viewer keeps at most 5,000 lines while following (the terminal keeps everything).
+  - `api.cliUpdates` and `api.crushUpdate` now take the `manual` flag.
+  - Window title needs the new capability `core:window:allow-set-title`.
+- **Not done in wave 3:** P4.4 (tree and restore dialogs) still waits.
 
 ## Phases 5-6, wave 1 (KIT, TERM, LST, LIVE), 2026-10-19
 

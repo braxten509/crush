@@ -46,6 +46,7 @@ impl AppError {
     }
 
     /// The scaffold's placeholder: a body its build piece has not written yet.
+    #[allow(dead_code)] // every phase 5-6 command is built now; kept for new ones
     pub fn not_built(what: &str) -> Self {
         AppError::new("not_built", format!("{what} is not built yet"))
     }

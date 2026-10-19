@@ -56,12 +56,19 @@ onEvent("question_batch_request", (_kind, request) => {
   prompts.question = request;
 });
 
-// Only one question batch can be pending at a time, so any notification means
-// the shown one was answered somewhere (agent_events.go:115-126).
-onEvent("question_batch_notification", () => {
+// A notification means that batch was answered somewhere (agent_events.go:115-126).
+onEvent("question_batch_notification", (_kind, note) => {
+  questionNotices += 1;
+  // Only the form of that batch closes (2.6 Arrival: batch_id equals the request id).
+  if (note?.batch_id && prompts.question && note.batch_id !== prompts.question.id) return;
   prompts.question = null;
   closeSlot("question");
 });
+
+// How many question notifications arrived: a read that started before one
+// must not bring its question back (lib/ask's pending-question read).
+let questionNotices = 0;
+export const questionNoticeCount = () => questionNotices;
 
 // The waiting marks of the chat list (LIST-012). session_id is already the
 // root chat. A chat this window has not seen is dropped: its first read

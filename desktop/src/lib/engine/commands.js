@@ -220,7 +220,7 @@ export async function selfupdateInstall() {
   return invoke("selfupdate_install");
 }
 
-// → {lines}
+// → {lines, log, crashes}
 export async function crushDirs() {
   return invoke("crush_dirs");
 }

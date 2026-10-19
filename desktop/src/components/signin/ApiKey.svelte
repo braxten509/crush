@@ -39,7 +39,18 @@
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  // The key that passed the check; any edit after it needs a new check
+  // (the terminal blurs the verified field, api_key_input.go:246).
+  let verifiedKey = null;
+  $effect(() => {
+    if (state === "verified" && key !== verifiedKey) {
+      state = "initial";
+      verifiedKey = null;
+    }
+  });
+
   async function verify() {
+    const checking = key;
     state = "verifying";
     document.querySelector(`[data-sheet="${ID}"] input`)?.blur();
     const started = Date.now();
@@ -51,11 +62,16 @@
       ok = false;
     }
     await sleep(Math.max(0, MIN_VERIFY_MS - (Date.now() - started)));
+    if (ok) verifiedKey = checking;
     state = ok ? "verified" : "error";
     if (!ok) queueMicrotask(() => document.querySelector(`[data-sheet="${ID}"] input`)?.focus());
   }
 
   async function save() {
+    if (key !== verifiedKey) {
+      state = "initial";
+      return;
+    }
     if (saving || saved) return;
     saving = true;
     saveError = "";

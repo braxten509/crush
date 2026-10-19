@@ -179,6 +179,11 @@
   function openNote() {
     if (!item || kind === "free_text" || kind === "secure_entry") return;
     const choices = item.choices ?? [];
+    // The hovered choice is the target, as the terminal adopts it (single.go:90).
+    if (hovered >= 0 && hovered < choices.length) {
+      states[active].cursor = hovered;
+      hovered = -1;
+    }
     const key = kind === "yes_no" || state.cursor >= choices.length ? item.id : choices[state.cursor].id;
     noteKey = key;
     noteText = state.notes[key] ?? "";
@@ -412,6 +417,9 @@
   }
 
   function clickChoice(at) {
+    // Dragging to select text never picks a choice (DLG-182).
+    const selection = globalThis.getSelection?.();
+    if (selection && !selection.isCollapsed && selection.toString() !== "") return;
     states[active].cursor = at; // a click selects without advancing (DLG-162)
     if (kind === "multi_choice") states[active].picked[at] = !states[active].picked[at];
     if (inEditor()) root?.focus({ preventScroll: true });

@@ -6,7 +6,7 @@
 import SecureForm from "../../components/ask/SecureForm.svelte";
 import QuestionForm from "../../components/ask/QuestionForm.svelte";
 import { api } from "../engine/api.js";
-import { prompts } from "../stores/prompts.svelte.js";
+import { prompts, questionNoticeCount } from "../stores/prompts.svelte.js";
 import { rootOf, sessions } from "../stores/sessions.svelte.js";
 import { closeSlot, openSlot, ui } from "../stores/ui.svelte.js";
 
@@ -79,9 +79,11 @@ let questionRead = "";
 // G-12: the shown chat waits for a question this window has not seen.
 async function readPendingQuestion(sid) {
   questionRead = sid;
+  const notices = questionNoticeCount();
   try {
     const request = await api.pendingQuestion(sid);
-    if (request?.id && sessions.currentId === sid && !prompts.question) prompts.question = request;
+    // A notification that came meanwhile means it was answered: it stays closed.
+    if (request?.id && sessions.currentId === sid && !prompts.question && questionNoticeCount() === notices) prompts.question = request;
   } catch {
     // No route returns a pending request yet (2.6 "Arrival").
   }

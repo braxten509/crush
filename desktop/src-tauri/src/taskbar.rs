@@ -1,11 +1,31 @@
 //! The taskbar badge, progress and attention (desktop-design-5-6 2.18,
-//! NOTE-007, NOTE-008). Placeholder from scaffold S5; SYS owns this file (7.3).
+//! NOTE-007, NOTE-008), applied to every window of the app (the badge and the
+//! progress belong to the app's icon). A desktop that does not show them
+//! ignores the calls. With --probe each call is also recorded. SYS owns this
+//! file (7.3).
 
-use crate::error::{AppError, AppResult};
-use tauri::AppHandle;
+use crate::error::AppResult;
+use serde_json::json;
+use tauri::window::{ProgressBarState, ProgressBarStatus};
+use tauri::UserAttentionType;
+use tauri::{AppHandle, Manager};
 
 /// Applies the app-wide badge count, progress and attention.
-#[allow(dead_code)] // alerts.rs (SYS) calls it
-pub fn apply(_app: &AppHandle, _badge: Option<u32>, _progress: Option<&str>, _attention: bool) -> AppResult<()> {
-    Err(AppError::not_built("taskbar"))
+pub fn apply(app: &AppHandle, badge: Option<u32>, progress: Option<&str>, attention: bool) -> AppResult<()> {
+    let state = app.state::<crate::state::AppState>();
+    if let Some(file) = state.launch.probe_side_file("alerts.jsonl") {
+        crate::state::append_json_line(&file, &json!({ "kind": "taskbar", "badge": badge, "progress": progress, "attention": attention }));
+    }
+    let progress_state = || ProgressBarState {
+        status: Some(if progress.is_some() { ProgressBarStatus::Indeterminate } else { ProgressBarStatus::None }),
+        progress: None,
+    };
+    for window in app.webview_windows().values() {
+        let _ = window.set_badge_count(badge.filter(|n| *n > 0).map(i64::from));
+        let _ = window.set_progress_bar(progress_state());
+        if attention && !window.is_focused().unwrap_or(false) {
+            let _ = window.request_user_attention(Some(UserAttentionType::Informational));
+        }
+    }
+    Ok(())
 }

@@ -88,7 +88,10 @@ func insertAgentWorkspace(t *testing.T, b *Backend, coord agent.Coordinator) *Wo
 		clients:      make(map[string]*clientState),
 		shutdownFn:   func() {},
 	}
-	ws.App = &app.App{AgentCoordinator: coord}
+	// A real event broker: a main-agent switch sends config_changed.
+	ws.App = app.NewForTest(context.Background())
+	ws.App.AgentCoordinator = coord
+	t.Cleanup(ws.App.ShutdownForTest)
 	ws.ctx, ws.cancel = context.WithCancel(b.ctx)
 	b.mu.Lock()
 	b.workspaces.Set(ws.ID, ws)

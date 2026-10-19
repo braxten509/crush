@@ -113,7 +113,10 @@ func (s *runCoordinator) capturedCtx() context.Context {
 func buildAgentWorkspace(t *testing.T, coord agent.Coordinator) (*controllerV1, string) {
 	t.Helper()
 	b := backend.New(context.Background(), nil, nil)
-	a := &app.App{AgentCoordinator: coord}
+	// A real event broker: a main-agent switch sends config_changed.
+	a := app.NewForTest(context.Background())
+	a.AgentCoordinator = coord
+	t.Cleanup(a.ShutdownForTest)
 
 	ws := &backend.Workspace{
 		ID:   uuid.New().String(),

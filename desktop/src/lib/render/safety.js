@@ -8,6 +8,7 @@
 //                           two left out
 //          location         location.href
 //          workspace_keys   Object.keys(conn.workspace): never env or config
+//          links_asked      how many link opens the page asked for (links.js)
 //   heavy  handlers_found   on* attributes anywhere in the page
 //          scripts_found    script, frame, object, embed, base and refresh
 //                           elements the page did not start with
@@ -17,16 +18,19 @@
 //          violations       [{directive, blocked, own}] every event seen;
 //                           blocked is a keyword ("inline", "eval") or the
 //                           address's scheme, never the address
+//          roots            [{text}] each drawn reply's words (the first 400)
+//          blocks           [{text, rect}] each paragraph and list item drawn
 //          anchors          [{text, href, rect}] every link drawn from a reply
 //          refused          [{text, rect}] every link turned into text
 //          chips            [{figure, kind, title, rect}] the visuals chips
 //          figures          [{figure, kind, state}] the figures on the page
+//          focus            {tag, href, text} of the focused element, or null
 //
 // The counter starts when the renderer is first imported, before the probe's
 // own test runs; the section reports only in test runs (--probe).
 import { probeSection } from "../probe.js";
 import { conn } from "../stores/connection.svelte.js";
-import { safeHref } from "./links.js";
+import { linksAsked, safeHref } from "./links.js";
 
 // Elements that run, load or redirect something. The page starts with its own
 // script and the content rule's meta element; anything later is counted.
@@ -124,15 +128,17 @@ export function scanPage(doc = document) {
     }
   }
   const scripts = [...doc.querySelectorAll(ACTIVE)].filter((el) => !startup.has(el)).length;
+  // Drawn surfaces may hold each other (a figure inside a reply): each element once.
   const drawn = [...doc.querySelectorAll(DRAWN)];
-  const controls = drawn.reduce((n, root) => n + [...root.querySelectorAll(CONTROLS)].filter((el) => !el.closest(".md-chip")).length, 0);
-  const inside = (selector) => drawn.flatMap((root) => [...root.querySelectorAll(selector)]);
+  const inside = (selector) => [...new Set(drawn.flatMap((root) => [...root.querySelectorAll(selector)]))];
   return {
     handlers_found: handlers,
     scripts_found: scripts,
-    controls_found: controls,
+    controls_found: inside(CONTROLS).filter((el) => !el.closest(".md-chip")).length,
     bad_hrefs_found: bad,
     violations: violations.map((v) => ({ ...v })),
+    roots: [...doc.querySelectorAll(".md")].filter((root) => !root.parentElement?.closest(".md")).map((root) => ({ text: words(root).slice(0, 400) })),
+    blocks: inside("p, li").map((el) => ({ text: words(el).slice(0, 120), rect: rectOf(el) })),
     anchors: inside("a[href]:not(.md-chip)").map((a) => ({ text: words(a), href: a.getAttribute("href"), rect: rectOf(a) })),
     refused: inside(".md-link-refused").map((span) => ({ text: words(span), rect: rectOf(span) })),
     chips: [...doc.querySelectorAll(".md-chip")].map((chip) => ({
@@ -146,7 +152,14 @@ export function scanPage(doc = document) {
       kind: view.dataset.kind ?? null,
       state: view.dataset.state ?? null,
     })),
+    focus: focusOf(doc),
   };
+}
+
+function focusOf(doc) {
+  const el = doc.activeElement;
+  if (!el || el === doc.body || el === doc.documentElement) return null;
+  return { tag: el.localName, href: el.getAttribute("href"), text: words(el).slice(0, 80) };
 }
 
 export function safetyLight() {
@@ -155,6 +168,7 @@ export function safetyLight() {
     csp_violations: violations.filter((v) => !v.own).length,
     location: location.href,
     workspace_keys: Object.keys(conn.workspace ?? {}),
+    links_asked: linksAsked(),
   };
 }
 

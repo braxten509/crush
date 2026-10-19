@@ -18,6 +18,7 @@
 //   linkGuard               the same as a Svelte action: use:linkGuard
 //   openLink(href)          open_link (1.3) with the project folder; a refusal
 //                           shows as an error notice
+//   linksAsked()            how many times openLink ran (the safety probe)
 import { open_link } from "../engine/commands.js";
 import { conn } from "../stores/connection.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
@@ -43,7 +44,15 @@ export function makeAnchor(doc, href) {
   return a;
 }
 
+// How many opens the page asked for (the probe's safety section reads it; the
+// addresses themselves are not kept).
+let asked = 0;
+export function linksAsked() {
+  return asked;
+}
+
 export async function openLink(href) {
+  asked += 1;
   try {
     await open_link(href, conn.project.path || conn.project.cwd);
     return true;

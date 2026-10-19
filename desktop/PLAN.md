@@ -464,6 +464,16 @@ Kept current during the build. Percent = share of the phase table in section 4.
 - Lighter ultrabuild: one independent review per phase (on the merged phase), not one per piece. The review/fix cap stays 3 rounds per phase.
 - Test budget (ultrabuild updated the same day): automated tests only for logic that can break silently; one real-window check per user flow at the phase level, not a driver per piece; one deliberate break per new test file. Every brief names its budget.
 - Wave 2 (P3.5-P3.9) was stopped once each piece's app code was saved and its unit tests and build passed; their unfinished per-piece window drivers were dropped. All five merged into `desktop` without conflicts; the phase 3 review covers them together.
+- Builders use Claude Opus at medium or high effort; max only for a brand-new screen element. Phase reviews use Codex gpt-6.1-sol (high, read-only); Claude Fable only for the final whole-app review.
+
+### Owner decisions (2026-10-19, before away mode)
+- Final steps without asking: once every check and the final whole-app review pass, merge `desktop` into `main`, push to the fork, install the new crush on this PC and add Crush Desktop to the app menu.
+- A look choice the approved designs don't settle: pick what fits the approved Scholar's Edition look best, record it here under "Look picks made while away", and keep going.
+- When the Claude session limit stops builders: wait until usage is back, then continue on Opus (no switch to another model).
+- OpenCode keeps the written copy for branches (its OpenCode Go key has expired; its fork call exists but was not checked with a model).
+
+### Look picks made while away
+- none yet
 
 ### Open findings
 - none

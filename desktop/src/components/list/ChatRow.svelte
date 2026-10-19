@@ -239,18 +239,19 @@
     text-underline-offset: calc(4 * var(--px));
   }
 
-  /* The close slot: a 28 px square hit area centred on the chevron's column
-     (right 19 + 13 / 2 = 25.5 from the row's right edge) and on the title's
-     first line (26 from the row's top on chat and branch rows alike, selected
-     or not). */
+  /* The close slot: a hit area 28 px wide and as tall as the × (12), centred
+     on the chevron's column (right 19 + 13 / 2 = 25.5 from the row's right
+     edge) and on the title's first line (26 from the row's top on chat and
+     branch rows alike, selected or not). It ends above the chevron (from 32.5
+     on a branch row, 37 on a chat row), so a click there stays the row's. */
   .close {
     position: absolute;
-    top: calc(12 * var(--px));
+    top: calc(20 * var(--px));
     right: calc(11.5 * var(--px));
     display: grid;
     place-items: center;
     width: calc(28 * var(--px));
-    height: calc(28 * var(--px));
+    height: calc(12 * var(--px));
     padding: 0;
     color: var(--slate);
     visibility: hidden;

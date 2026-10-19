@@ -184,6 +184,17 @@ describe("links (3.3)", () => {
     expect(Object.keys(L.links.byId).sort()).toEqual(["l1", "l2"]);
   });
 
+  it("a read with the same links writes nothing: each message keeps its list; a changed link writes only its own", async () => {
+    h.routes.set("GET chat-links", [link("l1", "b1", "s1", "m1"), link("l2", "b2", "s1", "m2")]);
+    await L.loadLinks();
+    const [m1, m2, l1] = [L.links.byParentMessage.m1, L.links.byParentMessage.m2, L.links.byId.l1];
+    await L.loadLinks();
+    expect([L.links.byParentMessage.m1 === m1, L.links.byParentMessage.m2 === m2, L.links.byId.l1 === l1]).toEqual([true, true, true]);
+    h.routes.set("GET chat-links", [link("l1", "b1", "s1", "m1"), link("l2", "b2", "s1", "m2", { start: 0, end: 6 })]);
+    await L.loadLinks();
+    expect([L.links.byParentMessage.m1 === m1, L.links.byParentMessage.m2 === m2, L.links.byParentMessage.m2[0].highlight_start]).toEqual([true, false, 0]);
+  });
+
   it.each([
     ["the session first", ["session", "chat_link"]],
     ["the link first", ["chat_link", "session"]],
@@ -239,6 +250,17 @@ describe("closing (3.3, 4.8)", () => {
     expect(S.sessions.currentId).toBe("s2");
     await C.closeChat("s2");
     expect(S.sessions.currentId).toBe("");
+  });
+
+  it("closing the last listed chat while its reply runs still leaves the landing state, with no busy notice", async () => {
+    await withList(chat("s1"));
+    openable("s1");
+    await S.openChat("s1");
+    S.sessions.live.s1 = true; // a reply is running
+    expect(S.busy("s1")).toBe(true);
+    const { ui } = await import("./ui.svelte.js");
+    expect(await C.closeChat("s1")).toBe(true);
+    expect([S.sessions.currentId, C.isClosed("s1"), ui.notice?.text ?? null]).toEqual(["", true, null]);
   });
 });
 

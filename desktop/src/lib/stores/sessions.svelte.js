@@ -390,7 +390,9 @@ function leave(sid) {
   dropFiles(sid);
 }
 
-function showLanding() {
+// Exported for closing the last listed chat (closed.svelte.js, P4.1), which
+// leaves a busy chat too.
+export function showLanding() {
   abandonOpen();
   const old = sessions.currentId;
   sessions.currentId = "";

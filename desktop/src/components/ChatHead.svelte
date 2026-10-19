@@ -62,8 +62,8 @@
   {:else}
     <h2 class="title">{title}</h2>
     {#if parent}
-      <p class="path" aria-label="Path">
-        Branched from <button class="parent" type="button" title="{isClosed(parent.id) ? 'Reopen' : 'Open'} {parent.title}" onclick={openParent}>{parent.title}</button>
+      <p class="path branched" aria-label="Path">
+        <span class="from">{"Branched from "}</span><button class="parent" type="button" title="{isClosed(parent.id) ? 'Reopen' : 'Open'} {parent.title}" onclick={openParent}><span class="parent-title">{parent.title}</span></button>
       </p>
     {:else if path}<p class="path" aria-label="Path" title={conn.project.path}>{path}</p>{/if}
   {/if}
@@ -95,18 +95,37 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* On a branch the line is a row: "Branched from " keeps its width (its
+     space too) and a long parent title gives way, cut with "…". A button
+     draws its text in an inner box of its own, so the cut is made on a span
+     inside it. */
+  .branched {
+    display: flex;
+  }
+  .from {
+    flex: none;
+    white-space: pre;
+  }
   /* The parent's title: the path line's own letters in the link look. */
   .parent {
+    min-width: 0;
+    overflow: hidden;
     padding: 0;
     font: inherit;
     letter-spacing: inherit;
     text-transform: inherit;
     color: var(--link);
+  }
+  .parent-title {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: calc(4 * var(--px));
   }
-  .parent:hover {
+  .parent:hover .parent-title {
     text-decoration-thickness: max(1px, calc(1.5 * var(--px)));
   }
 

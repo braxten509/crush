@@ -193,7 +193,7 @@ def look(app, S, B, D, a2, out_dir):
                "surface": {"id": "links-s", "name": "S open, the medium reply's link in view", "kind": "page"},
                "rows": list_rows(app, rows, names, titles)}
     for i, l in enumerate(on_line):
-        capture["rows"].append({"id": f"link-line-{i + 1}", "label": f"Link, line {i + 1}", "rect": px_box(app, l["link"]), "source": "src/components/ChatHead.svelte:118",
+        capture["rows"].append({"id": f"link-line-{i + 1}", "label": f"Link, line {i + 1}", "rect": px_box(app, l["link"]), "source": "src/components/ChatHead.svelte:133",
                                 "center": False, "center_reason": "Words inside a reply's line, not a control",
                                 "elements": [{"id": f"link-words-{i + 1}", "kind": "text", "text_kind": "variable", "label": "Link words", "text": "link", "rect": px_box(app, l["link"], LOOK_TEXT)}]})
     captures.append(capture)

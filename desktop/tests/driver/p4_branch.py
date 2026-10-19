@@ -30,13 +30,17 @@ over its socket. Each step is named after its row and saves <ROW>.png.
   B5     a selection in the tool's body: Branch from here is disabled with
          "Branch from message text, not tool output"
   B12    a sibling C of B from other words of the same reply; inside C the
-         copied link opens B; a branch of B nests at depth 2
+         copied link opens B; a branch of B nests at depth 2; with B renamed
+         to a 61-character title, at the narrowest window (900 px) its head's
+         link is cut with "…", ends inside the head and still opens B
   B9     B's row plain, hovered and selected: the title's box (where a cut
          title's "…" falls), the title's letters, the time's and the
          chevron's rects move by at most 1 real px, the × shows in the
-         reserved slot only when hovered or selected; its × hides B, B's
-         branch moves up to depth 1, the footer says "1 closed · links reopen
-         them", the window opens S, and the settings file holds the closing
+         reserved slot only when hovered or selected; a click on the hovered
+         row's chevron opens B and does not close it; the selected row is as
+         tall as the plain one; its × hides B, B's branch moves up to depth 1,
+         the footer says "1 closed · links reopen them", the window opens S,
+         and the settings file holds the closing
   B10    clicking the link in S opens B and lists it again
   B15    the engine's tree switch moves S's head off the linked reply: the
          link goes; switching back shows it again
@@ -808,6 +812,26 @@ def main():
                 head = (app.heavy().get("branch") or {}).get("head") or {}
                 check(flat(head.get("text")).upper() == f"BRANCHED FROM {s['B_title']}".upper(), f"its head's path line says BRANCHED FROM <B> ({head.get('text')!r})")
                 s["D"] = D
+                # A long parent title at the narrowest window: the title is cut
+                # with "…", its link ends inside the head and still opens B.
+                record = engine.get(f"sessions/{B}")
+                long_title = "A parent chat whose long title runs far past the head's width"
+                engine.call("PUT", f"sessions/{B}", dict(record, title=long_title))
+                if check(app.place(w=900), "the window is at its narrowest, 900 px wide"):
+                    ok, head, _ = poll(lambda: (app.heavy().get("branch") or {}).get("head") or {}, lambda h: long_title in flat(h.get("text")) and bool(h.get("link")), 5)
+                    link, line = head.get("link") or {}, head.get("rect") or {}
+                    inside = ok and bool(link and line) and link["x"] + link["w"] <= line["x"] + line["w"] + 0.5
+                    check(inside and head.get("link_cut") and link["w"] >= 40,
+                          f"a {len(long_title)}-character parent title is cut and its link ends inside the head (link {link}, line {line}, cut {head.get('link_cut')})")
+                    if link:
+                        app.click_rect(link)
+                        ok, _, _ = poll(app.chat_id, lambda c: c == B, 5)
+                        check(ok, f"the cut link still opens B ({app.chat_id()})")
+                app.place()
+                engine.call("PUT", f"sessions/{B}", record)
+                ok, _, _ = poll(lambda: app.row(B) or {}, lambda r: r.get("title") == record.get("title"), 5)
+                if not ok:
+                    raise RuntimeError("B's title did not come back")
         if stop_after("B12"):
             return
 
@@ -828,14 +852,22 @@ def main():
             app.move(t["x"] + min(40, t["w"] / 2), t["y"] + t["h"] / 2)
             hovered = row_of(app.heavy(), B)
             check(bool(hovered) and hovered.get("close_shown"), "hovered: the × shows in it")
-            app.click(t["x"] + min(40, t["w"] / 2), t["y"] + t["h"] / 2)
+            # B has a branch, so its row has a chevron under the shown ×; a
+            # click on the chevron is the row's, as it is with no × shown.
+            chev = (hovered or {}).get("chevron")
+            if not check(bool(chev), "B's row has a chevron (it has a branch)"):
+                raise RuntimeError("B's row has no chevron")
+            app.click(chev["x"] + chev["w"] / 2, chev["y"] + chev["h"] / 2)
             ok, _, _ = poll(app.chat_id, lambda c: c == B, 5)
-            check(ok, "a click selects the row (B opens)")
+            row_b = app.row(B)
+            check(ok and bool(row_b) and not row_b.get("closed"), f"a click on the hovered row's chevron selects the row (B opens) and does not close it ({app.chat_id()}, {row_b})")
             time.sleep(0.4)
             selected_hover = row_of(app.heavy(), B)
             app.park()
             selected = row_of(app.heavy(), B)
             check(bool(selected) and selected.get("close_shown"), "selected: the × shows without the pointer")
+            heights = [((r or {}).get("row") or {}).get("h") for r in (plain, selected)]
+            check(None not in heights and abs(heights[0] - heights[1]) <= 0.5, f"the selected branch row is as tall as the plain branch row ({heights})")
             # The title twice: its box decides where a cut title's "…" falls;
             # its letters' box keeps the whole text and shows where they start.
             for name, label in (("title", "title's box"), ("title_text", "title's letters"), ("time", "time"), ("chevron", "chevron")):

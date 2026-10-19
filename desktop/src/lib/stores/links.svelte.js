@@ -19,6 +19,8 @@ export const links = $state({ byId: {}, byParentMessage: {}, originOf: {} }); //
 
 // The two indexes, rebuilt from byId after every change (a project has tens
 // of links, not thousands). byParentMessage lists a message's links by start.
+// Only what changed is written: a message whose links are the same keeps its
+// list, so what reads it (linksFor, and so the drawn text) does not run again.
 function reindex() {
   const byParentMessage = {};
   const originOf = {};
@@ -27,8 +29,14 @@ function reindex() {
     if (link.origin) originOf[link.session_id] = link;
   }
   for (const list of Object.values(byParentMessage)) list.sort((a, b) => a.highlight_start - b.highlight_start);
-  links.byParentMessage = byParentMessage;
-  links.originOf = originOf;
+  merge(links.byParentMessage, byParentMessage, (a, b) => a.length === b.length && a.every((link, i) => link === b[i]));
+  merge(links.originOf, originOf, (a, b) => a === b);
+}
+
+// Writes next's entries into target, leaving the equal ones as they are.
+function merge(target, next, equal) {
+  for (const key of Object.keys(target)) if (!(key in next)) delete target[key];
+  for (const [key, value] of Object.entries(next)) if (!(key in target) || !equal(target[key], value)) target[key] = value;
 }
 
 const FIELDS = ["session_id", "parent_session_id", "source_message_id", "highlight_text", "highlight_start", "highlight_end", "origin", "created_at"];
@@ -57,11 +65,23 @@ export function upsertLink(link) {
   reindex();
 }
 
+// A read's whole list: a link kept already the same stays as it is, so a read
+// that changed nothing writes nothing.
 function replaceAll(list) {
-  const byId = {};
-  for (const link of list) if (valid(link)) byId[link.id] = plain(link);
-  links.byId = byId;
-  reindex();
+  const next = {};
+  for (const link of list) if (valid(link)) next[link.id] = plain(link);
+  let changed = false;
+  for (const id of Object.keys(links.byId)) {
+    if (id in next) continue;
+    delete links.byId[id];
+    changed = true;
+  }
+  for (const [id, link] of Object.entries(next)) {
+    if (same(links.byId[id], link)) continue;
+    links.byId[id] = link;
+    changed = true;
+  }
+  if (changed) reindex();
 }
 
 let reading = null;

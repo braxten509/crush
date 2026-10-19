@@ -228,7 +228,9 @@ probeSection(
     const nav = document.querySelector("nav.chats");
     const header = document.querySelector("header.head");
     const head = header?.querySelector(".path");
-    const words = head?.firstChild?.nodeType === Node.TEXT_NODE ? head.firstChild : null;
+    const from = head?.querySelector(".from")?.firstChild;
+    const words = from?.nodeType === Node.TEXT_NODE ? from : null;
+    const parentTitle = head?.querySelector(".parent-title");
     const footer = nav?.querySelector(".footer");
     return {
       shown: shownLinks(),
@@ -249,14 +251,16 @@ probeSection(
       }),
       // ink, day: the footer's letters and the day label's, which share a left edge.
       footer: footer ? { text: footer.textContent.trim(), rect: rectOf(footer), ink: inkRect(footer), day: inkRect(nav.querySelector(".day")) } : null,
-      // words, glyph: "Branched from" and its first letter; link_text: the parent's title.
+      // words, glyph: "Branched from" and its first letter; link_text: the
+      // parent's title; link_cut: the title is cut with "…" to fit.
       head: head
         ? {
             text: head.textContent.trim(),
             rect: rectOf(head),
             title: rectOf(header.querySelector(".title")),
             link: rectOf(head.querySelector(".parent")),
-            link_text: inkRect(head.querySelector(".parent")),
+            link_text: inkRect(parentTitle),
+            link_cut: Boolean(parentTitle) && parentTitle.scrollWidth > parentTitle.clientWidth,
             words: lettersRect(words),
             glyph: lettersRect(words, true),
           }

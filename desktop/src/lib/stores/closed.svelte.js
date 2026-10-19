@@ -16,7 +16,7 @@ import { closed_set, settings_get } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { buildRows } from "../listmodel.js";
 import { parentOf } from "./links.svelte.js";
-import { newChat, openChat, sessions } from "./sessions.svelte.js";
+import { openChat, sessions, showLanding } from "./sessions.svelte.js";
 import { notify } from "./ui.svelte.js";
 
 export const closed = $state({ ids: new SvelteSet() }); // from settings.closed_chats[engine data_dir]
@@ -126,7 +126,8 @@ export function listedChats() {
 }
 
 // The list's ×: closes the chat; the shown chat makes way for the first chat
-// still listed, or the landing state when none is left (D15).
+// still listed, or the landing state when none is left (D15), busy or not
+// (newChat would refuse a busy chat; its reply carries on unseen).
 export async function closeChat(sessionId) {
   if (!sessionId) return false;
   const wasShown = sessions.currentId === sessionId;
@@ -134,6 +135,6 @@ export async function closeChat(sessionId) {
   if (!done || !wasShown || sessions.currentId !== sessionId) return done;
   const next = listedChats().find((id) => id !== sessionId);
   if (next) await openChat(next);
-  else await newChat();
+  else showLanding();
   return true;
 }

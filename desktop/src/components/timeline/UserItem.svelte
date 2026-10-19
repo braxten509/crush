@@ -11,5 +11,5 @@
 
 <div class="user">
   <Byline author="You" time={clockTime(item.time ?? 0)} />
-  <UserBox text={item.text} chips={item.chips} />
+  <UserBox text={item.text} chips={item.chips} messageId={item.messageId} />
 </div>

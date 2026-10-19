@@ -1,10 +1,13 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -218,6 +221,41 @@ func TestVerifyKey(t *testing.T) {
 	for _, form := range []string{marker, url.QueryEscape(marker), "G56keyMARKER"} {
 		require.NotContains(t, string(out), form, "the key is not in the answer")
 		require.NotContains(t, logs.String(), form, "the key is not in the logs")
+	}
+
+	// A provider that answers 401 with the key, base64-encoded, as its
+	// status line's reason and as its body: only the status code is told.
+	echoed := base64.StdEncoding.EncodeToString([]byte(marker))
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				if _, err := http.ReadRequest(bufio.NewReader(conn)); err != nil {
+					return
+				}
+				fmt.Fprintf(conn, "HTTP/1.1 401 %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", echoed, len(echoed), echoed)
+			}()
+		}
+	}()
+	mustWorkspace(t, g).Cfg.Config().Providers.Set("smarker", config.ProviderConfig{
+		ID: "smarker", Name: "G56 echo", Type: catwalk.TypeOpenAICompat, BaseURL: "http://" + ln.Addr().String() + "/v1",
+	})
+	code, out = u.call(t, http.MethodPost, path, proto.VerifyKeyRequest{ProviderID: "smarker", APIKey: marker})
+	require.Equal(t, http.StatusOK, code, "%s", out)
+	var echo proto.VerifyKey
+	require.NoError(t, json.Unmarshal(out, &echo))
+	require.Equal(t, proto.VerifyKey{Error: "failed to connect to provider smarker: 401 Unauthorized"}, echo)
+	for _, form := range []string{marker, url.QueryEscape(marker), "G56keyMARKER", echoed,
+		base64.URLEncoding.EncodeToString([]byte(marker)), base64.RawStdEncoding.EncodeToString([]byte(marker))} {
+		require.NotContains(t, string(out), form, "the echoed key is not in the answer")
+		require.NotContains(t, logs.String(), form, "the echoed key is not in the logs")
 	}
 
 	pc, _ := mustWorkspace(t, g).Cfg.Config().Providers.Get("fake")

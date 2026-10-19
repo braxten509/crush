@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/config/providers"
 	"github.com/charmbracelet/crush/internal/login"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/oauth/copilot"
@@ -49,9 +52,32 @@ var hyperMinimumWait = 750 * time.Millisecond
 var newAuthFlow = login.NewFlow
 
 // verifyAPIKey tests key against provider as the terminal's API key
-// sheet does; tests and the crushtest seams replace it.
+// sheet does; tests and the crushtest seams replace it. Its error holds
+// only trusted text: see [trustedKeyError].
 var verifyAPIKey = func(provider config.ProviderConfig, resolver config.VariableResolver) error {
-	return provider.TestConnection(resolver)
+	return trustedKeyError(provider.ID, provider.TestConnection(resolver))
+}
+
+// trustedKeyError rebuilds a key check's error from what Crush itself
+// knows, in the terminal's wording, so nothing the provider sent (its
+// status line's reason or its body) and nothing of the request (a key in
+// its address) reaches an app: a refusal is its status code and Go's text
+// for it, a format check keeps Crush's own text, and any other failure is
+// the terminal's request failure without its cause.
+func trustedKeyError(providerID string, err error) error {
+	var status *providers.StatusError
+	var format *providers.KeyFormatError
+	switch {
+	case err == nil:
+		return nil
+	case errors.As(err, &status):
+		return fmt.Errorf("failed to connect to provider %s: %s", providerID,
+			strings.TrimSpace(fmt.Sprintf("%d %s", status.StatusCode, http.StatusText(status.StatusCode))))
+	case errors.As(err, &format):
+		return format
+	default:
+		return fmt.Errorf("failed to create request for provider %s", providerID)
+	}
 }
 
 // SetAuthForTest replaces the sign-in flows and the key check; nil keeps

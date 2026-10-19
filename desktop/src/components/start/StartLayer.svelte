@@ -59,7 +59,7 @@
   style:--band-bottom={band ? `${band.bottom}px` : null}
   aria-label={label}
 >
-  {@render children()}
+  {@render children?.()}
 </section>
 
 <style>

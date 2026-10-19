@@ -144,14 +144,14 @@ describe("footerFields (renderFooterItems)", () => {
 });
 
 describe("meterModel (the panel's meters)", () => {
-  it("the approved picture: CONTEXT 62 %, 5-HOUR 86 % with the warning, WEEK 31 %", () => {
+  it("the meters show what is left: CONTEXT 38 %, 5-HOUR 14 % with the warning, WEEK 69 %", () => {
     const { meters, lines, tokens } = meterModel({ session: chat(), limit: 200_000, limits: windows.slice(0, 2) });
     expect(meters.map((m) => [m.label, m.text, m.warn])).toEqual([
-      ["CONTEXT", "62%", false],
-      ["5-HOUR", "86%", true],
-      ["WEEK", "31%", false],
+      ["CONTEXT", "38% left", false],
+      ["5-HOUR", "14% left", true],
+      ["WEEK", "69% left", false],
     ]);
-    expect(meters.map((m) => m.used)).toEqual([62, 86, 31]);
+    expect(meters.map((m) => Math.round(m.left))).toEqual([38, 14, 69]);
     expect(lines).toEqual(["Context 38% left · 124k/200k tokens", "5h 14% left", "Weekly 69% left"]);
     expect(tokens).toBe("124k/200k tokens");
   });
@@ -168,7 +168,7 @@ describe("meterModel (the panel's meters)", () => {
 
   it("checking… until the CLI's first reading; an API model has no limit meters", () => {
     const checking = meterModel({ session: chat(), limit: 200_000, limits: null });
-    expect(checking.meters.map((m) => [m.label, m.text])).toEqual([["CONTEXT", "62%"], ["5-HOUR", "checking…"], ["WEEK", "checking…"]]);
+    expect(checking.meters.map((m) => [m.label, m.text])).toEqual([["CONTEXT", "38% left"], ["5-HOUR", "checking…"], ["WEEK", "checking…"]]);
     expect(checking.lines.slice(1)).toEqual(["5h checking…", "Weekly checking…"]);
     expect(meterModel({ session: chat(), limit: 200_000, limits: [] }).meters.map((m) => m.label)).toEqual(["CONTEXT"]);
   });
@@ -182,7 +182,7 @@ describe("meterModel (the panel's meters)", () => {
     // SIDE-023: a third window shows only while "Other usage limits" is on.
     expect(labels(DEFAULT_FOOTER_ITEMS.filter((id) => id !== "limit_other"))).toEqual(["CONTEXT", "5-HOUR", "WEEK"]);
     const other = meterModel({ items: ["limit_other"], limits: windows }).meters;
-    expect(other.map((m) => [m.id, m.text])).toEqual([["limit_other:Opus", "50%"]]);
+    expect(other.map((m) => [m.id, m.text])).toEqual([["limit_other:Opus", "50% left"]]);
     // SIDE-019: tokens leave the detail and the strip.
     const noTokens = meterModel({ items: ["context"], session: chat(), limit: 200_000 });
     expect([noTokens.lines, noTokens.tokens]).toEqual([["Context 38% left"], ""]);
@@ -197,16 +197,16 @@ describe("meterModel (the panel's meters)", () => {
 
   it("no chat: the context is unknown", () => {
     const { meters, lines, tokens } = meterModel({ session: null, limit: 200_000, limits: [] });
-    expect(meters.map((m) => [m.label, m.text, m.used])).toEqual([["CONTEXT", "–", 0]]);
+    expect(meters.map((m) => [m.label, m.text, m.left])).toEqual([["CONTEXT", "–", 0]]);
     expect([lines, tokens]).toEqual([["Context unknown"], ""]);
   });
 
-  it("the shown used part and the left part add up to 100 at every half", () => {
+  it("the meter and its line show the same amount left at every half", () => {
     for (const left of [14.5, 15.5, 0.5, 99.5]) {
       const { meters, lines } = meterModel({ items: ["limit_5h"], limits: [{ name: "5h", left, resetsIn: null }] });
-      const used = Number(meters[0].text.replace("%", ""));
+      const shown = Number(/(\d+)% left/u.exec(meters[0].text)[1]);
       const shownLeft = Number(/(\d+)% left/u.exec(lines[0])[1]);
-      expect(used + shownLeft, String(left)).toBe(100);
+      expect(shown, String(left)).toBe(shownLeft);
     }
   });
 });
@@ -307,11 +307,11 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
     expect(limitWindows(reading({ windows: [{ name: "5h", used: 1, resets_at: "0001-01-01T00:00:00Z" }] }), "opus", now)).toEqual([{ name: "5h", left: 99, resetsIn: null }]);
   });
 
-  it("feeds the meters: the picture's 5-HOUR 86 % with the warning", () => {
+  it("feeds the meters: 5-HOUR 14 % left with the warning", () => {
     const { meters } = meterModel({ items: ["limit_5h", "limit_weekly", "resets"], limits: limitWindows(reading(), "opus", now) });
     expect(meters.map((m) => [m.label, m.text, m.warn, m.resets])).toEqual([
-      ["5-HOUR", "86%", true, "resets 2h41m"],
-      ["WEEK", "31%", false, "resets 3d0h"],
+      ["5-HOUR", "14% left", true, "resets 2h41m"],
+      ["WEEK", "69% left", false, "resets 3d0h"],
     ]);
   });
 });

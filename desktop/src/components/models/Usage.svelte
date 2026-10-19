@@ -191,7 +191,7 @@
       <Rule marks="start" />
       <p class="label">{w.name}</p>
       <p class="figure">{shown.figure}</p>
-      <div class="meter"><span style:width="{shown.used}%"></span></div>
+      <div class="meter"><span style:width="{100 - shown.used}%"></span></div>
       {#each shown.lines as text}
         <p class="line">{text}</p>
       {/each}

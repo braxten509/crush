@@ -22,8 +22,8 @@
     {#each model.meters as meter (meter.id)}
       <span class="item" data-meter={meter.id}>
         <span class="label">{meter.label}</span>
-        <span class="bar" role="meter" aria-label="{meter.label} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.used)}>
-          <span class="fill" style:width="{meter.used}%"></span>
+        <span class="bar" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
+          <span class="fill" style:width="{meter.left}%"></span>
         </span>
         <span class="value">{meter.text}</span>
         {#if meter.warn}
@@ -42,7 +42,8 @@
     flex: none;
     height: 0;
   }
-  /* The composer's bottom padding is 25 picture px; the field starts 20 in. */
+  /* The strip fills the last 25 picture px of the composer's 33 bottom padding
+     (8 above it keep the field's focus ring clear); the field starts 20 in. */
   .strip {
     position: absolute;
     left: calc(20 * var(--px));

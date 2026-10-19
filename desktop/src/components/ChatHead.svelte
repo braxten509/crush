@@ -4,7 +4,7 @@
   // style; on a branch, "Branched from <parent title>" with the parent's
   // title as a link that opens it, reopening it first when it is closed (4.8,
   // 3.3; demo core.js:101). While a chat opens: that chat's title. On the
-  // start screens (landing, init, onboarding): the CRUSH AI wordmark with
+  // init and onboarding screens: the CRUSH AI wordmark with
   // "Charm™ · v<version>" (START-003, START-004), in the landing block's
   // column. Nothing while the window is still deciding what to show, so no
   // wordmark flashes before a -s chat.
@@ -25,7 +25,8 @@
   let { session } = $props();
 
   const view = $derived(screen());
-  const brand = $derived(view === "landing" || view === "init" || view === "onboarding");
+  // The landing page is blank, wordmark included (owner, 2026-10-19).
+  const brand = $derived(view === "init" || view === "onboarding");
   const hyper = $derived(ws.config?.models?.large?.provider === "hyper");
   const title = $derived(view === "opening" ? (sessions.opening?.title ?? "") : view === "chat" ? (session?.title ?? "") : "");
   // A branch whose parent is still listed names it; a deleted parent took its

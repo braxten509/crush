@@ -106,7 +106,8 @@
     flex-direction: column;
     min-height: 0;
     box-sizing: border-box;
-    padding: calc(15 * var(--px)) calc(20 * var(--px)) calc(25 * var(--px));
+    /* 33 below: the meter strip's 25 plus room for the focus ring (owner, 2026-10-19). */
+    padding: calc(15 * var(--px)) calc(20 * var(--px)) calc(33 * var(--px));
   }
   /* The chip row brings its own 10 above and below in place of the top padding. */
   .composer.chipped {

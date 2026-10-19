@@ -2,7 +2,7 @@
   // The usage meters at the panel's top (SIDE-007, SIDE-014, SIDE-020 to
   // SIDE-024): CONTEXT, then one meter per usage window of the agent CLI
   // (5-HOUR, WEEK, and other windows when "Other usage limits" is on), each
-  // the used part as a percent and a bar, with the amber triangle under 20 %
+  // the part left as a percent and a bar, with the amber triangle under 20 %
   // left. Three share a row at the approved picture's proportions; more go on
   // the next row, fewer share the row evenly. Hover or focus shows the
   // terminal's words and "Customize…" (MeterDetail).
@@ -49,8 +49,8 @@
             <span class="visually-hidden">near the limit</span>
           {/if}
         </p>
-        <div class="meter" role="meter" aria-label="{meter.label} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.used)}>
-          <span class="fill" style:width="{meter.used}%"></span>
+        <div class="meter" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
+          <span class="fill" style:width="{meter.left}%"></span>
         </div>
         {#if meter.resets}<p class="resets">{meter.resets}</p>{/if}
       </div>

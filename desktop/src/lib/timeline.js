@@ -419,19 +419,6 @@ export function footerText(m, providers, lastUserTime) {
 
 // -- Keys (4.4, D16) --
 
-// The letters of the n-th key (0-based): A is the rail's top dot, so keys
-// run B, C, … Z, then AA, AB.
-export function keyLetters(n) {
-  let k = n + 2;
-  let out = "";
-  while (k > 0) {
-    const r = (k - 1) % 26;
-    out = String.fromCharCode(65 + r) + out;
-    k = Math.floor((k - 1) / 26);
-  }
-  return out;
-}
-
 // -- Building --
 
 export function createTimelineState() {
@@ -609,10 +596,11 @@ export function buildTimeline(input, state = createTimelineState()) {
   const items = [];
   let status = "";
   let refreshAt = Infinity;
-  let keyed = 0;
+  // One letter per key (owner, 2026-10-19): A for the agent's turns and
+  // tools, U for the user's own message.
   const letterFor = (kind, mid) => {
     const on = kind === "tools" || ((kind === "user" || kind === "reply") && hasKey?.(mid));
-    return on ? keyLetters(keyed++) : "";
+    return on ? (kind === "user" ? "U" : "A") : "";
   };
   const base = (kind, messageId) => ({ kind, sessionId, messageId });
   const statusItem = (key, m, words, timerKey, thought) => {

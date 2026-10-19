@@ -439,6 +439,7 @@
     padding: 0 calc(26 * var(--px));
     cursor: default;
     outline: none;
+    isolation: isolate;
   }
   .row.two-line {
     height: calc(64 * var(--px));
@@ -491,26 +492,30 @@
     visibility: hidden;
     pointer-events: none;
   }
-  .row:hover {
+  /* Hover and selection draw 8 in from the frame on both sides, so they never
+     touch its edges (owner, 2026-10-19). */
+  .row:hover::before,
+  .row.selected::before {
+    content: "";
+    position: absolute;
+    inset: 0 calc(8 * var(--px));
+    z-index: -1;
+    pointer-events: none;
+  }
+  .row:hover::before {
     background: var(--control-hover);
   }
   /* The selected row: a band between faint lines, with the vermilion edge
      (the shown chat's row, ChatList, look 5.0). */
-  .row.selected {
-    background: var(--band);
-  }
   .row.selected::before {
-    content: "";
-    position: absolute;
-    inset: 0;
+    background: var(--band);
     border-top: 1px solid var(--rule-faint);
     border-bottom: 1px solid var(--rule-faint);
-    pointer-events: none;
   }
   .row.selected::after {
     content: "";
     position: absolute;
-    left: calc(3 * var(--px));
+    left: calc(8 * var(--px));
     top: 0;
     bottom: 0;
     width: calc(4 * var(--px));

@@ -80,15 +80,32 @@
     ),
   );
 
+  // Only the newest chats show (owner, 2026-10-19), with their branches and
+  // always the open chat; "All chats" opens the Sessions sheet for the rest.
+  // A search shows every match.
+  const SHOWN_CHATS = 6;
+
   // Day groups for drawing: each day's label and the rows under it.
-  const groups = $derived.by(() => {
+  const view = $derived.by(() => {
     const out = [];
+    let top = 0;
+    let hidden = 0;
+    let keep = true;
     for (const item of built.items) {
-      if (item.kind === "day") out.push({ key: `${out.length}:${item.label}`, label: item.label, rows: [] });
-      else if (out.length) out[out.length - 1].rows.push(item);
+      if (item.kind === "day") {
+        out.push({ key: `${out.length}:${item.label}`, label: item.label, rows: [] });
+        continue;
+      }
+      if (item.depth === 0) {
+        top++;
+        keep = query !== "" || top <= SHOWN_CHATS || item.selected;
+        if (!keep) hidden++;
+      }
+      if ((keep || item.selected) && out.length) out[out.length - 1].rows.push(item);
     }
-    return out;
+    return { groups: out.filter((g) => g.rows.length > 0), hidden };
   });
+  const groups = $derived(view.groups);
 
   const searchHint = $derived(start.platform === "macos" ? "⌘K" : "Ctrl K");
 
@@ -236,12 +253,21 @@
       <entry.component />
     {/each}
 
+    {#if view.hidden > 0}
+      <button class="all-chats" type="button" onclick={() => openDialog("sessions")}>All chats <span class="more">({view.hidden} more)</span></button>
+    {/if}
     <ListFooter count={built.closedCount} />
     {#each listSections("footer") as entry (entry.id)}
       <entry.component />
     {/each}
     {#if !built.empty}<Rule marks="both" class="end-of-list" />{/if}
   </div>
+
+  <!-- Settings without the Ctrl+P menu (owner, 2026-10-19). -->
+  <button class="settings" type="button" onclick={() => openDialog("settings")}>
+    <Icon name="gear" size={16} />
+    <span class="label">Settings</span>
+  </button>
 </nav>
 
 <style>
@@ -297,6 +323,45 @@
     font: var(--t-button);
   }
   .new-chat:hover .label {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: calc(4 * var(--px));
+  }
+
+  /* "All chats (N more)" under the shown rows opens the Sessions sheet. */
+  .all-chats {
+    display: block;
+    margin: calc(10 * var(--px)) calc(20 * var(--px)) calc(4 * var(--px));
+    padding: 0;
+    border: 0;
+    background: none;
+    font: var(--t-body-small);
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  .all-chats .more {
+    color: var(--slate);
+  }
+  /* Settings sits under the scrolling rows, at the column's foot. */
+  .settings {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: calc(12 * var(--px));
+    box-sizing: border-box;
+    height: calc(52 * var(--px));
+    margin: 0 calc(20 * var(--px));
+    padding: 0;
+    border: 0;
+    border-top: 1px solid var(--rule-faint);
+    background: none;
+    font: var(--t-body-small);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .all-chats:hover,
+  .settings:hover .label {
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: calc(4 * var(--px));

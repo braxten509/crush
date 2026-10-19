@@ -9,7 +9,6 @@ import {
   createTimelineState,
   footerText,
   hypercredits,
-  keyLetters,
   noticeParts,
   parseSkill,
   ranTools,
@@ -433,7 +432,7 @@ describe("groups and keys (CHAT-080, 4.4)", () => {
     const out = build(run);
     expect(kinds(out)).toEqual(["user", "reply", "tools", "reply", "footer"]);
     const g = out.items[2];
-    expect(g).toMatchObject({ key: "group:c1", groupId: "c1", working: false, lastFailed: true, failed: 1, backgrounded: 0, live: null, letter: "B" });
+    expect(g).toMatchObject({ key: "group:c1", groupId: "c1", working: false, lastFailed: true, failed: 1, backgrounded: 0, live: null, letter: "A" });
     expect(g.calls.map((c) => [c.id, c.status])).toEqual([
       ["c1", "done"],
       ["c2", "done"],
@@ -476,10 +475,11 @@ describe("groups and keys (CHAT-080, 4.4)", () => {
     expect(toolActivity(name)).toBe(words);
   });
 
-  test("keys: B, C, … Z, then AA, AB; only groups in phase 3, replies with a branch link in phase 4", () => {
-    expect([0, 1, 23, 24, 25, 26].map(keyLetters)).toEqual(["B", "C", "Y", "Z", "AA", "AB"]);
+  test("keys: A on tool groups and on replies with a branch link, U on a user message with one", () => {
     const out = build(run, { hasKey: (mid) => mid === "a1" });
-    expect(out.items.map((i) => i.letter)).toEqual(["", "B", "C", "", ""]);
+    expect(out.items.map((i) => i.letter)).toEqual(["", "A", "A", "", ""]);
+    const user = build(run, { hasKey: (mid) => mid === "u1" });
+    expect(user.items.map((i) => i.letter)).toEqual(["U", "", "A", "", ""]);
     expect(ranTools(1)).toBe("Ran 1 tool");
   });
 

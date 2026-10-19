@@ -202,8 +202,9 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
     meters.push({
       id: FOOTER.context,
       label: "CONTEXT",
-      used: left === null ? 0 : 100 - left,
-      text: left === null ? "–" : `${100 - Number(goFixed(left, 0))}%`,
+      // The owner's call (2026-10-19): the meters show what is left.
+      left: left === null ? 0 : left,
+      text: left === null ? "–" : `${goFixed(left, 0)}% left`,
       // As the sidebar's context line (elements.go:144): over 80 % used.
       warn: left !== null && left < 20,
       resets: "",
@@ -219,7 +220,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
       [FOOTER.limitWeekly, "WEEK", "Weekly"],
     ]) {
       if (!show(id)) continue;
-      meters.push({ id, label, used: 0, text: "checking…", warn: false, resets: "" });
+      meters.push({ id, label, left: 0, text: "checking…", warn: false, resets: "" });
       lines.push(`${name} checking…`);
     }
     return { meters, lines, tokens };
@@ -231,8 +232,8 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
     meters.push({
       id: id === FOOTER.limitOther ? `${id}:${window.name}` : id,
       label: id === FOOTER.limit5h ? "5-HOUR" : id === FOOTER.limitWeekly ? "WEEK" : String(window.name).toUpperCase(),
-      used: 100 - window.left,
-      text: `${100 - Number(goFixed(window.left, 0))}%`,
+      left: window.left,
+      text: `${goFixed(window.left, 0)}% left`,
       // Under 20 % left (sidebar.go:136-139).
       warn: window.left < 20,
       resets: limitWords.resets,

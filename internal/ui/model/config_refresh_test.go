@@ -104,3 +104,21 @@ func TestConfigRefreshFollowsMainAgent(t *testing.T) {
 	require.Equal(t, uiInputModeCode, u.mode)
 	require.Zero(t, ws.switches, "the terminal does not switch the agent itself")
 }
+
+// TestConfigRefreshDropsOlderReplies: when two refreshes' main agent reads
+// come back in reverse order, the newer one's answer stands (G-3).
+func TestConfigRefreshDropsOlderReplies(t *testing.T) {
+	u, base, _ := newThemeUI(t)
+	ws := &agentNameWorkspace{cmdStateWorkspace: base, agent: config.AgentPlan}
+	u.com.Workspace = ws
+
+	older, ok := findMsg[mainAgentMsg](refreshConfig(u))
+	require.True(t, ok)
+	ws.agent = config.AgentCoder
+	newer, ok := findMsg[mainAgentMsg](refreshConfig(u))
+	require.True(t, ok)
+
+	u.Update(newer)
+	u.Update(older)
+	require.Equal(t, uiInputModeCode, u.mode, "the older refresh's late answer is dropped")
+}

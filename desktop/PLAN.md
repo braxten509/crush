@@ -442,6 +442,8 @@ Kept current during the build. Percent = share of the phase table in section 4.
 
 - 2026-10-18: P3.3 round-1 fixes done (t44; 3f6c1434, 53e417ce, bac469cb): all six test-first, 16 breaks caught, pnpm 262, cargo 88, real app against the engine 24 + 16 PASS, 0 of 14 outside files changed. Its export list is in design 1.5.3 (2c529128). Coordinator answers to its open questions, sent as a small round (Opus high, as the owner decided for non-screen work): a kind with no `read_at` is polled like a stale one; Esc follows the terminal (`send.go:259`: a queued send still awaiting its 202 keeps going); `openChat`'s history read gets the same no-lost-event guard as the resync. Other options: the literal rule (never poll an unread kind), the briefed interrupt rule, leaving the history-read gap.
 
+- 2026-10-18: P3.3 rechecks (t52, GPT-6.1 Sol, as the owner chose for reviews until the last one): round 2 closed 8 of 9 (older reads could still overwrite newer ones), round 3 found a check-then-await gap in the new read turns; both fixed test-first (9b6e3619, 1848ec4b) and the return shapes went into design 1.5.3 (d09a8bd4). Final recheck "ready to merge". Coordinator's checks on 1848ec4b all pass (pnpm 273, cargo 88, both builds, commands both modes, self-test). Merged into desktop (97d2ff93).
+
 ### Owner decisions for the overnight run (2026-10-18, before bed)
 - Engine questions, all as built: stopped helpers start again when another app next opens the project or the engine next starts; a copied branch copies each message's price and starts its totals at zero; a closing app's message already inside another app's running reply lets that reply keep going.
 - The lone-window lock is built and tested in phase 1 and switched on in phase 7 (approved plan change).

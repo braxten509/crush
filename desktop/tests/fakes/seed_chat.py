@@ -26,7 +26,9 @@ It prints one JSON line: {"session_id", "workspace_id", "turns", "messages",
 
 The engine is reached over its unix socket with Python's http.client (what
 `curl --unix-socket` does). The workspace object the engine returns holds the
-login environment, so it is never printed.
+login environment, so it is never printed. Joining sends this process's own
+environment, so it runs only inside tests/sandbox.sh (HOME /tmp/home and
+DESKTOP_ROOT set) and exits 1 anywhere else, before reaching any engine.
 """
 import argparse, http.client, json, os, socket, subprocess, sys, threading, time, uuid
 
@@ -101,6 +103,10 @@ def ensure(crush, cwd):
 
 
 def seed(opts):
+    # The workspace create sends this process's environment, so it runs only in
+    # the test sandbox (fake_ai_server.py's engine checks use the same guard).
+    if os.environ.get("HOME") != "/tmp/home" or not os.environ.get("DESKTOP_ROOT"):
+        raise ApiError("run it inside tests/sandbox.sh (HOME /tmp/home): it sends its environment to the engine")
     sock = opts.socket or ensure(opts.crush or os.environ.get("DESKTOP_CRUSH") or "crush", opts.cwd)
     engine = Engine(sock)
     info = engine.call("GET", "/v1/version")

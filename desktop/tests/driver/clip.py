@@ -15,6 +15,11 @@ program takes the clipboard. Exit 0 on success, 1 on failure, 2 without a screen
 import os, select, subprocess, sys, tempfile, time
 
 HOLD_SECONDS = 10
+NO_SCREEN = "clip.py: no screen (DISPLAY is not set or not reachable)"
+
+
+class NoScreen(Exception):
+    pass
 
 
 def gtk():
@@ -23,8 +28,7 @@ def gtk():
     gi.require_version("Gdk", "3.0")
     from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
     if not Gtk.init_check(sys.argv)[0]:
-        print("clip.py: no screen (DISPLAY is not set or not reachable)", file=sys.stderr)
-        sys.exit(2)
+        raise NoScreen()
     return Gdk, GdkPixbuf, GLib, Gtk
 
 
@@ -60,6 +64,9 @@ def own(kind, value):
         os.close(read_end)
         if answer.startswith("ok"):
             return 0
+        if answer.startswith("no screen"):
+            print(NO_SCREEN, file=sys.stderr)
+            return 2
         print("clip.py: could not take the clipboard: " + (answer or "no answer"), file=sys.stderr)
         return 1
     os.close(read_end)
@@ -94,6 +101,8 @@ def own(kind, value):
         os.close(write_end)
         GLib.timeout_add(100, watch)
         Gtk.main()
+    except NoScreen:
+        os.write(write_end, b"no screen\n")
     except Exception as e:  # report to the parent, which is still waiting
         try:
             os.write(write_end, ("error: %s\n" % e).encode())
@@ -162,7 +171,14 @@ def self_test():
 
 
 def main():
-    args = sys.argv[1:]
+    try:
+        return command(sys.argv[1:])
+    except NoScreen:
+        print(NO_SCREEN, file=sys.stderr)
+        return 2
+
+
+def command(args):
     if args == ["get-text"]:
         return get_text()
     if args == ["targets"]:

@@ -3,7 +3,6 @@
  "turns": [
   {
    "when": "Stream for two minutes",
-   "title": "Session cookie review",
    "steps": [
     {
      "delay_ms": 120,
@@ -221,7 +220,6 @@
   },
   {
    "when": "first from desktop",
-   "title": "first from desktop",
    "steps": [
     {
      "delay_ms": 40,
@@ -250,7 +248,6 @@
   },
   {
    "when": "from the terminal",
-   "title": "from the terminal",
    "steps": [
     {
      "delay_ms": 120,
@@ -260,7 +257,6 @@
   },
   {
    "when": "R7 model check: terminal chat",
-   "title": "R7 model check",
    "steps": [
     {
      "text": "R7 reply on the terminal's chat."
@@ -269,7 +265,6 @@
   },
   {
    "when": "R7 model check: desktop chat",
-   "title": "R7 model check",
    "steps": [
     {
      "text": "R7 reply on the desktop's chat."
@@ -278,7 +273,6 @@
   },
   {
    "when": "Reconnect check: a long reply",
-   "title": "Reconnect check",
    "steps": [
     {
      "delay_ms": 120,
@@ -288,7 +282,6 @@
   },
   {
    "when": "Reconnect check: kept while reconnecting",
-   "title": "Reconnect check",
    "steps": [
     {
      "text": "Sent after the rejoin: the typing box kept this text while the app reconnected."
@@ -297,7 +290,6 @@
   },
   {
    "when": "Reconnect check: sent as the engine stops",
-   "title": "Reconnect check",
    "steps": [
     {
      "text": "This prompt reached the engine before it stopped."
@@ -306,7 +298,6 @@
   },
   {
    "when": "Reconnect check: typed while failed",
-   "title": "Reconnect check",
    "steps": [
     {
      "text": "Sent after Try again: the typing box kept this text while the connection was down."

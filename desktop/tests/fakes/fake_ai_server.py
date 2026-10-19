@@ -8,8 +8,7 @@ Usage:
 
 Scripts. Every tests/fakes/scripts/*.json is loaded at start; "script X" in the
 design means the turns of scripts/X.json. A script is
-  {"turns": [{"when": "substring of the last user message", "title": "optional",
-              "steps": [STEP, ...]}, ...],
+  {"turns": [{"when": "substring of the last user message", "steps": [STEP, ...]}, ...],
    "default": STEP, "about": "optional note"}
 and a STEP is
   {"delay_ms": 10, "reasoning": "thinking text", "text": "streamed reply",
@@ -22,6 +21,10 @@ tools, else stop. "error" answers with that HTTP status instead of a reply;
 with "times": N it does so only for the first N requests of one conversation,
 and the step then plays normally (a 429 once). "headers" go on the error
 answer (for example {"retry-after": "1"}, so a retry does not wait 5 s).
+Design 6.2's rules hold for every script (the self-test enforces them): a
+script, its turns and its steps use only the keys above plus "about" (free
+text); no turn's "when" is a substring of another script's "when" or contains
+one; every turn is reached with any script active or none.
 
 Picking a reply. The server is stateless: it takes the turn whose "when" is a
 substring of the last user message, then the step whose index is the number of
@@ -30,8 +33,8 @@ tried first, then every script in file-name order; nothing matching gives the
 active script's default, else {"text": "OK."}. A turn played past its last
 step answers with its script's default. A request that offers no tools (titles,
 summaries) never gets tool calls. Title requests ("Generate a concise title for
-the following content: ...") are answered at once with the turn's "title", or
-the content's first six words, and never play a script step.
+the following content: ...") are answered at once with the content's first six
+words and never play a script step (the log still names the turn they match).
 
 Streaming. Text and reasoning go out in chunks of 1-4 words (the same chunks on
 every run of the same step), tool calls as OpenAI deltas (id and name first,
@@ -43,7 +46,8 @@ Other paths. GET /file.txt and GET /page.html are served for the Download and
 Fetch tools; GET .../models lists the models. POST /_fake/control
 {"script": NAME|null, "time_scale": N} selects the active script and the time
 scale (a driver reaches it on the port it is given); GET /_fake/control reports
-them. Every other GET is logged with "beacon": true (the safety check, 2.9).
+them. Every other path, GET or POST, answers 404 and is logged with
+"beacon": true (the safety check, 2.9).
 
 Log. Every request is one JSON line in $FAKE_AI_LOG: method, path, model,
 stream, messages (the count), tools (the count), last_user (its first 200
@@ -55,9 +59,11 @@ Self-test. --self-test plays every script in scripts/ through a real server
 over HTTP, step by step as the engine would (tool results go back as tool
 messages), and checks every stream: chunk shape, 1-4 words per text chunk, the
 reassembled text, reasoning and tool-call arguments, the finish reason, usage,
-errors and their "times". It also checks each script's shape and that every
-turn is reached by its own "when" text, and runs built-in cases for the rest
-(timing, titles, files, beacons, the control call, non-streamed requests).
+errors and their "times". It also checks 6.2's rules on each script (its
+keys, no "when" inside another script's, every turn reached by its own "when"
+with no script and with each script active), and runs built-in cases for the
+rest (timing, titles, files, beacons, the control call, non-streamed requests,
+the rule checks themselves, seed_chat.py's sandbox guard).
 With --engine CRUSH (inside tests/sandbox.sh only) it also runs real
 `crush run` turns against the server, the fake AI tools, seed_chat.py through
 the engine's API, the fake MCP server and the fake LSP server (see
@@ -209,9 +215,8 @@ class Fake:
         idx, text = last_user(messages)
         content = title_content(text)
         if content is not None:
-            name, ti, turn = self.match(content)
-            title = (turn or {}).get("title") or default_title(content)
-            return {"kind": "title", "step": {"text": title}, "script": name, "turn": ti, "step_index": None}
+            name, ti, _ = self.match(content)
+            return {"kind": "title", "step": {"text": default_title(content)}, "script": name, "turn": ti, "step_index": None}
         name, ti, turn = self.match(text)
         if turn is None:
             return {"kind": "default", "step": self.default_step(), "script": self.active, "turn": None, "step_index": None}
@@ -355,7 +360,7 @@ class Handler(BaseHTTPRequestHandler):
                       "messages": len(messages), "tools": len(body.get("tools") or []),
                       "last_user": text[:200], "session": self.headers.get("x-session-id", "")})
         if not path.rstrip("/").endswith("/chat/completions"):
-            entry.update({"kind": "unknown", "status": 404})
+            entry.update({"kind": "beacon", "beacon": True, "status": 404})
             self.fake.log(entry)
             return self._send(404, {"error": {"message": "not found"}})
         choice = self.fake.pick(messages)
@@ -605,7 +610,8 @@ TOOL_REQUIRED = {
 
 
 def check_shapes(r, scripts):
-    """Each script's shape: turns, steps, fields and finish values."""
+    """Each script's shape: turns, steps, fields and finish values. A script,
+    its turns and its steps use only the keys design 6.2 shows plus "about"."""
     for name, script in scripts.items():
         problems, notes = [], []
         if not isinstance(script, dict):
@@ -624,7 +630,7 @@ def check_shapes(r, scripts):
                 problems.append(f"turn {i} has no \"when\" text")
                 continue
             for key in turn:
-                if key not in ("when", "steps", "title", "about"):
+                if key not in ("when", "steps", "about"):
                     problems.append(f"turn {i} has an unknown key {key!r}")
             if not isinstance(turn.get("steps", []), list) or not turn.get("steps"):
                 problems.append(f"turn {i} ({turn['when']!r}) has no steps")
@@ -662,23 +668,46 @@ def check_shapes(r, scripts):
             r.note(f"script {name}: {n}")
 
 
-def check_reachable(r, scripts):
-    """Every turn must be the one its own "when" text picks, with its script
-    active and with no script active (a driver may not select one)."""
+def turn_whens(scripts):
+    """[(script, turn index, when)] of every turn with a "when" text."""
+    return [(name, i, t["when"]) for name, s in scripts.items() if isinstance(s, dict) for i, t in enumerate(s.get("turns") or [])
+            if isinstance(t, dict) and isinstance(t.get("when"), str) and t["when"]]
+
+
+def when_collisions(scripts):
+    """Turns of two scripts where one "when" is a substring of the other (6.2:
+    a turn's "when" is not a substring of another script's "when" and contains
+    none): [(script, turn index, other script, its turn index)]."""
+    whens = turn_whens(scripts)
+    return [(a, i, b, j) for a, i, wa in whens for b, j, wb in whens if a < b and (wa in wb or wb in wa)]
+
+
+def unreached(scripts, name, i):
+    """The active scripts (None: no script active) under which the turn's own
+    "when" picks another turn (6.2: each turn is reached with every other script
+    active as well as alone)."""
+    when = scripts[name]["turns"][i]["when"]
     fake = Fake(scripts)
-    for name, script in scripts.items():
-        for i, turn in enumerate(script.get("turns") or []):
-            when = turn.get("when")
-            if not isinstance(when, str) or not when:
-                continue
-            fake.active = name
-            n1, i1, _ = fake.match(when)
-            fake.active = None
-            n2, i2, _ = fake.match(when)
-            r.check((n1, i1) == (name, i), f"script {name} turn {i} ({when!r}) is reached with its script active"
-                    + ("" if (n1, i1) == (name, i) else f" (got {n1} turn {i1})"))
-            r.check((n2, i2) == (name, i), f"script {name} turn {i} ({when!r}) is reached with no script active"
-                    + ("" if (n2, i2) == (name, i) else f": script {n2} turn {i2} wins; make one \"when\" unique"))
+    missed = []
+    for active in [None, *scripts]:
+        fake.active = active
+        if fake.match(when)[:2] != (name, i):
+            missed.append(active)
+    return missed
+
+
+def check_reachable(r, scripts):
+    """Design 6.2's rules on "when": no turn's "when" is a substring of another
+    script's or contains one, and every turn is the one its own "when" picks
+    with no script active and with each script active (its own and every
+    other; a driver activates its own, 6.2)."""
+    found = when_collisions(scripts)
+    r.check(not found, "no turn's \"when\" is a substring of another script's \"when\" or contains one"
+            + ("" if not found else ": " + "; ".join(f"script {a} turn {i} and script {b} turn {j}" for a, i, b, j in found)))
+    for name, i, when in turn_whens(scripts):
+        missed = unreached(scripts, name, i)
+        r.check(not missed, f"script {name} turn {i} ({when!r}) is reached with no script active and with each of the {len(scripts)} scripts active"
+                + ("" if not missed else ": not with " + ", ".join("no script" if m is None else f"script {m}" for m in missed) + " active"))
 
 
 def fake_tool_result(call):
@@ -818,7 +847,7 @@ def builtin_cases(r):
     log = os.path.join(folder, "log.jsonl")
     try:
         os.mkdir(os.path.join(folder, "scripts"))
-        a = {"turns": [{"when": "alpha", "title": "Alpha title", "steps": [
+        a = {"turns": [{"when": "alpha", "steps": [
                  {"delay_ms": 40, "reasoning": "think a bit", "text": "one two three four five six seven"},
              ]},
              {"when": "tools please", "steps": [
@@ -901,7 +930,8 @@ def builtin_cases(r):
 
         title_req = TITLE_PREFIX + "\n\nalpha and more words here for the title\n <think>\n\n</think>"
         _, _, raw = ask(title_req, with_tools=False)
-        r.check(parse_stream(raw)[1]["text"] == "Alpha title", "built-in: a title request gets the matching turn's title")
+        r.check(parse_stream(raw)[1]["text"] == "alpha and more words here for",
+                "built-in: a title request gets the content's first six words, also when a turn matches it")
         _, _, raw = ask(TITLE_PREFIX + "\n\nfirst from the desktop app today please\n <think>\n\n</think>", with_tools=False)
         r.check(parse_stream(raw)[1]["text"] == "first from the desktop app today", "built-in: other titles are the content's first six words")
 
@@ -922,10 +952,14 @@ def builtin_cases(r):
         r.check(status == 200 and [m["id"] for m in json.loads(body)["data"]] == MODELS, "built-in: GET /v1/models lists the models")
         status, _, _ = http(port, "GET", "/beacon?x=1")
         r.check(status == 404, "built-in: any other GET answers 404")
+        status, _, _ = http(port, "POST", "/form", {"x": 1})
+        r.check(status == 404, "built-in: a POST to any other path answers 404")
         srv.shutdown()
         entries = [json.loads(line) for line in open(log)]
         r.check(any(e.get("path") == "/beacon?x=1" and e.get("beacon") is True for e in entries),
                 "built-in: the other GET is logged as a beacon")
+        r.check(any(e.get("path") == "/form" and e.get("method") == "POST" and e.get("beacon") is True for e in entries),
+                "built-in: the other POST is logged as a beacon too")
         r.check(not any(e.get("beacon") for e in entries if e.get("path") in ("/file.txt", "/page.html", "/v1/models", "/_fake/control")),
                 "built-in: files, models and control are never beacons")
         posts = [e for e in entries if e.get("method") == "POST" and e.get("kind") != "control"]
@@ -933,6 +967,23 @@ def builtin_cases(r):
                 "built-in: every request is logged with its message count, last user message and status")
         r.check(any(e.get("kind") == "title" for e in posts) and any(e.get("tools_dropped") for e in posts),
                 "built-in: the log marks title requests and dropped tool calls")
+        r.check(any(e.get("kind") == "title" and e.get("script") == "a" and e.get("turn") == 0 for e in posts),
+                "built-in: a title request is logged with the turn its content matches")
+
+        loaded = load_scripts(os.path.join(folder, "scripts"))
+        r.check(when_collisions(loaded) == [("a", 0, "b", 0)],
+                f"built-in: the \"when\" rule finds a turn's \"when\" inside another script's (\"alpha\" in \"alpha beta\"; got {when_collisions(loaded)})")
+        r.check(unreached(loaded, "b", 0) == [None, "a"] and unreached(loaded, "a", 0) == [],
+                f"built-in: a turn another script's \"when\" shadows is unreached with no script and with that script active "
+                f"(got {unreached(loaded, 'b', 0)} and {unreached(loaded, 'a', 0)})")
+
+        # seed_chat.py sends its environment to the engine, so outside the
+        # sandbox (HOME not /tmp/home) it refuses before reaching any engine.
+        p = subprocess.run([sys.executable, "-I", os.path.join(HERE, "seed_chat.py"), "--cwd", folder, "--turns", "1",
+                            "--socket", os.path.join(folder, "no-engine.sock")],
+                           env=dict(os.environ, HOME=os.path.join(folder, "home")), capture_output=True, text=True, timeout=30)
+        r.check(p.returncode == 1 and "tests/sandbox.sh" in p.stderr,
+                f"built-in: seed_chat.py refuses to run with HOME outside /tmp/home (exit {p.returncode}: {p.stderr.strip()[-160:]})")
     finally:
         shutil.rmtree(folder, ignore_errors=True)
 

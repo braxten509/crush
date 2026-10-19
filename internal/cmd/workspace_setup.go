@@ -69,7 +69,7 @@ func engineMode(cmd *cobra.Command) string {
 	}
 	mode, err := config.EngineMode(cwd, dataDir)
 	if err != nil {
-		slog.Warn("Failed to read the engine setting; sharing the engine", "error", err)
+		slog.Warn("Failed to read the engine setting; using the default", "error", err)
 	}
 	if engineModes.byKey == nil {
 		engineModes.byKey = map[string]string{}
@@ -266,7 +266,17 @@ func setupClientServerWorkspace(cmd *cobra.Command) (workspace.Workspace, func()
 // connectToServer ensures the server is running, creates a client and
 // workspace, and returns a cleanup function that deletes the workspace.
 func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func(), error) {
-	conn, err := connectToServerOrEngine(cmd)
+	return connectionParts(connectToServerOrEngine(cmd))
+}
+
+// joinServer is connectToServer for `crush logout`: it joins the project's
+// live engine when one runs and never starts one, whatever the engine
+// setting (engine-design.md 5.2).
+func joinServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func(), error) {
+	return connectionParts(connectToServerOrEngineWith(cmd, false))
+}
+
+func connectionParts(conn *serverConnection, err error) (*client.Client, *proto.Workspace, func(), error) {
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -287,13 +297,19 @@ type serverConnection struct {
 // (engine-design.md 5.2), creates it there, and returns a cleanup that
 // leaves it:
 //
-//  1. With CRUSH_CLIENT_SERVER=1 and no --host: the project's engine,
-//     started if needed.
-//  2. With the switch off and no --host (only `crush logout` gets here):
-//     the project's live engine, when FindEngine finds one. It never
-//     starts one.
+//  1. In a shared window (useClientServer) with no --host: the project's
+//     engine, started if needed.
+//  2. For `crush logout` (joinServer) with no --host: the project's live
+//     engine, when FindEngine finds one. It never starts one.
 //  3. Otherwise the legacy server at --host, as before.
 func connectToServerOrEngine(cmd *cobra.Command) (*serverConnection, error) {
+	return connectToServerOrEngineWith(cmd, useClientServer(cmd))
+}
+
+// connectToServerOrEngineWith is connectToServerOrEngine where start says
+// whether the project's engine may be started (case 1) or only joined
+// (case 2).
+func connectToServerOrEngineWith(cmd *cobra.Command, start bool) (*serverConnection, error) {
 	cwd, err := ResolveCwd(cmd)
 	if err != nil {
 		return nil, err
@@ -312,7 +328,7 @@ func connectToServerOrEngine(cmd *cobra.Command) (*serverConnection, error) {
 	debug, _ := cmd.Flags().GetBool("debug")
 	opts := serverctl.EnsureOptions{Cwd: absCwd, DataDir: dataDir, Debug: debug}
 
-	if useClientServer(cmd) {
+	if start {
 		h, err := serverctl.EnsureEngine(cmd.Context(), opts)
 		if err != nil {
 			return nil, err

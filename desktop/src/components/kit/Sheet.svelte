@@ -17,7 +17,7 @@
   // before the sheet opened, the typing box by default (2.0 rule 9). Only the
   // front sheet hears keys: onKey(event, combo) first, then its kit parts,
   // then Esc and Alt+Esc close it.
-  //   id, title, width: "small" | "standard" | "wide" (520, 760, 1040),
+  //   id, title, label? (the screen-reader name when untitled), width: "small" | "standard" | "wide" (520, 760, 1040),
   //   maxHeight? (picture px), controls? (a snippet beside the title; buttons
   //   in it get the small-caps label look, the active one marked with
   //   aria-pressed="true"), help: [{key, text, disabled?}], onKey?, docked?,
@@ -46,6 +46,7 @@
   let {
     id,
     title,
+    label = null, // the sheet's name for screen readers when it has no title
     width = "standard",
     maxHeight = null,
     controls = null,
@@ -253,7 +254,8 @@
     class:capped={maxHeight !== null && maxHeight !== undefined}
     role="dialog"
     aria-modal="true"
-    aria-labelledby={uid}
+    aria-labelledby={title ? uid : null}
+    aria-label={title ? null : label}
     tabindex="-1"
     data-sheet={id}
     data-kit-sheet

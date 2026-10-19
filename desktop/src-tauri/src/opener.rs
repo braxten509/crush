@@ -998,6 +998,8 @@ mod tests {
     }
 
     /// TestOpenChatLinkDesktopDispatch (links_test.go:133-150), with fake openers.
+    /// Linux only: the fake opener checks its streams through /proc.
+    #[cfg(target_os = "linux")]
     #[test]
     fn opener_runs_the_first_desktop_opener_with_quiet_streams() {
         let dir = Dir::new("dispatch");

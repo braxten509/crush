@@ -18,6 +18,28 @@ Written by the coordinator (Claude Opus 5.5, high effort), in the same way as wa
 - **Alignment results (2026-10-19, real window, `tests/out/look_align/summary.json`):** at picture size (12/12) the first screen and the Sessions sheet pass every check. At the default Compact zoom (8/12) three icons measure 1 pixel off their row's middle (the chat list's search icon and every filter field's icon 1 low, the model picker's arrow 1 high): their boxes are centered, and the offset comes from 50- and 20-unit sizes landing on thirds of a pixel. Left as they are (a fix would have to move them per zoom step). Sheets with only text rows report "no relationships to measure" rather than a pass; the Settings, Models, Commands, Kept skills, Skills, Theme and Notifications sheets pass. Found by eye and fixed: the Quit sheet drew an empty title band (a sheet with no title and no controls now has none).
 - **The "go back" setting has no screen.** `options.engine` is set in crush.json or through `CRUSH_ENGINE`. The desktop app's settings screen does not show it, because the desktop app always uses the engine.
 
+## Final reviews (MiniMax t96, Sonnet 5.5 t98), 2026-10-19
+
+Fixed:
+- `crush logout` started the project's engine once shared became the default; it now only joins a running engine (`joinServer`, design 5.2). Covered by the updated `TestExplicitHostKeepsLegacyServer`, which now runs in a shared setting.
+- Windows defaults to working alone (the engine does not run there yet); an explicit setting still wins. A `CRUSH_ENGINE` value that is not shared or alone now logs a warning.
+- Mac build: the opener test that checks streams through `/proc` runs on Linux only, so `cargo test` can pass on macOS.
+- `api` uppercases the method before the key redaction, so `get`/`post` can no longer skip it.
+- A phone message into a shared window's new chat reports the new chat to the engine before answering, so the engine's "switched to another chat" check no longer races it; an empty new chat fails cleanly instead of crashing.
+- A share answer that is neither setup nor on is shown as "sharing did not start" instead of being taken as on.
+- Smaller: FilterList counts rows below the view only when capped; the Quit sheet has a screen-reader name (`Sheet` `label`); a misplaced comment in `engine/commands.js`; stale comments on logout.
+
+Checked and not changed:
+- FilterList's cap does not change when scrolled (both edges move together); the Global "enabled" label in MCP toggles matches the terminal (`toggles.go:312-328`); the Mac download expects `crush` on PATH, as the README says.
+
+Left open:
+- `crush login` in a shared window starts the engine, like any other window (the design names only logout as join-only).
+- Secret copies not wiped: the Go string in `secure_remote.go` (the JSON wire format needs strings) and the request buffer `uds_http.rs` builds; the `connection.rs` comment says all copies are wiped.
+- In a shared window the secret form's submit blocks the terminal for up to 30 s if the engine hangs, and a submit error shows under whichever field comes first (the server's field name is not passed back through the client).
+- Phone sharing in a shared window: presence changes are sent one goroutine each and can arrive out of order; after an engine restart the window still shows REMOTE until the next status; a share that comes up just as a cancel errors is left running; a stale stop can arrive after a newer start.
+- The background row can show the old chat's jobs for up to 1 s after a switch; a shared window counts services as unfinished work in the session host.
+- Mac, unconfirmed until the first Mac run: PTY tabs use `poll(2)` on the PTY, which macOS may not support for devices (a tab would close at once; fix would be `select`); socket paths in tests may pass macOS's 104-byte limit; the workflow's pnpm and unpinned Tauri CLI versions.
+
 ## Tests added later for waves 2 and 3 (2026-10-19, owner-approved plan)
 
 Risk-based only (logic that could break unnoticed), 36 checks in 9 files, each file shown to fail once on a deliberate break and then restored: secret hiding in `commands.rs` (`redact_answer`, 3 new Rust tests beside the scrub test), question-form answers (`ask/form.test.js`), theme color math and readability (`themes/tokens.test.js`), model picker groups (`models/groups.test.js`), custom command arguments (`palette/customcommands.test.js`), Sessions ages and project rule (`sessions/match.test.js`), log lines (`system/loglines.test.js`), picture picker rules (`pictures/picker.test.js`), and the two fixed phone-sharing bugs (`remote/share.test.js`). No app code changed; no real bug found (two first failures were test mistakes: a provider not built the way the app reads it, and a promise about argument values the terminal does not keep either). Still without tests, on purpose: glue, wording, layout, alerts, badge, title, settings setters, sign-in mapping, and FilterList's row cap (jsdom measures no layout).

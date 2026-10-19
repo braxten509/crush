@@ -61,7 +61,7 @@
   }
 </script>
 
-<Sheet id={ID} title="" width="small" help={[{ key: "←/→", text: "switch options" }, { key: "enter/space", text: "confirm" }]} {onKey}>
+<Sheet id={ID} title="" label="Quit Crush" width="small" help={[{ key: "←/→", text: "switch options" }, { key: "enter/space", text: "confirm" }]} {onKey}>
   <div class="quit">
     <p class="question">Are you sure you want to quit?</p>
     <div class="buttons"><Buttons buttons={BUTTONS} bind:selected onPress={click} /></div>

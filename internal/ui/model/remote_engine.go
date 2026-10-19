@@ -82,6 +82,9 @@ func (m *UI) handleRemoteEngineStarted(msg remoteEngineStartedMsg) tea.Cmd {
 		}
 		return nil
 	}
+	if err == nil && msg.status.State != "on" {
+		err = errors.New("sharing did not start")
+	}
 	if err != nil {
 		if m.remote.quiet {
 			m.remote.quiet = false
@@ -200,7 +203,24 @@ func (m *UI) handleEngineRemoteAction(a proto.RemoteAction) tea.Cmd {
 		if err != nil {
 			return fail(err)
 		}
-		return tea.Batch(cmd, finish(proto.RemoteActionDone{SessionID: m.session.ID}))
+		if !m.hasSession() {
+			return fail(errors.New("the new chat could not start"))
+		}
+		id := m.session.ID
+		// The engine checks the answer against this window's current chat,
+		// so report the new chat before answering; loadSession's own report
+		// runs alongside and may land later.
+		return tea.Batch(cmd, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := ws.SetCurrentSession(ctx, id); err != nil {
+				slog.Debug("Failed to report current session", "session_id", id, "error", err)
+			}
+			if err := ws.FinishRemoteAction(ctx, a.ActionID, proto.RemoteActionDone{SessionID: id}); err != nil {
+				slog.Debug("Failed to answer the phone", "error", err)
+			}
+			return nil
+		})
 	case "yolo":
 		if m.mode == uiInputModePlan && (m.isAgentBusy() || m.modeSwitching) {
 			return fail(errAgentBusy)

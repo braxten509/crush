@@ -51,8 +51,8 @@ func TestClientServerEnvJoinsEngineWorkspace(t *testing.T) {
 }
 
 // TestExplicitHostKeepsLegacyServer: an explicit --host takes the legacy
-// server even with the switch on; so does connectToServer working alone
-// with no --host when no engine runs, as `crush logout` calls it, on
+// server even with the switch on; so does joinServer (crush logout)
+// in a shared window with no --host when no engine runs, on
 // the default host, looked up only then. No engine starts in either case.
 func TestExplicitHostKeepsLegacyServer(t *testing.T) {
 	p := newCmdProject(t)
@@ -68,10 +68,11 @@ func TestExplicitHostKeepsLegacyServer(t *testing.T) {
 	stopLegacyServer(t, c, explicit, p.dataDir)
 	require.NoFileExists(t, p.socket, "no engine started")
 
+	// Logout joins only, even in a shared window.
 	t.Setenv("CRUSH_CLIENT_SERVER", "")
-	t.Setenv("CRUSH_ENGINE", config.EngineAlone)
+	t.Setenv("CRUSH_ENGINE", config.EngineShared)
 	fallback := defaultSocket(t)
-	c, ws, cleanup, err = connectToServer(setupCmd(t))
+	c, ws, cleanup, err = joinServer(setupCmd(t))
 	require.NoError(t, err)
 	require.NotEmpty(t, ws.ID)
 	require.FileExists(t, fallback, "the legacy server listens on the default host")

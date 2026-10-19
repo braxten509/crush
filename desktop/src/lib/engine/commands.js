@@ -220,12 +220,12 @@ export async function selfupdateInstall() {
   return invoke("selfupdate_install");
 }
 
-// → {lines, log, crashes}
 // True to the first window that asks, once per app start (2.19).
 export async function updatesClaim() {
   return invoke("updates_claim");
 }
 
+// → {lines, log, crashes}
 export async function crushDirs() {
   return invoke("crush_dirs");
 }

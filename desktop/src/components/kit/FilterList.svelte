@@ -225,6 +225,8 @@
     if (!scroller) return;
     fadeTop = scroller.scrollTop > 0.5;
     fadeBottom = scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 0.5;
+    // Only a capped list shows "↓ N more"; long uncapped lists skip the rects.
+    if (!maxRows) return;
     const bottom = scroller.getBoundingClientRect().bottom;
     below = [...scroller.querySelectorAll("[data-index]")].filter((el) => el.getBoundingClientRect().top >= bottom - 0.5).length;
   }

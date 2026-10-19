@@ -56,7 +56,7 @@ crush logout grok
 	},
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, ws, cleanup, err := connectToServer(cmd)
+		c, ws, cleanup, err := joinServer(cmd)
 		if err != nil {
 			return err
 		}

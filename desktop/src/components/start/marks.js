@@ -67,10 +67,20 @@ function textLines(el) {
   return bands.length;
 }
 
+// Drawn and wholly on screen: inside the window and inside every ancestor that
+// clips (a scrolled list's rows below its bottom are not in the capture).
 function visible(el) {
   const r = el.getBoundingClientRect();
   const style = getComputedStyle(el);
-  return r.width > 0 && r.height > 0 && style.visibility !== "hidden" && style.opacity !== "0";
+  if (!(r.width > 0 && r.height > 0 && style.visibility !== "hidden" && style.opacity !== "0")) return false;
+  if (r.left < 0 || r.top < 0 || r.right > window.innerWidth || r.bottom > window.innerHeight) return false;
+  for (let a = el.parentElement; a; a = a.parentElement) {
+    const s = getComputedStyle(a);
+    if (s.overflowX === "visible" && s.overflowY === "visible") continue;
+    const c = a.getBoundingClientRect();
+    if (r.left < c.left - 0.5 || r.top < c.top - 0.5 || r.right > c.right + 0.5 || r.bottom > c.bottom + 0.5) return false;
+  }
+  return true;
 }
 
 // specs: [{row: selector, id: string | (el) => string, source, center, items:

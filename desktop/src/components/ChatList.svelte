@@ -16,7 +16,7 @@
   import { ws } from "../lib/stores/workspace.svelte.js";
   import Icon from "./Icon.svelte";
   import ChatRow from "./list/ChatRow.svelte";
-  import { setSearchField } from "./list/listfocus.js";
+  import { searchFocused, setSearchField } from "./list/listfocus.js";
   import ListFooter from "./list/ListFooter.svelte";
   import { startNewChat } from "./list/newchat.js";
   import { listMarks } from "./start/marks.js";
@@ -124,6 +124,7 @@
       rows: built.rows.map((r) => ({ id: r.id, title: r.title, depth: r.depth, selected: r.selected, closed: r.closed, state: r.state, state_kind: r.stateKind, time: r.time, agent: r.agent })),
       closed_count: built.closedCount,
       search_hint: searchHint,
+      search_focused: searchFocused(),
       query,
       empty: built.empty,
       days: groups.map((g) => g.label),
@@ -149,13 +150,17 @@
     }),
   );
 
-  // The text's own box, not its element's (a cut title ends at its "…").
+  // The text as drawn, not its element's box: a cut title ends at its "…",
+  // the content box's right edge (its right padding stays empty).
   function textRect(el) {
     if (!el) return null;
     const range = document.createRange();
     range.selectNodeContents(el);
     const r = range.getBoundingClientRect();
-    return r.width ? { x: r.x, y: r.y, w: Math.min(r.width, el.clientWidth), h: r.height } : null;
+    if (!r.width) return null;
+    const box = el.getBoundingClientRect();
+    const contentRight = box.left + el.clientLeft + el.clientWidth - (parseFloat(getComputedStyle(el).paddingRight) || 0);
+    return { x: r.x, y: r.y, w: Math.min(r.right, contentRight) - r.x, h: r.height };
   }
 </script>
 

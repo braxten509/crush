@@ -240,6 +240,13 @@ function registerProbe() {
           block: rectOf(document.querySelector(".landing .block")),
           content: contentRect(document.querySelector(".landing .block")),
           columns: rectOf(document.querySelector(".landing .columns")),
+          // Where each column's rows end: START-003's rows never run past the area.
+          rows_end: Object.fromEntries(
+            [...document.querySelectorAll(".landing .column")].map((c) => [
+              c.dataset.column,
+              Math.max(0, ...[...c.querySelectorAll("li, .none")].map((el) => el.getBoundingClientRect().bottom)),
+            ]),
+          ),
         },
         init: {
           block: rectOf(document.querySelector(".init .block")),

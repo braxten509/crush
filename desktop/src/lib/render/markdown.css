@@ -22,10 +22,10 @@
 .md li > * + * {
   margin-top: calc(14 * var(--px));
 }
-.md :is(.md, blockquote, li) > .md-h:not(:first-child) {
+:is(.md, .md blockquote, .md li) > .md-h:not(:first-child) {
   margin-top: calc(22 * var(--px));
 }
-.md :is(.md, blockquote, li) > .md-h + * {
+:is(.md, .md blockquote, .md li) > .md-h + * {
   margin-top: calc(8 * var(--px));
 }
 
@@ -42,12 +42,11 @@
   font: var(--t-label);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
-  margin: 0;
 }
 
-.md p,
-.md blockquote,
-.md pre {
+/* The browser's own margins on blocks app.css does not clear. :where() keeps this at
+   zero specificity, so the spacing rules above always win. */
+:where(.md) :where(blockquote, pre, h4, h5, h6) {
   margin: 0;
 }
 

@@ -24,7 +24,7 @@ function fake(svg, seen = {}) {
 }
 
 describe("settings", () => {
-  test("strict, no HTML labels, the base theme with the paper's colors", () => {
+  test("strict, no HTML labels, the base theme with the paper's colors, flat", () => {
     expect(MERMAID_CONFIG).toMatchObject({ startOnLoad: false, securityLevel: "strict", htmlLabels: false, theme: "base", look: "neo" });
     expect(MERMAID_CONFIG.themeVariables).toEqual({
       background: "transparent",
@@ -34,6 +34,9 @@ describe("settings", () => {
       lineColor: "#383634",
       fontFamily: "Spectral",
       fontSize: "15px",
+      // The neo look's own gradient borders and shadows stay off (desktop-design 4: flat color, no shadows).
+      useGradient: false,
+      dropShadow: "none",
     });
     for (const key of ["securityLevel", "htmlLabels", "flowchart", "theme", "themeVariables", "themeCSS", "look", "secure"]) {
       expect(MERMAID_CONFIG.secure).toContain(key);

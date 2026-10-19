@@ -130,10 +130,20 @@ if (svgPurifier) {
       node.textContent = cleanCss(node.textContent ?? "");
     }
   });
+  // Mermaid puts a clickable node's position on the <a> around it. The <a>
+  // goes, so its transform moves onto a <g> holding what the <a> held, which
+  // the cleaner then keeps (and checks) in the <a>'s place.
+  svgPurifier.addHook("uponSanitizeElement", (node, data) => {
+    if (data.tagName !== "a" || !node.hasAttribute?.("transform")) return;
+    const g = node.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("transform", node.getAttribute("transform"));
+    g.append(...node.childNodes);
+    node.append(g);
+  });
 }
 
-// Mermaid's SVG with the SVG profile: no links (their words stay), no
-// pictures, no outside addresses.
+// Mermaid's SVG with the SVG profile: no links (their words stay, in their
+// place), no pictures, no outside addresses.
 export function svgFragment(svg) {
   if (!svgPurifier) return emptyFragment();
   return svgPurifier.sanitize(String(svg), {

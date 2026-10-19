@@ -29,6 +29,10 @@ export const MERMAID_CONFIG = {
     lineColor: "#383634",
     fontFamily: "Spectral",
     fontSize: "15px",
+    // The base theme turns on gradient borders and a drop shadow for the neo
+    // look; every surface keeps flat color and no shadows (desktop-design 4).
+    useGradient: false,
+    dropShadow: "none",
   },
   // Keys a diagram's own %%{init}%% may not change: Mermaid's list, plus the
   // look and every way to turn HTML labels back on.

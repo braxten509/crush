@@ -292,6 +292,20 @@ describe("the diagram", () => {
     expect(holder.querySelector("circle").hasAttribute("onload")).toBe(false);
     expect(holder.textContent).toContain("t");
   });
+
+  test("a clickable node keeps its place when its link goes", () => {
+    // Mermaid puts a clickable node's position on the <a> around it.
+    const holder = document.createElement("div");
+    holder.append(
+      svgFragment(
+        '<svg><g class="nodes"><a xlink:href="about:blank" transform="translate(167, 35)"><g class="node clickable" id="flowchart-B-1"><rect width="80" height="40"/><text>Home</text></g></a></g></svg>',
+      ),
+    );
+    expect(holder.querySelector("a")).toBeNull();
+    const node = holder.querySelector("#flowchart-B-1");
+    expect(node.parentElement.getAttribute("transform")).toBe("translate(167, 35)");
+    expect(node.textContent).toBe("Home");
+  });
 });
 
 describe("pictures", () => {

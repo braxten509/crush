@@ -492,6 +492,8 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	if cfg := com.Config(); cfg != nil {
 		ui.theme.key = styles.ThemeKeyForProvider(cfg.Models[config.SelectedModelTypeLarge].Provider)
 		ui.theme.userSelected = common.ThemeNameFromConfig(cfg) != ""
+		ui.theme.shown = common.ThemeNameFromConfig(cfg)
+		ui.theme.revision = styles.ThemeFileRevision(ui.theme.shown)
 	}
 
 	// Seed the yolo cache once at construction; afterwards it is kept

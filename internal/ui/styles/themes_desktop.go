@@ -1,6 +1,29 @@
 package styles
 
-import "charm.land/lipgloss/v2"
+import (
+	"fmt"
+	"os"
+
+	"charm.land/lipgloss/v2"
+)
+
+// ThemeFileRevision is the user theme file's size and modification time,
+// "" when the theme has no file (a built-in, or no name). Apps compare it
+// to see whether a theme's colors changed on disk.
+func ThemeFileRevision(name string) string {
+	if name == "" {
+		return ""
+	}
+	path, err := FindThemeFile(name)
+	if err != nil {
+		return ""
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d-%d", info.Size(), info.ModTime().UnixNano())
+}
 
 // The desktop app's two built-in themes (desktop design 5-6, 3.7). Both
 // apps list them, so a theme the desktop shows can be picked and edited in

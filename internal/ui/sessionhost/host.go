@@ -69,6 +69,9 @@ type Host struct {
 
 	theme  string
 	styles styles.Styles
+	// themeRevision is the shown theme file's revision, as the last
+	// session reported it.
+	themeRevision string
 	// useTerminalBackground follows the last shown chat's background setting.
 	useTerminalBackground bool
 	appearanceSource      int // last shown chat, including later status updates
@@ -397,11 +400,11 @@ func (h *Host) statusChanged(id int) {
 	}
 }
 
-func (h *Host) applyTheme(name string) {
-	if name == h.theme {
+func (h *Host) applyTheme(name, revision string) {
+	if name == h.theme && revision == h.themeRevision {
 		return
 	}
-	h.theme = name
+	h.theme, h.themeRevision = name, revision
 	h.styles = styles.ThemeFromConfig(name)
 	h.refreshTerminalColors()
 }

@@ -63,7 +63,7 @@ func (h *Host) startTerminal(dir string) error {
 func (h *Host) applyAppearance(st Status) {
 	changed := h.useTerminalBackground != st.UseTerminalBackground
 	h.useTerminalBackground = st.UseTerminalBackground
-	h.applyTheme(st.Theme)
+	h.applyTheme(st.Theme, st.ThemeRevision)
 	if changed {
 		h.refreshTerminalColors()
 	}

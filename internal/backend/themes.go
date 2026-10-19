@@ -244,10 +244,8 @@ func themeView(name string) (proto.ThemeView, error) {
 	if builtin {
 		view.Source = styles.ThemeSourceBuiltin.String()
 	}
-	if path, err := styles.FindThemeFile(name); err == nil {
-		if info, err := os.Stat(path); err == nil {
-			view.Revision = fmt.Sprintf("%d-%d", info.Size(), info.ModTime().UnixNano())
-		}
+	if _, err := styles.FindThemeFile(name); err == nil {
+		view.Revision = styles.ThemeFileRevision(name)
 		view.Overridden = builtin
 	} else {
 		view.Pure = builtin

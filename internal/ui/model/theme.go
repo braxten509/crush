@@ -40,6 +40,11 @@ type themeController struct {
 	// goroutine. Only the latest one is shown, and ending a preview drops
 	// any still in flight.
 	previewSeq int
+
+	// shown and revision are the configured theme and its file's revision
+	// as last loaded from the config, so a config refresh reloads the
+	// theme only when either changed (config_refresh.go).
+	shown, revision string
 }
 
 // nextPreview starts a preview load and returns its number.

@@ -1,0 +1,276 @@
+{
+ "live_now": "2026-10-19T12:00:00Z",
+ "workspace": {
+  "id": "ws-live",
+  "path": "/tmp/home/proj",
+  "yolo": true,
+  "debug": false,
+  "data_dir": "/tmp/home/proj/.crush",
+  "version": "fixture",
+  "channels": [],
+  "skills": [],
+  "protocol": 1
+ },
+ "agent": {
+  "is_busy": false,
+  "is_ready": true,
+  "model": {
+   "id": "sonnet",
+   "name": "Sonnet 5.5",
+   "context_window": 200000,
+   "can_reason": true,
+   "reasoning_levels": ["low", "medium", "high"],
+   "default_reasoning_effort": "high",
+   "supports_attachments": true
+  },
+  "model_cfg": {
+   "model": "sonnet",
+   "provider": "claude-code",
+   "reasoning_effort": "high"
+  }
+ },
+ "get": {
+  "config": {
+   "models": {
+    "large": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
+    "small": {"model": "sonnet", "provider": "claude-code"}
+   },
+   "options": {"notifications": "disabled"}
+  },
+  "agent/default-small-model": {"model": "sonnet", "provider": "claude-code"},
+  "agent/capabilities": {"kind": "claude-code", "can_background": true},
+  "providers": [],
+  "git/branch": {"branch": "main"},
+  "project/needs-init": {"needs_init": false},
+  "permissions/skip": {"skip": true},
+  "lsps": {},
+  "mcp/states": {},
+  "skills": [],
+  "chat-links": [],
+  "/v1/limits": {"clis": []},
+  "/v1/memory": {
+   "supported": true,
+   "percent": 91,
+   "high": true,
+   "episode": 1,
+   "top": [{"name": "crushtest-hog", "bytes": 3221225472}],
+   "message": "Memory is 91% full. Biggest: crushtest-hog 3.0 GB",
+   "limit_bytes": 0,
+   "box_used_bytes": 0,
+   "total_ram_bytes": 17179869184
+  },
+  "sessions": [
+   {
+    "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "parent_session_id": "",
+    "title": "Speed up the test suite",
+    "message_count": 2,
+    "prompt_tokens": 18400,
+    "completion_tokens": 2100,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792409400,
+    "updated_at": 1792411140,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 18400, "estimated": false},
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": "",
+    "todos": [
+     {"content": "Find the slowest tests", "status": "completed", "active_form": "Finding the slowest tests"},
+     {"content": "Split the database tests", "status": "in_progress", "active_form": "Splitting the database tests"},
+     {"content": "Run the suite in parallel", "status": "pending", "active_form": "Running the suite in parallel"}
+    ]
+   },
+   {
+    "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
+    "parent_session_id": "",
+    "title": "Release notes draft",
+    "message_count": 2,
+    "prompt_tokens": 9200,
+    "completion_tokens": 800,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792408800,
+    "updated_at": 1792410540,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 9200, "estimated": false},
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   }
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01": {
+   "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+   "parent_session_id": "",
+   "title": "Speed up the test suite",
+   "message_count": 2,
+   "prompt_tokens": 18400,
+   "completion_tokens": 2100,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792409400,
+   "updated_at": 1792411140,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 18400, "estimated": false},
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": "",
+   "todos": [
+    {"content": "Find the slowest tests", "status": "completed", "active_form": "Finding the slowest tests"},
+    {"content": "Split the database tests", "status": "in_progress", "active_form": "Splitting the database tests"},
+    {"content": "Run the suite in parallel", "status": "pending", "active_form": "Running the suite in parallel"}
+   ]
+  },
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01/messages": [
+   {
+    "id": "m1",
+    "role": "user",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "parts": [{"type": "text", "data": {"text": "The test suite takes nine minutes. Make it faster."}}],
+    "model": "",
+    "provider": "",
+    "created_at": 1792409500,
+    "updated_at": 1792409500
+   },
+   {
+    "id": "m2",
+    "role": "assistant",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "parts": [
+     {"type": "text", "data": {"text": "I started two helpers: one fixes the flaky tests, one reads the runner's docs. The watcher and the log tail run in the background."}},
+     {"type": "finish", "data": {"reason": "end_turn", "time": 1792409550}}
+    ],
+    "model": "sonnet",
+    "provider": "claude-code",
+    "created_at": 1792409550,
+    "updated_at": 1792409550
+   }
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01/helpers": [
+   {
+    "id": "t11",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11",
+    "name": "find-slow-tests",
+    "cli": "claude",
+    "model": "haiku",
+    "status": "done",
+    "started": "2026-10-19T11:50:00Z",
+    "ended": "2026-10-19T11:53:00Z"
+   },
+   {
+    "id": "t12",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e12",
+    "name": "fix-flaky-tests",
+    "cli": "claude",
+    "model": "sonnet",
+    "effort": "high",
+    "status": "running",
+    "started": "2026-10-19T11:59:19Z"
+   },
+   {
+    "id": "t13",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01",
+    "child_session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e13",
+    "name": "read-runner-docs",
+    "cli": "codex",
+    "model": "gpt-5.5",
+    "read_only": true,
+    "status": "running",
+    "started": "2026-10-19T10:55:00Z"
+   }
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01/jobs": [
+   {"job_id": "3", "command": "npm run watch", "started": "2026-10-19T11:58:45Z", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01"},
+   {"pid": 4242, "command": "python -m http.server 8000", "started": "2026-10-19T11:56:40Z", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01"},
+   {"pid": 5151, "command": "tail -f build.log", "started": "2026-10-19T11:59:30Z", "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01"}
+  ],
+  "servers": [
+   {"port": 8000, "program": "python", "name": "http.server", "command": "python -m http.server 8000", "pid": 4242, "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01"}
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02": {
+   "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
+   "parent_session_id": "",
+   "title": "Release notes draft",
+   "message_count": 2,
+   "prompt_tokens": 9200,
+   "completion_tokens": 800,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792408800,
+   "updated_at": 1792410540,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 9200, "estimated": false},
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/messages": [
+   {
+    "id": "r1",
+    "role": "user",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
+    "parts": [{"type": "text", "data": {"text": "Draft the release notes for 2.4."}}],
+    "model": "",
+    "provider": "",
+    "created_at": 1792408900,
+    "updated_at": 1792408900
+   },
+   {
+    "id": "r2",
+    "role": "assistant",
+    "session_id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
+    "parts": [
+     {"type": "text", "data": {"text": "Here is a first draft of the 2.4 notes."}},
+     {"type": "finish", "data": {"reason": "end_turn", "time": 1792408920}}
+    ],
+    "model": "sonnet",
+    "provider": "claude-code",
+    "created_at": 1792408920,
+    "updated_at": 1792408920
+   }
+  ],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/helpers": [],
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/jobs": []
+ },
+ "events": [
+  {
+   "at_ms": 12000,
+   "entries": [
+    {
+     "kind": "event",
+     "type": "memory_status",
+     "event": "updated",
+     "payload": {"supported": true, "percent": 78, "high": false, "episode": 1, "limit_bytes": 0, "box_used_bytes": 0, "total_ram_bytes": 17179869184}
+    }
+   ]
+  },
+  {
+   "at_ms": 15000,
+   "entries": [
+    {
+     "kind": "event",
+     "type": "memory_status",
+     "event": "updated",
+     "payload": {
+      "supported": true,
+      "percent": 92,
+      "high": true,
+      "episode": 2,
+      "top": [{"name": "crushtest-hog", "bytes": 3328599654}],
+      "message": "Memory is 92% full. Biggest: crushtest-hog 3.1 GB",
+      "limit_bytes": 0,
+      "box_used_bytes": 0,
+      "total_ram_bytes": 17179869184
+     }
+    }
+   ]
+  }
+ ]
+}

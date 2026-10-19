@@ -11,6 +11,13 @@ Owner instruction: the coordinator builds wave 2 itself, with no sub-agents, **n
 - **No review.** No reviewer read wave 2's code.
 - **No builder report.** No row-by-row list of what each piece covers or where it differs from the design; whatever the coordinator records in PLAN.md is all there is.
 - **P4.4** (tree and restore dialogs) still waits; it was not part of this request.
+- **Places it differs from the design's file plan** (not checked by anyone):
+  - `lib/dialogs.js` (S3's file) got `dialogRegistered(id)`, so the palette hides entries and keys whose sheet is not built yet.
+  - AUTH added `components/signin/SignOut.svelte` (the sign-out confirm sheet), not in the file list.
+  - ASK's parts are fewer files than listed: `QuestionForm.svelte` draws every question type, the tabs and the Confirm page; `Picture.svelte`, `SecureField.svelte` and `SecureForm.svelte` are the rest. `askYesNo` is built on the same form (slot kind `update`).
+  - Not done: the question arrival sound and notification (2.6, 2.18) wait for SYS (wave 3). Multi choice preselection waits for G-13 (the engine sends no `selected` list). The narrow-window "N/M" tab label is not built.
+  - Known leftover: LIVE's Ctrl+C binding takes the key in the helper view even with no selection, so the quit sheet does not open there.
+- **Checks that did run:** `pnpm test` 83 files / 1889 tests, `pnpm build` with no warnings, `cargo test` 98. None of them exercise wave 2's code.
 
 ## Phases 5-6, wave 1 (KIT, TERM, LST, LIVE), 2026-10-19
 

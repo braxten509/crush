@@ -1,5 +1,11 @@
 {
   "identifier": "default",
-  "windows": ["main", "w*"],
-  "permissions": ["core:default"]
+  "windows": [
+    "main",
+    "w*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize"
+  ]
 }

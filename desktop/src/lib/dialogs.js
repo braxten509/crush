@@ -23,6 +23,12 @@ export function registerDialog(id, Component, { veil = true } = {}) {
   components.set(id, { component: Component, veil });
 }
 
+// Whether a piece registered the sheet: the palette hides entries for sheets
+// that are not built yet (desktop-design-5-6 2.2).
+export function dialogRegistered(id) {
+  return components.has(id);
+}
+
 // Pushes the sheet (true), or brings an open one to the front (false). An id
 // nobody registered logs and returns false.
 export function openDialog(id, props = {}, { grace = false } = {}) {

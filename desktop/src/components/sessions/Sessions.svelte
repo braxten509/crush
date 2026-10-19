@@ -1,0 +1,285 @@
+<script>
+  // The Sessions sheet (desktop-design-5-6 2.5, look 5.7; DLG-076 to DLG-088):
+  // a port of internal/ui/dialog/sessions/sessions.go. Rows are this
+  // workspace's saved chats from GET …/saved-sessions, newest first, with
+  // "~/folder · 3 hours ago" in the info column (35 % budget). Enter, Tab and
+  // Ctrl+Y open the selected chat; Ctrl+R renames it in its row, Ctrl+X asks
+  // to delete it; both go through POST …/saved-sessions as the terminal's
+  // CatalogChange. A chat of another folder opens in that folder's window
+  // (window_open with its id). Session events rename or remove rows in place.
+  //   query? (the filter's first text: the left list's search box, START-021's id)
+  import { onMount, tick, untrack } from "svelte";
+  import Field from "../kit/Field.svelte";
+  import FilterList from "../kit/FilterList.svelte";
+  import Sheet from "../kit/Sheet.svelte";
+  import { windowBusy } from "../../lib/busy.js";
+  import { closeDialog } from "../../lib/dialogs.js";
+  import { api } from "../../lib/engine/api.js";
+  import { file_info, windowOpen } from "../../lib/engine/commands.js";
+  import { onEvent } from "../../lib/engine/events.js";
+  import { leftList } from "../../lib/leftlist/store.svelte.js";
+  import { infoText, inProject } from "../../lib/sessions/match.js";
+  import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
+  import { conn } from "../../lib/stores/connection.svelte.js";
+  import { busy, openChat, sessions } from "../../lib/stores/sessions.svelte.js";
+  import { notify } from "../../lib/stores/ui.svelte.js";
+  import { secondNow } from "../../lib/live/helpers.svelte.js";
+
+  const ID = "sessions";
+  const BUSY = "Agent is busy, please wait..."; // sessions.go:196-198
+
+  let { query: firstQuery = "" } = $props();
+
+  let query = $state(untrack(() => firstQuery));
+  let rows = $state([]);
+  let selected = $state(-1);
+  let mode = $state("normal"); // "normal" | "rename" | "delete" (sessions.go's sessionsMode)
+  let renameText = $state("");
+  let loaded = $state(false);
+  let list = $state(null);
+
+  const now = $derived(secondNow());
+  const help = $derived(
+    mode === "delete"
+      ? [
+          { key: "y", text: "delete" },
+          { key: "n", text: "cancel" },
+        ]
+      : mode === "rename"
+        ? [
+            { key: "enter", text: "confirm" },
+            { key: "esc", text: "cancel" },
+          ]
+        : [
+            { key: "↑↓", text: "choose" },
+            { key: "ctrl+r", text: "rename" },
+            { key: "ctrl+x", text: "delete" },
+            { key: "enter", text: "choose" },
+            { key: "esc", text: "exit" },
+          ],
+  );
+
+  async function read() {
+    try {
+      const list = (await api.savedSessions(sessions.currentId || "")) ?? [];
+      const keep = rows[selected]?.ID ?? sessions.currentId;
+      rows = list;
+      const at = rows.findIndex((row) => row.ID === keep);
+      selected = at >= 0 ? at : rows.length > 0 ? 0 : -1;
+    } catch (error) {
+      notify("error", error?.message ?? String(error));
+    } finally {
+      loaded = true;
+    }
+  }
+
+  const chosen = () => (selected >= 0 ? rows[selected] : null);
+
+  // -- Opening a row (2.5; session_load.go:82-100) --
+
+  async function open(row) {
+    if (!row || mode !== "normal") return;
+    if (inProject(row, conn.project.path || conn.project.cwd)) {
+      closeDialog(ID);
+      if (isClosed(row.ID)) await reopen(row.ID);
+      await openChat(row.ID);
+      return;
+    }
+    if (windowBusy()) {
+      notify("warn", "Agent is busy, please wait before switching folders...");
+      return;
+    }
+    let isFolder = false;
+    try {
+      const info = await file_info(row.Directory, "/");
+      isFolder = info?.exists === true && info?.is_dir === true;
+    } catch {
+      isFolder = false;
+    }
+    if (!isFolder) {
+      notify("warn", `That chat's folder is no longer available: ${row.Directory}`);
+      return;
+    }
+    closeDialog(ID);
+    try {
+      await windowOpen(row.Directory, row.ID, false, null);
+    } catch (error) {
+      notify("error", error?.message ?? String(error));
+    }
+  }
+
+  // -- Rename and delete (sessions.go:171-198, :420-477) --
+
+  function startRename() {
+    const row = chosen();
+    if (!row) return;
+    renameText = row.Title ?? "";
+    mode = "rename";
+  }
+
+  async function saveRename() {
+    const row = chosen();
+    const title = renameText.trim();
+    mode = "normal";
+    if (!row || title === "" || title === row.Title) return;
+    const at = rows.indexOf(row);
+    rows[at] = { ...row, Title: title };
+    try {
+      await api.changeSavedSession({ DiscardEmpty: false, Session: { ...row, Title: title }, Remove: false });
+    } catch (error) {
+      notify("error", error?.message ?? String(error));
+      read();
+    }
+  }
+
+  function startDelete() {
+    const row = chosen();
+    if (!row) return;
+    if (busy(row.ID)) {
+      notify("warn", BUSY);
+      return;
+    }
+    mode = "delete";
+  }
+
+  async function confirmDelete() {
+    const row = chosen();
+    mode = "normal";
+    if (!row) return;
+    const at = rows.indexOf(row);
+    rows = rows.filter((r) => r !== row);
+    selected = rows.length === 0 ? -1 : Math.min(at, rows.length - 1);
+    try {
+      await api.changeSavedSession({ DiscardEmpty: false, Session: row, Remove: true });
+    } catch (error) {
+      notify("error", error?.message ?? String(error));
+      read();
+    }
+  }
+
+  // -- Keys (sessions.go:160-235) --
+
+  function onKey(event, combo) {
+    if (mode === "delete") {
+      if (combo === "y" || combo === "Shift+Y" || combo === "Enter") confirmDelete();
+      else if (combo === "n" || combo === "Shift+N" || combo === "Escape" || combo === "Alt+Escape") mode = "normal";
+      return true;
+    }
+    if (mode === "rename") {
+      if (combo === "Enter") {
+        saveRename();
+        return true;
+      }
+      if (combo === "Escape" || combo === "Alt+Escape") {
+        mode = "normal";
+        return true;
+      }
+      // The row's field keeps every other key; the list does not move.
+      return combo === "ArrowUp" || combo === "ArrowDown" || combo === "Tab" || combo === "Shift+Tab";
+    }
+    switch (combo) {
+      case "Ctrl+P":
+        list?.move(-1);
+        return true;
+      case "Ctrl+N":
+        list?.move(1);
+        return true;
+      case "Enter":
+      case "Tab":
+      case "Ctrl+Y":
+        open(chosen());
+        return true;
+      case "Ctrl+R":
+        startRename();
+        return true;
+      case "Ctrl+X":
+        startDelete();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // The row's field takes the focus while renaming; the filter gets it back.
+  $effect(() => {
+    const now = mode;
+    tick().then(() => {
+      const sheet = document.querySelector(`[data-sheet="${ID}"]`);
+      const target = now === "rename" ? sheet?.querySelector(".rename input") : sheet?.querySelector("input");
+      target?.focus();
+      if (now === "rename") target?.select();
+    });
+  });
+
+  // A chat renamed or deleted elsewhere changes its row in place (2.5).
+  onMount(() => {
+    read();
+    return onEvent("session", (kind, record) => {
+      const at = rows.findIndex((row) => row.ID === record?.id);
+      if (at < 0) return;
+      if (kind === "deleted") {
+        const keep = rows[selected]?.ID;
+        rows = rows.filter((_, i) => i !== at);
+        const again = rows.findIndex((row) => row.ID === keep);
+        selected = again >= 0 ? again : rows.length === 0 ? -1 : Math.min(at, rows.length - 1);
+      } else if (kind === "updated" && typeof record.title === "string") {
+        rows[at] = { ...rows[at], Title: record.title, UpdatedAt: record.updated_at ?? rows[at].UpdatedAt };
+      }
+    });
+  });
+</script>
+
+<Sheet id={ID} title="Sessions" width="standard" {help} {onKey}>
+  <Field bind:value={query} icon="search" placeholder="Enter session name" label="Filter sessions" />
+  {#if mode === "rename"}
+    <p class="ask">Rename this session?</p>
+  {:else if mode === "delete"}
+    <p class="ask strong">Delete this session?</p>
+  {/if}
+  {#if loaded && rows.length > 0}
+    <FilterList
+      bind:this={list}
+      items={rows}
+      filterText={(row) => row.Title ?? ""}
+      info={(row) => infoText(row, leftList.home, now)}
+      infoBudget={35}
+      {query}
+      bind:selected
+      onChoose={(row) => open(row)}
+      label="Sessions"
+      row={mode === "rename" ? renameRow : null}
+    />
+  {/if}
+</Sheet>
+
+{#snippet renameRow(item, index, state)}
+  {#if state.selected}
+    <div class="rename">
+      <Field bind:value={renameText} prompt="> " label="New title" />
+    </div>
+  {:else}
+    <span class="plain">{item.Title}</span>
+  {/if}
+{/snippet}
+
+<style>
+  .ask {
+    margin: calc(6 * var(--px)) 0 0 calc(23 * var(--px));
+    font: var(--t-small);
+    color: var(--slate);
+  }
+  .ask.strong {
+    color: var(--ink);
+  }
+  .rename {
+    flex: 1;
+    min-width: 0;
+  }
+  .plain {
+    font: var(--t-item);
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>

@@ -7,7 +7,7 @@ import { onEvent, onResync, withHeld } from "../engine/events.js";
 import { chatOf, isFinished, load, messages, parseAgentChatId, readyChat, returnDraft, unload } from "./messages.svelte.js";
 import { keepPromptsFor, seedMarks } from "./prompts.svelte.js";
 import { notify } from "./ui.svelte.js";
-import { dropFiles, setFiles, ws } from "./workspace.svelte.js";
+import { dropFiles, setFiles, startFilesRead, ws } from "./workspace.svelte.js";
 
 export const sessions = $state({
   byId: {},
@@ -433,6 +433,7 @@ async function showChat(id) {
   // which fails as a whole (session.go:115-117), a failed history read opens
   // the chat with no files and a warning.
   let historyFailed = false;
+  const filesRead = startFilesRead(id);
   const history = api.history(id).catch((error) => {
     console.error("file history read failed", errorText(error));
     historyFailed = true;
@@ -456,7 +457,7 @@ async function showChat(id) {
   }
   if (loaded.value !== true) return false; // the chat went away while it loaded
   upsertSession(read.value, { since });
-  setFiles(id, files.value);
+  setFiles(id, files.value, filesRead);
   if (historyFailed) notify("warn", "Couldn't read this chat's file history");
   const old = sessions.currentId;
   sessions.currentId = id;

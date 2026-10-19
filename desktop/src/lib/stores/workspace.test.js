@@ -194,6 +194,47 @@ describe("events and reads", () => {
     expect(workspace.ws.mcps.github.tool_count).toBe(3);
   });
 
+  describe("an older read never overwrites a newer one", () => {
+    const older = { models: { large: { provider: "claude-code", model: "opus" } } };
+    const newer = { models: { large: { provider: "codex-cli", model: "gpt-6-sol" } } };
+    const f1 = { id: "f1", session_id: "s1", path: "/p/a.go", version: 0, created_at: 10 };
+    const f2 = { id: "f2", session_id: "s1", path: "/p/b.go", version: 0, created_at: 20 };
+    // Each read of the route waits until the test answers it, in either order.
+    function slow(route) {
+      const reads = [];
+      h.routes.set(route, () => new Promise((resolve) => reads.push(resolve)));
+      return reads;
+    }
+    async function answer(reads, order, old, now) {
+      const [first, second] = order === "the newer read lands first" ? [[1, now], [0, old]] : [[0, old], [1, now]];
+      reads[first[0]](first[1]);
+      await settle();
+      reads[second[0]](second[1]);
+      await settle();
+    }
+
+    for (const order of ["the newer read lands first", "the older read lands first"]) {
+      it(`config: a config_changed read, then a resync's read; ${order}`, async () => {
+        const reads = slow("GET config");
+        await deliver(ev("config_changed", "updated", { workspace_id: "w" }));
+        await deliver({ kind: "resync" });
+        expect(reads).toHaveLength(2);
+        await answer(reads, order, older, newer);
+        expect(workspace.ws.config.models.large.provider).toBe("codex-cli");
+      });
+
+      it(`files: two overlapping resyncs; ${order}`, async () => {
+        workspace.startWorkspace({ currentChat: () => "s1" });
+        const reads = slow("GET sessions/s1/history");
+        await deliver({ kind: "resync" });
+        await deliver({ kind: "resync" });
+        expect(reads).toHaveLength(2);
+        await answer(reads, order, [f1], [f1, f2]);
+        expect(workspace.ws.files.s1.map((f) => f.id)).toEqual(["f1", "f2"]);
+      });
+    }
+  });
+
   it("a resync holds file, skills and config events until its reads land, so the newer state wins", async () => {
     h.routes.set("GET sessions/s1/history", []);
     await workspace.startWorkspace({ currentChat: () => "s1" });

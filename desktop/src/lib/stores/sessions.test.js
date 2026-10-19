@@ -57,6 +57,7 @@ let M; // messages store
 let api;
 let ui;
 let ws;
+let loadFiles;
 
 beforeEach(async () => {
   vi.resetModules();
@@ -83,7 +84,7 @@ beforeEach(async () => {
   M = await import("./messages.svelte.js");
   ({ api } = await import("../engine/api.js"));
   ui = await import("./ui.svelte.js");
-  ({ ws } = await import("./workspace.svelte.js"));
+  ({ ws, loadFiles } = await import("./workspace.svelte.js"));
   await events.startEvents();
   await settle();
 });
@@ -400,6 +401,36 @@ describe("opening a chat (LIST-034, TYPE-049)", () => {
     expect(ws.files.s1).toEqual([]);
     expect(h.notices).toEqual([{ kind: "warn", text: "Couldn't read this chat's file history" }]);
   });
+
+  for (const order of ["the newer read lands first", "the older read lands first"]) {
+    it(`the open's history read and a later history read share one guard: ${order}`, async () => {
+      await withList(chat("s1"));
+      h.routes.set("GET sessions/s1", chat("s1"));
+      h.routes.set("GET sessions/s1/messages", []);
+      const reads = [];
+      h.routes.set("GET sessions/s1/history", () => new Promise((resolve) => reads.push(resolve)));
+      const opening = S.openChat("s1");
+      await settle();
+      const reading = loadFiles("s1");
+      await settle();
+      expect(reads).toHaveLength(2);
+      const older = [{ id: "f1", session_id: "s1", path: "/p/a.go", version: 0, created_at: 10 }];
+      const newer = [...older, { id: "f2", session_id: "s1", path: "/p/b.go", version: 0, created_at: 20 }];
+      if (order === "the newer read lands first") {
+        reads[1](newer);
+        await settle();
+        reads[0](older);
+      } else {
+        reads[0](older);
+        await settle();
+        reads[1](newer);
+      }
+      expect(await opening).toBe(true);
+      await reading;
+      await settle();
+      expect(ws.files.s1.map((f) => f.id)).toEqual(["f1", "f2"]);
+    });
+  }
 
   it("a file event during the open's history read is not lost (1.5.4)", async () => {
     await withList(chat("s1"));

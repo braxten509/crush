@@ -50,28 +50,52 @@ export function pickProvider(provider) {
   return structuredClone(rest);
 }
 
+// Reads of one field can overlap (an event's read and a resync's, two
+// resyncs, a timer's): only the newest one started may store its answer, so an
+// older read that lands last never undoes a newer one. Events that arrive
+// during a resync or an open wait until its reads land (withHeld), so an
+// answer computed before an event never undoes it either. One counter for
+// every field: a turn is never reused.
+const newest = new Map(); // field → the number of its newest read
+let reads = 0;
+function turn(field) {
+  reads += 1;
+  newest.set(field, reads);
+  return reads;
+}
+async function latest(field, read) {
+  const mine = turn(field);
+  const value = await read();
+  return newest.get(field) === mine ? { value } : null;
+}
+
 export async function loadConfig() {
-  ws.config = pickConfig(await api.config());
+  const read = await latest("config", () => api.config());
+  if (read) ws.config = pickConfig(read.value);
 }
 
 export async function loadAgent() {
-  const agent = await api.agentInfo();
+  const read = await latest("agent", () => api.agentInfo());
+  if (!read) return;
+  const agent = read.value;
   ws.agent = agent ?? null;
   if (agent?.is_ready) agentProviderChanged(agent.model_cfg?.provider ?? "");
 }
 
 export async function loadProviders() {
-  const list = await api.providers();
-  ws.providers = Array.isArray(list) ? list.map(pickProvider).filter(Boolean) : [];
+  const read = await latest("providers", () => api.providers());
+  if (read) ws.providers = Array.isArray(read.value) ? read.value.map(pickProvider).filter(Boolean) : [];
 }
 
 export async function loadSkills() {
-  const list = await api.skills();
-  ws.skills = Array.isArray(list) ? list : [];
+  const read = await latest("skills", () => api.skills());
+  if (read) ws.skills = Array.isArray(read.value) ? read.value : [];
 }
 
 export async function loadBranch() {
-  const answer = await api.gitBranch();
+  const read = await latest("branch", () => api.gitBranch());
+  if (!read) return;
+  const answer = read.value;
   ws.branch = typeof answer === "string" ? answer : (answer?.branch ?? "");
 }
 
@@ -145,16 +169,31 @@ function byVersion(a, b) {
 }
 
 export async function loadFiles(sid) {
-  const list = await api.history(sid);
-  ws.files[sid] = (Array.isArray(list) ? list : []).slice().sort(byVersion);
-  return ws.files[sid];
+  const read = await latest(`files:${sid}`, () => api.history(sid));
+  if (read) store(sid, read.value);
+  return ws.files[sid] ?? [];
 }
 
-export function setFiles(sid, list) {
+// openChat reads the history itself and sets it once the chat shows: it takes
+// its turn when its read starts and passes it to setFiles.
+export function startFilesRead(sid) {
+  return turn(`files:${sid}`);
+}
+
+// Sets the list unless a newer read of it started after `read` (without one,
+// it always sets, and reads started before it are ignored). True when set.
+export function setFiles(sid, list, read = turn(`files:${sid}`)) {
+  if (newest.get(`files:${sid}`) !== read) return false;
+  store(sid, list);
+  return true;
+}
+
+function store(sid, list) {
   ws.files[sid] = (Array.isArray(list) ? list : []).slice().sort(byVersion);
 }
 
 export function dropFiles(sid) {
+  newest.delete(`files:${sid}`); // a read still on its way is ignored
   delete ws.files[sid];
 }
 

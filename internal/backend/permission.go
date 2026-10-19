@@ -17,14 +17,15 @@ func (b *Backend) GrantPermission(workspaceID string, req proto.PermissionGrant)
 }
 
 // SetPermissionsSkip sets whether permission prompts are skipped, then
-// runs the ConfigChanged hook so every app on the project re-reads it.
+// sends config_changed (the ConfigEvent hook: no MCP reconcile) so every
+// app on the project re-reads it.
 func (b *Backend) SetPermissionsSkip(workspaceID string, skip bool) error {
 	o, err := b.ops(workspaceID)
 	if err != nil {
 		return err
 	}
 	o.App.Permissions.SetSkipRequests(skip)
-	o.configChanged()
+	o.configEvent()
 	return nil
 }
 

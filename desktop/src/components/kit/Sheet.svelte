@@ -274,7 +274,8 @@
       <span class="corner br" aria-hidden="true"><PlusMark arm={8} /></span>
     {/if}
 
-    <div class="title-line" bind:this={line} data-kit-title>
+    <!-- A sheet with no title and no controls (Quit) has no title band. -->
+    <div class="title-line" class:untitled={!title && !controls} bind:this={line} data-kit-title>
       <h2 class="title" id={uid} bind:this={heading}>{title}</h2>
       {#if controls}
         <div class="controls" class:hidden={!controlsFit} aria-hidden={controlsFit ? undefined : "true"} bind:this={side} data-kit-controls>
@@ -282,7 +283,9 @@
         </div>
       {/if}
     </div>
-    <Rule marks="both" class="kit-title-rule" />
+    {#if title || controls}
+      <Rule marks="both" class="kit-title-rule" />
+    {/if}
 
     <div class="body" bind:this={body} data-kit-body>
       {@render children?.()}
@@ -406,6 +409,9 @@
     align-items: baseline;
     min-height: calc(38 * var(--px));
     padding: 0 calc(26 * var(--px));
+  }
+  .title-line.untitled {
+    display: none;
   }
   .title {
     flex: 1 1 auto;

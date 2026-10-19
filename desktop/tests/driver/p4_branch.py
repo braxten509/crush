@@ -28,7 +28,8 @@ over its socket. Each step is named after its row and saves <ROW>.png.
          "Branch from message text, not tool output"
   B12    a sibling C of B from other words of the same reply; inside C the
          copied link opens B; a branch of B nests at depth 2
-  B9     B's row plain, hovered and selected: the title's, the time's and the
+  B9     B's row plain, hovered and selected: the title's box (where a cut
+         title's "…" falls), the title's letters, the time's and the
          chevron's rects move by at most 1 real px, the × shows in the
          reserved slot only when hovered or selected; its × hides B, B's
          branch moves up to depth 1, the footer says "1 closed · links reopen
@@ -811,9 +812,11 @@ def main():
             app.park()
             selected = row_of(app.heavy(), B)
             check(bool(selected) and selected.get("close_shown"), "selected: the × shows without the pointer")
-            for name in ("title_text", "time", "chevron"):
+            # The title twice: its box decides where a cut title's "…" falls;
+            # its letters' box keeps the whole text and shows where they start.
+            for name, label in (("title", "title's box"), ("title_text", "title's letters"), ("time", "time"), ("chevron", "chevron")):
                 moves = [rect_moves((plain or {}).get(name), (other or {}).get(name)) for other in (hovered, selected_hover, selected)]
-                check(all(m is not None and m <= 1.0 for m in moves), f"the {name.replace('_text', '')}'s rect moves at most 1 real px between plain, hovered and selected ({moves})")
+                check(all(m is not None and m <= 1.0 for m in moves), f"the {label} moves at most 1 real px between plain, hovered and selected ({moves})")
             g, chev, title = (selected or {}).get("close_glyph"), (selected or {}).get("chevron"), (selected or {}).get("title")
             if check(bool(g and chev and title), "the × glyph, the chevron and the title are drawn"):
                 dx = abs((g["x"] + g["w"] / 2) - (chev["x"] + chev["w"] / 2))

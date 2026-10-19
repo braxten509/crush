@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -161,8 +162,11 @@ func (m *UI) handleTaskTick() tea.Cmd {
 // pollBgProcs lists the background processes off the update loop.
 func (m *UI) pollBgProcs() tea.Cmd {
 	inHost := m.inSessionHost
+	com, sessionID := m.com, m.currentSessionID()
 	return tea.Tick(bgProcsRefresh, func(time.Time) tea.Msg {
-		procs := agent.BackgroundProcesses()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		procs := com.BackgroundJobs(ctx, sessionID)
 		if !inHost {
 			return bgProcsMsg{procs: procs}
 		}

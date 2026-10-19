@@ -156,6 +156,17 @@ func Limits(kind catwalk.Type, model string) []Limit {
 	return limits
 }
 
+// StoreLimits puts limits read elsewhere (the shared engine's reading,
+// engine-design.md 5.13) into the cache Limits reads. It reports whether
+// anything was stored.
+func StoreLimits(kind catwalk.Type, limits []Limit) bool {
+	if len(limits) == 0 {
+		return false
+	}
+	setLimits(kind, limits)
+	return true
+}
+
 func setLimits(kind catwalk.Type, limits []Limit) {
 	if len(limits) == 0 {
 		return

@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -66,11 +67,16 @@ type remoteShare struct {
 	// quiet: the share was asked for by the phone's launcher, so it starts
 	// without opening the Remote Control dialog over the new window.
 	quiet bool
+
+	// engineOn: the shared engine runs this window's share
+	// (remote_engine.go); engineStatus is its last state.
+	engineOn     bool
+	engineStatus proto.RemoteStatus
 }
 
 // active reports whether the share runs or is starting.
 func (r *remoteShare) active() bool {
-	return r.server != nil || r.starting
+	return r.server != nil || r.engineOn || r.starting
 }
 
 // beginStart marks a start attempt in flight and returns its generation
@@ -162,7 +168,7 @@ func (r *remoteShare) wait() tea.Cmd {
 
 // openRemote shows the share, starting it first when it is off.
 func (m *UI) openRemote() tea.Cmd {
-	if m.remote.server != nil {
+	if m.remote.server != nil || m.remote.engineOn {
 		m.openRemoteDialog()
 		return nil
 	}
@@ -173,9 +179,10 @@ func (m *UI) openRemote() tea.Cmd {
 	if m.remote.starting {
 		return nil
 	}
-	_, ok := m.com.Workspace.(*workspace.AppWorkspace)
-	if !ok {
-		return util.ReportWarn("Remote Control needs Crush running in this terminal, not as a client")
+	_, local := m.com.Workspace.(*workspace.AppWorkspace)
+	_, shared := m.engineWorkspace()
+	if !local && !shared {
+		return util.ReportWarn("Remote Control needs Crush running in this terminal or on the project's engine, not on a server")
 	}
 	m.remote.generation++
 	if !m.remote.quiet {
@@ -187,6 +194,9 @@ func (m *UI) openRemote() tea.Cmd {
 func (m *UI) checkRemoteSetup() tea.Cmd {
 	if m.remote.starting || m.remote.setupBusy {
 		return nil
+	}
+	if cws, shared := m.engineWorkspace(); shared {
+		return m.startEngineRemote(cws)
 	}
 	ws, ok := m.com.Workspace.(*workspace.AppWorkspace)
 	if !ok {
@@ -304,6 +314,10 @@ func (m *UI) openRemoteDialog() {
 		m.dialog.BringToFront(dialog.RemoteID)
 		return
 	}
+	if m.remote.engineOn {
+		m.dialog.OpenDialog(remotecontrol.NewRemote(m.com, m.engineRemoteStatus))
+		return
+	}
 	s := m.remote.server
 	m.dialog.OpenDialog(remotecontrol.NewRemote(m.com, func() remotecontrol.RemoteStatus {
 		st := s.Status()
@@ -316,6 +330,9 @@ func (m *UI) openRemoteDialog() {
 func (m *UI) stopRemote() tea.Cmd {
 	m.closeRemoteSetup()
 	m.dialog.CloseDialog(dialog.RemoteID)
+	if ws, shared := m.engineWorkspace(); shared && m.remote.engineOn {
+		return m.stopEngineRemote(ws)
+	}
 	stop := m.remote.stop()
 	if stop == nil {
 		return nil
@@ -339,7 +356,7 @@ func (m *UI) handleRemotePhones() tea.Cmd {
 // syncRemotePresence tells the phone what the window shows. It runs after
 // every update and only reaches the server on a change.
 func (m *UI) syncRemotePresence() {
-	if m.remote.server == nil {
+	if m.remote.server == nil && !m.remote.engineOn {
 		return
 	}
 	p := remote.Presence{
@@ -348,6 +365,10 @@ func (m *UI) syncRemotePresence() {
 	}
 	if m.hasSession() {
 		p.SessionID = m.session.ID
+	}
+	if m.remote.engineOn {
+		m.syncEnginePresence(p)
+		return
 	}
 	m.remote.setPresence(p)
 }

@@ -73,7 +73,8 @@ type QuestionForm struct {
 
 	// secure is the local form behind secure fields, which saves them and
 	// resolves the request itself. nil for ordinary forms.
-	secure    *secureentry.Form
+	secure    SecureBackend
+	owner     any // what OwnsSecureForm compares: the local form or the engine's form ID
 	dismissed bool
 
 	// sel holds mouse text selection and link clicks over the drawn form.
@@ -96,12 +97,19 @@ func NewQuestionForm(sty *styles.Styles, batch question.Request) *QuestionForm {
 // answers; cancelling resolves it without writing. It needs no OnAnswer or
 // OnCancel.
 func NewSecureQuestionForm(sty *styles.Styles, form *secureentry.Form) *QuestionForm {
-	f := newQuestionForm(sty, form.Request, form)
-	f.secure = form
+	return NewSecureBackendForm(sty, localSecure{form: form}, form)
+}
+
+// NewSecureBackendForm shows a form whose secure fields backend saves.
+// owner is what OwnsSecureForm matches.
+func NewSecureBackendForm(sty *styles.Styles, backend SecureBackend, owner any) *QuestionForm {
+	f := newQuestionForm(sty, backend.Questions(), backend)
+	f.secure = backend
+	f.owner = owner
 	return f
 }
 
-func newQuestionForm(sty *styles.Styles, batch question.Request, secure *secureentry.Form) *QuestionForm {
+func newQuestionForm(sty *styles.Styles, batch question.Request, secure SecureBackend) *QuestionForm {
 	comps := make([]questionResponder, len(batch.Questions))
 	labels := make([]string, len(batch.Questions))
 	ids := make([]string, len(batch.Questions))
@@ -117,9 +125,9 @@ func newQuestionForm(sty *styles.Styles, batch question.Request, secure *securee
 		case question.TypeFreeText:
 			comps[i] = NewFreeText(sty, req)
 		case question.TypeSecureEntry:
-			var field *secureentry.Field
+			var field SecureSlot
 			if secure != nil {
-				field = secure.Field(req.ID)
+				field = secure.Slot(req.ID)
 			}
 			sq := NewSecureQuestion(sty, req, field)
 			secureFields[i] = sq
@@ -255,7 +263,7 @@ func (f *QuestionForm) secureQuestion(idx int) *SecureQuestion {
 // UI must not resolve such a form through the question service.
 func (f *QuestionForm) HasSecureEntry() bool { return f.secure != nil }
 
-func (f *QuestionForm) OwnsSecureForm(form *secureentry.Form) bool { return f.secure == form }
+func (f *QuestionForm) OwnsSecureForm(owner any) bool { return f.secure != nil && f.owner == owner }
 
 // Dismiss releases a form the UI drops without the user answering it, such
 // as when another form replaces it. A secure form is cancelled and its
@@ -266,6 +274,13 @@ func (f *QuestionForm) Dismiss() {
 		f.clearSecrets()
 		f.secure.Cancel()
 	}
+}
+
+// Close drops a secure form that closed elsewhere (submitted or cancelled
+// in another window): its buffers are cleared and nothing is cancelled.
+func (f *QuestionForm) Close() {
+	f.dismissed = true
+	f.clearSecrets()
 }
 
 func (f *QuestionForm) HandleSecurePaste(msg SecureQuestionPaste) {

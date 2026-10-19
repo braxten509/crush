@@ -61,10 +61,11 @@ func (m *UI) refreshUsage(d *dialog.Usage) tea.Cmd {
 	}
 	data.Refreshing, data.Error = true, ""
 	d.SetData(data)
+	com := m.com
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		err := cliagent.RefreshLimitsNow(ctx, data.Kind)
+		_, err := com.RefreshCLILimits(ctx, data.Kind, true)
 		return usageRefreshedMsg{dialog: d, err: err}
 	}
 }

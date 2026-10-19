@@ -1,6 +1,7 @@
 package dialog
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strconv"
@@ -171,12 +172,12 @@ func (b *Background) HandleMsg(msg tea.Msg) Action {
 		b.list.SetSelected(min(sel, len(b.items)-1))
 		cmd := func() tea.Msg {
 			if item.task != nil {
-				if err := agent.StopTask(item.task.ID); err != nil {
+				if err := b.com.StopHelper(context.Background(), *item.task); err != nil {
 					return util.ReportError(err)()
 				}
 				return util.NewInfoMsg("Stopped sub-agent " + item.task.Name)
 			}
-			if err := agent.StopBackgroundProcess(*item.proc); err != nil {
+			if err := b.com.KillJob(context.Background(), *item.proc); err != nil {
 				return util.ReportError(err)()
 			}
 			return util.NewInfoMsg("Killed " + item.proc.Command)

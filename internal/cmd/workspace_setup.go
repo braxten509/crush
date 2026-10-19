@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/client"
@@ -41,11 +42,45 @@ func supportsProgressBar() bool {
 	return isWindowsTerminal || xstrings.ContainsAnyOf(strings.ToLower(termProg), "ghostty", "iterm2", "rio")
 }
 
-// useClientServer returns true when the client/server architecture is
-// enabled via the CRUSH_CLIENT_SERVER environment variable.
-func useClientServer() bool {
-	v, _ := strconv.ParseBool(os.Getenv("CRUSH_CLIENT_SERVER"))
-	return v
+// useClientServer reports whether this window runs its chats on the
+// project's engine (engine-design.md 5.13): CRUSH_CLIENT_SERVER, when set,
+// still decides (1 means shared, 0 alone); otherwise the engine setting
+// (CRUSH_ENGINE, then options.engine), which defaults to shared.
+func useClientServer(cmd *cobra.Command) bool {
+	if v, err := strconv.ParseBool(os.Getenv("CRUSH_CLIENT_SERVER")); err == nil {
+		return v
+	}
+	return engineMode(cmd) == config.EngineShared
+}
+
+// engineMode reads the engine setting for the command's folder once per
+// folder, data folder and override.
+func engineMode(cmd *cobra.Command) string {
+	cwd, _ := cmd.Flags().GetString("cwd")
+	if cwd == "" {
+		cwd, _ = os.Getwd()
+	}
+	dataDir, _ := cmd.Flags().GetString("data-dir")
+	key := strings.Join([]string{cwd, dataDir, os.Getenv("CRUSH_ENGINE")}, "\x00")
+	engineModes.Lock()
+	defer engineModes.Unlock()
+	if mode, ok := engineModes.byKey[key]; ok {
+		return mode
+	}
+	mode, err := config.EngineMode(cwd, dataDir)
+	if err != nil {
+		slog.Warn("Failed to read the engine setting; sharing the engine", "error", err)
+	}
+	if engineModes.byKey == nil {
+		engineModes.byKey = map[string]string{}
+	}
+	engineModes.byKey[key] = mode
+	return mode
+}
+
+var engineModes struct {
+	sync.Mutex
+	byKey map[string]string
 }
 
 // setupWorkspaceWithProgressBar wraps setupWorkspace with an optional
@@ -70,7 +105,7 @@ func setupWorkspaceWithProgressBar(cmd *cobra.Command) (workspace.Workspace, fun
 // ClientWorkspace. Otherwise it creates an in-process app.App and
 // returns an AppWorkspace.
 func setupWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
-	if useClientServer() {
+	if useClientServer(cmd) {
 		return setupClientServerWorkspace(cmd)
 	}
 	return setupLocalWorkspace(cmd)
@@ -125,8 +160,17 @@ func setupLocalApp(cmd *cobra.Command) (*app.App, func(), error) {
 		slog.Warn("Failed to register project", "error", err)
 	}
 
+	// A window that works alone holds the shared project lock, so the
+	// shared engine and it never run the same project at once; lone windows
+	// share it with each other (engine-design.md 5.10, 5.13).
+	releaseLock, err := db.LockProject(ctx, cfg.Options.DataDirectory, db.ProjectLockAlone, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	conn, err := db.Connect(ctx, cfg.Options.DataDirectory)
 	if err != nil {
+		_ = releaseLock()
 		return nil, nil, err
 	}
 	db.PruneIdleReviewsInBackground(ctx, conn)
@@ -150,6 +194,7 @@ func setupLocalApp(cmd *cobra.Command) (*app.App, func(), error) {
 	appInstance, err := app.New(ctx, conn, store, skillsMgr)
 	if err != nil {
 		_ = conn.Close()
+		_ = releaseLock()
 		slog.Error("Failed to create app instance", "error", err)
 		return nil, nil, err
 	}
@@ -158,7 +203,10 @@ func setupLocalApp(cmd *cobra.Command) (*app.App, func(), error) {
 		event.Init()
 	}
 
-	cleanup := func() { appInstance.Shutdown() }
+	cleanup := func() {
+		appInstance.Shutdown()
+		_ = releaseLock()
+	}
 	return appInstance, cleanup, nil
 }
 
@@ -264,7 +312,7 @@ func connectToServerOrEngine(cmd *cobra.Command) (*serverConnection, error) {
 	debug, _ := cmd.Flags().GetBool("debug")
 	opts := serverctl.EnsureOptions{Cwd: absCwd, DataDir: dataDir, Debug: debug}
 
-	if useClientServer() {
+	if useClientServer(cmd) {
 		h, err := serverctl.EnsureEngine(cmd.Context(), opts)
 		if err != nil {
 			return nil, err

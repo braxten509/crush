@@ -29,8 +29,8 @@ type SecureQuestion struct {
 	Styles  *styles.Styles
 	Request question.Question
 
-	field     *secureentry.Field // nil outside the local terminal
-	buffer    *secretBuffer      // behind a pointer so formatting the struct can't show it
+	field     SecureSlot    // nil when no form can save it
+	buffer    *secretBuffer // behind a pointer so formatting the struct can't show it
 	focused   bool
 	errorText string
 
@@ -87,7 +87,7 @@ func (p SecureQuestionPaste) Discard() { clear(p.value) }
 
 // NewSecureQuestion creates a masked field. Without a prepared field it
 // shows that secure entry needs the local terminal and takes no input.
-func NewSecureQuestion(sty *styles.Styles, req question.Question, field *secureentry.Field) *SecureQuestion {
+func NewSecureQuestion(sty *styles.Styles, req question.Question, field SecureSlot) *SecureQuestion {
 	return &SecureQuestion{
 		Styles:   sty,
 		Request:  req,

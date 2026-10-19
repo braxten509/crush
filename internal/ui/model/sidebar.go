@@ -115,8 +115,11 @@ func (m *UI) fetchCLILimits() tea.Cmd {
 	if kind == "" {
 		return nil
 	}
+	com := m.com
 	return func() tea.Msg {
-		if cliagent.RefreshLimits(context.Background(), kind) {
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		if changed, _ := com.RefreshCLILimits(ctx, kind, false); changed {
 			return cliLimitsMsg{}
 		}
 		return nil

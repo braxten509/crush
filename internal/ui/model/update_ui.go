@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/workspace"
+
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/dialog/skillbrowser"
 
@@ -116,6 +118,12 @@ func (m *UI) handleRemoteMsg(msg tea.Msg) (tea.Cmd, bool) {
 		cmds = append(cmds, m.handleRemoteAction(msg.action))
 	case remotePhonesMsg:
 		cmds = append(cmds, m.handleRemotePhones())
+	case remoteEngineStartedMsg:
+		cmds = append(cmds, m.handleRemoteEngineStarted(msg))
+	case workspace.RemoteStatusMsg:
+		cmds = append(cmds, m.handleRemoteEngineStatus(msg.Status))
+	case workspace.RemoteActionMsg:
+		cmds = append(cmds, m.handleEngineRemoteAction(msg.Action))
 	default:
 		return nil, false
 	}

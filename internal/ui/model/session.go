@@ -14,7 +14,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
@@ -377,6 +376,7 @@ func (m *UI) newSession() tea.Cmd {
 	}
 
 	draftID := m.session.ID
+	com := m.com
 	planCmd := m.resetPlanModeState()
 	m.session = nil
 	m.agentBusyCache.set(false)
@@ -408,9 +408,12 @@ func (m *UI) newSession() tea.Cmd {
 			return nil
 		},
 		func() tea.Msg {
-			// A new chat starts clean: end what the agents left running.
-			for _, p := range agent.BackgroundProcesses() {
-				_ = agent.StopBackgroundProcess(p)
+			// A new chat starts clean: end what the agents left running
+			// (in this process when working alone, the chat's jobs on the
+			// engine when shared, so other windows' work keeps running).
+			ctx := context.Background()
+			for _, p := range com.BackgroundJobs(ctx, draftID) {
+				_ = com.KillJob(ctx, p)
 			}
 			return nil
 		},

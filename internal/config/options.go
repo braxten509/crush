@@ -178,7 +178,18 @@ type Options struct {
 	// RemoteLaunchTarget is what the phone launcher opens: "terminal" (the
 	// default) or "desktop" (desktop design 5-6, G-17).
 	RemoteLaunchTarget string `json:"remote_launch_target,omitempty" jsonschema:"description=What crush remote launcher opens for the phone: a terminal window or the desktop app,enum=terminal,enum=desktop,default=terminal"`
+	// Engine is where a terminal window runs its chats: "shared" (the
+	// default) joins the project's engine, which the desktop app uses too;
+	// "alone" runs in-process as before (engine-design.md 5.13).
+	// CRUSH_ENGINE overrides it.
+	Engine string `json:"engine,omitempty" jsonschema:"description=Where a terminal window runs its chats: shared joins the project's engine (so the desktop app and other windows show the same chats live)\\, alone runs them inside the window,enum=shared,enum=alone,default=shared"`
 }
+
+// Engine modes (engine-design.md 5.13).
+const (
+	EngineShared = "shared"
+	EngineAlone  = "alone"
+)
 
 // DefaultCheckInInterval is how often Crush wakes the agent with a progress
 // check-in while background work runs, unless options.check_in_minutes says

@@ -33,6 +33,9 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Secure input bypasses chat, clipboard attachments, global keys, history,
 	// question answers, and remote presence handling entirely.
+	if cmd, ok := m.handleEngineSecureMsg(msg); ok {
+		return m, cmd
+	}
 	if cmd, ok := m.handleSecureEntryMsg(msg); ok {
 		return m, cmd
 	}

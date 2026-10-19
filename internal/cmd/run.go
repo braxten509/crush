@@ -117,7 +117,7 @@ crush run --continue "Follow up on your last response"
 		}
 
 		hideSpinner := quiet || verbose
-		if useClientServer() {
+		if useClientServer(cmd) {
 			return runOnServer(ctx, cmd, opts, verbose, hideSpinner)
 		}
 		return runInProcess(ctx, cmd, opts, verbose, hideSpinner)

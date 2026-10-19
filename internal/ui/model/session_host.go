@@ -2,6 +2,7 @@ package model
 
 import (
 	"cmp"
+	"context"
 	"slices"
 	"strconv"
 
@@ -62,10 +63,21 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 		st.State = sessionhost.StateWaiting
 	case m.isAgentBusy():
 		st.State = sessionhost.StateWorking
-	case agent.SessionHasUnfinishedWork(m.currentSessionID()), m.hasUntrackedProcess():
+	case m.hasUnfinishedWork(), m.hasUntrackedProcess():
 		st.State = sessionhost.StateBackground
 	}
 	return st
+}
+
+// hasUnfinishedWork reports running sub-agents or jobs of the shown chat:
+// the agent's own record when working alone, the row's engine-fed state
+// when shared (the agent globals are empty then).
+func (m *UI) hasUnfinishedWork() bool {
+	if !m.com.Shared() {
+		return agent.SessionHasUnfinishedWork(m.currentSessionID())
+	}
+	id := m.currentSessionID()
+	return id != "" && (len(m.visibleTasks()) > 0 || slices.ContainsFunc(m.taskRow.bgProcs, func(p agent.Process) bool { return p.JobID != "" && p.Session == id }))
 }
 
 // hasUntrackedProcess reports a command this chat's agent left running
@@ -85,10 +97,11 @@ func (m *UI) stopHostServer(port int) tea.Cmd {
 		return nil
 	}
 	process := m.taskRow.hostServers[i].Process
+	com := m.com
 	// Taken off at once; the next refresh shows whatever still listens.
 	m.taskRow.hostServers = slices.DeleteFunc(m.taskRow.hostServers, func(s agent.Server) bool { return s.Process == process })
 	return func() tea.Msg {
-		if err := agent.StopBackgroundProcess(process); err != nil {
+		if err := com.KillJob(context.Background(), process); err != nil {
 			return util.ReportError(err)()
 		}
 		return nil

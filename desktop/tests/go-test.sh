@@ -13,6 +13,7 @@
 # Only committed work is tested: commit on the desktop branch first.
 # Usage: tests/go-test.sh [go test args...]   (default: ./...)
 # GO_TEST_MAX_SEC sets the time limit (default 1800 seconds).
+# CRUSH_ENGINE passes through, so the suite runs in either engine mode.
 # CRUSH_TEST_SRC tests another worktree's newest commit with this runner
 # (default: the worktree this script is in).
 # Each run gets its own /tmp (a folder inside the run folder bound over /tmp),
@@ -81,7 +82,7 @@ systemd-run --user --wait --pipe --collect --quiet --unit="$unit" \
   -E PATH="$PATH" -E HOME="$T_HOME" \
   -E XDG_CONFIG_HOME="$T_HOME/.config" -E XDG_DATA_HOME="$T_HOME/.local/share" \
   -E XDG_CACHE_HOME="$T_HOME/.cache" -E XDG_STATE_HOME="$T_HOME/.local/state" \
-  -E XDG_RUNTIME_DIR="$RUN/runtime" -E TMPDIR="$RUN/tmp" \
+  -E XDG_RUNTIME_DIR="$RUN/runtime" -E TMPDIR="$RUN/tmp" -E CRUSH_ENGINE="${CRUSH_ENGINE:-}" \
   -E DISPLAY= -E WAYLAND_DISPLAY= -E XAUTHORITY= -E ICEAUTHORITY= -E SESSION_MANAGER= \
   -E DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
   -E GOPATH="$(go env GOPATH)" -E GOCACHE="$(go env GOCACHE)" -E GOMODCACHE="$(go env GOMODCACHE)" \

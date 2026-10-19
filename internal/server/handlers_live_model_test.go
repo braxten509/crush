@@ -162,14 +162,20 @@ func liveModelEnd(w http.ResponseWriter, finish string) {
 
 func liveModelToolCalls(w http.ResponseWriter, name string, job, helper bool) {
 	var calls [][2]string
-	if job {
-		command := "sleep 120"
-		if strings.HasPrefix(name, "listen") {
-			// A job that listens on a local port, like a dev server (G-18).
-			command = `python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(); time.sleep(120)'`
-		}
+	switch {
+	case job && strings.HasPrefix(name, "listen"):
+		// A dev server on a local port, started as an agent CLI starts its
+		// jobs, through `crush bg` (G-18).
+		request := fmt.Sprintf(`{"session":"%%s","background":{"command":"python3 -m http.server 0 --bind 127.0.0.1","name":"%s"}}`, name)
 		args, _ := json.Marshal(map[string]any{
-			"description": "Start the " + name + " job", "command": command, "run_in_background": true,
+			"description": "Start the " + name + " job",
+			"command": fmt.Sprintf(`printf '%s' "$CRUSH_SESSION_ID" > "$CRUSH_TASKS_DIR/%s.tmp" && mv "$CRUSH_TASKS_DIR/%s.tmp" "$CRUSH_TASKS_DIR/%s.req"`,
+				request, name, name, name),
+		})
+		calls = append(calls, [2]string{"call_job_" + name, string(args)})
+	case job:
+		args, _ := json.Marshal(map[string]any{
+			"description": "Start the " + name + " job", "command": "sleep 120", "run_in_background": true,
 		})
 		calls = append(calls, [2]string{"call_job_" + name, string(args)})
 	}

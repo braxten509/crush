@@ -622,6 +622,40 @@ export function closeSlot(kind);                     // closes only when that ki
 export function revealInChat(target);                // sets ui.scrollTo; a figure heading's click uses it (4.3)
 ```
 
+**Exports of the P3.3 stores (as built, `desktop-p3-3` at bac469cb).** Screen pieces call only these names; "(store use)" marks exports only the stores themselves call.
+
+*messages.svelte.js*
+- `ChatMessages`: one per loaded chat: `status` ("idle"|"loading"|"ready"|"error"), `error`, `ids` (chat order, replaced whole), `byId` (SvelteMap mid → Message as sent), `active` (Set of assistant ids a live event showed unfinished).
+- `messages`: `{bySession: sid → ChatMessages (agent chats "<mid>$$<tcid>" too), pending: submissionId → {submissionId, sessionId, text, attachments, held, state: "working"|"uncertain", acknowledged, createdAt}, returned: sid → [{text, attachments}]}`.
+- `interrupted`: SvelteSet of message ids this window interrupted.
+- `isFinished(m)`; `agentChatId(messageId, toolCallId)` → `"<messageId>$$<toolCallId>"`; `parseAgentChatId(sid)` → `{messageId, toolCallId}` or null; `chatOf(mid)` → the loaded chat holding mid, or "".
+- `load(sid)` → Promise<boolean>: reads the messages, buffering that chat's events meanwhile; true when the snapshot landed, false when the chat was dropped meanwhile, rejects when the read failed; then loads its agent chats. `unload(sid)`; `readyChat(sid)` → an empty chat counted as loaded (one this window just made).
+- `withInterrupt(m)` → m, or for an interrupted message without a finish part a copy with a canceled finish part (one copy per object); draw this, never the stored one. `isInterrupted(mid)`; `isHiddenInterruptedStep(m, shownBefore)` → true for a tools-only step of an interrupted run first shown after the interrupt.
+- `addPending({sessionId, text, attachments, held, submissionId})` → submissionId; the send must carry it as `submission_id` (its 202 sets `acknowledged`). `pendingFor(sid)` (shown in the timeline, send order); `heldFor(sid)` (tray queue only); `markUncertain(submissionId)` ("This message may not have been sent", TYPE-048); `takePending(submissionId)`; `releaseHeld(sid)`; `returnDraft(sid, {text, attachments})` ("" is the landing page); `takeReturned(sid)`; `finishPending(submissionId, restore)`; `resolvePending(submissionId, restoreIfMissing)` → Promise<void> (after a failed run: a saved prompt stays, a missing one goes back; a failed read shows an error notice).
+- Store use: `applyMessage(event, m)`; `interruptChat(sid)` (runs inside `api.interrupt(sid)`).
+
+*sessions.svelte.js*
+- `sessions`: `{byId, order (newest first), currentId, loaded, live: sid → true, opening: null|{id, title, startedAt}, sent: sid → {run_id: true}, activity: sid → updated_at}`.
+- `rootOf(sid)` → the top-level chat (helper, title or agent chat), or "". `busy(id)`: busy rule (a)-(d) above (D41).
+- `openChat(id)` → Promise<boolean>: true when the chat shows; a newer switch wins; a failure keeps the window where it was with "Couldn't load this chat: …" and Try again; a failed file-history read still opens it, with the warning "Couldn't read this chat's file history".
+- `newChat()` → Promise<boolean>: to the landing state; false when no chat is shown, or (with the busy warning) when the shown chat is busy. `ensureSession()` → Promise<string>: the shown chat's id; on the landing page it creates "New Session" first (concurrent calls share one create).
+- `deferSend({run(sid), text, attachments, hidden, shell})` → true when held for the chat being opened (TYPE-049); if the open fails the prompt goes back to the shown chat's field (a shell command is not run, with a warning).
+- `deleteChat(id)` → Promise (rejects on failure; this window's own delete shows no "deleted elsewhere" notice). `loadSessions({since})`; `openLaunchChat({session, continueLast})` (`-s` / `-C`, START-006, only while nothing is shown or opening).
+- Store use: `readStart`, `upsertSession(s, {fromEvent, since})`, `removeSession`, `settleBusy`, `noteChatMessage(sid, kind, m, {loaded})`, `markPromptPending(root, value)`.
+
+*limits.svelte.js*
+- `limits`: `{byKind: kind → CLILimits}` (newest read_at per kind). `limitsFor(kind, model)` → `{kind, state, readAt, error, windows}` or null ("checking…"). `leftPercent(window, now)` → 0-100 (past its reset: 100). `readTime(value)` → `[ms, ns]` or null (Go RFC 3339 with nanoseconds; Go's zero time is null). `loadLimits()`.
+- Store use: `applyLimits`, `agentProviderChanged`, `startLimitsPoll({idle})`, `stopLimitsPoll()` (the connection store runs the 60 s poll while connected; a kind is asked again at most every 3 min).
+
+*prompts.svelte.js*
+- `prompts`: `{permission, question, pendingByRoot: root → {permission, question}, callStatus: tool_call_id → "permission"|"running"|"cancelled"}`. `clearPermission(toolCallId)` (this window answered: closes the shown request at once).
+- Store use: `seedMarks(root, pendingPrompt)`, `keepPromptsFor(root)`.
+
+*workspace.svelte.js*
+- `ws`: `{config, agent, providers, lsps: name → info + diagnostics {error, warning, information, hint}, mcps, skills, files: sid → File[], branch}`. `pickConfig(config)` (models, recent_models, options, permissions; mcp and lsp entries only {type, disabled}); `pickProvider(provider)` (without api_key, api_endpoint, default_headers).
+- `loadConfig`, `loadAgent`, `loadProviders`, `loadSkills`, `loadBranch`, `loadMcps`, `loadLsps` → Promise<void> (a failure rejects and keeps the old value; LSP and MCP reads never overlap); `loadFiles(sid)` → Promise<File[]> (by version, then created_at).
+- Store use: `setFiles`, `dropFiles`, `startWorkspace({currentChat, connected})`, `stopWorkspace()`.
+
 Why the message shape. A `$state` object proxies every plain object put into it, so a 1,000-message chat kept that way makes Svelte wrap every part at load (review finding 10). Svelte proxies only plain objects and arrays (`svelte/src/internal/client/proxy.js:53`), so a `ChatMessages` instance stays as it is, its `ids` is a raw array that is replaced, and its `byId` map stores each message as the engine sent it. `lib/timeline.js` caches the items it builds per Message object in a `WeakMap`; an update replaces the object, so only that message is rebuilt.
 
 **Applying a batch.** `events.js` hands each entry, in order, to the handlers registered for its `type` (`onEvent(type, fn)`), and `resync` entries (and `connection` events with `resync: true`) to every function registered with `onResync(fn)`. Registration happens at module load of each store, so no store edits another's file. Rules:

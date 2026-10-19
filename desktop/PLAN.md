@@ -475,5 +475,12 @@ Kept current during the build. Percent = share of the phase table in section 4.
 ### Look picks made while away
 - none yet
 
+### Progress (2026-10-19, away mode)
+- Phase 3: merged review found 3 bugs (timeline rows erased on resize, slow queue recall could lose a prompt, copy skipped Agent tools) plus 4 failing check steps. Fix round 1 (`desktop-p3-fix`, merged d48646c6) fixed all; Sol re-review closed them with no new findings (round 1 of 3). Coverage limits noted by the reviewer: the recall test doesn't assert the abort; START-018 doesn't force overlapping saves.
+- `p3_chat.py` named in design 5.2 was never written (wave 2's per-piece drivers were dropped under the test budget); chat flows are covered by the phase-level checks.
+- P4.3 live fork checks merged (53a0342b): Claude, Codex, Grok pass all 5 steps; AGY has no fork; OpenCode not checked live (expired key).
+- P4.2 Go forkers merged (9588942f): 9 Go tests, whole agent suite with -race, `p4_fork_args.py` passes for all four tools; deliberate break (Grok index) caught.
+- G56 (engine gaps) started early beside phase 4 (Go only, no dependency on S5).
+
 ### Open findings
 - none

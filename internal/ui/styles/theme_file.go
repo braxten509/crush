@@ -88,10 +88,12 @@ func SaveThemeFile(path string, tf *ThemeFile) error {
 // writeThemeFileAtomic writes data to a temporary file beside path and
 // renames it over path, so a reader never sees a half-written theme. The
 // file keeps its permissions (0644 when new) and a symlink keeps pointing
-// at the file it named.
+// at the file it named, which is created when it does not exist yet, as
+// os.WriteFile did.
 func writeThemeFileAtomic(path string, data []byte) error {
-	if target, err := filepath.EvalSymlinks(path); err == nil {
-		path = target
+	path, err := symlinkTarget(path)
+	if err != nil {
+		return err
 	}
 	perm := os.FileMode(0o644)
 	if info, err := os.Stat(path); err == nil {
@@ -116,6 +118,36 @@ func writeThemeFileAtomic(path string, data []byte) error {
 		_ = os.Remove(tmp)
 	}
 	return err
+}
+
+// maxSymlinks bounds a chain of symlinks, as the kernel does.
+const maxSymlinks = 40
+
+// symlinkTarget follows path's symlinks to the file they finally name,
+// whether or not that file exists yet; a path that is no symlink is
+// returned as it is.
+func symlinkTarget(path string) (string, error) {
+	for range maxSymlinks {
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			return path, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			return path, nil
+		}
+		link, err := os.Readlink(path)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(link) {
+			link = filepath.Join(filepath.Dir(path), link)
+		}
+		path = link
+	}
+	return "", fmt.Errorf("%s: too many levels of symbolic links", path)
 }
 
 // themeDirsOverride allows tests to replace the default theme directories.

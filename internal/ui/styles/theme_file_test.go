@@ -45,6 +45,26 @@ func TestThemeFile_SaveCreatesDirectories(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestThemeFile_SaveThroughDanglingSymlink: saving through a symlink whose
+// target does not exist yet creates the target and keeps the link.
+func TestThemeFile_SaveThroughDanglingSymlink(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	target := filepath.Join(dir, "elsewhere", "real.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+	link := filepath.Join(dir, "linked.json")
+	require.NoError(t, os.Symlink(filepath.Join("elsewhere", "real.json"), link))
+
+	require.NoError(t, SaveThemeFile(link, &ThemeFile{Base: "gruvbox-dark"}))
+
+	info, err := os.Lstat(link)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink, "the link is still a link")
+	loaded, err := LoadThemeFile(target)
+	require.NoError(t, err, "the link's target was created")
+	require.Equal(t, "gruvbox-dark", loaded.Base)
+}
+
 func TestThemeFile_LoadInvalidJSON(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

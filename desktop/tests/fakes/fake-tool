@@ -13,6 +13,13 @@ named after each tool, and:
   of its last line; else "default"), then waits for stdin to close, as the Go fakes do
   (cliagent_test.go:20-28); a kept Claude or Codex process serves every later
   prompt the same way;
+- forks like each tool (desktop-design 3.4, docs/evidence/phase4/live-summary.md):
+  Claude's --resume S --fork-session --resume-session-at U starts a new
+  session, Codex's thread/fork answers a new thread, Grok's ACP extension
+  _x.ai/session/fork answers a new session that session/load then opens;
+- logs the IDs each reply used ({tool, reply: {...}}: Claude's session and
+  assistant uuids, Codex's thread and turn, the ACP session), so a check can
+  match a fork's arguments to the cut;
 - answers --version, model discovery (`codex app-server` model/list, Grok's
   ACP initialize, `agy models`, `opencode models opencode-go`) and title
   requests (a short title, never a stream).
@@ -149,6 +156,7 @@ class Subs:
         self.prompt = values.get("PROMPT", "")
         self.request = None
         self.named = {}
+        self.title = False  # a title request's replay: its IDs are not logged
 
     def apply(self, value):
         if isinstance(value, dict):
@@ -183,6 +191,16 @@ class Replay(threading.Thread):
         self.stopped.set()
 
     def run(self):
+        sent = []
+        try:
+            self.play(sent)
+        finally:
+            reply = None if self.subs.title else self.proto.reply_ids(sent)
+            if reply is not None:
+                log({"reply": reply})
+        self.proto.finished(self)
+
+    def play(self, sent):
         for raw in self.lines:
             if self.stopped.is_set():
                 break
@@ -197,13 +215,13 @@ class Replay(threading.Thread):
             if DELAY and self.stopped.wait(DELAY):
                 break
             send(obj)
+            sent.append(obj)
             wait_id = self.proto.request_id(obj)
             if wait_id is not None:
                 answer = self.proto.wait_answer(wait_id, self.stopped)
                 if answer is None:
                     break
                 self.proto.on_answer(obj, answer)
-        self.proto.finished(self)
 
 
 class Proto:
@@ -244,6 +262,10 @@ class Proto:
     def finished(self, replay):
         pass
 
+    def reply_ids(self, sent):
+        """The IDs one reply used, for the log; None logs nothing."""
+        return None
+
     def busy(self):
         return self.replay is not None and self.replay.is_alive()
 
@@ -264,7 +286,9 @@ def claude_text(message):
 class Claude(Proto):
     def __init__(self):
         super().__init__()
-        self.session = flag("--resume") or str(uuid.uuid4())
+        # A fork (--fork-session) is a new session holding the resumed one's
+        # messages through --resume-session-at.
+        self.session = str(uuid.uuid4()) if "--fork-session" in ARGS else flag("--resume") or str(uuid.uuid4())
         self.bypass = flag("--permission-mode") == "bypassPermissions"
         self.interrupted = False
 
@@ -291,6 +315,9 @@ class Claude(Proto):
                     block["content"] = self.denied.pop(block["tool_use_id"])
                     block["is_error"] = True
         return obj
+
+    def reply_ids(self, sent):
+        return {"session": self.session, "uuids": [o["uuid"] for o in sent if o.get("type") == "assistant" and o.get("uuid")]}
 
     def finished(self, replay):
         if replay.stopped.is_set() and self.interrupted:
@@ -327,6 +354,7 @@ class Claude(Proto):
                 return
             title = title_of(text)
             subs = Subs(SESSION=self.session, PROMPT=text, CWD=os.getcwd())
+            subs.title = title is not None
             if title is not None:
                 lines = [{"type": "system", "subtype": "init", "session_id": "$SESSION"},
                          {"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}},
@@ -372,6 +400,9 @@ class Codex(Proto):
                     item["aggregatedOutput"] = ""
         return obj
 
+    def reply_ids(self, sent):
+        return {"thread": self.thread, "turn": self.turn}
+
     def finished(self, replay):
         if replay.stopped.is_set():
             send({"method": "turn/completed", "params": {"turn": {"id": self.turn, "status": "interrupted"}}})
@@ -399,12 +430,18 @@ class Codex(Proto):
             self.approval = params.get("approvalPolicy") or self.approval
             self.thread = params.get("threadId") if method == "thread/resume" else "th-" + uuid.uuid4().hex[:12]
             send({"id": rid, "result": {"thread": {"id": self.thread}}})
+        elif method == "thread/fork":
+            # A new thread holding the source's turns through lastTurnId.
+            self.approval = params.get("approvalPolicy") or self.approval
+            self.thread = "th-" + uuid.uuid4().hex[:12]
+            send({"id": rid, "result": {"thread": {"id": self.thread, "turns": []}}})
         elif method == "turn/start":
             text = "".join(i.get("text", "") for i in params.get("input") or [] if isinstance(i, dict) and i.get("type") == "text")
             self.turn = "tu-" + uuid.uuid4().hex[:12]
             send({"id": rid, "result": {"turn": {"id": self.turn}}})
             subs = Subs(SESSION=self.thread or "", TURN=self.turn, PROMPT=text, CWD=os.getcwd())
             title = title_of(text)
+            subs.title = title is not None
             if title is not None:
                 lines = [{"method": "item/started", "params": {"item": {"type": "agentMessage", "id": "m_$UUID1"}}},
                          {"method": "item/agentMessage/delta", "params": {"itemId": "m_$UUID1", "delta": title}},
@@ -463,6 +500,9 @@ class ACP(Proto):
             update["content"] = [{"type": "content", "content": {"type": "text", "text": "The user rejected this tool call."}}]
         return obj
 
+    def reply_ids(self, sent):
+        return {"session": self.session}
+
     def finished(self, replay):
         result = {"stopReason": "end_turn"}
         if replay.stopped.is_set() and self.cancelled:
@@ -488,6 +528,9 @@ class ACP(Proto):
         elif method == "session/new":
             self.session = "ses-" + uuid.uuid4().hex[:12]
             send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": self.session}})
+        elif method == "_x.ai/session/fork" and TOOL == "grok":
+            # Grok's fork: a new session keeping prompts 0..targetPromptIndex.
+            send({"jsonrpc": "2.0", "id": rid, "result": {"newSessionId": "ses-" + uuid.uuid4().hex[:12]}})
         elif method == "session/load":
             self.session = params.get("sessionId")
             send({"jsonrpc": "2.0", "id": rid, "result": {}})
@@ -502,6 +545,7 @@ class ACP(Proto):
             subs = Subs(SESSION=self.session or params.get("sessionId") or "", PROMPT=text, CWD=os.getcwd())
             subs.request = rid
             title = title_of(text)
+            subs.title = title is not None
             if title is not None:
                 lines = [{"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "$SESSION", "update": {
                               "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": title}}}},
@@ -524,6 +568,9 @@ class AGY(Proto):
         super().__init__()
         self.session = flag("--conversation") or "conv-" + uuid.uuid4().hex[:12]
 
+    def reply_ids(self, sent):
+        return {"session": self.session}
+
     def on_line(self, obj):
         if obj.get("event") != "user" or self.replay is not None:
             return
@@ -531,6 +578,7 @@ class AGY(Proto):
         text = content if isinstance(content, str) else claude_text(obj.get("message"))
         subs = Subs(SESSION=self.session, PROMPT=text, CWD=os.getcwd())
         title = title_of(text)
+        subs.title = title is not None
         if title is not None:
             lines = [{"event": "init", "conversation_id": "$SESSION"},
                      {"event": "step_update", "step_update": {"step_index": 1, "state": "ACTIVE", "step_type": "agent_response", "text_delta": title}},
@@ -554,6 +602,10 @@ def serve(proto):
             proto.on_line(obj)
     if proto.replay is not None:
         proto.replay.stop()
+        # Let the replay log its reply IDs first: Grok's, OpenCode's and
+        # AGY's processes end their turn by closing input right after the
+        # last line, often before the replay thread has logged them.
+        proto.replay.join(2)
     os._exit(0)
 
 

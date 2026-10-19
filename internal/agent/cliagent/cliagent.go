@@ -111,8 +111,13 @@ type Turn struct {
 	Prompt    string
 	// Continue shows a reply the CLI started on its own between turns
 	// (see [OnUnprompted]) instead of sending Prompt.
-	Continue    bool
-	Resume      string // native session to continue; empty starts a new one
+	Continue bool
+	Resume   string // native session to continue; empty starts a new one
+	// Fork, set on a branch's first turn, makes the turn fork the tool's
+	// session at the cut instead of starting or resuming one (see
+	// [CanFork]); the source session is never resumed in place. A failed
+	// fork returns an error matching [ErrNoFork] before any event.
+	Fork        *ForkPoint
 	Effort      string
 	Attachments []message.Attachment
 	// NoTools runs a one-shot, text-only request that is not saved as a

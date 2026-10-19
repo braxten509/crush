@@ -89,6 +89,8 @@ type acpRun struct {
 	calls   map[string]*acpTool
 	// loading is set while session/load replays history, which is skipped.
 	loading bool
+	// loaded is the native session session/load opened, if any.
+	loaded string
 
 	// OpenCode folds a session/prompt sent mid-turn into the running turn
 	// at its next step, then answers it with the turn's own result. It
@@ -192,10 +194,25 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+	if t.Fork != nil && r.session.Load() == nil {
+		return fmt.Errorf("%w: %v", ErrNoFork, exitError(name, p))
+	}
 	if t.Resume != "" && r.session.Load() == nil {
 		return ErrResume
 	}
 	return exitError(name, p)
+}
+
+// openSession loads the native session resume, or starts a new one when
+// it is empty.
+func (r *acpRun) openSession(resume string) {
+	params := map[string]any{"cwd": r.m.Dir, "mcpServers": []any{}}
+	method := "session/new"
+	if resume != "" {
+		method, params["sessionId"] = "session/load", resume
+	}
+	r.loaded = resume
+	_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": acpSessionID, "method": method, "params": params})
 }
 
 // steer sends a prompt queued mid-turn to the running session.
@@ -317,6 +334,9 @@ func (r *acpRun) handleSteerResponse(id string, msg rpcMessage) (done bool, err 
 // done reports that the turn ended, with err.
 func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error) {
 	if msg.Error != nil {
+		if (id == acpForkID || id == acpSessionID) && r.t.Fork != nil {
+			return true, fmt.Errorf("%w: %s: %s", ErrNoFork, r.name, msg.Error.Message)
+		}
 		if id == acpSessionID && r.t.Resume != "" {
 			return true, ErrResume
 		}
@@ -324,19 +344,30 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 	}
 	switch id {
 	case acpInitID:
-		params := map[string]any{"cwd": r.m.Dir, "mcpServers": []any{}}
-		method := "session/new"
-		if r.t.Resume != "" {
-			method, params["sessionId"] = "session/load", r.t.Resume
+		if r.t.Fork != nil {
+			params, err := grokForkParams(*r.t.Fork, r.m.Dir)
+			if err != nil {
+				return true, err
+			}
+			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": acpForkID, "method": grokForkMethod, "params": params})
+			return false, nil
 		}
-		_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": acpSessionID, "method": method, "params": params})
+		r.openSession(r.t.Resume)
+	case acpForkID:
+		// The branch continues the new session: load it, as a resume does.
+		forked, err := grokForkSession(msg.Result)
+		if err != nil {
+			return true, err
+		}
+		r.loading = true
+		r.openSession(forked)
 	case acpSessionID:
 		r.loading = false
 		var res struct {
 			SessionID string `json:"sessionId"`
 		}
 		_ = json.Unmarshal(msg.Result, &res)
-		sid := cmp.Or(res.SessionID, r.t.Resume)
+		sid := cmp.Or(res.SessionID, r.loaded)
 		r.session.Store(&sid)
 		if err := r.t.Emit(Event{Type: EventSession, Session: sid}); err != nil {
 			return true, err

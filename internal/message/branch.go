@@ -274,3 +274,20 @@ func (s *service) RecordMarker(ctx context.Context, m db.MessageMarker) error {
 	}
 	return storage.RecordMarker(ctx, m)
 }
+
+// MarkerReader lists the AI-tool markers recorded on a chat's messages,
+// oldest first, so a branch can find where to fork a tool's memory.
+type MarkerReader interface {
+	Markers(ctx context.Context, sessionID string) ([]db.MessageMarker, error)
+}
+
+// Markers implements MarkerReader.
+func (s *service) Markers(ctx context.Context, sessionID string) ([]db.MessageMarker, error) {
+	storage, ok := s.q.(interface {
+		MarkersForSession(context.Context, string) ([]db.MessageMarker, error)
+	})
+	if !ok {
+		return nil, errors.New("marker storage unavailable")
+	}
+	return storage.MarkersForSession(ctx, sessionID)
+}

@@ -190,6 +190,7 @@ probeSection(
       sections: [...document.querySelectorAll('[data-probe="panel"] [data-section]')].map((el) => ({ name: el.dataset.section, rect: rect(el) })),
       meters: rect(document.querySelector('[data-probe="panel"] .usage')),
       meter_detail: rect(document.querySelector("#meter-detail")),
+      customize_button: rect(document.querySelector("#meter-detail .customize")),
       strip: rect(document.querySelector("[data-meter-strip]")),
       field: rect(document.querySelector("main.conversation .field")),
       timeline: rect(document.querySelector("[data-notice-anchor]")?.previousElementSibling),

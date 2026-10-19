@@ -40,9 +40,12 @@ Engine run, on the fresh /tmp/home/proj: tests/check.sh p3_start.py
                 the branch still fill.
   START-017     a global large model and the project's: the project's shows.
   START-019     the old "theme" setting reaches options.tui.active_theme.
-  START-012     --yolo=false then a bash tool opens the permission slot: needs
-                P3.7's composer section; NOT RUN (a failure) until it exists.
-  START-018     needs Customize Composer (P3.7, P3.8); NOT RUN until then.
+  START-012     a fresh folder opened with --yolo=false (the first window on
+                it, so its value holds): the engine asks before tools, and a
+                prompt whose reply calls bash opens the permission slot.
+  START-018     the desktop saves Customize Composer (from the meters' detail)
+                while this driver, another client, posts a config/set of
+                another key: both values are kept.
 
 Fixture run: tests/check.sh --fixture tests/fixtures/list-states.json p3_start.py
   The app is started again on a copy of the fixture whose days are moved so
@@ -68,7 +71,7 @@ and align-<surface>.json (the probe's marks); then, outside the sandbox
 builds each surface's manifest with align_real.py's manifest_for() and runs
 align.py --self-review on it.
 """
-import importlib.util, json, os, re, shlex, shutil, signal, struct, subprocess, sys, time, types, uuid
+import importlib.util, json, os, re, shlex, shutil, signal, struct, subprocess, sys, threading, time, types, uuid
 from datetime import datetime, timedelta, date
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -846,13 +849,68 @@ def engine_run():
             close(app)
 
         with step("START-012", out_dir):
-            if "composer" not in main.report():
-                pc.not_run("START-012", "the permission slot is P3.7's composer section, not in this build")
-            else:
-                pc.not_run("START-012", "its window step is written once P3.7's slot fields are known (1.9 composer.slot)")
+            pc.set_active_script(port, "stream2m")
+            path = pc.make_project(os.path.join(HOMEDIR, "proj-ask"), port)
+            app = AppRun("ask", out_dir, path, args=["--yolo=false"])
+            extra.append(app)
+            check(joined(app), "a window with --yolo=false on a fresh folder joins (the first on it, so its value holds)")
+            check(answer_no(app), "its init prompt is answered (No)")
+            ok, comp = wait_on(app, "composer", lambda c: c.get("yolo") is False, 10)
+            check(ok, f"the engine asks before tools (composer.yolo {comp.get('yolo')})")
+            focus(app)
+            ok, comp = wait_on(app, "composer", lambda c: c.get("focused") is True, 5)
+            if check(ok, "the typing box has the keyboard"):
+                type_text("START-012 permission check")
+                ok, _ = wait_on(app, "composer", lambda c: c.get("value") == "START-012 permission check", 5)
+                check(ok, "the prompt is typed")
+                key("Return")
+                ok, comp = wait_on(app, "composer", lambda c: (c.get("slot") or {}).get("kind") == "permission", 20)
+                shot(out_dir, "START-012")
+                check(ok, f"the reply's bash call opens the permission slot ({comp.get('slot')})")
+                buttons = [b.get("label") for b in (comp.get("slot") or {}).get("buttons") or []]
+                check(buttons == ["Allow", "Allow for Session", "Deny"], f"with Allow, Allow for Session and Deny ({buttons})")
+                check(not os.path.exists(os.path.join(path, "start-012.txt")), "and the command has not run")
+            close(app)
 
         with step("START-018", out_dir):
-            pc.not_run("START-018", "the desktop's side saves Customize Composer (P3.7, P3.8), not in this build")
+            footer_key, other_key, other_value = "options.tui.composer_footer", "options.tui.exit_banner", "compact"
+            h, _ = heavy(main)
+            meters = (h.get("panel") or {}).get("meters")
+            if check(bool(meters) and main.click(meters), f"the meters are clicked ({meters})"):
+                button = None
+                for _ in range(20):
+                    button = (heavy(main)[0].get("panel") or {}).get("customize_button")
+                    if button:
+                        break
+                    time.sleep(0.2)
+                check(bool(button) and main.click(button), f"their detail's \"Customize…\" is clicked ({button})")
+            ok, panel = wait_on(main, "panel", lambda p: p.get("customize") is not None, 5)
+            if check(ok, "Customize Composer opens in the slot"):
+                before = set(panel["customize"].get("picked") or [])
+                key("8")  # "When usage limits reset", off by default
+                ok, panel = wait_on(main, "panel", lambda p: set((p.get("customize") or {}).get("picked") or []) != before, 3)
+                picked = sorted((panel.get("customize") or {}).get("picked") or [])
+                check(ok and len(picked) == len(before) + 1, f"8 picks one more row ({sorted(before)} → {picked})")
+                posted = {}
+                other = threading.Thread(target=lambda: posted.update(answer=client.post("config/set", {"scope": 0, "key": other_key, "value": other_value})))
+                key("Return")
+                other.start()
+                other.join(15)
+                ok, overlay = wait_on(main, "overlay", lambda o: (o.get("notice") or {}).get("text") == "Composer updated", 10)
+                check(ok, f"the desktop saved it (\"Composer updated\": {overlay.get('notice')})")
+                check("answer" in posted, "the other client's config/set answered")
+
+                def kept(cfg):
+                    tui = ((cfg or {}).get("options") or {}).get("tui") or {}
+                    return sorted(tui.get("composer_footer") or []) == picked and tui.get("exit_banner") == other_value
+
+                ok, cfg, took = poll(lambda: client.get("config"), kept, 10, 0.3)
+                tui = ((cfg or {}).get("options") or {}).get("tui") or {}
+                check(ok, f"the engine keeps both: {footer_key} {tui.get('composer_footer')} and {other_key} {tui.get('exit_banner')!r} ({took:.1f} s)")
+                time.sleep(2)
+                check(kept(client.get("config")), "and still does 2 s later (no reload lost one)")
+                for k in (footer_key, other_key):
+                    client.post("config/remove", {"scope": 0, "key": k})
     finally:
         tmux("kill-server")
         if client:

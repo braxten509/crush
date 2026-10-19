@@ -1,5 +1,5 @@
 {
- "about": "P3.10's script. \"Stream for two minutes\" is the speed check's reply (p3_speed.py, desktop-design 2.9; p4_mid_reply.py streams it too): about 120 s at about 20 words a second, 12 tool calls, two Mermaid fences and a 30-row table; it edits only speed/session.go, a fresh copy it makes itself, so every run plays the same. The \"Seed turn ...\" turns answer at once for seed_chat.py; the four \"... from desktop\" and \"... terminal\" turns and the two \"R7 model check\" turns are the two-app check's (p3_two_apps.py); the four \"Reconnect check: ...\" turns are p3_reconnect.py's (a slow reply to stop the engine during, and short replies).",
+ "about": "P3.10's script. \"Stream for two minutes\" is the speed check's reply (p3_speed.py, desktop-design 2.9; p4_mid_reply.py streams it too): about 120 s at about 20 words a second, 12 tool calls, two Mermaid fences and a 30-row table; it edits only speed/session.go, a fresh copy it makes itself, so every run plays the same. The \"Seed turn ...\" turns answer at once for seed_chat.py; the four \"... from desktop\" and \"... terminal\" turns and the two \"R7 model check\" turns are the two-app check's (p3_two_apps.py); the four \"Reconnect check: ...\" turns are p3_reconnect.py's (a slow reply to stop the engine during, and short replies). The \"START-012 permission check\" turn is p3_start.py's: one bash call that needs permission, then a short reply.",
  "turns": [
   {
    "when": "Stream for two minutes",
@@ -301,6 +301,25 @@
    "steps": [
     {
      "text": "Sent after Try again: the typing box kept this text while the connection was down."
+    }
+   ]
+  },
+  {
+   "when": "START-012 permission check",
+   "steps": [
+    {
+     "tool_calls": [
+      {
+       "name": "bash",
+       "arguments": {
+        "command": "touch start-012.txt",
+        "description": "Make a file"
+       }
+      }
+     ]
+    },
+    {
+     "text": "The file is there."
     }
    ]
   }

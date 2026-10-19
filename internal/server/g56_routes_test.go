@@ -227,6 +227,10 @@ func TestCommandsRouteMatchesLoader(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "team"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.md"), []byte("Say hi to $NAME in $LANG_CODE."), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "team", "plain.md"), []byte("No arguments here."), 0o600))
+	skillDir := filepath.Join(g.ws.Path, ".crush", "skills", "g56-greet")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"),
+		[]byte("---\nname: g56-greet\ndescription: Greets the G56 test.\nuser-invocable: true\n---\nSay hello.\n"), 0o600))
 
 	got := liveJSON[[]proto.CustomCommand](t, g.h, http.MethodGet, g.path("/commands"), nil, http.StatusOK)
 
@@ -249,4 +253,11 @@ func TestCommandsRouteMatchesLoader(t *testing.T) {
 	require.Nil(t, hello.Skill)
 	require.Contains(t, byID, "project:team:plain")
 	require.Empty(t, byID["project:team:plain"].Arguments)
+
+	skillAt := slices.IndexFunc(got, func(c proto.CustomCommand) bool { return c.Skill != nil && c.Skill.Name == "g56-greet" })
+	require.GreaterOrEqual(t, skillAt, len(loaded), "the skill comes after the loader's commands")
+	skill := got[skillAt]
+	require.Equal(t, "Greets the G56 test.", skill.Skill.Description)
+	require.Equal(t, filepath.Join(skillDir, "SKILL.md"), skill.Skill.SkillFilePath)
+	require.Empty(t, skill.Arguments)
 }

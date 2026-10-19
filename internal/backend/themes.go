@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 
 	"charm.land/glamour/v2/ansi"
@@ -329,7 +330,7 @@ func fillThemeColors(view *proto.ThemeView, palette styles.Palette, s styles.Sty
 	for _, f := range styles.PaletteFields() {
 		v := f.Get(palette)
 		view.Palette[f.Name] = v
-		view.Resolved[f.Name] = colorHex(v)
+		view.Resolved[f.Name] = paletteColorHex(palette, v)
 	}
 	view.Dark = paletteIsDark(palette)
 	view.Syntax = map[string]string{}
@@ -339,10 +340,51 @@ func fillThemeColors(view *proto.ThemeView, palette styles.Palette, s styles.Sty
 	view.Markdown = styleColors(s.Markdown)
 }
 
-// colorHex resolves a palette value (hex, ANSI index or Charmtone name) to
-// #rrggbb, or "" when it is empty or unknown.
-func colorHex(v string) string {
+// ansiRoles are the palette's ANSI roles in index order, 0 to 15.
+var ansiRoles = [16]func(p styles.Palette) string{
+	func(p styles.Palette) string { return p.AnsiBlack },
+	func(p styles.Palette) string { return p.AnsiRed },
+	func(p styles.Palette) string { return p.AnsiGreen },
+	func(p styles.Palette) string { return p.AnsiYellow },
+	func(p styles.Palette) string { return p.AnsiBlue },
+	func(p styles.Palette) string { return p.AnsiMagenta },
+	func(p styles.Palette) string { return p.AnsiCyan },
+	func(p styles.Palette) string { return p.AnsiWhite },
+	func(p styles.Palette) string { return p.AnsiBrightBlack },
+	func(p styles.Palette) string { return p.AnsiBrightRed },
+	func(p styles.Palette) string { return p.AnsiBrightGreen },
+	func(p styles.Palette) string { return p.AnsiBrightYellow },
+	func(p styles.Palette) string { return p.AnsiBrightBlue },
+	func(p styles.Palette) string { return p.AnsiBrightMagenta },
+	func(p styles.Palette) string { return p.AnsiBrightCyan },
+	func(p styles.Palette) string { return p.AnsiBrightWhite },
+}
+
+// paletteColorString resolves a palette value as section 3.1 says: an
+// ANSI index 0-15 takes the theme's own ANSI role of that index, or the
+// xterm default when that role is empty or itself an index; any other
+// value goes through [styles.ColorString].
+func paletteColorString(p styles.Palette, v string) string {
 	cs := styles.ColorString(v)
+	n, err := strconv.Atoi(cs)
+	if err != nil || n < 0 || n >= len(ansiRoles) {
+		return cs
+	}
+	own := styles.ColorString(ansiRoles[n](p))
+	if own == "" {
+		return cs
+	}
+	if _, err := strconv.Atoi(own); err == nil {
+		return cs
+	}
+	return own
+}
+
+// paletteColorHex resolves a palette value (hex, ANSI index or Charmtone
+// name) against the whole palette to #rrggbb, or "" when it is empty or
+// unknown.
+func paletteColorHex(p styles.Palette, v string) string {
+	cs := paletteColorString(p, v)
 	if cs == "" {
 		return ""
 	}
@@ -353,7 +395,7 @@ func colorHex(v string) string {
 // paletteIsDark reports whether the theme's background is dark: a WCAG
 // relative luminance of 0.18 or less, the line section 3.6 adjusts by.
 func paletteIsDark(p styles.Palette) bool {
-	cs := styles.ColorString(p.BgBase)
+	cs := paletteColorString(p, p.BgBase)
 	if cs == "" {
 		return true
 	}

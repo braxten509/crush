@@ -7,8 +7,12 @@ Case 1, every run:
                         "Reconnect check: a long reply" (scripts/stream2m.json,
                         about 10 s); the reply streams.
   reconnect-2-kill      with "Reconnect check: kept while reconnecting" typed in
-                        the field, kill -9 on connection.engine.pid: "Lost
-                        connection to the Crush server — reconnecting…", a new
+                        the field, kill -9 on connection.engine.pid: the "Lost
+                        connection to the Crush server — reconnecting…"
+                        notification is issued (on the line in a probe write,
+                        or in connection.notices: a quick rejoin replaces it
+                        before a write, as the terminal does; reconnect-6
+                        proves it reaches the line), a new
                         engine from ensure (another pid, fresh_engine true),
                         "Reconnected to the Crush server.", connected within
                         15 s; the field keeps its text the whole time.
@@ -22,7 +26,9 @@ Case 1, every run:
                         back in the field, or shown pending in the chat.
 Case 2, only with CHECK_CRUSH=$PWD/tests/fakes/crush-wrap (its ensure fails
 while /tmp/fail-ensure exists):
-  reconnect-6-failed    /tmp/fail-ensure made, kill -9: reconnecting, then after
+  reconnect-6-failed    /tmp/fail-ensure made, kill -9: reconnecting, with "Lost
+                        connection to the Crush server — reconnecting…" on the
+                        notice line while the tries fail, then after
                         three failed tries "Can't restore the connection to the
                         Crush server. Restart Crush to recover." with Try again;
                         the field keeps "Reconnect check: typed while failed"
@@ -499,7 +505,7 @@ def main():
                                "the probe has no notice section (P3.8) or no connection notices list (P3.3), so the notice line could not be read")
                 else:
                     check(on_line or pc.flat(LOST) in added,
-                          f"its notice line shows \"{LOST}\" (on the line in a probe write: {on_line}; connection notices since the kill: {added})")
+                          f"the lost notification \"{LOST}\" is issued (on the line in a probe write: {on_line}; connection notices since the kill: {added})")
             new_pid = samples[-1]["pid"] if samples else None
             check(back, f"it is connected to a new engine within {LIMIT} s (pid {old_pid} -> {new_pid}, {took:.1f} s)")
             pid, sock, wid = side.engine()
@@ -593,6 +599,15 @@ def main():
             failed, samples = watch(side, lambda s: s["state"] == "failed", LIMIT)
             states = side.states(samples)
             check(failed and "reconnecting" in states, f"the window reconnects, then fails (states seen: {sorted(states)})")
+            if not stand_in:
+                # The tries fail for seconds here, so the lost notice stays up long
+                # enough for a probe write: this proves it reaches the line.
+                trying = [s for s in samples if s["state"] == "reconnecting"]
+                lost = notice_seen(trying, LOST)
+                if lost is None:
+                    pc.not_run("reconnect-6-failed: the lost notice", "no probe write while reconnecting had a notice section (P3.8)")
+                else:
+                    check(lost, f"while the tries fail, its notice line shows \"{LOST}\" ({len(trying)} probe reads while reconnecting)")
             if stand_in:
                 tries = side.failed_tries()
                 check([n for n, _ in tries] == [1, 2, 3], f"after three failed tries ({[n for n, _ in tries]})")

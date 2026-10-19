@@ -1,5 +1,5 @@
 {
- "about": "P3.10's script. \"Stream for two minutes\" is the speed check's reply (p3_speed.py, desktop-design 2.9; p4_mid_reply.py streams it too): about 120 s at about 20 words a second, 12 tool calls, two Mermaid fences and a 30-row table; it edits only speed/session.go, a fresh copy it makes itself, so every run plays the same. The \"Seed turn ...\" turns answer at once for seed_chat.py; the four \"... from desktop\" and \"... terminal\" turns are the two-app check's (p3_two_apps.py).",
+ "about": "P3.10's script. \"Stream for two minutes\" is the speed check's reply (p3_speed.py, desktop-design 2.9; p4_mid_reply.py streams it too): about 120 s at about 20 words a second, 12 tool calls, two Mermaid fences and a 30-row table; it edits only speed/session.go, a fresh copy it makes itself, so every run plays the same. The \"Seed turn ...\" turns answer at once for seed_chat.py; the four \"... from desktop\" and \"... terminal\" turns and the two \"R7 model check\" turns are the two-app check's (p3_two_apps.py); the four \"Reconnect check: ...\" turns are p3_reconnect.py's (a slow reply to stop the engine during, and short replies).",
  "turns": [
   {
    "when": "Stream for two minutes",
@@ -255,6 +255,61 @@
     {
      "delay_ms": 120,
      "text": "Terminal chat reply: this new chat started in the terminal app.\n\nThe reader returns an empty string when the cookie is missing, which lets callers treat both cases the same way. That choice is friendly, but it hides the difference between a visitor who never signed in and a broken cookie. Tests can cover both paths with a recorded request, so no real browser is needed to check the behaviour. Before changing anything, it helps to list every place that builds or reads the cookie, so nothing drifts apart. The search below finds each use of the cookie name, which is the quickest map of the package's surface.\n\nEnd of the terminal chat reply."
+    }
+   ]
+  },
+  {
+   "when": "R7 model check: terminal chat",
+   "title": "R7 model check",
+   "steps": [
+    {
+     "text": "R7 reply on the terminal's chat."
+    }
+   ]
+  },
+  {
+   "when": "R7 model check: desktop chat",
+   "title": "R7 model check",
+   "steps": [
+    {
+     "text": "R7 reply on the desktop's chat."
+    }
+   ]
+  },
+  {
+   "when": "Reconnect check: a long reply",
+   "title": "Reconnect check",
+   "steps": [
+    {
+     "delay_ms": 120,
+     "text": "Long reply for the reconnect check. This answer streams slowly on purpose, so the driver can stop the engine while the words are still arriving. When the engine goes away, the desktop app shows that it lost the connection, starts a new engine through crush engine ensure, joins the project again with the same client id, and reads the chat once more, so every finished message comes back in its place.\n\nNothing in this reply matters except its length and its pace. It talks about the reconnect itself so that a person reading the screenshots can tell which turn it is. The words come in small chunks, one to four at a time, with a short pause before each chunk, the way a real model streams a long answer.\n\nWhile this text is still growing, the typing box keeps whatever the person had typed, and the timeline stays on screen and read-only. Once the new engine answers, the app says it reconnected, reloads the chat, and the typing box can send again.\n\nIf you can read this sentence in the engine's list, the reply was not cut off, which means the engine was stopped later than planned; the driver checks the order and the text of the finished messages either way. End of the long reply."
+    }
+   ]
+  },
+  {
+   "when": "Reconnect check: kept while reconnecting",
+   "title": "Reconnect check",
+   "steps": [
+    {
+     "text": "Sent after the rejoin: the typing box kept this text while the app reconnected."
+    }
+   ]
+  },
+  {
+   "when": "Reconnect check: sent as the engine stops",
+   "title": "Reconnect check",
+   "steps": [
+    {
+     "text": "This prompt reached the engine before it stopped."
+    }
+   ]
+  },
+  {
+   "when": "Reconnect check: typed while failed",
+   "title": "Reconnect check",
+   "steps": [
+    {
+     "text": "Sent after Try again: the typing box kept this text while the connection was down."
     }
    ]
   }

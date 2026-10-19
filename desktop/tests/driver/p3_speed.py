@@ -4,11 +4,13 @@ Mermaid fences, a 30-row table) on a chat that already has 300 items.
 
 Setup: seed_chat.py seeds the chat through the engine's API until the
 desktop's timeline has 300 items, and the project is marked initialized so no
-start-up question gets in the way. The hidden screen's keyboard map turns
-Ctrl+Alt+F12 into the X server's console switch, which never reaches the
-window, so F12's key is made plain F12 on that screen first (xmodmap; the
-sandbox's own X server only). Then three times (three launches, the same
-script and chunking):
+start-up question gets in the way. The engine is the one in the probe's
+connection.engine.socket (1.9); crush engine ensure finds it when the field
+is missing (a NOTE line says so). The hidden screen's keyboard map gives
+Ctrl+Alt+F12 to the X server's console switch, which never reaches the
+window, so F12's key is made plain F12 on that screen while the app is
+connected (free_ctrl_alt_f12 says why then). Then three times (three
+launches, the same script and chunking):
   1. launch the app with --probe and -s on the chat, press Ctrl+Alt+F12 (the
      probe's frame mark starts the measured stretch, 1.9), send the prompt;
   2. every 500 ms during the stream type one letter into the field
@@ -117,6 +119,21 @@ def load(name, path):
     return module
 
 
+SEED_CHAT = os.path.join(ROOT, "tests", "fakes", "seed_chat.py")
+seed_chat = load("seed_chat", SEED_CHAT)
+
+
+def engine_socket(probe_path):
+    """The engine's socket from the probe's connection.engine (1.9, 6.4); when
+    the field is missing, crush engine ensure answers the same engine."""
+    conn = (read_probe(probe_path, tries=3) or {}).get("connection") or {}
+    sock = (conn.get("engine") or {}).get("socket")
+    if sock:
+        return sock
+    print("NOTE the probe has no connection.engine.socket; crush engine ensure finds the engine", flush=True)
+    return seed_chat.ensure(CRUSH, PROJ)
+
+
 class App:
     """One launch of the desktop app on the chat, read through its probe."""
 
@@ -199,7 +216,10 @@ def free_ctrl_alt_f12():
     """The hidden screen's keyboard map gives Ctrl+Alt+F12 the X server's
     console switch (XF86Switch_VT_12), which the server keeps, so the page
     never sees the probe's mark key. Rewrites F12's key on this screen alone
-    (the sandbox's own X server) as plain F12 at every level."""
+    (the sandbox's own X server) as plain F12 at every level. It must run while
+    the app is connected: tests/run-in-sandbox.sh makes the same change before
+    the app starts, but xvfb-run starts Xvfb without -noreset, so the server
+    resets when xmodmap, its only client, leaves, and that undoes the change."""
     table = subprocess.run(["xmodmap", "-pke"], capture_output=True, text=True).stdout
     codes = [line.split()[1] for line in table.splitlines() if line.startswith("keycode") and "= F12" in line]
     for code in codes:
@@ -228,9 +248,10 @@ def stream_steps_served(since):
             and e.get("script") == "stream2m" and e.get("turn") == 0 and e.get("status") == 200}
 
 
-def seed(args, timeout=600):
-    """Runs seed_chat.py; returns its JSON line, or None (with a FAIL line)."""
-    p = subprocess.run([sys.executable, "-I", os.path.join(ROOT, "tests", "fakes", "seed_chat.py"), "--cwd", PROJ, "--crush", CRUSH, *args],
+def seed(args, sock, timeout=600):
+    """Runs seed_chat.py on the engine at sock; returns its JSON line, or None
+    (with a FAIL line)."""
+    p = subprocess.run([sys.executable, "-I", SEED_CHAT, "--cwd", PROJ, "--socket", sock, *args],
                        capture_output=True, text=True, timeout=timeout)
     if not check(p.returncode == 0, f"seed_chat.py {' '.join(args)}: {p.stdout.strip()} {p.stderr.strip()[-300:]}"):
         return None
@@ -245,12 +266,14 @@ def measure(app, sid, n):
                   and (p.get("chat") or {}).get("id") == sid, 60)
     if not check(ok, f"run {n}: the app opens the seeded chat"):
         return None
+    # Again on every launch: the screen reset when the last run's app left.
+    check(free_ctrl_alt_f12(), f"run {n}: Ctrl+Alt+F12 reaches the window (the hidden screen's console switch key is turned into F12)")
     # A timeline item is not always one engine message, so the chat grows
     # until the timeline itself has the items (the app shows new turns live).
     for _ in range(6):
         if app.wait(lambda p: len((p.get("chat") or {}).get("items") or []) >= ITEMS, 15):
             break
-        seed(["--session", sid, "--turns", "25"])
+        seed(["--session", sid, "--turns", "25"], engine_socket(app.probe_path))
     loaded = app.wait(lambda p: len((p.get("chat") or {}).get("items") or []) >= ITEMS, 15)
     count = len(app.section("chat").get("items") or [])
     if not check(loaded, f"run {n}: the timeline has at least {ITEMS} items ({count})"):
@@ -325,7 +348,6 @@ def main():
     probe_path, out_dir, port = sys.argv[1], sys.argv[2], sys.argv[3]
     if sys.argv[4:] == ["--meter-check"]:
         return meter_check(probe_path, out_dir)
-    seed_chat = load("seed_chat", os.path.join(ROOT, "tests", "fakes", "seed_chat.py"))
     app = App(probe_path, out_dir)
     runs, sid = [], None
     try:
@@ -333,13 +355,13 @@ def main():
             with urlrequest.urlopen(f"http://127.0.0.1:{port}/_fake/control", timeout=5) as resp:
                 scale = json.load(resp).get("time_scale")
             check(scale == 1, f"the fake server streams in real time (time scale {scale})")
-            check(free_ctrl_alt_f12(), "Ctrl+Alt+F12 reaches the window (the hidden screen's console switch key is turned into F12)")
             p = wait_for(probe_path, lambda p: (p.get("connection") or {}).get("state") == "connected", 45)
             connected = check((p.get("connection") or {}).get("state") == "connected", "the first app joined the project's engine")
-            info = seed(["--items", str(ITEMS), "--title", "Speed check"]) if connected else None
+            sock = engine_socket(probe_path) if connected else None
+            info = seed(["--items", str(ITEMS), "--title", "Speed check"], sock) if connected else None
             if info:
                 sid = info["session_id"]
-                api = seed_chat.Engine(seed_chat.ensure(CRUSH, PROJ))
+                api = seed_chat.Engine(sock)
                 api.call("POST", f"/v1/workspaces/{info['workspace_id']}/project/init")
                 needs = api.call("GET", f"/v1/workspaces/{info['workspace_id']}/project/needs-init").get("needs_init")
                 check(needs is False, "the project is marked initialized, so no start-up question shows")

@@ -1,117 +1,145 @@
 <script>
-  // The right column: the project, the three usage meters (context, 5-hour and
-  // week limits), and the visuals the agent drew for this chat: a flow and a table.
-  // Scaffold S3: the data comes from sample.js until piece P3.8 reads it from the
-  // stores (the panel takes no props).
-  import { sample } from "../lib/sample.js";
-  import Icon from "./Icon.svelte";
+  // The right column (SIDE-005, D12): PROJECT and the project name, the usage
+  // meters, then a scrolling body with VISUALS, FILES, LSP, MCP and SKILLS.
+  // The chat title is in the chat head, the folder and branch in its path
+  // line, the model in the model button. Everything comes from the stores
+  // (design 1.5.3); the panel takes no props. App.svelte hides it (D11).
+  //
+  // Focus (SIDE-012): → or l from the timeline, or a click, focuses the body
+  // (lib/plugins/panel.js has the keys); the body's scrollbar shows while it
+  // has focus or for 2 s after a wheel turn. With composer_focus_only a click
+  // leaves focus in the field and the wheel still scrolls the body on hover.
+  import { conn } from "../lib/stores/connection.svelte.js";
+  import { sessions } from "../lib/stores/sessions.svelte.js";
+  import { setFocus, ui } from "../lib/stores/ui.svelte.js";
+  import { ws } from "../lib/stores/workspace.svelte.js";
+  import FilesSection from "./panel/FilesSection.svelte";
+  import LspSection from "./panel/LspSection.svelte";
+  import McpSection from "./panel/McpSection.svelte";
+  import Meters from "./panel/Meters.svelte";
+  import { panel, sectionRows, setPanelBody, toField } from "./panel/panel.svelte.js";
+  import SkillsSection from "./panel/SkillsSection.svelte";
+  import VisualsSection from "./panel/VisualsSection.svelte";
   import Rule from "./Rule.svelte";
 
-  const { project, usage, visuals } = sample;
+  const lists = $derived(sectionRows());
+  const focusOnly = $derived(ws.config?.options?.tui?.composer_focus_only === true);
 
-  // Meters share the width, with a one-pixel line in each gap. The usual three
-  // keep the approved drawing's exact proportions; any other count shares evenly.
-  const usageColumns = $derived(
-    usage.length === 3
-      ? "116fr 32fr 115fr 31fr 114fr"
-      : Array.from({ length: usage.length }, () => "115fr").join(" 31fr "),
-  );
+  let aside = $state();
+  let body = $state();
+  $effect(() => {
+    setPanelBody(body);
+    return () => setPanelBody(null);
+  });
 
-  // Short labels never end on a lone word: the last two words stay together
-  // ("Check / session cookie", not "Check session / cookie").
-  function keepLastWords(label) {
-    return label.split(" ").length > 2 ? label.replace(/ (\S+)$/, "\u00a0$1") : label;
+  // The scrollbar: while focus is in the panel, or 2 s after a wheel turn
+  // (the terminal's sidebar scrollbar, chat_scroll.go:37 scrollbarHideDuration).
+  let wheelTimer = null;
+  function wheel() {
+    panel.wheeled = true;
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => (panel.wheeled = false), 2000);
+  }
+  // Hidden with focus inside (SIDE-002): focus goes to the field. App asks
+  // the composer first; this covers a field that did not take it.
+  $effect(() => () => {
+    clearTimeout(wheelTimer);
+    panel.wheeled = false;
+    panel.focused = false;
+    if (ui.focus === "panel") toField(aside);
+  });
+
+  function focusIn() {
+    panel.focused = true;
+    setFocus("panel");
+  }
+  function focusOut(event) {
+    panel.focused = aside.contains(event.relatedTarget);
+  }
+
+  // A click on the panel's words (not a control) focuses the body. Inside the
+  // body the browser already does, as the body is click-focusable.
+  function click(event) {
+    if (focusOnly || !body || event.button !== 0) return;
+    if (event.target.closest?.("button, a, input, textarea, [tabindex]")) return;
+    if (String(globalThis.getSelection?.() ?? "")) return;
+    body.focus({ preventScroll: true });
+  }
+
+  // composer_focus_only: a press never takes focus from the field; clicks
+  // still work.
+  function down(event) {
+    if (focusOnly) event.preventDefault();
+  }
+
+  // The reveal scroll (4.3): the figure comes into view inside the body.
+  function scale() {
+    return parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
+  }
+  function scrollToFigure(element) {
+    if (!body) return;
+    const margin = 12 * scale();
+    const view = body.getBoundingClientRect();
+    const box = element.getBoundingClientRect();
+    if (box.top < view.top + margin || box.height > view.height - 2 * margin) body.scrollTop += box.top - view.top - margin;
+    else if (box.bottom > view.bottom - margin) body.scrollTop += box.bottom - view.bottom + margin;
   }
 </script>
 
-<aside class="panel" aria-label="Project and visuals">
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+<aside
+  class="panel"
+  aria-label="Project and visuals"
+  data-probe="panel"
+  bind:this={aside}
+  onfocusin={focusIn}
+  onfocusout={focusOut}
+  onclick={click}
+  onmousedown={down}
+>
   <section class="project" aria-labelledby="project-label">
     <h2 class="label" id="project-label">Project</h2>
-    <p class="project-name">{project}</p>
+    <p class="project-name">{conn.project.name}</p>
   </section>
 
   <Rule caret={26} class="caret-rule" />
 
-  <section class="usage" aria-label="Usage" style:grid-template-columns={usageColumns}>
-    {#each usage as meter, i (meter.id)}
-      {#if i > 0}<span class="separator" aria-hidden="true"></span>{/if}
-      <div class="cell">
-        <h3 class="label">{meter.label}</h3>
-        <p class="value">
-          <span>{meter.percent}%</span>
-          {#if meter.warn}
-            <Icon name="warning" />
-            <span class="visually-hidden">near the limit</span>
-          {/if}
-        </p>
-        <div
-          class="meter"
-          role="meter"
-          aria-label="{meter.label} used"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          aria-valuenow={meter.percent}
-        >
-          <span class="fill" style:width="{meter.percent}%"></span>
-        </div>
-      </div>
-    {/each}
-  </section>
+  <Meters />
 
   <Rule marks="both" class="under-usage" />
 
-  <section class="visuals" aria-labelledby="visuals-label">
-    <h2 class="label" id="visuals-label">Visuals</h2>
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div
+    class="body"
+    class:show-bar={panel.focused || panel.wheeled}
+    tabindex="-1"
+    role="region"
+    aria-label="Visuals and project status"
+    bind:this={body}
+    onwheel={wheel}
+  >
+    <VisualsSection sessionId={sessions.currentId} scrollTo={scrollToFigure} />
 
-    <figure class="flow-figure">
-      <figcaption class="heading">{visuals.flow.title}</figcaption>
-      <ol class="flow">
-        {#each visuals.flow.steps as step, i (i)}
-          <li>
-            {#if i > 0}
-              <span class="arrow" aria-hidden="true"><span class="shaft"></span><Icon name="arrowhead" /></span>
-            {/if}
-            <span class="node">{keepLastWords(step)}</span>
-          </li>
-        {/each}
-      </ol>
-    </figure>
+    <Rule caret={26} class="section-rule" />
+    <div class="list"><FilesSection list={lists.files} /></div>
 
-    <Rule caret={26} class="caret-rule after-flow" />
+    <Rule caret={26} class="section-rule" />
+    <div class="list"><LspSection list={lists.lsp} /></div>
 
-    <figure class="table-figure">
-      <figcaption class="heading">{visuals.table.title}</figcaption>
-      <table>
-        <colgroup>
-          <col class="first" />
-          <col class="second" />
-          <col />
-        </colgroup>
-        <thead>
-          <tr>
-            {#each visuals.table.columns as column (column)}
-              <th scope="col">{column}</th>
-            {/each}
-          </tr>
-        </thead>
-        <tbody>
-          {#each visuals.table.rows as row, r (r)}
-            <tr>
-              {#each row as cell, c (c)}
-                <td>{cell}</td>
-              {/each}
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </figure>
-  </section>
+    <Rule caret={26} class="section-rule" />
+    <div class="list"><McpSection list={lists.mcp} /></div>
+
+    <Rule caret={26} class="section-rule" />
+    <div class="list"><SkillsSection list={lists.skills} /></div>
+  </div>
 </aside>
 
 <style>
   /* Vertical positions follow the approved picture at 12/12 (column top = 0). */
   .panel {
     position: relative;
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
@@ -124,7 +152,11 @@
     text-transform: uppercase;
   }
 
+  .project {
+    flex: none;
+  }
   .project-name {
+    min-height: calc(38 * var(--px));
     font: var(--t-project);
     letter-spacing: -0.02em;
     white-space: nowrap;
@@ -136,157 +168,43 @@
     margin: calc(19 * var(--px)) 0 0 calc(-1 * var(--px));
   }
 
-  .usage {
-    display: grid;
-    height: calc(110 * var(--px));
-    margin-top: calc(21 * var(--px));
-  }
-  .cell {
-    position: relative;
-    padding-top: calc(7 * var(--px));
-  }
-  .separator {
-    width: 1px;
-    margin-left: calc(15 * var(--px));
-  }
-  .separator:nth-of-type(2) {
-    margin-left: calc(14 * var(--px));
-  }
-  .separator {
-    background: var(--rule-frame);
-  }
-  .value {
-    display: flex;
-    align-items: flex-start;
-    margin-top: calc(10 * var(--px));
-    font: var(--t-figure);
-  }
-  .value :global(.icon) {
-    margin: calc(2 * var(--px)) 0 0 calc(16 * var(--px));
-  }
-  .meter {
-    position: relative;
-    box-sizing: border-box;
-    height: calc(13 * var(--px));
-    margin-top: calc(9 * var(--px));
-    border: 1px solid var(--meter-edge);
-    background: var(--meter-track);
-  }
-  .fill {
-    position: absolute;
-    left: -1px;
-    top: -1px;
-    bottom: -1px;
-    background: var(--meter);
-  }
-
   .panel :global(.rule.under-usage) {
     margin: calc(22 * var(--px)) calc(-19 * var(--px)) 0 calc(-26 * var(--px));
   }
 
-  .visuals > .label {
-    margin-top: calc(22 * var(--px));
-  }
-  .heading {
-    font: var(--t-heading);
-  }
-  .flow-figure,
-  .table-figure {
-    margin: 0;
-  }
-  .flow-figure .heading {
-    margin-top: calc(29 * var(--px));
-  }
-
-  /* The flow is drawn from data: boxes in ink, arrows that take the space between. */
-  .flow {
-    display: flex;
-    align-items: stretch;
-    height: calc(85 * var(--px));
-    margin-top: calc(16 * var(--px));
-  }
-  .flow li {
-    display: contents;
-  }
-  .node {
-    flex: none;
-    box-sizing: border-box;
-    min-width: calc(98 * var(--px));
-    max-width: calc(142 * var(--px));
-    padding: calc(3 * var(--px)) calc(7 * var(--px)) 0;
-    border: calc(2 * var(--px)) solid var(--figure);
-    display: grid;
-    place-items: center;
-    text-align: center;
-    text-wrap: balance;
-    font: var(--t-body-small);
-    line-height: calc(24 * var(--px));
-  }
-  .arrow {
-    flex: 1 1 0;
-    min-width: calc(28 * var(--px));
-    display: flex;
-    align-items: center;
-    padding-right: calc(4 * var(--px));
-    color: var(--figure);
-  }
-  .shaft {
+  /* The body runs to the panel's edges, so its scrollbar sits in the right
+     gutter, outside the rows, and the reveal mark has room in the left one. */
+  .body {
     flex: 1;
-    height: max(1px, calc(1.6 * var(--px)));
-    background: currentColor;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    margin: 0 calc(-19 * var(--px)) 0 calc(-26 * var(--px));
+    padding: calc(22 * var(--px)) calc(19 * var(--px)) calc(26 * var(--px)) calc(26 * var(--px));
+    scrollbar-width: none;
+  }
+  .body::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  .body.show-bar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule-control) transparent;
+  }
+  .body.show-bar::-webkit-scrollbar {
+    width: calc(6 * var(--px));
+  }
+  .body.show-bar::-webkit-scrollbar-thumb {
+    background: var(--rule-control);
+  }
+  .body:focus-visible {
+    outline-offset: -1px;
   }
 
-  .panel :global(.rule.after-flow) {
-    margin-top: calc(37 * var(--px));
+  .body :global(.rule.section-rule) {
+    margin: calc(30 * var(--px)) 0 0 calc(-1 * var(--px));
   }
-  .table-figure .heading {
+  .list {
     margin-top: calc(19 * var(--px));
-  }
-
-  /* Collapsed borders: a cell's border beats the table's, so the outer edge is set on the edge cells. */
-  table {
-    width: 100%;
-    margin-top: calc(17 * var(--px));
-    table-layout: fixed;
-    border-collapse: collapse;
-  }
-  col.first {
-    width: calc(141 * var(--px));
-  }
-  col.second {
-    width: calc(136 * var(--px));
-  }
-  th,
-  td {
-    text-align: left;
-    padding-left: calc(17 * var(--px));
-    border: 1px solid var(--rule-table-inner);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  th {
-    padding-top: calc(15 * var(--px));
-    padding-bottom: calc(10 * var(--px));
-    font: var(--t-label);
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-  }
-  td {
-    padding-top: calc(12 * var(--px));
-    padding-bottom: calc(9 * var(--px));
-    font: var(--t-body-small);
-  }
-  thead th {
-    border-top-color: var(--rule-table);
-  }
-  tr > :first-child {
-    border-left-color: var(--rule-table);
-  }
-  tr > :last-child {
-    border-right-color: var(--rule-table);
-  }
-  tbody tr:last-child td {
-    border-bottom-color: var(--rule-table);
   }
 </style>

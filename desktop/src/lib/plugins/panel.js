@@ -4,6 +4,7 @@
 // overlay (SIDE-003), → or l from the timeline into the panel and the
 // panel's own keys (SIDE-012); and the probe's panel and notice sections
 // (1.9). Loaded by lib/plugins.js.
+import { alignRows } from "../../components/panel/align.js";
 import CustomizeForm from "../../components/panel/CustomizeForm.svelte";
 import { CUSTOMIZE_COLLAPSED, CUSTOMIZE_HELP } from "../../components/panel/customize.js";
 import { helpGroups, helpLines } from "../../components/panel/help.js";
@@ -195,6 +196,8 @@ probeSection(
       help: rect(document.querySelector("[data-help-sheet]")),
       details: rect(document.querySelector("[data-details-overlay]")),
       viewer: rect(document.querySelector("[data-image-viewer] img")),
+      window: { w: window.innerWidth, h: window.innerHeight, scale: scale() },
+      align: alignRows(),
     };
   },
 );

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Branch links, closed chats and trees (desktop-design 3.3, 1.5.3) on the
@@ -252,4 +253,34 @@ it("the tree store keeps its own revision: another app's tree_changed only marks
   expect([T.tree.bySession.s1.stale, T.expectedRevision("s1")]).toEqual([true, 5]);
   await T.readTree("s1");
   expect(T.tree.bySession.s1.stale).toBe(false);
+});
+
+// Last in the file: the branch plugin's page listeners stay on the document.
+it("a branch link over a web link's words wins: a click opens only the branch, and the hover title is the branch's", async () => {
+  await withList(chat("s1"), chat("b1", { title: "Login guide branch" }));
+  openable("b1");
+  await import("../plugins/branch.js");
+  const { createMarkdown } = await import("../render/markdown.js");
+  const { guardLinks } = await import("../render/links.js");
+  const text = "Read [the login guide](https://example.com/guide) first.";
+  const start = text.indexOf("login");
+  const end = start + "login guide".length;
+  const root = document.createElement("div");
+  root.className = "md";
+  document.body.replaceChildren(root);
+  createMarkdown(root, { messageId: "m1", sessionId: "s1" }).update(text, { finished: true, decorations: [{ kind: "branch-link", start, end, data: link("l1", "b1", "s1", "m1", { start, end }) }] });
+  const opened = [];
+  guardLinks(root, (href) => opened.push(href), { trust: () => true }); // as a real click
+  const anchor = root.querySelector("a");
+  const span = anchor.querySelector(".md-deco-branch-link");
+  expect(span.textContent).toBe("login guide");
+  const click = (el) => el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+  click(anchor); // the web link's own words still open its address
+  expect(opened).toEqual(["https://example.com/guide"]);
+  span.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  expect([span.closest("[title]") === span, span.title]).toEqual([true, "Open Login guide branch"]);
+  expect(click(span)).toBe(false); // nothing navigates
+  await settle();
+  expect(opened).toEqual(["https://example.com/guide"]);
+  expect(S.sessions.currentId).toBe("b1");
 });

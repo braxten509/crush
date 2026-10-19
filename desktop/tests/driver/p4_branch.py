@@ -22,6 +22,9 @@ over its socket. Each step is named after its row and saves <ROW>.png.
   B3     words of your own second message: the branch ends with that message;
          the next send's AI request (fake AI log) holds it unanswered before
          the new prompt (one message more than the source's request for it)
+  B3-link  back in S, those words of your own message are a link to the
+         branch (the user box draws it), titled "Open <branch>"; a click on
+         it opens the branch
   B4     words of the tool turn's first reply: the branch's messages are the
          source's path through the cut plus the tool result that answers it
   B5     a selection in the tool's body: Branch from here is disabled with
@@ -40,6 +43,9 @@ over its socket. Each step is named after its row and saves <ROW>.png.
   B14    the terminal app (hidden tmux) lists the branch by its title
   B13    S deleted through the engine API: its branches stay, at the top
          level; B's branch stays under B; B's head no longer says BRANCHED FROM
+  B9-rows  at 8/12 and at 12/12: the choice moves between two top-level chats
+         without branches; no row of the list moves or changes height by more
+         than 0.5 px, and the open chat's row is as tall as a plain one
 
 Usage: tests/check.sh p4_branch.py [--stop-after ROW]
 The other p4 drivers load this file for its helpers (App, Engine, the oracle
@@ -695,6 +701,24 @@ def main():
         if stop_after("B3"):
             return
 
+        with step("B3-link", out_dir):
+            # The link over your own words: the user box draws it, titles it and opens it.
+            B3 = s.get("B3")
+            if not check(bool(B3), "B3's branch exists"):
+                raise RuntimeError("B3-link needs B3's branch")
+            check(app.open_chat(S), "back in the source chat")
+            key_u2 = app.item_key(u2, "user") or u2
+            app.bring_into_view(key_u2, ["turn", "medium"])
+            shown = [l for l in app.shown_links() if l.get("session_id") == B3]
+            if check(len(shown) == 1 and shown[0].get("mid") == u2 and shown[0].get("item") == key_u2 and flat(shown[0].get("text")) == "turn medium",
+                     f"your own message's words are a link to B3 ({[(l.get('mid') == u2, l.get('item'), l.get('text')) for l in shown]})"):
+                title = hover_title(app, shown[0])
+                check(title == f"Open {branch_title('turn medium')}", f"its hover title says Open <branch> ({title!r})")
+                r = shown[0]["rects"][0]
+                app.click(r["x"] + r["w"] / 2, r["y"] + r["h"] / 2)
+                ok, _, _ = poll(app.chat_id, lambda c: c == B3, 5)
+                check(ok, f"clicking it opens B3 ({app.chat_id()})")
+
         with step("B4", out_dir):
             check(app.open_chat(S), "in the source chat")
             key_a5 = app.item_key(a5, "reply") or a5
@@ -907,6 +931,46 @@ def main():
             check(depth.get(D) == 1, f"B's own branch stays under B ({depth.get(D)})")
             ok, head, _ = poll(lambda: (app.heavy().get("branch") or {}).get("head") or {}, lambda h: not flat(h.get("text")).upper().startswith("BRANCHED FROM"), 5)
             check(ok, f"B's head now shows the folder line ({head.get('text')!r})")
+        if stop_after("B13"):
+            return
+
+        with step("B9-rows", out_dir):
+            # The open chat's band keeps a plain row's height at every zoom, so
+            # moving the choice between two chats without branches (nothing
+            # opens or closes in the list) moves no row and changes no height.
+            depth = {r.get("id"): r.get("depth") for r in app.rows()}
+            plain = [r["id"] for r in (app.heavy().get("branch") or {}).get("rows") or [] if depth.get(r["id"]) == 0 and not r.get("chevron")]
+            if not check(len(plain) >= 2, f"two top-level chats without branches are listed ({len(plain)})"):
+                raise RuntimeError("B9-rows needs two plain chats")
+            first, second = plain[0], plain[1]
+
+            def zoom_to(twelfths):
+                app.focus()
+                key("ctrl+0")
+                for _ in range(twelfths - 8):
+                    key("ctrl+equal")
+                ok, _, _ = poll(lambda: app.report().get("zoom"), lambda z: z is not None and abs(z - twelfths / 12) < 1e-3, 5)
+                time.sleep(0.5)
+                return ok
+
+            def places():
+                app.park()
+                return {r["id"]: r["row"] for r in (app.heavy().get("branch") or {}).get("rows") or [] if r.get("row")}
+
+            for twelfths in (8, 12):
+                check(zoom_to(twelfths), f"the zoom is {twelfths}/12")
+                check(app.open_chat(first), "the first chat is chosen")
+                before = places()
+                check(app.open_chat(second), "the choice moves to the second")
+                after = places()
+                ids = [i for i in before if i in after]
+                moved = {i: round(max(abs(after[i]["y"] - before[i]["y"]), abs(after[i]["h"] - before[i]["h"])), 3) for i in ids}
+                below = [i for i in ids[ids.index(first) + 1:]] if first in ids else []
+                tall = (round(before[first]["h"] - before[second]["h"], 3), round(after[second]["h"] - after[first]["h"], 3))
+                check(len(ids) >= 3 and max(moved.values()) <= 0.5,
+                      f"{twelfths}/12: no row moves or changes height ({len(ids)} rows; rows below the first moved {[moved[i] for i in below]} px)")
+                check(all(abs(d) <= 0.5 for d in tall), f"{twelfths}/12: the open chat's row is as tall as a plain one (selected minus plain: {tall} px)")
+            check(zoom_to(8), "the zoom is back at 8/12")
     finally:
         tmux("kill-server")
 

@@ -169,22 +169,27 @@
     color: var(--ink);
   }
 
-  /* The open chat: a band between faint lines, with a vermilion edge. */
+  /* The open chat: a band between faint lines, with a vermilion edge. The
+     lines are drawn inside the row's own box, so the open chat keeps a plain
+     row's height and nothing on it or below it moves when the choice moves;
+     the edge is drawn after them, over their ends. */
   .selected .row {
     background: var(--band);
-    border-top: 1px solid var(--rule-faint);
-    border-bottom: 1px solid var(--rule-faint);
-    height: calc(77 * var(--px) + 2px);
-  }
-  .selected .line2 {
-    margin-top: calc(3 * var(--px));
   }
   .selected .row::before {
     content: "";
     position: absolute;
+    inset: 0;
+    border-top: 1px solid var(--rule-faint);
+    border-bottom: 1px solid var(--rule-faint);
+    pointer-events: none;
+  }
+  .selected .row::after {
+    content: "";
+    position: absolute;
     left: calc(3 * var(--px));
-    top: -1px;
-    bottom: -1px;
+    top: 0;
+    bottom: 0;
     width: calc(4 * var(--px));
     background: var(--vermilion);
   }
@@ -236,8 +241,8 @@
 
   /* The close slot: a 28 px square hit area centred on the chevron's column
      (right 19 + 13 / 2 = 25.5 from the row's right edge) and on the title's
-     first line (26 from the row's top on chat and branch rows alike; the
-     selected row's top line adds 1 real px). */
+     first line (26 from the row's top on chat and branch rows alike, selected
+     or not). */
   .close {
     position: absolute;
     top: calc(12 * var(--px));
@@ -249,9 +254,6 @@
     padding: 0;
     color: var(--slate);
     visibility: hidden;
-  }
-  .selected .close {
-    top: calc(12 * var(--px) + 1px);
   }
   .chat:hover .close,
   .chat:focus-within .close,

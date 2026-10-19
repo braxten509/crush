@@ -122,13 +122,30 @@ export function linkTitle(sid) {
   return `${isClosed(sid) ? "Reopen" : "Open"} ${branchName(sid)}`;
 }
 
-// The title a link shows on hover (4.8), set as the pointer reaches it.
+// A branch link over a web link's words wins: its click is taken on the way
+// down, before the web link's guard (render/links.js) could open the address
+// and before the view's own routing, so only the branch opens. A click that
+// ends a selection is left alone, as on every link.
+function onBranchLinkClick(event) {
+  const span = event.target?.closest?.(".md-deco-branch-link");
+  if (!span?.closest("a") || event.button !== 0) return;
+  if (span.ownerDocument.getSelection?.()?.isCollapsed === false) return;
+  const sid = decorationOf(span)?.data?.session_id;
+  if (!sid) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openBranch(sid).catch((error) => console.error("opening a branch failed", error));
+}
+
+// The title a link shows on hover (4.8), set as the pointer reaches it; the
+// span's own title is the nearest, so a web link under it never shows its own.
 if (typeof document !== "undefined") {
   document.addEventListener("mouseover", (event) => {
     const span = event.target?.closest?.(".md-deco-branch-link");
     const sid = span ? decorationOf(span)?.data?.session_id : "";
     if (sid) span.title = linkTitle(sid);
   });
+  document.addEventListener("click", onBranchLinkClick, true);
 }
 
 // -- Closing (4.8): the action phase 5's palette lists; its key is the 5-6 design's --

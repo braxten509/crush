@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/apigen"
 	"github.com/charmbracelet/crush/internal/backend"
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/rpc"
 )
@@ -56,6 +57,50 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Tags("system").
 			Fails(400, 404, 500).
 			Build(),
+
+		apigen.For(rpc.StartAuthFlow).
+			Summary("Start a sign-in").
+			Description("Starts `crush login`'s flow for platform (hyper, copilot, openai or grok) and "+
+				"returns the URL to open and the code to show; code_entry is set when a code pasted "+
+				"from the provider's page can finish it. The flow then reports through auth_flow "+
+				"events (waiting, saving, done, failed); the engine saves the token as `crush login` "+
+				"does and fetches the account's models before done. Answers only on the engine's "+
+				"unix socket; nothing of it is logged.").
+			Tags("auth").
+			PathParam("id", "Workspace ID").
+			Fails(400, 403, 404, 500).
+			Handle(c.localOnly(serve(c, rpc.StartAuthFlow, c.startAuthFlow))),
+
+		apigen.For(rpc.SendAuthCode).
+			Summary("Finish a sign-in with a code").
+			Description("Sends the code pasted from the provider's page (Grok's browser flow). The "+
+				"outcome arrives as auth_flow; a wrong code fails the flow. Answers only on the "+
+				"engine's unix socket.").
+			Tags("auth").
+			PathParam("id", "Workspace ID").
+			PathParam("flow_id", "Sign-in flow ID").
+			Fails(400, 403, 404).
+			Handle(c.localOnly(serve(c, rpc.SendAuthCode, c.sendAuthCode))),
+
+		apigen.For(rpc.CancelAuthFlow).
+			Summary("Cancel a sign-in").
+			Description("Stops a running sign-in; no event follows. Answers only on the engine's "+
+				"unix socket.").
+			Tags("auth").
+			PathParam("id", "Workspace ID").
+			PathParam("flow_id", "Sign-in flow ID").
+			Fails(403, 404).
+			Handle(c.localOnly(serve(c, rpc.CancelAuthFlow, c.cancelAuthFlow))),
+
+		apigen.For(rpc.VerifyKey).
+			Summary("Check an API key").
+			Description("Tests an API key against the provider as the terminal's API key sheet "+
+				"does, without saving it: ok, or the reason in error. Answers only on the engine's "+
+				"unix socket; the key is never logged.").
+			Tags("auth").
+			PathParam("id", "Workspace ID").
+			Fails(400, 403, 404).
+			Handle(c.localOnly(c.handleVerifyKey)),
 
 		route(c, rpc.ListThemes, c.listThemes).
 			Summary("List themes").
@@ -128,7 +173,14 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 
 // wrapDesktopEvent wraps the G56 fan-in events for SSE. It reports false
 // for an event that is not G56's.
-func wrapDesktopEvent(any) (*pubsub.Payload, bool) { return nil, false }
+func wrapDesktopEvent(ev any) (*pubsub.Payload, bool) {
+	switch e := ev.(type) {
+	case pubsub.Event[proto.AuthFlowEvent]:
+		return envelope(pubsub.PayloadTypeAuthFlow, e), true
+	default:
+		return nil, false
+	}
+}
 
 // desktopErrors maps the G56 errors to their statuses and codes.
 func desktopErrors() []apiError {
@@ -141,5 +193,9 @@ func desktopErrors() []apiError {
 		{Match: is(backend.ErrThemeInvalid), Status: http.StatusBadRequest, Code: "bad_request"},
 		{Match: is(backend.ErrThemeNotFound), Status: http.StatusNotFound, Code: "theme_not_found"},
 		{Match: is(backend.ErrThemePalette), Status: http.StatusUnprocessableEntity, Code: "invalid_palette"},
+		{Match: is(backend.ErrAuthFlowNotFound), Status: http.StatusNotFound, Code: "auth_flow_not_found"},
+		{Match: is(backend.ErrAuthPlatform), Status: http.StatusBadRequest, Code: "bad_request"},
+		{Match: is(backend.ErrAuthNoCode), Status: http.StatusBadRequest, Code: "bad_request"},
+		{Match: is(backend.ErrAuthProvider), Status: http.StatusNotFound, Code: "provider_not_found"},
 	}
 }

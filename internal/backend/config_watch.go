@@ -27,6 +27,8 @@ type desktopEngine struct {
 	watchOnce sync.Once
 	// cpu is what the engine last applied of the agent CPU setting (G-16).
 	cpu cpuState
+	// auth holds the running sign-in flows (G-5).
+	auth authFlows
 }
 
 // desktopEngines maps each Backend to its desktopEngine.

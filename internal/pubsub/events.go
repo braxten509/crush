@@ -44,6 +44,10 @@ const (
 	PayloadTypeSecureForm          PayloadType = "secure_form"
 	PayloadTypeSecureFormClosed    PayloadType = "secure_form_closed"
 	PayloadTypePromptPending       PayloadType = "prompt_pending"
+
+	// PayloadTypeAuthFlow reports a sign-in flow's state (desktop design
+	// 5-6, 2.4; G-5).
+	PayloadTypeAuthFlow PayloadType = "auth_flow"
 )
 
 // Payload wraps a discriminated JSON payload with a type tag.

@@ -545,3 +545,4 @@ Kept current during the build. Percent = share of the phase table in section 4.
 - 2026-10-19: second review t88 (Codex Sol 6.1 high) of wave 2: 14 of 16 earlier findings fixed, 2 partly; new 2 high and 4 medium. All fixed by the coordinator (DEBUGGING.md). Wave 3 continues.
 - 2026-10-19: third review t89 (Codex Sol 6.1 high) of wave 2 at the owner's request: 5 findings, all fixed by the coordinator (DEBUGGING.md).
 - 2026-10-19: wave 3 (EXT, SET, THM, VIEW, SHARE, SYS) written by the coordinator at Opus high with no tests and no ultrabuild, as the owner asked (DEBUGGING.md lists where it differs from the design). Next: Sol 6.1 high review, fixes, commit, install on this PC.
+- 2026-10-19: review t90 (Codex Sol 6.1 high) of wave 3: 3 high, 13 medium, all fixed by the coordinator (DEBUGGING.md). Next: commit, install on this PC.

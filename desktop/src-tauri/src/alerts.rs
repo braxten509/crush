@@ -133,6 +133,20 @@ pub fn window_state(app: &AppHandle, label: &str, state: &str, project_dir: &str
     crate::taskbar::apply(app, Some(badge), working.then_some("indeterminate"), attention)
 }
 
+/// A window is gone: it leaves the table and the taskbar follows.
+pub fn window_gone(app: &AppHandle, label: &str) {
+    let alerts = app.state::<Alerts>();
+    let (badge, working) = {
+        let mut windows = alerts.windows.lock().unwrap();
+        if windows.remove(label).is_none() {
+            return;
+        }
+        let badge = windows.values().filter(|w| matches!(w.state.as_str(), "blocked" | "done" | "error")).count() as u32;
+        (badge, windows.values().any(|w| w.state == "working"))
+    };
+    let _ = crate::taskbar::apply(app, Some(badge), working.then_some("indeterminate"), false);
+}
+
 /// `alert_handler`: the window that shows the chat, else the project's lead window.
 pub fn handler(app: &AppHandle, project_dir: &str, session_id: &str) -> AppResult<String> {
     {

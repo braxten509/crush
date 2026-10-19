@@ -216,8 +216,9 @@ export const api = {
   cancelSecureForm: (form_id) => post(`secure-forms/${seg(form_id)}/cancel`),
 
   installedSkills: () => get("skills/installed"),
-  manageSkill: (request) => post("skills/manage", request),
-  searchSkills: (q) => get("skills/search", { q }),
+  // callId: abort(callId) stops the work (the engine uses the request's context).
+  manageSkill: (request, callId) => post("skills/manage", request, undefined, callId),
+  searchSkills: (q, callId) => commands.api("GET", "skills/search", { q }, undefined, callId),
   mcpDisabled: () => get("mcp/disabled"),
   setMcpDisabled: ({ name, disabled }) => post("mcp/disabled", { name, disabled }),
   mcpEnabled: () => get("mcp/enabled"),

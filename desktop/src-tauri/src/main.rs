@@ -107,6 +107,10 @@ fn main() {
                 api.prevent_close();
                 windows::close_requested(window.app_handle(), window.label());
             }
+            if let tauri::WindowEvent::Destroyed = event {
+                alerts::window_gone(window.app_handle(), window.label());
+                logs::stop_window(window.app_handle(), window.label());
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,

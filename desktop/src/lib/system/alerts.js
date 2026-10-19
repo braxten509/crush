@@ -86,6 +86,24 @@ export function startAlerts() {
     const n = request?.questions?.length ?? 0;
     raise({ sessionId: request?.session_id, sound: "message-new-instant", title: "Crush is waiting...", body: `${n} questions need your input` });
   });
+  // The engine sends permission asks and questions only to windows showing
+  // that chat (internal/server/events.go:144-183), so a chat no window shows
+  // is alerted from its prompt_pending mark, which every window gets; the
+  // lead window handles it (LIST-052).
+  const pendingNow = new Set();
+  onEvent("prompt_pending", (_kind, mark) => {
+    const key = `${mark?.session_id}|${mark?.kind}`;
+    if (!mark?.pending) {
+      pendingNow.delete(key);
+      return;
+    }
+    if (pendingNow.has(key)) return;
+    pendingNow.add(key);
+    if (!mark.session_id || mark.session_id === sessions.currentId) return; // the prompt event itself alerts
+    const chat = sessions.byId[mark.session_id]?.title || "New session";
+    if (mark.kind === "permission") raise({ sessionId: mark.session_id, title: "Crush is waiting...", body: `Permission required in "${chat}"` });
+    else if (mark.kind === "question") raise({ sessionId: mark.session_id, sound: "message-new-instant", title: "Crush is waiting...", body: `Questions in "${chat}" need your input` });
+  });
   onEvent("secure_form", (_kind, form) => {
     raise({ sessionId: form?.session_id, sound: "message-new-instant" });
   });

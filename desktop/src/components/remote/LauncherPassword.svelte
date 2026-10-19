@@ -56,7 +56,10 @@
 
   function onKey(event, combo) {
     if (combo === "Enter") {
-      save();
+      // A focused button presses itself; elsewhere Enter presses the chosen one.
+      if (event.target?.tagName === "BUTTON") return false;
+      if (selected === "cancel") closeDialog(ID);
+      else save();
       return true;
     }
     return false;

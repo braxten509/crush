@@ -8,8 +8,9 @@ import { setBadge } from "../stores/composer.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { share } from "./store.svelte.js";
 
-let startSeq = 0;
-let cancelled = false;
+let startSeq = 0; // bumped by every start, Cancel and stop: older answers are dropped
+let latestStart = 0; // the newest start
+let cancelledStart = 0; // the start that Cancel dropped
 
 export const isOn = () => share.state === "on";
 
@@ -28,7 +29,7 @@ function turnedOn(status) {
 // One start. `launchId` once per launch; `quiet` opens no sheet.
 export async function startShare({ launchId = null, quiet = false } = {}) {
   const mine = ++startSeq;
-  cancelled = false;
+  latestStart = mine;
   if (share.state !== "on") share.state = "starting";
   share.quiet = quiet;
   share.error = "";
@@ -44,13 +45,14 @@ export async function startShare({ launchId = null, quiet = false } = {}) {
     else share.status = { state: "off", error: text };
     return;
   }
-  if (mine !== startSeq) return;
-  if (cancelled) {
-    // A share that came up after Cancel is stopped (remote.go:255-258).
+  // A share that came up after Cancel is stopped (remote.go:255-258),
+  // unless a newer start wants it.
+  if (mine === cancelledStart && latestStart === mine) {
     if (status?.state === "on") api.stopRemote().catch(() => {});
     if (share.state !== "on") share.state = "off";
     return;
   }
+  if (mine !== startSeq) return;
   if (status?.state === "on") {
     const wasOn = share.state === "on";
     turnedOn(status);
@@ -87,7 +89,7 @@ export function openRemote() {
 
 // Cancel in the setup sheet: drop a start in flight.
 export function cancelStart() {
-  cancelled = true;
+  cancelledStart = latestStart;
   startSeq += 1;
   if (share.state !== "on") share.state = "off";
 }

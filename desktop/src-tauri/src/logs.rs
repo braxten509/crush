@@ -17,10 +17,10 @@ use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
 
-/// The running follows, by id (managed by main.rs).
+/// The running follows, by id, with their window's label (managed by main.rs).
 #[derive(Default)]
 pub struct Follows {
-    stops: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    stops: Mutex<HashMap<String, (String, Arc<AtomicBool>)>>,
 }
 
 #[derive(Serialize)]
@@ -29,6 +29,9 @@ pub struct Tail {
     pub truncated: bool,
     pub missing: bool,
     pub path: String,
+    /// The byte offset just after the last whole line read; a follow starts
+    /// there, so no line written in between is lost.
+    pub end: u64,
 }
 
 #[derive(Serialize)]
@@ -50,7 +53,7 @@ pub fn tail(app: &AppHandle, label: &str, lines: u32) -> AppResult<Tail> {
     let shown = path.to_string_lossy().into_owned();
     let mut file = match File::open(&path) {
         Ok(file) => file,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Tail { lines: vec![], truncated: false, missing: true, path: shown }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Tail { lines: vec![], truncated: false, missing: true, path: shown, end: 0 }),
         Err(e) => return Err(AppError::new("read_failed", format!("{shown}: {e}"))),
     };
     let size = file.metadata().map(|m| m.len()).unwrap_or(0);
@@ -71,6 +74,11 @@ pub fn tail(app: &AppHandle, label: &str, lines: u32) -> AppResult<Tail> {
             break;
         }
     }
+    // A last line still being written is left for the follow.
+    let unfinished = buf.iter().rev().take_while(|&&b| b != b'\n').count();
+    let unfinished = if unfinished == buf.len() && start > 0 { 0 } else { unfinished };
+    buf.truncate(buf.len() - unfinished);
+    let end = size - unfinished as u64;
     let text = String::from_utf8_lossy(&buf);
     let mut all: Vec<String> = text.lines().filter(|l| !l.trim().is_empty()).map(String::from).collect();
     if start > 0 && !all.is_empty() {
@@ -81,20 +89,30 @@ pub fn tail(app: &AppHandle, label: &str, lines: u32) -> AppResult<Tail> {
         all.drain(..all.len() - want);
     }
     let truncated = truncated && all.len() >= want;
-    Ok(Tail { lines: all, truncated, missing: false, path: shown })
+    Ok(Tail { lines: all, truncated, missing: false, path: shown, end })
 }
 
 /// `logs_follow`: new lines as the file grows.
-pub fn follow(app: &AppHandle, label: &str, on_lines: Channel<serde_json::Value>) -> AppResult<Followed> {
+/// `from` is the tail's `end`; None starts at the file's end. A window has
+/// one follow: a new one (after a reload) stops the old one, and closing the
+/// window stops it too (`stop_window`).
+pub fn follow(app: &AppHandle, label: &str, from: Option<u64>, on_lines: Channel<serde_json::Value>) -> AppResult<Followed> {
     let path = log_path(app, label)?;
+    stop_window(app, label);
     let id = uuid::Uuid::new_v4().to_string();
     let stop = Arc::new(AtomicBool::new(false));
-    app.state::<Follows>().stops.lock().unwrap().insert(id.clone(), stop.clone());
+    app.state::<Follows>().stops.lock().unwrap().insert(id.clone(), (label.to_string(), stop.clone()));
+    let handle = app.clone();
+    let owner = label.to_string();
+    let own_id = id.clone();
     std::thread::spawn(move || {
-        let mut offset = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let mut offset = from.unwrap_or_else(|| std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0));
         let mut partial = String::new();
         while !stop.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(250));
+            if handle.get_webview_window(&owner).is_none() {
+                break;
+            }
             let Ok(meta) = std::fs::metadata(&path) else { continue };
             if meta.len() < offset {
                 offset = 0; // the log was replaced
@@ -125,13 +143,25 @@ pub fn follow(app: &AppHandle, label: &str, on_lines: Channel<serde_json::Value>
                 break;
             }
         }
+        handle.state::<Follows>().stops.lock().unwrap().remove(&own_id);
     });
     Ok(Followed { follow_id: id })
 }
 
 pub fn unfollow(app: &AppHandle, follow_id: &str) -> AppResult<()> {
-    if let Some(stop) = app.state::<Follows>().stops.lock().unwrap().remove(follow_id) {
+    if let Some((_, stop)) = app.state::<Follows>().stops.lock().unwrap().remove(follow_id) {
         stop.store(true, Ordering::SeqCst);
     }
     Ok(())
+}
+
+/// Stops every follow of a window (a new follow, or the window is gone).
+pub fn stop_window(app: &AppHandle, label: &str) {
+    app.state::<Follows>().stops.lock().unwrap().retain(|_, (owner, stop)| {
+        let mine = owner == label;
+        if mine {
+            stop.store(true, Ordering::SeqCst);
+        }
+        !mine
+    });
 }

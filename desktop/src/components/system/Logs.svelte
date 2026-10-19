@@ -98,7 +98,7 @@
         await tick();
         scroll("end");
         if (missing) return;
-        const followed = await logsFollow(channel);
+        const followed = await logsFollow(tail.end ?? null, channel);
         if (gone) logsUnfollow(followed.followId).catch(() => {});
         else followId = followed.followId;
       } catch (e) {

@@ -17,6 +17,9 @@
   let error = $state("");
   let status = $state(null);
   let busy = false;
+  let loaded = false; // Enter waits for the saved limit
+  let touched = false; // after a failed read, only a typed value is saved
+  let shown = "";
 
   const help = [
     { key: "enter", text: "save" },
@@ -32,10 +35,12 @@
   $effect(() => {
     void text;
     error = "";
+    if (loaded && text !== shown) touched = true;
   });
 
   async function save() {
-    if (busy) return;
+    if (busy || !loaded) return;
+    if (!status && !touched && text === shown) return;
     const parsed = parseGigabytes(text);
     if (parsed.error) {
       error = parsed.error;
@@ -67,8 +72,11 @@
       status = await api.memory();
       if (status?.limit_bytes) text = String(Number(gigabytes(status.limit_bytes)));
     } catch {
-      // The field still works; the usage line shows less.
+      // The field still works once typed in; the usage line shows less.
+      status = null;
     }
+    shown = text;
+    loaded = true;
   });
 </script>
 

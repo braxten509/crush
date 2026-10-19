@@ -217,6 +217,17 @@ fn redact_answer(method: &str, path: &str, mut value: Value) -> Value {
     }
     match route {
         "config" => redact_config(&mut value),
+        // A server's configured URL may carry a password or key in its user
+        // part or query (mcp/auth.go:72): only scheme, host and path cross.
+        "mcp/pending-auth" => {
+            if let Some(list) = value.as_array_mut() {
+                for server in list.iter_mut().filter_map(Value::as_object_mut) {
+                    if let Some(url) = server.get("url").and_then(Value::as_str).map(bare_url) {
+                        server.insert("url".into(), Value::String(url));
+                    }
+                }
+            }
+        }
         "providers" => {
             if let Some(list) = value.as_array_mut() {
                 for provider in list.iter_mut().filter_map(Value::as_object_mut) {
@@ -229,6 +240,15 @@ fn redact_answer(method: &str, path: &str, mut value: Value) -> Value {
         _ => {}
     }
     value
+}
+
+/// `scheme://host[:port]/path` of a URL: no user part, query or fragment.
+fn bare_url(url: &str) -> String {
+    let url = url.split(['?', '#']).next().unwrap_or("");
+    let Some((scheme, rest)) = url.split_once("://") else { return String::new() };
+    let (authority, path) = rest.split_once('/').map(|(a, p)| (a, format!("/{p}"))).unwrap_or((rest, String::new()));
+    let host = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    format!("{scheme}://{host}{path}")
 }
 
 fn redact_config(config: &mut Value) {
@@ -472,8 +492,8 @@ pub fn alert_handler(app: AppHandle, project_dir: String, session_id: String) ->
 }
 
 #[tauri::command(async)]
-pub fn crash_pending(app: AppHandle) -> AppResult<Option<crash::Pending>> {
-    crash::pending(&app)
+pub fn crash_pending(app: AppHandle, window: Window) -> AppResult<Option<crash::Pending>> {
+    crash::pending(&app, window.label())
 }
 
 #[tauri::command(async)]
@@ -487,8 +507,8 @@ pub fn logs_tail(app: AppHandle, window: Window, lines: u32) -> AppResult<logs::
 }
 
 #[tauri::command(async)]
-pub fn logs_follow(app: AppHandle, window: Window, on_lines: Channel<Value>) -> AppResult<logs::Followed> {
-    logs::follow(&app, window.label(), on_lines)
+pub fn logs_follow(app: AppHandle, window: Window, from: Option<u64>, on_lines: Channel<Value>) -> AppResult<logs::Followed> {
+    logs::follow(&app, window.label(), from, on_lines)
 }
 
 #[tauri::command(async)]

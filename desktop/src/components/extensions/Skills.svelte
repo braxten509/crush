@@ -11,7 +11,7 @@
   import FilterList from "../kit/FilterList.svelte";
   import Rule from "../Rule.svelte";
   import Sheet from "../kit/Sheet.svelte";
-  import { api } from "../../lib/engine/api.js";
+  import { api, uuid } from "../../lib/engine/api.js";
   import { onEvent } from "../../lib/engine/events.js";
   import { labelOf, TEXT } from "../../lib/extensions/skills.js";
   import { readCommands } from "../../lib/palette/store.svelte.js";
@@ -32,6 +32,18 @@
   let list = $state(null);
   let alive = true;
   let seq = 0;
+  const calls = new Set(); // callIds of skill work in flight; Esc stops them
+
+  // Runs one stoppable engine call.
+  async function stoppable(run) {
+    const callId = uuid();
+    calls.add(callId);
+    try {
+      return await run(callId);
+    } finally {
+      calls.delete(callId);
+    }
+  }
 
   const items = $derived(tab === "installed" ? installed : results);
   const current = $derived(items[selected] ?? null);
@@ -85,7 +97,7 @@
     running = true;
     say(TEXT.saving);
     try {
-      await api.manageSkill({ action: "toggle", name: skill.name, enabled: !skill.enabled });
+      await stoppable((callId) => api.manageSkill({ action: "toggle", name: skill.name, enabled: !skill.enabled }, callId));
       if (!alive || mine !== seq) return;
       say(TEXT.applied);
       readCommands().catch(() => {});
@@ -112,7 +124,7 @@
     running = true;
     say(TEXT.searching);
     try {
-      const list = await api.searchSkills(q);
+      const list = await stoppable((callId) => api.searchSkills(q, callId));
       if (!alive || mine !== seq) return;
       results = Array.isArray(list) ? list : [];
       searchedFor = q;
@@ -135,7 +147,7 @@
     running = true;
     say(TEXT.installing);
     try {
-      await api.manageSkill({ action: "install", skill: { id: skill.id, name: skill.name, source: skill.source, skillId: skill.skillId, installs: skill.installs } });
+      await stoppable((callId) => api.manageSkill({ action: "install", skill: { id: skill.id, name: skill.name, source: skill.source, skillId: skill.skillId, installs: skill.installs } }, callId));
       if (!alive || mine !== seq) return;
       say(TEXT.installed);
       readCommands().catch(() => {});
@@ -198,6 +210,8 @@
       alive = false;
       seq += 1;
       off();
+      for (const callId of calls) api.abort(callId).catch(() => {});
+      calls.clear();
     };
   });
 </script>

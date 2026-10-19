@@ -20,25 +20,25 @@ async function done(id, answer) {
 export async function runRemoteAction(action) {
   const id = action?.action_id ?? action?.id;
   if (!id) return;
+  if (!["new_chat_send", "yolo", "mode"].includes(action.kind)) return; // the engine runs every other kind
+  // The phone acts on the chat it saw; no chat is the window's new chat
+  // (remote.go:369-377).
+  if ((action.session_id ?? "") !== (sessions.currentId ?? "")) return done(id, { error: SWITCHED });
   try {
     switch (action.kind) {
       case "new_chat_send": {
-        runAction("chat.new");
         const sid = await ensureSession();
-        await done(id, { session_id: sid });
-        return;
+        // The window may have opened another chat while the new one was made.
+        if (sessions.currentId && sessions.currentId !== sid) return done(id, { error: SWITCHED });
+        return done(id, { session_id: sid });
       }
       case "yolo":
-        if (action.session_id && action.session_id !== sessions.currentId) return done(id, { error: SWITCHED });
         runAction("yolo.toggle");
         return done(id, {});
       case "mode":
-        if (action.session_id && action.session_id !== sessions.currentId) return done(id, { error: SWITCHED });
         if (windowBusy()) return done(id, { error: BUSY });
         runAction("mode.cycle");
         return done(id, {});
-      default:
-        return; // the engine runs every other kind
     }
   } catch (error) {
     await done(id, { error: error?.message ?? String(error) });

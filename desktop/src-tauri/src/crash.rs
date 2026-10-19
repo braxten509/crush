@@ -27,6 +27,8 @@ const SHOWN: &str = "crash-desktop-shown";
 
 /// Web view crashes of this run, by window label.
 static WEBVIEW: Mutex<Option<HashMap<String, Pending>>> = Mutex::new(None);
+/// Held for a whole `pending` call, so two windows never claim one report.
+static CLAIM: Mutex<()> = Mutex::new(());
 
 pub fn folder() -> PathBuf {
     let state = std::env::var_os("XDG_STATE_HOME")
@@ -131,22 +133,20 @@ fn mark_shown(dir: &Path, name: &str) {
     }
 }
 
-/// `crash_pending`: each report once. A web view crash of this window first,
-/// else the newest desktop panic report not shown yet.
-pub fn pending(app: &AppHandle) -> AppResult<Option<Pending>> {
+/// `crash_pending`: each report once. A web view crash of the calling
+/// window first, else the newest desktop panic report not shown yet.
+pub fn pending(app: &AppHandle, label: &str) -> AppResult<Option<Pending>> {
     let _ = app;
+    let _claim = CLAIM.lock().unwrap_or_else(|e| e.into_inner());
     let dir = folder();
-    let shown = shown_list(&dir);
-    let mut webview = WEBVIEW.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(map) = webview.as_mut() {
-        if let Some(label) = map.keys().next().cloned() {
-            let report = map.remove(&label).unwrap();
-            if let Some(name) = Path::new(&report.path).file_name() {
-                mark_shown(&dir, &name.to_string_lossy());
-            }
-            return Ok(Some(report));
+    let own = WEBVIEW.lock().unwrap_or_else(|e| e.into_inner()).as_mut().and_then(|map| map.remove(label));
+    if let Some(report) = own {
+        if let Some(name) = Path::new(&report.path).file_name() {
+            mark_shown(&dir, &name.to_string_lossy());
         }
+        return Ok(Some(report));
     }
+    let shown = shown_list(&dir);
     let mut reports: Vec<(SystemTime, PathBuf)> = std::fs::read_dir(&dir)
         .map(|entries| {
             entries

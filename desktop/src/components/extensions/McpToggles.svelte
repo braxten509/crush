@@ -30,9 +30,11 @@
   const rows = $derived(
     names.map((name) => {
       const globallyDisabled = ws.config?.mcp?.[name]?.disabled === true;
-      const locallyDisabled = disabledHere.has(name) && !enabledHere.has(name);
+      // The effective local state: a globally disabled server stays off here
+      // unless this repository turned it on (toggles.go:38-40).
+      const locallyDisabled = disabledHere.has(name) || (globallyDisabled && !enabledHere.has(name));
       const off = scope === "local" ? locallyDisabled : globallyDisabled;
-      let text = statusText(states[name], { locallyDisabled, globallyDisabled });
+      let text = statusText(states[name], { locallyDisabled });
       if (starting.has(name) && !off) text = "starting";
       return { name, off, text };
     }),

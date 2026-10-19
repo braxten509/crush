@@ -14,6 +14,7 @@
 
   let text = $state("");
   let loaded = $state(false);
+  let readOk = false; // never save over a file that could not be read
 
   const help = [
     { key: "ctrl+s", text: "save" },
@@ -21,6 +22,7 @@
   ];
 
   async function save() {
+    if (!readOk) return;
     try {
       await subagentInstructionsWrite(text);
       notify("info", "Sub-agent instructions saved");
@@ -41,6 +43,7 @@
   onMount(async () => {
     try {
       text = await subagentInstructionsRead();
+      readOk = true;
     } catch (e) {
       notify("error", e?.message ?? String(e));
     }

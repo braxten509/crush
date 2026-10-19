@@ -44,7 +44,7 @@
       notify("info", `Created new theme: ${wanted}`);
       closeDialog(ID);
       onCreated?.(wanted);
-      openDialog("theme_editor", { name: wanted }, { grace: true });
+      openDialog("theme_editor", { name: wanted, onSaved: onCreated ? () => onCreated(wanted) : null }, { grace: true });
     } catch (e) {
       error = e?.message ?? String(e);
     } finally {

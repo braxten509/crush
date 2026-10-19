@@ -197,14 +197,14 @@ export async function crashRestart() {
   return invoke("crash_restart");
 }
 
-// → {lines, truncated, missing}
+// → {lines, truncated, missing, path, end}
 export async function logsTail(lines) {
   return invoke("logs_tail", { lines });
 }
 
-// onLines: a Channel. → {followId}
-export async function logsFollow(onLines) {
-  return invoke("logs_follow", { onLines });
+// from: the tail's `end` (null: the file's end); onLines: a Channel. → {followId}
+export async function logsFollow(from, onLines) {
+  return invoke("logs_follow", { from, onLines });
 }
 
 export async function logsUnfollow(followId) {

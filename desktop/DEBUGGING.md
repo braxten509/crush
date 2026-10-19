@@ -48,6 +48,23 @@ The owner asked for this wave to be written like wave 2, and for this note.
   - `api.cliUpdates` and `api.crushUpdate` now take the `manual` flag.
   - Window title needs the new capability `core:window:allow-set-title`.
 - **Not done in wave 3:** P4.4 (tree and restore dialogs) still waits.
+- **Review t90 (Codex Sol 6.1 high), after wave 3 was written:** 3 high and 13 medium. All 16 fixed by the coordinator, no new tests, no second review:
+  1. (high) An MCP server's URL waiting for sign-in reached the page whole, so a password or key in it could too. `redact_answer` now keeps only scheme, host and path for `mcp/pending-auth`. A key placed in the path itself still crosses.
+  2. (high) Cancel in the phone-share setup never stopped a share that came up late. The cancelled start is now remembered and stopped unless a newer start wants it (`remote/share.js`).
+  3. (high) A late phone "new chat" message could land in another chat. Every phone action now needs the chat the phone saw to still be the window's chat, as the terminal does (`remote/actions.js`).
+  4. Saving the sub-agent instructions before they were read wrote an empty file; Enter in Memory Limit before the limit was read removed it. Both now wait for the read (and the instructions are never saved over a file that failed to read).
+  5. Local MCP toggles ignored the global off switch. The local state is now the terminal's `localDisabled` (`McpToggles.svelte`).
+  6. The image picker could hang on a named pipe. Only regular files are opened to test readability (`dirlist.rs`).
+  7. A closed window's badge or progress could stay on the taskbar. Window destruction now removes it and refreshes the taskbar (`alerts::window_gone`).
+  8. Log followers could outlive their window. Each follow belongs to its window; a new follow, a closed window or a gone window stops it, and it leaves the table when it ends (`logs.rs`).
+  9. Lines written between the first read and the follow were lost. `logs_tail` returns `end` and the follow starts there.
+  10. Moving in the theme list while Apply saved could leave a preview showing for good. The list ignores moves and previews while Apply runs.
+  11. After editing or creating a theme the list and its cached colors were stale. The editor and New Theme now call back and the list is read again.
+  12. Settings fields that were only focused could save an old value over a change made elsewhere. Fields follow the config while not being typed in.
+  13. Enter on the launcher password's Cancel button saved the password. A focused button now presses itself.
+  14. Esc in the Skills sheet did not stop an install or search. Those calls now carry a call ID and are aborted when the sheet closes.
+  15. Permission and question alerts never fired for a chat no window shows (the engine sends those prompts only to windows showing the chat). Alerts now also follow `prompt_pending`, which every window gets. Their texts differ from the design: "Permission required in \"<chat>\"" and "Questions in \"<chat>\" need your input" (the mark has no tool name or count).
+  16. Two windows could claim one crash report, and a window could take another window's web view crash. `crash_pending` now holds one lock for the whole claim and takes the caller's own web view report.
 
 ## Phases 5-6, wave 1 (KIT, TERM, LST, LIVE), 2026-10-19
 

@@ -62,7 +62,10 @@ fn list_in(path: &str, home: Option<PathBuf>) -> AppResult<DirList> {
         let is_dir = target.as_ref().map(|m| m.is_dir()).unwrap_or(false);
         let readable = match &target {
             Ok(_) if is_dir => fs::read_dir(&own).is_ok(),
-            Ok(_) => fs::File::open(&own).is_ok(),
+            // Only regular files are opened: opening a pipe with no writer
+            // (or a device) can block forever.
+            Ok(m) if m.is_file() => fs::File::open(&own).is_ok(),
+            Ok(_) => false,
             Err(_) => false,
         };
         entries.push(DirEntry { name, is_dir, is_symlink, readable });

@@ -28,6 +28,7 @@
   let renameText = $state("");
   let target = null; // the theme name the rename or delete is for
   let applied = false;
+  let choosing = false; // Apply is saving: no more previews or moves
   let filter = $state(null);
   const views = new Map(); // name → ThemeView, for this sheet's life
   let previewSeq = 0;
@@ -84,6 +85,7 @@
 
   // The highlighted theme on this window; newest load wins.
   async function preview(item) {
+    if (choosing) return;
     const mine = ++previewSeq;
     if (!item || item.name === NEW) {
       endPreview();
@@ -98,7 +100,7 @@
       }
       views.set(item.name, view);
     }
-    if (mine === previewSeq && !applied) previewView(view);
+    if (mine === previewSeq && !applied && !choosing) previewView(view);
   }
 
   $effect(() => {
@@ -109,15 +111,19 @@
   async function choose(item) {
     if (!item) return;
     if (item.name === NEW) {
-      openDialog("theme_new", {}, { grace: true });
+      openDialog("theme_new", { onCreated: (name) => read(name) }, { grace: true });
       return;
     }
+    if (choosing) return;
+    choosing = true;
+    previewSeq += 1; // a preview still loading is dropped
     try {
       await chooseTheme(item.name);
       applied = true;
       notify("info", `Theme switched to ${item.name}`);
       closeDialog(ID);
     } catch (error) {
+      choosing = false;
       endPreview();
       notify("error", error?.message ?? String(error));
     }
@@ -184,7 +190,23 @@
     }
   }
 
+  // An edited theme's colors are read again, and the list too.
+  function editTheme(name) {
+    openDialog(
+      "theme_editor",
+      {
+        name,
+        onSaved: () => {
+          views.delete(name);
+          read(name);
+        },
+      },
+      { grace: true },
+    );
+  }
+
   function onKey(event, combo) {
+    if (choosing) return combo !== "Escape" && combo !== "Alt+Escape";
     if (mode === "delete") {
       if (combo === "y" || combo === "Shift+Y" || combo === "Enter") confirmDelete();
       else if (combo === "n" || combo === "Shift+N" || combo === "Escape" || combo === "Alt+Escape") {
@@ -211,7 +233,7 @@
         choose(filter?.chosen());
         return true;
       case "Ctrl+E":
-        if (current && current.name !== NEW) openDialog("theme_editor", { name: current.name }, { grace: true });
+        if (current && current.name !== NEW) editTheme(current.name);
         return true;
       case "Ctrl+R":
         startRename();
@@ -263,7 +285,7 @@
     info={(item) => (item.name === chosenTheme() ? "current" : "")}
     {query}
     bind:selected
-    onChoose={(item) => mode === "normal" && choose(item)}
+    onChoose={(item) => mode === "normal" && !choosing && choose(item)}
     label="Themes"
     row={mode === "rename" ? renameRow : null}
   />

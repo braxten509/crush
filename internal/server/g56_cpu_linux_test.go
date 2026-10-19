@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/cpuaffinity"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 )
@@ -51,6 +52,24 @@ func TestCPUAffinityRoute(t *testing.T) {
 	require.NoError(t, unix.SchedGetaffinity(0, &now))
 	for _, cpu := range allowed {
 		require.True(t, now.IsSet(cpu), "CPU %d is usable again", cpu)
+	}
+
+	// The ordinary config routes move the engine too, whatever the key's
+	// spelling: an equivalent path turns the CPUs on, a removal turns them
+	// off.
+	cfgPath := "/v1/workspaces/" + g.ws.ID + "/config/"
+	unixJSON[rpc.Empty](t, u, http.MethodPost, cfgPath+"set",
+		proto.ConfigSetRequest{Scope: config.ScopeGlobal, Key: ":options.agent_cpus_enabled", Value: true}, http.StatusOK)
+	require.True(t, store.Config().Options.AgentCPUsEnabled)
+	require.NoError(t, unix.SchedGetaffinity(0, &now))
+	require.Equal(t, 1, now.Count(), "an equivalent path moves the engine onto the agent CPUs")
+	require.True(t, now.IsSet(allowed[0]))
+	unixJSON[rpc.Empty](t, u, http.MethodPost, cfgPath+"remove",
+		proto.ConfigRemoveRequest{Scope: config.ScopeGlobal, Key: "options.agent_cpus_enabled"}, http.StatusOK)
+	require.False(t, store.Config().Options.AgentCPUsEnabled)
+	require.NoError(t, unix.SchedGetaffinity(0, &now))
+	for _, cpu := range allowed {
+		require.True(t, now.IsSet(cpu), "after the removal, CPU %d is usable again", cpu)
 	}
 
 	require.NoError(t, store.SetConfigField(config.ScopeGlobal, "options.agent_cpus", "100000"))

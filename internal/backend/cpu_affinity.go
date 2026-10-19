@@ -3,6 +3,7 @@ package backend
 import (
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -65,28 +66,36 @@ func (b *Backend) SetCPUAffinity(enabled bool) (proto.CPUAffinity, error) {
 	return proto.CPUAffinity{CPUs: list}, nil
 }
 
-// isCPUSetting reports whether a config write to key can change the CPU
-// setting: options.agent_cpus_enabled, options.agent_cpus, or their
-// parent.
-func isCPUSetting(key string) bool {
-	switch key {
-	case "options", "options.agent_cpus_enabled", "options.agent_cpus":
-		return true
+// cpuSetting is ws's effective CPU setting: "on:<cpus>", "off", or ""
+// when ws has no options.
+func cpuSetting(ws *Workspace) string {
+	if ws == nil || ws.Cfg == nil {
+		return ""
 	}
-	return false
+	o := ws.Cfg.Config().Options
+	if o == nil {
+		return ""
+	}
+	if o.AgentCPUsEnabled {
+		return "on:" + o.AgentCPUs
+	}
+	return "off"
 }
 
-// writeCPUSetting runs a config write to a CPU setting and then applies
-// the saved setting, both under the CPU lock, so the engine's CPUs follow
-// writes through the ordinary config routes too.
-func (b *Backend) writeCPUSetting(ws *Workspace, write func() error) error {
+// writeConfig runs a config write through the ordinary config routes under
+// the CPU lock, and applies the CPU setting when the write changed it, so
+// the engine's CPUs follow those writes too, however the key was spelled.
+func (b *Backend) writeConfig(ws *Workspace, write func() error) error {
 	st := b.cpuState()
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	before := cpuSetting(ws)
 	if err := write(); err != nil {
 		return err
 	}
-	b.applyCPUAffinityLocked(ws)
+	if cpuSetting(ws) != before {
+		b.applyCPUAffinityLocked(ws)
+	}
 	return nil
 }
 
@@ -104,17 +113,14 @@ func (b *Backend) applyCPUAffinity(ws *Workspace) {
 // held. It reads the setting under the lock, so the last apply sees the
 // last write.
 func (b *Backend) applyCPUAffinityLocked(ws *Workspace) {
-	if ws == nil || ws.Cfg == nil || !cpuaffinity.Supported() {
+	if !cpuaffinity.Supported() {
 		return
 	}
-	o := ws.Cfg.Config().Options
-	if o == nil {
+	want := cpuSetting(ws)
+	if want == "" {
 		return
 	}
-	want := "off"
-	if o.AgentCPUsEnabled {
-		want = "on:" + o.AgentCPUs
-	}
+	cpus := strings.TrimPrefix(want, "on:")
 	st := b.cpuState()
 	if st.applied == want || (st.applied == "" && want == "off") {
 		st.applied = want
@@ -125,8 +131,8 @@ func (b *Backend) applyCPUAffinityLocked(ws *Workspace) {
 			slog.Warn("Failed to move Crush back onto every CPU", "error", err)
 			return
 		}
-	} else if _, err := cpuaffinity.Apply(o.AgentCPUs); err != nil {
-		slog.Warn("Failed to move Crush onto agent CPUs", "cpus", o.AgentCPUs, "error", err)
+	} else if _, err := cpuaffinity.Apply(cpus); err != nil {
+		slog.Warn("Failed to move Crush onto agent CPUs", "cpus", cpus, "error", err)
 		return
 	}
 	st.applied = want

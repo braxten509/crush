@@ -33,6 +33,9 @@ func newG56Workspace(t *testing.T) *g56Workspace {
 	t.Helper()
 	h := newRealCreateHarness(t)
 	t.Setenv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	// Each test gets its own global config, data config and themes folder.
+	t.Setenv("CRUSH_GLOBAL_CONFIG", t.TempDir())
+	t.Setenv("CRUSH_GLOBAL_DATA", t.TempDir())
 	dir := t.TempDir()
 	cfg, err := json.Marshal(map[string]any{
 		"providers": map[string]any{"fake": map[string]any{

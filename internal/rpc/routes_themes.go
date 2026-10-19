@@ -10,6 +10,6 @@ var (
 	SaveTheme    = Op[proto.ThemePaletteRequest, proto.ThemeView]{Method: put, Path: "/v1/themes/{name}"}
 	CreateTheme  = Op[proto.ThemeCreateRequest, proto.ThemeView]{Method: post, Path: "/v1/themes"}
 	RenameTheme  = Op[proto.ThemeRenameRequest, Empty]{Method: post, Path: "/v1/themes/{name}/rename"}
-	DeleteTheme  = Op[Empty, Empty]{Method: del,Path: "/v1/themes/{name}"}
+	DeleteTheme  = Op[Empty, Empty]{Method: del, Path: "/v1/themes/{name}"}
 	RevertTheme  = Op[Empty, Empty]{Method: post, Path: "/v1/themes/{name}/revert"}
 )

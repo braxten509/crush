@@ -39,7 +39,7 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 
 		route(c, rpc.ListThemes, c.listThemes).
 			Summary("List themes").
-			Description("The built-in and user themes both apps list, by name. source is "+
+			Description("The built-in and user themes both apps list, by name. source is " +
 				"builtin or user; overridden marks a built-in a user file shadows.").
 			Tags("themes").
 			Build(),
@@ -118,7 +118,7 @@ func desktopErrors() []apiError {
 	return []apiError{
 		{Match: is(backend.ErrNoPendingQuestion), Status: http.StatusNotFound, Code: "no_pending_question"},
 		{Match: is(backend.ErrCPUAffinity), Status: http.StatusBadRequest, Code: "bad_request"},
-		{Match: is(backend.ErrThemeInvalid),Status: http.StatusBadRequest, Code: "bad_request"},
+		{Match: is(backend.ErrThemeInvalid), Status: http.StatusBadRequest, Code: "bad_request"},
 		{Match: is(backend.ErrThemeNotFound), Status: http.StatusNotFound, Code: "theme_not_found"},
 		{Match: is(backend.ErrThemePalette), Status: http.StatusUnprocessableEntity, Code: "invalid_palette"},
 	}

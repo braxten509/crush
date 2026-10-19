@@ -156,6 +156,7 @@ class Subs:
         self.prompt = values.get("PROMPT", "")
         self.request = None
         self.named = {}
+        self.title = False  # a title request's replay: its IDs are not logged
 
     def apply(self, value):
         if isinstance(value, dict):
@@ -194,7 +195,7 @@ class Replay(threading.Thread):
         try:
             self.play(sent)
         finally:
-            reply = self.proto.reply_ids(sent)
+            reply = None if self.subs.title else self.proto.reply_ids(sent)
             if reply is not None:
                 log({"reply": reply})
         self.proto.finished(self)
@@ -353,6 +354,7 @@ class Claude(Proto):
                 return
             title = title_of(text)
             subs = Subs(SESSION=self.session, PROMPT=text, CWD=os.getcwd())
+            subs.title = title is not None
             if title is not None:
                 lines = [{"type": "system", "subtype": "init", "session_id": "$SESSION"},
                          {"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}},
@@ -439,6 +441,7 @@ class Codex(Proto):
             send({"id": rid, "result": {"turn": {"id": self.turn}}})
             subs = Subs(SESSION=self.thread or "", TURN=self.turn, PROMPT=text, CWD=os.getcwd())
             title = title_of(text)
+            subs.title = title is not None
             if title is not None:
                 lines = [{"method": "item/started", "params": {"item": {"type": "agentMessage", "id": "m_$UUID1"}}},
                          {"method": "item/agentMessage/delta", "params": {"itemId": "m_$UUID1", "delta": title}},
@@ -542,6 +545,7 @@ class ACP(Proto):
             subs = Subs(SESSION=self.session or params.get("sessionId") or "", PROMPT=text, CWD=os.getcwd())
             subs.request = rid
             title = title_of(text)
+            subs.title = title is not None
             if title is not None:
                 lines = [{"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "$SESSION", "update": {
                               "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": title}}}},

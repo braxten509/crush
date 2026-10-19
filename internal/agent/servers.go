@@ -60,13 +60,14 @@ func FindServers(processes []Process) (servers []Server, rest []Process) {
 	return servers, rest
 }
 
-// processTree returns p's processes: a managed job's are those carrying its
-// marker; any other's are p and everything it started.
+// processTree returns p's processes: a job's are those carrying its marker,
+// as a managed job or as a native shell job; any other's are p and
+// everything it started.
 func processTree(p Process, table map[int]proc) []int {
 	var tree []int
 	if p.JobID != "" {
 		for pid, q := range table {
-			if p.marker != "" && q.managedJobID == p.marker {
+			if p.marker != "" && (q.managedJobID == p.marker || q.nativeShellID == p.marker) {
 				tree = append(tree, pid)
 			}
 		}

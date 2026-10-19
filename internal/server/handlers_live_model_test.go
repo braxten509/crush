@@ -173,6 +173,12 @@ func liveModelToolCalls(w http.ResponseWriter, name string, job, helper bool) {
 				request, name, name, name),
 		})
 		calls = append(calls, [2]string{"call_job_" + name, string(args)})
+	case job && strings.HasPrefix(name, "native-listen"):
+		// A dev server on a local port, started by the bash tool itself.
+		args, _ := json.Marshal(map[string]any{
+			"description": "Start the " + name + " job", "command": "python3 -m http.server 0 --bind 127.0.0.1", "run_in_background": true,
+		})
+		calls = append(calls, [2]string{"call_job_" + name, string(args)})
 	case job:
 		args, _ := json.Marshal(map[string]any{
 			"description": "Start the " + name + " job", "command": "sleep 120", "run_in_background": true,

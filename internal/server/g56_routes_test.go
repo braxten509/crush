@@ -27,26 +27,32 @@ import (
 )
 
 // TestServersRoute: a chat's background job that listens on a port is
-// listed with its chat, job and program (G-18).
+// listed with its chat, job and program (G-18), whether `crush bg` or the
+// bash tool itself started it.
 func TestServersRoute(t *testing.T) {
 	l := newLiveWork(t)
 	chat := l.chat(t, "web")
 	l.start(t, chat, "job", "listen-web")
+	native := l.chat(t, "native")
+	l.start(t, native, "job", "native-listen-web")
 
 	// Until the job's start returns (about 1 s), its process is listed on
 	// its own, without the job's ID and name.
-	var got []proto.ServerPort
+	var got, gotNative []proto.ServerPort
 	require.Eventually(t, func() bool {
 		all := liveJSON[[]proto.ServerPort](t, l.h, http.MethodGet, "/v1/workspaces/"+l.ws.ID+"/servers", nil, http.StatusOK)
-		got = nil
+		got, gotNative = nil, nil
 		for _, s := range all {
 			require.NotEmpty(t, s.SessionID)
-			if s.SessionID == chat {
+			switch s.SessionID {
+			case chat:
 				got = append(got, s)
+			case native:
+				gotNative = append(gotNative, s)
 			}
 		}
-		return len(got) == 1 && got[0].JobID != ""
-	}, 20*time.Second, 100*time.Millisecond, "the listening job shows up")
+		return len(got) == 1 && got[0].JobID != "" && len(gotNative) == 1 && gotNative[0].JobID != ""
+	}, 20*time.Second, 100*time.Millisecond, "both listening jobs show up")
 	jobs := agent.SessionBackgroundProcesses(chat)
 	require.Len(t, jobs, 1)
 	require.Positive(t, got[0].Port)
@@ -54,6 +60,14 @@ func TestServersRoute(t *testing.T) {
 	require.Equal(t, "python3 -m http.server 0 --bind 127.0.0.1", got[0].Command)
 	require.Equal(t, "listen-web", got[0].Name)
 	require.Equal(t, "python3", got[0].Program)
+
+	nativeJobs := agent.SessionBackgroundProcesses(native)
+	require.Len(t, nativeJobs, 1)
+	require.Positive(t, gotNative[0].Port)
+	require.NotEqual(t, got[0].Port, gotNative[0].Port)
+	require.Equal(t, nativeJobs[0].JobID, gotNative[0].JobID)
+	require.Equal(t, "python3 -m http.server 0 --bind 127.0.0.1", gotNative[0].Command)
+	require.Equal(t, "python3", gotNative[0].Program)
 }
 
 // TestProvidersRefreshRoute: the refresh runs `crush update-providers`'

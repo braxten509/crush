@@ -6,11 +6,11 @@ Setup: seed_chat.py seeds the chat through the engine's API until the
 desktop's timeline has 300 items, and the project is marked initialized so no
 start-up question gets in the way. The engine is the one in the probe's
 connection.engine.socket (1.9); crush engine ensure finds it when the field
-is missing (a NOTE line says so). The hidden screen's keyboard map gives
-Ctrl+Alt+F12 to the X server's console switch, which never reaches the
-window, so F12's key is made plain F12 on that screen while the app is
-connected (free_ctrl_alt_f12 says why then). Then three times (three
-launches, the same script and chunking):
+is missing (a NOTE line says so). tests/run-in-sandbox.sh has already made
+Ctrl+Alt+F12 reach the window (the hidden screen's keymap gives it to the X
+server's console switch), and the screen keeps that change for the whole run
+(-noreset in tests/sandbox.sh). Then three times (three launches, the same
+script and chunking):
   1. launch the app with --probe and -s on the chat, press Ctrl+Alt+F12 (the
      probe's frame mark starts the measured stretch, 1.9), send the prompt;
   2. every 500 ms during the stream type one letter into the field
@@ -216,10 +216,10 @@ def free_ctrl_alt_f12():
     """The hidden screen's keyboard map gives Ctrl+Alt+F12 the X server's
     console switch (XF86Switch_VT_12), which the server keeps, so the page
     never sees the probe's mark key. Rewrites F12's key on this screen alone
-    (the sandbox's own X server) as plain F12 at every level. It must run while
-    the app is connected: tests/run-in-sandbox.sh makes the same change before
-    the app starts, but xvfb-run starts Xvfb without -noreset, so the server
-    resets when xmodmap, its only client, leaves, and that undoes the change."""
+    (the sandbox's own X server) as plain F12 at every level.
+    tests/run-in-sandbox.sh makes the same change for every driver, and the
+    screen keeps it for the whole run (-noreset), so this is only the meter
+    check's own guard; the speed runs rely on the harness."""
     table = subprocess.run(["xmodmap", "-pke"], capture_output=True, text=True).stdout
     codes = [line.split()[1] for line in table.splitlines() if line.startswith("keycode") and "= F12" in line]
     for code in codes:
@@ -266,8 +266,6 @@ def measure(app, sid, n):
                   and (p.get("chat") or {}).get("id") == sid, 60)
     if not check(ok, f"run {n}: the app opens the seeded chat"):
         return None
-    # Again on every launch: the screen reset when the last run's app left.
-    check(free_ctrl_alt_f12(), f"run {n}: Ctrl+Alt+F12 reaches the window (the hidden screen's console switch key is turned into F12)")
     # A timeline item is not always one engine message, so the chat grows
     # until the timeline itself has the items (the app shows new turns live).
     for _ in range(6):
@@ -352,8 +350,12 @@ def main():
     runs, sid = [], None
     try:
         with step("speed-seed", out_dir):
-            with urlrequest.urlopen(f"http://127.0.0.1:{port}/_fake/control", timeout=5) as resp:
-                scale = json.load(resp).get("time_scale")
+            req = urlrequest.Request(f"http://127.0.0.1:{port}/_fake/control", data=json.dumps({"script": "stream2m"}).encode(),
+                                     method="POST", headers={"Content-Type": "application/json"})
+            with urlrequest.urlopen(req, timeout=5) as resp:
+                fake = json.load(resp)
+            check(fake.get("script") == "stream2m", f"the fake server plays script stream2m, whose turns this check uses (6.2; {fake.get('script')})")
+            scale = fake.get("time_scale")
             check(scale == 1, f"the fake server streams in real time (time scale {scale})")
             p = wait_for(probe_path, lambda p: (p.get("connection") or {}).get("state") == "connected", 45)
             connected = check((p.get("connection") or {}).get("state") == "connected", "the first app joined the project's engine")

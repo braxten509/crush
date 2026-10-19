@@ -32,8 +32,9 @@ project's engine, its nine steps, then LIST-012's step.
 Fails when a wait times out, the apps and the engine disagree on order or
 text, the desktop shows a message twice, step 8's reply stops, or the
 desktop's chat runs on another model. The replies are scripts/stream2m.json's
-two-app turns; "basic" is made the active script when it exists, as the
-design says. The engine is the one in the probe's connection.engine (1.9,
+two-app turns, so stream2m is made the active script (6.2: drivers activate
+the script whose turns they use; 2.9's step 2 names basic, another piece's
+script). The engine is the one in the probe's connection.engine (1.9,
 6.4); crush engine ensure finds it when the field is missing (a NOTE line
 says so).
 
@@ -485,8 +486,6 @@ def set_active_script(name):
 def main():
     first, second, third, terminal = (flat(script_reply(w)) for w in
                                       ("first from desktop", "second from terminal", "third from desktop", "from the terminal"))
-    if set_active_script("basic"):
-        print("NOTE the fake server plays script basic first", flush=True)
     desktop = StandIn() if STAND_IN else Window()
     if STAND_IN:
         print("NOTE --stand-in: the desktop's part is played through the engine API; the window is not checked", flush=True)
@@ -496,6 +495,7 @@ def main():
     tmux("kill-server")
     try:
         with step("two-apps-1-build", out_dir):
+            check(set_active_script("stream2m"), "the fake server plays script stream2m, whose turns this check uses (6.2)")
             out = subprocess.run([CRUSH, "engine", "version"], capture_output=True, text=True, timeout=30)
             version = json.loads(out.stdout or "{}").get("version")
             check(os.access(CRUSH, os.X_OK) and bool(version), f"the terminal app is the worktree's build {CRUSH} ({version})")

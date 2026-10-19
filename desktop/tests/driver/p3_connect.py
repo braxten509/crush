@@ -10,54 +10,66 @@ P3.1's rows that show at join (START-006, START-008, START-009).
                       connected: the probe's connection section has the
                       state, client id, engine version and engine{socket, pid}
                       (1.9), and they match the engine's own answers.
-  connect-3-notices   a second desktop on the same folder joins quickly and
-                      shows no notice; one on sub/ shows "The AI works in
-                      /tmp/home/proj, the folder the first window on this
-                      project opened."; one started with --yolo=false shows
-                      "Crush skips permission prompts on this project, as the
-                      first window on it chose." (engine-design.md:545-550).
-  connect-4-starting  a join that starts a new engine (a fresh folder):
-                      "Starting Crush…" never shows sooner than 400 ms into the
-                      join, shows in a join over 1 s, and goes once joined.
+  connect-3-notices   a second desktop on the same folder joins quickly, keeps
+                      the 400 ms rule and shows no notice; one on sub/ shows
+                      "The AI works in /tmp/home/proj, the folder the first
+                      window on this project opened."; one started with
+                      --yolo=false shows "Crush skips permission prompts on
+                      this project, as the first window on it chose."
+                      (engine-design.md:545-550).
+  connect-4-starting  a join that starts a new engine (a fresh folder) and is
+                      slowed to over 1 s (CRUSH_DESKTOP_CRUSH names a crush
+                      that answers 1.5 s late): gate.starting ("Starting
+                      Crush…") never turns true sooner than 400 ms into the
+                      join, turns true during it, and is false once joined.
   connect-5-not-found CRUSH_DESKTOP_CRUSH naming a wrapper that exits 127, then
-                      no variable and an empty PATH: "Crush Desktop could not
-                      find crush at <path>." and "... on your PATH.", under the
-                      title "Crush not found", with the fix line, which names
-                      CRUSH_DESKTOP_CRUSH until phase 5 adds Settings.
+                      no variable and an empty PATH: the gate's title "Crush
+                      not found", its body "Crush Desktop could not find crush
+                      at <path>." and "... on your PATH.", and its fix line,
+                      which names CRUSH_DESKTOP_CRUSH until phase 5 adds
+                      Settings.
   connect-6-too-old   CRUSH_DESKTOP_CRUSH naming a link to tests/fakes/crush-old:
-                      "The crush at <link> is too old for Crush Desktop: it has
-                      no engine command.", "Update Crush, then press Try
-                      again." and Try again; with the link moved to a crush
-                      that has the engine, Try again joins.
+                      title "Crush is too old", body "The crush at <link> is
+                      too old for Crush Desktop: it has no engine command.",
+                      fix "Update Crush, then press Try again." and the button
+                      "Try again"; with the link moved to a crush that has the
+                      engine, pressing it joins.
   connect-7-locked    another engine holds a fresh folder (a terminal app on an
                       engine in another runtime folder, which the desktop's
-                      ensure cannot see): the engine's message as is ("This
-                      project is already open in another Crush engine (PID
-                      N). ...") and Try again; once that engine has exited,
-                      Try again joins. (2.9's example, a terminal working
-                      alone, cannot lock a project on this branch: nothing
-                      takes db.ProjectLockAlone yet.)
+                      ensure cannot see): title "Crush could not open this
+                      project", the engine's message as is ("This project is
+                      already open in another Crush engine (PID N). ...") and
+                      Try again; once that engine has exited, pressing it
+                      joins. (2.9's example, a terminal working alone, cannot
+                      lock a project on this branch: nothing takes
+                      db.ProjectLockAlone yet.)
   connect-8-no-folder START-008: --cwd /tmp/home/missing shows "failed to
                       change directory: chdir /tmp/home/missing: no such file
-                      or directory", stays on the gate and starts no engine.
+                      or directory" in the gate's body, stays on the gate and
+                      starts no engine.
   connect-9-data-dir  START-009: -D /tmp/home/data-d is the engine's data_dir.
 
 Each extra app runs with its own probe file (/tmp/probe-<name>.json) and is
 closed through its close button's request at the end of its step. Texts on
-screen are looked for in every light field of the probe report, since 1.9
-pins no section for EngineGate; buttons are found by their words in the heavy
-fields (a dict with the words and a rect, or the rect at the same place under
-"heavy"). A step that cannot run prints NOT RUN and fails the check: it is
-never a pass.
+screen are read from the probe's gate section (1.9, P3.9: title, body, fix,
+starting, button{label}) and notice section (P3.8: kind, text,
+action{label}); buttons are pressed by their heavy rects (gate.button.rect,
+notice.action.rect). While a section is absent (its piece is not merged), each
+check that needs it prints NOT RUN and fails: it is never a pass.
 
 --stand-in plays the screens' part through the app's own commands (the probe's
 invoke: engine_open, and engine_open again for Try again, as connection.svelte.js
 does), for builds without P3.3's connection store. It checks the Rust side and
 this driver's own steps; texts on screen are not checked.
+--self-check runs the gate, notice and 400 ms helpers on made-up probe reports
+(no app, no sandbox needed).
 Usage: tests/check.sh p3_connect.py [--stand-in]
-p3_reconnect.py uses this file's helpers (AppRun, find_rect, not_run, ...).
+       python3 -I tests/driver/p3_connect.py --self-check
+p3_reconnect.py uses this file's helpers (AppRun, wait_section, press_button, not_run, ...).
 """
-import ctypes, importlib.util, json, os, shutil, signal, subprocess, sys, time
+import ctypes, importlib.util, json, os, shlex, shutil, signal, subprocess, sys, tempfile, time
+from urllib import request as urlrequest
+from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from harness import check, finish, probe_heavy, read_probe, step, xdo
@@ -78,6 +90,7 @@ NOT_RUN = []
 STARTING = "Starting Crush…"
 TRY_AGAIN = "Try again"
 COBRA = "if any flags in the group [session continue] are set none of the others can be"
+SLOW_SECONDS = 1.5  # connect-4's crush answers this late, so its join lasts over 1 s
 
 
 def load(name, path):
@@ -107,65 +120,146 @@ def flat(text):
     return " ".join((text or "").split())
 
 
-def strings(node):
-    if isinstance(node, str):
-        yield node
-    elif isinstance(node, dict):
-        for value in node.values():
-            yield from strings(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from strings(value)
-
-
-def light_text(report):
-    """Every string in the probe report's light fields, as one flat text."""
-    light = {k: v for k, v in (report or {}).items() if k not in ("heavy", "invoked", "request_id")}
-    return flat("\n".join(strings(light)))
-
-
-def shows(report, text):
-    return flat(text) in light_text(report)
-
-
-def find_rect(report, words):
-    """The rect of the first thing in a probe_heavy() report labelled words: a
-    dict whose label, text or title is words and that holds a rect, or whose
-    twin at the same place under "heavy" holds one (as slot.buttons[] and
-    heavy slot.buttons[].rect do). None when nothing has those words and a rect."""
-    heavy = report.get("heavy") or {}
-
-    def twin(path):
-        node = heavy
-        for part in path:
-            if isinstance(node, dict) and isinstance(part, str):
-                node = node.get(part)
-            elif isinstance(node, list) and isinstance(part, int) and part < len(node):
-                node = node[part]
-            else:
-                return None
-        return node
-
-    def walk(node, path):
-        if isinstance(node, dict):
-            if any(node.get(k) == words for k in ("label", "text", "title")):
-                other = twin(path)
-                rect = node.get("rect") or (other.get("rect") if isinstance(other, dict) else None)
-                if rect:
-                    return rect
-            for key, value in node.items():
-                found = walk(value, path + [key])
-                if found:
-                    return found
-        elif isinstance(node, list):
-            for i, value in enumerate(node):
-                found = walk(value, path + [i])
-                if found:
-                    return found
+def set_active_script(port, name):
+    """Makes name the fake AI server's active script (6.2: a driver activates
+    the script whose turns it uses); answers the script it then plays."""
+    req = urlrequest.Request(f"http://127.0.0.1:{port}/_fake/control", data=json.dumps({"script": name}).encode(),
+                             method="POST", headers={"Content-Type": "application/json"})
+    try:
+        with urlrequest.urlopen(req, timeout=5) as resp:
+            return json.load(resp).get("script")
+    except (HTTPError, URLError, ValueError):
         return None
 
-    sections = {k: v for k, v in report.items() if k not in ("heavy", "invoked", "request_id")}
-    return walk(sections, []) or walk(heavy, [])
+
+# The screen, through the probe's gate and notice sections (1.9) -------------
+
+def gate_mismatches(gate, want):
+    """The fields of a gate section (1.9: title, body, fix, button{label}) that
+    differ from want, as "field 'got'" texts; empty when all match. A wanted
+    value is the exact text (spaces folded) or a test of the text; for
+    "button" it is the button's label."""
+    bad = []
+    for field, wanted in want.items():
+        got = (gate.get("button") or {}).get("label") if field == "button" else gate.get(field)
+        if not (wanted(flat(got)) if callable(wanted) else flat(got) == flat(wanted)):
+            bad.append(f"{field} {got!r}")
+    return bad
+
+
+def button_of(report, section, field):
+    """(label, rect) of a section's button (1.9: gate.button, notice.action):
+    the label from the light fields, the rect from the heavy ones."""
+    light = (report.get(section) or {}).get(field) or {}
+    heavy = ((report.get("heavy") or {}).get(section) or {}).get(field) or {}
+    return light.get("label"), heavy.get("rect")
+
+
+def wait_section(run, name, test, timeout):
+    """Reads run's probe until test(section) holds for the section name.
+    Answers (True, section) when it did; (False, the last one seen) when the
+    section showed but test never held; (None, None) when no write had the
+    section (its piece is not in this build)."""
+    end = time.time() + timeout
+    last = None
+    while True:
+        p = read_probe(run.probe, tries=1)
+        if p and name in p:
+            last = p.get(name) or {}
+            if test(last):
+                return True, last
+        if time.time() >= end:
+            return (None, None) if last is None else (False, last)
+        time.sleep(0.1)
+
+
+def wait_gate(run, want, row, timeout=10):
+    """Window: waits until the gate (the probe's gate section, P3.9) shows want
+    (see gate_mismatches). Answers the fields that still differ (empty when
+    all match), or None with a NOT RUN line when no write had a gate section."""
+    held, gate = wait_section(run, "gate", lambda g: not gate_mismatches(g, want), timeout)
+    if held is None:
+        not_run(row, "the probe has no gate section (P3.9 is not in this build), so the gate's texts could not be read")
+        return None
+    return [] if held else gate_mismatches(gate, want)
+
+
+def watch_notice(run, test, row, timeout):
+    """Window: watches the notice line (the probe's notice section, P3.8) until
+    test(its text) holds. Answers True or False, or None with a NOT RUN line
+    when no write had a notice section."""
+    held, _ = wait_section(run, "notice", lambda n: test(flat(n.get("text"))), timeout)
+    if held is None:
+        not_run(row, "the probe has no notice section (P3.8 is not in this build), so the notice line could not be read")
+    return held
+
+
+def press_button(run, section, field, owner, row):
+    """A real click on a section's "Try again" button by its heavy rect (1.9).
+    NOT RUN when the probe has no such section (owner is not in this build); a
+    failed check when the section has no "Try again" button with a rect."""
+    report = probe_heavy(run.probe, 20)
+    if section not in report:
+        not_run(row, f"the probe has no {section} section ({owner} is not in this build), so \"{TRY_AGAIN}\" could not be pressed")
+        return False
+    label, rect = button_of(report, section, field)
+    if not check(label == TRY_AGAIN and bool(rect), f"the {section}'s button is \"{TRY_AGAIN}\" with a rect ({label}, {rect})"):
+        return False
+    return run.click(rect)
+
+
+def join_times(samples):
+    """From the probe writes read during a join, [(at, connection state, gate
+    section or None when the write had none)]: the times (ms) of the first
+    write saying connecting, the first with gate.starting true and the first
+    saying connected, and whether any write had a gate section."""
+    first = {"connecting": None, "starting": None, "connected": None, "gate": False}
+    for at, state, gate in samples:
+        first["gate"] = first["gate"] or gate is not None
+        if state == "connecting" and first["connecting"] is None:
+            first["connecting"] = at
+        if gate and gate.get("starting") is True and first["starting"] is None:
+            first["starting"] = at
+        if state == "connected" and first["connected"] is None:
+            first["connected"] = at
+    return first
+
+
+def starting_findings(first, long_join=False):
+    """The 400 ms rule (2.9) on join_times(): (join ms, [(ok, what)]), or None
+    when no write had a gate section, so gate.starting could not be read. The
+    probe writes every 200 ms, so the text shown after 400 ms lands at least
+    about 200 ms after the first write saying connecting, and one shown at
+    once lands with it. A join under 200 ms shows nothing; a long join (slowed
+    on purpose) must last 1 s and show the text."""
+    if not first["gate"]:
+        return None
+    if first["connected"] is None or (long_join and first["connecting"] is None):
+        return None, [(False, f"the probe saw the join (connecting at {first['connecting']}, connected at {first['connected']})")]
+    start = first["connecting"] if first["connecting"] is not None else first["connected"]
+    took = first["connected"] - start
+    shown = None if first["starting"] is None else first["starting"] - start
+    found = [(shown is None or shown >= 150, f"\"{STARTING}\" (gate.starting) never shows sooner than 400 ms into the join "
+                                             f"(first shown {shown} ms after connecting; join {took} ms)")]
+    if took < 200:
+        found.append((first["starting"] is None, f"a join under 400 ms shows nothing (join {took} ms)"))
+    if long_join:
+        found.append((took >= 1000, f"the slowed join lasts over 1 s ({took} ms)"))
+        found.append((first["starting"] is not None, f"a join of {took} ms shows \"{STARTING}\" (gate.starting turns true)"))
+    return took, found
+
+
+def check_starting(first, label, row, long_join=False):
+    """check()s starting_findings(); NOT RUN when no write had a gate section.
+    Answers the join's ms, or None."""
+    result = starting_findings(first, long_join)
+    if result is None:
+        not_run(row, "the probe has no gate section (P3.9 is not in this build), so gate.starting could not be read")
+        return None
+    took, found = result
+    for ok, what in found:
+        check(ok, f"{label}: {what}")
+    return took
 
 
 class _ClientMessage(ctypes.Structure):
@@ -359,24 +453,21 @@ def error_is(outcome, code, message):
     return e.get("code") == code and e.get("message") == message, f"{e.get('code')}: {e.get('message')}"
 
 
-def shows_all(run, texts, timeout=10):
-    """Window: waits until every text is on screen (in the light fields); answers the missing ones."""
-    p = run.wait(lambda p: all(shows(p, t) for t in texts), timeout)
-    return [t for t in texts if not shows(p, t)]
+def check_gate(run, want, what, row):
+    """Window: check()s that the gate shows want (wait_gate); NOT RUN without a gate section."""
+    bad = wait_gate(run, want, row)
+    if bad is not None:
+        check(not bad, f"{what}" + (f" (differs: {'; '.join(bad)})" if bad else ""))
 
 
 def press_try_again(run, row):
-    """The "Try again" button. Window: a real click on it, found by its words in
-    the heavy fields; NOT RUN when no rect is there. Stand-in: engine_open again,
+    """The gate's "Try again". Window: a real click on gate.button.rect (1.9);
+    NOT RUN when the probe has no gate section. Stand-in: engine_open again,
     what the button does after a failed join (connection.svelte.js retry)."""
     if STAND_IN:
         run.invoke("engine_open", {"cwd": run.cwd})
         return True
-    rect = find_rect(probe_heavy(run.probe, 20), TRY_AGAIN)
-    if not rect:
-        not_run(row, "the probe has no rect for the \"Try again\" button (1.9 pins none), so it could not be pressed")
-        return False
-    return run.click(rect)
+    return press_button(run, "gate", "button", "P3.9", row)
 
 
 def state_after(run, timeout):
@@ -397,6 +488,15 @@ def make_project(path, port):
         with open(os.path.join(path, "crush.json"), "w") as f:
             f.write(text)
         subprocess.run(["git", "-C", path, "init", "-q"], check=True)
+    return path
+
+
+def wrapper(path, body):
+    """Writes an executable shell script at path (a stand-in crush for one step)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write("#!/bin/sh\n" + body)
+    os.chmod(path, 0o755)
     return path
 
 
@@ -424,43 +524,78 @@ def engines(runtime=None):
 
 
 def sample_join(run, timeout=45):
-    """Window: reads the probe every 50 ms until connected; answers the probe
-    times (ms) of the first write saying connecting, the first with the gate's
-    "Starting Crush…", and the first saying connected."""
-    first = {"connecting": None, "text": None, "connected": None}
-    end = time.time() + timeout
-    while time.time() < end and first["connected"] is None:
+    """Window: reads the probe every 50 ms until it says connected; answers
+    join_times() of the writes read."""
+    samples, end = [], time.time() + timeout
+    while time.time() < end:
         p = read_probe(run.probe, tries=1)
-        state = (p.get("connection") or {}).get("state")
-        at = p.get("at")
-        if state == "connecting" and first["connecting"] is None:
-            first["connecting"] = at
-        if p and shows(p, STARTING) and first["text"] is None:
-            first["text"] = at
-        if state == "connected":
-            first["connected"] = at
+        if p:
+            state = (p.get("connection") or {}).get("state")
+            samples.append((p.get("at"), state, (p.get("gate") or {}) if "gate" in p else None))
+            if state == "connected":
+                break
         time.sleep(0.05)
-    return first
+    return join_times(samples)
 
 
-def check_starting(first, label):
-    """The 400 ms rule (2.9) from sample_join's times. The probe writes every
-    200 ms, so a text shown after 400 ms lands at least about 200 ms after the
-    first write that says connecting; one shown at once lands with it."""
-    if first["connecting"] is None or first["connected"] is None:
-        check(False, f"{label}: the probe showed the join (connecting {first['connecting']}, connected {first['connected']})")
-        return None
-    took = first["connected"] - first["connecting"]
-    early = first["text"] is not None and first["text"] - first["connecting"] < 150
-    check(not early, f"{label}: \"{STARTING}\" never shows sooner than 400 ms into the join "
-                     f"(first seen {None if first['text'] is None else first['text'] - first['connecting']} ms after connecting; join {took} ms)")
-    if took < 200:
-        check(first["text"] is None, f"{label}: a join under 400 ms shows nothing (join {took} ms)")
-    return took
+def self_check():
+    """--self-check: the helpers that read the gate and notice sections and the
+    400 ms rule, on made-up probe reports. No app runs."""
+    body = "The crush at /tmp/home/switch/crush is too old for Crush Desktop: it has no engine command."
+    gate = {"state": "failed", "title": "Crush is too old", "body": body, "fix": "Update Crush, then press Try again.",
+            "starting": False, "button": {"label": TRY_AGAIN}}
+    want = {"title": "Crush is too old", "body": body, "fix": "Update Crush, then press Try again.", "button": TRY_AGAIN}
+    check(gate_mismatches(gate, want) == [], "gate: the right title, body, fix line and button match")
+    check(gate_mismatches(dict(gate, body=body.replace(" for ", "\n for ") + " "), want) == [], "gate: spaces and line breaks are folded")
+    check(gate_mismatches(dict(gate, title="Crush not found"), want) == ["title 'Crush not found'"], "gate: another title differs")
+    check(gate_mismatches(dict(gate, body=body.replace("too old", "old")), want) != [], "gate: a reworded body differs")
+    check(gate_mismatches(dict(gate, button=None), want) == ["button None"], "gate: a gate with no button differs")
+    names_variable = lambda t: t.startswith("Install Crush") and "CRUSH_DESKTOP_CRUSH" in t
+    check(gate_mismatches({"fix": "Install Crush, or set CRUSH_DESKTOP_CRUSH to its path."}, {"fix": names_variable}) == []
+          and gate_mismatches({"fix": "Install Crush, or set the crush path in Settings."}, {"fix": names_variable}) != [],
+          "gate: a test of the fix line passes only on a line naming CRUSH_DESKTOP_CRUSH")
+
+    rect = {"x": 600, "y": 400, "w": 96, "h": 32}
+    check(button_of({"gate": {"button": {"label": TRY_AGAIN}}, "heavy": {"gate": {"button": {"rect": rect}}}}, "gate", "button") == (TRY_AGAIN, rect),
+          "button: the label comes from gate.button, the rect from heavy gate.button.rect")
+    check(button_of({"notice": {"action": {"label": TRY_AGAIN}}, "heavy": {"notice": {"action": {"rect": rect}}}}, "notice", "action") == (TRY_AGAIN, rect),
+          "button: the notice's comes from notice.action and heavy notice.action.rect")
+    check(button_of({"gate": {"button": None}, "heavy": {"gate": {"button": None}}}, "gate", "button") == (None, None), "button: none when the gate has none")
+    check(button_of({"gate": {"button": {"label": TRY_AGAIN}}}, "gate", "button") == (TRY_AGAIN, None), "button: no rect without heavy fields")
+
+    idle, shown = {"starting": False}, {"starting": True}
+    passes = lambda result: result is not None and all(ok for ok, _ in result[1])
+    fast = lambda *writes: starting_findings(join_times(list(writes)))
+    slow = lambda *writes: starting_findings(join_times(list(writes)), long_join=True)
+    check(fast((0, "connecting", None), (200, "connected", None)) is None, "400 ms rule: no gate section in any write is not a pass (NOT RUN)")
+    check(passes(fast((0, "connecting", idle), (150, "connected", idle))), "400 ms rule: a 150 ms join that never shows the text passes")
+    check(not passes(fast((0, "connecting", shown), (150, "connected", idle))), "400 ms rule: a 150 ms join that shows the text at once fails")
+    check(passes(fast((0, "connected", idle))), "400 ms rule: a join over before the first write, the text never shown, passes")
+    check(passes(slow((0, "connecting", idle), (200, "connecting", idle), (400, "connecting", shown), (3000, "connected", idle))),
+          "400 ms rule: a 3 s join showing the text from 400 ms passes")
+    check(not passes(slow((0, "connecting", shown), (3000, "connected", idle))), "400 ms rule: a 3 s join showing the text at once fails")
+    check(not passes(slow((0, "connecting", idle), (1600, "connecting", idle), (3000, "connected", idle))),
+          "400 ms rule: a 3 s join where gate.starting never turns true fails")
+    check(not passes(slow((0, "connecting", idle), (400, "connecting", shown), (600, "connected", idle))), "400 ms rule: a slowed join under 1 s fails")
+    check(not passes(slow((0, "connected", idle))), "400 ms rule: a slowed join the probe never saw connecting fails")
+
+    with tempfile.TemporaryDirectory() as folder:
+        run = type("Run", (), {"probe": os.path.join(folder, "probe.json")})()
+
+        def write(report):
+            with open(run.probe, "w") as f:
+                json.dump(report, f)
+        write({"gate": gate})
+        check(wait_section(run, "gate", lambda g: not gate_mismatches(g, want), 0.3)[0] is True, "probe file: a gate that shows the texts answers True")
+        check(wait_section(run, "gate", lambda g: g.get("title") == "Crush not found", 0.3)[0] is False, "probe file: a gate that never does answers False")
+        write({"connection": {"state": "connecting"}})
+        check(wait_section(run, "gate", lambda g: True, 0.3) == (None, None), "probe file: no gate section answers None (NOT RUN)")
 
 
 def main():
     global STAND_IN
+    if sys.argv[1:] == ["--self-check"]:
+        return self_check()
     probe_path, out_dir, port = sys.argv[1], sys.argv[2], sys.argv[3]
     STAND_IN = "--stand-in" in sys.argv[4:]
     if STAND_IN:
@@ -511,9 +646,10 @@ def main():
                 check(out["state"] == "connected" and (out.get("workspace") or {}).get("path") == out.get("cwd") == PROJ,
                       f"a second desktop on the same folder joins with its own folder as the AI's ({(out.get('workspace') or {}).get('path')})")
             else:
-                took = check_starting(sample_join(same), "a second desktop on the same folder")
-                p = same.wait(lambda p: shows(p, "The AI works in"), 3)
-                check(took is not None and not shows(p, "The AI works in"), "it shows no folder notice")
+                check_starting(sample_join(same), "a second desktop on the same folder", "connect-3-notices: its join's 400 ms rule")
+                shown = watch_notice(same, lambda t: t.startswith("The AI works in"), "connect-3-notices: no folder notice", 3)
+                if shown is not None:
+                    check(not shown, "it shows no folder notice")
             check(same.close(), "it closes")
             os.makedirs(os.path.join(PROJ, "sub"), exist_ok=True)
             sub = AppRun("subfolder", out_dir, os.path.join(PROJ, "sub"))
@@ -526,8 +662,9 @@ def main():
                       f"({(out.get('workspace') or {}).get('path')} vs {out.get('cwd')})")
             else:
                 check(out["state"] == "connected", f"a desktop on sub/ joins ({out['state']}, {out.get('error')})")
-                missing = shows_all(sub, [path_notice])
-                check(not missing, f"it shows \"{path_notice}\"")
+                shown = watch_notice(sub, lambda t: t == path_notice, "connect-3-notices: the folder notice", 10)
+                if shown is not None:
+                    check(shown, f"its notice line shows \"{path_notice}\"")
             check(sub.close(), "it closes")
             nos = AppRun("yolo-off", out_dir, PROJ, ["--yolo=false"])
             extra.append(nos)
@@ -539,35 +676,31 @@ def main():
                       f"(sent {out.get('sent_yolo')}, project {(out.get('workspace') or {}).get('yolo')})")
             else:
                 check(out["state"] == "connected", f"a desktop started with --yolo=false joins ({out['state']}, {out.get('error')})")
-                missing = shows_all(nos, [yolo_notice])
-                check(not missing, f"it shows \"{yolo_notice}\"")
+                shown = watch_notice(nos, lambda t: t == yolo_notice, "connect-3-notices: the yolo notice", 10)
+                if shown is not None:
+                    check(shown, f"its notice line shows \"{yolo_notice}\"")
             check(nos.close(), "it closes")
 
         with step("connect-4-starting", out_dir):
-            cold = AppRun("cold", out_dir, make_project(os.path.join(HOME, "cold"), port))
+            slow = wrapper(os.path.join(HOME, "slow", "crush"),
+                           f"# A crush that answers {SLOW_SECONDS} s late, so the join lasts over 1 s (desktop-design 2.9).\n"
+                           f"sleep {SLOW_SECONDS}\nexec {shlex.quote(CRUSH)} \"$@\"\n")
+            cold = AppRun("cold", out_dir, make_project(os.path.join(HOME, "cold"), port), env={"CRUSH_DESKTOP_CRUSH": slow})
             extra.append(cold)
             if STAND_IN:
                 started = time.time()
                 out = join_outcome(cold, 45)
                 check(out["state"] == "connected" and out["engine"].get("started") is True,
-                      f"a fresh folder's join starts a new engine ({out['state']}, started {out['engine'].get('started')}, {time.time() - started:.1f} s)")
+                      f"a fresh folder's slowed join starts a new engine ({out['state']}, started {out['engine'].get('started')}, {time.time() - started:.1f} s)")
             else:
-                first = sample_join(cold)
-                took = check_starting(first, "a join that starts a new engine")
-                if took is not None and took >= 1000:
-                    check(first["text"] is not None, f"a join of {took} ms shows \"{STARTING}\"")
-                elif took is not None:
-                    print(f"NOTE the new engine's join took {took} ms; under 1 s the gate's text need not show", flush=True)
-                p = cold.wait(lambda p: not shows(p, STARTING), 3)
-                check(not shows(p, STARTING), "once joined the gate's text is gone")
+                took = check_starting(sample_join(cold), "a slowed join that starts a new engine", "connect-4-starting: gate.starting", long_join=True)
+                if took is not None:
+                    gone, _ = wait_section(cold, "gate", lambda g: g.get("starting") is not True, 3)
+                    check(gone is not False, "once joined gate.starting is false (the text is gone)")
             check(cold.close(), "it closes")
 
         with step("connect-5-not-found", out_dir):
-            fake = os.path.join(HOME, "gone", "crush")
-            os.makedirs(os.path.dirname(fake), exist_ok=True)
-            with open(fake, "w") as f:
-                f.write("#!/bin/sh\n# A wrapper whose crush is gone (desktop-design 2.9).\nexit 127\n")
-            os.chmod(fake, 0o755)
+            fake = wrapper(os.path.join(HOME, "gone", "crush"), "# A wrapper whose crush is gone (desktop-design 2.9).\nexit 127\n")
             for name, env, message in (
                     ("not-found-127", {"CRUSH_DESKTOP_CRUSH": fake}, f"Crush Desktop could not find crush at {fake}."),
                     ("not-found-path", {"CRUSH_DESKTOP_CRUSH": None, "PATH": ""}, "Crush Desktop could not find crush on your PATH.")):
@@ -577,8 +710,10 @@ def main():
                 ok, got = error_is(out, "crush_not_found", message)
                 check(ok, f"{name}: the error is crush_not_found, \"{message}\" ({got})")
                 if not STAND_IN:
-                    missing = shows_all(run, ["Crush not found", message, "Install Crush", "CRUSH_DESKTOP_CRUSH"])
-                    check(not missing, f"{name}: the gate shows the title, the message and the fix line naming CRUSH_DESKTOP_CRUSH (missing: {missing})")
+                    check_gate(run, {"title": "Crush not found", "body": message,
+                                     "fix": lambda t: t.startswith("Install Crush") and "CRUSH_DESKTOP_CRUSH" in t},
+                               f"{name}: the gate shows the title, the message and the fix line naming CRUSH_DESKTOP_CRUSH",
+                               f"connect-5-not-found: {name}'s gate")
                 check(run.close(), f"{name}: it closes")
 
         with step("connect-6-too-old", out_dir):
@@ -594,11 +729,11 @@ def main():
             ok, got = error_is(out, "crush_too_old", message)
             check(ok, f"the error is crush_too_old, \"{message}\" ({got})")
             if not STAND_IN:
-                missing = shows_all(run, ["Crush is too old", message, "Update Crush, then press Try again.", TRY_AGAIN])
-                check(not missing, f"the gate shows the title, the message, the fix line and Try again (missing: {missing})")
+                check_gate(run, {"title": "Crush is too old", "body": message, "fix": "Update Crush, then press Try again.", "button": TRY_AGAIN},
+                           "the gate shows the title, the message, the fix line and Try again", "connect-6-too-old: the gate")
             os.remove(link)
             os.symlink(CRUSH, link)
-            if press_try_again(run, "connect-6-too-old"):
+            if press_try_again(run, "connect-6-too-old: Try again"):
                 state = state_after(run, 45)
                 check(state == "connected", f"with a crush that has the engine, Try again joins ({state})")
             check(run.close(), "it closes")
@@ -626,8 +761,8 @@ def main():
             ok, got = error_is(out, "project_locked", held)
             check(ok, f"the error is project_locked with the engine's message as is ({got})")
             if not STAND_IN:
-                missing = shows_all(run, ["Crush could not open this project", held, TRY_AGAIN])
-                check(not missing, f"the gate shows the title, the engine's message and Try again (missing: {missing})")
+                check_gate(run, {"title": "Crush could not open this project", "body": held, "button": TRY_AGAIN},
+                           "the gate shows the title, the engine's message and Try again", "connect-7-locked: the gate")
             tmux("kill-session", "-t", "other")
             gone = False
             for _ in range(225):  # the engine exits 10 s after its last client's hold ends
@@ -636,7 +771,7 @@ def main():
                     break
                 time.sleep(0.2)
             check(gone, "with the terminal app closed, the other engine exits")
-            if press_try_again(run, "connect-7-locked"):
+            if press_try_again(run, "connect-7-locked: Try again"):
                 state = state_after(run, 60)
                 check(state == "connected", f"then Try again joins ({state})")
             check(run.close(), "it closes")
@@ -651,8 +786,7 @@ def main():
             ok, got = error_is(out, "bad_path", message)
             check(ok, f"START-008: the error is \"{message}\" ({got})")
             if not STAND_IN:
-                missing = shows_all(run, [message])
-                check(not missing, "it shows in a start-up notice")
+                check_gate(run, {"body": message}, "the gate's body shows it", "connect-8-no-folder: the gate")
                 check((run.section("connection").get("state")) != "connected", "the window stays on the gate")
             time.sleep(1)
             new = engines() - before  # an earlier step's engine may exit meanwhile (10 s after its last window)

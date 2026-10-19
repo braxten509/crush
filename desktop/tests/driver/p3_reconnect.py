@@ -13,7 +13,9 @@ Case 1, every run:
                         "Reconnected to the Crush server.", connected within
                         15 s; the field keeps its text the whole time.
   reconnect-3-reload    the chat reloads: the window has every finished message
-                        the new engine has, none twice, in the engine's order.
+                        the new engine has, none twice, in the engine's order;
+                        and chat.busy is false (D41: the reply the engine's
+                        death stopped does not keep the chat busy).
   reconnect-4-send      the kept text sends, and its reply comes.
   reconnect-5-mid-send  TYPE-048: a prompt sent just as the engine is stopped is
                         not lost: after the rejoin it is in the engine's list,
@@ -30,23 +32,28 @@ while /tmp/fail-ensure exists):
                         engine, nothing was sent while failed, and the kept text
                         then sends.
 Fails when the state is not connected within 15 s, a text is missing, messages
-are missing or doubled against the engine's list, or the field loses its text
-or sends while the engine is gone. The replies are scripts/stream2m.json's
-"Reconnect check: ..." turns, so every run streams the same (2.9 names script
-basic, another piece's; its turns are not known here). A step that cannot run
-prints NOT RUN and fails the check.
+are missing or doubled against the engine's list, the chat stays busy after
+the reload, or the field loses its text or sends while the engine is gone. The
+replies are scripts/stream2m.json's "Reconnect check: ..." turns, so stream2m
+is made the active script (6.2: drivers activate the script whose turns they
+use; 2.9 names script basic, another piece's). The notices are read from the
+probe's notice section (1.9, P3.8: kind, text, action{label}) and Try again is
+pressed at its heavy rect (notice.action.rect); while the section is absent
+(P3.8 not merged), each check that needs it prints NOT RUN and fails.
 
 --stand-in plays the screens' part through the app's own commands (engine_open,
 api, events_take, engine_retry), for builds without P3.3's stores: it checks
 the Rust side's reconnect (its connection events, engine_unavailable while the
 engine is gone) and this driver's steps; texts on screen are not checked.
+--self-check runs the notice and chat.busy helpers on made-up samples (no app).
 Usage: tests/check.sh p3_reconnect.py [--stand-in]
        CHECK_CRUSH=$PWD/tests/fakes/crush-wrap tests/check.sh p3_reconnect.py [--stand-in]
+       python3 -I tests/driver/p3_reconnect.py --self-check
 """
 import importlib.util, os, signal, sys, threading, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from harness import check, finish, key, probe_heavy, step, type_text, wait_for
+from harness import check, finish, key, step, type_text, wait_for
 
 
 def load(name, path):
@@ -118,6 +125,23 @@ def compare(window, engine):
         if pc.flat(by_id[m["id"]].get("text")) != pc.flat(m["text"]):
             return False, f"the text of {m['id']} differs"
     return True, ""
+
+
+def notice_seen(samples, text):
+    """Whether the notice line said text in any sample: True or False, or None
+    when no sample had a notice section (P3.8 is not in this build)."""
+    shown = [s for s in samples if s.get("has_notice")]
+    if not shown:
+        return None
+    return any(pc.flat(s.get("notice")) == pc.flat(text) for s in shown)
+
+
+def busy_after_reload(read, timeout=5):
+    """reconnect-3's D41 check: reads the window's chat.busy until it is false.
+    Answers "idle", "busy" (still true at the timeout: a stuck live flag), or
+    None when the probe has no chat.busy."""
+    passed, value, _ = poll(read, lambda b: b is False, timeout)
+    return "idle" if passed else (None if value is None else "busy")
 
 
 class WindowSide:
@@ -197,12 +221,12 @@ class WindowSide:
         return self.app.section("chat").get("messages") or []
 
     def sample(self):
-        """One look at the window: state, attempt, engine pid, fresh_engine, its texts, the field."""
+        """One look at the window: state, attempt, engine pid, fresh_engine, the notice line, the field."""
         p = self.app.report()
         c = p.get("connection") or {}
         return {"state": c.get("state"), "attempt": c.get("attempt"), "pid": (c.get("engine") or {}).get("pid"),
-                "fresh": c.get("fresh_engine"), "text": pc.light_text(p), "field": (p.get("composer") or {}).get("value") or "",
-                "at": time.time()}
+                "fresh": c.get("fresh_engine"), "has_notice": "notice" in p, "notice": (p.get("notice") or {}).get("text"),
+                "field": (p.get("composer") or {}).get("value") or "", "at": time.time()}
 
     def states(self, samples):
         """The states the window went through. The probe writes every 200 ms, so a
@@ -213,21 +237,30 @@ class WindowSide:
             seen.add("reconnecting")
         return seen
 
-    def shows(self, text, timeout=5):
-        return pc.shows(self.app.wait(lambda p: pc.shows(p, text), timeout), text)
+    def notice(self, text, row, timeout=5, action=None):
+        """Waits until the notice line (the probe's notice section, P3.8) says
+        text, with the button action when one is given: True or False, or None
+        with a NOT RUN line when no write had a notice section."""
+        held, _ = pc.wait_section(self.app, "notice", lambda n: pc.flat(n.get("text")) == pc.flat(text)
+                                  and (action is None or (n.get("action") or {}).get("label") == action), timeout)
+        if held is None:
+            pc.not_run(row, "the probe has no notice section (P3.8 is not in this build), so the notice line could not be read")
+        return held
+
+    def busy(self):
+        return self.app.section("chat").get("busy")
 
     def chat_shows(self, text):
-        return pc.flat(text) in pc.light_text({"chat": self.app.section("chat")})
+        return any(pc.flat(m.get("text")) == pc.flat(text) for m in self.messages())
 
     def try_again(self, row):
-        """The failed notice's Try again: a real click, found by its words in the
-        heavy fields; when the probe has no rect for it, NOT RUN, and engine_retry
-        (what the button calls) so the steps after it can still run."""
-        rect = pc.find_rect(probe_heavy(self.probe, 20), pc.TRY_AGAIN)
-        if rect and self.app.click(rect):
+        """The failed notice's Try again: a real click at notice.action.rect
+        (1.9). When it cannot be pressed (NOT RUN without a notice section, a
+        failed check without the button), engine_retry, what the button calls,
+        stands in so the steps after it can still run."""
+        if pc.press_button(self.app, "notice", "action", "P3.8", row):
             return True
-        pc.not_run(row, "the probe has no rect for the notice's \"Try again\" (1.9 pins none); "
-                        "engine_retry stood in for the click so the later checks still run")
+        print("NOTE engine_retry stood in for the click so the later checks still run", flush=True)
         self.app.invoke("engine_retry")
         return False
 
@@ -326,7 +359,7 @@ class StandInSide:
         else:
             state = error.get("code")
         return {"state": state, "attempt": None, "pid": (a.get("value") or {}).get("pid") if a.get("ok") else None,
-                "fresh": None, "text": "", "field": self.text, "at": time.time()}
+                "fresh": None, "has_notice": False, "notice": None, "field": self.text, "at": time.time()}
 
     def states(self, samples):
         """The states the calls answered, and reconnecting when the log says a
@@ -345,9 +378,6 @@ class StandInSide:
                 n, _, message = rest.partition(" failed: ")
                 tries.append((int(n) if n.isdigit() else n, message))
         return tries
-
-    def shows(self, text, timeout=5):
-        return True  # texts on screen are the window's; not checked here
 
     def chat_shows(self, text):
         return False
@@ -377,7 +407,26 @@ def kill_engine(pid):
         return False
 
 
+def self_check():
+    """--self-check: the helpers that read the notice line and chat.busy, on
+    made-up samples and readers. No app runs."""
+    seen = [{"has_notice": True, "notice": None}, {"has_notice": True, "notice": LOST}, {"has_notice": True, "notice": BACK}]
+    check(notice_seen(seen, LOST) is True, "notice: samples that showed the lost notice find it")
+    check(notice_seen([{"has_notice": True, "notice": BACK}], LOST) is False, "notice: samples that never showed it answer False")
+    check(notice_seen([{"has_notice": False, "notice": None}], LOST) is None, "notice: no notice section in any sample is not a pass (NOT RUN)")
+    rect = {"x": 700, "y": 900, "w": 90, "h": 24}
+    report = {"notice": {"kind": "error", "text": FAILED, "action": {"label": pc.TRY_AGAIN}}, "heavy": {"notice": {"action": {"rect": rect}}}}
+    check(pc.button_of(report, "notice", "action") == (pc.TRY_AGAIN, rect), "notice: Try again is pressed at heavy notice.action.rect")
+    check(busy_after_reload(lambda: False, 0.3) == "idle", "busy: a chat that is not busy after the reload passes")
+    check(busy_after_reload(lambda: True, 0.3) == "busy", "busy: chat.busy that stays true (a stuck live flag, D41) fails by name")
+    check(busy_after_reload(lambda: None, 0.3) is None, "busy: no chat.busy in the probe is not a pass (NOT RUN)")
+    values = iter([True, True, False])
+    check(busy_after_reload(lambda: next(values, False), 2) == "idle", "busy: a chat that turns idle just after the reload passes")
+
+
 def main():
+    if sys.argv[1:] == ["--self-check"]:
+        return self_check()
     probe_path, out_dir, port = sys.argv[1], sys.argv[2], sys.argv[3]
     pc.STAND_IN = stand_in = "--stand-in" in sys.argv[4:]
     side = StandInSide(probe_path, out_dir) if stand_in else WindowSide(probe_path)
@@ -387,6 +436,7 @@ def main():
     sid = None
     try:
         with step("reconnect-1-stream", out_dir):
+            check(pc.set_active_script(port, "stream2m") == "stream2m", "the fake server plays script stream2m, whose turns this check uses (6.2)")
             if not side.has_connection():
                 check(False, "the probe has a connection section (P3.3's store is not in this build)")
                 check(False, "every step reads the window's connection; stopping here")
@@ -417,8 +467,12 @@ def main():
             states = side.states(samples)
             check("reconnecting" in states, f"the window turns reconnecting (states seen: {sorted(states)})")
             if not stand_in:
-                check(any(pc.flat(LOST) in s["text"] for s in samples) or side.shows(LOST, 1),
-                      f"it shows \"{LOST}\"")
+                lost = notice_seen(samples, LOST)
+                if lost is None:
+                    pc.not_run("reconnect-2-kill: the lost notice",
+                               "no probe write had a notice section (P3.8 is not in this build), so the notice line could not be read")
+                else:
+                    check(lost, f"its notice line shows \"{LOST}\"")
             new_pid = samples[-1]["pid"] if samples else None
             check(back, f"it is connected to a new engine within {LIMIT} s (pid {old_pid} -> {new_pid}, {took:.1f} s)")
             pid, sock, wid = side.engine()
@@ -426,7 +480,9 @@ def main():
                 check(bool(wid) and wid != old_wid, f"the new engine gave the window a fresh workspace ({old_wid} -> {wid})")
             else:
                 check(bool(samples) and samples[-1]["fresh"] is True, "the window knows the engine is a fresh one (fresh_engine)")
-                check(side.shows(BACK), f"it shows \"{BACK}\"")
+                shown = side.notice(BACK, "reconnect-2-kill: the reconnected notice")
+                if shown is not None:
+                    check(shown, f"its notice line shows \"{BACK}\"")
                 kept = [s["field"] for s in samples if s["field"] != KEPT]
                 check(not kept and side.field() == KEPT, f"the field kept its text the whole time ({kept[:3]})")
 
@@ -438,6 +494,13 @@ def main():
                     break
                 time.sleep(0.2)
             check(agree, f"the chat has every finished message of the new engine, none twice, in order {why}")
+            if not stand_in:
+                busy = busy_after_reload(side.busy)
+                if busy is None:
+                    pc.not_run("reconnect-3-reload: chat.busy", "the probe's chat section has no busy field (P3.5 is not in this build)")
+                else:
+                    check(busy == "idle", f"after the reload the chat is not busy (chat.busy {'stays true' if busy == 'busy' else 'false'}; "
+                                          "D41: the reply the engine's death stopped does not keep it busy)")
             ends = reply_after(engine_messages(sock, wid, sid), LONG)
             print(f"NOTE the stopped reply in the new engine: {len(ends.get('text') or '')} characters, finished {ends.get('finished')}", flush=True)
 
@@ -505,7 +568,9 @@ def main():
                 check(bool(tries) and all(m.endswith("(start_failed)") for _, m in tries),
                       f"each with ensure's error ({tries[-1][1] if tries else None})")
             else:
-                check(side.shows(FAILED) and side.shows(pc.TRY_AGAIN), f"it shows \"{FAILED}\" and Try again")
+                shown = side.notice(FAILED, "reconnect-6-failed: the failed notice", action=pc.TRY_AGAIN)
+                if shown is not None:
+                    check(shown, f"its notice line shows \"{FAILED}\" with a \"{pc.TRY_AGAIN}\" button")
             side.enter()
             if stand_in:
                 code = ((side.last_send or {}).get("error") or {}).get("code")
@@ -517,11 +582,13 @@ def main():
         with step("reconnect-7-try-again", out_dir):
             os.remove(FAIL_FILE)
             pressed_at = time.time()
-            side.try_again("reconnect-7-try-again")
+            side.try_again("reconnect-7-try-again: Try again")
             back, samples = watch(side, lambda s: s["state"] == "connected" and s["pid"] not in (None, old_pid), LIMIT)
             check(back, f"Try again connects within {LIMIT} s ({time.time() - pressed_at:.1f} s, pid {samples[-1]['pid'] if samples else None})")
             if not stand_in:
-                check(side.shows(BACK), f"it shows \"{BACK}\"")
+                shown = side.notice(BACK, "reconnect-7-try-again: the reconnected notice")
+                if shown is not None:
+                    check(shown, f"its notice line shows \"{BACK}\"")
             pid, sock, wid = side.engine()
             agree, why = False, "no read"
             for _ in range(50):

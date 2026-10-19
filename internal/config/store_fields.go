@@ -259,46 +259,57 @@ func (s *ConfigStore) RemoveConfigField(scope Scope, key string) error {
 	return nil
 }
 
-// SetConfigFieldChanges reports whether setting key to value in scope's
-// config file, as it is now, would change the value at any of paths. It
-// writes nothing; equivalent spellings of a path are judged by their
-// effect, not their text.
-func (s *ConfigStore) SetConfigFieldChanges(scope Scope, key string, value any, paths ...string) (bool, error) {
-	return s.editChanges(scope, func(v string) (string, error) { return sjson.Set(v, key, value) }, paths)
+// ConfigEditGuard judges a config file edit inside the locked
+// read-transform-write, from the file's contents before and after it. An
+// error refuses the edit: nothing is written and the error is returned.
+type ConfigEditGuard func(before, after []byte) error
+
+// SetConfigFieldGuarded is [ConfigStore.SetConfigField] with guard judging
+// the edit under the same config locks as the write, so no other writer
+// can change the file between the judgment and the write.
+func (s *ConfigStore) SetConfigFieldGuarded(scope Scope, key string, value any, guard ConfigEditGuard) error {
+	return s.guardedEdit(scope, guard, func(v string) (string, error) {
+		v, err := sjson.Set(v, key, value)
+		if err != nil {
+			return "", fmt.Errorf("failed to set config field %s: %w", key, err)
+		}
+		return v, nil
+	})
 }
 
-// RemoveConfigFieldChanges reports whether removing key from scope's
-// config file, as it is now, would change the value at any of paths. It
-// writes nothing.
-func (s *ConfigStore) RemoveConfigFieldChanges(scope Scope, key string, paths ...string) (bool, error) {
-	return s.editChanges(scope, func(v string) (string, error) { return sjson.Delete(v, key) }, paths)
+// RemoveConfigFieldGuarded is [ConfigStore.RemoveConfigField] with guard
+// judging the edit as in [ConfigStore.SetConfigFieldGuarded].
+func (s *ConfigStore) RemoveConfigFieldGuarded(scope Scope, key string, guard ConfigEditGuard) error {
+	return s.guardedEdit(scope, guard, func(v string) (string, error) {
+		v, err := sjson.Delete(v, key)
+		if err != nil {
+			return "", fmt.Errorf("failed to delete config field %s: %w", key, err)
+		}
+		return v, nil
+	})
 }
 
-// editChanges applies edit to a copy of scope's config file and compares
-// the value at each of paths before and after.
-func (s *ConfigStore) editChanges(scope Scope, edit func(string) (string, error), paths []string) (bool, error) {
-	path, err := s.configPath(scope)
-	if err != nil {
-		return false, err
-	}
-	data, err := readFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return false, fmt.Errorf("read config file: %w", err)
+// guardedEdit applies edit to scope's file in one locked
+// read-transform-write, asking guard first, then reloads as
+// SetConfigFields does.
+func (s *ConfigStore) guardedEdit(scope Scope, guard ConfigEditGuard, edit func(string) (string, error)) error {
+	err := s.atomicWrite(scope, func(data []byte) ([]byte, error) {
+		after, err := edit(string(data))
+		if err != nil {
+			return nil, err
 		}
-		data = []byte("{}")
-	}
-	before := string(data)
-	after, err := edit(before)
-	if err != nil {
-		return false, err
-	}
-	for _, p := range paths {
-		if gjson.Get(before, p).Raw != gjson.Get(after, p).Raw {
-			return true, nil
+		if err := guard(data, []byte(after)); err != nil {
+			return nil, err
 		}
+		return []byte(after), nil
+	})
+	if err != nil {
+		return err
 	}
-	return false, nil
+	if err := s.autoReload(context.Background()); err != nil {
+		slog.Warn("Config file updated but failed to reload in-memory state", "error", err)
+	}
+	return nil
 }
 
 // removeConfigFieldNoReload deletes a key from the config file for the

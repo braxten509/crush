@@ -59,20 +59,30 @@ func (b *Backend) SetConfigField(workspaceID string, scope config.Scope, key str
 
 // SetConfigFieldAs is [Backend.SetConfigField] for a caller that came in
 // on the engine's unix socket (local) or not. A caller that is not local
-// may not move the engine's CPUs: a write that would change
-// options.agent_cpus_enabled or options.agent_cpus in scope's file is
-// refused with [ErrLocalOnly] before anything changes.
+// may not move the engine's CPUs: a write that could change
+// options.agent_cpus_enabled or options.agent_cpus in scope's file, by any
+// spelling the loader accepts, is refused with [ErrLocalOnly] before
+// anything changes. The check is part of the locked write itself.
 func (b *Backend) SetConfigFieldAs(workspaceID string, local bool, scope config.Scope, key string, value any) error {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
 	o := ws.ops()
-	var movesCPUs func() (bool, error)
 	if !local {
-		movesCPUs = func() (bool, error) { return ws.Cfg.SetConfigFieldChanges(scope, key, value, cpuSettingPaths...) }
+		return b.writeConfig(ws, func() error {
+			return o.mutateConfig(func() error { return ws.Cfg.SetConfigFieldGuarded(scope, key, value, refuseCPUChange) })
+		})
 	}
-	return b.writeConfig(ws, movesCPUs, func() error { return o.SetConfigField(scope, key, value) })
+	return b.writeConfig(ws, func() error { return o.SetConfigField(scope, key, value) })
+}
+
+// refuseCPUChange refuses a config edit that could change the CPU setting.
+func refuseCPUChange(before, after []byte) error {
+	if config.CPUSettingChanged(before, after) {
+		return ErrLocalOnly
+	}
+	return nil
 }
 
 // RemoveConfigField removes a key from the config file for the given
@@ -90,11 +100,12 @@ func (b *Backend) RemoveConfigFieldAs(workspaceID string, local bool, scope conf
 		return err
 	}
 	o := ws.ops()
-	var movesCPUs func() (bool, error)
 	if !local {
-		movesCPUs = func() (bool, error) { return ws.Cfg.RemoveConfigFieldChanges(scope, key, cpuSettingPaths...) }
+		return b.writeConfig(ws, func() error {
+			return o.mutateConfig(func() error { return ws.Cfg.RemoveConfigFieldGuarded(scope, key, refuseCPUChange) })
+		})
 	}
-	return b.writeConfig(ws, movesCPUs, func() error { return o.RemoveConfigField(scope, key) })
+	return b.writeConfig(ws, func() error { return o.RemoveConfigField(scope, key) })
 }
 
 // UpdatePreferredModel updates the preferred model for the given type

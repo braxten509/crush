@@ -31,7 +31,7 @@ import {
   unreadable,
 } from "../composer/paste.js";
 import { planReadyPresent } from "../render/plan.js";
-import { conn } from "./connection.svelte.js";
+import { conn, refusedWhileFailed } from "./connection.svelte.js";
 import { addPending, finishPending, markUncertain, messages, resolvePending, returnDraft, takeReturned } from "./messages.svelte.js";
 import { queue, recall as recallQueued, recalled, refresh as refreshQueue } from "./queue.svelte.js";
 import { busy, deferSend, ensureSession, sessions, upsertSession } from "./sessions.svelte.js";
@@ -726,7 +726,7 @@ function reportSendFailure(submissionId, error) {
     if (submissionId) finishPending(submissionId, false);
     return;
   }
-  notify("error", errorText(error));
+  if (!refusedWhileFailed(error)) notify("error", errorText(error));
   if (!submissionId) return;
   if (code === "transport" || code === "timeout") {
     // The engine may have taken it (update_agent.go:134-141): the item stays.
@@ -761,7 +761,7 @@ async function sendMessage(content, attachments = [], { hidden = false } = {}) {
     sid = await ensureSession();
   } catch (error) {
     landingSend = false;
-    notify("error", errorText(error));
+    if (!refusedWhileFailed(error)) notify("error", errorText(error));
     if (!hidden) returnDraft(prior, { text: content, attachments });
     return false;
   }

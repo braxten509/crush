@@ -255,6 +255,20 @@ describe("sending", () => {
       expect(h.calls.some((c) => c.path === "sessions/s1/messages")).toBe(false);
     });
 
+    it("a send refused while the connection has failed keeps the failed notice and its Try again (SIDE-030)", async () => {
+      show("s1");
+      await deliver(ev("connection", "updated", { state: "connected", attempt: 0 }));
+      await deliver(ev("connection", "updated", { state: "failed", attempt: 3, error: { code: "engine_unavailable", message: "ensure failed" } }));
+      h.routes.set("POST agent", () => Promise.reject({ code: "engine_unavailable", message: "Crush Desktop lost its connection to the Crush engine; nothing was sent." }));
+      C.setText("hello");
+      await C.send();
+      await settle();
+      const { ui } = await import("../stores/ui.svelte.js");
+      expect(ui.notice.text).toBe("Can't restore the connection to the Crush server. Restart Crush to recover. Nothing was sent.");
+      expect(ui.notice.action?.label).toBe("Try again");
+      expect(M.messages.returned.s1).toEqual([{ text: "hello", attachments: [] }]);
+    });
+
     it("a stopped send is dropped without coming back", async () => {
       show("s1");
       h.routes.set("POST agent", () => Promise.reject({ code: "aborted", message: "stopped" }));

@@ -184,6 +184,19 @@ export async function retry() {
   return true;
 }
 
+// The failed notice (SIDE-030, internal/ui/model/agent_events.go:39-41).
+const FAILED_TEXT = "Can't restore the connection to the Crush server. Restart Crush to recover.";
+
+// A send refused while the connection has failed (engine_unavailable): Try
+// again is the only way back (SIDE-030), so the failed notice stays, saying
+// nothing was sent, instead of a notice without the button. True when it
+// took the refusal; the caller shows its own notice otherwise.
+export function refusedWhileFailed(error) {
+  if (conn.state !== "failed" || !joinedOnce || error?.code !== "engine_unavailable") return false;
+  notify("error", `${FAILED_TEXT} Nothing was sent.`, 60_000, { label: "Try again", run: retry });
+  return true;
+}
+
 // The connection event (1.4.2; SIDE-030, internal/ui/model/agent_events.go:
 // 25-65). A connected event with resync: true also runs every resync, which
 // reloads the shown chat (events.js).
@@ -204,7 +217,7 @@ onEvent("connection", (_kind, ev) => {
   if (ev.state === "reconnecting") {
     note("warn", "Lost connection to the Crush server — reconnecting…", 30_000);
   } else if (ev.state === "failed" && joinedOnce) {
-    note("error", "Can't restore the connection to the Crush server. Restart Crush to recover.", 60_000, { label: "Try again", run: retry });
+    note("error", FAILED_TEXT, 60_000, { label: "Try again", run: retry });
   } else if (ev.state === "connected" && (ev.resync === true || before === "reconnecting" || before === "failed") && before !== "connecting") {
     note("success", "Reconnected to the Crush server.", 5000);
   }

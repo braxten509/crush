@@ -7,8 +7,12 @@ Case 1, every run:
                         "Reconnect check: a long reply" (scripts/stream2m.json,
                         about 10 s); the reply streams.
   reconnect-2-kill      with "Reconnect check: kept while reconnecting" typed in
-                        the field, kill -9 on connection.engine.pid: "Lost
-                        connection to the Crush server — reconnecting…", a new
+                        the field, kill -9 on connection.engine.pid: the "Lost
+                        connection to the Crush server — reconnecting…"
+                        notification is issued (on the line in a probe write,
+                        or in connection.notices: a quick rejoin replaces it
+                        before a write, as the terminal does; reconnect-6
+                        proves it reaches the line), a new
                         engine from ensure (another pid, fresh_engine true),
                         "Reconnected to the Crush server.", connected within
                         15 s; the field keeps its text the whole time.
@@ -22,7 +26,9 @@ Case 1, every run:
                         back in the field, or shown pending in the chat.
 Case 2, only with CHECK_CRUSH=$PWD/tests/fakes/crush-wrap (its ensure fails
 while /tmp/fail-ensure exists):
-  reconnect-6-failed    /tmp/fail-ensure made, kill -9: reconnecting, then after
+  reconnect-6-failed    /tmp/fail-ensure made, kill -9: reconnecting, with "Lost
+                        connection to the Crush server — reconnecting…" on the
+                        notice line while the tries fail, then after
                         three failed tries "Can't restore the connection to the
                         Crush server. Restart Crush to recover." with Try again;
                         the field keeps "Reconnect check: typed while failed"
@@ -134,6 +140,23 @@ def notice_seen(samples, text):
     if not shown:
         return None
     return any(pc.flat(s.get("notice")) == pc.flat(text) for s in shown)
+
+
+def notices_added(before, after):
+    """The connection notices shown between two reads of the connection
+    section's notices list (1.9: every connection notice handed to the notice
+    line, newest last, at most 20). The terminal replaces its status line at
+    once (internal/ui/model/agent_events.go:29-52), so a reconnect quicker than
+    the probe's 200 ms write shows its lost notice between two writes: the list
+    still has it. None when the section has no list."""
+    if before is None or after is None:
+        return None
+    texts = lambda notices: [pc.flat(n.get("text")) for n in notices]
+    before, after = texts(before), texts(after)
+    for start in range(len(before) + 1):  # the longest end of before that starts after
+        if after[:len(before) - start] == before[start:]:
+            return after[len(before) - start:]
+    return after
 
 
 def busy_after_reload(read, timeout=5):
@@ -414,6 +437,13 @@ def self_check():
     check(notice_seen(seen, LOST) is True, "notice: samples that showed the lost notice find it")
     check(notice_seen([{"has_notice": True, "notice": BACK}], LOST) is False, "notice: samples that never showed it answer False")
     check(notice_seen([{"has_notice": False, "notice": None}], LOST) is None, "notice: no notice section in any sample is not a pass (NOT RUN)")
+    old = [{"kind": "success", "text": BACK}]
+    check(notices_added(old, old + [{"kind": "warn", "text": LOST}, {"kind": "success", "text": BACK}]) == [pc.flat(LOST), pc.flat(BACK)],
+          "notices: the lost and reconnected notices shown between two writes are found in the list")
+    check(notices_added(old, old) == [], "notices: a list that did not grow adds nothing")
+    full = [{"text": str(i)} for i in range(20)]
+    check(notices_added(full, full[1:] + [{"text": LOST}]) == [pc.flat(LOST)], "notices: a full list that dropped its oldest still gives the new one")
+    check(notices_added(None, old) is None, "notices: no list in the probe is not a pass (NOT RUN)")
     rect = {"x": 700, "y": 900, "w": 90, "h": 24}
     report = {"notice": {"kind": "error", "text": FAILED, "action": {"label": pc.TRY_AGAIN}}, "heavy": {"notice": {"action": {"rect": rect}}}}
     check(pc.button_of(report, "notice", "action") == (pc.TRY_AGAIN, rect), "notice: Try again is pressed at heavy notice.action.rect")
@@ -460,6 +490,7 @@ def main():
             old_pid, old_wid = pid, wid
             if stand_in:
                 side.set_mark()
+            notices_before = None if stand_in else side.conn().get("notices")
             killed_at = time.time()
             check(kill_engine(old_pid), f"kill -9 on the engine (pid {old_pid})")
             back, samples = watch(side, lambda s: s["state"] == "connected" and s["pid"] not in (None, old_pid), LIMIT)
@@ -467,12 +498,14 @@ def main():
             states = side.states(samples)
             check("reconnecting" in states, f"the window turns reconnecting (states seen: {sorted(states)})")
             if not stand_in:
-                lost = notice_seen(samples, LOST)
-                if lost is None:
+                on_line = notice_seen(samples, LOST)
+                added = notices_added(notices_before, side.conn().get("notices"))
+                if on_line is None or added is None:
                     pc.not_run("reconnect-2-kill: the lost notice",
-                               "no probe write had a notice section (P3.8 is not in this build), so the notice line could not be read")
+                               "the probe has no notice section (P3.8) or no connection notices list (P3.3), so the notice line could not be read")
                 else:
-                    check(lost, f"its notice line shows \"{LOST}\"")
+                    check(on_line or pc.flat(LOST) in added,
+                          f"the lost notification \"{LOST}\" is issued (on the line in a probe write: {on_line}; connection notices since the kill: {added})")
             new_pid = samples[-1]["pid"] if samples else None
             check(back, f"it is connected to a new engine within {LIMIT} s (pid {old_pid} -> {new_pid}, {took:.1f} s)")
             pid, sock, wid = side.engine()
@@ -566,6 +599,15 @@ def main():
             failed, samples = watch(side, lambda s: s["state"] == "failed", LIMIT)
             states = side.states(samples)
             check(failed and "reconnecting" in states, f"the window reconnects, then fails (states seen: {sorted(states)})")
+            if not stand_in:
+                # The tries fail for seconds here, so the lost notice stays up long
+                # enough for a probe write: this proves it reaches the line.
+                trying = [s for s in samples if s["state"] == "reconnecting"]
+                lost = notice_seen(trying, LOST)
+                if lost is None:
+                    pc.not_run("reconnect-6-failed: the lost notice", "no probe write while reconnecting had a notice section (P3.8)")
+                else:
+                    check(lost, f"while the tries fail, its notice line shows \"{LOST}\" ({len(trying)} probe reads while reconnecting)")
             if stand_in:
                 tries = side.failed_tries()
                 check([n for n, _ in tries] == [1, 2, 3], f"after three failed tries ({[n for n, _ in tries]})")

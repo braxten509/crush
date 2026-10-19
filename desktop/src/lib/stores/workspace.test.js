@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 // The real event loop (events.js) with fake Tauri calls (see prompts.test.js).
 const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], ring: null }));
@@ -330,6 +330,23 @@ describe("events and reads", () => {
     await settle();
     expect(answers).toHaveLength(2);
     expect(workspace.ws.skills).toEqual([{ name: "last" }]);
+  });
+
+  it("a failed skills read still runs the follow-up an event queued during it", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => logged.mockRestore());
+    const reads = [];
+    h.routes.set("GET skills", () => new Promise((resolve, reject) => reads.push({ resolve, reject })));
+    await deliver(ev("skills_event", "updated", {})); // A
+    await deliver(ev("skills_event", "updated", {})); // B, while A's read is pending
+    expect(reads).toHaveLength(1);
+    reads[0].reject({ code: "transport", message: "down" });
+    await settle();
+    expect(reads).toHaveLength(2);
+    reads[1].resolve([{ name: "after-failure" }]);
+    await settle();
+    expect(workspace.ws.skills).toEqual([{ name: "after-failure" }]);
+    expect(logged).toHaveBeenCalledWith("skills read failed", { code: "transport", message: "down" });
   });
 
   it("the Git branch answer is {branch}", async () => {

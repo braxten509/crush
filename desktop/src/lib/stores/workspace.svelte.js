@@ -217,11 +217,13 @@ onEvent("config_changed", () => {
 });
 onEvent("lsp_event", () => quietly(loadLsps(), "LSP"));
 onEvent("mcp_event", () => quietly(loadMcps(), "MCP"));
-onEvent("skills_event", () => quietly(reloadSkills(), "skills"));
+onEvent("skills_event", () => reloadSkills());
 
 // skills_event reads never overlap: events during one collapse into one more
 // read after it. A skills read used to publish skills_event itself, so every
 // read an event started brought another event (and with two windows, two).
+// A failed read is logged and the follow-up still runs: the engine sends no
+// second event for an unchanged list, so a dropped one would leave it stale.
 const skillsRead = { running: false, again: false };
 async function reloadSkills() {
   if (skillsRead.running) {
@@ -232,7 +234,7 @@ async function reloadSkills() {
   try {
     do {
       skillsRead.again = false;
-      await loadSkills();
+      await quietly(loadSkills(), "skills");
     } while (skillsRead.again);
   } finally {
     skillsRead.running = false;

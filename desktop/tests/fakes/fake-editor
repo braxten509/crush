@@ -1,0 +1,89 @@
+#!/usr/bin/python3 -I
+"""Stands in for the user's editor in TERM's checks (desktop-design-5-6 8.4,
+tests/driver/p6_terminal.py): writes "edited at <line>:<column>" into the file
+it is given and exits.
+
+It reads the position the way github.com/charmbracelet/x/editor passes it to
+the editor it is named as (the driver runs it through a link called nvim;
+2.26 step 3): "+call cursor(L,C)" (vi, vim, nvim), "+L,C" (nano), "+L:C"
+(emacs, kak), "+L" (gedit), "--goto FILE:L:C" (code), "FILE:L:C" (hx). With
+no position it writes "edited at ?:?".
+
+Each call appends one JSON line to /tmp/fake-editor.log: its name, its
+arguments, the file's text and mode before it changed it, its terminal and
+$TERM (it runs in a terminal tab). The first line of
+/tmp/fake-editor.mode, when present, changes what the next call does:
+  edit          the default above
+  write TEXT    writes TEXT instead
+  fail          exits 3 and writes nothing
+  shell         runs an interactive /bin/sh in the tab instead, the driver's
+                way to a terminal tab while the folder picker (LST) is not
+                merged in
+"""
+import json, os, re, sys
+
+LOG = "/tmp/fake-editor.log"
+MODE = "/tmp/fake-editor.mode"
+
+name = os.path.basename(sys.argv[0])
+args = sys.argv[1:]
+mode = ""
+try:
+    with open(MODE) as f:
+        mode = f.readline().rstrip("\n")
+except OSError:
+    pass
+
+line = column = "?"
+path = None
+take_goto = False
+for arg in args:
+    if take_goto:
+        take_goto = False
+        m = re.fullmatch(r"(.*):(\d+):(\d+)", arg)
+        if m:
+            path, line, column = m.groups()
+        continue
+    if arg == "--goto":
+        take_goto = True
+        continue
+    m = re.fullmatch(r"\+call cursor\((\d+),(\d+)\)", arg) or re.fullmatch(r"\+(\d+)[,:](\d+)", arg)
+    if m:
+        line, column = m.groups()
+        continue
+    m = re.fullmatch(r"\+(\d+)", arg)
+    if m:
+        line = m.group(1)
+        continue
+    if arg.startswith("-"):
+        continue
+    m = re.fullmatch(r"(.*):(\d+):(\d+)", arg) if name == "hx" else None
+    if m:
+        path, line, column = m.groups()
+    else:
+        path = arg
+
+before = file_mode = None
+if path:
+    try:
+        with open(path) as f:
+            before = f.read()
+        file_mode = oct(os.stat(path).st_mode & 0o777)
+    except OSError:
+        pass
+try:
+    tty = os.ttyname(0)
+except OSError:
+    tty = None
+with open(LOG, "a") as f:
+    f.write(json.dumps({"name": name, "args": args, "mode": mode, "before": before, "file_mode": file_mode,
+                        "tty": tty, "term": os.environ.get("TERM")}) + "\n")
+
+if mode == "shell":
+    os.execv("/bin/sh", ["sh", "-i"])
+if mode == "fail":
+    sys.exit(3)
+text = mode[len("write "):] if mode.startswith("write ") else f"edited at {line}:{column}"
+if path:
+    with open(path, "w") as f:
+        f.write(text + "\n")

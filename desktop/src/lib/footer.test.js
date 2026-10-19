@@ -10,6 +10,7 @@ import {
   footerTokenCount,
   formatReasoningEffort,
   goFixed,
+  limitWindows,
   meterModel,
   modelInfo,
   shortDuration,
@@ -265,5 +266,52 @@ describe("cliKind and modelInfo (the details overlay)", () => {
 
   it("no agent model: empty", () => {
     expect(modelInfo({ agent: null })).toEqual({ name: "", via: "", reasoning: "", usage: null, limits: [] });
+  });
+});
+
+describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
+  const now = Date.parse("2026-10-18T12:00:00Z");
+  const reading = (fields = {}) => ({
+    kind: "claude-code",
+    state: "ready",
+    read_at: "2026-10-18T11:59:30.123456789Z",
+    windows: [
+      { name: "5h", used: 86, resets_at: "2026-10-18T14:41:00Z" },
+      { name: "Weekly", used: 31, resets_at: "2026-10-21T12:00:00.5Z" },
+      { name: "Opus", used: 40, model: "opus" },
+      { name: "Sonnet", used: 10, model: "sonnet" },
+    ],
+    ...fields,
+  });
+
+  it("the windows for every model and for this one, with what is left and the time to the reset", () => {
+    expect(limitWindows(reading(), "opus", now)).toEqual([
+      { name: "5h", left: 14, resetsIn: (2 * 60 + 41) * 60_000 },
+      { name: "Weekly", left: 69, resetsIn: 3 * 24 * 3_600_000 + 500 },
+      { name: "Opus", left: 60, resetsIn: null },
+    ]);
+  });
+
+  it("a window past its reset is whole again; used over 100 leaves 0", () => {
+    const past = reading({ windows: [{ name: "5h", used: 90, resets_at: "2026-10-18T11:00:00Z" }, { name: "Weekly", used: 120 }] });
+    expect(limitWindows(past, "opus", now)).toEqual([
+      { name: "5h", left: 100, resetsIn: -3_600_000 },
+      { name: "Weekly", left: 0, resetsIn: null },
+    ]);
+  });
+
+  it("checking until the first reading; no reading means no limits; Go's zero time is no time", () => {
+    expect(limitWindows(reading({ state: "checking", read_at: undefined }), "opus", now)).toBeNull();
+    expect(limitWindows(reading({ state: "error", read_at: "0001-01-01T00:00:00Z" }), "opus", now)).toBeNull();
+    expect(limitWindows(undefined, "opus", now)).toEqual([]);
+    expect(limitWindows(reading({ windows: [{ name: "5h", used: 1, resets_at: "0001-01-01T00:00:00Z" }] }), "opus", now)).toEqual([{ name: "5h", left: 99, resetsIn: null }]);
+  });
+
+  it("feeds the meters: the picture's 5-HOUR 86 % with the warning", () => {
+    const { meters } = meterModel({ items: ["limit_5h", "limit_weekly", "resets"], limits: limitWindows(reading(), "opus", now) });
+    expect(meters.map((m) => [m.label, m.text, m.warn, m.resets])).toEqual([
+      ["5-HOUR", "86%", true, "resets 2h41m"],
+      ["WEEK", "31%", false, "resets 3d0h"],
+    ]);
   });
 });

@@ -18,7 +18,7 @@
 //                                 effect below runs it for the shown chat
 import { untrack } from "svelte";
 import { extractFigures } from "../render/figures.js";
-import { isFinished, messages, withInterrupt } from "./messages.svelte.js";
+import { messages } from "./messages.svelte.js";
 import { sessions } from "./sessions.svelte.js";
 
 export const visuals = $state({ bySession: {}, marked: "" }); // sid → { order: [figureId], byId: { figureId: Figure } }; marked: the figure with the 1.2 s bar
@@ -102,13 +102,16 @@ export function revealFigure(figureId) {
 
 // -- Extraction in idle time (1.6 item 5) --
 
-const seen = new Map(); // sid → Map(mid → the shown message object last queued)
+const seen = new Map(); // sid → Map(mid → the message object last queued)
 const inputs = new Map(); // sid → Map(mid → "finished\0text" last extracted)
 const waiting = new Map(); // sid → Set(mid) to extract
 let scheduled = false;
 
-// Message.Content() is the first text part (internal/proto/message.go).
+// Message.Content() is the first text part, and a message is finished once it
+// has a finish part (internal/proto/message.go); a stopped run gets one too
+// (internal/agent/agent.go, FinishReasonCanceled).
 const textOf = (m) => (m?.parts ?? []).find((p) => p?.type === "text")?.data?.text ?? "";
+const finishedOf = (m) => (m?.parts ?? []).some((p) => p?.type === "finish");
 
 function schedule() {
   if (scheduled) return;
@@ -121,9 +124,8 @@ function extractOne(sessionId, mid) {
   const chat = messages.bySession[sessionId];
   const m = chat?.byId?.get(mid);
   if (!m || m.role !== "assistant") return;
-  const shown = withInterrupt(m);
-  const text = textOf(shown);
-  const finished = isFinished(shown);
+  const text = textOf(m);
+  const finished = finishedOf(m);
   let last = inputs.get(sessionId);
   if (!last) inputs.set(sessionId, (last = new Map()));
   const input = `${finished ? 1 : 0}\u0000${text}`;
@@ -164,7 +166,7 @@ export function syncFigures(sessionId) {
   const shown = [];
   for (const mid of ids) {
     const m = chat.byId.get(mid);
-    if (m?.role === "assistant") shown.push([mid, withInterrupt(m)]);
+    if (m?.role === "assistant") shown.push([mid, m]);
   }
   untrack(() => {
     // Figures of chats no longer loaded go (sessions.svelte.js unloads a

@@ -2,11 +2,12 @@
 // panel (SIDE-006, SIDE-014, SIDE-019 to SIDE-024): ports of
 // internal/ui/model/composer_footer.go:99-139,250-349, sidebar.go:25-160 and
 // internal/ui/common/elements.go:43-149. Pure: the panel gives it the
-// stores' values, and limit windows already measured
-// ({name, left, resetsIn}: left from limits.svelte.js leftPercent, resetsIn
-// the milliseconds to the reset, or null).
+// stores' values, and limit windows already measured by limitWindows
+// ({name, left, resetsIn}: resetsIn the milliseconds to the reset, or null).
 //
 //   FOOTER_CHOICES, DEFAULT_FOOTER_ITEMS, footerItems(config)   the Customize rows and the chosen ids
+//   footerAnswer(picked)                                          what Customize saves
+//   cliKind(agent, providers), limitWindows(reading, model, now)  the agent CLI's windows from limits.byKind
 //   footerFields({...}) → [{id, text}], footerText(fields)        renderFooterItems, joined with " · "
 //   meterModel({...}) → {meters, lines, tokens}                   the panel's meters, detail lines and strip count
 //   modelInfo({...})                                              the details overlay's model block
@@ -248,6 +249,34 @@ export function cliKind(agent, providers) {
   if (!provider) return "";
   const kind = providerKind(provider, providers);
   return CLI_KINDS.has(kind) ? kind : "";
+}
+
+// Go's RFC 3339 time (up to nine fraction digits) in ms, or null for none or
+// Go's zero time.
+const RFC3339 = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/iu;
+function goTime(value) {
+  const m = typeof value === "string" ? RFC3339.exec(value.trim()) : null;
+  if (!m || m[1].startsWith("0001-01-01")) return null;
+  const ms = Date.parse(m[1] + (m[3].toUpperCase() === "Z" ? "Z" : m[3]));
+  return Number.isFinite(ms) ? ms + Math.floor(Number((m[2] ?? "").padEnd(9, "0")) / 1e6) : null;
+}
+
+// The windows of a kind's reading (limits.byKind[kind], CLILimits) that
+// apply to the model, measured at now: those for every model and those for
+// this one (cliagent.Limits, internal/agent/cliagent/limits.go:145-157); a
+// window past its reset is whole again (Limit.Left, limits.go:30-36). null
+// while the kind is checking (a reading without read_at); [] when the kind
+// reports no limits at all.
+export function limitWindows(reading, model, now = Date.now()) {
+  if (!reading) return [];
+  if (goTime(reading.read_at) === null) return null;
+  return (reading.windows ?? [])
+    .filter((w) => !w.model || w.model === model)
+    .map((w) => {
+      const resets = goTime(w.resets_at);
+      const left = resets !== null && now > resets ? 100 : Math.max(0, 100 - (Number(w.used) || 0));
+      return { name: String(w.name ?? ""), left, resetsIn: resets === null ? null : resets - now };
+    });
 }
 
 const ABACUS = "abacus";

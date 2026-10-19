@@ -136,16 +136,19 @@ describe("extraction", () => {
     expect(figures.extractFigures.mock.calls.map((c) => c[1])).toEqual(["m1", "m2"]);
   });
 
-  it("counts a streaming message's closed blocks only, and all of them once interrupted", async () => {
+  it("counts a streaming message's closed blocks only, and all of them once it has a finish part", async () => {
     const open = `${TABLE}\nNext\n\n| Name | Value |\n|---|---|\n| a`;
-    chat(reply("m1", open, { finished: false }));
+    const c = chat(reply("m1", open, { finished: false }));
     store.syncFigures(SID);
     await settle();
     expect(ids(store.figuresFor(SID))).toEqual(["m1:0"]);
-    msgs.interrupted.add("m1"); // withInterrupt gives the shown copy a finish part
+    const first = store.visuals.bySession[SID].byId["m1:0"];
+    // A stopped run gets a finish part too (FinishReasonCanceled).
+    c.byId.set("m1", reply("m1", open, { finished: true }));
     store.syncFigures(SID);
     await settle();
     expect(ids(store.figuresFor(SID))).toEqual(["m1:0", "m1:1"]);
+    expect(store.figuresFor(SID)[0]).toEqual(first); // the closed block's index never changed
   });
 
   it("replaces a rewritten message's figures and keeps the other messages' objects", async () => {

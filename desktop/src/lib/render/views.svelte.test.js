@@ -12,7 +12,7 @@ import script from "../../../tests/fakes/scripts/unsafe.json";
 import { registerDecorationHandler, registerDecorationSource } from "../decorations.js";
 import { setPanelHidden, ui } from "../stores/ui.svelte.js";
 import { extractFigures } from "./figures.js";
-import { DIAGRAM_FAILED, loadMermaid, resetMermaidForTests } from "./mermaid.js";
+import { DIAGRAM_FAILED, DIAGRAM_KINDS, loadMermaid, resetMermaidForTests } from "./mermaid.js";
 import { scanPage } from "./safety.js";
 
 const spies = vi.hoisted(() => ({ reveal: vi.fn(), fileRead: vi.fn(), openLink: vi.fn() }));
@@ -144,7 +144,8 @@ describe("MarkdownView", () => {
     const scan = scanPage(document);
     expect([scan.handlers_found, scan.scripts_found, scan.controls_found, scan.bad_hrefs_found]).toEqual([0, 0, 0, 0]);
     expect(scan.anchors.map((a) => a.href)).toEqual(["http://127.0.0.1:47321/page.html"]);
-    expect(scan.chips.map((c) => c.kind)).toEqual(["diagram", "math"]);
+    // The hostile diagram and the math, then one valid diagram of every kind.
+    expect(scan.chips.map((c) => c.kind)).toEqual(["diagram", "math", ...DIAGRAM_KINDS.map(() => "diagram")]);
   });
 
   test("leaving the page unmounts every visual", () => {
@@ -222,9 +223,12 @@ describe("FigureView", () => {
   });
 
   test("a diagram: its source until idle time, then the drawing", async () => {
-    const fake = { initialize() {}, render: async (id) => ({ svg: `<svg id="${id}" xmlns="http://www.w3.org/2000/svg" style="max-width: 120px;" height="40"><text>Sign in</text></svg>` }) };
+    const fake = {
+      initialize() {},
+      render: async (id) => ({ svg: `<svg id="${id}" xmlns="http://www.w3.org/2000/svg" aria-roledescription="flowchart-v2" style="max-width: 120px;" height="40"><text>Sign in</text></svg>` }),
+    };
     loadMermaid(async () => fake);
-    const target = show(FigureView, { figure: figure("diagram", { source: "flowchart LR\n  A[Sign in] --> B" }) });
+    const target = show(FigureView, { figure: figure("diagram", { title: "Sign-in flow", source: "flowchart LR\n  A[Sign in] --> B" }) });
     const view = target.querySelector(".figure-view");
     expect(view.dataset.state).toBe("pending");
     expect(view.querySelector(".figure-source").textContent).toBe("flowchart LR\n  A[Sign in] --> B");
@@ -234,16 +238,20 @@ describe("FigureView", () => {
     expect(svg.getAttribute("width")).toBe("100%");
     expect(svg.hasAttribute("height")).toBe(false);
     expect(svg.style.maxWidth).toBe("");
+    // The safety scan names the figure by its title and reads the kind its
+    // drawing says it is, so the window check can tell each diagram apart.
+    expect(scanPage(document).figures).toEqual([{ figure: "m9:0", kind: "diagram", title: "Sign-in flow", state: "drawn", svg: "flowchart-v2", inline: false }]);
   });
 
   test("a diagram that cannot be drawn shows its source and the line", async () => {
     loadMermaid(async () => ({ initialize() {}, render: async () => Promise.reject(new Error("parse error")) }));
-    const target = show(FigureView, { figure: figure("diagram", { source: "not a diagram" }) });
+    const target = show(FigureView, { figure: figure("diagram", { source: "not a diagram" }), inline: true });
     await idle();
     const view = target.querySelector(".figure-view");
     expect(view.dataset.state).toBe("fallback");
     expect(view.querySelector(".figure-source").textContent).toBe("not a diagram");
     expect(view.querySelector(".figure-failed").textContent).toBe(DIAGRAM_FAILED);
+    expect(scanPage(document).figures.map(({ title, state, svg }) => ({ title, state, svg }))).toEqual([{ title: "A figure", state: "fallback", svg: null }]);
   });
 
   test("math: KaTeX display in idle time; while streaming only the source", async () => {

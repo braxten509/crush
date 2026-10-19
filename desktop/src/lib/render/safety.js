@@ -23,8 +23,11 @@
 //          anchors          [{text, href, rect}] every link drawn from a reply
 //          refused          [{text, rect}] every link turned into text
 //          chips            [{figure, kind, title, rect}] the visuals chips
-//          figures          [{figure, kind, state, inline}] the figures on the
-//                           page; inline when drawn in a reply (panel hidden)
+//          figures          [{figure, kind, title, state, svg, inline}] the
+//                           figures on the page; svg is the kind the drawn SVG
+//                           names (Mermaid's aria-roledescription), null when
+//                           the body holds no SVG; inline when drawn in a
+//                           reply (panel hidden)
 //          focus            {tag, href, text} of the focused element, or null
 //
 // The counter starts when the renderer is first imported, before the probe's
@@ -148,12 +151,17 @@ export function scanPage(doc = document) {
       title: words(chip.querySelector(".md-chip-title") ?? chip),
       rect: rectOf(chip),
     })),
-    figures: [...doc.querySelectorAll(".figure-view")].map((view) => ({
-      figure: view.dataset.figure ?? null,
-      kind: view.dataset.kind ?? null,
-      state: view.dataset.state ?? null,
-      inline: view.closest(".md") !== null,
-    })),
+    figures: [...doc.querySelectorAll(".figure-view")].map((view) => {
+      const svg = view.querySelector(":scope > .figure-body > svg");
+      return {
+        figure: view.dataset.figure ?? null,
+        kind: view.dataset.kind ?? null,
+        title: words(view.querySelector(":scope > figcaption .caption-title, :scope > figcaption .heading") ?? view.querySelector(":scope > figcaption") ?? view),
+        state: view.dataset.state ?? null,
+        svg: svg ? (svg.getAttribute("aria-roledescription") ?? "") : null,
+        inline: view.closest(".md") !== null,
+      };
+    }),
     focus: focusOf(doc),
   };
 }

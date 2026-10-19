@@ -15,6 +15,51 @@ import { svgFragment } from "./sanitize.js";
 
 export const DIAGRAM_FAILED = "This diagram could not be drawn here.";
 
+// The kinds the renderer draws: every kind Mermaid 12.2.0 registers, by the id
+// its parse reports and its SVG names (aria-roledescription). The safety
+// corpus holds one valid diagram of each (tests/fakes/scripts/unsafe.json,
+// "unsafe diagrams"), and p3_safety.py fails when any of them falls back to
+// its source, inline or in the panel: the fallback is for bad input only.
+export const DIAGRAM_KINDS = [
+  "flowchart-v2",
+  "sequence",
+  "classDiagram",
+  "stateDiagram",
+  "er",
+  "journey",
+  "gantt",
+  "pie",
+  "quadrantChart",
+  "requirement",
+  "gitGraph",
+  "c4",
+  "mindmap",
+  "timeline",
+  "sankey",
+  "xychart",
+  "block",
+  "packet",
+  "kanban",
+  "architecture",
+  "radar",
+  "treemap",
+  "info",
+  "ishikawa",
+  "venn",
+  "treeView",
+  "usecase",
+  "wardley",
+  "cynefin",
+  "railroad",
+  "railroadEbnf",
+  "railroadAbnf",
+  "railroadPeg",
+  "agentflow",
+  "swimlane",
+  "eventmodeling",
+  "flowchart-elk",
+];
+
 export const MERMAID_CONFIG = {
   startOnLoad: false,
   securityLevel: "strict",

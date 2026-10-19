@@ -51,13 +51,13 @@
     "id": "5afe0000-0000-4000-8000-0000000000a1",
     "parent_session_id": "",
     "title": "Unsafe replies",
-    "message_count": 8,
+    "message_count": 10,
     "prompt_tokens": 2400,
     "completion_tokens": 0,
     "summary_message_id": "",
     "cost": 0,
     "created_at": 1792400000,
-    "updated_at": 1792400245,
+    "updated_at": 1792400305,
     "is_busy": false,
     "attached_clients": 0,
     "context_budget": {
@@ -75,13 +75,13 @@
    "id": "5afe0000-0000-4000-8000-0000000000a1",
    "parent_session_id": "",
    "title": "Unsafe replies",
-   "message_count": 8,
+   "message_count": 10,
    "prompt_tokens": 2400,
    "completion_tokens": 0,
    "summary_message_id": "",
    "cost": 0,
    "created_at": 1792400000,
-   "updated_at": 1792400245,
+   "updated_at": 1792400305,
    "is_busy": false,
    "attached_clients": 0,
    "context_budget": {
@@ -258,6 +258,48 @@
     "provider": "claude-code",
     "created_at": 1792400241,
     "updated_at": 1792400245
+   },
+   {
+    "id": "u5",
+    "role": "user",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "unsafe diagrams"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792400300,
+    "updated_at": 1792400300
+   },
+   {
+    "id": "a5",
+    "role": "assistant",
+    "session_id": "5afe0000-0000-4000-8000-0000000000a1",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Diagrams of every kind the renderer draws, one each. Every one of them must draw as a picture, here and in the panel; only the hostile diagram may fall back to its source.\n\n```mermaid\n---\ntitle: Valid flowchart-v2\n---\nflowchart LR\n  A[Write] --> B{Ready?}\n  B -->|yes| C[Ship]\n  B -->|no| A\n```\n\n```mermaid\n---\ntitle: Valid sequence\n---\nsequenceDiagram\n  participant Y as You\n  participant A as App\n  Y->>A: Send a prompt\n  A-->>Y: Draw the reply\n```\n\n```mermaid\n---\ntitle: Valid classDiagram\n---\nclassDiagram\n  class Chat {\n    +String title\n    +send(text)\n  }\n  class Message\n  Chat \"1\" --> \"*\" Message\n```\n\n```mermaid\n---\ntitle: Valid stateDiagram\n---\nstateDiagram-v2\n  [*] --> Idle\n  Idle --> Busy: send\n  Busy --> Idle: done\n```\n\n```mermaid\n---\ntitle: Valid er\n---\nerDiagram\n  SESSION ||--o{ MESSAGE : holds\n  SESSION {\n    string id\n    string title\n  }\n```\n\n```mermaid\n---\ntitle: Valid journey\n---\njourney\n  section Start\n    Open the app: 5: You\n    Pick a folder: 3: You\n```\n\n```mermaid\n---\ntitle: Valid gantt\n---\ngantt\n  dateFormat YYYY-MM-DD\n  section Build\n    Renderers: a1, 2026-10-01, 5d\n    Panel: after a1, 3d\n```\n\n```mermaid\n---\ntitle: Valid pie\n---\npie\n  \"Text\" : 60\n  \"Code\" : 30\n  \"Figures\" : 10\n```\n\n```mermaid\n---\ntitle: Valid quadrantChart\n---\nquadrantChart\n  x-axis Low effort --> High effort\n  y-axis Low value --> High value\n  quadrant-1 Plan\n  quadrant-2 Do now\n  quadrant-3 Skip\n  quadrant-4 Later\n  Renderers: [0.3, 0.8]\n  Panel: [0.7, 0.6]\n```\n\n```mermaid\n---\ntitle: Valid requirement\n---\nrequirementDiagram\n  requirement safe_links {\n    id: 1\n    text: Links open after a click\n    risk: high\n    verifymethod: test\n  }\n  element safety_check {\n    type: driver\n  }\n  safety_check - verifies -> safe_links\n```\n\n```mermaid\n---\ntitle: Valid gitGraph\n---\ngitGraph\n  commit\n  branch renderers\n  checkout renderers\n  commit\n  checkout main\n  merge renderers\n```\n\n```mermaid\n---\ntitle: Valid c4\n---\nC4Context\n  Person(you, \"You\")\n  System(app, \"Crush Desktop\")\n  System_Ext(engine, \"Crush engine\")\n  Rel(you, app, \"Uses\")\n  Rel(app, engine, \"Talks to\")\n```\n\n```mermaid\n---\ntitle: Valid mindmap\n---\nmindmap\n  root((Renderers))\n    Markdown\n      Links\n      Tables\n    Figures\n      Math\n      Diagrams\n```\n\n```mermaid\n---\ntitle: Valid timeline\n---\ntimeline\n  Wave 1 : Engine client : Services : Renderers\n  Wave 2 : Timeline : Panel\n```\n\n```mermaid\n---\ntitle: Valid sankey\n---\nsankey-beta\nPrompts,Replies,40\nPrompts,Tools,20\nTools,Replies,15\n```\n\n```mermaid\n---\ntitle: Valid xychart\n---\nxychart-beta\n  x-axis [Mon, Tue, Wed, Thu]\n  y-axis \"Replies\" 0 --> 50\n  bar [12, 30, 22, 41]\n  line [12, 30, 22, 41]\n```\n\n```mermaid\n---\ntitle: Valid block\n---\nblock-beta\n  columns 3\n  a[\"Chat\"] b[\"Panel\"] c[\"Composer\"]\n```\n\n```mermaid\n---\ntitle: Valid packet\n---\npacket-beta\n  0-15: \"Source port\"\n  16-31: \"Destination port\"\n  32-63: \"Sequence number\"\n```\n\n```mermaid\n---\ntitle: Valid kanban\n---\nkanban\n  todo[To do]\n    t1[Write the check]\n  doing[Doing]\n    t2[Draw the diagrams]\n  done[Done]\n    t3[Merge desktop]\n```\n\n```mermaid\n---\ntitle: Valid architecture\n---\narchitecture-beta\n  group app(cloud)[Desktop]\n  service ui(server)[Window] in app\n  service engine(database)[Engine] in app\n  ui:R --> L:engine\n```\n\n```mermaid\n---\ntitle: Valid radar\n---\nradar-beta\n  axis a[\"Speed\"], b[\"Care\"], c[\"Reach\"]\n  curve x[\"Renderer\"]{4, 5, 3}\n  max 5\n```\n\n```mermaid\n---\ntitle: Valid treemap\n---\ntreemap-beta\n\"Replies\"\n    \"Text\": 60\n    \"Figures\"\n        \"Tables\": 10\n        \"Math\": 5\n```\n\n```mermaid\n---\ntitle: Valid info\n---\ninfo\n```\n\n```mermaid\n---\ntitle: Valid ishikawa\n---\nishikawa-beta\n  Slow replies\n    Network\n      Long waits\n    Code\n      Big lists\n```\n\n```mermaid\n---\ntitle: Valid venn\n---\nvenn-beta\n  set A[\"Readers\"]\n  set B[\"Writers\"]\n  union A,B[\"Both\"]\n```\n\n```mermaid\n---\ntitle: Valid treeView\n---\ntreeView-beta\n  desktop\n    src\n      lib\n    tests\n```\n\n```mermaid\n---\ntitle: Valid usecase\n---\nusecase-beta\n  actor User\n  User --> open(Open a chat)\n  User --> send(Send a prompt)\n```\n\n```mermaid\n---\ntitle: Valid wardley\n---\nwardley-beta\n  anchor Reader [0.95, 0.63]\n  component Reply [0.79, 0.61]\n  component Renderer [0.63, 0.81]\n  Reader -> Reply\n  Reply -> Renderer\n```\n\n```mermaid\n---\ntitle: Valid cynefin\n---\ncynefin-beta\n  complex\n    \"Design the panel\"\n  complicated\n    \"Map the selection\"\n  clear\n    \"Run the tests\"\n  chaotic\n    \"Fix the outage\"\n  complex --> complicated : \"understood\"\n```\n\n```mermaid\n---\ntitle: Valid railroad\n---\nrailroad-beta\n  number = sequence(optional(terminal(\"-\")), oneOrMore(nonterminal(\"digit\")));\n```\n\n```mermaid\n---\ntitle: Valid railroadEbnf\n---\nrailroad-ebnf-beta\n  number = [ \"-\" ] , digit , { digit } ;\n  digit = \"0\" | \"1\" | \"2\" ;\n```\n\n```mermaid\n---\ntitle: Valid railroadAbnf\n---\nrailroad-abnf-beta\n  number = [\"-\"] 1*digit ;\n  digit = \"0\" / \"1\" / \"2\" ;\n```\n\n```mermaid\n---\ntitle: Valid railroadPeg\n---\nrailroad-peg-beta\n  number <- \"-\"? digit+ ;\n  digit <- \"0\" / \"1\" / \"2\" ;\n```\n\n```mermaid\n---\ntitle: Valid agentflow\n---\nagentflow-beta\n  flow Main\n    A[Ask] --> B[Answer]\n  end\n```\n\n```mermaid\n---\ntitle: Valid swimlane\n---\nswimlane-beta LR\n  subgraph You\n    A[Write a prompt]\n  end\n  subgraph App\n    B[Draw the reply]\n  end\n  A --> B\n```\n\n```mermaid\n---\ntitle: Valid eventmodeling\n---\neventmodeling\n  tf 01 cmd SendPrompt\n  tf 02 evt PromptSent ->> 01\n  tf 03 rmo Timeline ->> 02\n```\n\n```mermaid\n---\ntitle: Valid flowchart-elk\n---\nflowchart-elk LR\n  A[Write] --> B[Read]\n```\n\nThe diagrams reply ends here."
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792400305,
+       "text": ""
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792400301,
+    "updated_at": 1792400305
    }
   ],
   "chat-links": [],

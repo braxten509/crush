@@ -5,7 +5,7 @@ Fixture first, then the engine:
   tests/check.sh --fixture tests/fixtures/unsafe-chat.json p3_safety.py
   tests/check.sh p3_safety.py
 The fixture shows the chat "Unsafe replies"; with the engine the driver picks
-the fake server's script "unsafe" and sends its four prompts. Either way the
+the fake server's script "unsafe" and sends its five prompts. Either way the
 window then holds the replies of tests/fakes/scripts/unsafe.json.
 
 Steps (each one PASS or FAIL, with a screenshot in tests/out/p3_safety/):
@@ -23,16 +23,19 @@ Steps (each one PASS or FAIL, with a screenshot in tests/out/p3_safety/):
            open (the safety section's links_asked) and add lines to
            <probe>.opened.jsonl; no refused navigation; the page never moves;
            the field holds no dropped address
-  diagram  the Mermaid figure draws (strict) or shows its source with the
-           fallback line, in VISUALS and again in the chat with the right
-           panel hidden (picture size in a 900 px window, SIDE-002); the
-           content rule still saw nothing and the scans stay clean
+  diagram  in VISUALS, and again in the chat with the right panel hidden
+           (picture size in a 900 px window, SIDE-002): every valid diagram of
+           the diagrams reply (one per kind the renderer supports, titled
+           "Valid <kind>") draws as an SVG that names its kind, and a fallback
+           or a missing figure there fails; only the hostile Mermaid figure may
+           draw (strict) or show its source with the fallback line. The content
+           rule still saw nothing and the scans stay clean
   env      the workspace keys hold neither env nor config; the run's
            environment mark (and the fixture's own secret) never appears in a
            probe write, opened.jsonl, the app's api log, its output or any
            file the run left in tests/out/p3_safety/
 """
-import glob, json, os, subprocess, sys, threading, time
+import glob, json, os, re, subprocess, sys, threading, time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -45,8 +48,15 @@ PAGE = "http://127.0.0.1:47321/page.html"
 FIXTURE_SECRET = "leak-fixture-5e1f0c2d9a7b3e48"  # tests/fixtures/unsafe-chat.json workspace env and config
 SCRIPT = json.load(open(os.path.join(os.path.dirname(__file__), "..", "fakes", "scripts", "unsafe.json")))
 PROMPTS = [turn["when"] for turn in SCRIPT["turns"]]
-# Words each drawn reply must show (one per reply of the script).
-SHOWN = ["The markup reply ends here.", "Links a reply might try.", "A diagram that asks for loose security", "Allow bash to run this?"]
+# Words each drawn reply must show (one per reply of the script, within the
+# first 400 characters the probe reports of each).
+SHOWN = ["The markup reply ends here.", "Links a reply might try.", "A diagram that asks for loose security", "Allow bash to run this?",
+         "Diagrams of every kind the renderer draws"]
+# The diagrams reply: one valid diagram per kind the renderer supports
+# (render/mermaid.js DIAGRAM_KINDS), each titled "Valid <kind>" in its front
+# matter, <kind> being the name Mermaid puts on its SVG (aria-roledescription).
+DIAGRAMS_TEXT = next("".join(s["text"] for s in t["steps"]) for t in SCRIPT["turns"] if t["when"] == "unsafe diagrams")
+VALID = re.findall(r"^```mermaid\n---\ntitle: (Valid (\S+))\n---\n", DIAGRAMS_TEXT, re.M)
 REFUSED_LINKS = ["javascript link", "data link", "tab first", "space first", "upper case", "vbscript link", "blob link",
                  "data html", "entity link", "colon entity", "reference link", "javascript:alert(1)"]
 RAW_LINKS = ["raw tab first", "raw space first", "raw upper case", "raw newline inside", "raw vbscript", "raw blob", "raw data"]
@@ -156,7 +166,7 @@ def fake_control(script):
 
 
 def show_corpus():
-    """Brings the four replies on screen: already there, the fixture's chat
+    """Brings the five replies on screen: already there, the fixture's chat
     from the list, or the engine through the composer."""
     heavy, _ = safety_heavy()
     if corpus_drawn(heavy):
@@ -202,7 +212,7 @@ if not check(safety is not None, "the probe has the renderer's safety section (t
 
 with step("safety-corpus", out_dir):
     drawn = show_corpus()
-    check(drawn, "the four replies of script \"unsafe\" are drawn")
+    check(drawn, f"the {len(SHOWN)} replies of script \"unsafe\" are drawn")
     time.sleep(1.0)
     heavy, report = safety_heavy()
     light = report.get("safety") or {}
@@ -346,19 +356,28 @@ def diagrams(heavy, inline):
 
 
 def check_diagram(inline):
-    """The Mermaid figure in VISUALS or, with the panel hidden, in the chat."""
+    """The diagrams in VISUALS or, with the panel hidden, in the chat: every
+    valid one draws as an SVG of its kind; only the hostile one may fall back."""
     where = "in the chat" if inline else "in VISUALS"
-    end = time.time() + 30
+    titles = {title for title, _ in VALID}
+    end = time.time() + 120
     while True:
         heavy, _ = safety_heavy()
         figures = diagrams(heavy, inline)
-        if (figures and all(f.get("state") in ("drawn", "fallback") for f in figures)) or time.time() > end:
+        if (len(figures) > len(VALID) and all(f.get("state") in ("drawn", "fallback") for f in figures)) or time.time() > end:
             break
         time.sleep(0.5)
-    states = [f.get("state") for f in figures]
-    check(bool(figures) and all(s in ("drawn", "fallback") for s in states), f"{where}: the Mermaid figure draws or shows its source with the fallback line ({states})")
+    bad = []
+    for title, kind in VALID:
+        found = [f for f in figures if f.get("title") == title]
+        if len(found) != 1 or found[0].get("state") != "drawn" or found[0].get("svg") != kind:
+            bad.append(f"{title}: {[(f.get('state'), f.get('svg')) for f in found] or 'missing'}")
+    check(VALID and not bad, f"{where}: all {len(VALID)} valid diagrams draw as an SVG of their kind ({bad or 'all drawn'})")
+    hostile = [f for f in figures if f.get("title") not in titles]
+    states = [f.get("state") for f in hostile]
+    check(len(hostile) == 1 and states[0] in ("drawn", "fallback"), f"{where}: the hostile Mermaid figure draws or shows its source with the fallback line ({states})")
     if "fallback" in states:
-        note(f"{where}: the diagram fell back to its source")
+        note(f"{where}: the hostile diagram fell back to its source")
     light = probe_section(probe_path, "safety") or {}
     check(light.get("csp_violations") == 0, f"{where}: csp_violations still 0 with the figures drawn ({light.get('csp_violations')}; {heavy.get('violations')})")
     for field in ("scripts_found", "handlers_found", "bad_hrefs_found", "controls_found"):
@@ -372,10 +391,8 @@ def zoom_is(target):
 
 
 with step("safety-diagram", out_dir):
-    if diagrams(safety_heavy()[0], False):
-        check_diagram(False)
-    else:
-        note("no figure in VISUALS (nothing draws the panel's figures in this build)")
+    # A build whose panel draws no figures fails here (design 2.9: both surfaces).
+    check_diagram(False)
     # The right panel hides when the page is under 1,060 picture px wide (SIDE-002); the
     # window's least width is 900, so at picture size (Ctrl = four times from 8/12).
     xdo("windowfocus", "--sync", wid)

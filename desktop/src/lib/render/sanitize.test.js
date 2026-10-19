@@ -111,6 +111,15 @@ describe("finished replies", () => {
   });
 });
 
+// Where a stream of text stops: every size characters, or (size "line") at
+// every line end.
+function stops(text, size) {
+  if (size === "line") return [...text.matchAll(/\n/g)].map((m) => m.index + 1).concat(text.length);
+  const out = [];
+  for (let at = size; at < text.length + size; at += size) out.push(Math.min(at, text.length));
+  return out;
+}
+
 describe("a reply mid-stream never draws anything unsafe", () => {
   for (const [when, text] of REPLIES) {
     test(when, () => {
@@ -118,9 +127,11 @@ describe("a reply mid-stream never draws anything unsafe", () => {
       root.className = "md";
       document.body.append(root);
       const renderer = createMarkdown(root, { messageId: "m", sessionId: "s" });
-      for (const size of [1, 7]) {
-        for (let at = size; at < text.length + size; at += size) {
-          const prefix = text.slice(0, Math.min(at, text.length));
+      // The valid diagrams hold nothing hostile, and their reply is long: it
+      // streams line by line, the others a character and seven at a time.
+      for (const size of when === "unsafe diagrams" ? ["line"] : [1, 7]) {
+        for (const at of stops(text, size)) {
+          const prefix = text.slice(0, at);
           renderer.update(prefix, { finished: false });
           expectClean(`${when} after ${prefix.length}: ${JSON.stringify(prefix.slice(-24))}`);
         }

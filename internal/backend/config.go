@@ -54,23 +54,47 @@ type MCPResourceContents = proto.MCPResourceContents
 // SetConfigField sets a key/value pair in the config file for the
 // given scope.
 func (b *Backend) SetConfigField(workspaceID string, scope config.Scope, key string, value any) error {
+	return b.SetConfigFieldAs(workspaceID, true, scope, key, value)
+}
+
+// SetConfigFieldAs is [Backend.SetConfigField] for a caller that came in
+// on the engine's unix socket (local) or not. A caller that is not local
+// may not move the engine's CPUs: a write that would change
+// options.agent_cpus_enabled or options.agent_cpus in scope's file is
+// refused with [ErrLocalOnly] before anything changes.
+func (b *Backend) SetConfigFieldAs(workspaceID string, local bool, scope config.Scope, key string, value any) error {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
 	o := ws.ops()
-	return b.writeConfig(ws, func() error { return o.SetConfigField(scope, key, value) })
+	var movesCPUs func() (bool, error)
+	if !local {
+		movesCPUs = func() (bool, error) { return ws.Cfg.SetConfigFieldChanges(scope, key, value, cpuSettingPaths...) }
+	}
+	return b.writeConfig(ws, movesCPUs, func() error { return o.SetConfigField(scope, key, value) })
 }
 
 // RemoveConfigField removes a key from the config file for the given
 // scope.
 func (b *Backend) RemoveConfigField(workspaceID string, scope config.Scope, key string) error {
+	return b.RemoveConfigFieldAs(workspaceID, true, scope, key)
+}
+
+// RemoveConfigFieldAs is [Backend.RemoveConfigField] for a caller that
+// came in on the engine's unix socket (local) or not, with the CPU rule of
+// [Backend.SetConfigFieldAs].
+func (b *Backend) RemoveConfigFieldAs(workspaceID string, local bool, scope config.Scope, key string) error {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
 	o := ws.ops()
-	return b.writeConfig(ws, func() error { return o.RemoveConfigField(scope, key) })
+	var movesCPUs func() (bool, error)
+	if !local {
+		movesCPUs = func() (bool, error) { return ws.Cfg.RemoveConfigFieldChanges(scope, key, cpuSettingPaths...) }
+	}
+	return b.writeConfig(ws, movesCPUs, func() error { return o.RemoveConfigField(scope, key) })
 }
 
 // UpdatePreferredModel updates the preferred model for the given type

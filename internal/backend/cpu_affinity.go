@@ -82,13 +82,24 @@ func cpuSetting(ws *Workspace) string {
 	return "off"
 }
 
+// cpuSettingPaths are the config paths of the CPU setting.
+var cpuSettingPaths = []string{"options.agent_cpus_enabled", "options.agent_cpus"}
+
 // writeConfig runs a config write through the ordinary config routes under
 // the CPU lock, and applies the CPU setting when the write changed it, so
 // the engine's CPUs follow those writes too, however the key was spelled.
-func (b *Backend) writeConfig(ws *Workspace, write func() error) error {
+// When movesCPUs is set and reports that the write would change the CPU
+// setting, or cannot tell, the write is refused with [ErrLocalOnly]
+// before anything changes.
+func (b *Backend) writeConfig(ws *Workspace, movesCPUs func() (bool, error), write func() error) error {
 	st := b.cpuState()
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	if movesCPUs != nil {
+		if moves, err := movesCPUs(); err != nil || moves {
+			return ErrLocalOnly
+		}
+	}
 	before := cpuSetting(ws)
 	if err := write(); err != nil {
 		return err

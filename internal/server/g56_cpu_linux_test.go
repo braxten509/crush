@@ -38,6 +38,26 @@ func TestCPUAffinityRoute(t *testing.T) {
 	liveError(t, g.h, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true}, http.StatusForbidden, "local_only", "")
 	require.False(t, store.Config().Options.AgentCPUsEnabled, "a TCP request changes nothing")
 
+	// Nor can TCP reach the CPU setting through the ordinary config routes,
+	// by any spelling, while other keys still work there.
+	cfgPath := "/v1/workspaces/" + g.ws.ID + "/config/"
+	for _, key := range []string{"options.agent_cpus_enabled", ":options.agent_cpus_enabled", "options"} {
+		value := any(true)
+		if key == "options" {
+			value = map[string]any{"agent_cpus_enabled": true}
+		}
+		liveError(t, g.h, http.MethodPost, cfgPath+"set",
+			proto.ConfigSetRequest{Scope: config.ScopeGlobal, Key: key, Value: value}, http.StatusForbidden, "local_only", "")
+	}
+	liveError(t, g.h, http.MethodPost, cfgPath+"remove",
+		proto.ConfigRemoveRequest{Scope: config.ScopeGlobal, Key: "options.agent_cpus"}, http.StatusForbidden, "local_only", "")
+	require.False(t, store.Config().Options.AgentCPUsEnabled, "a TCP config set changes nothing")
+	require.Equal(t, agentCPUs, store.Config().Options.AgentCPUs, "a TCP config remove changes nothing")
+	liveJSON[rpc.Empty](t, g.h, http.MethodPost, cfgPath+"set",
+		proto.ConfigSetRequest{Scope: config.ScopeGlobal, Key: "options.debug", Value: true}, http.StatusOK)
+	liveJSON[rpc.Empty](t, g.h, http.MethodPost, cfgPath+"remove",
+		proto.ConfigRemoveRequest{Scope: config.ScopeGlobal, Key: "options.debug"}, http.StatusOK)
+
 	on := unixJSON[proto.CPUAffinity](t, u, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true}, http.StatusOK)
 	require.Equal(t, agentCPUs, on.CPUs)
 	require.True(t, store.Config().Options.AgentCPUsEnabled, "the setting is saved")
@@ -57,7 +77,6 @@ func TestCPUAffinityRoute(t *testing.T) {
 	// The ordinary config routes move the engine too, whatever the key's
 	// spelling: an equivalent path turns the CPUs on, a removal turns them
 	// off.
-	cfgPath := "/v1/workspaces/" + g.ws.ID + "/config/"
 	unixJSON[rpc.Empty](t, u, http.MethodPost, cfgPath+"set",
 		proto.ConfigSetRequest{Scope: config.ScopeGlobal, Key: ":options.agent_cpus_enabled", Value: true}, http.StatusOK)
 	require.True(t, store.Config().Options.AgentCPUsEnabled)

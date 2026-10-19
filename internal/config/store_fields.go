@@ -259,6 +259,48 @@ func (s *ConfigStore) RemoveConfigField(scope Scope, key string) error {
 	return nil
 }
 
+// SetConfigFieldChanges reports whether setting key to value in scope's
+// config file, as it is now, would change the value at any of paths. It
+// writes nothing; equivalent spellings of a path are judged by their
+// effect, not their text.
+func (s *ConfigStore) SetConfigFieldChanges(scope Scope, key string, value any, paths ...string) (bool, error) {
+	return s.editChanges(scope, func(v string) (string, error) { return sjson.Set(v, key, value) }, paths)
+}
+
+// RemoveConfigFieldChanges reports whether removing key from scope's
+// config file, as it is now, would change the value at any of paths. It
+// writes nothing.
+func (s *ConfigStore) RemoveConfigFieldChanges(scope Scope, key string, paths ...string) (bool, error) {
+	return s.editChanges(scope, func(v string) (string, error) { return sjson.Delete(v, key) }, paths)
+}
+
+// editChanges applies edit to a copy of scope's config file and compares
+// the value at each of paths before and after.
+func (s *ConfigStore) editChanges(scope Scope, edit func(string) (string, error), paths []string) (bool, error) {
+	path, err := s.configPath(scope)
+	if err != nil {
+		return false, err
+	}
+	data, err := readFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return false, fmt.Errorf("read config file: %w", err)
+		}
+		data = []byte("{}")
+	}
+	before := string(data)
+	after, err := edit(before)
+	if err != nil {
+		return false, err
+	}
+	for _, p := range paths {
+		if gjson.Get(before, p).Raw != gjson.Get(after, p).Raw {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // removeConfigFieldNoReload deletes a key from the config file for the
 // given scope without touching in-memory state.
 func (s *ConfigStore) removeConfigFieldNoReload(scope Scope, key string) error {

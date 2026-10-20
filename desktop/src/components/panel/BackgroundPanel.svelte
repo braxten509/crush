@@ -15,34 +15,28 @@
   ]);
 </script>
 
-<section class="panel-section" class:empty={rows.length === 0} data-section="background" aria-label="Background">
+<!-- Shown only while it has something in it (owner, 2026-10-20). -->
+{#if rows.length > 0}
+<section class="panel-section" data-section="background" aria-label="Background">
   <h2 class="label">Background</h2>
-  {#if rows.length === 0}
-    <p class="visually-hidden">None</p>
-  {:else}
-    <ul class="rows">
-      {#each rows as row (row.key)}
-        <li class="line row">
-          <span class="bullet" aria-hidden="true">•</span>
-          <span class="text" title={row.text}>{row.text}</span>
-          <span class="info">{row.info}</span>
-          <button class="stop" type="button" tabindex="-1" title={row.label} aria-label="{row.label} {row.text}" onclick={row.stop}><Icon name="cross" size={12} /></button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+  <ul class="rows">
+    {#each rows as row (row.key)}
+      <li class="line row">
+        <span class="bullet" aria-hidden="true">•</span>
+        <span class="text" title={row.text}>{row.text}</span>
+        <span class="info">{row.info}</span>
+        <button class="stop" type="button" tabindex="-1" title={row.label} aria-label="{row.label} {row.text}" onclick={row.stop}><Icon name="cross" size={12} /></button>
+      </li>
+    {/each}
+  </ul>
 </section>
+{/if}
 
 <style>
   .label {
     font: var(--t-label);
     letter-spacing: var(--track-label);
     text-transform: uppercase;
-  }
-  /* An empty section steps back (owner, 2026-10-20): a quieter heading and
-     no "None" line; the heading keeps its place. */
-  .empty .label {
-    color: var(--mark);
   }
   /* A bulleted list, no lines between rows (owner, 2026-10-20). */
   .rows {

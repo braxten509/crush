@@ -1,7 +1,7 @@
 <script>
-  // The page frame: one-pixel lines round the three columns, with a small gap
-  // at each corner and where a column divider meets the top or bottom line
-  // (no + marks since owner, 2026-10-20).
+  // The page frame: one-pixel lines round the three columns that meet at the
+  // corners, and the column dividers run into its top and bottom lines (owner,
+  // 2026-10-20: the outer boxes are closed; only lines inside them stop short).
   // These elements sit straight in the page grid (see App.svelte). Without the
   // panel (D11) the frame closes round the chat list and the conversation.
   let { panel = true } = $props();
@@ -25,14 +25,14 @@
   .vertical {
     grid-row: 1 / 4;
   }
-  /* Lines stop 11 picture pixels short of each corner and join. */
+  /* The verticals cover the corner pixels, so the lines meet. */
   .vertical::before {
     content: "";
     position: absolute;
     left: 0;
     width: 1px;
-    top: calc(11 * var(--px));
-    bottom: calc(14 * var(--px));
+    top: 0;
+    bottom: 0;
     background: var(--rule-frame);
   }
   .horizontal::before {
@@ -40,8 +40,8 @@
     position: absolute;
     top: 0;
     height: 1px;
-    left: calc(11 * var(--px));
-    right: calc(11 * var(--px));
+    left: 0;
+    right: 0;
     background: var(--rule-frame);
   }
 </style>

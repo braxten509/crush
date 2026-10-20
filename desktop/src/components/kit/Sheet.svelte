@@ -357,8 +357,8 @@
     border-left: 1px solid var(--rule-frame);
   }
 
-  /* The page frame's drawing (Frame.svelte): hairlines that stop 11 short of
-     each corner. */
+  /* The page frame's drawing (Frame.svelte): hairlines that meet at the
+     corners (owner, 2026-10-20: the outer box is closed). */
   .edge {
     position: absolute;
     background: var(--rule-frame);
@@ -366,8 +366,8 @@
   }
   .edge.top,
   .edge.bottom {
-    left: calc(11 * var(--px));
-    right: calc(11 * var(--px));
+    left: 0;
+    right: 0;
     height: 1px;
   }
   .edge.top {
@@ -378,8 +378,8 @@
   }
   .edge.left,
   .edge.right {
-    top: calc(11 * var(--px));
-    bottom: calc(11 * var(--px));
+    top: 0;
+    bottom: 0;
     width: 1px;
   }
   .edge.left {

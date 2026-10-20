@@ -13,38 +13,32 @@
   const header = $derived(todoHeader(list, true));
 </script>
 
-<section class="panel-section" class:empty={list.length === 0} data-section="todos" aria-label="To-do">
-  <h2 class="label">{header.label}{#if list.length > 0}<span class="count">{header.count}</span>{/if}</h2>
-  {#if list.length === 0}
-    <p class="visually-hidden">None</p>
-  {:else}
-    <ul class="rows">
-      {#each todoList(list) as item, at (at)}
-        <li class="line {item.status}" data-status={item.status}>
-          <span class="mark">
-            {#if item.status === "in_progress"}
-              <span class="dots" aria-hidden="true">…</span>
-            {:else}
-              <Icon name={ICON[item.status]} size={14} />
-            {/if}
-          </span>
-          <span class="text">{item.text}</span>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+<!-- Shown only while it has something in it (owner, 2026-10-20). -->
+{#if list.length > 0}
+<section class="panel-section" data-section="todos" aria-label="To-do">
+  <h2 class="label">{header.label}<span class="count">{header.count}</span></h2>
+  <ul class="rows">
+    {#each todoList(list) as item, at (at)}
+      <li class="line {item.status}" data-status={item.status}>
+        <span class="mark">
+          {#if item.status === "in_progress"}
+            <span class="dots" aria-hidden="true">…</span>
+          {:else}
+            <Icon name={ICON[item.status]} size={14} />
+          {/if}
+        </span>
+        <span class="text">{item.text}</span>
+      </li>
+    {/each}
+  </ul>
 </section>
+{/if}
 
 <style>
   .label {
     font: var(--t-label);
     letter-spacing: var(--track-label);
     text-transform: uppercase;
-  }
-  /* An empty section steps back (owner, 2026-10-20): a quieter heading and
-     no "None" line; the heading keeps its place. */
-  .empty .label {
-    color: var(--mark);
   }
   .count {
     margin-left: calc(8 * var(--px));

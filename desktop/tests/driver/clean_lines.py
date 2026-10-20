@@ -3,8 +3,10 @@ gaps; no red rail without an open chat; the notice line's words start where
 reply text starts. In the real window on the hidden screen.
 
 Start leg (default, no chat open): no rail, and no sliver of it on screen;
-the page frame's corners and joins and a sheet's corners are bare paper on
-screen; no + mark in the page or the sheet.
+the outer boxes are closed: the page frame's corners, the joins where the
+column dividers meet it, and a sheet's corners are drawn on screen; the
+section rules inside the columns stop short of the dividers; no + mark in
+the page or the sheet.
 
 Chat leg ("chat" argument, a chat open): the rail is there; a copy shows the
 notice line, whose words start at the chat's text edge.
@@ -33,6 +35,15 @@ def pixels(path):
     r = subprocess.run(["magick", path, "-depth", "8", "rgb:-"], capture_output=True, check=True)
     w, h = map(int, subprocess.run(["magick", "identify", "-format", "%w %h", path], capture_output=True, text=True).stdout.split())
     return w, h, r.stdout
+
+
+def unjoined(picture, points, paper):
+    """The points where the lines do not meet: the corner pixel itself is
+    paper (a line that stops short of the corner leaves it bare)."""
+    w, h, data = picture
+    ox, oy = window_geometry()[:2]
+    return [(x, y) for x, y in points
+            if max(abs(data[(round(oy + y) * w + round(ox + x)) * 3 + k] - paper[k]) for k in range(3)) <= 12]
 
 
 def bare(picture, points, paper, reach=5):
@@ -90,8 +101,18 @@ if not CHAT:
       return v.flatMap((r) => [[r.x, top], [r.x, bottom]]);
     """)
     check(len(corners or []) >= 6, f"the frame has its corners and joins ({len(corners or [])})")
-    marked = bare(picture, corners or [], paper)
-    check(not marked, f"the frame's corners and joins are bare paper ({marked})")
+    open_corners = unjoined(picture, corners or [], paper)
+    check(not open_corners, f"the frame's lines meet at its corners and joins ({open_corners})")
+    # Lines inside the columns keep clear ends: the pixel just in from each end is paper.
+    ends = run("""
+      return [...document.querySelectorAll('.rule.marks-both')].filter((r) => r.offsetParent).map((r) => {
+        const b = r.getBoundingClientRect();
+        return [[b.x + 2, b.y], [b.right - 3, b.y]];
+      }).flat();
+    """)
+    check(len(ends or []) >= 4, f"the columns have section rules ({len(ends or [])} ends)")
+    marked = bare(picture, ends or [], paper, reach=1)
+    check(not marked, f"the section rules stop short of the dividers ({marked})")
     # A sheet's corners.
     run("window.__probe.openDialog('models', {}); return true;")
     time.sleep(1.2)
@@ -100,8 +121,8 @@ if not CHAT:
       return f && [[f.x, f.y], [f.right - 1, f.y], [f.x, f.bottom - 1], [f.right - 1, f.bottom - 1]];
     """)
     check(bool(sheet), "the model sheet opens")
-    marked = bare(pixels(shot(out_dir, "sheet")), sheet or [], paper)
-    check(not marked, f"the sheet's corners are bare paper ({marked})")
+    open_corners = unjoined(pixels(shot(out_dir, "sheet")), sheet or [], paper)
+    check(not open_corners, f"the sheet's lines meet at its corners ({open_corners})")
     check(run(f"return {MARKS};") == 0, "no + mark in the sheet")
     finish()
 

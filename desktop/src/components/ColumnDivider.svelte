@@ -72,13 +72,14 @@
     cursor: col-resize;
     touch-action: none;
   }
+  /* The line runs into the frame's top and bottom lines (owner, 2026-10-20). */
   .divider::before {
     content: "";
     position: absolute;
     left: 0;
     width: 1px;
-    top: calc(11 * var(--px));
-    bottom: calc(14 * var(--px));
+    top: 0;
+    bottom: 0;
     background: var(--rule-frame);
   }
   /* A wider grip than the line itself, invisible. */

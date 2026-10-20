@@ -8,8 +8,8 @@ wins and this file is out of date. The approved reference picture is
 ## Character
 
 A printed page, not a dashboard: bone paper, iron-black ink, book serifs, one-pixel rules
-that stop just short of each other where they meet (no `+` marks, owner 2026-10-20), and
-one vermilion accent. No shadows, no glows, no
+(the outer boxes closed at their corners, the rules inside them stopping just short; no `+`
+marks, owner 2026-10-20), and one vermilion accent. No shadows, no glows, no
 blur, no rounded cards. Hierarchy comes from type size, rules and white space.
 
 ## Zoom and units
@@ -94,15 +94,15 @@ never "sessions".
 ## Layout
 
 - Three columns in a frame: the chat list (left), the conversation (middle), the side panel
-  (right). The frame and column dividers are one-pixel rules that stop 11 picture pixels
-  short of each corner and join; section rules keep 20 clear of the left divider and 19 of
-  the right. The left column can collapse to a strip.
+  (right). The frame and column dividers are one-pixel rules that meet at the frame's
+  corners and run into its top and bottom lines; section rules inside a column keep 20 clear
+  of the left divider and 19 of the right. The left column can collapse to a strip.
 - The conversation reads at a fixed measure in the middle column; the typing box sits on the
   bottom rule. The red rail shows only under an open chat, never on a start screen.
 - The notice line over the composer starts its words 66 in, where reply text starts, with
   its icon hanging to their left.
 - Side-panel sections (Folder, To-do, Background, Servers) stack with space between them;
-  an empty section keeps its heading in `--mark` and shows no "None" line.
+  To-do, Background and Servers show only while they have rows (owner, 2026-10-20).
 - Settings rows stop at 840 picture pixels, so each switch sits near its name.
 
 ## Title bar
@@ -113,8 +113,8 @@ with a `--rule-faint` hairline under it. From the left: the app icon, the chat's
 running head (`--t-item`, weight 500), the folder after it in italic `--slate`; on the
 right four square-cornered buttons 54 picture pixels wide: the pin (`--mark`), minimize,
 maximize or restore, close (hover: `--control-hover`; close: `--vermilion-fill` with
-`--on-accent`). Pinned, the pin fills in `--vermilion-ink` and the bottom rule becomes a
-two-pixel `--vermilion` line. The buttons are not in the Tab order, as on the system bar.
+`--on-accent`). Pinned, only the pin changes: it fills in `--vermilion-ink`; the bar's
+rule stays the same (owner, 2026-10-20). The buttons are not in the Tab order, as on the system bar.
 The bar is a drag area, so moving, edge snapping, double-click and the right-click window
 menu stay the compositor's. The pin keeps the window above the others (KWin's "keep
 above" on KDE Wayland) and is remembered per window. The page and its overlays sit under
@@ -125,7 +125,7 @@ the bar (`--titlebar`); in full screen the bar steps aside.
 Every dialog is a `kit/Sheet`:
 
 - Widths: small 520, standard 760, wide 1040 picture pixels, never wider than the window.
-- A one-pixel frame whose sides stop 11 short of each corner; no shadow. The page behind is covered
+- A one-pixel frame closed at its corners; no shadow. The page behind is covered
   by `--scrim` (paper at 92%, no blur), except sheets opened with `veil: false` (themes,
   changes), which leave the page visible so its look can be judged.
 - Title line (title, title-side controls, a close cross that does what Esc does), a rule

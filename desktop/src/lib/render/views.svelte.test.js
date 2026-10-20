@@ -327,9 +327,9 @@ describe("Chip", () => {
     expect(target.querySelector(".trail.number").textContent).toBe("3");
   });
 
-  test("a kept skill shows SKILL before its name", () => {
+  test("a kept skill shows SKILL before its name, with no icon (owner, 2026-10-20)", () => {
     const chip = show(Chip, { chip: { kind: "skill", name: "deploy", mime: "", viewable: false } }).querySelector(".chip");
-    expect([...chip.querySelector(".label").children].map((el) => el.classList[0])).toEqual(["icon", "skill", "name"]);
+    expect([...chip.querySelector(".label").children].map((el) => el.classList[0])).toEqual(["skill", "name"]);
     expect(chip.querySelector(".skill").textContent).toBe("Skill");
   });
 

@@ -7,8 +7,9 @@ private hidden one of tests/kwin/screen.sh, with a mouse KWin itself sees.
 - Dragging the bar moves the window; double-clicking it maximizes and
   restores; dragging the window's right edge resizes it.
 - Right-clicking the bar opens KWin's window menu.
-- Maximize/Restore, Minimize, the pin (KWin's keep-above, the vermilion rule)
-  and Close work; a pinned window opens pinned again.
+- Maximize/Restore, Minimize, the pin (KWin's keep-above; pinned, only the
+  pin icon changes, the bar's rule stays) and Close work; a pinned window
+  opens pinned again.
 
 Usage: tests/check.sh --no-app --kwin --size 1900x1200 --fixture tests/fixtures/model-menu.json title_bar.py
 (the screen has room around the 1586x992 window to move and widen it)
@@ -38,8 +39,9 @@ BAR = """
     pin: box('[data-probe="title-pin"]'), minimize: box('[data-probe="title-minimize"]'),
     maximize: box('[data-probe="title-maximize"]'), close: box('[data-probe="title-close"]'),
     maximizeLabel: q('[data-probe="title-maximize"]').getAttribute('aria-label'),
-    pinned: bar.classList.contains('pinned'), rule: getComputedStyle(bar, '::after').backgroundColor,
-    vermilion: getComputedStyle(document.documentElement).getPropertyValue('--vermilion').trim(),
+    pinned: bar.classList.contains('pinned'), rule: getComputedStyle(bar).borderBottomColor + ' ' + getComputedStyle(bar).borderBottomWidth,
+    after: getComputedStyle(bar, '::after').content,
+    pinIcon: q('[data-probe="title-pin"] svg')?.innerHTML ?? '',
   };
 """
 
@@ -139,17 +141,17 @@ back = wait(lambda: (lambda w: w if w["w"] == win["w"] else None)(app_window()))
 check(bool(back), "the Restore button gives the old size back")
 win = app_window()
 
-# The pin: KWin's keep-above, the vermilion rule, remembered.
+# The pin: KWin's keep-above, only the pin icon changes, remembered.
 b = bar()
+rule_before, icon_before = b["rule"], b["pinIcon"]
 check(not win["keepAbove"] and not b["pinned"], "the window starts unpinned")
 mouse.click(*at(win, b["pin"]))
 up = wait(lambda: (lambda w: w if w["keepAbove"] else None)(app_window()))
 check(bool(up), "the pin turns on KWin's keep-above for the window")
 b = wait(lambda: (lambda got: got if got and got["pinned"] else None)(bar())) or bar()
 check(b["pinned"], "pinned, the bar shows it")
-v = b["vermilion"].lstrip("#")
-vermilion = f"rgb({int(v[0:2], 16)}, {int(v[2:4], 16)}, {int(v[4:6], 16)})"
-check(b["rule"] == vermilion, f"pinned, the bar's bottom rule turns vermilion ({b['rule']}, vermilion {vermilion})")
+check(b["pinIcon"] != icon_before, "pinned, the pin icon changes (fills in)")
+check(b["rule"] == rule_before and b["after"] in ("none", "normal", ""), f"pinned, the bar's rule stays as it was, no extra line ({rule_before} -> {b['rule']}, ::after {b['after']})")
 saved = wait(lambda: os.path.exists(PINS) and json.load(open(PINS)))
 check(saved == {"main": True}, f"the pin is remembered ({saved})")
 

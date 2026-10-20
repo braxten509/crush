@@ -1,8 +1,8 @@
 """The right panel and the folder line (owner, 2026-10-19). In the real
 window on the hidden screen.
 
-Fixture leg (default): the panel shows FOLDER, TO-DO, BACKGROUND and
-SERVERS and no visuals; the chat's diagram and table are drawn in the
+Fixture leg (default): the panel shows FOLDER, then TO-DO, BACKGROUND and
+SERVERS only while they have rows (owner, 2026-10-20), and no visuals; the chat's diagram and table are drawn in the
 message, not as chips; the tray above the typing box has no to-do or
 background entries and the left list no server rows; the typing box has no
 focus ring; a new chat has no folder line above the typing box (owner,
@@ -87,6 +87,7 @@ if not SWITCH:
       const ring = field ? getComputedStyle(field) : null;
       return {
         sections: [...(panel?.querySelectorAll('[data-section]') ?? [])].map((s) => s.dataset.section),
+        emptyShown: [...(panel?.querySelectorAll('[data-section]:not([data-section="folder"])') ?? [])].filter((s) => !s.querySelector('li')).map((s) => s.dataset.section),
         panelText: panel?.innerText ?? '',
         folder: panel?.querySelector('[data-section="folder"] .name')?.innerText ?? '',
         figures: [...document.querySelectorAll('.figure-view.inline')].map((f) => f.dataset.kind),
@@ -97,7 +98,10 @@ if not SWITCH:
         focused: field?.contains(document.activeElement) ?? false,
       };
     """) or {}
-    check(got.get("sections") == ["folder", "todos", "background", "servers"], f"the panel shows folder, to-do, background, servers ({got.get('sections')})")
+    order = ["folder", "todos", "background", "servers"]
+    shown = got.get("sections") or []
+    check(shown[:1] == ["folder"] and shown == [n for n in order if n in shown], f"the panel shows the folder, then to-do, background, servers in that order ({shown})")
+    check(got.get("emptyShown") == [], f"an empty to-do, background or servers section is not shown ({got.get('emptyShown')})")
     check("VISUALS" not in got.get("panelText", "").upper(), "the panel has no visuals section")
     check(bool(got.get("folder")), f"the panel names the folder ({got.get('folder')!r})")
     check("diagram" in got.get("figures", []) and "table" in got.get("figures", []), f"the diagram and the table are drawn in the message ({got.get('figures')})")

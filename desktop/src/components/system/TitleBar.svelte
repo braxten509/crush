@@ -2,8 +2,8 @@
   // The window's own title bar on Linux (owner 2026-10-20, design D): the
   // system bar's parts in the edition's type, the chat's title as a running
   // head with the folder after it in italic, and on the right the pin
-  // (keep the window above the others), minimize, maximize and close. A
-  // pinned window's bottom rule turns vermilion.
+  // (keep the window above the others), minimize, maximize and close.
+  // Pinned, only the pin changes: it fills in (owner, 2026-10-20).
   //
   // Moving, snapping to screen edges, double-click to maximize and the
   // right-click window menu are the compositor's: the bar is a drag area
@@ -98,18 +98,6 @@
     -webkit-app-region: drag;
     app-region: drag;
   }
-  /* Pinned: the bottom rule turns vermilion and doubles, drawn over the
-     hairline so nothing below moves. */
-  .title-bar.pinned::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -1px;
-    height: 2px;
-    background: var(--vermilion);
-    pointer-events: none;
-  }
 
   .app-icon {
     flex: none;
@@ -158,6 +146,10 @@
   }
   .buttons button:hover {
     background: var(--control-hover);
+  }
+  /* Out of the Tab order, so no focus ring after a click (owner, 2026-10-20). */
+  .buttons button:focus-visible {
+    outline: none;
   }
   .buttons .pin {
     color: var(--mark);

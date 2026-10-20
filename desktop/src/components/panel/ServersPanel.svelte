@@ -13,41 +13,35 @@
   const key = (row) => (row.ports > 0 ? `fold:${foldOf(row.server)}` : `${row.child ? "child" : "port"}:${row.server.port}`);
 </script>
 
-<section class="panel-section" class:empty={rows.length === 0} data-section="servers" aria-label="Servers">
+<!-- Shown only while it has something in it (owner, 2026-10-20). -->
+{#if rows.length > 0}
+<section class="panel-section" data-section="servers" aria-label="Servers">
   <h2 class="label">Servers</h2>
-  {#if rows.length === 0}
-    <p class="visually-hidden">None</p>
-  {:else}
-    <ul class="rows">
-      {#each rows as row (key(row))}
-        {@const texts = rowTexts(row)}
-        <li class="line row" class:child={row.child}>
-          <button class="open" type="button" tabindex="-1" onclick={() => useRow(row)}>
-            {#if row.ports > 0}
-              <span class="fold" class:turned={leftList.openFolds[foldOf(row.server)]}><Icon name="disclosure" size={10} /></span>
-            {:else}
-              <Icon name="arrow-up-right" size={12} />
-            {/if}
-            <span class="name">{texts.label}</span>
-            {#if texts.right}<span class="port">{texts.right}</span>{/if}
-          </button>
-          <button class="stop" type="button" tabindex="-1" title="Stop" aria-label="Stop {texts.label}" onclick={() => stopServer(row.server)}><Icon name="cross" size={12} /></button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+  <ul class="rows">
+    {#each rows as row (key(row))}
+      {@const texts = rowTexts(row)}
+      <li class="line row" class:child={row.child}>
+        <button class="open" type="button" tabindex="-1" onclick={() => useRow(row)}>
+          {#if row.ports > 0}
+            <span class="fold" class:turned={leftList.openFolds[foldOf(row.server)]}><Icon name="disclosure" size={10} /></span>
+          {:else}
+            <Icon name="arrow-up-right" size={12} />
+          {/if}
+          <span class="name">{texts.label}</span>
+          {#if texts.right}<span class="port">{texts.right}</span>{/if}
+        </button>
+        <button class="stop" type="button" tabindex="-1" title="Stop" aria-label="Stop {texts.label}" onclick={() => stopServer(row.server)}><Icon name="cross" size={12} /></button>
+      </li>
+    {/each}
+  </ul>
 </section>
+{/if}
 
 <style>
   .label {
     font: var(--t-label);
     letter-spacing: var(--track-label);
     text-transform: uppercase;
-  }
-  /* An empty section steps back (owner, 2026-10-20): a quieter heading and
-     no "None" line; the heading keeps its place. */
-  .empty .label {
-    color: var(--mark);
   }
   /* A list with no lines between rows, as Background (owner, 2026-10-20). */
   .rows {

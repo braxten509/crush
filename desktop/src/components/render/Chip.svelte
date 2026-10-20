@@ -5,7 +5,7 @@
   // maxFilename), and at the right the ✕ of a removable chip or, in delete
   // mode, the digit that removes it, in the same place so the chips do not
   // move (attachments.go Render). A kept skill shows SKILL in small caps
-  // before its name. A click (press and release in place) on a picture opens
+  // before its name, with no icon. A click (press and release in place) on a picture opens
   // the viewer. Placed by UserItem, PendingItem (P3.5) and ChipRow (P3.7);
   // ChipRow passes onremove and, in delete mode, number.
   const MAX_NAME = 15;
@@ -25,7 +25,7 @@
 
   let { chip, removable = false, number = null, onremove = null } = $props();
 
-  const ICONS = { picture: "image", file: "file", text: "text", skill: "skill" };
+  const ICONS = { picture: "image", file: "file", text: "text" };
   // A press that moves farther than this before the release is a drag.
   const DRAG_SLOP = 4;
 
@@ -52,8 +52,8 @@
 </script>
 
 {#snippet label()}
-  <Icon name={ICONS[chip.kind] ?? "file"} size={16} />
-  {#if chip.kind === "skill"}<span class="skill">Skill</span>{/if}
+  <!-- A kept skill has no icon: SKILL leads it (owner, 2026-10-20). -->
+  {#if chip.kind === "skill"}<span class="skill">Skill</span>{:else}<Icon name={ICONS[chip.kind] ?? "file"} size={16} />{/if}
   <span class="name">{chipName(chip.name)}</span>
 {/snippet}
 

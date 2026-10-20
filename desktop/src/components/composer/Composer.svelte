@@ -8,7 +8,6 @@
   import Icon from "../Icon.svelte";
   import ChipRow from "./ChipRow.svelte";
   import Field from "./Field.svelte";
-  import FolderLine from "./FolderLine.svelte";
   import ModelButton from "./ModelButton.svelte";
   import ModeMark from "./ModeMark.svelte";
   import PermissionPrompt from "./PermissionPrompt.svelte";
@@ -18,7 +17,6 @@
   import { composer, currentMode, focusField, hasChips, send } from "../../lib/stores/composer.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { closeSlot, openSlot, ui } from "../../lib/stores/ui.svelte.js";
-  import { screen } from "../start/start.svelte.js";
 
   let { sessionId } = $props();
 
@@ -85,8 +83,6 @@
   {#if ui.slot}
     <Slot entry={ui.slot} />
   {:else}
-    <!-- A new chat, also while the folder asks to be initialized. -->
-    {#if screen() === "landing" || screen() === "init"}<FolderLine />{/if}
     {#if hasChips()}<ChipRow />{/if}
     <form class="row" onsubmit={submit}>
       <div class="field" class:marked={mode !== "normal" || composer.badges.length > 0}>

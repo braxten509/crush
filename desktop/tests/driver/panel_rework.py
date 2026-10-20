@@ -5,11 +5,14 @@ Fixture leg (default): the panel shows FOLDER, TO-DO, BACKGROUND and
 SERVERS and no visuals; the chat's diagram and table are drawn in the
 message, not as chips; the tray above the typing box has no to-do or
 background entries and the left list no server rows; the typing box has no
-focus ring; a new chat shows the folder line, whose click opens the folder
-list. Pictures: panel.png, landing.png.
+focus ring; a new chat has no folder line above the typing box (owner,
+2026-10-20); the panel's folder name opens the folder list. Pictures:
+panel.png, landing.png.
 
-Engine leg ("switch" argument, no fixture): picking another folder from the
-folder line switches this window to it; no second window opens.
+Engine leg ("switch" argument, no fixture): the init notice sits on the left,
+in line with the typing box, in the question forms' sizes; picking another
+folder from the panel's folder name switches this window to it; no second
+window opens.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/model-menu.json panel_rework.py
@@ -106,13 +109,13 @@ if not SWITCH:
 
     run("window.__probe.runAction('chat.new'); return true;")
     time.sleep(1.2)
-    line = run("const el = document.querySelector('[data-probe=\"folder-line\"]'); return el ? el.innerText : null;")
-    check(bool(line) and got.get("folder", "?") in line, f"a new chat shows the folder line with the folder's name ({line!r})")
+    line = run("return document.querySelectorAll('[data-probe=\"folder-line\"]').length;")
+    check(line == 0, f"a new chat has no folder line above the typing box ({line})")
     subprocess.run(["import", "-window", wid, os.path.join(out_dir, "landing.png")])
-    check(click_at('[data-probe="folder-line"]'), "the folder line can be clicked")
+    check(click_at('[data-probe="folder-picker"]'), "the panel's folder name can be clicked")
     time.sleep(0.8)
     picker = run("return document.body.innerText.includes('New session in');")
-    check(picker is True, "a click on the folder line opens the folder list")
+    check(picker is True, "a click on the panel's folder name opens the folder list")
     xdo("key", "Escape")
     finish()
 
@@ -120,11 +123,29 @@ if not SWITCH:
 other = "/tmp/home/other-folder"
 os.makedirs(other, exist_ok=True)
 subprocess.run(["git", "-C", other, "init", "-q"])
-before = run("return document.querySelector('[data-section=\"folder\"] .name')?.title ?? '';")
-run("window.__probe.runAction('chat.new'); return true;")
-time.sleep(1.2)
-subprocess.run(["import", "-window", wid, os.path.join(out_dir, "switch-before.png")])
-if not check(click_at('[data-probe="folder-line"]'), "the folder line can be clicked"):
+before = run("return document.querySelector('[data-section=\"folder\"] .where')?.title ?? '';")
+time.sleep(1.5)
+subprocess.run(["import", "-window", wid, os.path.join(out_dir, "init.png")])
+init = run("""
+  const block = document.querySelector('[aria-label="Initialize this project"] .block, .block[role="group"]');
+  const field = document.querySelector('.composer .field');
+  const yep = block?.querySelector('.buttons button');
+  const probe = document.createElement('span');
+  probe.style.font = 'var(--t-reading)';
+  probe.textContent = 'x';
+  document.body.append(probe);
+  const reading = parseFloat(getComputedStyle(probe).fontSize);
+  probe.remove();
+  if (!block || !field) return { missing: true };
+  const q = block.querySelector('.question');
+  return { blockLeft: block.getBoundingClientRect().left + parseFloat(getComputedStyle(block).paddingLeft), fieldLeft: field.getBoundingClientRect().left,
+           question: parseFloat(getComputedStyle(q).fontSize), reading, yep: yep.getBoundingClientRect().height,
+           pill: parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 * 44 };
+""") or {}
+check(not init.get("missing") and abs(init["blockLeft"] - init["fieldLeft"]) <= 1, f"the init notice starts in line with the typing box ({init})")
+check(not init.get("missing") and abs(init["question"] - init["reading"]) < 0.5, "the init question is in the question forms' size")
+check(not init.get("missing") and abs(init["yep"] - init["pill"]) <= 1, "the init buttons are the question forms' Yes/No size")
+if not check(click_at('[data-probe="folder-picker"]'), "the panel's folder name can be clicked"):
     print("page:", run("return document.body.innerText.slice(0, 600);"), flush=True)
 time.sleep(0.8)
 xdo("key", "ctrl+u")
@@ -137,7 +158,7 @@ now = before
 while time.time() < end:
     time.sleep(1)
     try:
-        now = run("return document.querySelector('[data-section=\"folder\"] .name')?.title ?? '';") or now
+        now = run("return document.querySelector('[data-section=\"folder\"] .where')?.title ?? '';") or now
     except Exception:
         continue
     if now == other:
@@ -145,6 +166,6 @@ while time.time() < end:
 check(before != other and now == other, f"this window switched from {before!r} to {now!r}")
 time.sleep(2)
 check(len(windows()) == 1, f"no second window opened ({len(windows())} windows)")
-line = run("const el = document.querySelector('[data-probe=\"folder-line\"]'); return el ? el.innerText : null;")
-check(bool(line) and "other-folder" in line, f"the window shows a new chat in the other folder ({line!r})")
+name = run("return document.querySelector('[data-section=\"folder\"] .name')?.innerText ?? '';")
+check("other-folder" in (name or ""), f"the panel names the other folder ({name!r})")
 finish()

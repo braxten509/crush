@@ -122,23 +122,23 @@
 {/if}
 
 <style>
-  /* CHAT-001: centred, its content at most 720 picture px wide and at least
-     60 from each edge of the column; at the bottom of the space, as the
-     terminal draws it. */
+  /* At the bottom of the space, as the terminal draws it; on the left, in
+     line with the typing box, and in the question forms' sizes (owner,
+     2026-10-20: it was centred and much larger than the other questions). */
   .block {
     box-sizing: border-box;
     width: 100%;
-    max-width: calc(840 * var(--px));
-    margin: auto auto 0;
-    padding: calc(24 * var(--px)) calc(60 * var(--px)) calc(30 * var(--px));
+    max-width: calc(760 * var(--px));
+    margin: auto auto 0 0;
+    padding: calc(16 * var(--px)) calc(20 * var(--px)) calc(20 * var(--px));
   }
 
   .question {
-    font: var(--t-figure);
+    font: var(--t-reading);
     color: var(--ink);
   }
   .path {
-    margin-top: calc(12 * var(--px));
+    margin-top: calc(6 * var(--px));
     font: var(--t-stamp);
     color: var(--slate);
     white-space: nowrap;
@@ -146,12 +146,12 @@
     text-overflow: ellipsis;
   }
   .desc {
-    margin-top: calc(18 * var(--px));
-    font: var(--t-reading);
+    margin-top: calc(10 * var(--px));
+    font: var(--t-body-small);
     color: var(--ink);
   }
   .hint {
-    margin-top: calc(12 * var(--px));
+    margin-top: calc(6 * var(--px));
     font: var(--t-body-small);
     color: var(--slate);
   }
@@ -160,26 +160,26 @@
     color: var(--ink);
   }
   .ask {
-    margin-top: calc(18 * var(--px));
-    font: var(--t-reading);
+    margin-top: calc(10 * var(--px));
+    font: var(--t-body-small);
     color: var(--ink);
   }
 
   .buttons {
     display: flex;
     gap: calc(12 * var(--px));
-    margin-top: calc(20 * var(--px));
+    margin-top: calc(12 * var(--px));
   }
-  /* The New chat button's look (ChatList.svelte); the chosen one as the
-     slot's chosen button (4.9): an ink line and the band. */
+  /* The question forms' Yes/No look (QuestionForm.svelte .pill); the chosen
+     one as the slot's chosen button (4.9): an ink line and the band. */
   .buttons button {
     display: flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    min-width: calc(128 * var(--px));
-    height: calc(52 * var(--px));
-    padding: 0 calc(22 * var(--px));
+    min-width: calc(112 * var(--px));
+    height: calc(44 * var(--px));
+    padding: 0 calc(20 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--paper-raised);
     color: var(--ink);

@@ -191,27 +191,15 @@ ul {
   white-space: nowrap;
 }
 
-/* Motion (owner, 2026-10-19: "paper unfold", lib/motion.js). Every control's
-   colours and lines ease instead of snapping; pieces that come and go unroll
-   or settle through lib/motion.js and the keyframes below. */
+/* Motion (owner, 2026-10-19: "paper unfold", lib/motion.js). Floating pieces
+   (sheets, menus, popups) unroll; pieces in the page only slide a few pixels
+   into place. Nothing fades in from nothing and colours never ease, as both
+   read as flashes (owner, 2026-10-19: a theme preview or a hover repaints
+   many things at once, and a fade made each one blink). */
 :root {
   --motion: 220ms;
   --motion-quick: 140ms;
   --ease-paper: cubic-bezier(0.33, 1, 0.68, 1);
-}
-button,
-a,
-input,
-textarea,
-select,
-[role="option"],
-[role="switch"] {
-  transition:
-    background-color var(--motion-quick) ease-out,
-    border-color var(--motion-quick) ease-out,
-    color var(--motion-quick) ease-out,
-    outline-color var(--motion-quick) ease-out,
-    text-decoration-color var(--motion-quick) ease-out;
 }
 /* A piece that arrives unrolls from its top edge (sheets, menus, figures). */
 @keyframes paper-unfold {
@@ -224,15 +212,11 @@ select,
     transform: none;
   }
 }
-/* A piece that arrives settles in place (new messages, notices, rows). */
+/* A piece that arrives settles in place (new messages, notices, figures):
+   a short slide, fully drawn from the first frame. */
 @keyframes paper-settle {
   from {
-    opacity: 0;
     transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
   }
 }
 @keyframes paper-fade {
@@ -262,14 +246,12 @@ select,
 /* A column coming in from the right edge (the right panel). */
 @keyframes paper-slide-left {
   from {
-    opacity: 0;
-    transform: translateX(18px);
+    transform: translateX(14px);
   }
 }
 /* A column coming in from the left edge (the chat list back from Settings). */
 @keyframes paper-slide-right {
   from {
-    opacity: 0;
-    transform: translateX(-18px);
+    transform: translateX(-14px);
   }
 }

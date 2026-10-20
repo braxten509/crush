@@ -61,9 +61,9 @@
   }
   /* The picture's spacing: the first heading 29 below the label, 37 from a
      figure to the caret rule, 19 from the rule to the next heading. */
-  /* A newly selected figure unrolls in its place (the paper motion). */
+  /* A newly selected figure settles in its place (the paper motion). */
   .figure {
-    animation: paper-unfold var(--motion) var(--ease-paper);
+    animation: paper-settle var(--motion) var(--ease-paper);
     position: relative;
     min-width: 0;
     margin-top: calc(19 * var(--px));

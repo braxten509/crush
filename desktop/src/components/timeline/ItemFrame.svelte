@@ -25,7 +25,11 @@
   // (`focused`) has tabindex 0, the rest -1.
   // Placed by Timeline.
   let { item, selected, focused, children } = $props();
-  const fresh = takeFresh(item.key);
+  // Only whole new pieces settle: a reply, a tool group or call, a queued
+  // message or a shell. Status lines and banners that come and go while the
+  // agent works stay still, so a busy chat never twitches.
+  const SETTLES = new Set(["reply", "tools", "tool", "pending", "shell"]);
+  const fresh = takeFresh(item.key) && SETTLES.has(item.kind);
 
   // The key sits on the middle of the item's first box (owner, 2026-10-19):
   // a tool group's row, the user's box, or a reply's first line of text.

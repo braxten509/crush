@@ -501,7 +501,6 @@
     inset: 0 calc(8 * var(--px));
     z-index: -1;
     pointer-events: none;
-    animation: paper-fade var(--motion-quick) ease-out;
   }
   .row:hover::before {
     background: var(--control-hover);

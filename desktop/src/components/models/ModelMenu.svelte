@@ -268,7 +268,6 @@
     height: calc(38 * var(--px));
     padding: 0 calc(10 * var(--px));
     text-align: left;
-    transition: background-color 120ms ease-out;
   }
   .group :global(svg) {
     flex: none;
@@ -368,9 +367,6 @@
     font: var(--t-small);
     text-align: center;
     white-space: nowrap;
-    transition:
-      background-color 160ms ease-out,
-      color 160ms ease-out;
   }
   .level + .level {
     border-left: 1px solid var(--rule-control);

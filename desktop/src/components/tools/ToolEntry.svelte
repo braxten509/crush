@@ -217,8 +217,8 @@
   .body-box {
     min-width: 0;
   }
-  /* The call's output unrolls down from its line (the paper motion). */
+  /* The call's output settles in under its line (the paper motion). */
   .content {
-    animation: paper-unfold var(--motion) var(--ease-paper);
+    animation: paper-settle var(--motion) var(--ease-paper);
   }
 </style>

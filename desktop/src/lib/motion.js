@@ -38,7 +38,8 @@ export function slidePage(node, { dir = 1, duration = MOTION_MS, delay = 0 } = {
     delay,
     duration,
     easing: cubicOut,
-    css: (t, u) => `opacity: ${t.toFixed(3)}; transform: translateX(${(dir * u * 18).toFixed(2)}px);`,
+    // No fade: a page drawn from its first frame never blinks (owner, 2026-10-19).
+    css: (t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px);`,
   };
 }
 
@@ -49,6 +50,6 @@ export function settle(node, { duration = MOTION_MS, delay = 0, rise = RISE } = 
     delay,
     duration,
     easing: cubicOut,
-    css: (t, u) => `opacity: ${t.toFixed(3)}; transform: translateY(${(u * rise).toFixed(2)}px);`,
+    css: (t, u) => `transform: translateY(${(u * rise).toFixed(2)}px);`,
   };
 }

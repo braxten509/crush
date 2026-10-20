@@ -124,7 +124,6 @@
     z-index: -1;
     background: var(--band);
     opacity: 0;
-    transition: opacity 160ms ease-out;
   }
   .row:hover::before,
   .row.selected::before {
@@ -139,10 +138,12 @@
     width: calc(3 * var(--px));
     background: var(--vermilion);
     transform: scaleY(0);
-    transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
   }
+  /* The new choice's edge draws down; the old one goes at once, so two edges
+     never show together. */
   .row.selected::after {
     transform: scaleY(1);
+    transition: transform var(--motion) var(--ease-paper);
   }
   .row:focus-visible {
     outline: 1px solid var(--vermilion);

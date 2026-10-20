@@ -329,12 +329,12 @@
     color: var(--ink);
   }
   /* The open group continues the row's box (4.6). */
-  /* The calls unroll down from the row (the paper motion); the box takes its
+  /* The calls settle in under the row (the paper motion); the box takes its
      full height at once, so the timeline's measures never wait on it. */
   .list {
     border: 1px solid var(--rule-control);
     border-top: 0;
-    animation: paper-unfold var(--motion) var(--ease-paper);
+    animation: paper-settle var(--motion) var(--ease-paper);
   }
   .list > :global(.entry + .entry),
   .list > .earlier + :global(.entry) {

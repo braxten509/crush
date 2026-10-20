@@ -57,6 +57,13 @@ fn main() {
         return;
     }
     applog::write("info", "app", &format!("start crush-desktop {}", env!("CARGO_PKG_VERSION")));
+    // The drawing settings this run started with, so a graphics test can be
+    // checked from the log (FLASHING.md).
+    let drawing: Vec<String> = std::env::vars()
+        .filter(|(key, _)| key.starts_with("WEBKIT_") || key == "GDK_BACKEND" || key == "GSK_RENDERER")
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect();
+    applog::write("info", "app", &format!("drawing settings: {}", if drawing.is_empty() { "default".to_string() } else { drawing.join(" ") }));
     let here = std::env::current_dir().unwrap_or_default();
     let ui_debug = std::env::var("CRUSH_UI_DEBUG").is_ok_and(|v| v == "true");
     let launch = match parse_launch(&args, &here, ui_debug) {

@@ -37,3 +37,14 @@ landed. Not reproducible in the hidden Xvfb window (software drawing).
 - https://v2.tauri.app/develop/debug/linux-graphics/: flicker mostly NVIDIA +
   DMA-BUF renderer; WEBKIT_DISABLE_DMABUF_RENDERER=1.
 - https://forums.developer.nvidia.com/t/geforce-rtx-4070-flickering-issue-when-using-the-dmabuf-renderer-in-webkitgtk/274741
+
+### 2. CPU drawing (WEBKIT_SKIA_ENABLE_CPU_RENDERING=1), owner test
+- Where: temporary menu entry ~/.local/share/applications/crush-desktop-cpu-test.desktop
+  ("Crush (CPU drawing test)"), same preload as the normal entry plus the variable.
+- Suspect tested: 1.
+- Predicted: no see-through frames → suspect 1 confirmed; still flashing → ruled out,
+  test DMA-BUF off (2) and 60 Hz (3) next.
+- Actual result, try 1: owner answered "same as before", but the log shows the
+  only start since the entry was made (19:42:38) ran without the variable: the
+  normal entry or a taskbar pin was opened. Not a valid test; repeated.
+  Since then the app logs its drawing settings at start ("drawing settings: …").

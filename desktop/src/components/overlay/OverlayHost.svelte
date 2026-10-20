@@ -49,7 +49,7 @@
   /* Above the page's own layers (the conversation's rules sit at z-index 1). */
   .veil {
     position: fixed;
-    inset: 0;
+    inset: var(--titlebar) 0 0;
     z-index: 10;
   }
   /* The scrim fades in on its own layer under the sheets. Fading the veil

@@ -8,9 +8,13 @@ import { sessions } from "../stores/sessions.svelte.js";
 
 const base = (path) => String(path ?? "").replace(/\/+$/, "").split("/").pop() || "";
 
+// The two parts apart, for the page's own title bar (TitleBar.svelte).
+export function titleParts() {
+  return { chat: sessions.byId[sessions.currentId]?.title?.trim() || "New session", project: base(projectDir()) };
+}
+
 export function titleText() {
-  const chat = sessions.byId[sessions.currentId]?.title?.trim() || "New session";
-  const project = base(projectDir());
+  const { chat, project } = titleParts();
   return project ? `${chat} · ${project}` : chat;
 }
 

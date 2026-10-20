@@ -233,7 +233,8 @@ class Win:
     def place(self, x, y, w, h):
         xdo("windowmove", self.wid, x, y)
         xdo("windowsize", self.wid, w, h)
-        ok, _ = poll(lambda: self.report().get("shell") or {}, lambda s: round(s.get("w", 0)) == w and round(s.get("h", 0)) == h, 10)
+        # The page sits under the window's own title bar, so it ends at the window's bottom edge.
+        ok, _ = poll(lambda: self.report().get("shell") or {}, lambda s: round(s.get("w", 0)) == w and round(s.get("y", 0) + s.get("h", 0)) == h, 10)
         time.sleep(0.4)
         return ok
 
@@ -742,9 +743,10 @@ def flow_pictures(main):
         check(ok and all(i["on_top"] for i in h["images"]), "the picture shows in the chat")
         main.focus()
         key("alt+n")
-        main.until(lambda s: s.get("picker"), 3)
+        opened = main.until(lambda s: s.get("picker"), 3)
         h = main.hv()
-        check(bool(h.get("images")) and not any(i["on_top"] for i in h["images"]), "the folder picker covers it")
+        check(bool(h.get("images")) and not any(i["on_top"] for i in h["images"]),
+              f"the folder picker covers it (picker {bool(opened)}, pictures {h.get('images')}, dialogs {dialogs(main)})")
         key("Escape")
         main.until(lambda s: not s.get("picker"), 3)
         ok, h = poll(main.hv, lambda h: h.get("images") and all(i["on_top"] for i in h["images"]), 3, 0.3)
@@ -1103,12 +1105,17 @@ def engine_run():
                 if port:
                     sec = main.until(lambda s: any(x["port"] == port for x in s["servers"]), 2.5)
                     check(bool(sec), f"its row shows within 2 s (:{port})")
-                    row = next((x for x in (sec or {}).get("servers") or [] if x["port"] == port), {})
                     # The engine names a command by its program until its job is
-                    # registered, then by the job: the name it gives now.
-                    name = next((x.get("name") or "" for x in engine.servers() if x["port"] == port), server.get("name") or "")
-                    want = (name, f":{port}") if name else (f"localhost:{port}", "")
-                    check((row.get("label"), row.get("right")) == want, f"named after the job ({row.get('label')!r} {row.get('right')!r}, engine {name!r})")
+                    # registered, then by the job; the list follows within its
+                    # next read, so the row may show the program name first.
+                    def named():
+                        name = next((x.get("name") or "" for x in engine.servers() if x["port"] == port), server.get("name") or "")
+                        want = (name, f":{port}") if name else (f"localhost:{port}", "")
+                        row = next((x for x in main.ll().get("servers") or [] if x["port"] == port), {})
+                        return (row.get("label"), row.get("right")), want, name
+                    ok, last = poll(named, lambda r: r[0] == r[1], 4, 0.3)
+                    got, want, name = last or ((None, None), None, "")
+                    check(ok, f"named after the job ({got[0]!r} {got[1]!r}, engine {name!r})")
                     shot(OUT, "LIST-028")
                     # The servers are the right panel's SERVERS since 2026-10-19:
                     # one click on the name opens it, the row's cross stops it.

@@ -9,7 +9,8 @@
   // strip instead of the list while leftList.strip; a helper's chat or a
   // terminal tab (mainView.current) takes the conversation's place while the
   // conversation stays mounted, hidden, so its draft and scroll survive; and
-  // the debug overlay shows with CRUSH_UI_DEBUG=true.
+  // the debug overlay shows with CRUSH_UI_DEBUG=true. On Linux the window's
+  // title bar is the page's own (TitleBar.svelte); the page sits under it.
   import { onMount, untrack } from "svelte";
   import ChatList from "./components/ChatList.svelte";
   import ColumnDivider from "./components/ColumnDivider.svelte";
@@ -22,6 +23,7 @@
   import SidePanel from "./components/SidePanel.svelte";
   import EngineGate from "./components/start/EngineGate.svelte";
   import DebugOverlay from "./components/system/DebugOverlay.svelte";
+  import TitleBar from "./components/system/TitleBar.svelte";
   import "./lib/closing.js"; // the window's close steps answer close-requested
   import { COLUMN_LIMITS, dragColumn, fitColumns, loadColumns, saveColumns } from "./lib/columns.js";
   import { app_info } from "./lib/engine/commands.js";
@@ -88,7 +90,7 @@
     // Settings takes the window (owner, 2026-10-19): the panel steps aside.
     const off = panelSetting.off || settingsOpen();
     const update = () => {
-      const hidden = off || inner() < PANEL_ROOM || window.innerHeight / scale() < PANEL_MIN_HEIGHT;
+      const hidden = off || inner() < PANEL_ROOM || page.parentElement.clientHeight / scale() < PANEL_MIN_HEIGHT;
       if (hidden !== ui.panelHidden) {
         // Focus in the panel moves to the field (SIDE-002; the terminal's compact switch, internal/ui/model/layout.go:70-79).
         if (hidden && ui.focus === "panel") focusField();
@@ -111,6 +113,8 @@
       .catch(() => {});
   });
 </script>
+
+<TitleBar />
 
 <div class="sheet" data-probe="shell">
   <div
@@ -178,7 +182,7 @@
 <style>
   .sheet {
     position: fixed;
-    inset: 0;
+    inset: var(--titlebar) 0 0;
     overflow: hidden;
     background: var(--paper);
   }

@@ -1,7 +1,8 @@
 // The page's line to Electron (main.cjs), in place of Tauri's: invoke() to
-// the helper, the helper's events and channel messages back, and the two
-// window calls the page makes itself. The page reaches it through
-// src/lib/bridge/, which keeps Tauri's function names.
+// the helper, the helper's events and channel messages back, and the
+// window calls the page makes itself (its title, the title bar's buttons).
+// The page reaches it through src/lib/bridge/, which keeps Tauri's function
+// names.
 "use strict";
 
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
@@ -29,6 +30,13 @@ contextBridge.exposeInMainWorld("crushBridge", {
     channels.set(id, callback);
   },
   window: (action, value) => ipcRenderer.send("crush-window", action, value),
+  // The title bar's state, { bar, maximized, fullscreen, pinned }, and its changes.
+  windowState: () => ipcRenderer.sendSync("crush-window-state"),
+  onWindowState(callback) {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on("crush-window-state", listener);
+    return () => ipcRenderer.removeListener("crush-window-state", listener);
+  },
   // The paths of files dropped on the window (an array of File objects; a
   // file with no place on disk, like a picture dragged out of a browser, has none).
   pathsOf: (files) => files.map((file) => webUtils.getPathForFile(file)).filter(Boolean),

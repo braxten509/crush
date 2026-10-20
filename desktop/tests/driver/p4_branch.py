@@ -205,7 +205,8 @@ class App:
             return False
         xdo("windowmove", box[0], 0, 0)
         xdo("windowsize", box[0], w, h)
-        p = self.wait(lambda p: round((p.get("shell") or {}).get("w", 0)) == w and round((p.get("shell") or {}).get("h", 0)) == h, 10)
+        # The page sits under the window's own title bar, so it ends at the window's bottom edge.
+        p = self.wait(lambda p: round((p.get("shell") or {}).get("w", 0)) == w and round((p.get("shell") or {}).get("y", 0) + (p.get("shell") or {}).get("h", 0)) == h, 10)
         time.sleep(0.4)
         return round((p.get("shell") or {}).get("w", 0)) == w
 

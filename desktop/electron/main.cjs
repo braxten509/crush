@@ -10,7 +10,7 @@
 "use strict";
 
 const { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, protocol } = require("electron");
-const { spawn } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -242,6 +242,102 @@ function act(message) {
 
 // -- Windows.
 
+// On Linux the page draws the window's title bar itself (owner 2026-10-20,
+// design D: the system bar's parts plus a pin that keeps the window above the
+// others; system/TitleBar.svelte). Mac and Windows keep their own bars.
+// Moving, snapping, double-click and the right-click window menu stay the
+// system's: Electron hands presses on the bar's drag area to the compositor.
+const OWN_BAR = process.platform === "linux";
+
+// The window's state the bar shows: { bar, maximized, fullscreen, pinned }.
+// Like the system's, the bar steps aside in full screen.
+function windowState(win) {
+  return { bar: OWN_BAR, maximized: win.isMaximized(), fullscreen: win.isFullScreen(), pinned: Boolean(pins.get(win)) };
+}
+
+function sendState(win) {
+  if (!win.isDestroyed()) win.webContents.send("crush-window-state", windowState(win));
+}
+
+// -- The pin: keep the window above the others. On KDE under Wayland an app
+// may not raise itself above the others, so the pin asks KWin to turn on its
+// own "keep above" through a KWin script (owner's choice); elsewhere Electron
+// does it. The pin is remembered per window label (owner's choice) in
+// window-pins.json next to Chromium's files.
+
+const pins = new WeakMap(); // BrowserWindow → pinned
+const pendingPins = new WeakSet(); // windows still to pin once they show a title
+const KWIN = process.platform === "linux" && process.env.XDG_SESSION_TYPE === "wayland" && /KDE/i.test(process.env.XDG_CURRENT_DESKTOP ?? "");
+
+function pinFile() {
+  return path.join(app.getPath("userData"), "window-pins.json");
+}
+
+function savedPins() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(pinFile(), "utf8"));
+    return saved && typeof saved === "object" ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePin(label, on) {
+  const saved = savedPins();
+  if (on) saved[label] = true;
+  else delete saved[label];
+  try {
+    fs.writeFileSync(pinFile(), JSON.stringify(saved));
+  } catch (e) {
+    console.error(`crush-desktop: the pin could not be saved: ${e.message}`);
+  }
+}
+
+function setPinned(win, on) {
+  pins.set(win, on);
+  win.setAlwaysOnTop(on);
+  if (KWIN) kwinKeepAbove(win, on);
+  const label = labels.get(win.webContents.id);
+  if (label) savePin(label, on);
+  sendState(win);
+}
+
+// The script picks this app's window: the only one, else the active one
+// (the pin was just clicked there), else the one with this window's title.
+let kwinScripts = 0;
+function kwinKeepAbove(win, on) {
+  const name = `crush-desktop-pin-${process.pid}-${++kwinScripts}`;
+  const file = path.join(os.tmpdir(), `${name}.js`);
+  const script = `(function () {
+  const pid = ${process.pid};
+  const title = ${JSON.stringify(win.getTitle())};
+  const mine = workspace.windowList().filter((w) => w.pid === pid && w.normalWindow);
+  const w = mine.length === 1 ? mine[0]
+    : mine.find((w) => w === workspace.activeWindow) || mine.find((w) => w.caption === title || w.caption.startsWith(title + " <"));
+  if (w) w.keepAbove = ${on ? "true" : "false"};
+})();
+`;
+  const gdbus = (call, ...rest) =>
+    new Promise((resolve, reject) =>
+      execFile("gdbus", ["call", "--session", "--dest", "org.kde.KWin", ...call, ...rest], { timeout: 5000 }, (e, out) =>
+        e ? reject(e) : resolve(out),
+      ),
+    );
+  fs.promises
+    .writeFile(file, script)
+    .then(() => gdbus(["--object-path", "/Scripting", "--method", "org.kde.kwin.Scripting.loadScript"], file, name))
+    .then((out) => {
+      const id = /-?\d+/.exec(out)?.[0];
+      if (!id || Number(id) < 0) throw new Error(`KWin refused the script (${out.trim()})`);
+      return gdbus(["--object-path", `/Scripting/Script${id}`, "--method", "org.kde.kwin.Script.run"]);
+    })
+    .catch((e) => console.error(`crush-desktop: KWin did not take the pin: ${e.message}`))
+    .finally(() => {
+      gdbus(["--object-path", "/Scripting", "--method", "org.kde.kwin.Scripting.unloadScript"], name).catch(() => {});
+      fs.promises.rm(file, { force: true }).catch(() => {});
+    });
+}
+
 function createWindow(label) {
   if (windows.has(label)) return windows.get(label);
   const win = new BrowserWindow({
@@ -251,6 +347,7 @@ function createWindow(label) {
     minHeight: 560,
     title: "Crush",
     icon: ICON,
+    frame: !OWN_BAR,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -274,6 +371,15 @@ function createWindow(label) {
     windows.delete(label);
     send({ t: "window", label, event: "destroyed" });
   });
+  for (const event of ["maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "always-on-top-changed"]) {
+    win.on(event, () => sendState(win));
+  }
+  // A remembered pin comes back once the page names the window, which is
+  // when it is on screen and KWin can tell it apart by its title.
+  if (savedPins()[label]) {
+    pins.set(win, true);
+    pendingPins.add(win);
+  }
   win.on("focus", () => send({ t: "window", label, event: "focus" }));
   win.on("blur", () => send({ t: "window", label, event: "blur" }));
   win.webContents.on("render-process-gone", (_event, details) =>
@@ -323,8 +429,19 @@ ipcMain.handle("crush-invoke", (event, cmd, callArgs) => {
 ipcMain.on("crush-window", (event, action, value) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
-  if (action === "title") win.setTitle(String(value));
-  else if (action === "minimize") win.minimize();
+  if (action === "title") {
+    win.setTitle(String(value));
+    if (pendingPins.delete(win)) setPinned(win, true);
+  } else if (action === "minimize") win.minimize();
+  else if (action === "maximize") win.isMaximized() ? win.unmaximize() : win.maximize();
+  // The close event runs the page's close steps (createWindow).
+  else if (action === "close") win.close();
+  else if (action === "pin") setPinned(win, Boolean(value));
+});
+
+ipcMain.on("crush-window-state", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  event.returnValue = win ? windowState(win) : { bar: false, maximized: false, fullscreen: false, pinned: false };
 });
 
 // -- The app.

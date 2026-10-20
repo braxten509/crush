@@ -101,6 +101,21 @@ never "sessions".
   an empty section keeps its heading in `--mark` and shows no "None" line.
 - Settings rows stop at 840 picture pixels, so each switch sits near its name.
 
+## Title bar
+
+On Linux the window has no system title bar; the page draws its own (owner, 2026-10-20,
+design D; `components/system/TitleBar.svelte`). It is 48 picture pixels tall on `--paper`
+with a `--rule-faint` hairline under it. From the left: the app icon, the chat's title as a
+running head (`--t-item`, weight 500), the folder after it in italic `--slate`; on the
+right four square-cornered buttons 54 picture pixels wide: the pin (`--mark`), minimize,
+maximize or restore, close (hover: `--control-hover`; close: `--vermilion-fill` with
+`--on-accent`). Pinned, the pin fills in `--vermilion-ink` and the bottom rule becomes a
+two-pixel `--vermilion` line. The buttons are not in the Tab order, as on the system bar.
+The bar is a drag area, so moving, edge snapping, double-click and the right-click window
+menu stay the compositor's. The pin keeps the window above the others (KWin's "keep
+above" on KDE Wayland) and is remembered per window. The page and its overlays sit under
+the bar (`--titlebar`); in full screen the bar steps aside.
+
 ## Sheets (dialogs)
 
 Every dialog is a `kit/Sheet`:

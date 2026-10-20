@@ -18,10 +18,14 @@
 #   arguments for the app, such as --fixture FILE).
 # - the hidden screen runs with -noreset, so a key map change made by a short
 #   client (xmodmap in run-in-sandbox.sh) survives that client exiting.
-# Usage: tests/sandbox.sh [-s WxH] command args...
+# - with --kwin the hidden screen is a private KWin (tests/kwin/screen.sh)
+#   with its own session bus, in place of Xvfb.
+# Usage: tests/sandbox.sh [-s WxH] [--kwin] command args...
 set -euo pipefail
 SIZE=1600x1000
+SCREEN=xvfb
 if [ "${1:-}" = "-s" ]; then SIZE="$2"; shift 2; fi
+if [ "${1:-}" = "--kwin" ]; then SCREEN=kwin; shift; fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKTREE="$(dirname "$ROOT")"
 mkdir -p "$ROOT/tests/out"
@@ -46,4 +50,7 @@ exec bwrap --ro-bind / / --dev /dev --proc /proc \
   FAKE_TOOL_LOG=/tmp/fake-tools.jsonl FAKE_AI_LOG=/tmp/fake-ai.jsonl \
   DESKTOP_ROOT="$ROOT" OUTER_HOME="$HOME" ${DESKTOP_APP:+"DESKTOP_APP=$DESKTOP_APP"} \
   ${DESKTOP_CRUSH:+"DESKTOP_CRUSH=$DESKTOP_CRUSH"} ${DESKTOP_ARGS:+"DESKTOP_ARGS=$DESKTOP_ARGS"} \
-  bash -c 'mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" && exec xvfb-run -a -s "-screen 0 '"$SIZE"'x24 -nolisten tcp -noreset" "$@"' sandbox "$@"
+  SCREEN="$SCREEN" SIZE="$SIZE" \
+  bash -c 'mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+    if [ "$SCREEN" = kwin ]; then exec "$DESKTOP_ROOT/tests/kwin/screen.sh" "$SIZE" "$@"; fi
+    exec xvfb-run -a -s "-screen 0 $SIZE""x24 -nolisten tcp -noreset" "$@"' sandbox "$@"

@@ -5,9 +5,16 @@
    real pixel at every zoom. */
 @import "./assets/fonts/fonts.css";
 
+:root[data-own-bar] {
+  --titlebar: calc(48 * var(--px));
+}
+
 :root {
   --zoom: 0.6667;
   --px: 0.0625rem;
+  /* The window's own title bar (system/TitleBar.svelte, Linux): the page and
+     its overlays sit under it. */
+  --titlebar: 0px;
 
   /* Paper and ink */
   --paper: #f9f8ef;

@@ -47,6 +47,11 @@
     "arrow-left": { w: 16, h: 16 },
     "arrow-down": { w: 16, h: 16 },
     bullet: { w: 16, h: 16 },
+    pin: { w: 16, h: 16 },
+    "pin-on": { w: 16, h: 16 },
+    minimize: { w: 16, h: 16 },
+    maximize: { w: 16, h: 16 },
+    restore: { w: 16, h: 16 },
   };
   const box = $derived(icons[name]);
   const scale = $derived(size ? size / Math.max(box.w, box.h) : 1);
@@ -116,6 +121,16 @@
     <path d="M11.96 .84v3.2H8.76" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
   {:else if name === "close"}
     <path d="M2.5 2.5l11 11M13.5 2.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.6" />
+  {:else if name === "pin" || name === "pin-on"}
+    <path d="M5.1 1.2h5.8l-.8 5 3 2.7v1.7H2.9V8.9l3-2.7z" fill={name === "pin-on" ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+    <path d="M8 10.6v4.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+  {:else if name === "minimize"}
+    <path d="M3 8.5h10" fill="none" stroke="currentColor" stroke-width="1.4" />
+  {:else if name === "maximize"}
+    <path d="M3.5 3.5h9v9h-9z" fill="none" stroke="currentColor" stroke-width="1.4" />
+  {:else if name === "restore"}
+    <path d="M3.5 5.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1.4" />
+    <path d="M5.5 3.5h7v7" fill="none" stroke="currentColor" stroke-width="1.4" />
   {:else if name === "image"}
     <path d="M1.5 2.5h13v11h-13z" fill="none" stroke="currentColor" stroke-width="1.6" />
     <path d="M1.5 11.5l4-4 3 3 2-2 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />

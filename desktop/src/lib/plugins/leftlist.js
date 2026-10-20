@@ -289,9 +289,10 @@ probeSection(
         tool: el.closest("[data-tool]")?.dataset.tool ?? "",
         rect: rectOf(el),
       })),
-      // Pictures in the page (not in a sheet): whether each is on top at its centre.
+      // Pictures in the page (not in a sheet, nor the title bar's icon, which
+      // stays above the sheets): whether each is on top at its centre.
       images: all("img")
-        .filter((img) => !img.closest(".veil") && img.getBoundingClientRect().width > 0)
+        .filter((img) => !img.closest(".veil, .title-bar") && img.getBoundingClientRect().width > 0)
         .map((img) => {
           const r = img.getBoundingClientRect();
           return { rect: rectOf(img), on_top: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === img };

@@ -218,7 +218,7 @@
 <style>
   .viewer {
     position: fixed;
-    inset: 0;
+    inset: var(--titlebar) 0 0;
     z-index: 20;
     display: flex;
     flex-direction: column;

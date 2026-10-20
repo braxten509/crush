@@ -1,0 +1,6 @@
+#!/bin/sh
+# Starts Crush Desktop from the source tree: Electron with this folder as the
+# app, the screens from ../dist and the helper from ../src-tauri/target/release
+# (main.cjs finds them). The installed app has its own launcher.
+here=$(dirname "$(readlink -f "$0")")
+exec "$here/../node_modules/electron/dist/electron" "$here" "$@"

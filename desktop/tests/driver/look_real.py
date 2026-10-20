@@ -17,7 +17,7 @@ def app_window(timeout=20):
     hidden helper windows with the same title."""
     end = time.time() + timeout
     while time.time() < end:
-        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Crush$"], capture_output=True, text=True)
+        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True)
         best = None
         for wid in r.stdout.split():
             g = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], capture_output=True, text=True)

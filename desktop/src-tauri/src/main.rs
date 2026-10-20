@@ -1,7 +1,10 @@
-// Crush Desktop: the window, its flags and its commands (desktop-design 1.2).
-// Test runs start it with `--probe <file>` (the page reports what is on
-// screen) and may add `--fixture <file>` (a recorded engine, 6.3).
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Crush Desktop's helper (owner 2026-10-20: the app moved from Tauri to
+// Electron). Electron (electron/main.cjs) starts this program with the app's
+// command line and owns the windows; this program keeps the engine
+// connections, files, terminals, settings and alerts, and the two talk in
+// JSON lines over stdin and stdout (host.rs). Test runs start the app with
+// `--probe <file>` (the page reports what is on screen) and may add
+// `--fixture <file>` (a recorded engine, 6.3).
 
 mod alerts;
 mod applog;
@@ -14,6 +17,7 @@ mod crash;
 mod crush_bin;
 mod crushinfo;
 mod dirlist;
+mod dispatch;
 mod docker;
 mod editor;
 mod engine_cli;
@@ -21,6 +25,7 @@ mod error;
 mod files;
 mod fixture;
 mod folderdialog;
+mod host;
 mod login_env;
 mod logs;
 mod opener;
@@ -36,10 +41,12 @@ mod taskbar;
 mod uds_http;
 mod windows;
 
+use host::{async_runtime, AppHandle};
+use serde_json::{json, Value};
 use state::{AppState, Launch};
+use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::Manager;
 
 fn main() {
     crash::install();
@@ -56,14 +63,8 @@ fn main() {
         println!("crush-desktop {}", env!("CARGO_PKG_VERSION"));
         return;
     }
-    applog::write("info", "app", &format!("start crush-desktop {}", env!("CARGO_PKG_VERSION")));
-    // The drawing settings this run started with, so a graphics test can be
-    // checked from the log (FLASHING.md).
-    let drawing: Vec<String> = std::env::vars()
-        .filter(|(key, _)| key.starts_with("WEBKIT_") || key == "GDK_BACKEND" || key == "GSK_RENDERER")
-        .map(|(key, value)| format!("{key}={value}"))
-        .collect();
-    applog::write("info", "app", &format!("drawing settings: {}", if drawing.is_empty() { "default".to_string() } else { drawing.join(" ") }));
+    let (input, output) = take_lines();
+    applog::write("info", "app", &format!("start crush-desktop {} (Electron)", env!("CARGO_PKG_VERSION")));
     let here = std::env::current_dir().unwrap_or_default();
     let ui_debug = std::env::var("CRUSH_UI_DEBUG").is_ok_and(|v| v == "true");
     let launch = match parse_launch(&args, &here, ui_debug) {
@@ -82,111 +83,117 @@ fn main() {
     };
     let opened_log = launch.probe_side_file("opened.jsonl");
     let first_window = windows::WindowLaunch::first(&launch);
-    let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(windows::handoff))
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(nav_guard(opened_log))
-        .manage(AppState {
-            windows: Mutex::default(),
-            settings: Mutex::new(settings::load()),
-            launch,
-        })
-        .manage(windows::Windows::new(first_window))
-        .manage(pty::Ptys::default())
-        .manage(editor::Edits::default())
-        .manage(alerts::Alerts::default())
-        .manage(logs::Follows::default())
-        .manage(selfupdate::Runner::default());
+    let app = AppHandle::new(Box::new(output));
+    app.manage(AppState {
+        windows: Mutex::default(),
+        settings: Mutex::new(settings::load()),
+        launch,
+    });
+    app.manage(windows::Windows::new(first_window));
+    app.manage(pty::Ptys::default());
+    app.manage(editor::Edits::default());
+    app.manage(alerts::Alerts::default());
+    app.manage(logs::Follows::default());
+    app.manage(selfupdate::Runner::default());
     if let Some(fixture) = fixture {
-        builder = builder.manage(fixture);
+        app.manage(fixture);
     }
-    builder
-        .setup(|app| {
-            settings::watch(app.handle().clone());
-            if let Some(window) = app.get_webview_window(windows::FIRST) {
-                crash::watch_webview(&window);
-                refresh::full_rate(&window);
+    settings::watch(app.clone());
+    app.send(&json!({"t": "ready"}));
+    for line in input.lines() {
+        let Ok(line) = line else { break };
+        match serde_json::from_str::<Value>(&line) {
+            Ok(message) => handle(&app, message, opened_log.as_deref()),
+            Err(e) => eprintln!("crush-desktop: a message from Electron could not be read: {e}"),
+        }
+    }
+    // Electron is gone: so is the app.
+    std::process::exit(0);
+}
+
+/// Keeps stdin and stdout for the line to Electron and points the program's
+/// own (which every child process inherits: the engine, sound players,
+/// terminals) at /dev/null and stderr, so nothing else ever writes into the
+/// line or reads from it.
+fn take_lines() -> (std::io::BufReader<std::fs::File>, std::fs::File) {
+    use std::os::fd::FromRawFd;
+    // SAFETY: plain descriptor calls on 0, 1 and 2; each new descriptor is owned by one File.
+    unsafe {
+        let input = libc::fcntl(0, libc::F_DUPFD_CLOEXEC, 3);
+        let output = libc::fcntl(1, libc::F_DUPFD_CLOEXEC, 3);
+        if input < 0 || output < 0 {
+            eprintln!("crush-desktop: could not keep the line to Electron");
+            std::process::exit(1);
+        }
+        let null = libc::open(c"/dev/null".as_ptr(), libc::O_RDONLY);
+        if null >= 0 {
+            libc::dup2(null, 0);
+            libc::close(null);
+        }
+        libc::dup2(2, 1);
+        (std::io::BufReader::new(std::fs::File::from_raw_fd(input)), std::fs::File::from_raw_fd(output))
+    }
+}
+
+/// One message from Electron (host.rs lists them).
+fn handle(app: &AppHandle, message: Value, opened_log: Option<&Path>) {
+    let text = |key: &str| message.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
+    match message.get("t").and_then(Value::as_str).unwrap_or_default() {
+        "call" => {
+            let Some(id) = message.get("id").and_then(Value::as_u64) else { return };
+            let (app, label, cmd) = (app.clone(), text("label"), text("cmd"));
+            let args = message.get("args").cloned().unwrap_or(Value::Null);
+            async_runtime::spawn(async move {
+                let answer = match dispatch::call(app.clone(), label, cmd, args).await {
+                    Ok(value) => json!({"t": "result", "id": id, "ok": value}),
+                    Err(error) => json!({"t": "result", "id": id, "err": error}),
+                };
+                app.send(&answer);
+            });
+        }
+        "reply" => {
+            let Some(id) = message.get("id").and_then(Value::as_u64) else { return };
+            let answer = match message.get("err") {
+                Some(error) => Err(error.as_str().map(String::from).unwrap_or_else(|| error.to_string())),
+                None => Ok(message.get("ok").cloned().unwrap_or(Value::Null)),
+            };
+            app.answer(id, answer);
+        }
+        "window" => {
+            let label = text("label");
+            match text("event").as_str() {
+                "created" => app.window_created(&label),
+                // The system close button: the page runs its close steps (6.4).
+                "close-requested" => windows::close_requested(app, &label),
+                "destroyed" => {
+                    app.window_gone(&label);
+                    alerts::window_gone(app, &label);
+                    logs::stop_window(app, &label);
+                }
+                "focus" => app.set_focused(&label, true),
+                "blur" => app.set_focused(&label, false),
+                "crashed" => crash::webview_crashed(app, &label, &text("reason")),
+                other => eprintln!("crush-desktop: unknown window event {other}"),
             }
-            Ok(())
-        })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // The page runs its close steps and calls window_close, which
-                // leaves the engine (DELETE /v1/clients/{id}, 1.2.6) before the
-                // window goes; after 10 s Rust closes it anyway (6.4).
-                api.prevent_close();
-                windows::close_requested(window.app_handle(), window.label());
+        }
+        "handoff" => {
+            let argv = message.get("argv").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect()).unwrap_or_default();
+            let (app, cwd) = (app.clone(), text("cwd"));
+            // Opening a window waits for Electron's answer, which this thread reads.
+            async_runtime::spawn_blocking(move || windows::handoff(&app, argv, cwd));
+        }
+        // The navigation guard (1.2.9) lives in Electron; a refusal is logged
+        // with the address's scheme only, and in probe mode recorded in
+        // `<probe>.opened.jsonl`.
+        "refused" => {
+            let scheme = text("scheme");
+            eprintln!("crush-desktop: refused a navigation to a {scheme} address");
+            if let Some(log) = opened_log {
+                state::append_json_line(log, &json!({"refused_navigation": scheme}));
             }
-            if let tauri::WindowEvent::Destroyed = event {
-                alerts::window_gone(window.app_handle(), window.label());
-                logs::stop_window(window.app_handle(), window.label());
-            }
-        })
-        .invoke_handler(tauri::generate_handler![
-            commands::app_info,
-            commands::probe_write,
-            commands::probe_request,
-            commands::probe_eval,
-            commands::updates_claim,
-            refresh::frame_rate_report,
-            refresh::scroll_test_mode,
-            refresh::scroll_test_report,
-            applog::app_log,
-            commands::engine_open,
-            commands::engine_retry,
-            commands::engine_set_current_session,
-            commands::events_take,
-            commands::api,
-            commands::api_abort,
-            commands::settings_get,
-            commands::settings_set,
-            commands::closed_set,
-            commands::clipboard_write,
-            commands::clipboard_read,
-            commands::open_link,
-            commands::file_info,
-            commands::file_read,
-            commands::files_list,
-            commands::api_secret,
-            commands::window_open,
-            commands::window_close,
-            commands::project_switch,
-            commands::pty_spawn,
-            commands::pty_write,
-            commands::pty_resize,
-            commands::pty_cwd,
-            commands::pty_close,
-            commands::pty_close_all,
-            commands::editor_prepare,
-            commands::editor_finish,
-            commands::alert_notify,
-            commands::alert_sound,
-            commands::alert_window_state,
-            commands::alert_handler,
-            commands::crash_pending,
-            commands::crash_restart,
-            commands::logs_tail,
-            commands::logs_follow,
-            commands::logs_unfollow,
-            commands::selfupdate_run,
-            commands::selfupdate_install,
-            commands::crush_dirs,
-            commands::crush_stats,
-            commands::docker_mcp_version,
-            commands::projects_list,
-            commands::project_save,
-            commands::project_remove,
-            commands::recent_folders,
-            commands::subagent_instructions_read,
-            commands::subagent_instructions_write,
-            commands::remote_password_exists,
-            commands::remote_password_set,
-            commands::dir_list,
-            commands::folder_pick,
-        ])
-        .run(tauri::generate_context!())
-        .expect("Crush Desktop could not start");
+        }
+        other => eprintln!("crush-desktop: unknown message {other}"),
+    }
 }
 
 /// Starts this program again with `--launch-id <id>` added and
@@ -209,30 +216,6 @@ fn relaunch_with_launch_id(id: std::ffi::OsString) {
     }
     let e = std::process::Command::new(exe).args(args).env_remove("CRUSH_REMOTE_LAUNCH").exec();
     eprintln!("crush-desktop: could not start again for the phone launch: {e}");
-}
-
-/// The navigation guard (1.2.9): every webview the app opens, now and in later
-/// phases, may show only the app's own pages. A refusal is logged with the
-/// address's scheme only, and in probe mode recorded in `<probe>.opened.jsonl`.
-fn nav_guard<R: tauri::Runtime>(opened_log: Option<PathBuf>) -> tauri::plugin::TauriPlugin<R> {
-    tauri::plugin::Builder::new("nav-guard")
-        .on_navigation(move |_webview, url| {
-            if nav_allowed(url) {
-                return true;
-            }
-            eprintln!("crush-desktop: refused a navigation to a {}: address", url.scheme());
-            if let Some(log) = &opened_log {
-                let line = serde_json::json!({"refused_navigation": format!("{}:", url.scheme())});
-                state::append_json_line(log, &line);
-            }
-            false
-        })
-        .build()
-}
-
-/// Only the app's own pages: there is no dev server (tauri.conf.json has only frontendDist).
-fn nav_allowed(url: &tauri::Url) -> bool {
-    url.scheme() == "tauri" && url.host_str() == Some("localhost")
 }
 
 /// Reads the command line: the terminal's flags (internal/cmd/root.go:37-48),
@@ -319,26 +302,6 @@ mod tests {
     fn parse(args: &[&str]) -> Result<Launch, String> {
         let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
         parse_launch(&args, Path::new("/work"), false)
-    }
-
-    #[test]
-    fn nav_guard_allows_only_app_pages() {
-        let url = |s: &str| tauri::Url::parse(s).unwrap();
-        assert!(nav_allowed(&url("tauri://localhost/")));
-        assert!(nav_allowed(&url("tauri://localhost/index.html?zoom=1#x")));
-        for refused in [
-            "http://localhost/",
-            "https://example.com/",
-            "http://tauri.localhost/",
-            "file:///etc/passwd",
-            "data:text/html,<p>x</p>",
-            "tauri://example.com/",
-            "tauri://localhost.example.com/",
-            "javascript:alert(1)",
-            "about:blank",
-        ] {
-            assert!(!nav_allowed(&url(refused)), "{refused} must be refused");
-        }
     }
 
     #[test]

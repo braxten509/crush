@@ -12,8 +12,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
-use tauri_plugin_notification::NotificationExt;
+use crate::host::AppHandle;
 
 #[derive(Clone)]
 struct WindowState {
@@ -52,9 +51,9 @@ pub fn notify(app: &AppHandle, title: &str, body: &str) -> AppResult<Notified> {
         crate::state::append_json_line(&file, &json!({ "kind": "notify", "title": title, "body": body, "at": at as u64 }));
         return Ok(Notified { sent: true, error: None });
     }
-    match app.notification().builder().title(title).body(body).show() {
-        Ok(()) => Ok(Notified { sent: true, error: None }),
-        Err(e) => Ok(Notified { sent: false, error: Some(e.to_string()) }),
+    match app.ask("notify", json!({"title": title, "body": body}), Some(std::time::Duration::from_secs(5))) {
+        Ok(_) => Ok(Notified { sent: true, error: None }),
+        Err(e) => Ok(Notified { sent: false, error: Some(e) }),
     }
 }
 

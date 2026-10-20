@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
+use crate::host::AppHandle;
 
 #[derive(Serialize)]
 pub struct PasswordSet {

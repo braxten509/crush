@@ -22,7 +22,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-use tauri::{Emitter, Manager};
 
 /// `dirs::config_dir()/crush-desktop/settings.json`. Phases 5 and 6 add keys;
 /// unknown keys are kept on write (`other`).
@@ -61,7 +60,7 @@ pub fn load() -> Settings {
 }
 
 /// Known keys only: crush_path, yolo.
-pub fn set_key(app: &tauri::AppHandle, key: &str, value: serde_json::Value) -> AppResult<Settings> {
+pub fn set_key(app: &crate::host::AppHandle, key: &str, value: serde_json::Value) -> AppResult<Settings> {
     let change = KeyChange::parse(key, value)?;
     let file = global().ok_or_else(no_folder)?;
     file.change(|s| change.apply(s), |s| publish(app, s))
@@ -70,7 +69,7 @@ pub fn set_key(app: &tauri::AppHandle, key: &str, value: serde_json::Value) -> A
 /// Phase 4's closed chats, kept per engine data folder (`project` is the
 /// engine's `data_dir`, the project's one stable name).
 pub fn set_closed(
-    app: &tauri::AppHandle,
+    app: &crate::host::AppHandle,
     project: &str,
     session_id: &str,
     closed: bool,
@@ -85,7 +84,7 @@ pub fn set_closed(
 /// (std::os::unix::fs::MetadataExt). When any of the three differs from the last seen value, it
 /// re-reads and parses the file; when the parsed Settings differ from AppState.settings, it
 /// stores them and emits `settings-changed` to every window of this process.
-pub fn watch(app: tauri::AppHandle) {
+pub fn watch(app: crate::host::AppHandle) {
     let Some(file) = global() else {
         eprintln!("crush-desktop: no settings folder, so changes from other app windows are not followed");
         return;
@@ -116,7 +115,7 @@ fn global() -> Option<&'static SettingsFile> {
 /// Hands new settings to this process: AppState.settings (what `settings_get`
 /// answers) and the `settings-changed` event to every window. Called while the
 /// file's mutex is held, so two publishes never cross.
-fn publish(app: &tauri::AppHandle, settings: &Settings) {
+fn publish(app: &crate::host::AppHandle, settings: &Settings) {
     if let Some(state) = app.try_state::<AppState>() {
         *state.settings.lock().unwrap() = settings.clone();
     }

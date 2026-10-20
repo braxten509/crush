@@ -24,8 +24,7 @@ use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
-use tauri::async_runtime::JoinHandle;
-use tauri::{Emitter, Manager};
+use crate::host::async_runtime::JoinHandle;
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Entries a hidden window's batch may hold before it falls back to a Resync.
@@ -255,7 +254,7 @@ fn crush_check(setting: Option<String>) -> CrushCheck {
 
 /// Runs blocking work (crush, the login shell) off the async threads.
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> AppResult<T> + Send + 'static) -> AppResult<T> {
-    tauri::async_runtime::spawn_blocking(work)
+    crate::host::async_runtime::spawn_blocking(work)
         .await
         .unwrap_or_else(|_| Err(AppError::new("internal", "A background step of Crush Desktop stopped unexpectedly.")))
 }
@@ -903,7 +902,7 @@ impl WindowConn {
     /// starts a reconnect (1.2.5 step 4).
     fn start_reader(self: &Arc<Self>, mut stream: ByteStream, generation: u64) -> JoinHandle<()> {
         let me = self.clone();
-        tauri::async_runtime::spawn(async move {
+        crate::host::async_runtime::spawn(async move {
             let mut lines = LineSplitter::new();
             let mut out = Vec::new();
             while let Some(Ok(chunk)) = stream.next_chunk().await {
@@ -946,7 +945,7 @@ impl WindowConn {
     fn start_reconnect(self: &Arc<Self>, inner: &mut Inner) {
         inner.phase = Phase::Reconnecting;
         let me = self.clone();
-        inner.reconnect = Some(tauri::async_runtime::spawn(async move { me.reconnect().await }));
+        inner.reconnect = Some(crate::host::async_runtime::spawn(async move { me.reconnect().await }));
     }
 
     /// Ensure and rejoin until it works; after `max_failures` failed tries in a
@@ -1102,8 +1101,8 @@ impl WindowConn {
         // Listed before it can run, so `abort` never misses it.
         let task = {
             let mut calls = self.calls.lock().unwrap();
-            let task = tauri::async_runtime::spawn(async move { http.call(&method, &target, body.as_ref(), None).await });
-            let abort = task.inner().abort_handle();
+            let task = crate::host::async_runtime::spawn(async move { http.call(&method, &target, body.as_ref(), None).await });
+            let abort = task.abort_handle();
             if calls.insert(id.clone(), Running { serial, abort }).is_some() {
                 self.log("a call took the id of a call still running; abort now stops the new one");
             }
@@ -1113,7 +1112,7 @@ impl WindowConn {
             calls: &self.calls,
             id,
             serial,
-            abort: task.inner().abort_handle(),
+            abort: task.abort_handle(),
         };
         match task.await {
             Ok(result) => result,
@@ -1277,13 +1276,13 @@ pub fn check_secret_route(path: &str) -> AppResult<()> {
 
 // The commands' side (1.3): one connection per window label in AppState.
 
-fn connection(app: &tauri::AppHandle, label: &str) -> Option<Arc<WindowConn>> {
+fn connection(app: &crate::host::AppHandle, label: &str) -> Option<Arc<WindowConn>> {
     app.state::<AppState>().windows.lock().unwrap().get(label).cloned()
 }
 
 /// Version check, ensure, join steps 1-4, stream start. Called once per window, and again by
 /// "Try again" after a failure. Idempotent: a second call while connected returns the same result.
-pub async fn open(app: &tauri::AppHandle, label: &str, cwd: &str) -> AppResult<OpenResult> {
+pub async fn open(app: &crate::host::AppHandle, label: &str, cwd: &str) -> AppResult<OpenResult> {
     let state = app.state::<AppState>();
     let mut launch = state.launch.clone();
     // A window other than the first joins the folder it was opened for
@@ -1320,14 +1319,14 @@ pub async fn open(app: &tauri::AppHandle, label: &str, cwd: &str) -> AppResult<O
     conn.open(plan).await
 }
 
-pub async fn retry(app: &tauri::AppHandle, label: &str) -> AppResult<()> {
+pub async fn retry(app: &crate::host::AppHandle, label: &str) -> AppResult<()> {
     connection(app, label).ok_or_else(not_open)?.retry()
 }
 
 /// Generic call for the window (section 1.3, `api`): adds client_id, checks the route list.
 /// With `call_id`: no time limit, and the call is registered for `abort` until it ends (1.2.4).
 pub async fn call(
-    app: &tauri::AppHandle,
+    app: &crate::host::AppHandle,
     label: &str,
     method: &str,
     path: &str,
@@ -1344,12 +1343,12 @@ pub async fn call(
 
 /// `api_abort` (1.3): aborts that window's running call with this id; false when none is
 /// running. The aborted call fails with code "aborted" (1.2.2).
-pub fn abort(app: &tauri::AppHandle, label: &str, call_id: &str) -> bool {
+pub fn abort(app: &crate::host::AppHandle, label: &str, call_id: &str) -> bool {
     connection(app, label).is_some_and(|conn| conn.abort_call(call_id))
 }
 
 pub async fn set_current_session(
-    app: &tauri::AppHandle,
+    app: &crate::host::AppHandle,
     label: &str,
     session_id: &str,
 ) -> AppResult<()> {
@@ -1357,13 +1356,13 @@ pub async fn set_current_session(
 }
 
 /// The wire form of 1.4.2.
-pub fn take(app: &tauri::AppHandle, label: &str) -> Vec<serde_json::Value> {
+pub fn take(app: &crate::host::AppHandle, label: &str) -> Vec<serde_json::Value> {
     connection(app, label).map(|conn| conn.take()).unwrap_or_default()
 }
 
 /// `api_secret` (6.4): `body` is the JSON bytes; they are overwritten with zeros
 /// when the call ends, either way, and appear in no log line or error.
-pub async fn call_secret(app: &tauri::AppHandle, label: &str, path: &str, mut body: Vec<u8>) -> AppResult<Value> {
+pub async fn call_secret(app: &crate::host::AppHandle, label: &str, path: &str, mut body: Vec<u8>) -> AppResult<Value> {
     let result = match connection(app, label) {
         Some(conn) => conn.call_secret(path, &mut body).await,
         None => check_secret_route(path).and(Err(not_open())),
@@ -1375,13 +1374,13 @@ pub async fn call_secret(app: &tauri::AppHandle, label: &str, path: &str, mut bo
 /// The engine this window joined (its `data_dir` names the project's log
 /// folder, 2.28); None before the first join.
 #[allow(dead_code)] // SYS's logs.rs reads it
-pub fn ensured(app: &tauri::AppHandle, label: &str) -> Option<Ensured> {
+pub fn ensured(app: &crate::host::AppHandle, label: &str) -> Option<Ensured> {
     connection(app, label)?.inner().opened.as_ref().map(|opened| opened.engine.clone())
 }
 
 /// Window closing: abort every running call of that window (so its `!` commands end with it,
 /// 1.2.4), then DELETE /v1/clients/{client_id} (1 s limit, errors only logged), stop the reader.
-pub async fn close(app: &tauri::AppHandle, label: &str) {
+pub async fn close(app: &crate::host::AppHandle, label: &str) {
     let conn = app.state::<AppState>().windows.lock().unwrap().remove(label);
     if let Some(conn) = conn {
         conn.close().await;
@@ -1398,7 +1397,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
 
     fn run<T>(f: impl Future<Output = T>) -> T {
-        tauri::async_runtime::block_on(f)
+        crate::host::async_runtime::block_on(f)
     }
 
     /// Every line `WindowConn::log` wrote during the tests.
@@ -2138,7 +2137,7 @@ mod tests {
         j.fake.set_handler(engine_with(WS, |seen| seen.path().ends_with("/shell").then_some(Answer::Hang)));
         let call = {
             let conn = j.conn.clone();
-            tauri::async_runtime::spawn(async move {
+            crate::host::async_runtime::spawn(async move {
                 let body = Some(json!({"command": "sleep 100"}));
                 conn.call("POST", "agent/sessions/s1/shell", None, body, Some("c-1".into())).await
             })
@@ -2444,7 +2443,7 @@ esac"#,
         j.fake.set_handler(engine_with(WS, |seen| seen.path().ends_with("/shell").then_some(Answer::Hang)));
         let call = {
             let conn = j.conn.clone();
-            tauri::async_runtime::spawn(async move {
+            crate::host::async_runtime::spawn(async move {
                 conn.call("POST", "agent/sessions/s1/shell", None, Some(json!({"command": "sleep 100"})), Some("c-1".into())).await
             })
         };

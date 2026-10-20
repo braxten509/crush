@@ -16,7 +16,7 @@ NO_APP=""
 if [ "${1:-}" = "--no-app" ]; then NO_APP=1; shift; fi
 DRIVER="$1"; shift
 OUT="$ROOT/tests/out/$(basename "$DRIVER" .py)"; mkdir -p "$OUT"
-APP="${DESKTOP_APP:-$ROOT/src-tauri/target/release/crush-desktop}"
+APP="${DESKTOP_APP:-$ROOT/electron/crush-desktop}"
 python3 -I "$ROOT/tests/fakes/fake_ai_server.py" --port-file /tmp/fake-ai.port >/tmp/fake-ai.out 2>&1 &
 srv=$!
 for _ in $(seq 50); do [ -s /tmp/fake-ai.port ] && break; sleep 0.1; done

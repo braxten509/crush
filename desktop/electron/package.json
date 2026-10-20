@@ -1,0 +1,8 @@
+{
+  "name": "crush-desktop",
+  "version": "0.1.0",
+  "description": "Crush Desktop: the desktop app for Crush",
+  "main": "main.cjs",
+  "private": true,
+  "desktopName": "crush-desktop.desktop"
+}

@@ -32,7 +32,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter};
+use crate::host::AppHandle;
 
 #[derive(serde::Deserialize, Default)]
 #[serde(default)]

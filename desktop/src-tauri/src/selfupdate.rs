@@ -9,7 +9,7 @@ use crate::error::{codes, AppError, AppResult};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use crate::host::AppHandle;
 
 /// One self-update run per app (managed by main.rs).
 #[derive(Default)]

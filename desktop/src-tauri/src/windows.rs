@@ -18,9 +18,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager};
+use crate::host::AppHandle;
 
-/// The configured first window (tauri.conf.json).
+/// The first window, which Electron opens at the start (electron/main.cjs).
 pub const FIRST: &str = "main";
 
 /// How long a window may take over its close steps before Rust closes it (6.4, inferred bound).
@@ -255,25 +255,10 @@ pub fn open(
         }
         OpenPlan::Create(label) => {
             let built = app
-                .config()
-                .app
-                .windows
-                .iter()
-                .find(|w| w.label == FIRST)
-                .cloned()
-                .ok_or_else(|| AppError::new("internal", "The app's window settings are missing."))
-                .and_then(|mut config| {
-                    config.label = label.clone();
-                    tauri::WebviewWindowBuilder::from_config(app, &config)
-                        .and_then(|builder| builder.build())
-                        .map_err(|e| AppError::new("internal", format!("Crush Desktop could not open a window: {e}")))
-                });
+                .create_window(&label)
+                .map_err(|e| AppError::new("internal", format!("Crush Desktop could not open a window: {e}")));
             match built {
-                Ok(window) => {
-                    crate::crash::watch_webview(&window);
-                    crate::refresh::full_rate(&window);
-                    Ok(Opened { label, created: true })
-                }
+                Ok(_) => Ok(Opened { label, created: true }),
                 Err(e) => {
                     windows.remove(&label);
                     Err(e)
@@ -343,7 +328,7 @@ pub fn close_requested(app: &AppHandle, label: &str) {
         eprintln!("crush-desktop: could not ask window {label} to close: {e}");
     }
     let (app, label) = (app.clone(), label.to_string());
-    tauri::async_runtime::spawn(async move {
+    crate::host::async_runtime::spawn(async move {
         let still_open = {
             let (app, label) = (app.clone(), label.clone());
             move || app.get_webview_window(&label).is_some() && !app.state::<Windows>().is_closing(&label)
@@ -454,7 +439,7 @@ mod tests {
     #[test]
     fn close_requested_fallback_closes() {
         let run = |still_open: bool| {
-            tauri::async_runtime::block_on(close_fallback(Duration::from_millis(30), move || still_open))
+            crate::host::async_runtime::block_on(close_fallback(Duration::from_millis(30), move || still_open))
         };
         let started = Instant::now();
         assert!(run(true), "a window that did not close itself is closed");

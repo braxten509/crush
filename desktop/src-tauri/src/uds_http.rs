@@ -492,7 +492,7 @@ mod tests {
     use serde_json::json;
 
     fn run<T>(f: impl std::future::Future<Output = T>) -> T {
-        tauri::async_runtime::block_on(f)
+        crate::host::async_runtime::block_on(f)
     }
 
     #[test]

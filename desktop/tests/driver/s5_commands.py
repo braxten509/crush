@@ -69,7 +69,7 @@ COMMANDS = [
 
 
 def crush_windows():
-    r = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Crush$"], capture_output=True, text=True)
+    r = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True)
     out = []
     for wid in r.stdout.split():
         g = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], capture_output=True, text=True)

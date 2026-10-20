@@ -268,7 +268,7 @@ def setup():
 def start_app(session="idle"):
     global app
     app = apps.App(args=("-s", session), env=APP_ENV)
-    ok = H.window_geometry("Crush", timeout=30) is not None
+    ok = H.window_geometry(timeout=30) is not None
     p = wait_for(probe_path, lambda p: "terminal" in p and composer(p).get("session_id") == session, 30)
     focus_app()
     return check(ok and composer(p).get("session_id") == session, f"the app shows the chat {session!r} with the terminal probe section")
@@ -587,7 +587,7 @@ def step_typing_jumps():
               f"pasting jumps back and keeps the selection ({got!r}, {t.get('selection')!r})")
         key("ctrl+u")
         wid = app_window()
-        geo = H.window_geometry("Crush")
+        geo = H.window_geometry()
         if wid and geo:
             subprocess.run(["xdotool", "windowsize", str(wid), str(geo[2] - 120), str(geo[3] - 60)], capture_output=True)
             t = wait_tab(tid, lambda t: t.get("selection") == "")

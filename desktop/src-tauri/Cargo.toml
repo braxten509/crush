@@ -2,18 +2,18 @@
 name = "crush-desktop"
 version = "0.1.0"
 edition = "2021"
-description = "Crush Desktop: the desktop app for Crush"
+description = "Crush Desktop's helper: the engine connections, files, terminals and settings behind the Electron windows"
 
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
+[[bin]]
+name = "crush-desktop-core"
+path = "src/main.rs"
 
 [dependencies]
-tauri = { version = "2", features = ["custom-protocol"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The engine client and desktop services (desktop-design 1.2). Each version is
-# the one Cargo.lock already holds as a dependency of Tauri.
-tokio = { version = "1.53.3", features = ["net", "io-util", "time", "sync", "rt", "fs"] }
+# the one Cargo.lock held when the app was built on Tauri.
+tokio = { version = "1.53.3", features = ["net", "io-util", "time", "sync", "rt", "rt-multi-thread", "fs"] }
 hyper = { version = "1.12.0", features = ["client", "http1"] }
 hyper-util = { version = "0.1.21", features = ["tokio"] }
 http-body-util = "0.1.5"
@@ -23,14 +23,6 @@ dirs = "7.0.0"
 base64 = "0.22.1"
 # Phases 5 and 6 (desktop-design-5-6 7.1, scaffold S5), each pinned exactly.
 portable-pty = "=0.9.0"
-tauri-plugin-dialog = "=2.8.3"
-tauri-plugin-single-instance = "=2.5.4"
-tauri-plugin-notification = "=2.7.0"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-gtk = "0.18.2"
-# Already in Cargo.lock through wry; named so crash.rs can watch the web process.
-webkit2gtk = "=2.0.2"
 libc = "0.2"
 
 [profile.release]

@@ -82,7 +82,7 @@ MAIN_PROBE = "/tmp/probe.json"
 # worktree's own build, which the driver uses for answers it relies on.
 REAL_CRUSH = os.path.join(ROOT, "tests", "out", "bin", "crush")
 CRUSH = os.environ.get("DESKTOP_CRUSH") or REAL_CRUSH
-APP = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "src-tauri", "target", "release", "crush-desktop")
+APP = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "electron", "crush-desktop")
 TMUX = ["tmux", "-L", "crushtest", "-f", "/dev/null"]
 STAND_IN = False
 NOT_RUN = []
@@ -324,7 +324,7 @@ def alive(pid):
 def windows_of(pid):
     """The visible app windows of process pid, largest first: [(wid, x, y, w, h)]."""
     found = []
-    for wid in subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Crush$"], capture_output=True, text=True).stdout.split():
+    for wid in subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True).stdout.split():
         owner = subprocess.run(["xdotool", "getwindowpid", wid], capture_output=True, text=True).stdout.strip()
         if owner != str(pid):
             continue

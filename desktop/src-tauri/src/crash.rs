@@ -14,7 +14,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
-use tauri::{AppHandle, Manager};
+use crate::host::AppHandle;
 
 #[derive(Serialize, Clone)]
 pub struct Pending {
@@ -95,31 +95,20 @@ pub fn install() {
     }));
 }
 
-/// Watches a window's web process for a crash.
-pub fn watch_webview<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
-    #[cfg(target_os = "linux")]
-    {
-        let label = window.label().to_string();
-        let handle = window.clone();
-        let _ = window.with_webview(move |webview| {
-            use webkit2gtk::WebViewExt;
-            let label = label.clone();
-            let handle = handle.clone();
-            webview.inner().connect_web_process_terminated(move |_view, reason| {
-                let text = format!("Crush Desktop {}: the web view of window {label} ended ({reason:?})\n", env!("CARGO_PKG_VERSION"));
-                if let Some(path) = write_report(&text) {
-                    WEBVIEW
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .get_or_insert_with(HashMap::new)
-                        .insert(label.clone(), Pending { path: path.to_string_lossy().into_owned(), kind: "webview".into() });
-                }
-                let _ = handle.eval("location.reload()");
-            });
-        });
+/// A window's page process ended (Electron's render-process-gone): the
+/// report is written, kept for the page to show, and the page reloads.
+pub fn webview_crashed(app: &AppHandle, label: &str, reason: &str) {
+    let text = format!("Crush Desktop {}: the web view of window {label} ended ({reason})\n", env!("CARGO_PKG_VERSION"));
+    if let Some(path) = write_report(&text) {
+        WEBVIEW
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(HashMap::new)
+            .insert(label.to_string(), Pending { path: path.to_string_lossy().into_owned(), kind: "webview".into() });
     }
-    #[cfg(not(target_os = "linux"))]
-    let _ = window;
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.eval("location.reload()");
+    }
 }
 
 fn shown_list(dir: &Path) -> Vec<String> {

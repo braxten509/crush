@@ -44,13 +44,13 @@ def xdo(*args):
     return subprocess.run(["xdotool", *map(str, args)], check=True, capture_output=True, text=True).stdout
 
 
-def window_geometry(name, timeout=20):
-    """Find the app's visible window by exact title and return its (x, y, w, h).
-    GTK also makes tiny hidden helper windows with the same title, so only
-    visible windows count and the largest one wins. None if none appears."""
+def window_geometry(timeout=20):
+    """Find the app's visible window by its class (crush-desktop; the title
+    follows the chat) and return its (x, y, w, h). Only visible windows count
+    and the largest one wins. None if none appears."""
     end = time.time() + timeout
     while time.time() < end:
-        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", f"^{name}$"], capture_output=True, text=True)
+        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True)
         best = None
         for wid in r.stdout.split():
             g = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], capture_output=True, text=True)
@@ -128,7 +128,7 @@ def word_rect(report, text, mid=None, nth=0):
 
 
 def _window_origin():
-    geo = window_geometry("Crush")
+    geo = window_geometry()
     return (geo[0], geo[1]) if geo else (0, 0)
 
 

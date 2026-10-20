@@ -38,8 +38,7 @@ pub fn write(level: &str, window: &str, message: &str) {
 }
 
 /// `app_log`: a line from the page ("info", "warn" or "error").
-#[tauri::command]
-pub fn app_log(window: tauri::Window, level: String, message: String) {
+pub fn app_log(window: crate::host::Window, level: String, message: String) {
     let level = match level.as_str() {
         "warn" | "error" => level.as_str(),
         _ => "info",

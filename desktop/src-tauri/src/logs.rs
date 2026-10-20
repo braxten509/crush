@@ -14,8 +14,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager};
+use crate::host::Channel;
+use crate::host::AppHandle;
 
 /// The running follows, by id, with their window's label (managed by main.rs).
 #[derive(Default)]

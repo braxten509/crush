@@ -17,7 +17,6 @@ use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use tauri::Manager;
 
 #[derive(Debug, PartialEq)]
 pub enum LinkKind {
@@ -39,7 +38,7 @@ pub fn classify(url: &str, cwd: &str) -> AppResult<LinkKind> {
 /// it (inferred reading of "your editor"; a terminal-tab editor is Ctrl+O, phase 6).
 /// When the app runs with --probe, nothing is started: the request is appended as one JSON line
 /// to "<probe file>.opened.jsonl" (so a test never shows a browser).
-pub fn open(app: &tauri::AppHandle, url: &str, cwd: &str) -> AppResult<()> {
+pub fn open(app: &crate::host::AppHandle, url: &str, cwd: &str) -> AppResult<()> {
     let probe_log = app
         .try_state::<AppState>()
         .and_then(|state| state.launch.probe_side_file("opened.jsonl"));

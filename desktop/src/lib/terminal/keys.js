@@ -25,11 +25,11 @@ export function arrowKeys(up, applicationCursor, count = WHEEL_LINES) {
   return `${ESC}${applicationCursor ? "O" : "["}${up ? "A" : "B"}`.repeat(count);
 }
 
-// One wheel notch in pixels: WebKitGTK reports a notch as one line step of
-// 40 pixels (WebCore's Scrollbar::pixelsPerLineStep), and a touchpad as many
-// small pixel steps, which add up to notches here. Line and page deltas are
-// scaled to pixels first.
-export const NOTCH_PX = 40;
+// One wheel notch in pixels: Chromium (Electron, owner 2026-10-20) reports a
+// notch as 120 pixels, whatever the app's CSS zoom (measured on the hidden
+// screen), and a touchpad as many small pixel steps, which add up to notches
+// here. Line and page deltas are scaled to pixels first.
+export const NOTCH_PX = 120;
 
 // Adds a wheel event to acc ({rest}) and returns the whole notches it made:
 // negative upward. acc keeps the part of a notch that is left over.

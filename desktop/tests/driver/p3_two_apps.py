@@ -56,7 +56,7 @@ STAND_IN = "--stand-in" in sys.argv[4:]
 PROJ = "/tmp/home/proj"
 ROOT = os.environ.get("DESKTOP_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CRUSH = os.environ.get("DESKTOP_CRUSH") or os.path.join(ROOT, "tests", "out", "bin", "crush")
-APP = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "src-tauri", "target", "release", "crush-desktop")
+APP = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "electron", "crush-desktop")
 TMUX = ["tmux", "-L", "crushtest", "-f", "/dev/null"]
 # The terminal's own busy status: the live reply's status line
 # (internal/ui/chat/assistant_render.go:185-193, toolgroup.go:293-369). Its
@@ -266,7 +266,7 @@ class Window:
 
     def close(self):
         """Closes the window the way its close button does, then waits for the app to exit."""
-        found = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Crush$"], capture_output=True, text=True).stdout.split()
+        found = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True).stdout.split()
         pids = set()
         for wid in found:
             pid = subprocess.run(["xdotool", "getwindowpid", wid], capture_output=True, text=True).stdout.strip()

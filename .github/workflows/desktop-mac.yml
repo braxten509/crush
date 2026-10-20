@@ -53,15 +53,27 @@ jobs:
       - name: Rust tests
         working-directory: desktop/src-tauri
         run: cargo test --release
+      - name: Build the helper
+        working-directory: desktop/src-tauri
+        run: cargo build --release
       - name: Build the app
         working-directory: desktop
-        # tauri.macos.conf.json turns bundling on for the Mac (app and dmg).
-        run: pnpm dlx @tauri-apps/cli@2 build
+        # The app is Electron (since 2026-10-20) with the screens and the
+        # helper inside (electron/stage.sh), wrapped into Crush Desktop.app,
+        # then into a dmg. No asar archive: the helper must stay a file the
+        # app can start.
+        run: |
+          electron/stage.sh build/app
+          pnpm dlx @electron/packager@20.3.0 build/app "Crush Desktop" --platform=darwin --arch=arm64 \
+            --electron-version="$(node -p 'require("electron/package.json").version')" \
+            --icon=src-tauri/icons/icon.icns --app-bundle-id=dev.braxten.crush-desktop --no-asar --out=build/out --overwrite
+          hdiutil create -volname "Crush Desktop" -srcfolder "build/out/Crush Desktop-darwin-arm64/Crush Desktop.app" \
+            -ov -format UDZO "build/Crush Desktop.dmg"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: crush-desktop-mac
           path: |
-            desktop/src-tauri/target/release/bundle/dmg/*.dmg
-            desktop/src-tauri/target/release/bundle/macos/*.app
+            desktop/build/*.dmg
+            desktop/build/out/*/*.app
             dist/crush
           if-no-files-found: error

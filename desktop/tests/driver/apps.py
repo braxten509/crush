@@ -81,7 +81,7 @@ class App:
         self.probe = probe
         self.n = next(_app_numbers)
         self.log = os.path.join(out_dir(), f"app-{self.n}.log")
-        binary = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "src-tauri", "target", "release", "crush-desktop")
+        binary = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "electron", "crush-desktop")
         extra = shlex.split(os.environ.get("DESKTOP_ARGS", ""))
         self.argv = [binary, "--probe", probe, "--cwd", PROJ, *extra, *args]
         os.makedirs(out_dir(), exist_ok=True)

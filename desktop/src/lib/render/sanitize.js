@@ -26,23 +26,22 @@ function purifier() {
   return typeof window === "undefined" ? null : DOMPurify(window);
 }
 
-const textPurifier = purifier();
 const mathPurifier = purifier();
 const codePurifier = purifier();
 const svgPurifier = purifier();
 
 // The text of raw HTML with every tag removed, character references decoded
 // and the ends trimmed, the way the terminal prints it.
+// A template's content is parsed inert (nothing loads or runs) and, unlike the
+// DOMParser document DOMPurify parses into, it is not checked against the
+// page's content rule: Chromium reports a <base> parsed by DOMParser as a
+// base-uri violation although it never applies (owner 2026-10-20, Electron).
 export function stripTags(html) {
-  if (!textPurifier) return String(html).replace(/<[^>]*>/g, "").trim();
-  const fragment = textPurifier.sanitize(String(html), {
-    ALLOWED_TAGS: [],
-    ALLOWED_ATTR: [],
-    KEEP_CONTENT: true,
-    FORBID_CONTENTS: SKIP_CONTENT,
-    RETURN_DOM_FRAGMENT: true,
-  });
-  return (fragment.textContent ?? "").trim();
+  if (typeof document === "undefined") return String(html).replace(/<[^>]*>/g, "").trim();
+  const holder = document.createElement("template");
+  holder.innerHTML = String(html);
+  for (const el of holder.content.querySelectorAll(SKIP_CONTENT.join(","))) el.remove();
+  return (holder.content.textContent ?? "").trim();
 }
 
 // The characters of raw HTML that show as text, in order, each with its source

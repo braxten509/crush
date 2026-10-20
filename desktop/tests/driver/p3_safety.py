@@ -27,8 +27,9 @@ Steps (each one PASS or FAIL, with a screenshot in tests/out/p3_safety/):
            open (the safety section's links_asked) and add lines to
            <probe>.opened.jsonl; no refused navigation; the page never moves;
            the field holds no dropped address
-  diagram  in VISUALS, and again in the chat with the right panel hidden
-           (picture size in a 900 px window, SIDE-002): every valid diagram of
+  diagram  in the chat, at the start size and again at picture size in a
+           900 px window (figures sit in the chat; no panel shows them since
+           2026-10-19): every valid diagram of
            the diagrams reply (one per kind the renderer supports, titled
            "Valid <kind>") draws as an SVG that names its kind, and a fallback
            or a missing figure there fails; only the hostile Mermaid figure may
@@ -127,10 +128,10 @@ threading.Thread(target=watch_probe, daemon=True).start()
 
 
 def app_window(timeout=20):
-    """The id of the largest visible window titled "Crush" (GTK also makes tiny hidden ones)."""
+    """The id of the largest visible crush-desktop window (the title names the chat; tiny helper windows left out)."""
     end = time.time() + timeout
     while time.time() < end:
-        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Crush$"], capture_output=True, text=True)
+        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True)
         best = None
         for wid in r.stdout.split():
             g = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], capture_output=True, text=True)
@@ -508,15 +509,14 @@ def inline_figures():
     return list(seen.values()), scans
 
 
-def check_diagram(inline):
-    """The diagrams in VISUALS or, with the panel hidden, in the chat: every
-    valid one draws as an SVG of its kind; only the hostile one may fall back."""
-    where = "in the chat" if inline else "in VISUALS"
+def check_diagram(where):
+    """The diagrams in the chat: every valid one draws as an SVG of its kind;
+    only the hostile one may fall back."""
     titles = {title for title, _ in VALID}
     end = time.time() + 120
     while True:
         heavy, _ = safety_heavy()
-        figures, scans = inline_figures() if inline else (diagrams(heavy, inline), [heavy])
+        figures, scans = inline_figures()
         if (len(figures) > len(VALID) and all(f.get("state") in ("drawn", "fallback") for f in figures)) or time.time() > end:
             break
         time.sleep(0.5)
@@ -545,17 +545,16 @@ def zoom_is(target):
 
 
 with step("safety-diagram", out_dir):
-    # A build whose panel draws no figures fails here (design 2.9: both surfaces).
-    check_diagram(False)
-    # The right panel hides when the page is under 1,060 picture px wide (SIDE-002); the
-    # window's least width is 900, so at picture size (Ctrl = four times from 8/12).
+    check_diagram("in the chat")
+    # Again in the narrowest window (900 px) at picture size (Ctrl = four times
+    # from 8/12), where the right panel hides (SIDE-002).
     xdo("windowfocus", "--sync", wid)
     for _ in range(4):
         key("ctrl+equal")
         time.sleep(0.2)
     check(zoom_is(1.0), "picture size (12/12) after four Ctrl = presses")
     xdo("windowsize", wid, 900, start_h)
-    check_diagram(True)
+    check_diagram("in the narrow chat")
     subprocess.run(["import", "-window", wid, os.path.join(out_dir, "safety-diagram-inline.png")], check=False)
     key("ctrl+0")
     xdo("windowsize", wid, start_w, start_h)

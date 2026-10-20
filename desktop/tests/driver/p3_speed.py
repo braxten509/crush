@@ -44,7 +44,7 @@ PROMPT = "Stream for two minutes"
 PROJ = "/tmp/home/proj"
 ROOT = os.environ.get("DESKTOP_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CRUSH = os.environ.get("DESKTOP_CRUSH") or os.path.join(ROOT, "tests", "out", "bin", "crush")
-APP = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "src-tauri", "target", "release", "crush-desktop")
+APP = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "electron", "crush-desktop")
 
 
 def verdict(runs):
@@ -231,7 +231,7 @@ def free_ctrl_alt_f12():
 def close_windows():
     """Closes every app window on the hidden screen and waits for the apps to exit."""
     pids = set()
-    for wid in subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Crush$"], capture_output=True, text=True).stdout.split():
+    for wid in subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True).stdout.split():
         pid = subprocess.run(["xdotool", "getwindowpid", wid], capture_output=True, text=True).stdout.strip()
         if pid.isdigit():
             pids.add(int(pid))

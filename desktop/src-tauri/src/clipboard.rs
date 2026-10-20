@@ -9,7 +9,7 @@
 //! same moment can make a good write look lost. Only a verified failure is an
 //! error ("Failed to copy to clipboard", internal/ui/common/common.go:265).
 //!
-//! The commands that call these run off the main thread (`#[tauri::command(async)]`
+//! The commands that call these run off the main thread (on the helper's blocking pool, dispatch.rs
 //! in commands.rs), so a body may wait for `app.run_on_main_thread`.
 
 use crate::error::{AppError, AppResult};
@@ -20,11 +20,12 @@ const WRITE_ATTEMPTS: usize = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(5);
 
 /// The longest a clipboard call waits for an answer.
+#[cfg(target_os = "linux")]
 const WAIT: Duration = Duration::from_secs(5);
 
-/// Linux: gtk::Clipboard (CLIPBOARD selection) on the main thread via app.run_on_main_thread;
+/// Linux: Electron's clipboard, asked for through host.rs (it reads the text back);
 /// Mac: the general pasteboard through `pbcopy` and `pbpaste` (no new library).
-pub fn write_text(app: &tauri::AppHandle, text: &str) -> AppResult<()> {
+pub fn write_text(app: &crate::host::AppHandle, text: &str) -> AppResult<()> {
     for attempt in 0..WRITE_ATTEMPTS {
         if attempt > 0 {
             std::thread::sleep(RETRY_DELAY);
@@ -37,7 +38,7 @@ pub fn write_text(app: &tauri::AppHandle, text: &str) -> AppResult<()> {
 }
 
 /// Ctrl+Shift+V (TYPE-010). None when the clipboard is empty or holds no text.
-pub fn read_text(app: &tauri::AppHandle) -> AppResult<Option<String>> {
+pub fn read_text(app: &crate::host::AppHandle) -> AppResult<Option<String>> {
     Ok(platform::read(app)?.filter(|text| !text.is_empty()))
 }
 
@@ -57,31 +58,19 @@ fn read_failed() -> AppError {
 mod platform {
     use super::{copy_failed, WAIT};
     use crate::error::{AppError, AppResult};
-    use gtk::gdk::SELECTION_CLIPBOARD;
-    use std::sync::mpsc;
+    use serde_json::{json, Value};
 
-    /// Sets the text, then reads it back. Ok(false): the clipboard does not
-    /// hold the text afterwards (the caller tries again).
-    pub fn write_and_check(app: &tauri::AppHandle, text: &str) -> AppResult<bool> {
-        let text = text.to_string();
-        let landed = on_main(app, move |done: Box<dyn FnOnce(bool) + Send>| {
-            let clipboard = gtk::Clipboard::get(&SELECTION_CLIPBOARD);
-            clipboard.set_text(&text);
-            // Writing nothing empties the clipboard, so there is nothing to read back.
-            if text.is_empty() {
-                done(true);
-                return;
-            }
-            clipboard.request_text(move |_, got| done(got == Some(text.as_str())));
-        });
-        landed.ok_or_else(copy_failed)
+    /// Sets the text through Electron, which reads it back. Ok(false): the
+    /// clipboard does not hold the text afterwards (the caller tries again).
+    pub fn write_and_check(app: &crate::host::AppHandle, text: &str) -> AppResult<bool> {
+        match app.ask("clipboard.write", json!({"text": text}), Some(WAIT)) {
+            Ok(landed) => Ok(landed.as_bool().unwrap_or(false)),
+            Err(_) => Err(copy_failed()),
+        }
     }
 
-    pub fn read(app: &tauri::AppHandle) -> AppResult<Option<String>> {
-        answered(on_main(app, |done: Box<dyn FnOnce(Option<String>) + Send>| {
-            let clipboard = gtk::Clipboard::get(&SELECTION_CLIPBOARD);
-            clipboard.request_text(move |_, text| done(text.map(str::to_string)));
-        }))
+    pub fn read(app: &crate::host::AppHandle) -> AppResult<Option<String>> {
+        answered(app.ask("clipboard.read", Value::Null, Some(WAIT)).ok().map(|text| text.as_str().map(String::from)))
     }
 
     /// A read's answer: the text, or None when the clipboard holds none. No
@@ -95,24 +84,6 @@ mod platform {
             )
         })
     }
-
-    /// Runs `work` on the main thread (GTK lives there) and waits up to WAIT
-    /// for the answer it hands to `done`. None when the main thread could not
-    /// take the work or no answer came in time.
-    fn on_main<T: Send + 'static>(
-        app: &tauri::AppHandle,
-        work: impl FnOnce(Box<dyn FnOnce(T) + Send>) + Send + 'static,
-    ) -> Option<T> {
-        let (tx, rx) = mpsc::channel();
-        let done: Box<dyn FnOnce(T) + Send> = Box::new(move |value| {
-            let _ = tx.send(value);
-        });
-        if let Err(e) = app.run_on_main_thread(move || work(done)) {
-            eprintln!("crush-desktop: the clipboard could not reach the main thread: {e}");
-            return None;
-        }
-        rx.recv_timeout(WAIT).ok()
-    }
 }
 
 #[cfg(target_os = "macos")]
@@ -124,7 +95,7 @@ mod platform {
 
     /// pbcopy and pbpaste read and write the general pasteboard as plain text;
     /// a GUI app's environment may lack LANG, so UTF-8 is named explicitly.
-    pub fn write_and_check(app: &tauri::AppHandle, text: &str) -> AppResult<bool> {
+    pub fn write_and_check(app: &crate::host::AppHandle, text: &str) -> AppResult<bool> {
         let mut child = Command::new("/usr/bin/pbcopy")
             .env("LANG", "en_US.UTF-8")
             .stdin(Stdio::piped())
@@ -145,7 +116,7 @@ mod platform {
         Ok(read(app).ok().flatten().as_deref() == Some(text))
     }
 
-    pub fn read(_app: &tauri::AppHandle) -> AppResult<Option<String>> {
+    pub fn read(_app: &crate::host::AppHandle) -> AppResult<Option<String>> {
         let out = Command::new("/usr/bin/pbpaste")
             .env("LANG", "en_US.UTF-8")
             .stdin(Stdio::null())
@@ -164,11 +135,11 @@ mod platform {
     use super::{copy_failed, read_failed};
     use crate::error::AppResult;
 
-    pub fn write_and_check(_app: &tauri::AppHandle, _text: &str) -> AppResult<bool> {
+    pub fn write_and_check(_app: &crate::host::AppHandle, _text: &str) -> AppResult<bool> {
         Err(copy_failed())
     }
 
-    pub fn read(_app: &tauri::AppHandle) -> AppResult<Option<String>> {
+    pub fn read(_app: &crate::host::AppHandle) -> AppResult<Option<String>> {
         Err(read_failed())
     }
 }

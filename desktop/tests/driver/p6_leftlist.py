@@ -158,9 +158,9 @@ def ask_close(wid):
 
 
 def window_ids(pid):
-    """The app's visible windows (GTK's tiny helper windows left out)."""
+    """The app's visible windows (tiny helper windows left out)."""
     found = []
-    out = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Crush$"], capture_output=True, text=True).stdout
+    out = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True).stdout
     for wid in out.split():
         owner = subprocess.run(["xdotool", "getwindowpid", wid], capture_output=True, text=True).stdout.strip()
         if owner == str(pid) and (geometry(int(wid)) or (0, 0, 0, 0))[2] > 100:

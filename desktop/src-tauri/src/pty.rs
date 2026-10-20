@@ -22,8 +22,8 @@ use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
-use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager};
+use crate::host::Channel;
+use crate::host::AppHandle;
 
 /// How long a closed tab's programs get before they are killed (session.go:64).
 const STOP_GRACE: Duration = Duration::from_secs(5);

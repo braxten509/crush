@@ -19,8 +19,8 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
-use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State, WebviewWindow, Window};
+use crate::host::Channel;
+use crate::host::{AppHandle, State, WebviewWindow, Window};
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct AppInfo {
@@ -43,7 +43,6 @@ pub struct AppInfo {
     host: String,
 }
 
-#[tauri::command]
 pub fn app_info(window: Window, state: State<AppState>, windows: State<Windows>) -> AppInfo {
     let label = window.label();
     let opened = windows::info_launch(&state, Some(&windows), label);
@@ -86,7 +85,6 @@ fn host_name() -> String {
 }
 
 /// The first window writes the probe file, every other window `<probe file>.<label>` (8.2).
-#[tauri::command]
 pub fn probe_write(window: Window, state: State<AppState>, json: String) -> Result<(), String> {
     let probe = state.launch.probe.as_ref().ok_or("not started with --probe")?;
     let label = window.label();
@@ -112,7 +110,6 @@ pub struct ProbeRequest {
 }
 
 /// Probe mode only: `{request, opened}`, else null (1.9). Reads, never writes.
-#[tauri::command(async)]
 pub fn probe_request(state: State<'_, AppState>) -> AppResult<Option<ProbeRequest>> {
     let launch = &state.launch;
     let (Some(request), Some(opened)) = (
@@ -132,7 +129,6 @@ pub fn probe_request(state: State<'_, AppState>) -> AppResult<Option<ProbeReques
 /// True to the first window that asks, once per app start: that window runs
 /// the automatic update checks when it is ready (desktop-design-5-6 2.19),
 /// whichever window that turns out to be.
-#[tauri::command]
 pub fn updates_claim() -> bool {
     static CLAIMED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     !CLAIMED.swap(true, std::sync::atomic::Ordering::SeqCst)
@@ -142,14 +138,12 @@ pub fn updates_claim() -> bool {
 /// the alignment check, which reads the real page's boxes (8.6). The page's
 /// CSP forbids eval; a script the app itself runs is not held to it. The
 /// script reports through `window.__probeEval`, which the probe passes on.
-#[tauri::command]
 pub fn probe_eval(window: WebviewWindow, state: State<AppState>) -> Result<(), String> {
     let path = state.launch.probe_side_file("eval.js").ok_or("not started with --probe")?;
     let script = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     window.eval(script).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
 pub async fn engine_open(
     app: AppHandle,
     window: Window,
@@ -166,7 +160,6 @@ pub async fn engine_open(
     connection::open(&app, window.label(), &cwd).await
 }
 
-#[tauri::command]
 pub async fn engine_retry(app: AppHandle, window: Window) -> AppResult<()> {
     if app.try_state::<Fixture>().is_some() {
         return Ok(());
@@ -174,7 +167,6 @@ pub async fn engine_retry(app: AppHandle, window: Window) -> AppResult<()> {
     connection::retry(&app, window.label()).await
 }
 
-#[tauri::command]
 pub async fn engine_set_current_session(
     app: AppHandle,
     window: Window,
@@ -188,7 +180,6 @@ pub async fn engine_set_current_session(
 }
 
 /// Once per animation frame (1.5.4).
-#[tauri::command]
 pub fn events_take(app: AppHandle, window: Window) -> Vec<Value> {
     if let Some(fixture) = app.try_state::<Fixture>() {
         return fixture.take(window.label());
@@ -202,7 +193,6 @@ pub fn events_take(app: AppHandle, window: Window) -> Vec<Value> {
     events
 }
 
-#[tauri::command]
 #[allow(clippy::too_many_arguments)] // one argument per field of the `api` command (1.3)
 pub async fn api(
     app: AppHandle,
@@ -363,7 +353,6 @@ fn redact_config(config: &mut Value) {
 }
 
 /// Stops the `api` call that carries this `callId` (1.2.4); false when none is running.
-#[tauri::command]
 pub fn api_abort(app: AppHandle, window: Window, state: State<AppState>, call_id: String) -> bool {
     if let Some(fixture) = app.try_state::<Fixture>() {
         return fixture.abort(&state.launch, window.label(), &call_id);
@@ -371,39 +360,32 @@ pub fn api_abort(app: AppHandle, window: Window, state: State<AppState>, call_id
     connection::abort(&app, window.label(), &call_id)
 }
 
-#[tauri::command]
 pub fn settings_get(state: State<AppState>) -> Settings {
     state.settings.lock().unwrap().clone()
 }
 
-#[tauri::command(async)]
 pub fn settings_set(app: AppHandle, key: String, value: Value) -> AppResult<Settings> {
     settings::set_key(&app, &key, value)
 }
 
 /// Phase 4: the closed chats, kept per engine data folder.
-#[tauri::command(async)]
 pub fn closed_set(app: AppHandle, project: String, session_id: String, closed: bool) -> AppResult<Settings> {
     settings::set_closed(&app, &project, &session_id, closed)
 }
 
-#[tauri::command(async)]
 pub fn clipboard_write(app: AppHandle, text: String) -> AppResult<()> {
     clipboard::write_text(&app, &text)
 }
 
-#[tauri::command(async)]
 pub fn clipboard_read(app: AppHandle) -> AppResult<Option<String>> {
     clipboard::read_text(&app)
 }
 
 /// After a click only (1.7).
-#[tauri::command(async)]
 pub fn open_link(app: AppHandle, url: String, cwd: String) -> AppResult<()> {
     opener::open(&app, &url, &cwd)
 }
 
-#[tauri::command(async)]
 pub fn file_info(path: String, cwd: String) -> AppResult<FileInfo> {
     files::info(&path, &cwd)
 }
@@ -414,7 +396,6 @@ pub struct FileData {
     base64: String,
 }
 
-#[tauri::command(async)]
 pub fn file_read(path: String, cwd: String, max_bytes: u64) -> AppResult<FileData> {
     let (mime, base64) = files::read(&path, &cwd, max_bytes)?;
     Ok(FileData { mime, base64 })
@@ -426,7 +407,6 @@ static FILE_LISTS: LazyLock<Mutex<HashMap<String, CachedList>>> = LazyLock::new(
 const FILE_LIST_FOR: Duration = Duration::from_secs(5);
 
 /// The `@` popup; cached per window for 5 s.
-#[tauri::command(async)]
 pub fn files_list(window: Window, cwd: String, max_depth: u32, max_items: u32) -> AppResult<Vec<FileEntry>> {
     let label = window.label().to_string();
     if let Some((at, c, d, n, entries)) = FILE_LISTS.lock().unwrap().get(&label) {
@@ -449,7 +429,6 @@ pub fn files_list(window: Window, cwd: String, max_depth: u32, max_items: u32) -
 /// body goes to Rust as bytes that are zeroed after the call; the value Tauri
 /// handed over is zeroed too. In fixture mode only the route and the body's
 /// top-level key names are recorded.
-#[tauri::command]
 pub async fn api_secret(app: AppHandle, window: Window, state: State<'_, AppState>, path: String, mut body: Value) -> AppResult<Value> {
     if let Some(fixture) = app.try_state::<Fixture>() {
         let answer = fixture.api_secret(&state.launch, &path, &body);
@@ -461,7 +440,6 @@ pub async fn api_secret(app: AppHandle, window: Window, state: State<'_, AppStat
     connection::call_secret(&app, window.label(), &path, bytes).await
 }
 
-#[tauri::command(async)]
 pub fn window_open(
     app: AppHandle,
     project_dir: String,
@@ -473,18 +451,15 @@ pub fn window_open(
 }
 
 /// After the window's close steps (lib/closing.js); the last window ends the app.
-#[tauri::command]
 pub async fn window_close(app: AppHandle, window: Window) -> AppResult<()> {
     windows::close(&app, window.label()).await;
     Ok(())
 }
 
-#[tauri::command]
 pub async fn project_switch(app: AppHandle, window: Window, project_dir: String) -> AppResult<bool> {
     windows::switch(&app, window.label(), &project_dir).await
 }
 
-#[tauri::command(async)]
 pub fn pty_spawn(
     app: AppHandle,
     window: Window,
@@ -497,52 +472,42 @@ pub fn pty_spawn(
     pty::spawn(&app, window.label(), &cwd, argv, cols, rows, on_data)
 }
 
-#[tauri::command(async)]
 pub fn pty_write(app: AppHandle, id: String, data: String) -> AppResult<()> {
     pty::write(&app, &id, &data)
 }
 
-#[tauri::command(async)]
 pub fn pty_resize(app: AppHandle, id: String, cols: u16, rows: u16) -> AppResult<()> {
     pty::resize(&app, &id, cols, rows)
 }
 
-#[tauri::command(async)]
 pub fn pty_cwd(app: AppHandle, id: String) -> AppResult<Option<String>> {
     pty::cwd(&app, &id)
 }
 
-#[tauri::command(async)]
 pub fn pty_close(app: AppHandle, id: String) -> AppResult<()> {
     pty::close(&app, &id)
 }
 
-#[tauri::command(async)]
 pub fn pty_close_all(app: AppHandle, window: Window) -> AppResult<()> {
     pty::close_all(&app, window.label())
 }
 
-#[tauri::command(async)]
 pub fn editor_prepare(edits: State<editor::Edits>, text: String, line: u32, column: u32) -> AppResult<editor::Prepared> {
     editor::prepare(&edits, &text, line, column)
 }
 
-#[tauri::command(async)]
 pub fn editor_finish(edits: State<editor::Edits>, path: String) -> AppResult<editor::Finished> {
     editor::finish(&edits, &path)
 }
 
-#[tauri::command(async)]
 pub fn alert_notify(app: AppHandle, title: String, body: String) -> AppResult<alerts::Notified> {
     alerts::notify(&app, &title, &body)
 }
 
-#[tauri::command(async)]
 pub fn alert_sound(app: AppHandle, id: String) -> AppResult<alerts::Sounded> {
     alerts::sound(&app, &id)
 }
 
-#[tauri::command(async)]
 pub fn alert_window_state(
     app: AppHandle,
     window: Window,
@@ -554,107 +519,86 @@ pub fn alert_window_state(
     alerts::window_state(&app, window.label(), &state, &project_dir, &session_id, focused)
 }
 
-#[tauri::command(async)]
 pub fn alert_handler(app: AppHandle, project_dir: String, session_id: String) -> AppResult<String> {
     alerts::handler(&app, &project_dir, &session_id)
 }
 
-#[tauri::command(async)]
 pub fn crash_pending(app: AppHandle, window: Window) -> AppResult<Option<crash::Pending>> {
     crash::pending(&app, window.label())
 }
 
-#[tauri::command(async)]
 pub fn crash_restart(app: AppHandle, window: Window) -> AppResult<()> {
     crash::restart(&app, window.label())
 }
 
-#[tauri::command(async)]
 pub fn logs_tail(app: AppHandle, window: Window, lines: u32) -> AppResult<logs::Tail> {
     logs::tail(&app, window.label(), lines)
 }
 
-#[tauri::command(async)]
 pub fn logs_follow(app: AppHandle, window: Window, from: Option<u64>, on_lines: Channel<Value>) -> AppResult<logs::Followed> {
     logs::follow(&app, window.label(), from, on_lines)
 }
 
-#[tauri::command(async)]
 pub fn logs_unfollow(app: AppHandle, follow_id: String) -> AppResult<()> {
     logs::unfollow(&app, &follow_id)
 }
 
-#[tauri::command(async)]
 pub fn selfupdate_run(app: AppHandle, tag: String) -> AppResult<selfupdate::RunResult> {
     selfupdate::run(&app, &tag)
 }
 
-#[tauri::command(async)]
 pub fn selfupdate_install(app: AppHandle) -> AppResult<selfupdate::RunResult> {
     selfupdate::install(&app)
 }
 
-#[tauri::command(async)]
 pub fn crush_dirs(app: AppHandle, window: Window) -> AppResult<crushinfo::Dirs> {
     crushinfo::dirs(&app, window.label())
 }
 
-#[tauri::command(async)]
 pub fn crush_stats(app: AppHandle, window: Window) -> AppResult<crushinfo::Stats> {
     crushinfo::stats(&app, window.label())
 }
 
-#[tauri::command(async)]
 pub fn docker_mcp_version() -> AppResult<docker::DockerMcp> {
     docker::mcp_version()
 }
 
-#[tauri::command(async)]
 pub fn projects_list() -> AppResult<projects::Projects> {
     projects::list()
 }
 
-#[tauri::command(async)]
 pub fn project_save(path: String) -> AppResult<()> {
     projects::save(&path)
 }
 
-#[tauri::command(async)]
 pub fn project_remove(path: String) -> AppResult<()> {
     projects::remove(&path)
 }
 
-#[tauri::command(async)]
 pub fn recent_folders(limit: u32) -> AppResult<Vec<String>> {
     projects::recent_folders(limit)
 }
 
-#[tauri::command(async)]
 pub fn subagent_instructions_read() -> AppResult<String> {
     configfiles::subagent_instructions_read()
 }
 
-#[tauri::command(async)]
 pub fn subagent_instructions_write(text: String) -> AppResult<()> {
     configfiles::subagent_instructions_write(&text)
 }
 
-#[tauri::command(async)]
 pub fn remote_password_exists() -> AppResult<bool> {
     configfiles::remote_password_exists()
 }
 
-#[tauri::command(async)]
 pub fn remote_password_set(app: AppHandle, first: String, second: String) -> AppResult<remote::PasswordSet> {
     remote::password_set(&app, first, second)
 }
 
-#[tauri::command(async)]
 pub fn dir_list(path: String) -> AppResult<dirlist::DirList> {
     dirlist::list(&path)
 }
 
-#[tauri::command(async)]
 pub fn folder_pick(app: AppHandle, start: String) -> AppResult<Option<String>> {
     folderdialog::pick(&app, &start)
 }

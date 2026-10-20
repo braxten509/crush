@@ -639,12 +639,14 @@ def main():
                 check(desktop.open_chat(sid), "the desktop opens its own chat again (a launch with -s)")
                 ok, model, took = poll(engine.large_model, lambda m: m == "fake-large", 10, 0.3)
                 check(ok, f"opening it restores that chat's model, fake-large, for the whole project (LIST-035; engine {model}, {took:.1f} s)")
-                shown = desktop.model_words()
+                # The button follows the engine's model event, which can land
+                # a moment after the engine's answer above.
+                _, shown, _ = poll(desktop.model_words, lambda w: w is not None and "Fake Large" in w and "Fake Small" not in w, 5, 0.2)
                 if shown is None or ("Fake Large" not in shown and "Fake Small" not in shown):
                     print("NOTE the model button's words are not in the probe (1.9 pins no model field in composer or panel); "
                           "the engine's answers are the check", flush=True)
                 else:
-                    check("Fake Large" in shown and "Fake Small" not in shown, "the desktop shows its chat's model, Fake Large")
+                    check("Fake Large" in shown and "Fake Small" not in shown, f"the desktop shows its chat's model, Fake Large ({shown!r})")
                 check(desktop.send(R7_DESKTOP), "the desktop sends a prompt on its chat")
                 ok, reply, _ = poll(lambda: last_assistant_after(engine.messages(sid), R7_DESKTOP) or {}, lambda m: m.get("finished"), 20, 0.3)
                 asked = requested_model(R7_DESKTOP)

@@ -537,8 +537,10 @@ def step_select_copy():
         check(got == "beta", f"a left drag selects ({got!r})")
         clip = wait_for(probe_path, lambda p: clipboard(p).get("text") == "beta", 3)
         check(clipboard(clip).get("text") == "beta", "releasing copies it to the clipboard")
-        late = wait_line(tid, lambda line: line == "LATE2", 6)
-        check(late is not None and tab_of(tid).get("selection") == "beta", "the selection stays on its text while output arrives")
+        # The job prints after the prompt, on the prompt's line.
+        late = wait_line(tid, lambda line: line.endswith("LATE2"), 6)
+        check(late is not None and tab_of(tid).get("selection") == "beta",
+              f"the selection stays on its text while output arrives ({tab_of(tid).get('selection')!r})")
         h = heavy()
         r = row_index(h, "alpha beta gamma")
         if r is not None:
@@ -657,7 +659,8 @@ def step_paste_focus():
         time.sleep(0.5)
         sixel = heavy().get("image_cells", 0)
         check(sixel > 0, f"a sixel picture shows inline ({sixel} cells)")
-        run(tid, "clear; printf '\\033]1337;File=inline=1;width=4;height=2:%s\\007' " + PNG_1PX + "; printf '\\nIIP%s\\n' 1", "IIP1")
+        # The size (the picture's bytes) as imgcat sends it; the add-on drops a picture without one.
+        run(tid, "clear; printf '\\033]1337;File=inline=1;size=70;width=4;height=2:%s\\007' " + PNG_1PX + "; printf '\\nIIP%s\\n' 1", "IIP1")
         time.sleep(0.5)
         iip = heavy().get("image_cells", 0)
         check(iip > 0, f"an iTerm2 inline picture shows ({iip} cells)")

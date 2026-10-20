@@ -255,19 +255,14 @@ probeSection(
       },
       failure: rectOf(one("nav.chats .start-failure")),
       failure_text: one("nav.chats .start-failure")?.textContent ?? "",
+      // The right panel's SERVERS rows (owner, 2026-10-19).
       servers: {
-        rule: rectOf(one("nav.chats .servers-part .servers-rule")),
-        rows: all("nav.chats .servers-part .server").map((el) => ({
-          port: Number(el.dataset.port),
-          rect: rectOf(el),
-          label: rectOf(el.querySelector(".label")),
-          right: rectOf(el.querySelector(".right")),
-          stop: rectOf(el.querySelector(".stop")),
-          cross: rectOf(el.querySelector(".stop .icon")),
-          picked: el.classList.contains("picked"),
+        rows: all('[data-section="servers"] li.row').map((li) => ({
+          text: li.querySelector(".open")?.textContent.replace(/\s+/g, " ").trim() ?? "",
+          child: li.classList.contains("child"),
+          open: rectOf(li.querySelector(".open .name")),
+          stop: rectOf(li.querySelector(".stop")),
         })),
-        hint: rectOf(one("nav.chats .servers-part .hint")),
-        hint_text: one("nav.chats .servers-part .hint")?.textContent ?? "",
       },
       picker: field && {
         frame: rectOf(one(".folder-picker")?.closest('[role="dialog"]')),
@@ -276,8 +271,8 @@ probeSection(
         caret: field.selectionStart,
         focused: document.activeElement === field,
         browse: rectOf(one(".folder-picker .browse")),
-        error: rectOf(one(".folder-picker .error")),
-        error_cut: cut(one(".folder-picker .error")),
+        error: rectOf(one(".folder-picker p.error")),
+        error_cut: cut(one(".folder-picker p.error")),
         heading: rectOf(one(".folder-picker .heading")),
         rows: all(".folder-picker .row").map((el) => ({ path: el.dataset.path, text: el.textContent, rect: rectOf(el), picked: el.classList.contains("picked") })),
       },

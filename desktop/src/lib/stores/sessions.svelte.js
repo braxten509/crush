@@ -69,6 +69,13 @@ function storeSession(s, { fromEvent, since }) {
       next.pending_prompt = s.pending_prompt ?? "";
       seedMarks(s.id, next.pending_prompt);
     }
+    // The live flag of a chat not loaded becomes the read's is_busy (the
+    // list's and each chat's reads alike, so a chat that ends with no event
+    // stops working).
+    if (messages.bySession[s.id]?.status !== "ready" && !changedSince(s.id, "live", since)) {
+      if (s.is_busy === true) sessions.live[s.id] = true;
+      else delete sessions.live[s.id];
+    }
   }
   sessions.byId[s.id] = next;
 }
@@ -288,11 +295,6 @@ function applyList(list, since) {
     if (!s?.id || s.parent_session_id || listed.includes(s.id)) continue;
     listed.push(s.id);
     storeSession(s, { fromEvent: false, since });
-    // The live flag of a chat not loaded becomes the read's is_busy.
-    if (messages.bySession[s.id]?.status !== "ready" && !changedSince(s.id, "live", since)) {
-      if (s.is_busy === true) sessions.live[s.id] = true;
-      else delete sessions.live[s.id];
-    }
   }
   const kept = new Set(listed);
   for (const id of Object.keys(sessions.byId)) {

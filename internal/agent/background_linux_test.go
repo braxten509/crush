@@ -178,6 +178,21 @@ func TestBackgroundProcesses(t *testing.T) {
 	require.Equal(t, "sleep 30; true", found[0].Command)
 	require.Equal(t, found[0].Started, BackgroundProcesses()[0].Started, "start times remain stable for process identity checks")
 
+	// A PID under the listed command (the sleep) finds the command, in its
+	// chat only.
+	var sleepPID int
+	for pid, q := range markedProcs(hubMarkers()) {
+		if len(q.args) > 0 && filepath.Base(q.args[0]) == "sleep" {
+			sleepPID = pid
+		}
+	}
+	require.NotZero(t, sleepPID)
+	held, ok := SessionProcessHolding(t.Name(), sleepPID)
+	require.True(t, ok)
+	require.Equal(t, found[0].PID, held.PID)
+	_, ok = SessionProcessHolding("another-chat", sleepPID)
+	require.False(t, ok, "another chat's process is not found")
+
 	require.NoError(t, KillProcess(found[0].PID))
 	require.Eventually(t, func() bool { return len(BackgroundProcesses()) == 0 }, 5*time.Second, 50*time.Millisecond)
 	require.Error(t, KillProcess(os.Getpid()), "only listed processes can be killed")

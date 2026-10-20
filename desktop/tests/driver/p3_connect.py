@@ -350,8 +350,11 @@ def processes(match):
 
 
 def pid_with_probe(probe):
-    """The app process started with --probe probe (the run's own app is not the driver's child)."""
-    found = processes(lambda args: args[0].endswith("crush-desktop") and any(a == "--probe" and b == probe for a, b in zip(args, args[1:])))
+    """The app process started with --probe probe (the run's own app is not the driver's child):
+    Electron's main process, named crush-desktop when installed and electron in the
+    worktree (electron/crush-desktop runs it). The helper, crush-desktop-core, is not it."""
+    found = processes(lambda args: os.path.basename(args[0]) in ("crush-desktop", "electron")
+                      and any(a == "--probe" and b == probe for a, b in zip(args, args[1:])))
     return found[0] if found else None
 
 

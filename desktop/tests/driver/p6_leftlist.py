@@ -23,18 +23,19 @@ dialog, 8.4):
             here; Ctrl+N starts one with no picker (also LIST-006, LIST-007,
             LIST-038 to LIST-042, CMD-014)
   LIST-053  a picture under the folder picker is covered and comes back
-  LIST-049  Browse… opens the window for another folder on a new chat with
-            only the folder of the start flags; window-request's newChat;
+  LIST-049  a window opened for another folder gets only the folder of the
+            start flags; Browse… with that folder brings it forward on a new
+            chat (window-request's newChat), opening no third window;
             the working mark shows the same frame in both windows; the other
             window follows the collapsed choice (also LIST-013, LIST-003)
-  LIST-030  server rows: pick, move, open, fold and stop with keys and
-            clicks (also LIST-029, LIST-031, LIST-032)
+  LIST-030  the right panel's server rows: open, fold and stop with clicks
+            (also LIST-029, LIST-031, LIST-032)
   LIST-017  closing: one window's close leaves the app running; Ctrl+Shift+W
             runs the draft step and the last window quits the app
             (also LIST-026's and MISC-024's fixture part)
   LIST-003  the next start opens on the strip (the saved choice)
-  LIST-048  "Couldn't start a session." on the list's bottom line, above the
-            server rows, never in the strip, cleared by the next attempt
+  LIST-048  a folder the window cannot switch to: "Couldn't start a chat."
+            in the notice line
 Engine legs, without --fixture (tests/fakes/scripts/leftlist-engine.json; the
 terminal app in the hidden tmux):
   LIST-018  a chat the terminal app runs shows working, then Done, from the
@@ -56,7 +57,7 @@ from datetime import date, datetime, timedelta
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import apps  # noqa: E402
-from harness import check, finish, key, shot, step, type_text, wait_for, xdo  # noqa: E402
+from harness import check, finish, key, probe_eval, shot, step, type_text, wait_for, xdo  # noqa: E402
 
 PROBE, OUT = sys.argv[1], sys.argv[2]
 WANT = {name.removeprefix("lst.") for name in sys.argv[4:]}
@@ -69,7 +70,6 @@ MOVED = "/tmp/leftlist-today.json"
 SETTINGS = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"), "crush-desktop", "settings.json")
 CLIP = os.path.join(HERE, "clip.py")
 PICKER_HINT = "↑↓ pick · tab open folder · enter start · esc cancel"  # draw.go:673
-SERVER_HINT = "↵ open · x stop · esc back"  # servers.go:37, drawn without its leading space
 WIDTH, HEIGHT = 1600, 992
 
 
@@ -425,14 +425,18 @@ def flow_list(main, data):
         today = date.today()
         when = {c["id"]: c["updated_at"] for c in chats}
         days = lst.get("days") or []
-        check(days[:2] == ["Today", "Yesterday"], f"the day groups start Today, Yesterday ({days[:2]})")
+        # The list draws the newest 6 chats (with the shown one), then "All
+        # chats (N more)" (owner 2026-10-19): the groups are the drawn rows'.
+        drawn_ids = [r["id"] for r in main.hv().get("chat_rows") or []]
+        check(drawn_ids == ids[:6], f"the list draws the newest 6 chats ({drawn_ids})")
+        more = probe_eval(main.path, 'window.__probeEval = document.querySelector("nav.chats .all-chats")?.textContent.replace(/\\s+/g, " ").trim() ?? null;')
+        check(more == f"All chats ({len(ids) - 6} more)", f"then the line for the rest ({more!r})")
         want_days = []
-        for rid in ids:
+        for rid in drawn_ids:
             label = design_day(when.get(rid, time.time()), today)
             if not want_days or want_days[-1] != label:
                 want_days.append(label)
-        if days != want_days:
-            mismatch("LIST-010", f"later day groups read {days[2:]}; the design's wording is {want_days[2:5]}… (P3.9's ChatList/listmodel draws them)")
+        check(days == want_days, f"its day groups ({days}, want {want_days})")
         skip("LIST-010", "the Terminals [n] group: runs after TERM merges")
         shot(OUT, "LIST-010")
 
@@ -461,6 +465,8 @@ def flow_list(main, data):
         h = main.hv()
         drawn = {r["id"]: r for r in h.get("chat_rows") or []}
         for rid, text in STATE_LINES.items():
+            if rid not in drawn:
+                continue  # past the newest 6
             check(drawn.get(rid, {}).get("state_text") == text, f"{rid}'s state line reads {text!r} ({drawn.get(rid, {}).get('state_text')!r})")
         done = drawn.get("done", {})
         check(done.get("registered") and done.get("mark"), "Done is the list's own state, drawn with its mark in the state's place")
@@ -471,28 +477,12 @@ def flow_list(main, data):
         servers = [(s["label"], s["right"]) for s in sec.get("servers") or []]
         check(servers == [("localhost:8100", ""), ("dev", "2 ports"), ("web", ":8000")],
               f"server rows in the list's order, each port once, a program's ports folded ({servers})")
-        check(sec.get("server_count") == 4 and not sec.get("hint"), "four ports, none picked, no hint")
-        px = h.get("px") or 1
-        hrows = (h.get("servers") or {}).get("rows") or []
-        rule = (h.get("servers") or {}).get("rule")
-        scroll = (h.get("scroll") or {}).get("rect")
-        column = h.get("column")
-        check(len(hrows) == 3 and rule and all(r["rect"]["y"] >= rule["y"] for r in hrows), "they sit under a rule")
-        if hrows and scroll:
-            last = hrows[-1]["rect"]
-            check(near(last["y"] + last["h"], scroll["y"] + scroll["h"], 2), "at the bottom of the open list, while the chats scroll above them")
-        check(all(near(r["rect"]["h"], 40 * px) for r in hrows), "each 40 high")
-        check(all(inside(r["rect"], column) for r in hrows), "inside the list's column")
-        for r in hrows:
-            rect = r["rect"]
-            check(near(r["label"]["x"], rect["x"] + 45 * px, 2), f":{r['port']} label starts after the mark (23 + 12 + 10)")
-            if r.get("right"):
-                check(near(r["right"]["x"] + r["right"]["w"], rect["x"] + rect["w"] - 44 * px, 2), f":{r['port']} right text ends before the stop slot")
-            check(r["stop"] and near(r["stop"]["w"], 20 * px) and near(r["stop"]["x"], rect["x"] + rect["w"] - 40 * px, 2),
-                  f":{r['port']} keeps the 20 wide stop slot, empty while not picked")
-            check(not r.get("cross"), f":{r['port']} has no × while not picked")
+        check(sec.get("server_count") == 4, "four ports")
+        # The rows are the right panel's SERVERS since 2026-10-19 (mouse only,
+        # owner 2026-10-20): a name, then the port or the program's port count.
+        panel = panel_servers(main)
+        check([r["text"] for r in panel] == ["localhost:8100", "dev 2 ports", "web :8000"], f"the right panel lists them the same ({[r['text'] for r in panel]})")
         shot(OUT, "LIST-028")
-        shot(OUT, "LIST-047")
 
 
 def flow_switch(main):
@@ -509,19 +499,18 @@ def flow_switch(main):
         rect = next((r["rect"] for r in (main.hv("list").get("rows") or []) if r["id"] == "wait"), None)
         main.click(rect)
         check(bool(main.until(lambda s: shown_id(s) == "wait", 5)), "a click on a row shows its chat")
-        # LIST-045: the wheel scrolls the list; switching brings the shown row back.
-        h = main.hv()
-        before = (h.get("scroll") or {}).get("top", 0)
-        main.wheel(h["scroll"]["rect"], 30)
-        h = main.hv()
-        scroll = h.get("scroll") or {}
-        check(scroll.get("top", 0) > before + 100, f"the wheel scrolls the list ({before} → {scroll.get('top')})")
-        ready = next((r["rect"] for r in h.get("chat_rows") or [] if r["id"] == "ready"), None)
-        check(ready and not inside(ready, scroll.get("rect")), "the row about to be shown is out of view")
+        # LIST-045: the list draws the newest 6 chats and the shown one
+        # (owner 2026-10-19); showing a chat past them adds its row.
+        ids = [r["id"] for r in main.ll().get("rows") or []]
+        far = ids[7]
+        key("alt+8")
+        main.until(lambda s: shown_id(s) == far, 5)
+        ok, h = poll(main.hv, lambda h: [r["id"] for r in h.get("chat_rows") or []] == ids[:6] + [far], 3, 0.3)
+        check(ok, f"Alt+8 shows {far}, past the newest 6, and its row joins them ({[r['id'] for r in (h or {}).get('chat_rows') or []]})")
         key(f"alt+{number_of(main.ll(), 'ready')}")
         main.until(lambda s: shown_id(s) == "ready", 5)
-        ok, h = poll(main.hv, lambda h: inside(next((r["rect"] for r in h.get("chat_rows") or [] if r["id"] == "ready"), None), (h.get("scroll") or {}).get("rect")), 3, 0.3)
-        check(ok, "showing it brings its row into view")
+        ok, h = poll(main.hv, lambda h: [r["id"] for r in h.get("chat_rows") or []] == ids[:6], 3, 0.3)
+        check(ok, "showing one of the 6 again leaves the 6")
         shot(OUT, "LIST-045")
 
 
@@ -547,7 +536,7 @@ def flow_collapse(main):
         check([c["state"] for c in cells] == [r["state"] for r in rows], "and its state's mark")
         check(all(c["mark"] for c in cells), "every cell draws its mark")
         check([c["row"] for c in cells if c["shown"]] == ["chat:ready"], "the shown row's cell has the bar")
-        check(not (h.get("servers") or {}).get("rows") and not h.get("failure"), "no server rows and no notice line in the strip")
+        check(not h.get("failure"), "no notice line in the strip (the servers are the right panel's)")
         skip("LIST-044", "the rule between chats and terminal tabs: runs after TERM merges")
         cell = next((c for c in cells if c["row"] == "chat:wait"), None)
         main.click(cell and cell["rect"])
@@ -784,12 +773,12 @@ def flow_windows(app, main):
     with step("LIST-049", OUT):
         show(main, "ready")
         before = set(window_ids(app.proc.pid))
-        key("alt+n")
-        main.until(lambda s: s.get("picker"), 3)
-        main.click((main.hv().get("picker") or {}).get("browse"))
+        # Another folder switches this window (owner 2026-10-19: no new
+        # window; panel_rework.py's switch leg checks that on the engine), so
+        # the second window opens as Open Project's does.
+        main.invoke("window_open", {"projectDir": PROJ2, "newChat": True})
         ok, wids = poll(lambda: set(window_ids(app.proc.pid)) - before, bool, 20, 0.3)
-        check(ok, "Browse… with another folder chosen opens a window")
-        check(bool(main.until(lambda s: not s.get("picker"), 3)), "and the picker closes")
+        check(ok, "a window opens on another folder")
         if not ok:
             return None
         w2 = Win(app, "w2", sorted(wids)[0])
@@ -810,12 +799,14 @@ def flow_windows(app, main):
         key("alt+n")
         main.until(lambda s: s.get("picker"), 3)
         main.click((main.hv().get("picker") or {}).get("browse"))
-        check(bool(w2.until(lambda s: not shown_id(s), 5)), "Browse… with that folder again brings its window a new chat")
-        check(set(window_ids(app.proc.pid)) == before | {w2.wid}, "and opens no third window")
+        check(bool(w2.until(lambda s: not shown_id(s), 5)), "Browse… with that folder brings its window forward with a new chat")
+        check(bool(main.until(lambda s: not s.get("picker"), 3)), "the picker closes")
+        check(set(window_ids(app.proc.pid)) == before | {w2.wid} and shown_id(main.ll()) == "ready", "no third window opens and this window stays where it was")
 
     with step("LIST-013", OUT):
-        main.place(0, 0, 900, 1000)
-        w2.place(700, 0, 900, 1000)
+        # Side by side, not overlapping: each list's marks must be on screen.
+        main.place(0, 0, WIDTH // 2, 1000)
+        w2.place(WIDTH // 2, 0, WIDTH // 2, 1000)
         for win in (main, w2):  # both lists at their top, so the working chat is in view
             scroll = (win.hv().get("scroll") or {}).get("rect")
             if scroll:
@@ -849,95 +840,49 @@ def flow_windows(app, main):
 
 
 def flow_servers(main):
-    """LIST-030 with LIST-029, LIST-031 and LIST-032."""
+    """LIST-030 with LIST-029, LIST-031 and LIST-032, with the mouse in the
+    right panel's SERVERS (mouse only, owner 2026-10-20)."""
     with step("LIST-030", OUT):
         main.focus()
         main.until(lambda s: s.get("server_count") == 4, 5)
 
-        def hrow(port, fold=None):
-            rows = (main.hv().get("servers") or {}).get("rows") or []
-            return next((r for r in rows if r["port"] == port), None)
-
-        def picked():
-            return [(s["label"], s["fold"] != "") for s in main.ll().get("servers") or [] if s["picked"]]
+        def prow(text):
+            return next((r for r in panel_servers(main) if r["text"] == text), {})
 
         opened0 = len(lines(f"{PROBE}.opened.jsonl"))
-        main.click(hrow(8100)["rect"])
-        sec = main.until(lambda s: any(x["picked"] for x in s["servers"]), 3)
-        check(bool(sec) and picked() == [("localhost:8100", False)], "a click picks a server row")
-        h = main.hv()
-        r = next((x for x in (h.get("servers") or {}).get("rows") or [] if x["port"] == 8100), {})
-        check(r.get("picked") and r.get("cross"), "the picked row has the band and its ×")
-        check(((h.get("servers") or {}).get("hint_text") or "").strip() == SERVER_HINT, f"and the hint shows ({(h.get('servers') or {}).get('hint_text')!r})")
-        check(len(lines(f"{PROBE}.opened.jsonl")) == opened0, "the first click opens nothing")
-        shot(OUT, "LIST-047-picked")
-        key("Down")
-        check(bool(main.until(lambda s: [x["label"] for x in s["servers"] if x["picked"]] == ["dev"], 2)), "↓ picks the next row")
-        key("Down")
-        check(bool(main.until(lambda s: [x["label"] for x in s["servers"] if x["picked"]] == ["web"], 2)), "and the next")
-        key("Up")
-        check(bool(main.until(lambda s: [x["label"] for x in s["servers"] if x["picked"]] == ["dev"], 2)), "↑ goes back")
         # LIST-029: the fold.
-        key("Return")
+        main.click(prow("dev 2 ports").get("open"))
         sec = main.until(lambda s: [(x["label"], x["right"], x["child"]) for x in s["servers"]] ==
                          [("localhost:8100", "", False), ("dev", "2 ports", False), ("node", ":5173", True), ("esbuild", ":5174", True), ("web", ":8000", False)], 3)
-        check(bool(sec), "Enter on a program opens it: its servers follow, named after the program holding each port")
-        rows = (main.hv().get("servers") or {}).get("rows") or []
-        labels = [x["label"]["x"] for x in rows]
-        check(len(rows) == 5 and labels[2] > labels[1] + 20 and near(labels[2], labels[3]), "indented under it")
+        check(bool(sec), "a click on a program opens it: its servers follow, named after the program holding each port")
+        panel = panel_servers(main)
+        check([r["text"] for r in panel] == ["localhost:8100", "dev 2 ports", "node :5173", "esbuild :5174", "web :8000"] and panel[2]["child"] and panel[3]["child"]
+              and panel[2]["open"]["x"] > panel[1]["open"]["x"] + 10, f"indented under it ({[r['text'] for r in panel]})")
+        check(len(lines(f"{PROBE}.opened.jsonl")) == opened0, "opening a program opens no page")
         shot(OUT, "LIST-029")
-        key("Return")
-        check(bool(main.until(lambda s: len(s["servers"]) == 3 and not s["servers"][1]["open"], 2)), "Enter again closes it")
-        key("Escape")
-        check(bool(main.until(lambda s: not any(x["picked"] for x in s["servers"]) and not s["hint"], 2)), "Esc lets go")
-        fold_rect = (main.hv().get("servers") or {}).get("rows")[1]["rect"]
-        main.click(fold_rect)
-        check(bool(main.until(lambda s: s["servers"][1]["picked"] and s["servers"][1]["open"], 2)), "one click on a program picks and opens it")
-        main.click(fold_rect)
-        check(bool(main.until(lambda s: s["servers"][1]["picked"] and not s["servers"][1]["open"], 2)), "another closes it")
+        main.click(prow("dev 2 ports").get("open"))
+        check(bool(main.until(lambda s: len(s["servers"]) == 3 and not s["servers"][1]["open"], 2)), "another click closes it")
         # LIST-031: open.
-        web = hrow(8000)["rect"]
-        main.click(web)
-        main.until(lambda s: [x["label"] for x in s["servers"] if x["picked"]] == ["web"], 2)
-        check(len(lines(f"{PROBE}.opened.jsonl")) == opened0, "a click picks a server without opening it")
-        main.click(web)
+        main.click(prow("web :8000").get("open"))
         ok, _ = poll(lambda: opened_urls(opened0), lambda u: u == ["http://localhost:8000"], 3)
-        check(ok, "a click on the picked server opens http://localhost:8000")
-        key("Return")
-        ok, _ = poll(lambda: opened_urls(opened0), lambda u: u == ["http://localhost:8000"] * 2, 3)
-        check(ok, "so does Enter")
+        check(ok, "a click on a server's name opens http://localhost:8000")
         shot(OUT, "LIST-031")
-        key("Right")
-        check(bool(main.until(lambda s: not any(x["picked"] for x in s["servers"]), 2)), "any other key lets go")
-        main.click(web)
-        main.until(lambda s: any(x["picked"] for x in s["servers"]), 2)
-        x, y, w, hgt = geometry(main.wid)
-        main.click_at(w * 0.6, hgt * 0.5)
-        check(bool(main.until(lambda s: not any(x["picked"] for x in s["servers"]), 2)), "a click elsewhere lets go")
         # LIST-032: stop.
         calls0 = len(lines(f"{PROBE}.api.jsonl"))
-        main.click(hrow(8000)["rect"])
-        main.until(lambda s: [x["label"] for x in s["servers"] if x["picked"]] == ["web"], 2)
-        key("x")
+        main.click(prow("web :8000").get("stop"))
         ok, calls = poll(lambda: api_calls("/jobs/kill", calls0), lambda c: len(c) == 1, 3)
         check(ok and calls[0]["path"].endswith("sessions/ready/jobs/kill") and calls[0]["body"] == {"job_id": "job-web"},
-              f"x stops the job: POST …/sessions/ready/jobs/kill {{\"job_id\": \"job-web\"}} ({calls[-1] if calls else None})")
-        check(not any(x["picked"] for x in main.ll().get("servers") or []), "and lets go of the row")
+              f"its cross stops the job: POST …/sessions/ready/jobs/kill {{\"job_id\": \"job-web\"}} ({calls[-1] if calls else None})")
         main.until(lambda s: s.get("server_count") == 4, 3)  # the fixture's next read has it again
-        main.click(hrow(8100)["rect"])
-        main.until(lambda s: [x["label"] for x in s["servers"] if x["picked"]] == ["localhost:8100"], 2)
-        key("shift+x")
+        main.click(prow("localhost:8100").get("stop"))
         ok, calls = poll(lambda: api_calls("/jobs/kill", calls0), lambda c: len(c) == 2, 3)
         check(ok and calls[1]["path"].endswith("sessions/wait/jobs/kill") and calls[1]["body"] == {"pid": 4242},
-              "Shift+X stops a plain process by its pid")
+              "a plain process's cross stops it by its pid")
         main.until(lambda s: s.get("server_count") == 4, 3)
-        main.click(hrow(5173)["rect"])
-        main.until(lambda s: s["servers"][1]["picked"], 2)
-        cross = next((r for r in (main.hv().get("servers") or {}).get("rows") or [] if r["picked"]), {}).get("stop")
-        main.click(cross)
+        main.click(prow("dev 2 ports").get("stop"))
         ok, calls = poll(lambda: api_calls("/jobs/kill", calls0), lambda c: len(c) == 3, 3)
         check(ok and calls[2]["path"].endswith("sessions/bg/jobs/kill") and calls[2]["body"] == {"job_id": "job-dev"},
-              "a click on the picked program's × stops its job")
+              "a program's cross stops its job")
         shot(OUT, "LIST-032")
         main.until(lambda s: s.get("server_count") == 4, 3)
 
@@ -984,23 +929,11 @@ def flow_restart():
             key("alt+n")
             main.until(lambda s: s.get("picker"), 3)
             main.click((main.hv().get("picker") or {}).get("browse"))
-            sec = main.until(lambda s: s.get("failure"), 5)
-            check(bool(sec) and sec["failure"] == "Couldn't start a session.", f"a session that cannot start says so ({(sec or {}).get('failure')!r})")
-            h = main.hv()
-            fail = h.get("failure")
-            rule = (h.get("servers") or {}).get("rule")
-            scroll = (h.get("scroll") or {}).get("rect")
-            check(h.get("failure_text") == "Couldn't start a session.", "on the list's bottom line")
-            check(fail and rule and fail["y"] + fail["h"] <= rule["y"] + 1 and inside(fail, scroll), "above the server rows")
-            key("alt+s")
-            main.until(lambda s: s["strip"], 3)
-            check(not main.hv().get("failure"), "never in the strip")
-            key("alt+s")
-            main.until(lambda s: not s["strip"], 3)
-            key("alt+n")
-            main.until(lambda s: (s.get("picker") or {}).get("input") == "~/proj/", 3)
-            key("Return")
-            check(bool(main.until(lambda s: not s.get("failure"), 5)), "the next attempt clears it")
+            # A folder the window cannot switch to says so in the notice line
+            # (the switch in this window, owner 2026-10-19).
+            ok, notice = poll(lambda: main.section("overlay").get("notice"), lambda n: bool(n), 5)
+            check(ok and notice == {"kind": "error", "text": "Couldn't start a chat."}, f"a chat that cannot start says so ({notice})")
+            check(not main.ll().get("failure"), "and the list draws no line of its own")
             skip("LIST-048", "\"Couldn't start the terminal.\" from a real failed start: runs after TERM merges")
     finally:
         with step("LIST-017-close", OUT):
@@ -1075,6 +1008,12 @@ class Engine:
         return {s["id"] for s in self.get("sessions") or []}
 
 
+def panel_servers(win):
+    """The right panel's SERVERS rows: their words and the rects of the name
+    and the stop cross."""
+    return (win.hv().get("servers") or {}).get("rows") or []
+
+
 def composer_send(win, text):
     for _ in range(4):
         if win.section("composer").get("focused"):
@@ -1092,13 +1031,17 @@ def serve_from_desktop(main, engine, label):
     """A new chat in the window that starts a listening job: (chat id, port)."""
     main.focus()
     key("ctrl+n")
-    poll(lambda: main.section("chat").get("id"), lambda c: not c, 3)
+    ok, _ = poll(lambda: main.section("chat").get("id"), lambda c: not c, 3)
+    check(ok, f"{label}: Ctrl+N starts a new chat")
     known = {s["port"] for s in engine.servers()}
     check(composer_send(main, "leftlist serve the folder"), f"{label}: the desktop sends the serve prompt")
     ok, sid = poll(lambda: main.section("chat").get("id"), bool, 15)
     ok, found = poll(engine.servers, lambda ss: any(s["session_id"] == sid and s["port"] not in known for s in ss), 25, 0.5)
     server = next((s for s in found or [] if s["session_id"] == sid and s["port"] not in known), None)
     check(ok and bool(server), f"{label}: the engine lists the job's port ({server})")
+    # Ctrl+N waits for a working chat (the terminal's "busy" warning), so the
+    # next chat starts once this reply ends.
+    poll(lambda: engine.get(f"sessions/{sid}") if sid else {}, lambda s: not s.get("is_busy"), 20, 0.3)
     return sid, (server or {}).get("port"), server
 
 
@@ -1124,20 +1067,30 @@ def engine_run():
         if wanted("status_from_engine"):
             with step("LIST-018", OUT):
                 before = {r["id"] for r in main.ll().get("rows") or []}
+                # Typed once the terminal app's typing box shows, and sent once it holds the words.
+                poll(term.text, lambda t: "›" in t, 15, 0.3)
                 term.keys("-l", "leftlist slow reply")
+                poll(term.text, lambda t: "leftlist slow reply" in t, 5, 0.2)
                 term.keys("Enter")
                 ok, sid = poll(lambda: next((r["id"] for r in main.ll()["rows"] if r["id"] not in before), ""), bool, 15)
-                check(ok, f"a chat the terminal app starts is listed ({sid})")
+                check(ok, f"a chat the terminal app starts is listed ({sid})" + ("" if ok else f"; the terminal shows {term.text().strip()[-400:]!r}"))
                 ok, busy = poll(lambda: engine.get(f"sessions/{sid}"), lambda s: s.get("is_busy"), 10)
                 t_busy = time.time()
                 ok2 = main.until(lambda s: state_of(s, sid) == "working", 2.5)
                 check(ok and bool(ok2), f"the desktop shows it working within 2 s of the engine ({time.time() - t_busy:.1f} s)")
                 lst_row = next((r for r in main.section("list").get("rows") or [] if r["id"] == sid), {})
-                check(lst_row.get("state") == "Working…" and lst_row.get("agent") == "Fake AI", f"its row says Working… under Fake AI ({lst_row})")
+                check(lst_row.get("state") == "Working…", f"its row says Working… ({lst_row})")
                 ok, _ = poll(lambda: engine.get(f"sessions/{sid}"), lambda s: not s.get("is_busy"), 30, 0.2)
                 t_idle = time.time()
                 ok2 = main.until(lambda s: state_of(s, sid) == "unread", 2.5)
                 check(ok and bool(ok2), f"when it finishes, the desktop shows it Done within 2 s ({time.time() - t_idle:.1f} s)")
+                # The agent line names the provider on the chat's record, which
+                # only a CLI agent's context budget sets; the built-in fake
+                # agent sets none, so the line stays empty.
+                provider = ((engine.get(f"sessions/{sid}") or {}).get("context_budget") or {}).get("provider") or ""
+                ok, lst_row = poll(lambda: next((r for r in main.section("list").get("rows") or [] if r["id"] == sid), {}),
+                                   lambda r: r.get("agent") == ("Fake AI" if provider == "fake" else ""), 3)
+                check(ok, f"and its agent line follows the record's provider ({lst_row.get('agent')!r}, provider {provider!r})")
                 title = engine.get(f"sessions/{sid}").get("title")
                 ok, _ = poll(lambda: (row_of(main.section("list"), sid) or {}).get("title"), lambda t: t == title, 3)
                 check(ok, f"its title follows the engine's record ({title!r})")
@@ -1151,21 +1104,23 @@ def engine_run():
                     sec = main.until(lambda s: any(x["port"] == port for x in s["servers"]), 2.5)
                     check(bool(sec), f"its row shows within 2 s (:{port})")
                     row = next((x for x in (sec or {}).get("servers") or [] if x["port"] == port), {})
-                    name = server.get("name") or ""
+                    # The engine names a command by its program until its job is
+                    # registered, then by the job: the name it gives now.
+                    name = next((x.get("name") or "" for x in engine.servers() if x["port"] == port), server.get("name") or "")
                     want = (name, f":{port}") if name else (f"localhost:{port}", "")
                     check((row.get("label"), row.get("right")) == want, f"named after the job ({row.get('label')!r} {row.get('right')!r}, engine {name!r})")
                     shot(OUT, "LIST-028")
+                    # The servers are the right panel's SERVERS since 2026-10-19:
+                    # one click on the name opens it, the row's cross stops it.
                     opened0 = len(lines(f"{PROBE}.opened.jsonl"))
-                    rect = next((r["rect"] for r in (main.hv().get("servers") or {}).get("rows") or [] if r["port"] == port), None)
-                    main.click(rect)
-                    main.until(lambda s: any(x["picked"] for x in s["servers"]), 2)
-                    main.click(rect)
+                    panel = next((r for r in panel_servers(main) if f":{port}" in r["text"]), {})
+                    main.click(panel.get("open"))
                     ok, _ = poll(lambda: opened_urls(opened0), lambda u: u == [f"http://localhost:{port}"], 3)
-                    check(ok, f"a second click opens http://localhost:{port}")
+                    check(ok, f"a click on its name opens http://localhost:{port}")
                     shot(OUT, "LIST-031")
                     check(listening(port), "the server answers on its port")
-                    key("x")
-                    check(bool(main.until(lambda s: not any(x["port"] == port for x in s["servers"]), 1)), "x: the row leaves at once")
+                    main.click(panel.get("stop"))
+                    check(bool(main.until(lambda s: not any(x["port"] == port for x in s["servers"]), 1)), "its cross: the row leaves at once")
                     ok, _ = poll(engine.servers, lambda ss: not any(s["port"] == port for s in ss), 10, 0.5)
                     check(ok and not listening(port), "the engine killed the job: nothing listens on the port")
                     time.sleep(1.5)

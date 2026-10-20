@@ -147,6 +147,20 @@ func SessionBackgroundProcesses(sessionID string) []Process {
 	return out
 }
 
+// SessionProcessHolding finds the chat's listed background process whose
+// processes include pid. A command shows by its PID until its job is
+// registered and by the job after that, so a stop that names the PID it
+// was shown with still finds it.
+func SessionProcessHolding(sessionID string, pid int) (Process, bool) {
+	table := markedProcs(hubMarkers())
+	for _, p := range SessionBackgroundProcesses(sessionID) {
+		if p.PID == pid || slices.Contains(processTree(p, table), pid) {
+			return p, true
+		}
+	}
+	return Process{}, false
+}
+
 // isDetached reports whether p was left running by a command that already
 // ended (`nohup … &`, `setsid`): its parent is neither one of the marked
 // processes nor Crush, so it was reparented. CLI helpers and hooks always

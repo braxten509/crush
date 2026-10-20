@@ -499,7 +499,7 @@ export function probeLight() {
       for: closeBoxFor(),
       question: box.querySelector(".question")?.textContent ?? "",
       detail: box.querySelector(".detail")?.textContent ?? "",
-      buttons: [...box.querySelectorAll("button")].map((button) => button.textContent.trim()),
+      buttons: [...box.querySelectorAll(".buttons button")].map((button) => button.textContent.trim()),
       selected: box.querySelector("[data-selected]")?.dataset.selected ?? null,
     },
     tabs: terminals.map((entry) => {
@@ -540,7 +540,7 @@ export function probeLight() {
 
 export function probeHeavy() {
   const box = document.querySelector('[data-sheet="terminal_close"]');
-  const closeButtons = box ? [...box.querySelectorAll("button")].map((button) => ({ label: button.textContent.trim(), rect: rectOf(button) })) : [];
+  const closeButtons = box ? [...box.querySelectorAll(".buttons button")].map((button) => ({ label: button.textContent.trim(), rect: rectOf(button) })) : [];
   const tab = shownTab();
   const term = tab?.term;
   const screen = term?.element?.querySelector(".xterm-screen");

@@ -34,10 +34,11 @@ const ICON = found(path.join(__dirname, "icon.png"), path.join(ROOT, "src-tauri"
 const PAGE = "app://localhost/index.html";
 
 // The page's rules (they were tauri.conf.json's): only the app's own files,
-// pictures also from blob: and data:, no frames.
+// pictures also from blob: and data:, no frames. WebAssembly may compile (not
+// eval): the terminal's picture add-on decodes sixel and iTerm2 pictures with it.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data:",
   "font-src 'self' data:",

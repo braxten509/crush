@@ -171,6 +171,14 @@ describe("the live flag (1.5.3, LIST-012)", () => {
     expect(S.busy("s1")).toBe(true);
   });
 
+  it("a chat's own read clears it, so a chat the list read as busy stops working with no event", async () => {
+    await withList(chat("s1"), chat("s2", { is_busy: true }));
+    expect(S.busy("s2")).toBe(true);
+    S.upsertSession(chat("s2", { is_busy: false }), { since: S.readStart() });
+    expect(S.sessions.live.s2).toBeUndefined();
+    expect(S.busy("s2")).toBe(false);
+  });
+
   it("a message newer than the record moves the chat up the list", async () => {
     await withList(chat("s1", { updated_at: 30 }), chat("s2", { updated_at: 20 }));
     expect(S.sessions.order).toEqual(["s1", "s2"]);

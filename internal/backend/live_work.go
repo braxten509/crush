@@ -75,14 +75,22 @@ func (b *Backend) ListJobs(workspaceID, sessionID string) ([]proto.Job, error) {
 	return out, nil
 }
 
-// KillJob ends one of the chat's jobs as the terminal's kill does. A job
-// that is not in the chat's list is ErrJobNotFound, and keeps running.
+// KillJob ends one of the chat's jobs as the terminal's kill does. A PID
+// finds the job that holds it (a command is listed by its PID until its job
+// is registered). A job that is not in the chat's list is ErrJobNotFound,
+// and keeps running.
 func (b *Backend) KillJob(workspaceID, sessionID string, ref proto.JobRef) error {
 	if _, err := b.GetWorkspace(workspaceID); err != nil {
 		return err
 	}
+	if ref.JobID == "" {
+		if p, ok := agent.SessionProcessHolding(sessionID, ref.PID); ref.PID != 0 && ok {
+			return agent.StopBackgroundProcess(p)
+		}
+		return ErrJobNotFound
+	}
 	for _, p := range agent.SessionBackgroundProcesses(sessionID) {
-		if ref.JobID != "" && p.JobID == ref.JobID || ref.JobID == "" && ref.PID != 0 && p.PID == ref.PID {
+		if p.JobID == ref.JobID {
 			return agent.StopBackgroundProcess(p)
 		}
 	}

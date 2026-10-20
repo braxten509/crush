@@ -50,8 +50,8 @@
     }
     closeDialog(ID);
     try {
-      await projectSwitch(row.path);
-      location.reload();
+      // False: another window shows it and came forward instead.
+      if (await projectSwitch(row.path)) location.reload();
     } catch (error) {
       notify("error", error?.message ?? String(error));
     }

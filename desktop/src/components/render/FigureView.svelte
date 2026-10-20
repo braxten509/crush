@@ -13,7 +13,7 @@
   // A figure still streaming (its block not yet stable) shows a diagram's or
   // math's source only. The root's data-state says where the drawing is:
   // "source", "pending", "drawn", "fallback" or "link" (the safety probe and the
-  // checks read it). Placed by VisualsSection (P3.8); MarkdownView inline.
+  // checks read it). Placed by MarkdownView, inline in the chat.
   export function keepLastWords(label) {
     const text = String(label ?? "");
     return text.split(" ").length > 2 ? text.replace(/ (\S+)$/, " $1") : text;

@@ -480,7 +480,7 @@ pub async fn window_close(app: AppHandle, window: Window) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub async fn project_switch(app: AppHandle, window: Window, project_dir: String) -> AppResult<()> {
+pub async fn project_switch(app: AppHandle, window: Window, project_dir: String) -> AppResult<bool> {
     windows::switch(&app, window.label(), &project_dir).await
 }
 

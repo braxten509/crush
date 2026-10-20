@@ -4,11 +4,9 @@
 // Ctrl+X and Ctrl+B; the 60-second hint under a running command; the memory
 // notice; and the probe's "live" section.
 import Background from "../../components/live/Background.svelte";
-import HelpersSection from "../../components/live/HelpersSection.svelte";
-import JobsSection from "../../components/live/JobsSection.svelte";
 import SubAgents from "../../components/live/SubAgents.svelte";
 import { dialogs, registerDialog } from "../dialogs.js";
-import { bindKey, comboOf } from "../keys.js";
+import { bindKey } from "../keys.js";
 import { backgroundKey } from "../live/ctrlb.js";
 import { hintedCalls, hintFor } from "../live/hint.js";
 import {
@@ -33,45 +31,13 @@ import { sessions } from "../stores/sessions.svelte.js";
 import { ui } from "../stores/ui.svelte.js";
 import { ticker } from "../ticker.svelte.js";
 import { registerToolHint } from "../toolhints.js";
-import { registerTraySection, traySections, traySelected } from "../tray.js";
+import { traySections, traySelected } from "../tray.js";
 
 registerDialog(SHEET.jobs, Background);
 registerDialog(SHEET.helpers, SubAgents);
 
-// -- Tray entries (LIVE-001, LIVE-002) --
-
-// Enter, Space, x, Delete, Backspace and Ctrl+X open the entry's sheet
-// (internal/ui/model/tasks.go:214-217, :225-226); ← → ↑ Esc Tab and typing are
-// the tray's own (lib/tray.js).
-const OPEN_KEYS = new Set(["Enter", "Space", "x", "Delete", "Backspace", "Ctrl+X"]);
-
-function openOnKey(id) {
-  return (event) => {
-    if (!OPEN_KEYS.has(comboOf(event))) return false;
-    openSheet(id);
-    return true;
-  };
-}
-
-registerTraySection({
-  id: "helpers",
-  order: 30,
-  visible: () => runningHelpers().length > 0,
-  header: () => helpersLabel(runningHelpers().length),
-  component: HelpersSection,
-  onKey: openOnKey(SHEET.helpers),
-  downFocus: true,
-});
-
-registerTraySection({
-  id: "jobs",
-  order: 40,
-  visible: () => trayJobs().length > 0,
-  header: () => jobsLabel(trayJobs().length),
-  component: JobsSection,
-  onKey: openOnKey(SHEET.jobs),
-  downFocus: true,
-});
+// The helpers and jobs are the right panel's BACKGROUND now (owner,
+// 2026-10-19), not tray entries.
 
 // -- Keys --
 

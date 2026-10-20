@@ -77,12 +77,6 @@ export function systemEntries({ summarize, toggleYolo, initProject }) {
     action("enable_docker_mcp", "Enable Docker MCP Catalog", "docker.enable", { when: () => actionEnabled("docker.enable") }),
     action("disable_docker_mcp", "Disable Docker MCP Catalog", "docker.disable", { when: () => actionEnabled("docker.disable") }),
     sheet("toggle_mcps", "Toggle MCPs", "mcp_toggles", { when: () => Object.keys(ws.config?.mcp ?? {}).length > 0 }),
-    {
-      ...action("toggle_pills", "", "todos.toggle", { shortcut: "ctrl+t", when: () => actionEnabled("todos.toggle") }),
-      get label() {
-        return actions.find((a) => a.id === "todos.toggle")?.title ?? "Toggle To-Dos";
-      },
-    },
     sheet("select_notifications", "Notification Style", "notifications"),
     own("toggle_yolo", "Toggle Yolo Mode", toggleYolo, { shortcut: "ctrl+y" }),
     action("toggle_help", "Toggle Help", "help.toggle", { shortcut: "ctrl+g" }),

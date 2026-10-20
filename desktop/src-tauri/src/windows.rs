@@ -307,14 +307,30 @@ async fn leave_engine(app: &AppHandle, label: &str) {
     connection::close(app, label).await;
 }
 
-/// `project_switch` (6.4): this window leaves its engine and takes `project_dir`.
-pub async fn switch(app: &AppHandle, label: &str, project_dir: &str) -> AppResult<()> {
+/// `project_switch` (6.4): this window leaves its engine and takes
+/// `project_dir` (true; the page reloads). When another window already shows
+/// the folder, that one comes forward with a new chat and this window stays
+/// as it is (false): no folder is shown twice.
+pub async fn switch(app: &AppHandle, label: &str, project_dir: &str) -> AppResult<bool> {
     if project_dir.is_empty() || !Path::new(project_dir).is_absolute() {
         return Err(AppError::new("bad_path", format!("Crush Desktop switches only to an absolute folder, not \"{project_dir}\".")));
     }
+    let windows = app.state::<Windows>();
+    if let Some(other) = windows.lead_window(Path::new(project_dir)).filter(|other| other != label) {
+        if let Some(window) = app.get_webview_window(&other) {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        let request = WindowRequest { session_id: None, new_chat: true, launch_id: None };
+        if let Err(e) = app.emit_to(other.as_str(), "window-request", request) {
+            eprintln!("crush-desktop: could not hand the request to window {other}: {e}");
+        }
+        return Ok(false);
+    }
     leave_engine(app, label).await;
-    app.state::<Windows>().set_project(label, Path::new(project_dir));
-    Ok(())
+    windows.set_project(label, Path::new(project_dir));
+    Ok(true)
 }
 
 /// The system close button: the page runs its close steps; after

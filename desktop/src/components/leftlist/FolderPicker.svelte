@@ -9,18 +9,20 @@
   // recent_folders), an error line, and the system folder dialog behind
   // "Browse…". Enter, a second click on a row, or a folder from the dialog
   // starts there: a session in this window's folder is a new chat here (as
-  // Ctrl+N), in another folder the window for it opens or comes forward with
-  // a new chat (window_open); a terminal is TERM's openTerminal. A failure
-  // shows on the list's bottom line.
+  // Ctrl+N); another folder switches this window to it with a new chat
+  // (project_switch; a window already showing it comes forward instead); a
+  // terminal is TERM's openTerminal. A failure shows as a notice.
   import { onMount } from "svelte";
   import { runAction } from "../../lib/actions.js";
   import { closeDialog } from "../../lib/dialogs.js";
-  import { dirList, file_info, folderPick, recentFolders, windowOpen } from "../../lib/engine/commands.js";
+  import { windowBusy } from "../../lib/busy.js";
+  import { dirList, file_info, folderPick, projectSwitch, recentFolders } from "../../lib/engine/commands.js";
   import { comboOf } from "../../lib/keys.js";
   import { shownTerminal } from "../../lib/leftlist/numbers.js";
   import * as P from "../../lib/leftlist/picker.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
+  import { notify } from "../../lib/stores/ui.svelte.js";
   import { openTerminal, terminals } from "../../lib/terminal/tabs.svelte.js";
   import Sheet from "../kit/Sheet.svelte";
 
@@ -216,7 +218,6 @@
 
   // Starting (2.21): the failure line is cleared by each attempt.
   async function startIn(what, dir) {
-    leftList.failure = "";
     if (what === "terminal") {
       try {
         const tab = await openTerminal({ cwd: dir });
@@ -226,7 +227,7 @@
         if (start?.error) throw new Error(start.error);
       } catch (error) {
         console.error("Could not start a terminal", error?.message ?? error);
-        leftList.failure = "Couldn't start the terminal.";
+        notify("error", "Couldn't start the terminal.");
       }
       return;
     }
@@ -234,11 +235,18 @@
       runAction("chat.new");
       return;
     }
+    // Another folder: this window switches to it, with a new chat (owner,
+    // 2026-10-19: no new window). A window already showing it comes forward
+    // instead. A busy agent keeps the window where it is, as Open Project.
+    if (windowBusy()) {
+      notify("warn", "Agent is busy, please wait before switching folders...");
+      return;
+    }
     try {
-      await windowOpen(dir, null, true, null);
+      if (await projectSwitch(dir)) location.reload();
     } catch (error) {
       console.error("Could not start a Crush session", error?.message ?? error);
-      leftList.failure = "Couldn't start a session.";
+      notify("error", "Couldn't start a session.");
     }
   }
 

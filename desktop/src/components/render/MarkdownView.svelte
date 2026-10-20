@@ -3,15 +3,15 @@
   // 1.7, 4.1, 4.3). lib/render/markdown.js draws the text into this element
   // and keeps a streaming reply's stable prefix, so an update redraws only the
   // tail. Links are guarded (links.js: they open only after a real click or
-  // Enter). Each visual is a VisualChip where its block was, or the figure
-  // itself (FigureView, inline) while the right panel is hidden. Marks other
+  // Enter). Each visual is drawn where its block was (FigureView, inline;
+  // owner, 2026-10-19: the right panel no longer shows visuals); a web
+  // picture stays a link chip (VisualChip). Marks other
   // features lay over the text (lib/decorations.js) are drawn as spans and a
   // click on one goes to its kind's handler. Placed by ReplyItem (P3.5).
   import { mount, unmount, untrack } from "svelte";
   import { decorationHandler, decorationsFor } from "../../lib/decorations.js";
   import { linkGuard } from "../../lib/render/links.js";
   import { createMarkdown } from "../../lib/render/markdown.js";
-  import { ui } from "../../lib/stores/ui.svelte.js";
   import FigureView from "./FigureView.svelte";
   import VisualChip from "./VisualChip.svelte";
 
@@ -24,7 +24,7 @@
   const visuals = new Map();
 
   // A web picture stays a link chip: its figure could only be the same chip.
-  const drawsAsFigure = (info, hidden) => hidden && !info.href;
+  const drawsAsFigure = (info) => !info.href;
 
   function mountVisual(host, entry, asFigure) {
     const { info } = entry;
@@ -43,7 +43,7 @@
     host.className = info.inline ? "md-visual md-visual-inline" : "md-visual";
     const entry = { info, component: null, asFigure: false };
     visuals.set(host, entry);
-    untrack(() => mountVisual(host, entry, drawsAsFigure(info, ui.panelHidden)));
+    untrack(() => mountVisual(host, entry, drawsAsFigure(info)));
     return host;
   }
 
@@ -67,20 +67,6 @@
         rendererFor = key;
       }
       renderer.update(stored, { finished: done, decorations });
-    });
-  });
-
-  // Showing or hiding the right panel swaps every visual between its chip and
-  // its figure.
-  $effect(() => {
-    const hidden = ui.panelHidden;
-    untrack(() => {
-      for (const [host, entry] of visuals) {
-        const asFigure = drawsAsFigure(entry.info, hidden);
-        if (entry.asFigure === asFigure) continue;
-        unmount(entry.component);
-        mountVisual(host, entry, asFigure);
-      }
     });
   });
 

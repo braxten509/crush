@@ -119,6 +119,8 @@ export function loadMermaid(load = () => import("mermaid")) {
 
 export function resetMermaidForTests() {
   loading = null;
+  // Work queued by a test's figures must not hold back the next test's.
+  queue.length = 0;
 }
 
 let count = 0;

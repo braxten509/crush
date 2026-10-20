@@ -1,58 +1,32 @@
-// The composer's registrations (desktop-design 1.10): the yolo.toggle,
-// mode.cycle and todos.toggle actions, the tray's to-do and queue sections,
+// The composer's registrations (desktop-design 1.10): the yolo.toggle and
+// mode.cycle actions, the tray's queue section,
 // the keys of the field, its `@` popup and delete mode and the global ones
 // (1.8), and the probe's `composer` section (1.9).
 import QueueSection from "../../components/composer/QueueSection.svelte";
-import TodoSection from "../../components/composer/TodoSection.svelte";
 import { registerAction } from "../actions.js";
 import { deleteModeKey } from "../composer/chips.js";
 import { atEnd, onFirstLine, onLastLine } from "../composer/history.js";
 import { modelButtonText } from "../composer/modes.js";
-import { hasIncomplete, queueRows, todoHeader } from "../composer/trayrows.js";
+import { queueRows } from "../composer/trayrows.js";
 import { bindKey } from "../keys.js";
 import { probeSection } from "../probe.js";
 import * as C from "../stores/composer.svelte.js";
 import { visibleItems } from "../stores/queue.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
-import { todos, toggle as toggleTodos } from "../stores/todos.svelte.js";
+import { todos } from "../stores/todos.svelte.js";
 import { ui } from "../stores/ui.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
 import { focusTray, registerTraySection, traySections } from "../tray.js";
 
-const shownTodos = () => sessions.byId[sessions.currentId]?.todos ?? [];
 const queued = () => (sessions.currentId ? visibleItems(sessions.currentId) : []);
 
 // -- Actions --
 
 registerAction({ id: "yolo.toggle", title: "Toggle Yolo Mode", keys: ["Ctrl+Y"], run: () => C.toggleYolo() });
 registerAction({ id: "mode.cycle", title: "Switch Input Mode", keys: ["Shift+Tab"], run: () => C.cycleMode() });
-// The title follows what the tray has (commands.go:596-606).
-registerAction({
-  id: "todos.toggle",
-  get title() {
-    const withTodos = hasIncomplete(shownTodos());
-    const withQueue = queued().length > 0;
-    return withTodos && withQueue ? "Toggle To-Dos/Queue" : withQueue ? "Toggle Queue" : "Toggle To-Dos";
-  },
-  keys: ["Ctrl+T"],
-  enabled: () => Boolean(sessions.currentId) && (hasIncomplete(shownTodos()) || queued().length > 0),
-  run: () => toggleTodos(),
-});
 
-// -- The tray's sections (SIDE-031 to SIDE-034, TYPE-044, TYPE-045) --
-
-function todoLine() {
-  const header = todoHeader(shownTodos(), todos.open);
-  return [`${header.label} ${header.count}`, header.step, header.hint].filter(Boolean).join(" · ");
-}
-
-registerTraySection({
-  id: "todos",
-  order: 10,
-  visible: () => Boolean(sessions.currentId) && hasIncomplete(shownTodos()),
-  header: todoLine,
-  component: TodoSection,
-});
+// -- The tray's sections (TYPE-044, TYPE-045). The to-do list is the right
+// panel's (owner, 2026-10-19). --
 
 registerTraySection({
   id: "queue",
@@ -217,13 +191,6 @@ bindKey("global", "Ctrl+Y", () => {
   C.toggleYolo();
   return true;
 });
-for (const combo of ["Ctrl+T", "Ctrl+Space"]) {
-  bindKey("global", combo, () => {
-    if (!sessions.currentId) return false;
-    toggleTodos();
-    return true;
-  });
-}
 // Ctrl+C copies a selection in the field (TYPE-009); without one it is left
 // for the quit key (phase 5).
 bindKey("global", "Ctrl+C", (event) => {

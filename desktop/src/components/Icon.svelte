@@ -34,6 +34,7 @@
     close: { w: 16, h: 16 },
     image: { w: 16, h: 16 },
     file: { w: 16, h: 16 },
+    folder: { w: 16, h: 16 },
     text: { w: 16, h: 16 },
     skill: { w: 16, h: 16 },
     "half-circle": { w: 16, h: 16 },
@@ -115,6 +116,8 @@
     <circle cx="10.6" cy="5.9" r="1.3" fill="currentColor" />
   {:else if name === "file"}
     <path d="M3.5 1.5h6l3.5 3.5v9.5h-9.5z M9.5 1.5V5h3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+  {:else if name === "folder"}
+    <path d="M1.5 3h4.5l1.6 1.8h6.9v8.7h-13z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
   {:else if name === "text"}
     <path d="M2 4h12M2 8h12M2 12h8" fill="none" stroke="currentColor" stroke-width="1.6" />
   {:else if name === "skill"}

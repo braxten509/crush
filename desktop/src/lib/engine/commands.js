@@ -128,7 +128,9 @@ export async function windowClose() {
   return invoke("window_close");
 }
 
-// Leaves this window's engine and records the new folder; the page then reloads.
+// Leaves this window's engine and records the new folder, true: the page
+// then reloads. False when another window already shows the folder and came
+// forward instead.
 export async function projectSwitch(projectDir) {
   return invoke("project_switch", { projectDir });
 }

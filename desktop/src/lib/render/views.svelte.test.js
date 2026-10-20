@@ -1,6 +1,6 @@
 // The four render components (desktop-design 4.3, 4.9; CHAT-006, CHAT-007,
 // CHAT-014, CHAT-018; TYPE-036 to TYPE-038), mounted in the page model:
-// MarkdownView's chips, figures and decorations, VisualChip, FigureView for
+// MarkdownView's figures and decorations, VisualChip, FigureView for
 // every kind, and the attachment Chip.
 import { flushSync, mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -56,43 +56,31 @@ afterEach(() => {
 const REPLY = "Intro with a [link](https://example.com).\n\n| Property | Value |\n|:--|--:|\n| `SameSite` | **Lax** |\n\n$$\nE = mc^2\n$$\n\nEnd.";
 
 describe("MarkdownView", () => {
-  test("visuals are chips with the figures' ids; a click shows the figure", () => {
+  test("visuals draw in place as figures with the figures' ids (owner, 2026-10-19)", async () => {
     const target = show(MarkdownView, { text: REPLY, messageId: "m1", sessionId: "s1", finished: true });
     const root = target.querySelector(".md");
-    const chips = [...root.querySelectorAll(".md-chip")];
-    expect(chips.map((chip) => [chip.tagName, chip.dataset.kind, chip.dataset.figure])).toEqual([
-      ["BUTTON", "table", "m1:0"],
-      ["BUTTON", "math", "m1:1"],
-    ]);
-    expect(chips.map((chip) => chip.dataset.figure)).toEqual(extractFigures("s1", "m1", REPLY).map((figure) => figure.id));
-    expect(chips[0].querySelector(".md-chip-title").textContent).toBe("Property · Value");
-    chips[1].click();
-    expect(spies.reveal).toHaveBeenCalledWith("m1:1");
-  });
-
-  test("while the panel is hidden the figures draw in place of their chips, and back", async () => {
-    const target = show(MarkdownView, { text: REPLY, messageId: "m1", sessionId: "s1", finished: true });
-    const root = target.querySelector(".md");
-    setPanelHidden(true);
-    flushSync();
     expect(root.querySelector(".md-chip")).toBeNull();
     const figures = [...root.querySelectorAll(".figure-view.inline")];
     expect(figures.map((f) => [f.dataset.kind, f.dataset.figure])).toEqual([
       ["table", "m1:0"],
       ["math", "m1:1"],
     ]);
+    expect(figures.map((f) => f.dataset.figure)).toEqual(extractFigures("s1", "m1", REPLY).map((figure) => figure.id));
     expect(figures[0].querySelector(".caption-kind").textContent).toBe("TABLE");
     expect(figures[0].querySelector("table.md-table")).not.toBeNull();
     await idle();
     expect(figures[1].dataset.state).toBe("drawn");
     expect(figures[1].querySelector(".katex")).not.toBeNull();
+    // Hiding or showing the right panel leaves them in place.
+    setPanelHidden(true);
+    flushSync();
     setPanelHidden(false);
     flushSync();
-    expect(root.querySelectorAll(".md-chip").length).toBe(2);
-    expect(root.querySelector(".figure-view")).toBeNull();
+    expect(root.querySelectorAll(".figure-view.inline").length).toBe(2);
+    expect(root.querySelector(".md-chip")).toBeNull();
   });
 
-  test("a streaming reply: chips get their ids when their blocks are stable; nodes before stay", async () => {
+  test("a streaming reply: the table shows as it arrives; nodes before stay", async () => {
     const props = $state({ text: "First paragraph.\n\n| a |\n|---|\n| 1 |", messageId: "m2", sessionId: "s1", finished: false });
     const target = document.createElement("div");
     document.body.append(target);
@@ -100,19 +88,17 @@ describe("MarkdownView", () => {
     flushSync();
     const root = target.querySelector(".md");
     const first = root.firstChild;
-    expect(root.querySelector(".md-chip").dataset.figure).toBeUndefined();
-    // A table line may not end the stable prefix (the terminal's rule 3), so
-    // the table is stable once the paragraph after it is closed too.
+    const shown = () => root.querySelectorAll(".figure-view.inline");
+    expect(shown().length).toBe(1);
+    expect(shown()[0].querySelector("table.md-table")).not.toBeNull();
     props.text += "\n\nMore text.";
     flushSync();
-    expect(root.querySelector(".md-chip").dataset.figure).toBeUndefined();
     props.text += "\n\nAnd more";
     flushSync();
     expect(root.firstChild).toBe(first);
-    expect(root.querySelector(".md-chip").dataset.figure).toBe("m2:0");
     props.finished = true;
     flushSync();
-    expect(root.querySelectorAll(".md-chip").length).toBe(1);
+    expect([...shown()].map((f) => f.dataset.figure)).toEqual(["m2:0"]);
   });
 
   test("links are guarded: no navigation, and nothing opens without a real click", () => {
@@ -145,7 +131,7 @@ describe("MarkdownView", () => {
     expect([scan.handlers_found, scan.scripts_found, scan.controls_found, scan.bad_hrefs_found]).toEqual([0, 0, 0, 0]);
     expect(scan.anchors.map((a) => a.href)).toEqual(["http://127.0.0.1:47321/page.html"]);
     // The hostile diagram and the math, then one valid diagram of every kind.
-    expect(scan.chips.map((c) => c.kind)).toEqual(["diagram", "math", ...DIAGRAM_KINDS.map(() => "diagram")]);
+    expect(scan.figures.map((f) => f.kind)).toEqual(["diagram", "math", ...DIAGRAM_KINDS.map(() => "diagram")]);
   });
 
   test("leaving the page unmounts every visual", () => {
@@ -153,10 +139,10 @@ describe("MarkdownView", () => {
     document.body.append(target);
     const component = mount(MarkdownView, { target, props: { text: REPLY, messageId: "m1", sessionId: "s1" } });
     flushSync();
-    expect(target.querySelectorAll(".md-chip").length).toBe(2);
+    expect(target.querySelectorAll(".figure-view").length).toBe(2);
     unmount(component);
     flushSync();
-    expect(target.querySelector(".md-chip, .md")).toBeNull();
+    expect(target.querySelector(".figure-view, .md")).toBeNull();
   });
 });
 

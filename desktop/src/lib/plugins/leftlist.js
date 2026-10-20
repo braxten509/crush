@@ -9,7 +9,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { untrack } from "svelte";
 import CollapseButton from "../../components/leftlist/CollapseButton.svelte";
 import FolderPicker from "../../components/leftlist/FolderPicker.svelte";
-import ServerRows from "../../components/leftlist/ServerRows.svelte";
 import TerminalRows from "../../components/leftlist/TerminalRows.svelte";
 import { runAction } from "../actions.js";
 import { registerCloseStep } from "../closing.js";
@@ -33,13 +32,8 @@ import { askCloseTerminal, terminals } from "../terminal/tabs.svelte.js";
 
 registerListSection({ id: "collapse", order: 0, place: "header", component: CollapseButton });
 registerListSection({ id: "terminals", order: 10, place: "rows", visible: () => terminals.length > 0, component: TerminalRows });
-registerListSection({
-  id: "servers",
-  order: 10,
-  place: "footer",
-  visible: () => leftList.failure !== "" || leftList.servers.length > 0,
-  component: ServerRows,
-});
+// The servers are the right panel's SERVERS (owner, 2026-10-19); the list
+// still reads them (below).
 registerRowState(rowStateOf);
 registerDialog("folder_picker", FolderPicker);
 registerCloseStep({ ...DRAFT_STEP, run: discardDraft });

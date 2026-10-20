@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -214,10 +216,7 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 			delete(h.interrupting, job.ID)
 			h.mu.Unlock()
 		}()
-		removeCheckIn := func() {}
-		if !service {
-			removeCheckIn = h.addCheckIn(sessionID, backgroundJobWork(ctx, job))
-		}
+		removeCheckIn := h.addCheckIn(sessionID, backgroundJobWork(ctx, job, service))
 		waited := job.WaitContext(ctx)
 		removeCheckIn()
 		stoppedByAgent := tools.StoppedByAgent(job.ID)
@@ -236,7 +235,7 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 			h.interruptJob(job)
 			return
 		}
-		notice := backgroundJobNotification(job, spillDir)
+		notice := backgroundJobNotification(job, marker, spillDir)
 		accept := h.acceptHandoff(sessionID, func() { delete(h.jobHandoffs, marker) })
 		_, err := h.c.RunAccepted(ctx, accept, sessionID, notice)
 		accept.Close()
@@ -251,7 +250,7 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 	}()
 }
 
-func backgroundJobNotification(job *shell.BackgroundShell, spillDir string) string {
+func backgroundJobNotification(job *shell.BackgroundShell, marker, spillDir string) string {
 	stdout, stderr, _, err := job.GetOutput()
 	status := "completed"
 	if err != nil {
@@ -262,7 +261,40 @@ func backgroundJobNotification(job *shell.BackgroundShell, spillDir string) stri
 		output += "\n" + err.Error()
 	}
 	output = shelltool.TruncateOutput(output, spillDir)
-	return taskResult{Name: BackgroundProcessName, Status: status, Body: fmt.Sprintf("Job %s (%s) ended with exit code %d.\n%s", job.ID, job.Description, shell.ExitCode(err), output)}.String()
+	body := fmt.Sprintf("Job %s (%s) ended with exit code %d.\n%s", job.ID, job.Description, shell.ExitCode(err), output)
+	if left := leftoverProcesses(marker); left != "" {
+		body += "\n" + left
+	}
+	return taskResult{Name: BackgroundProcessName, Status: status, Body: body}.String()
+}
+
+// maxLeftovers is how many leftover processes a job-ended notice names.
+const maxLeftovers = 5
+
+// leftoverProcesses names the processes still carrying a job's marker after
+// the job ended: helpers its command started that outlived it (Crush stops
+// waiting for them after [shell.LeftoverWait]). Empty when there are none.
+func leftoverProcesses(marker string) string {
+	if marker == "" {
+		return ""
+	}
+	marked := markedProcs([]string{managedJobEnv + "=" + marker, tools.NativeShellEnv + "=" + marker})
+	if len(marked) == 0 {
+		return ""
+	}
+	pids := slices.Sorted(maps.Keys(marked))
+	lines := make([]string, 0, maxLeftovers+1)
+	for _, pid := range pids[:min(len(pids), maxLeftovers)] {
+		command := strings.Join(marked[pid].args, " ")
+		if len(command) > 100 {
+			command = command[:100] + "..."
+		}
+		lines = append(lines, fmt.Sprintf("  PID %d: %s", pid, command))
+	}
+	if len(pids) > maxLeftovers {
+		lines = append(lines, fmt.Sprintf("  and %d more", len(pids)-maxLeftovers))
+	}
+	return fmt.Sprintf("%d process(es) the job started are still running; stop them with kill <PID> unless they are still needed:\n%s", len(pids), strings.Join(lines, "\n"))
 }
 
 func (h *taskHub) recordBackgroundTool(ctx context.Context, sessionID string, call fantasy.ToolCall, response fantasy.ToolResponse) {

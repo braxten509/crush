@@ -270,3 +270,50 @@ func TestCheckInInstructionsNameTheInterval(t *testing.T) {
 	require.Contains(t, text, "status running")
 	require.Contains(t, fmtCheckIn(time.Minute), "every minute")
 }
+
+// While only services run, the note names them and comes three times, then
+// stops until other work starts; other work's notes name the services in
+// one line, without their output.
+func TestServiceOnlyCheckInsStopAfterThree(t *testing.T) {
+	h, calls := checkInTest(t)
+	h.checkInEvery = 100 * time.Millisecond
+	session, err := h.c.sessions.Create(t.Context(), "services")
+	require.NoError(t, err)
+	service := fixedWork("Job S", "server", "noisy log", time.Now())
+	service.service = true
+	removeService := h.addCheckIn(session.ID, service)
+	defer removeService()
+
+	quietNotes := func() int {
+		count := 0
+		deadline := time.After(time.Second)
+		for {
+			select {
+			case call := <-calls:
+				if strings.Contains(call.Prompt, "[Job A]") {
+					continue // on its way before Job A ended
+				}
+				require.Contains(t, call.Prompt, "1 service still running in the background: [Job S] server, up")
+				require.Contains(t, call.Prompt, "crush bg --stop")
+				require.NotContains(t, call.Prompt, "noisy log")
+				count++
+			case <-deadline:
+				return count
+			}
+		}
+	}
+	require.Equal(t, serviceOnlyCheckIns, quietNotes(), "three notes, then quiet")
+
+	removeJob := h.addCheckIn(session.ID, fixedWork("Job A", "build", "a out", time.Now()))
+	select {
+	case call := <-calls:
+		require.Contains(t, call.Prompt, "[Job A] build")
+		require.Contains(t, call.Prompt, "a out")
+		require.Contains(t, call.Prompt, "1 service still running in the background: [Job S] server, up")
+		require.NotContains(t, call.Prompt, "noisy log")
+	case <-time.After(time.Second):
+		t.Fatal("no check-in once other work started")
+	}
+	removeJob()
+	require.Equal(t, serviceOnlyCheckIns, quietNotes(), "other work starting brings the three notes back")
+}

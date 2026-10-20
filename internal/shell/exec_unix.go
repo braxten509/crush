@@ -4,6 +4,7 @@ package shell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -59,6 +60,8 @@ func processGroupExecHandler(killTimeout time.Duration) interp.ExecHandlerFunc {
 			Stdin:  hc.Stdin,
 			Stdout: hc.Stdout,
 			Stderr: hc.Stderr,
+			// Background jobs stop waiting for leftovers holding the output.
+			WaitDelay: leftoverWait(ctx),
 		}
 		isolateProcess(&cmd)
 
@@ -89,7 +92,8 @@ func processGroupExecHandler(killTimeout time.Duration) interp.ExecHandlerFunc {
 // matching the conventions of interp.DefaultExecHandler. Extracted so the
 // platform-specific exec handler stays focused on isolation mechanics.
 func exitStatusFromError(ctx context.Context, stderr io.Writer, err error) error {
-	if err == nil {
+	// The command exited cleanly; only leftovers still held its output.
+	if err == nil || errors.Is(err, exec.ErrWaitDelay) {
 		return nil
 	}
 	switch err := err.(type) {

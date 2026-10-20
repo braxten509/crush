@@ -191,3 +191,21 @@ func TestManagedBackgroundJobReportsOnce(t *testing.T) {
 	}
 	require.Never(t, func() bool { return len(notices) > 0 }, time.Second, 50*time.Millisecond, "the job was reported twice")
 }
+
+// A job whose command leaves a helper holding its output (D-Bus portals do)
+// ends a few seconds after the command, not when the helper quits, and the
+// notice names the helper.
+func TestJobEndsDespiteLeftoverHoldingItsOutput(t *testing.T) {
+	h, sessionID, notices := nativeJobTest(t)
+	job := startNativeJob(t, h, sessionID, "sh -c 'sleep 9 & printf started'")
+	select {
+	case notice := <-notices:
+		require.Contains(t, notice, "ended with exit code 0")
+		require.Contains(t, notice, "started")
+		require.Contains(t, notice, "still running")
+		require.Contains(t, notice, "sleep 9")
+	case <-time.After(7 * time.Second):
+		t.Fatal("the job waited for the leftover helper")
+	}
+	require.True(t, job.IsDone())
+}

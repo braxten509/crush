@@ -92,6 +92,22 @@ func GetBackgroundShellManager() *BackgroundShellManager {
 	return backgroundManager
 }
 
+// LeftoverWait is how long a background job's command may keep its output
+// open after it has exited. A command can leave helpers behind (D-Bus starts
+// portals and secret stores on demand) that inherit the output and keep it
+// open for hours; without a limit the job would show as running until they
+// quit. A variable so tests can shorten it.
+var LeftoverWait = 3 * time.Second
+
+type leftoverWaitKey struct{}
+
+// leftoverWait is the LeftoverWait of the background job running under ctx;
+// zero (wait for every holder of the output) for foreground commands.
+func leftoverWait(ctx context.Context) time.Duration {
+	wait, _ := ctx.Value(leftoverWaitKey{}).(time.Duration)
+	return wait
+}
+
 // Start creates and starts a new background shell with the given command.
 func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, blockFuncs []BlockFunc, command string, description string, extraEnv ...string) (*BackgroundShell, error) {
 	// Only running jobs count toward the limit. Finished jobs are kept for
@@ -109,7 +125,7 @@ func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, b
 		Env:        append(os.Environ(), extraEnv...),
 	})
 
-	shellCtx, cancel := context.WithCancel(ctx)
+	shellCtx, cancel := context.WithCancel(context.WithValue(ctx, leftoverWaitKey{}, LeftoverWait))
 
 	bgShell := &BackgroundShell{
 		ID:          id,

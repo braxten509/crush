@@ -230,6 +230,16 @@ ul {
   inherits: false;
   initial-value: 0;
 }
+/* Set on a scroller while its thumb shows. Nothing reads it: WebKitGTK
+   redraws a scroll bar only when its scroller's own style changes, not when
+   a class changes just the bar's look, so this is what puts the thumb on
+   screen and takes it away (owner, 2026-10-20). Not inherited, so the
+   chat's rows are not restyled. */
+@property --bar-shown {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
 /* A piece that arrives unrolls from its top edge (sheets, menus, figures). */
 @keyframes paper-unfold {
   from {

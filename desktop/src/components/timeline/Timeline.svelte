@@ -61,6 +61,8 @@
   import { ws } from "../../lib/stores/workspace.svelte.js";
   import { thoughtLineEnabled } from "../../lib/thought.js";
   import { buildTimeline, createTimelineState } from "../../lib/timeline.js";
+  import { footerProviders } from "../../lib/models/providers.js";
+  import { modelData, refreshModels } from "../../lib/models/store.svelte.js";
   import { focusTray } from "../../lib/tray.js";
   import { markFresh } from "./ItemFrame.svelte";
   import VirtualList from "./VirtualList.svelte";
@@ -101,6 +103,19 @@
   // This window's send marks the chat busy at once (send.go:114-121), so the
   // prompt gets its waiting status before the engine's first event.
   const isBusy = $derived(shown && (busy(sessionId) || pending.some((p) => p.state === "working")));
+  // Footers and authors name models as the terminal does: the configured
+  // providers (agent CLIs included) first, then the catalog.
+  const providers = $derived(footerProviders(modelData.cfg, ws.providers));
+  // The config holds the agent CLIs' models: read it once connected (the
+  // model menu shares the read; config_changed keeps it fresh after).
+  let modelsAsked = false;
+  $effect(() => {
+    if (conn.state !== "connected" || modelData.cfg !== null || modelsAsked) return;
+    modelsAsked = true;
+    untrack(() => refreshModels()).then((ok) => {
+      if (!ok) modelsAsked = false;
+    });
+  });
   const built = $derived.by(() => {
     tick;
     if (!shown) return { items: [], status: "", refreshAt: Infinity };
@@ -114,7 +129,7 @@
         busy: isBusy,
         planMode: composer.mode === "plan",
         callMarks: prompts.callStatus,
-        providers: ws.providers,
+        providers,
         thoughtLine: thoughtLineEnabled(ws.config),
         hasKey: (mid) => linksFor(mid).length > 0, // phase 4: items holding a branch link get a key
         now: Date.now(),

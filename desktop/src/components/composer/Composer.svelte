@@ -14,7 +14,7 @@
   import PlanHandoff from "./PlanHandoff.svelte";
   import Popup from "./Popup.svelte";
   import Slot from "./Slot.svelte";
-  import { composer, currentMode, focusField, hasChips, send } from "../../lib/stores/composer.svelte.js";
+  import { composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { closeSlot, openSlot, ui } from "../../lib/stores/ui.svelte.js";
 
@@ -24,6 +24,19 @@
   let fullTop = $state(0);
 
   const mode = $derived(currentMode());
+
+  // The send square shows Stop while the shown chat works and nothing is
+  // typed or attached (owner, 2026-10-20, choice A); typing turns it back
+  // into Send, which queues the message. Esc stops as before. One button
+  // throughout, so nothing moves and the focus stays.
+  const stopping = $derived(working() && draftOf().text.trim() === "" && draftOf().attachments.length === 0);
+
+  function sendClick(event) {
+    if (!stopping) return; // a submit: the form sends
+    event.preventDefault();
+    stop();
+    focusField();
+  }
 
   // DLG-119: the shown chat's permission request takes the slot; a newer one
   // replaces it, and one that waited behind another form opens when the slot frees.
@@ -91,8 +104,8 @@
         <span class="divider" aria-hidden="true"></span>
         <ModelButton />
       </div>
-      <button class="send" type="submit" aria-label="Send">
-        <Icon name="send" />
+      <button class="send" class:stopping type={stopping ? "button" : "submit"} aria-label={stopping ? "Stop" : "Send"} title={stopping ? "Stop (Esc)" : "Send (Enter)"} onclick={sendClick}>
+        {#if stopping}<Icon name="stop" size={20} />{:else}<Icon name="send" />{/if}
       </button>
     </form>
   {/if}
@@ -160,18 +173,17 @@
     margin: calc(7 * var(--px)) 0;
     background: var(--rule);
   }
+  /* Square, as tall as the one-line field; the plane's drawing is balanced
+     in its own box, so it sits in the exact middle (owner, 2026-10-20: the
+     old nudge to the right read as off-centre). */
   .send {
     flex: none;
     align-self: flex-end;
-    width: calc(55 * var(--px));
+    width: calc(58 * var(--px));
     height: calc(58 * var(--px));
     display: grid;
     place-items: center;
     background: var(--vermilion-fill);
     color: var(--on-accent);
-  }
-  .send :global(.icon) {
-    /* A paper plane reads centred a little right of its box. */
-    transform: translateX(calc(3 * var(--px)));
   }
 </style>

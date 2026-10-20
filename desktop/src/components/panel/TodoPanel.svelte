@@ -50,7 +50,10 @@
     margin-left: calc(8 * var(--px));
     font-variant-numeric: tabular-nums;
   }
-  .rows,
+  /* One step per line, under the heading. */
+  .rows {
+    margin-top: calc(8 * var(--px));
+  }
   .line {
     display: flex;
     align-items: flex-start;

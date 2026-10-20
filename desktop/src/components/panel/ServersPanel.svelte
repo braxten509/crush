@@ -49,19 +49,16 @@
   .empty .label {
     color: var(--mark);
   }
-  .rows,
+  /* A list with no lines between rows, as Background (owner, 2026-10-20). */
+  .rows {
+    margin-top: calc(8 * var(--px));
+  }
   .line {
     display: flex;
     align-items: center;
     gap: calc(8 * var(--px));
     min-height: calc(28 * var(--px));
     font: var(--t-small);
-  }
-  /* A list with no lines between rows, as Background (owner, 2026-10-20). */
-  .rows {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
   }
   .child {
     padding-left: calc(18 * var(--px));

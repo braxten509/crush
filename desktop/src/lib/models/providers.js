@@ -69,6 +69,30 @@ export async function readCatalog() {
   }));
 }
 
+// The providers a reply's footer and author read, as the terminal's
+// cfg.GetModel and cfg.Providers.Get do (internal/config/config.go:168-186):
+// every configured provider first, the agent CLIs among them (owner,
+// 2026-10-20: footers said "Unknown Model via claude-code" because the
+// catalog has no agent CLIs), with its models, ChatGPT and Grok models, and
+// the catalog's models after them; then the catalog providers the config
+// does not have. [{id, name, models}]
+export function footerProviders(cfg, catalog = []) {
+  const out = [];
+  const seen = new Set();
+  const list = Array.isArray(catalog) ? catalog : [];
+  for (const [id, p] of cfg?.providers ?? []) {
+    seen.add(id);
+    const fromCatalog = list.find((c) => c?.id === id);
+    out.push({
+      id,
+      name: p?.name || fromCatalog?.name || "",
+      models: [...(p?.models ?? []), ...(p?.chatgpt_models ?? []), ...(p?.grok_models ?? []), ...(fromCatalog?.models ?? [])],
+    });
+  }
+  for (const c of list) if (c && !seen.has(c.id)) out.push(c);
+  return out;
+}
+
 // The catalog model for a selected model, configured names first.
 export function modelInfo(cfg, catalog, selected) {
   if (!selected?.provider || !selected?.model) return null;

@@ -31,25 +31,29 @@
     flex: none;
     vertical-align: middle;
   }
+  /* Dots and gaps are whole pixels: at a zoom where a picture pixel is a
+     fraction of a real one, each dot would round to a different width and the
+     last could look cut off (owner, 2026-10-20). */
   .line {
-    gap: calc(6 * var(--px));
+    gap: round(calc(6 * var(--px)), 1px);
   }
   .small {
-    gap: calc(3 * var(--px));
+    gap: round(calc(3 * var(--px)), 1px);
   }
   .dot {
     display: block;
+    flex: none;
     border-radius: 50%;
     background: var(--ink);
     animation: fade 1.2s ease-in-out infinite both;
   }
   .line .dot {
-    width: calc(4 * var(--px));
-    height: calc(4 * var(--px));
+    width: round(calc(4 * var(--px)), 1px);
+    height: round(calc(4 * var(--px)), 1px);
   }
   .small .dot {
-    width: calc(3 * var(--px));
-    height: calc(3 * var(--px));
+    width: round(calc(3 * var(--px)), 1px);
+    height: round(calc(3 * var(--px)), 1px);
   }
   .dot:nth-child(2) {
     animation-delay: 0.2s;

@@ -18,6 +18,8 @@ blur, no rounded cards. Hierarchy comes from type size, rules and white space.
   8/12, is the default.
 - Hairlines stay one real pixel at every zoom (`1px`, never `--px`).
 - Small functional text never drops below 11 real pixels: `max(11px, …)` in the type roles.
+- Tiny repeated marks (the busy dots) round their size and gaps to whole real pixels
+  (`round(calc(4 * var(--px)), 1px)`), so at Compact zoom every dot draws the same width.
 
 ## Color
 
@@ -126,12 +128,20 @@ Every dialog is a `kit/Sheet`:
 - Motion uses `--motion` (220 ms) and `--motion-quick` (140 ms) on `--ease-paper`; movement
   distances scale with `--px`. The busy marks loop over 1.2 s. Nothing moves the layout when
   a state changes (no show or hide on a flag).
+- The Send square shows Stop (a filled square) while the shown chat works and nothing is
+  typed or attached; typing turns it back into Send, which queues the message. Esc stops
+  too. One button throughout, so nothing moves.
 - Scroll bars are thin and show their thumb only while scrolling (about 2 s after the last
   move). A column grip next to a scroll bar sits on the far side of the divider, so the bar
-  stays clickable.
+  stays clickable. Only the user's scrolling shows it: the page moving the view (a send
+  shrinking the typing box) does not. WebKitGTK redraws the bar through `--bar-shown` on
+  the scroller (app.css), never by flipping `overflow`, which redrew the whole chat.
 
 ## Checks
 
+- `tests/driver/owner_fixes.py` checks, at Compact zoom: the to-do steps stack, the
+  strip's "›" cell and the Send square are centred, reply footers name the configured
+  model, the busy dots are whole pixels, and Send turns into Stop and back.
 - `tests/driver/dark_mode.py` turns dark mode on and off in the real window, checks that
   the ink reads on every dark surface, and checks that the chat's scroll bar hides after
   scrolling and is not covered by the column grip; dark pictures go to `tests/out/dark_mode/`.

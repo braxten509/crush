@@ -37,6 +37,7 @@
     folder: { w: 16, h: 16 },
     text: { w: 16, h: 16 },
     skill: { w: 16, h: 16 },
+    stop: { w: 16, h: 16 },
     "half-circle": { w: 16, h: 16 },
     circle: { w: 16, h: 16 },
     offline: { w: 16, h: 16 },
@@ -125,6 +126,8 @@
     <path d="M1.5 3h4.5l1.6 1.8h6.9v8.7h-13z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
   {:else if name === "text"}
     <path d="M2 4h12M2 8h12M2 12h8" fill="none" stroke="currentColor" stroke-width="1.6" />
+  {:else if name === "stop"}
+    <rect x="2.5" y="2.5" width="11" height="11" fill="currentColor" shape-rendering="crispEdges" />
   {:else if name === "skill"}
     <path d="M8 2.5l6 11H2z" fill="currentColor" />
   {:else if name === "half-circle"}

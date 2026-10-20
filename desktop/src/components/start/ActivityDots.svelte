@@ -9,18 +9,17 @@
 <span class="dots" aria-hidden="true"><span></span><span></span><span></span></span>
 
 <style>
+  /* Whole-pixel dots and gaps, as the timeline's ActivityMark. */
   .dots {
     display: inline-flex;
     flex: none;
     align-items: center;
-    gap: calc(6 * var(--px));
-    width: calc(24 * var(--px));
-    height: calc(4 * var(--px));
+    gap: round(calc(6 * var(--px)), 1px);
   }
   .dots span {
     flex: none;
-    width: calc(4 * var(--px));
-    height: calc(4 * var(--px));
+    width: round(calc(4 * var(--px)), 1px);
+    height: round(calc(4 * var(--px)), 1px);
     border-radius: 50%;
     background: var(--ink);
     opacity: 0.25;

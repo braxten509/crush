@@ -77,8 +77,11 @@
 
 <style>
   /* 64 wide at 12/12, at the column's left; the column keeps its own width
-     (App.svelte's grid). The top row matches the open list's wordmark row
-     (27 to 67), the "+" the list's New chat button (from 89). */
+     (App.svelte's grid). The "›" cell is 44 tall like the cells below and
+     centered on the open list's wordmark row (27 to 67), so its hover fill
+     and focus outline sit around the arrow (owner, 2026-10-20: the arrow sat
+     low in a tall box); the "+" lines up with the list's New chat button
+     (from 89). */
   .strip {
     align-self: flex-start;
     display: flex;
@@ -94,8 +97,9 @@
     display: grid;
     place-items: center;
     width: 100%;
-    height: calc(67 * var(--px));
-    padding: calc(27 * var(--px)) 0 0;
+    height: calc(44 * var(--px));
+    margin-top: calc(25 * var(--px));
+    padding: 0;
     color: var(--slate);
   }
   .expand :global(.right) {
@@ -111,7 +115,7 @@
     color: var(--slate);
   }
   .new-session {
-    margin-top: calc(22 * var(--px));
+    margin-top: calc(20 * var(--px));
   }
   .expand:hover,
   .tool:hover {

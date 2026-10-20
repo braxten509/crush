@@ -1,5 +1,5 @@
 <script>
-  // One timeline row: the item's frame (selection bar, key, focus) around its
+  // One timeline row: the item's frame (key, focus) around its
   // kind's component (desktop-design 1.5.6). The virtual list mounts one Row
   // per rendered item and keeps it while the item is in its cache, so
   // scrolling back never draws a reply again (1.6 item 3).

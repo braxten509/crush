@@ -1,11 +1,13 @@
 """No flashes (owner, 2026-10-19: "a lot of places flash ... all over the
 app"). In the real window on the hidden screen, with real mouse moves and
 clicks, the page records every running animation on every frame while the
-owner's paths run: switching Settings sections, back to the chats, opening a
-tool group, hovering the chat rows, opening the model menu. It fails when an
-animation fades a piece in from see-through (an opacity under 1 in its
-keyframes) anywhere but the dark veil behind a sheet, or when the settings
-page shows a frame with no rows during a section switch.
+owner's paths run: opening the Themes sheet, switching Settings sections, back
+to the chats, opening a tool group, hovering the chat rows, opening the model
+menu. It fails when an animation fades a piece in from see-through (an opacity
+under 1 in its keyframes) anywhere but the scrim layer behind sheets
+(.veil::before), or when the settings page shows a frame with no rows during
+a section switch. The veil itself once faded, and every sheet inside it faded
+with it (FLASHING.md, attempt 10).
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/model-menu.json no_flash.py
@@ -56,7 +58,9 @@ def move(point):
 
 def click(selector, text=None, wait=0.5):
     point = center(selector, text)
-    if not point:
+    if not point or "x" not in point:
+        seen = run("return { timeline: document.querySelectorAll('.timeline').length, tools: document.querySelectorAll('.tool-row').length, expandable: document.querySelectorAll('.tool-row[aria-expanded]').length, settings: !!document.querySelector('[data-probe=\"settings-page\"]'), items: document.querySelectorAll('[role=article]').length };")
+        check(False, f"found {selector} {text or ''}: {point}; page has {seen}")
         return False
     move(point)
     xdo("click", 1)
@@ -84,9 +88,11 @@ started = run("""
   const frame = () => {
     for (const a of document.getAnimations()) {
       const target = a.effect?.target;
-      if (!target || target.closest?.('.veil')) continue;
+      if (!target) continue;
+      // The scrim alone may fade: its own layer, under the sheets.
+      if (target.classList?.contains('veil') && a.effect.pseudoElement === '::before') continue;
       const fades = (a.effect.getKeyframes?.() ?? []).some((k) => k.opacity !== undefined && k.opacity !== '' && Number(k.opacity) < 0.99);
-      const key = name(target) + '|' + (a.animationName || a.transitionProperty || 'svelte');
+      const key = name(target) + (a.effect.pseudoElement || '') + '|' + (a.animationName || a.transitionProperty || 'svelte');
       if (fades && !seen.has(key)) { seen.add(key); window.__fades.push(key); }
     }
     const page = document.querySelector('[data-probe="settings-page"]');
@@ -99,6 +105,11 @@ started = run("""
 check(started is True, "the frame recorder runs in the page")
 
 # The owner's paths.
+for _ in range(2):
+    run("window.__probe.openDialog('theme'); return true;")
+    time.sleep(0.6)
+    run("window.__probe.closeDialog('theme'); return true;")
+    time.sleep(0.4)
 click("nav.chats button.settings")
 for section in ["Typing", "Work", "Appearance", "Typing"]:
     click(".settings-nav .row", section, wait=0.35)

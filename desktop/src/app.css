@@ -201,15 +201,30 @@ ul {
   --motion-quick: 140ms;
   --ease-paper: cubic-bezier(0.33, 1, 0.68, 1);
 }
+/* Every animation below also runs --paper-tick from 0 to 1. Nothing reads
+   it; it changes on every frame, so WebKit works out the element's style
+   on every frame. WebKitGTK 2.54 runs opacity and transform animations on
+   its compositor and keeps a stale copy of the value for the layer; when
+   the animation ends it draws one frame with that copy (a fading scrim
+   vanished, a settling row jumped back). With the style worked out each
+   frame the copy is current when the animation ends (FLASHING.md, 16-21).
+   An animation that ends needs the tick; animation-ticks.test.js checks. */
+@property --paper-tick {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
 /* A piece that arrives unrolls from its top edge (sheets, menus, figures). */
 @keyframes paper-unfold {
   from {
     clip-path: inset(0 0 100% 0);
     transform: translateY(-4px);
+    --paper-tick: 0;
   }
   to {
     clip-path: inset(0 0 0 0);
     transform: none;
+    --paper-tick: 1;
   }
 }
 /* A piece that arrives settles in place (new messages, notices, figures):
@@ -217,11 +232,19 @@ ul {
 @keyframes paper-settle {
   from {
     transform: translateY(4px);
+    --paper-tick: 0;
+  }
+  to {
+    --paper-tick: 1;
   }
 }
 @keyframes paper-fade {
   from {
     opacity: 0;
+    --paper-tick: 0;
+  }
+  to {
+    --paper-tick: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -237,21 +260,31 @@ ul {
   from {
     clip-path: inset(100% 0 0 0);
     transform: translateY(4px);
+    --paper-tick: 0;
   }
   to {
     clip-path: inset(0 0 0 0);
     transform: none;
+    --paper-tick: 1;
   }
 }
 /* A column coming in from the right edge (the right panel). */
 @keyframes paper-slide-left {
   from {
     transform: translateX(14px);
+    --paper-tick: 0;
+  }
+  to {
+    --paper-tick: 1;
   }
 }
 /* A column coming in from the left edge (the chat list back from Settings). */
 @keyframes paper-slide-right {
   from {
     transform: translateX(-14px);
+    --paper-tick: 0;
+  }
+  to {
+    --paper-tick: 1;
   }
 }

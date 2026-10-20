@@ -51,11 +51,20 @@
     position: fixed;
     inset: 0;
     z-index: 10;
+  }
+  /* The scrim fades in on its own layer under the sheets. Fading the veil
+     itself faded every sheet inside it in from see-through, and WebKit then
+     showed an older frame as the fade ended: the Themes sheet flickered on
+     every open (FLASHING.md, attempt 10). */
+  .veil::before {
+    content: "";
+    position: absolute;
+    inset: 0;
     background: var(--scrim);
     animation: paper-fade var(--motion-quick) ease-out;
   }
-  .veil.bare {
-    background: none;
+  .veil.bare::before {
+    content: none;
   }
   /* Each sheet gets the whole window to place itself in; the front one is last, so on top. */
   .sheet {

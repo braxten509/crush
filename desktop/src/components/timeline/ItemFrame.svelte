@@ -17,10 +17,9 @@
 
 <script>
   // One timeline item's frame (desktop-design 1.5.6, 4.4; CHAT-003, CHAT-016,
-  // CHAT-054): the selection bar (calc(2 * var(--px)) of ink at
-  // calc(56 * var(--px)) from the column's left, the item's full height; never
-  // vermilion, which the rail uses), the vermilion key on the rail, and the
-  // keyboard focus around the item, which comes as `children`. The frame is
+  // CHAT-054): the vermilion key on the rail and the keyboard focus around the
+  // item, which comes as `children`. A selected item draws no bar beside it
+  // (owner, 2026-10-19: no line when a row is clicked). The frame is
   // the feed's article; the item that holds the timeline's one tab stop
   // (`focused`) has tabindex 0, the rest -1.
   // Placed by Timeline.
@@ -71,7 +70,6 @@
   aria-current={selected ? "true" : undefined}
   tabindex={focused ? 0 : -1}
 >
-  {#if selected}<span class="bar" aria-hidden="true"></span>{/if}
   {#if item.letter}<span class="key" style:top={keyTop === null ? null : `${keyTop}px`} aria-label="Key {item.letter}">{item.letter}</span>{/if}
   {@render children()}
 </div>
@@ -83,17 +81,6 @@
   .frame.fresh {
     animation: paper-settle var(--motion) var(--ease-paper);
   }
-  /* The timeline's text starts calc(66 * var(--px)) from the column's left. */
-  .bar {
-    position: absolute;
-    left: calc(-10 * var(--px));
-    top: 0;
-    bottom: 0;
-    width: calc(2 * var(--px));
-    background: var(--ink);
-    pointer-events: none;
-  }
-
   /* A key on the rail marks where the chat branched or tools ran (4.4). It
      sits level with the item's first box: the row of a tool group, the box
      or the text under a byline. */

@@ -1,7 +1,7 @@
 // What the app builds and hands from one piece to another, as JSDoc types
 // (desktop-design 1.5.6). No code. wire.js holds what the engine sends. Every
 // item component takes exactly one prop, `item`, of its kind's type; ItemFrame
-// (P3.5) draws the selection bar, the key letter and the focus around it, so no
+// (P3.5) draws the key letter and the focus around it, so no
 // item component draws those.
 
 /** Fields every timeline item has (built by lib/timeline.js, P3.5).

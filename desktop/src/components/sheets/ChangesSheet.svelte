@@ -307,9 +307,15 @@
     outline: none;
     animation: slide-in 180ms ease-out;
   }
+  /* --paper-tick keeps WebKit's copy of the transform current, so the sheet
+     doesn't jump back for a frame when the slide ends (app.css). */
   @keyframes slide-in {
     from {
       transform: translateX(100%);
+      --paper-tick: 0;
+    }
+    to {
+      --paper-tick: 1;
     }
   }
   @media (prefers-reduced-motion: reduce) {

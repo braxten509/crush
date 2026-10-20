@@ -152,7 +152,7 @@
   .rows {
     margin-top: calc(10 * var(--px));
   }
-  /* The cursor's row has the timeline's selection bar at its left. */
+  /* The cursor's row has a bar at its left. */
   .row {
     position: relative;
     display: flex;

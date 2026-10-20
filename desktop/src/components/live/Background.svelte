@@ -308,6 +308,7 @@
     font: var(--t-button);
     line-height: calc(30 * var(--px));
     color: var(--ink);
+    text-align: center;
     visibility: hidden;
   }
   .row.selected .act,

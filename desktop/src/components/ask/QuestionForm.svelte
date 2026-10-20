@@ -541,6 +541,10 @@
     min-height: 0;
     outline: none;
     border: 1px solid transparent;
+    /* The form's edge lies over the slot's gray one, so a focused form
+       shows one vermilion line, not a vermilion and a gray (owner,
+       2026-10-19). */
+    margin: -1px;
   }
   .form.focused {
     border-color: var(--vermilion);
@@ -646,6 +650,7 @@
     background: var(--control-rest);
     font: var(--t-button);
     color: var(--ink);
+    text-align: center;
     cursor: pointer;
   }
   .pill.on {

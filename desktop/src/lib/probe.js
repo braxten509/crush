@@ -202,7 +202,10 @@ export async function startProbe() {
   }
   if (!enabled) return;
   // For scripts run through probe_eval (the look checks open each screen).
-  window.__probe = { openDialog, closeDialog, runAction };
+  // askYesNo loads the form only when a check asks: a static import here
+  // runs the form's modules before the app's own and leaves the page blank.
+  const askYesNo = async (options) => (await import("./ask/localform.js")).askYesNo(options);
+  window.__probe = { openDialog, closeDialog, runAction, askYesNo };
   inlineResult = inlineCodeBlocked();
   probeSection("overlay", () => ({
     viewer: ui.viewer ?? null,

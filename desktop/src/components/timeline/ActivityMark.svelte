@@ -16,7 +16,7 @@
 </script>
 
 <script>
-  // Placed by StatusLine; ToolHeader, ShellItem, ToolGroup (P3.6); TodoSection (P3.7).
+  // Placed by StatusLine; ToolHeader, ShellItem, ToolGroup (P3.6); the right panel's TodoPanel.
   let { size = "line" } = $props();
 
   const kind = $derived(size === "small" ? "small" : "line");

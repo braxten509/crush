@@ -19,7 +19,7 @@ export const leftList = $state({
   servers: [], // the listening ports of the project's chats, each once, in list order (servers.js)
   openFolds: {}, // fold → true: a program's row opened to show its servers
   picked: null, // null | {fold} | {port}: the picked server row
-  serverRoom: Infinity, // how many server rows fit while leaving room for one chat (ServerRows.svelte)
+  serverRoom: Infinity, // how many server rows fit while leaving room for one chat (no longer measured: the servers are the right panel's)
 });
 
 // The open list needs the left column at its narrowest and the conversation

@@ -81,7 +81,7 @@ export function serverRows(servers, openFolds = {}) {
 }
 
 // The rows the open list shows: as many as leave room for one chat (2.22,
-// servers.go:94-104; ServerRows.svelte measures the room). None in the strip.
+// servers.go:94-104). None in the strip.
 export function shownRows() {
   if (leftList.strip) return [];
   return serverRows(leftList.servers, leftList.openFolds).slice(0, Math.max(leftList.serverRoom ?? Infinity, 0));

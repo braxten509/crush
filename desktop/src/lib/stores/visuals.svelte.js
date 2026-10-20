@@ -13,8 +13,8 @@
 //                                 clicked in that chat, else the newest
 //   revealFigure(id)              a chip's click: selects it, marks it 1.2 s and asks
 //                                 VISUALS to scroll to it (reveal.seq)
-//   reveal                        { id, seq }: the newest reveal; VisualsSection
-//                                 scrolls once per seq, when the figure is there
+//   reveal                        { id, seq }: the newest reveal (no panel
+//                                 shows figures since 2026-10-19; they are inline)
 //   syncFigures(sid)              queues the chat's changed assistant messages and
 //                                 drops the figures of messages that left it; the
 //                                 effect below runs it for the shown chat

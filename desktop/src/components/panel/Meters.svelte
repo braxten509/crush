@@ -4,11 +4,9 @@
   // (5-HOUR, WEEK, and other windows when "Other usage limits" is on), each
   // the part left as a percent and a bar, with the amber triangle under 20 %
   // left. Three share a row at the approved picture's proportions; more go on
-  // the next row, fewer share the row evenly. Hover or focus shows the
-  // terminal's words and "Customize…" (MeterDetail).
-  import { runAction } from "../../lib/actions.js";
+  // the next row, fewer share the row evenly. No hover box (owner,
+  // 2026-10-19): the meters say it all; Ctrl+P keeps Customize.
   import Icon from "../Icon.svelte";
-  import MeterDetail from "./MeterDetail.svelte";
   import { meterNow } from "./panel.svelte.js";
 
   // The reset times count down and a window past its reset is whole again.
@@ -24,18 +22,10 @@
   const columns = $derived(perRow === 3 ? "116fr 32fr 115fr 31fr 114fr" : Array.from({ length: perRow }, () => "115fr").join(" 31fr "));
   const resets = $derived(meters.some((m) => m.resets));
 
-  let hover = $state(false);
-  let within = $state(false);
-  const open = $derived(hover || within);
-
-  function leave(event) {
-    if (!event.currentTarget.contains(event.relatedTarget)) within = false;
-  }
 </script>
 
-<div class="usage-wrap" role="presentation" onmouseenter={() => (hover = true)} onmouseleave={() => (hover = false)} onfocusin={() => (within = true)} onfocusout={leave}>
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <section class="usage" class:with-resets={resets} aria-label="Usage" aria-describedby={open ? "meter-detail" : undefined} tabindex="0" style:grid-template-columns={columns}>
+<div class="usage-wrap">
+  <section class="usage" class:with-resets={resets} aria-label="Usage" style:grid-template-columns={columns}>
     {#each meters as meter, i (meter.id)}
       {@const col = i % perRow}
       {@const row = Math.floor(i / perRow) + 1}
@@ -58,11 +48,6 @@
       <p class="no-meters">No meters chosen.</p>
     {/each}
   </section>
-  {#if open}
-    <div class="detail-anchor">
-      <MeterDetail id="meter-detail" lines={model.lines} oncustomize={() => runAction("composer.customize")} />
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -148,15 +133,5 @@
     align-self: center;
     font: var(--t-small);
     color: var(--slate);
-  }
-  /* Below the meters, over the rule and the body; its padding keeps the
-     pointer inside while it crosses to the popover. */
-  .detail-anchor {
-    position: absolute;
-    z-index: 3;
-    top: 100%;
-    left: 0;
-    right: 0;
-    padding-top: calc(8 * var(--px));
   }
 </style>

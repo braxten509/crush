@@ -184,7 +184,6 @@
         }}
       >
         <span class="name">{group.name}</span>
-        {#if group.configured}<span class="dot" aria-label="Set up"></span>{/if}
         <Icon name="disclosure" size={9} />
       </button>
     {/each}
@@ -282,13 +281,6 @@
   }
   .group.recent .name {
     font-style: italic;
-  }
-  .dot {
-    flex: none;
-    width: calc(5 * var(--px));
-    height: calc(5 * var(--px));
-    border-radius: 50%;
-    background: var(--ink);
   }
   .group:hover,
   .model:hover,

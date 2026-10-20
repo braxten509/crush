@@ -17,9 +17,9 @@ and nesting are the same after quitting the app and starting it again.
          link in view. Checked from the probe's rects: every row's band keeps
          the same edges at depths 0 to 2; each shown × is centred on the
          chevrons' column and on its title's line; the footer's letters start
-         where the day label's do; the head's path line starts with the title,
-         keeps one line box with its parent link, and does not move between a
-         chat and a branch; link words sit on their line's boxes. The captures
+         where the day label's do; the branch label (in the top bar since
+         2026-10-20, after the chat's title and folder) keeps one line box with
+         its parent link and stays on its line between a chat and a branch; link words sit on their line's boxes. The captures
          and look/align.json (the align skill's screenshot manifest: the × and
          chevron icons, "Branched from"; titles, times, counts and link words
          are variable text it leaves out) go to look/ for the skill's checker,
@@ -144,10 +144,10 @@ def look(app, S, B, D, a2, out_dir):
     geometry["footer"] = {"text": footer.get("text"), "ink_left": (footer.get("ink") or {}).get("x"), "day_left": (footer.get("day") or {}).get("x")}
     check(off is not None and abs(off) <= 1, f"look: the footer's letters start where the day label's do ({off if off is None else round(off, 2)} px; {footer.get('text')!r})")
     words, link_text = head.get("words"), head.get("link_text")
-    off_x = head["rect"]["x"] - head["title"]["x"] if head.get("rect") and head.get("title") else None
+    after = head["rect"]["x"] - (head["title"]["x"] + head["title"]["w"]) if head.get("rect") and head.get("title") else None
     same_line = bool(words and link_text) and abs(words["y"] - link_text["y"]) <= 1 and abs(words["h"] - link_text["h"]) <= 1
     geometry["head_branch"] = {"text": head.get("text"), "rect": head.get("rect"), "title": head.get("title"), "words": words, "link_text": link_text}
-    check(off_x is not None and abs(off_x) <= 1, f"look: the path line starts with the title ({off_x} px)")
+    check(after is not None and after >= 0, f"look: the branch label sits after the chat's title in the top bar ({after} px)")
     check(same_line, f"look: \"Branched from\" and the parent's title share one line box ({words}, {link_text})")
     capture = {"id": "list-d-open", "method": "screenshot", "image": "list-d-open.png", "device_scale": 1,
                "surface": {"id": "list-d-open", "name": "D open under B under S, B hovered", "kind": "page"},
@@ -158,8 +158,8 @@ def look(app, S, B, D, a2, out_dir):
     if words and head.get("glyph"):
         fixed = px_box(app, words, LOOK_TEXT)
         glyph = px_box(app, head["glyph"])
-        capture["rows"].append({"id": "head-path", "label": "Head path line", "rect": px_box(app, head["rect"]), "source": "src/components/ChatHead.svelte:65",
-                                "center": False, "center_reason": "The path line's line box under the title, not a control; its line box is checked by geometry",
+        capture["rows"].append({"id": "head-path", "label": "Top bar branch label", "rect": px_box(app, head["rect"]), "source": "src/components/system/TitleBar.svelte",
+                                "center": False, "center_reason": "The branch label's line box in the top bar, not a control; its line box is checked by geometry",
                                 "elements": [{"id": "branched-from", "kind": "text", "text_kind": "fixed", "label": "Branched from", "text": "BRANCHED FROM", "rect": fixed,
                                               "reference_rect": [glyph[0], fixed[1], glyph[2], fixed[3]], "reference_text": "B"},
                                              {"id": "parent-title", "kind": "text", "text_kind": "variable", "label": "Parent's title", "text": (head.get("text") or "")[len("Branched from"):].strip(),
@@ -177,9 +177,11 @@ def look(app, S, B, D, a2, out_dir):
     rows = [r for r in branch.get("rows") or [] if r.get("id") in names]
     geometry["slots_s_open"] = slot_checks(rows, names, "S open")
     head_s = branch.get("head") or {}
-    moved = pb.rect_moves(head_s.get("rect"), head.get("rect"))
+    # Its left edge follows the chat's title (the top bar's running head); its line does not move.
+    a, b = head_s.get("rect"), head.get("rect")
+    moved = max(abs(a["y"] - b["y"]), abs(a["h"] - b["h"])) if a and b else None
     geometry["head_chat"] = {"text": head_s.get("text"), "rect": head_s.get("rect")}
-    check(moved is not None and moved <= 1, f"look: the path line keeps its box between a branch and a chat ({moved} px; {head_s.get('text')!r})")
+    check(moved is not None and moved <= 1, f"look: the branch label stays on its line between a branch and a chat ({moved} px; {head_s.get('text')!r})")
     links = [l for l in branch.get("shown") or [] if l.get("session_id") == B]
     on_line = []
     words_a2 = [w for w in ((h.get("chat") or {}).get("words") or []) if w.get("key") == key_a2]

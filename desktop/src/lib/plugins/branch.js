@@ -227,8 +227,8 @@ probeSection(
   }),
   () => {
     const nav = document.querySelector("nav.chats");
-    const header = document.querySelector("header.head");
-    const head = header?.querySelector(".path");
+    const header = document.querySelector('[data-probe="title-bar"]');
+    const head = header?.querySelector('[data-probe="title-branch"]');
     const from = head?.querySelector(".from")?.firstChild;
     const words = from?.nodeType === Node.TEXT_NODE ? from : null;
     const parentTitle = head?.querySelector(".parent-title");
@@ -258,7 +258,7 @@ probeSection(
         ? {
             text: head.textContent.trim(),
             rect: rectOf(head),
-            title: rectOf(header.querySelector(".title")),
+            title: rectOf(header.querySelector('[data-probe="title-chat"]')),
             link: rectOf(head.querySelector(".parent")),
             link_text: inkRect(parentTitle),
             link_cut: Boolean(parentTitle) && parentTitle.scrollWidth > parentTitle.clientWidth,

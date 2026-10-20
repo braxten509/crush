@@ -28,7 +28,9 @@
     const measure = () => {
       const unit = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16;
       columnHeight = column.getBoundingClientRect().height / unit;
-      if (head && foot) limit = Math.max(0, ((foot.getBoundingClientRect().top - head.getBoundingClientRect().bottom) * SHARE) / (1 + SHARE));
+      // A chat has no head (owner, 2026-10-20): then the space starts at the column's top.
+      const top = head ? head.getBoundingClientRect().bottom : column.getBoundingClientRect().top;
+      if (foot) limit = Math.max(0, ((foot.getBoundingClientRect().top - top) * SHARE) / (1 + SHARE));
     };
     const observer = new ResizeObserver(measure);
     observer.observe(column);

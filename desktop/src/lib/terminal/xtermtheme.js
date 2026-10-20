@@ -51,13 +51,27 @@ export function themeFromPage(root = document.documentElement) {
   return xtermTheme((name) => style.getPropertyValue(name).trim());
 }
 
+// Prompt themes (powerlevel10k, starship) draw their arrows and icons from
+// the Nerd Fonts' private-use letters, which Inconsolata lacks and Chromium
+// never finds on its own (owner, 2026-10-20): these installed faces fill in,
+// letter by letter, before the generic family.
+export const NERD_FALLBACK = '"Symbols Nerd Font Mono", "MesloLGS NF", "MesloLGS Nerd Font Mono", "FantasqueSansM Nerd Font Mono"';
+
+// --face-mono with the Nerd faces put in ahead of its generic families.
+export function terminalFamily(face) {
+  const names = (face || "monospace").split(",").map((name) => name.trim());
+  const generic = names.findIndex((name) => /^(ui-monospace|monospace)$/.test(name));
+  const at = generic === -1 ? names.length : generic;
+  return [...names.slice(0, at), NERD_FALLBACK, ...names.slice(at)].join(", ");
+}
+
 // The text size: --face-mono at 18/24 picture pixels, never below 11 real
 // pixels (look 5.18). zoom is the root size over 16 (lib/zoom.js); xterm takes
 // the line height as a multiple of the size, at least 1.
 export function xtermType(zoom, root = document.documentElement) {
   const fontSize = Math.max(11, 18 * zoom);
   return {
-    fontFamily: getComputedStyle(root).getPropertyValue("--face-mono").trim() || "monospace",
+    fontFamily: terminalFamily(getComputedStyle(root).getPropertyValue("--face-mono").trim()),
     fontSize,
     lineHeight: Math.max(1, (24 * zoom) / fontSize),
   };

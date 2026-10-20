@@ -29,6 +29,8 @@
   import { searchFocused, setSearchField } from "./list/listfocus.js";
   import ListFooter from "./list/ListFooter.svelte";
   import { startNewChat } from "./list/newchat.js";
+  import { openPicker } from "../lib/leftlist/store.svelte.js";
+  import { listRoom } from "./panel/panel.svelte.js";
   import { listMarks } from "./start/marks.js";
   import { start } from "./start/start.svelte.js";
   import { providerName } from "./start/startmodel.js";
@@ -187,6 +189,7 @@
       }),
       column: rectOf(nav),
       new_chat: rectOf(nav?.querySelector(".new-chat")),
+      new_terminal: rectOf(nav?.querySelector(".new-terminal")),
       search: rectOf(nav?.querySelector(".search")),
       scroll: rectOf(nav?.querySelector(".scroll")),
       empty: rectOf(nav?.querySelector(".empty")),
@@ -206,16 +209,51 @@
     const contentRight = box.left + el.clientLeft + el.clientWidth - (parseFloat(getComputedStyle(el).paddingRight) || 0);
     return { x: r.x, y: r.y, w: Math.min(r.right, contentRight) - r.x, h: r.height };
   }
+
+  // The list width New chat and New terminal need with their words whole
+  // (owner, 2026-10-20): each half's content, twice, plus the gap and what
+  // the list keeps around the row. Measured again on a zoom change.
+  let newRow = $state(null);
+  $effect(() => {
+    if (!newRow) return;
+    const measure = () => {
+      const halves = [...newRow.children];
+      if (halves.length === 0) return;
+      const need = (b) => {
+        const style = getComputedStyle(b);
+        const parts = [...b.children].reduce((sum, c) => sum + c.getBoundingClientRect().width + parseFloat(getComputedStyle(c).marginLeft), 0);
+        return parts + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + 2 * parseFloat(style.borderLeftWidth) + 2;
+      };
+      const gap = parseFloat(getComputedStyle(newRow).columnGap) || 0;
+      const row = Math.max(...halves.map(need)) * halves.length + gap * (halves.length - 1);
+      const column = newRow.closest(".chats-column") ?? newRow.parentElement;
+      const around = column.getBoundingClientRect().width - newRow.getBoundingClientRect().width;
+      const unit = parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
+      listRoom.width = Math.ceil((row + around) / unit);
+    };
+    measure();
+    document.fonts?.ready.then(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(newRow);
+    return () => observer.disconnect();
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <nav class="chats" aria-label="Chats" bind:this={nav} onfocusin={() => setFocus("list")} onkeydown={onKey}>
   <h1 class="wordmark"><span class="crush">Crush</span> <span class="ai">AI</span></h1>
 
-  <button class="new-chat" type="button" onclick={startNewChat}>
-    <Icon name="plus" />
-    <span class="label">New chat</span>
-  </button>
+  <!-- New chat and New terminal, two equal halves of one row (owner, 2026-10-20, A). -->
+  <div class="new-row" bind:this={newRow}>
+    <button class="new-chat" type="button" onclick={startNewChat}>
+      <Icon name="plus" />
+      <span class="label">New chat</span>
+    </button>
+    <button class="new-chat new-terminal" type="button" title="New terminal (Alt+T)" onclick={() => openPicker("terminal")}>
+      <Icon name="terminal" />
+      <span class="label">New terminal</span>
+    </button>
+  </div>
 
   <!-- A button, not a box (owner, 2026-10-20): it opens the Sessions sheet,
        where the search text goes; a letter typed on it starts that search. -->
@@ -281,7 +319,7 @@
   }
   /* The header keeps its size; only the rows give way (and scroll). */
   .wordmark,
-  .new-chat,
+  .new-row,
   .search,
   .chats :global(.rule.under-search) {
     flex: none;
@@ -302,13 +340,20 @@
     color: var(--slate);
   }
 
+  .new-row {
+    display: flex;
+    gap: calc(8 * var(--px));
+    margin: calc(22 * var(--px)) calc(20 * var(--px)) 0;
+  }
   .new-chat {
+    flex: 1 1 0;
+    min-width: 0;
     display: flex;
     align-items: center;
     box-sizing: border-box;
     height: calc(52 * var(--px));
-    margin: calc(22 * var(--px)) calc(20 * var(--px)) 0;
     padding-left: calc(16 * var(--px));
+    white-space: nowrap;
     border: 1px solid var(--rule-control);
     background: var(--paper-raised);
     color: var(--ink);

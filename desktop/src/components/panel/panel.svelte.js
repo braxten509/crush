@@ -35,6 +35,12 @@ import { lspRows, mcpRows, skillRows } from "./rows.js";
 
 export const panel = $state({ detailsOpen: false, focused: false, wheeled: false, needsInit: false });
 
+// The panel width, in picture px, its meters' words need to show whole
+// (Meters.svelte measures it; App.svelte keeps the panel at least this wide).
+export const meterRoom = $state({ width: 0 });
+// The same for the chat list's New chat and New terminal (ChatList.svelte).
+export const listRoom = $state({ width: 0 });
+
 export const customizing = $state({ cursor: 0, picked: [] });
 
 export const viewing = $state({ fit: true, state: "idle", name: "", size: "" });

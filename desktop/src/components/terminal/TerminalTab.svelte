@@ -1,8 +1,7 @@
 <script>
   // A terminal tab in the middle column (desktop-design-5-6 2.25, look 5.18):
-  // the chat's head with the tab's title ("Terminal", "Editor" or "Remote
-  // setup") and its folder as the path line, the head's rule, then the
-  // terminal widget filling the column with 12 of padding on --paper, with
+  // the terminal widget filling the column with 12 of padding on --paper (no
+  // head with the tab's title and folder since 2026-10-20, as chats), with
   // nothing around it. While the shell starts slowly the loading line shows
   // (look 5.0); a failed start shows its error there in --error-ink.
   //
@@ -13,9 +12,8 @@
   import "@xterm/xterm/css/xterm.css";
   import { dialogs } from "../../lib/dialogs.js";
   import { setFocus, ui } from "../../lib/stores/ui.svelte.js";
-  import { addPictures, copySelection, fitTab, getTab, pasteInto, shortFolder, terminals, wheel } from "../../lib/terminal/tabs.svelte.js";
+  import { addPictures, copySelection, fitTab, getTab, pasteInto, terminals, wheel } from "../../lib/terminal/tabs.svelte.js";
   import Icon from "../Icon.svelte";
-  import Rule from "../Rule.svelte";
 
   let { id } = $props();
 
@@ -111,13 +109,6 @@
 </script>
 
 <section class="terminal-tab" data-terminal-tab={id} aria-label={entry?.title ?? "Terminal"} onfocusin={() => setFocus("main")}>
-  <header class="head">
-    <h2 class="title">{entry?.title ?? ""}</h2>
-    {#if entry?.cwd}<p class="path" aria-label="Path" title={entry.cwd}>{shortFolder(entry.cwd)}</p>{/if}
-  </header>
-
-  <Rule marks="both" class="under-head" />
-
   <div class="body">
     {#if entry?.state === "failed"}
       <p class="status error" role="alert">{entry.error}</p>
@@ -135,37 +126,6 @@
     min-width: 0;
     min-height: 0;
     background: var(--paper);
-  }
-
-  /* The chat's head (ChatHead.svelte): title in --t-title, the folder as the path line. */
-  .head {
-    padding: calc(17 * var(--px)) calc(30 * var(--px)) 0;
-    height: calc(121 * var(--px));
-    box-sizing: border-box;
-    flex: none;
-    min-width: 0;
-  }
-  .title {
-    min-height: calc(50 * var(--px));
-    font: var(--t-title);
-    letter-spacing: -0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .path {
-    margin-top: calc(11 * var(--px));
-    font: var(--t-path);
-    letter-spacing: var(--track-path);
-    text-transform: uppercase;
-    color: var(--slate);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .terminal-tab :global(.rule.under-head) {
-    flex: none;
-    z-index: 1;
   }
 
   .body {
@@ -199,6 +159,14 @@
   }
   .screen :global(.xterm) {
     height: 100%;
+  }
+  /* The widget's own scroll area is black with a native scroll bar
+     (xterm.css); both showed in the gap under the last whole row as a black
+     bar with an arrow (owner, 2026-10-20). The page's paper, and only the
+     thin thumb below as the bar. */
+  .screen :global(.xterm .xterm-viewport) {
+    background-color: var(--paper) !important;
+    scrollbar-width: none;
   }
   /* No focus ring on the widget's hidden text box; the cursor shows the focus. */
   .screen :global(.xterm-helper-textarea:focus) {

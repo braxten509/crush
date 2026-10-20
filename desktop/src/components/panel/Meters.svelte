@@ -7,7 +7,7 @@
   // Three share a row at the approved picture's proportions; more go on the
   // next row, fewer share the row evenly. No hover box (owner,
   // 2026-10-19): the meters say it all; Ctrl+P keeps Customize.
-  import { meterNow } from "./panel.svelte.js";
+  import { meterNow, meterRoom } from "./panel.svelte.js";
 
   // The reset times count down and a window past its reset is whole again.
   let now = $state(Date.now());
@@ -22,10 +22,48 @@
   const columns = $derived(perRow === 3 ? "116fr 32fr 115fr 31fr 114fr" : Array.from({ length: perRow }, () => "115fr").join(" 31fr "));
   const resets = $derived(meters.some((m) => m.resets));
 
+  // The panel width every meter's label, figure and reset time need whole
+  // (owner, 2026-10-20: none may overlap or be cut with "…"): each cell's
+  // widest word over its share of the row, plus what the panel keeps around
+  // the meters. Measured again when the meters, their words or the zoom change.
+  let section = $state(null);
+  $effect(() => {
+    void meters;
+    if (!section) return;
+    const measure = () => {
+      const cells = [...section.querySelectorAll(".cell")];
+      if (cells.length === 0) return;
+      const shares = perRow === 3 ? [116, 115, 114] : Array.from({ length: perRow }, () => 115);
+      const total = perRow === 3 ? 408 : 115 * perRow + 31 * (perRow - 1);
+      let row = 0;
+      // The words' own width, read from their text: a block's scrollWidth is
+      // never under its box, which grew the panel a pixel a measure.
+      const range = document.createRange();
+      const width = (el) => {
+        if (!el) return 0;
+        range.selectNodeContents(el);
+        return range.getBoundingClientRect().width;
+      };
+      cells.forEach((cell, i) => {
+        const need = Math.max(...[".label", ".resets", ".value > span"].map((s) => width(cell.querySelector(s))));
+        row = Math.max(row, ((need + 1) * total) / shares[i % perRow]);
+      });
+      const column = section.closest(".panel-column") ?? section.parentElement;
+      const around = column.getBoundingClientRect().width - section.getBoundingClientRect().width;
+      const unit = parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
+      meterRoom.width = Math.ceil((row + around) / unit);
+    };
+    measure();
+    document.fonts?.ready.then(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(section);
+    return () => observer.disconnect();
+  });
+
 </script>
 
 <div class="usage-wrap">
-  <section class="usage" class:with-resets={resets} aria-label="Usage" style:grid-template-columns={columns}>
+  <section class="usage" class:with-resets={resets} aria-label="Usage" style:grid-template-columns={columns} bind:this={section}>
     {#each meters as meter, i (meter.id)}
       {@const col = i % perRow}
       {@const row = Math.floor(i / perRow) + 1}

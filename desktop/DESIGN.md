@@ -103,6 +103,20 @@ never "sessions".
   its icon hanging to their left.
 - Side-panel sections (Folder, To-do, Background, Servers) stack with space between them;
   To-do, Background and Servers show only while they have rows (owner, 2026-10-20).
+- A chat and a terminal tab have no head of their own: the chat's title, folder and Git
+  branch are in the title bar (owner, 2026-10-20). Only the init and onboarding screens
+  keep the wordmark head and its rule.
+- New chat and New terminal share one row at the list's top in equal halves.
+- No column gets so narrow that its words are cut or overlap: the list stops where both
+  buttons fit whole, the panel where every meter's label, figure and reset time fit, both
+  measured from the words themselves at the current zoom.
+- The panel's "››" in its top right corner hides it (the same switch as Settings and
+  Ctrl+P); hidden that way, a thin "‹‹" tab at the window's right edge brings it back.
+  Both draw the list's "‹‹" collapse control. The open chat's vermilion edge runs one
+  pixel past the row at each end, over the rules between rows.
+- The typing box never scrolls under 15 lines, so its words stay on the cursor's line.
+- The terminal falls back to installed Nerd Font faces for prompt symbols, and the space
+  under its last row is `--paper` with no native scroll bar.
 - Settings rows stop at 840 picture pixels, so each switch sits near its name.
 
 ## Title bar
@@ -110,7 +124,9 @@ never "sessions".
 On Linux the window has no system title bar; the page draws its own (owner, 2026-10-20,
 design D; `components/system/TitleBar.svelte`). It is 48 picture pixels tall on `--paper`
 with a `--rule-faint` hairline under it. From the left: the app icon, the chat's title as a
-running head (`--t-item`, weight 500), the folder after it in italic `--slate`; on the
+running head (`--t-item`, weight 500), the folder after it in italic `--slate`, then the
+Git branch in the path style (`--t-path`, capitals, `--slate`), or on a branch "Branched
+from <parent>" with the parent's title as a link; on the
 right four square-cornered buttons 54 picture pixels wide: the pin (`--mark`), minimize,
 maximize or restore, close (hover: `--control-hover`; close: `--vermilion-fill` with
 `--on-accent`). Pinned, only the pin changes: it fills in `--vermilion-ink`; the bar's

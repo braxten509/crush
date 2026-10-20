@@ -26,6 +26,16 @@ describe("columns", () => {
     expect(dragColumn(COLUMN_DEFAULTS, "right", -40)).toEqual({ left: 389, right: 493 });
   });
 
+  it("never drags a side narrower than its words need", () => {
+    expect(dragColumn(COLUMN_DEFAULTS, "right", 999, null, { right: 512 }).right).toBe(512);
+    expect(dragColumn(COLUMN_DEFAULTS, "left", -999, null, { left: 330 }).left).toBe(330);
+    // Wider than the usual maximum: the words still win.
+    expect(fitColumns({ left: 389, right: 900 }, null, { right: 700 }).right).toBe(700);
+    // Short of room, each side stops at its raised minimum.
+    const tight = fitColumns({ left: 389, right: 600 }, 330 + 512 + COLUMN_LIMITS.middleMin, { left: 330, right: 512 });
+    expect(tight).toEqual({ left: 330, right: 512 });
+  });
+
   it("keeps each side column inside its limits", () => {
     expect(dragColumn(COLUMN_DEFAULTS, "left", -999).left).toBe(COLUMN_LIMITS.left.min);
     expect(dragColumn(COLUMN_DEFAULTS, "right", -999).right).toBe(COLUMN_LIMITS.right.max);

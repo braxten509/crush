@@ -5,7 +5,7 @@ Runs in the sandbox on TERM's fixture (no engine):
   tests/check.sh --no-app --fixture tests/fixtures/terminal-chats.json p6_terminal.py [names]
 Names pick steps (default: all): editor, new_terminal, env_shown,
 cwd_tracking, scrollback, select_copy, typing_jumps, paste_focus,
-shift_enter, cursor, theme_follow, close_box, close_buttons, exit_closes_tab,
+shift_enter, cursor, theme_follow, look, close_box, close_buttons, exit_closes_tab,
 close_kinds, busy.
 
 The app starts here (apps.App) on the chat "Shell checks" with SHELL=/bin/sh
@@ -452,7 +452,6 @@ def step_cwd_tracking():
         run(s["id"], "mkdir -p /tmp/termdir && cd /tmp/termdir && printf 'CD%s\\n' 1", "CD1")
         t = wait_tab(s["id"], lambda t: t.get("cwd") == "/tmp/termdir")
         check(t.get("cwd") == "/tmp/termdir", f"the tab's folder follows cd (/proc/<pid>/cwd): {t.get('cwd')}")
-        check(heavy().get("path_line") == "/tmp/termdir", "the head's path line names it")
         run(s["id"], r"printf '\033]7;file://localhost/var\007'; printf 'OSC%s\n' 1", "OSC1")
         t = wait_tab(s["id"], lambda t: t.get("osc_folder") == "/var")
         check(t.get("osc_folder") == "/var", f"OSC 7 from localhost is read ({t.get('osc_folder')})")
@@ -461,9 +460,8 @@ def step_cwd_tracking():
         time.sleep(0.5)
         check(tab_of(s["id"]).get("osc_folder") == "/var", "OSC 7 from another computer is ignored")
         run(s["id"], "cd ~ && printf 'HOME%s\\n' 1", "HOME1")
-        wait_tab(s["id"], lambda t: t.get("cwd") == "/tmp/home")
-        h = heavy()
-        check(h.get("path_line") == "~", f"the home folder reads as ~ ({h.get('path_line')!r})")
+        t = wait_tab(s["id"], lambda t: t.get("cwd") == "/tmp/home")
+        check(t.get("cwd") == "/tmp/home", f"and back home ({t.get('cwd')})")
         run(s["id"], "cd /tmp/home/proj && printf 'BACK%s\\n' 1", "BACK1")
 
 
@@ -723,6 +721,44 @@ def step_theme_follow():
         not_run("LIST-019", "a theme switch recoloring every tab at once runs after THM merges (no theme can be switched here)")
 
 
+LOOK = """
+  const tab = document.querySelector('[data-terminal-tab]:not([hidden])') || document.querySelector('[data-terminal-tab]');
+  const vp = tab.querySelector('.xterm-viewport'), screen = tab.querySelector('.xterm-screen'), box = tab.querySelector('.xterm');
+  const row = [...tab.querySelectorAll('.xterm-rows > div')].find((r) => r.textContent.includes('NF1 '));
+  const span = row && [...row.querySelectorAll('span')].find((e) => e.textContent.includes('\\ue0b0'));
+  const family = getComputedStyle(span || row || box).fontFamily;
+  // The arrow drawn alone at 40 px: a found face fills about half its box; a
+  // missing letter's empty box or nothing fills far less.
+  const c = document.createElement('canvas'); c.width = 80; c.height = 80;
+  const g = c.getContext('2d'); g.font = '40px ' + family; g.fillStyle = '#000'; g.textBaseline = 'middle';
+  const w = Math.max(1, Math.round(g.measureText('\\ue0b0').width));
+  g.fillText('\\ue0b0', 0, 40);
+  const px = g.getImageData(0, 20, w, 40).data;
+  let ink = 0; for (let i = 3; i < px.length; i += 4) if (px[i] > 128) ink++;
+  const paper = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
+  return { row: !!row, family, fill: ink / (w * 40), vpBg: getComputedStyle(vp).backgroundColor, paper,
+           bars: getComputedStyle(vp).scrollbarWidth, gap: box.getBoundingClientRect().bottom - screen.getBoundingClientRect().bottom };
+"""
+
+
+def step_look():
+    # Owner, 2026-10-20: a prompt's arrows and icons were missing, and a black
+    # bar with an arrow sat under the last row.
+    with step("LOOK-TERM"):
+        s = ensure_shell()
+        if not check(s is not None, "a shell tab"):
+            return
+        focus_app()
+        run(s["id"], r"printf 'NF%s \356\202\260\n' 1", "NF1")
+        got = H.probe_eval(probe_path, "(async () => { try { window.__probeEval = await (async () => {" + LOOK
+                           + "})() ?? null; } catch (e) { window.__probeEval = { error: String(e && e.stack || e) }; } })();") or {}
+        check(got.get("row"), f"the prompt arrow's line shows ({got})")
+        check("Nerd Font" in (got.get("family") or ""), f"the terminal falls back to a Nerd face ({got.get('family')})")
+        check((got.get("fill") or 0) > 0.35, f"the prompt arrow draws as a solid shape, not an empty box (fills {got.get('fill')})")
+        check(got.get("vpBg") == css_rgb(got.get("paper") or ""), f"the space under the last row is paper, not black ({got.get('vpBg')} vs {got.get('paper')}; gap {got.get('gap')})")
+        check(got.get("bars") == "none", f"no built-in scroll bar or arrow under the rows ({got.get('bars')})")
+
+
 def css_rgb(color):
     """"#rrggbb" as the page's computed style writes it, else ""."""
     m = re.fullmatch(r"#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})", color.strip())
@@ -874,6 +910,7 @@ STEPS = [
     ("shift_enter", step_shift_enter),
     ("cursor", step_cursor),
     ("theme_follow", step_theme_follow),
+    ("look", step_look),
     ("close_box", step_close_box),
     ("close_buttons", step_close_buttons),
     ("exit_closes_tab", step_exit_closes_tab),

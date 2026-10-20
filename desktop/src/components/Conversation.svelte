@@ -25,13 +25,15 @@
   // opening, or the wordmark screens. The blank start screen has no empty
   // bar at the top (owner, 2026-10-19).
   const headed = $derived(["chat", "opening", "init", "onboarding"].includes(screen()));
+  // A chat has no head of its own any more (its title, folder and branch are
+  // in the top bar; owner, 2026-10-20): only the wordmark screens draw one.
+  const branded = $derived(["init", "onboarding"].includes(screen()));
 </script>
 
 <main class="conversation" aria-label={session?.title || "Conversation"}>
   {#if headed}
     <ChatHead {session} />
-
-    <Rule marks="both" class="under-head" />
+    {#if branded}<Rule marks="both" class="under-head" />{/if}
   {/if}
 
   <!-- The start screens show themselves in the timeline's place when they apply (P3.9). -->

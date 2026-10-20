@@ -197,12 +197,15 @@
     border-bottom: 1px solid var(--rule-faint);
     pointer-events: none;
   }
+  /* One pixel past each end, over the lines between rows, so no gray end
+     shows under it (owner, 2026-10-20). */
   .selected .row::after {
     content: "";
     position: absolute;
+    z-index: 1;
     left: calc(3 * var(--px));
-    top: 0;
-    bottom: 0;
+    top: -1px;
+    bottom: -1px;
     width: calc(4 * var(--px));
     background: var(--vermilion);
   }

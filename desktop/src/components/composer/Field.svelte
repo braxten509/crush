@@ -41,6 +41,15 @@
     el.style.height = "";
     lines = Math.min(MAX_LINES, needed);
     scrolls = needed > MAX_LINES;
+    if (!scrolls) el.scrollTop = 0;
+  }
+
+  // Under 15 lines the field never scrolls. Its lines (28) are taller than
+  // its 26 a line, so Chromium scrolled it a few pixels to show the caret and
+  // kept that after the text was cleared: the words rose above the cursor
+  // (owner, 2026-10-20).
+  function scrolled() {
+    if (!scrolls && el.scrollTop !== 0) el.scrollTop = 0;
   }
 
   $effect(() => {
@@ -138,6 +147,7 @@
   onkeydown={keydown}
   onkeyup={caretMoved}
   onpointerup={caretMoved}
+  onscroll={scrolled}
 ></textarea>
 
 <style>

@@ -555,7 +555,6 @@ export function probeHeavy() {
     cell: { w: rect.w / term.cols, h: rect.h / term.rows },
     rows,
     background: getComputedStyle(term.element.querySelector(".xterm-scrollable-element") ?? term.element).backgroundColor,
-    path_line: term.element.closest("[data-terminal-tab]")?.querySelector(".path")?.textContent ?? "",
     image_cells: imageCells(tab),
     close_buttons: closeButtons,
   };

@@ -10,7 +10,7 @@
   // (lib/plugins/panel.js has the keys); the body's scrollbar shows while it
   // has focus or for 2 s after a wheel turn. With composer_focus_only a click
   // leaves focus in the field and the wheel still scrolls the body on hover.
-  import { setFocus, ui } from "../lib/stores/ui.svelte.js";
+  import { setFocus, setPanelShown, ui } from "../lib/stores/ui.svelte.js";
   import { ws } from "../lib/stores/workspace.svelte.js";
   import Meters from "./panel/Meters.svelte";
   import { panel, setPanelBody, toField } from "./panel/panel.svelte.js";
@@ -18,6 +18,7 @@
   import FolderSection from "./panel/FolderSection.svelte";
   import ServersPanel from "./panel/ServersPanel.svelte";
   import TodoPanel from "./panel/TodoPanel.svelte";
+  import Icon from "./Icon.svelte";
   import Rule from "./Rule.svelte";
 
   const focusOnly = $derived(ws.config?.options?.tui?.composer_focus_only === true);
@@ -82,6 +83,13 @@
   onclick={click}
   onmousedown={down}
 >
+  <!-- Hides the panel; a tab at the window's edge brings it back (App.svelte;
+       owner, 2026-10-20, B). The same switch as Settings and Ctrl+P's. -->
+  <!-- "››", the list's own "‹‹" (leftlist/CollapseButton.svelte) turned the other way. -->
+  <button class="hide" type="button" aria-label="Hide the right panel" title="Hide the right panel" data-probe="panel-hide" onclick={() => setPanelShown(false)}>
+    <span class="pair"><Icon name="chevron" /><Icon name="chevron" /></span>
+  </button>
+
   <Meters />
 
   <Rule marks="both" class="under-usage" />
@@ -115,6 +123,35 @@
     min-height: 0;
     overflow: hidden;
     padding: calc(26 * var(--px)) calc(19 * var(--px)) 0 calc(26 * var(--px));
+  }
+
+  /* In the panel's top right corner, above the meters and clear of them. */
+  .hide {
+    position: absolute;
+    top: calc(2 * var(--px));
+    right: calc(1 * var(--px));
+    display: grid;
+    place-items: center;
+    width: calc(24 * var(--px));
+    height: calc(24 * var(--px));
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--slate);
+    cursor: pointer;
+  }
+  .hide:hover {
+    color: var(--ink);
+  }
+  .hide:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
+  }
+  .hide .pair {
+    display: flex;
+    flex-direction: column;
+    gap: calc(3 * var(--px));
+    transform: rotate(-90deg);
   }
 
   /* The meters lead the column now that PROJECT is gone. */

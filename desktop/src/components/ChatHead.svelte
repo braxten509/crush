@@ -1,5 +1,10 @@
 <script>
-  // The middle column's head (desktop-design 2.1). On a chat: its title and
+  // The middle column's head (desktop-design 2.1). Drawn only on the init and
+  // onboarding screens now: a chat's title, folder and branch are in the
+  // window's top bar (system/TitleBar.svelte; owner, 2026-10-20). What it
+  // would show on a chat is still reported (shown.head) for the checks.
+  //
+  // As it was: on a chat, its title and
   // the path line, the project's folder and Git branch in the built path
   // style; on a branch, "Branched from <parent title>" with the parent's
   // title as a link that opens it, reopening it first when it is closed (4.8,
@@ -12,10 +17,9 @@
   // The branch links over a message's words are drawn by the renderer as
   // span.md-deco-branch-link (lib/render/sourcemap.js); their look (4.8) is
   // set here, the one branching component every chat shows.
-  import { isClosed, reopen } from "../lib/stores/closed.svelte.js";
   import { conn } from "../lib/stores/connection.svelte.js";
   import { parentOf } from "../lib/stores/links.svelte.js";
-  import { openChat, sessions } from "../lib/stores/sessions.svelte.js";
+  import { sessions } from "../lib/stores/sessions.svelte.js";
   import { ws } from "../lib/stores/workspace.svelte.js";
   import Wordmark from "./start/Wordmark.svelte";
   import { screen, start } from "./start/start.svelte.js";
@@ -47,28 +51,15 @@
     };
   });
 
-  async function openParent() {
-    const id = parent?.id;
-    if (!id) return;
-    if (isClosed(id) && !(await reopen(id))) return;
-    await openChat(id);
-  }
 </script>
 
-<header class="head" class:brand>
-  {#if brand}
+{#if brand}
+  <header class="head brand">
     <div class="brand-column">
       <Wordmark {hyper} version={start.version} />
     </div>
-  {:else}
-    <h2 class="title">{title}</h2>
-    {#if parent}
-      <p class="path branched" aria-label="Path">
-        <span class="from">{"Branched from "}</span><button class="parent" type="button" title="{isClosed(parent.id) ? 'Reopen' : 'Open'} {parent.title}" onclick={openParent}><span class="parent-title">{parent.title}</span></button>
-      </p>
-    {:else if path}<p class="path" aria-label="Path" title={conn.project.path}>{path}</p>{/if}
-  {/if}
-</header>
+  </header>
+{/if}
 
 <style>
   .head {
@@ -78,58 +69,6 @@
     flex: none;
     min-width: 0;
   }
-  .title {
-    min-height: calc(50 * var(--px));
-    font: var(--t-title);
-    letter-spacing: -0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .path {
-    margin-top: calc(11 * var(--px));
-    font: var(--t-path);
-    letter-spacing: var(--track-path);
-    text-transform: uppercase;
-    color: var(--slate);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  /* On a branch the line is a row: "Branched from " keeps its width (its
-     space too) and a long parent title gives way, cut with "…". A button
-     draws its text in an inner box of its own, so the cut is made on a span
-     inside it. */
-  .branched {
-    display: flex;
-  }
-  .from {
-    flex: none;
-    white-space: pre;
-  }
-  /* The parent's title: the path line's own letters in the link look. */
-  .parent {
-    min-width: 0;
-    overflow: hidden;
-    padding: 0;
-    font: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    color: var(--link);
-  }
-  .parent-title {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: calc(4 * var(--px));
-  }
-  .parent:hover .parent-title {
-    text-decoration-thickness: max(1px, calc(1.5 * var(--px)));
-  }
-
   /* A branch link over a message's words (4.8; as built, Conversation.svelte:181-186). */
   :global(.md-deco-branch-link) {
     color: var(--link);

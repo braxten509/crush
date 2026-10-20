@@ -32,14 +32,21 @@
   import { mainView } from "./lib/mainview.js";
   import { focusField } from "./lib/stores/composer.svelte.js";
   import { start } from "./lib/stores/connection.svelte.js";
-  import { panelSetting, setPanelHidden, ui } from "./lib/stores/ui.svelte.js";
+  import { panelSetting, setPanelHidden, setPanelShown, ui } from "./lib/stores/ui.svelte.js";
+  import Icon from "./components/Icon.svelte";
   import { ws } from "./lib/stores/workspace.svelte.js";
+  import { listRoom, meterRoom } from "./components/panel/panel.svelte.js";
 
   // D11 (SIDE-002): the project panel hides when keeping it would leave the
   // conversation under its minimum with both side columns at theirs (1,060
   // picture px of inner width), when the window is under 640 picture px tall,
   // or when its own switch is off (not the terminal's compact mode).
-  const PANEL_ROOM = COLUMN_LIMITS.left.min + COLUMN_LIMITS.right.min + COLUMN_LIMITS.middleMin;
+  // Each side's minimum: its own, or what its words need, the panel's meters
+  // and the list's two buttons (owner, 2026-10-20).
+  const rightMin = $derived(Math.max(COLUMN_LIMITS.right.min, meterRoom.width));
+  const leftMin = $derived(Math.max(COLUMN_LIMITS.left.min, listRoom.width));
+  const mins = $derived({ left: leftMin, right: rightMin });
+  const panelRoom = () => leftMin + rightMin + COLUMN_LIMITS.middleMin;
   const PANEL_MIN_HEIGHT = 640;
   // The left list's narrow strip is 64 picture px wide and cannot be dragged
   // (desktop-design-5-6 5.2 "Strip"); the list's own width is kept for when it opens.
@@ -71,13 +78,13 @@
   // The widths the page can hold. A hidden panel takes no room and keeps its
   // width for when it comes back.
   function fit(next) {
-    if (!ui.panelHidden) return fitColumns(next, inner());
-    const { min } = COLUMN_LIMITS.right;
-    return { left: fitColumns({ left: next.left, right: min }, inner() + min).left, right: next.right };
+    if (!ui.panelHidden) return fitColumns(next, inner(), mins);
+    const min = rightMin;
+    return { left: fitColumns({ left: next.left, right: min }, inner() + min, mins).left, right: next.right };
   }
 
   function drag(side, delta) {
-    widths = ui.panelHidden ? fit({ ...widths, left: widths.left + delta }) : dragColumn(widths, side, delta, inner());
+    widths = ui.panelHidden ? fit({ ...widths, left: widths.left + delta }) : dragColumn(widths, side, delta, inner(), mins);
   }
   function done() {
     saveColumns(storage, widths);
@@ -87,10 +94,12 @@
   // conversation readable when the window shrinks.
   $effect(() => {
     if (!page) return;
+    // Again when the words' room changes a side's minimum.
+    void mins;
     // Settings takes the window (owner, 2026-10-19): the panel steps aside.
     const off = panelSetting.off || settingsOpen();
     const update = () => {
-      const hidden = off || inner() < PANEL_ROOM || page.parentElement.clientHeight / scale() < PANEL_MIN_HEIGHT;
+      const hidden = off || inner() < panelRoom() || page.parentElement.clientHeight / scale() < PANEL_MIN_HEIGHT;
       if (hidden !== ui.panelHidden) {
         // Focus in the panel moves to the field (SIDE-002; the terminal's compact switch, internal/ui/model/layout.go:70-79).
         if (hidden && ui.focus === "panel") focusField();
@@ -140,7 +149,7 @@
       label="Resize the chat list"
       fixed={leftList.strip && !settingsOpen()}
       value={widths.left}
-      min={COLUMN_LIMITS.left.min}
+      min={leftMin}
       max={COLUMN_LIMITS.left.max}
       ondrag={drag}
       ondone={done}
@@ -161,7 +170,7 @@
         column="5"
         label="Resize the project panel"
         value={widths.right}
-        min={COLUMN_LIMITS.right.min}
+        min={rightMin}
         max={COLUMN_LIMITS.right.max}
         ondrag={drag}
         ondone={done}
@@ -171,6 +180,14 @@
       </div>
     {/if}
   </div>
+  <!-- The panel turned off (its arrow, Settings or Ctrl+P): a thin tab at the
+       window's right edge brings it back (owner, 2026-10-20, B). Not while it
+       is hidden only for room, which showing it would not change. -->
+  {#if panelSetting.off && !settingsOpen()}
+    <button class="panel-tab" type="button" aria-label="Show the right panel" title="Show the right panel" data-probe="panel-tab" onclick={() => setPanelShown(true)}>
+      <span class="pair"><Icon name="chevron" /><Icon name="chevron" /></span>
+    </button>
+  {/if}
 </div>
 
 <OverlayHost />
@@ -200,6 +217,39 @@
       1px calc(var(--right) * var(--px)) 1px;
     grid-template-rows: 1px minmax(0, 1fr) 1px;
   }
+  /* In the 28 picture px between the frame and the window's right edge, level
+     with the panel's hide arrow. */
+  .panel-tab {
+    position: absolute;
+    top: calc(40 * var(--px));
+    right: 0;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: calc(22 * var(--px));
+    height: calc(48 * var(--px));
+    padding: 0;
+    border: 1px solid var(--rule-control);
+    border-right: 0;
+    background: var(--paper-raised);
+    color: var(--slate);
+    cursor: pointer;
+  }
+  .panel-tab:hover {
+    color: var(--ink);
+  }
+  .panel-tab:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
+  }
+  /* "‹‹", as the list's collapse control draws it. */
+  .panel-tab .pair {
+    display: flex;
+    flex-direction: column;
+    gap: calc(3 * var(--px));
+    transform: rotate(90deg);
+  }
+
   /* Without the panel (D11) the conversation runs to the frame's right line. */
   .page.panel-hidden {
     grid-template-columns: 1px calc(var(--left) * var(--px)) 1px minmax(0, 1fr) 1px;

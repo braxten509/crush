@@ -8,9 +8,10 @@ export function timelineBox(doc = document) {
   const column = doc.querySelector("main.conversation");
   const head = column?.querySelector(".rule.under-head");
   const anchor = column?.querySelector("[data-notice-anchor]");
-  if (!column || !head || !anchor) return null;
+  if (!column || !anchor) return null;
   const c = column.getBoundingClientRect();
-  return { left: c.left, width: c.width, top: head.getBoundingClientRect().bottom, bottom: anchor.getBoundingClientRect().top };
+  // A chat has no head (owner, 2026-10-20): the timeline starts at the column's top.
+  return { left: c.left, width: c.width, top: head ? head.getBoundingClientRect().bottom : c.top, bottom: anchor.getBoundingClientRect().top };
 }
 
 // Calls update now and whenever the box may have moved: window resizes and

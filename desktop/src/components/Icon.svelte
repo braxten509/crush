@@ -42,6 +42,10 @@
     offline: { w: 16, h: 16 },
     terminal: { w: 16, h: 16 },
     "arrow-up-right": { w: 16, h: 16 },
+    "arrow-right": { w: 16, h: 16 },
+    "arrow-left": { w: 16, h: 16 },
+    "arrow-down": { w: 16, h: 16 },
+    bullet: { w: 16, h: 16 },
   };
   const box = $derived(icons[name]);
   const scale = $derived(size ? size / Math.max(box.w, box.h) : 1);
@@ -77,9 +81,10 @@
     <circle cx="10" cy="10" r="8.6" fill="none" stroke="currentColor" stroke-width="1.6" />
     <path d="M10 5.2V10l3.4 2.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
   {:else if name === "warning"}
-    <path d="M10.9 1.6a1.8 1.8 0 0 1 3.2 0l10.5 19.6a1.8 1.8 0 0 1-1.6 2.6H2a1.8 1.8 0 0 1-1.6-2.6z" fill="var(--amber)" />
-    <path d="M12.5 8.4v7" fill="none" stroke="var(--on-amber)" stroke-width="2.4" stroke-linecap="round" />
-    <circle cx="12.5" cy="19.4" r="1.35" fill="var(--on-amber)" />
+    <!-- A drawn line, not a filled emoji-like sign (owner, 2026-10-20). -->
+    <path d="M11.2 2.6a1.5 1.5 0 0 1 2.6 0l9.6 17.9a1.5 1.5 0 0 1-1.3 2.2H2.9a1.5 1.5 0 0 1-1.3-2.2z" fill="none" stroke="var(--amber-ink)" stroke-width="1.75" stroke-linejoin="round" />
+    <path d="M12.5 9v6" fill="none" stroke="var(--amber-ink)" stroke-width="1.9" stroke-linecap="round" />
+    <circle cx="12.5" cy="18.6" r="1.15" fill="var(--amber-ink)" />
   {:else if name === "send"}
     <path d="M29.6 1.4 1.6 9.3l10.8 4.4 4.8 10.1z M29.6 1.4 12.4 13.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
   {:else if name === "chevron"}
@@ -133,6 +138,14 @@
   {:else if name === "terminal"}
     <!-- The terminal's "›" row mark and ">_" button: a 6×10 chevron, then a 7-long underscore. -->
     <path d="M1.5 3l6 5-6 5M8 13h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+  {:else if name === "arrow-right"}
+    <path d="M2.5 8h10.5M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+  {:else if name === "arrow-left"}
+    <path d="M13.5 8H3M7 4 3 8l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+  {:else if name === "arrow-down"}
+    <path d="M8 2.5V13M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+  {:else if name === "bullet"}
+    <circle cx="8" cy="8" r="2" fill="currentColor" />
   {:else if name === "arrow-up-right"}
     <path d="M4.5 11.5l7-7M5.5 4.5h6v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
   {/if}

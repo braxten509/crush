@@ -33,7 +33,7 @@
     toggleThoughtLine,
     tui,
   } from "../../lib/settings/store.svelte.js";
-  import { chosenTheme, theme } from "../../lib/themes/current.svelte.js";
+  import { chooseAppearance, chosenTheme, theme } from "../../lib/themes/current.svelte.js";
   import { panelSetting } from "../../lib/stores/ui.svelte.js";
 
   const ACCOUNTS = [
@@ -135,6 +135,14 @@
       <span class="name">Theme</span>
       <span class="value">{chosenTheme()}{theme.name !== chosenTheme() ? ` (showing ${theme.name})` : ""}</span>
       <button type="button" class="act" onclick={() => openDialog("theme")}>Change…</button>
+    </div>
+    <div class="row">
+      <span class="name">Mode</span>
+      <span class="choices" role="radiogroup" aria-label="Mode">
+        {#each [["light", "Light"], ["dark", "Dark"], ["system", "Same as system"]] as [id, label] (id)}
+          <button type="button" class="choice" role="radio" aria-checked={theme.appearance === id} onclick={() => chooseAppearance(id)}>{label}</button>
+        {/each}
+      </span>
     </div>
     <div class="row">
       <span class="name">Show the right panel</span>

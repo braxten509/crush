@@ -47,6 +47,7 @@
   class="divider"
   class:dragging
   class:fixed
+  class:right={side === "right"}
   style:grid-column={column}
   role="separator"
   aria-orientation="vertical"
@@ -88,6 +89,13 @@
     right: calc(-5 * var(--px));
     top: calc(11 * var(--px));
     bottom: calc(14 * var(--px));
+  }
+  /* The conversation's scrollbar runs down the right divider's left side, so
+     that grip reaches into the panel instead (owner, 2026-10-20: the bar must
+     stay clickable). */
+  .divider.right::after {
+    left: 0;
+    right: calc(-10 * var(--px));
   }
   .divider.fixed {
     cursor: default;

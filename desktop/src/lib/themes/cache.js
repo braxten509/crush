@@ -1,6 +1,6 @@
 // The theme cache public/theme-boot.js reads before the page draws
 // (desktop-design-5-6 3.3, LIST-054): local storage "crush-desktop.theme",
-// {name, revision, dark, tokens}.
+// {name, revision, appearance, dark, tokens}.
 const KEY = "crush-desktop.theme";
 
 export function readCache() {

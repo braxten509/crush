@@ -425,7 +425,7 @@
         bind:this={back}
         onclick={close}
         onfocus={() => (buttonFocused = true)}
-        onblur={() => (buttonFocused = false)}>← Return to parent</button
+        onblur={() => (buttonFocused = false)}><Icon name="arrow-left" size={12} /> Return to parent</button
       >
       <span class="esc">esc</span>
     </div>
@@ -579,6 +579,9 @@
     padding-left: calc(14 * var(--px) + 1px);
   }
   .back {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6 * var(--px));
     padding: 0;
     font: var(--t-button);
     color: var(--ink);

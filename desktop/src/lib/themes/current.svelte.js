@@ -4,18 +4,23 @@
 // a change through `settings-changed` (other app processes through P3.2's
 // watcher); a theme file changed elsewhere arrives as config_changed and is
 // applied when its revision moved. A preview (the Themes sheet, the editor)
-// recolors this window only until it is applied or reverted.
+// recolors this window only until it is applied or reverted. The
+// `appearance` setting ("light", "dark" or "system"; absent: light) turns a
+// light theme dark (dark.js); "system" follows the desktop's own preference.
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { api } from "../engine/api.js";
 import { settings_get, settings_set } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { applyView } from "./apply.js";
 import { readCache, writeCache } from "./cache.js";
+import { notify } from "../stores/ui.svelte.js";
+import { darkView, wantsDark } from "./dark.js";
 import { DEFAULT_THEME } from "./tokens.js";
 
-export const theme = $state({ name: DEFAULT_THEME, dark: false, revision: "" });
+export const theme = $state({ name: DEFAULT_THEME, dark: false, revision: "", appearance: "light" });
 
 let chosen = ""; // the setting as last read ("" = the default)
+let lastView = null; // the view as the engine sent it, before dark mode
 let loadSeq = 0;
 let previewing = false;
 
@@ -24,11 +29,32 @@ export const themeSetting = () => chosen;
 
 // Applies a ThemeView to this window; `save` also records it as the first-frame cache.
 export function applyTheme(view, { save = true } = {}) {
-  const { tokens, dark } = applyView(view);
+  lastView = view;
+  const { tokens, dark } = applyView(wantsDark(theme.appearance, systemDark()) ? darkView(view) : view);
   theme.name = view?.name || theme.name;
   theme.dark = dark;
   theme.revision = view?.revision ?? "";
-  if (save) writeCache({ name: theme.name, revision: theme.revision, dark, tokens });
+  if (save) writeCache({ name: theme.name, revision: theme.revision, appearance: modeKey(), dark, tokens });
+}
+
+// The desktop's own light/dark preference ("system" mode follows it).
+const systemQuery = globalThis.matchMedia?.("(prefers-color-scheme: dark)") ?? null;
+const systemDark = () => systemQuery?.matches === true;
+
+// What the cache was made for: a mode change must not reuse it.
+const modeKey = () => (wantsDark(theme.appearance, systemDark()) ? "dark" : "light");
+
+// Light, dark or system: settings_set, which every window hears.
+export async function chooseAppearance(mode) {
+  try {
+    await settings_set("appearance", mode);
+  } catch (error) {
+    notify("error", `Couldn't save the mode: ${error?.message ?? error}`);
+    return;
+  }
+  if (!takeAppearance({ appearance: mode })) return;
+  if (lastView && !previewing) applyTheme(lastView);
+  else loadCurrent({ force: true });
 }
 
 // Reads the chosen theme from the engine and applies it when it differs
@@ -51,7 +77,10 @@ export async function loadCurrent({ force = false } = {}) {
   }
   if (mine !== loadSeq || previewing) return;
   const cache = readCache();
-  if (!force && cache?.name === view.name && cache?.revision === view.revision && theme.name === view.name && theme.revision === view.revision) return;
+  if (!force && cache?.name === view.name && cache?.revision === view.revision && (cache?.appearance ?? "light") === modeKey() && theme.name === view.name && theme.revision === view.revision) {
+    lastView = view;
+    return;
+  }
   applyTheme(view);
 }
 
@@ -81,6 +110,13 @@ function takeSettings(settings) {
   const next = typeof settings?.theme === "string" ? settings.theme : "";
   const changed = next !== chosen;
   chosen = next;
+  return takeAppearance(settings) || changed;
+}
+
+function takeAppearance(settings) {
+  const mode = ["light", "dark", "system"].includes(settings?.appearance) ? settings.appearance : "light";
+  const changed = mode !== theme.appearance;
+  theme.appearance = mode;
   return changed;
 }
 
@@ -94,7 +130,13 @@ export function startThemes() {
     theme.name = cache.name;
     theme.dark = cache.dark === true;
     theme.revision = cache.revision ?? "";
+    // Until the settings arrive, the mode the cached colors were made in.
+    if (cache.appearance === "dark") theme.appearance = "dark";
   }
+  // The desktop switched light/dark: "system" follows it.
+  systemQuery?.addEventListener?.("change", () => {
+    if (theme.appearance === "system" && lastView && !previewing) applyTheme(lastView);
+  });
   try {
     getCurrentWebviewWindow()
       .listen("settings-changed", (event) => {

@@ -842,7 +842,8 @@
 </section>
 
 <style>
-  /* The rail runs from the head's rule to the top of the composer block. */
+  /* The rail runs from the head's rule to the top of the composer block; no
+     dot at its top (owner, 2026-10-20). */
   .rail {
     position: absolute;
     left: calc(30 * var(--px));
@@ -850,16 +851,6 @@
     width: calc(3 * var(--px));
     background: var(--vermilion);
     pointer-events: none;
-  }
-  .rail::before {
-    content: "";
-    position: absolute;
-    left: calc(-2 * var(--px));
-    top: calc(1 * var(--px) + 1px);
-    width: calc(7 * var(--px));
-    height: calc(7 * var(--px));
-    border-radius: 50%;
-    background: var(--vermilion);
   }
 
   .timeline {

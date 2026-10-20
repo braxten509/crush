@@ -66,6 +66,14 @@
     element.classList.toggle("kit-bar-never", mode === "never");
     element.classList.toggle("kit-bar-always", mode === "always");
     element.classList.toggle("kit-bar-shown", mode === "default" && (shown || dragging));
+    // WebKitGTK keeps the old thumb until the bar is laid out again; a
+    // one-frame overflow flip redraws it (as VirtualList, owner 2026-10-20).
+    const keep = element.scrollTop;
+    const was = element.style.overflowY;
+    element.style.overflowY = "hidden";
+    void element.offsetWidth;
+    element.style.overflowY = was;
+    if (element.scrollTop !== keep) element.scrollTop = keep;
   });
 
   // Whether the thumb shows now (for the probe).

@@ -19,6 +19,7 @@
       }
     }
     root.style.colorScheme = cache.dark === true ? "dark" : "light";
+    root.dataset.mode = cache.dark === true ? "dark" : "light";
   } catch (error) {
     // Any error leaves app.css's defaults.
   }

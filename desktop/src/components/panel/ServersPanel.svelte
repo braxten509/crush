@@ -57,8 +57,11 @@
     min-height: calc(28 * var(--px));
     font: var(--t-small);
   }
-  .row + .row {
-    border-top: 1px solid var(--rule-faint);
+  /* A list with no lines between rows, as Background (owner, 2026-10-20). */
+  .rows {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
   }
   .child {
     padding-left: calc(18 * var(--px));

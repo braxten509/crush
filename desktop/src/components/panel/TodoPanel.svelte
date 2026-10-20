@@ -1,18 +1,16 @@
 <script>
   // TO-DO (owner, 2026-10-19: moved here from the tray above the typing box):
   // "TO-DO 2/4", then every step: done, in progress, pending
-  // (trayrows.js todoList). The activity mark runs only while the agent works
-  // on a step; "None" without steps.
+  // (trayrows.js todoList); the step in progress shows three dots (owner,
+  // 2026-10-20); "None" without steps.
   import Icon from "../Icon.svelte";
-  import ActivityMark from "../timeline/ActivityMark.svelte";
-  import { progress, todoHeader, todoList } from "../../lib/composer/trayrows.js";
-  import { busy, sessions } from "../../lib/stores/sessions.svelte.js";
+  import { todoHeader, todoList } from "../../lib/composer/trayrows.js";
+  import { sessions } from "../../lib/stores/sessions.svelte.js";
 
-  const ICON = { completed: "check", in_progress: "dot", pending: "circle" };
+  const ICON = { completed: "check", pending: "circle" };
 
   const list = $derived(sessions.byId[sessions.currentId]?.todos ?? []);
   const header = $derived(todoHeader(list, true));
-  const working = $derived(Boolean(sessions.currentId) && busy(sessions.currentId) && progress(list).active !== null);
 </script>
 
 <section class="panel-section" class:empty={list.length === 0} data-section="todos" aria-label="To-do">
@@ -24,8 +22,8 @@
       {#each todoList(list) as item, at (at)}
         <li class="line {item.status}" data-status={item.status}>
           <span class="mark">
-            {#if item.status === "in_progress" && working}
-              <ActivityMark size="small" />
+            {#if item.status === "in_progress"}
+              <span class="dots" aria-hidden="true">…</span>
             {:else}
               <Icon name={ICON[item.status]} size={14} />
             {/if}
@@ -66,8 +64,12 @@
   .completed .text {
     text-decoration: line-through;
   }
-  .in_progress .text {
-    font-weight: 600;
+  /* The step in progress: three dots, in the same weight as every step
+     (owner, 2026-10-20). */
+  .dots {
+    font: var(--t-small);
+    line-height: 1;
+    color: var(--ink);
   }
   .mark {
     flex: none;

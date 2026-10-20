@@ -8,6 +8,7 @@
   import { tick } from "svelte";
   import Field from "../kit/Field.svelte";
   import FilterList from "../kit/FilterList.svelte";
+  import Icon from "../Icon.svelte";
   import Sheet from "../kit/Sheet.svelte";
   import { api } from "../../lib/engine/api.js";
   import { GROUP, GROUP_ORDER, keptState, nextKept } from "../../lib/extensions/skills.js";
@@ -83,7 +84,7 @@
     bind:below
   />
   {#if below > 0}
-    <p class="more">↓ {below} more</p>
+    <p class="more"><Icon name="arrow-down" size={12} /> {below} more</p>
   {/if}
 </Sheet>
 
@@ -129,6 +130,9 @@
     text-overflow: ellipsis;
   }
   .more {
+    display: flex;
+    align-items: center;
+    gap: calc(4 * var(--px));
     margin: calc(6 * var(--px)) 0 0;
     font: var(--t-small);
     color: var(--slate);

@@ -140,7 +140,7 @@ init = run("""
   const q = block.querySelector('.question');
   return { blockLeft: block.getBoundingClientRect().left + parseFloat(getComputedStyle(block).paddingLeft), fieldLeft: field.getBoundingClientRect().left,
            question: parseFloat(getComputedStyle(q).fontSize), reading, yep: yep.getBoundingClientRect().height,
-           pill: parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 * 44 };
+           pill: parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 * 36 };
 """) or {}
 check(not init.get("missing") and abs(init["blockLeft"] - init["fieldLeft"]) <= 1, f"the init notice starts in line with the typing box ({init})")
 check(not init.get("missing") and abs(init["question"] - init["reading"]) < 0.5, "the init question is in the question forms' size")

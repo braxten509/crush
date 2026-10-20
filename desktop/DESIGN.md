@@ -44,6 +44,19 @@ exact.
 Text colors are checked at 4.5:1 or better against the paper they sit on; the 16 program
 colors (`--ansi-*`) are 4.5:1 or better on both `--band` and `--paper`.
 
+Dark mode (Settings > Appearance > Mode: Light, Dark or Same as system; desktop setting
+`appearance`) turns a light theme dark in `lib/themes/dark.js`: paper and ink trade places
+(the edition's cream becomes the text, its black the page), every gray keeps its place
+between them, the program colors are lifted to read on the dark band, and the diff tints
+become faint versions of their hue. Accent colors stay; the contrast pass moves any that no
+longer read. A theme that is already dark is left as it is. Diagrams, drawn in the light
+colors, flip with `invert(1) hue-rotate(180deg)` when the root's `data-mode` is `dark`.
+Components never write a color directly; everything goes through the tokens, so both modes
+follow.
+
+Icons are drawn SVGs in `components/Icon.svelte` (stroked, `currentColor`), never emoji or
+symbol characters standing in for pictures.
+
 ## Type
 
 Three faces (owner, 2026-10-20), bundled in `src/assets/fonts/`:
@@ -113,8 +126,15 @@ Every dialog is a `kit/Sheet`:
 - Motion uses `--motion` (220 ms) and `--motion-quick` (140 ms) on `--ease-paper`; movement
   distances scale with `--px`. The busy marks loop over 1.2 s. Nothing moves the layout when
   a state changes (no show or hide on a flag).
+- Scroll bars are thin and show their thumb only while scrolling (about 2 s after the last
+  move). A column grip next to a scroll bar sits on the far side of the divider, so the bar
+  stays clickable.
 
 ## Checks
+
+- `tests/driver/dark_mode.py` turns dark mode on and off in the real window, checks that
+  the ink reads on every dark surface, and checks that the chat's scroll bar hides after
+  scrolling and is not covered by the column grip; dark pictures go to `tests/out/dark_mode/`.
 
 - `tests/driver/look_real.py` compares the first screen with the approved picture in the
   real window (WebKitGTK).

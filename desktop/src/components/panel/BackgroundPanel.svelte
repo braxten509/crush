@@ -23,6 +23,7 @@
     <ul class="rows">
       {#each rows as row (row.key)}
         <li class="line row">
+          <span class="bullet" aria-hidden="true">•</span>
           <span class="text" title={row.text}>{row.text}</span>
           <span class="info">{row.info}</span>
           <button class="stop" type="button" tabindex="-1" title={row.label} aria-label="{row.label} {row.text}" onclick={row.stop}><Icon name="cross" size={12} /></button>
@@ -51,8 +52,15 @@
     min-height: calc(28 * var(--px));
     font: var(--t-small);
   }
-  .row + .row {
-    border-top: 1px solid var(--rule-faint);
+  /* A bulleted list, no lines between rows (owner, 2026-10-20). */
+  .rows {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .bullet {
+    flex: none;
+    color: var(--slate);
   }
   .info {
     color: var(--slate);

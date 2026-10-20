@@ -13,6 +13,7 @@ export function applyTokens(tokens, dark) {
   if (!root) return;
   for (const [name, value] of Object.entries(tokens)) root.style.setProperty(name, value);
   root.style.colorScheme = dark ? "dark" : "light";
+  root.dataset.mode = dark ? "dark" : "light";
 }
 
 export function applyView(view) {

@@ -170,7 +170,7 @@
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: 1fr;
-    justify-content: start;
+    width: max-content;
     gap: calc(12 * var(--px));
     margin-top: calc(12 * var(--px));
   }

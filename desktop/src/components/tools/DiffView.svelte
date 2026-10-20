@@ -19,6 +19,7 @@
   //   cutAbove     the hidden-rows note goes above the rows (Multi-Edit)
   //   onexpand     a click on the hidden-rows note
   import { onDestroy } from "svelte";
+  import { theme } from "../../lib/themes/current.svelte.js";
   import { DELETE, diffRows, INSERT, numberDigits, prepareFile, tintFor } from "../../lib/diff.js";
   import { diffShown, hiddenText } from "../../lib/tools/body.js";
   import { codeLine, cutCells, diffLanguage } from "../../lib/tools/highlight.js";
@@ -115,7 +116,10 @@
   const sign = (kind) => (kind === INSERT ? "+" : kind === DELETE ? "−" : " ");
   const lead = (text) => shift > 0 && text !== "";
 
+  // Re-read when the theme or the mode changes.
   $effect(() => {
+    void theme.dark;
+    void theme.revision;
     if (!root) return;
     tint = tintFor(getComputedStyle(root).getPropertyValue("--paper"));
   });

@@ -14,6 +14,7 @@
   import { codeLines, hiddenText, markdownLines, plainLines } from "../../lib/tools/body.js";
   import { show } from "../../lib/tools/nodes.js";
   import { openViewer } from "../../lib/stores/ui.svelte.js";
+  import Icon from "../Icon.svelte";
   import DiffView from "./DiffView.svelte";
   import ToolMarkdown from "./ToolMarkdown.svelte";
 
@@ -32,6 +33,12 @@
 
   function picture(part) {
     openViewer({ src: `data:${part.mime};base64,${part.data}`, name: part.mime, mime: part.mime });
+  }
+
+  // The terminal's text marks (todos.js: ✓ done, → in progress, • to do),
+  // drawn as icons (owner, 2026-10-20: no emoji or symbol glyphs as icons).
+  function markIcon(glyph) {
+    return glyph === "✓" ? "check" : glyph === "→" ? "arrow-right" : "bullet";
   }
 </script>
 
@@ -87,16 +94,16 @@
     {:else if part.type === "todos"}
       <ul class="todos">
         {#each part.items as todo, n (n)}
-          <li class={todo.status}><span class="todo-icon">{todo.icon}</span>{todo.text}</li>
+          <li class={todo.status}><span class="todo-icon"><Icon name={markIcon(todo.icon)} size={12} /></span>{todo.text}</li>
         {/each}
       </ul>
     {:else if part.type === "started"}
-      <p class="todos"><span class="todo-icon">{part.icon}</span>{part.text}</p>
+      <p class="todos"><span class="todo-icon"><Icon name={markIcon(part.icon)} size={12} /></span>{part.text}</p>
     {:else if part.type === "questions"}
       <ul class="questions">
         {#each part.blocks as block, n (n)}
           <li>
-            <p class="question"><span class="todo-icon">✓</span>{block.question}{#each block.parts as answer, a (a)}<span class="answer {answer.tone ?? ''}">{a === 0 ? " " : ", "}{answer.text}</span>{/each}</p>
+            <p class="question"><span class="todo-icon"><Icon name="check" size={12} /></span>{block.question}{#each block.parts as answer, a (a)}<span class="answer {answer.tone ?? ''}">{a === 0 ? " " : ", "}{answer.text}</span>{/each}</p>
             {#each block.notes as note, k (k)}<p class="answer-note">╰ {note}</p>{/each}
           </li>
         {/each}
@@ -220,9 +227,11 @@
     font: var(--t-body-small);
   }
   .todo-icon {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     width: calc(22 * var(--px));
     color: var(--slate);
+    vertical-align: -0.1em;
   }
   .todos .completed {
     color: var(--slate);

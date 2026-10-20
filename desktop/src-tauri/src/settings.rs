@@ -169,6 +169,11 @@ impl KeyChange {
                 Value::Bool(on) => Ok(KeyChange::Other("list_collapsed", Value::Bool(on))),
                 _ => Err(bad_setting("list_collapsed takes true or false.")),
             },
+            // Light or dark paper (owner, 2026-10-20), or the system's choice.
+            "appearance" => match value {
+                Value::String(mode) if matches!(mode.as_str(), "light" | "dark" | "system") => Ok(KeyChange::Other("appearance", Value::String(mode))),
+                _ => Err(bad_setting("appearance takes \"light\", \"dark\" or \"system\".")),
+            },
             other => Err(bad_setting(format!("{other} is not a setting Crush Desktop can change."))),
         }
     }
@@ -668,7 +673,8 @@ mod tests {
         assert_eq!(KeyChange::parse("crush_path", json!(null)).unwrap(), KeyChange::CrushPath(None));
         assert_eq!(KeyChange::parse("crush_path", json!("  ")).unwrap(), KeyChange::CrushPath(None));
         assert_eq!(KeyChange::parse("yolo", json!(false)).unwrap(), KeyChange::Yolo(false));
-        for (key, value) in [("yolo", json!("no")), ("crush_path", json!(3)), ("closed_chats", json!({})), ("theme", json!(3)), ("list_collapsed", json!("yes"))] {
+        assert_eq!(KeyChange::parse("appearance", json!("dark")).unwrap(), KeyChange::Other("appearance", json!("dark")));
+        for (key, value) in [("yolo", json!("no")), ("crush_path", json!(3)), ("closed_chats", json!({})), ("theme", json!(3)), ("list_collapsed", json!("yes")), ("appearance", json!("dim")), ("appearance", json!(true))] {
             let err = KeyChange::parse(key, value).unwrap_err();
             assert_eq!(err.code, "bad_setting", "{key}");
         }

@@ -306,6 +306,20 @@
     barShown = false;
   }
 
+  // WebKitGTK keeps painting a scrollbar thumb after only its pseudo-element
+  // style changes; a one-frame overflow flip makes it draw the new look
+  // (owner, 2026-10-20: the bar stayed after scrolling stopped).
+  $effect(() => {
+    void barShown;
+    void dragging;
+    if (!scroller) return;
+    const keep = scroller.scrollTop;
+    scroller.style.overflowY = "hidden";
+    void scroller.offsetWidth;
+    scroller.style.overflowY = "";
+    if (scroller.scrollTop !== keep) scroller.scrollTop = keep;
+  });
+
   function onScroll() {
     const t = scroller.scrollTop;
     if (Math.abs(t - lastTop) < 0.5) return; // our own

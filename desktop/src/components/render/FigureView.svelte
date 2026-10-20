@@ -359,4 +359,9 @@
   .figure-body :global(.md-table .md-align-right) {
     text-align: right;
   }
+  /* Diagrams are drawn in the light edition's colors; on dark paper they
+     flip, cream to black, keeping their hues (owner, 2026-10-20). */
+  :global(:root[data-mode="dark"]) .figure-view[data-kind="diagram"] .figure-body :global(svg) {
+    filter: invert(1) hue-rotate(180deg);
+  }
 </style>

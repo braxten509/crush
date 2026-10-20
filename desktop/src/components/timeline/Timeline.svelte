@@ -69,8 +69,8 @@
 
   let { sessionId, readOnly = false } = $props();
 
-  // A mouse selection is copied this long after it ends (CHAT-091), so a
-  // double click's word is what gets copied.
+  // With composer_focus_only the typing box takes the focus back this long
+  // after a press ends, so a double click still selects its word.
   const DOUBLE_CLICK_MS = 400;
   const DRAG_SLOP = 4;
   const READING_LINE = 33; // --t-reading's line, picture px: ↑/k and ↓/j scroll one (CHAT-096)
@@ -242,7 +242,9 @@
   }
 
   // With composer_focus_only (SET-003) a click selects and opens items, but
-  // focus goes back to the typing box once the press (and its copy) is over.
+  // focus goes back to the typing box once the press is over; a press that
+  // leaves text selected keeps the focus until the selection is gone, since
+  // focusing the typing box would end it (Chromium) and Ctrl+C copies it.
   let refocusAfterPress = false;
   function onFocusIn() {
     if (readOnly) return;
@@ -254,10 +256,12 @@
     if (ui.focus !== "timeline") setFocus("timeline");
   }
 
-  // -- Mouse: select, open, copy (CHAT-091, CHAT-101) --
+  // -- Mouse: select and open (CHAT-101). A mouse selection is not copied by
+  // itself in the window (owner, 2026-10-20: Ctrl+C and the right-click menu
+  // copy it; CHAT-091 is the terminal's) --
 
   let press = null; // {x, y, dragged} of the primary press that started in the timeline
-  let copyTimer = null;
+  let refocusTimer = null;
   let replaying = false;
 
   function keyAt(target) {
@@ -281,19 +285,30 @@
   function onMouseUp(event) {
     if (event.button !== 0 || !press) return;
     press = null;
-    clearTimeout(copyTimer);
-    copyTimer = setTimeout(() => {
-      copyTimer = null;
-      const range = timelineRange(root);
-      if (range) {
-        const text = copySelection(range, items);
-        if (text) writeClipboard(text, COPIED_SELECTION);
-      }
-      if (refocusAfterPress) {
+    clearTimeout(refocusTimer);
+    refocusTimer = setTimeout(() => {
+      refocusTimer = null;
+      if (refocusAfterPress && !timelineRange(root)) {
         refocusAfterPress = false;
         focusField();
       }
     }, DOUBLE_CLICK_MS);
+  }
+
+  // While composer_focus_only holds the focus off the typing box for a chat
+  // selection: Esc clears the selection (the typing box's Esc would stop a
+  // run) and a typed character goes to the typing box, ending it.
+  function heldSelectionKey(event) {
+    if (!refocusAfterPress || !timelineRange(root)) return false;
+    if (event.key === "Escape") {
+      document.getSelection()?.removeAllRanges();
+      return true;
+    }
+    if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      refocusAfterPress = false;
+      focusField();
+    }
+    return false;
   }
 
   function selectionCollapsed() {
@@ -331,7 +346,12 @@
   // -- The text selection's two ends stay mounted (1.6 item 8, CHAT-087) --
 
   function onSelectionChange() {
-    const { startKey, endKey } = selectionEnds(timelineRange(root));
+    const range = timelineRange(root);
+    if (refocusAfterPress && !range && !press && !refocusTimer) {
+      refocusAfterPress = false;
+      focusField();
+    }
+    const { startKey, endKey } = selectionEnds(range);
     const next = [...new Set([startKey, endKey].filter((key) => key && indexOf.has(key)))];
     if (next.join("\n") !== pins.join("\n")) pins = next;
   }
@@ -652,6 +672,7 @@
       for (const scope of ["timeline", "composer"]) unbind.push(bindKey(scope, "Ctrl+End", chatKey(jumpToEnd)));
     }
     unbind.push(bindKey("global", "Ctrl+C", chatKey(copyTimelineSelection)));
+    if (!readOnly) unbind.push(bindKey("overlay", "*", heldSelectionKey));
 
     document.addEventListener("selectionchange", onSelectionChange);
     window.addEventListener("mouseup", onMouseUp, true);
@@ -664,7 +685,7 @@
       document.removeEventListener("selectionchange", onSelectionChange);
       window.removeEventListener("mouseup", onMouseUp, true);
       window.removeEventListener("mousemove", onMouseMove, true);
-      clearTimeout(copyTimer);
+      clearTimeout(refocusTimer);
       if (shownProbe?.light === probeLight) shownProbe = null;
     };
   });

@@ -6,6 +6,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { tick } from "svelte";
 
+const BENIGN = /^ResizeObserver loop (completed with undelivered notifications|limit exceeded)/;
+
 export function log(level, message) {
   invoke("app_log", { level, message: String(message) }).catch(() => {});
 }
@@ -165,7 +167,13 @@ export function startAppLog() {
   invoke("scroll_test_mode")
     .then((mode) => mode && watchScrolling())
     .catch(() => {});
-  window.addEventListener("error", (e) => log("error", `${e.message} (${e.filename}:${e.lineno})`));
+  window.addEventListener("error", (e) => {
+    // Chromium's note that a ResizeObserver change waits for the next frame
+    // (the lists measure their rows that way); it comes many times a second
+    // while scrolling and is no fault.
+    if (BENIGN.test(e.message ?? "")) return;
+    log("error", `${e.message} (${e.filename}:${e.lineno})`);
+  });
   window.addEventListener("unhandledrejection", (e) => log("error", `unhandled: ${e.reason?.message ?? e.reason}`));
   setTimeout(sample, 3000);
   window.addEventListener("focus", () => setTimeout(sample, 500));

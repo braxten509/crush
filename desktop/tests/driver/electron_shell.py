@@ -11,7 +11,7 @@ Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
 import json, os, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(__file__))
-from harness import check, finish, probe_eval, wait_for
+from harness import check, finish, probe_eval, wait_for, window_geometry
 
 probe_path, out_dir = sys.argv[1], sys.argv[2]
 
@@ -78,5 +78,52 @@ time.sleep(1)
 wait_for(probe_path, lambda p: (p.get("connection") or {}).get("state") == "connected", 40)
 got = page('return window.__beforeReload === undefined;', wait=15)
 check(got is True, "crash_restart reloads the page, which joins again")
+
+# A picture dragged from another program onto the window (the owner's report,
+# 2026-10-20): a GTK window offers the file the way a file manager does, the
+# real mouse drags it over the app, and the picture lands in the typing box.
+PICTURE = "/tmp/home/proj/dropped-picture.png"
+SOURCE = """
+import gi, sys
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GdkPixbuf, Gtk
+GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, False, 8, 8, 8).savev(sys.argv[1], "png", [], [])
+w = Gtk.Window(title="crushtest-drag")
+w.set_default_size(120, 120)
+w.move(int(sys.argv[2]), int(sys.argv[3]))
+box = Gtk.EventBox()
+w.add(box)
+box.drag_source_set(Gdk.ModifierType.BUTTON1_MASK, [Gtk.TargetEntry.new("text/uri-list", 0, 0)], Gdk.DragAction.COPY)
+box.connect("drag-data-get", lambda *a: a[2].set_uris(["file://" + sys.argv[1]]))
+w.connect("destroy", Gtk.main_quit)
+w.show_all()
+print("shown", flush=True)
+Gtk.main()
+"""
+geo = window_geometry()
+screen_w, screen_h = (int(v) for v in subprocess.run(["xdotool", "getdisplaygeometry"], capture_output=True, text=True).stdout.split())
+sx, sy = screen_w - 130, screen_h - 130
+source = subprocess.Popen([sys.executable, "-I", "-c", SOURCE, PICTURE, str(sx), str(sy)], stdout=subprocess.PIPE, text=True)
+source.stdout.readline()
+time.sleep(0.5)
+tx, ty = geo[0] + geo[2] // 2, geo[1] + geo[3] // 2
+subprocess.run(["xdotool", "mousemove", str(sx + 60), str(sy + 60)])
+subprocess.run(["xdotool", "mousedown", "1"])
+for i in range(1, 21):
+    subprocess.run(["xdotool", "mousemove", str(round(sx + 60 + (tx - sx - 60) * i / 20)), str(round(sy + 60 + (ty - sy - 60) * i / 20))])
+    time.sleep(0.12)
+# A few small moves over the window, then a pause: the drop is only offered
+# once Electron has answered the drag's position messages.
+for d in range(10):
+    subprocess.run(["xdotool", "mousemove", str(tx + d % 3), str(ty + d % 2)])
+    time.sleep(0.15)
+time.sleep(1.0)
+subprocess.run(["xdotool", "mouseup", "1"])
+p = wait_for(probe_path, lambda p: any(a.get("name") == "dropped-picture.png" for a in (p.get("composer") or {}).get("attachments") or []), 10)
+attached = (p.get("composer") or {}).get("attachments") or []
+source.terminate()
+check(any(a.get("name") == "dropped-picture.png" and (a.get("mime") or "").startswith("image/") for a in attached),
+      f"a picture dragged onto the window becomes an attachment ({attached})")
 
 finish()

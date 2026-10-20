@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("crushBridge", {
     channels.set(id, callback);
   },
   window: (action, value) => ipcRenderer.send("crush-window", action, value),
-  // The paths of files dropped on the window.
-  pathsOf: (files) => [...files].map((file) => webUtils.getPathForFile(file)).filter(Boolean),
+  // The paths of files dropped on the window (an array of File objects; a
+  // file with no place on disk, like a picture dragged out of a browser, has none).
+  pathsOf: (files) => files.map((file) => webUtils.getPathForFile(file)).filter(Boolean),
 });

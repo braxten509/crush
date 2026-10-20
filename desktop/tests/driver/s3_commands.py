@@ -42,7 +42,7 @@ check(p.get("ready") is True, "the app window is up and reporting")
 # The doorbell (1.2.5, 1.5.4), with a fixture only: engine_open pushes the
 # "connected" event and rings "events-ready"; the page's own frame loop must
 # take that batch, so a take a moment later finds nothing. This is also the
-# smoke test that capabilities/default.json (core:default) allows the listener.
+# smoke test that the page's event listener reaches the helper's events.
 first = probe_heavy(probe_path, timeout=30, invoke=[{"command": "app_info"}])
 if ((first.get("invoked") or [{}])[0].get("value") or {}).get("fixture"):
     opened = probe_heavy(probe_path, timeout=30, invoke=[{"command": "engine_open", "args": {"cwd": PROJ}}])

@@ -34,7 +34,8 @@ const current = {
     const drop = (event) => {
       if (!files(event)) return;
       event.preventDefault();
-      const paths = line.pathsOf(event.dataTransfer.files);
+      // A plain array: Electron's bridge carries File objects but not a FileList.
+      const paths = line.pathsOf([...event.dataTransfer.files]);
       if (paths.length) callback({ payload: { type: "drop", paths } });
     };
     window.addEventListener("dragover", over);

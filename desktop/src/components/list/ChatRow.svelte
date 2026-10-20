@@ -186,8 +186,18 @@
      lines are drawn inside the row's own box, so the open chat keeps a plain
      row's height and nothing on it or below it moves when the choice moves;
      the edge is drawn after them, over their ends. */
+  /* The band reaches 1px past each end, its faint lines over the lines
+     between rows (owner, 2026-10-20); the negative margins keep every row
+     where it was. */
   .selected .row {
+    margin: -1px 0;
+    height: calc(81 * var(--px) + 2px);
+    padding-top: calc(12 * var(--px) + 1px);
     background: var(--band);
+  }
+  .selected.branch .row {
+    height: calc(72 * var(--px) + 2px);
+    padding-top: calc(13 * var(--px) + 1px);
   }
   .selected .row::before {
     content: "";
@@ -197,15 +207,14 @@
     border-bottom: 1px solid var(--rule-faint);
     pointer-events: none;
   }
-  /* One pixel past each end, over the lines between rows, so no gray end
-     shows under it (owner, 2026-10-20). */
+  /* The band's full height, so it ends with the band's lines. */
   .selected .row::after {
     content: "";
     position: absolute;
     z-index: 1;
     left: calc(3 * var(--px));
-    top: -1px;
-    bottom: -1px;
+    top: 0;
+    bottom: 0;
     width: calc(4 * var(--px));
     background: var(--vermilion);
   }

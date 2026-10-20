@@ -4,9 +4,13 @@
 // settings, so every window and the next start agree), or while the page is
 // too narrow to hold it (forced; the saved choice is kept, as the terminal's
 // listOpen, internal/ui/sessionhost/host.go:443-446).
+import { runAction } from "../actions.js";
 import { COLUMN_LIMITS } from "../columns.js";
 import { hasDialog, openDialog } from "../dialogs.js";
 import { settings_set } from "../engine/commands.js";
+import { conn } from "../stores/connection.svelte.js";
+import { notify } from "../stores/ui.svelte.js";
+import { openTerminal } from "../terminal/tabs.svelte.js";
 
 export const leftList = $state({
   collapsed: false, // the saved choice
@@ -76,12 +80,41 @@ export function applySettings(settings) {
   setCollapsed(settings.list_collapsed === true);
 }
 
-// Alt+N, Alt+T, the strip's "+" and ">_", the Terminals group's "+" and the
-// palette: the folder picker, unless a close box (TERM's terminal_close) is
-// open (host.go:287-290).
+// The right panel's folder name: the folder picker, to switch folders,
+// unless a close box (TERM's terminal_close) is open (host.go:287-290).
 export function openPicker(kind = "session") {
   if (hasDialog("terminal_close") || hasDialog("folder_picker")) return false;
   return openDialog("folder_picker", { mode: kind === "terminal" ? "terminal" : "session" });
+}
+
+// New chat and New terminal (the buttons, the strip's "+" and ">_", the
+// Terminals group's "+", Alt+N, Alt+T) start in this window's folder with no
+// picker: the list only shows this folder's chats and terminals (owner,
+// 2026-10-20).
+export function newChat() {
+  if (hasDialog("terminal_close")) return false;
+  runAction("chat.new");
+  return true;
+}
+
+export function newTerminal() {
+  if (hasDialog("terminal_close")) return false;
+  startTerminal(conn.project.cwd || "");
+  return true;
+}
+
+// A terminal tab in dir; a shell that can't start shows as a notice.
+export async function startTerminal(dir) {
+  try {
+    const tab = await openTerminal({ cwd: dir });
+    if (!tab?.id) throw new Error("no terminal tab");
+    // The tab exists at once; whether its shell started comes later.
+    const start = await tab.started;
+    if (start?.error) throw new Error(start.error);
+  } catch (error) {
+    console.error("Could not start a terminal", error?.message ?? error);
+    notify("error", "Couldn't start the terminal.");
+  }
 }
 
 // Runs fn as an effect for the app's life (fn may return a cleanup), so the

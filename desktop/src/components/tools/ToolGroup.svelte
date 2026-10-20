@@ -307,10 +307,12 @@
   .dels {
     color: var(--error-ink);
   }
-  .live {
-    display: inline-flex;
-    vertical-align: middle;
-    max-width: 100%;
+  /* The status runs inline in the line, so its words share the row's
+     baseline and its dots centre like the separator dot at every zoom; a box
+     set by its middle matched only at some zooms (owner, 2026-10-20). */
+  .live,
+  .live :global(.status) {
+    display: inline;
   }
   .changes {
     position: absolute;

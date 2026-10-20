@@ -20,10 +20,10 @@
   import { comboOf } from "../../lib/keys.js";
   import { shownTerminal } from "../../lib/leftlist/numbers.js";
   import * as P from "../../lib/leftlist/picker.js";
-  import { leftList } from "../../lib/leftlist/store.svelte.js";
+  import { leftList, startTerminal } from "../../lib/leftlist/store.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
-  import { openTerminal, terminals } from "../../lib/terminal/tabs.svelte.js";
+  import { terminals } from "../../lib/terminal/tabs.svelte.js";
   import Sheet from "../kit/Sheet.svelte";
 
   let { mode = "session" } = $props();
@@ -219,16 +219,7 @@
   // Starting (2.21): the failure line is cleared by each attempt.
   async function startIn(what, dir) {
     if (what === "terminal") {
-      try {
-        const tab = await openTerminal({ cwd: dir });
-        if (!tab?.id) throw new Error("no terminal tab");
-        // The tab exists at once; whether its shell started comes later.
-        const start = await tab.started;
-        if (start?.error) throw new Error(start.error);
-      } catch (error) {
-        console.error("Could not start a terminal", error?.message ?? error);
-        notify("error", "Couldn't start the terminal.");
-      }
+      await startTerminal(dir);
       return;
     }
     if (P.clean(dir) === P.clean(conn.project.cwd || "")) {

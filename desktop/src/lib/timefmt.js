@@ -46,11 +46,17 @@ export function goDuration(seconds) {
   return `${sign}${sec}s`;
 }
 
-// A byline's time: the message's local clock time, "10:42".
+// A local clock time on the 12-hour clock, "9:05 AM" (owner, 2026-10-20):
+// a byline's time and a list row's time today and yesterday.
+export function twelveHour(date) {
+  const h = date.getHours();
+  return `${h % 12 || 12}:${String(date.getMinutes()).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+// A byline's time: the message's local clock time, "10:42 AM".
 export function clockTime(unixSeconds) {
   if (!unixSeconds) return "";
-  const d = new Date(unixSeconds * 1000);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return twelveHour(new Date(unixSeconds * 1000));
 }
 
 // One shared 1 s clock for every visible timer (CHAT-021): it ticks only

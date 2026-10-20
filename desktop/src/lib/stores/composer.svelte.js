@@ -35,7 +35,7 @@ import { conn, refusedWhileFailed } from "./connection.svelte.js";
 import { addPending, finishPending, markUncertain, messages, resolvePending, returnDraft, takeReturned } from "./messages.svelte.js";
 import { queue, recall as recallQueued, recalled, refresh as refreshQueue } from "./queue.svelte.js";
 import { busy, deferSend, ensureSession, sessions, upsertSession } from "./sessions.svelte.js";
-import { notify, setFocus, ui } from "./ui.svelte.js";
+import { notify, requestEnd, setFocus, ui } from "./ui.svelte.js";
 import { loadAgent, ws } from "./workspace.svelte.js";
 
 export const composer = $state({
@@ -840,6 +840,7 @@ async function sendMessage(content, attachments = [], { hidden = false } = {}) {
   if (!prior) composer.pendingKept = [];
   const queued = prior !== "" && prior === sid && (busy(sid) || interrupting.has(sid));
   const submissionId = hidden ? "" : addPending({ sessionId: sid, text: content, attachments, held: queued });
+  if (!hidden) requestEnd();
   composer.sending = true;
   try {
     for (const skill of kept) {
@@ -896,6 +897,7 @@ export async function send() {
     history.reset();
     syncMode();
     runShell(text);
+    requestEnd();
     return true;
   }
   const attachments = [...draft.attachments];

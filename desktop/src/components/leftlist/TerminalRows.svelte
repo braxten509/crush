@@ -11,7 +11,7 @@
   import { askCloseTerminal } from "../../lib/terminal/tabs.svelte.js";
   import { orderedTerminals, showRow, shownTerminal, startDrag } from "../../lib/leftlist/numbers.js";
   import { baseOf, clean, short } from "../../lib/leftlist/picker.js";
-  import { leftList, openPicker } from "../../lib/leftlist/store.svelte.js";
+  import { leftList, newTerminal } from "../../lib/leftlist/store.svelte.js";
   import Icon from "../Icon.svelte";
 
   let list = $state(null);
@@ -48,7 +48,7 @@
 <section class="terminals" aria-label="Terminals">
   <h2 class="group">
     <span class="label">Terminals [{tabs.length}]</span>
-    <button class="add" type="button" aria-label="New terminal" title="New terminal (Alt+T)" onclick={() => openPicker("terminal")}>
+    <button class="add" type="button" aria-label="New terminal" title="New terminal (Alt+T)" onclick={newTerminal}>
       <Icon name="plus" />
     </button>
   </h2>

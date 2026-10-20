@@ -29,7 +29,7 @@
   import { searchFocused, setSearchField } from "./list/listfocus.js";
   import ListFooter from "./list/ListFooter.svelte";
   import { startNewChat } from "./list/newchat.js";
-  import { openPicker } from "../lib/leftlist/store.svelte.js";
+  import { newTerminal } from "../lib/leftlist/store.svelte.js";
   import { listRoom } from "./panel/panel.svelte.js";
   import { listMarks } from "./start/marks.js";
   import { start } from "./start/start.svelte.js";
@@ -249,7 +249,7 @@
       <Icon name="plus" />
       <span class="label">New chat</span>
     </button>
-    <button class="new-chat new-terminal" type="button" title="New terminal (Alt+T)" onclick={() => openPicker("terminal")}>
+    <button class="new-chat new-terminal" type="button" title="New terminal (Alt+T)" onclick={newTerminal}>
       <Icon name="terminal" />
       <span class="label">New terminal</span>
     </button>
@@ -477,5 +477,10 @@
 
   .chats :global(.rule.end-of-list) {
     margin-top: 0;
+  }
+  /* Right under the open chat's band the list's end rule would be a second
+     line beneath its own; it goes clear there (owner, 2026-10-20). */
+  .chats :global(.group:has(.chat.selected:last-child) + .rule.end-of-list) {
+    visibility: hidden;
   }
 </style>

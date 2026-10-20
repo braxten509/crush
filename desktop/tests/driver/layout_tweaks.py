@@ -6,7 +6,10 @@ with a chat open:
   even with the chat list at its narrowest;
 - the right panel never gets so narrow that a meter's words are cut or run
   into the next meter (dragged to its narrowest with the divider's keys);
-- the panel's arrow hides it, and the tab at the window's edge brings it back.
+- the top bar's panel switch hides it, and the tab at the window's edge
+  brings it back;
+- the vermilion rail starts at the column's top, and the list's "‹‹" sits
+  on the middle of the wordmark's capitals.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/model-menu.json layout_tweaks.py
@@ -56,6 +59,52 @@ bar = run("""
 check(not bar.get("head") and not bar.get("rule"), f"no head or head rule over the chat ({bar})")
 check(bar.get("branch") == "main" and bar.get("order"), f"the top bar shows the branch after the folder ({bar})")
 
+# The vermilion rail starts at the chat column's top, not where the old head
+# ended (owner, 2026-10-20: "the orange line is getting cut off").
+rail = run("""
+  const r = document.querySelector('.rail')?.getBoundingClientRect(), c = document.querySelector('main.conversation')?.getBoundingClientRect();
+  return r && c ? { rail: r.top, column: c.top } : null;
+""") or {}
+check(rail.get("rail") is not None and abs(rail["rail"] - rail["column"]) <= 0.5, f"the rail starts at the column's top ({rail})")
+
+# The open chat's band reaches 1px past the lines on each side and its words
+# stay where a plain row has them; the list's end rule right under it goes
+# clear, so no second line shows beneath the band (owner, 2026-10-20).
+band = run("""
+  const li = document.querySelector('nav.chats .chat.selected'), next = li?.nextElementSibling;
+  if (!li || !next || !next.matches('.chat')) return null;
+  const r = li.querySelector('.row').getBoundingClientRect(), n = next.getBoundingClientRect();
+  const textTop = (e) => e.querySelector('.title').getBoundingClientRect().top - e.getBoundingClientRect().top - parseFloat(getComputedStyle(e).borderTopWidth);
+  const end = document.querySelector('nav.chats .rule.end-of-list');
+  const groups = [...document.querySelectorAll('nav.chats .group')], last = groups.at(-1)?.querySelector('.chat:last-child');
+  const shownEnd = end && getComputedStyle(end).visibility;
+  // The last row open, as its class says, while the rule is read.
+  li.classList.remove('selected'); last.classList.add('selected');
+  const hiddenEnd = end && getComputedStyle(end).visibility;
+  last.classList.remove('selected'); li.classList.add('selected');
+  return { past: r.bottom - n.top, text: textTop(li), plain: textTop(next), end_after: !!end && end.previousElementSibling === groups.at(-1), shownEnd, hiddenEnd };
+""") or {}
+check(band.get("past") == 1, f"the open chat's band reaches 1px over the line under it ({band})")
+check(band and abs(band["text"] - band["plain"]) <= 0.5, f"its title sits where a plain row's does ({band})")
+check(band.get("end_after") and band.get("shownEnd") == "visible" and band.get("hiddenEnd") == "hidden",
+      f"the end rule shows under a plain last row and goes clear under an open one ({band})")
+
+# The list's "‹‹" sits on the middle of the wordmark's capitals (owner,
+# 2026-10-20: "not centered"), read from the font's own ink box.
+mark = run("""
+  const crush = document.querySelector('nav.chats .wordmark .crush');
+  const pair = document.querySelector('nav.chats .collapse .pair');
+  if (!crush || !pair) return null;
+  const m = document.createElement('span'); m.style.cssText = 'display:inline-block;width:0;height:0';
+  crush.append(m); const baseline = m.getBoundingClientRect().top; m.remove();
+  const ctx = document.createElement('canvas').getContext('2d'); ctx.font = getComputedStyle(crush).font;
+  const ink = ctx.measureText(crush.textContent.toUpperCase());
+  const caps = baseline - (ink.actualBoundingBoxAscent - ink.actualBoundingBoxDescent) / 2;
+  const r = pair.getBoundingClientRect();
+  return { caps, arrow: r.top + r.height / 2 };
+""") or {}
+check(mark.get("caps") is not None and abs(mark["caps"] - mark["arrow"]) <= 0.5, f"the list's ‹‹ is centred on the wordmark's capitals ({mark})")
+
 # New chat and New terminal, at the chat list's narrowest.
 press_on("Resize the chat list", "shift+Left", 12)
 buttons = run("""
@@ -85,10 +134,10 @@ shot(out_dir, "narrowest")
 check(meters.get("count", 0) >= 2, f"the panel shows its meters ({meters})")
 check(not meters.get("error") and not meters.get("cut") and not meters.get("overlap") and not meters.get("into"), f"at the panel's narrowest no meter word is cut or runs into the next ({meters})")
 
-# Hide and bring back.
-check(click('[data-probe="panel-hide"]'), "the panel has a hide arrow")
-gone = run("return { panel: !!document.querySelector('.panel-column'), tab: !!document.querySelector('[data-probe=\"panel-tab\"]') };") or {}
-check(not gone.get("panel") and gone.get("tab"), f"the arrow hides the panel and a tab shows at the edge ({gone})")
+# Hide and bring back: the top bar's panel switch (owner, 2026-10-20, A).
+check(click('[data-probe="title-panel"]'), "the top bar has the panel switch")
+gone = run("return { panel: !!document.querySelector('.panel-column'), tab: !!document.querySelector('[data-probe=\"panel-tab\"]'), pressed: document.querySelector('[data-probe=\"title-panel\"]').getAttribute('aria-pressed') };") or {}
+check(not gone.get("panel") and gone.get("tab") and gone.get("pressed") == "false", f"it hides the panel and a tab shows at the edge ({gone})")
 shot(out_dir, "hidden")
 click('[data-probe="panel-tab"]')
 back = run("return { panel: !!document.querySelector('.panel-column'), tab: !!document.querySelector('[data-probe=\"panel-tab\"]') };") or {}

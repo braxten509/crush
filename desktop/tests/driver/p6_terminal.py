@@ -15,11 +15,9 @@ names a missing program, so only $VISUAL can have been used. The variables
 the tabs must not get are exported by /tmp/home/.profile, which the app's
 login shell reads (login_env.rs) and the tab's shell does not.
 
-Until the folder picker (LST) is merged, a terminal tab is opened through
-the editor: the fake editor in its shell mode runs an interactive /bin/sh in
-the tab, titled "Editor". With the picker (Alt+T, LIST-005) the steps run on
-real "Terminal" tabs. The rows' other parts that need LST, KIT, THM or PAL
-are named in each step's NOT-RUN lines."""
+Alt+T opens a "Terminal" tab in this window's folder with no picker (owner,
+2026-10-20; LIST-005), and the steps run on it. The rows' other parts that
+need LST, KIT, THM or PAL are named in each step's NOT-RUN lines."""
 import os, re, shutil, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -302,19 +300,12 @@ def clear_composer():
 
 def open_shell():
     """A new terminal tab with a shell, shown; its probe entry, or None.
-    LIST-005's real path (Alt+T, the folder picker) when LST is merged; else
-    the editor's tab with the fake editor's shell."""
+    Alt+T opens it in this folder with no picker (owner, 2026-10-20)."""
     before = {t["id"] for t in tabs()}
     focus_composer()
     key("alt+t")
-    if wait_for(probe_path, lambda p: "folder_picker" in dialogs(p), 2) and "folder_picker" in dialogs():
-        key("Return")
-    else:
-        set_mode("shell")
-        key("ctrl+o")
     new = wait_term(lambda t: any(x["id"] not in before and x["state"] == "running" for x in t.get("tabs") or []), 10)
     tab = next((x for x in new.get("tabs") or [] if x["id"] not in before), None)
-    set_mode("edit")
     if not tab:
         return None
     wait_line(tab["id"], lambda line: re.search(r"[$#] ?$", line) is not None, 8)
@@ -417,10 +408,8 @@ def step_new_terminal():
             return
         t = term()
         check(t.get("shown") == shell["id"], "the new tab is shown")
-        title = shell["title"]
-        if title != "Terminal":
-            not_run("LIST-005", "Alt+T, the Terminals \"+\" and the folder picker \"New terminal in…\" run after LST merges; this tab came through the editor (\"Editor\")")
-        check(shell["cwd"] == apps.PROJ, f"it starts in the chosen folder ({shell['cwd']})")
+        check(shell["title"] == "Terminal" and "folder_picker" not in dialogs(), f"Alt+T opens a \"Terminal\" tab with no picker ({shell['title']!r})")
+        check(shell["cwd"] == apps.PROJ, f"it starts in this window's folder ({shell['cwd']})")
 
 
 def step_env_shown():

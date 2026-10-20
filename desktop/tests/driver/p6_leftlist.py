@@ -351,6 +351,13 @@ def dialogs(win):
     return win.section("overlay").get("dialogs") or []
 
 
+def open_picker(win, until=lambda s: s.get("picker")):
+    """The folder picker, from the right panel's folder name (New chat and
+    New terminal start here with no picker since 2026-10-20)."""
+    win.click(win.hv().get("folder_name"))
+    return win.until(until, 5)
+
+
 def clip_set(text):
     return subprocess.run([sys.executable, "-I", CLIP, "set-text", text], capture_output=True, timeout=30).returncode == 0
 
@@ -543,15 +550,15 @@ def flow_collapse(main):
         main.click(cell and cell["rect"])
         check(bool(main.until(lambda s: shown_id(s) == "wait", 5)), "a click on a cell shows its row")
         main.click(ns)
-        sec = main.until(lambda s: (s.get("picker") or {}).get("kind") == "session", 5)
-        check(bool(sec) and sec["picker"]["title"] == "New chat in…", "the strip's + opens \"New chat in…\"")
-        key("Escape")
-        main.until(lambda s: not s.get("picker"), 3)
+        sec = main.until(lambda s: not shown_id(s), 5)
+        check(bool(sec) and not sec.get("picker") and "folder_picker" not in dialogs(main), "the strip's + starts a new chat here with no picker")
+        before = len(main.section("terminal").get("tabs") or [])
         main.click(nt)
-        sec = main.until(lambda s: (s.get("picker") or {}).get("kind") == "terminal", 5)
-        check(bool(sec) and sec["picker"]["title"] == "New terminal in…", "its >_ opens \"New terminal in…\"")
-        key("Escape")
-        main.until(lambda s: not s.get("picker"), 3)
+        ok, _ = poll(lambda: main.section("terminal"), lambda t: len(t.get("tabs") or []) == before + 1, 5)
+        check(ok and "folder_picker" not in dialogs(main), "its >_ opens a terminal here with no picker")
+        if ok:
+            key("ctrl+d")  # the shell ends and its tab closes
+            poll(lambda: main.section("terminal"), lambda t: len(t.get("tabs") or []) == before, 5)
         shot(OUT, "LIST-044")
         main.click(ex)
         check(bool(main.until(lambda s: not s["collapsed"] and not s["strip"], 5)), "a click on › opens the list")
@@ -587,9 +594,8 @@ def flow_picker(main):
     with step("LIST-004", OUT):
         show(main, "ready")
         main.focus()
-        key("alt+n")
-        sec = main.until(lambda s: (s.get("picker") or {}).get("kind") == "session", 5)
-        check(bool(sec), "Alt+N opens the folder picker")
+        sec = open_picker(main, lambda s: (s.get("picker") or {}).get("kind") == "session")
+        check(bool(sec), "the panel's folder name opens the folder picker")
         p = (sec or {}).get("picker") or {}
         check(p.get("title") == "New chat in…" and "folder_picker" in dialogs(main), f"titled \"New chat in…\" ({p.get('title')!r})")
         # LIST-038: the shown chat's folder, home as ~, a / at the end, the caret after it.
@@ -706,12 +712,10 @@ def flow_picker(main):
         check(bool(main.until(lambda s: not s.get("picker"), 3)) and "folder_picker" not in dialogs(main), "a click outside the sheet closes it")
         shot(OUT, "LIST-041")
         # Esc cancels; Enter in this window's folder starts a new chat here.
-        key("alt+n")
-        main.until(lambda s: s.get("picker"), 3)
+        open_picker(main)
         key("Escape")
         check(bool(main.until(lambda s: not s.get("picker"), 3)) and shown_id(main.ll()) == "ready", "Esc cancels and changes nothing")
-        key("alt+n")
-        main.until(lambda s: (s.get("picker") or {}).get("input") == "~/proj/", 3)
+        open_picker(main, lambda s: (s.get("picker") or {}).get("input") == "~/proj/")
         key("Return")
         sec = main.until(lambda s: not s.get("picker") and not shown_id(s), 5)
         check(bool(sec), "Enter on this window's folder starts a new chat here (no chat shown, the new chat's page)")
@@ -721,6 +725,10 @@ def flow_picker(main):
         key("ctrl+n")
         sec = main.until(lambda s: not shown_id(s), 5)
         check(bool(sec) and not sec.get("picker") and "folder_picker" not in dialogs(main), "Ctrl+N starts a new chat with no picker")
+        show(main, "ready")
+        key("alt+n")
+        sec = main.until(lambda s: not shown_id(s), 5)
+        check(bool(sec) and not sec.get("picker") and "folder_picker" not in dialogs(main), "so does Alt+N (owner, 2026-10-20)")
         skip("CMD-014", "the palette's \"New Session\" entry: runs after PAL merges")
         shot(OUT, "CMD-014")
 
@@ -742,8 +750,7 @@ def flow_pictures(main):
         ok, h = poll(main.hv, lambda h: h.get("images"), 5, 0.3)
         check(ok and all(i["on_top"] for i in h["images"]), "the picture shows in the chat")
         main.focus()
-        key("alt+n")
-        opened = main.until(lambda s: s.get("picker"), 3)
+        opened = open_picker(main)
         h = main.hv()
         check(bool(h.get("images")) and not any(i["on_top"] for i in h["images"]),
               f"the folder picker covers it (picker {bool(opened)}, pictures {h.get('images')}, dialogs {dialogs(main)})")
@@ -798,8 +805,7 @@ def flow_windows(app, main):
         w2.focus()
         check(show(w2, "ready"), "the new window shows a chat")
         main.focus()
-        key("alt+n")
-        main.until(lambda s: s.get("picker"), 3)
+        open_picker(main)
         main.click((main.hv().get("picker") or {}).get("browse"))
         check(bool(w2.until(lambda s: not shown_id(s), 5)), "Browse… with that folder brings its window forward with a new chat")
         check(bool(main.until(lambda s: not s.get("picker"), 3)), "the picker closes")
@@ -928,8 +934,7 @@ def flow_restart():
         with step("LIST-048", OUT):
             main.until(lambda s: s.get("server_count") == 4, 10)
             show(main, "ready")
-            key("alt+n")
-            main.until(lambda s: s.get("picker"), 3)
+            open_picker(main)
             main.click((main.hv().get("picker") or {}).get("browse"))
             # A folder the window cannot switch to says so in the notice line
             # (the switch in this window, owner 2026-10-19).

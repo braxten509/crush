@@ -19,7 +19,7 @@ import { bindKey } from "../keys.js";
 import { isShown, listRows, moveShown, orderedTerminals, showNumber, shownTerminal } from "../leftlist/numbers.js";
 import { SERVER_HINT, foldOf, isPicked, readServers, rowTexts, serverKey, shownRows, unpick } from "../leftlist/servers.js";
 import { chatOfEvent, chatState, forgetChat, phase3Kind, pollWorking, readSoon, rowStateOf, unknown } from "../leftlist/states.js";
-import { applySettings, leftList, openPicker, toggleList, watch } from "../leftlist/store.svelte.js";
+import { applySettings, leftList, newChat, newTerminal, toggleList, watch } from "../leftlist/store.svelte.js";
 import { forget, noteState, unread } from "../leftlist/unread.js";
 import { DRAFT_STEP, closeThisWindow, discardDraft } from "../leftlist/windowclose.js";
 import { registerListSection } from "../listsections.js";
@@ -54,8 +54,8 @@ function closeShown() {
   return true;
 }
 
-listKey("Alt+N", () => (openPicker("session"), true));
-listKey("Alt+T", () => (openPicker("terminal"), true));
+listKey("Alt+N", () => (newChat(), true));
+listKey("Alt+T", () => (newTerminal(), true));
 listKey("Alt+S", toggleList);
 listKey("Alt+W", closeShown);
 listKey("Alt+Shift+ArrowUp", () => (moveShown(-1), true));
@@ -236,6 +236,7 @@ probeSection(
       strip_expand: rectOf(one("nav.strip .expand")),
       strip_new_session: rectOf(one("nav.strip .new-session")),
       strip_new_terminal: rectOf(one("nav.strip .new-terminal")),
+      folder_name: rectOf(one('[data-probe="folder-picker"]')),
       strip_rule: rectOf(one("nav.strip .group-rule")),
       strip_cells: all("nav.strip .cell").map((el) => ({
         row: el.dataset.row,

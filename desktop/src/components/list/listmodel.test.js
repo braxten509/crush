@@ -25,8 +25,8 @@ describe("days and times", () => {
   });
 
   it("shows the clock today and yesterday, the weekday within a week, else the date", () => {
-    expect(rowTime(at(9, 18, 10, 43), NOW)).toBe("10:43");
-    expect(rowTime(at(9, 17, 9, 5), NOW)).toBe("09:05");
+    expect(rowTime(at(9, 18, 10, 43), NOW)).toBe("10:43 AM");
+    expect(rowTime(at(9, 17, 9, 5), NOW)).toBe("9:05 AM");
     expect(rowTime(at(9, 14), NOW)).toBe("Wed");
     expect(rowTime(at(8, 3), NOW)).toBe("Sep 3");
     expect(rowTime(at(11, 24, 12, 0, 2025), NOW)).toBe("Dec 24, 2025");
@@ -58,7 +58,7 @@ describe("buildRows", () => {
     const busy = (id) => id === "b";
     const { items, rows, closedCount, empty } = buildRows(list, { now: NOW, busy, selectedId: "a" });
     expect(shape(items)).toEqual(["# Today", "a", "b", "# Yesterday", "c", "# Previous 7 days", "d", "# Previous 30 days", "e", "# Older", "f"]);
-    expect(rows[0]).toMatchObject({ id: "a", title: "A", time: "11:00", depth: 0, selected: true, closed: false, state: "" });
+    expect(rows[0]).toMatchObject({ id: "a", title: "A", time: "11:00 AM", depth: 0, selected: true, closed: false, state: "" });
     expect(rows[1]).toMatchObject({ id: "b", selected: false, state: "Working…", stateKind: "working" });
     expect(closedCount).toBe(0);
     expect(empty).toBe("");
@@ -71,7 +71,7 @@ describe("buildRows", () => {
   it("uses the activity time it is given for groups and times", () => {
     const timeOf = (s) => (s.id === "f" ? at(9, 18, 14, 30) : s.updated_at);
     const { rows } = buildRows([list[5]], { now: NOW, timeOf });
-    expect(rows[0].time).toBe("14:30");
+    expect(rows[0].time).toBe("2:30 PM");
   });
 
   // p ← q ← r (r is q's branch, q is p's branch); s ← t; u's parent is not listed.

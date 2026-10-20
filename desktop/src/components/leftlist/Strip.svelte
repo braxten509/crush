@@ -2,8 +2,8 @@
   // The narrow strip (desktop-design-5-6 2.20, look 5.17; LIST-002, LIST-044;
   // the terminal's drawStrip, internal/ui/sessionhost/draw.go:471-500), shown
   // instead of the list while leftList.strip. Top to bottom: "›" (the whole
-  // top row opens the list), "+" (the folder picker for a new session), ">_"
-  // (for a new terminal), then one cell per row with its state mark and its
+  // top row opens the list), "+" (a new chat in this folder), ">_"
+  // (a new terminal in this folder), then one cell per row with its state mark and its
   // number (its Alt+number, at most two digits); the shown row's cell has the
   // vermilion edge, and a rule parts the chats from the terminal tabs. No
   // notice line and no server rows (servers.go:96-99). A terminal tab's cell
@@ -11,7 +11,7 @@
   import { onMount } from "svelte";
   import { isShown, listRows, showRow, startDrag } from "../../lib/leftlist/numbers.js";
   import { MARKS, chatState } from "../../lib/leftlist/states.js";
-  import { leftList, openPicker, toggleList, watchWidth } from "../../lib/leftlist/store.svelte.js";
+  import { leftList, newChat, newTerminal, toggleList, watchWidth } from "../../lib/leftlist/store.svelte.js";
   import Icon from "../Icon.svelte";
 
   let nav = $state(null);
@@ -47,10 +47,10 @@
   <button class="expand" type="button" aria-label="Open the list" title="Open the list (Alt+S)" onclick={toggleList}>
     <Icon name="chevron" class="right" />
   </button>
-  <button class="tool new-session" type="button" aria-label="New chat" title="New chat (Alt+N)" onclick={() => openPicker("session")}>
+  <button class="tool new-session" type="button" aria-label="New chat" title="New chat (Alt+N)" onclick={newChat}>
     <Icon name="plus" size={18} />
   </button>
-  <button class="tool new-terminal" type="button" aria-label="New terminal" title="New terminal (Alt+T)" onclick={() => openPicker("terminal")}>
+  <button class="tool new-terminal" type="button" aria-label="New terminal" title="New terminal (Alt+T)" onclick={newTerminal}>
     <Icon name="terminal" size={18} />
   </button>
   <div class="cells" bind:this={cells}>

@@ -25,7 +25,7 @@
   // (applyChatScroll, transcript.go:14-28); Tab from the chat
   // (keypress.go:516-518). Desktop rules: CHAT-087 to CHAT-101.
   //
-  // The rail runs from under the head to the top edge of the composer block,
+  // The rail runs from the column's top to the top edge of the composer block,
   // measured from the layout: the end follows `.rule.above-composer`'s bottom
   // edge (the composer block starts there), so a taller composer (chips
   // queued, a slot form) never lets the rail run into it.
@@ -619,6 +619,17 @@
     list.scrollToBottom();
   }
 
+  // A sent message or `!` command (requestEnd): the bottom too.
+  let endSeen = ui.endRequest;
+  $effect(() => {
+    const n = ui.endRequest;
+    if (n === endSeen) return;
+    endSeen = n;
+    untrack(() => {
+      if (shown && list && !readOnly) jumpToEnd();
+    });
+  });
+
   // For a readOnly timeline's owner (LIVE's helper view, desktop-design-5-6 7.1):
   // n reading lines or pages (negative: up), and the bottom, following.
   export function scrollLines(n) {
@@ -880,12 +891,13 @@
 </section>
 
 <style>
-  /* The rail runs from the head's rule to the top of the composer block; no
-     dot at its top (owner, 2026-10-20). */
+  /* The rail runs from the column's top (chats have no head since
+     2026-10-20) to the top of the composer block; no dot at its top (owner,
+     2026-10-20). */
   .rail {
     position: absolute;
     left: calc(30 * var(--px));
-    top: calc(121 * var(--px));
+    top: 0;
     width: calc(3 * var(--px));
     background: var(--vermilion);
     pointer-events: none;

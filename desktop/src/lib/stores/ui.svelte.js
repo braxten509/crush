@@ -13,6 +13,7 @@ export const ui = $state({
   notice: null, // null | {id, kind, text, action}
   panelHidden: false,
   follow: true, // the timeline keeps its bottom in view (CHAT-099)
+  endRequest: 0, // counts up: each step brings the timeline to its bottom, following
   slot: null, // null | SlotEntry (lib/types.js): what holds the typing box's place (Q8)
   scrollTo: null, // null | {sessionId, messageId, figureId?}: the timeline (P3.5) carries it out and clears it
 });
@@ -84,6 +85,12 @@ export function selectItem(key) {
 
 export function setFollow(on) {
   ui.follow = on;
+}
+
+// Sending a message or a `!` command brings the chat to its bottom, however
+// far up it was read (owner, 2026-10-20).
+export function requestEnd() {
+  ui.endRequest += 1;
 }
 
 export function setPanelHidden(hidden) {

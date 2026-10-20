@@ -1,8 +1,9 @@
 <script>
   // The window's own title bar on Linux (owner 2026-10-20, design D): the
   // system bar's parts in the edition's type, the chat's title as a running
-  // head with the folder after it in italic, and on the right the pin
-  // (keep the window above the others), minimize, maximize and close.
+  // head with the folder after it in italic, and on the right the right
+  // panel's switch (owner, 2026-10-20, A: filled while the panel shows), the
+  // pin (keep the window above the others), minimize, maximize and close.
   // Pinned, only the pin changes: it fills in (owner, 2026-10-20). After the
   // folder, the Git branch in the path style, or on a branch "Branched from
   // <parent title>" with the title as a link that opens it, reopening it
@@ -13,11 +14,12 @@
   // (app-region), the buttons are not. Close runs the page's close steps, as
   // the system's button does (electron/main.cjs). Where the system draws the
   // bar (Mac, Windows, outside the app) this draws nothing.
-  import appIcon from "../../../src-tauri/icons/icon.svg?url";
+  import appIcon from "../../assets/heart.svg?url";
   import { getCurrentWindow } from "../../lib/bridge/window.js";
   import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
   import { parentOf } from "../../lib/stores/links.svelte.js";
   import { openChat, sessions } from "../../lib/stores/sessions.svelte.js";
+  import { panelSetting, setPanelShown } from "../../lib/stores/ui.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
   import { titleParts } from "../../lib/system/title.svelte.js";
   import Icon from "../Icon.svelte";
@@ -74,6 +76,18 @@
       <button
         type="button"
         tabindex="-1"
+        class="panel-switch"
+        title={panelSetting.off ? "Show the right panel" : "Hide the right panel"}
+        aria-label={panelSetting.off ? "Show the right panel" : "Hide the right panel"}
+        aria-pressed={!panelSetting.off}
+        data-probe="title-panel"
+        onclick={() => setPanelShown(panelSetting.off)}
+      >
+        <Icon name={panelSetting.off ? "panel" : "panel-on"} />
+      </button>
+      <button
+        type="button"
+        tabindex="-1"
         class="pin"
         title={state.pinned ? "Don't keep on top" : "Keep on top"}
         aria-label={state.pinned ? "Don't keep on top" : "Keep on top"}
@@ -126,25 +140,34 @@
     app-region: drag;
   }
 
+  /* The heart bit alone, no tile, about the bar's capital height and a half
+     (owner, 2026-10-20: no background, bigger). */
   .app-icon {
     flex: none;
-    width: calc(24 * var(--px));
-    height: calc(24 * var(--px));
+    width: calc(28 * var(--px));
+    height: calc(23.86 * var(--px));
     margin-right: calc(14 * var(--px));
   }
 
   /* The chat's title gives way first; the folder keeps its name until it
      alone would crowd the buttons. */
+  /* Its capitals sit on the bar's middle with the branch's and the icons'
+     (the flex centre puts its taller line box 1 to 2 px high; measured with
+     tests/driver/titlebar_align.py, owner 2026-10-20). */
   .chat {
+    position: relative;
+    top: calc(1.5 * var(--px));
     flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     font-weight: 500;
   }
+  /* Its floor is 60 or its own width, if less, so a short name leaves no
+     wider gap before the branch (owner, 2026-10-20). */
   .project {
     flex: 0 10 auto;
-    min-width: calc(60 * var(--px));
+    min-width: calc-size(max-content, min(size, calc(60 * var(--px))));
     overflow: hidden;
     text-overflow: ellipsis;
     margin-left: calc(15 * var(--px));
@@ -156,7 +179,7 @@
      chat's title and before the folder. */
   .path {
     flex: 0 5 auto;
-    min-width: calc(60 * var(--px));
+    min-width: calc-size(max-content, min(size, calc(60 * var(--px))));
     overflow: hidden;
     text-overflow: ellipsis;
     margin-left: calc(15 * var(--px));
@@ -229,7 +252,8 @@
   .buttons button:focus-visible {
     outline: none;
   }
-  .buttons .pin {
+  .buttons .pin,
+  .buttons .panel-switch {
     color: var(--mark);
   }
   .pinned .buttons .pin {

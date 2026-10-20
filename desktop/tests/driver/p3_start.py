@@ -108,7 +108,7 @@ def day_label(at, now):
 def row_time(at, now):
     t, d = datetime.fromtimestamp(at), days_ago(at, now)
     if d <= 1:
-        return f"{t.hour:02d}:{t.minute:02d}"
+        return f"{t.hour % 12 or 12}:{t.minute:02d} {'AM' if t.hour < 12 else 'PM'}"
     if d <= 7:
         return WEEKDAYS[(t.weekday() + 1) % 7]
     text = f"{MONTHS[t.month - 1]} {t.day}"

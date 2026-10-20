@@ -11,6 +11,8 @@
 // the list's order (sessions.order); a chat's branches come oldest first, as
 // the picture and the demo show them.
 
+import { twelveHour } from "./timefmt.js";
+
 export const DAY_LABELS = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -36,15 +38,13 @@ export function dayLabel(at, now) {
   return DAY_LABELS[4];
 }
 
-const pad = (n) => String(n).padStart(2, "0");
-
-// The row's time: 24-hour clock today and yesterday, the weekday within a
+// The row's time: the 12-hour clock today and yesterday, the weekday within a
 // week, else the date (with the year when it is another year).
 export function rowTime(at, now) {
   if (!at) return "";
   const date = new Date(at * 1000);
   const days = daysAgo(at, now);
-  if (days <= 1) return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (days <= 1) return twelveHour(date);
   if (days <= 7) return WEEKDAYS[date.getDay()];
   const text = `${MONTHS[date.getMonth()]} ${date.getDate()}`;
   return date.getFullYear() === new Date(now).getFullYear() ? text : `${text}, ${date.getFullYear()}`;

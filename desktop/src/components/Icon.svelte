@@ -52,6 +52,8 @@
     minimize: { w: 16, h: 16 },
     maximize: { w: 16, h: 16 },
     restore: { w: 16, h: 16 },
+    panel: { w: 16, h: 16 },
+    "panel-on": { w: 16, h: 16 },
   };
   const box = $derived(icons[name]);
   const scale = $derived(size ? size / Math.max(box.w, box.h) : 1);
@@ -124,8 +126,12 @@
   {:else if name === "pin" || name === "pin-on"}
     <path d="M5.1 1.2h5.8l-.8 5 3 2.7v1.7H2.9V8.9l3-2.7z" fill={name === "pin-on" ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
     <path d="M8 10.6v4.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+  {:else if name === "panel" || name === "panel-on"}
+    <!-- A window with its right column; filled while the right panel shows. -->
+    <path d="M2.5 3.2h11v9.6h-11z" fill="none" stroke="currentColor" stroke-width="1.4" />
+    {#if name === "panel-on"}<path d="M9.8 3.2h3.7v9.6H9.8z" fill="currentColor" />{:else}<path d="M9.8 3.2v9.6" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
   {:else if name === "minimize"}
-    <path d="M3 8.5h10" fill="none" stroke="currentColor" stroke-width="1.4" />
+    <path d="M3 8h10" fill="none" stroke="currentColor" stroke-width="1.4" />
   {:else if name === "maximize"}
     <path d="M3.5 3.5h9v9h-9z" fill="none" stroke="currentColor" stroke-width="1.4" />
   {:else if name === "restore"}

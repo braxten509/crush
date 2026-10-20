@@ -55,6 +55,6 @@ describe("footer duration (Go's Duration.String)", () => {
 
 test("the byline's clock time is the local hour and minute", () => {
   const at = new Date(2026, 9, 18, 9, 5, 30).getTime() / 1000;
-  expect(clockTime(at)).toBe("09:05");
+  expect(clockTime(at)).toBe("9:05 AM");
   expect(clockTime(0)).toBe("");
 });

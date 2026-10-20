@@ -23,11 +23,12 @@
 </button>
 
 <style>
-  /* The wordmark's row runs 27 to 67 at 12/12; the control is centred on it,
-     its right edge 20 in from the column's, where the list's text ends. */
+  /* The chevrons' middle sits on the middle of the wordmark's capitals (not
+     its line box, which put them 1.2 low; owner, 2026-10-20), its right edge
+     20 in from the column's, where the list's text ends. */
   .collapse {
     position: absolute;
-    top: calc(31 * var(--px));
+    top: calc(29.8 * var(--px));
     right: calc(20 * var(--px));
     display: grid;
     place-items: center;

@@ -360,8 +360,12 @@
     text-align: right;
   }
   /* Diagrams are drawn in the light edition's colors; on dark paper they
-     flip, cream to black, keeping their hues (owner, 2026-10-20). */
+     flip, keeping their hues (owner, 2026-10-20), and the flip is pressed
+     in so the cream fill lands on the graphite paper (#232321) and the black
+     text on the soft ink (#dad9d2), not on black and white. Half saturation
+     takes the cream's tint off the fill and calms the colors, as dark.js
+     calms the theme's. */
   :global(:root[data-mode="dark"]) .figure-view[data-kind="diagram"] .figure-body :global(svg) {
-    filter: invert(1) hue-rotate(180deg);
+    filter: invert(1) hue-rotate(180deg) contrast(0.767) brightness(1.02) saturate(0.5);
   }
 </style>

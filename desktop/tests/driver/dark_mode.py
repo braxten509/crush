@@ -7,9 +7,14 @@ screen, with real mouse moves, wheel turns and clicks:
 - the chat's scroll bar shows its thumb while the wheel turns and paints it
   away again once scrolling stops, and the point on the bar belongs to the
   chat, not to the right column's grip beside it;
-- Settings > Appearance > Mode > Dark turns the paper black and the ink
-  cream, every window color still reads (ink on paper, band and controls),
-  and Light brings the cream paper back.
+- Settings > Appearance > Mode > Dark lays soft linen ink on graphite paper
+  (owner, 2026-10-20: "it loses the soft vibe", then the Graphite pick):
+  the paper is #232321, the ink reads at 10 to 13:1 (not 18:1), every window
+  color still reads (ink on paper, band and controls), quiet text stays
+  quieter than the ink, the frame rules stay faint, and Light brings the
+  cream paper back;
+- on the themed chat, a diagram's box fills with the graphite paper, not
+  black (part "diagram").
 
 Pictures of the dark screens go to tests/out/dark_mode/.
 
@@ -19,7 +24,7 @@ Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/model-menu.json dark_mode.py scroll
        tests/check.sh dark_mode.py dark        (the real engine; no CHECK_ARGS)
        CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
-       tests/check.sh --fixture tests/fixtures/model-menu-themed.json dark_mode.py dark
+       tests/check.sh --fixture tests/fixtures/model-menu-themed.json dark_mode.py dark diagram
                                                (a full chat in dark; the recording plus
                                                the engine's theme, from capture_theme.py)
 """
@@ -93,13 +98,14 @@ COLORS = """
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   };
   const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-  const names = ['--paper', '--ink', '--band', '--slate', '--control-rest', '--control-hover', '--paper-raised'];
+  const names = ['--paper', '--ink', '--band', '--slate', '--control-rest', '--control-hover', '--paper-raised', '--rule-frame'];
   const c = Object.fromEntries(names.map((n) => [n, get(n)]));
   return {
     mode: document.documentElement.dataset.mode,
     paper: c['--paper'], ink: c['--ink'], paperLum: lum(c['--paper']),
     worst: Math.min(...['--paper', '--band', '--control-rest', '--control-hover', '--paper-raised'].map((b) => ratio(c['--ink'], c[b]))),
     slate: Math.min(ratio(c['--slate'], c['--paper']), ratio(c['--slate'], c['--band'])),
+    ink: ratio(c['--ink'], c['--paper']), frame: ratio(c['--rule-frame'], c['--paper']),
   };
 """
 
@@ -168,10 +174,11 @@ check(mode_row is True, "Settings > Appearance has the Mode choice")
 click("[role=radiogroup][aria-label=Mode] .choice", "Dark")
 dark = run(COLORS)
 check(dark and dark.get("mode") == "dark", f"Dark turns the window dark ({dark and dark.get('mode')})")
-check(dark and light and dark.get("ink") == light.get("paper"), f"the ink is the light paper's cream ({dark and dark.get('ink')} vs {light and light.get('paper')})")
-check(dark and dark.get("paperLum") is not None and dark["paperLum"] < 0.05, f"the paper is near black ({dark and dark.get('paper')})")
+check(dark and dark.get("paper") == "#232321", f"the paper is soft graphite ({dark and dark.get('paper')})")
+check(dark and 10 <= dark.get("ink", 0) <= 13, f"the ink is soft, not glaring ({dark and dark.get('ink')}:1 on the paper)")
 check(dark and dark.get("worst", 0) >= 4.5, f"the ink reads on every dark surface (worst {dark and dark.get('worst')}:1)")
-check(dark and dark.get("slate", 0) >= 4.5, f"quiet text reads on the dark paper and band ({dark and dark.get('slate')}:1)")
+check(dark and 4.5 <= dark.get("slate", 0) < dark.get("ink", 0), f"quiet text reads and stays quieter than the ink ({dark and dark.get('slate')}:1)")
+check(dark and dark.get("frame", 99) < 2.2, f"the frame rules stay faint ({dark and dark.get('frame')}:1)")
 checked = run("return document.querySelector('[role=radiogroup][aria-label=Mode] [aria-checked=true]')?.textContent.trim();")
 check(checked == "Dark", f"the Dark choice shows as chosen ({checked})")
 shot("dark-settings-appearance")
@@ -180,6 +187,28 @@ for name in ["Typing", "Work", "Notifications"]:
         shot(f"dark-settings-{name.lower()}", 0.3)
 click(".settings-nav button.back", wait=0.8)
 shot("dark-chat")
+if "diagram" in parts:
+    # A box of the chat's diagram, read off the screen beside its label.
+    node = None
+    end = time.time() + 15
+    while time.time() < end and not node:
+        node = run("""
+          const fig = document.querySelector('.figure-view[data-kind="diagram"]');
+          const box = fig && fig.querySelector('svg g.node');
+          if (!box) return null;
+          fig.scrollIntoView({ block: 'center' });
+          const r = box.getBoundingClientRect();
+          return { x: r.x + 10, y: r.y + r.height / 2, w: r.width };
+        """)
+        time.sleep(0.5)
+    if check(node is not None, "the themed chat shows its diagram"):
+        time.sleep(0.8)
+        node = run("const r = document.querySelector('.figure-view[data-kind=\"diagram\"] svg g.node').getBoundingClientRect(); return { x: r.x + 10, y: r.y + r.height / 2 };")
+        path = shot("dark-diagram", 0.3)
+        got = subprocess.run(["magick", path, "-format", f"%[pixel:p{{{round(node['x'])},{round(node['y'])}}}]", "info:"], capture_output=True, text=True).stdout
+        nums = [int(float(v)) for v in got[got.find("(") + 1:got.find(")")].split(",")[:3]] if "(" in got else []
+        paper = [0x23, 0x23, 0x21]
+        check(len(nums) == 3 and all(abs(a - b) <= 10 for a, b in zip(nums, paper)), f"the diagram's box fills with the graphite paper ({got.strip()} vs #232321)")
 run("document.querySelector('.timeline .scroller, .scroller')?.scrollBy(0, -1200); return true;")
 shot("dark-chat-top")
 run("window.__probe.openDialog('theme'); return true;")

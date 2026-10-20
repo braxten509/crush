@@ -96,6 +96,12 @@ const DERIVED = {
   "--skill-tint": ["plan", "bg_base", 0.12],
 };
 
+// Dark mode (dark.js) draws these rules a quarter softer: on graphite paper
+// the light edition's amounts read loud (owner, 2026-10-20). Control borders
+// keep their strength.
+const DARK_SOFTER = new Set(["--rule-frame", "--rule-faint", "--rule-table-inner", "--meter-edge"]);
+const DARK_RULE_SCALE = 0.75;
+
 // The eight code classes (3.1) → their syntax keys.
 const SYNTAX = {
   "--hl-keyword": "keyword",
@@ -155,9 +161,11 @@ export function tokensOf(view) {
   for (const [token, name] of Object.entries(DIRECT)) if (role(name)) tokens[token] = role(name);
   const exact = EXACT[view?.root] ?? null;
   const rootRoles = ROOT_ROLES[view?.root] ?? null;
+  const softer = view?.darkened === true;
   for (const [token, [a, b, t]] of Object.entries(DERIVED)) {
     const untouched = exact && rootRoles && [a, b].every((name) => String(role(name)).toLowerCase() === rootRoles[name]);
-    tokens[token] = untouched ? exact[token] : mix(role(a), role(b), t);
+    const amount = softer && DARK_SOFTER.has(token) ? t * DARK_RULE_SCALE : t;
+    tokens[token] = untouched ? exact[token] : mix(role(a), role(b), amount);
   }
   const fg = role("fg_base");
   const bg = role("bg_base");

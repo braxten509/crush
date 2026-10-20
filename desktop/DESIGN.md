@@ -47,12 +47,21 @@ Text colors are checked at 4.5:1 or better against the paper they sit on; the 16
 colors (`--ansi-*`) are 4.5:1 or better on both `--band` and `--paper`.
 
 Dark mode (Settings > Appearance > Mode: Light, Dark or Same as system; desktop setting
-`appearance`) turns a light theme dark in `lib/themes/dark.js`: paper and ink trade places
-(the edition's cream becomes the text, its black the page), every gray keeps its place
-between them, the program colors are lifted to read on the dark band, and the diff tints
-become faint versions of their hue. Accent colors stay; the contrast pass moves any that no
-longer read. A theme that is already dark is left as it is. Diagrams, drawn in the light
-colors, flip with `invert(1) hue-rotate(180deg)` when the root's `data-mode` is `dark`.
+`appearance`) turns a light theme dark in `lib/themes/dark.js`, in the Graphite look the
+owner picked to keep the light edition's softness: graphite paper `#232321` with no color
+cast, and the light paper dimmed to a soft linen ink (`#dad9d2` for the edition, about
+11:1 rather than 18:1). Every gray keeps its place between them by how light it looks
+(OKLCH), so quiet text stays quieter (about 7:1) and rules stay faint; bands and controls
+sit half a step farther from the paper so they still show. Colors keep their hue but calm
+down: at least 0.65 lightness and 70 % of their saturation (the vermilion becomes
+`#de6550`); colors nearly as dark as the ink (the navy links) become light with a trace of
+their hue. Text on the red fill is the paper. The frame, faint, inner table and meter-edge
+rules are mixed at three quarters of their light amount; control borders keep theirs. The
+program colors are calmed and lifted to read on the dark band, and the diff tints become
+faint versions of their hue. A theme that is already dark is left as it is. Diagrams,
+drawn in the light colors, flip with `invert(1) hue-rotate(180deg) contrast(0.767)
+brightness(1.02) saturate(0.5)` when the root's `data-mode` is `dark`, which lands their cream
+fill on the graphite paper with no tint and their black text on the soft ink.
 Components never write a color directly; everything goes through the tokens, so both modes
 follow.
 
@@ -142,8 +151,10 @@ Every dialog is a `kit/Sheet`:
 - `tests/driver/owner_fixes.py` checks, at Compact zoom: the to-do steps stack, the
   strip's "›" cell and the Send square are centred, reply footers name the configured
   model, the busy dots are whole pixels, and Send turns into Stop and back.
-- `tests/driver/dark_mode.py` turns dark mode on and off in the real window, checks that
-  the ink reads on every dark surface, and checks that the chat's scroll bar hides after
+- `tests/driver/dark_mode.py` turns dark mode on and off in the real window, checks the
+  graphite paper, the soft ink (10 to 13:1), that the ink reads on every dark surface, that
+  quiet text stays quieter and the frame rules faint, that a diagram's box fills with the
+  paper (part `diagram`, on the themed chat), and that the chat's scroll bar hides after
   scrolling and is not covered by the column grip; dark pictures go to `tests/out/dark_mode/`.
 
 - `tests/driver/look_real.py` compares the first screen with the approved picture in the

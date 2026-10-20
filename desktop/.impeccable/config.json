@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-10-18T11:11:37.637Z",
         "reason": "Owner-approved: the Scholar's edition picture (approved 2026-10-18) is set on bone paper; this is its sampled paper colour, not a reflex default."
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "src/components/ask/Picture.svelte"
+        ],
+        "createdAt": "2026-10-20T22:25:05.351Z",
+        "reason": "agent: <img {src}> is Svelte shorthand, rendered only after the data URL loads (inside {:else} of !src)"
       }
     ]
   }

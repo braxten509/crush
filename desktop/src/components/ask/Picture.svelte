@@ -22,8 +22,12 @@
     failed = false;
     if (!wanted) return;
     if (cache.has(wanted)) {
-      src = cache.get(wanted);
-      failed = src === null;
+      // Never read src back here: reading it made the effect depend on its
+      // own write, so the next path change looped until Svelte stopped the
+      // effect and the picture froze (owner, 2026-10-20).
+      const url = cache.get(wanted);
+      src = url;
+      failed = url === null;
       return;
     }
     let live = true;

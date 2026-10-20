@@ -3,6 +3,7 @@
 // what it attaches. A port of internal/ui/model/mention.go, editor.go:277-428
 // and internal/ui/completions/completions.go:20-310.
 import { fuzzyFind } from "./fuzzy.js";
+import { fuzzyFind as paletteFind } from "../kit/fuzzy.js";
 import { baseName, isImagePath, kindOf, MAX_ATTACHMENT_BYTES, NO_PICTURES, toBase64 } from "./paste.js";
 
 export const MAX_ROWS = 10;
@@ -38,6 +39,31 @@ export function mentionQuery(value, caret, start) {
   const word = wordAt(value, caret);
   if (word.start !== start || !word.text.startsWith("@")) return null;
   return word.text.slice(1);
+}
+
+// The `/` menu (owner, 2026-10-20): a "/" typed as the text's first
+// character opens it; the query is the word after it, as with "@".
+export function slashOpens(value, caret) {
+  return value[0] === "/" && caret === 1;
+}
+
+export function slashQuery(value, caret) {
+  if (caret < 1 || value[0] !== "/") return null;
+  const word = wordAt(value, caret);
+  if (word.start !== 0) return null;
+  return word.text.slice(1);
+}
+
+// Its rows ({text, match, shortcut, entry}) in the palette's order with no
+// query, else best match first (index 0, drawn lowest), ranked as the Ctrl+P
+// palette ranks them (lib/kit/fuzzy.js); the matched letters are marked when
+// the name is the whole text matched, as the palette does.
+export function rankSlash(rows, query) {
+  if (query === "") return rows.map((row) => ({ row, chars: [] }));
+  return paletteFind(query, rows.map((row) => row.match)).map(({ index, matched }) => ({
+    row: rows[index],
+    chars: rows[index].match === rows[index].text ? matched : [],
+  }));
 }
 
 // The span the pick replaces: the "@" and the word after it.

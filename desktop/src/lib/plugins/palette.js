@@ -1,6 +1,6 @@
 // PAL's registrations (desktop-design-5-6 2.2, 2.24, 7.3; loaded by
-// lib/plugins.js): the action `palette.open` (Ctrl+P, and "/" in an empty
-// typing box); the sheets `commands`, `arguments` and `quit`; the global keys
+// lib/plugins.js): the action `palette.open` (Ctrl+P; "/" in an empty typing
+// box opens the composer's `/` menu instead); the sheets `commands`, `arguments` and `quit`; the global keys
 // of 2.2; and Ctrl+C's plain binding, which opens the quit sheet over any
 // sheet or form unless text is selected (then the key goes on and copies).
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -12,7 +12,6 @@ import { dialogRegistered, openDialog, registerDialog } from "../dialogs.js";
 import { app_info } from "../engine/commands.js";
 import { bindKey } from "../keys.js";
 import { platform } from "../palette/entries.js";
-import { fieldElement } from "../stores/composer.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
 
@@ -40,13 +39,9 @@ bindKey("global", "Ctrl+S", sheetKey("sessions"));
 bindKey("global", "Ctrl+F", sheetKey("filepicker", () => Boolean(sessions.currentId) && ws.agent?.model?.supports_attachments === true));
 bindKey("global", "Ctrl+,", sheetKey("settings"));
 
-// CMD-001: "/" typed into an empty typing box opens the palette.
-bindKey("composer", "/", () => {
-  const field = fieldElement();
-  if (!field || field.value !== "") return false;
-  openDialog("commands");
-  return true;
-});
+// CMD-001's "/" in an empty typing box now opens the composer's own `/` menu
+// (owner, 2026-10-20; lib/stores/composer.svelte.js openSlash); Ctrl+P keeps
+// the palette.
 
 // CMD-064: Ctrl+Z minimizes the window unless an editable field has the focus.
 bindKey("global", "Ctrl+Z", (event) => {

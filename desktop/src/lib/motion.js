@@ -8,6 +8,13 @@ import { cubicOut } from "svelte/easing";
 export const MOTION_MS = 220;
 const RISE = 4; // CSS px a piece travels while it unrolls
 
+// Every motion also runs the invisible --paper-tick (app.css): WebKitGTK
+// otherwise draws one stale frame as a transform ends, and a sliding page
+// jumps back for a frame (owner, 2026-10-20: 9 of 16 settings slides).
+export function tick(t) {
+  return ` --paper-tick: ${t.toFixed(3)};`;
+}
+
 export function reducedMotion(win = globalThis) {
   return win.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
@@ -27,7 +34,7 @@ export function unfold(node, { from = "bottom", duration = MOTION_MS, delay = 0 
     delay,
     duration,
     easing: cubicOut,
-    css: (t, u) => `clip-path: ${unfoldInset(from, u)}; transform: translateY(${(sign * u * RISE).toFixed(2)}px);`,
+    css: (t, u) => `clip-path: ${unfoldInset(from, u)}; transform: translateY(${(sign * u * RISE).toFixed(2)}px);${tick(t)}`,
   };
 }
 
@@ -39,7 +46,7 @@ export function slidePage(node, { dir = 1, duration = MOTION_MS, delay = 0 } = {
     duration,
     easing: cubicOut,
     // No fade: a page drawn from its first frame never blinks (owner, 2026-10-19).
-    css: (t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px);`,
+    css: (t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px);${tick(t)}`,
   };
 }
 
@@ -50,6 +57,6 @@ export function settle(node, { duration = MOTION_MS, delay = 0, rise = RISE } = 
     delay,
     duration,
     easing: cubicOut,
-    css: (t, u) => `transform: translateY(${(u * rise).toFixed(2)}px);`,
+    css: (t, u) => `transform: translateY(${(u * rise).toFixed(2)}px);${tick(t)}`,
   };
 }

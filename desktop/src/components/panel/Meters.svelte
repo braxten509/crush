@@ -2,11 +2,11 @@
   // The usage meters at the panel's top (SIDE-007, SIDE-014, SIDE-020 to
   // SIDE-024): CONTEXT, then one meter per usage window of the agent CLI
   // (5-HOUR, WEEK, and other windows when "Other usage limits" is on), each
-  // the part left as a percent and a bar, with the amber triangle under 20 %
-  // left. Three share a row at the approved picture's proportions; more go on
-  // the next row, fewer share the row evenly. No hover box (owner,
+  // the part left as a percent and a bar; under 30 % left both turn amber,
+  // under 10 % rose (owner, 2026-10-20, in place of the warning triangle).
+  // Three share a row at the approved picture's proportions; more go on the
+  // next row, fewer share the row evenly. No hover box (owner,
   // 2026-10-19): the meters say it all; Ctrl+P keeps Customize.
-  import Icon from "../Icon.svelte";
   import { meterNow } from "./panel.svelte.js";
 
   // The reset times count down and a window past its reset is whole again.
@@ -32,15 +32,12 @@
       {#if col > 0}<span class="separator" class:second={col === 2} style:grid-row={row} style:grid-column={2 * col} aria-hidden="true"></span>{/if}
       <div class="cell" data-meter={meter.id} style:grid-row={row} style:grid-column={2 * col + 1}>
         <h3 class="label">{meter.label}</h3>
-        <p class="value" class:pending={meter.text === "checking…"}>
+        <p class="value {meter.level}" class:pending={meter.text === "checking…"}>
           <span>{meter.text}</span>
-          {#if meter.warn}
-            <Icon name="warning" />
-            <span class="visually-hidden">near the limit</span>
-          {/if}
+          {#if meter.level}<span class="visually-hidden">{meter.level === "out" ? "almost used up" : "running low"}</span>{/if}
         </p>
         {#if meter.bar !== false}<div class="meter" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
-          <span class="fill" style:width="{meter.left}%"></span>
+          <span class="fill {meter.level}" style:width="{meter.left}%"></span>
         </div>{/if}
         {#if meter.resets}<p class="resets">{meter.resets}</p>{/if}
       </div>
@@ -95,8 +92,11 @@
     font: var(--t-figure);
     white-space: nowrap;
   }
-  .value :global(.icon) {
-    margin: calc(2 * var(--px)) 0 0 calc(16 * var(--px));
+  .value.low {
+    color: var(--amber-ink);
+  }
+  .value.out {
+    color: var(--error-ink);
   }
   .value.pending {
     align-items: center;
@@ -117,8 +117,16 @@
     top: -1px;
     bottom: -1px;
     background: var(--meter);
-    /* A changed amount eases to its new length. */
-    transition: width 400ms var(--ease-paper);
+    /* A changed amount eases to its new length and color. */
+    transition:
+      width 400ms var(--ease-paper),
+      background-color 400ms var(--ease-paper);
+  }
+  .fill.low {
+    background: var(--amber);
+  }
+  .fill.out {
+    background: var(--error-ink);
   }
   .resets {
     margin-top: calc(4 * var(--px));

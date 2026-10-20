@@ -156,6 +156,12 @@ describe("meterModel (the panel's meters)", () => {
     expect(tokens).toBe("124k/200k tokens");
   });
 
+  it("a meter turns amber under 30 % left and rose under 10 %", () => {
+    const at = (left) => meterModel({ items: ["limit_5h"], limits: [{ name: "5h", left, resetsIn: null }] }).meters[0].level;
+    expect([at(30), at(29.9), at(10), at(9.9), at(0)]).toEqual(["", "low", "low", "out", "out"]);
+    expect(meterModel({ items: ["context"] }).meters[0].level).toBe("");
+  });
+
   it("the warning shows under 20 % left, never at 20 % or more", () => {
     const at = (left) => meterModel({ items: ["limit_5h"], limits: [{ name: "5h", left, resetsIn: null }] }).meters[0].warn;
     expect(at(20)).toBe(false);
@@ -226,10 +232,10 @@ describe("cliKind and modelInfo (the details overlay)", () => {
     expect(info.name).toBe("Opus 5.5");
     expect(info.via).toBe("via Claude Code");
     expect(info.reasoning).toBe("Reasoning Max · FAST · Ultracode");
-    expect(info.usage).toEqual({ percent: "62%", tokens: "(124K)", cost: "$0.12", warn: false });
+    expect(info.usage).toEqual({ percent: "62%", tokens: "(124K)", cost: "$0.12", warn: false, level: "" });
     expect(info.limits).toEqual([
-      { name: "5h", left: "14%", warn: true, resets: "resets 2h41m" },
-      { name: "Weekly", left: "69%", warn: false, resets: "resets 3d0h" },
+      { name: "5h", left: "14%", warn: true, level: "low", resets: "resets 2h41m" },
+      { name: "Weekly", left: "69%", warn: false, level: "", resets: "resets 3d0h" },
     ]);
   });
 

@@ -122,7 +122,9 @@ Every dialog is a `kit/Sheet`:
   the selected row), `Buttons` (a row or a stack, 36 high, the one button size everywhere;
   the underlined letter is the key), `HelpFooter` (key and text pairs that drop from the end
   with an ellipsis when the line is too short). Every list in a sheet uses FilterList's row
-  look and the sheet's 26 gutter.
+  look and the sheet's 26 gutter. A FilterList under a filter `Field` starts 12 below it
+  with a faint 1-pixel line as wide as the field, then 12 more, so the selected row's band
+  never touches the field.
 
 ## Interaction
 
@@ -135,11 +137,19 @@ Every dialog is a `kit/Sheet`:
   disabled selected row `--disabled-band`. A selected button or level is `--band` inside an
   ink hairline. No drop shadows; menus sit on one layer (30).
 - Motion uses `--motion` (220 ms) and `--motion-quick` (140 ms) on `--ease-paper`; movement
-  distances scale with `--px`. The busy marks loop over 1.2 s. Nothing moves the layout when
+  distances scale with `--px`. Every animation that ends, CSS keyframes and the Svelte
+  transitions in `lib/motion.js` alike, also runs the invisible `--paper-tick`, or WebKitGTK
+  draws one stale frame at its end (a settings page jumped back after settling). The busy marks loop over 1.2 s. Nothing moves the layout when
   a state changes (no show or hide on a flag).
 - The Send square shows Stop (a filled square) while the shown chat works and nothing is
   typed or attached; typing turns it back into Send, which queues the message. Esc stops
   too. One button throughout, so nothing moves.
+- Usage meters (panel and the strip under the typing box) turn amber under 30 % left and
+  rose under 10 %, bar and number together; there is no warning triangle.
+- "/" typed as the first letter in the typing box opens the command menu: the `@` popup's
+  look over every Ctrl+P command (System, User, MCP), name left and shortcut right, best
+  match lowest. Enter runs the command and clears the "/word"; Esc closes it and keeps the
+  text. Ctrl+P keeps the full palette.
 - Scroll bars are thin and show their thumb only while scrolling (about 2 s after the last
   move). A column grip next to a scroll bar sits on the far side of the divider, so the bar
   stays clickable. Only the user's scrolling shows it: the page moving the view (a send

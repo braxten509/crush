@@ -180,9 +180,19 @@ export function footerText(fields) {
   return fields.map((f) => f.text).join(" · ");
 }
 
+// How low a meter is (owner, 2026-10-20): "" above 30 % left, "low" under 30
+// (amber), "out" under 10 (rose). It colors the bar and the number in place of
+// the old warning triangle.
+export function meterLevel(left) {
+  if (left === null || left === undefined || !Number.isFinite(Number(left))) return "";
+  if (left < 10) return "out";
+  if (left < 30) return "low";
+  return "";
+}
+
 // The panel's meters (SIDE-007, SIDE-014, SIDE-019 to SIDE-024):
 //   meters  in the footer's order, CONTEXT then one per limit window:
-//           {id, label, used (0-100, the bar), text (the value shown), warn, resets}
+//           {id, label, used (0-100, the bar), text (the value shown), warn, level, resets}
 //   lines   the detail popover's lines: "Context 38% left · ~124k/200k tokens",
 //           "5h 14% left · resets 2h41m", …
 //   tokens  the token count for the strip ("" when not chosen or no chat)
@@ -207,6 +217,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
       text: left === null ? "–" : `${goFixed(left, 0)}% left`,
       // As the sidebar's context line (elements.go:144): over 80 % used.
       warn: left !== null && left < 20,
+      level: meterLevel(left),
       resets: "",
     });
     contextLine.push(words ? words.context : "Context unknown");
@@ -220,7 +231,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
       [FOOTER.limitWeekly, "WEEK", "Weekly"],
     ]) {
       if (!show(id)) continue;
-      meters.push({ id, label, left: 0, text: "checking…", warn: false, resets: "" });
+      meters.push({ id, label, left: 0, text: "checking…", warn: false, level: "", resets: "" });
       lines.push(`${name} checking…`);
     }
     return { meters, lines, tokens };
@@ -236,6 +247,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
       text: `${goFixed(window.left, 0)}% left`,
       // Under 20 % left (sidebar.go:136-139).
       warn: window.left < 20,
+      level: meterLevel(window.left),
       resets: limitWords.resets,
     });
     lines.push(limitWords.resets ? `${limitWords.text} · ${limitWords.resets}` : limitWords.text);
@@ -244,7 +256,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
   // cost instead (owner, 2026-10-19: "usage and context (or price)").
   if (api && limits.length === 0 && session) {
     const cost = `$${goFixed(Number(session.cost) || 0, 2)}`;
-    meters.push({ id: "cost", label: "COST", left: 0, text: cost, warn: false, resets: "", bar: false });
+    meters.push({ id: "cost", label: "COST", left: 0, text: cost, warn: false, level: "", resets: "", bar: false });
     lines.push(`Cost ${cost}`);
   }
   return { meters, lines, tokens };
@@ -325,8 +337,8 @@ function shortTokens(tokens) {
 
 // The details overlay's model block (sidebar.go:25-86, elements.go:58-149):
 //   {name, via ("via Claude Code" or ""), reasoning ("Reasoning Max · FAST"),
-//    usage: {percent: "62%", tokens: "(124K)", cost: "$0.00", warn} or null,
-//    limits: [{name, left: " 14%", warn, resets}]}
+//    usage: {percent: "62%", tokens: "(124K)", cost: "$0.00", warn, level} or null,
+//    limits: [{name, left: " 14%", warn, level, resets}]}
 // The provider comes from GET providers; one that list lacks keeps its id
 // as its type and shows no "via" name.
 export function modelInfo({ agent = null, providers = [], session = null, limits = [] } = {}) {
@@ -357,6 +369,7 @@ export function modelInfo({ agent = null, providers = [], session = null, limits
       tokens: `(${shortTokens(tokens)})`,
       cost: `$${goFixed(Number(session.cost) || 0, 2)}`,
       warn: percentage > 80,
+      level: window > 0 ? meterLevel(100 - percentage) : "",
     };
   }
   return {
@@ -368,6 +381,7 @@ export function modelInfo({ agent = null, providers = [], session = null, limits
       name: w.name,
       left: `${goFixed(w.left, 0)}%`,
       warn: w.left < 20,
+      level: meterLevel(w.left),
       resets: w.resetsIn != null && w.resetsIn > 0 ? `resets ${shortDuration(w.resetsIn)}` : "",
     })),
   };

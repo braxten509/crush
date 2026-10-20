@@ -421,6 +421,18 @@
     min-height: 0;
     margin: 0 calc(-26 * var(--px));
   }
+  /* Under a filter box: 12 of space, a faint line as wide as the box, then 12
+     more, so the picked row's band never touches the box (owner, 2026-10-20). */
+  :global([data-kit-field]) ~ .filter-list::before {
+    content: "";
+    flex: none;
+    height: 1px;
+    margin: calc(12 * var(--px)) calc(26 * var(--px));
+    background: var(--rule-faint);
+  }
+  :global([data-kit-field]) ~ .filter-list .fade.top {
+    top: calc(25 * var(--px) + 1px);
+  }
   .scroller {
     flex: 1 1 auto;
     min-height: 0;

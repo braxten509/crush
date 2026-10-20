@@ -14,7 +14,7 @@ import { api, uuid } from "../engine/api.js";
 import { clipboard_read, clipboard_write, file_info, file_read, files_list } from "../engine/commands.js";
 import { onEvent, onResync } from "../engine/events.js";
 import { bangAfterPaste, bangAfterTyping, bangFromValue, historyEntries, joinDrafts, PromptHistory } from "../composer/history.js";
-import { absolutePath, fileRows, insertPick, mentionQuery, mentionSpan, moveFocus, opensAt, pickFile, previewPick, rankRows } from "../composer/mentions.js";
+import { absolutePath, fileRows, insertPick, mentionQuery, mentionSpan, moveFocus, opensAt, pickFile, previewPick, rankRows, rankSlash, slashOpens, slashQuery } from "../composer/mentions.js";
 import { AGENT_FOR, bannerFor, BUSY_SWITCH, cycleSteps, isQuitWord, markOf, pickPlaceholders, placeholderFor, SWITCHING, YOLO_BANNER, YOLO_OFF } from "../composer/modes.js";
 import {
   attachPath,
@@ -45,7 +45,7 @@ export const composer = $state({
   switching: false, // a mode switch is in flight (TYPE-008)
   sending: false, // a send call is on its way
   deleteMode: false, // TYPE-038
-  popup: null, // null | { kind: "@", start, query, rows: [{row, chars}], focused, loading } (TYPE-026 to TYPE-028)
+  popup: null, // null | { kind: "@" | "/", start, query, rows: [{row, chars}], focused, loading } (TYPE-026 to TYPE-028; "/" the command menu)
   shells: {}, // request_id → ShellState (lib/types.js): live `!` commands, read by lib/timeline.js (P3.5)
   planHandoff: null, // null | { sessionId, open } (TYPE-052): a ready plan waits; open: its form is meant to show
   badges: [], // [{ id, text }] drawn after the mode mark; phase 6 adds the Remote badge (SIDE-025)
@@ -413,6 +413,8 @@ export function typed({ before, value, caret, data = "", paste = false }) {
   if (data === "@" && !paste) {
     // triggers (mention.go:27-34); the "@" that opened it is not followed.
     if (!composer.popup && opensAt(next.value, next.caret - 1)) openMention(next.caret - 1);
+  } else if (data === "/" && !paste && !draft.bang && !composer.popup && slashOpens(next.value, next.caret)) {
+    openSlash();
   } else if (composer.popup) {
     followMention(next.value, next.caret);
   }
@@ -472,15 +474,40 @@ export async function openMention(start) {
 function rank() {
   const popup = composer.popup;
   if (!popup) return;
-  popup.rows = rankRows(fileList, popup.query);
+  popup.rows = popup.kind === "/" ? rankSlash(slash?.slashRows() ?? [], popup.query) : rankRows(fileList, popup.query);
   popup.focused = 0;
+}
+
+// The `/` menu (owner, 2026-10-20): every palette command, filtered by what
+// follows the "/". Its module loads on first use (lib/palette/slash.js).
+let slash = null;
+let slashStop = null;
+
+export async function openSlash() {
+  composer.popup = { kind: "/", start: 0, query: "", rows: [], focused: 0, loading: true };
+  const turn = ++listTurn;
+  slash ??= await import("../palette/slash.js");
+  if (turn !== listTurn || composer.popup?.kind !== "/") return;
+  slashStop?.();
+  slashStop = slash.watchSlash();
+  composer.popup.loading = false;
+  rank();
+  // The custom commands and MCP prompts join when they arrive; the focused
+  // row stays the same command.
+  await slash.readSlash();
+  const popup = composer.popup;
+  if (turn !== listTurn || popup?.kind !== "/") return;
+  const focused = popup.rows[popup.focused]?.row.entry.id;
+  rank();
+  const at = popup.rows.findIndex(({ row }) => row.entry.id === focused);
+  if (at >= 0) popup.focused = at;
 }
 
 // follow (mention.go:49-63).
 function followMention(value, caret) {
   const popup = composer.popup;
   if (!popup) return;
-  const query = mentionQuery(value, caret, popup.start);
+  const query = popup.kind === "/" ? slashQuery(value, caret) : mentionQuery(value, caret, popup.start);
   if (query === null) {
     closePopup();
     return;
@@ -495,6 +522,8 @@ export function closePopup() {
   listTurn += 1;
   composer.popup = null;
   fileList = [];
+  slashStop?.();
+  slashStop = null;
 }
 
 // ↑ and ↓ in the popup (moveFocus: the best row is drawn lowest).
@@ -519,6 +548,7 @@ export async function pickRow(index = composer.popup?.focused ?? 0) {
   const popup = composer.popup;
   const entry = popup?.rows[index];
   if (!entry) return false;
+  if (popup.kind === "/") return runSlash(entry.row.entry);
   const sid = sessions.currentId;
   const value = draftOf(sid).text;
   const placed = insertPick(value, mentionSpan(value, popup.start), entry.row.text);
@@ -529,11 +559,30 @@ export async function pickRow(index = composer.popup?.focused ?? 0) {
   return true;
 }
 
+// A `/` pick: the "/word" leaves the field, then the command runs as the
+// palette runs it (lib/palette/run.js).
+async function runSlash(command) {
+  const sid = sessions.currentId;
+  const value = draftOf(sid).text;
+  const span = mentionSpan(value, 0);
+  const rest = value.slice(span.end).replace(/^[ \t]/, "");
+  closePopup();
+  await place(rest, 0, sid);
+  history.edited(rest);
+  command.run();
+  return true;
+}
+
 // Ctrl+N and Ctrl+P: the next or previous row's text in place of the
-// mention, the popup staying open; nothing is attached until a pick.
+// mention, the popup staying open; nothing is attached until a pick. The `/`
+// menu only moves its focus.
 export function previewRow(direction) {
   const popup = composer.popup;
   if (!popup || popup.rows.length === 0) return;
+  if (popup.kind === "/") {
+    popup.focused = moveFocus(popup.focused, popup.rows.length, direction === "next" ? "down" : "up");
+    return;
+  }
   popup.focused = moveFocus(popup.focused, popup.rows.length, direction === "next" ? "down" : "up");
   const value = draftOf().text;
   const shown = previewPick(value, mentionSpan(value, popup.start), popup.rows[popup.focused].row.text);

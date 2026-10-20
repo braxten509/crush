@@ -5,7 +5,9 @@
   // drawn lowest; matched letters are at weight 600 and the focused row is on
   // --band. Only the rows in view are drawn, and the wheel moves the view. A
   // click picks a row; the field keeps focus. The keys are the popup scope's
-  // (lib/plugins/composer.js).
+  // (lib/plugins/composer.js). The `/` menu (owner, 2026-10-20) is the same
+  // popup over the palette's commands: the name in the text face, its
+  // shortcut in --mark at the right, the box as wide as its longest row.
   import { untrack } from "svelte";
   import { MAX_ROWS, popupColumns } from "../../lib/composer/mentions.js";
   import { composer, fieldElement, focusRow, pickRow } from "../../lib/stores/composer.svelte.js";
@@ -16,6 +18,7 @@
   const popup = $derived(composer.popup);
   const rows = $derived(popup?.rows ?? []);
   const columns = $derived(popupColumns(rows));
+  const commands = $derived(popup?.kind === "/");
 
   let first = $state(0); // the index of the lowest row drawn
   let box = $state(null);
@@ -138,8 +141,9 @@
 {#if view.length > 0}
   <div
     class="popup"
+    class:commands
     role="listbox"
-    aria-label="Files"
+    aria-label={commands ? "Commands" : "Files"}
     tabindex="-1"
     data-probe="popup"
     bind:this={box}
@@ -149,7 +153,7 @@
     style:visibility={place ? null : "hidden"}
     onmousedown={(event) => event.preventDefault()}
   >
-    {#each view as { entry, index } (entry.row.text)}
+    {#each view as { entry, index } (entry.row.entry?.id ?? entry.row.text)}
       <!-- The keys (↑ ↓ Enter Tab) are the popup scope's; the click is the mouse's way to the same pick. -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
@@ -163,6 +167,7 @@
         onclick={() => pickRow(index)}
       >
         <span class="text">{#each runs(entry.row.text, entry.chars) as run, at (at)}{#if run.hit}<b>{run.text}</b>{:else}{run.text}{/if}{/each}</span>
+        {#if commands && entry.row.shortcut}<span class="shortcut">{entry.row.shortcut}</span>{/if}
       </div>
     {/each}
   </div>
@@ -195,6 +200,22 @@
   }
   .row.focused {
     background: var(--band);
+  }
+  .commands {
+    width: max-content;
+    min-width: calc(260 * var(--px));
+    max-width: min(calc(560 * var(--px)), calc(100vw - 2 * 8 * var(--px) - 2px));
+    font: var(--t-body-small);
+  }
+  .commands .row {
+    justify-content: space-between;
+    gap: calc(32 * var(--px));
+    padding: 0 calc(14 * var(--px));
+  }
+  .shortcut {
+    flex: none;
+    font: var(--t-code);
+    color: var(--mark);
   }
   .text {
     min-width: 0;

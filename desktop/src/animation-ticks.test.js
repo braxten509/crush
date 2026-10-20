@@ -4,6 +4,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { settle, slidePage, unfold } from "./lib/motion.js";
 
 const SRC = new URL(".", import.meta.url).pathname;
 
@@ -50,5 +51,12 @@ describe("animation ticks", () => {
   it.each(all.filter((frames) => !frames.loops).map((frames) => [`${frames.path} ${frames.name}`, frames.body]))("%s runs --paper-tick 0 to 1", (_, body) => {
     expect(body).toMatch(/--paper-tick:\s*0/);
     expect(body).toMatch(/--paper-tick:\s*1/);
+  });
+
+  // Svelte transitions become the same kind of animation.
+  it.each([["unfold", unfold], ["slidePage", slidePage], ["settle", settle]])("%s runs --paper-tick", (_, motion) => {
+    const { css } = motion(null);
+    expect(css(0, 1)).toMatch(/--paper-tick: 0\.000;/);
+    expect(css(1, 0)).toMatch(/--paper-tick: 1\.000;/);
   });
 });

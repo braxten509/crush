@@ -130,6 +130,8 @@ fn main() {
             commands::probe_eval,
             commands::updates_claim,
             refresh::frame_rate_report,
+            refresh::scroll_test_mode,
+            refresh::scroll_test_report,
             applog::app_log,
             commands::engine_open,
             commands::engine_retry,

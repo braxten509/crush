@@ -4,13 +4,28 @@
 //! (~/.local/lib/webkit-full-refresh) turns it off for apps that read their
 //! settings; `full_rate` turns it off in every web view the app makes, and
 //! `frame_rate_report` logs the rate the page measured (applog.rs), so a slow
-//! rate can be traced without looking at the screen. The feature switch arrived in
+//! rate can be traced without looking at the screen. CRUSH_SCROLL_TEST (owner,
+//! 2026-10-20) measures scrolling the same way: any value logs how often a
+//! scrolled list really moves, and "main" also turns off WebKit's separate
+//! overflow scrolling, so the two can be compared on the owner's screen. The
+//! feature switch arrived in
 //! WebKitGTK 2.42, newer than the webkit2gtk crate's bindings, so its
 //! functions are looked up at run time.
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 static STATE: Mutex<Option<HashMap<String, &'static str>>> = Mutex::new(None);
+static SCROLLING: Mutex<Option<&'static str>> = Mutex::new(None);
+
+/// CRUSH_SCROLL_TEST: "" (off), "main" (WebKit's overflow scrolling off), or
+/// "measure" for any other value.
+fn scroll_mode() -> &'static str {
+    match std::env::var("CRUSH_SCROLL_TEST").as_deref() {
+        Err(_) | Ok("") | Ok("0") => "",
+        Ok("main") => "main",
+        Ok(_) => "measure",
+    }
+}
 
 /// Turns the 60-a-second preference off in the window's web view (Linux).
 pub fn full_rate<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
@@ -21,7 +36,14 @@ pub fn full_rate<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
             use gtk::glib::object::ObjectType;
             use webkit2gtk::WebViewExt;
             let state = match webview.inner().settings() {
-                Some(settings) => unsafe { turn_off(settings.as_ptr() as *mut std::ffi::c_void) },
+                Some(settings) => {
+                    let settings = settings.as_ptr() as *mut std::ffi::c_void;
+                    if scroll_mode() == "main" {
+                        let scrolling = unsafe { turn_off(settings, &["AsyncOverflowScrolling", "AsyncOverflowScrollingEnabled"]) };
+                        *SCROLLING.lock().unwrap_or_else(|e| e.into_inner()) = Some(scrolling);
+                    }
+                    unsafe { turn_off(settings, &["PreferPageRenderingUpdatesNear60FPS", "PreferPageRenderingUpdatesNear60FPSEnabled"]) }
+                }
                 None => "no settings",
             };
             STATE.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(label, state);
@@ -37,9 +59,10 @@ unsafe fn sym(name: &str) -> *mut std::ffi::c_void {
     libc::dlsym(libc::RTLD_DEFAULT, name.as_ptr())
 }
 
-/// What happened: "turned off", "already off", or why nothing was done.
+/// Turns off the first feature found by one of `names`. What happened:
+/// "turned off", "already off", or why nothing was done.
 #[cfg(target_os = "linux")]
-unsafe fn turn_off(settings: *mut std::ffi::c_void) -> &'static str {
+unsafe fn turn_off(settings: *mut std::ffi::c_void, names: &[&str]) -> &'static str {
     type Ptr = *mut std::ffi::c_void;
     let (all, length, get, ident, enabled, set) = (
         sym("webkit_settings_get_all_features"),
@@ -63,7 +86,7 @@ unsafe fn turn_off(settings: *mut std::ffi::c_void) -> &'static str {
     for i in 0..length(list) {
         let feature = get(list, i);
         let name = std::ffi::CStr::from_ptr(ident(feature)).to_string_lossy();
-        if name == "PreferPageRenderingUpdatesNear60FPS" || name == "PreferPageRenderingUpdatesNear60FPSEnabled" {
+        if names.iter().any(|n| name == *n) {
             if enabled(settings, feature) == 0 {
                 return "already off";
             }
@@ -81,4 +104,18 @@ pub fn frame_rate_report(window: tauri::Window, rate: f64) {
     let state = STATE.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(window.label()).copied()).unwrap_or("not set");
     let preload = std::fs::read_to_string("/proc/self/maps").map(|m| m.contains("libwebkit-full-refresh")).unwrap_or(false);
     crate::applog::write("info", window.label(), &format!("frame rate {rate:.1}/s, near-60 preference {state}, menu preload {preload}"));
+}
+
+/// `scroll_test_mode`: CRUSH_SCROLL_TEST's mode for the page ("" when off).
+#[tauri::command]
+pub fn scroll_test_mode() -> &'static str {
+    scroll_mode()
+}
+
+/// `scroll_test_report`: one scroll's measurement from the page, with the
+/// state of WebKit's overflow scrolling switch.
+#[tauri::command]
+pub fn scroll_test_report(window: tauri::Window, text: String) {
+    let scrolling = SCROLLING.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or("left on");
+    crate::applog::write("info", window.label(), &format!("scroll test ({}): {text}, overflow scrolling helper {scrolling}", scroll_mode()));
 }

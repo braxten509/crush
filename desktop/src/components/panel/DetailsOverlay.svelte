@@ -12,7 +12,6 @@
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { ui } from "../../lib/stores/ui.svelte.js";
-  import Icon from "../Icon.svelte";
   import Rule from "../Rule.svelte";
   import FilesSection from "./FilesSection.svelte";
   import LspSection from "./LspSection.svelte";
@@ -87,8 +86,8 @@
         {/if}
         {#if info.reasoning}<span class="part">{info.reasoning}</span>{/if}
         {#if info.usage}
-          <span class="part usage" class:warn={info.usage.warn}>
-            {#if info.usage.warn}<Icon name="warning" size={12} /><span class="visually-hidden">Context nearly full:</span>{/if}
+          <span class="part usage {info.usage.level}">
+            {#if info.usage.level}<span class="visually-hidden">Context nearly full:</span>{/if}
             {info.usage.percent} <span class="slate">{info.usage.tokens}</span> {info.usage.cost}
           </span>
         {/if}
@@ -97,7 +96,7 @@
         <p class="limits">
           <span class="slate">Usage left</span>
           {#each info.limits as limit, i (i)}
-            <span class="part" class:warn={limit.warn}>{limit.name} {limit.left}{#if limit.resets}<span class="slate"> {limit.resets}</span>{/if}</span>
+            <span class="part {limit.level}">{limit.name} {limit.left}{#if limit.resets}<span class="slate"> {limit.resets}</span>{/if}</span>
           {/each}
         </p>
       {/if}
@@ -170,8 +169,12 @@
     gap: calc(4 * var(--px));
     white-space: nowrap;
   }
-  .warn {
+  /* Amber under 30 % left, rose under 10 % (footer.js meterLevel). */
+  .low {
     color: var(--amber-ink);
+  }
+  .out {
+    color: var(--error-ink);
   }
   .columns {
     display: grid;

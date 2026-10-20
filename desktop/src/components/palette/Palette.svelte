@@ -13,18 +13,13 @@
   import FilterList from "../kit/FilterList.svelte";
   import Sheet from "../kit/Sheet.svelte";
   import Icon from "../Icon.svelte";
-  import { closeDialog, hasDialog, openDialog } from "../../lib/dialogs.js";
-  import { api } from "../../lib/engine/api.js";
-  import { initProject, sendPrompt, summarize, toggleYolo } from "../../lib/palette/actions.js";
-  import { commandArguments, fillArguments, promptArguments } from "../../lib/palette/customcommands.js";
+  import { closeDialog, hasDialog } from "../../lib/dialogs.js";
+  import { initProject, summarize, toggleYolo } from "../../lib/palette/actions.js";
   import { entryFilter, systemEntries } from "../../lib/palette/entries.js";
-  import { cancelPrompt, finishPrompt, palette, promptCurrent, startPrompt, watchCommands } from "../../lib/palette/store.svelte.js";
-  import { sessions } from "../../lib/stores/sessions.svelte.js";
-  import { attachSkill } from "../../lib/stores/composer.svelte.js";
+  import { mcpEntries as mcpEntries_, PALETTE_ID as ID, userEntries as userEntries_ } from "../../lib/palette/run.js";
+  import { cancelPrompt, palette, watchCommands } from "../../lib/palette/store.svelte.js";
   import { checkDocker } from "../../lib/extensions/store.svelte.js";
-  import { notify } from "../../lib/stores/ui.svelte.js";
 
-  const ID = "commands";
   const CATEGORIES = ["System", "User", "MCP"];
 
   const system = systemEntries({ summarize, toggleYolo, initProject });
@@ -35,28 +30,8 @@
   let selectedId = null;
   let list = $state(null);
 
-  const userEntries = $derived(
-    palette.commands.map((command) => ({
-      id: `custom_${command.id}`,
-      label: command.skill ? command.skill.name || command.name : command.name,
-      detail: command.skill?.description ?? "",
-      shortcut: "",
-      aliases: [],
-      run: () => runCommand(command),
-    })),
-  );
-  const mcpEntries = $derived(
-    palette.prompts.map((prompt) => ({
-      id: `mcp_${prompt.id}`,
-      label: prompt.prompt_id,
-      detail: "",
-      shortcut: "",
-      aliases: [],
-      // Without arguments the palette stays, showing "Generating Prompt...".
-      keepOpen: promptArguments(prompt).length === 0,
-      run: () => runPrompt(prompt),
-    })),
-  );
+  const userEntries = $derived(userEntries_());
+  const mcpEntries = $derived(mcpEntries_());
   const categories = $derived(CATEGORIES.filter((c) => c === "System" || (c === "User" ? userEntries.length > 0 : mcpEntries.length > 0)));
   const items = $derived(category === "User" ? userEntries : category === "MCP" ? mcpEntries : system.filter((entry) => entry.shown()));
 
@@ -96,57 +71,6 @@
     if (!entry || palette.generating) return;
     if (!entry.keepOpen) closeDialog(ID);
     entry.run();
-  }
-
-  // -- User and MCP entries --
-
-  function runCommand(command) {
-    if (command.skill) {
-      attachSkill({ id: command.skill.skill_file_path, name: command.skill.name || command.name });
-      return;
-    }
-    const args = commandArguments(command);
-    if (args.length === 0) {
-      sendPrompt(command.content);
-      return;
-    }
-    openDialog("arguments", {
-      title: "Custom command arguments",
-      args,
-      onSubmit: (values) => {
-        closeDialog("arguments");
-        sendPrompt(fillArguments(command.content, values));
-      },
-    });
-  }
-
-  async function fetchPrompt(prompt, values) {
-    const ticket = startPrompt();
-    const sid = sessions.currentId;
-    try {
-      const answer = await api.getMcpPrompt({ client_id: prompt.client_id, prompt_id: prompt.prompt_id, args: values });
-      if (!promptCurrent(ticket) || sessions.currentId !== sid) return; // cancelled, replaced, or another chat
-      closeDialog("arguments");
-      closeDialog(ID);
-      if (answer?.prompt) sendPrompt(answer.prompt);
-    } catch (error) {
-      if (promptCurrent(ticket)) notify("error", error?.message ?? String(error));
-    } finally {
-      finishPrompt(ticket);
-    }
-  }
-
-  function runPrompt(prompt) {
-    const args = promptArguments(prompt);
-    if (args.length === 0) {
-      fetchPrompt(prompt, {});
-      return;
-    }
-    openDialog("arguments", {
-      title: prompt.title || "MCP Prompt Arguments",
-      args,
-      onSubmit: (values) => fetchPrompt(prompt, values),
-    });
   }
 
   // -- Keys (commands.go:170-230) --

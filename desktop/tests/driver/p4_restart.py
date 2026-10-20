@@ -105,7 +105,10 @@ def slot_checks(rows, names, why):
     for r in rows:
         if r.get("id") not in names or not r.get("close_shown"):
             continue
-        x, y = mid(r["close"], "x"), mid(r["close"], "y")
+        # The × drawing itself: its button grew to a bigger click area
+        # (owner, 2026-10-20), so the button's middle is no longer the ×'s.
+        glyph = r.get("close_glyph") or r["close"]
+        x, y = mid(glyph, "x"), mid(glyph, "y")
         off_x = max(abs(x - c) for c in chevrons) if chevrons else None
         off_y = y - mid(r["title"], "y")
         table.append({"row": names[r["id"]], "column_off": off_x, "line_off": off_y})

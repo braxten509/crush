@@ -1,5 +1,5 @@
 {
- "about": "P3.9's list and landing fixture (tests/driver/p3_start.py). Every *_at time is a local wall-clock time on its day around 2026-10-18 (the anchor); the driver moves the days so the anchor day is today. Chats in each day group, the four LIST-012 states, a chat another app starts and finishes replying in (events), long titles for the narrow list, and more LSPs, MCPs and skills than the landing page fits.",
+ "about": "P3.9's list and landing fixture (tests/driver/p3_start.py). Every *_at time is a local wall-clock time on its day around 2026-10-18 (the anchor); the driver moves the days so the anchor day is today. Chats in each day group, the four LIST-012 states, a chat another app starts and finishes replying in (events), long titles for the narrow list, and more LSPs, MCPs and skills than the landing page fits. The Sessions sheet's saved-sessions holds the one recorded chat, cookie, so LIST-narrow can open it.",
  "anchor": 1792346400,
  "workspace": {
   "id": "ws-list",
@@ -956,6 +956,20 @@
     "id": "skill-60",
     "name": "skill-60",
     "description": "A test skill."
+   }
+  ],
+  "saved-sessions": [
+   {
+    "Directory": "/tmp/home/proj",
+    "DataDirectory": "/tmp/home/proj/.crush",
+    "ID": "cookie",
+    "ParentSessionID": "",
+    "Title": "Cookie lifetime",
+    "MessageCount": 4,
+    "PromptTokens": 1200,
+    "CompletionTokens": 300,
+    "CreatedAt": 1792088400,
+    "UpdatedAt": 1792089000
    }
   ]
  },

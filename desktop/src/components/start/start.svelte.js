@@ -232,6 +232,8 @@ function registerProbe() {
       configured: start.configured,
       agent_ready: ws.agent ? ws.agent.is_ready === true : null,
       large_model: ws.config?.models?.large ? { model: ws.config.models.large.model ?? "", provider: ws.config.models.large.provider ?? "" } : null,
+      // The Git branch the window shows (the top bar's, since the landing page went blank).
+      branch: ws.branch,
       active_theme: ws.config?.options?.tui?.active_theme ?? null,
       head: shown.head,
       landing: shown.landing,

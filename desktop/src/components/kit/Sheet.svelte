@@ -34,6 +34,7 @@
   import { closeDialog, dialogs, frontDialog } from "../../lib/dialogs.js";
   import { focusables, setSheet } from "../../lib/kit/sheetkeys.js";
   import { focusField } from "../../lib/stores/composer.svelte.js";
+  import { ui } from "../../lib/stores/ui.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
   import Icon from "../Icon.svelte";
   import NoticeLine from "../NoticeLine.svelte";
@@ -101,7 +102,12 @@
       if (usable) back.focus({ preventScroll: true });
       return;
     }
-    if (usable) back.focus({ preventScroll: true });
+    // A form in the typing box's slot (a command from the palette may have
+    // just opened one) keeps the keys: focusField hands them to it, where
+    // the opener would be the field under it (owner, 2026-10-20: Ctrl+P
+    // Customize composer ignored its number keys).
+    if (ui.slot) focusField();
+    else if (usable) back.focus({ preventScroll: true });
     else focusField();
   }
 

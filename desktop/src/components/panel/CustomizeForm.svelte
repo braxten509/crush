@@ -11,7 +11,7 @@
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { FOOTER_CHOICES, footerItems } from "../../lib/footer.js";
   import { bindKey, comboOf } from "../../lib/keys.js";
-  import { focusField } from "../../lib/stores/composer.svelte.js";
+  import { attachSlot, focusField } from "../../lib/stores/composer.svelte.js";
   import { closeSlot, notify, setFocus, ui } from "../../lib/stores/ui.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
   import { CUSTOMIZE, customizeClick, customizeKey, customizeSave, startCustomize } from "./customize.js";
@@ -67,9 +67,14 @@
 
   onMount(() => {
     const unbind = KEYS.map((combo) => bindKey("slot", combo, key));
+    // As the other slot forms: focusField (a sheet closing over it) focuses the list.
+    const detach = attachSlot(() => root?.focus({ preventScroll: true }));
     root?.focus({ preventScroll: true });
     setFocus("slot");
-    return () => unbind.forEach((off) => off());
+    return () => {
+      unbind.forEach((off) => off());
+      detach();
+    };
   });
 </script>
 

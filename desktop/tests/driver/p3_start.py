@@ -430,25 +430,31 @@ def list_edges(h, label):
     rects = [(r["id"], r["band"]) for r in lh.get("rows") or [] if r.get("band")]
     off = [rid for rid, r in rects if not col or abs(r["x"] - col["x"]) > 0.5 or abs(r["x"] + r["w"] - col["x"] - col["w"]) > 0.5]
     check(bool(rects) and not off, f"{label}: every row and the open chat's band span the list's full width {off or ''}")
-    nc, sr = lh.get("new_chat") or {}, lh.get("search") or {}
-    check(bool(nc and sr) and abs(nc["x"] - sr["x"]) <= 0.5 and abs(nc["x"] + nc["w"] - sr["x"] - sr["w"]) <= 0.5,
-          f"{label}: New chat and the search share both edges ({nc.get('x')}, {sr.get('x')}; {nc.get('w')}, {sr.get('w')})")
+    # New chat and New terminal share one row (owner, 2026-10-20): New chat's
+    # left edge and New terminal's right edge are the search's.
+    nc, nt, sr = lh.get("new_chat") or {}, lh.get("new_terminal") or {}, lh.get("search") or {}
+    check(bool(nc and nt and sr) and abs(nc["x"] - sr["x"]) <= 0.5 and abs(nt["x"] + nt["w"] - sr["x"] - sr["w"]) <= 0.5,
+          f"{label}: New chat and New terminal span the search's edges ({nc.get('x')}, {sr.get('x')}; {nt.get('x', 0) + nt.get('w', 0)}, {sr.get('x', 0) + sr.get('w', 0)})")
 
 
 def landing_checks(app, label):
-    """CHAT-001's rules on the landing block's content box, and START-005."""
+    """CHAT-001 since the landing page went blank (owner, 2026-10-19): it
+    reports itself blank and draws no block, and START-005."""
     h, report = heavy(app)
     st = h.get("start") or {}
-    z = report.get("zoom") or 8 / 12
-    col, content = st.get("column") or {}, (st.get("landing") or {}).get("content") or {}
-    if not check(bool(col) and bool(content), f"{label}: the probe has the column and the landing block ({col}, {content})"):
-        return
-    left = content["x"] - col["x"]
-    right = col["x"] + col["w"] - (content["x"] + content["w"])
-    check(content["w"] <= 720 * z + 1, f"{label}: the landing content is at most 720 picture px wide ({content['w']:.1f} ≤ {720 * z:.1f})")
-    check(left >= 60 * z - 1 and right >= 60 * z - 1, f"{label}: at least 60 picture px from each edge of the column ({left:.1f}, {right:.1f}; {60 * z:.1f})")
-    check(abs(left - right) <= 1, f"{label}: centred in the column ({left:.1f} and {right:.1f})")
+    landing = section(app, "start").get("landing")
+    check(landing == {"blank": True}, f"{label}: the landing page is blank ({landing})")
+    check(not (st.get("landing") or {}).get("content"), f"{label}: it draws no landing block ({(st.get('landing') or {}).get('content')})")
     return h
+
+
+def panel_rows(app, name):
+    """The panel's rows of one section (lsp, mcp, skills) as "name text"
+    lines: where the window lists the engine's LSPs, MCP servers and skills
+    since the landing page went blank (the details overlay draws them)."""
+    sec = next((s for s in section(app, "panel").get("sections") or [] if s.get("name") == name), {}) or {}
+    return [" ".join(x for x in (str(r.get("name") or ""), str(r.get("text") or "")) if x).strip() if isinstance(r, dict) else str(r)
+            for r in sec.get("rows") or []]
 
 
 # --- Engine steps ------------------------------------------------------------
@@ -579,34 +585,35 @@ def engine_run():
             check(ok, "once the run is cancelled the row has no state")
 
         with step("START-003", out_dir):
+            # The landing page is blank (owner, 2026-10-19); the engine's
+            # project data still reaches the window: the branch in the top
+            # bar, the model, and the LSP / MCP / skills lists of the panel.
             focus(main)
             key("ctrl+n")
             screen_is(main, "landing", 5)
-            ok, start = wait_on(main, "start", lambda s: (s.get("landing") or {}).get("model"), 10)
-            landing = start.get("landing") or {}
+            ok, start = wait_on(main, "start", lambda s: s.get("landing") == {"blank": True} and (s.get("large_model") or {}).get("model"), 10)
+            check(ok, f"the landing page is blank ({start.get('landing')})")
             branch = (client.get("git/branch") or {}).get("branch") or ""
-            check(landing.get("path_line") == (f"{PROJ} · {branch}" if branch else PROJ), f"the folder and branch: {landing.get('path_line')!r} (engine branch {branch!r})")
-            check((landing.get("model") or "").startswith("Fake Large · via Fake AI"), f"the model line names the project's model and provider: {landing.get('model')!r}")
-            columns = landing.get("columns") or {}
-            check([c.get("title") for c in columns.values()] == ["LSP", "MCP", "Skills"], f"three columns: {[c.get('title') for c in columns.values()]}")
-            engine_counts = {"lsps": len(client.get("lsps") or {}), "mcps": len(client.get("mcp/states") or {}), "skills": len(client.get("skills") or [])}
-            for k, c in columns.items():
-                shown = len(c.get("rows") or []) + (c.get("more") or 0)
-                check(shown == engine_counts.get(k) and (c.get("none") == (engine_counts.get(k) == 0)),
-                      f"{c.get('title')}: {len(c.get('rows') or [])} rows + {c.get('more')} more = the engine's {engine_counts.get(k)}")
+            check(start.get("branch") == branch, f"the window has the engine's branch: {start.get('branch')!r} (engine {branch!r})")
+            check((start.get("large_model") or {}).get("model") == "fake-large", f"the window has the project's model: {start.get('large_model')}")
+            engine_counts = {"lsp": len(client.get("lsps") or {}), "mcp": len(client.get("mcp/states") or {}), "skills": len(client.get("skills") or [])}
+            for k, n in engine_counts.items():
+                got = len(panel_rows(main, k))
+                check(got == n, f"the panel's {k} rows: {got} = the engine's {n}")
 
         with step("START-004", out_dir):
-            head = section(main, "start").get("head") or {}
-            check(head.get("wordmark") == "CRUSH AI", f"the wordmark: {head.get('wordmark')!r}")
-            check(bool(version) and head.get("charm") == f"Charm™ · v{version}", f"\"Charm™ · v<version>\" is the app's own version ({head.get('charm')!r}, crush-desktop --version {version})")
-            h, _ = heavy(main)
-            check(bool((h.get("start") or {}).get("wordmark")), "the wordmark is drawn in the head")
+            # Blank, wordmark included (owner, 2026-10-19): the wordmark and
+            # "Charm™ · v<version>" stay on the init and onboarding screens.
+            head = section(main, "start").get("head")
+            check(head is None, f"the landing page draws no head or wordmark ({head})")
+            check(bool(version), f"the app knows its own version (crush-desktop --version {version})")
             check(main.report().get("heading") == "Crush AI", f"the list's wordmark is still the page's heading ({main.report().get('heading')!r})")
 
         with step("START-005", out_dir):
-            h, _ = heavy(main)
-            anims = (h.get("start") or {}).get("animations")
-            check(anims == [], f"no animation runs on the landing page ({anims})")
+            # A one-off ease (a meter's bar sliding to a new value, 400 ms)
+            # may be caught mid-way; nothing keeps running.
+            ok, anims, _ = poll(lambda: (heavy(main)[0].get("start") or {}).get("animations"), lambda a: a == [], 3, 0.3)
+            check(ok, f"no animation keeps running on the landing page ({anims})")
 
         with step("CHAT-001", out_dir):
             landing_checks(main, "engine landing at 1600 x 992")
@@ -745,8 +752,8 @@ def engine_run():
                 else:
                     ok, overlay = wait_on(app, "overlay", lambda o: (o.get("notice") or {}).get("text") == error, 15)
                     check(ok and (overlay.get("notice") or {}).get("kind") == "error", f"-s {value}: the error notice says {error!r} ({overlay.get('notice')})")
-                    ok, _ = wait_on(app, "list", lambda l: l.get("search_focused") is True, 5)
-                    check(ok, "and the chat-list search has the focus")
+                    ok, _ = wait_on(app, "overlay", lambda o: "sessions" in (o.get("dialogs") or []), 5)
+                    check(ok, "and the Sessions sheet opens with the ID in its filter (the search is a button since 2026-10-20)")
                     check(selected(app) is None and section(app, "start").get("screen") == "landing", "and no chat opened")
                     if name == "ambiguous":
                         time.sleep(6)
@@ -799,18 +806,16 @@ def engine_run():
             check(bool(wid), f"the window's engine has the project ({wid})")
             eng = lambda p: mcp_api.call("GET", f"/v1/workspaces/{wid}/{p}") if wid else None
             _, broken, _ = poll(lambda: (eng("mcp/states") or {}).get("broken") or {}, lambda b: b.get("state") == "error", 20, 0.3)
-            want = f"broken error: {broken.get('error')}"
-            ok, start = wait_on(app, "start", lambda s: want in ((((s.get("landing") or {}).get("columns") or {}).get("mcps") or {}).get("rows") or []), 20)
-            landing = start.get("landing") or {}
-            cols = landing.get("columns") or {}
-            check(ok and bool(broken.get("error")), f"the broken server's row says its error as the engine has it ({(cols.get('mcps') or {}).get('rows')}; engine {broken.get('error')!r})")
-            check(any(r.startswith("fakelsp") for r in (cols.get("lsps") or {}).get("rows") or []), f"the LSP column fills ({(cols.get('lsps') or {}).get('rows')})")
+            want = f"broken error: {broken.get('error')}".lower()
+            ok, _ = wait_on(app, "panel", lambda p: any(want == r.lower() for r in panel_rows(app, "mcp")), 20)
+            check(ok and bool(broken.get("error")), f"the broken server's row says its error as the engine has it ({panel_rows(app, 'mcp')}; engine {broken.get('error')!r})")
+            check(any(r.startswith("fakelsp") for r in panel_rows(app, "lsp")), f"the LSP rows fill ({panel_rows(app, 'lsp')})")
             skills = eng("skills") or []
-            sk = cols.get("skills") or {}
-            check(len(sk.get("rows") or []) + (sk.get("more") or 0) == len(skills), f"the skills column has the engine's {len(skills)} skills")
-            check((landing.get("model") or "").startswith("Fake Large"), f"the model line fills ({landing.get('model')!r})")
+            check(len(panel_rows(app, "skills")) == len(skills), f"the skills rows have the engine's {len(skills)} skills")
+            start = section(app, "start")
+            check((start.get("large_model") or {}).get("model") == "fake-large", f"the model fills ({start.get('large_model')})")
             branch = (eng("git/branch") or {}).get("branch") or ""
-            check(bool(branch) and landing.get("path_line") == f"{path} · {branch}", f"the branch fills ({landing.get('path_line')!r}, engine {branch!r})")
+            check(bool(branch) and start.get("branch") == branch, f"the branch fills ({start.get('branch')!r}, engine {branch!r})")
             close(app)
 
         with step("START-017", out_dir):
@@ -828,9 +833,8 @@ def engine_run():
                 extra.append(app)
                 check(joined(app), "a window on a project whose crush.json sets fake-large, under a global fake-small, joins")
                 answer_no(app)
-                ok, start = wait_on(app, "start", lambda s: (s.get("landing") or {}).get("model"), 10)
+                ok, start = wait_on(app, "start", lambda s: (s.get("large_model") or {}).get("model"), 10)
                 check((start.get("large_model") or {}).get("model") == "fake-large", f"the merged config's large model is the project's ({start.get('large_model')})")
-                check((start.get("landing") or {}).get("model", "").startswith("Fake Large"), f"the landing page names it ({(start.get('landing') or {}).get('model')!r})")
                 close(app)
             finally:
                 if kept is None:
@@ -875,16 +879,13 @@ def engine_run():
 
         with step("START-018", out_dir):
             footer_key, other_key, other_value = "options.tui.composer_footer", "options.tui.exit_banner", "compact"
-            h, _ = heavy(main)
-            meters = (h.get("panel") or {}).get("meters")
-            if check(bool(meters) and main.click(meters), f"the meters are clicked ({meters})"):
-                button = None
-                for _ in range(20):
-                    button = (heavy(main)[0].get("panel") or {}).get("customize_button")
-                    if button:
-                        break
-                    time.sleep(0.2)
-                check(bool(button) and main.click(button), f"their detail's \"Customize…\" is clicked ({button})")
+            # The meters have no detail box (owner, 2026-10-19): Ctrl+P keeps Customize.
+            focus(main)
+            key("ctrl+p")
+            time.sleep(0.6)
+            type_text("Customize composer")
+            time.sleep(0.4)
+            key("Return")
             ok, panel = wait_on(main, "panel", lambda p: p.get("customize") is not None, 5)
             if check(ok, "Customize Composer opens in the slot"):
                 before = set(panel["customize"].get("picked") or [])
@@ -979,8 +980,10 @@ def fixture_run():
             order = sorted(when, key=lambda k: -when[k])
             lst = section(app, "list")
             check([r["id"] for r in lst.get("rows") or []] == order, f"newest first: {[r['id'] for r in lst.get('rows') or []]}")
+            # The list draws the newest 6 chats, then "All chats" (owner,
+            # 2026-10-19); the probe's rows are all of them, its days the drawn ones.
             want_days = []
-            for sid in order:
+            for sid in order[:6]:
                 label = day_label(when[sid], now)
                 if not want_days or want_days[-1] != label:
                     want_days.append(label)
@@ -991,32 +994,22 @@ def fixture_run():
             check(lst.get("search_hint") == "Ctrl K", f"the search hint: {lst.get('search_hint')!r}")
 
         with step("START-003", out_dir):
-            ok, start = wait_on(app, "start", lambda s: s.get("screen") == "landing" and (s.get("landing") or {}).get("model"), 10)
-            check(ok, "the landing page shows")
-            landing = start.get("landing") or {}
-            check(landing.get("path_line") == f"{PROJ} · main", f"the folder and branch: {landing.get('path_line')!r}")
-            check(landing.get("model") == "Fake Large · via Fake AI · Reasoning High", f"the model line: {landing.get('model')!r}")
-            cols = landing.get("columns") or {}
-            counts = {"lsps": len(data["get"]["lsps"]), "mcps": len(data["get"]["mcp/states"]), "skills": len(data["get"]["skills"])}
-            for k, c in cols.items():
-                rows_ = c.get("rows") or []
-                check(len(rows_) + (c.get("more") or 0) == counts[k], f"{c.get('title')}: {len(rows_)} rows + {c.get('more')} more = {counts[k]}")
-            check((cols.get("lsps") or {}).get("more", 0) > 0 and (cols.get("skills") or {}).get("more", 0) > 0, "LSPs and skills that do not fit end with \"…and N more\"")
-            lsp_rows = " | ".join((cols.get("lsps") or {}).get("rows") or [])
+            # Blank landing page (owner, 2026-10-19); the fixture's LSPs and
+            # MCP servers show in the panel's lists (the details overlay).
+            ok, start = wait_on(app, "start", lambda s: s.get("screen") == "landing" and s.get("landing") == {"blank": True}, 10)
+            check(ok, f"the blank landing page shows ({start.get('landing')})")
+            check(start.get("branch") == "main", f"the window has the branch: {start.get('branch')!r}")
+            check((start.get("large_model") or {}).get("model"), f"the window has the model: {start.get('large_model')}")
+            # The panel lists only the MCP servers the config names (this recording names none).
+            configured = set(((data["get"].get("config") or {}).get("mcp") or {}).keys())
+            counts = {"lsp": len(data["get"]["lsps"]), "mcp": len(configured & set(data["get"]["mcp/states"])), "skills": len(data["get"]["skills"])}
+            for k, n in counts.items():
+                check(len(panel_rows(app, k)) == n, f"the panel's {k} rows: {len(panel_rows(app, k))} = {n}")
+            lsp_rows = " | ".join(panel_rows(app, "lsp"))
             for text in ("deno disabled", "gopls", "pyright unstarted", "rust-analyzer error: exited with status 1", "typescript starting...", "zls stopped"):
                 check(text in lsp_rows, f"LSP row {text!r}")
-            mcp_rows = (cols.get("mcps") or {}).get("rows") or []
-            check(mcp_rows == ["Docker MCP 12 tools 3 resources", "broken error: exec: \"mcp-broken\": executable file not found in $PATH",
-                               "files 5 tools 2 prompts channel", "github needs authentication", "off disabled", "slow starting..."], f"MCP rows {mcp_rows}")
-            head = start.get("head") or {}
-            check(head.get("charm") == f"Charm™ · v{version}", f"the head: {head}")
             h, _ = heavy(app)
-            land = (h.get("start") or {}).get("landing") or {}
-            area = land.get("columns") or {}
-            ends = land.get("rows_end") or {}
-            check(bool(area) and all(v <= area["y"] + area["h"] + 0.5 for v in ends.values()), f"no column's rows run past the area ({ends}, bottom {area.get('y', 0) + area.get('h', 0)})")
             check((h.get("start") or {}).get("animations") == [], "START-005: no animation runs")
-            save_align_both(app, "landing", "The landing page")
 
         with step("CHAT-001", out_dir):
             landing_checks(app, f"fixture landing at {WIDTH} x {HEIGHT}")
@@ -1025,28 +1018,30 @@ def fixture_run():
             place(app)
 
         with step("LIST-search", out_dir):
+            # The search is a button since 2026-10-20: Ctrl+K opens the
+            # Sessions sheet, where the search text goes; Esc closes it.
             focus(app)
             key("ctrl+k")
-            ok, _ = wait_on(app, "list", lambda l: l.get("search_focused") is True, 3)
-            check(ok, "Ctrl+K focuses the chat-list search")
-            type_text("cookie")
-            ok, lst = wait_on(app, "list", lambda l: [r["id"] for r in l.get("rows") or []] == ["cookie"], 5)
-            check(ok, f"\"cookie\" leaves its chat ({[r['id'] for r in lst.get('rows') or []]})")
-            key("ctrl+a")
-            type_text("zzz")
-            ok, lst = wait_on(app, "list", lambda l: l.get("empty") == "No chats match “zzz”.", 5)
-            check(ok and not lst.get("rows"), f"no match says {lst.get('empty')!r}")
-            h, _ = heavy(app)
-            check(bool((h.get("list") or {}).get("empty")), "and draws it")
+            ok, _ = wait_on(app, "overlay", lambda o: "sessions" in (o.get("dialogs") or []), 3)
+            check(ok, "Ctrl+K opens the Sessions sheet")
             key("Escape")
-            ok, lst = wait_on(app, "list", lambda l: l.get("query") == "" and len(l.get("rows") or []) == len(sessions), 5)
-            check(ok, "Esc clears the search")
+            ok, _ = wait_on(app, "overlay", lambda o: "sessions" not in (o.get("dialogs") or []), 3)
+            check(ok, "Esc closes it")
+            ok, lst = wait_on(app, "list", lambda l: len(l.get("rows") or []) > 0, 3)
+            check(ok, "and the chat list keeps its rows")
 
         with step("LIST-narrow", out_dir):
             focus(app)
-            click_row(app, "cookie")
+            # "cookie" (the one recorded chat) is past the 6 drawn rows: the
+            # Sessions sheet opens it, and the open chat is always drawn.
+            key("ctrl+k")
+            wait_on(app, "overlay", lambda o: "sessions" in (o.get("dialogs") or []), 3)
+            time.sleep(0.3)
+            type_text("cookie")
+            time.sleep(0.5)
+            key("Return")
             ok, _, _ = poll(lambda: selected(app), lambda s: s == "cookie", 10)
-            check(ok, "a chat is open (the band)")
+            check(ok, f"a chat is open (the band; {selected(app)})")
             place(app)
             save_align_both(app, "list", "The chat list", "list")
             h, report = heavy(app)
@@ -1065,7 +1060,9 @@ def fixture_run():
                 time.sleep(0.5)
                 h, _ = heavy(app)
                 col = (h.get("list") or {}).get("column") or {}
-                check(abs(col.get("w", 0) - 280 * z) <= 1.5, f"the list is at its narrowest, 280 picture px ({col.get('w')} ≈ {280 * z:.1f})")
+                # Its narrowest is where New chat and New terminal fit whole (owner, 2026-10-20), never under 280.
+                nt = (h.get("list") or {}).get("new_terminal") or {}
+                check(col.get("w", 0) >= 280 * z - 1.5 and bool(nt), f"the list stops at its narrowest, at least 280 picture px ({col.get('w')} ≥ {280 * z:.1f})")
                 touching = []
                 for r in (h.get("list") or {}).get("rows") or []:
                     title, t = r.get("title_text"), r.get("time")

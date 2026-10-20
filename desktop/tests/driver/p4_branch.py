@@ -884,22 +884,16 @@ def main():
                 check(dx <= 1.0 and dy <= 1.5, f"the × sits in the reserved slot: on the chevron's column ({dx:.2f} px) and the title's first line ({dy:.2f} px)")
             check((selected or {}).get("close_label") == f"Close {s['B_title']}", f"the × is a button named Close <title> ({(selected or {}).get('close_label')!r})")
             shot(out_dir, "B9-selected")
-            # With words in the search, the × opens the first chat the search
-            # still shows: "the" shows B and hides S, the whole list's first.
-            app.focus()
-            key("ctrl+k")
-            type_text("the")
-            ok, listed, _ = poll(lambda: app.section("list"), lambda l: l.get("query") == "the" and any(r.get("id") == B for r in l.get("rows") or []), 5)
-            ids = [r.get("id") for r in listed.get("rows") or []]
-            want = next((x for x in ids if x != B), "")
-            check(ok and S not in ids, f"\"the\" in the search shows B and hides S ({ids})")
+            # The shown chat's × opens the first chat the list still shows.
+            # (Words typed in the list's search open the Sessions sheet since
+            # 2026-10-19, so the list itself never filters and its × always
+            # works on the whole list.)
             app.click_rect((row_of(app.heavy(), B) or {}).get("close"))
-            ok, _, _ = poll(app.chat_id, lambda c: c == want, 5)
-            check(ok, f"its × opens the first chat the search still shows, {want or 'the landing state'}, not S ({app.chat_id()!r})")
-            key("ctrl+k")
-            key("Escape")
             ok, rows, _ = poll(app.rows, lambda rs: any(r.get("id") == S for r in rs) and not any(r.get("id") == B for r in rs), 5)
-            check(ok, "its × hides B (the search cleared again)")
+            check(ok, "its × hides B")
+            want = next((r.get("id") for r in rows or [] if r.get("id") != B), "")
+            ok, _, _ = poll(app.chat_id, lambda c: c == want, 5)
+            check(ok and bool(want), f"and opens the first chat the list still shows, {want or 'none'} ({app.chat_id()!r})")
             depth = {r.get("id"): r.get("depth") for r in rows}
             check(depth.get(D) == 1, f"B's branch moves up to depth 1, under S ({depth.get(D)})")
             ok, footer, _ = poll(lambda: (app.heavy().get("branch") or {}).get("footer"), lambda f: bool(f) and f.get("text") == "1 closed · links reopen them", 5)

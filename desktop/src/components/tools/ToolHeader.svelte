@@ -142,7 +142,7 @@
     flex: 1;
     min-width: 0;
     margin-left: calc(12 * var(--px));
-    font: 400 calc(17 * var(--px)) / calc(26 * var(--px)) var(--face-mono);
+    font: var(--t-code);
     color: var(--slate);
     white-space: pre;
     overflow: hidden;
@@ -191,7 +191,7 @@
   .counts {
     flex: none;
     margin-left: calc(16 * var(--px));
-    font: 400 calc(17 * var(--px)) / calc(26 * var(--px)) var(--face-mono);
+    font: var(--t-code);
     white-space: nowrap;
   }
   .adds {

@@ -130,7 +130,7 @@
   .command {
     display: flex;
     min-width: 0;
-    font: 500 calc(17 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
+    font: var(--t-mono-strong);
     white-space: pre;
   }
   .command .text {

@@ -11,12 +11,13 @@ import { ws } from "../stores/workspace.svelte.js";
 
 export const DEFAULT_AUTOCOMPACT = 400_000;
 export const DEFAULT_CHECK_IN = 2;
+// Each style says in everyday words what it does (owner, 2026-10-20).
 export const NOTIFICATION_STYLES = [
-  { id: "auto", label: "Auto" },
-  { id: "native", label: "Native" },
-  { id: "osc", label: "OSC" },
-  { id: "bell", label: "Bell" },
-  { id: "disabled", label: "Disabled" },
+  { id: "auto", label: "Auto", description: "Crush picks the best way for where it runs" },
+  { id: "native", label: "Native", description: "A pop-up from your desktop" },
+  { id: "osc", label: "OSC", description: "A notice through the terminal, for terminals that show them" },
+  { id: "bell", label: "Bell", description: "The terminal's bell sound" },
+  { id: "disabled", label: "Disabled", description: "No notices" },
 ];
 
 const errorText = (error) => error?.message ?? String(error);

@@ -31,10 +31,12 @@
 
 <script>
   import { onMount, tick } from "svelte";
-  import { dialogs, frontDialog } from "../../lib/dialogs.js";
+  import { closeDialog, dialogs, frontDialog } from "../../lib/dialogs.js";
   import { focusables, setSheet } from "../../lib/kit/sheetkeys.js";
   import { focusField } from "../../lib/stores/composer.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
+  import Icon from "../Icon.svelte";
+  import NoticeLine from "../NoticeLine.svelte";
   import PlusMark from "../PlusMark.svelte";
   import HelpFooter from "./HelpFooter.svelte";
   import Scrollbar from "./Scrollbar.svelte";
@@ -42,6 +44,7 @@
   const WIDTHS = { small: 520, standard: 760, wide: 1040 };
   const EDGE = 24; // picture px a sheet keeps from the window's edges
   const CONTROLS_GAP = 24; // the least room between the title and its controls
+  const CLOSE_ROOM = 38; // the close cross (20) and its gap (18)
 
   let {
     id,
@@ -123,14 +126,24 @@
     });
   });
 
-  // -- Title-side controls: beside the title with room to spare, or hidden --
+  // The close cross does what Esc does: the sheet's own Esc first (a form
+  // may cancel its edit), else the sheet closes (owner, 2026-10-20: every
+  // shortcut also has something to click).
+  function closeClick() {
+    const event = new KeyboardEvent("keydown", { key: "Escape" });
+    if (typeof onKey === "function" && onKey(event, "Escape") === true) return;
+    closeDialog(id);
+  }
+
+  // -- Title-side controls: beside the title with room to spare, else on a
+  //    line of their own under it (owner, 2026-10-20: they never vanish) --
 
   function fitControls() {
     if (!line || !heading || !side) {
       controlsFit = true;
       return;
     }
-    controlsFit = heading.scrollWidth + CONTROLS_GAP * scale() + side.scrollWidth <= line.clientWidth;
+    controlsFit = heading.scrollWidth + CONTROLS_GAP * scale() + side.scrollWidth + CLOSE_ROOM * scale() <= line.clientWidth;
   }
 
   $effect(() => {
@@ -187,7 +200,7 @@
       docked: Boolean(docked),
       onboarding: Boolean(onboarding),
       max_height: maxHeight,
-      controls: controls ? (controlsFit ? "shown" : "hidden") : null,
+      controls: controls ? (controlsFit ? "shown" : "wrapped") : null,
       focus: focusName(),
     };
   }
@@ -218,7 +231,7 @@
       title_text: text ? { x: text.x, y: text.y, w: Math.min(text.width, heading.clientWidth), h: text.height } : null,
       title_cut: heading ? heading.scrollWidth > heading.clientWidth + 0.5 : false,
       title_line: rectOf(line),
-      controls: side ? { rect: rectOf(side), visible: controlsFit && getComputedStyle(side).visibility !== "hidden" } : null,
+      controls: side ? { rect: rectOf(side), visible: getComputedStyle(side).visibility !== "hidden", wrapped: !controlsFit } : null,
       rule: rectOf(frame?.querySelector(".kit-title-rule")),
       rule_marks: [...(frame?.querySelector(".kit-title-rule")?.querySelectorAll(".plus") ?? [])].map(rectOf),
       body: rectOf(body),
@@ -277,13 +290,14 @@
     {/if}
 
     <!-- A sheet with no title and no controls (Quit) has no title band. -->
-    <div class="title-line" class:untitled={!title && !controls} bind:this={line} data-kit-title>
+    <div class="title-line" class:untitled={!title && !controls} class:wrapped={!controlsFit} bind:this={line} data-kit-title>
       <h2 class="title" id={uid} bind:this={heading}>{title}</h2>
       {#if controls}
-        <div class="controls" class:hidden={!controlsFit} aria-hidden={controlsFit ? undefined : "true"} bind:this={side} data-kit-controls>
+        <div class="controls" bind:this={side} data-kit-controls>
           {@render controls()}
         </div>
       {/if}
+      <button class="close" type="button" aria-label="Close" title="Close" data-kit-close onclick={closeClick}><Icon name="close" size={12} /></button>
     </div>
     {#if title || controls}
       <Rule marks="both" class="kit-title-rule" />
@@ -293,6 +307,9 @@
       {@render children?.()}
     </div>
     <Scrollbar target={body} mode={barMode} />
+    {#if isFront}
+      <NoticeLine inline />
+    {/if}
 
     {#if help && help.length > 0}
       <div class="foot">
@@ -434,11 +451,43 @@
     gap: calc(18 * var(--px));
     margin-left: calc(24 * var(--px));
   }
-  .controls.hidden {
+  /* Too narrow for both: the controls take a line of their own under the
+     title; the close cross stays beside the title. */
+  .title-line.wrapped {
+    flex-wrap: wrap;
+  }
+  .title-line.wrapped .controls {
+    order: 3;
+    flex-basis: 100%;
+    margin: calc(10 * var(--px)) 0 0;
+  }
+  /* The close cross: 12 to see, at least 24 real pixels to hit. */
+  .close {
+    order: 2;
+    position: relative;
+    flex: none;
+    align-self: center;
+    display: grid;
+    place-items: center;
+    width: calc(20 * var(--px));
+    height: calc(20 * var(--px));
+    margin-left: calc(18 * var(--px));
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--slate);
+  }
+  .close::after {
+    content: "";
     position: absolute;
-    right: calc(26 * var(--px));
-    visibility: hidden;
-    pointer-events: none;
+    left: 50%;
+    top: 50%;
+    width: max(24px, 100%);
+    height: max(24px, 100%);
+    transform: translate(-50%, -50%);
+  }
+  .close:hover {
+    color: var(--ink);
   }
   .controls :global(button) {
     padding: 0;

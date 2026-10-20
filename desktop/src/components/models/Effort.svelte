@@ -35,7 +35,7 @@
     { key: "↑/↓", text: "choose" },
     { key: "tab", text: "ultracode", disabled: ultracode === null },
     { key: "enter", text: "confirm" },
-    { key: "esc", text: "exit" },
+    { key: "esc", text: "close" },
   ]);
 
   (async () => {
@@ -96,7 +96,7 @@
 </script>
 
 {#if ready}
-  <Sheet id={ID} title="Select Reasoning Effort" width="small" {help} {onKey}>
+  <Sheet id={ID} title="Select reasoning effort" width="small" {help} {onKey}>
     <Field bind:value={query} icon="search" placeholder="Type to filter" label="Filter levels" />
     <FilterList
       bind:this={list}
@@ -125,7 +125,7 @@
     display: flex;
     align-items: center;
     gap: calc(10 * var(--px));
-    margin: calc(12 * var(--px)) 0 0 calc(23 * var(--px));
+    margin: calc(12 * var(--px)) 0 0;
     padding: 0;
     border: 0;
     background: none;
@@ -147,7 +147,7 @@
     border-color: var(--ink);
   }
   .error {
-    margin: calc(8 * var(--px)) 0 0 calc(23 * var(--px));
+    margin: calc(8 * var(--px)) 0 0;
     font: var(--t-small);
     color: var(--error-ink);
   }

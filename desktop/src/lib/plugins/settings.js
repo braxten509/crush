@@ -21,7 +21,7 @@ registerDialog("memory_limit", MemoryLimit);
 registerDialog("subagent_instructions", SubagentInstructions);
 registerDialog("notifications", NotificationStyle);
 
-registerAction({ id: "sidebar.toggle", title: "Toggle Sidebar", run: toggleSidebar });
-registerAction({ id: "composer.focusOnly", title: "Keep Focus on Composer", run: toggleComposerFocusOnly });
-registerAction({ id: "thoughtline.toggle", title: "Hide Thought Line", run: toggleThoughtLine });
-registerAction({ id: "cpus.toggle", title: "Run AI Work on CPU Half 2", run: toggleAgentCpus });
+registerAction({ id: "sidebar.toggle", title: "Toggle right panel", run: toggleSidebar });
+registerAction({ id: "composer.focusOnly", title: "Keep focus on composer", run: toggleComposerFocusOnly });
+registerAction({ id: "thoughtline.toggle", title: "Hide thought line", run: toggleThoughtLine });
+registerAction({ id: "cpus.toggle", title: "Run AI work on CPU half 2", run: toggleAgentCpus });

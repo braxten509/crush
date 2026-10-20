@@ -44,7 +44,7 @@
   }
 </script>
 
-<Sheet id={ID} title="Remote Control" width="small" {help} {onKey}>
+<Sheet id={ID} title="Remote control" width="small" {help} {onKey}>
   <p class="lead">On. Your phone can see this chat.</p>
   <table>
     <tbody>

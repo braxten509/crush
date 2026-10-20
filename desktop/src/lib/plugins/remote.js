@@ -20,7 +20,7 @@ registerDialog("remote", RemoteStatus);
 registerDialog("remote_setup", RemoteSetup);
 registerDialog("launcher_password", LauncherPassword);
 
-registerAction({ id: "remote.open", title: "Remote Control", run: openRemote });
+registerAction({ id: "remote.open", title: "Remote control", run: openRemote });
 
 onEvent("remote_status", (_kind, status) => onStatus(status));
 onEvent("remote_action", (_kind, action) => runRemoteAction(action));

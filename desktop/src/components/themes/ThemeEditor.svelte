@@ -214,7 +214,7 @@
   .role {
     width: calc(234 * var(--px));
     flex: none;
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     color: var(--ink);
   }
   .swatch {
@@ -226,7 +226,7 @@
     border: 1px solid var(--rule-control);
   }
   .value {
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     color: var(--slate);
   }
   .value-field {
@@ -237,6 +237,6 @@
     height: calc(32 * var(--px));
   }
   .value-field :global(input) {
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
   }
 </style>

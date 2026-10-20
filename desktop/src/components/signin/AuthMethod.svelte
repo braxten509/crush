@@ -132,8 +132,9 @@
   .card:hover {
     background: var(--control-hover);
   }
+  /* Selected: the band inside an ink hairline; the frame keeps its size. */
   .card.selected {
-    border: 2px solid var(--ink);
+    border-color: var(--ink);
     background: var(--band);
   }
 </style>

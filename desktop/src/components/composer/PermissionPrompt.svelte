@@ -1,7 +1,7 @@
 <script>
   // The permission prompt in the slot (DLG-119 to DLG-140; 4.9): the title
   // and the tool, the request's facts, the content (the command, the JSON or
-  // the diff), the hints that apply and Allow / Allow for Session / Deny. The
+  // the diff), the hints that apply and Allow / Allow for session / Deny. The
   // keys are the slot scope's while the prompt is mounted; for a moment after
   // it opens every key is absorbed (lib/grace.js), so one meant for the field
   // cannot answer it. The answer is POST permissions/grant; the slot closes
@@ -363,15 +363,16 @@
   .choice {
     flex: none;
     box-sizing: border-box;
-    height: calc(44 * var(--px));
-    padding: 0 calc(18 * var(--px));
+    height: calc(36 * var(--px));
+    padding: 0 calc(16 * var(--px));
     border: 1px solid var(--rule-control);
-    font: var(--t-body-small);
+    background: var(--control-rest);
+    font: var(--t-button);
     color: var(--ink);
     white-space: nowrap;
   }
-  .choice:hover {
-    border-color: var(--ink);
+  .choice:hover:not(.selected) {
+    background: var(--control-hover);
   }
   .choice.selected {
     border-color: var(--ink);

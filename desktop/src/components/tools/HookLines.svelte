@@ -35,7 +35,7 @@
     column-gap: 1ch;
     align-items: baseline;
     justify-content: start;
-    font: 400 calc(17 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
+    font: var(--t-code);
     color: var(--slate);
   }
   .hooks.matchers {

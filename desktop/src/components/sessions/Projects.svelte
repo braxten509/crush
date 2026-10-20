@@ -33,7 +33,7 @@
     { key: "↑/↓", text: "choose" },
     { key: "enter", text: "open" },
     { key: "ctrl+x", text: "remove" },
-    { key: "esc", text: "exit" },
+    { key: "esc", text: "close" },
   ];
 
   // dialog_actions.go:406-420.
@@ -110,7 +110,7 @@
 </script>
 
 {#if rows}
-<Sheet id={ID} title="Open Project" width="small" {help} {onKey}>
+<Sheet id={ID} title="Open project" width="small" {help} {onKey}>
   <Field bind:value={query} icon="search" placeholder="Type to filter" label="Filter projects" />
   <FilterList
     bind:this={list}

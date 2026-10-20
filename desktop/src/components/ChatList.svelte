@@ -124,8 +124,11 @@
     return true;
   }
 
-  function onSearchInput(event) {
-    if (event.inputType?.startsWith("insert")) handOff();
+  function onSearchKey(event) {
+    if (event.ctrlKey || event.altKey || event.metaKey || event.key.length !== 1 || event.key === " ") return;
+    event.preventDefault();
+    query = event.key;
+    handOff();
   }
 
   function onKey(event) {
@@ -214,19 +217,13 @@
     <span class="label">New chat</span>
   </button>
 
-  <label class="search">
+  <!-- A button, not a box (owner, 2026-10-20): it opens the Sessions sheet,
+       where the search text goes; a letter typed on it starts that search. -->
+  <button class="search" type="button" aria-label="Search chats" bind:this={field} onclick={handOff} onkeydown={onSearchKey}>
     <Icon name="search" />
-    <input
-      type="search"
-      placeholder="Search chats…"
-      aria-label="Search chats"
-      bind:this={field}
-      bind:value={query}
-      oninput={onSearchInput}
-      onclick={handOff}
-    />
+    <span class="placeholder">Search chats…</span>
     <kbd>{searchHint}</kbd>
-  </label>
+  </button>
 
   <Rule marks="both" class="under-search" />
 
@@ -292,7 +289,7 @@
 
   .wordmark {
     margin: calc(27 * var(--px)) 0 0 calc(20 * var(--px));
-    font: 700 calc(32 * var(--px)) / calc(40 * var(--px)) var(--face-brand);
+    font: var(--t-wordmark);
     color: var(--ink);
     white-space: nowrap;
   }
@@ -317,10 +314,8 @@
     color: var(--ink);
   }
   .new-chat .label {
-    /* Spectral's capitals sit high in their line box; one picture pixel down
-       centres them on the plus (measured in the real window, WebKitGTK). */
-    position: relative;
-    top: calc(1 * var(--px));
+    /* At the small button size the capitals already centre on the plus
+       (measured in the real window, 2026-10-20); the old 1 px nudge is gone. */
     margin-left: calc(13 * var(--px));
     font: var(--t-button);
   }
@@ -377,36 +372,30 @@
     margin: calc(17 * var(--px)) calc(20 * var(--px)) 0;
     padding: 0 calc(12 * var(--px)) 0 calc(11 * var(--px));
     border: 1px solid var(--rule-control);
+    background: none;
     color: var(--ink);
-    cursor: text;
+    cursor: pointer;
   }
-  .search input {
+  .search .placeholder {
     flex: 1;
     min-width: 0;
-    height: calc(26 * var(--px));
     margin-left: calc(12 * var(--px));
-    padding: 0;
-    border: 0;
-    outline: 0;
-    background: none;
     font: var(--t-field);
-    appearance: none;
-  }
-  .search input::placeholder {
+    line-height: calc(26 * var(--px));
     color: var(--slate);
-    opacity: 1;
+    text-align: left;
   }
-  .search input::-webkit-search-cancel-button {
-    appearance: none;
+  .search:hover {
+    background: var(--control-hover);
   }
-  .search:focus-within {
+  .search:focus-visible {
     outline: 1px solid var(--vermilion);
     outline-offset: calc(2 * var(--px));
   }
   .search kbd {
     flex: none;
     margin-left: calc(8 * var(--px));
-    font: var(--t-small);
+    font: var(--t-mono);
     color: var(--slate);
     white-space: nowrap;
   }

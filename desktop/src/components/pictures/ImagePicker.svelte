@@ -203,7 +203,7 @@
   });
 </script>
 
-<Sheet id={ID} title="Add Image" width="wide" maxHeight={640} {help} {onKey}>
+<Sheet id={ID} title="Add image" width="wide" maxHeight={640} {help} {onKey}>
   <p class="path">{dir}</p>
   <div class="columns" class:with-preview={showPreview}>
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -241,9 +241,7 @@
 <style>
   .path {
     margin: 0 0 calc(12 * var(--px));
-    font: var(--t-path);
-    letter-spacing: var(--track-label);
-    text-transform: uppercase;
+    font: var(--t-small);
     color: var(--slate);
     overflow-wrap: anywhere;
   }
@@ -256,16 +254,24 @@
   .columns.with-preview {
     grid-template-columns: calc(600 * var(--px)) 1fr;
   }
+  /* The list reaches the frame, as FilterList's does: rows 44 high with the
+     sheet's 26 gutter, hover and selection drawn 8 in from the frame. */
   .list {
+    margin-left: calc(-26 * var(--px));
     overflow-y: auto;
     min-height: 0;
     outline: none;
   }
+  .columns:not(.with-preview) .list {
+    margin-right: calc(-26 * var(--px));
+  }
   .row {
+    position: relative;
+    isolation: isolate;
     display: flex;
     align-items: center;
-    height: calc(36 * var(--px));
-    padding: 0 calc(12 * var(--px));
+    height: calc(44 * var(--px));
+    padding: 0 calc(26 * var(--px));
     font: var(--t-item);
     color: var(--ink);
     white-space: nowrap;
@@ -273,20 +279,39 @@
     text-overflow: ellipsis;
     cursor: pointer;
   }
-  .row:hover {
+  .row:hover::before,
+  .row.selected::before {
+    content: "";
+    position: absolute;
+    inset: 0 calc(8 * var(--px));
+    z-index: -1;
+    pointer-events: none;
+  }
+  .row:hover::before {
     background: var(--control-hover);
   }
-  .row.selected {
+  .row.selected::before {
     background: var(--band);
+    border-top: 1px solid var(--rule-faint);
+    border-bottom: 1px solid var(--rule-faint);
+  }
+  .row.selected::after {
+    content: "";
+    position: absolute;
+    left: calc(8 * var(--px));
+    top: 0;
+    bottom: 0;
+    width: calc(4 * var(--px));
+    background: var(--vermilion);
   }
   .row.dim {
     color: var(--mark);
   }
-  .row.dim.selected {
+  .row.dim.selected::before {
     background: var(--disabled-band);
   }
   .empty {
-    margin: calc(12 * var(--px));
+    margin: calc(12 * var(--px)) 0;
     font: var(--t-small);
     color: var(--slate);
   }

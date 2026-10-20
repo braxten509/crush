@@ -84,8 +84,8 @@ xdo("windowsize", wid, WIDTH, HEIGHT)
 p = wait_for(probe_path, lambda p: p.get("ready") and p.get("fonts") == "loaded" and (p.get("chat") or {}).get("ready", True), 30)
 check(p.get("ready"), "the first screen is ready")
 
-# The first screen asks to initialize the project; answer Nope.
-run("const b = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Nope'); b?.click(); return Boolean(b);")
+# The first screen asks to initialize the project; answer Not now.
+run("const b = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Not now'); b?.click(); return Boolean(b);")
 settle()
 for i, text in enumerate(SEEDS):
     if not check(send(text), f"sent {text!r}"):

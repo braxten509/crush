@@ -3,13 +3,13 @@
 // internal/ui/dialog/permissions/permissions.go and content.go. The params
 // arrive as the engine's JSON (internal/agent/tools/*PermissionsParams).
 
-export const TITLE = "Permission Required";
+export const TITLE = "Permission required";
 
 // The buttons in order (renderButtons, permissions.go:531-536): the key letter
 // is the one underlined.
 export const BUTTONS = [
   { label: "Allow", key: "A", underline: 0, action: "allow" },
-  { label: "Allow for Session", key: "S", underline: 10, action: "allow_session" },
+  { label: "Allow for session", key: "S", underline: 10, action: "allow_session" },
   { label: "Deny", key: "D", underline: 0, action: "deny" },
 ];
 

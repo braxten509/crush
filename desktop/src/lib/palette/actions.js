@@ -14,7 +14,7 @@ const errorText = (error) => error?.message ?? String(error);
 // the request, so it has a call id and no time limit.
 export async function summarize() {
   if (windowBusy()) {
-    notify("warn", "Agent is busy, please wait before summarizing session...");
+    notify("warn", "Agent is busy, please wait before summarizing this chat...");
     return;
   }
   const sid = sessions.currentId;

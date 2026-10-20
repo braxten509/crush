@@ -124,7 +124,7 @@
     padding: 0;
     border: 0;
     background: none;
-    font: var(--t-agent-mono);
+    font: var(--t-small);
     color: var(--link);
     text-align: left;
     overflow-wrap: anywhere;

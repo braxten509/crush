@@ -47,7 +47,7 @@
   }
   /* The caret turns over while the menu is open. */
   .model :global(svg) {
-    transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+    transition: transform var(--motion) var(--ease-paper);
   }
   .model.open :global(svg) {
     transform: rotate(180deg);

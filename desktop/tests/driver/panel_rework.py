@@ -114,7 +114,7 @@ if not SWITCH:
     subprocess.run(["import", "-window", wid, os.path.join(out_dir, "landing.png")])
     check(click_at('[data-probe="folder-picker"]'), "the panel's folder name can be clicked")
     time.sleep(0.8)
-    picker = run("return document.body.innerText.includes('New session in');")
+    picker = run("return document.body.innerText.includes('New chat in');")
     check(picker is True, "a click on the panel's folder name opens the folder list")
     xdo("key", "Escape")
     finish()

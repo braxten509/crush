@@ -39,14 +39,14 @@ const detailsShown = () => panel.detailsOpen && ui.panelHidden && Boolean(sessio
 
 registerAction({
   id: "help.toggle",
-  title: "Toggle Help",
+  title: "Toggle help",
   keys: ["Ctrl+G"],
   run: () => setHelp(!ui.help),
 });
 
 registerAction({
   id: "details.toggle",
-  title: "Toggle Details",
+  title: "Toggle details",
   keys: ["Ctrl+D"],
   enabled: () => ui.panelHidden,
   run: toggleDetails,
@@ -56,7 +56,7 @@ registerAction({
 // (composer_footer.go:142-145); the slot refuses the rest.
 registerAction({
   id: "composer.customize",
-  title: "Customize Composer",
+  title: "Customize composer",
   run() {
     if (ui.slot) return;
     openSlot({ kind: "customize", component: CustomizeForm, props: { help: CUSTOMIZE_HELP, collapsedHelp: CUSTOMIZE_COLLAPSED } });

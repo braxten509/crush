@@ -11,16 +11,16 @@ import { api } from "../engine/api.js";
 import { capabilities } from "../models/capabilities.svelte.js";
 import { refreshModels } from "../models/store.svelte.js";
 import { toggleFast, toggleThinking, toggleUltracode } from "../models/toggles.js";
-import { notify } from "../stores/ui.svelte.js";
+import { clearNotice, notify } from "../stores/ui.svelte.js";
 import { loadProviders } from "../stores/workspace.svelte.js";
 
 registerDialog("models", ModelPicker);
 registerDialog("reasoning", Effort);
 registerDialog("usage", Usage);
 
-registerAction({ id: "model.fast", title: "Toggle FAST Mode", enabled: () => capabilities.supports_fast, run: toggleFast });
+registerAction({ id: "model.fast", title: "Toggle FAST mode", enabled: () => capabilities.supports_fast, run: toggleFast });
 registerAction({ id: "model.ultracode", title: "Toggle Ultracode", enabled: () => capabilities.supports_ultracode, run: toggleUltracode });
-registerAction({ id: "model.thinking", title: "Toggle Thinking Mode", enabled: () => capabilities.supports_thinking_toggle, run: toggleThinking });
+registerAction({ id: "model.thinking", title: "Toggle thinking mode", enabled: () => capabilities.supports_thinking_toggle, run: toggleThinking });
 
 // G-9: the same work as `crush update-providers`, one notice per source.
 let refreshing = false;
@@ -30,8 +30,12 @@ registerAction({
   async run() {
     if (refreshing) return;
     refreshing = true;
+    // Says it started at once (owner, 2026-10-20); each result replaces it.
+    const busyText = "Refreshing the provider list…";
+    notify("info", busyText, 0);
     try {
       const answer = await api.refreshProviders();
+      if (!(answer?.results?.length > 0)) clearNotice(busyText);
       for (const result of answer?.results ?? []) {
         if (result.ok) notify("info", `${result.source} provider updated successfully.`);
         else notify("error", result.error || `${result.source} provider update failed`);

@@ -129,7 +129,7 @@
   });
 </script>
 
-<Sheet id={ID} title="Remote Control" width="small" {help} {onKey}>
+<Sheet id={ID} title="Remote control" width="small" {help} {onKey}>
   <p class="title">{title}</p>
   {#if checking}
     <p class="loading"><Icon name="working" size={16} /> {detail}</p>

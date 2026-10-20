@@ -102,7 +102,7 @@
         </p>
       {/if}
       <div class="columns">
-        <FilesSection list={lists.files} label="Modified Files" />
+        <FilesSection list={lists.files} label="Modified files" />
         <LspSection list={lists.lsp} label="LSPs" />
         <McpSection list={lists.mcp} label="MCPs" />
         <SkillsSection list={lists.skills} label="Skills" />

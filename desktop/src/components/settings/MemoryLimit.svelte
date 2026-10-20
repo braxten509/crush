@@ -4,6 +4,7 @@
   // Empty or 0 means no limit; otherwise at least 2 GB. The engine saves and
   // applies it (PUT /v1/memory/limit) and returns the notice to show.
   import { onMount } from "svelte";
+  import Buttons from "../kit/Buttons.svelte";
   import Field from "../kit/Field.svelte";
   import Sheet from "../kit/Sheet.svelte";
   import { closeDialog } from "../../lib/dialogs.js";
@@ -80,13 +81,21 @@
   });
 </script>
 
-<Sheet id={ID} title="Memory Limit" width="small" {help} {onKey}>
+<Sheet id={ID} title="Memory limit" width="small" {help} {onKey}>
   <p class="hint">Most memory all Crush windows and everything they start may use. At the limit, the biggest program inside is stopped.</p>
   <Field bind:value={text} prompt="GB: " label="Memory limit in GB" {error} />
   <p class="usage">{usage}</p>
+  <div class="actions">
+    <Buttons buttons={[{ id: "save", label: "Save" }, { id: "cancel", label: "Cancel" }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
+  </div>
 </Sheet>
 
 <style>
+  /* Save and Cancel to click, beside their keys (owner, 2026-10-20). */
+  .actions {
+    margin-top: calc(18 * var(--px));
+  }
+
   p {
     margin: 0;
     font: var(--t-small);
@@ -94,6 +103,7 @@
   }
   .hint {
     margin-bottom: calc(12 * var(--px));
+    font: var(--t-body-small);
   }
   .usage {
     margin-top: calc(8 * var(--px));

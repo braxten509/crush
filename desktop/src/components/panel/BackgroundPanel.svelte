@@ -15,10 +15,10 @@
   ]);
 </script>
 
-<section class="panel-section" data-section="background" aria-label="Background">
+<section class="panel-section" class:empty={rows.length === 0} data-section="background" aria-label="Background">
   <h2 class="label">Background</h2>
   {#if rows.length === 0}
-    <p class="line none">None</p>
+    <p class="visually-hidden">None</p>
   {:else}
     <ul class="rows">
       {#each rows as row (row.key)}
@@ -38,10 +38,12 @@
     letter-spacing: var(--track-label);
     text-transform: uppercase;
   }
-  .rows,
-  .none {
-    margin-top: calc(8 * var(--px));
+  /* An empty section steps back (owner, 2026-10-20): a quieter heading and
+     no "None" line; the heading keeps its place. */
+  .empty .label {
+    color: var(--mark);
   }
+  .rows,
   .line {
     display: flex;
     align-items: center;
@@ -52,7 +54,6 @@
   .row + .row {
     border-top: 1px solid var(--rule-faint);
   }
-  .none,
   .info {
     color: var(--slate);
   }

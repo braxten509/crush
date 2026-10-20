@@ -17,7 +17,7 @@
     flex: none;
   }
   .word {
-    font: 700 calc(64 * var(--px)) / calc(64 * var(--px)) var(--face-brand);
+    font: var(--t-wordmark-large);
     color: var(--ink);
     white-space: nowrap;
   }

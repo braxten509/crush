@@ -159,7 +159,7 @@ function closeTarget() {
 
 registerAction({
   id: "chat.close",
-  title: "Close Chat",
+  title: "Close chat",
   enabled: () => Boolean(closeTarget()),
   run: () => closeChat(closeTarget(), { query: searchQuery() }),
 });

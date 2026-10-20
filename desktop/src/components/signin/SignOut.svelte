@@ -26,12 +26,12 @@
   }
 </script>
 
-<Sheet id={ID} title="Sign Out" width="small" help={[{ key: "←/→", text: "choose" }, { key: "enter", text: "confirm" }, { key: "esc", text: "cancel" }]} {onKey}>
+<Sheet id={ID} title="Sign out" width="small" help={[{ key: "←/→", text: "choose" }, { key: "enter", text: "confirm" }, { key: "esc", text: "cancel" }]} {onKey}>
   <p class="question">Are you sure you want to log out of {name}?</p>
   <Buttons
     buttons={[
-      { id: "yes", label: "Yes", key: "y" },
-      { id: "no", label: "No", key: "n" },
+      { id: "yes", label: "Sign out", key: "y" },
+      { id: "no", label: "Cancel", key: "n" },
     ]}
     bind:selected
     onPress={(id) => answer(id === "yes")}

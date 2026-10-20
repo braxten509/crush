@@ -137,8 +137,8 @@
       <button type="button" class="act" onclick={() => openDialog("theme")}>Change…</button>
     </div>
     <div class="row">
-      <span class="name">Show sidebar</span>
-      <button type="button" class="switch" role="switch" aria-checked={!panelSetting.off} aria-label="Show sidebar" onclick={() => setSidebarShown(panelSetting.off)}></button>
+      <span class="name">Show the right panel</span>
+      <button type="button" class="switch" role="switch" aria-checked={!panelSetting.off} aria-label="Show the right panel" onclick={() => setSidebarShown(panelSetting.off)}></button>
     </div>
   {/if}
   {#if section === "typing"}
@@ -252,12 +252,15 @@
     letter-spacing: -0.01em;
     color: var(--ink);
   }
+  /* Rows stop at a reading width (owner, 2026-10-20), so each switch sits
+     near its name; names start on the title's edge. */
   .rows {
+    max-width: calc(840 * var(--px));
     border-top: 1px solid var(--rule-control);
   }
   .rows .row {
     min-height: calc(56 * var(--px));
-    padding: calc(6 * var(--px)) calc(4 * var(--px));
+    padding: calc(6 * var(--px)) 0;
     border-bottom: 1px solid var(--rule-control);
   }
 
@@ -284,7 +287,7 @@
     border: 1px solid var(--rule-control);
     border-radius: 0;
     background: var(--control-rest);
-    font: var(--t-small);
+    font: var(--t-button);
     color: var(--ink);
     cursor: pointer;
   }

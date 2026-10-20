@@ -66,7 +66,7 @@
   });
 </script>
 
-<Sheet id={ID} title="New Theme" width="small" {help} {onKey}>
+<Sheet id={ID} title="New theme" width="small" {help} {onKey}>
   <Field bind:value={name} placeholder="my-theme" label="Theme name" {error} />
   {#if !error}<p class="reserve" aria-hidden="true"></p>{/if}
 </Sheet>

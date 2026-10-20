@@ -212,7 +212,7 @@ probeSection(
       hint: shown.some((row) => isPicked(row)) ? SERVER_HINT : "",
       picker: picker && {
         kind: picker.kind,
-        title: picker.kind === "terminal" ? "New terminal in…" : "New session in…",
+        title: picker.kind === "terminal" ? "New terminal in…" : "New chat in…",
         hint: PICKER_HINT,
         base: picker.base,
         input: picker.input,

@@ -22,8 +22,8 @@ const queued = () => (sessions.currentId ? visibleItems(sessions.currentId) : []
 
 // -- Actions --
 
-registerAction({ id: "yolo.toggle", title: "Toggle Yolo Mode", keys: ["Ctrl+Y"], run: () => C.toggleYolo() });
-registerAction({ id: "mode.cycle", title: "Switch Input Mode", keys: ["Shift+Tab"], run: () => C.cycleMode() });
+registerAction({ id: "yolo.toggle", title: "Toggle Yolo mode", keys: ["Ctrl+Y"], run: () => C.toggleYolo() });
+registerAction({ id: "mode.cycle", title: "Switch input mode", keys: ["Shift+Tab"], run: () => C.cycleMode() });
 
 // -- The tray's sections (TYPE-044, TYPE-045). The to-do list is the right
 // panel's (owner, 2026-10-19). --

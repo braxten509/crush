@@ -61,7 +61,8 @@ export function initKey(event) {
   if (event.altKey) return null;
   if (k === "Enter") return "enter";
   if (k === "ArrowLeft" || k === "ArrowRight" || (k === "Tab" && !event.shiftKey)) return "switch";
-  if (k === "y" || k === "Y") return "yes";
+  // Y as the terminal's Yep!; I for the button's word, Initialize (owner, 2026-10-20).
+  if (k === "y" || k === "Y" || k === "i" || k === "I") return "yes";
   if (k === "n" || k === "N") return "no";
   return null;
 }

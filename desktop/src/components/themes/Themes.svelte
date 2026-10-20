@@ -37,7 +37,7 @@
     const system = list.filter((t) => t.source === "builtin" || t.overridden).sort((a, b) => (a.name < b.name ? -1 : 1));
     const user = list.filter((t) => t.source === "user" && !t.overridden).sort((a, b) => (a.name < b.name ? -1 : 1));
     return [
-      { name: NEW, label: "New Theme...", group: "" },
+      { name: NEW, label: "New theme...", group: "" },
       ...system.map((t) => ({ ...t, label: t.overridden ? `${t.name} (overridden)` : t.name, group: "System" })),
       ...user.map((t) => ({ ...t, label: t.name, group: "User" })),
     ];

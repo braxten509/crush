@@ -75,7 +75,7 @@
   }
   .path {
     margin: calc(12 * var(--px)) 0 calc(18 * var(--px));
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     color: var(--slate);
     overflow-wrap: anywhere;
   }

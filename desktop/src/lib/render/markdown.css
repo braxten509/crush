@@ -11,8 +11,11 @@
   background: var(--selection);
 }
 
-/* Prose uses the column's full width, like code blocks and chips (owner,
-   2026-10-19); the column's own padding keeps it off the edges. */
+/* Prose stops at 80 letters a line (owner, 2026-10-20), for easy reading;
+   code blocks, tables and pictures keep the column's full width. */
+:is(.md, .md blockquote, .md li) > :is(p, ul, ol, blockquote, .md-h, h1, h2, h3, h4, h5, h6) {
+  max-width: 80ch;
+}
 
 /* calc(14 * var(--px)) between blocks; more above a heading than below it. */
 .md > * + *,
@@ -62,7 +65,7 @@
 /* Inline code: mono at 0.94 em, its own ink, no backticks, no box (CHAT-017). */
 .md .md-icode {
   font-family: var(--face-mono);
-  font-size: 0.94em;
+  font-size: 0.9em; /* 19 in reading text, 17 in secondary text: both on the scale */
   color: var(--code-inline);
 }
 

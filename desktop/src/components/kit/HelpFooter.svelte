@@ -133,7 +133,7 @@
     white-space: pre;
   }
   kbd {
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     color: var(--ink);
   }
   .text {

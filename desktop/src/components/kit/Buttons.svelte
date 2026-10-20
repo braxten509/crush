@@ -135,9 +135,9 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    height: calc(44 * var(--px));
-    min-width: calc(112 * var(--px));
-    padding: 0 calc(20 * var(--px));
+    height: calc(36 * var(--px));
+    min-width: calc(80 * var(--px));
+    padding: 0 calc(16 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--control-rest);
     color: var(--ink);

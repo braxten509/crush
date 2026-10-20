@@ -169,7 +169,6 @@
     place-items: center;
     background: var(--vermilion-fill);
     color: var(--on-accent);
-    border-radius: calc(2 * var(--px));
   }
   .send :global(.icon) {
     /* A paper plane reads centred a little right of its box. */

@@ -223,16 +223,16 @@
     background: var(--d-code-bg);
   }
   .diff.dark {
-    --d-add-bg: #142d1b;
-    --d-add-gutter: #163620;
-    --d-add-ink: #79cd91;
-    --d-del-bg: #3a1d1c;
-    --d-del-gutter: #4a2322;
-    --d-del-ink: #fb9890;
-    --d-hunk-bg: #1b222e;
-    --d-code-bg: #14171d;
-    --d-ink: #e5e8ed;
-    --d-quiet: #8e929b;
+    --d-add-bg: var(--diff-dark-add-bg);
+    --d-add-gutter: var(--diff-dark-add-gutter);
+    --d-add-ink: var(--diff-dark-add-ink);
+    --d-del-bg: var(--diff-dark-del-bg);
+    --d-del-gutter: var(--diff-dark-del-gutter);
+    --d-del-ink: var(--diff-dark-del-ink);
+    --d-hunk-bg: var(--diff-dark-hunk-bg);
+    --d-code-bg: var(--diff-dark-code-bg);
+    --d-ink: var(--diff-dark-ink);
+    --d-quiet: var(--diff-dark-quiet);
   }
   .ruler {
     position: absolute;

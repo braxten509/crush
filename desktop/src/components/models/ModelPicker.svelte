@@ -22,8 +22,8 @@
 
   const ID = "models";
   const TYPES = [
-    { id: "large", label: "Large Task", placeholder: "Choose a model for large, complex tasks" },
-    { id: "small", label: "Small Task", placeholder: "Choose a model for small, simple tasks" },
+    { id: "large", label: "Large task", placeholder: "Choose a model for large, complex tasks" },
+    { id: "small", label: "Small task", placeholder: "Choose a model for small, simple tasks" },
   ];
 
   let { onboarding = false } = $props();
@@ -46,7 +46,7 @@
     { key: "tab", text: "toggle type", disabled: onboarding },
     { key: "enter", text: "confirm" },
     { key: "ctrl+e", text: "edit", disabled: !editable },
-    { key: "esc", text: "exit" },
+    { key: "esc", text: "close" },
   ]);
 
   $effect(() => watchModels());
@@ -128,7 +128,7 @@
   const isCurrent = (item) => item.model.id === current.model && item.provider.id === current.provider;
 </script>
 
-<Sheet id={ID} title="Switch Model" width="standard" maxHeight={720} {help} {onKey} {onboarding} controls={onboarding ? null : controls}>
+<Sheet id={ID} title="Switch model" width="standard" maxHeight={720} {help} {onKey} {onboarding} controls={onboarding ? null : controls}>
   {#if onboarding}
     <p class="lead">To start, let's choose a provider and model.</p>
   {/if}

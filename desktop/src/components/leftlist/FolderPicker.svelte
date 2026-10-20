@@ -28,7 +28,7 @@
 
   let { mode = "session" } = $props();
 
-  const title = $derived(mode === "terminal" ? "New terminal in…" : "New session in…");
+  const title = $derived(mode === "terminal" ? "New terminal in…" : "New chat in…");
   // The terminal's hint (draw.go:673) as help pairs.
   const HELP = [
     { key: "↑↓", text: "pick" },
@@ -246,7 +246,7 @@
       if (await projectSwitch(dir)) location.reload();
     } catch (error) {
       console.error("Could not start a Crush session", error?.message ?? error);
-      notify("error", "Couldn't start a session.");
+      notify("error", "Couldn't start a chat.");
     }
   }
 
@@ -389,7 +389,7 @@
     border: 0;
     outline: 0;
     background: none;
-    font: var(--t-agent-mono);
+    font: var(--t-field);
     color: var(--ink);
     caret-color: var(--choice);
   }
@@ -397,7 +397,7 @@
     flex: none;
     box-sizing: border-box;
     height: calc(50 * var(--px));
-    padding: 0 calc(20 * var(--px));
+    padding: 0 calc(16 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--control-rest);
     font: var(--t-button);
@@ -432,8 +432,11 @@
     color: var(--error-ink);
   }
 
+  /* The rows reach the frame, as FilterList's do (owner, 2026-10-20: one row
+     look for every picker): 44 high, the sheet's 26 gutter, hover and the
+     picked band drawn 8 in from the frame. */
   .rows {
-    margin: calc(13 * var(--px)) 0 0;
+    margin: calc(13 * var(--px)) calc(-26 * var(--px)) 0;
   }
   .heading {
     margin: calc(14 * var(--px)) 0 0;
@@ -445,38 +448,37 @@
   .heading + .rows {
     margin-top: calc(13 * var(--px));
   }
-
-  /* One-line rows 36 high, text from 23; the picked row as the active state. */
   .row {
     position: relative;
     box-sizing: border-box;
-    height: calc(36 * var(--px));
-    padding: 0 calc(24 * var(--px)) 0 calc(23 * var(--px));
-    font: var(--t-agent-mono);
-    line-height: calc(36 * var(--px));
+    height: calc(44 * var(--px));
+    padding: 0 calc(26 * var(--px));
+    font: var(--t-item);
+    line-height: calc(44 * var(--px));
     color: var(--ink);
     cursor: default;
+    isolation: isolate;
   }
-  .row:hover .end {
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: calc(4 * var(--px));
-  }
-  .row.picked {
-    background: var(--band);
-  }
+  .row:hover::before,
   .row.picked::before {
     content: "";
     position: absolute;
-    inset: 0;
+    inset: 0 calc(8 * var(--px));
+    z-index: -1;
+    pointer-events: none;
+  }
+  .row:hover::before {
+    background: var(--control-hover);
+  }
+  .row.picked::before {
+    background: var(--band);
     border-top: 1px solid var(--rule-faint);
     border-bottom: 1px solid var(--rule-faint);
-    pointer-events: none;
   }
   .row.picked::after {
     content: "";
     position: absolute;
-    left: calc(3 * var(--px));
+    left: calc(8 * var(--px));
     top: 0;
     bottom: 0;
     width: calc(4 * var(--px));

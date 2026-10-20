@@ -3,7 +3,10 @@
   // complete): mainView.current, a helper's chat (LIVE) or a terminal tab
   // (TERM), drawn in the conversation's place. App keeps the conversation
   // mounted underneath, hidden, while it shows.
+  // Its notices show here too (owner, 2026-10-20: a message appears where the
+  // person is working); a helper's chat draws its own line.
   import { mainView } from "../lib/mainview.js";
+  import NoticeLine from "./NoticeLine.svelte";
 
   const view = $derived(mainView.current);
 </script>
@@ -13,6 +16,9 @@
     {#key view.key ?? view.kind}
       <view.component {...view.props} />
     {/key}
+    {#if view.kind !== "helper"}
+      <NoticeLine />
+    {/if}
   </div>
 {/if}
 
@@ -23,7 +29,7 @@
     min-width: 0;
     min-height: 0;
   }
-  .main-view > :global(*) {
+  .main-view > :global(*:not([data-notice-anchor])) {
     flex: 1;
   }
 </style>

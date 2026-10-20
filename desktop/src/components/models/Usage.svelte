@@ -44,7 +44,7 @@
   const estimated = $derived(Boolean(session?.estimated_usage || session?.context_budget?.estimated));
   const now = $derived(secondNow());
   const help = $derived([
-    { key: "esc", text: "exit" },
+    { key: "esc", text: "close" },
     { key: "r", text: "refresh", disabled: !kind || refreshing },
     { key: "↑/↓", text: "scroll" },
   ]);
@@ -217,7 +217,6 @@
   .body {
     overflow-y: auto;
     min-height: 0;
-    padding-left: calc(4 * var(--px));
   }
   p {
     margin: 0;

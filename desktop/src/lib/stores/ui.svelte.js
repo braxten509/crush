@@ -24,12 +24,15 @@ let noticeTimer = null;
 // notice replaces the older one; it clears itself after ttlMs (0 or less:
 // it stays until replaced). action: null | {label, run()} for the text
 // button at the line's right (4.14). Errors also go to the log.
+// Errors stay until dismissed, replaced or fixed (owner, 2026-10-20: an error
+// must be readable and offer its way out), whatever time the caller gave.
 export function notify(kind, text, ttlMs = 5000, action = null) {
   const id = ++noticeCount;
-  ui.notice = { id, kind, text, action };
+  const sticky = kind === "error" || ttlMs <= 0;
+  ui.notice = { id, kind, text, action, sticky };
   if (kind === "error") console.error(text);
   clearTimeout(noticeTimer);
-  if (ttlMs > 0) {
+  if (!sticky) {
     noticeTimer = setTimeout(() => {
       if (ui.notice?.id === id) ui.notice = null;
     }, ttlMs);

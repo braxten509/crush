@@ -399,7 +399,7 @@ describe("opening a chat (LIST-034, TYPE-049)", () => {
     expect(await S.openChat("s1")).toBe(true);
     expect(S.sessions.currentId).toBe("s1");
     expect(ws.files.s1).toEqual([]);
-    expect(h.notices).toEqual([{ kind: "warn", text: "Couldn't read this chat's file history" }]);
+    expect(h.notices).toEqual([{ kind: "warn", text: "Couldn't read this chat's file history, so its changed files are not listed" }]);
   });
 
   for (const order of ["the newer read lands first", "the older read lands first"]) {

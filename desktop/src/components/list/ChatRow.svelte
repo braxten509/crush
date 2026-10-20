@@ -220,7 +220,7 @@
     margin-top: 0;
   }
   .branch .agent {
-    font: var(--t-agent-mono);
+    font: var(--t-meta);
     line-height: calc(20 * var(--px));
   }
   .branch .time {
@@ -252,19 +252,22 @@
     text-underline-offset: calc(4 * var(--px));
   }
 
-  /* The close slot: a hit area 28 px wide and as tall as the × (12), centred
-     on the chevron's column (right 19 + 13 / 2 = 25.5 from the row's right
-     edge) and on the title's first line (26 from the row's top on chat and
-     branch rows alike, selected or not). It ends above the chevron (from 32.5
-     on a branch row, 37 on a chat row), so a click there stays the row's. */
+  /* The close slot: the × (12) centred on the chevron's column (right 19 +
+     13 / 2 = 25.5 from the row's right edge) and on the title's first line
+     (26 from the row's top on chat and branch rows alike, selected or not).
+     Its hit area is as big as the row allows (owner, 2026-10-20: small
+     controls get a bigger click area): 36 wide, from the row's top to just
+     above the chevron (from 32.5 on a branch row), so a click there stays
+     the row's. */
   .close {
     position: absolute;
-    top: calc(20 * var(--px));
-    right: calc(11.5 * var(--px));
+    top: 0;
+    right: calc(7.5 * var(--px));
     display: grid;
-    place-items: center;
-    width: calc(28 * var(--px));
-    height: calc(12 * var(--px));
+    justify-items: center;
+    align-items: end;
+    width: calc(36 * var(--px));
+    height: calc(32 * var(--px));
     padding: 0;
     color: var(--slate);
     visibility: hidden;

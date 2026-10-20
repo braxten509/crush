@@ -27,7 +27,7 @@ export const start = $state({
   version: "", // app_info's version (START-004)
   platform: "", // "linux" | "macos"
   needsInit: null, // GET project/needs-init, read once after the first join; null until then
-  initSelected: "yes", // the init prompt's chosen button: Yep! first (internal/ui/model/ui.go:520)
+  initSelected: "yes", // the init prompt's chosen button: Initialize first (internal/ui/model/ui.go:520)
   answering: false,
   configured: null, // some provider is set up and not disabled (config.IsConfigured); null until read
   providerNames: {}, // provider id → its configured name; nothing else of the config is kept

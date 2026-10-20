@@ -34,7 +34,7 @@ const K = {
   sessions: e("ctrl+s", "sessions"),
   yolo: e("ctrl+y", "toggle yolo"),
   shiftTab: e("shift+tab", "mode"),
-  newSession: e("ctrl+n", "new session"),
+  newSession: e("ctrl+n", "new chat"),
   endFollow: e("ctrl+end", "jump to the bottom and follow"),
   background: e("ctrl+b", "background command"),
   cancel: e("esc", "cancel"),

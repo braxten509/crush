@@ -28,8 +28,8 @@ const ask = (tool_name, params, extra = {}) => ({
 });
 
 describe("the header (DLG-119, DLG-121, permissions.go:439-522)", () => {
-  it("is titled Permission Required", () => {
-    expect(TITLE).toBe("Permission Required");
+  it("is titled Permission required", () => {
+    expect(TITLE).toBe("Permission required");
   });
 
   it("names MCP tools as server → tool", () => {
@@ -128,7 +128,7 @@ describe("keys (DLG-130 to DLG-138, permissions.go:225-293)", () => {
   const at = (selected, diff = false) => ({ selected, diff });
 
   it("starts on Allow and moves with ←/→, h/l and Tab, wrapping", () => {
-    expect(BUTTONS.map((b) => b.label)).toEqual(["Allow", "Allow for Session", "Deny"]);
+    expect(BUTTONS.map((b) => b.label)).toEqual(["Allow", "Allow for session", "Deny"]);
     expect(promptKey("ArrowRight", at(0))).toEqual({ selected: 1 });
     expect(promptKey("Tab", at(2))).toEqual({ selected: 0 });
     expect(promptKey("l", at(1))).toEqual({ selected: 2 });

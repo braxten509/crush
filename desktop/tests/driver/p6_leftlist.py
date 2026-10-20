@@ -554,7 +554,7 @@ def flow_collapse(main):
         check(bool(main.until(lambda s: shown_id(s) == "wait", 5)), "a click on a cell shows its row")
         main.click(ns)
         sec = main.until(lambda s: (s.get("picker") or {}).get("kind") == "session", 5)
-        check(bool(sec) and sec["picker"]["title"] == "New session in…", "the strip's + opens \"New session in…\"")
+        check(bool(sec) and sec["picker"]["title"] == "New chat in…", "the strip's + opens \"New chat in…\"")
         key("Escape")
         main.until(lambda s: not s.get("picker"), 3)
         main.click(nt)
@@ -601,7 +601,7 @@ def flow_picker(main):
         sec = main.until(lambda s: (s.get("picker") or {}).get("kind") == "session", 5)
         check(bool(sec), "Alt+N opens the folder picker")
         p = (sec or {}).get("picker") or {}
-        check(p.get("title") == "New session in…" and "folder_picker" in dialogs(main), f"titled \"New session in…\" ({p.get('title')!r})")
+        check(p.get("title") == "New chat in…" and "folder_picker" in dialogs(main), f"titled \"New chat in…\" ({p.get('title')!r})")
         # LIST-038: the shown chat's folder, home as ~, a / at the end, the caret after it.
         check(p.get("input") == "~/proj/" and p.get("cursor") == 7 and p.get("sel") == -1 and not p.get("err"),
               f"it starts with the shown chat's folder as ~/proj/, the caret at the end, nothing picked ({p.get('input')!r} {p.get('cursor')})")

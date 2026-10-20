@@ -30,8 +30,8 @@ async function docker(enable) {
   }
 }
 
-registerAction({ id: "docker.enable", title: "Enable Docker MCP Catalog", enabled: () => !dockerConfigured() && ext.dockerAvailable, run: () => docker(true) });
-registerAction({ id: "docker.disable", title: "Disable Docker MCP Catalog", enabled: () => dockerConfigured(), run: () => docker(false) });
+registerAction({ id: "docker.enable", title: "Enable Docker MCP catalog", enabled: () => !dockerConfigured() && ext.dockerAvailable, run: () => docker(true) });
+registerAction({ id: "docker.disable", title: "Disable Docker MCP catalog", enabled: () => dockerConfigured(), run: () => docker(false) });
 
 // Docker's availability is asked on connect and each time the palette opens
 // (commands.go:138; Palette.svelte).

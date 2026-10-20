@@ -45,6 +45,6 @@
     color: var(--slate);
   }
   .bang {
-    font: var(--t-author);
+    font: var(--t-key);
   }
 </style>

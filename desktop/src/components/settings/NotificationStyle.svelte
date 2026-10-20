@@ -24,12 +24,13 @@
   }
 </script>
 
-<Sheet id={ID} title="Notification Style" width="small" {help}>
+<Sheet id={ID} title="Notification style" width="small" {help}>
   <Field bind:value={query} icon="search" placeholder="Type to filter" label="Filter styles" />
   <FilterList
     items={NOTIFICATION_STYLES}
     filterText={(style) => style.label}
     info={(style) => (style.id === notificationStyle() ? "current" : "")}
+    detail={(style) => style.description}
     {query}
     bind:selected
     onChoose={(style) => choose(style)}

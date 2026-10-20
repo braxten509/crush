@@ -144,7 +144,7 @@
   }
   .note,
   .state {
-    font: var(--t-small);
+    font: var(--t-body-small);
     color: var(--slate);
   }
   .note {
@@ -161,7 +161,7 @@
     border: 1px solid var(--rule-control);
     background: var(--code-bg, var(--band));
     padding: calc(8 * var(--px)) calc(10 * var(--px));
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     color: var(--ink);
     user-select: text;
     outline: none;

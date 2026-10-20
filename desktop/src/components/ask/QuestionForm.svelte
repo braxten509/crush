@@ -168,7 +168,7 @@
     else cancelQuestions(request);
   }
 
-  // Esc or "Not yet": the first unanswered question, else the last (confirm.go:207-236).
+  // Esc or "Go back": the first unanswered question, else the last (confirm.go:207-236).
   function back() {
     const first = items.findIndex((_, i) => !answeredAt(i));
     switchTab(first >= 0 ? first : items.length - 1);
@@ -519,8 +519,8 @@
           {/if}
           <Buttons
             buttons={[
-              { id: "yup", label: "Yup!", key: "y" },
-              { id: "notyet", label: "Not yet", key: "n" },
+              { id: "yup", label: "Submit", key: "y" },
+              { id: "notyet", label: "Go back", key: "n" },
             ]}
             bind:selected={confirmChoice}
             onPress={(id) => (id === "yup" ? submit() : back())}
@@ -581,7 +581,7 @@
   .tab {
     padding: 0 0 calc(4 * var(--px));
     border: 0;
-    border-bottom: 2px solid transparent;
+    border-bottom: calc(2 * var(--px)) solid transparent;
     background: none;
     font: var(--t-label);
     letter-spacing: var(--track-label);
@@ -609,6 +609,12 @@
     font: var(--t-body-small);
     color: var(--slate);
     user-select: text;
+  }
+  /* The description's Markdown keeps the description's smaller, quieter text
+     instead of the chat's reading size. */
+  .description :global(.md) {
+    font: inherit;
+    color: inherit;
   }
   .pages {
     display: grid;
@@ -643,8 +649,8 @@
     gap: calc(12 * var(--px));
   }
   .pill {
-    min-width: calc(112 * var(--px));
-    height: calc(44 * var(--px));
+    min-width: calc(80 * var(--px));
+    height: calc(36 * var(--px));
     border: 1px solid var(--rule-control);
     border-radius: 0;
     background: var(--control-rest);
@@ -652,6 +658,9 @@
     color: var(--ink);
     text-align: center;
     cursor: pointer;
+  }
+  .pill:hover:not(.on) {
+    background: var(--control-hover);
   }
   .pill.on {
     border-color: var(--ink);
@@ -676,7 +685,7 @@
     box-sizing: border-box;
     width: calc(16 * var(--px));
     height: calc(16 * var(--px));
-    border: 1.6px solid var(--figure);
+    border: calc(1.6 * var(--px)) solid var(--figure);
     border-radius: 50%;
     position: relative;
   }
@@ -701,7 +710,7 @@
     width: calc(4 * var(--px));
     height: calc(8 * var(--px));
     border: solid var(--paper);
-    border-width: 0 1.6px 1.6px 0;
+    border-width: 0 calc(1.6 * var(--px)) calc(1.6 * var(--px)) 0;
     border-radius: 0;
     background: none;
     transform: rotate(45deg);

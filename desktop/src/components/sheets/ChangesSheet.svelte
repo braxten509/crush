@@ -305,7 +305,7 @@
     background: var(--paper);
     border-left: 1px solid var(--rule-frame);
     outline: none;
-    animation: slide-in 180ms ease-out;
+    animation: slide-in var(--motion) var(--ease-paper);
   }
   /* --paper-tick keeps WebKit's copy of the transform current, so the sheet
      doesn't jump back for a frame when the slide ends (app.css). */
@@ -327,7 +327,7 @@
     position: absolute;
     visibility: hidden;
     pointer-events: none;
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     white-space: pre;
   }
   .heading {
@@ -335,7 +335,7 @@
     display: flex;
     align-items: center;
     height: calc(72 * var(--px));
-    padding: 0 calc(16 * var(--px)) 0 calc(24 * var(--px));
+    padding: 0 calc(26 * var(--px));
   }
   .titles {
     flex: 1;
@@ -343,7 +343,7 @@
   }
   .title {
     margin: 0;
-    font: var(--t-heading);
+    font: var(--t-project);
   }
   .source {
     margin: 0;
@@ -384,7 +384,7 @@
     box-sizing: border-box;
     width: 100%;
     min-height: calc(32 * var(--px));
-    padding: 0 calc(12 * var(--px)) 0 calc(16 * var(--px));
+    padding: 0 calc(12 * var(--px)) 0 calc(26 * var(--px));
     text-align: left;
     cursor: pointer;
   }
@@ -407,14 +407,14 @@
   .file-path {
     flex: 1;
     min-width: 0;
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     white-space: pre;
     overflow: hidden;
   }
   .stat,
   .counts {
     flex: none;
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     white-space: nowrap;
   }
   .stat.label {
@@ -465,7 +465,7 @@
     color: var(--slate);
   }
   .chevron :global(.icon) {
-    transition: transform 120ms ease-out;
+    transition: transform var(--motion-quick) var(--ease-paper);
   }
   .chevron.open :global(.icon) {
     transform: rotate(90deg);
@@ -497,7 +497,7 @@
     display: flex;
     align-items: center;
     height: calc(44 * var(--px));
-    padding: 0 calc(24 * var(--px));
+    padding: 0 calc(26 * var(--px));
     border-top: 1px solid var(--rule-faint);
     font: var(--t-small);
     color: var(--slate);

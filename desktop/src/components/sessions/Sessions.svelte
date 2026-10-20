@@ -9,6 +9,7 @@
   // (window_open with its id). Session events rename or remove rows in place.
   //   query? (the filter's first text: the left list's search box, START-021's id)
   import { onMount, tick, untrack } from "svelte";
+  import Buttons from "../kit/Buttons.svelte";
   import Field from "../kit/Field.svelte";
   import FilterList from "../kit/FilterList.svelte";
   import Sheet from "../kit/Sheet.svelte";
@@ -38,6 +39,7 @@
   let lockedAt = -1; // the selection while a mode runs: clicks do not move it (2.5)
   let renameText = $state("");
   let loaded = $state(false);
+  let failed = $state(false);
   let list = $state(null);
 
   const now = $derived(secondNow());
@@ -57,7 +59,7 @@
             { key: "ctrl+r", text: "rename" },
             { key: "ctrl+x", text: "delete" },
             { key: "enter", text: "choose" },
-            { key: "esc", text: "exit" },
+            { key: "esc", text: "close" },
           ],
   );
 
@@ -66,9 +68,11 @@
       const list = (await api.savedSessions(sessions.currentId || "")) ?? [];
       const keep = rows[selected]?.ID ?? sessions.currentId;
       rows = list;
+      failed = false;
       const at = rows.findIndex((row) => row.ID === keep);
       selected = at >= 0 ? at : rows.length > 0 ? 0 : -1;
     } catch (error) {
+      failed = rows.length === 0;
       notify("error", error?.message ?? String(error));
     } finally {
       loaded = true;
@@ -255,12 +259,25 @@
   });
 </script>
 
-<Sheet id={ID} title="Sessions" width="standard" {help} {onKey}>
-  <Field bind:value={query} icon="search" placeholder="Enter session name" label="Filter sessions" />
+<Sheet id={ID} title="Chats" width="standard" {help} {onKey} controls={mode === "normal" && selected >= 0 ? controls : null}>
+  <Field bind:value={query} icon="search" placeholder="Search chats" label="Filter chats" />
   {#if mode === "rename"}
-    <p class="ask">Rename this session?</p>
+    <p class="ask">Rename this chat?</p>
+    <div class="actions">
+      <Buttons buttons={[{ id: "save", label: "Rename" }, { id: "cancel", label: "Cancel" }]} selected="save" onPress={(id) => (id === "save" ? saveRename() : leave())} />
+    </div>
   {:else if mode === "delete"}
-    <p class="ask strong">Delete this session?</p>
+    <p class="ask strong">Delete this chat?</p>
+    <div class="actions">
+      <Buttons buttons={[{ id: "delete", label: "Delete", destructive: true }, { id: "cancel", label: "Cancel" }]} selected="cancel" onPress={(id) => (id === "delete" ? confirmDelete() : leave())} />
+    </div>
+  {/if}
+  {#if !loaded}
+    <p class="state">Loading chats…</p>
+  {:else if failed}
+    <p class="state">Couldn't read the saved chats. <button class="retry" type="button" onclick={read}>Try again</button></p>
+  {:else if rows.length === 0}
+    <p class="state">No saved chats yet</p>
   {/if}
   {#if loaded && rows.length > 0}
     <FilterList
@@ -278,6 +295,12 @@
   {/if}
 </Sheet>
 
+<!-- Rename and Delete to click, beside their keys (owner, 2026-10-20). -->
+{#snippet controls()}
+  <button type="button" onclick={startRename}>Rename</button>
+  <button type="button" onclick={startDelete}>Delete</button>
+{/snippet}
+
 {#snippet renameRow(item, index, state)}
   {#if state.selected}
     <div class="rename">
@@ -289,8 +312,24 @@
 {/snippet}
 
 <style>
+  .actions {
+    margin-top: calc(12 * var(--px));
+  }
+  /* Loading, empty and failed each say so (owner, 2026-10-20). */
+  .state {
+    margin: calc(20 * var(--px)) 0 0;
+    font: var(--t-body-small);
+    color: var(--slate);
+  }
+  .retry {
+    font: inherit;
+    color: var(--link);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: calc(4 * var(--px));
+  }
   .ask {
-    margin: calc(6 * var(--px)) 0 0 calc(23 * var(--px));
+    margin: calc(6 * var(--px)) 0 0;
     font: var(--t-small);
     color: var(--slate);
   }

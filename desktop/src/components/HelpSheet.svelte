@@ -108,7 +108,7 @@
     margin: calc(4 * var(--px)) 0 0;
   }
   .key {
-    font: var(--t-stamp);
+    font: var(--t-mono);
     white-space: nowrap;
   }
   .action {

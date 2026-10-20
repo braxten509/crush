@@ -269,7 +269,7 @@
     min-width: 0;
   }
   .label {
-    font: var(--t-agent-mono);
+    font: var(--t-small);
     color: var(--slate);
   }
   .name {

@@ -1,10 +1,9 @@
 <script>
   // The quit sheet (desktop-design-5-6 2.24, look 5.19; DLG-288 to DLG-293):
-  // a port of internal/ui/dialog/quit.go. "Nope" is selected when it opens;
+  // a port of internal/ui/dialog/quit.go. "Cancel" is selected when it opens;
   // ←/→ and Tab switch; Enter and Space press the selected button; Y, Shift+Y
   // and Ctrl+C quit (so Ctrl+C twice quits without looking); N, Shift+N and
-  // Esc cancel. Hover only shows the hover look; a click on the other button
-  // selects it, a click on the selected one presses it. "Yep!" closes this
+  // Esc cancel. Hover only shows the hover look; a click presses its button. "Quit" closes this
   // window as 2.23 does; the app ends after its last window.
   import Buttons from "../kit/Buttons.svelte";
   import Sheet from "../kit/Sheet.svelte";
@@ -13,8 +12,8 @@
 
   const ID = "quit";
   const BUTTONS = [
-    { id: "yes", label: "Yep!", key: "y" },
-    { id: "no", label: "Nope", key: "n" },
+    { id: "yes", label: "Quit", key: "y" },
+    { id: "no", label: "Cancel", key: "n" },
   ];
 
   let selected = $state("no");
@@ -54,10 +53,9 @@
     }
   }
 
-  // Clicks only (the keys are onKey's).
+  // A click presses its button at once (owner, 2026-10-20); the keys are onKey's.
   function click(id) {
-    if (id !== selected) selected = id;
-    else press(id);
+    press(id);
   }
 </script>
 

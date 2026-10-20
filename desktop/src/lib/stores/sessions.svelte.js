@@ -6,7 +6,7 @@ import { api, onSend, setCurrentSession } from "../engine/api.js";
 import { onEvent, onResync, withHeld } from "../engine/events.js";
 import { chatOf, isFinished, load, messages, parseAgentChatId, readyChat, returnDraft, unload } from "./messages.svelte.js";
 import { keepPromptsFor, seedMarks } from "./prompts.svelte.js";
-import { notify } from "./ui.svelte.js";
+import { clearNotice, notify } from "./ui.svelte.js";
 import { dropFiles, setFiles, startFilesRead, ws } from "./workspace.svelte.js";
 
 export const sessions = $state({
@@ -419,6 +419,23 @@ export async function openChat(id) {
   }
 }
 
+// A failed file history read: the chat opens with an empty FILES list, and the
+// warning stays with a way to try again (owner, 2026-10-20).
+const HISTORY_FAILED = "Couldn't read this chat's file history, so its changed files are not listed";
+function noteHistoryFailed(id) {
+  notify("warn", HISTORY_FAILED, 0, { label: "Try again", run: () => retryHistory(id) });
+}
+async function retryHistory(id) {
+  const read = startFilesRead(id);
+  try {
+    const list = await api.history(id);
+    if (setFiles(id, list, read)) clearNotice(HISTORY_FAILED);
+  } catch (error) {
+    console.error("file history read failed", errorText(error));
+    noteHistoryFailed(id);
+  }
+}
+
 async function showChat(id) {
   openSeq += 1;
   const seq = openSeq;
@@ -460,7 +477,7 @@ async function showChat(id) {
   if (loaded.value !== true) return false; // the chat went away while it loaded
   upsertSession(read.value, { since });
   setFiles(id, files.value, filesRead);
-  if (historyFailed) notify("warn", "Couldn't read this chat's file history");
+  if (historyFailed) noteHistoryFailed(id);
   const old = sessions.currentId;
   sessions.currentId = id;
   if (sessions.opening?.id === id) sessions.opening = null;

@@ -40,35 +40,41 @@
   --meter-track: #edeee8;
   --meter-edge: #bdbdb9;
 
-  /* Faces: Charis SIL for large lettering, Spectral for reading and labels,
-     Inconsolata for authors, times and keys, Science Gothic for the CRUSH wordmark. */
-  --face-display: "Charis SIL", Charter, Georgia, serif;
+  /* Faces (owner, 2026-10-20: three fonts): Spectral for all text, Inconsolata
+     only for code and keys, Science Gothic for the CRUSH wordmark. */
   --face-text: "Spectral", Georgia, serif;
   --face-mono: "Inconsolata", ui-monospace, monospace;
   --face-brand: "Science Gothic", sans-serif;
 
   /* Type roles: weight, size / line height, face (sizes in picture pixels).
-     Small functional text never drops below 11 px, however far the window is
-     zoomed out; at picture size every role keeps the picture's size. */
-  --t-title: 400 calc(42 * var(--px)) / calc(50 * var(--px)) var(--face-display);
-  --t-project: 400 calc(32 * var(--px)) / calc(38 * var(--px)) var(--face-display);
+     Five sizes only (owner, 2026-10-20): 42 titles, 28 sheet titles and
+     figures, 21 reading, 19 secondary, 17 small. Small functional text never
+     drops below 11 px, however far the window is zoomed out. */
+  --t-title: 400 calc(42 * var(--px)) / calc(50 * var(--px)) var(--face-text);
+  --t-project: 400 calc(28 * var(--px)) / calc(34 * var(--px)) var(--face-text);
   --t-figure: 400 calc(28 * var(--px)) / calc(34 * var(--px)) var(--face-text);
+  --t-figure-mono: 400 calc(28 * var(--px)) / calc(34 * var(--px)) var(--face-mono);
   --t-reading: 400 calc(21 * var(--px)) / calc(33 * var(--px)) var(--face-text);
   --t-heading: 400 calc(21 * var(--px)) / calc(28 * var(--px)) var(--face-text);
   --t-item: 400 calc(21 * var(--px)) / calc(28 * var(--px)) var(--face-text);
+  --t-composer: 400 calc(21 * var(--px)) / calc(28 * var(--px)) var(--face-text);
+  --t-author: 700 calc(21 * var(--px)) / calc(24 * var(--px)) var(--face-text);
+  --t-key: 600 calc(21 * var(--px)) / calc(25 * var(--px)) var(--face-mono);
   --t-branch: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
-  --t-meta: 400 max(11px, calc(18 * var(--px))) / calc(24 * var(--px)) var(--face-text);
-  --t-small: 400 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-text);
+  --t-meta: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
   --t-body-small: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
   --t-field: 400 calc(19 * var(--px)) / calc(26 * var(--px)) var(--face-text);
-  --t-composer: 400 calc(20 * var(--px)) / calc(26 * var(--px)) var(--face-text);
-  --t-button: 500 calc(23 * var(--px)) / calc(30 * var(--px)) var(--face-text);
-  --t-label: 500 max(11px, calc(15 * var(--px))) / calc(20 * var(--px)) var(--face-text);
-  --t-path: 400 max(11px, calc(15 * var(--px))) / calc(20 * var(--px)) var(--face-text);
-  --t-author: 700 calc(21 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
-  --t-stamp: 400 max(11px, calc(18 * var(--px))) / calc(24 * var(--px)) var(--face-mono);
-  --t-agent-mono: 400 max(11px, calc(16 * var(--px))) / calc(22 * var(--px)) var(--face-mono);
-  --t-key: 600 calc(21 * var(--px)) / calc(25 * var(--px)) var(--face-mono);
+  --t-small: 400 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-text);
+  --t-button: 400 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-text);
+  --t-label: 500 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-text);
+  --t-path: 400 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-text);
+  --t-stamp: 400 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-text);
+  --t-mono: 400 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-mono);
+  --t-mono-strong: 500 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-mono);
+  --t-code: 400 max(11px, calc(17 * var(--px))) / calc(24 * var(--px)) var(--face-mono);
+  /* The CRUSH logo keeps its own sizes: a picture, not text. */
+  --t-wordmark: 700 calc(32 * var(--px)) / calc(40 * var(--px)) var(--face-brand);
+  --t-wordmark-large: 700 calc(64 * var(--px)) / calc(64 * var(--px)) var(--face-brand);
   --track-label: 0.04em;
   --track-path: 0.15em;
 
@@ -80,6 +86,17 @@
   --diff-add-ink: #2f5a1e;     /* "+N" counts, added squares; 7.6:1 */
   --diff-del-bg: #f6e6df;
   --diff-del-gutter: #efd5ca;  /* removed lines use --error-ink for "−N" */
+  /* The dark diff (DiffView's .dark), kept with the palette so themes can set it. */
+  --diff-dark-add-bg: #142d1b;
+  --diff-dark-add-gutter: #163620;
+  --diff-dark-add-ink: #79cd91;
+  --diff-dark-del-bg: #3a1d1c;
+  --diff-dark-del-gutter: #4a2322;
+  --diff-dark-del-ink: #fb9890;
+  --diff-dark-hunk-bg: #1b222e;
+  --diff-dark-code-bg: #14171d;
+  --diff-dark-ink: #e5e8ed;
+  --diff-dark-quiet: #8e929b;
 
   /* Selection and small tints */
   --selection: #e6d9a8;        /* ::selection in the timeline and fields */
@@ -120,10 +137,9 @@
   --disabled-band: #edeee8;    /* a disabled row that is selected (pickers) */
 
   /* Reading roles for Markdown */
-  --t-h1: 400 calc(30 * var(--px)) / calc(38 * var(--px)) var(--face-display);
-  --t-h2: 400 calc(25 * var(--px)) / calc(32 * var(--px)) var(--face-display);
-  --t-h3: 600 calc(21 * var(--px)) / calc(30 * var(--px)) var(--face-text);
-  --t-code: 400 calc(17 * var(--px)) / calc(24 * var(--px)) var(--face-mono);
+  --t-h1: 400 calc(28 * var(--px)) / calc(36 * var(--px)) var(--face-text);
+  --t-h2: 700 calc(21 * var(--px)) / calc(30 * var(--px)) var(--face-text);
+  --t-h3: 700 calc(19 * var(--px)) / calc(28 * var(--px)) var(--face-text);
 }
 
 html {
@@ -218,7 +234,7 @@ ul {
 @keyframes paper-unfold {
   from {
     clip-path: inset(0 0 100% 0);
-    transform: translateY(-4px);
+    transform: translateY(calc(-4 * var(--px)));
     --paper-tick: 0;
   }
   to {
@@ -231,7 +247,7 @@ ul {
    a short slide, fully drawn from the first frame. */
 @keyframes paper-settle {
   from {
-    transform: translateY(4px);
+    transform: translateY(calc(4 * var(--px)));
     --paper-tick: 0;
   }
   to {
@@ -259,7 +275,7 @@ ul {
 @keyframes paper-unfold-up {
   from {
     clip-path: inset(100% 0 0 0);
-    transform: translateY(4px);
+    transform: translateY(calc(4 * var(--px)));
     --paper-tick: 0;
   }
   to {
@@ -271,7 +287,7 @@ ul {
 /* A column coming in from the right edge (the right panel). */
 @keyframes paper-slide-left {
   from {
-    transform: translateX(14px);
+    transform: translateX(calc(14 * var(--px)));
     --paper-tick: 0;
   }
   to {
@@ -281,7 +297,7 @@ ul {
 /* A column coming in from the left edge (the chat list back from Settings). */
 @keyframes paper-slide-right {
   from {
-    transform: translateX(-14px);
+    transform: translateX(calc(-14 * var(--px)));
     --paper-tick: 0;
   }
   to {

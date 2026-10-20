@@ -196,7 +196,7 @@
     color: var(--slate);
   }
   .mime {
-    font: 400 calc(17 * var(--px)) / calc(26 * var(--px)) var(--face-mono);
+    font: var(--t-code);
   }
   .thumb {
     align-self: flex-start;

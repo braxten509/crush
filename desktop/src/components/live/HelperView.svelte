@@ -589,7 +589,7 @@
     text-underline-offset: calc(4 * var(--px));
   }
   .esc {
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     color: var(--slate);
   }
 </style>

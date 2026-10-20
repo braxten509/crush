@@ -33,7 +33,7 @@ import {
 // it only while $EDITOR is set; the page cannot see the login-shell
 // environment, so the action is always on and editor_prepare reports a
 // missing editor.
-registerAction({ id: "editor.open", title: "Open External Editor", keys: ["Ctrl+O"], run: openExternalEditor });
+registerAction({ id: "editor.open", title: "Open external editor", keys: ["Ctrl+O"], run: openExternalEditor });
 
 registerDialog("terminal_close", CloseBox);
 

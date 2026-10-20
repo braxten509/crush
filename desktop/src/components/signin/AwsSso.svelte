@@ -19,7 +19,7 @@
       ? [{ key: "enter", text: "close" }]
       : [
           { key: "enter", text: "open in browser", disabled: !awsSso.url },
-          { key: "esc", text: "exit" },
+          { key: "esc", text: "cancel" },
         ],
   );
 
@@ -37,7 +37,7 @@
   }
 </script>
 
-<Sheet id={ID} title="AWS SSO Authentication" width="standard" {help} {onKey}>
+<Sheet id={ID} title="AWS SSO authentication" width="standard" {help} {onKey}>
   <div class="body">
     {#if awsSso.state === "error"}
       <p class="failed">Authentication failed.</p>
@@ -65,7 +65,7 @@
     color: var(--keyword);
   }
   .mono {
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
   }
   .link {
     display: inline-block;

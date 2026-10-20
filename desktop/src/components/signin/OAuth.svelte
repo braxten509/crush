@@ -36,7 +36,7 @@
 
   const codeEntry = $derived(state === "display" && flow?.code_entry === true && !flow?.user_code);
   const help = $derived.by(() => {
-    if (state === "error") return [{ key: "esc", text: "exit" }];
+    if (state === "error") return [{ key: "esc", text: "cancel" }];
     if (state === "success") return [{ key: "enter", text: "finish" }];
     if (state === "saving" || state === "initializing") return [];
     if (codeEntry && codeFocused)
@@ -47,7 +47,7 @@
     const pairs = [
       { key: "u", text: "copy url" },
       { key: "enter", text: flow?.user_code ? "copy & open" : "open browser" },
-      { key: "esc", text: "exit" },
+      { key: "esc", text: "cancel" },
     ];
     if (flow?.user_code) pairs.unshift({ key: "c", text: "copy code" });
     if (codeEntry) pairs.unshift({ key: "tab", text: "enter code" });
@@ -242,7 +242,7 @@
     height: calc(72 * var(--px));
     margin: calc(16 * var(--px)) 0;
     border: 1px solid var(--rule-table);
-    font: 400 calc(28 * var(--px)) / calc(34 * var(--px)) var(--face-mono);
+    font: var(--t-figure-mono);
     letter-spacing: 0.12em;
     color: var(--ink);
     user-select: all;

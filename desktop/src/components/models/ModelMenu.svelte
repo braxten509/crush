@@ -219,18 +219,17 @@
 </div>
 
 <style>
-  /* The paper and hairlines of the app's other popups (Popup.svelte), with
-     the light paper lift of the motion style. */
+  /* The paper and hairlines of the app's other popups (Popup.svelte), on the
+     menu layer the chat's context menu uses; no shadow, as every other menu. */
   .model-menu {
     position: fixed;
-    z-index: 6;
+    z-index: 30;
     display: grid;
     grid-template-columns: calc(220 * var(--px)) calc(400 * var(--px));
     max-width: calc(100vw - 16 * var(--px));
     max-height: calc(100vh - 16 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--paper-raised);
-    box-shadow: 0 calc(6 * var(--px)) 0 rgb(0 0 0 / 0.05);
     color: var(--ink);
     font: var(--t-item);
     user-select: none;
@@ -283,15 +282,20 @@
     font-style: italic;
   }
   .group:hover,
-  .model:hover,
+  .model:hover {
+    background: var(--control-hover);
+  }
+  /* Keyboard focus: the app's vermilion hairline, drawn inside the row so the
+     scrolling list never cuts it off. */
   .group:focus-visible,
-  .model:focus-visible {
-    background: var(--band);
-    outline: none;
+  .model:focus-visible,
+  .level:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: -1px;
   }
   .group[aria-selected="true"] {
     background: var(--band);
-    box-shadow: inset calc(2 * var(--px)) 0 0 var(--vermilion);
+    box-shadow: inset calc(4 * var(--px)) 0 0 var(--vermilion);
   }
   .models {
     display: flex;
@@ -310,7 +314,8 @@
     color: var(--slate);
   }
   .search:focus-within {
-    border-color: var(--ink);
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
   }
   .search input {
     flex: 1;
@@ -363,13 +368,13 @@
   .level + .level {
     border-left: 1px solid var(--rule-control);
   }
-  .level:hover,
-  .level:focus-visible {
-    background: var(--band);
-    outline: none;
+  .level:hover {
+    background: var(--control-hover);
   }
+  /* The chosen level: the band inside an ink hairline, as a selected button. */
   .level[aria-checked="true"] {
-    background: var(--vermilion);
-    color: var(--paper);
+    background: var(--band);
+    box-shadow: inset 0 0 0 1px var(--ink);
+    color: var(--ink);
   }
 </style>

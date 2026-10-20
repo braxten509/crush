@@ -111,7 +111,7 @@
       return;
     }
     openDialog("arguments", {
-      title: "Custom Command Arguments",
+      title: "Custom command arguments",
       args,
       onSubmit: (values) => {
         closeDialog("arguments");

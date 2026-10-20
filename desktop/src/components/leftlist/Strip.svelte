@@ -47,7 +47,7 @@
   <button class="expand" type="button" aria-label="Open the list" title="Open the list (Alt+S)" onclick={toggleList}>
     <Icon name="chevron" class="right" />
   </button>
-  <button class="tool new-session" type="button" aria-label="New session" title="New session (Alt+N)" onclick={() => openPicker("session")}>
+  <button class="tool new-session" type="button" aria-label="New chat" title="New chat (Alt+N)" onclick={() => openPicker("session")}>
     <Icon name="plus" size={18} />
   </button>
   <button class="tool new-terminal" type="button" aria-label="New terminal" title="New terminal (Alt+T)" onclick={() => openPicker("terminal")}>
@@ -157,7 +157,7 @@
   }
   .number {
     min-width: calc(16 * var(--px));
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     color: var(--slate);
     text-align: left;
   }

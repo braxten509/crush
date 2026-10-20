@@ -22,7 +22,7 @@ registerDialog("projects", Projects);
 // dialog_actions.go:400-407.
 registerAction({
   id: "project.save",
-  title: "Save Project",
+  title: "Save project",
   async run() {
     const path = conn.project.path || conn.project.cwd;
     if (!path) return;

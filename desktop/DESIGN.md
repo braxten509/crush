@@ -46,16 +46,25 @@ colors (`--ansi-*`) are 4.5:1 or better on both `--band` and `--paper`.
 
 ## Type
 
-Four faces, bundled in `src/assets/fonts/`:
+Three faces (owner, 2026-10-20), bundled in `src/assets/fonts/`:
 
-- **Charis SIL**: large lettering (titles, project name, Markdown h1 and h2).
-- **Spectral**: reading text, labels, buttons, fields.
-- **Inconsolata**: authors, times, keys, code.
-- **Science Gothic**: the CRUSH wordmark only.
+- **Spectral**: all text: titles, reading text, labels, buttons, fields, names, times, paths.
+- **Inconsolata**: code and keys only (code blocks, tool commands and output, diffs, logs,
+  key hints, typed secrets and colour values). Never for names or times.
+- **Science Gothic**: the CRUSH wordmark only (a picture, so it keeps its own sizes).
 
-Roles are whole `font` shorthands (`--t-title`, `--t-reading`, `--t-label`, `--t-key`, …).
-Components use a role, never a raw size. Labels are small caps by letter spacing
-(`--track-label: 0.04em`), paths more so (`--track-path: 0.15em`).
+Five text sizes, in picture pixels: **42** (chat and page titles), **28** (sheet titles,
+figures, Markdown h1), **21** (reading text, rows, the typing box, authors), **19**
+(secondary text, fields, sub-rows, help, Markdown h3), **17** (small text: times, hints,
+keys, buttons, section labels, code). Small text never drops below 11 real pixels.
+
+Roles are whole `font` shorthands (`--t-title`, `--t-reading`, `--t-label`, `--t-mono`, …).
+Components use a role, never a raw size, face or weight. Labels are small caps by letter
+spacing (`--track-label: 0.04em`), paths more so (`--track-path: 0.15em`). Message prose
+stops at 80 letters a line; code, tables and pictures use the column's full width.
+Titles use a capital on the first word only ("Switch model"); the app's own confirmations
+name their action ("Quit / Cancel"), agent questions keep Yes / No. Things are "chats",
+never "sessions".
 
 ## Layout
 
@@ -64,8 +73,9 @@ Components use a role, never a raw size. Labels are small caps by letter spacing
   rule. The left column can collapse to a strip.
 - The conversation reads at a fixed measure in the middle column; the typing box sits on the
   bottom rule.
-- Side-panel sections stack with a rule between them; the rule carries a small `^` caret
-  pointing at the heading above (`Rule.svelte`, `caret`).
+- Side-panel sections (Folder, To-do, Background, Servers) stack with space between them;
+  an empty section keeps its heading in `--mark` and shows no "None" line.
+- Settings rows stop at 840 picture pixels, so each switch sits near its name.
 
 ## Sheets (dialogs)
 
@@ -75,23 +85,33 @@ Every dialog is a `kit/Sheet`:
 - A one-pixel frame with `+` marks at the four corners; no shadow. The page behind is covered
   by `--scrim` (paper at 92%, no blur), except sheets opened with `veil: false` (themes,
   changes), which leave the page visible so its look can be judged.
-- Title line, a rule with marks at both ends, the body, then the help line.
+- Title line (title, title-side controls, a close cross that does what Esc does), a rule
+  with marks at both ends, the body, then the help line. Controls that do not fit beside
+  the title move to a line under it; they never hide.
+- Messages (notices) show where the person is: inside the front sheet, on the Settings
+  page, or over the conversation. Errors stay until dismissed, replaced or fixed.
 - Content sits 26 picture pixels in from the frame on both sides; the title text, section
   labels, fields, lists and the help line share that left edge.
 - Building blocks: `Field` (one line, optional icon or prompt), `Area` (several lines),
-  `FilterList` (fuzzy list with groups, matched letters underlined), `Buttons` (a row or a
-  stack; the underlined letter is the key), `HelpFooter` (key and text pairs that drop from
-  the end with an ellipsis when the line is too short).
+  `FilterList` (fuzzy list with groups, matched letters underlined; rows 44 high, 64 with a
+  second line, hover and selection drawn 8 in from the frame, a 4-pixel vermilion edge on
+  the selected row), `Buttons` (a row or a stack, 36 high, the one button size everywhere;
+  the underlined letter is the key), `HelpFooter` (key and text pairs that drop from the end
+  with an ellipsis when the line is too short). Every list in a sheet uses FilterList's row
+  look and the sheet's 26 gutter.
 
 ## Interaction
 
 - Keyboard first: every action has a key, shown in the help line or the command palette
-  (Ctrl+P). Underlined letters in buttons are their keys.
+  (Ctrl+P). Underlined letters in buttons are their keys. Every key action also has
+  something to click (Save / Cancel in forms, Rename / Delete beside the Chats title).
+- Small controls keep a click area of about 24 real pixels, whatever their drawn size.
 - Focus is a one-pixel vermilion outline 2 picture pixels out, never a glow.
-- Hover and selection fill a row's whole frame with `--control-hover`; a selected row in a
-  picker uses `--band`, a disabled selected row `--disabled-band`.
-- Motion is short and never decorative: sheets slide in over 180 ms (`ease-out`), small
-  movements take 120 ms, the busy marks fade on a 1.2 s loop. Nothing moves the layout when
+- Hover fills with `--control-hover`; a selected row uses `--band` between faint rules, a
+  disabled selected row `--disabled-band`. A selected button or level is `--band` inside an
+  ink hairline. No drop shadows; menus sit on one layer (30).
+- Motion uses `--motion` (220 ms) and `--motion-quick` (140 ms) on `--ease-paper`; movement
+  distances scale with `--px`. The busy marks loop over 1.2 s. Nothing moves the layout when
   a state changes (no show or hide on a flag).
 
 ## Checks

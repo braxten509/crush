@@ -1,8 +1,8 @@
 <script>
   // The init prompt (START-002; the terminal's initializeView and its keys,
   // internal/ui/model/onboarding.go:32-119, keys.go:323-338): shown while
-  // GET project/needs-init says so. Yep! makes a new chat and sends the
-  // engine's init prompt in it; Nope goes to the landing page; both mark the
+  // GET project/needs-init says so. Initialize makes a new chat and sends the
+  // engine's init prompt in it; Not now goes to the landing page; both mark the
   // project initialized (start.svelte.js answerInit). Enter answers with the
   // chosen button, ← → Tab switch, y Y yes, n N Esc no. Like the terminal's,
   // the block sits at the bottom of the space, above the composer.
@@ -61,7 +61,7 @@
   }
 
   onMount(() => {
-    const combos = ["y", "Y", "n", "N", "Escape", "Alt+Escape", "Enter", "ArrowLeft", "ArrowRight", "Tab"];
+    const combos = ["y", "Y", "i", "I", "n", "N", "Escape", "Alt+Escape", "Enter", "ArrowLeft", "ArrowRight", "Tab"];
     const unbind = combos.map((combo) => bindKey("global", combo, onKey));
     return () => unbind.forEach((off) => off());
   });
@@ -76,7 +76,7 @@
 
   $effect(() => {
     shown.init = active
-      ? { question: QUESTION, path: conn.project.path, desc, hint: `You can also initialize anytime via ${HINT_KEY}.`, ask: ASK, buttons: ["Yep!", "Nope"], selected: start.initSelected }
+      ? { question: QUESTION, path: conn.project.path, desc, hint: `You can also initialize anytime via ${HINT_KEY}.`, ask: ASK, buttons: ["Initialize", "Not now"], selected: start.initSelected }
       : null;
     return () => {
       shown.init = null;
@@ -103,7 +103,7 @@
           onclick={() => answer("yes")}
           disabled={start.answering}
         >
-          <span class="label"><span class="key">Y</span>ep!</span>
+          <span class="label"><span class="key">I</span>nitialize</span>
         </button>
         <button
           class="no"
@@ -114,7 +114,7 @@
           onclick={() => answer("no")}
           disabled={start.answering}
         >
-          <span class="label"><span class="key">N</span>ope</span>
+          <span class="label"><span class="key">N</span>ot now</span>
         </button>
       </div>
     </div>
@@ -156,7 +156,7 @@
     color: var(--slate);
   }
   .hint kbd {
-    font: inherit;
+    font: var(--t-mono);
     color: var(--ink);
   }
   .ask {
@@ -165,8 +165,12 @@
     color: var(--ink);
   }
 
+  /* Both buttons as wide as the wider word, as a Yes/No pair. */
   .buttons {
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    justify-content: start;
     gap: calc(12 * var(--px));
     margin-top: calc(12 * var(--px));
   }
@@ -177,12 +181,15 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    min-width: calc(112 * var(--px));
-    height: calc(44 * var(--px));
-    padding: 0 calc(20 * var(--px));
+    min-width: calc(80 * var(--px));
+    height: calc(36 * var(--px));
+    padding: 0 calc(16 * var(--px));
     border: 1px solid var(--rule-control);
-    background: var(--paper-raised);
+    background: var(--control-rest);
     color: var(--ink);
+  }
+  .buttons button:hover:not(.selected) {
+    background: var(--control-hover);
   }
   .buttons button.selected {
     border-color: var(--ink);

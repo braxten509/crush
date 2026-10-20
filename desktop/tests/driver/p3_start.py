@@ -6,7 +6,7 @@ mouse. Each step is named after its row and saves <ROW>.png (2.0).
 
 Engine run, on the fresh /tmp/home/proj: tests/check.sh p3_start.py
   START-002     the fresh project asks first: the question, the folder, the
-                initialize_as file, the hint, Yep! chosen; Tab, ← and → switch;
+                initialize_as file, the hint, Initialize chosen; Tab, ← and → switch;
                 y makes a chat that sends the engine's init prompt and marks
                 the project; a restart asks no more.
   START-015     the data folder's .gitignore holds *.
@@ -473,7 +473,7 @@ def engine_run():
             initialize_as = ((client.get("config") or {}).get("options") or {}).get("initialize_as") or "AGENTS.md"
             want = {"question": "Would you like to initialize this project?", "path": PROJ, "desc": INIT_DESC.format(initialize_as),
                     "hint": "You can also initialize anytime via Ctrl+P.", "ask": "Would you like to initialize now?",
-                    "buttons": ["Yep!", "Nope"], "selected": "yes"}
+                    "buttons": ["Initialize", "Not now"], "selected": "yes"}
             for field, value in want.items():
                 check(init.get(field) == value, f"init {field}: {init.get(field)!r}")
             place(main)
@@ -868,7 +868,7 @@ def engine_run():
                 shot(out_dir, "START-012")
                 check(ok, f"the reply's bash call opens the permission slot ({comp.get('slot')})")
                 buttons = [b.get("label") for b in (comp.get("slot") or {}).get("buttons") or []]
-                check(buttons == ["Allow", "Allow for Session", "Deny"], f"with Allow, Allow for Session and Deny ({buttons})")
+                check(buttons == ["Allow", "Allow for session", "Deny"], f"with Allow, Allow for session and Deny ({buttons})")
                 check(not os.path.exists(os.path.join(path, "start-012.txt")), "and the command has not run")
             close(app)
 

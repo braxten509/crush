@@ -19,7 +19,7 @@ registerDialog("logs", Logs);
 registerDialog("about", About);
 registerDialog("crash", CrashNotice);
 
-registerAction({ id: "updates.clis", title: "Update Agent CLIs", run: () => checkClis(true) });
+registerAction({ id: "updates.clis", title: "Update agent CLIs", run: () => checkClis(true) });
 registerAction({ id: "updates.crush", title: "Update Crush", run: () => checkCrush(true) });
 
 // MISC-017: crush writes the report and opens it in the browser itself.

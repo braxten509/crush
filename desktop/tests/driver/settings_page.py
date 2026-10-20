@@ -2,7 +2,7 @@
 for the section names, the right panel stepping aside) and the right panel's
 own switch (not the terminal's compact mode). In the real window on the
 hidden screen, with real mouse clicks: Settings opens the page with no sheet;
-a section click shows that section; "Show sidebar" off hides the panel back
+a section click shows that section; "Show the right panel" off hides the panel back
 in the chats without asking the engine to change compact mode, and on brings
 it back; Back to chats and Esc both return. Pictures go to
 tests/out/settings_page/.
@@ -103,7 +103,7 @@ click("nav.chats button.settings")
 v = view()
 check(v["page"] and v["nav"] and not v["chats"], f"Settings opens the page with the sections on the left ({v})")
 check(not v["panel"] and v["sheets"] == 0, "the right panel steps aside and no sheet opens")
-check(v["title"] == "Appearance" and "Show sidebar" in v["rows"], f"it starts on Appearance ({v['title']}, {v['rows']})")
+check(v["title"] == "Appearance" and "Show the right panel" in v["rows"], f"it starts on Appearance ({v['title']}, {v['rows']})")
 subprocess.run(["import", "-window", wid, os.path.join(out_dir, "settings.png")], check=True)
 
 # 2. A section click shows that section.
@@ -111,11 +111,11 @@ click(".settings-nav .row", "Typing")
 v = view()
 check(v["title"] == "Typing" and "Keep focus on the typing box" in v["rows"], f"a click on Typing shows its rows ({v['title']}, {v['rows']})")
 
-# 3. Show sidebar off hides the panel in the chats, without the engine's compact mode.
+# 3. Show the right panel off hides the panel in the chats, without the engine's compact mode.
 click(".settings-nav .row", "Appearance")
-click('[data-probe="settings-page"] [role="switch"][aria-label="Show sidebar"]')
-off = run("return document.querySelector('[aria-label=\"Show sidebar\"]').getAttribute('aria-checked');")
-check(off == "false", f"the Show sidebar switch turns off ({off})")
+click('[data-probe="settings-page"] [role="switch"][aria-label="Show the right panel"]')
+off = run("return document.querySelector('[aria-label=\"Show the right panel\"]').getAttribute('aria-checked');")
+check(off == "false", f"the Show the right panel switch turns off ({off})")
 click(".settings-nav button.back")
 v = view()
 check(v["chats"] and not v["page"], "Back to chats returns to the chats")
@@ -126,7 +126,7 @@ subprocess.run(["import", "-window", wid, os.path.join(out_dir, "no-panel.png")]
 xdo("key", "--clearmodifiers", "ctrl+comma")
 time.sleep(0.6)
 check(view()["page"], "Ctrl+, opens the Settings page")
-click('[data-probe="settings-page"] [role="switch"][aria-label="Show sidebar"]')
+click('[data-probe="settings-page"] [role="switch"][aria-label="Show the right panel"]')
 xdo("key", "Escape")
 time.sleep(0.6)
 v = view()

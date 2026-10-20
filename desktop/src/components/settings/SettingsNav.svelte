@@ -44,7 +44,7 @@
   .wordmark {
     flex: none;
     margin: calc(27 * var(--px)) 0 0 calc(20 * var(--px));
-    font: 700 calc(32 * var(--px)) / calc(40 * var(--px)) var(--face-brand);
+    font: var(--t-wordmark);
     color: var(--ink);
     white-space: nowrap;
   }
@@ -122,12 +122,18 @@
     position: absolute;
     inset: 0 calc(8 * var(--px));
     z-index: -1;
-    background: var(--band);
+    background: var(--control-hover);
     opacity: 0;
   }
   .row:hover::before,
   .row.selected::before {
     opacity: 1;
+  }
+  /* The chosen section: the band between faint lines, as every selected row. */
+  .row.selected::before {
+    background: var(--band);
+    border-top: 1px solid var(--rule-faint);
+    border-bottom: 1px solid var(--rule-faint);
   }
   .row::after {
     content: "";
@@ -135,7 +141,7 @@
     left: calc(8 * var(--px));
     top: 0;
     bottom: 0;
-    width: calc(3 * var(--px));
+    width: calc(4 * var(--px));
     background: var(--vermilion);
     transform: scaleY(0);
   }

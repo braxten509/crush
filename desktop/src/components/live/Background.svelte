@@ -30,14 +30,14 @@
 
   const forHelpers = $derived(kind === SHEET.helpers);
   // The terminal's texts (background.go:91-100, :205-213, :224-227).
-  const title = $derived(forHelpers ? "Sub-agents" : "Background Processes");
+  const title = $derived(forHelpers ? "Sub-agents" : "Background processes");
   const empty = $derived(forHelpers ? "No sub-agents are running." : "No background processes are running.");
   const action = $derived(forHelpers ? "Stop" : "Kill");
   const help = $derived([
     { key: "enter", text: "open chat", disabled: !forHelpers },
     { key: "↑/↓", text: "choose" },
     { key: "x", text: forHelpers ? "stop" : "kill" },
-    { key: "esc", text: "exit" },
+    { key: "esc", text: "close" },
   ]);
   const scrollbar = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
 
@@ -208,13 +208,16 @@
 <style>
   .empty {
     margin: 0;
-    padding: calc(20 * var(--px)) 0 calc(4 * var(--px)) calc(23 * var(--px));
+    padding: calc(20 * var(--px)) 0 calc(4 * var(--px));
     font: var(--t-body-small);
     color: var(--slate);
   }
   /* At most eight rows show; the rest scroll (KIT's Scrollbar draws the bar). */
+  /* The list reaches the frame, as FilterList's does: rows keep the sheet's
+     26 gutter, so names line up with the title and the footer. */
   .list {
     max-height: calc(8 * 64 * var(--px));
+    margin: 0 calc(-26 * var(--px));
     overflow-y: auto;
   }
   /* Two-line rows 64 high (look 5.1): the mark and the name on the first line,
@@ -229,29 +232,33 @@
     column-gap: calc(12 * var(--px));
     row-gap: calc(5 * var(--px));
     height: calc(64 * var(--px));
-    padding: 0 calc(24 * var(--px)) 0 calc(23 * var(--px));
+    padding: 0 calc(26 * var(--px));
     user-select: none;
     outline: none;
+    isolation: isolate;
   }
-  .row:hover {
-    background: var(--control-hover);
-  }
-  /* The selected row: the band between faint lines, with the vermilion edge. */
-  .row.selected {
-    background: var(--band);
-  }
+  /* Hover and selection draw 8 in from the frame, as FilterList's rows. */
+  .row:hover::before,
   .row.selected::before {
     content: "";
     position: absolute;
-    inset: 0;
+    inset: 0 calc(8 * var(--px));
+    z-index: -1;
+    pointer-events: none;
+  }
+  .row:hover::before {
+    background: var(--control-hover);
+  }
+  /* The selected row: the band between faint lines, with the vermilion edge. */
+  .row.selected::before {
+    background: var(--band);
     border-top: 1px solid var(--rule-faint);
     border-bottom: 1px solid var(--rule-faint);
-    pointer-events: none;
   }
   .row.selected::after {
     content: "";
     position: absolute;
-    left: calc(3 * var(--px));
+    left: calc(8 * var(--px));
     top: 0;
     bottom: 0;
     width: calc(4 * var(--px));
@@ -300,13 +307,12 @@
      hovered row; hidden, it keeps its place. */
   .act {
     box-sizing: border-box;
-    min-width: calc(112 * var(--px));
-    height: calc(32 * var(--px));
-    padding: 0 calc(20 * var(--px));
+    min-width: calc(80 * var(--px));
+    height: calc(36 * var(--px));
+    padding: 0 calc(16 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--control-rest);
     font: var(--t-button);
-    line-height: calc(30 * var(--px));
     color: var(--ink);
     text-align: center;
     visibility: hidden;

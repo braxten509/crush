@@ -279,15 +279,16 @@
   .choice {
     flex: none;
     box-sizing: border-box;
-    height: calc(44 * var(--px));
-    padding: 0 calc(18 * var(--px));
+    height: calc(36 * var(--px));
+    padding: 0 calc(16 * var(--px));
     border: 1px solid var(--rule-control);
-    font: var(--t-body-small);
+    background: var(--control-rest);
+    font: var(--t-button);
     color: var(--ink);
     white-space: nowrap;
   }
-  .handoff:not(.inactive) .choice:hover {
-    border-color: var(--ink);
+  .handoff:not(.inactive) .choice:hover:not(.selected) {
+    background: var(--control-hover);
   }
   .choice.selected {
     border-color: var(--ink);

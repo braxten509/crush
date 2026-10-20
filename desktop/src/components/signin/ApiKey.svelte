@@ -33,7 +33,7 @@
   );
   const help = [
     { key: "enter", text: "submit" },
-    { key: "esc", text: "exit" },
+    { key: "esc", text: "cancel" },
   ];
   const configPath = $derived(conn.workspace?.config_path ?? "");
 
@@ -138,7 +138,7 @@
   }
   .path {
     margin: calc(2 * var(--px)) 0 0;
-    font: var(--t-agent-mono);
+    font: var(--t-mono);
     color: var(--ink);
     overflow-wrap: anywhere;
   }

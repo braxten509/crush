@@ -15,10 +15,10 @@
   const working = $derived(Boolean(sessions.currentId) && busy(sessions.currentId) && progress(list).active !== null);
 </script>
 
-<section class="panel-section" data-section="todos" aria-label="To-do">
+<section class="panel-section" class:empty={list.length === 0} data-section="todos" aria-label="To-do">
   <h2 class="label">{header.label}{#if list.length > 0}<span class="count">{header.count}</span>{/if}</h2>
   {#if list.length === 0}
-    <p class="line none">None</p>
+    <p class="visually-hidden">None</p>
   {:else}
     <ul class="rows">
       {#each todoList(list) as item, at (at)}
@@ -43,14 +43,16 @@
     letter-spacing: var(--track-label);
     text-transform: uppercase;
   }
+  /* An empty section steps back (owner, 2026-10-20): a quieter heading and
+     no "None" line; the heading keeps its place. */
+  .empty .label {
+    color: var(--mark);
+  }
   .count {
     margin-left: calc(8 * var(--px));
     font-variant-numeric: tabular-nums;
   }
   .rows,
-  .none {
-    margin-top: calc(8 * var(--px));
-  }
   .line {
     display: flex;
     align-items: flex-start;
@@ -58,7 +60,6 @@
     min-height: calc(24 * var(--px));
     font: var(--t-small);
   }
-  .none,
   .completed .text {
     color: var(--slate);
   }

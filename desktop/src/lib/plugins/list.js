@@ -9,7 +9,7 @@ import { registerAction } from "../actions.js";
 import { hasDialog, openDialog } from "../dialogs.js";
 import { bindKey } from "../keys.js";
 
-registerAction({ id: "chat.new", title: "New Session", keys: ["Ctrl+N"], run: startNewChat });
+registerAction({ id: "chat.new", title: "New chat", keys: ["Ctrl+N"], run: startNewChat });
 
 bindKey("global", "Ctrl+N", () => {
   startNewChat();

@@ -21,10 +21,16 @@
   // ("Try again", SIDE-030). The text is one line, cut with "…" (the
   // terminal joins a notice's lines with spaces, status.go:220). Placed by
   // Conversation, between the timeline and the tray.
-  import { ui } from "../lib/stores/ui.svelte.js";
+  // inline: drawn inside the front sheet (kit Sheet), in the flow above its
+  // help line. The page's line steps aside while a sheet is open, so a
+  // message shows where the person is working (owner, 2026-10-20).
+  import { dialogs } from "../lib/dialogs.js";
+  import { clearNotice, ui } from "../lib/stores/ui.svelte.js";
   import Icon from "./Icon.svelte";
 
-  const notice = $derived(ui.notice);
+  let { inline = false } = $props();
+
+  const notice = $derived(inline || dialogs.length === 0 ? ui.notice : null);
 
   function act() {
     const action = notice?.action;
@@ -32,13 +38,16 @@
   }
 </script>
 
-<div class="notice-anchor" data-notice-anchor>
+<div class="notice-anchor" class:inline data-notice-anchor>
   {#if notice}
     <div class="notice {notice.kind}" role="status" aria-live="polite" data-notice-kind={notice.kind}>
       <span class="mark"><Icon name={NOTICE_ICON[notice.kind] ?? "info"} size={16} /></span>
       <span class="text">{notice.text}</span>
       {#if notice.action?.label}
         <button type="button" class="action" data-notice-action onclick={act}>{notice.action.label}</button>
+      {/if}
+      {#if notice.sticky}
+        <button type="button" class="dismiss" aria-label="Dismiss" title="Dismiss" data-notice-dismiss onclick={() => clearNotice()}><Icon name="cross" size={12} /></button>
       {/if}
     </div>
   {/if}
@@ -85,6 +94,38 @@
   }
   .error {
     color: var(--error-ink);
+  }
+  /* Inside a sheet: in the flow, on the sheet's gutter. */
+  .inline {
+    height: auto;
+  }
+  .inline .notice {
+    position: static;
+    padding: 0 calc(26 * var(--px));
+    background: none;
+    animation: none;
+  }
+  /* The close cross: small to see, 24 real pixels to hit. */
+  .dismiss {
+    flex: none;
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: calc(16 * var(--px));
+    height: calc(16 * var(--px));
+    color: var(--slate);
+  }
+  .dismiss::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(24px, 100%);
+    height: max(24px, 100%);
+    transform: translate(-50%, -50%);
+  }
+  .dismiss:hover {
+    color: var(--ink);
   }
   .warn .text {
     color: var(--amber-ink);

@@ -8,7 +8,8 @@ wins and this file is out of date. The approved reference picture is
 ## Character
 
 A printed page, not a dashboard: bone paper, iron-black ink, book serifs, one-pixel rules
-with small `+` marks where they meet, and one vermilion accent. No shadows, no glows, no
+that stop just short of each other where they meet (no `+` marks, owner 2026-10-20), and
+one vermilion accent. No shadows, no glows, no
 blur, no rounded cards. Hierarchy comes from type size, rules and white space.
 
 ## Zoom and units
@@ -93,10 +94,13 @@ never "sessions".
 ## Layout
 
 - Three columns in a frame: the chat list (left), the conversation (middle), the side panel
-  (right). Column dividers are one-pixel rules with `+` marks where they cross a section
-  rule. The left column can collapse to a strip.
+  (right). The frame and column dividers are one-pixel rules that stop 11 picture pixels
+  short of each corner and join; section rules keep 20 clear of the left divider and 19 of
+  the right. The left column can collapse to a strip.
 - The conversation reads at a fixed measure in the middle column; the typing box sits on the
-  bottom rule.
+  bottom rule. The red rail shows only under an open chat, never on a start screen.
+- The notice line over the composer starts its words 66 in, where reply text starts, with
+  its icon hanging to their left.
 - Side-panel sections (Folder, To-do, Background, Servers) stack with space between them;
   an empty section keeps its heading in `--mark` and shows no "None" line.
 - Settings rows stop at 840 picture pixels, so each switch sits near its name.
@@ -121,11 +125,11 @@ the bar (`--titlebar`); in full screen the bar steps aside.
 Every dialog is a `kit/Sheet`:
 
 - Widths: small 520, standard 760, wide 1040 picture pixels, never wider than the window.
-- A one-pixel frame with `+` marks at the four corners; no shadow. The page behind is covered
+- A one-pixel frame whose sides stop 11 short of each corner; no shadow. The page behind is covered
   by `--scrim` (paper at 92%, no blur), except sheets opened with `veil: false` (themes,
   changes), which leave the page visible so its look can be judged.
 - Title line (title, title-side controls, a close cross that does what Esc does), a rule
-  with marks at both ends, the body, then the help line. Controls that do not fit beside
+  with clear ends, the body, then the help line. Controls that do not fit beside
   the title move to a line under it; they never hide.
 - Messages (notices) show where the person is: inside the front sheet, on the Settings
   page, or over the conversation. Errors stay until dismissed, replaced or fixed.

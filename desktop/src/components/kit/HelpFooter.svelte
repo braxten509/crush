@@ -1,6 +1,6 @@
 <script>
   // A sheet's help footer (desktop-design-5-6 2.1, DLG-009; look 5.1): a rule
-  // with + marks, then one line of "key description" pairs joined by " · ".
+  // with clear ends, then one line of "key description" pairs joined by " · ".
   // Disabled pairs are left out; pairs that do not fit are dropped from the
   // end and "…" follows when it fits, so the line never wraps and never ends
   // on a separator (lib/kit/helpfit.js, the terminal's ShortHelpLine,

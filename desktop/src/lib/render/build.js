@@ -213,7 +213,7 @@ export class Builder {
         return this.list(token, abs);
       case "hr": {
         const rule = this.el("span", "md-rule");
-        rule.append(this.el("hr"), this.el("span", "md-plus md-plus-start"), this.el("span", "md-plus md-plus-end"));
+        rule.append(this.el("hr"));
         this.atom(rule, abs(0), abs(token.raw.length));
         return rule;
       }

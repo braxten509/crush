@@ -72,7 +72,9 @@
     display: flex;
     align-items: center;
     gap: calc(10 * var(--px));
-    padding: 0 calc(23 * var(--px)) 0 calc(66 * var(--px));
+    /* The words start where reply text does, 66 in (CHAT-001); the icon
+       hangs to their left: 66 less its 16 and the 10 gap (owner, 2026-10-20). */
+    padding: 0 calc(23 * var(--px)) 0 calc(40 * var(--px));
     background: var(--paper-raised);
     border-top: 1px solid var(--rule-faint);
     color: var(--ink);

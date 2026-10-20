@@ -3,7 +3,7 @@
   // DLG-007, DLG-008; look 5.1). Every sheet draws itself in one: the title
   // line (title, and title-side controls on the right that hide whole when
   // they cannot sit beside the title, internal/ui/dialog/common.go:106-118),
-  // a rule with + marks, the body, and the help footer. The frame is centered
+  // a rule, the body, and the help footer. The frame is centered
   // in the window and never comes closer than 24 to its edges; the body
   // scrolls inside, and a resize re-centers and re-fits it in the same frame
   // (dialog.go:263-274). An onboarding sheet sits at the bottom left of the
@@ -37,7 +37,6 @@
   import { ws } from "../../lib/stores/workspace.svelte.js";
   import Icon from "../Icon.svelte";
   import NoticeLine from "../NoticeLine.svelte";
-  import PlusMark from "../PlusMark.svelte";
   import HelpFooter from "./HelpFooter.svelte";
   import Scrollbar from "./Scrollbar.svelte";
 
@@ -233,11 +232,9 @@
       title_line: rectOf(line),
       controls: side ? { rect: rectOf(side), visible: getComputedStyle(side).visibility !== "hidden", wrapped: !controlsFit } : null,
       rule: rectOf(frame?.querySelector(".kit-title-rule")),
-      rule_marks: [...(frame?.querySelector(".kit-title-rule")?.querySelectorAll(".plus") ?? [])].map(rectOf),
       body: rectOf(body),
       body_scroll: body ? { scroll_height: body.scrollHeight, client_height: body.clientHeight } : null,
       help: rectOf(frame?.querySelector("[data-kit-help]")),
-      corners: [...(frame?.querySelectorAll(":scope > .corner") ?? [])].map(rectOf),
       edges: [...(frame?.querySelectorAll(":scope > .edge") ?? [])].map(rectOf),
       background: frame ? getComputedStyle(frame).backgroundColor : null,
       window: { w: innerWidth, h: innerHeight, px: scale() },
@@ -283,10 +280,6 @@
       <span class="edge bottom" aria-hidden="true"></span>
       <span class="edge left" aria-hidden="true"></span>
       <span class="edge right" aria-hidden="true"></span>
-      <span class="corner tl" aria-hidden="true"><PlusMark arm={8} /></span>
-      <span class="corner tr" aria-hidden="true"><PlusMark arm={8} /></span>
-      <span class="corner bl" aria-hidden="true"><PlusMark arm={8} /></span>
-      <span class="corner br" aria-hidden="true"><PlusMark arm={8} /></span>
     {/if}
 
     <!-- A sheet with no title and no controls (Quit) has no title band. -->
@@ -365,7 +358,7 @@
   }
 
   /* The page frame's drawing (Frame.svelte): hairlines that stop 11 short of
-     each corner, and a + mark with 8 arms at each corner. */
+     each corner. */
   .edge {
     position: absolute;
     background: var(--rule-frame);
@@ -394,32 +387,6 @@
   }
   .edge.right {
     right: 0;
-  }
-  .corner {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    pointer-events: none;
-  }
-  .corner.tl {
-    left: 0;
-    top: 0;
-  }
-  .corner.tr {
-    right: 0;
-    top: 0;
-  }
-  .corner.bl {
-    left: 0;
-    bottom: 0;
-  }
-  .corner.br {
-    right: 0;
-    bottom: 0;
-  }
-  .corner :global(.plus) {
-    left: 0;
-    top: 0;
   }
 
   /* Title line: the title, and its controls on the right on its baseline. */

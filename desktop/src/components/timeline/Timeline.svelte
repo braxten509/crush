@@ -854,7 +854,9 @@
   }
 </script>
 
-{#if railBottom !== null && !readOnly}
+<!-- Only under an open chat: a start screen covers the rail, and rounding
+     left its last pixel row showing above the composer (owner, 2026-10-20). -->
+{#if shown && railBottom !== null && !readOnly}
   <div class="rail" bind:this={rail} style:bottom="{railBottom}px" aria-hidden="true"></div>
 {/if}
 

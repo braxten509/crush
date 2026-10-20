@@ -1,5 +1,5 @@
 /* Crush Desktop: the Scholar's edition look (.impeccable/mocks/decision/edition.png).
-   Bone paper, iron-black ink, book serifs, one-pixel rules with small + marks, and a vermilion rail.
+   Bone paper, iron-black ink, book serifs, one-pixel rules with clear ends, and a vermilion rail.
    Every size is written in picture pixels times --px, so the whole window zooms in twelfths
    (lib/zoom.js; 12/12 is the approved picture, Compact 8/12 is the default). Hairlines stay one
    real pixel at every zoom. */

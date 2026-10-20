@@ -145,10 +145,10 @@ describe("blocks", () => {
     expect(root.textContent).toBe("em strong gone both");
   });
 
-  test("a thematic break with + marks", () => {
+  test("a thematic break: one rule, no + marks", () => {
     const root = render("a\n\n---\n\nb");
     expect(blocks(root)).toEqual(["p", "span.md-rule", "p"]);
-    expect([...root.children[1].children].map((el) => el.tagName + "." + el.className)).toEqual(["HR.", "SPAN.md-plus md-plus-start", "SPAN.md-plus md-plus-end"]);
+    expect([...root.children[1].children].map((el) => el.tagName + "." + el.className)).toEqual(["HR."]);
   });
 
   test("raw HTML shows as text with every tag removed (1.7 item 2)", () => {

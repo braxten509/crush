@@ -2,7 +2,7 @@
   // The picture viewer (4.5, CHAT-007, TYPE-037): a picture chip, a picture in
   // a reply or a figure in VISUALS opens it over the whole window. The paper
   // scrim, a bar with the name, "W × H · N KB", Fit, Actual size and Close Esc,
-  // a rule with + marks, then the picture centered 24 in from the edges, fit
+  // a rule, then the picture centered 24 in from the edges, fit
   // by default; Actual size (or F) shows it 1:1, panned by dragging or by the
   // arrow keys in steps of 40. Transparent pictures sit on --paper-raised.
   // Esc closes; focus stays inside while it is open and goes back to what

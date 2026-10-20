@@ -172,7 +172,7 @@
   display: none;
 }
 
-/* A thematic break: the column rule with the + marks of Rule.svelte. */
+/* A thematic break: the column rule of Rule.svelte, with its clear ends. */
 .md .md-rule {
   display: block;
   position: relative;
@@ -188,36 +188,6 @@
   margin: 0;
   border: 0;
   background: currentColor;
-}
-.md .md-plus {
-  position: absolute;
-  top: 0;
-  width: 1px;
-  height: 1px;
-}
-.md .md-plus-start {
-  left: calc(11 * var(--px));
-}
-.md .md-plus-end {
-  right: calc(9 * var(--px));
-}
-.md .md-plus::before,
-.md .md-plus::after {
-  content: "";
-  position: absolute;
-  background: var(--mark);
-}
-.md .md-plus::before {
-  left: calc(-4 * var(--px));
-  top: 0;
-  width: calc(8 * var(--px) + 1px);
-  height: 1px;
-}
-.md .md-plus::after {
-  top: calc(-4 * var(--px));
-  left: 0;
-  width: 1px;
-  height: calc(8 * var(--px) + 1px);
 }
 
 /* Raw HTML's leftover text keeps its line breaks. */

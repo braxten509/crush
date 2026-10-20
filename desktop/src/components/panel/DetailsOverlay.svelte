@@ -5,7 +5,7 @@
   // draw.go:331-380): a header line with the chat's title, the model info
   // (sidebar.go:25-86 and its "Usage left" limits) and the version at the
   // right, then Modified Files, LSPs, MCPs and Skills side by side, at most
-  // 20 rows each; a ruled bottom edge with + marks. Typing in the field closes
+  // 20 rows each; a ruled bottom edge. Typing in the field closes
   // it (keypress.go:401-405); Ctrl+D toggles it (lib/plugins/panel.js). It is
   // drawn only while the panel is hidden and a chat is shown (draw.go:155,
   // :333). Placed by OverlayHost.

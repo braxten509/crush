@@ -18,14 +18,15 @@ probe_path, out_dir = sys.argv[1], sys.argv[2]
 WIDTH, HEIGHT = 1600, 992
 SEEDS = ["Seed turn short", "Seed turn code", "Seed turn list", "Seed turn tool"]
 DIALOGS = [
-    "commands", "settings", "autocompact", "memory_limit", "subagent_instructions", "notifications",
-    "models", "reasoning", "usage", "sessions", "projects", "theme", "theme_new", "logs", "about",
+    "commands", "autocompact", "memory_limit", "subagent_instructions", "notifications",
+    "models", "usage", "sessions", "theme", "theme_new", "logs", "about",
     "skills", "kept_skills", "mcp_toggles", "remote_setup", "launcher_password",
     "background", "sub-agents", "filepicker", "folder_picker", "quit",
 ]
-# reasoning and projects close at once here (a model without reasoning
-# levels, one project); changes needs a message's tool calls; auth_method
-# goes on into a sign-in flow.
+# Left out: settings opens the Settings page, not a sheet; reasoning and
+# projects close at once here (a model without reasoning levels, one
+# project); changes needs a message's tool calls; auth_method goes on into a
+# sign-in flow.
 COLLECT = open(os.path.join(out_dir, "in", "collect.js")).read()
 
 

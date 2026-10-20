@@ -191,7 +191,7 @@
     visibility: hidden;
   }
   .disclosure :global(.icon) {
-    transition: transform 120ms ease-out;
+    transition: transform var(--motion) var(--ease-paper);
   }
   .disclosure.open :global(.icon) {
     transform: rotate(90deg);
@@ -216,5 +216,9 @@
   }
   .body-box {
     min-width: 0;
+  }
+  /* The call's output unrolls down from its line (the paper motion). */
+  .content {
+    animation: paper-unfold var(--motion) var(--ease-paper);
   }
 </style>

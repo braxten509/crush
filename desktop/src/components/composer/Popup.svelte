@@ -182,6 +182,7 @@
     font: var(--t-code);
     color: var(--ink);
     user-select: none;
+    animation: paper-unfold-up var(--motion) var(--ease-paper);
   }
   .row {
     display: flex;

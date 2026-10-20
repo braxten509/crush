@@ -1,28 +1,23 @@
 <script>
-  // The right column (SIDE-005, D12): PROJECT and the project name, the usage
-  // meters, then a scrolling body with VISUALS, FILES, LSP, MCP and SKILLS.
-  // The chat title is in the chat head, the folder and branch in its path
-  // line, the model in the model button. Everything comes from the stores
-  // (design 1.5.3); the panel takes no props. App.svelte hides it (D11).
+  // The right column (SIDE-005, D12; owner, 2026-10-19): the usage meters
+  // (context, then the agent's usage windows or the chat's cost), then a
+  // scrolling body with the selected visual. No project, files, LSP, MCP or
+  // skills: the chat head has the folder and branch, the model button the
+  // model. Everything comes from the stores (design 1.5.3); the panel takes
+  // no props. App.svelte hides it (D11, or its own switch).
   //
   // Focus (SIDE-012): → or l from the timeline, or a click, focuses the body
   // (lib/plugins/panel.js has the keys); the body's scrollbar shows while it
   // has focus or for 2 s after a wheel turn. With composer_focus_only a click
   // leaves focus in the field and the wheel still scrolls the body on hover.
-  import { conn } from "../lib/stores/connection.svelte.js";
   import { sessions } from "../lib/stores/sessions.svelte.js";
   import { setFocus, ui } from "../lib/stores/ui.svelte.js";
   import { ws } from "../lib/stores/workspace.svelte.js";
-  import FilesSection from "./panel/FilesSection.svelte";
-  import LspSection from "./panel/LspSection.svelte";
-  import McpSection from "./panel/McpSection.svelte";
   import Meters from "./panel/Meters.svelte";
-  import { panel, sectionRows, setPanelBody, toField } from "./panel/panel.svelte.js";
-  import SkillsSection from "./panel/SkillsSection.svelte";
+  import { panel, setPanelBody, toField } from "./panel/panel.svelte.js";
   import VisualsSection from "./panel/VisualsSection.svelte";
   import Rule from "./Rule.svelte";
 
-  const lists = $derived(sectionRows());
   const focusOnly = $derived(ws.config?.options?.tui?.composer_focus_only === true);
 
   let aside = $state();
@@ -89,7 +84,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 <aside
   class="panel"
-  aria-label="Project and visuals"
+  aria-label="Usage and visuals"
   data-probe="panel"
   bind:this={aside}
   onfocusin={focusIn}
@@ -97,13 +92,6 @@
   onclick={click}
   onmousedown={down}
 >
-  <section class="project" aria-labelledby="project-label">
-    <h2 class="label" id="project-label">Project</h2>
-    <p class="project-name">{conn.project.name}</p>
-  </section>
-
-  <Rule caret={26} class="caret-rule" />
-
   <Meters />
 
   <Rule marks="both" class="under-usage" />
@@ -114,29 +102,19 @@
     class:show-bar={panel.focused || panel.wheeled}
     tabindex="-1"
     role="region"
-    aria-label="Visuals and project status"
+    aria-label="Visuals"
     bind:this={body}
     onwheel={wheel}
   >
     <VisualsSection sessionId={sessions.currentId} scrollTo={scrollToFigure} />
-
-    <Rule caret={26} class="section-rule" />
-    <div class="list"><FilesSection list={lists.files} /></div>
-
-    <Rule caret={26} class="section-rule" />
-    <div class="list"><LspSection list={lists.lsp} /></div>
-
-    <Rule caret={26} class="section-rule" />
-    <div class="list"><McpSection list={lists.mcp} /></div>
-
-    <Rule caret={26} class="section-rule" />
-    <div class="list"><SkillsSection list={lists.skills} /></div>
   </div>
 </aside>
 
 <style>
   /* Vertical positions follow the approved picture at 12/12 (column top = 0). */
+  /* Coming back, the panel settles in from the right (the paper motion). */
   .panel {
+    animation: paper-slide-left var(--motion) var(--ease-paper);
     position: relative;
     display: flex;
     flex-direction: column;
@@ -146,26 +124,9 @@
     padding: calc(26 * var(--px)) calc(19 * var(--px)) 0 calc(26 * var(--px));
   }
 
-  .label {
-    font: var(--t-label);
-    letter-spacing: var(--track-label);
-    text-transform: uppercase;
-  }
-
-  .project {
-    flex: none;
-  }
-  .project-name {
-    min-height: calc(38 * var(--px));
-    font: var(--t-project);
-    letter-spacing: -0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .panel :global(.rule.caret-rule) {
-    margin: calc(19 * var(--px)) 0 0 calc(-1 * var(--px));
+  /* The meters lead the column now that PROJECT is gone. */
+  .panel :global(.usage-wrap) {
+    margin-top: 0;
   }
 
   .panel :global(.rule.under-usage) {
@@ -201,10 +162,4 @@
     outline-offset: -1px;
   }
 
-  .body :global(.rule.section-rule) {
-    margin: calc(30 * var(--px)) 0 0 calc(-1 * var(--px));
-  }
-  .list {
-    margin-top: calc(19 * var(--px));
-  }
 </style>

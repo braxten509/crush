@@ -7,7 +7,8 @@
   // (SIDE-028: the notice sits over the timeline's bottom, on the composer
   // rule). The band is measured from the two rules, which Conversation.svelte
   // names under-head and above-composer, whenever any part of the column
-  // changes size or a part comes or goes.
+  // changes size or a part comes or goes. Without a head the band starts at
+  // the column's top.
   import { onMount } from "svelte";
   import { ui } from "../../lib/stores/ui.svelte.js";
 
@@ -20,11 +21,12 @@
     const column = layer?.parentElement;
     const head = column?.querySelector(":scope > .rule.under-head");
     const foot = column?.querySelector(":scope > .rule.above-composer");
-    if (!head || !foot) {
+    if (!foot) {
       band = null;
       return;
     }
-    const top = head.offsetTop + head.offsetHeight;
+    // The blank start screen has no head (Conversation.svelte): the band starts at the top.
+    const top = head ? head.offsetTop + head.offsetHeight : 0;
     const bottom = column.clientHeight - foot.offsetTop;
     if (band?.top !== top || band?.bottom !== bottom) band = { top, bottom };
   }

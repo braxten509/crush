@@ -190,3 +190,86 @@ ul {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Motion (owner, 2026-10-19: "paper unfold", lib/motion.js). Every control's
+   colours and lines ease instead of snapping; pieces that come and go unroll
+   or settle through lib/motion.js and the keyframes below. */
+:root {
+  --motion: 220ms;
+  --motion-quick: 140ms;
+  --ease-paper: cubic-bezier(0.33, 1, 0.68, 1);
+}
+button,
+a,
+input,
+textarea,
+select,
+[role="option"],
+[role="switch"] {
+  transition:
+    background-color var(--motion-quick) ease-out,
+    border-color var(--motion-quick) ease-out,
+    color var(--motion-quick) ease-out,
+    outline-color var(--motion-quick) ease-out,
+    text-decoration-color var(--motion-quick) ease-out;
+}
+/* A piece that arrives unrolls from its top edge (sheets, menus, figures). */
+@keyframes paper-unfold {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-4px);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: none;
+  }
+}
+/* A piece that arrives settles in place (new messages, notices, rows). */
+@keyframes paper-settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes paper-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+/* The same unroll for a piece over its opener (popups above the typing box). */
+@keyframes paper-unfold-up {
+  from {
+    clip-path: inset(100% 0 0 0);
+    transform: translateY(4px);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: none;
+  }
+}
+/* A column coming in from the right edge (the right panel). */
+@keyframes paper-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+}
+/* A column coming in from the left edge (the chat list back from Settings). */
+@keyframes paper-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+}

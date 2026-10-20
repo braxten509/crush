@@ -8,7 +8,7 @@ import { actions, runAction } from "../actions.js";
 import { dialogRegistered, openDialog } from "../dialogs.js";
 import { capabilities } from "../models/capabilities.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
-import { ui } from "../stores/ui.svelte.js";
+import { panelSetting, ui } from "../stores/ui.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
 import { quitNow } from "./actions.js";
 
@@ -71,7 +71,7 @@ export function systemEntries({ summarize, toggleYolo, initProject }) {
       aliases: ["effort"],
       when: () => agentModel()?.can_reason === true && (agentModel()?.reasoning_levels?.length ?? 0) > 0,
     }),
-    action("toggle_sidebar", "Toggle Sidebar", "sidebar.toggle", { when: () => hasSession() && (!ui.panelHidden || tui().compact_mode === true) }),
+    action("toggle_sidebar", "Toggle Sidebar", "sidebar.toggle", { when: () => hasSession() && (!ui.panelHidden || panelSetting.off) }),
     sheet("file_picker", "Open File Picker", "filepicker", { shortcut: "ctrl+f", when: () => hasSession() && agentModel()?.supports_attachments === true }),
     action("open_external_editor", "Open External Editor", "editor.open", { shortcut: "ctrl+o" }),
     action("enable_docker_mcp", "Enable Docker MCP Catalog", "docker.enable", { when: () => actionEnabled("docker.enable") }),

@@ -335,6 +335,8 @@
     color: var(--ink);
     pointer-events: auto;
     outline: none;
+    /* The sheet unrolls from its top edge (app.css, the paper motion). */
+    animation: paper-unfold var(--motion) var(--ease-paper);
   }
   .frame.capped {
     max-height: min(calc(var(--sheet-h) * var(--px)), 100%);

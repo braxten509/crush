@@ -62,6 +62,7 @@
   import { thoughtLineEnabled } from "../../lib/thought.js";
   import { buildTimeline, createTimelineState } from "../../lib/timeline.js";
   import { focusTray } from "../../lib/tray.js";
+  import { markFresh } from "./ItemFrame.svelte";
   import VirtualList from "./VirtualList.svelte";
 
   let { sessionId, readOnly = false } = $props();
@@ -122,6 +123,30 @@
     );
   });
   const items = $derived(built.items);
+
+  // New items settle in (ItemFrame's markFresh): those that join a chat
+  // already shown, not the ones there when it opens. The user's own message
+  // replaces its pending copy, which has settled already.
+  const seenKeys = new Map(); // sid → Set of item keys
+  $effect.pre(() => {
+    const list = items;
+    const sid = sessionId;
+    if (!sid || !shown || readOnly) return;
+    untrack(() => {
+      const seen = seenKeys.get(sid);
+      if (!seen) {
+        if (list.length > 0) seenKeys.set(sid, new Set(list.map((item) => item.key)));
+        return;
+      }
+      const fresh = [];
+      for (const item of list) {
+        if (seen.has(item.key)) continue;
+        seen.add(item.key);
+        if (item.kind !== "user") fresh.push(item.key);
+      }
+      if (fresh.length > 0) markFresh(fresh);
+    });
+  });
   // What the virtual list draws: readOnly items carry no key letters.
   const drawn = $derived(readOnly ? items.map((item) => (item.letter ? { ...item, letter: "" } : item)) : items);
   const indexOf = $derived(new Map(items.map((item, i) => [item.key, i])));

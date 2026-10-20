@@ -6,7 +6,7 @@
 import { windowBusy } from "../busy.js";
 import { api, SCOPE } from "../engine/api.js";
 import { focusField } from "../stores/composer.svelte.js";
-import { notify } from "../stores/ui.svelte.js";
+import { notify, panelSetting, setPanelShown } from "../stores/ui.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
 
 export const DEFAULT_AUTOCOMPACT = 400_000;
@@ -29,21 +29,14 @@ export async function setOption(key, value) {
 
 // -- The four toggles (config_write.go:71-199) --
 
-// Toggle Sidebar: the terminal's compact mode, inverted.
-export async function toggleSidebar() {
-  try {
-    await api.setCompact(!(tui().compact_mode === true));
-  } catch (error) {
-    notify("error", errorText(error));
-  }
+// Toggle Sidebar: the desktop's own right panel switch, not the terminal's
+// compact mode (owner, 2026-10-19: separate apps).
+export function toggleSidebar() {
+  setPanelShown(panelSetting.off);
 }
 
-export async function setSidebarShown(shown) {
-  try {
-    await api.setCompact(!shown);
-  } catch (error) {
-    notify("error", errorText(error));
-  }
+export function setSidebarShown(shown) {
+  setPanelShown(shown);
 }
 
 export async function toggleComposerFocusOnly() {

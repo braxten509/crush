@@ -22,9 +22,9 @@
     {#each model.meters as meter (meter.id)}
       <span class="item" data-meter={meter.id}>
         <span class="label">{meter.label}</span>
-        <span class="bar" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
+        {#if meter.bar !== false}<span class="bar" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
           <span class="fill" style:width="{meter.left}%"></span>
-        </span>
+        </span>{/if}
         <span class="value">{meter.text}</span>
         {#if meter.warn}
           <Icon name="warning" size={12} />
@@ -82,6 +82,8 @@
     top: -1px;
     bottom: -1px;
     background: var(--meter);
+    /* A changed amount eases to its new length. */
+    transition: width 400ms var(--ease-paper);
   }
   .value,
   .tokens {

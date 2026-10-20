@@ -19,8 +19,10 @@ let frontGrace = null;
 // it run again when the stack changes.
 export const dialogs = liveList(() => [...stack.values()]);
 
-export function registerDialog(id, Component, { veil = true } = {}) {
-  components.set(id, { component: Component, veil });
+// open: a sheet that is really a page (Settings, owner 2026-10-19) gives a
+// function that shows it instead; openDialog calls that and stacks nothing.
+export function registerDialog(id, Component, { veil = true, open = null } = {}) {
+  components.set(id, { component: Component, veil, open });
 }
 
 // Whether a piece registered the sheet: the palette hides entries for sheets
@@ -37,6 +39,7 @@ export function openDialog(id, props = {}, { grace = false } = {}) {
     console.warn(`openDialog: no sheet is registered as "${id}"`);
     return false;
   }
+  if (registered.open) return registered.open(props) !== false;
   if (stack.has(id)) {
     bringToFront(id);
     return false;

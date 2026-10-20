@@ -10,9 +10,12 @@ import Settings from "../../components/settings/Settings.svelte";
 import SubagentInstructions from "../../components/settings/SubagentInstructions.svelte";
 import { registerAction } from "../actions.js";
 import { registerDialog } from "../dialogs.js";
+import { openSettings, setSettingsPage } from "../settings/page.svelte.js";
 import { toggleAgentCpus, toggleComposerFocusOnly, toggleSidebar, toggleThoughtLine } from "../settings/store.svelte.js";
 
-registerDialog("settings", Settings);
+// Settings is a page in the middle column (owner, 2026-10-19), not a sheet.
+setSettingsPage(Settings);
+registerDialog("settings", Settings, { open: (props) => openSettings(props?.section ?? null) });
 registerDialog("autocompact", AutoCompact);
 registerDialog("memory_limit", MemoryLimit);
 registerDialog("subagent_instructions", SubagentInstructions);

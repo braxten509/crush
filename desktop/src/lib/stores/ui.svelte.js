@@ -87,6 +87,28 @@ export function setPanelHidden(hidden) {
   ui.panelHidden = hidden;
 }
 
+// The right panel's own switch (owner, 2026-10-19): the desktop app keeps it
+// apart from the terminal's compact mode, as the two are separate apps. It is
+// kept in this window's local storage; shown unless turned off.
+const PANEL_KEY = "crush-desktop.panel";
+function readPanelOff() {
+  try {
+    return globalThis.localStorage?.getItem(PANEL_KEY) === "off";
+  } catch {
+    return false;
+  }
+}
+export const panelSetting = $state({ off: readPanelOff() });
+
+export function setPanelShown(shown) {
+  panelSetting.off = !shown;
+  try {
+    globalThis.localStorage?.setItem(PANEL_KEY, shown ? "on" : "off");
+  } catch {
+    // Not kept past this run; the switch still works.
+  }
+}
+
 // Puts a form in the typing box's place. Refuses (false) while another kind
 // holds the slot, except that "permission", "question" and "secure" replace
 // "plan", "customize" and "update"; "update" replaces nothing

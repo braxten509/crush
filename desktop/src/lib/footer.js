@@ -191,7 +191,7 @@ export function footerText(fields) {
 // model's CLI reports none (an API model). Without a chat the context is
 // unknown ("–"). The shown value is the used part, 100 minus the rounded
 // left part, so the two always add up to 100.
-export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit = 0, limits = [] } = {}) {
+export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit = 0, limits = [], api = false } = {}) {
   const show = (id) => items.includes(id);
   const meters = [];
   const lines = [];
@@ -239,6 +239,13 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
       resets: limitWords.resets,
     });
     lines.push(limitWords.resets ? `${limitWords.text} · ${limitWords.resets}` : limitWords.text);
+  }
+  // An API model (no agent CLI, so no usage windows) shows what the chat has
+  // cost instead (owner, 2026-10-19: "usage and context (or price)").
+  if (api && limits.length === 0 && session) {
+    const cost = `$${goFixed(Number(session.cost) || 0, 2)}`;
+    meters.push({ id: "cost", label: "COST", left: 0, text: cost, warn: false, resets: "", bar: false });
+    lines.push(`Cost ${cost}`);
   }
   return { meters, lines, tokens };
 }

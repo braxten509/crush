@@ -156,6 +156,7 @@
     background: var(--paper-raised);
     border: 1px solid var(--rule-control);
     outline: none;
+    animation: paper-unfold var(--motion) var(--ease-paper);
   }
   /* 36 tall: a 26 line between 5 above and 5 below. */
   .entry {

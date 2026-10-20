@@ -1,17 +1,25 @@
 <script>
   // The model button at the field's right (SIDE-006's label; 4.9): the
   // agent's model and effort as the footer items allow, "Unknown" until the
-  // agent has a model. A click opens the models sheet, which phase 5
-  // registers (until then nothing opens).
+  // agent has a model. A click opens the model menu over the button
+  // (ModelMenu.svelte, owner 2026-10-19), and a second click closes it; the
+  // full models sheet stays on Ctrl+P.
   import Icon from "../Icon.svelte";
   import { modelButtonText } from "../../lib/composer/modes.js";
-  import { openDialog } from "../../lib/dialogs.js";
+  import { closeMenu, openMenu, ui } from "../../lib/stores/ui.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
 
   const label = $derived(modelButtonText(ws.agent, ws.config?.options?.tui?.composer_footer));
+  const open = $derived(ui.menu?.kind === "model");
+  let button = $state();
+
+  function toggle() {
+    if (open) closeMenu();
+    else openMenu({ kind: "model", anchor: button });
+  }
 </script>
 
-<button class="model" type="button" aria-label={label ? `Model: ${label}` : "Model"} onclick={() => openDialog("models")}>
+<button bind:this={button} class="model" class:open type="button" aria-label={label ? `Model: ${label}` : "Model"} aria-haspopup="dialog" aria-expanded={open} onclick={toggle}>
   <span class="label">{label}</span>
   <Icon name="caret" />
 </button>
@@ -36,6 +44,13 @@
   /* Inside the field, whose own hairline shows too. */
   .model:focus-visible {
     outline-offset: calc(-6 * var(--px));
+  }
+  /* The caret turns over while the menu is open. */
+  .model :global(svg) {
+    transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  .model.open :global(svg) {
+    transform: rotate(180deg);
   }
   .label {
     min-width: 0;

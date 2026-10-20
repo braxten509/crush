@@ -49,9 +49,9 @@
             <span class="visually-hidden">near the limit</span>
           {/if}
         </p>
-        <div class="meter" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
+        {#if meter.bar !== false}<div class="meter" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
           <span class="fill" style:width="{meter.left}%"></span>
-        </div>
+        </div>{/if}
         {#if meter.resets}<p class="resets">{meter.resets}</p>{/if}
       </div>
     {:else}
@@ -132,6 +132,8 @@
     top: -1px;
     bottom: -1px;
     background: var(--meter);
+    /* A changed amount eases to its new length. */
+    transition: width 400ms var(--ease-paper);
   }
   .resets {
     margin-top: calc(4 * var(--px));

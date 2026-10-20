@@ -58,7 +58,7 @@ function windowsNow(now) {
 export function meterNow(now = Date.now()) {
   const session = shownSession();
   const limit = compactionLimit({ agent: ws.agent, session, providers: ws.providers, options: ws.config?.options });
-  return meterModel({ items: footerItems(ws.config), session, limit, limits: windowsNow(now) });
+  return meterModel({ items: footerItems(ws.config), session, limit, limits: windowsNow(now), api: Boolean(ws.agent?.model_cfg?.provider) && !cliKind(ws.agent, ws.providers) });
 }
 
 export function modelNow(now = Date.now()) {

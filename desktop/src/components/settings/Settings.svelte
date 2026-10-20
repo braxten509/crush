@@ -1,13 +1,18 @@
 <script>
   // The Settings page (desktop-design-5-6 2.13, look 5.13; SET-003 to
-  // SET-037): a sheet of the rows the plan and the checklist ask for; every
-  // other option stays a crush.json or crushrc setting the engine honors.
-  // Each row shows the effective value from the config (re-read on
-  // config_changed, so the terminal's changes show too); the small sheets of
-  // 2.12 open from their rows. Tab and Shift+Tab move between the controls.
+  // SET-037; owner 2026-10-19: a full page, not a sheet). It takes the middle
+  // column's place (lib/mainview.js, kind "settings") while SettingsNav
+  // lists the sections in the left column; this page shows the chosen
+  // section's rows and slides them in when the section changes. Every other
+  // option stays a crush.json or crushrc setting the engine honors. Each row
+  // shows the effective value from the config (re-read on config_changed, so
+  // the terminal's changes show too); the small sheets of 2.12 open over the
+  // page from their rows. Esc goes back to the chats.
   import { onMount } from "svelte";
-  import Sheet, { section } from "../kit/Sheet.svelte";
-  import { openDialog, closeDialog } from "../../lib/dialogs.js";
+  import { openDialog } from "../../lib/dialogs.js";
+  import { bindKey } from "../../lib/keys.js";
+  import { slidePage } from "../../lib/motion.js";
+  import { closeSettings, settingsPage, settingsSections } from "../../lib/settings/page.svelte.js";
   import { runAction } from "../../lib/actions.js";
   import { crushDirs, remotePasswordExists } from "../../lib/engine/commands.js";
   import { refreshModels, modelData } from "../../lib/models/store.svelte.js";
@@ -29,8 +34,8 @@
     tui,
   } from "../../lib/settings/store.svelte.js";
   import { chosenTheme, theme } from "../../lib/themes/current.svelte.js";
+  import { panelSetting } from "../../lib/stores/ui.svelte.js";
 
-  const ID = "settings";
   const ACCOUNTS = [
     { platform: "hyper", provider: "hyper", name: "Hyper" },
     { platform: "copilot", provider: "copilot", name: "GitHub Copilot" },
@@ -53,11 +58,16 @@
     if (editing !== "cpus") cpus = set;
   });
 
-  const help = [
-    { key: "tab", text: "next" },
-    { key: "enter", text: "choose" },
-    { key: "esc", text: "close" },
-  ];
+  const section = $derived(settingsPage.section);
+  // The slide's side: a later section comes in from the right.
+  let dir = $state(1);
+  let last = settingsPage.section;
+  $effect(() => {
+    const next = settingsPage.section;
+    const order = settingsSections().map((s) => s.id);
+    dir = order.indexOf(next) >= order.indexOf(last) ? 1 : -1;
+    last = next;
+  });
 
   const signedIn = (provider) => {
     const p = modelData.cfg?.providers.get(provider);
@@ -81,12 +91,12 @@
     await setAgentCpus(cpus);
   }
 
-  function onKey(event, combo) {
-    if (combo === "Enter" && event.target?.tagName === "INPUT") {
-      event.target.blur();
-      return true;
+  // Enter in a field saves it (the field's blur saves).
+  function fieldKey(event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.currentTarget.blur();
     }
-    return false;
   }
 
   async function account(row) {
@@ -98,6 +108,11 @@
   let configDirs = $state([]);
 
   onMount(() => {
+    const unbind = bindKey("main", "Escape", () => {
+      if (document.activeElement?.tagName === "INPUT") return false;
+      closeSettings();
+      return true;
+    });
     refreshModels();
     remotePasswordExists()
       .then((exists) => (hasPassword = exists))
@@ -106,12 +121,16 @@
     crushDirs()
       .then((dirs) => (configDirs = (dirs?.lines ?? []).slice(0, 2)))
       .catch(() => {});
+    return unbind;
   });
 </script>
 
-<Sheet id={ID} title="Settings" width="wide" maxHeight={760} {help} {onKey}>
-  <div class="page">
-    {@render section("Appearance")}
+<div class="settings-page" data-probe="settings-page">
+  {#key section}
+    <div class="page" in:slidePage={{ dir }}>
+      <h2 class="title">{settingsSections().find((s) => s.id === section)?.label ?? section}</h2>
+      <div class="rows">
+  {#if section === "appearance"}
     <div class="row">
       <span class="name">Theme</span>
       <span class="value">{chosenTheme()}{theme.name !== chosenTheme() ? ` (showing ${theme.name})` : ""}</span>
@@ -119,10 +138,10 @@
     </div>
     <div class="row">
       <span class="name">Show sidebar</span>
-      <button type="button" class="switch" role="switch" aria-checked={tui().compact_mode !== true} aria-label="Show sidebar" onclick={() => setSidebarShown(tui().compact_mode === true)}></button>
+      <button type="button" class="switch" role="switch" aria-checked={!panelSetting.off} aria-label="Show sidebar" onclick={() => setSidebarShown(panelSetting.off)}></button>
     </div>
-
-    {@render section("Typing")}
+  {/if}
+  {#if section === "typing"}
     <div class="row">
       <span class="name">Keep focus on the typing box</span>
       <button type="button" class="switch" role="switch" aria-checked={tui().composer_focus_only === true} aria-label="Keep focus on the typing box" onclick={toggleComposerFocusOnly}></button>
@@ -137,13 +156,13 @@
         type="button"
         class="act"
         onclick={() => {
-          closeDialog(ID);
+          closeSettings();
           runAction("composer.customize");
         }}>Customize…</button
       >
     </div>
-
-    {@render section("Work")}
+  {/if}
+  {#if section === "work"}
     <div class="row">
       <span class="name">Fallback compaction</span>
       <span class="value">{(Number(options().auto_compact_token_limit) || DEFAULT_AUTOCOMPACT).toLocaleString("en-US")} tokens</span>
@@ -151,15 +170,14 @@
     </div>
     <div class="row">
       <span class="name">Check-in messages every</span>
-      <span class="field"><input type="text" inputmode="numeric" bind:value={checkIn} onfocus={() => ((editing = "check_in"), (atFocus = checkIn))} onblur={saveCheckIn} aria-label="Check-in minutes" /> minutes</span>
+      <span class="field"><input type="text" inputmode="numeric" bind:value={checkIn} onfocus={() => ((editing = "check_in"), (atFocus = checkIn))} onblur={saveCheckIn} onkeydown={fieldKey} aria-label="Check-in minutes" /> minutes</span>
     </div>
     <div class="row">
       <span class="name">Sub-agent instructions</span>
       <button type="button" class="act" onclick={() => openDialog("subagent_instructions")}>Edit…</button>
     </div>
-
-    {#if platform.linux}
-      {@render section("System")}
+  {/if}
+  {#if section === "system"}
       <div class="row">
         <span class="name">Memory limit</span>
         <span class="value">{memoryText}</span>
@@ -171,18 +189,17 @@
       </div>
       <div class="row">
         <span class="name">CPUs for AI work</span>
-        <span class="field"><input type="text" bind:value={cpus} onfocus={() => ((editing = "cpus"), (atFocus = cpus))} onblur={saveCpus} placeholder="detect" aria-label="CPUs for AI work" /></span>
+        <span class="field"><input type="text" bind:value={cpus} onfocus={() => ((editing = "cpus"), (atFocus = cpus))} onblur={saveCpus} onkeydown={fieldKey} placeholder="detect" aria-label="CPUs for AI work" /></span>
       </div>
-    {/if}
-
-    {@render section("Notifications")}
+  {/if}
+  {#if section === "notifications"}
     <div class="row">
       <span class="name">Notification style</span>
       <span class="value">{styleLabel}</span>
       <button type="button" class="act" onclick={() => openDialog("notifications")}>Change…</button>
     </div>
-
-    {@render section("Accounts")}
+  {/if}
+  {#if section === "accounts"}
     {#each ACCOUNTS as row (row.platform)}
       <div class="row">
         <span class="name">{row.name}</span>
@@ -190,8 +207,8 @@
         <button type="button" class="act" onclick={() => account(row)}>{signedIn(row.provider) ? "Sign out" : "Sign in"}</button>
       </div>
     {/each}
-
-    {@render section("Phone")}
+  {/if}
+  {#if section === "phone"}
     <div class="row">
       <span class="name">Phone opens new chats in</span>
       <span class="choices" role="radiogroup" aria-label="Phone opens new chats in">
@@ -205,22 +222,45 @@
       <span class="value">{hasPassword ? "Set" : "Not set"}</span>
       <button type="button" class="act" onclick={() => openDialog("launcher_password")}>Set password…</button>
     </div>
-
-    {@render section("Providers")}
+  {/if}
+  {#if section === "providers"}
     <div class="row">
       <span class="name">Provider list</span>
       <button type="button" class="act" onclick={() => runAction("providers.refresh")}>Refresh</button>
     </div>
-
-    <p class="quiet">Other settings are read from crush.json and crushrc{configDirs.length ? ` in ${configDirs.join(" and ")}` : ""}.</p>
-  </div>
-</Sheet>
+  {/if}
+      </div>
+      
+    </div>
+  {/key}
+  <p class="quiet">Other settings are read from crush.json and crushrc{configDirs.length ? ` in ${configDirs.join(" and ")}` : ""}.</p>
+</div>
 
 <style>
-  .page {
-    overflow-y: auto;
+  .settings-page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
     min-height: 0;
+    overflow-y: auto;
+    padding: calc(28 * var(--px)) calc(40 * var(--px)) calc(30 * var(--px));
   }
+  .title {
+    margin: 0 0 calc(18 * var(--px));
+    font: var(--t-title);
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .rows {
+    border-top: 1px solid var(--rule-control);
+  }
+  .rows .row {
+    min-height: calc(56 * var(--px));
+    padding: calc(6 * var(--px)) calc(4 * var(--px));
+    border-bottom: 1px solid var(--rule-control);
+  }
+
   .row {
     display: flex;
     align-items: center;

@@ -2,7 +2,8 @@
   // Everything drawn over the window (desktop-design 2.1, 1.10): the help
   // sheet and the details overlay, the stack of sheets on the veil (front
   // last; every sheet but the front one is inert, so neither keys nor clicks
-  // reach it), the picture viewer, and the right-click menu on top. Each
+  // reach it), the picture viewer, and the right-click menu (or the model
+  // button's menu) on top. Each
   // surface draws and places itself; the veil covers the window behind the
   // sheets with --scrim and keeps the page underneath from being clicked. A
   // front sheet registered with {veil: false} (the docked Themes sheet and
@@ -14,6 +15,7 @@
   import HelpSheet from "../HelpSheet.svelte";
   import DetailsOverlay from "../panel/DetailsOverlay.svelte";
   import ImageViewer from "../panel/ImageViewer.svelte";
+  import ModelMenu from "../models/ModelMenu.svelte";
   import ContextMenu from "../timeline/ContextMenu.svelte";
 
   const front = $derived(frontDialog());
@@ -35,7 +37,11 @@
 
 <ImageViewer />
 
-{#if ui.menu}
+<!-- The model button's menu shares the right-click menu's slot (ui.menu), so
+     the key router gives it the "menu" scope alone. -->
+{#if ui.menu?.kind === "model"}
+  <ModelMenu menu={ui.menu} />
+{:else if ui.menu}
   <ContextMenu menu={ui.menu} />
 {/if}
 
@@ -46,6 +52,7 @@
     inset: 0;
     z-index: 10;
     background: var(--scrim);
+    animation: paper-fade var(--motion-quick) ease-out;
   }
   .veil.bare {
     background: none;

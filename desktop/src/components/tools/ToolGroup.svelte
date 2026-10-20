@@ -249,7 +249,7 @@
     flex: none;
   }
   .disclosure :global(.icon) {
-    transition: transform 120ms ease-out;
+    transition: transform var(--motion) var(--ease-paper);
   }
   .disclosure.open :global(.icon) {
     transform: rotate(90deg);
@@ -329,9 +329,12 @@
     color: var(--ink);
   }
   /* The open group continues the row's box (4.6). */
+  /* The calls unroll down from the row (the paper motion); the box takes its
+     full height at once, so the timeline's measures never wait on it. */
   .list {
     border: 1px solid var(--rule-control);
     border-top: 0;
+    animation: paper-unfold var(--motion) var(--ease-paper);
   }
   .list > :global(.entry + .entry),
   .list > .earlier + :global(.entry) {

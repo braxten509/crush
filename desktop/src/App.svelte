@@ -18,6 +18,7 @@
   import Strip from "./components/leftlist/Strip.svelte";
   import MainHost from "./components/MainHost.svelte";
   import OverlayHost from "./components/overlay/OverlayHost.svelte";
+  import SettingsNav from "./components/settings/SettingsNav.svelte";
   import SidePanel from "./components/SidePanel.svelte";
   import EngineGate from "./components/start/EngineGate.svelte";
   import DebugOverlay from "./components/system/DebugOverlay.svelte";
@@ -25,16 +26,17 @@
   import { COLUMN_LIMITS, dragColumn, fitColumns, loadColumns, saveColumns } from "./lib/columns.js";
   import { app_info } from "./lib/engine/commands.js";
   import { leftList } from "./lib/leftlist/store.svelte.js";
+  import { settingsOpen } from "./lib/settings/page.svelte.js";
   import { mainView } from "./lib/mainview.js";
   import { focusField } from "./lib/stores/composer.svelte.js";
   import { start } from "./lib/stores/connection.svelte.js";
-  import { setPanelHidden, ui } from "./lib/stores/ui.svelte.js";
+  import { panelSetting, setPanelHidden, ui } from "./lib/stores/ui.svelte.js";
   import { ws } from "./lib/stores/workspace.svelte.js";
 
   // D11 (SIDE-002): the project panel hides when keeping it would leave the
   // conversation under its minimum with both side columns at theirs (1,060
   // picture px of inner width), when the window is under 640 picture px tall,
-  // or in compact mode.
+  // or when its own switch is off (not the terminal's compact mode).
   const PANEL_ROOM = COLUMN_LIMITS.left.min + COLUMN_LIMITS.right.min + COLUMN_LIMITS.middleMin;
   const PANEL_MIN_HEIGHT = 640;
   // The left list's narrow strip is 64 picture px wide and cannot be dragged
@@ -83,9 +85,10 @@
   // conversation readable when the window shrinks.
   $effect(() => {
     if (!page) return;
-    const compact = ws.config?.options?.tui?.compact_mode === true;
+    // Settings takes the window (owner, 2026-10-19): the panel steps aside.
+    const off = panelSetting.off || settingsOpen();
     const update = () => {
-      const hidden = compact || inner() < PANEL_ROOM || window.innerHeight / scale() < PANEL_MIN_HEIGHT;
+      const hidden = off || inner() < PANEL_ROOM || window.innerHeight / scale() < PANEL_MIN_HEIGHT;
       if (hidden !== ui.panelHidden) {
         // Focus in the panel moves to the field (SIDE-002; the terminal's compact switch, internal/ui/model/layout.go:70-79).
         if (hidden && ui.focus === "panel") focusField();
@@ -114,12 +117,14 @@
     class="page"
     class:panel-hidden={ui.panelHidden}
     bind:this={page}
-    style:--left={leftList.strip ? STRIP_WIDTH : widths.left}
+    style:--left={leftList.strip && !settingsOpen() ? STRIP_WIDTH : widths.left}
     style:--right={widths.right}
   >
     <Frame panel={!ui.panelHidden} />
     <div class="column chats-column">
-      {#if leftList.strip}
+      {#if settingsOpen()}
+        <SettingsNav />
+      {:else if leftList.strip}
         <Strip />
       {:else}
         <ChatList />
@@ -129,7 +134,7 @@
       side="left"
       column="3"
       label="Resize the chat list"
-      fixed={leftList.strip}
+      fixed={leftList.strip && !settingsOpen()}
       value={widths.left}
       min={COLUMN_LIMITS.left.min}
       max={COLUMN_LIMITS.left.max}

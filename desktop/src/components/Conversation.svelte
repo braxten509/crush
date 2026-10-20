@@ -17,15 +17,22 @@
   import Timeline from "./timeline/Timeline.svelte";
   import { sessions } from "../lib/stores/sessions.svelte.js";
   import { ui } from "../lib/stores/ui.svelte.js";
+  import { screen } from "./start/start.svelte.js";
 
   const sessionId = $derived(sessions.currentId);
   const session = $derived(sessions.byId[sessions.currentId] ?? null);
+  // The head and its rule show only with something in them: a chat, a chat
+  // opening, or the wordmark screens. The blank start screen has no empty
+  // bar at the top (owner, 2026-10-19).
+  const headed = $derived(["chat", "opening", "init", "onboarding"].includes(screen()));
 </script>
 
 <main class="conversation" aria-label={session?.title || "Conversation"}>
-  <ChatHead {session} />
+  {#if headed}
+    <ChatHead {session} />
 
-  <Rule marks="both" class="under-head" />
+    <Rule marks="both" class="under-head" />
+  {/if}
 
   <!-- The start screens show themselves in the timeline's place when they apply (P3.9). -->
   <Onboarding />

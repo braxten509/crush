@@ -53,6 +53,7 @@
     z-index: 2;
   }
   .notice {
+    animation: paper-settle var(--motion) var(--ease-paper);
     position: absolute;
     left: 0;
     right: 0;

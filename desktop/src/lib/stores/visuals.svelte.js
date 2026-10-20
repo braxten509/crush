@@ -9,7 +9,9 @@
 //   visuals                       { bySession: sid → {order, byId}, marked }
 //   setFigures(sid, mid, figures) that message's figures, replaced as a whole
 //   figuresFor(sid)               Figure[] in chat order: message order, then index
-//   revealFigure(id)              a chip's click: marks the figure 1.2 s and asks
+//   selectedFigure(sid)           the one figure VISUALS shows: the last chip
+//                                 clicked in that chat, else the newest
+//   revealFigure(id)              a chip's click: selects it, marks it 1.2 s and asks
 //                                 VISUALS to scroll to it (reveal.seq)
 //   reveal                        { id, seq }: the newest reveal; VisualsSection
 //                                 scrolls once per seq, when the figure is there
@@ -21,7 +23,7 @@ import { extractFigures } from "../render/figures.js";
 import { messages } from "./messages.svelte.js";
 import { sessions } from "./sessions.svelte.js";
 
-export const visuals = $state({ bySession: {}, marked: "" }); // sid → { order: [figureId], byId: { figureId: Figure } }; marked: the figure with the 1.2 s bar
+export const visuals = $state({ bySession: {}, marked: "", selected: "" }); // sid → { order: [figureId], byId: { figureId: Figure } }; marked: the figure with the 1.2 s bar
 export const reveal = $state({ id: "", seq: 0 });
 
 export const MARK_MS = 1200;
@@ -86,10 +88,17 @@ export function figuresFor(sessionId) {
   return entry.order.map((id) => entry.byId[id]).filter(Boolean);
 }
 
-// A chip's click: scroll VISUALS to the figure, mark it 1.2 s (4.3).
+export function selectedFigure(sessionId) {
+  const figures = figuresFor(sessionId);
+  return figures.find((f) => f.id === visuals.selected) ?? figures.at(-1) ?? null;
+}
+
+// A chip's click: VISUALS shows that figure (the panel shows one figure, the
+// selected one, owner 2026-10-19), scrolls to it and marks it 1.2 s (4.3).
 let markTimer = null;
 export function revealFigure(figureId) {
   if (!figureId) return;
+  visuals.selected = figureId;
   visuals.marked = figureId;
   reveal.id = figureId;
   reveal.seq += 1;

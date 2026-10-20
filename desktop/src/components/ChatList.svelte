@@ -272,7 +272,9 @@
 
 <style>
   /* Vertical positions follow the approved picture at 12/12 (column top = 0). */
+  /* The list slides in from the left when it comes back from Settings (the paper motion). */
   .chats {
+    animation: paper-slide-right var(--motion) var(--ease-paper);
     position: relative;
     display: flex;
     flex-direction: column;

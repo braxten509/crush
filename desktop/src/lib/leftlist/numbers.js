@@ -75,7 +75,8 @@ function listedChats(now) {
     byId: sessions.byId,
     parentOf,
     here: inFolder,
-    selectedId: sessions.currentId,
+    // A shown terminal takes the band; no chat stays marked open beside it.
+    selectedId: shownTerminal() ? "" : sessions.currentId,
     busy,
     now,
     timeOf: (s) => Math.max(s?.updated_at ?? 0, sessions.activity[s?.id] ?? 0),

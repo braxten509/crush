@@ -13,6 +13,7 @@
   import { baseOf, clean, short } from "../../lib/leftlist/picker.js";
   import { leftList, newTerminal } from "../../lib/leftlist/store.svelte.js";
   import Icon from "../Icon.svelte";
+  import Rule from "../Rule.svelte";
 
   let list = $state(null);
 
@@ -46,6 +47,7 @@
 </script>
 
 <section class="terminals" aria-label="Terminals">
+  <Rule marks="both" class="above-terminals" />
   <h2 class="group">
     <span class="label">Terminals [{tabs.length}]</span>
     <button class="add" type="button" aria-label="New terminal" title="New terminal (Alt+T)" onclick={newTerminal}>
@@ -74,13 +76,18 @@
 </section>
 
 <style>
-  /* The day heading's style and place (ChatList.svelte .day), with the "+"
-     20 x 20 at the list's right edge minus 19, on the heading's centre line. */
+  /* Set apart from the chats by a 24 gap and a clear-ended rule, the heading
+     10 below it (owner's pick D, 2026-10-21). */
+  .terminals :global(.rule.above-terminals) {
+    margin-top: calc(24 * var(--px));
+  }
+  /* The day heading's style (ChatList.svelte .day), with the "+" 20 x 20 at
+     the list's right edge minus 19, on the heading's centre line. */
   .group {
     position: relative;
     display: flex;
     align-items: center;
-    margin: calc(14 * var(--px)) 0 0 calc(20 * var(--px));
+    margin: calc(10 * var(--px)) 0 0 calc(20 * var(--px));
     font: var(--t-label);
     letter-spacing: var(--track-label);
     text-transform: uppercase;

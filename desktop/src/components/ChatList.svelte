@@ -230,6 +230,7 @@
     {#each groups as group (group.dir)}
       <section class="group" aria-label={group.label} data-folder={group.dir}>
         <div class="folder">
+          <Icon name="folder-filled" size={12} class="folder-icon" />
           <span class="folder-name" title={group.dir}>{group.label}</span>
           {#if group.rows.length === 0}
             <button class="folder-button folder-drop" type="button" aria-label="Remove {group.label}" title="Remove folder" onclick={() => dropFolder(group.dir)}>
@@ -429,6 +430,11 @@
     height: calc(36 * var(--px));
     margin-top: calc(10 * var(--px));
     padding: 0 calc(12 * var(--px)) 0 calc(23 * var(--px));
+  }
+  .folder :global(.folder-icon) {
+    flex: none;
+    margin-right: calc(2 * var(--px));
+    color: var(--slate);
   }
   .folder-name {
     flex: 1 1 auto;

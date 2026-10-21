@@ -63,7 +63,7 @@
           onpointerdown={(event) => press(event, tab)}
         >
           <span class="title"><Icon name="terminal" size={18} /><span class="name">{titleOf(tab)}</span></span>
-          <span class="folder">{folderOf(tab)}</span>
+          <span class="folder"><Icon name="folder-filled" size={12} /><span class="path">{folderOf(tab)}</span></span>
         </button>
         <button class="close" type="button" aria-label="Close {titleOf(tab)}" onclick={(event) => close(event, tab)}>
           <Icon name="close" size={12} />
@@ -145,9 +145,16 @@
     text-overflow: ellipsis;
   }
   .folder {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--px));
+    min-width: 0;
     margin-top: calc(5 * var(--px));
     font: var(--t-meta);
     color: var(--slate);
+  }
+  .path {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

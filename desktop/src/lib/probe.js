@@ -16,7 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { closeDialog, dialogs, openDialog } from "./dialogs.js";
 import { runAction } from "./actions.js";
 import { app_info, lastClipboardWrite } from "./engine/commands.js";
-import { ui } from "./stores/ui.svelte.js";
+import { notify, ui } from "./stores/ui.svelte.js";
 
 let inlineResult = null;
 
@@ -205,7 +205,7 @@ export async function startProbe() {
   // askYesNo loads the form only when a check asks: a static import here
   // runs the form's modules before the app's own and leaves the page blank.
   const askYesNo = async (options) => (await import("./ask/localform.js")).askYesNo(options);
-  window.__probe = { openDialog, closeDialog, runAction, askYesNo };
+  window.__probe = { openDialog, closeDialog, runAction, askYesNo, notify };
   inlineResult = inlineCodeBlocked();
   probeSection("overlay", () => ({
     viewer: ui.viewer ?? null,

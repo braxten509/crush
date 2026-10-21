@@ -136,6 +136,9 @@ never "sessions".
 - Under the typing box is the same 15 as above it; the meter strip (panel hidden) brings 18
   more of its own that grows and shrinks with it, so the space glides both ways (owner,
   2026-10-20).
+- The notice line unrolls up from the composer rule and rolls back down to it; while an
+  update runs, its sync mark turns about its own middle (the whole <svg> turns, centre
+  50% 50% = the ring's centre) (owner, 2026-10-20).
 - The chat's scroll range ends on a whole pixel (an invisible bit of room under the last
   item), so a wheel at the bottom never nudges it (owner, 2026-10-20).
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).

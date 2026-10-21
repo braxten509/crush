@@ -23,9 +23,11 @@
   // Conversation, between the timeline and the tray.
   // inline: drawn inside the front sheet (kit Sheet), in the flow above its
   // help line. The page's line steps aside while a sheet is open, so a
-  // message shows where the person is working (owner, 2026-10-20).
+  // message shows where the person is working (owner, 2026-10-20). The line
+  // unrolls up from the composer rule and rolls back down to it; while an
+  // update runs its sync mark turns (owner, 2026-10-20).
   import { dialogs } from "../lib/dialogs.js";
-  import { settle } from "../lib/motion.js";
+  import { unfold } from "../lib/motion.js";
   import { clearNotice, ui } from "../lib/stores/ui.svelte.js";
   import Icon from "./Icon.svelte";
 
@@ -41,7 +43,7 @@
 
 <div class="notice-anchor" class:inline data-notice-anchor>
   {#if notice}
-    <div class="notice {notice.kind}" role="status" aria-live="polite" data-notice-kind={notice.kind} transition:settle|global={{ off: inline }}>
+    <div class="notice {notice.kind}" role="status" aria-live="polite" data-notice-kind={notice.kind} transition:unfold|global={{ from: "bottom", off: inline }}>
       <span class="mark"><Icon name={NOTICE_ICON[notice.kind] ?? "info"} size={16} /></span>
       <span class="text">{notice.text}</span>
       {#if notice.action?.label}
@@ -96,6 +98,25 @@
   }
   .error {
     color: var(--error-ink);
+  }
+  /* The whole drawing turns about its own middle: the outer <svg> is a CSS
+     box, so 50% 50% is its centre, which is the ring's centre (8, 8 of the
+     16 × 16 view box). Turning a path inside it would turn about the view
+     box's corner, or about the path's own off-centre bounds. */
+  @media (prefers-reduced-motion: no-preference) {
+    .update .mark :global(svg) {
+      transform-origin: 50% 50%;
+      animation: notice-turn 1.2s linear infinite;
+    }
+  }
+  @keyframes -global-notice-turn {
+    from {
+      --paper-tick: 0;
+    }
+    to {
+      transform: rotate(360deg);
+      --paper-tick: 1;
+    }
   }
   /* Inside a sheet: in the flow, on the sheet's gutter. */
   .inline {

@@ -47,9 +47,9 @@ export function paper(css, { duration = MOTION_MS, delay = 0, away = null, off =
       : { delay, duration, easing: cubicOut, css };
 }
 
-export function unfold(node, { from = "bottom", duration = MOTION_MS, delay = 0, overlay = false } = {}) {
+export function unfold(node, { from = "bottom", duration = MOTION_MS, delay = 0, overlay = false, off = false } = {}) {
   const sign = from === "top" ? -1 : 1;
-  return paper((t, u) => `clip-path: ${unfoldInset(from, u)}; transform: translateY(${(sign * u * RISE).toFixed(2)}px);${tick(t)}`, { duration, delay, overlay });
+  return paper((t, u) => `clip-path: ${unfoldInset(from, u)}; transform: translateY(${(sign * u * RISE).toFixed(2)}px);${tick(t)}`, { duration, delay, overlay, off });
 }
 
 // The inset that hides a piece leaving to one side: `dir` 1 rolls it away

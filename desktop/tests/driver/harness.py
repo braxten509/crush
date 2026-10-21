@@ -4,10 +4,37 @@ report, the real mouse and keyboard (xdotool) and screenshots.
 Drivers are started by tests/run-in-sandbox.sh as DRIVER.py PROBE OUT PORT
 [args]. Rects in the probe are viewport pixels {x, y, w, h}; the helpers that
 click add the app window's place on the hidden screen."""
-import contextlib, itertools, json, os, subprocess, sys, time
+import contextlib, fcntl, itertools, json, os, subprocess, sys, time
 
 failures = 0
 _step_failures = 0
+
+# The open chats shared by the desktop and the terminal (internal/openchats).
+OPEN_CHATS = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "crush", "open-chats.json")
+
+
+def list_open_chat(chat, as_app=False):
+    """Lists chat ({id, dir, title}) as open, the way the terminal does: under
+    the lock, through a temp file. as_app also signs this process in as a
+    running app."""
+    with open(OPEN_CHATS + ".lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        with open(OPEN_CHATS) as f:
+            data = json.load(f)
+        if as_app:
+            data.setdefault("apps", []).append({"pid": os.getpid(), "kind": "terminal"})
+        data.setdefault("chats", []).append(chat)
+        with open(OPEN_CHATS + ".tmp", "w") as f:
+            json.dump(data, f)
+        os.replace(OPEN_CHATS + ".tmp", OPEN_CHATS)
+
+
+def open_chat_ids():
+    try:
+        with open(OPEN_CHATS) as f:
+            return [c["id"] for c in json.load(f).get("chats") or []]
+    except (OSError, ValueError):
+        return []
 
 
 def check(ok, what):

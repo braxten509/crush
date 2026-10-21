@@ -1,11 +1,12 @@
 <script>
-  // One chat in the left list ({row} from listmodel.buildRows): the title,
-  // the agent under it, and on the right the time or what the chat is doing
+  // One chat in the left list ({row} from leftlist/openlist.listedRows): the
+  // title, the chat's folder under it ("~" for home, as the terminal's list
+  // writes it), and on the right the time or what the chat is doing
   // (LIST-012: "Working…", "Waiting for permission", "Waiting for your
   // answer", "Background"). The time keeps the picture's place on the row's
   // middle line; a hidden copy of it holds a column of the row's width, so a
   // long title ends before the time instead of under it. The state shares the
-  // agent's line and the agent gives way to it. Rows deeper than the top use
+  // folder's line and the folder gives way to it. Rows deeper than the top use
   // the built branch look (phase 4 nests branches, 4.8).
   //
   // Every row reserves a close slot on the title's first line, centred on the
@@ -18,16 +19,15 @@
   // desktop-design-5-6 2.20) in the same slot: its icon and text.
   import Icon from "../Icon.svelte";
   import { rowState } from "../../lib/rowstates.js";
-  import { closeChat, closeIn } from "../../lib/stores/closed.svelte.js";
-  import { openInFolder } from "../../lib/stores/folders.svelte.js";
+  import { closeListed, openInFolder } from "../../lib/stores/openchats.svelte.js";
   import { openChat } from "../../lib/stores/sessions.svelte.js";
-  import { searchQuery } from "./listfocus.js";
 
   let { row } = $props();
   let rowButton = $state(null);
 
   // A row of another folder (row.folder) opens in that folder: the window
-  // switches to it first, and its × closes it in that folder's set.
+  // switches to it first. The × closes the chat for every app (the open
+  // chats shared with the terminal).
   function open() {
     if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
     else openChat(row.id);
@@ -35,8 +35,7 @@
 
   function close(event) {
     event.stopPropagation();
-    const done = row.folder ? closeIn(row.folder.dataDir, row.id) : closeChat(row.id, { query: searchQuery() });
-    done.catch((error) => console.error("closing a chat failed", error));
+    closeListed(row.id).catch((error) => console.error("closing a chat failed", error));
   }
 
   // ↑ and ↓ on the × move from its row, as from the row itself (the list's keys).
@@ -221,7 +220,8 @@
     content: "";
     position: absolute;
     z-index: 1;
-    left: calc(3 * var(--px));
+    /* Flush with the column's line (owner, 2026-10-20: no gap at its side). */
+    left: 0;
     top: 0;
     bottom: 0;
     width: calc(4 * var(--px));

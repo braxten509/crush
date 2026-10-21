@@ -46,6 +46,9 @@ struct FixtureFile {
     get: Map<String, Value>,
     events: Vec<Timed>,
     projects: Map<String, Value>,
+    /// The chats open at the start (openchats.rs); absent, every recorded
+    /// top-level chat of `get.sessions`, in the workspace's folder.
+    open_chats: Option<Vec<crate::openchats::Chat>>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -92,6 +95,27 @@ impl Fixture {
             loaded: Instant::now(),
             players: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// The chats a fixture run starts with open.
+    pub fn open_chats(&self) -> Vec<crate::openchats::Chat> {
+        if let Some(chats) = &self.file.open_chats {
+            return chats.clone();
+        }
+        let dir = self.file.workspace.get("path").and_then(Value::as_str).unwrap_or_default().to_string();
+        let sessions = self.file.get.get("sessions").and_then(Value::as_array).cloned().unwrap_or_default();
+        sessions
+            .iter()
+            .filter(|s| s.get("parent_session_id").and_then(Value::as_str).unwrap_or_default().is_empty())
+            .filter_map(|s| {
+                Some(crate::openchats::Chat {
+                    id: s.get("id")?.as_str()?.to_string(),
+                    dir: dir.clone(),
+                    title: s.get("title").and_then(Value::as_str).unwrap_or_default().to_string(),
+                    opened: 0,
+                })
+            })
+            .collect()
     }
 
     /// `engine_open`. A second call for the same window returns the same answer.

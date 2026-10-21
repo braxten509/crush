@@ -135,6 +135,19 @@ export async function projectSwitch(projectDir) {
   return invoke("project_switch", { projectDir });
 }
 
+// The open chats shared with the terminal (openchats.rs): [{id, dir, title, opened}].
+export async function openChatsGet() {
+  return invoke("open_chats_get");
+}
+
+export async function openChatsAdd(id, dir, title = "") {
+  return invoke("open_chats_add", { id, dir, title });
+}
+
+export async function openChatsRemove(id) {
+  return invoke("open_chats_remove", { id });
+}
+
 // Leaves this window's engine and records the new folder, for the page to
 // join it in place (engine_open) with no reload.
 export async function projectEnter(projectDir) {

@@ -24,7 +24,7 @@ func TestHostStatusIsSentOncePerChange(t *testing.T) {
 	m.session.Title = "Remote setup"
 
 	require.NotNil(t, m.hostStatus(), "the first status is always sent")
-	require.Equal(t, sessionhost.Status{Title: "Remote setup", State: sessionhost.StateReady}, m.lastHostStatus)
+	require.Equal(t, sessionhost.Status{Title: "Remote setup", State: sessionhost.StateReady, Session: m.session.ID}, m.lastHostStatus)
 	require.Nil(t, m.hostStatus(), "nothing changed")
 
 	m.agentBusyCache.set(true)

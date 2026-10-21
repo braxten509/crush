@@ -613,5 +613,42 @@
     }
    }
   }
- }
+ },
+ "open_chats": [
+  {
+   "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f03",
+   "dir": "/tmp/home/proj",
+   "title": "Is SameSite=Lax safe?"
+  },
+  {
+   "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f02",
+   "dir": "/tmp/home/proj",
+   "title": "Cookie lifetime"
+  },
+  {
+   "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+   "dir": "/tmp/home/proj",
+   "title": "Login keeps redirecting"
+  },
+  {
+   "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f04",
+   "dir": "/tmp/home/proj",
+   "title": "Card Wars stutter at 60 fps"
+  },
+  {
+   "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
+   "dir": "/tmp/home/proj",
+   "title": "Herm\u00f3\u00f0r sends mail twice"
+  },
+  {
+   "id": "b0b0b0b0-1111-4222-8333-000000000001",
+   "dir": "/tmp/home/beta",
+   "title": "Beta chat"
+  },
+  {
+   "id": "c0c0c0c0-1111-4222-8333-000000000001",
+   "dir": "/tmp/home/gamma",
+   "title": "Gamma chat"
+  }
+ ]
 }

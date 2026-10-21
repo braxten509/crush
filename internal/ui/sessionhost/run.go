@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/pkg/browser"
 )
 
@@ -18,10 +20,20 @@ func Run(ctx context.Context, opts Options) error {
 	// The browser opener would otherwise write over the host's screen.
 	browser.Stdout, browser.Stderr = io.Discard, io.Discard
 	h := New(opts)
+	leave := func() {}
+	if list, err := openchats.Open(); err == nil {
+		if leave, err = list.Join("terminal"); err == nil {
+			h.chats = &list
+		} else {
+			slog.Warn("Could not share the open chats", "error", err)
+		}
+	}
 	p := tea.NewProgram(h, tea.WithContext(ctx), tea.WithEnvironment(os.Environ()))
 	h.SetSend(p.Send)
 	QuitOnHangup(p.Quit)
 	_, err := p.Run()
+	h.leaving = true
+	leave()
 	h.stopAll()
 	if h.startErr != nil {
 		return fmt.Errorf("could not start a Crush session: %w", h.startErr)

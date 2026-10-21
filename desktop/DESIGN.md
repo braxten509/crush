@@ -107,12 +107,17 @@ never "sessions".
   branch are in the title bar (owner, 2026-10-20). Only the init and onboarding screens
   keep the wordmark head and its rule.
 - The folder is per chat (owner, 2026-10-20): the window's folder is the shown chat's or
-  terminal's, and the title bar and panel follow it. The left list shows every chat not
-  closed, from any folder, under folder headings (this folder first, then the others by
-  their newest chat; other folders' branches stay hidden once the window has seen their
-  links). Picking a chat or terminal of another folder switches the window to it in place
-  (`project_enter`, no reload; terminals and the list stay). The search (Sessions sheet)
-  shows only the shown folder's chats.
+  terminal's, and the title bar and panel follow it. Picking a chat or terminal of another
+  folder switches the window to it in place (`project_enter`, no reload; terminals and the
+  list stay). The search (Sessions sheet) shows only the shown folder's chats.
+- The left list is the open chats shared with the terminal's session list (owner,
+  2026-10-20: "the two should be in sync"): one file, `$XDG_STATE_HOME/crush/
+  open-chats.json` (internal/openchats, src-tauri/src/openchats.rs). A chat opened in
+  either app is listed in both; its × (or closing it in the terminal) takes it off both.
+  The list is flat, in the file's order, each chat's folder as its second line; no
+  headings, no "All chats" line, no cap. The open chats close only when every app is
+  closed. Unsent new chats are never listed. In the terminal, a listed chat it has not
+  started yet starts when picked.
 - New chat and New terminal share one row at the list's top in equal halves. Both (and
   the strip's "+" and ">_", the Terminals "+", Alt+N, Alt+T) open the folder picker on this
   folder; another folder switches the window first. Ctrl+N is a new chat here at once.

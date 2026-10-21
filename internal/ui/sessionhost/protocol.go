@@ -55,6 +55,9 @@ type Status struct {
 	UseTerminalBackground bool   `json:"use_terminal_background,omitempty"`
 	// Servers are the ports the session's background work listens on.
 	Servers []Server `json:"servers,omitempty"`
+	// Session is the shown chat's id, for the open-chats list the host
+	// shares with Crush Desktop (shared.go).
+	Session string `json:"session,omitempty"`
 }
 
 // Server is a port a session's background work listens on, and its name.
@@ -82,7 +85,7 @@ func (s *Server) UnmarshalJSON(data []byte) error {
 func (s Status) Equal(o Status) bool {
 	return s.Title == o.Title && s.Dir == o.Dir && s.Model == o.Model && s.Theme == o.Theme && s.ThemeRevision == o.ThemeRevision &&
 		s.State == o.State && s.UseTerminalBackground == o.UseTerminalBackground &&
-		slices.Equal(s.Servers, o.Servers)
+		slices.Equal(s.Servers, o.Servers) && s.Session == o.Session
 }
 
 // InHost reports whether this Crush runs as a session inside the host.

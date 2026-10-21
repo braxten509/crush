@@ -7,6 +7,7 @@
 // `--fixture <file>` (a recorded engine, 6.3).
 
 mod alerts;
+mod openchats;
 mod applog;
 mod batch;
 mod clipboard;
@@ -95,7 +96,12 @@ fn main() {
     app.manage(alerts::Alerts::default());
     app.manage(logs::Follows::default());
     app.manage(selfupdate::Runner::default());
+    openchats::join();
     if let Some(fixture) = fixture {
+        // A fixture run starts with its chats open (the recorded ones unless it names its own).
+        for chat in fixture.open_chats() {
+            let _ = openchats::add(chat);
+        }
         app.manage(fixture);
     }
     settings::watch(app.clone());
@@ -107,7 +113,8 @@ fn main() {
             Err(e) => eprintln!("crush-desktop: a message from Electron could not be read: {e}"),
         }
     }
-    // Electron is gone: so is the app.
+    // Electron is gone: so is the app, which signs out of the open chats.
+    openchats::leave();
     std::process::exit(0);
 }
 

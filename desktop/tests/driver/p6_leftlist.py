@@ -57,7 +57,7 @@ from datetime import date, datetime, timedelta
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import apps  # noqa: E402
-from harness import check, finish, key, probe_eval, shot, step, type_text, wait_for, xdo  # noqa: E402
+from harness import check, finish, key, list_open_chat, probe_eval, shot, step, type_text, wait_for, xdo  # noqa: E402
 
 PROBE, OUT = sys.argv[1], sys.argv[2]
 WANT = {name.removeprefix("lst.") for name in sys.argv[4:]}
@@ -416,6 +416,9 @@ def flow_list(main, data):
     """LIST-001 with LIST-010, LIST-011, LIST-012, LIST-028, LIST-047."""
     with step("LIST-001", OUT):
         chats = data["get"]["sessions"]
+        # The app that makes fresh lists it as open (the list is the open
+        # chats shared with the terminal; owner, 2026-10-20).
+        list_open_chat({"id": "fresh", "dir": PROJ, "title": ""})
         sec = main.until(lambda s: state_of(s, "fresh") == "unknown" and state_of(s, "done") == "unread", 15)
         check(bool(sec), "the chat another app made (fresh) is listed as unknown, and done turned unread after its first read")
         sec = sec or main.ll()
@@ -429,20 +432,13 @@ def flow_list(main, data):
         check(all(r["kind"] == "chat" for r in rows), "chats come first; this window has no terminal tabs")
         skip("LIST-001", "terminal rows between the chats and the server rows: runs after TERM merges")
 
-        # LIST-010: groups by day.
-        today = date.today()
-        when = {c["id"]: c["updated_at"] for c in chats}
+        # LIST-010: one flat list of every open chat (owner, 2026-10-20: no
+        # headings, no "All chats" line, no cap).
         days = lst.get("days") or []
-        # The list draws the newest 6 chats (with the shown one), then "All
-        # chats (N more)" (owner 2026-10-19): the groups are the drawn rows'.
         drawn_ids = [r["id"] for r in main.hv().get("chat_rows") or []]
-        check(drawn_ids == ids[:6], f"the list draws the newest 6 chats ({drawn_ids})")
-        more = probe_eval(main.path, 'window.__probeEval = document.querySelector("nav.chats .all-chats")?.textContent.replace(/\\s+/g, " ").trim() ?? null;')
-        check(more == f"All chats ({len(ids) - 6} more)", f"then the line for the rest ({more!r})")
-        # One heading for this folder (owner, 2026-10-20: rows under folder
-        # headings; the fixture's catalog has no other folder).
-        want_days = [os.path.basename(PROJ.rstrip("/"))]
-        check(days == want_days, f"its folder heading ({days}, want {want_days})")
+        check(drawn_ids == ids, f"the list draws every open chat ({len(drawn_ids)} of {len(ids)})")
+        more = probe_eval(main.path, 'window.__probeEval = !!document.querySelector("nav.chats .all-chats");')
+        check(more is False and days == [], f"with no All chats line and no headings ({more!r}, {days})")
         skip("LIST-010", "the Terminals [n] group: runs after TERM merges")
         shot(OUT, "LIST-010")
 
@@ -450,7 +446,8 @@ def flow_list(main, data):
         by_id = {r["id"]: r for r in lst.get("rows") or []}
         titled = [c for c in chats if c["title"]]
         check(all(by_id.get(c["id"], {}).get("title") == c["title"] for c in titled), "each row shows its chat's title")
-        check(all(by_id.get(c["id"], {}).get("agent") == "Fake AI" for c in chats), "and its AI tool (the chat's provider, by name)")
+        folder = os.path.basename(PROJ.rstrip("/"))
+        check(all(by_id.get(c["id"], {}).get("agent") == folder for c in chats), f"and its folder as its second line ({folder})")
         timed = [c for c in chats if not STATE_LINES.get(c["id"])]
         check(all(by_id.get(c["id"], {}).get("time") for c in timed), "and its time where it has no state line")
         fallback = by_id.get("untitled", {}).get("title")
@@ -505,18 +502,15 @@ def flow_switch(main):
         rect = next((r["rect"] for r in (main.hv("list").get("rows") or []) if r["id"] == "wait"), None)
         main.click(rect)
         check(bool(main.until(lambda s: shown_id(s) == "wait", 5)), "a click on a row shows its chat")
-        # LIST-045: the list draws the newest 6 chats and the shown one
-        # (owner 2026-10-19); showing a chat past them adds its row.
+        # LIST-045: every open chat stays drawn whichever one shows.
         ids = [r["id"] for r in main.ll().get("rows") or []]
         far = ids[7]
         key("alt+8")
-        main.until(lambda s: shown_id(s) == far, 5)
-        ok, h = poll(main.hv, lambda h: [r["id"] for r in h.get("chat_rows") or []] == ids[:6] + [far], 3, 0.3)
-        check(ok, f"Alt+8 shows {far}, past the newest 6, and its row joins them ({[r['id'] for r in (h or {}).get('chat_rows') or []]})")
+        ok = main.until(lambda s: shown_id(s) == far, 5)
+        h = main.hv()
+        check(bool(ok) and [r["id"] for r in h.get("chat_rows") or []] == ids, f"Alt+8 shows {far} and every row stays drawn")
         key(f"alt+{number_of(main.ll(), 'ready')}")
         main.until(lambda s: shown_id(s) == "ready", 5)
-        ok, h = poll(main.hv, lambda h: [r["id"] for r in h.get("chat_rows") or []] == ids[:6], 3, 0.3)
-        check(ok, "showing one of the 6 again leaves the 6")
         shot(OUT, "LIST-045")
 
 

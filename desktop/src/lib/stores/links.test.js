@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Branch links, closed chats and trees (desktop-design 3.3, 1.5.3) on the
 // real event loop (events.js) with fake Tauri calls, as sessions.test.js.
-const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], listeners: new Map(), settings: null, closedCalls: [], refuse: false }));
+const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], listeners: new Map(), open: [] }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
   getCurrentWebviewWindow: () => ({
@@ -27,15 +27,13 @@ vi.mock("../engine/commands.js", () => ({
   engine_set_current_session: async () => null,
   events_take: async () => h.entries.splice(0),
   lastClipboardWrite: () => null,
-  settings_get: async () => structuredClone(h.settings),
-  closed_set: async (project, sessionId, closed) => {
-    h.closedCalls.push({ project, sessionId, closed });
-    if (h.refuse) throw { code: "io", message: "disk full" };
-    const list = new Set(h.settings.closed_chats[project] ?? []);
-    if (closed) list.add(sessionId);
-    else list.delete(sessionId);
-    h.settings.closed_chats[project] = [...list];
-    return structuredClone(h.settings);
+  // The open chats shared with the terminal (openchats.svelte.js).
+  openChatsGet: async () => structuredClone(h.open),
+  openChatsAdd: async (id, dir, title) => {
+    if (!h.open.some((c) => c.id === id)) h.open.push({ id, dir, title });
+  },
+  openChatsRemove: async (id) => {
+    h.open = h.open.filter((c) => c.id !== id);
   },
 }));
 
@@ -59,6 +57,7 @@ let M; // messages store
 let buildRows;
 
 const DATA = "/tmp/home/proj/.crush";
+const DIR = "/tmp/home/proj";
 
 beforeEach(async () => {
   vi.resetModules();
@@ -66,9 +65,7 @@ beforeEach(async () => {
   h.calls.length = 0;
   h.entries.length = 0;
   h.listeners.clear();
-  h.closedCalls.length = 0;
-  h.refuse = false;
-  h.settings = { version: 1, crush_path: null, yolo: true, closed_chats: {} };
+  h.open = [];
   h.routes.set("GET chat-links", []);
   vi.stubGlobal("requestAnimationFrame", (fn) => setTimeout(() => fn(0), 0));
   const events = await import("../engine/events.js");
@@ -108,10 +105,11 @@ async function withList(...records) {
   await S.loadSessions();
 }
 
-const rows = (selectedId = "") =>
+// Every chat open unless a test passes the closed store's isClosed.
+const rows = (selectedId = "", isClosed = () => false) =>
   buildRows(
     S.sessions.order.map((id) => S.sessions.byId[id]),
-    { parentOf: L.parentOf, isClosed: C.isClosed, selectedId },
+    { parentOf: L.parentOf, isClosed, selectedId },
   );
 const shape = (built) => built.rows.map((r) => `${r.id}@${r.depth}`);
 
@@ -211,70 +209,39 @@ describe("links (3.3)", () => {
 });
 
 describe("closing (3.3, 4.8)", () => {
-  async function family() {
+  // Closed = off the shared open chats (closed.svelte.js since 2026-10-20).
+  async function family(listed) {
+    const { conn } = await import("./connection.svelte.js");
+    conn.project = { ...conn.project, cwd: DIR, path: DIR };
+    h.open = listed.map((id) => ({ id, dir: DIR, title: "" }));
     await withList(chat("s1", { updated_at: 5 }), chat("b1", { created_at: 2 }), chat("b2", { created_at: 3 }), chat("s2", { updated_at: 1 }));
     await deliver(ev("chat_link", "created", link("l1", "b1", "s1", "m1")), ev("chat_link", "created", link("l2", "b2", "b1", "m2")));
+    await (await import("./openchats.svelte.js")).refreshOpenChats();
   }
 
-  it("a closed branch is left out and its children move up; the footer counts it; reopening puts it back", async () => {
-    await family();
-    expect(shape(rows("b2"))).toEqual(["s1@0", "b1@1", "b2@2", "s2@0"]);
-    expect(await C.close("b1")).toBe(true);
-    expect(h.closedCalls).toEqual([{ project: DATA, sessionId: "b1", closed: true }]);
-    const built = rows("b2");
-    expect(shape(built)).toEqual(["s1@0", "b2@1", "s2@0"]);
-    expect(built.closedCount).toBe(1);
-    await C.reopen("b1");
-    expect(shape(rows("b2"))).toEqual(["s1@0", "b1@1", "b2@2", "s2@0"]);
+  it("a chat off the shared list is closed: its children move up; reopening lists it again", async () => {
+    await family(["s1", "b2", "s2"]);
+    expect([C.isClosed("b1"), C.isClosed("s1")]).toEqual([true, false]);
+    expect(shape(rows("b2", C.isClosed))).toEqual(["s1@0", "b2@1", "s2@0"]);
+    expect(await C.reopen("b1")).toBe(true);
+    await settle();
+    expect(h.open.map((c) => c.id)).toContain("b1");
+    expect(shape(rows("b2", C.isClosed))).toEqual(["s1@0", "b1@1", "b2@2", "s2@0"]);
   });
 
-  it("another window's change arrives as settings-changed; a refused write is put back with a notice", async () => {
-    await family();
-    h.listeners.get("settings-changed")({ payload: { ...h.settings, closed_chats: { [DATA]: ["s2"], "/elsewhere": ["s1"] } } });
-    expect([C.isClosed("s2"), C.isClosed("s1")]).toEqual([true, false]);
-    h.refuse = true;
-    const { ui } = await import("./ui.svelte.js");
-    expect(await C.close("s1")).toBe(false);
-    expect(C.isClosed("s1")).toBe(false);
-    expect(ui.notice?.text).toBe("Couldn't close this chat: disk full");
-  });
-
-  it("closing the shown chat opens the first chat still listed; closing the last leaves the landing state (D15)", async () => {
-    await family();
+  it("closing the shown chat takes it off the shared list and opens the next listed chat; the last leaves the landing state, busy or not", async () => {
+    await family(["s1", "s2"]);
     for (const id of ["s1", "b1", "b2", "s2"]) openable(id);
     await S.openChat("s1");
-    await C.closeChat("s1");
-    expect(S.sessions.currentId).toBe("b1"); // s1's branch moved up to the top
-    await C.closeChat("b1");
-    await C.closeChat("b2");
-    expect(S.sessions.currentId).toBe("s2");
-    await C.closeChat("s2");
-    expect(S.sessions.currentId).toBe("");
-  });
-
-  it("with words in the search, closing the shown chat opens the next chat the search shows, else the landing state", async () => {
-    const list = [chat("s1", { title: "Login flow", updated_at: 5 }), chat("s2", { title: "Billing", updated_at: 4 }), chat("s3", { title: "Login page", updated_at: 3 })];
-    await withList(...list);
-    for (const s of list) {
-      openable(s.id);
-      h.routes.set(`GET sessions/${s.id}`, s);
-    }
-    await S.openChat("s1");
-    await C.closeChat("s1", { query: "login" });
-    expect(S.sessions.currentId).toBe("s3"); // s2 is first in the whole list, but the search hides it
-    await C.closeChat("s3", { query: "login" });
-    expect(S.sessions.currentId).toBe("");
-  });
-
-  it("closing the last listed chat while its reply runs still leaves the landing state, with no busy notice", async () => {
-    await withList(chat("s1"));
-    openable("s1");
-    await S.openChat("s1");
-    S.sessions.live.s1 = true; // a reply is running
-    expect(S.busy("s1")).toBe(true);
-    const { ui } = await import("./ui.svelte.js");
+    await settle();
     expect(await C.closeChat("s1")).toBe(true);
-    expect([S.sessions.currentId, C.isClosed("s1"), ui.notice?.text ?? null]).toEqual(["", true, null]);
+    await settle();
+    expect([S.sessions.currentId, h.open.map((c) => c.id)]).toEqual(["s2", ["s2"]]);
+    S.sessions.live.s2 = true; // a reply is running
+    const { ui } = await import("./ui.svelte.js");
+    await C.closeChat("s2");
+    await settle();
+    expect([S.sessions.currentId, h.open, ui.notice?.text ?? null]).toEqual(["", [], null]);
   });
 });
 
@@ -295,6 +262,8 @@ it("the tree store keeps its own revision: another app's tree_changed only marks
 it("a branch link over a web link's words wins: a click opens only the branch, and the hover title is the branch's", async () => {
   await withList(chat("s1"), chat("b1", { title: "Login guide branch" }));
   openable("b1");
+  h.open = [{ id: "s1", dir: "/p", title: "" }, { id: "b1", dir: "/p", title: "" }]; // both open
+  await (await import("./openchats.svelte.js")).refreshOpenChats();
   await import("../plugins/branch.js");
   const { createMarkdown } = await import("../render/markdown.js");
   const { guardLinks } = await import("../render/links.js");

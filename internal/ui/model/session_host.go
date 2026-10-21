@@ -39,6 +39,7 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 	}
 	if m.session != nil {
 		st.Title = m.session.Title
+		st.Session = m.session.ID
 	}
 	for _, server := range m.taskRow.hostServers {
 		st.Servers = append(st.Servers, sessionhost.Server{

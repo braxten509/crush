@@ -1,15 +1,17 @@
 // The list's rows in order (desktop-design-5-6 2.20; LIST-008, LIST-009,
-// LIST-044): the chat rows as the list draws them (listmodel.buildRows over
-// ChatList's stores, without the search), then this window's terminal tabs in
-// their list order. A row's number is its Alt+number, chats first
+// LIST-044): the open chats shared with the terminal as the list draws them
+// (openlist.listedRows), then this window's terminal tabs in their list
+// order. A row's number is its Alt+number, chats first
 // (internal/ui/sessionhost/input.go:53-56); the strip shows it.
-import { buildRows } from "../listmodel.js";
 import { closeMain, mainView } from "../mainview.js";
-import { isClosed } from "../stores/closed.svelte.js";
-import { conn, switchFolder } from "../stores/connection.svelte.js";
+import { conn, inFolder, switchFolder } from "../stores/connection.svelte.js";
+import { folders } from "../stores/folders.svelte.js";
+import { openChats } from "../stores/openchats.svelte.js";
 import { parentOf } from "../stores/links.svelte.js";
 import { busy, openChat, sessions } from "../stores/sessions.svelte.js";
 import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
+import { listedRows } from "./openlist.js";
+import { baseOf, clean, short } from "./picker.js";
 import { leftList } from "./store.svelte.js";
 
 // This window's terminal tabs in list order: TERM's own tab order, which the
@@ -18,16 +20,24 @@ export function orderedTerminals() {
   return terminals;
 }
 
+// A chat's second line: its folder's name, "~" for home (as the terminal's
+// list writes it).
+export function folderLabel(dir) {
+  return dir ? baseOf(short(clean(dir), leftList.home)) : "";
+}
+
 export function chatRows(now = Date.now()) {
-  const list = sessions.order.map((id) => sessions.byId[id]);
-  return buildRows(list, {
+  return listedRows(openChats.list, {
+    byId: sessions.byId,
     parentOf,
-    isClosed,
+    here: inFolder,
     selectedId: sessions.currentId,
     busy,
     now,
     timeOf: (s) => Math.max(s?.updated_at ?? 0, sessions.activity[s?.id] ?? 0),
-  }).rows;
+    folderOf: folderLabel,
+    catalog: folders.byId,
+  });
 }
 
 // The terminal tab the main column shows, else "".

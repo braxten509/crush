@@ -70,9 +70,17 @@ const outputDrain = 2 * time.Second
 type session struct {
 	id   int
 	kind sessionKind
-	emu  *vt.SafeEmulator
-	tty  *os.File
-	cmd  *exec.Cmd
+	// chatID, chatDir and chatTitle are the chat as last written to the
+	// open-chats list (shared.go). waiting: a chat listed elsewhere whose
+	// Crush starts when the row is first shown; it has no process yet.
+	// closedHere: the user closed the row in this host.
+	chatID, chatDir, chatTitle string
+	waiting                    bool
+	closedHere                 bool
+
+	emu *vt.SafeEmulator
+	tty *os.File
+	cmd *exec.Cmd
 
 	// visible is set while the host shows this session, so only its output
 	// asks for a new frame. dirty holds back repeat requests until the host
@@ -370,6 +378,9 @@ func (s *session) setFocus(focused bool) {
 }
 
 func (s *session) resize(width, height int) {
+	if s.waiting {
+		return
+	}
 	s.clearSelection()
 	s.emu.Resize(width, height)
 	_ = pty.Setsize(s.tty, winsize(width, height))

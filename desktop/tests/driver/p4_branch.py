@@ -37,12 +37,10 @@ over its socket. Each step is named after its row and saves <ROW>.png.
          title's "…" falls), the title's letters, the time's and the
          chevron's rects move by at most 1 real px, the × shows in the
          reserved slot only when hovered or selected; a click on the hovered
-         row's chevron opens B and does not close it; the selected row is as
-         tall as the plain one; with "the" in the search (it hides S, the
-         list's first chat) its × opens the first chat the search still
-         shows; it hides B, B's branch moves up to depth 1, the footer says
-         "1 closed · links reopen them", and the settings file holds the
-         closing
+         row's chevron opens B and does not close it; the selected band is
+         the plain row and 1px past each end; its × opens the first chat the
+         list still shows; it hides B, B's branch moves up to depth 1, and the open
+         chats shared with the terminal no longer hold B
   B10    clicking the link in S opens B and lists it again
   B15    the engine's tree switch moves S's head off the linked reply: the
          link goes; switching back shows it again
@@ -50,8 +48,8 @@ over its socket. Each step is named after its row and saves <ROW>.png.
   B13    S deleted through the engine API: its branches stay, at the top
          level; B's branch stays under B; B's head no longer says BRANCHED FROM
   B9-rows  at 8/12 and at 12/12: the choice moves between two top-level chats
-         without branches; no row of the list moves or changes height by more
-         than 0.5 px, and the open chat's row is as tall as a plain one
+         without branches; no other row of the list moves or changes height by more
+         than 0.5 px, and the open chat's band is a plain row and 1px past each end
 
 Usage: tests/check.sh p4_branch.py [--stop-after ROW]
 The other p4 drivers load this file for its helpers (App, Engine, the oracle
@@ -60,7 +58,7 @@ functions); its main() runs only as a script.
 import importlib.util, json, os, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from harness import check, fake_ai_requests, finish, key, probe_heavy, read_probe, shot, step, type_text, xdo
+from harness import check, fake_ai_requests, finish, key, list_open_chat, open_chat_ids, probe_heavy, read_probe, shot, step, type_text, xdo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.environ.get("DESKTOP_ROOT") or os.path.dirname(os.path.dirname(HERE))
@@ -68,7 +66,6 @@ PROJ = "/tmp/home/proj"
 CRUSH = os.environ.get("DESKTOP_CRUSH") or os.path.join(ROOT, "tests", "out", "bin", "crush")
 APP_BIN = os.environ.get("DESKTOP_APP") or os.path.join(ROOT, "electron", "crush-desktop")
 TMUX = ["tmux", "-L", "crushtest", "-f", "/dev/null"]
-SETTINGS = "/tmp/home/.config/crush-desktop/settings.json"
 WIDTH, HEIGHT = 1600, 992
 TITLE_MAX = 34
 MENU = ["Branch from here", "Copy", "Quote in reply", "Copy whole message"]
@@ -485,14 +482,6 @@ def rect_moves(a, b):
     return max(abs(a[k] - b[k]) for k in ("x", "y", "w", "h"))
 
 
-def settings_closed():
-    try:
-        with open(SETTINGS) as f:
-            return (json.load(f) or {}).get("closed_chats") or {}
-    except (OSError, ValueError):
-        return {}
-
-
 def tmux(*args):
     return subprocess.run(TMUX + list(args), capture_output=True, text=True)
 
@@ -544,6 +533,8 @@ def setup(app, port, title="Cookie review"):
     sid = seed(5, title)
     if not check(bool(sid), f"seed_chat.py made the five-turn chat {sid}"):
         return engine, None
+    # Made outside the window, as in a terminal: that app lists it as open.
+    list_open_chat({"id": sid, "dir": PROJ, "title": title})
     ok, _, _ = poll(lambda: app.row(sid), bool, 15)
     check(ok, "the seeded chat is listed")
     check(app.open_chat(sid), "its row opens it")
@@ -871,7 +862,8 @@ def main():
             selected = row_of(app.heavy(), B)
             check(bool(selected) and selected.get("close_shown"), "selected: the × shows without the pointer")
             heights = [((r or {}).get("row") or {}).get("h") for r in (plain, selected)]
-            check(None not in heights and abs(heights[0] - heights[1]) <= 0.5, f"the selected branch row is as tall as the plain branch row ({heights})")
+            # The band reaches 1px past each end (owner, 2026-10-20).
+            check(None not in heights and abs(heights[1] - heights[0] - 2) <= 0.5, f"the selected branch row's band is a plain branch row and 1px past each end ({heights})")
             # The title twice: its box decides where a cut title's "…" falls;
             # its letters' box keeps the whole text and shows where they start.
             for name, label in (("title", "title's box"), ("title_text", "title's letters"), ("time", "time"), ("chevron", "chevron")):
@@ -896,10 +888,9 @@ def main():
             check(ok and bool(want), f"and opens the first chat the list still shows, {want or 'none'} ({app.chat_id()!r})")
             depth = {r.get("id"): r.get("depth") for r in rows}
             check(depth.get(D) == 1, f"B's branch moves up to depth 1, under S ({depth.get(D)})")
-            ok, footer, _ = poll(lambda: (app.heavy().get("branch") or {}).get("footer"), lambda f: bool(f) and f.get("text") == "1 closed · links reopen them", 5)
-            check(ok, f"the footer says \"1 closed · links reopen them\" ({(footer or {}).get('text')!r})")
-            closed_sets = settings_closed()
-            check(any(B in ids for ids in closed_sets.values()), f"the settings file holds the closing ({ {k: len(v) for k, v in closed_sets.items()} })")
+            # Closing takes it off the open chats shared with the terminal.
+            ok, _, _ = poll(open_chat_ids, lambda ids: B not in ids, 5)
+            check(ok, "and the shared open chats no longer hold it")
         if stop_after("B9"):
             return
 
@@ -917,7 +908,7 @@ def main():
                 check(ok, "clicking it opens B")
                 ok, _, _ = poll(lambda: app.branch().get("closed") or [], lambda ids: B not in ids, 5)
                 check(ok and bool(app.row(B)), "and B is listed again")
-                check(not any(B in ids for ids in settings_closed().values()), "the settings file no longer holds it")
+                check(B in open_chat_ids(), "and the shared open chats hold it again")
         if stop_after("B10"):
             return
 
@@ -1008,9 +999,11 @@ def main():
                 moved = {i: round(max(abs(after[i]["y"] - before[i]["y"]), abs(after[i]["h"] - before[i]["h"])), 3) for i in ids}
                 below = [i for i in ids[ids.index(first) + 1:]] if first in ids else []
                 tall = (round(before[first]["h"] - before[second]["h"], 3), round(after[second]["h"] - after[first]["h"], 3))
-                check(len(ids) >= 3 and max(moved.values()) <= 0.5,
-                      f"{twelfths}/12: no row moves or changes height ({len(ids)} rows; rows below the first moved {[moved[i] for i in below]} px)")
-                check(all(abs(d) <= 0.5 for d in tall), f"{twelfths}/12: the open chat's row is as tall as a plain one (selected minus plain: {tall} px)")
+                others = [moved[i] for i in ids if i not in (first, second)]
+                check(len(ids) >= 3 and max(others) <= 0.5,
+                      f"{twelfths}/12: no other row moves or changes height ({len(ids)} rows; rows below the first moved {[moved[i] for i in below]} px)")
+                # The band reaches 1px past each end (owner, 2026-10-20).
+                check(all(abs(d - 2) <= 0.5 for d in tall), f"{twelfths}/12: the open chat's band is a plain row and 1px past each end (selected minus plain: {tall} px)")
             check(zoom_to(8), "the zoom is back at 8/12")
     finally:
         tmux("kill-server")

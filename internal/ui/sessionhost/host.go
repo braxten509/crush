@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -107,6 +108,10 @@ type Host struct {
 	blurred bool
 	// startErr is why the first session couldn't start.
 	startErr error
+	// chats is the open-chats list shared with Crush Desktop (shared.go);
+	// nil when the host doesn't share it. leaving: the host is quitting.
+	chats   *openchats.List
+	leaving bool
 }
 
 type confirmClose struct {
@@ -145,6 +150,7 @@ func (h *Host) Init() tea.Cmd {
 			tea.RequestForegroundColor,
 			tea.Tick(colorWait, func(time.Time) tea.Msg { return colorWaitMsg{} }),
 		),
+		h.pollOpenChats(),
 	)
 }
 
@@ -193,7 +199,11 @@ func (h *Host) update(msg tea.Msg) tea.Cmd {
 		}
 		return h.tickActivityAt(at)
 	case exitedMsg:
+		h.unlistExited(h.byID(msg.id))
 		return h.removeSession(msg.id)
+	case openChatsTickMsg:
+		h.syncOpenChats()
+		return h.pollOpenChats()
 	case tea.KeyPressMsg:
 		return h.handleKey(msg)
 	case tea.PasteMsg:
@@ -338,7 +348,7 @@ func (h *Host) shareCellSize(s *session) {
 }
 
 func (h *Host) show(i int) {
-	if i < 0 || i >= len(h.sessions) {
+	if i < 0 || i >= len(h.sessions) || !h.wake(i) {
 		return
 	}
 	if s := h.current(); s != nil && s != h.sessions[i] {
@@ -363,7 +373,8 @@ func (h *Host) show(i int) {
 }
 
 func (h *Host) current() *session {
-	if h.active < 0 || h.active >= len(h.sessions) {
+	// A waiting row has no screen until it is shown (shared.go).
+	if h.active < 0 || h.active >= len(h.sessions) || h.sessions[h.active].waiting {
 		return nil
 	}
 	return h.sessions[h.active]
@@ -384,6 +395,7 @@ func (h *Host) statusChanged(id int) {
 		return
 	}
 	st := s.snapshot()
+	h.listChat(s, st)
 	working := st.State == StateWorking || st.State == StateBackground
 	// Work that ends while another session is shown waits as "finished"
 	// until the user looks.
@@ -484,6 +496,12 @@ func (h *Host) answerClose(close bool) {
 		return
 	}
 	if s := h.byID(c.id); s != nil {
+		s.closedHere = true
+		if s.waiting {
+			h.unlistExited(s)
+			h.dropRow(s.id)
+			return
+		}
 		s.stop()
 		if s.kind == terminalSession {
 			if h.closing == nil {

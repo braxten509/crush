@@ -7,19 +7,25 @@
 # Other files in ~/.local/lib/crush-desktop (a crush build the settings may
 # name) are left alone. A previous ~/.local/bin/crush-desktop that is a
 # program, not this launcher, is kept as crush-desktop.before-electron.
-# Build first: tests/build.sh. Quit the app before installing.
+# Build first: tests/build.sh. Quit the app before installing (the updater
+# sets CRUSH_DESKTOP_LIVE, CRUSH_DESKTOP_LIB, CRUSH_DESKTOP_BIN and
+# CRUSH_DESKTOP_COMMIT).
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
-LIB="$HOME/.local/lib/crush-desktop/app"
-BIN="$HOME/.local/bin/crush-desktop"
+LIB="${CRUSH_DESKTOP_LIB:-$HOME/.local/lib/crush-desktop/app}"
+BIN="${CRUSH_DESKTOP_BIN:-$HOME/.local/bin/crush-desktop}"
+# The commit this build is of (build.json, which the updater compares).
+COMMIT="${CRUSH_DESKTOP_COMMIT:-$(git rev-parse HEAD 2>/dev/null || true)}"
 ELECTRON="$ROOT/node_modules/electron/dist"
 CORE="$ROOT/src-tauri/target/release/crush-desktop-core"
 
 for need in "$ELECTRON/electron" "$CORE" "$ROOT/dist/index.html"; do
   [ -e "$need" ] || { echo "missing $need: run tests/build.sh first" >&2; exit 1; }
 done
-if pgrep -x crush-desktop >/dev/null; then
+# The updater (update.sh) installs while the app runs, then restarts it: the
+# running app keeps its old files until then (the folder is swapped whole).
+if [ -z "${CRUSH_DESKTOP_LIVE:-}" ] && pgrep -x crush-desktop >/dev/null; then
   echo "Crush Desktop is running; quit it first" >&2
   exit 1
 fi
@@ -31,6 +37,7 @@ mkdir -p "$NEW"
 cp -a "$ELECTRON/." "$NEW/"
 mv "$NEW/electron" "$NEW/crush-desktop"
 electron/stage.sh "$NEW/resources/app"
+printf '{"commit":"%s"}\n' "$COMMIT" >"$NEW/resources/app/build.json"
 rm -rf "$LIB.old"
 [ -d "$LIB" ] && mv "$LIB" "$LIB.old"
 mv "$NEW" "$LIB"

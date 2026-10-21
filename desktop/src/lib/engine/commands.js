@@ -241,6 +241,21 @@ export async function selfupdateInstall() {
   return invoke("selfupdate_install");
 }
 
+// The app's own updater (appupdate.rs, update.sh): {current, latest, newer}
+// or {error}; a run answers {ok, commit, version, log} or {ok: false, error, log}.
+export async function appUpdateCheck() {
+  return invoke("app_update_check");
+}
+
+export async function appUpdateRun() {
+  return invoke("app_update_run");
+}
+
+// The restart after an update keeps the open chats.
+export async function appRestartHold() {
+  return invoke("app_restart_hold");
+}
+
 // True to the first window that asks, once per app start (2.19).
 export async function updatesClaim() {
   return invoke("updates_claim");

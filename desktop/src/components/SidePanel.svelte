@@ -17,6 +17,7 @@
   import BackgroundPanel from "./panel/BackgroundPanel.svelte";
   import FolderSection from "./panel/FolderSection.svelte";
   import ServersPanel from "./panel/ServersPanel.svelte";
+  import UpdateFoot from "./panel/UpdateFoot.svelte";
   import TodoPanel from "./panel/TodoPanel.svelte";
   import Icon from "./Icon.svelte";
   import Rule from "./Rule.svelte";
@@ -103,6 +104,8 @@
     <BackgroundPanel />
     <ServersPanel />
   </div>
+
+  <UpdateFoot />
 </aside>
 
 <style>

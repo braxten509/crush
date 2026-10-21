@@ -437,6 +437,18 @@ ipcMain.on("crush-window", (event, action, value) => {
   // The close event runs the page's close steps (createWindow).
   else if (action === "close") win.close();
   else if (action === "pin") setPinned(win, Boolean(value));
+  // After an update (the panel's update button): the app starts again on the
+  // new files; the helper already holds the open chats (app_restart_hold).
+  else if (action === "relaunch") {
+    // A fixture run (the checks) stays up: the driver reads what happened.
+    if (args.some((arg) => arg === "--fixture" || arg.startsWith("--fixture="))) {
+      console.error("crush-desktop: relaunch asked (fixture run: kept running)");
+      return;
+    }
+    quitting = true;
+    app.relaunch();
+    app.quit();
+  }
 });
 
 ipcMain.on("crush-window-state", (event) => {

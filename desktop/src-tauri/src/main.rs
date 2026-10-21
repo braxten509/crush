@@ -7,6 +7,7 @@
 // `--fixture <file>` (a recorded engine, 6.3).
 
 mod alerts;
+mod appupdate;
 mod openchats;
 mod applog;
 mod batch;
@@ -96,6 +97,7 @@ fn main() {
     app.manage(alerts::Alerts::default());
     app.manage(logs::Follows::default());
     app.manage(selfupdate::Runner::default());
+    app.manage(appupdate::Runner::default());
     openchats::join();
     if let Some(fixture) = fixture {
         // A fixture run starts with its chats open (the recorded ones unless it names its own).

@@ -21,6 +21,8 @@
 //!   `<probe file>.api.jsonl` and answered with null.
 //! - `slow` (`{"sessions/S1/messages": 2000}`) holds a GET answer back that
 //!   many milliseconds; `"engine_open"` holds back joining a folder.
+//! - `app_update` (`{"check": {}, "run": {}, "run_ms": 0}`) answers the app
+//!   updater's check and run (appupdate.rs).
 //! - `api_abort` answers false (no fixture call runs long) and is recorded too.
 //! - The entries of `events` reach the window's batcher at their `at_ms` after
 //!   `engine_open`, through the same doorbell as the engine's events, so the
@@ -54,6 +56,8 @@ struct FixtureFile {
     /// GET paths answered late, path → milliseconds (a chat that loads
     /// slowly, for checks that act while it loads).
     slow: Map<String, Value>,
+    /// The app updater's answers: {"check": {}, "run": {}, "run_ms": 0}.
+    app_update: Map<String, Value>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -108,6 +112,14 @@ impl Fixture {
             return None;
         }
         answer_in(&self.file.slow, path).and_then(|ms| ms.as_u64()).map(Duration::from_millis)
+    }
+
+    /// The app updater's answer to `which` ("check" or "run") and, for a
+    /// run, how long it takes (`app_update.run_ms`).
+    pub fn app_update(&self, which: &str) -> (Value, Duration) {
+        let value = self.file.app_update.get(which).cloned().unwrap_or_else(|| serde_json::json!({"error": "no fixture answer"}));
+        let wait = if which == "run" { self.file.app_update.get("run_ms").and_then(Value::as_u64).unwrap_or(0) } else { 0 };
+        (value, Duration::from_millis(wait))
     }
 
     /// The chats a fixture run starts with open.

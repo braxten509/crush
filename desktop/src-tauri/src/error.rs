@@ -33,6 +33,8 @@ pub mod codes {
     pub const DIALOG_FAILED: &str = "dialog_failed";
     pub const NOTIFY_FAILED: &str = "notify_failed";
     pub const UPDATE_RUNNING: &str = "update_running";
+    /// The app's own updater (update.sh) is missing or gave no answer.
+    pub const UPDATE_UNAVAILABLE: &str = "update_unavailable";
 }
 
 impl AppError {

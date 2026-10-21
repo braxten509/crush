@@ -62,27 +62,57 @@ pub fn chats() -> Vec<Chat> {
     file.chats
 }
 
+/// The marker of an update's restart (appupdate.rs): while it is fresh, the
+/// app leaving and the new one joining keep the list (owner, 2026-10-20).
+fn hold_path() -> Option<PathBuf> {
+    path().map(|p| p.with_extension("restart"))
+}
+
+const HOLD: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// The next leave and join keep the open chats (an update's restart).
+pub fn hold_for_restart() {
+    if let Some(p) = hold_path() {
+        let _ = std::fs::write(p, b"restart\n");
+    }
+}
+
+fn held() -> bool {
+    hold_path()
+        .and_then(|p| std::fs::metadata(p).ok())
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.elapsed().ok())
+        .is_some_and(|age| age < HOLD)
+}
+
 /// Signs this process in as the desktop; the list starts empty when no other
-/// app has it open.
+/// app has it open, unless an update restarts the app.
 pub fn join() {
     let me = App { pid: std::process::id() as i32, start: process_start(std::process::id() as i32), kind: "desktop".into() };
+    let keep = held();
     let _ = change(|file| {
         file.apps = live(std::mem::take(&mut file.apps));
-        if file.apps.is_empty() {
+        if file.apps.is_empty() && !keep {
             file.chats.clear();
         }
         file.apps.retain(|a| a.pid != me.pid);
         file.apps.push(me.clone());
     });
+    if keep {
+        if let Some(p) = hold_path() {
+            let _ = std::fs::remove_file(p);
+        }
+    }
 }
 
 /// Signs this process out; the last app out empties the list.
 pub fn leave() {
     let pid = std::process::id() as i32;
+    let keep = held();
     let _ = change(|file| {
         file.apps = live(std::mem::take(&mut file.apps));
         file.apps.retain(|a| a.pid != pid);
-        if file.apps.is_empty() {
+        if file.apps.is_empty() && !keep {
             file.chats.clear();
         }
     });

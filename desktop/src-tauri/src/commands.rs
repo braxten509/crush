@@ -12,7 +12,7 @@ use crate::state::{count_lines, AppState, Launch};
 use crate::windows::{self, Opened, WindowLaunch, Windows};
 use crate::{
     alerts, clipboard, configfiles, crash, crushinfo, dirlist, docker, editor, folderdialog, logs, opener,
-    projects, pty, remote, selfupdate,
+    appupdate, projects, pty, remote, selfupdate,
 };
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -559,6 +559,18 @@ pub fn selfupdate_run(app: AppHandle, tag: String) -> AppResult<selfupdate::RunR
 
 pub fn selfupdate_install(app: AppHandle) -> AppResult<selfupdate::RunResult> {
     selfupdate::install(&app)
+}
+
+pub fn app_update_check(app: AppHandle) -> AppResult<serde_json::Value> {
+    appupdate::check(&app)
+}
+
+pub fn app_update_run(app: AppHandle) -> AppResult<serde_json::Value> {
+    appupdate::run(&app)
+}
+
+pub fn app_restart_hold() -> bool {
+    appupdate::hold()
 }
 
 pub fn crush_dirs(app: AppHandle, window: Window) -> AppResult<crushinfo::Dirs> {

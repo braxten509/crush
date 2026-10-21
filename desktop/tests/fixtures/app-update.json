@@ -1,0 +1,426 @@
+{
+ "workspace": {
+  "id": "ws-picture",
+  "path": "/tmp/home/proj",
+  "yolo": true,
+  "debug": false,
+  "data_dir": "/tmp/home/proj/.crush",
+  "version": "fixture",
+  "channels": [],
+  "skills": [],
+  "protocol": 1
+ },
+ "agent": {
+  "is_busy": false,
+  "is_ready": true,
+  "model": {
+   "id": "opus",
+   "name": "Opus 5.5",
+   "context_window": 200000,
+   "can_reason": true,
+   "reasoning_levels": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "default_reasoning_effort": "high",
+   "supports_attachments": true
+  },
+  "model_cfg": {
+   "model": "opus",
+   "provider": "claude-code",
+   "reasoning_effort": "max"
+  }
+ },
+ "get": {
+  "sessions": [
+   {
+    "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f03",
+    "parent_session_id": "",
+    "title": "Is SameSite=Lax safe?",
+    "message_count": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792321800,
+    "updated_at": 1792321920,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "claude-code",
+     "model": "opus",
+     "tokens": 0,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f02",
+    "parent_session_id": "",
+    "title": "Cookie lifetime",
+    "message_count": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792320720,
+    "updated_at": 1792320900,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "claude-code",
+     "model": "opus",
+     "tokens": 0,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+    "parent_session_id": "",
+    "title": "Login keeps redirecting",
+    "message_count": 4,
+    "prompt_tokens": 124000,
+    "completion_tokens": 0,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792320120,
+    "updated_at": 1792320250,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "claude-code",
+     "model": "opus",
+     "tokens": 124000,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": ""
+   },
+   {
+    "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f04",
+    "parent_session_id": "",
+    "title": "Card Wars stutter at 60 fps",
+    "message_count": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792315800,
+    "updated_at": 1792320000,
+    "is_busy": true,
+    "attached_clients": 1,
+    "context_budget": {
+     "provider": "codex-cli",
+     "model": "default",
+     "tokens": 0,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": true,
+    "pending_prompt": ""
+   },
+   {
+    "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
+    "parent_session_id": "",
+    "title": "Hermóðr sends mail twice",
+    "message_count": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "summary_message_id": "",
+    "cost": 0,
+    "created_at": 1792314600,
+    "updated_at": 1792318800,
+    "is_busy": false,
+    "attached_clients": 0,
+    "context_budget": {
+     "provider": "grok-cli",
+     "model": "default",
+     "tokens": 0,
+     "estimated": false
+    },
+    "estimated_usage": false,
+    "has_unfinished_work": false,
+    "pending_prompt": "permission"
+   }
+  ],
+  "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01": {
+   "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+   "parent_session_id": "",
+   "title": "Login keeps redirecting",
+   "message_count": 4,
+   "prompt_tokens": 124000,
+   "completion_tokens": 0,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792320120,
+   "updated_at": 1792320250,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "claude-code",
+    "model": "opus",
+    "tokens": 124000,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01/messages": [
+   {
+    "id": "m1",
+    "role": "user",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Why does the login page keep sending me back after I sign in?"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792320120,
+    "updated_at": 1792320120
+   },
+   {
+    "id": "m2",
+    "role": "assistant",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "The session cookie uses SameSite=Strict, so the browser drops it on the redirect back from sign-in."
+      }
+     },
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "call-1",
+       "name": "view",
+       "input": "{\"file_path\": \"/tmp/home/proj/auth/session.go\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "call-2",
+       "name": "edit",
+       "input": "{\"file_path\": \"/tmp/home/proj/auth/session.go\", \"old_string\": \"SameSite: http.SameSiteStrictMode\", \"new_string\": \"SameSite: http.SameSiteLaxMode\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "call-3",
+       "name": "view",
+       "input": "{\"file_path\": \"/tmp/home/proj/auth/session_test.go\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "call-4",
+       "name": "bash",
+       "input": "{\"command\": \"go test ./auth/...\", \"description\": \"Run the auth tests\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "tool_use",
+       "time": 1792320220
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792320180,
+    "updated_at": 1792320220
+   },
+   {
+    "id": "m2-tools",
+    "role": "tool",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+    "parts": [
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "call-1",
+       "name": "view",
+       "content": "<file>\n     1|package auth\n</file>",
+       "metadata": "{}",
+       "is_error": false
+      }
+     },
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "call-2",
+       "name": "edit",
+       "content": "<result>\nContent replaced in file: /tmp/home/proj/auth/session.go\n</result>",
+       "metadata": "{}",
+       "is_error": false
+      }
+     },
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "call-3",
+       "name": "view",
+       "content": "<file>\n     1|package auth\n</file>",
+       "metadata": "{}",
+       "is_error": false
+      }
+     },
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "call-4",
+       "name": "bash",
+       "content": "ok  \texample.com/proj/auth\t0.012s",
+       "metadata": "{}",
+       "is_error": false
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792320221,
+    "updated_at": 1792320221
+   },
+   {
+    "id": "m3",
+    "role": "assistant",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Switching to Lax fixes the loop. All 12 tests pass.\n\n```mermaid\n---\ntitle: Sign-in flow\n---\nflowchart LR\n  A[Sign in] --> B[Check session cookie] --> C[Home]\n```\n\n| Property | Current | Fixed |\n|---|---|---|\n| SameSite | Strict | Lax |\n| Lifetime | 24 h | 24 h |\n"
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792320250
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792320240,
+    "updated_at": 1792320250
+   }
+  ],
+  "chat-links": [
+   {
+    "id": "link-samesite",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f03",
+    "parent_session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+    "source_message_id": "m2",
+    "highlight_text": "SameSite=Strict",
+    "highlight_start": 24,
+    "highlight_end": 39,
+    "origin": true,
+    "created_at": 1792321800
+   },
+   {
+    "id": "link-cookie",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f02",
+    "parent_session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
+    "source_message_id": "m2",
+    "highlight_text": "session cookie",
+    "highlight_start": 4,
+    "highlight_end": 18,
+    "origin": true,
+    "created_at": 1792320720
+   }
+  ],
+  "/v1/limits": {
+   "clis": [
+    {
+     "kind": "claude-code",
+     "state": "ready",
+     "read_at": "2026-10-18T10:44:00Z",
+     "windows": [
+      {
+       "name": "5h",
+       "used": 86,
+       "resets_at": "2026-10-18T13:25:00Z"
+      },
+      {
+       "name": "Weekly",
+       "used": 31,
+       "resets_at": "2026-10-22T08:00:00Z"
+      }
+     ]
+    }
+   ]
+  },
+  "config": {
+   "models": {
+    "large": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    },
+    "small": {
+     "model": "opus",
+     "provider": "claude-code"
+    }
+   },
+   "options": {
+    "notifications": "disabled"
+   }
+  },
+  "agent/default-small-model": {
+   "model": "opus",
+   "provider": "claude-code"
+  },
+  "providers": [],
+  "git/branch": {
+   "branch": "main"
+  },
+  "project/needs-init": {
+   "needs_init": false
+  },
+  "permissions/skip": {
+   "skip": true
+  },
+  "lsps": {},
+  "mcp/states": {},
+  "skills": []
+ },
+ "events": [],
+ "app_update": {
+  "check": {
+   "current": "aaaaaaa1111111111111111111111111111111aa",
+   "latest": "bbbbbbb2222222222222222222222222222222bb",
+   "newer": true
+  },
+  "run": {
+   "ok": true,
+   "commit": "bbbbbbb2222222222222222222222222222222bb",
+   "version": "v0.98.2-local.test",
+   "log": "/tmp/update.log"
+  },
+  "run_ms": 1500
+ }
+}

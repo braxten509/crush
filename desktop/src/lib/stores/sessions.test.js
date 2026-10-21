@@ -474,6 +474,49 @@ describe("opening a chat (LIST-034, TYPE-049)", () => {
   });
 });
 
+describe("open chats load ahead (owner, 2026-10-21)", () => {
+  it("a preloaded chat shows at once, with no read in the way", async () => {
+    await withList(chat("a"), chat("b"));
+    openable("a", [user("ua", "a")]);
+    openable("b", [user("ub", "b")]);
+    await S.openChat("a");
+    expect(await S.preloadChat("b")).toBe(true);
+    expect(S.isKept("b")).toBe(true);
+    const reads = h.calls.length;
+    h.routes.set("GET sessions/b/messages", () => new Promise(() => {})); // a read now would never end
+    expect(await S.openChat("b")).toBe(true);
+    expect(S.sessions.currentId).toBe("b");
+    expect(M.messages.bySession.b.ids).toEqual(["ub"]);
+    expect(h.calls.length).toBeGreaterThan(reads); // read again behind it
+  });
+
+  it("open chats stay kept past the usual six; others make way", async () => {
+    const ids = Array.from({ length: 9 }, (_, i) => `c${i}`);
+    await withList(...ids.map((id) => chat(id)));
+    for (const id of ids) openable(id, [user(`u${id}`, id)]);
+    S.setOpenChats(ids.slice(0, 8));
+    for (const id of ids) await S.preloadChat(id);
+    for (const id of ids.slice(0, 8)) expect(S.isKept(id)).toBe(true);
+    expect(S.isKept("c8")).toBe(false);
+  });
+
+  it("a chat opened while it preloads is left to the opening", async () => {
+    await withList(chat("a"));
+    const slow = later();
+    h.routes.set("GET sessions/a", chat("a"));
+    h.routes.set("GET sessions/a/history", []);
+    h.routes.set("GET sessions/a/messages", () => slow.promise);
+    const preload = S.preloadChat("a");
+    await settle();
+    const opening = S.openChat("a");
+    slow.resolve([user("ua", "a")]);
+    expect(await preload).toBe(false);
+    expect(await opening).toBe(true);
+    expect(S.sessions.currentId).toBe("a");
+    expect(S.isKept("a")).toBe(false);
+  });
+});
+
 describe("deleted, new and first chats (LIST-037, LIST-033, TYPE-041)", () => {
   it("the shown chat deleted elsewhere: the landing state and a notice", async () => {
     await withList(chat("s1"), chat("s2"));

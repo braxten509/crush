@@ -54,7 +54,7 @@
   import { composer, focusField, interruptAndSend, stop } from "../../lib/stores/composer.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { linksFor } from "../../lib/stores/links.svelte.js";
-  import { isFinished, messages, pendingFor } from "../../lib/stores/messages.svelte.js";
+  import { isFinished, loadOlder, messages, pendingFor } from "../../lib/stores/messages.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { busy, sessions } from "../../lib/stores/sessions.svelte.js";
   import { clearScrollTo, openMenu, selectItem, setFocus, setFollow, ui } from "../../lib/stores/ui.svelte.js";
@@ -456,7 +456,14 @@
   // the visible edge nearest it (applyChatScroll and SelectNearestInView,
   // transcript.go:14-28, chat_scroll.go:249-272). With nothing selected only
   // a focused timeline picks one.
+  // Older messages load as the view nears the top: within two views of it.
+  function nearTop() {
+    if (!list || !chat?.more || chat.older) return;
+    if (list.scrollOffset() < 2 * list.viewportHeight()) loadOlder(sessionId);
+  }
+
   function onScrolled({ up }) {
+    if (up) nearTop();
     if (!list || readOnly) return;
     const key = ui.selectedItem;
     if (key && list.keyInView(key)) return;
@@ -591,6 +598,7 @@
     [["g", "Home"], () => {
       list.scrollToTop();
       setFollowed(false);
+      nearTop();
       const i = items.findIndex(isSelectable);
       select(i);
     }],

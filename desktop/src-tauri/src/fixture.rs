@@ -221,7 +221,9 @@ impl Fixture {
         crate::connection::check_route(&method.to_ascii_uppercase(), path)?;
         if method.eq_ignore_ascii_case("GET") {
             let own = self.players.lock().unwrap().get(label).map(|p| p.get.clone()).unwrap_or_default();
-            return answer_in(&own, path).or_else(|| self.answer(path)).ok_or_else(|| AppError {
+            let found = answer_in(&own, path).or_else(|| self.answer(path));
+            let found = if path.ends_with("/messages") { found.map(|list| page_messages(list, query.as_ref())) } else { found };
+            return found.ok_or_else(|| AppError {
                 code: "not_found".to_string(),
                 message: format!("the fixture has no answer for GET {path}"),
                 field: None,
@@ -373,6 +375,29 @@ fn answer_in(get: &Map<String, Value>, path: &str) -> Option<Value> {
     get.get(relative).cloned()
 }
 
+/// A recorded chat's messages cut as the engine cuts them for `last` and
+/// `before` (internal/server/handlers_session.go pageMessages), so a long
+/// recorded chat opens the way a real one does.
+fn page_messages(list: Value, query: Option<&Map<String, Value>>) -> Value {
+    let Value::Array(mut msgs) = list else { return list };
+    let text = |key: &str| query.and_then(|q| q.get(key)).and_then(Value::as_str).unwrap_or("").to_string();
+    let before = text("before");
+    let last: usize = text("last").parse().unwrap_or(0);
+    if !before.is_empty() {
+        match msgs.iter().position(|m| m.get("id").and_then(Value::as_str) == Some(before.as_str())) {
+            Some(i) => msgs.truncate(i),
+            None => return Value::Array(Vec::new()),
+        }
+    }
+    if last == 0 || msgs.len() <= last {
+        return Value::Array(msgs);
+    }
+    let start = msgs.len() - last;
+    let low = start.saturating_sub(last);
+    let from = (low..=start).rev().find(|&i| msgs[i].get("role").and_then(Value::as_str) == Some("user")).unwrap_or(start);
+    Value::Array(msgs.split_off(from))
+}
+
 /// A workspace as the window may see it: without `env` and `config` (1.2.5).
 fn public_copy(workspace: &Value) -> Value {
     let mut copy = workspace.clone();
@@ -464,6 +489,19 @@ mod tests {
     fn the_window_never_gets_env_or_config() {
         let ws = json!({"id": "w", "path": "/p", "env": ["KEY=secret"], "config": {"providers": {}}});
         assert_eq!(public_copy(&ws), json!({"id": "w", "path": "/p"}));
+    }
+
+    #[test]
+    fn messages_are_paged_as_the_engine_pages_them() {
+        let roles = ["user", "assistant", "tool", "assistant", "user", "assistant", "tool", "assistant", "user", "assistant"];
+        let list = json!(roles.iter().enumerate().map(|(i, r)| json!({"id": i.to_string(), "role": r})).collect::<Vec<_>>());
+        let ids = |v: Value| v.as_array().unwrap().iter().map(|m| m["id"].as_str().unwrap().to_string()).collect::<String>();
+        let q = |pairs: &[(&str, &str)]| Map::from_iter(pairs.iter().map(|(k, v)| (k.to_string(), json!(v))));
+        assert_eq!(ids(page_messages(list.clone(), None)), "0123456789");
+        assert_eq!(ids(page_messages(list.clone(), Some(&q(&[("last", "2")])))), "89");
+        assert_eq!(ids(page_messages(list.clone(), Some(&q(&[("last", "5")])))), "456789");
+        assert_eq!(ids(page_messages(list.clone(), Some(&q(&[("last", "3"), ("before", "4")])))), "0123");
+        assert_eq!(ids(page_messages(list, Some(&q(&[("before", "nope")])))), "");
     }
 
     #[test]

@@ -95,7 +95,14 @@ export const api = {
   // The whole record as last read (engine design 5.1(a)).
   saveSession: (session) => commands.api("PUT", chat(session.id), undefined, session),
   deleteSession: (sid) => commands.api("DELETE", chat(sid)),
-  messages: (sid) => get(`${chat(sid)}/messages`),
+  // `last` reads about the newest N, `before` only those older than a message
+  // (internal/server/handlers_session.go pageMessages).
+  messages: (sid, { last = 0, before = "" } = {}) => {
+    const query = {};
+    if (last > 0) query.last = String(last);
+    if (before) query.before = before;
+    return get(`${chat(sid)}/messages`, Object.keys(query).length ? query : undefined);
+  },
   userMessages: (sid) => get(`${chat(sid)}/messages/user`),
   review: (sid, mid) => get(`${chat(sid)}/messages/${seg(mid)}/review`),
   history: (sid) => get(`${chat(sid)}/history`),

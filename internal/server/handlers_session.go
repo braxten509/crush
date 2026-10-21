@@ -3,11 +3,13 @@ package server
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/backend"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/session"
@@ -136,13 +138,41 @@ func (c *controllerV1) getSessionHistory(r *http.Request, _ rpc.Empty) ([]proto.
 	return proto.FilesFromDomain(history), nil
 }
 
-// getSessionMessages returns every message of a session.
+// getSessionMessages returns a session's messages: all of them, or with
+// ?last=N the newest part, and with ?before=<message id> only those older
+// than that message (a long chat opens with its newest part first and
+// reads older pages as it scrolls up).
 func (c *controllerV1) getSessionMessages(r *http.Request, _ rpc.Empty) ([]proto.Message, error) {
 	messages, err := c.backend.ListSessionMessages(r.Context(), r.PathValue("id"), r.PathValue("sid"))
 	if err != nil {
 		return nil, err
 	}
-	return proto.MessagesFromDomain(messages), nil
+	last, _ := strconv.Atoi(r.URL.Query().Get("last"))
+	return proto.MessagesFromDomain(pageMessages(messages, last, r.URL.Query().Get("before"))), nil
+}
+
+// pageMessages cuts msgs (oldest first) to those before the message with ID
+// before (none when it is unknown), then to about the last N. A page starts
+// at a user message when one is near, so a tool's result never shows
+// without its call; it reaches back at most N more messages for one.
+func pageMessages(msgs []message.Message, last int, before string) []message.Message {
+	if before != "" {
+		i := slices.IndexFunc(msgs, func(m message.Message) bool { return m.ID == before })
+		if i < 0 {
+			return nil
+		}
+		msgs = msgs[:i]
+	}
+	if last <= 0 || len(msgs) <= last {
+		return msgs
+	}
+	start := len(msgs) - last
+	for i := start; i >= 0 && i >= start-last; i-- {
+		if msgs[i].Role == message.User {
+			return msgs[i:]
+		}
+	}
+	return msgs[start:]
 }
 
 // getMessageReview loads the retained file review of a message.

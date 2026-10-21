@@ -21,7 +21,15 @@ export class ChatMessages {
   // counts only once it gets an update, so a run killed mid-reply leaves no
   // ghost "working" state (internal/ui/model/session_load.go:498-506).
   active = $state.raw(new Set());
+  // Older messages the engine still has: a chat opens with its newest
+  // PAGE (owner, 2026-10-21: an 18,000-message chat took 10 s to open) and
+  // reads older pages as the view nears its top (loadOlder).
+  more = $state(false);
+  older = $state(false); // an older page is being read
 }
+
+// About how many messages a chat opens with, and each older page.
+export const PAGE = 300;
 
 export const messages = $state({
   bySession: {}, // sid → ChatMessages (agent tools' chats "<mid>$$<tool call id>" too, CHAT-078)
@@ -145,8 +153,10 @@ export function load(sid) {
   chat.error = null;
   token.promise = (async () => {
     let list;
+    // An agent tool's chat is read whole: it is short, and its parent needs it all.
+    const paged = !parseAgentChatId(sid);
     try {
-      list = await api.messages(sid);
+      list = await api.messages(sid, paged ? { last: PAGE } : {});
     } catch (error) {
       if (loads.get(sid) !== token) return newestLoad(sid);
       loads.delete(sid);
@@ -160,7 +170,7 @@ export function load(sid) {
     if (loads.get(sid) !== token) return newestLoad(sid);
     loads.delete(sid);
     if (messages.bySession[sid] !== chat) return false;
-    applySnapshot(sid, chat, Array.isArray(list) ? list : [], token.events);
+    applySnapshot(sid, chat, Array.isArray(list) ? list : [], token.events, paged);
     retryHeldAgentEvents();
     // A top-level chat loads its agents' chats, level by level; an agent's
     // own chat leaves the next level to that walk.
@@ -170,16 +180,64 @@ export function load(sid) {
   return token.promise;
 }
 
+// Reads the page before the chat's oldest shown message and puts it ahead.
+// Resolves true when older messages were added.
+export async function loadOlder(sid) {
+  const chat = messages.bySession[sid];
+  if (!chat || chat.status !== "ready" || !chat.more || chat.older) return false;
+  const oldest = chat.ids[0];
+  if (!oldest) return false;
+  chat.older = true;
+  let list;
+  try {
+    list = await api.messages(sid, { last: PAGE, before: oldest });
+  } catch (error) {
+    console.error("older messages read failed", errorText(error));
+    if (messages.bySession[sid] === chat) chat.older = false;
+    return false;
+  }
+  if (messages.bySession[sid] !== chat || chat.ids[0] !== oldest) {
+    chat.older = false;
+    return false;
+  }
+  const added = (Array.isArray(list) ? list : []).filter((m) => m?.id && !chat.byId.has(m.id));
+  for (const m of added) {
+    chat.byId.set(m.id, m);
+    settle(m);
+  }
+  chat.ids = [...added.map((m) => m.id), ...chat.ids];
+  chat.more = (Array.isArray(list) ? list.length : 0) >= PAGE;
+  chat.older = false;
+  // The added page's agent tools' chats, which no walk has read yet.
+  if (added.length) loadAgentChats(sid, { onlyNew: true });
+  return added.length > 0;
+}
+
 function newestLoad(sid) {
   return loads.get(sid)?.promise ?? messages.bySession[sid]?.status === "ready";
 }
 
-function applySnapshot(sid, chat, list, events) {
+function applySnapshot(sid, chat, list, events, paged = false) {
   const snapshot = new Map();
   for (const m of list) if (m?.id) snapshot.set(m.id, m);
+  // A reload of a paged chat keeps the older pages already read: the
+  // messages before the snapshot's first one stay ahead of it.
+  const first = list.find((m) => m?.id);
+  const kept = [];
+  if (paged && first && chat.status === "ready") {
+    for (const id of chat.ids) {
+      const m = chat.byId.get(id);
+      if (!m || snapshot.has(id)) continue;
+      if ((m.created_at ?? 0) < (first.created_at ?? 0)) kept.push(m);
+    }
+  }
   chat.byId.clear();
+  for (const m of kept) chat.byId.set(m.id, m);
   for (const m of snapshot.values()) chat.byId.set(m.id, m);
-  chat.ids = [...snapshot.keys()];
+  chat.ids = [...kept.map((m) => m.id), ...snapshot.keys()];
+  // A full page says older ones may be left; kept pages keep what they knew.
+  if (!paged) chat.more = false;
+  else if (!kept.length) chat.more = list.length >= PAGE;
   chat.active = new Set();
   for (const m of snapshot.values()) settle(m);
   // Replay with the terminal's guard (snapshotIsNewer, session_load.go:567-572):
@@ -246,8 +304,9 @@ function agentCallsIn(sid) {
 const AGENT_CHAT_FETCHES = 8; // nestedFetchConcurrency, session_load.go:27-29
 
 // One level at a time, at most 8 reads at once; agents within agents follow.
-async function loadAgentChats(sid) {
+async function loadAgentChats(sid, { onlyNew = false } = {}) {
   let level = agentCallsIn(sid);
+  if (onlyNew) level = level.filter((child) => !messages.bySession[child]);
   while (level.length > 0) {
     const next = [];
     let i = 0;

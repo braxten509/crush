@@ -208,6 +208,8 @@ func (c *controllerV1) sessionEndpoints() []apigen.Endpoint {
 			Tags("sessions").
 			PathParam("id", "Workspace ID").
 			PathParam("sid", "Session ID").
+			QueryParam("last", "Only about the newest N messages, starting at a user message").
+			QueryParam("before", "Only messages older than this message ID").
 			Fails(404, 500).
 			Build(),
 

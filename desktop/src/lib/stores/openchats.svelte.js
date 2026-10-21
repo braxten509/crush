@@ -9,7 +9,7 @@ import { untrack } from "svelte";
 import { openChatsAdd, openChatsGet, openChatsRemove } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { conn, inFolder, switchFolder } from "./connection.svelte.js";
-import { isKept, openChat, sessions, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
+import { isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
 
 export const openChats = $state({ list: [], loaded: false });
 
@@ -30,6 +30,8 @@ async function read() {
   if (mine !== seq) return;
   openChats.list = Array.isArray(list) ? list : [];
   openChats.loaded = true;
+  setOpenChats(openChats.list.map((c) => c.id));
+  preloadOpen();
   const shown = sessions.currentId;
   const listed = openChats.list.some((c) => c.id === shown);
   if (shown && listed) seenShown = shown;
@@ -37,6 +39,28 @@ async function read() {
   if (shown && !listed && seenShown === shown) {
     seenShown = "";
     leaveShown(shown);
+  }
+}
+
+// The open chats of the joined folder are loaded and kept behind the shown
+// one, one at a time, so each shows at once when picked (owner, 2026-10-21).
+// Chats of other folders load when their folder is joined. Each is tried
+// once per folder.
+const tried = new Set();
+let preloading = false;
+async function preloadOpen() {
+  if (preloading || conn.state !== "connected") return;
+  preloading = true;
+  try {
+    for (;;) {
+      const dir = folderNow();
+      const next = openChats.list.find((c) => c.dir === dir && !tried.has(`${dir}\n${c.id}`) && c.id !== sessions.currentId);
+      if (!next || conn.state !== "connected") break;
+      tried.add(`${dir}\n${next.id}`);
+      await preloadChat(next.id);
+    }
+  } finally {
+    preloading = false;
   }
 }
 

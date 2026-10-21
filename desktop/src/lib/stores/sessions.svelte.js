@@ -398,9 +398,48 @@ function leave(sid) {
     forget(sid);
     return;
   }
+  keep(sid, sessions.byId[sid]);
+}
+
+// Open chats (the list shared with the terminal) stay kept past KEEP, so
+// every one shows at once (owner, 2026-10-21).
+const openIds = new Set();
+export function setOpenChats(ids) {
+  openIds.clear();
+  for (const id of ids) openIds.add(id);
+}
+
+function keep(sid, record) {
   kept.delete(sid);
-  kept.set(sid, sessions.byId[sid]);
-  while (kept.size > KEEP) forget(kept.keys().next().value);
+  kept.set(sid, record);
+  while (kept.size > KEEP) {
+    const oldest = [...kept.keys()].find((id) => !openIds.has(id));
+    if (oldest === undefined) break;
+    forget(oldest);
+  }
+}
+
+// Loads a chat this window does not show yet and keeps it, so a click on it
+// shows it at once (open chats at startup, owner 2026-10-21). Resolves true
+// when it is kept.
+export async function preloadChat(id) {
+  if (!id || id === sessions.currentId || sessions.opening?.id === id || messages.bySession[id]) return false;
+  let record;
+  try {
+    [record] = await Promise.all([api.getSession(id), load(id)]);
+  } catch (error) {
+    console.error("preloading a chat failed", errorText(error));
+    if (id !== sessions.currentId && sessions.opening?.id !== id) unload(id);
+    return false;
+  }
+  // Opened (or closed) meanwhile: the opening owns it now.
+  if (id === sessions.currentId || sessions.opening?.id === id) return false;
+  if (!record?.id || messages.bySession[id]?.status !== "ready") {
+    unload(id);
+    return false;
+  }
+  keep(id, record);
+  return true;
 }
 
 function forget(sid) {

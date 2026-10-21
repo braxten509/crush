@@ -198,6 +198,44 @@ describe("loading a chat (LIST-036): the buffer and its replay", () => {
   });
 });
 
+describe("long chats open with their newest page (owner, 2026-10-21)", () => {
+  const page = (from, count, at = from) => Array.from({ length: count }, (_, i) => msg(`m${from + i}`, { role: i === 0 ? "user" : "assistant", at: at + i }));
+
+  it("a chat reads its newest page; a full page says older ones are left", async () => {
+    const chat = await loaded("s1", page(1000, M.PAGE));
+    expect(h.calls.at(-1).query).toEqual({ last: String(M.PAGE) });
+    expect(chat.ids).toHaveLength(M.PAGE);
+    expect(chat.more).toBe(true);
+    expect((await loaded("s2", page(1, 5, 1))).more).toBe(false);
+  });
+
+  it("older pages go ahead of what shows, until a short page", async () => {
+    const chat = await loaded("s1", page(1000, M.PAGE));
+    h.routes.set("GET sessions/s1/messages", ({ query }) => (query.before === "m1000" ? page(700, M.PAGE) : page(690, 10)));
+    expect(await M.loadOlder("s1")).toBe(true);
+    expect(h.calls.at(-1).query).toEqual({ last: String(M.PAGE), before: "m1000" });
+    expect(chat.ids[0]).toBe("m700");
+    expect(chat.ids).toHaveLength(2 * M.PAGE);
+    expect(chat.more).toBe(true);
+    expect(await M.loadOlder("s1")).toBe(true);
+    expect(chat.ids[0]).toBe("m690");
+    expect(chat.more).toBe(false);
+    const calls = h.calls.length;
+    expect(await M.loadOlder("s1")).toBe(false);
+    expect(h.calls.length).toBe(calls); // nothing older to ask for
+  });
+
+  it("a reload keeps the older pages already read", async () => {
+    const chat = await loaded("s1", page(1000, M.PAGE));
+    h.routes.set("GET sessions/s1/messages", ({ query }) => (query.before ? page(700, M.PAGE) : page(1000, M.PAGE + 1)));
+    await M.loadOlder("s1");
+    await M.load("s1");
+    expect(chat.ids[0]).toBe("m700");
+    expect(chat.ids).toHaveLength(2 * M.PAGE + 1);
+    expect(chat.more).toBe(true);
+  });
+});
+
 describe("duplicates and keys (1.5.3)", () => {
   it("applying the same events twice gives the same state", async () => {
     await loaded("s1", []);

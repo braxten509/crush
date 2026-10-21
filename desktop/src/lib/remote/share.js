@@ -9,10 +9,10 @@ import { api } from "../engine/api.js";
 import { notify } from "../stores/ui.svelte.js";
 import { share, shownChat, shownShare } from "./store.svelte.js";
 
-let startSeq = 0; // bumped by every start, Cancel and stop: older answers are dropped
+let startSeq = 0; // bumped by every start, and by Cancel or a stop of its chat: older answers are dropped
 let latestStart = 0; // the newest start
 let cancelledStart = 0; // the start that Cancel dropped
-let hadShare = false; // the chat the newest start is for was shared already
+let startChat = null; // the chat the newest start is for
 
 // What the window heard of each chat's share: a list read before a change
 // does not undo it.
@@ -35,7 +35,8 @@ export async function startShare({ launchId = null, quiet = false } = {}) {
   const mine = ++startSeq;
   latestStart = mine;
   const chat = shownChat();
-  hadShare = Boolean(share.shares[chat]);
+  startChat = chat;
+  const since = changes;
   share.state = "starting";
   share.quiet = quiet;
   share.error = "";
@@ -51,10 +52,11 @@ export async function startShare({ launchId = null, quiet = false } = {}) {
     else share.status = { state: "off", error: text };
     return;
   }
-  // A share that came up after Cancel is stopped (remote.go:255-258),
-  // unless a newer start wants it or the chat was shared already.
+  // A share this start turned on after Cancel is stopped (remote.go:255-258),
+  // unless a newer start wants it; one it did not turn on (the chat was
+  // shared already, by any app) stays.
   if (mine === cancelledStart && latestStart === mine) {
-    if (status?.state === "on" && !hadShare) api.stopRemote(status.session_id ?? chat).catch(() => {});
+    if (status?.state === "on" && status.started) api.stopRemote(status.session_id ?? chat).catch(() => {});
     share.state = "off";
     return;
   }
@@ -63,8 +65,11 @@ export async function startShare({ launchId = null, quiet = false } = {}) {
     share.state = "off";
     share.status = null;
     // It names the chat it shares: this window's, unless the window moved
-    // on from its new chat meanwhile.
-    heard(status.session_id ?? "", status);
+    // on from its new chat meanwhile. The engine's events come in order and
+    // this answer may not: one heard about that chat since the start began
+    // is newer.
+    const named = status.session_id ?? "";
+    if ((changed[named] ?? 0) <= since) heard(named, status);
     closeDialog("remote_setup");
     if (!quiet && shownShare()) openDialog("remote", {}, { grace: true });
     return;
@@ -106,9 +111,10 @@ export function cancelStart() {
 }
 
 // Stops the share of `chat` (the shown one by default), whichever app
-// started it.
+// started it. A start in flight for that chat is dropped, as Cancel does; one
+// for another chat goes on.
 export async function stopShare({ chat = shownChat(), silent = false } = {}) {
-  startSeq += 1;
+  if (share.state === "starting" && chat === startChat) cancelStart();
   try {
     await api.stopRemote(chat);
   } catch (error) {

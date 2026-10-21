@@ -312,6 +312,9 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, sessio
 
 	st.mu.Lock()
 	closed, running, start := st.closed, st.shares[shareKey(clientID, sessionID)], st.start
+	// What the window was last reported to show: a report older than this
+	// start can still name the chat it left for its new chat.
+	before := st.windows[clientID].SessionID
 	var status proto.RemoteStatus
 	if running != nil {
 		status = running.status()
@@ -374,10 +377,11 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, sessio
 	st.shares[sh.key()] = sh
 	st.tellPhone(sh, true)
 	b.announceShare(ws, sh, sh.status())
-	// The window may have shown a chat while its new chat's share started.
+	// The window may have shown a chat while its new chat's share started:
+	// only a report that changed during the start counts.
 	shown := ""
-	if sessionID == "" {
-		shown = st.windows[clientID].SessionID
+	if now := st.windows[clientID].SessionID; sessionID == "" && now != before {
+		shown = now
 	}
 	st.mu.Unlock()
 	go b.pumpShare(ws, sh)
@@ -393,7 +397,9 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, sessio
 		}
 		return proto.RemoteStatus{State: remoteStateOff, SessionID: shown}, nil
 	}
-	return sh.status(), nil
+	status = sh.status()
+	status.Started = true
+	return status, nil
 }
 
 // StopRemote stops the phone share of sessionID ("" for clientID's new
@@ -600,12 +606,16 @@ func (b *Backend) FinishRemoteAction(workspaceID, clientID, actionID string, don
 		ws.share.mu.Lock()
 		chat, owner, ended := sh.chat, sh.owner, sh.ended
 		ws.share.mu.Unlock()
-		if !ended && chat != done.SessionID {
+		switch {
+		case ended:
+			// Turned off meanwhile: the phone's prompt is not sent.
+			pa.reply(errPhoneShareOff)
+		case chat != done.SessionID:
 			// The window had opened another chat, which the share now shows.
 			pa.reply(errPhoneOtherChat)
-			return nil
+		default:
+			pa.reply(b.shareSend(ws, owner, done.SessionID, text, atts))
 		}
-		pa.reply(b.shareSend(ws, owner, done.SessionID, text, atts))
 	}
 	return nil
 }

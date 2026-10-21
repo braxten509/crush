@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
 
@@ -203,4 +205,39 @@ func TestEngineRemoteChangeAfterTheFirstList(t *testing.T) {
 		m.handleRemoteEngineStatus(proto.RemoteStatus{State: "off", SessionID: "s1"})
 	})
 	require.False(t, m.engineShared())
+}
+
+// A window's reports reach the engine one at a time, newest first in line:
+// reports waiting behind one in flight give way to the newest (review t1,
+// 2026-10-21).
+func TestPresenceSenderSendsTheNewest(t *testing.T) {
+	t.Parallel()
+	var s presenceSender
+	var mu sync.Mutex
+	var sent []int
+	record := func(n int) {
+		mu.Lock()
+		defer mu.Unlock()
+		sent = append(sent, n)
+	}
+	holding, release := make(chan struct{}), make(chan struct{})
+	s.send(func() {
+		close(holding)
+		<-release
+		record(1)
+	})
+	<-holding
+	for n := 2; n <= 4; n++ {
+		s.send(func() { record(n) })
+	}
+	close(release)
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(sent) >= 2
+	}, 5*time.Second, time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []int{1, 4}, sent)
 }

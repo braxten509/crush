@@ -28,10 +28,12 @@ func TestRemoteRestartUpdatesLaunch(t *testing.T) {
 	first, err := b.StartRemote(t.Context(), ws.ID, app, "chat-1", "launch-1")
 	require.NoError(t, err)
 	require.Equal(t, remoteStateOn, first.State)
+	require.True(t, first.Started)
 	require.Equal(t, "launch-1", srv.reportedLaunch())
 
 	again, err := b.StartRemote(t.Context(), ws.ID, app, "chat-1", "launch-2")
 	require.NoError(t, err)
+	first.Started = false // this start did not turn it on
 	require.Equal(t, first, again, "the answer is the running share's status")
 	require.Equal(t, int32(1), starts.Load(), "no second share starts")
 	require.Equal(t, "launch-2", srv.reportedLaunch(), "the share reports the new launch")

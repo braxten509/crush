@@ -45,6 +45,10 @@ type RemoteStatus struct {
 	Setup     *RemoteSetup `json:"setup,omitempty"`
 	// Error is a failed start that is not a setup issue.
 	Error string `json:"error,omitempty"`
+	// Started is set only in a start's answer, when that start turned the
+	// share on: a start dropped by Cancel stops only such a share, never
+	// one the chat had already (from any app).
+	Started bool `json:"started,omitempty"`
 }
 
 // RemotePresence is what an app's window shows.

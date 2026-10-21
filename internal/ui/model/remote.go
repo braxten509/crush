@@ -72,9 +72,8 @@ type remoteShare struct {
 	// window sees, by chat ("" for its new chat): one per chat, whichever
 	// app started it (remote_engine.go).
 	engine map[string]proto.RemoteStatus
-	// hadShare: the chat a start in flight is for was shared already, so
-	// a cancelled start leaves its share on.
-	hadShare bool
+	// reports sends what the window shows to the engine, in order.
+	reports *presenceSender
 	// changes counts what this window heard of the engine's shares, and
 	// changed holds the count at each chat's last change: a list read
 	// before a change does not undo it.

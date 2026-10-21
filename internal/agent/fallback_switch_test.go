@@ -29,6 +29,9 @@ func fallbackCoordinator(t *testing.T, blocks []config.FallbackBlock, usage map[
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	t.Setenv("CODEX_HOME", "")
 	c := newGateTestCoordinator(t, true)
+	// The coordinator builds its agent's tools in the background; the config
+	// changes below wait for that, or they race its reads of the models.
+	_ = c.readyWg.Wait()
 	cfg := c.cfg.Config()
 	for _, kind := range []catwalk.Type{config.TypeClaudeCode, config.TypeCodexCLI} {
 		cfg.Providers.Set(string(kind), config.ProviderConfig{ID: string(kind), Name: string(kind), Type: kind,

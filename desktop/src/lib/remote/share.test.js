@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Phone sharing (desktop-design-5-6 2.27): one share per chat, whichever app
-// turned it on (owner, 2026-10-21). A share that came up after Cancel must be
-// stopped, but not when a newer start wants it or the chat was shared
-// already (review t90 finding 2); the window follows every chat's share and
+// turned it on (owner, 2026-10-21). A share a start turned on after Cancel
+// must be stopped, but not when a newer start wants it or the start did not
+// turn it on (review t90 finding 2); a stop of another chat or a late answer
+// must not undo a start or a newer event (review t1, 2026-10-21); the window follows every chat's share and
 // stops the shown one's; a phone request made for one chat must never run in
 // another (finding 3).
 const api = vi.hoisted(() => ({
@@ -54,7 +55,7 @@ describe("start and Cancel", () => {
     const started = startShare();
     expect(api.startRemote).toHaveBeenCalledWith({ session_id: "s1" });
     cancelStart();
-    late.resolve(on("s1"));
+    late.resolve({ ...on("s1"), started: true });
     await started;
     expect(api.stopRemote).toHaveBeenCalledWith("s1");
     expect(share.state).toBe("off");
@@ -85,6 +86,34 @@ describe("start and Cancel", () => {
     await started;
     expect(api.stopRemote).not.toHaveBeenCalled();
     expect(isShown()).toBe(true);
+  });
+
+  it("lets a start finish when another chat's share stops meanwhile", async () => {
+    onStatus(on("s2"));
+    const late = deferred();
+    api.startRemote.mockReturnValueOnce(late.promise);
+    const started = startShare();
+    await stopShare({ chat: "s2", silent: true });
+    late.resolve({ ...on("s1"), started: true });
+    await started;
+    expect(share.state).toBe("off");
+    expect(isShown()).toBe(true);
+    expect(api.stopRemote).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a start's late answer undo what the engine said after", async () => {
+    sessions.currentId = null;
+    const late = deferred();
+    api.startRemote.mockReturnValueOnce(late.promise);
+    const started = startShare();
+    // The new chat's share came on, then moved to the chat the window opened.
+    onStatus(on(""));
+    onStatus({ state: "off", session_id: "" });
+    onStatus(on("s5"));
+    late.resolve(on(""));
+    await started;
+    expect(share.shares[""]).toBeUndefined();
+    expect(share.shares.s5).toBeTruthy();
   });
 
   it("starts the new chat's share as the empty chat", async () => {

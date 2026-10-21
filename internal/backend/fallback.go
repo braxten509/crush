@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -54,6 +55,17 @@ func fallbackSettings(cfg *config.Config) proto.FallbackSettings {
 	return out
 }
 
+// freshConfig is ws's config with the edit just written: an edit's own
+// reload is skipped while another reload runs (the folder's config watcher
+// reloads after every write; config.autoReload), and the answer would then
+// be the settings from before the edit.
+func freshConfig(ws *Workspace) *config.Config {
+	if err := ws.Cfg.ReloadFromDisk(context.Background()); err != nil {
+		slog.Warn("Failed to reload the config after an account edit", "error", err)
+	}
+	return ws.Cfg.Config()
+}
+
 // SetFallbackOrder checks and saves the order.
 func (b *Backend) SetFallbackOrder(workspaceID string, order config.FallbackOrder) (proto.FallbackSettings, error) {
 	ws, err := b.GetWorkspace(workspaceID)
@@ -67,8 +79,9 @@ func (b *Backend) SetFallbackOrder(workspaceID string, order config.FallbackOrde
 	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "options.fallback", order); err != nil {
 		return proto.FallbackSettings{}, err
 	}
+	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
-	return fallbackSettings(ws.Cfg.Config()), nil
+	return fallbackSettings(cfg), nil
 }
 
 func checkFallbackOrder(cfg *config.Config, order config.FallbackOrder) error {
@@ -136,8 +149,9 @@ func (b *Backend) AddAccount(workspaceID, kind string) (proto.AccountLogin, erro
 		_ = accounts.Remove(a.ID)
 		return proto.AccountLogin{}, err
 	}
+	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
-	return accountLogin(ws.Cfg.Config(), a)
+	return accountLogin(cfg, a)
 }
 
 func accountLogin(cfg *config.Config, a config.Account) (proto.AccountLogin, error) {
@@ -207,8 +221,9 @@ func (b *Backend) RenameAccount(workspaceID, id, name string) (proto.FallbackSet
 		if err != nil {
 			return proto.FallbackSettings{}, err
 		}
+		cfg = freshConfig(ws)
 		sendConfigChanged(ws)
-		return fallbackSettings(ws.Cfg.Config()), nil
+		return fallbackSettings(cfg), nil
 	}
 	_, i, err := findAccount(cfg, id)
 	if err != nil {
@@ -219,8 +234,9 @@ func (b *Backend) RenameAccount(workspaceID, id, name string) (proto.FallbackSet
 	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "options.accounts", list); err != nil {
 		return proto.FallbackSettings{}, err
 	}
+	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
-	return fallbackSettings(ws.Cfg.Config()), nil
+	return fallbackSettings(cfg), nil
 }
 
 // RemoveAccount deletes an account: its folder (its login and links; what
@@ -264,8 +280,9 @@ func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings,
 	if err := accounts.Remove(id); err != nil {
 		return proto.FallbackSettings{}, err
 	}
+	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
-	return fallbackSettings(ws.Cfg.Config()), nil
+	return fallbackSettings(cfg), nil
 }
 
 // UseRefill spends one of a Codex account's free refills.

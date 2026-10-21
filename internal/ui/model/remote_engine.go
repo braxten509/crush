@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -30,6 +32,8 @@ type (
 		status     proto.RemoteStatus
 		err        error
 		generation uint64
+		// changes is what the window had heard when the start began.
+		changes uint64
 	}
 	// remoteEngineSharesMsg is the engine's list of the shares this window
 	// sees, read after the window had heard of changes changes.
@@ -49,11 +53,11 @@ func (m *UI) startEngineRemote(ws *workspace.ClientWorkspace) tea.Cmd {
 	generation, ctx, cancel := m.remote.beginStart()
 	launch := remote.LaunchID()
 	chat := m.shownChat()
-	m.remote.hadShare = m.engineShared()
+	changes := m.remote.changes
 	return func() tea.Msg {
 		defer cancel()
 		st, err := ws.StartRemote(ctx, chat, launch)
-		return remoteEngineStartedMsg{status: st, err: err, generation: generation}
+		return remoteEngineStartedMsg{status: st, err: err, generation: generation, changes: changes}
 	}
 }
 
@@ -101,9 +105,9 @@ func (m *UI) handleRemoteEngineStarted(msg remoteEngineStartedMsg) tea.Cmd {
 		return nil
 	}
 	if msg.generation != m.remote.generation || (!m.remote.quiet && !m.dialog.ContainsDialog(dialog.RemoteSetupID)) {
-		// Cancelled meanwhile: a share that came up anyway is stopped,
-		// unless the chat was shared already.
-		if msg.err == nil && msg.status.State == "on" && !m.remote.hadShare {
+		// Cancelled meanwhile: a share this start turned on is stopped; one
+		// the chat had already, from any app, stays.
+		if msg.err == nil && msg.status.State == "on" && msg.status.Started {
 			chat := msg.status.SessionID
 			return func() tea.Msg {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -155,8 +159,12 @@ func (m *UI) handleRemoteEngineStarted(msg remoteEngineStartedMsg) tea.Cmd {
 	remote.SetLaunchID("")
 	m.dialog.CloseDialog(dialog.RemoteSetupID)
 	// The status names the chat it shares, which is the one this window
-	// shows unless the window moved on from its new chat meanwhile.
-	m.remote.heard(msg.status.SessionID, msg.status, true)
+	// shows unless the window moved on from its new chat meanwhile. The
+	// engine's events come in order and this answer may not: one heard
+	// about that chat since the start began is newer.
+	if m.remote.changed[msg.status.SessionID] <= msg.changes {
+		m.remote.heard(msg.status.SessionID, msg.status, true)
+	}
 	m.status.SetRemote(m.engineShared())
 	if !m.remote.quiet && m.engineShared() {
 		m.openRemoteDialog()
@@ -217,11 +225,35 @@ func (m *UI) syncEnginePresence(p remote.Presence) {
 		return
 	}
 	m.remote.presence = p
-	go func() {
+	if m.remote.reports == nil {
+		m.remote.reports = &presenceSender{}
+	}
+	m.remote.reports.send(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := ws.SetRemotePresence(ctx, proto.RemotePresence{SessionID: p.SessionID, Focused: p.Focused, Plan: p.Plan}); err != nil {
 			slog.Debug("Failed to report the window to the phone share", "error", err)
+		}
+	})
+}
+
+// presenceSender sends a window's reports one at a time, newest first in
+// line: two reports in flight together could reach the engine out of order
+// and leave it with the older one.
+type presenceSender struct {
+	mu     sync.Mutex
+	latest atomic.Uint64
+}
+
+// send runs report in the background after any report in flight, unless a
+// newer one came meanwhile.
+func (s *presenceSender) send(report func()) {
+	n := s.latest.Add(1)
+	go func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.latest.Load() == n {
+			report()
 		}
 	}()
 }

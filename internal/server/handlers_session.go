@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
@@ -115,7 +116,9 @@ func (c *controllerV1) setKeptSkill(r *http.Request, req proto.SetKeptSkillReque
 
 // listSavedSessions lists saved chats across every project.
 func (c *controllerV1) listSavedSessions(r *http.Request, _ rpc.Empty) ([]session.Session, error) {
-	return c.backend.ListSavedSessions(r.Context(), r.PathValue("id"), r.URL.Query().Get("selected"))
+	// ?folders=N also lists the N most recently used projects' chats.
+	folders, _ := strconv.Atoi(r.URL.Query().Get("folders"))
+	return c.backend.ListRecentSavedSessions(r.Context(), r.PathValue("id"), r.URL.Query().Get("selected"), max(folders, 0))
 }
 
 // changeSavedSession renames or deletes a saved chat, or discards an

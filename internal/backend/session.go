@@ -142,12 +142,18 @@ func (b *Backend) LoadMessageReview(ctx context.Context, workspaceID, sessionID,
 // in its own database are discarded. An empty draft that an app shows on
 // any of this engine's workspaces using that database is never discarded.
 func (b *Backend) ListSavedSessions(ctx context.Context, workspaceID, selected string) ([]session.Session, error) {
+	return b.ListRecentSavedSessions(ctx, workspaceID, selected, 0)
+}
+
+// ListRecentSavedSessions is ListSavedSessions plus the chats of the folders
+// most recently used saved projects (the desktop's Recent).
+func (b *Backend) ListRecentSavedSessions(ctx context.Context, workspaceID, selected string, folders int) ([]session.Session, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
 	}
 	o := ws.ops()
-	return o.ListSavedSessionsShown(ctx, selected, b.shownInDataDir(o.savedSessions().DataDirectory))
+	return o.ListSavedSessionsShown(ctx, selected, b.shownInDataDir(o.savedSessions().DataDirectory), folders)
 }
 
 // shownInDataDir lists the chats apps show on every workspace whose data

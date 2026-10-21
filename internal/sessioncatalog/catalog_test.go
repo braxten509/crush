@@ -123,3 +123,22 @@ func TestDiscardEmptyPreservesSentMessages(t *testing.T) {
 	require.NoError(t, catalog.DiscardEmpty(t.Context(), "attachment"))
 	require.True(t, catalogExists(t, conn, "attachment"))
 }
+
+func TestCatalogFoldersListsRecentProjectsWithoutDiscardingTheirDrafts(t *testing.T) {
+	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(t.TempDir(), "data"))
+	first, a := catalogFixture(t)
+	_, b := catalogFixture(t)
+	old := time.Now().Add(-time.Hour).Unix()
+	catalogChat(t, a, "here", "", "user", `[{"type":"text","text":"hello"}]`, old)
+	catalogChat(t, b, "there", "", "user", `[{"type":"text","text":"hi"}]`, old+1)
+	catalogChat(t, b, "their-draft", "", "", "", old)
+	first.Folders = 10
+	entries, err := first.List(t.Context(), "")
+	require.NoError(t, err)
+	ids := []string{}
+	for _, entry := range entries {
+		ids = append(ids, entry.ID)
+	}
+	require.ElementsMatch(t, []string{"there", "here"}, ids)
+	require.True(t, catalogExists(t, b, "their-draft"))
+}

@@ -205,7 +205,11 @@ export const api = {
   cancelAuthFlow: (flow_id) => post(`auth/flows/${seg(flow_id)}/cancel`),
 
   // [session.Session] with PascalCase keys; selected: the shown chat's id.
-  savedSessions: (selected) => get("saved-sessions", selected ? { selected } : undefined),
+  // folders: also the chats of that many most recently used folders.
+  savedSessions: (selected, folders = 0) => {
+    const query = { ...(selected ? { selected } : {}), ...(folders > 0 ? { folders: String(folders) } : {}) };
+    return get("saved-sessions", Object.keys(query).length ? query : undefined);
+  },
   // session.CatalogChange {DiscardEmpty, Session, Remove}.
   changeSavedSession: (change) => post("saved-sessions", change),
 

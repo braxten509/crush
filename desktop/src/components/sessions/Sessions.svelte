@@ -5,8 +5,9 @@
   // "~/folder · 3 hours ago" in the info column (35 % budget). Enter, Tab and
   // Ctrl+Y open the selected chat; Ctrl+R renames it in its row, Ctrl+X asks
   // to delete it; both go through POST …/saved-sessions as the terminal's
-  // CatalogChange. Under "Recent", the 5 newest chats of any folder; then,
-  // under the folder's name, the rest of this folder's chats (owner,
+  // CatalogChange. Under "Recent", the 5 newest chats of the 10 most
+  // recently used folders, with their folder; then, under "Current folder ·
+  // ~/path", the rest of this folder's chats with only their time (owner,
   // 2026-10-20). A chat of another folder switches the window there in
   // place. Session events rename or remove rows in place.
   //   query? (the filter's first text: the left list's search box, START-021's id)
@@ -20,7 +21,7 @@
   import { api } from "../../lib/engine/api.js";
   import { file_info } from "../../lib/engine/commands.js";
   import { onEvent } from "../../lib/engine/events.js";
-  import { folderLabel } from "../../lib/leftlist/numbers.js";
+  import { clean, short } from "../../lib/leftlist/picker.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
   import { infoText, inProject } from "../../lib/sessions/match.js";
   import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
@@ -32,6 +33,7 @@
 
   const ID = "sessions";
   const RECENT = 5;
+  const FOLDERS = 10; // Recent reads the 10 most recently used folders (owner, 2026-10-20)
   const BUSY = "Agent is busy, please wait..."; // sessions.go:196-198
 
   let { query: firstQuery = "" } = $props();
@@ -71,7 +73,7 @@
 
   async function read() {
     try {
-      const all = (await api.savedSessions(sessions.currentId || "")) ?? [];
+      const all = (await api.savedSessions(sessions.currentId || "", FOLDERS)) ?? [];
       const newest = [...all].sort((a, b) => Number(b.UpdatedAt ?? 0) - Number(a.UpdatedAt ?? 0)).slice(0, RECENT);
       const top = new Set(newest.map((row) => row.ID));
       const here = all.filter((row) => !top.has(row.ID) && inProject(row, conn.project.path || conn.project.cwd));
@@ -294,8 +296,8 @@
       bind:this={list}
       items={rows}
       filterText={(row) => row.Title ?? ""}
-      groups={(row) => (recent.has(row.ID) ? "Recent" : folderLabel(conn.project.path || conn.project.cwd))}
-      info={(row) => infoText(row, leftList.home, now)}
+      groups={(row) => (recent.has(row.ID) ? "Recent" : `Current folder · ${short(clean(conn.project.path || conn.project.cwd), leftList.home)}`)}
+      info={(row) => infoText(recent.has(row.ID) ? row : { ...row, Directory: "" }, leftList.home, now)}
       infoBudget={35}
       {query}
       bind:selected

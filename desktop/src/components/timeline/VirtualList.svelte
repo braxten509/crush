@@ -215,7 +215,21 @@
       measured += 1;
       flushSync();
     }
+    evenEnd();
   });
+
+  // The scroll range ends on a whole pixel (owner, 2026-10-20: "scrolling
+  // further down pushes it up/down 1-2 pixels"): Chromium keeps a fractional
+  // end offset, then snaps a wheel scroll at the bottom to the whole pixel
+  // above it. A little more room under the last item rounds it up.
+  let even = $state(0);
+  function evenEnd() {
+    if (!scroller || !canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const end = (canvas.getBoundingClientRect().height - even - scroller.getBoundingClientRect().height) * dpr;
+    const next = end > 0 ? (Math.ceil(end - 0.001) - end) / dpr : 0;
+    if (Math.abs(next - even) > 0.001) even = next;
+  }
 
   function readSizes() {
     if (!scroller || !canvas) return false;
@@ -460,7 +474,7 @@
   aria-label={label}
   aria-busy="false"
 >
-  <div class="canvas" bind:this={canvas}>
+  <div class="canvas" style:--even="{even}px" bind:this={canvas}>
     {#each segs as seg (seg.spacer ? seg.id : keys[seg.index])}
       {#if seg.spacer}
         <div class="spacer" style:height="{seg.height}px" aria-hidden="true"></div>
@@ -506,7 +520,7 @@
   /* The picture's padding (Conversation.svelte:133 as built): the text starts
      calc(66 * var(--px)) from the column's left (CHAT-001). */
   .canvas {
-    padding: calc(24 * var(--px)) calc(23 * var(--px)) calc(24 * var(--px)) calc(66 * var(--px));
+    padding: calc(24 * var(--px)) calc(23 * var(--px)) calc(24 * var(--px) + var(--even, 0px)) calc(66 * var(--px));
   }
   .slot {
     display: flow-root;

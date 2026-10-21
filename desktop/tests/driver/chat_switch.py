@@ -7,7 +7,10 @@ answering its messages 2 s late (fixture `slow`):
   under its 2 s), its words still there;
 - across folders (joining one takes 1.5 s): beta's chat, then the first chat
   of proj and beta's again each show at once once seen, and the window
-  ends on beta's folder.
+  ends on beta's folder;
+- Alt+number on a never-opened chat of proj from beta opens it in proj's
+  folder (it opened in beta's and failed with "no rows", owner 2026-10-20;
+  beta's answers have no such chat).
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/chat-switch.json chat_switch.py
@@ -16,12 +19,13 @@ import os, sys, time
 
 sys.path.insert(0, os.path.dirname(__file__))
 import harness as H
-from harness import check, finish, probe_eval, type_text, wait_for
+from harness import check, finish, key, probe_eval, type_text, wait_for
 
 probe_path, out_dir = sys.argv[1], sys.argv[2]
 A = "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01"
 B = "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f04"
 BETA = "b0b0b0b0-1111-4222-8333-000000000001"
+NEVER = "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05"
 WORDS = "hello there"
 
 
@@ -95,4 +99,11 @@ check(again is not None and again < 0.8, f"and beta's chat again at once ({again
 ok = wait_for(probe_path, lambda p: (p.get("connection") or {}).get("workspace_id") == "ws-beta" and (p.get("connection") or {}).get("state") == "connected", 10)
 title = run("return document.querySelector('[data-probe=\"title-project\"]')?.textContent.trim() ?? null;")
 check(bool(ok) and title == "beta", f"and the window joins beta's folder behind it ({title!r})")
+
+# Alt+number: a chat of proj never opened yet, from beta's folder.
+number = run(f"return [...document.querySelectorAll('nav.chats .chat')].findIndex((el) => el.getAttribute('data-id') === '{NEVER}') + 1;")
+key(f"alt+{number}")
+got = shown(NEVER, 8)
+ok = wait_for(probe_path, lambda p: (p.get("connection") or {}).get("workspace_id") != "ws-beta" and (p.get("connection") or {}).get("state") == "connected", 10)
+check(number > 0 and got is not None and bool(ok), f"Alt+{number} opens a chat of proj in its own folder")
 finish()

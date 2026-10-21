@@ -6,7 +6,9 @@ with a chat open:
   even with the chat list at its narrowest;
 - the right panel never gets so narrow that a meter's words are cut or run
   into the next meter (dragged to its narrowest with the divider's keys);
-- the top bar's panel switch hides it and brings it back;
+- the top bar's panel switch hides it and brings it back; with nothing
+  under the typing box the space below it equals the space above, and the
+  space below glides both ways with the meter strip (owner, 2026-10-20);
 - your messages sit on the right, at most 70% wide, on a fill, with YOU over
   them on the right;
 - the vermilion rail starts at the column's top, and the list's "‹‹" sits
@@ -162,7 +164,41 @@ check(not meters.get("error") and not meters.get("cut") and not meters.get("over
 # Hide and bring back: the top bar's panel switch (owner, 2026-10-20, A), the
 # only control for it there; the edge tab is gone.
 state = "return { panel: !!document.querySelector('.panel-column'), tab: !!document.querySelector('[data-probe=\"panel-tab\"]'), pressed: document.querySelector('[data-probe=\"title-panel\"]').getAttribute('aria-pressed') };"
+SPACE = """
+  const field = document.querySelector('main.conversation .composer .field').getBoundingClientRect();
+  const rule = document.querySelector('main.conversation .above-composer').getBoundingClientRect();
+  const col = document.querySelector('main.conversation').getBoundingClientRect();
+  return { above: Math.round((field.top - rule.bottom) * 100) / 100, below: Math.round((col.bottom - field.bottom) * 100) / 100 };
+"""
+space = run(SPACE) or {}
+check(abs(space.get("above", 0) - space.get("below", 99)) <= 1, f"with nothing under the typing box the space below equals the space above ({space})")
+GLIDE = """
+  window.__glide = [];
+  const t0 = performance.now();
+  const step = () => {
+    const field = document.querySelector('main.conversation .composer .field').getBoundingClientRect();
+    window.__glide.push(Math.round((document.querySelector('main.conversation').getBoundingClientRect().bottom - field.bottom) * 10) / 10);
+    if (performance.now() - t0 < 700) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  return true;
+"""
+
+
+def glided():
+    """The space-below values in between its two ends while the strip came or went."""
+    time.sleep(0.9)
+    values = run("return window.__glide;") or []
+    if not values:
+        return values, []
+    lo, hi = min(values[0], values[-1]), max(values[0], values[-1])
+    return values, sorted({v for v in values if lo + 0.5 < v < hi - 0.5})
+
+
+run(GLIDE)
 check(click('[data-probe="title-panel"]'), "the top bar has the panel switch")
+values, between = glided()
+check(len(between) >= 3, f"the space below glides as the meter strip comes ({values[:3]}…{values[-3:]}, {len(between)} values between)")
 gone = run(state) or {}
 check(not gone.get("panel") and not gone.get("tab") and gone.get("pressed") == "false", f"it hides the panel, with no tab at the edge ({gone})")
 shot(out_dir, "hidden")
@@ -189,7 +225,10 @@ if check(bool(strip), f"the meter strip shows under the typing box ({strip})"):
     ink = [y for y in rows if 0 < marked(y) <= 0.9 and lines and lines[0] < y < lines[-1]]
     above, below = (ink[0] - lines[0] - 1, lines[-1] - ink[-1] - 1) if ink and len(lines) >= 2 else (None, None)
     check(ink and abs(above - below) <= 1, f"the strip's words sit midway: {above} px above, {below} px below")
+run(GLIDE)
 click('[data-probe="title-panel"]')
+values, between = glided()
+check(len(between) >= 3, f"and glides back as it goes ({values[:3]}…{values[-3:]}, {len(between)} values between)")
 back = run(state) or {}
 check(back.get("panel") and back.get("pressed") == "true", f"it brings the panel back ({back})")
 finish()

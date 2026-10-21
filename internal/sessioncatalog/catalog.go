@@ -23,6 +23,31 @@ type Catalog struct {
 	// them, even when they are old empty drafts. Listing only ever
 	// discards drafts in DataDirectory's own database.
 	Shown []string
+	// Folders, when above 0, also lists the chats of that many most
+	// recently used saved projects (the desktop's Recent, owner
+	// 2026-10-20); the terminal's own list stays this workspace's.
+	Folders int
+}
+
+// recent is the current workspace, then the n most recently used saved
+// projects with a data directory.
+func (c Catalog) recent(n int) ([]projects.Project, error) {
+	known, err := projects.List()
+	if err != nil {
+		return nil, err
+	}
+	known = slices.Clone(known)
+	slices.SortStableFunc(known, func(a, b projects.Project) int { return b.LastAccessed.Compare(a.LastAccessed) })
+	result := []projects.Project{{Path: c.Directory, DataDir: c.DataDirectory}}
+	for _, project := range known {
+		if len(result) > n {
+			break
+		}
+		if project.DataDir != "" {
+			result = append(result, project)
+		}
+	}
+	return result, nil
 }
 
 func (c Catalog) locations() ([]projects.Project, error) {
@@ -44,12 +69,20 @@ func catalogPath(path string) string {
 	return full
 }
 
-// List returns only chats from the current workspace, omitting drafts with no
+// List returns the current workspace's chats (with Folders, also the recently
+// used projects' chats), omitting drafts with no
 // user message. Old abandoned drafts are discarded;
 // the selected chat and recently created drafts are protected while a first
 // message may be in flight. The DELETE rechecks message existence atomically.
 func (c Catalog) List(ctx context.Context, selected string) ([]session.Session, error) {
 	locations := []projects.Project{{Path: c.Directory, DataDir: c.DataDirectory}}
+	if c.Folders > 0 {
+		var err error
+		if locations, err = c.recent(c.Folders); err != nil {
+			return nil, err
+		}
+	}
+	own := catalogPath(c.DataDirectory)
 	result := []session.Session{}
 	seen := map[string]bool{}
 	for _, project := range locations {
@@ -66,8 +99,13 @@ func (c Catalog) List(ctx context.Context, selected string) ([]session.Session, 
 		} else if err != nil {
 			return nil, err
 		}
-		entries, err := catalogProject(ctx, project.Path, data, selected, c.Shown)
+		entries, err := catalogProject(ctx, project.Path, data, selected, c.Shown, data == own)
 		if err != nil {
+			if data != own {
+				// Another folder's unreadable database never hides this one's chats.
+				slog.Warn("Could not read another folder's saved chats", "directory", project.Path, "error", err)
+				continue
+			}
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
@@ -87,14 +125,16 @@ func (c Catalog) List(ctx context.Context, selected string) ([]session.Session, 
 	return result, nil
 }
 
-func catalogProject(ctx context.Context, directory, data, selected string, shown []string) ([]session.Session, error) {
+func catalogProject(ctx context.Context, directory, data, selected string, shown []string, discard bool) ([]session.Session, error) {
 	conn, err := db.Connect(ctx, data)
 	if err != nil {
 		return nil, err
 	}
 	defer db.Release(data)
-	if err := discardEmptyBefore(ctx, conn, time.Now().Add(-5*time.Minute).Unix(), selected, shown...); err != nil {
-		slog.Warn("Could not discard abandoned empty chats", "directory", directory, "error", err)
+	if discard {
+		if err := discardEmptyBefore(ctx, conn, time.Now().Add(-5*time.Minute).Unix(), selected, shown...); err != nil {
+			slog.Warn("Could not discard abandoned empty chats", "directory", directory, "error", err)
+		}
 	}
 	rows, err := conn.QueryContext(ctx, `SELECT s.id, s.title, s.message_count, s.created_at, s.updated_at
  FROM sessions s WHERE s.parent_session_id IS NULL

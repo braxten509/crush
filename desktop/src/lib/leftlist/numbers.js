@@ -6,7 +6,7 @@
 import { closeMain, mainView } from "../mainview.js";
 import { conn, inFolder, switchFolder } from "../stores/connection.svelte.js";
 import { folders } from "../stores/folders.svelte.js";
-import { openChats } from "../stores/openchats.svelte.js";
+import { openChats, openInFolder } from "../stores/openchats.svelte.js";
 import { parentOf } from "../stores/links.svelte.js";
 import { busy, openChat, sessions } from "../stores/sessions.svelte.js";
 import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
@@ -46,9 +46,10 @@ export function shownTerminal() {
   return view?.kind === "terminal" ? (view.props?.id ?? "") : "";
 }
 
-// Every row, numbered: {kind: "chat" | "terminal", id, title, number}.
+// Every row, numbered: {kind: "chat" | "terminal", id, title, number}; a chat
+// of another folder also has folder: {dir}.
 export function listRows() {
-  const rows = chatRows().map((row) => ({ kind: "chat", id: row.id, title: row.title }));
+  const rows = chatRows().map((row) => ({ kind: "chat", id: row.id, title: row.title, folder: row.folder ?? null }));
   for (const tab of orderedTerminals()) rows.push({ kind: "terminal", id: tab.id, title: tab.title || "Terminal" });
   return rows.map((row, i) => ({ ...row, number: i + 1 }));
 }
@@ -75,7 +76,9 @@ export function showRow(row) {
     return true;
   }
   if (mainView.current?.kind === "terminal") closeMain();
-  if (row.id !== sessions.currentId) openChat(row.id);
+  // A chat of another folder opens in that folder, as the list's own rows do.
+  if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
+  else if (row.id !== sessions.currentId) openChat(row.id);
   return true;
 }
 

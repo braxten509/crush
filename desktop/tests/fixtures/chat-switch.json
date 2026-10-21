@@ -729,6 +729,183 @@
     "created_at": 1792320240,
     "updated_at": 1792320250
    }
+  ],
+  "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05": {
+   "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
+   "parent_session_id": "",
+   "title": "Hermóðr sends mail twice",
+   "message_count": 4,
+   "prompt_tokens": 124000,
+   "completion_tokens": 0,
+   "summary_message_id": "",
+   "cost": 0,
+   "created_at": 1792320120,
+   "updated_at": 1792320250,
+   "is_busy": false,
+   "attached_clients": 0,
+   "context_budget": {
+    "provider": "claude-code",
+    "model": "opus",
+    "tokens": 124000,
+    "estimated": false
+   },
+   "estimated_usage": false,
+   "has_unfinished_work": false,
+   "pending_prompt": ""
+  },
+  "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05/messages": [
+   {
+    "id": "m1-c",
+    "role": "user",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Why does the login page keep sending me back after I sign in?"
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792320120,
+    "updated_at": 1792320120
+   },
+   {
+    "id": "m2-c",
+    "role": "assistant",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "The session cookie uses SameSite=Strict, so the browser drops it on the redirect back from sign-in."
+      }
+     },
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "call-1",
+       "name": "view",
+       "input": "{\"file_path\": \"/tmp/home/proj/auth/session.go\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "call-2",
+       "name": "edit",
+       "input": "{\"file_path\": \"/tmp/home/proj/auth/session.go\", \"old_string\": \"SameSite: http.SameSiteStrictMode\", \"new_string\": \"SameSite: http.SameSiteLaxMode\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "call-3",
+       "name": "view",
+       "input": "{\"file_path\": \"/tmp/home/proj/auth/session_test.go\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "tool_call",
+      "data": {
+       "id": "call-4",
+       "name": "bash",
+       "input": "{\"command\": \"go test ./auth/...\", \"description\": \"Run the auth tests\"}",
+       "finished": true
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "tool_use",
+       "time": 1792320220
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792320180,
+    "updated_at": 1792320220
+   },
+   {
+    "id": "m2-tools-c",
+    "role": "tool",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
+    "parts": [
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "call-1",
+       "name": "view",
+       "content": "<file>\n     1|package auth\n</file>",
+       "metadata": "{}",
+       "is_error": false
+      }
+     },
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "call-2",
+       "name": "edit",
+       "content": "<result>\nContent replaced in file: /tmp/home/proj/auth/session.go\n</result>",
+       "metadata": "{}",
+       "is_error": false
+      }
+     },
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "call-3",
+       "name": "view",
+       "content": "<file>\n     1|package auth\n</file>",
+       "metadata": "{}",
+       "is_error": false
+      }
+     },
+     {
+      "type": "tool_result",
+      "data": {
+       "tool_call_id": "call-4",
+       "name": "bash",
+       "content": "ok  \texample.com/proj/auth\t0.012s",
+       "metadata": "{}",
+       "is_error": false
+      }
+     }
+    ],
+    "model": "",
+    "provider": "",
+    "created_at": 1792320221,
+    "updated_at": 1792320221
+   },
+   {
+    "id": "m3-c",
+    "role": "assistant",
+    "session_id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
+    "parts": [
+     {
+      "type": "text",
+      "data": {
+       "text": "Switching to Lax fixes the loop. All 12 tests pass.\n\n```mermaid\n---\ntitle: Sign-in flow\n---\nflowchart LR\n  A[Sign in] --> B[Check session cookie] --> C[Home]\n```\n\n| Property | Current | Fixed |\n|---|---|---|\n| SameSite | Strict | Lax |\n| Lifetime | 24 h | 24 h |\n"
+      }
+     },
+     {
+      "type": "finish",
+      "data": {
+       "reason": "end_turn",
+       "time": 1792320250
+      }
+     }
+    ],
+    "model": "opus",
+    "provider": "claude-code",
+    "created_at": 1792320240,
+    "updated_at": 1792320250
+   }
   ]
  },
  "events": [],
@@ -747,6 +924,11 @@
    "id": "b0b0b0b0-1111-4222-8333-000000000001",
    "dir": "/tmp/home/beta",
    "title": "Beta chat"
+  },
+  {
+   "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
+   "dir": "/tmp/home/proj",
+   "title": "Hermóðr sends mail twice"
   }
  ],
  "slow": {
@@ -973,7 +1155,9 @@
     ],
     "git/branch": {
      "branch": "beta-branch"
-    }
+    },
+    "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05": null,
+    "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05/messages": null
    }
   }
  }

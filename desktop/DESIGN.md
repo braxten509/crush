@@ -109,9 +109,11 @@ never "sessions".
 - The folder is per chat (owner, 2026-10-20): the window's folder is the shown chat's or
   terminal's, and the title bar and panel follow it. Picking a chat or terminal of another
   folder switches the window to it in place (`project_enter`, no reload; terminals and the
-  list stay). The search (Sessions sheet) shows the 5 newest chats of any folder under
-  "Recent", then the shown folder's other chats under its name; picking another folder's
-  chat switches the window there in place.
+  list stay). The search (Sessions sheet) shows the 5 newest chats of the 10 most recently
+  used folders under "Recent" (each with its folder and time; the engine's
+  `saved-sessions?folders=10`), then the shown folder's other chats under "Current folder ·
+  ~/path" with only their time; picking another folder's chat (there, in the list or with
+  Alt+number) switches the window there in place.
 - The left list is the open chats shared with the terminal's session list (owner,
   2026-10-20: "the two should be in sync"): one file, `$XDG_STATE_HOME/crush/
   open-chats.json` (internal/openchats, src-tauri/src/openchats.rs). A chat opened in
@@ -131,6 +133,11 @@ never "sessions".
   (the folder's engine joins behind the shown chat); words typed while a chat opens go
   into that chat's box, as a send then does (owner, 2026-10-20).
 - Alt+Backspace in the chat box deletes the word before the caret (owner, 2026-10-20).
+- Under the typing box is the same 15 as above it; the meter strip (panel hidden) brings 18
+  more of its own that grows and shrinks with it, so the space glides both ways (owner,
+  2026-10-20).
+- The chat's scroll range ends on a whole pixel (an invisible bit of room under the last
+  item), so a wheel at the bottom never nudges it (owner, 2026-10-20).
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).
 - Sending a message or a `!` command brings the chat to its bottom, following.
 - The title bar's icon is the heart bit alone (no tile). The title, folder and branch share

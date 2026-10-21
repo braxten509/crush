@@ -10,7 +10,8 @@ chats (proj's, beta's and gamma's; the window is on proj):
 - picking beta's chat switches the window to beta in place: no reload, the
   top bar and the connection follow, a terminal tab stays;
 - the search (the Sessions sheet) lists the 5 newest chats under Recent,
-  then the shown folder's other chats under its name;
+  then the shown folder's other chats under "Current folder · ~/path", with
+  only their time;
 - New chat and New terminal ask where to start (the folder picker), on the
   shown folder.
 
@@ -111,8 +112,11 @@ sheet = run("""
 """) or {}
 want = ["Beta chat", "Is SameSite=Lax safe?", "Cookie lifetime", "Gamma chat", "Login keeps redirecting", "Beta notes"]
 got = [next((w for w in want if r.startswith(w)), r) for r in sheet.get("rows") or []]
-check(sheet.get("groups") == ["Recent", "beta"] and got == want,
-      f"the search shows the 5 newest chats under Recent, then beta's other chats ({sheet.get('groups')}, {got})")
+groups = sheet.get("groups") or []
+check(len(groups) == 2 and groups[0] == "Recent" and groups[1].startswith("Current folder · ") and groups[1].endswith("beta") and got == want,
+      f"the search shows the 5 newest chats under Recent, then beta's other chats under Current folder ({groups}, {got})")
+last = (sheet.get("rows") or [""])[-1]
+check("·" not in last, f"a row under Current folder shows only its time ({last!r})")
 key("Escape")
 time.sleep(0.6)
 

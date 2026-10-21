@@ -3,10 +3,19 @@
   // hidden, the same meters sit in the composer's bottom padding under the
   // field: per meter the small-caps label, a 60 × 4 bar and the percent (both
   // amber under 30 % left, rose under 10 %), 20 apart from the field's left
-  // edge; then the token count when "Tokens used" is on (SIDE-019). It takes no room of
-  // its own, so nothing moves when it comes and goes; it settles in and rolls
-  // away (lib/motion.js). Placed by Conversation.
-  import { settle } from "../../lib/motion.js";
+  // edge; then the token count when "Tokens used" is on (SIDE-019). It sits
+  // in the composer's 15 bottom padding plus 18 of its own room, which grows
+  // and shrinks with it as it settles in and rolls away, so the space under
+  // the field glides along (owner, 2026-10-20: "slide the bottom area's space
+  // at the same time"). Placed by Conversation.
+  import { paper, settle, tick } from "../../lib/motion.js";
+
+  // The strip's own room, scaled with the strip's motion (no clipping: the
+  // strip reaches up into the composer's padding).
+  function room(node) {
+    const height = parseFloat(getComputedStyle(node).height) || 0;
+    return paper((t) => `height: ${(t * height).toFixed(2)}px;${tick(t)}`);
+  }
   import { meterNow } from "./panel.svelte.js";
 
   let now = $state(Date.now());
@@ -18,7 +27,7 @@
   const model = $derived(meterNow(now));
 </script>
 
-<div class="strip-anchor">
+<div class="strip-anchor" transition:room|global>
   <div class="strip" role="group" aria-label="Usage" data-meter-strip transition:settle|global={{ fold: true }}>
     {#each model.meters as meter (meter.id)}
       <span class="item" data-meter={meter.id}>
@@ -35,12 +44,13 @@
 </div>
 
 <style>
+  /* 18 of its own under the composer's 15 = the 33 the strip fills. */
   .strip-anchor {
     position: relative;
     flex: none;
-    height: 0;
+    height: calc(18 * var(--px));
   }
-  /* The strip fills the composer's whole 33 picture px bottom padding, so its
+  /* The strip fills the composer's 15 bottom padding and its own 18, so its
      words sit midway between the field and the column's foot (owner,
      2026-10-20: the space above and below were unequal). Capitals and digits
      have no descenders, so their ink rides high in the line; 4 on top brings it

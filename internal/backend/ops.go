@@ -117,10 +117,12 @@ func (o Ops) ListSavedSessions(ctx context.Context, selected string) ([]session.
 }
 
 // ListSavedSessionsShown is ListSavedSessions that also keeps the drafts
-// an app shows right now.
-func (o Ops) ListSavedSessionsShown(ctx context.Context, selected string, shown []string) ([]session.Session, error) {
+// an app shows right now and, with folders above 0, also lists that many
+// recently used projects' chats.
+func (o Ops) ListSavedSessionsShown(ctx context.Context, selected string, shown []string, folders int) ([]session.Session, error) {
 	catalog := o.savedSessions()
 	catalog.Shown = shown
+	catalog.Folders = folders
 	return catalog.List(ctx, selected)
 }
 

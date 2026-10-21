@@ -122,8 +122,9 @@
     flex-direction: column;
     min-height: 0;
     box-sizing: border-box;
-    /* 33 below: the meter strip's room, words midway (MeterStrip; owner, 2026-10-20). */
-    padding: calc(15 * var(--px)) calc(20 * var(--px)) calc(33 * var(--px));
+    /* 15 below as above; the meter strip brings 18 more of its own while it
+       shows, words midway in the 33 (MeterStrip; owner, 2026-10-20). */
+    padding: calc(15 * var(--px)) calc(20 * var(--px));
   }
   /* The chip row brings its own 10 above and below in place of the top padding. */
   .composer.chipped {

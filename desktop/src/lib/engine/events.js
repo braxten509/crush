@@ -67,8 +67,21 @@ function book() {
   }
   booked = true;
   rangAgain = false;
-  requestAnimationFrame(frame);
+  // A minimized window draws no frames, so a timer books the take too:
+  // without it a finished chat's sound waited until the window was opened
+  // again (owner, 2026-10-21). Whichever comes first takes the batch.
+  let ran = false;
+  const once = () => {
+    if (ran) return;
+    ran = true;
+    frame();
+  };
+  requestAnimationFrame(once);
+  setTimeout(once, FALLBACK_MS);
 }
+
+// Long enough that a shown window always takes on its frame first.
+const FALLBACK_MS = 250;
 
 async function frame() {
   let entries = [];

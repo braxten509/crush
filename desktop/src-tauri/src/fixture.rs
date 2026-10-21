@@ -218,6 +218,7 @@ impl Fixture {
         body: Option<Value>,
         call_id: Option<String>,
     ) -> AppResult<Value> {
+        crate::connection::check_route(&method.to_ascii_uppercase(), path)?;
         if method.eq_ignore_ascii_case("GET") {
             let own = self.players.lock().unwrap().get(label).map(|p| p.get.clone()).unwrap_or_default();
             return answer_in(&own, path).or_else(|| self.answer(path)).ok_or_else(|| AppError {
@@ -479,7 +480,8 @@ mod tests {
         let launch = Launch::default();
         let get = |path: &str| fixture.api(&launch, "main", "GET", path, None, None, None);
         assert_eq!(get("sessions").unwrap(), json!([1]));
-        assert_eq!(get("/v1/workspaces/w1/sessions").unwrap(), json!([1]));
+        // A route the real connection refuses is refused here too.
+        assert_eq!(get("/v1/workspaces/w1/sessions").unwrap_err().code, "route_not_allowed");
         assert_eq!(get("/v1/limits").unwrap(), json!({"clis": []}));
         assert_eq!(get("agent").unwrap(), json!({"is_ready": true}));
         let missing = get("config").unwrap_err();

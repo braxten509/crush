@@ -387,6 +387,14 @@ const ROUTES: &[(&str, &str)] = &[
     ("POST", "/v1/updates/clis/install"),
     ("GET", "/v1/updates/crush"),
     ("POST", "/v1/updates/crush/decline"),
+    // Accounts and the fallback order (internal/rpc/routes_fallback.go).
+    ("GET", "fallback"),
+    ("PUT", "fallback/order"),
+    ("POST", "accounts"),
+    ("PUT", "accounts/{aid}"),
+    ("DELETE", "accounts/{aid}"),
+    ("POST", "accounts/{aid}/login"),
+    ("POST", "/v1/limits/refill"),
 ];
 
 /// The only routes `api_secret` posts to (6.4): a secure form's answers,
@@ -1269,6 +1277,12 @@ pub fn wipe_value(value: &mut Value) {
     }
 }
 
+/// `api`'s route check, for the fixture player too, so a recorded run
+/// refuses what a real one would: `route_not_allowed` for an unlisted route.
+pub fn check_route(method: &str, path: &str) -> AppResult<()> {
+    Route::find(method, path).map(|_| ())
+}
+
 /// `api_secret`'s route check, for the fixture player too: `secret_route` for any other path.
 pub fn check_secret_route(path: &str) -> AppResult<()> {
     Route::secret(path).map(|_| ())
@@ -1835,8 +1849,9 @@ mod tests {
         design.sort();
         listed.sort();
         design.extend(DESIGN_5_6_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))));
+        design.extend(FALLBACK_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))));
         design.sort();
-        assert_eq!(listed, design, "the route list is design 1.3's table and 5-6's 6.5, no more and no less");
+        assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5 and the fallback routes, no more and no less");
         for (method, pattern) in ROUTES {
             let path = pattern
                 .replace("{sid}", "s-1")
@@ -1967,6 +1982,23 @@ mod tests {
         ("PUT", &["/v1/memory/limit", "/v1/themes/{name}"]),
         ("DELETE", &["/v1/themes/{name}"]),
     ];
+
+    /// Accounts and the fallback order (internal/rpc/routes_fallback.go), row by row.
+    const FALLBACK_ROUTES: &[(&str, &[&str])] = &[
+        ("GET", &["fallback"]),
+        ("PUT", &["fallback/order", "accounts/{aid}"]),
+        ("POST", &["accounts", "accounts/{aid}/login", "/v1/limits/refill"]),
+        ("DELETE", &["accounts/{aid}"]),
+    ];
+
+    #[test]
+    fn route_list_has_fallback_routes() {
+        for (method, path) in [("GET", "fallback"), ("PUT", "fallback/order"), ("POST", "accounts"), ("PUT", "accounts/claude-2"),
+            ("DELETE", "accounts/claude-2"), ("POST", "accounts/claude-2/login"), ("POST", "/v1/limits/refill")] {
+            assert!(check_route(method, path).is_ok(), "{method} {path} is refused");
+        }
+        assert_eq!(check_route("DELETE", "fallback").err().map(|e| e.code), Some("route_not_allowed".to_string()));
+    }
 
     #[test]
     fn route_list_has_5_6_routes() {

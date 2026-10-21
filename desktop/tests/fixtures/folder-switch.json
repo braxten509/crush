@@ -551,6 +551,126 @@
     "MessageCount": 0,
     "CreatedAt": 1792310000,
     "UpdatedAt": 1792310000
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000101",
+    "ParentSessionID": "",
+    "Title": "Beta old 01",
+    "MessageCount": 0,
+    "CreatedAt": 1792299800,
+    "UpdatedAt": 1792299900
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000102",
+    "ParentSessionID": "",
+    "Title": "Beta old 02",
+    "MessageCount": 0,
+    "CreatedAt": 1792299700,
+    "UpdatedAt": 1792299800
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000103",
+    "ParentSessionID": "",
+    "Title": "Beta old 03",
+    "MessageCount": 0,
+    "CreatedAt": 1792299600,
+    "UpdatedAt": 1792299700
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000104",
+    "ParentSessionID": "",
+    "Title": "Beta old 04",
+    "MessageCount": 0,
+    "CreatedAt": 1792299500,
+    "UpdatedAt": 1792299600
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000105",
+    "ParentSessionID": "",
+    "Title": "Beta old 05",
+    "MessageCount": 0,
+    "CreatedAt": 1792299400,
+    "UpdatedAt": 1792299500
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000106",
+    "ParentSessionID": "",
+    "Title": "Beta old 06",
+    "MessageCount": 0,
+    "CreatedAt": 1792299300,
+    "UpdatedAt": 1792299400
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000107",
+    "ParentSessionID": "",
+    "Title": "Beta old 07",
+    "MessageCount": 0,
+    "CreatedAt": 1792299200,
+    "UpdatedAt": 1792299300
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000108",
+    "ParentSessionID": "",
+    "Title": "Beta old 08",
+    "MessageCount": 0,
+    "CreatedAt": 1792299100,
+    "UpdatedAt": 1792299200
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000109",
+    "ParentSessionID": "",
+    "Title": "Beta old 09",
+    "MessageCount": 0,
+    "CreatedAt": 1792299000,
+    "UpdatedAt": 1792299100
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000110",
+    "ParentSessionID": "",
+    "Title": "Beta old 10",
+    "MessageCount": 0,
+    "CreatedAt": 1792298900,
+    "UpdatedAt": 1792299000
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000111",
+    "ParentSessionID": "",
+    "Title": "Beta old 11",
+    "MessageCount": 0,
+    "CreatedAt": 1792298800,
+    "UpdatedAt": 1792298900
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000112",
+    "ParentSessionID": "",
+    "Title": "Beta old 12",
+    "MessageCount": 0,
+    "CreatedAt": 1792298700,
+    "UpdatedAt": 1792298800
    }
   ]
  },

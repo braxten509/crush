@@ -26,7 +26,9 @@
   //   hoverRuns? (the palette's mouse, CMD-013: hover selects, one click
   //   chooses), maxRows? (the list is no taller than that many rows, with
   //   the group headings among them), below (bindable: how many rows sit
-  //   wholly below the scrolled view, for a "↓ N more" line)
+  //   wholly below the scrolled view, for a "↓ N more" line), ruled? (a rule
+  //   over each group heading after the first), footer? (a snippet drawn
+  //   after the last row, inside the scrolled list)
   // Methods: move(delta, {wrap}), selectFirst(), selectLast(), chosen(),
   // visibleIndexes().
   import { tick, untrack } from "svelte";
@@ -55,6 +57,8 @@
     hoverRuns = false,
     maxRows = null,
     below = $bindable(0),
+    ruled = false,
+    footer = null,
   } = $props();
 
   let root = $state(null);
@@ -363,9 +367,9 @@
 
 <div class="filter-list" data-kit-list bind:this={root}>
   <ul class="scroller" role="listbox" aria-label={label || "Items"} tabindex="-1" bind:this={scroller} onscroll={updateFades} style:max-height={cap === null ? null : `${cap}px`}>
-    {#each sections as section (section.key)}
+    {#each sections as section, at (section.key)}
       {#if section.label}
-        <li class="group" role="presentation" data-group>{section.label}</li>
+        <li class="group" class:ruled={ruled && at > 0} role="presentation" data-group>{section.label}</li>
       {/if}
       {#each section.rows as entry (entry.index)}
         {@const item = items[entry.index]}
@@ -400,6 +404,9 @@
         </li>
       {/each}
     {/each}
+    {#if footer}
+      <li class="footer" role="presentation" data-list-footer>{@render footer()}</li>
+    {/if}
   </ul>
   {#if order.length === 0 && empty}
     <p class="empty" data-empty>{empty}</p>
@@ -551,6 +558,23 @@
     letter-spacing: var(--track-label);
     text-transform: uppercase;
     color: var(--ink);
+  }
+  /* A rule between groups, short of the frame like the sheet's other inner
+     rules (owner, 2026-10-20: "I cannot tell the difference"). */
+  .group.ruled {
+    position: relative;
+    margin-top: calc(10 * var(--px));
+  }
+  .group.ruled::before {
+    content: "";
+    position: absolute;
+    left: calc(26 * var(--px));
+    right: calc(26 * var(--px));
+    top: 0;
+    border-top: 1px solid var(--rule-faint);
+  }
+  .footer {
+    padding: calc(8 * var(--px)) calc(26 * var(--px)) calc(12 * var(--px));
   }
   .empty {
     margin: calc(20 * var(--px)) calc(26 * var(--px)) 0;

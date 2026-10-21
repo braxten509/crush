@@ -8,7 +8,9 @@
   // CatalogChange. Under "Recent", the 5 newest chats of the 10 most
   // recently used folders, with their folder; then, under "Current folder ·
   // ~/path", the rest of this folder's chats with only their time (owner,
-  // 2026-10-20). A chat of another folder switches the window there in
+  // 2026-10-20), a rule between the two; the folder's newest 10 first, 10 more
+  // per "Show more" at the list's end (a query searches them all). A chat of
+  // another folder switches the window there in
   // place. Session events rename or remove rows in place.
   //   query? (the filter's first text: the left list's search box, START-021's id)
   import { onMount, tick, untrack } from "svelte";
@@ -33,6 +35,7 @@
 
   const ID = "sessions";
   const RECENT = 5;
+  const LOCAL = 10; // the current folder's chats shown at first, and per "Show more"
   const FOLDERS = 10; // Recent reads the 10 most recently used folders (owner, 2026-10-20)
   const BUSY = "Agent is busy, please wait..."; // sessions.go:196-198
 
@@ -49,6 +52,17 @@
   let loaded = $state(false);
   let failed = $state(false);
   let list = $state(null);
+  let localShown = $state(LOCAL);
+
+  // What the list draws: Recent, then the folder's first localShown chats
+  // (rows keeps them all; a query searches them all). Recent come first in
+  // rows, so these are rows' first entries and share its indexes.
+  const shownRows = $derived.by(() => {
+    if (query) return rows;
+    let local = 0;
+    return rows.filter((row) => recent.has(row.ID) || local++ < localShown);
+  });
+  const hiddenCount = $derived(rows.length - shownRows.length);
 
   const now = $derived(secondNow());
   const help = $derived(
@@ -83,6 +97,9 @@
       failed = false;
       const at = rows.findIndex((row) => row.ID === keep);
       selected = at >= 0 ? at : rows.length > 0 ? 0 : -1;
+      // The kept chat stays in view: enough of the folder's chats show to reach it.
+      const localAt = at - newest.length;
+      if (localAt >= localShown) localShown = Math.ceil((localAt + 1) / LOCAL) * LOCAL;
     } catch (error) {
       failed = rows.length === 0;
       notify("error", error?.message ?? String(error));
@@ -91,7 +108,7 @@
     }
   }
 
-  const chosen = () => (selected >= 0 ? rows[selected] : null);
+  const chosen = () => (selected >= 0 ? (shownRows[selected] ?? null) : null);
 
   // -- Opening a row (2.5; session_load.go:82-100) --
 
@@ -294,7 +311,7 @@
   {#if loaded && rows.length > 0}
     <FilterList
       bind:this={list}
-      items={rows}
+      items={shownRows}
       filterText={(row) => row.Title ?? ""}
       groups={(row) => (recent.has(row.ID) ? "Recent" : `Current folder · ${short(clean(conn.project.path || conn.project.cwd), leftList.home)}`)}
       info={(row) => infoText(recent.has(row.ID) ? row : { ...row, Directory: "" }, leftList.home, now)}
@@ -304,6 +321,8 @@
       onChoose={(row) => open(row)}
       label="Sessions"
       row={mode === "rename" ? renameRow : null}
+      ruled
+      footer={hiddenCount > 0 && !query ? showMore : null}
     />
   {/if}
 </Sheet>
@@ -312,6 +331,10 @@
 {#snippet controls()}
   <button type="button" onclick={startRename}>Rename</button>
   <button type="button" onclick={startDelete}>Delete</button>
+{/snippet}
+
+{#snippet showMore()}
+  <button type="button" class="more" data-show-more onclick={() => (localShown += LOCAL)}>Show more ({hiddenCount})</button>
 {/snippet}
 
 {#snippet renameRow(item, index, state)}
@@ -325,6 +348,13 @@
 {/snippet}
 
 <style>
+  .more {
+    font: var(--t-small);
+    color: var(--link);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: calc(4 * var(--px));
+  }
   .actions {
     margin-top: calc(12 * var(--px));
   }

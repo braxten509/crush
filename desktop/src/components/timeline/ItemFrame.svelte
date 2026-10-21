@@ -78,6 +78,11 @@
   .frame {
     position: relative;
   }
+  /* No ring round a message (owner, 2026-10-20: "remove the orange
+     selector"): the timeline's keys still move between items. */
+  .frame:focus-visible {
+    outline: none;
+  }
   .frame.fresh {
     animation: paper-settle var(--motion) var(--ease-paper);
   }

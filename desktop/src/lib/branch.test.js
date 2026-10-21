@@ -252,6 +252,8 @@ describe("canBranch: the reasons of 3.1", () => {
     expect(canBranch(reply(call, finish), cut, [], { answered: new Set() })).toEqual({ reason: "unfinished" });
     expect(canBranch(reply(call, finish), cut, [], { answered: new Set(["c1"]) })).toEqual({ ok: true });
     expect(canBranch(reply(), { error: "unfinished" }, [])).toEqual({ reason: "unfinished" });
+    // A reply still being written says so whatever the selection (a whole line spills into the next item).
+    expect(canBranch(reply(), { error: "two_messages" }, [])).toEqual({ reason: "unfinished" });
     expect(HINTS.unfinished).toBe("Wait for the reply to finish");
   });
 

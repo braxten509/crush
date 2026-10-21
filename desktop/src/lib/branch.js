@@ -185,14 +185,16 @@ function settled(message, answered) {
   return partsOf(message, "tool_call").every((p) => !p.data?.id || has(p.data.id));
 }
 
-// message: the stored message the cut is in (or the clicked one when nothing
-// is selected); links: the links already on it. The order picks the hint that
-// helps first: where the words are, then the message's state, then the words.
+// message: the stored message the cut is in (or the clicked one when the
+// selection names none); links: the links already on it. The order picks the
+// hint that helps first: a reply still being written says so whatever is
+// selected (owner, 2026-10-20: a whole line selected said "Highlight text in
+// one message"), then where the words are, then the words.
 export function canBranch(message, cut, links = [], { answered = null } = {}) {
+  if (cut?.error === "unfinished" || (message && !settled(message, answered))) return { reason: "unfinished" };
   if (cut?.error === "two_messages") return { reason: "two_messages" };
   if (cut?.error === "tool_output") return { reason: "tool_output" };
   if (message && message.role !== "user" && message.role !== "assistant") return { reason: "tool_output" };
-  if (cut?.error === "unfinished" || (message && !settled(message, answered))) return { reason: "unfinished" };
   if (!message || !cut || cut.error || !(cut.end > cut.start) || String(cut.text ?? "").trim() === "") return { reason: "empty" };
   const own = (links ?? []).filter((link) => link.source_message_id === message.id);
   if (overlaps(own, cut.start, cut.end)) return { reason: "overlap" };

@@ -34,13 +34,13 @@ function answeredIn(chat) {
   return answered;
 }
 
-// The menu's context → {ok, cut, message} or {reason}. Without a selection
-// the clicked message speaks: a reply still being written says so, anything
-// else asks for words.
+// The menu's context → {ok, cut, message} or {reason}. When the selection
+// names no message the clicked one speaks: a reply still being written says
+// so, anything else gets the selection's own reason.
 function verdictOf(ctx) {
   const chat = messages.bySession[ctx?.sessionId ?? ""];
   const cut = ctx?.range ? cutOfRange(ctx.range, ctx.items ?? []) : { error: "empty" };
-  const mid = cut.message_id ?? (cut.error === "empty" ? (ctx?.message?.id ?? "") : "");
+  const mid = cut.message_id ?? (ctx?.message?.id ?? "");
   const message = mid ? (chat?.byId.get(mid) ?? null) : null;
   const verdict = canBranch(message, cut, linksOnMessage(mid), { answered: answeredIn(chat) });
   return verdict.ok ? { ok: true, cut, message } : verdict;

@@ -112,7 +112,8 @@ never "sessions".
   list stay). The search (Sessions sheet) shows the 5 newest chats of the 10 most recently
   used folders under "Recent" (each with its folder and time; the engine's
   `saved-sessions?folders=10`), then the shown folder's other chats under "Current folder ·
-  ~/path" with only their time; picking another folder's chat (there, in the list or with
+  ~/path" with only their time, past a rule; the folder's newest 10 first, 10 more per
+  "Show more" at the list's end (a search finds them all); picking another folder's chat (there, in the list or with
   Alt+number) switches the window there in place.
 - The left list is the open chats shared with the terminal's session list (owner,
   2026-10-20: "the two should be in sync"): one file, `$XDG_STATE_HOME/crush/
@@ -133,6 +134,8 @@ never "sessions".
   (the folder's engine joins behind the shown chat); words typed while a chat opens go
   into that chat's box, as a send then does (owner, 2026-10-20).
 - Alt+Backspace in the chat box deletes the word before the caret (owner, 2026-10-20).
+- A message never draws a focus ring (owner, 2026-10-20). A reply still being written
+  makes "Branch from here" say "Wait for the reply to finish", whatever is selected.
 - Under the typing box is the same 15 as above it; the meter strip (panel hidden) brings 18
   more of its own that grows and shrinks with it, so the space glides both ways (owner,
   2026-10-20).

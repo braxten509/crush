@@ -10,8 +10,9 @@ chats (proj's, beta's and gamma's; the window is on proj):
 - picking beta's chat switches the window to beta in place: no reload, the
   top bar and the connection follow, a terminal tab stays;
 - the search (the Sessions sheet) lists the 5 newest chats under Recent,
-  then the shown folder's other chats under "Current folder · ~/path", with
-  only their time;
+  then, past a rule, the shown folder's newest 10 under "Current folder ·
+  ~/path", with only their time; the rest behind "Show more" (a search
+  finds them);
 - New chat and New terminal ask where to start (the folder picker), on the
   shown folder.
 
@@ -21,7 +22,7 @@ Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
 import os, sys, time
 
 sys.path.insert(0, os.path.dirname(__file__))
-from harness import check, finish, key, list_open_chat, open_chat_ids, probe_eval, read_probe, shot, wait_for
+from harness import check, finish, key, list_open_chat, open_chat_ids, probe_eval, read_probe, shot, type_text, wait_for
 
 probe_path, out_dir = sys.argv[1], sys.argv[2]
 BETA = "b0b0b0b0-1111-4222-8333-000000000001"
@@ -110,13 +111,35 @@ sheet = run("""
   return { groups: [...s.querySelectorAll('[data-group]')].map((el) => el.textContent.trim()),
            rows: [...s.querySelectorAll('[data-index]')].map((el) => el.textContent.trim()) };
 """) or {}
-want = ["Beta chat", "Is SameSite=Lax safe?", "Cookie lifetime", "Gamma chat", "Login keeps redirecting", "Beta notes"]
+want = ["Beta chat", "Is SameSite=Lax safe?", "Cookie lifetime", "Gamma chat", "Login keeps redirecting", "Beta notes"] + [f"Beta old {i:02d}" for i in range(1, 10)]
 got = [next((w for w in want if r.startswith(w)), r) for r in sheet.get("rows") or []]
 groups = sheet.get("groups") or []
 check(len(groups) == 2 and groups[0] == "Recent" and groups[1].startswith("Current folder · ") and groups[1].endswith("beta") and got == want,
-      f"the search shows the 5 newest chats under Recent, then beta's other chats under Current folder ({groups}, {got})")
+      f"the search shows the 5 newest chats under Recent, then beta's newest 10 under Current folder ({groups}, {got})")
 last = (sheet.get("rows") or [""])[-1]
 check("·" not in last, f"a row under Current folder shows only its time ({last!r})")
+# A rule over the second heading, short of the frame (owner, 2026-10-20).
+rule = run("""
+  const heads = document.querySelectorAll('[data-sheet="sessions"] [data-group]');
+  const before = getComputedStyle(heads[1], '::before');
+  const first = getComputedStyle(heads[0], '::before');
+  return { second: before.borderTopWidth + ' ' + before.borderTopStyle, first: first.content };
+""") or {}
+check(rule.get("second") == "1px solid" and rule.get("first") in ("none", "normal"), f"a rule divides Recent from Current folder ({rule})")
+# The rest wait behind "Show more" at the end; a search finds them anyway.
+MORE = "return document.querySelector('[data-sheet=\"sessions\"] [data-show-more]')?.textContent.trim() ?? '';"
+check(run(MORE) == "Show more (3)", f"the folder's other 3 chats wait behind Show more ({run(MORE)!r})")
+type_text("old 12")
+time.sleep(0.6)
+found = run("return [...document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]')].map((el) => el.textContent.trim());") or []
+check(any(r.startswith("Beta old 12") for r in found) and run(MORE) == "", f"a search finds a chat behind Show more ({found})")
+for _ in range(len("old 12")):
+    key("BackSpace")
+time.sleep(0.4)
+run("document.querySelector('[data-sheet=\"sessions\"] [data-show-more]').click(); return true;")
+time.sleep(0.4)
+rows_now = run("return document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]').length;")
+check(rows_now == 5 + 13 and run(MORE) == "", f"Show more shows the rest ({rows_now} rows)")
 key("Escape")
 time.sleep(0.6)
 

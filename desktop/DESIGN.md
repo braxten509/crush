@@ -161,6 +161,10 @@ never "sessions".
   only the picked answers (✓, ink 600) and notes in italics (owner's pick A, 2026-10-20).
   Labels come from the newest `crush ask` call before the line (lib/answers.js); without
   one, the ids the result names (tests/driver/answers_popup.py).
+- Dragging the chat's scroll bar never shows a blank chat (owner, 2026-10-20): Electron runs
+  with `run-all-compositor-stages-before-draw`, so a frame shows only once it is painted
+  (tests/driver/scroll_drag.py records the real pixels with ffmpeg; without it 5-8 of 333
+  frames were empty paper; p3_speed still passes).
 - The chat's scroll range ends on a whole pixel (an invisible bit of room under the last
   item), so a wheel at the bottom never nudges it (owner, 2026-10-20).
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).

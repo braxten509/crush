@@ -90,6 +90,12 @@ if (process.platform === "linux") {
   app.setPath("userData", path.join(dataHome, "crush-desktop", single ? "electron" : `electron-${process.pid}`));
 }
 app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+// A frame shows only once its picture is painted (owner, 2026-10-20: "when I
+// drag this and a lot of text scrolls, the entire chat goes blank until I
+// stop"): dragging the chat's scroll bar jumps thousands of pixels a frame,
+// and Chromium otherwise draws the parts it has not painted yet as empty
+// paper (tests/driver/scroll_drag.py records them).
+app.commandLine.appendSwitch("run-all-compositor-stages-before-draw");
 // The window's class (X11) and app id (Wayland) is "crush-desktop", the name
 // the menu entry and the test drivers know it by.
 app.setName("crush-desktop");

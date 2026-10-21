@@ -82,6 +82,8 @@ type coordinator struct {
 	tasks       *taskHub
 	// limitRetries continues chats whose usage limit resets.
 	limitRetries limitRetries
+	// fallback follows the fallback order between turns.
+	fallback fallbackState
 
 	// agentMu guards mainAgent and mainAgentName: SetMainAgent runs on
 	// HTTP handler goroutines while runs, cancels, and probes read the

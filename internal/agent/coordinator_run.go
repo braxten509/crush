@@ -155,6 +155,7 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 	// its model settings, and the model refresh below must all target the
 	// same agent even if SetMainAgent swaps the main agent mid-flight.
 	agent, agentName := c.activeAgent()
+	c.fallbackBeforeTurn(ctx, sessionID)
 	if err := c.updateAgentModels(ctx, agent, agentName); err != nil {
 		return nil, fmt.Errorf("failed to update models: %w", err)
 	}
@@ -213,7 +214,16 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 	beforeLoaded := c.skillTracker.LoadedNames()
 	result, originalErr := agent.Run(ctx, call)
 	logTurnSkillUsage(sessionID, prompt, c.activeSkills, c.skillTracker, beforeLoaded)
-	c.planLimitRetry(sessionID, originalErr)
+	if !c.fallbackOnOut(ctx, sessionID, originalErr) {
+		c.planLimitRetry(sessionID, originalErr)
+		// The error box leaves the retry out when the order steers the
+		// chat; nothing in the order had room, so say it here.
+		if c.interactiveTurn(ctx) && fallbackHolds(c.cfg, model.ModelCfg) {
+			if at, ok := limitRetryTime(originalErr, time.Now()); ok {
+				c.fallbackNotice(ctx, sessionID, "Nothing in the fallback order has room. "+limitRetryNote(at))
+			}
+		}
+	}
 
 	// Notify only if still unauthorized after retry — a successful
 	// retry means the user doesn't need to re-authenticate. AWS SSO is

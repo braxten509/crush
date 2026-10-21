@@ -39,6 +39,9 @@ func (m *UI) composerFooter(width int) string {
 		// Unwrapped here; the whole line wraps below.
 		stats := renderFooterItems(m.com.Styles, m.footerItems(), m.selectedLargeModel(), m.session,
 			m.compactionLimit(m.selectedLargeModel(), m.session), m.selectedCLILimits(), math.MaxInt32)
+		if n := m.selectedCLIRefills(); n > 0 && stats != "" {
+			stats += m.com.Styles.ComposerFooter.Separator.Render(" · ") + m.com.Styles.ComposerFooter.LimitOther.Render(refillsText(n))
+		}
 		switch {
 		case line == "":
 			line = stats
@@ -333,6 +336,14 @@ func renderFooterItems(t *styles.Styles, items []string, model *workspace.AgentM
 		fields = append(fields, field)
 	}
 	return ansi.Wrap(strings.Join(fields, s.Separator.Render(" · ")), width, "")
+}
+
+// refillsText is "1 free refill" or "N free refills".
+func refillsText(n int) string {
+	if n == 1 {
+		return "1 free refill"
+	}
+	return strconv.Itoa(n) + " free refills"
 }
 
 func footerTokenCount(tokens int64) string {

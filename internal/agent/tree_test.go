@@ -29,7 +29,7 @@ func TestTreeCLIStartsFreshAndHandoffExcludesAbandonedBranch(t *testing.T) {
 	require.NoError(t, err)
 	old, err := env.messages.Create(ctx, sess.ID, message.CreateMessageParams{Role: message.Assistant, Parts: []message.ContentPart{message.TextContent{Text: "OLD_VIOLET"}}})
 	require.NoError(t, err)
-	provider := cliagent.NewProvider(config.TypeClaudeCode, t.TempDir(), t.TempDir(), nil, nil, "", false)
+	provider := cliagent.NewProvider(config.TypeClaudeCode, t.TempDir(), t.TempDir(), nil, nil, "", false, "")
 	model, err := provider.LanguageModel(ctx, "haiku")
 	require.NoError(t, err)
 	cli := model.(*cliagent.Model)

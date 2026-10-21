@@ -27,6 +27,7 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 		c.treeEndpoints(),
 		c.shareEndpoints(),
 		c.desktopEndpoints(),
+		c.fallbackEndpoints(),
 	)
 }
 

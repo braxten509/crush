@@ -3,6 +3,32 @@
   "$id": "https://github.com/charmbracelet/crush/internal/config/config",
   "$ref": "#/$defs/Config",
   "$defs": {
+    "Account": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable ID; also the account folder's name"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "claude-code",
+            "codex-cli"
+          ],
+          "description": "The tool signed in"
+        },
+        "name": {
+          "type": "string",
+          "description": "Shown name; defaults to the tool and the account's number"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "id",
+        "kind"
+      ]
+    },
     "Attribution": {
       "properties": {
         "trailer_style": {
@@ -110,6 +136,78 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "FallbackBlock": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "use",
+            "wait",
+            "refill"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "effort": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "account": {
+          "type": "string"
+        },
+        "move_at_percent": {
+          "type": "number",
+          "maximum": 100,
+          "minimum": 0
+        },
+        "refill_first": {
+          "type": "boolean"
+        },
+        "come_back": {
+          "type": "boolean"
+        },
+        "max_wait_minutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "meanwhile": {
+          "type": "string",
+          "enum": [
+            "",
+            "next"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "type"
+      ]
+    },
+    "FallbackOrder": {
+      "properties": {
+        "on": {
+          "type": "boolean"
+        },
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/FallbackBlock"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "on"
+      ]
     },
     "HookConfig": {
       "properties": {
@@ -515,6 +613,17 @@
           "minimum": 1000,
           "description": "Fallback compaction threshold for models without native compaction; defaults to 400000"
         },
+        "accounts": {
+          "items": {
+            "$ref": "#/$defs/Account"
+          },
+          "type": "array",
+          "description": "More Claude Code and Codex sign-ins"
+        },
+        "fallback": {
+          "$ref": "#/$defs/FallbackOrder",
+          "description": "The fallback order: which account and model a chat moves to when one runs out"
+        },
         "memory_limit_gb": {
           "type": "number",
           "minimum": 0,
@@ -844,6 +953,10 @@
           "examples": [
             "openai"
           ]
+        },
+        "account": {
+          "type": "string",
+          "description": "ID of the options.accounts sign-in this Claude Code or Codex model runs on; empty is the tool's own login"
         },
         "reasoning_effort": {
           "type": "string",

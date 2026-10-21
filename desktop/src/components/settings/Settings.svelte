@@ -35,6 +35,8 @@
   } from "../../lib/settings/store.svelte.js";
   import { chooseAppearance, chosenTheme, theme } from "../../lib/themes/current.svelte.js";
   import { panelSetting } from "../../lib/stores/ui.svelte.js";
+  import FallbackOrder from "./FallbackOrder.svelte";
+  import ToolAccounts from "./ToolAccounts.svelte";
 
   const ACCOUNTS = [
     { platform: "hyper", provider: "hyper", name: "Hyper" },
@@ -215,6 +217,10 @@
         <button type="button" class="act" onclick={() => account(row)}>{signedIn(row.provider) ? "Sign out" : "Sign in"}</button>
       </div>
     {/each}
+    <ToolAccounts />
+  {/if}
+  {#if section === "fallback"}
+    <FallbackOrder />
   {/if}
   {#if section === "phone"}
     <div class="row">

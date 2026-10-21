@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,7 +81,7 @@ func (m *UI) modelInfo(width int) string {
 	}
 	info := common.ModelInfo(m.com.Styles, modelName, providerName, reasoningInfo, modelContext, width, m.hyperCredits)
 	if limits := m.selectedCLILimits(); len(limits) > 0 {
-		info = lipgloss.JoinVertical(lipgloss.Left, info, "", usageLimits(m.com.Styles, limits, width))
+		info = lipgloss.JoinVertical(lipgloss.Left, info, "", usageLimits(m.com.Styles, limits, m.selectedCLIRefills(), width))
 	}
 	return info
 }
@@ -104,9 +105,21 @@ func (m *UI) selectedCLILimits() []cliagent.Limit {
 		return nil
 	}
 	if kind := m.cliKind(); kind != "" {
-		return cliagent.Limits(kind, m.agentModel.ModelCfg.Model)
+		return cliagent.AccountLimits(kind, m.agentModel.ModelCfg.Account, m.agentModel.ModelCfg.Model)
 	}
 	return nil
+}
+
+// selectedCLIRefills is how many free refills the selected model's account
+// has left (Codex), as last read.
+func (m *UI) selectedCLIRefills() int {
+	if m.selectedLargeModel() == nil {
+		return 0
+	}
+	if kind := m.cliKind(); kind != "" {
+		return cliagent.Refills(kind, m.agentModel.ModelCfg.Account)
+	}
+	return 0
 }
 
 // fetchCLILimits refreshes the selected agent CLI's usage limits.
@@ -127,7 +140,7 @@ func (m *UI) fetchCLILimits() tea.Cmd {
 }
 
 // usageLimits renders what is left of each subscription usage window.
-func usageLimits(t *styles.Styles, limits []cliagent.Limit, width int) string {
+func usageLimits(t *styles.Styles, limits []cliagent.Limit, refills, width int) string {
 	nameWidth := 0
 	for _, l := range limits {
 		nameWidth = max(nameWidth, lipgloss.Width(l.Name))
@@ -145,6 +158,9 @@ func usageLimits(t *styles.Styles, limits []cliagent.Limit, width int) string {
 			line += t.ModelInfo.TokenCount.Render("  resets " + shortDuration(in))
 		}
 		lines = append(lines, ansi.Truncate(line, width, "…"))
+	}
+	if refills > 0 {
+		lines = append(lines, ansi.Truncate("  "+label.Render("Free refills ")+t.ModelInfo.TokenPercentage.Render(strconv.Itoa(refills)), width, "…"))
 	}
 	return strings.Join(lines, "\n")
 }

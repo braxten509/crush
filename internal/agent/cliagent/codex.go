@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/charmbracelet/crush/internal/version"
@@ -130,7 +132,7 @@ func codexGuardTrust(result json.RawMessage) map[string]any {
 // codexKey is what a live Codex process's thread was started with; a turn
 // that needs anything else starts a new one.
 type codexKey struct {
-	dir, model, tier, approval, sandbox string
+	dir, model, tier, approval, sandbox, account string
 }
 
 // codexLive is a Codex process kept open between the turns of one Crush
@@ -207,7 +209,7 @@ type codexRun struct {
 
 func runCodex(ctx context.Context, m *Model, t Turn) error {
 	r := newCodexRun(ctx, m, t)
-	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: r.approval, sandbox: r.sandbox}
+	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: r.approval, sandbox: r.sandbox, account: m.Account}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	live, lines, err := r.open(keep, key)
@@ -291,7 +293,8 @@ func (r *codexRun) open(keep bool, key codexKey) (*codexLive, <-chan []byte, err
 	// Crush hands every CLI the shared memory; Codex's own stays off.
 	var err error
 	args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0", "-c", codexGuardHook()}
-	if r.p, err = startReviewProc(r.m.Dir, r.t.Env, !r.t.NoTools, "codex", args...); err != nil {
+	env := append(slices.Clone(r.t.Env), config.AccountEnv(r.m.Kind, r.m.Account)...)
+	if r.p, err = startReviewProc(r.m.Dir, env, !r.t.NoTools, "codex", args...); err != nil {
 		return nil, nil, err
 	}
 	return nil, r.p.readLines(), nil

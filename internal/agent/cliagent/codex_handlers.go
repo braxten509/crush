@@ -146,7 +146,7 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 			RateLimits codexSnapshot `json:"rateLimits"`
 		}
 		_ = json.Unmarshal(msg.Params, &up)
-		setLimits(config.TypeCodexCLI, up.RateLimits.limits())
+		setLimits(limitKey{config.TypeCodexCLI, r.m.Account}, up.RateLimits.limits(), -1)
 	case "turn/plan/updated":
 		var up struct {
 			Plan any `json:"plan"`

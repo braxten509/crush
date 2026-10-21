@@ -1,6 +1,7 @@
 package cliagent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/google/uuid"
 )
 
 // Limit is one usage window of a CLI's subscription.
@@ -39,48 +41,80 @@ func (l Limit) Left() float64 {
 // their own updates as they happen.
 const limitRefresh = 3 * time.Minute
 
+// limitKey is one account of one CLI: account "" is the tool's own login,
+// any other an options.accounts ID.
+type limitKey struct {
+	kind    catwalk.Type
+	account string
+}
+
 // ponytail: in-process store, so the TUI only sees it in the default
 // (non client/server) mode. The engine reads it through Snapshot and
 // SetLimitsHook (engine-design.md 5.9 e).
 var limitStore struct {
 	sync.Mutex
-	byKind  map[catwalk.Type][]Limit
-	fetched map[catwalk.Type]time.Time
-	pending map[catwalk.Type]bool
+	byKind  map[limitKey][]Limit
+	fetched map[limitKey]time.Time
+	pending map[limitKey]bool
 	// readAt is when the last reading arrived. Unlike fetched, which a
 	// failed refresh sets too as a backoff, it proves a reading exists.
-	readAt map[catwalk.Type]time.Time
+	readAt map[limitKey]time.Time
 	// lastErr is the last failed refresh since the last reading.
-	lastErr map[catwalk.Type]string
+	lastErr map[limitKey]string
+	// refills is how many free refills an account has (Codex), when read.
+	refills map[limitKey]int
 	// hook is told about every new reading and every failed refresh.
-	hook func(kind catwalk.Type)
+	hook func(kind catwalk.Type, account string)
 	// replaced is set while a test's fetchers stand in for the real ones.
 	replaced bool
 }
 
-// KindLimits is what the store knows about one CLI's usage limits.
+// KindLimits is what the store knows about one account's usage limits.
 type KindLimits struct {
 	Kind    catwalk.Type
+	Account string // "" for the tool's own login
 	Limits  []Limit
+	Refills int       // free refills left (Codex); 0 when none or unread
 	ReadAt  time.Time // set only by setLimits
 	Err     string    // last refresh error since the last reading
 	Pending bool
 }
 
-// Snapshot returns the store's state for every CLI with a usage fetcher,
-// sorted by kind.
+// Snapshot returns the store's state for every CLI with a usage fetcher
+// (its own login) and every other account the store has heard of, sorted
+// by kind, then account.
 func Snapshot() []KindLimits {
 	limitStore.Lock()
 	defer limitStore.Unlock()
-	kinds := slices.Sorted(maps.Keys(limitFetchers))
-	out := make([]KindLimits, 0, len(kinds))
-	for _, kind := range kinds {
+	keys := map[limitKey]bool{}
+	for kind := range limitFetchers {
+		keys[limitKey{kind: kind}] = true
+		for _, m := range []map[limitKey]time.Time{limitStore.fetched, limitStore.readAt} {
+			for k := range m {
+				if k.kind == kind {
+					keys[k] = true
+				}
+			}
+		}
+		for k := range limitStore.pending {
+			if k.kind == kind {
+				keys[k] = true
+			}
+		}
+	}
+	sorted := slices.SortedFunc(maps.Keys(keys), func(a, b limitKey) int {
+		return cmp.Or(cmp.Compare(a.kind, b.kind), cmp.Compare(a.account, b.account))
+	})
+	out := make([]KindLimits, 0, len(sorted))
+	for _, k := range sorted {
 		out = append(out, KindLimits{
-			Kind:    kind,
-			Limits:  slices.Clone(limitStore.byKind[kind]),
-			ReadAt:  limitStore.readAt[kind],
-			Err:     limitStore.lastErr[kind],
-			Pending: limitStore.pending[kind],
+			Kind:    k.kind,
+			Account: k.account,
+			Limits:  slices.Clone(limitStore.byKind[k]),
+			Refills: limitStore.refills[k],
+			ReadAt:  limitStore.readAt[k],
+			Err:     limitStore.lastErr[k],
+			Pending: limitStore.pending[k],
 		})
 	}
 	return out
@@ -88,26 +122,38 @@ func Snapshot() []KindLimits {
 
 // SetLimitsHook installs fn, called after each new reading and each failed
 // refresh, with no lock held. nil uninstalls it.
-func SetLimitsHook(fn func(kind catwalk.Type)) {
+func SetLimitsHook(fn func(kind catwalk.Type, account string)) {
 	limitStore.Lock()
 	defer limitStore.Unlock()
 	limitStore.hook = fn
 }
 
-// limitsChanged tells the hook, if one is installed, that kind changed.
-// Callers hold no store lock.
-func limitsChanged(kind catwalk.Type) {
+// limitsChanged tells the hook, if one is installed, that an account
+// changed. Callers hold no store lock.
+func limitsChanged(k limitKey) {
 	limitStore.Lock()
 	fn := limitStore.hook
 	limitStore.Unlock()
 	if fn != nil {
-		fn(kind)
+		fn(k.kind, k.account)
 	}
+}
+
+// forgetKind drops everything the store knows about kind's accounts.
+// Callers hold the store lock.
+func forgetKind(kind catwalk.Type) {
+	of := func(k limitKey) bool { return k.kind == kind }
+	maps.DeleteFunc(limitStore.byKind, func(k limitKey, _ []Limit) bool { return of(k) })
+	maps.DeleteFunc(limitStore.fetched, func(k limitKey, _ time.Time) bool { return of(k) })
+	maps.DeleteFunc(limitStore.readAt, func(k limitKey, _ time.Time) bool { return of(k) })
+	maps.DeleteFunc(limitStore.lastErr, func(k limitKey, _ string) bool { return of(k) })
+	maps.DeleteFunc(limitStore.refills, func(k limitKey, _ int) bool { return of(k) })
 }
 
 // SetLimitFetchersForTest makes fetchers the only usage fetchers, with an
 // empty store for them, until restore runs. Tests use it so that no real
-// CLI or account is asked.
+// CLI or account is asked. A fetcher reads the account it is asked about
+// with LimitAccount.
 func SetLimitFetchersForTest(fetchers map[catwalk.Type]func(context.Context) ([]Limit, error)) (restore func()) {
 	limitStore.Lock()
 	defer limitStore.Unlock()
@@ -115,10 +161,7 @@ func SetLimitFetchersForTest(fetchers map[catwalk.Type]func(context.Context) ([]
 	limitFetchers = maps.Clone(fetchers)
 	limitStore.replaced = true
 	for kind := range fetchers {
-		delete(limitStore.byKind, kind)
-		delete(limitStore.fetched, kind)
-		delete(limitStore.readAt, kind)
-		delete(limitStore.lastErr, kind)
+		forgetKind(kind)
 	}
 	return func() {
 		limitStore.Lock()
@@ -126,10 +169,7 @@ func SetLimitFetchersForTest(fetchers map[catwalk.Type]func(context.Context) ([]
 		limitFetchers = saved
 		limitStore.replaced = false
 		for kind := range fetchers {
-			delete(limitStore.byKind, kind)
-			delete(limitStore.fetched, kind)
-			delete(limitStore.readAt, kind)
-			delete(limitStore.lastErr, kind)
+			forgetKind(kind)
 		}
 	}
 }
@@ -142,13 +182,19 @@ func LimitFetchersReplaced() bool {
 	return limitStore.replaced
 }
 
-// Limits returns the last known usage limits of a CLI that apply to a
-// model, or nil.
+// Limits returns the last known usage limits of a CLI's own login that
+// apply to a model, or nil.
 func Limits(kind catwalk.Type, model string) []Limit {
+	return AccountLimits(kind, "", model)
+}
+
+// AccountLimits returns the last known usage limits of one account that
+// apply to a model, or nil.
+func AccountLimits(kind catwalk.Type, account, model string) []Limit {
 	limitStore.Lock()
 	defer limitStore.Unlock()
 	var limits []Limit
-	for _, l := range limitStore.byKind[kind] {
+	for _, l := range limitStore.byKind[limitKey{kind, account}] {
 		if l.Model == "" || l.Model == model {
 			limits = append(limits, l)
 		}
@@ -156,79 +202,129 @@ func Limits(kind catwalk.Type, model string) []Limit {
 	return limits
 }
 
+// Refills is how many free refills an account has left, as last read.
+func Refills(kind catwalk.Type, account string) int {
+	limitStore.Lock()
+	defer limitStore.Unlock()
+	return limitStore.refills[limitKey{kind, account}]
+}
+
 // StoreLimits puts limits read elsewhere (the shared engine's reading,
 // engine-design.md 5.13) into the cache Limits reads. It reports whether
 // anything was stored.
 func StoreLimits(kind catwalk.Type, limits []Limit) bool {
+	return StoreAccountLimits(kind, "", limits, -1)
+}
+
+// StoreAccountLimits is StoreLimits for any account, with its refill
+// count (negative leaves the count as it is).
+func StoreAccountLimits(kind catwalk.Type, account string, limits []Limit, refills int) bool {
 	if len(limits) == 0 {
 		return false
 	}
-	setLimits(kind, limits)
+	setLimits(limitKey{kind, account}, limits, refills)
 	return true
 }
 
-func setLimits(kind catwalk.Type, limits []Limit) {
+// setLimits stores a reading; refills < 0 keeps the known refill count
+// (a turn's own updates carry none).
+func setLimits(k limitKey, limits []Limit, refills int) {
 	if len(limits) == 0 {
 		return
 	}
 	limitStore.Lock()
 	if limitStore.byKind == nil {
-		limitStore.byKind = map[catwalk.Type][]Limit{}
+		limitStore.byKind = map[limitKey][]Limit{}
 	}
 	if limitStore.fetched == nil {
-		limitStore.fetched = map[catwalk.Type]time.Time{}
+		limitStore.fetched = map[limitKey]time.Time{}
 	}
 	if limitStore.readAt == nil {
-		limitStore.readAt = map[catwalk.Type]time.Time{}
+		limitStore.readAt = map[limitKey]time.Time{}
+	}
+	if limitStore.refills == nil {
+		limitStore.refills = map[limitKey]int{}
 	}
 	now := time.Now()
-	limitStore.byKind[kind] = limits
-	limitStore.fetched[kind] = now
-	limitStore.readAt[kind] = now
-	delete(limitStore.lastErr, kind)
+	limitStore.byKind[k] = limits
+	limitStore.fetched[k] = now
+	limitStore.readAt[k] = now
+	if refills >= 0 {
+		limitStore.refills[k] = refills
+	}
+	delete(limitStore.lastErr, k)
 	limitStore.Unlock()
-	limitsChanged(kind)
+	limitsChanged(k)
 }
 
-// RefreshLimits asks a CLI's service for its usage limits unless they are
-// recent. It reports whether new limits were stored.
+// limitAccountKey carries the account a fetch is for.
+type limitAccountKey struct{}
+
+// refillSinkKey carries where a fetch reports the account's refills.
+type refillSinkKey struct{}
+
+// LimitAccount is the account a usage fetch is for ("" for the tool's own
+// login).
+func LimitAccount(ctx context.Context) string {
+	id, _ := ctx.Value(limitAccountKey{}).(string)
+	return id
+}
+
+// ReportRefills tells the store how many free refills the account being
+// fetched has. Fetchers that know call it.
+func ReportRefills(ctx context.Context, n int) {
+	if sink, ok := ctx.Value(refillSinkKey{}).(*int); ok {
+		*sink = n
+	}
+}
+
+// RefreshLimits asks a CLI's service for its own login's usage limits
+// unless they are recent. It reports whether new limits were stored.
 func RefreshLimits(ctx context.Context, kind catwalk.Type) bool {
-	updated, _ := refreshLimits(ctx, kind, false)
+	updated, _ := refreshLimits(ctx, limitKey{kind: kind}, false)
 	return updated
 }
 
 // RefreshLimitsNow bypasses the refresh interval for an explicit usage request.
 // Concurrent requests still share the same in-flight guard.
 func RefreshLimitsNow(ctx context.Context, kind catwalk.Type) error {
-	_, err := refreshLimits(ctx, kind, true)
+	_, err := refreshLimits(ctx, limitKey{kind: kind}, true)
 	return err
 }
 
-func refreshLimits(ctx context.Context, kind catwalk.Type, force bool) (bool, error) {
+// RefreshAccountLimits refreshes one account's usage limits; force skips
+// the refresh interval. It reports whether new limits were stored.
+func RefreshAccountLimits(ctx context.Context, kind catwalk.Type, account string, force bool) (bool, error) {
+	return refreshLimits(ctx, limitKey{kind, account}, force)
+}
+
+func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 	limitStore.Lock()
-	fetch := limitFetchers[kind]
+	fetch := limitFetchers[k.kind]
 	if fetch == nil {
 		limitStore.Unlock()
 		return false, errors.New("This CLI does not report usage limits")
 	}
-	if limitStore.pending[kind] {
+	if limitStore.pending[k] {
 		limitStore.Unlock()
 		return false, errors.New("Usage refresh is already in progress")
 	}
-	if !force && time.Since(limitStore.fetched[kind]) < limitRefresh {
+	if !force && time.Since(limitStore.fetched[k]) < limitRefresh {
 		limitStore.Unlock()
 		return false, nil
 	}
 	if limitStore.pending == nil {
-		limitStore.pending = map[catwalk.Type]bool{}
+		limitStore.pending = map[limitKey]bool{}
 	}
-	limitStore.pending[kind] = true
+	limitStore.pending[k] = true
 	limitStore.Unlock()
 	defer func() {
 		limitStore.Lock()
-		delete(limitStore.pending, kind)
+		delete(limitStore.pending, k)
 		limitStore.Unlock()
 	}()
+	refills := -1
+	ctx = context.WithValue(context.WithValue(ctx, limitAccountKey{}, k.account), refillSinkKey{}, &refills)
 	limits, err := fetch(ctx)
 	if err == nil && force && len(limits) == 0 {
 		err = errors.New("No usage windows were returned by this CLI")
@@ -237,18 +333,18 @@ func refreshLimits(ctx context.Context, kind catwalk.Type, force bool) (bool, er
 		// Back off like a success so a broken source isn't hammered.
 		limitStore.Lock()
 		if limitStore.fetched == nil {
-			limitStore.fetched = map[catwalk.Type]time.Time{}
+			limitStore.fetched = map[limitKey]time.Time{}
 		}
 		if limitStore.lastErr == nil {
-			limitStore.lastErr = map[catwalk.Type]string{}
+			limitStore.lastErr = map[limitKey]string{}
 		}
-		limitStore.fetched[kind] = time.Now()
-		limitStore.lastErr[kind] = err.Error()
+		limitStore.fetched[k] = time.Now()
+		limitStore.lastErr[k] = err.Error()
 		limitStore.Unlock()
-		limitsChanged(kind)
+		limitsChanged(k)
 		return false, err
 	}
-	setLimits(kind, limits)
+	setLimits(k, limits, refills)
 	return true, nil
 }
 
@@ -467,14 +563,18 @@ func claudeRateLimit(raw json.RawMessage) []Limit {
 }
 
 // fetchClaudeLimits asks Anthropic's usage endpoint (the one behind
-// Claude Code's /usage) with Claude Code's own login. An expired token is
-// left for Claude Code to refresh on its next run.
+// Claude Code's /usage) with the account's Claude Code login. An expired
+// token is left for Claude Code to refresh on its next run.
 func fetchClaudeLimits(ctx context.Context) ([]Limit, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
+	dir := config.AccountDir(LimitAccount(ctx))
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		dir = filepath.Join(home, ".claude")
 	}
-	data, err := os.ReadFile(filepath.Join(home, ".claude", ".credentials.json"))
+	data, err := os.ReadFile(filepath.Join(dir, ".credentials.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -541,11 +641,12 @@ func (s codexSnapshot) limits() []Limit {
 }
 
 // fetchCodexLimits reads account/rateLimits/read from a short-lived
-// `codex app-server`; it makes no model request.
+// `codex app-server` on the account; it makes no model request. The
+// account's free refills come with it.
 func fetchCodexLimits(ctx context.Context) ([]Limit, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	p, err := startProc("", "codex", "app-server")
+	p, err := startProcEnv("", config.AccountEnv(config.TypeCodexCLI, LimitAccount(ctx)), "codex", "app-server")
 	if err != nil {
 		return nil, err
 	}
@@ -567,13 +668,75 @@ func fetchCodexLimits(ctx context.Context) ([]Limit, error) {
 		}
 		var res struct {
 			RateLimits codexSnapshot `json:"rateLimits"`
+			Refills    *struct {
+				Available int `json:"availableCount"`
+			} `json:"rateLimitResetCredits"`
 		}
 		if err := json.Unmarshal(msg.Result, &res); err != nil {
 			return nil, err
 		}
+		refills := 0
+		if res.Refills != nil {
+			refills = res.Refills.Available
+		}
+		ReportRefills(ctx, refills)
 		return res.RateLimits.limits(), nil
 	}
 	return nil, exitError("codex", p)
+}
+
+// ConsumeRefill spends one of a Codex account's free refills (OpenAI's
+// rate-limit reset credits), then reads its limits again. It reports what
+// Codex says happened: "reset", "nothingToReset", "noCredit" or
+// "alreadyRedeemed".
+func ConsumeRefill(ctx context.Context, account string) (string, error) {
+	outcome, err := consumeRefill(ctx, account)
+	if err == nil {
+		_, _ = RefreshAccountLimits(ctx, config.TypeCodexCLI, account, true)
+	}
+	return outcome, err
+}
+
+// consumeRefill is the refill request; tests replace it.
+var consumeRefill = func(ctx context.Context, account string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	p, err := startProcEnv("", config.AccountEnv(config.TypeCodexCLI, account), "codex", "app-server")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		p.kill()
+		p.finish()
+	}()
+	defer p.watchCancel(ctx, p.closeInput)()
+	_ = p.send(map[string]any{"id": "1", "method": "initialize", "params": map[string]any{"clientInfo": map[string]any{"name": "crush", "title": "Crush", "version": "0"}}})
+	_ = p.send(map[string]any{"method": "initialized"})
+	_ = p.send(map[string]any{"id": "2", "method": "account/rateLimitResetCredit/consume", "params": map[string]any{"idempotencyKey": uuid.NewString()}})
+	for p.lines.Scan() {
+		var msg rpcMessage
+		if json.Unmarshal(p.lines.Bytes(), &msg) != nil || strings.Trim(string(msg.ID), `"`) != "2" {
+			continue
+		}
+		if msg.Error != nil {
+			return "", errors.New(msg.Error.Message)
+		}
+		var res struct {
+			Outcome string `json:"outcome"`
+		}
+		if err := json.Unmarshal(msg.Result, &res); err != nil {
+			return "", err
+		}
+		return res.Outcome, nil
+	}
+	return "", exitError("codex", p)
+}
+
+// SetConsumeRefillForTest replaces the refill request until restore runs.
+func SetConsumeRefillForTest(fn func(ctx context.Context, account string) (string, error)) (restore func()) {
+	saved := consumeRefill
+	consumeRefill = fn
+	return func() { consumeRefill = saved }
 }
 
 func getJSON(ctx context.Context, url string, headers map[string]string, v any) error {

@@ -5,7 +5,13 @@
 import { api } from "../engine/api.js";
 import { onEvent, onResync } from "../engine/events.js";
 
-export const limits = $state({ byKind: {} }); // kind → CLILimits with the newest read_at (engine design 5.9)
+export const limits = $state({ byKind: {} }); // limitsKey → CLILimits with the newest read_at (engine design 5.9)
+
+// The key of one account's reading: the tool's own login is its kind, any
+// other account "kind#id" (options.accounts, the fallback order).
+export function limitsKey(kind, account = "") {
+  return account ? `${kind}#${account}` : kind;
+}
 
 // read_at is Go's RFC 3339 with up to nine fraction digits, which Date.parse
 // does not keep: [ms since 1970, ns within that ms], or null for no time.
@@ -28,12 +34,12 @@ function compareTimes(a, b) {
 // reading keeps the reading's read_at and adds its error); one without
 // read_at ("checking" or "error") never hides a reading.
 export function applyLimits(reading) {
-  const kind = reading?.kind;
-  if (!kind) return;
+  if (!reading?.kind) return;
+  const key = limitsKey(reading.kind, reading.account);
   const at = readTime(reading.read_at);
-  const storedAt = readTime(limits.byKind[kind]?.read_at);
+  const storedAt = readTime(limits.byKind[key]?.read_at);
   if (storedAt && (!at || compareTimes(at, storedAt) < 0)) return;
-  limits.byKind[kind] = reading;
+  limits.byKind[key] = reading;
 }
 
 let loaded = false;
@@ -114,8 +120,8 @@ export function stopLimitsPoll() {
 // The windows that apply to a model, as cliagent.Limits does
 // (internal/agent/cliagent/limits.go:145-157): those for every model and
 // those for this one. null until the kind has a reading.
-export function limitsFor(kind, model) {
-  const reading = limits.byKind[kind];
+export function limitsFor(kind, model, account = "") {
+  const reading = limits.byKind[limitsKey(kind, account)];
   if (!reading || !readTime(reading.read_at)) return null;
   const windows = (reading.windows ?? []).filter((w) => !w.model || w.model === model);
   return { kind, state: reading.state, readAt: reading.read_at, error: reading.error ?? "", windows };

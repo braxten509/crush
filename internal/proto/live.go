@@ -200,7 +200,9 @@ type LimitWindow struct {
 
 // CLILimits is an AI tool's usage limits as this engine last read them.
 type CLILimits struct {
-	Kind    string        `json:"kind"`             // catwalk type string of the AI tool
+	Kind    string        `json:"kind"`              // catwalk type string of the AI tool
+	Account string        `json:"account,omitempty"` // options.accounts ID; empty for the tool's own login
+	Refills int           `json:"refills,omitempty"` // free refills left (Codex)
 	State   string        `json:"state"`            // "checking" | "ready" | "error"
 	ReadAt  time.Time     `json:"read_at,omitzero"` // when this engine got the reading (UTC); zero until the first
 	Error   string        `json:"error,omitempty"`

@@ -225,6 +225,10 @@ func initCoder(ctx context.Context, ws *Workspace, interactive bool) error {
 		return err
 	}
 	l.nonInteractive = false
+	// The fallback order switches the model itself; the apps refresh it.
+	if s, ok := ws.coordinator().(interface{ SetModelSwitchHook(func()) }); ok {
+		s.SetModelSwitchHook(func() { sendConfigChanged(ws) })
+	}
 	return nil
 }
 

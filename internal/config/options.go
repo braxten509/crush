@@ -144,16 +144,18 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 }
 
 type Options struct {
-	AutoCompactTokenLimit   int64       `json:"auto_compact_token_limit,omitempty" jsonschema:"description=Fallback compaction threshold for models without native compaction; defaults to 400000,minimum=1000"`
-	MemoryLimitGB           *float64    `json:"memory_limit_gb,omitempty" jsonschema:"description=Most memory (RAM and swap together) all Crush windows and everything they start may use, in GB; 0 means no limit; defaults to half the computer's RAM (Linux only),minimum=0"`
-	ContextPaths            []string    `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
-	DisableInstructionFiles bool        `json:"disable_instruction_files,omitempty" jsonschema:"description=Use shared Crush instructions and memory instead of personal and project instruction files"`
-	GlobalContextPaths      []string    `json:"global_context_paths,omitempty" jsonschema:"description=Paths to files containing global context information for the AI,default=~/.config/crush/CRUSH.md,default=~/.config/AGENTS.md"`
-	SkillsPaths             []string    `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/crush/skills,example=./skills"`
-	TUI                     *TUIOptions `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
-	Debug                   bool        `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
-	DebugLSP                bool        `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
-	DisableAutoSummarize    bool        `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
+	AutoCompactTokenLimit   int64          `json:"auto_compact_token_limit,omitempty" jsonschema:"description=Fallback compaction threshold for models without native compaction; defaults to 400000,minimum=1000"`
+	Accounts                []Account      `json:"accounts,omitempty" jsonschema:"description=More Claude Code and Codex sign-ins, each in its own folder; the tools' own logins are account 1 and are not listed"`
+	Fallback                *FallbackOrder `json:"fallback,omitempty" jsonschema:"description=The fallback order: which account and model a chat moves to when one runs out"`
+	MemoryLimitGB           *float64       `json:"memory_limit_gb,omitempty" jsonschema:"description=Most memory (RAM and swap together) all Crush windows and everything they start may use, in GB; 0 means no limit; defaults to half the computer's RAM (Linux only),minimum=0"`
+	ContextPaths            []string       `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
+	DisableInstructionFiles bool           `json:"disable_instruction_files,omitempty" jsonschema:"description=Use shared Crush instructions and memory instead of personal and project instruction files"`
+	GlobalContextPaths      []string       `json:"global_context_paths,omitempty" jsonschema:"description=Paths to files containing global context information for the AI,default=~/.config/crush/CRUSH.md,default=~/.config/AGENTS.md"`
+	SkillsPaths             []string       `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/crush/skills,example=./skills"`
+	TUI                     *TUIOptions    `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
+	Debug                   bool           `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
+	DebugLSP                bool           `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
+	DisableAutoSummarize    bool           `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
 	// DataDirectory is where Crush keeps per-project state such as
 	// the SQLite database and workspace overrides. Relative paths are
 	// resolved against the working directory; absolute paths are used

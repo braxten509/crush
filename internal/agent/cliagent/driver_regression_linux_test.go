@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/jsonfile"
 	"github.com/charmbracelet/crush/internal/message"
@@ -161,7 +160,7 @@ func TestLinksSerializeSeparateProviders(t *testing.T) {
 	var wait sync.WaitGroup
 	errors := make(chan error, count)
 	for i := range count {
-		provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, "", false).(*provider)
+		provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, "", false, "").(*provider)
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
@@ -248,16 +247,16 @@ func TestRefreshLimitsCoalescesPendingFetch(t *testing.T) {
 	kind := config.TypeAGYCLI
 	previous := limitFetchers[kind]
 	limitStore.Lock()
-	previousTime := limitStore.fetched[kind]
-	delete(limitStore.fetched, kind)
+	previousTime := limitStore.fetched[limitKey{kind: kind}]
+	delete(limitStore.fetched, limitKey{kind: kind})
 	limitStore.Unlock()
 	t.Cleanup(func() {
 		limitFetchers[kind] = previous
 		limitStore.Lock()
 		if limitStore.fetched == nil {
-			limitStore.fetched = map[catwalk.Type]time.Time{}
+			limitStore.fetched = map[limitKey]time.Time{}
 		}
-		limitStore.fetched[kind] = previousTime
+		limitStore.fetched[limitKey{kind: kind}] = previousTime
 		limitStore.Unlock()
 	})
 	entered, release := make(chan struct{}), make(chan struct{})

@@ -153,6 +153,14 @@ export const api = {
   removeConfig: (scope, key) => post("config/remove", { scope: scopeOf(scope), key }),
   // model_type: "large" | "small"; model: {provider, model, …} (config.SelectedModel).
   setModel: (scope, model_type, model) => post("config/model", { scope: scopeOf(scope), model_type, model }),
+  // Accounts and the fallback order (internal/server/endpoints_fallback.go).
+  fallback: () => get("fallback"),
+  setFallbackOrder: (order) => commands.api("PUT", "fallback/order", undefined, order),
+  addAccount: (kind) => post("accounts", { kind }),
+  renameAccount: (id, name) => commands.api("PUT", `accounts/${seg(id)}`, undefined, { name }),
+  removeAccount: (id) => commands.api("DELETE", `accounts/${seg(id)}`),
+  signInAccount: (id) => post(`accounts/${seg(id)}/login`),
+  useRefill: (kind, account) => post("/v1/limits/refill", { kind, account }),
   setPermissionsSkip: (skip) => post("permissions/skip", { skip }),
   // Saved globally, as the terminal does (internal/ui/model/config_write.go:73-80).
   setCompact: (enabled) => post("config/compact", { scope: SCOPE.global, enabled }),

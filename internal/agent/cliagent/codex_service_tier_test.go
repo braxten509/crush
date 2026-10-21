@@ -41,7 +41,7 @@ cat >/dev/null
 `
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755))
 				t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-				provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, tier, false)
+				provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, tier, false, "")
 				model, err := provider.LanguageModel(t.Context(), "gpt-6-astra")
 				require.NoError(t, err)
 				require.NoError(t, model.(*Model).Run(t.Context(), Turn{

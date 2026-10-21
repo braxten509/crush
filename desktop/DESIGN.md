@@ -185,6 +185,10 @@ never "sessions".
 - The terminal falls back to installed Nerd Font faces for prompt symbols, and the space
   under its last row is `--paper` with no native scroll bar.
 - Settings rows stop at 840 picture pixels, so each switch sits near its name.
+- Settings > Fallback order is a stacked list (look A): numbered blocks 560 wide, each
+  with a drag handle, its one-line summary and ×; a small "↓ how it leaves" line sits
+  between blocks (and under the last one when it has its own settings). A click opens a
+  block's options below it as choice buttons; "+ Add block" is a dashed row.
 
 ## Title bar
 
@@ -256,6 +260,9 @@ Every dialog is a `kit/Sheet`:
 - Usage meters (panel and the strip under the typing box) turn amber under 30 % left and
   rose under 10 %, bar and number together; there is no warning triangle. The strip's
   words sit midway between the typing box and the frame line under it.
+- A Codex account's free refills show as a REFILLS count with a "Use one" button, in the
+  panel when it is open and in the strip under the typing box when it is hidden; only
+  while the count is above 0. Claude has none, so nothing shows for it.
 - "/" typed as the first letter in the typing box opens the command menu: the `@` popup's
   look over every Ctrl+P command (System, User, MCP), name left and shortcut right, best
   match lowest. Enter runs the command and clears the "/word"; Esc closes it and keeps the

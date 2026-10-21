@@ -8,6 +8,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 )
@@ -43,6 +44,29 @@ func (b *Backend) startLimits() {
 	for _, k := range cliagent.Snapshot() {
 		go func() { _ = cliagent.RefreshLimitsNow(ctx, k.Kind) }()
 	}
+	for _, a := range b.extraAccounts() {
+		go func() { _, _ = cliagent.RefreshAccountLimits(ctx, a.Kind, a.ID, true) }()
+	}
+}
+
+// extraAccounts lists every options.accounts sign-in of b's workspaces.
+func (b *Backend) extraAccounts() []config.Account {
+	var out []config.Account
+	for _, ws := range b.workspaces.Seq2() {
+		if ws.Cfg == nil {
+			continue
+		}
+		cfg := ws.Cfg.Config()
+		if cfg == nil || cfg.Options == nil {
+			continue
+		}
+		for _, a := range cfg.Options.Accounts {
+			if !slices.Contains(out, a) {
+				out = append(out, a)
+			}
+		}
+	}
+	return out
 }
 
 // removeLimitsHook stops sending b's apps limits events.
@@ -58,10 +82,10 @@ func removeLimitsHook(b *Backend) {
 	}
 }
 
-// sendLimits is the limits hook: every app gets kind's new state.
-func sendLimits(kind catwalk.Type) {
+// sendLimits is the limits hook: every app gets the account's new state.
+func sendLimits(kind catwalk.Type, account string) {
 	snap := cliagent.Snapshot()
-	i := slices.IndexFunc(snap, func(k cliagent.KindLimits) bool { return k.Kind == kind })
+	i := slices.IndexFunc(snap, func(k cliagent.KindLimits) bool { return k.Kind == kind && k.Account == account })
 	if i < 0 {
 		return
 	}
@@ -80,7 +104,7 @@ func sendLimits(kind catwalk.Type) {
 // arrived, error while there is none and the last refresh failed, checking
 // otherwise.
 func cliLimits(k cliagent.KindLimits) proto.CLILimits {
-	out := proto.CLILimits{Kind: string(k.Kind), Error: k.Err, Windows: make([]proto.LimitWindow, 0, len(k.Limits))}
+	out := proto.CLILimits{Kind: string(k.Kind), Account: k.Account, Refills: k.Refills, Error: k.Err, Windows: make([]proto.LimitWindow, 0, len(k.Limits))}
 	switch {
 	case !k.ReadAt.IsZero():
 		out.State, out.ReadAt = "ready", k.ReadAt.UTC()
@@ -111,14 +135,19 @@ func CurrentLimits() proto.LimitsSnapshot {
 	return out
 }
 
-// RefreshLimits starts a refresh of kind's limits and returns at once; the
-// result arrives as a limits event. It reports false for a kind that
-// reports no limits.
+// RefreshLimits starts a refresh of kind's limits, for every account of
+// it, and returns at once; the results arrive as limits events. It reports
+// false for a kind that reports no limits.
 func (b *Backend) RefreshLimits(kind string) bool {
 	if !slices.ContainsFunc(cliagent.Snapshot(), func(k cliagent.KindLimits) bool { return string(k.Kind) == kind }) {
 		return false
 	}
 	ctx := b.engineContext()
 	go func() { _ = cliagent.RefreshLimitsNow(ctx, catwalk.Type(kind)) }()
+	for _, a := range b.extraAccounts() {
+		if string(a.Kind) == kind {
+			go func() { _, _ = cliagent.RefreshAccountLimits(ctx, a.Kind, a.ID, true) }()
+		}
+	}
 	return true
 }

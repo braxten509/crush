@@ -63,3 +63,26 @@ func TestSubagentFooterUsesChildModelSettings(t *testing.T) {
 	ws.cfg.Providers.Del("codex-cli")
 	require.Contains(t, ansi.Strip(u.subagentFooter(120)), "child-model high fast")
 }
+
+// The terminal shows the selected model's account: its own usage and its
+// free refills, not the tool's own login's (fallback order, 2026-10-21).
+func TestTerminalShowsTheSelectedAccount(t *testing.T) {
+	ws := newLoadWorkspace()
+	ws.cfg.Providers.Set("codex-cli", config.ProviderConfig{
+		ID: "codex-cli", Type: config.TypeCodexCLI,
+		Models: []catwalk.Model{{ID: "gpt-test", Name: "GPT test"}},
+	})
+	u := newLoadTestUI(t, ws)
+	u.agentReady = true
+	u.agentModel = workspace.AgentModel{ModelCfg: config.SelectedModel{Provider: "codex-cli", Model: "gpt-test", Account: "codex-footer-test"}}
+	cliagent.StoreAccountLimits(config.TypeCodexCLI, "codex-footer-test", []cliagent.Limit{{Name: "5h", Used: 30}}, 2)
+
+	limits := u.selectedCLILimits()
+	require.Len(t, limits, 1)
+	require.InDelta(t, 70, limits[0].Left(), 0.01)
+	require.Equal(t, 2, u.selectedCLIRefills())
+	sty := styles.ThemeFromConfig("claude-code")
+	require.Contains(t, ansi.Strip(usageLimits(&sty, limits, u.selectedCLIRefills(), 60)), "Free refills 2")
+	require.NotContains(t, ansi.Strip(usageLimits(&sty, limits, 0, 60)), "refills")
+	require.Equal(t, "1 free refill", refillsText(1))
+}

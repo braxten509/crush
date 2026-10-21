@@ -7,7 +7,8 @@
   // Three share a row at the approved picture's proportions; more go on the
   // next row, fewer share the row evenly. No hover box (owner,
   // 2026-10-19): the meters say it all; Ctrl+P keeps Customize.
-  import { meterNow, meterRoom } from "./panel.svelte.js";
+  import { meterNow, meterRoom, refillNow } from "./panel.svelte.js";
+  import { useRefill } from "../../lib/fallback/store.svelte.js";
 
   // The reset times count down and a window past its reset is whole again.
   let now = $state(Date.now());
@@ -78,6 +79,7 @@
           <span class="fill {meter.level}" style:width="{meter.left}%"></span>
         </div>{/if}
         {#if meter.resets}<p class="resets">{meter.resets}</p>{/if}
+        {#if meter.refill}<button type="button" class="use-refill" data-refill-use onclick={() => useRefill(refillNow().kind, refillNow().account)}>Use one</button>{/if}
       </div>
     {:else}
       <p class="no-meters">No meters chosen.</p>
@@ -179,5 +181,24 @@
     align-self: center;
     font: var(--t-small);
     color: var(--slate);
+  }
+  /* A free refill's button, under its count (owner, 2026-10-21). */
+  .use-refill {
+    margin-top: calc(6 * var(--px));
+    height: calc(26 * var(--px));
+    padding: 0 calc(10 * var(--px));
+    border: 1px solid var(--rule-control);
+    border-radius: 0;
+    background: var(--control-rest);
+    font: var(--t-button);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .use-refill:hover {
+    background: var(--control-hover);
+  }
+  .use-refill:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
   }
 </style>

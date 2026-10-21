@@ -16,7 +16,8 @@
     const height = parseFloat(getComputedStyle(node).height) || 0;
     return paper((t) => `height: ${(t * height).toFixed(2)}px;${tick(t)}`);
   }
-  import { meterNow } from "./panel.svelte.js";
+  import { meterNow, refillNow } from "./panel.svelte.js";
+  import { useRefill } from "../../lib/fallback/store.svelte.js";
 
   let now = $state(Date.now());
   $effect(() => {
@@ -36,6 +37,7 @@
           <span class="fill {meter.level}" style:width="{meter.left}%"></span>
         </span>{/if}
         <span class="value {meter.level}">{meter.text}</span>
+        {#if meter.refill}<button type="button" class="use-refill" data-refill-use onclick={() => useRefill(refillNow().kind, refillNow().account)}>Use one</button>{/if}
         {#if meter.level}<span class="visually-hidden">{meter.level === "out" ? "almost used up" : "running low"}</span>{/if}
       </span>
     {/each}
@@ -122,5 +124,24 @@
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--slate);
+  }
+  /* A free refill's button, after its count (owner, 2026-10-21). */
+  .use-refill {
+    height: calc(18 * var(--px));
+    padding: 0 calc(6 * var(--px));
+    border: 1px solid var(--rule-control);
+    border-radius: 0;
+    background: var(--control-rest);
+    font: var(--t-small);
+    line-height: 1;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .use-refill:hover {
+    background: var(--control-hover);
+  }
+  .use-refill:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
   }
 </style>

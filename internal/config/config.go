@@ -55,6 +55,10 @@ type SelectedModel struct {
 	// Required.
 	Provider string `json:"provider" jsonschema:"required,description=The model provider ID that matches a key in the providers config,example=openai"`
 
+	// Account is the sign-in a Claude Code or Codex model runs on: the ID
+	// of an entry in options.accounts, or empty for the tool's own login.
+	Account string `json:"account,omitempty" jsonschema:"description=ID of the options.accounts sign-in this Claude Code or Codex model runs on; empty is the tool's own login"`
+
 	// Only used by models that use the openai provider and need this set.
 	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"description=Reasoning effort level supported by the selected model,enum=none,enum=minimal,enum=low,enum=medium,enum=high,enum=xhigh,enum=max,enum=ultra"`
 

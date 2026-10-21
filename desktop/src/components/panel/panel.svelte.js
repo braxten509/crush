@@ -25,7 +25,7 @@ import { cliKind, footerItems, limitWindows, meterModel, modelInfo } from "../..
 import { fileRows, modifiedFiles } from "../../lib/modified.js";
 import { composer, focusField, hasChips } from "../../lib/stores/composer.svelte.js";
 import { conn } from "../../lib/stores/connection.svelte.js";
-import { limits } from "../../lib/stores/limits.svelte.js";
+import { limits, limitsKey } from "../../lib/stores/limits.svelte.js";
 import { queue } from "../../lib/stores/queue.svelte.js";
 import { busy, sessions } from "../../lib/stores/sessions.svelte.js";
 import { todos } from "../../lib/stores/todos.svelte.js";
@@ -55,16 +55,29 @@ export function closeDetails() {
 
 const shownSession = () => (sessions.currentId ? (sessions.byId[sessions.currentId] ?? null) : null);
 
+// The reading of the account the agent runs on, or null.
+function readingNow() {
+  const kind = cliKind(ws.agent, ws.providers);
+  return kind ? (limits.byKind[limitsKey(kind, ws.agent?.model_cfg?.account ?? "")] ?? null) : null;
+}
+
 // The agent CLI's windows for the model: null while checking, [] for none.
 function windowsNow(now) {
   const kind = cliKind(ws.agent, ws.providers);
-  return kind ? limitWindows(limits.byKind[kind], ws.agent?.model_cfg?.model ?? "", now) : [];
+  return kind ? limitWindows(readingNow(), ws.agent?.model_cfg?.model ?? "", now) : [];
+}
+
+// The account the agent runs on, with its free refills (Codex), for the
+// meters' "Use one" button.
+export function refillNow() {
+  const reading = readingNow();
+  return { kind: reading?.kind ?? "", account: reading?.account ?? "", count: Number(reading?.refills) || 0 };
 }
 
 export function meterNow(now = Date.now()) {
   const session = shownSession();
   const limit = compactionLimit({ agent: ws.agent, session, providers: ws.providers, options: ws.config?.options });
-  return meterModel({ items: footerItems(ws.config), session, limit, limits: windowsNow(now), api: Boolean(ws.agent?.model_cfg?.provider) && !cliKind(ws.agent, ws.providers) });
+  return meterModel({ items: footerItems(ws.config), session, limit, limits: windowsNow(now), api: Boolean(ws.agent?.model_cfg?.provider) && !cliKind(ws.agent, ws.providers), refills: refillNow().count });
 }
 
 export function modelNow(now = Date.now()) {

@@ -18,7 +18,7 @@ type apiError struct {
 // pieceErrors lists the errors the build pieces add, each in its own
 // endpoints_<piece>.go. errorInfo checks them before today's errors.
 func pieceErrors() []apiError {
-	return slices.Concat(lifecycleErrors(), liveErrors(), treeErrors(), shareErrors(), desktopErrors())
+	return slices.Concat(lifecycleErrors(), liveErrors(), treeErrors(), shareErrors(), desktopErrors(), fallbackErrors())
 }
 
 // statusCode is the code of an error body written straight from a status

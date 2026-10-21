@@ -80,14 +80,14 @@ func (c *Common) RefreshCLILimits(ctx context.Context, kind catwalk.Type, force 
 	}
 	changed := false
 	for _, l := range all {
-		if l.Error != "" && catwalk.Type(l.Kind) == kind && len(l.Windows) == 0 {
+		if l.Error != "" && catwalk.Type(l.Kind) == kind && l.Account == "" && len(l.Windows) == 0 {
 			err = errorText(l.Error)
 		}
 		limits := make([]cliagent.Limit, 0, len(l.Windows))
 		for _, w := range l.Windows {
 			limits = append(limits, cliagent.Limit{Name: w.Name, Used: w.Used, ResetsAt: w.ResetsAt, Model: w.Model})
 		}
-		if cliagent.StoreLimits(catwalk.Type(l.Kind), limits) {
+		if cliagent.StoreAccountLimits(catwalk.Type(l.Kind), l.Account, limits, l.Refills) {
 			changed = true
 		}
 	}

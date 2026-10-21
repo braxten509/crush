@@ -45,7 +45,11 @@ func (m *UI) openUsageDialog() tea.Cmd {
 func (m *UI) updateUsageData(d *dialog.Usage) {
 	data := d.Data()
 	data.CompactAt = m.compactionLimit(m.selectedLargeModel(), m.session)
-	data.Limits = cliagent.Limits(data.Kind, data.ModelID)
+	account := ""
+	if model := m.selectedLargeModel(); model != nil {
+		account = model.ModelCfg.Account
+	}
+	data.Limits = cliagent.AccountLimits(data.Kind, account, data.ModelID)
 	if m.session != nil {
 		data.HasContext = true
 		data.Context = m.session.PromptTokens + m.session.CompletionTokens

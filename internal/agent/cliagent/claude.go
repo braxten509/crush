@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/secretguard"
 )
 
@@ -105,9 +106,9 @@ var claudeIdle = 15 * time.Minute
 // claudeKey is what a live Claude process was started with; a turn that
 // needs anything else starts a new one.
 type claudeKey struct {
-	dir, model, effort string
-	bypass, fast       bool
-	ultracode          bool
+	dir, model, effort, account string
+	bypass, fast                bool
+	ultracode                   bool
 }
 
 // claudeLive is a Claude process kept open between the turns of one Crush
@@ -334,6 +335,8 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 		}
 		env = nil
 	}
+	// The account's own folder, kept for one-shot requests too.
+	env = append(env, config.AccountEnv(m.Kind, m.Account)...)
 	// Disable native memory only in Crush's child process, including helpers.
 	// Crush supplies the shared memory index and rules through Instructions.
 	env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1", "CLAUDE_CODE_DISABLE_ORG_MEMORY=1")
@@ -397,7 +400,7 @@ type claudeRun struct {
 }
 
 func runClaude(ctx context.Context, m *Model, t Turn) error {
-	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID)}
+	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, account: m.Account, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID)}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *claudeLive

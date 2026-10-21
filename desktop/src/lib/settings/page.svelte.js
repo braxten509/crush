@@ -16,6 +16,7 @@ const SECTIONS = [
   { id: "system", label: "System", linux: true },
   { id: "notifications", label: "Notifications" },
   { id: "accounts", label: "Accounts" },
+  { id: "fallback", label: "Fallback order" },
   { id: "phone", label: "Phone" },
   { id: "providers", label: "Providers" },
 ];

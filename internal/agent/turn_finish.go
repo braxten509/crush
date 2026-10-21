@@ -63,7 +63,8 @@ func (t *turn) handleStreamError(result *fantasy.AgentResult, err error) (*fanta
 	reason, title, details := classifyRunError(err, isHyper, t.largeModel.CatwalkCfg.Name)
 	// Interactive chats continue on their own once a usage limit resets
 	// (coordinator.planLimitRetry); say when.
-	if !t.call.NonInteractive && !a.isSubAgent {
+	// The fallback order says for itself where a chat it steers goes.
+	if !t.call.NonInteractive && !a.isSubAgent && !fallbackHolds(a.cfg, t.largeModel.ModelCfg) {
 		if at, ok := limitRetryTime(err, time.Now()); ok {
 			details = strings.TrimSpace(details + "\n\n" + limitRetryNote(at))
 		}

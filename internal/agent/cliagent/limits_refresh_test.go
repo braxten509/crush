@@ -15,11 +15,11 @@ func TestExplicitUsageRefreshBypassesCacheAndKeepsLastGoodData(t *testing.T) {
 		delete(limitFetchers, kind)
 		limitStore.Lock()
 		defer limitStore.Unlock()
-		delete(limitStore.byKind, kind)
-		delete(limitStore.fetched, kind)
-		delete(limitStore.pending, kind)
+		delete(limitStore.byKind, limitKey{kind: kind})
+		delete(limitStore.fetched, limitKey{kind: kind})
+		delete(limitStore.pending, limitKey{kind: kind})
 	})
-	setLimits(kind, []Limit{{Name: "5h", Used: 10}})
+	setLimits(limitKey{kind: kind}, []Limit{{Name: "5h", Used: 10}}, -1)
 	calls := 0
 	limitFetchers[kind] = func(context.Context) ([]Limit, error) {
 		calls++
@@ -36,7 +36,7 @@ func TestExplicitUsageRefreshBypassesCacheAndKeepsLastGoodData(t *testing.T) {
 	limitFetchers[kind] = func(context.Context) ([]Limit, error) { return nil, nil }
 	require.ErrorContains(t, RefreshLimitsNow(t.Context(), kind), "No usage windows")
 	limitStore.Lock()
-	limitStore.pending[kind] = true
+	limitStore.pending[limitKey{kind: kind}] = true
 	limitStore.Unlock()
 	require.ErrorContains(t, RefreshLimitsNow(t.Context(), kind), "already in progress")
 }

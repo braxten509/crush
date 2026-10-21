@@ -407,7 +407,7 @@ func (b Builder) Provider(providerCfg config.ProviderConfig, model config.Select
 	}
 
 	if config.IsCLIProviderType(providerCfg.Type) {
-		return cliagent.NewProvider(providerCfg.Type, b.Config.WorkingDir(), b.Config.Config().Options.DataDirectory, b.Permissions, b.History, model.ServiceTier, model.Ultracode), nil
+		return cliagent.NewProvider(providerCfg.Type, b.Config.WorkingDir(), b.Config.Config().Options.DataDirectory, b.Permissions, b.History, model.ServiceTier, model.Ultracode, model.Account), nil
 	}
 
 	switch providerCfg.Type {

@@ -22,7 +22,7 @@ cat >/dev/null
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	provider := cliagent.NewProvider(config.TypeClaudeCode, dir, dir, nil, nil, "", false)
+	provider := cliagent.NewProvider(config.TypeClaudeCode, dir, dir, nil, nil, "", false, "")
 	model, err := provider.LanguageModel(t.Context(), "opus")
 	require.NoError(t, err)
 	env := testEnv(t)

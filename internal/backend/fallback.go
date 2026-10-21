@@ -1,0 +1,255 @@
+package backend
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+
+	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/accounts"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/proto"
+)
+
+// Accounts (config.Account) and the fallback order (config.FallbackOrder).
+// Both live in the global config, so every Crush follows them.
+
+var (
+	// ErrAccountNotFound is an account ID that is not in options.accounts.
+	ErrAccountNotFound = errors.New("account not found")
+	// ErrFallbackInvalid is a fallback order or account request that can't
+	// be saved; its text says why.
+	ErrFallbackInvalid = errors.New("invalid fallback settings")
+)
+
+func invalidFallback(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", ErrFallbackInvalid, fmt.Sprintf(format, args...))
+}
+
+// FallbackSettings lists every account (each tool's own login first) and
+// the order.
+func (b *Backend) FallbackSettings(workspaceID string) (proto.FallbackSettings, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	return fallbackSettings(ws.Cfg.Config()), nil
+}
+
+func fallbackSettings(cfg *config.Config) proto.FallbackSettings {
+	out := proto.FallbackSettings{Accounts: []proto.AccountInfo{}}
+	for _, kind := range config.AccountKinds {
+		out.Accounts = append(out.Accounts, proto.AccountInfo{Kind: string(kind), Name: cfg.AccountName(kind, ""), SignedIn: true})
+		for _, a := range cfg.Accounts(kind) {
+			out.Accounts = append(out.Accounts, proto.AccountInfo{ID: a.ID, Kind: string(kind), Name: cfg.AccountName(kind, a.ID), SignedIn: accounts.SignedIn(kind, a.ID)})
+		}
+	}
+	if cfg.Options != nil && cfg.Options.Fallback != nil {
+		out.Order = *cfg.Options.Fallback
+	}
+	if out.Order.Blocks == nil {
+		out.Order.Blocks = []config.FallbackBlock{}
+	}
+	return out
+}
+
+// SetFallbackOrder checks and saves the order.
+func (b *Backend) SetFallbackOrder(workspaceID string, order config.FallbackOrder) (proto.FallbackSettings, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	cfg := ws.Cfg.Config()
+	if err := checkFallbackOrder(cfg, order); err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "options.fallback", order); err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	sendConfigChanged(ws)
+	return fallbackSettings(ws.Cfg.Config()), nil
+}
+
+func checkFallbackOrder(cfg *config.Config, order config.FallbackOrder) error {
+	for i, blk := range order.Blocks {
+		n := i + 1
+		kind := blk.Kind
+		switch blk.Type {
+		case config.FallbackUse:
+			p, ok := cfg.Providers.Get(blk.Provider)
+			if !ok {
+				return invalidFallback("block %d: unknown provider %q", n, blk.Provider)
+			}
+			if blk.Model == "" {
+				return invalidFallback("block %d: pick a model", n)
+			}
+			kind = p.Type
+			if blk.Account != "" && !config.HasAccounts(kind) {
+				return invalidFallback("block %d: %s has no other accounts", n, p.Name)
+			}
+		case config.FallbackWait, config.FallbackRefill:
+			if !config.HasAccounts(kind) {
+				return invalidFallback("block %d: pick a Claude or Codex account", n)
+			}
+			if blk.Type == config.FallbackRefill && kind != config.TypeCodexCLI {
+				return invalidFallback("block %d: only Codex has free refills", n)
+			}
+		default:
+			return invalidFallback("block %d: unknown block type %q", n, blk.Type)
+		}
+		if !cfg.HasAccount(kind, blk.Account) {
+			return invalidFallback("block %d: unknown account %q", n, blk.Account)
+		}
+		if blk.MoveAtPercent < 0 || blk.MoveAtPercent > 100 || blk.MaxWaitMinutes < 0 {
+			return invalidFallback("block %d: limits must be 0-100%% and a wait of 0 or more minutes", n)
+		}
+		if blk.Meanwhile != "" && blk.Meanwhile != config.FallbackMeanwhileNext {
+			return invalidFallback("block %d: unknown meanwhile %q", n, blk.Meanwhile)
+		}
+	}
+	return nil
+}
+
+// AddAccount makes a new account of kind and its folder, and returns the
+// command that signs it in.
+func (b *Backend) AddAccount(workspaceID, kind string) (proto.AccountLogin, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return proto.AccountLogin{}, err
+	}
+	k := catwalk.Type(kind)
+	if !config.HasAccounts(k) {
+		return proto.AccountLogin{}, invalidFallback("only Claude Code and Codex can have more accounts")
+	}
+	cfg := ws.Cfg.Config()
+	var list []config.Account
+	if cfg.Options != nil {
+		list = slices.Clone(cfg.Options.Accounts)
+	}
+	a := config.Account{ID: accounts.NewID(k, list), Kind: k}
+	if _, err := accounts.Prepare(k, a.ID); err != nil {
+		return proto.AccountLogin{}, err
+	}
+	list = append(list, a)
+	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "options.accounts", list); err != nil {
+		_ = accounts.Remove(a.ID)
+		return proto.AccountLogin{}, err
+	}
+	sendConfigChanged(ws)
+	return accountLogin(ws.Cfg.Config(), a)
+}
+
+func accountLogin(cfg *config.Config, a config.Account) (proto.AccountLogin, error) {
+	argv, err := accounts.LoginArgv(a.Kind, a.ID)
+	if err != nil {
+		return proto.AccountLogin{}, err
+	}
+	info := proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: cfg.AccountName(a.Kind, a.ID), SignedIn: accounts.SignedIn(a.Kind, a.ID)}
+	return proto.AccountLogin{Account: info, LoginArgv: argv}, nil
+}
+
+func findAccount(cfg *config.Config, id string) (config.Account, int, error) {
+	if cfg.Options != nil {
+		for i, a := range cfg.Options.Accounts {
+			if a.ID == id {
+				return a, i, nil
+			}
+		}
+	}
+	return config.Account{}, -1, ErrAccountNotFound
+}
+
+// SignInAccount brings an account's folder up to date and returns the
+// command that signs it in again.
+func (b *Backend) SignInAccount(workspaceID, id string) (proto.AccountLogin, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return proto.AccountLogin{}, err
+	}
+	cfg := ws.Cfg.Config()
+	a, _, err := findAccount(cfg, id)
+	if err != nil {
+		return proto.AccountLogin{}, err
+	}
+	if _, err := accounts.Prepare(a.Kind, a.ID); err != nil {
+		return proto.AccountLogin{}, err
+	}
+	return accountLogin(cfg, a)
+}
+
+// RenameAccount names an account; an empty name goes back to its number.
+func (b *Backend) RenameAccount(workspaceID, id, name string) (proto.FallbackSettings, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	cfg := ws.Cfg.Config()
+	_, i, err := findAccount(cfg, id)
+	if err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	list := slices.Clone(cfg.Options.Accounts)
+	list[i].Name = strings.TrimSpace(name)
+	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "options.accounts", list); err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	sendConfigChanged(ws)
+	return fallbackSettings(ws.Cfg.Config()), nil
+}
+
+// RemoveAccount deletes an account: its folder (its login and links; what
+// they link to stays), its entry, and the order's blocks on it. A selected
+// model on it goes back to the tool's own login.
+func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	cfg := ws.Cfg.Config()
+	a, i, err := findAccount(cfg, id)
+	if err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	fields := map[string]any{"options.accounts": slices.Delete(slices.Clone(cfg.Options.Accounts), i, i+1)}
+	if cfg.Options.Fallback != nil {
+		order := *cfg.Options.Fallback
+		order.Blocks = slices.DeleteFunc(slices.Clone(order.Blocks), func(blk config.FallbackBlock) bool {
+			kind := blk.Kind
+			if blk.Type == config.FallbackUse {
+				if p, ok := cfg.Providers.Get(blk.Provider); ok {
+					kind = p.Type
+				}
+			}
+			return kind == a.Kind && blk.Account == id
+		})
+		fields["options.fallback"] = order
+	}
+	if err := ws.Cfg.SetConfigFields(config.ScopeGlobal, fields); err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	for _, t := range []config.SelectedModelType{config.SelectedModelTypeLarge, config.SelectedModelTypeSmall} {
+		if m, ok := ws.Cfg.Config().Models[t]; ok && m.Account == id {
+			m.Account = ""
+			if err := ws.Cfg.UpdatePreferredModel(config.ScopeGlobal, t, m); err != nil {
+				return proto.FallbackSettings{}, err
+			}
+		}
+	}
+	if err := accounts.Remove(id); err != nil {
+		return proto.FallbackSettings{}, err
+	}
+	sendConfigChanged(ws)
+	return fallbackSettings(ws.Cfg.Config()), nil
+}
+
+// UseRefill spends one of a Codex account's free refills.
+func (b *Backend) UseRefill(ctx context.Context, kind, account string) (proto.RefillResult, error) {
+	if catwalk.Type(kind) != config.TypeCodexCLI {
+		return proto.RefillResult{}, invalidFallback("only Codex has free refills")
+	}
+	outcome, err := cliagent.ConsumeRefill(ctx, account)
+	return proto.RefillResult{Outcome: outcome}, err
+}

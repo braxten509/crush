@@ -18,6 +18,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/jsonfile"
@@ -164,18 +165,22 @@ type Model struct {
 	ReadOnly bool
 	// Env is added to the CLI process environment on every turn.
 	Env []string
+	// Account is the Claude Code or Codex sign-in the model runs on (an
+	// options.accounts ID); empty is the tool's own login.
+	Account string
 }
 
 // NewProvider returns a [fantasy.Provider] whose models run through the
 // agent CLI of the given kind.
-func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string, ultracode bool) fantasy.Provider {
-	return &provider{kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, ultracode: ultracode, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
+func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string, ultracode bool, account string) fantasy.Provider {
+	return &provider{kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, ultracode: ultracode, account: account, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
 }
 
 type provider struct {
 	kind        catwalk.Type
 	serviceTier string
 	ultracode   bool
+	account     string
 	dir         string
 	perms       permission.Service
 	files       history.Service
@@ -185,13 +190,19 @@ type provider struct {
 func (p *provider) Name() string { return string(p.kind) }
 
 func (p *provider) LanguageModel(_ context.Context, modelID string) (fantasy.LanguageModel, error) {
-	return &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, Ultracode: p.ultracode, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
+	return &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, Ultracode: p.ultracode, Account: p.account, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
 }
 
 // Run executes one turn, emitting events until the CLI finishes it.
 func (m *Model) Run(ctx context.Context, t Turn) error {
 	if t.Continue && m.Kind != config.TypeClaudeCode {
 		return nil // the session moved on to another CLI
+	}
+	if m.Account != "" && config.HasAccounts(m.Kind) {
+		// Bring the account's folder up to date with account 1's.
+		if _, err := accounts.Prepare(m.Kind, m.Account); err != nil {
+			return fmt.Errorf("preparing %s: %w", m.Account, err)
+		}
 	}
 	calls := &openCalls{calls: map[string]openCall{}}
 	if t.Emit != nil {

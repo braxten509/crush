@@ -38,3 +38,24 @@ cat >/dev/null
 	}}))
 	require.Equal(t, map[string]bool{"t1": true, "t2": false}, background)
 }
+
+// Claude Code starts with its auto-background wait at 2 minutes, so a long
+// command moves to the background instead of holding the turn.
+func TestClaudeStartsWithTwoMinuteAutoBackground(t *testing.T) {
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, "env")
+	script := `#!/bin/sh
+env > "` + envFile + `"
+read -r _; read -r _
+echo '{"type":"system","subtype":"init","session_id":"s1"}'
+echo '{"type":"result","subtype":"success"}'
+cat >/dev/null
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	m := &Model{Kind: config.TypeClaudeCode, ID: "m", Dir: dir}
+	require.NoError(t, m.Run(t.Context(), Turn{Prompt: "hi", Emit: func(Event) error { return nil }}))
+	got, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	require.Contains(t, string(got), "\nCLAUDE_CODE_AUTO_BACKGROUND_TIMEOUT_MS=120000\n")
+}

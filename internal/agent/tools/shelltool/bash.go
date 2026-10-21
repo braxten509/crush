@@ -339,9 +339,7 @@ func (t *bashTool) runInForeground(ctx context.Context, r *bashRun) (fantasy.Too
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	autoBackgroundAfter := max(int(ForegroundWaitLimit/time.Second)+1, cmp.Or(r.params.AutoBackgroundAfter, tools.DefaultAutoBackgroundAfter))
-	autoBackgroundThreshold := time.Duration(autoBackgroundAfter) * time.Second
-	timeout := time.After(autoBackgroundThreshold)
+	timeout := time.After(autoBackgroundWait(r.params.AutoBackgroundAfter))
 
 	var stdout, stderr string
 	var done bool
@@ -501,4 +499,15 @@ func normalizeWorkingDir(path string) string {
 		path = strings.ReplaceAll(path, fsext.WindowsWorkingDirDrive(), "")
 	}
 	return filepath.ToSlash(path)
+}
+
+// autoBackgroundWait is how long a command runs in the foreground before it
+// becomes a background job: the requested seconds (default 60), never under
+// the protected foreground wait and never over 2 minutes (owner,
+// 2026-10-21: "if a command has been running for 2 minutes or more it is
+// forced to background").
+func autoBackgroundWait(requested int) time.Duration {
+	secs := cmp.Or(requested, tools.DefaultAutoBackgroundAfter)
+	secs = min(tools.MaxAutoBackgroundAfter, max(int(ForegroundWaitLimit/time.Second)+1, secs))
+	return time.Duration(secs) * time.Second
 }

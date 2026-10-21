@@ -342,6 +342,10 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	// shows it as the chat's to-do list. TodoWrite, which sends the whole
 	// list each time, rather than the step-by-step Task tools.
 	env = append(env, "CLAUDE_CODE_ENABLE_TODO_TOOLS=1", "CLAUDE_CODE_ENABLE_TASKS=0")
+	// A command still running after 2 minutes becomes a background task
+	// instead of holding the turn (owner, 2026-10-21: "if a command has been
+	// running for 2 minutes or more it is forced to background").
+	env = append(env, claudeAutoBackground)
 	p, err := m.startTurnProc(t.NoTools, env, "claude", args...)
 	if err != nil {
 		return nil, err
@@ -511,3 +515,7 @@ func (r *claudeRun) readLoop(pending [][]byte) (done bool, err error) {
 		}
 	}
 }
+
+// claudeAutoBackground caps Claude Code's foreground Bash wait (its own
+// setting): past it the command moves to the background.
+const claudeAutoBackground = "CLAUDE_CODE_AUTO_BACKGROUND_TIMEOUT_MS=120000"

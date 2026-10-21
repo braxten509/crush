@@ -2,6 +2,7 @@ package shelltool
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -105,4 +106,13 @@ func TestLeadingSleep(t *testing.T) {
 			t.Errorf("LeadingSleep(%q) = %v, want %v", cmd, got, want)
 		}
 	}
+}
+
+// No command stays in the foreground past 2 minutes, whatever the model
+// asks (owner, 2026-10-21).
+func TestAutoBackgroundWaitIsAtMostTwoMinutes(t *testing.T) {
+	require.Equal(t, 60*time.Second, autoBackgroundWait(0))
+	require.Equal(t, 90*time.Second, autoBackgroundWait(90))
+	require.Equal(t, 120*time.Second, autoBackgroundWait(600))
+	require.Equal(t, ForegroundWaitLimit+time.Second, autoBackgroundWait(1))
 }

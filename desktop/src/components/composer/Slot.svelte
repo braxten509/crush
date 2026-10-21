@@ -8,12 +8,17 @@
   import { unfold } from "../../lib/motion.js";
 
   let { entry } = $props();
+  // While the slot rolls away its entry is already gone (ui.slot is null):
+  // it keeps drawing the last one, or reading it throws and the window
+  // shows no form again (owner, 2026-10-21).
+  let last = null;
+  const shown = $derived.by(() => (entry ? (last = entry) : last));
   const LEAVING = "position: absolute; left: calc(20 * var(--px)); right: calc(20 * var(--px)); bottom: calc(33 * var(--px)); z-index: 3;";
 </script>
 
-<section class="slot" data-probe="slot" data-kind={entry.kind} transition:unfold|global={{ from: "bottom", overlay: LEAVING }}>
-  {#key entry}
-    <entry.component {...entry.props} />
+<section class="slot" data-probe="slot" data-kind={shown.kind} transition:unfold|global={{ from: "bottom", overlay: LEAVING }}>
+  {#key shown}
+    <shown.component {...shown.props} />
   {/key}
 </section>
 

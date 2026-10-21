@@ -63,7 +63,9 @@ export function sideInset(dir, u) {
 // the left; closing, it slides back that way and rolls away toward it.
 export function slidePage(node, { dir = 1, duration = MOTION_MS, delay = 0, overlay = false, off = false } = {}) {
   // No fade: a page drawn from its first frame never blinks (owner, 2026-10-19).
-  return paper((t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px);${tick(t)}`, { duration, delay, overlay, off, away: (u) => sideInset(dir, u) });
+  // --slide-shift lets a mark that must hold still (the open row's
+  // vermilion edge) take the slide back out (owner, 2026-10-21).
+  return paper((t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px); --slide-shift: ${(dir * u * 14).toFixed(2)}px;${tick(t)}`, { duration, delay, overlay, off, away: (u) => sideInset(dir, u) });
 }
 
 // A small piece settling in place (rows, notices, new messages); closing, it

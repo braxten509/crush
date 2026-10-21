@@ -182,6 +182,8 @@
     bottom: 0;
     width: calc(4 * var(--px));
     background: var(--vermilion);
+    /* Holds still while the list and the strip slide (motion.js slidePage). */
+    transform: translateX(calc(-1 * var(--slide-shift, 0px)));
   }
 
   /* The close slot, where the chat row keeps its own (ChatRow.svelte .close). */

@@ -458,6 +458,12 @@ describe("groups and keys (CHAT-080, 4.4)", () => {
     expect(build(between, { busy: false }).items.at(-1).live).toBe(null);
   });
 
+  test("an older group with a call cut off before its result never works again", () => {
+    const cut = [user("u1", "q"), assistant("a1", [call("c1", "bash", "{}", false), call("c2", "view")]), tool("t1", [result("c2", "view")]), assistant("a2", [text("done")]), user("u2", "next")];
+    const g = build(cut, { busy: true }).items.find((i) => i.kind === "tools");
+    expect(g).toMatchObject({ working: false, live: null });
+  });
+
   test.each([
     ["bash", "Running a command"],
     ["view", "Reading a file"],

@@ -794,7 +794,9 @@ export function buildTimeline(input, state = createTimelineState()) {
     const failed = calls.filter((c) => c.status === "error").length;
     const backgrounded = calls.filter((c) => c.status === "background").length;
     const lastFailed = calls[calls.length - 1]?.status === "error";
-    const working = liveItem !== null || (busy && calls.some((c) => c.status === "pending"));
+    // Only the chat's live end works: an older group's call left without a
+    // result (a reply cut off mid-stream) is abandoned, not running.
+    const working = liveItem !== null || (busy && live && calls.some((c) => c.status === "pending"));
     const withChanges = callEntries.filter((c) => c.result && (c.result.review || (!c.result.is_error && FILE_TOOLS.has(c.call.name))));
     const changes = withChanges.length
       ? { sessionId, messageId: withChanges[withChanges.length - 1].m.id, toolCallIds: withChanges.map((c) => c.call.id), title: ranTools(calls.length) }

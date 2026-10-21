@@ -25,10 +25,11 @@
 </button>
 
 <style>
-  /* The one-line field's full inner height, kept at the bottom as the field grows. */
+  /* The one-line field's full inner height, centred as the field grows
+     (owner, 2026-10-20). */
   .model {
     flex: none;
-    align-self: flex-end;
+    align-self: center;
     display: flex;
     align-items: center;
     justify-content: space-between;

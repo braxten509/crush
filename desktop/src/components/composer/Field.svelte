@@ -155,7 +155,9 @@
     flex: 1;
     min-width: 0;
     box-sizing: content-box;
-    height: calc(var(--lines, 1) * 26 * var(--px));
+    /* Each line is 28 tall; one line keeps the 26 box, so the row stays 58.
+       26 a line clipped the last line's g and y as lines were added. */
+    height: calc((var(--lines, 1) * 28 - 2) * var(--px));
     margin: calc(16 * var(--px)) calc(14 * var(--px)) calc(14 * var(--px));
     padding: 0;
     border: 0;

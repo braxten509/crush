@@ -167,10 +167,11 @@
   .field.marked :global(.input) {
     margin-left: calc(8 * var(--px));
   }
-  /* The divider and the controls keep the one-line row's place at the bottom as the field grows. */
+  /* The divider and the model button stay centred as the field grows
+     (owner, 2026-10-20). */
   .divider {
     flex: none;
-    align-self: flex-end;
+    align-self: center;
     width: 1px;
     height: calc(42 * var(--px));
     margin: calc(7 * var(--px)) 0;

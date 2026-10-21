@@ -270,6 +270,7 @@ probeSection(
         field: rectOf(one(".folder-picker .path")),
         field_value: field.value,
         caret: field.selectionStart,
+        caret_end: field.selectionEnd,
         focused: document.activeElement === field,
         browse: rectOf(one(".folder-picker .browse")),
         error: rectOf(one(".folder-picker p.error")),

@@ -10,7 +10,9 @@
 //   Ctrl+W, Alt+Backspace      delete the word before the caret
 //   Alt+D, Alt+Delete          delete the word after the caret
 //   Ctrl+U / Ctrl+K            delete everything before / after the caret
-//   Ctrl+A / Ctrl+E            to the line's start / end
+//   Ctrl+A                     select all, as desktop fields do (owner, 2026-10-21;
+//                              Home keeps the terminal's line start)
+//   Ctrl+E                     to the line's end
 //
 // A word is a run of characters that are not white space (Go's
 // unicode.IsSpace), and positions count characters, not UTF-16 units, as the
@@ -61,7 +63,7 @@ export function fieldEdit(combo, state, { masked = false } = {}) {
     case "Alt+ArrowLeft":
       return move(masked ? 0 : wordBackward(chars, selected ? start : caret));
     case "Ctrl+A":
-      return move(0);
+      return { chars, start: 0, end: chars.length };
     case "Ctrl+E":
       return move(chars.length);
     case "Ctrl+H":

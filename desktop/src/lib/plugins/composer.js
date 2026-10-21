@@ -33,7 +33,8 @@ registerAction({ id: "mode.cycle", title: "Switch input mode", keys: ["Shift+Tab
 registerTraySection({
   id: "queue",
   order: 20,
-  visible: () => queued().length > 0,
+  // Without chips the queue sits on Complete's row instead (QueueLine.svelte).
+  visible: () => queued().length > 0 && C.hasChips(),
   header: () => `QUEUE ${queued().length}`,
   component: QueueSection,
 });

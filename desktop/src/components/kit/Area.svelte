@@ -3,7 +3,7 @@
   // a <textarea> with the terminal's editor keys on top of the browser's
   // (lib/kit/areakeys.js). It grows with its text from minLines to maxLines
   // drawn lines and scrolls past that. Ctrl+P and Ctrl+N move the caret by
-  // drawn lines, as ↑ and ↓ do; Ctrl+G selects all and Ctrl+Shift+C copies
+  // drawn lines, as ↑ and ↓ do; Ctrl+G and Ctrl+A select all and Ctrl+Shift+C copies
   // the selection. The front sheet's onKey hears every key first, so a
   // question form may take ↑/↓ for its choices; `reserved` names keys the
   // editor leaves alone.
@@ -33,7 +33,7 @@
       lineMove(combo === "Ctrl+P" ? -1 : 1);
       return;
     }
-    if (combo === "Ctrl+G") {
+    if (combo === "Ctrl+G" || combo === "Ctrl+A") {
       event.preventDefault();
       area.setSelectionRange(0, area.value.length, "forward");
       return;

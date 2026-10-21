@@ -13,6 +13,7 @@
   import ModeMark from "./ModeMark.svelte";
   import PermissionPrompt from "./PermissionPrompt.svelte";
   import PlanHandoff from "./PlanHandoff.svelte";
+  import QueueLine from "./QueueLine.svelte";
   import Popup from "./Popup.svelte";
   import Slot from "./Slot.svelte";
   import { composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
@@ -107,7 +108,7 @@
            every app, as the list's × does. It sits on the right of the
            attached files' row (owner, 2026-10-21). -->
       <div class="complete-row">
-        {#if hasChips()}<div class="chips-side"><ChipRow /></div>{/if}
+        {#if hasChips()}<div class="chips-side"><ChipRow /></div>{:else if sessionId}<QueueLine />{/if}
         {#if sessionId}
           <button class="complete" type="button" onclick={complete}>
             <Icon name="check" />
@@ -201,12 +202,12 @@
      old nudge to the right read as off-centre). */
   .complete-row {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: calc(16 * var(--px));
     margin-bottom: calc(12 * var(--px));
   }
   .composer.chipped .complete-row {
-    align-items: center;
-    gap: calc(16 * var(--px));
     margin-bottom: 0;
   }
   .chips-side {

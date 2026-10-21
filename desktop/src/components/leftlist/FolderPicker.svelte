@@ -157,8 +157,8 @@
         });
         return true;
       case "Ctrl+A":
-        P.caretHome(mine);
-        syncField();
+        // Select all, as desktop fields do (owner, 2026-10-21).
+        field?.select();
         return true;
       case "Ctrl+E":
         P.caretEnd(mine);

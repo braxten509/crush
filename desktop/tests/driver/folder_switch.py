@@ -9,7 +9,8 @@ chats (proj's, beta's and gamma's; the window is on proj):
   the file for every app;
 - picking beta's chat switches the window to beta in place: no reload, the
   top bar and the connection follow, a terminal tab stays;
-- the search (the Sessions sheet) lists only the shown folder's chats;
+- the search (the Sessions sheet) lists the 5 newest chats under Recent,
+  then the shown folder's other chats under its name;
 - New chat and New terminal ask where to start (the folder picker), on the
   shown folder.
 
@@ -99,11 +100,19 @@ order = [r["id"] for r in rows() if r["depth"] == 0]
 check(BETA in order and DELTA in order and order.index(BETA) < order.index(DELTA), f"the list keeps its order across the switch ({order})")
 shot(out_dir, "list-beta")
 
-# The search lists only beta's chats.
+# The search: under Recent the 5 newest chats of any folder, then under
+# beta's name the rest of beta's chats (owner, 2026-10-20).
 run("document.querySelector('nav.chats button.search').click(); return true;")
 time.sleep(1.2)
-titles = run("return [...document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]')].map((el) => el.textContent.trim());") or []
-check(len(titles) == 1 and "Beta chat" in titles[0], f"the search shows only the shown folder's chats ({titles})")
+sheet = run("""
+  const s = document.querySelector('[data-sheet="sessions"]');
+  return { groups: [...s.querySelectorAll('[data-group]')].map((el) => el.textContent.trim()),
+           rows: [...s.querySelectorAll('[data-index]')].map((el) => el.textContent.trim()) };
+""") or {}
+want = ["Beta chat", "Is SameSite=Lax safe?", "Cookie lifetime", "Gamma chat", "Login keeps redirecting", "Beta notes"]
+got = [next((w for w in want if r.startswith(w)), r) for r in sheet.get("rows") or []]
+check(sheet.get("groups") == ["Recent", "beta"] and got == want,
+      f"the search shows the 5 newest chats under Recent, then beta's other chats ({sheet.get('groups')}, {got})")
 key("Escape")
 time.sleep(0.6)
 

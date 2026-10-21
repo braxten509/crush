@@ -5,9 +5,10 @@
   // "~/folder · 3 hours ago" in the info column (35 % budget). Enter, Tab and
   // Ctrl+Y open the selected chat; Ctrl+R renames it in its row, Ctrl+X asks
   // to delete it; both go through POST …/saved-sessions as the terminal's
-  // CatalogChange. Only this folder's chats show (owner, 2026-10-20: the
-  // search shows the history of the shown chat's folder; the left list has
-  // every folder's open chats). Session events rename or remove rows in place.
+  // CatalogChange. Under "Recent", the 5 newest chats of any folder; then,
+  // under the folder's name, the rest of this folder's chats (owner,
+  // 2026-10-20). A chat of another folder switches the window there in
+  // place. Session events rename or remove rows in place.
   //   query? (the filter's first text: the left list's search box, START-021's id)
   import { onMount, tick, untrack } from "svelte";
   import Buttons from "../kit/Buttons.svelte";
@@ -17,23 +18,27 @@
   import { windowBusy } from "../../lib/busy.js";
   import { closeDialog } from "../../lib/dialogs.js";
   import { api } from "../../lib/engine/api.js";
-  import { file_info, windowOpen } from "../../lib/engine/commands.js";
+  import { file_info } from "../../lib/engine/commands.js";
   import { onEvent } from "../../lib/engine/events.js";
+  import { folderLabel } from "../../lib/leftlist/numbers.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
   import { infoText, inProject } from "../../lib/sessions/match.js";
   import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
+  import { openInFolder } from "../../lib/stores/openchats.svelte.js";
   import { busy, openChat, sessions } from "../../lib/stores/sessions.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
   import { secondNow } from "../../lib/live/helpers.svelte.js";
 
   const ID = "sessions";
+  const RECENT = 5;
   const BUSY = "Agent is busy, please wait..."; // sessions.go:196-198
 
   let { query: firstQuery = "" } = $props();
 
   let query = $state(untrack(() => firstQuery));
   let rows = $state([]);
+  let recent = $state(new Set()); // the ids under "Recent"
   let selected = $state(-1);
   let mode = $state("normal"); // "normal" | "rename" | "delete" (sessions.go's sessionsMode)
   let target = null; // the chat id that entered rename or delete; the action is for it alone
@@ -67,9 +72,12 @@
   async function read() {
     try {
       const all = (await api.savedSessions(sessions.currentId || "")) ?? [];
-      const list = all.filter((row) => inProject(row, conn.project.path || conn.project.cwd));
+      const newest = [...all].sort((a, b) => Number(b.UpdatedAt ?? 0) - Number(a.UpdatedAt ?? 0)).slice(0, RECENT);
+      const top = new Set(newest.map((row) => row.ID));
+      const here = all.filter((row) => !top.has(row.ID) && inProject(row, conn.project.path || conn.project.cwd));
       const keep = rows[selected]?.ID ?? sessions.currentId;
-      rows = list;
+      recent = top;
+      rows = [...newest, ...here];
       failed = false;
       const at = rows.findIndex((row) => row.ID === keep);
       selected = at >= 0 ? at : rows.length > 0 ? 0 : -1;
@@ -110,7 +118,7 @@
     }
     closeDialog(ID);
     try {
-      await windowOpen(row.Directory, row.ID, false, null);
+      await openInFolder(row.Directory, row.ID);
     } catch (error) {
       notify("error", error?.message ?? String(error));
     }
@@ -286,6 +294,7 @@
       bind:this={list}
       items={rows}
       filterText={(row) => row.Title ?? ""}
+      groups={(row) => (recent.has(row.ID) ? "Recent" : folderLabel(conn.project.path || conn.project.cwd))}
       info={(row) => infoText(row, leftList.home, now)}
       infoBudget={35}
       {query}

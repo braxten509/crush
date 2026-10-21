@@ -131,7 +131,7 @@
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
     "parent_session_id": "",
-    "title": "Herm\u00f3\u00f0r sends mail twice",
+    "title": "Hermóðr sends mail twice",
     "message_count": 0,
     "prompt_tokens": 0,
     "completion_tokens": 0,
@@ -517,7 +517,7 @@
     "DataDirectory": "/tmp/home/proj/.crush",
     "ID": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
     "ParentSessionID": "",
-    "Title": "Herm\u00f3\u00f0r sends mail twice",
+    "Title": "Hermóðr sends mail twice",
     "MessageCount": 0,
     "CreatedAt": 1792314600,
     "UpdatedAt": 1792318800
@@ -541,6 +541,16 @@
     "MessageCount": 0,
     "CreatedAt": 1792320000,
     "UpdatedAt": 1792320500
+   },
+   {
+    "Directory": "/tmp/home/beta",
+    "DataDirectory": "/tmp/home/beta/.crush",
+    "ID": "b0b0b0b0-1111-4222-8333-000000000002",
+    "ParentSessionID": "",
+    "Title": "Beta notes",
+    "MessageCount": 0,
+    "CreatedAt": 1792310000,
+    "UpdatedAt": 1792310000
    }
   ]
  },
@@ -638,7 +648,7 @@
   {
    "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
    "dir": "/tmp/home/proj",
-   "title": "Herm\u00f3\u00f0r sends mail twice"
+   "title": "Hermóðr sends mail twice"
   },
   {
    "id": "b0b0b0b0-1111-4222-8333-000000000001",

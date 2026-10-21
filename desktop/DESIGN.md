@@ -109,7 +109,9 @@ never "sessions".
 - The folder is per chat (owner, 2026-10-20): the window's folder is the shown chat's or
   terminal's, and the title bar and panel follow it. Picking a chat or terminal of another
   folder switches the window to it in place (`project_enter`, no reload; terminals and the
-  list stay). The search (Sessions sheet) shows only the shown folder's chats.
+  list stay). The search (Sessions sheet) shows the 5 newest chats of any folder under
+  "Recent", then the shown folder's other chats under its name; picking another folder's
+  chat switches the window there in place.
 - The left list is the open chats shared with the terminal's session list (owner,
   2026-10-20: "the two should be in sync"): one file, `$XDG_STATE_HOME/crush/
   open-chats.json` (internal/openchats, src-tauri/src/openchats.rs). A chat opened in
@@ -121,6 +123,9 @@ never "sessions".
 - New chat and New terminal share one row at the list's top in equal halves. Both (and
   the strip's "+" and ">_", the Terminals "+", Alt+N, Alt+T) open the folder picker on this
   folder; another folder switches the window first. Ctrl+N is a new chat here at once.
+- Your messages sit on the right, at most 70% of the measure wide, in a box on the band's
+  fill with YOU and the time above it, also on the right; the AI's replies stay on the
+  left, unboxed (owner's pick C, 2026-10-20).
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).
 - Sending a message or a `!` command brings the chat to its bottom, following.
 - The title bar's icon is the heart bit alone (no tile). The title, folder and branch share

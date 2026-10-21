@@ -56,7 +56,12 @@
 </div>
 
 <style>
+  /* Your messages sit on the right, at most 70% wide, on the band's fill,
+     so you tell them from the AI's at a glance (owner's pick C, 2026-10-20). */
   .box {
+    max-width: 70%;
+    box-sizing: border-box;
+    background: var(--band);
     border: 1px solid var(--rule-faint);
     padding: calc(17 * var(--px)) calc(12 * var(--px)) calc(12 * var(--px));
     min-width: 0;

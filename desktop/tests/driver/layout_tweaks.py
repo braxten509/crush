@@ -7,6 +7,8 @@ with a chat open:
 - the right panel never gets so narrow that a meter's words are cut or run
   into the next meter (dragged to its narrowest with the divider's keys);
 - the top bar's panel switch hides it and brings it back;
+- your messages sit on the right, at most 70% wide, on a fill, with YOU over
+  them on the right;
 - the vermilion rail starts at the column's top, and the list's "‹‹" sits
   on the middle of the wordmark's capitals.
 
@@ -57,6 +59,21 @@ bar = run("""
 """) or {}
 check(not bar.get("head") and not bar.get("rule"), f"no head or head rule over the chat ({bar})")
 check(bar.get("branch") == "main" and bar.get("order"), f"the top bar shows the branch after the folder ({bar})")
+
+# Your messages sit on the right, narrower than the replies, on a fill; YOU
+# and the time sit over them on the right (owner's pick C, 2026-10-20).
+mine = run("""
+  const box = document.querySelector('.user .box'), by = document.querySelector('.user .byline');
+  const reply = document.querySelector('.reply .body');
+  if (!box || !by || !reply) return null;
+  const b = box.getBoundingClientRect(), y = by.getBoundingClientRect(), r = reply.getBoundingClientRect();
+  return { right: b.right, replyRight: r.right, left: b.left, replyLeft: r.left, width: b.width, column: r.width,
+           byRight: y.right, fill: getComputedStyle(box).backgroundColor };
+""") or {}
+check(bool(mine) and abs(mine["right"] - mine["replyRight"]) <= 1 and mine["left"] > mine["replyLeft"] + 1
+      and mine["width"] <= 0.7 * mine["column"] + 1, f"your message sits on the right, at most 70% wide ({mine})")
+check(bool(mine) and abs(mine["byRight"] - mine["right"]) <= 1 and mine.get("fill") not in (None, "rgba(0, 0, 0, 0)"),
+      f"with YOU over it on the right, on a fill ({mine.get('byRight')}, {mine.get('fill')})")
 
 # The vermilion rail starts at the chat column's top, not where the old head
 # ended (owner, 2026-10-20: "the orange line is getting cut off").

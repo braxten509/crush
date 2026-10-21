@@ -23,6 +23,12 @@
 </div>
 
 <style>
+  /* On the right, as your saved messages (UserItem). */
+  .pending {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
   .warn {
     display: flex;
     align-items: center;

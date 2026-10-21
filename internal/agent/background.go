@@ -114,9 +114,17 @@ func BackgroundProcesses() []Process {
 	if len(markers) == 0 {
 		return nil
 	}
+	out := append(managedBackgroundProcesses(), strayProcesses(markers)...)
+	slices.SortFunc(out, func(a, b Process) int { return a.Started.Compare(b.Started) })
+	return out
+}
+
+// strayProcesses lists the background processes carrying one of markers
+// that no managed job holds: what agents started outside crush bg.
+func strayProcesses(markers []string) []Process {
 	procs := markedProcs(markers)
 	now, moved := time.Now(), cliagent.LastBackground()
-	out := managedBackgroundProcesses()
+	var out []Process
 	for _, p := range procs {
 		if managedBackgroundJob(cmp.Or(p.managedJobID, p.nativeShellID)) != nil {
 			continue
@@ -131,7 +139,6 @@ func BackgroundProcesses() []Process {
 			out = append(out, Process{PID: p.pid, Command: commandText(p.args), Started: p.started, Session: p.session})
 		}
 	}
-	slices.SortFunc(out, func(a, b Process) int { return a.Started.Compare(b.Started) })
 	return out
 }
 

@@ -257,7 +257,12 @@ func serviceNotification(services []checkInWork, now time.Time) string {
 	if len(services) == 1 {
 		name, id = services[0].name, services[0].id
 	}
-	body := fmt.Sprintf("Automatic check: %s still running in the background: %s\nStop any you no longer need with crush bg --stop <ID>.", servicesCount(len(services)), serviceList(services, now))
+	stop := "Stop any you no longer need with crush bg --stop <ID>."
+	if slices.ContainsFunc(services, func(w checkInWork) bool { return strings.HasPrefix(w.id, "PID ") }) {
+		// Strays have no job to stop; see stray_check_ins.go.
+		stop = "Stop any you no longer need with crush bg --stop <ID>, or kill <PID> for one listed by PID."
+	}
+	body := fmt.Sprintf("Automatic check: %s still running in the background: %s\n%s", servicesCount(len(services)), serviceList(services, now), stop)
 	return taskResult{ID: id, Name: name, Status: string(TaskRunning), Body: body}.String()
 }
 

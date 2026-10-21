@@ -317,3 +317,54 @@ func TestServiceOnlyCheckInsStopAfterThree(t *testing.T) {
 	removeJob()
 	require.Equal(t, serviceOnlyCheckIns, quietNotes(), "other work starting brings the three notes back")
 }
+
+// Programs a chat left running outside crush bg get check-ins too (owner,
+// 2026-10-20: "the 2 minute reminder never came"): a plain one as work,
+// with how to stop it, and one on a local port as a service, three notes
+// and then quiet; each leaves when a scan no longer finds it.
+func TestStrayProcessesGetCheckIns(t *testing.T) {
+	h, calls := checkInTest(t)
+	h.checkInEvery = 100 * time.Millisecond
+	session, err := h.c.sessions.Create(t.Context(), "strays")
+	require.NoError(t, err)
+	adb := Server{Port: 5037, Process: Process{PID: 101, Command: "adb -L tcp:5037 fork-server server", Started: time.Now(), Session: session.ID}}
+	watcher := Process{PID: 202, Command: "python3 watch.py", Started: time.Now(), Session: session.ID}
+	known := strayCheckIns{}
+	h.syncStrays(known, []Server{adb}, []Process{watcher})
+	h.syncStrays(known, []Server{adb}, []Process{watcher}) // a second scan adds nothing
+
+	select {
+	case call := <-calls:
+		require.Equal(t, session.ID, call.SessionID)
+		require.Contains(t, call.Prompt, "[PID 202] python3 watch.py")
+		require.Contains(t, call.Prompt, "kill 202")
+		require.Contains(t, call.Prompt, "1 service still running in the background: [PID 101] adb · 5037, up")
+	case <-time.After(time.Second):
+		t.Fatal("no check-in for a stray process")
+	}
+
+	h.syncStrays(known, []Server{adb}, nil)
+	notes := 0
+	deadline := time.After(time.Second)
+collect:
+	for {
+		select {
+		case call := <-calls:
+			if strings.Contains(call.Prompt, "[PID 202]") {
+				continue // on its way before the program ended
+			}
+			require.Contains(t, call.Prompt, "[PID 101] adb · 5037")
+			require.Contains(t, call.Prompt, "kill <PID>")
+			notes++
+		case <-deadline:
+			break collect
+		}
+	}
+	require.Equal(t, serviceOnlyCheckIns, notes, "a stray server gets three notes, then quiet")
+
+	h.syncStrays(known, nil, nil)
+	require.Empty(t, known)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	require.Empty(t, h.checkIns)
+}

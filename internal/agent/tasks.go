@@ -185,6 +185,10 @@ func newTaskHub(c *coordinator, events pubsub.Publisher[Task]) *taskHub {
 	}
 	go h.watch()
 	go h.watchDetached()
+	if !testing.Testing() {
+		// Tests call syncStrays themselves.
+		go h.watchStrays()
+	}
 	hubsMu.Lock()
 	hubs = append(hubs, h)
 	hubsMu.Unlock()

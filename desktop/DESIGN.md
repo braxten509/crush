@@ -185,10 +185,13 @@ never "sessions".
 - The terminal falls back to installed Nerd Font faces for prompt symbols, and the space
   under its last row is `--paper` with no native scroll bar.
 - Settings rows stop at 840 picture pixels, so each switch sits near its name.
-- Settings > Fallback order is a stacked list (look A): numbered blocks 560 wide, each
-  with a drag handle, its one-line summary and ×; a small "↓ how it leaves" line sits
-  between blocks (and under the last one when it has its own settings). A click opens a
-  block's options below it as choice buttons; "+ Add block" is a dashed row.
+- Settings > Fallback order is one sentence per block (look C, owner 2026-10-21): numbered
+  blocks as wide as the switch row, each with a drag handle, its sentence and ×, a small ↓
+  in the room above every block but the first. The sentence's dotted-underlined words
+  open a menu under them (`settings/WordMenu.svelte`: unfolds from the word, Esc closes);
+  every pick saves at once. A dragged block follows the pointer while the others slide out
+  of its way, then settles into its place; Alt+Up/Down slides the same way; added and
+  removed blocks grow and shrink with their room. "+ Add block" is a dashed row.
 
 ## Title bar
 

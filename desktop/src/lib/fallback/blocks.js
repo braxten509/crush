@@ -62,34 +62,62 @@ export function minutesText(minutes) {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-// The block's one line in the list.
-export function blockText(block, { accounts = [], providers = [] } = {}) {
-  const kind = blockKind(block, providers);
-  const who = accountName(accounts, kind, block.account);
-  switch (block.type) {
-    case "use": {
-      const where = hasAccounts(kind) ? `${who} · ` : "";
-      const effort = block.effort ? ` · ${block.effort}` : "";
-      return `Use ${where}${modelName(providers, block.provider, block.model)}${effort}`;
-    }
-    case "wait": {
-      const most = Number(block.max_wait_minutes) > 0 ? `, at most ${minutesText(block.max_wait_minutes)}` : "";
-      const meanwhile = block.meanwhile === "next" ? ", using the next blocks meanwhile" : "";
-      return `Wait for ${who} to refill${most}${meanwhile}`;
-    }
-    case "refill":
-      return `Use a free refill on ${who}`;
-  }
-  return "Unknown block";
+// The effort levels of a use block's model, or [].
+export function effortsOf(block, providers) {
+  const p = (providers ?? []).find((x) => x?.id === block?.provider);
+  return p?.models?.find((m) => m?.id === block?.model)?.reasoning_levels ?? [];
 }
 
-// The small words under a block: how the chat leaves it.
-export function leaveText(block) {
-  if (block.type !== "use") return "";
-  const parts = [Number(block.move_at_percent) > 0 ? `at ${Number(block.move_at_percent)}% used` : "when it runs out"];
-  if (block.refill_first) parts.push("after a free refill");
-  if (block.come_back) parts.push("comes back when it refills");
-  return parts.join(" · ");
+// The accounts a block's account word may pick: a use block's tool's own, a
+// refill block's Codex ones, a wait block's every one.
+export function accountChoices(block, { accounts = [], providers = [] } = {}) {
+  if (block?.type === "use") return accountsOf(accounts, blockKind(block, providers));
+  if (block?.type === "refill") return accountsOf(accounts, CODEX);
+  return (accounts ?? []).filter((a) => hasAccounts(a.kind));
+}
+
+// How the chat leaves a use block: the end of its sentence.
+export function leaveWords(block) {
+  let text = Number(block?.move_at_percent) > 0 ? `at ${Number(block.move_at_percent)}% used` : "when it runs out";
+  if (block?.refill_first) text += ", after a free refill";
+  if (block?.come_back) text += ", and come back when it refills";
+  return text;
+}
+
+// The block as the sentence the page shows (owner, 2026-10-21, look C):
+// plain text ({text}) and words that open a menu ({text, menu}), menu naming
+// what the word changes: "model", "account", "effort", "leave" (how the
+// chat leaves a use block), "wait" (how long a wait block waits) or
+// "meanwhile". An account word with nothing else to pick stays plain text.
+export function sentence(block, ctx = {}) {
+  const { accounts = [], providers = [] } = ctx;
+  const kind = blockKind(block, providers);
+  const account = { text: accountName(accounts, kind, block?.account) };
+  if (accountChoices(block, ctx).length > 1) account.menu = "account";
+  switch (block?.type) {
+    case "use": {
+      const out = [{ text: "Use " }, { text: modelName(providers, block.provider, block.model), menu: "model" }];
+      if (hasAccounts(kind)) out.push({ text: " on " }, account);
+      if (effortsOf(block, providers).length) out.push({ text: " at " }, { text: block.effort || "default", menu: "effort" }, { text: " effort" });
+      out.push({ text: ". Move on " }, { text: leaveWords(block), menu: "leave" }, { text: "." });
+      return out;
+    }
+    case "wait": {
+      const most = Number(block.max_wait_minutes) > 0 ? `at most ${minutesText(block.max_wait_minutes)}` : "with no time limit";
+      const meanwhile = block.meanwhile === "next" ? "using the next blocks meanwhile" : "just waiting";
+      return [{ text: "Wait for " }, account, { text: " to refill, " }, { text: most, menu: "wait" }, { text: ", " }, { text: meanwhile, menu: "meanwhile" }, { text: "." }];
+    }
+    case "refill":
+      return [{ text: "Use a free refill on " }, account, { text: "." }];
+  }
+  return [{ text: "Unknown block" }];
+}
+
+// The sentence as one string.
+export function sentenceText(block, ctx) {
+  return sentence(block, ctx)
+    .map((piece) => piece.text)
+    .join("");
 }
 
 // A new block of type, filled in from what exists.

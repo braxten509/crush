@@ -1,30 +1,93 @@
 <script>
-  // Settings > Fallback order (owner, 2026-10-21; look A, a stacked list):
-  // the order chats move through when an account runs out. An on/off switch,
-  // then the blocks top to bottom with the way the chat leaves each under it,
-  // then "+ Add block". A block opens to its options when clicked; its handle
-  // drags it (Alt+Up/Down move it from the keyboard); × removes it. Every
-  // change is saved at once (lib/fallback/store.svelte.js).
-  import { onMount } from "svelte";
+  // Settings > Fallback order (owner, 2026-10-21; look C, one sentence per
+  // block): the order chats move through when an account runs out. An on/off
+  // switch, then the blocks top to bottom, then "+ Add block". Each block is
+  // one sentence (lib/fallback/blocks.js sentence) whose underlined words open
+  // a menu under them (WordMenu); every pick is saved at once
+  // (lib/fallback/store.svelte.js). A block's handle drags it: it follows the
+  // pointer and the others slide out of its way, and when let go it settles
+  // into its place (owner's pick A); Alt+Up/Down moves it from the keyboard,
+  // sliding the same way; × removes it. A block that is added grows in and
+  // one that is removed shrinks away. With the system's reduce-motion
+  // setting on, nothing slides.
+  import { onMount, tick } from "svelte";
   import { fallback, loadFallback, saveOrder } from "../../lib/fallback/store.svelte.js";
-  import { accountsOf, blockKind, blockText, changeBlock, CODEX, fallbackProviders, hasAccounts, leaveText, moveBlock, newBlock } from "../../lib/fallback/blocks.js";
+  import { accountChoices, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, moveBlock, newBlock, sentence } from "../../lib/fallback/blocks.js";
   import { modelData, watchModels } from "../../lib/models/store.svelte.js";
+  import { MOTION_MS, reducedMotion, settle } from "../../lib/motion.js";
+  import WordMenu from "./WordMenu.svelte";
 
   // The model choices: the configured providers, as the engine checks blocks
   // against them; only the agent CLIs (accounts live there) when there are any.
   const providers = $derived(fallbackProviders(modelData.cfg, modelData.catalog));
   const cliProviders = $derived(providers.filter((p) => /cli$|^claude-code$|^codex$/u.test(p.type ?? "")));
+  const tools = $derived(cliProviders.length ? cliProviders : providers);
   const ctx = $derived({ accounts: fallback.accounts, providers });
 
-  let open = $state(-1); // the block showing its options
-  let adding = $state(false);
-  let drag = $state(null); // {from, to}
+  const LABELS = { model: "Model", account: "Account", effort: "Effort", leave: "Move on", wait: "How long", meanwhile: "Meanwhile" };
 
-  const blocks = $derived(drag ? moveBlock(fallback.order.blocks, drag.from, drag.to) : fallback.order.blocks);
+  let adding = $state(false);
+  let menu = $state(""); // the open word menu: "<block key>:<menu>"
+  let drag = $state(null); // {from, to} while a block is held
+  let ready = $state(false); // blocks grow in only once the first ones are drawn
+
+  // Each block's key, kept across saves (the engine answers with new
+  // objects), so a block keeps its row: first the same words at the same
+  // place, then the same words anywhere (a move), then the same place (an
+  // edit); any other block is new and grows in.
+  let made = 0;
+  let lastBlocks = [];
+  let lastKeys = [];
+  const empty = (value) => value === "" || value === 0 || value === false || value === null || value === undefined;
+  const words = (block) =>
+    JSON.stringify(
+      Object.keys(block ?? {})
+        .sort()
+        .filter((field) => !empty(block[field]))
+        .map((field) => [field, block[field]]),
+    );
+  function keysOf(blocks) {
+    const before = lastBlocks.map((block, i) => ({ words: words(block), key: lastKeys[i], used: false }));
+    const now = blocks.map(words);
+    const keys = blocks.map(() => "");
+    const take = (i, found) => {
+      found.used = true;
+      keys[i] = found.key;
+    };
+    now.forEach((w, i) => before[i] && !before[i].used && before[i].words === w && take(i, before[i]));
+    now.forEach((w, i) => {
+      const found = !keys[i] && before.find((b) => !b.used && b.words === w);
+      if (found) take(i, found);
+    });
+    now.forEach((_, i) => {
+      if (keys[i]) return;
+      if (before[i] && !before[i].used) take(i, before[i]);
+      else keys[i] = `b${made++}`;
+    });
+    lastBlocks = blocks;
+    lastKeys = keys;
+    return keys;
+  }
+
+  const shown = $derived(drag ? moveBlock(fallback.order.blocks, drag.from, drag.to) : fallback.order.blocks);
+  const rows = $derived.by(() => {
+    const keys = keysOf(shown);
+    return shown.map((block, i) => ({ key: keys[i], block }));
+  });
 
   onMount(() => {
     loadFallback();
-    return watchModels();
+    const stop = watchModels();
+    return () => {
+      stop();
+      window.removeEventListener("pointermove", pull);
+      window.removeEventListener("pointerup", drop);
+      window.removeEventListener("pointercancel", drop);
+    };
+  });
+
+  $effect(() => {
+    if (fallback.loaded && !ready) requestAnimationFrame(() => (ready = true));
   });
 
   function save(nextBlocks, on = fallback.order.on) {
@@ -39,62 +102,219 @@
 
   function add(type) {
     adding = false;
-    const next = [...fallback.order.blocks, newBlock(type, { providers: cliProviders.length ? cliProviders : providers })];
-    open = next.length - 1;
-    save(next);
+    save([...fallback.order.blocks, newBlock(type, { providers: tools })]);
   }
 
   function remove(i) {
-    if (open === i) open = -1;
+    menu = "";
     save(fallback.order.blocks.filter((_, n) => n !== i));
   }
 
-  function move(i, to) {
-    if (to < 0 || to >= fallback.order.blocks.length) return;
-    if (open === i) open = to;
-    save(moveBlock(fallback.order.blocks, i, to));
-  }
-
-  // The handle: the block follows the pointer over the others' middles.
+  // The motion. Rows that change places slide from where they were drawn to
+  // their new places (the house slide: --motion on --ease-paper, with the
+  // --paper-tick every animation that ends runs, app.css).
   let list = $state(null);
-  function grab(event, i) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag = { from: i, to: i };
+  const ease = () => getComputedStyle(list).getPropertyValue("--ease-paper").trim() || "ease-out";
+  function slide(li, dy) {
+    const motion = li.animate([{ transform: `translateY(${dy}px)`, "--paper-tick": 0 }, { transform: "translateY(0)", "--paper-tick": 1 }], { duration: MOTION_MS, easing: ease() });
+    motion.id = "slide";
   }
-  function pull(event) {
-    if (!drag || !list) return;
-    const rows = [...list.querySelectorAll("[data-block]")];
-    let to = drag.to;
-    rows.forEach((row, n) => {
-      const r = row.getBoundingClientRect();
-      if (event.clientY >= r.top && event.clientY < r.bottom) to = n;
-    });
-    if (rows.length && event.clientY < rows[0].getBoundingClientRect().top) to = 0;
-    if (rows.length && event.clientY >= rows[rows.length - 1].getBoundingClientRect().bottom) to = rows.length - 1;
-    if (to !== drag.to) drag = { ...drag, to };
+  // Where each row is drawn now, mid-slide included.
+  function drawnTops() {
+    return new Map([...(list?.children ?? [])].map((li) => [li.dataset.key, li.getBoundingClientRect().top]));
   }
-  function drop() {
-    if (!drag) return;
-    const { from, to } = drag;
-    drag = null;
-    if (from !== to) move(from, to);
-  }
-  function handleKey(event, i) {
-    if (event.altKey && event.key === "ArrowUp") {
-      event.preventDefault();
-      move(i, i - 1);
-    } else if (event.altKey && event.key === "ArrowDown") {
-      event.preventDefault();
-      move(i, i + 1);
+  // Once the rows have moved: each that moved slides from where it was drawn
+  // (but `skip`, the row under the pointer).
+  async function slideFrom(before, skip = "") {
+    await tick();
+    if (!list || reducedMotion()) return;
+    for (const li of list.children) {
+      if (li.dataset.key === skip || !before.has(li.dataset.key)) continue;
+      for (const motion of li.getAnimations()) if (motion.id === "slide") motion.cancel();
+      const dy = before.get(li.dataset.key) - li.getBoundingClientRect().top;
+      if (Math.abs(dy) >= 0.5) slide(li, dy);
     }
   }
 
-  const providerOf = (block) => providers.find((p) => p.id === block.provider);
-  const effortsOf = (block) => providerOf(block)?.models?.find((m) => m.id === block.model)?.reasoning_levels ?? [];
-  const numberField = (event) => Math.max(0, Math.round(Number(event.currentTarget.value) || 0));
+  async function move(i, to, key) {
+    if (to < 0 || to >= fallback.order.blocks.length) return;
+    menu = "";
+    const before = drawnTops();
+    save(moveBlock(fallback.order.blocks, i, to));
+    await slideFrom(before);
+    // The keys follow the block, so its handle keeps the focus.
+    list?.querySelector(`[data-key="${key}"] .handle`)?.focus({ preventScroll: true });
+  }
+
+  function handleKey(event, i, key) {
+    if (event.altKey && event.key === "ArrowUp") {
+      event.preventDefault();
+      move(i, i - 1, key);
+    } else if (event.altKey && event.key === "ArrowDown") {
+      event.preventDefault();
+      move(i, i + 1, key);
+    }
+  }
+
+  // The handle: the held block is drawn under the pointer (kept within the
+  // list) while its row moves past every block whose middle it passes.
+  let held = $state(null); // {key, li, startY, top, height, mids, first, last, dy}
+  function grab(event, i, key) {
+    if (event.button !== 0 || !list) return;
+    event.preventDefault();
+    menu = "";
+    const lis = [...list.children];
+    const li = lis.find((el) => el.dataset.key === key);
+    if (!li) return;
+    for (const motion of li.getAnimations()) if (motion.id === "slide") motion.cancel();
+    const end = lis[lis.length - 1];
+    held = {
+      key,
+      li,
+      startY: event.clientY,
+      top: li.offsetTop,
+      height: li.offsetHeight,
+      mids: lis.map((el) => el.offsetTop + el.offsetHeight / 2),
+      first: lis[0].offsetTop,
+      last: end.offsetTop + end.offsetHeight,
+      dy: 0,
+    };
+    drag = { from: i, to: i };
+    window.addEventListener("pointermove", pull);
+    window.addEventListener("pointerup", drop);
+    window.addEventListener("pointercancel", drop);
+  }
+  function follow() {
+    if (held) held.li.style.transform = `translateY(${held.top + held.dy - held.li.offsetTop}px)`;
+  }
+  function pull(event) {
+    if (!held || !drag) return;
+    held.dy = Math.max(held.first - held.top, Math.min(held.last - held.top - held.height, event.clientY - held.startY));
+    const middle = held.top + held.height / 2 + held.dy;
+    let to = 0;
+    held.mids.forEach((mid, n) => {
+      if (n !== drag.from && mid < middle) to += 1;
+    });
+    if (to === drag.to) {
+      follow();
+      return;
+    }
+    const before = drawnTops();
+    drag = { ...drag, to };
+    slideFrom(before, held.key).then(follow);
+    follow();
+  }
+  function drop() {
+    window.removeEventListener("pointermove", pull);
+    window.removeEventListener("pointerup", drop);
+    window.removeEventListener("pointercancel", drop);
+    if (!held || !drag) return;
+    const { from, to } = drag;
+    const { li } = held;
+    const offset = held.top + held.dy - li.offsetTop;
+    held = null;
+    drag = null;
+    if (from !== to) save(moveBlock(fallback.order.blocks, from, to));
+    // It settles from under the pointer into its place.
+    li.style.transform = "";
+    if (Math.abs(offset) >= 0.5 && !reducedMotion()) slide(li, offset);
+  }
+
+  // A menu's number field (percent used, minutes): saved when it changes, or
+  // on Enter, which also closes the menu; each value is saved once.
+  function numberField(i, field, most, done) {
+    const keep = (input) => {
+      const value = Math.min(most, Math.max(1, Math.round(Number(input.value) || 0)));
+      if (input.dataset.saved === String(value)) return;
+      input.dataset.saved = String(value);
+      change(i, { [field]: value });
+    };
+    return {
+      onchange: (event) => keep(event.currentTarget),
+      onkeydown: (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        keep(event.currentTarget);
+        done();
+      },
+    };
+  }
 </script>
+
+{#snippet pick(on, text, choose)}
+  <button type="button" class="pick" role="menuitemradio" aria-checked={on} data-item onclick={choose}>{text}</button>
+{/snippet}
+
+{#snippet check(on, text, toggle)}
+  <button type="button" class="pick" role="menuitemcheckbox" aria-checked={on} data-item onclick={toggle}>
+    <span class="box" class:on aria-hidden="true">{#if on}<svg viewBox="0 0 12 12" focusable="false"><path d="M2.2 6.3 4.9 9 9.8 3.2" fill="none" stroke="currentColor" stroke-width="1.6" /></svg>{/if}</span>
+    {text}
+  </button>
+{/snippet}
+
+{#snippet menuOf(name, i, block, done)}
+  {#if name === "model"}
+    {#each tools as p (p.id)}
+      <span class="heading" role="presentation">{p.name}</span>
+      {#each p.models as m (m.id)}
+        {@render pick(block.provider === p.id && block.model === m.id, m.name || m.id, () => {
+          change(i, p.id === block.provider ? { model: m.id, effort: "" } : { provider: p.id, model: m.id, account: "", effort: "" });
+          done();
+        })}
+      {/each}
+    {/each}
+  {:else if name === "account"}
+    {#each accountChoices(block, ctx) as a (`${a.kind}/${a.id}`)}
+      {@render pick(blockKind(block, providers) === a.kind && (block.account ?? "") === a.id, a.name, () => {
+        change(i, block.type === "use" ? { account: a.id } : { kind: a.kind, account: a.id });
+        done();
+      })}
+    {/each}
+  {:else if name === "effort"}
+    {#each ["", ...effortsOf(block, providers)] as level (level)}
+      {@render pick((block.effort ?? "") === level, level || "default", () => {
+        change(i, { effort: level });
+        done();
+      })}
+    {/each}
+  {:else if name === "leave"}
+    {@const percent = Number(block.move_at_percent) > 0 ? Number(block.move_at_percent) : 0}
+    {@render pick(!percent, "when it runs out", () => {
+      change(i, { move_at_percent: 0 });
+      done();
+    })}
+    <span class="number-row" class:on={percent > 0}>
+      <button type="button" class="pick" role="menuitemradio" aria-checked={percent > 0} data-item onclick={() => (change(i, { move_at_percent: percent || 95 }), done())}>at</button>
+      <input type="number" min="1" max="100" class="small" data-item aria-label="Move on at percent used" value={percent || 95} {...numberField(i, "move_at_percent", 100, done)} />
+      <span class="unit">% used</span>
+    </span>
+    <span class="rule" role="separator"></span>
+    {#if blockKind(block, providers) === CODEX}
+      {@render check(Boolean(block.refill_first), "use a free refill first", () => change(i, { refill_first: !block.refill_first }))}
+    {/if}
+    {@render check(Boolean(block.come_back), "come back when it refills", () => change(i, { come_back: !block.come_back }))}
+  {:else if name === "wait"}
+    {@const minutes = Number(block.max_wait_minutes) > 0 ? Number(block.max_wait_minutes) : 0}
+    {@render pick(!minutes, "with no time limit", () => {
+      change(i, { max_wait_minutes: 0 });
+      done();
+    })}
+    <span class="number-row" class:on={minutes > 0}>
+      <button type="button" class="pick" role="menuitemradio" aria-checked={minutes > 0} data-item onclick={() => (change(i, { max_wait_minutes: minutes || 60 }), done())}>at most</button>
+      <input type="number" min="1" class="small" data-item aria-label="Wait at most minutes" value={minutes || 60} {...numberField(i, "max_wait_minutes", Infinity, done)} />
+      <span class="unit">minutes</span>
+    </span>
+  {:else if name === "meanwhile"}
+    {@render pick(block.meanwhile !== "next", "just waiting", () => {
+      change(i, { meanwhile: "" });
+      done();
+    })}
+    {@render pick(block.meanwhile === "next", "using the next blocks meanwhile", () => {
+      change(i, { meanwhile: "next" });
+      done();
+    })}
+  {/if}
+{/snippet}
 
 <div class="fallback" data-probe="fallback-order">
   <div class="row head">
@@ -104,108 +324,23 @@
   <p class="quiet">When a chat's account runs out, it moves down this list. Chats on a model that isn't in the list stay where they are.</p>
   {#if fallback.error}<p class="error" role="alert">{fallback.error}</p>{/if}
 
-  <ol class="blocks" bind:this={list} class:off={!fallback.order.on} aria-label="Fallback order">
-    {#each blocks as block, i (block)}
-      {@const kind = blockKind(block, providers)}
-      {@const real = drag ? (i === drag.to ? drag.from : i) : i}
-      <li class="item" data-block={i}>
-        <div class="block" class:wait={block.type === "wait"} class:open={open === real} class:dragging={drag && i === drag.to}>
-          <button type="button" class="handle" aria-label="Move block {i + 1}" title="Drag to move (Alt+Up/Down)" onpointerdown={(e) => grab(e, i)} onpointermove={pull} onpointerup={drop} onpointercancel={drop} onkeydown={(e) => handleKey(e, i)}>⠿</button>
-          <button type="button" class="summary" aria-expanded={open === real} onclick={() => (open = open === real ? -1 : real)}>
+  <ol class="blocks" bind:this={list} class:off={!fallback.order.on} class:dragging={Boolean(drag)} aria-label="Fallback order">
+    {#each rows as { key, block }, i (key)}
+      <li class="item" data-block={i} data-key={key} class:lead={i === 0} class:raised={menu.startsWith(`${key}:`)} class:held={held?.key === key} in:settle={{ fold: true, off: !ready }} out:settle={{ fold: true }}>
+        <div class="block" class:wait={block.type === "wait"}>
+          <button type="button" class="handle" aria-label="Move block {i + 1}" title="Drag to move (Alt+Up/Down)" onpointerdown={(e) => grab(e, i, key)} onkeydown={(e) => handleKey(e, i, key)}>⠿</button>
+          <div class="summary">
             <span class="number">{i + 1}</span>
-            <span class="text">{blockText(block, ctx)}</span>
-          </button>
-          <button type="button" class="remove" aria-label="Remove block {i + 1}" onclick={() => remove(real)}>×</button>
-        </div>
-        {#if open === real && !drag}
-          <div class="options" data-probe="block-options">
-            {#if block.type === "use"}
-              <div class="opt">
-                <span class="label">Tool</span>
-                <span class="choices">
-                  {#each cliProviders.length ? cliProviders : providers as p (p.id)}
-                    <button type="button" class="choice" aria-pressed={block.provider === p.id} onclick={() => change(real, { provider: p.id, model: p.models[0]?.id ?? "", account: "", effort: "" })}>{p.name}</button>
-                  {/each}
-                </span>
-              </div>
-              {#if hasAccounts(kind)}
-                <div class="opt">
-                  <span class="label">Account</span>
-                  <span class="choices">
-                    {#each accountsOf(fallback.accounts, kind) as a (a.id)}
-                      <button type="button" class="choice" aria-pressed={(block.account ?? "") === a.id} onclick={() => change(real, { account: a.id })}>{a.name}</button>
-                    {/each}
-                  </span>
-                </div>
-              {/if}
-              <div class="opt">
-                <span class="label">Model</span>
-                <span class="choices">
-                  {#each providerOf(block)?.models ?? [] as m (m.id)}
-                    <button type="button" class="choice" aria-pressed={block.model === m.id} onclick={() => change(real, { model: m.id, effort: "" })}>{m.name || m.id}</button>
-                  {/each}
-                </span>
-              </div>
-              {#if effortsOf(block).length}
-                <div class="opt">
-                  <span class="label">Effort</span>
-                  <span class="choices">
-                    <button type="button" class="choice" aria-pressed={!block.effort} onclick={() => change(real, { effort: "" })}>Default</button>
-                    {#each effortsOf(block) as level (level)}
-                      <button type="button" class="choice" aria-pressed={block.effort === level} onclick={() => change(real, { effort: level })}>{level}</button>
-                    {/each}
-                  </span>
-                </div>
-              {/if}
-              <div class="opt">
-                <span class="label">Move on</span>
-                <span class="choices">
-                  <button type="button" class="choice" aria-pressed={!(Number(block.move_at_percent) > 0)} onclick={() => change(real, { move_at_percent: 0 })}>When it runs out</button>
-                  <button type="button" class="choice" aria-pressed={Number(block.move_at_percent) > 0} onclick={() => change(real, { move_at_percent: Number(block.move_at_percent) > 0 ? block.move_at_percent : 95 })}>At</button>
-                  <input type="number" min="1" max="100" class="small" aria-label="Move on at percent used" value={Number(block.move_at_percent) > 0 ? block.move_at_percent : 95} onchange={(e) => change(real, { move_at_percent: Math.min(100, numberField(e)) })} />
-                  <span class="unit">% used</span>
-                </span>
-              </div>
-              {#if kind === CODEX}
-                <label class="check"><input type="checkbox" checked={Boolean(block.refill_first)} onchange={(e) => change(real, { refill_first: e.currentTarget.checked })} /> Use a free refill before moving on</label>
-              {/if}
-              <label class="check"><input type="checkbox" checked={Boolean(block.come_back)} onchange={(e) => change(real, { come_back: e.currentTarget.checked })} /> Come back here when it refills</label>
-            {:else}
-              <div class="opt">
-                <span class="label">Account</span>
-                <span class="choices">
-                  {#each fallback.accounts.filter((a) => block.type !== "refill" || a.kind === CODEX) as a (`${a.kind}/${a.id}`)}
-                    <button type="button" class="choice" aria-pressed={block.kind === a.kind && (block.account ?? "") === a.id} onclick={() => change(real, { kind: a.kind, account: a.id })}>{a.name}</button>
-                  {/each}
-                </span>
-              </div>
-              {#if block.type === "wait"}
-                <div class="opt">
-                  <span class="label">At most</span>
-                  <span class="choices">
-                    <button type="button" class="choice" aria-pressed={!(Number(block.max_wait_minutes) > 0)} onclick={() => change(real, { max_wait_minutes: 0 })}>No limit</button>
-                    <button type="button" class="choice" aria-pressed={Number(block.max_wait_minutes) > 0} onclick={() => change(real, { max_wait_minutes: Number(block.max_wait_minutes) > 0 ? block.max_wait_minutes : 60 })}>Up to</button>
-                    <input type="number" min="1" class="small" aria-label="Wait at most minutes" value={Number(block.max_wait_minutes) > 0 ? block.max_wait_minutes : 60} onchange={(e) => change(real, { max_wait_minutes: numberField(e) })} />
-                    <span class="unit">minutes, else skip ahead</span>
-                  </span>
-                </div>
-                <div class="opt">
-                  <span class="label">While waiting</span>
-                  <span class="choices">
-                    <button type="button" class="choice" aria-pressed={block.meanwhile !== "next"} onclick={() => change(real, { meanwhile: "" })}>Just wait</button>
-                    <button type="button" class="choice" aria-pressed={block.meanwhile === "next"} onclick={() => change(real, { meanwhile: "next" })}>Use the next blocks, come back after</button>
-                  </span>
-                </div>
-              {/if}
-            {/if}
+            <span class="text">{#each sentence(block, ctx) as piece, p (piece.menu || `t${p}`)}{#if piece.menu}<WordMenu
+                  text={piece.text}
+                  label={LABELS[piece.menu]}
+                  open={menu === `${key}:${piece.menu}`}
+                  ontoggle={(on) => (menu = on ? `${key}:${piece.menu}` : "")}
+                  >{#snippet children(done)}{@render menuOf(piece.menu, i, block, done)}{/snippet}</WordMenu
+                >{:else}{piece.text}{/if}{/each}</span>
           </div>
-        {/if}
-        {#if i < blocks.length - 1}
-          <div class="arrow" aria-hidden="true">↓ {leaveText(block) || "then"}</div>
-        {:else if leaveText(block) && leaveText(block) !== leaveText({ type: "use" })}
-          <!-- The last block has nowhere to go, but its own settings still show. -->
-          <div class="arrow" aria-hidden="true">{leaveText(block)}</div>
-        {/if}
+          <button type="button" class="remove" aria-label="Remove block {i + 1}" onclick={() => remove(i)}>×</button>
+        </div>
       </li>
     {/each}
   </ol>
@@ -242,12 +377,12 @@
     color: var(--ink);
   }
   .quiet {
-    margin: calc(12 * var(--px)) 0 calc(16 * var(--px));
+    margin: calc(12 * var(--px)) 0 0;
     font: var(--t-small);
     color: var(--slate);
   }
   .error {
-    margin: 0 0 calc(12 * var(--px));
+    margin: calc(12 * var(--px)) 0 0;
     font: var(--t-small);
     color: var(--rose, var(--vermilion));
   }
@@ -255,15 +390,45 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    width: calc(560 * var(--px));
-    max-width: 100%;
   }
-  .blocks.off {
-    opacity: 0.6;
+  .blocks.off .summary {
+    color: var(--slate);
+  }
+  .blocks.off .block {
+    border-color: var(--rule-faint);
+  }
+  .blocks.dragging {
+    user-select: none;
+  }
+  /* Every block owns the room above it, where the ↓ from the block before
+     sits (hidden over the first), so a block that grows in or shrinks away
+     takes its room with it and nothing else jumps. */
+  .item {
+    position: relative;
+    padding-top: calc(28 * var(--px));
+  }
+  .item::before {
+    content: "↓";
+    position: absolute;
+    top: 0;
+    left: calc(44 * var(--px));
+    font: var(--t-small);
+    line-height: calc(28 * var(--px));
+    color: var(--slate);
+  }
+  .item.lead::before,
+  .item.held::before {
+    visibility: hidden;
+  }
+  .item.held {
+    z-index: 2;
+  }
+  .item.raised {
+    z-index: 30;
   }
   .block {
+    position: relative;
     display: flex;
-    align-items: center;
     min-height: calc(44 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--paper-raised);
@@ -271,17 +436,14 @@
   .block.wait {
     border-style: dashed;
   }
-  .block.open {
+  .held .block {
     border-color: var(--ink);
-  }
-  .block.dragging {
     background: var(--band);
   }
   .handle,
   .remove {
     flex: none;
     width: calc(36 * var(--px));
-    align-self: stretch;
     border: 0;
     background: none;
     font: var(--t-item);
@@ -291,6 +453,9 @@
   }
   .remove {
     cursor: pointer;
+  }
+  .held .handle {
+    cursor: grabbing;
   }
   .handle:hover,
   .remove:hover {
@@ -302,45 +467,89 @@
     display: flex;
     align-items: baseline;
     gap: calc(10 * var(--px));
-    align-self: stretch;
-    padding: 0 calc(4 * var(--px));
-    border: 0;
-    background: none;
-    text-align: left;
+    padding: calc(8 * var(--px)) calc(4 * var(--px));
     font: var(--t-item);
     color: var(--ink);
-    cursor: pointer;
-    align-items: center;
   }
   .number {
+    flex: none;
     font: var(--t-small);
     color: var(--slate);
   }
   .text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
   }
-  .options {
+  /* The word menus' items (WordMenu draws the box). */
+  .pick {
     display: flex;
-    flex-direction: column;
-    gap: calc(10 * var(--px));
-    padding: calc(12 * var(--px)) calc(14 * var(--px)) calc(14 * var(--px)) calc(36 * var(--px));
-    border: 1px solid var(--ink);
-    border-top: 0;
-    background: var(--paper);
+    align-items: center;
+    gap: calc(8 * var(--px));
+    box-sizing: border-box;
+    width: 100%;
+    min-height: calc(32 * var(--px));
+    padding: 0 calc(14 * var(--px));
+    border: 0;
+    border-radius: 0;
+    background: none;
+    font: var(--t-button);
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
   }
-  .opt {
-    display: flex;
-    align-items: flex-start;
-    gap: calc(12 * var(--px));
+  .pick:hover {
+    background: var(--control-hover);
   }
-  .label {
-    flex: none;
-    width: calc(96 * var(--px));
-    padding-top: calc(7 * var(--px));
+  .pick[role="menuitemradio"][aria-checked="true"],
+  .number-row.on {
+    background: var(--band);
+  }
+  .pick:focus-visible,
+  .small:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: -1px;
+  }
+  .heading {
+    display: block;
+    padding: calc(8 * var(--px)) calc(14 * var(--px)) calc(2 * var(--px));
     font: var(--t-small);
     color: var(--slate);
+  }
+  .number-row {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--px));
+    padding-right: calc(14 * var(--px));
+  }
+  .number-row .pick {
+    width: auto;
+    padding-right: 0;
+  }
+  .number-row.on .pick {
+    background: none;
+  }
+  .rule {
+    display: block;
+    height: 1px;
+    margin: calc(4 * var(--px)) 0;
+    background: var(--rule-faint);
+  }
+  .box {
+    flex: none;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: calc(16 * var(--px));
+    height: calc(16 * var(--px));
+    border: 1px solid var(--rule-control);
+    background: var(--paper);
+  }
+  .box.on {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+  .box svg {
+    width: calc(12 * var(--px));
+    height: calc(12 * var(--px));
   }
   .choices {
     display: flex;
@@ -359,17 +568,13 @@
     color: var(--ink);
     cursor: pointer;
   }
-  .choice:hover:not(:disabled),
-  .add:hover {
-    background: var(--control-hover);
-  }
   .choice:disabled {
     color: var(--slate);
     cursor: default;
   }
-  .choice[aria-pressed="true"] {
-    background: var(--band);
-    border-color: var(--ink);
+  .choice:hover:not(:disabled),
+  .add:hover {
+    background: var(--control-hover);
   }
   .add {
     border-style: dashed;
@@ -377,7 +582,7 @@
   }
   .small {
     width: calc(64 * var(--px));
-    height: calc(32 * var(--px));
+    height: calc(28 * var(--px));
     padding: 0 calc(8 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--paper);
@@ -388,23 +593,8 @@
     font: var(--t-small);
     color: var(--slate);
   }
-  .check {
-    display: flex;
-    align-items: center;
-    gap: calc(8 * var(--px));
-    padding-left: calc(108 * var(--px));
-    font: var(--t-small);
-    color: var(--ink);
-  }
-  .arrow {
-    padding: calc(4 * var(--px)) 0 calc(4 * var(--px)) calc(44 * var(--px));
-    font: var(--t-small);
-    color: var(--slate);
-  }
   .adder {
     margin-top: calc(10 * var(--px));
-    width: calc(560 * var(--px));
-    max-width: 100%;
   }
   .adder .add {
     width: 100%;
@@ -436,8 +626,11 @@
     left: calc(23 * var(--px));
     background: var(--choice);
   }
-  button:focus-visible,
-  input:focus-visible {
+  .handle:focus-visible,
+  .remove:focus-visible,
+  .switch:focus-visible,
+  .choice:focus-visible,
+  .add:focus-visible {
     outline: 1px solid var(--vermilion);
     outline-offset: calc(2 * var(--px));
   }

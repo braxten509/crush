@@ -26,8 +26,9 @@ const (
 type (
 	// taskTickMsg turns the spinner and expires completed sub-agents after their linger period.
 	taskTickMsg struct{}
-	// bgProcsMsg carries a fresh list of background processes. Inside the
-	// session list, servers among them are shown there instead.
+	// bgProcsMsg carries a fresh list of background processes, the servers
+	// among them apart: the row counts them as servers, and inside the
+	// session list they are shown there instead.
 	bgProcsMsg struct {
 		procs   []agent.Process
 		servers []agent.Server
@@ -48,6 +49,10 @@ type taskRow struct {
 	// hostServers are background processes listening on a port, which the
 	// session list shows in place of the row.
 	hostServers []agent.Server
+	// servers are the same outside the session list: the row's own
+	// "servers" entry (owner, 2026-10-20: adb on port 5037 counted as a plain
+	// background process).
+	servers []agent.Server
 	// focused is set while Down from the editor selected the row; sel is
 	// the selected category.
 	focused bool
@@ -76,10 +81,35 @@ func (r *taskRow) len(sessionID string) int {
 	if len(r.visible(sessionID)) > 0 {
 		n++
 	}
+	if len(r.servers) > 0 {
+		n++
+	}
 	if len(r.bgProcs) > 0 {
 		n++
 	}
 	return n
+}
+
+// Row entries, in the row's order.
+const (
+	rowSubAgents = "subagents"
+	rowServers   = "servers"
+	rowBgProcs   = "background"
+)
+
+// kinds lists the row's entries for sessionID, in order.
+func (r *taskRow) kinds(sessionID string) []string {
+	var kinds []string
+	if len(r.visible(sessionID)) > 0 {
+		kinds = append(kinds, rowSubAgents)
+	}
+	if len(r.servers) > 0 {
+		kinds = append(kinds, rowServers)
+	}
+	if len(r.bgProcs) > 0 {
+		kinds = append(kinds, rowBgProcs)
+	}
+	return kinds
 }
 
 // record stores the latest state of a sub-agent.
@@ -161,22 +191,22 @@ func (m *UI) handleTaskTick() tea.Cmd {
 
 // pollBgProcs lists the background processes off the update loop.
 func (m *UI) pollBgProcs() tea.Cmd {
-	inHost := m.inSessionHost
 	com, sessionID := m.com, m.currentSessionID()
 	return tea.Tick(bgProcsRefresh, func(time.Time) tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		procs := com.BackgroundJobs(ctx, sessionID)
-		if !inHost {
-			return bgProcsMsg{procs: procs}
-		}
-		servers, rest := agent.FindServers(procs)
+		servers, rest := agent.FindServers(com.BackgroundJobs(ctx, sessionID))
 		return bgProcsMsg{procs: rest, servers: servers}
 	})
 }
 
 func (m *UI) handleBgProcs(msg bgProcsMsg) tea.Cmd {
-	m.taskRow.bgProcs, m.taskRow.hostServers = msg.procs, msg.servers
+	m.taskRow.bgProcs = msg.procs
+	if m.inSessionHost {
+		m.taskRow.hostServers, m.taskRow.servers = msg.servers, nil
+	} else {
+		m.taskRow.hostServers, m.taskRow.servers = nil, msg.servers
+	}
 	m.relayoutTasks()
 	m.refreshBackgroundDialog()
 	return m.pollBgProcs()
@@ -187,6 +217,7 @@ func (m *UI) handleBgProcs(msg bgProcsMsg) tea.Cmd {
 func (m *UI) refreshBackgroundDialog() {
 	for _, id := range []string{dialog.BackgroundID, dialog.SubAgentsID} {
 		if d, ok := m.dialog.Dialog(id).(*dialog.Background); ok {
+			d.SetServers(m.taskRow.servers)
 			d.SetItems(m.visibleTasks(), m.taskRow.bgProcs, "")
 		}
 	}
@@ -260,6 +291,13 @@ func (m *UI) renderTaskLine(width int, withHint bool) string {
 		}
 		items = append(items, icon+" "+t.Pills.TodoLabel.Render(label))
 	}
+	if n := len(m.taskRow.servers); n > 0 {
+		label := fmt.Sprintf("%d servers", n)
+		if n == 1 {
+			label = "1 server"
+		}
+		items = append(items, t.Pills.TodoSpinner.Render("⚙")+" "+t.Pills.TodoLabel.Render(label))
+	}
 	if n := len(m.taskRow.bgProcs); n > 0 {
 		label := fmt.Sprintf("%d background processes", n)
 		if n == 1 {
@@ -302,18 +340,19 @@ func splitTasks(editor uv.Rectangle, rows int) (uv.Rectangle, uv.Rectangle) {
 
 // openTaskRowDialog opens the dialog matching the selected row item.
 func (m *UI) openTaskRowDialog() tea.Cmd {
-	if m.taskRow.sel == 0 && len(m.visibleTasks()) > 0 {
+	if kinds := m.taskRow.kinds(m.currentSessionID()); m.taskRow.sel < len(kinds) && kinds[m.taskRow.sel] == rowSubAgents {
 		return m.openSubAgentsDialog()
 	}
 	return m.openBackgroundDialog()
 }
 
-// openBackgroundDialog lists only background processes.
+// openBackgroundDialog lists the servers and the other background
+// processes.
 func (m *UI) openBackgroundDialog() tea.Cmd {
 	m.taskRow.focused = false
 	m.dialog.CloseDialog(dialog.SubAgentsID)
 	m.dialog.CloseDialog(dialog.BackgroundID)
-	m.dialog.OpenDialog(dialog.NewBackground(m.com, m.taskRow.bgProcs))
+	m.dialog.OpenDialog(dialog.NewBackgroundWithServers(m.com, m.taskRow.servers, m.taskRow.bgProcs))
 	return nil
 }
 

@@ -31,13 +31,15 @@ const (
 )
 
 // Background lists either sub-agents or background processes, and stops or
-// kills the selected one.
+// kills the selected one. The processes' list starts with the servers among
+// them, named with their port.
 type Background struct {
-	id    string
-	com   *common.Common
-	help  help.Model
-	list  *list.FilterableList
-	items []list.FilterableItem
+	id      string
+	com     *common.Common
+	help    help.Model
+	list    *list.FilterableList
+	items   []list.FilterableItem
+	servers []agent.Server
 
 	keyMap struct {
 		Open     key.Binding
@@ -52,11 +54,14 @@ type Background struct {
 // ActionViewSubAgent opens a task transcript without changing the parent session.
 type ActionViewSubAgent struct{ Task agent.Task }
 
-// BackgroundItem is a sub-agent or a process.
+// BackgroundItem is a sub-agent or a process; a server is a process with
+// the port it listens on.
 type BackgroundItem struct {
 	*list.Versioned
 	task    *agent.Task
 	proc    *agent.Process
+	port    int
+	name    string
 	t       *styles.Styles
 	m       fuzzy.Match
 	cache   map[int]string
@@ -74,6 +79,18 @@ func NewBackground(com *common.Common, procs []agent.Process) *Background {
 	b.SetItems(nil, procs, "")
 	return b
 }
+
+// NewBackgroundWithServers creates the background processes dialog listing
+// the servers first.
+func NewBackgroundWithServers(com *common.Common, servers []agent.Server, procs []agent.Process) *Background {
+	b := newBackground(com, BackgroundID)
+	b.SetServers(servers)
+	b.SetItems(nil, procs, "")
+	return b
+}
+
+// SetServers sets the servers the next SetItems lists before the processes.
+func (b *Background) SetServers(servers []agent.Server) { b.servers = servers }
 
 // NewSubAgents creates the sub-agents dialog, selecting the given task.
 func NewSubAgents(com *common.Common, tasks []agent.Task, selected string) *Background {
@@ -119,6 +136,10 @@ func (b *Background) SetItems(tasks []agent.Task, procs []agent.Process, selecte
 			}
 		}
 	} else {
+		for _, s := range b.servers {
+			p := s.Process
+			b.items = append(b.items, &BackgroundItem{Versioned: list.NewVersioned(), proc: &p, port: s.Port, name: s.Title(), t: b.com.Styles})
+		}
 		for _, p := range procs {
 			b.items = append(b.items, &BackgroundItem{Versioned: list.NewVersioned(), proc: &p, t: b.com.Styles})
 		}
@@ -240,6 +261,9 @@ func (i *BackgroundItem) ID() string {
 	if i.task != nil {
 		return i.task.ID
 	}
+	if i.port > 0 {
+		return "port:" + strconv.Itoa(i.port)
+	}
 	if i.proc.JobID != "" {
 		return "job:" + i.proc.JobID
 	}
@@ -252,6 +276,9 @@ func (i *BackgroundItem) Filter() string { return i.title() }
 func (i *BackgroundItem) title() string {
 	if i.task != nil {
 		return "◐ " + i.task.Name
+	}
+	if i.port > 0 {
+		return "⚙ " + i.name + " · " + strconv.Itoa(i.port)
 	}
 	return "⚙ " + i.proc.Command
 }

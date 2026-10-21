@@ -155,3 +155,24 @@ func TestTaskCountChangesImmediatelyOnCompletion(t *testing.T) {
 	require.Empty(t, m.renderTasks(80))
 	require.Zero(t, m.layout.tasks.Dy())
 }
+
+// A process listening on a port counts as a server in the row of a single
+// chat too, not as a background process (owner, 2026-10-20: adb on port 5037
+// did), and the background list names it with its port.
+func TestTaskRowCountsServersOutsideSessionHost(t *testing.T) {
+	t.Parallel()
+	m := newTestUI()
+	m.dialog = dialog.NewOverlay()
+	m.session = &session.Session{ID: "s1"}
+	adb := agent.Process{PID: 7, Command: "adb -L tcp:5037 fork-server server --reply-fd 4", Started: time.Now()}
+	m.handleBgProcs(bgProcsMsg{servers: []agent.Server{{Port: 5037, Process: adb}}})
+	line := ansi.Strip(m.renderTaskLine(120, false))
+	require.Contains(t, line, "1 server")
+	require.NotContains(t, line, "background process")
+	require.Equal(t, 1, m.taskRowLen())
+
+	m.openBackgroundDialog()
+	scr := uv.NewScreenBuffer(100, 24)
+	m.dialog.Dialog(dialog.BackgroundID).Draw(scr, scr.Bounds())
+	require.Contains(t, ansi.Strip(scr.Render()), "adb · 5037")
+}

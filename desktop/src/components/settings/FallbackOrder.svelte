@@ -328,7 +328,7 @@
     {#each rows as { key, block }, i (key)}
       <li class="item" data-block={i} data-key={key} class:lead={i === 0} class:raised={menu.startsWith(`${key}:`)} class:held={held?.key === key} in:settle={{ fold: true, off: !ready }} out:settle={{ fold: true }}>
         <div class="block" class:wait={block.type === "wait"}>
-          <button type="button" class="handle" aria-label="Move block {i + 1}" title="Drag to move (Alt+Up/Down)" onpointerdown={(e) => grab(e, i, key)} onkeydown={(e) => handleKey(e, i, key)}>⠿</button>
+          <button type="button" class="handle" aria-label="Move block {i + 1}" title="Drag to move (Alt+Up/Down)" onpointerdown={(e) => grab(e, i, key)} onkeydown={(e) => handleKey(e, i, key)}><span class="grip" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></span></button>
           <div class="summary">
             <span class="number">{i + 1}</span>
             <span class="text">{#each sentence(block, ctx) as piece, p (piece.menu || `t${p}`)}{#if piece.menu}<WordMenu
@@ -440,9 +440,13 @@
     border-color: var(--ink);
     background: var(--band);
   }
+  /* Both slots centre what they hold, both ways (the button reset leaves
+     text at the left). */
   .handle,
   .remove {
     flex: none;
+    display: grid;
+    place-items: center;
     width: calc(36 * var(--px));
     border: 0;
     background: none;
@@ -456,6 +460,20 @@
   }
   .held .handle {
     cursor: grabbing;
+  }
+  /* The handle's six dots, drawn: the font's ⠿ sat high in its line, by as
+     much as its fallback font decides. Whole-pixel dots and gaps, as the
+     busy dots; square and solid, as the font drew them (round ones this
+     small come out paler). */
+  .grip {
+    display: grid;
+    grid-template-columns: repeat(2, round(calc(3 * var(--px)), 1px));
+    gap: round(calc(3 * var(--px)), 1px);
+  }
+  .grip span {
+    width: round(calc(3 * var(--px)), 1px);
+    height: round(calc(3 * var(--px)), 1px);
+    background: currentColor;
   }
   .handle:hover,
   .remove:hover {

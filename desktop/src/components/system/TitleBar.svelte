@@ -61,6 +61,7 @@
 {#if shown}
   <header class="title-bar" class:pinned={state.pinned} data-probe="title-bar">
     <img class="app-icon" src={appIcon} alt="" draggable="false" />
+    <span class="words">
     <span class="chat" data-probe="title-chat">{parts.chat}</span>
     {#if parts.project}
       <span class="project" data-probe="title-project">{parts.project}</span>
@@ -72,6 +73,7 @@
     {:else if ws.branch}
       <span class="path" data-probe="title-branch" title="Git branch">{ws.branch}</span>
     {/if}
+    </span>
     <span class="buttons">
       <button
         type="button"
@@ -140,23 +142,30 @@
     app-region: drag;
   }
 
-  /* The heart bit alone, no tile, about the bar's capital height and a half
-     (owner, 2026-10-20: no background, bigger). */
+  /* The heart bit alone, no tile (owner, 2026-10-20: no background, bigger,
+     then 1-2 px smaller). */
   .app-icon {
     flex: none;
-    width: calc(28 * var(--px));
-    height: calc(23.86 * var(--px));
+    width: calc(25 * var(--px));
+    height: calc(21.3 * var(--px));
     margin-right: calc(14 * var(--px));
   }
 
   /* The chat's title gives way first; the folder keeps its name until it
      alone would crowd the buttons. */
-  /* Its capitals sit on the bar's middle with the branch's and the icons'
-     (the flex centre puts its taller line box 1 to 2 px high; measured with
-     tests/driver/titlebar_align.py, owner 2026-10-20). */
-  .chat {
+  /* The title, folder and branch share one baseline (owner, 2026-10-20: "not
+     aligned"); the run is centred in the bar as a whole, then set so the
+     title's capitals sit on the bar's middle (measured with
+     tests/driver/titlebar_align.py). */
+  .words {
     position: relative;
-    top: calc(1.5 * var(--px));
+    top: 0.5px;
+    display: flex;
+    align-items: baseline;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .chat {
     flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;

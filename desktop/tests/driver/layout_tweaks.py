@@ -6,8 +6,7 @@ with a chat open:
   even with the chat list at its narrowest;
 - the right panel never gets so narrow that a meter's words are cut or run
   into the next meter (dragged to its narrowest with the divider's keys);
-- the top bar's panel switch hides it, and the tab at the window's edge
-  brings it back;
+- the top bar's panel switch hides it and brings it back;
 - the vermilion rail starts at the column's top, and the list's "‹‹" sits
   on the middle of the wordmark's capitals.
 
@@ -134,12 +133,14 @@ shot(out_dir, "narrowest")
 check(meters.get("count", 0) >= 2, f"the panel shows its meters ({meters})")
 check(not meters.get("error") and not meters.get("cut") and not meters.get("overlap") and not meters.get("into"), f"at the panel's narrowest no meter word is cut or runs into the next ({meters})")
 
-# Hide and bring back: the top bar's panel switch (owner, 2026-10-20, A).
+# Hide and bring back: the top bar's panel switch (owner, 2026-10-20, A), the
+# only control for it there; the edge tab is gone.
+state = "return { panel: !!document.querySelector('.panel-column'), tab: !!document.querySelector('[data-probe=\"panel-tab\"]'), pressed: document.querySelector('[data-probe=\"title-panel\"]').getAttribute('aria-pressed') };"
 check(click('[data-probe="title-panel"]'), "the top bar has the panel switch")
-gone = run("return { panel: !!document.querySelector('.panel-column'), tab: !!document.querySelector('[data-probe=\"panel-tab\"]'), pressed: document.querySelector('[data-probe=\"title-panel\"]').getAttribute('aria-pressed') };") or {}
-check(not gone.get("panel") and gone.get("tab") and gone.get("pressed") == "false", f"it hides the panel and a tab shows at the edge ({gone})")
+gone = run(state) or {}
+check(not gone.get("panel") and not gone.get("tab") and gone.get("pressed") == "false", f"it hides the panel, with no tab at the edge ({gone})")
 shot(out_dir, "hidden")
-click('[data-probe="panel-tab"]')
-back = run("return { panel: !!document.querySelector('.panel-column'), tab: !!document.querySelector('[data-probe=\"panel-tab\"]') };") or {}
-check(back.get("panel") and not back.get("tab"), f"the tab brings the panel back ({back})")
+click('[data-probe="title-panel"]')
+back = run(state) or {}
+check(back.get("panel") and back.get("pressed") == "true", f"it brings the panel back ({back})")
 finish()

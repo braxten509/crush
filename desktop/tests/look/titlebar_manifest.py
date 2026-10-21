@@ -51,7 +51,7 @@ def manifest(data, name):
 
 def main(out):
     worst = 0
-    for name in ("compact", "picture"):
+    for name in ("compact", "nine", "picture"):
         data = json.load(open(os.path.join(out, f"titlebar-{name}.json")))
         work = os.path.join(out, f"align-{name}")
         os.makedirs(work, exist_ok=True)

@@ -111,16 +111,16 @@ never "sessions".
   with no picker; the folder picker opens only from the panel's folder name.
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).
 - Sending a message or a `!` command brings the chat to its bottom, following.
-- The title bar's icon is the heart bit alone (no tile). The heart, the title's capitals,
-  the branch and the window icons share the bar's middle within half a pixel, and the
-  title, folder and branch are evenly spaced word to word (tests/driver/titlebar_align.py
+- The title bar's icon is the heart bit alone (no tile). The title, folder and branch share
+  one baseline, set so the title's capitals sit on the bar's middle with the heart and the
+  window icons (within half a pixel; the branch's smaller capitals sit 1 px lower), and
+  they are evenly spaced word to word (tests/driver/titlebar_align.py
   with tests/look/titlebar_manifest.py, the align skill's checker).
 - No column gets so narrow that its words are cut or overlap: the list stops where both
   buttons fit whole, the panel where every meter's label, figure and reset time fit, both
   measured from the words themselves at the current zoom.
 - A panel icon beside the title bar's pin hides and shows the right panel (filled while
-  it shows; the same switch as Settings and Ctrl+P); hidden, a thin "‹‹" tab at the
-  window's right edge also brings it back. The open chat's band, its faint lines and its
+  it shows; the same switch as Settings and Ctrl+P); it is the only control for it there. The open chat's band, its faint lines and its
   vermilion edge reach one pixel past the row at each end, and the rules beside it go
   clear. The vermilion rail starts at the chat column's top.
 - The typing box never scrolls under 15 lines, so its words stay on the cursor's line.

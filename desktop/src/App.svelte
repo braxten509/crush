@@ -32,8 +32,7 @@
   import { mainView } from "./lib/mainview.js";
   import { focusField } from "./lib/stores/composer.svelte.js";
   import { start } from "./lib/stores/connection.svelte.js";
-  import { panelSetting, setPanelHidden, setPanelShown, ui } from "./lib/stores/ui.svelte.js";
-  import Icon from "./components/Icon.svelte";
+  import { panelSetting, setPanelHidden, ui } from "./lib/stores/ui.svelte.js";
   import { ws } from "./lib/stores/workspace.svelte.js";
   import { listRoom, meterRoom } from "./components/panel/panel.svelte.js";
 
@@ -180,14 +179,6 @@
       </div>
     {/if}
   </div>
-  <!-- The panel turned off (its arrow, Settings or Ctrl+P): a thin tab at the
-       window's right edge brings it back (owner, 2026-10-20, B). Not while it
-       is hidden only for room, which showing it would not change. -->
-  {#if panelSetting.off && !settingsOpen()}
-    <button class="panel-tab" type="button" aria-label="Show the right panel" title="Show the right panel" data-probe="panel-tab" onclick={() => setPanelShown(true)}>
-      <span class="pair"><Icon name="chevron" /><Icon name="chevron" /></span>
-    </button>
-  {/if}
 </div>
 
 <OverlayHost />
@@ -217,39 +208,6 @@
       1px calc(var(--right) * var(--px)) 1px;
     grid-template-rows: 1px minmax(0, 1fr) 1px;
   }
-  /* In the 28 picture px between the frame and the window's right edge, level
-     with the panel's hide arrow. */
-  .panel-tab {
-    position: absolute;
-    top: calc(40 * var(--px));
-    right: 0;
-    display: grid;
-    place-items: center;
-    box-sizing: border-box;
-    width: calc(22 * var(--px));
-    height: calc(48 * var(--px));
-    padding: 0;
-    border: 1px solid var(--rule-control);
-    border-right: 0;
-    background: var(--paper-raised);
-    color: var(--slate);
-    cursor: pointer;
-  }
-  .panel-tab:hover {
-    color: var(--ink);
-  }
-  .panel-tab:focus-visible {
-    outline: 1px solid var(--vermilion);
-    outline-offset: calc(2 * var(--px));
-  }
-  /* "‹‹", as the list's collapse control draws it. */
-  .panel-tab .pair {
-    display: flex;
-    flex-direction: column;
-    gap: calc(3 * var(--px));
-    transform: rotate(90deg);
-  }
-
   /* Without the panel (D11) the conversation runs to the frame's right line. */
   .page.panel-hidden {
     grid-template-columns: 1px calc(var(--left) * var(--px)) 1px minmax(0, 1fr) 1px;

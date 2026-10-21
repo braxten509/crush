@@ -255,7 +255,8 @@
   /* Vertical positions follow the approved picture at 12/12 (column top = 0). */
   /* The list slides in from the left, back from Settings or the strip, and
      rolls away over the strip as it collapses (lib/motion.js; Settings'
-     own list covers it going, so then it leaves at once). */
+     own list covers it going, so then it leaves at once). Both ways it keeps
+     its open width while the column glides (App.svelte). */
   .chats {
     position: relative;
     display: flex;

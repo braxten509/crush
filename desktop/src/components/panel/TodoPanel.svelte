@@ -1,9 +1,11 @@
 <script>
   // TO-DO (owner, 2026-10-19: moved here from the tray above the typing box):
   // "TO-DO 2/4", then every step: done, in progress, pending
-  // (trayrows.js todoList); the step in progress shows three dots (owner,
-  // 2026-10-20); "None" without steps.
+  // (trayrows.js todoList); the step in progress shows the busy dots, in step
+  // with every other busy mark (owner, 2026-10-20 and 2026-10-21); "None"
+  // without steps.
   import Icon from "../Icon.svelte";
+  import ActivityMark from "../timeline/ActivityMark.svelte";
   import { todoHeader, todoList } from "../../lib/composer/trayrows.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
 
@@ -22,7 +24,7 @@
       <li class="line {item.status}" data-status={item.status}>
         <span class="mark">
           {#if item.status === "in_progress"}
-            <span class="dots" aria-hidden="true">…</span>
+            <ActivityMark size="small" />
           {:else}
             <Icon name={ICON[item.status]} size={14} />
           {/if}
@@ -60,13 +62,6 @@
   }
   .completed .text {
     text-decoration: line-through;
-  }
-  /* The step in progress: three dots, in the same weight as every step
-     (owner, 2026-10-20). */
-  .dots {
-    font: var(--t-small);
-    line-height: 1;
-    color: var(--ink);
   }
   .mark {
     flex: none;

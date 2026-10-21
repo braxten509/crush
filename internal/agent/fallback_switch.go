@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/fallback"
@@ -222,12 +223,12 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 			return false
 		}
 		to := fallback.BlockAccount(b, c.providerKind)
-		line := fmt.Sprintf("Switched to %s · %s: %s %s.", cfg.AccountName(to.Kind, to.ID), c.modelName(b.Provider, b.Model), cfg.AccountName(from.Kind, from.ID), why)
+		line := fmt.Sprintf("Switched to %s · %s: %s %s.", accounts.Label(cfg, to.Kind, to.ID), c.modelName(b.Provider, b.Model), accounts.Label(cfg, from.Kind, from.ID), why)
 		if !resume {
-			line = fmt.Sprintf("Switched to %s · %s by the fallback order.", cfg.AccountName(to.Kind, to.ID), c.modelName(b.Provider, b.Model))
+			line = fmt.Sprintf("Switched to %s · %s by the fallback order.", accounts.Label(cfg, to.Kind, to.ID), c.modelName(b.Provider, b.Model))
 		}
 		if act.Return != nil {
-			line += fmt.Sprintf(" Back to %s once it refills at %s.", cfg.AccountName(from.Kind, from.ID), act.Return.At.Local().Format("3:04 PM"))
+			line += fmt.Sprintf(" Back to %s once it refills at %s.", accounts.Label(cfg, from.Kind, from.ID), act.Return.At.Local().Format("3:04 PM"))
 		}
 		c.fallbackNotice(ctx, sessionID, line)
 		if resume {
@@ -237,7 +238,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 	case fallback.Wait:
 		b := order.Blocks[act.Block]
 		to := fallback.BlockAccount(b, c.providerKind)
-		c.fallbackNotice(ctx, sessionID, fmt.Sprintf("%s %s. Waiting for %s to refill at %s.", cfg.AccountName(from.Kind, from.ID), why, cfg.AccountName(to.Kind, to.ID), act.Until.Local().Format("3:04 PM")))
+		c.fallbackNotice(ctx, sessionID, fmt.Sprintf("%s %s. Waiting for %s to refill at %s.", accounts.Label(cfg, from.Kind, from.ID), why, accounts.Label(cfg, to.Kind, to.ID), act.Until.Local().Format("3:04 PM")))
 		c.limitRetries.plan(sessionID, act.Until.Add(limitRetryDelay), func() {
 			if err := c.switchModel(fallback.Model(b)); err != nil {
 				slog.Warn("The fallback order could not switch the model", "error", err)
@@ -262,13 +263,13 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 		c.fallback.mu.Lock()
 		delete(c.fallback.out, act.Account)
 		c.fallback.mu.Unlock()
-		line := fmt.Sprintf("Used a free refill on %s.", cfg.AccountName(act.Account.Kind, act.Account.ID))
+		line := fmt.Sprintf("Used a free refill on %s.", accounts.Label(cfg, act.Account.Kind, act.Account.ID))
 		if act.Block != at {
 			b := order.Blocks[act.Block]
 			if err := c.switchModel(fallback.Model(b)); err != nil {
 				return false
 			}
-			line = fmt.Sprintf("Used a free refill on %s and switched to it.", cfg.AccountName(act.Account.Kind, act.Account.ID))
+			line = fmt.Sprintf("Used a free refill on %s and switched to it.", accounts.Label(cfg, act.Account.Kind, act.Account.ID))
 		}
 		c.fallbackNotice(ctx, sessionID, line)
 		if resume {

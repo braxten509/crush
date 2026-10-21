@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -41,11 +42,8 @@ func (b *Backend) FallbackSettings(workspaceID string) (proto.FallbackSettings, 
 
 func fallbackSettings(cfg *config.Config) proto.FallbackSettings {
 	out := proto.FallbackSettings{Accounts: []proto.AccountInfo{}}
-	for _, kind := range config.AccountKinds {
-		out.Accounts = append(out.Accounts, proto.AccountInfo{Kind: string(kind), Name: cfg.AccountName(kind, ""), SignedIn: true})
-		for _, a := range cfg.Accounts(kind) {
-			out.Accounts = append(out.Accounts, proto.AccountInfo{ID: a.ID, Kind: string(kind), Name: cfg.AccountName(kind, a.ID), SignedIn: accounts.SignedIn(kind, a.ID)})
-		}
+	for _, a := range accounts.Every(cfg) {
+		out.Accounts = append(out.Accounts, proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: a.Name, Label: a.Label, SignedIn: accounts.SignedIn(a.Kind, a.ID)})
 	}
 	if cfg.Options != nil && cfg.Options.Fallback != nil {
 		out.Order = *cfg.Options.Fallback
@@ -147,7 +145,7 @@ func accountLogin(cfg *config.Config, a config.Account) (proto.AccountLogin, err
 	if err != nil {
 		return proto.AccountLogin{}, err
 	}
-	info := proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: cfg.AccountName(a.Kind, a.ID), SignedIn: accounts.SignedIn(a.Kind, a.ID)}
+	info := proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: accounts.Name(cfg, a.Kind, a.ID), Label: accounts.Label(cfg, a.Kind, a.ID), SignedIn: accounts.SignedIn(a.Kind, a.ID)}
 	return proto.AccountLogin{Account: info, LoginArgv: argv}, nil
 }
 
@@ -180,19 +178,44 @@ func (b *Backend) SignInAccount(workspaceID, id string) (proto.AccountLogin, err
 	return accountLogin(cfg, a)
 }
 
-// RenameAccount names an account; an empty name goes back to its number.
+// RenameAccount names an account: id is an options.accounts ID, or a tool
+// (claude-code, codex-cli) for that tool's own login, whose name is kept in
+// options.own_account_names. An empty name goes back to the account's
+// email, else its number.
 func (b *Backend) RenameAccount(workspaceID, id, name string) (proto.FallbackSettings, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return proto.FallbackSettings{}, err
 	}
 	cfg := ws.Cfg.Config()
+	name = strings.TrimSpace(name)
+	if config.HasAccounts(catwalk.Type(id)) {
+		names := map[string]string{}
+		if cfg.Options != nil {
+			maps.Copy(names, cfg.Options.OwnAccountNames)
+		}
+		if name == "" {
+			delete(names, id)
+		} else {
+			names[id] = name
+		}
+		if len(names) == 0 {
+			err = ws.Cfg.RemoveConfigField(config.ScopeGlobal, "options.own_account_names")
+		} else {
+			err = ws.Cfg.SetConfigField(config.ScopeGlobal, "options.own_account_names", names)
+		}
+		if err != nil {
+			return proto.FallbackSettings{}, err
+		}
+		sendConfigChanged(ws)
+		return fallbackSettings(ws.Cfg.Config()), nil
+	}
 	_, i, err := findAccount(cfg, id)
 	if err != nil {
 		return proto.FallbackSettings{}, err
 	}
 	list := slices.Clone(cfg.Options.Accounts)
-	list[i].Name = strings.TrimSpace(name)
+	list[i].Name = name
 	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "options.accounts", list); err != nil {
 		return proto.FallbackSettings{}, err
 	}

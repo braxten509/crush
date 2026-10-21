@@ -620,6 +620,13 @@
           "type": "array",
           "description": "More Claude Code and Codex sign-ins"
         },
+        "own_account_names": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Names given to each tool's own login (account 1) by tool (claude-code or codex-cli); an unnamed login shows the email it signed in with"
+        },
         "fallback": {
           "$ref": "#/$defs/FallbackOrder",
           "description": "The fallback order: which account and model a chat moves to when one runs out"

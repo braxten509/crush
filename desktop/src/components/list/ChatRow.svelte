@@ -250,9 +250,12 @@
     top: calc(25 * var(--px));
     transform: none;
   }
+  /* Over the row's band, so the open or hovered branch keeps its line
+     (owner, 2026-10-21: it vanished while the dash stayed). */
   .branch::before {
     content: "";
     position: absolute;
+    z-index: 1;
     left: calc((35 + 28 * (var(--depth) - 1)) * var(--px));
     top: 0;
     bottom: 0;

@@ -168,13 +168,13 @@
   .field.marked :global(.input) {
     margin-left: calc(8 * var(--px));
   }
-  /* The divider and the model button stay centred as the field grows
-     (owner, 2026-10-20). */
+  /* The model button stays centred as the field grows (owner, 2026-10-20);
+     the divider runs the field's whole height, 7 short of each end, so it
+     grows with it (owner, 2026-10-21). */
   .divider {
     flex: none;
-    align-self: center;
+    align-self: stretch;
     width: 1px;
-    height: calc(42 * var(--px));
     margin: calc(7 * var(--px)) 0;
     background: var(--rule);
   }

@@ -8,8 +8,9 @@ gone within about the close time (0.14 s, lib/motion.js), not vanish at once.
 Pieces: the right panel and the usage strip under the typing box, the chat
 details overlay, a sheet and its scrim, the keyboard help, the "/" popup, a
 tool group's list, the right-click menu, Settings (its page and its section
-list), the chat list collapsing to its strip and back (its width glides),
-and a form in the typing box's place.
+list), the chat list collapsing to its strip and back (its width glides;
+the strip itself leaves at once as the list opens, owner 2026-10-21), and a
+form in the typing box's place.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/model-menu.json close_motion.py
@@ -170,7 +171,25 @@ closes("the chat list (collapsing)", "nav.chats", click_js('button.collapse[aria
 widths = run("return window.__widths;") or []
 between = [w for w in widths if min(widths or [0]) < w < max(widths or [0])]
 check(len(set(between)) >= 3, f"the list's width glides as it collapses ({sorted(set(widths))[:3]}..{sorted(set(widths))[-3:]}, {len(set(between))} widths between)")
-closes("the strip (expanding)", "nav.strip", click_js("nav.strip button.expand"))
+# Opening, the strip leaves at once and the moving edge uncovers the list
+# (owner, 2026-10-21, look A): the motion is the column's width gliding open.
+time.sleep(0.6)
+run("""
+  window.__widths = [];
+  const col = document.querySelector('.chats-column');
+  const t0 = performance.now();
+  const frame = () => { window.__widths.push(Math.round(col.getBoundingClientRect().width)); if (performance.now() - t0 < 600) requestAnimationFrame(frame); };
+  requestAnimationFrame(frame);
+  window.__watchStart('the strip (expanding)', 'nav.strip');
+  return true;
+""")
+run(click_js("nav.strip button.expand") + "; return true;")
+time.sleep(0.8)
+rec = run("return window.__watch['the strip (expanding)'];") or {}
+check(rec.get("found") and rec.get("gone") is not None and rec.get("moving", 0) == 0, f"the strip leaves at once as the list opens ({rec})")
+widths = run("return window.__widths;") or []
+between = [w for w in widths if min(widths or [0]) < w < max(widths or [0])]
+check(len(set(between)) >= 3, f"the list's width glides as it opens ({sorted(set(widths))[:3]}..{sorted(set(widths))[-3:]}, {len(set(between))} widths between)")
 
 # A form in the typing box's place (Customize composer), closed with Esc.
 run("window.__probe.runAction('composer.customize'); return true;")

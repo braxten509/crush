@@ -265,7 +265,7 @@
     {/each}
   {:else if name === "account"}
     {#each accountChoices(block, ctx) as a (`${a.kind}/${a.id}`)}
-      {@render pick(blockKind(block, providers) === a.kind && (block.account ?? "") === a.id, a.name, () => {
+      {@render pick(blockKind(block, providers) === a.kind && (block.account ?? "") === a.id, a.label || a.name, () => {
         change(i, block.type === "use" ? { account: a.id } : { kind: a.kind, account: a.id });
         done();
       })}

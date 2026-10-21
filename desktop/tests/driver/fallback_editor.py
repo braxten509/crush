@@ -1,7 +1,9 @@
 """Accounts and the fallback order (owner, 2026-10-21). In the real window on
 the hidden screen, with real mouse clicks, on a chat running Codex with two
 free refills: the right panel shows REFILLS 2 with "Use one", and a click asks
-the engine for one; Settings > Accounts lists Claude 1, Claude 2 and Codex 1;
+the engine for one; Settings > Accounts lists Claude 1, Claude 2 and Codex 1,
+each name with a space on both sides of its dot and Rename last on every row,
+in one place (owner, 2026-10-21);
 Settings > Fallback order shows the fixture's three blocks in order, each a
 sentence saying how the chat leaves it (look C, owner 2026-10-21); the switch
 saves the whole order (PUT fallback/order in the fixture's api.jsonl);
@@ -135,6 +137,9 @@ click("nav.chats button.settings")
 click(".settings-nav .row", "Accounts")
 names = run("return [...document.querySelectorAll('[data-account]')].map((e) => e.getAttribute('data-account') + ' ' + e.querySelector('.name').textContent.trim());")
 check(len(names) == 3 and any("Claude 2" in n for n in names) and any("Codex 1" in n for n in names), f"Accounts lists Claude 1, Claude 2 and Codex 1 ({names})")
+check(all(" · " in n for n in names), f"each name has a space on both sides of its dot ({names})")
+renames = run("return [...document.querySelectorAll('[data-account]')].map((row) => { const acts = [...row.querySelectorAll('button.act')]; return { last: acts.at(-1)?.textContent.trim() ?? '', right: Math.round((acts.at(-1)?.getBoundingClientRect().right ?? 0) * 10) / 10 }; });") or []
+check(len(renames) == 3 and all(r["last"] == "Rename" for r in renames) and len({r["right"] for r in renames}) == 1, f"every account, the own logins too, has Rename last, in one place ({renames})")
 picture("accounts.png")
 
 # 3. Settings > Fallback order shows the three blocks in order.

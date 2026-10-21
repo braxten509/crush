@@ -45,7 +45,10 @@
   }
 </script>
 
-<nav class="strip" aria-label="Chats" bind:this={nav} transition:slidePage|global={{ dir: -1, overlay: true, off: settingsOpen() }}>
+<!-- It slides in as the list folds; it leaves at once as the list opens, so
+     the moving edge uncovers the list with nothing on top of it (owner,
+     2026-10-21, look A), and at once for Settings, whose list covers it. -->
+<nav class="strip" aria-label="Chats" bind:this={nav} in:slidePage|global={{ dir: -1, off: settingsOpen() }}>
   <button class="expand" type="button" aria-label="Open the list" title="Open the list (Alt+S)" onclick={toggleList}>
     <Icon name="chevron" class="right" />
   </button>

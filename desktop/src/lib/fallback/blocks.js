@@ -42,9 +42,12 @@ export function blockKind(block, providers) {
   return block?.type === "use" ? providerKind(providers, block.provider) : (block?.kind ?? "");
 }
 
+// An account where both tools' accounts are named together: its label (the
+// engine adds the tool when another account has the same name, owner
+// 2026-10-21), else its name.
 export function accountName(accounts, kind, id) {
   const found = (accounts ?? []).find((a) => a.kind === kind && a.id === (id ?? ""));
-  if (found) return found.name;
+  if (found) return found.label || found.name;
   return `${kind === CODEX ? "Codex" : kind === CLAUDE ? "Claude" : kind} ${id ? `(${id})` : "1"}`;
 }
 

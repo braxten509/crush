@@ -5,7 +5,8 @@ window on the hidden screen: the driver records the list's side at 60 frames
 a second while Alt+S folds and opens the list, and finds the orange pixels
 of every frame. The open chat's edge sits at the same x in the list and in
 the strip, so in every frame the edge is one bar at that x: never left of
-it, never two bars, never a frame without one.
+it, never two bars, never a frame without one. The list also keeps its open
+width in every frame, so its words never squeeze (owner, 2026-10-21).
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/long-chat.json list_fold.py
@@ -51,6 +52,21 @@ check(target is not None, f"the theme's vermilion is a plain color ({side['color
 if target is None:
     finish()
 
+# Every frame, the list's width while it is on the page: it keeps its open
+# width as the column glides both ways, so its words never squeeze (owner,
+# 2026-10-21: "the transition has some glitchy parts").
+run("""
+  const open = document.querySelector('nav.chats').getBoundingClientRect().width;
+  window.__fold = { open, widths: [] };
+  const t0 = performance.now();
+  const frame = () => {
+    const list = document.querySelector('nav.chats');
+    if (list) window.__fold.widths.push(Math.round(list.getBoundingClientRect().width * 10) / 10);
+    if (performance.now() - t0 < 4000) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return true;
+""")
 ox, oy = H._screen(0, 0)
 video = os.path.join(out_dir, "fold.mkv")
 if os.path.exists(video):
@@ -91,4 +107,7 @@ check(len(frames) > 60, f"the fold was recorded ({len(frames)} frames)")
 check(not outside, f"the orange edge never shows away from its place ({len(outside)} frames: {outside[:8]})")
 check(not doubled, f"the orange edge is never two bars ({len(doubled)} frames: {doubled[:8]})")
 check(not missing, f"the orange edge never vanishes ({len(missing)} frames: {missing[:8]})")
+fold = run("return window.__fold;") or {}
+squeezed = [w for w in fold.get("widths", []) if abs(w - fold.get("open", 0)) > 0.5]
+check(len(fold.get("widths", [])) > 30 and not squeezed, f"the list keeps its open width in every frame ({fold.get('open')}; {len(fold.get('widths', []))} frames, squeezed: {squeezed[:8]})")
 finish()

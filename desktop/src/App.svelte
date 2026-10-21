@@ -167,10 +167,12 @@
     class:panel-hidden={!panelKept}
     class:glide-open={glide === "open"}
     class:glide-close={glide === "close"}
+    class:list-folded={leftList.strip}
     class:panel-glide-open={panelGlide === "open"}
     class:panel-glide-close={panelGlide === "close"}
     bind:this={page}
     style:--left={leftList.strip && !settingsOpen() ? STRIP_WIDTH : widths.left}
+    style:--left-open={widths.left}
     style:--right={widths.right}
     style:--panel={ui.panelHidden ? 0 : 1}
   >
@@ -264,6 +266,19 @@
   .page.glide-close {
     --left-glide: var(--motion-quick);
     --left-ease: cubic-bezier(0.32, 0, 0.67, 0);
+  }
+  /* While the column glides to the strip and back, the list keeps its open
+     width and the column clips it, so its words never squeeze; the moving
+     edge covers and uncovers it (owner, 2026-10-21, look A). A list still
+     rolling away once the glide is over keeps that width to its last frame. */
+  .page.glide-open .chats-column,
+  .page.glide-close .chats-column {
+    overflow: hidden;
+  }
+  .page.glide-open .chats-column > :global(nav.chats),
+  .page.list-folded .chats-column > :global(nav.chats) {
+    flex: none;
+    width: calc(var(--left-open) * var(--px));
   }
   .page.panel-glide-open {
     --panel-glide: var(--motion);

@@ -2,8 +2,10 @@
   // Settings > Accounts, the Claude Code and Codex part (owner, 2026-10-21):
   // each tool's own login is account 1; more accounts each get a folder of
   // their own that shares account 1's settings, skills, tools and saved
-  // chats. "Add" makes one and opens a terminal tab that signs it in. A name
-  // is renamed in place; removing asks once more on the row itself.
+  // chats. "Add" makes one and opens a terminal tab that signs it in. Every
+  // account, the tools' own logins too, is renamed in place; one not renamed
+  // shows the email it signed in with (owner, 2026-10-21). Removing asks once
+  // more on the row itself. Lines part the tools, not a tool's own rows.
   import { onMount } from "svelte";
   import { addAccount, fallback, loadFallback, removeAccount, renameAccount, signInAccount } from "../../lib/fallback/store.svelte.js";
   import { CLAUDE, CODEX } from "../../lib/fallback/blocks.js";
@@ -32,19 +34,20 @@
       return;
     }
     renaming = "";
-    if (draft.trim() !== a.name) renameAccount(a.id, draft.trim());
+    // A tool's own login goes by the tool's name.
+    if (draft.trim() !== a.name) renameAccount(a.id || a.kind, draft.trim());
   }
 </script>
 
 {#each TOOLS as tool (tool.kind)}
   {#each fallback.accounts.filter((a) => a.kind === tool.kind) as a (a.id)}
-    <div class="row" data-account={`${a.kind}/${a.id}`}>
+    <div class="row account" data-account={`${a.kind}/${a.id}`}>
       <span class="name">
         {#if renaming === `${a.kind}/${a.id}`}
           <!-- svelte-ignore a11y_autofocus -->
           <input class="rename" type="text" bind:value={draft} aria-label="Account name" autofocus onkeydown={(e) => finishRename(a, e)} onblur={() => finishRename(a)} />
         {:else}
-          {a.name}<span class="tool"> · {tool.name}{a.id ? "" : ", its own login"}</span>
+          {a.name}<span class="tool">{" · "}{tool.name}{a.id ? "" : ", its own login"}</span>
         {/if}
       </span>
       {#if removing === a.id && a.id}
@@ -54,10 +57,11 @@
       {:else}
         <span class="value">{a.signed_in ? "Signed in" : "Not signed in"}</span>
         {#if a.id}
-          <button type="button" class="act" onclick={() => startRename(a)}>Rename</button>
           <button type="button" class="act" onclick={() => signInAccount(a.id)}>{a.signed_in ? "Sign in again" : "Sign in"}</button>
           <button type="button" class="act" onclick={() => (removing = a.id)}>Remove</button>
         {/if}
+        <!-- Last on every row, so it keeps one place (my-ui-design). -->
+        <button type="button" class="act" onclick={() => startRename(a)}>Rename</button>
       {/if}
     </div>
   {/each}
@@ -75,6 +79,12 @@
     min-height: calc(56 * var(--px));
     padding: calc(6 * var(--px)) 0;
     border-bottom: 1px solid var(--rule-control);
+  }
+  /* A tool's accounts and its "Another account" row stand together; the
+     line comes after the group (owner, 2026-10-21). The clear line keeps
+     every row the same height. */
+  .account {
+    border-bottom-color: transparent;
   }
   .name {
     flex: 1;

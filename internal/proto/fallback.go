@@ -3,11 +3,14 @@ package proto
 import "github.com/charmbracelet/crush/internal/config"
 
 // AccountInfo is one Claude Code or Codex sign-in. ID "" is the tool's
-// own login (account 1).
+// own login (account 1). Name is the name it was given, else its email,
+// else its tool and number; Label is Name with the tool added where
+// another account has the same name (accounts.Shown).
 type AccountInfo struct {
 	ID       string `json:"id"`
 	Kind     string `json:"kind"`
 	Name     string `json:"name"`
+	Label    string `json:"label"`
 	SignedIn bool   `json:"signed_in"`
 }
 
@@ -28,7 +31,8 @@ type AccountLogin struct {
 	LoginArgv []string    `json:"login_argv"`
 }
 
-// AccountRenameRequest renames an account; empty goes back to its number.
+// AccountRenameRequest renames an account; empty goes back to its email,
+// else its number.
 type AccountRenameRequest struct {
 	Name string `json:"name"`
 }

@@ -476,7 +476,7 @@
                     <div class="choice" class:cursor={at === (i === active && hovered >= 0 ? hovered : st.cursor)} onmouseenter={() => (hovered = at)} onclick={() => clickChoice(at)} role="option" aria-selected={k === "multi_choice" ? st.picked[at] : at === st.cursor} tabindex="-1">
                       <span class="mark" class:check={k === "multi_choice"} class:on={k === "multi_choice" ? st.picked[at] : at === st.cursor}></span>
                       <span class="label">{choice.label}</span>
-                      {#if choice.description}<span class="detail"> · {choice.description}</span>{/if}
+                      {#if choice.description}<span class="detail">{" · "}{choice.description}</span>{/if}
                     </div>
                     {#if i === active && noteKey === choice.id}
                       <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>

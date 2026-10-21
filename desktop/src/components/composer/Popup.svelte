@@ -200,7 +200,7 @@
     white-space: pre;
   }
   .row.focused {
-    background: var(--band);
+    background: var(--pick);
   }
   .commands {
     width: max-content;

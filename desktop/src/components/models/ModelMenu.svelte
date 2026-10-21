@@ -347,7 +347,7 @@
     outline-offset: -1px;
   }
   .group[aria-selected="true"] {
-    background: var(--band);
+    background: var(--pick);
     box-shadow: inset calc(4 * var(--px)) 0 0 var(--vermilion);
   }
   .models {
@@ -394,7 +394,7 @@
     color: var(--vermilion);
   }
   .model[aria-selected="true"] {
-    background: var(--band);
+    background: var(--pick);
   }
   .empty {
     margin: calc(10 * var(--px)) calc(10 * var(--px));
@@ -472,7 +472,7 @@
     background: var(--control-hover);
   }
   .option[aria-selected="true"] {
-    background: var(--band);
+    background: var(--pick);
   }
   .drop:focus-visible,
   .option:focus-visible {

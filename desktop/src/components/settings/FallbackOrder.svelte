@@ -517,7 +517,9 @@
   .pick:hover {
     background: var(--control-hover);
   }
-  .pick[role="menuitemradio"][aria-checked="true"],
+  .pick[role="menuitemradio"][aria-checked="true"] {
+    background: var(--pick);
+  }
   .number-row.on {
     background: var(--band);
   }

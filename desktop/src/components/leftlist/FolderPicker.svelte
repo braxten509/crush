@@ -436,7 +436,7 @@
     background: var(--control-hover);
   }
   .row.picked::before {
-    background: var(--band);
+    background: var(--pick);
     border-top: 1px solid var(--rule-faint);
     border-bottom: 1px solid var(--rule-faint);
   }

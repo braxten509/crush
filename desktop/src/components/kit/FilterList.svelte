@@ -527,7 +527,7 @@
   /* The selected row: a band between faint lines, with the vermilion edge
      (the shown chat's row, ChatList, look 5.0). */
   .row.selected::before {
-    background: var(--band);
+    background: var(--pick);
     border-top: 1px solid var(--rule-faint);
     border-bottom: 1px solid var(--rule-faint);
   }

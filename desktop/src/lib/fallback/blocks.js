@@ -8,6 +8,26 @@ export const CLAUDE = "claude-code";
 export const CODEX = "codex-cli";
 export const ACCOUNT_KINDS = [CLAUDE, CODEX];
 
+// The providers a use block may pick: the configured ones (readModelConfig's
+// Map), as the engine checks a block against cfg.Providers. The catalog has
+// no agent CLIs, so it only adds names, types and models to a configured
+// provider. Disabled ones and ones without models are left out.
+// [{id, name, type, models}]
+export function fallbackProviders(cfg, catalog = []) {
+  const out = [];
+  const list = Array.isArray(catalog) ? catalog : [];
+  for (const [id, p] of cfg?.providers ?? []) {
+    if (p?.disable) continue;
+    const fromCatalog = list.find((c) => c?.id === id);
+    const models = [];
+    for (const m of [...(p?.models ?? []), ...(p?.chatgpt_models ?? []), ...(p?.grok_models ?? []), ...(fromCatalog?.models ?? [])]) {
+      if (m?.id && !models.some((x) => x.id === m.id)) models.push(m);
+    }
+    if (models.length) out.push({ id, name: p?.name || fromCatalog?.name || id, type: p?.type || fromCatalog?.type || "", models });
+  }
+  return out;
+}
+
 // The tool behind a provider id (its type), or "".
 export function providerKind(providers, id) {
   return (providers ?? []).find((p) => p?.id === id)?.type ?? "";

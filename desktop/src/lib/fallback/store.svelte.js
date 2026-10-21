@@ -39,7 +39,8 @@ onEvent("config_changed", () => {
 
 let saving = Promise.resolve();
 
-// Saves the order; shown at once, the engine's answer replaces it.
+// Saves the order; shown at once, the engine's answer replaces it. A refused
+// order goes back to the saved one, with the reason above the list.
 export function saveOrder(order) {
   fallback.order = order;
   saving = saving.then(async () => {
@@ -47,8 +48,10 @@ export function saveOrder(order) {
       take(await api.setFallbackOrder(order));
       fallback.error = "";
     } catch (error) {
-      fallback.error = errorText(error);
       notify("error", `Couldn't save the fallback order: ${errorText(error)}`);
+      // Show what is really saved, not the refused order.
+      await loadFallback();
+      fallback.error = errorText(error);
     }
   });
   return saving;

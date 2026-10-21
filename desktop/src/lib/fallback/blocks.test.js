@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockText, changeBlock, leaveText, minutesText, moveBlock, newBlock } from "./blocks.js";
+import { blockText, changeBlock, fallbackProviders, leaveText, minutesText, moveBlock, newBlock } from "./blocks.js";
 import { meterModel } from "../footer.js";
 
 const providers = [
@@ -49,6 +49,28 @@ describe("the fallback order's blocks", () => {
   it("start from the first agent CLI", () => {
     expect(newBlock("use", { providers })).toEqual({ type: "use", provider: "claude-code", model: "opus", account: "" });
     expect(newBlock("refill").kind).toBe("codex-cli");
+  });
+});
+
+describe("the providers a use block may pick", () => {
+  it("are the configured ones, agent CLIs included, with catalog models added", () => {
+    const cfg = {
+      providers: new Map([
+        ["claude-code", { name: "Claude Code", type: "claude-code", models: [{ id: "opus", name: "Opus" }] }],
+        ["openai", { name: "", type: "", models: [] }],
+        ["off", { name: "Off", type: "openai", disable: true, models: [{ id: "x" }] }],
+        ["empty", { name: "Empty", type: "openai", models: [] }],
+      ]),
+    };
+    const catalog = [
+      { id: "openai", name: "OpenAI", type: "openai", models: [{ id: "gpt" }] },
+      { id: "anthropic", name: "Anthropic", type: "anthropic", models: [{ id: "sonnet" }] },
+    ];
+    expect(fallbackProviders(cfg, catalog)).toEqual([
+      { id: "claude-code", name: "Claude Code", type: "claude-code", models: [{ id: "opus", name: "Opus" }] },
+      { id: "openai", name: "OpenAI", type: "openai", models: [{ id: "gpt" }] },
+    ]);
+    expect(fallbackProviders(null, catalog)).toEqual([]);
   });
 });
 

@@ -6,12 +6,13 @@
   // drags it (Alt+Up/Down move it from the keyboard); × removes it. Every
   // change is saved at once (lib/fallback/store.svelte.js).
   import { onMount } from "svelte";
-  import { ws } from "../../lib/stores/workspace.svelte.js";
   import { fallback, loadFallback, saveOrder } from "../../lib/fallback/store.svelte.js";
-  import { accountsOf, blockKind, blockText, changeBlock, CODEX, hasAccounts, leaveText, moveBlock, newBlock } from "../../lib/fallback/blocks.js";
+  import { accountsOf, blockKind, blockText, changeBlock, CODEX, fallbackProviders, hasAccounts, leaveText, moveBlock, newBlock } from "../../lib/fallback/blocks.js";
+  import { modelData, watchModels } from "../../lib/models/store.svelte.js";
 
-  // The model choices: the agent CLIs (accounts live there), others after.
-  const providers = $derived((Array.isArray(ws.providers) ? ws.providers : []).filter((p) => p?.id && Array.isArray(p.models) && p.models.length > 0));
+  // The model choices: the configured providers, as the engine checks blocks
+  // against them; only the agent CLIs (accounts live there) when there are any.
+  const providers = $derived(fallbackProviders(modelData.cfg, modelData.catalog));
   const cliProviders = $derived(providers.filter((p) => /cli$|^claude-code$|^codex$/u.test(p.type ?? "")));
   const ctx = $derived({ accounts: fallback.accounts, providers });
 
@@ -23,6 +24,7 @@
 
   onMount(() => {
     loadFallback();
+    return watchModels();
   });
 
   function save(nextBlocks, on = fallback.order.on) {
@@ -211,7 +213,7 @@
   <div class="adder">
     {#if adding}
       <span class="choices" role="group" aria-label="Add a block">
-        <button type="button" class="choice" onclick={() => add("use")}>Use an account</button>
+        <button type="button" class="choice" disabled={!providers.length} title={providers.length ? undefined : "No models are set up yet"} onclick={() => add("use")}>Use an account</button>
         <button type="button" class="choice" onclick={() => add("wait")}>Wait for a refill</button>
         <button type="button" class="choice" onclick={() => add("refill")}>Use a free refill</button>
         <button type="button" class="choice" onclick={() => (adding = false)}>Cancel</button>
@@ -357,9 +359,13 @@
     color: var(--ink);
     cursor: pointer;
   }
-  .choice:hover,
+  .choice:hover:not(:disabled),
   .add:hover {
     background: var(--control-hover);
+  }
+  .choice:disabled {
+    color: var(--slate);
+    cursor: default;
   }
   .choice[aria-pressed="true"] {
     background: var(--band);

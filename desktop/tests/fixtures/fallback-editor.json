@@ -401,6 +401,10 @@
     "claude-code": {
      "name": "Claude Code",
      "type": "claude-code"
+    },
+    "codex-cli": {
+     "name": "Codex",
+     "type": "codex-cli"
     }
    }
   },

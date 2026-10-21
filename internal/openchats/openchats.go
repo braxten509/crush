@@ -102,6 +102,17 @@ func (l List) DesktopHears(dir string) bool {
 	return false
 }
 
+// DesktopOpen reports whether a desktop app is running, whatever folders
+// it shows (agents may then use what only the desktop draws).
+func (l List) DesktopOpen() bool {
+	for _, a := range liveApps(l.read().Apps) {
+		if a.Kind == "desktop" {
+			return true
+		}
+	}
+	return false
+}
+
 // sameDir is dir cleaned with its links followed, for comparing folders.
 func sameDir(dir string) string {
 	if real, err := filepath.EvalSymlinks(dir); err == nil {

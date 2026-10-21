@@ -17,6 +17,7 @@ import (
 	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/secureentry"
@@ -638,7 +639,25 @@ For secrets alone, run:
 That is shorthand for a one-question form with a secure_entry question: same form, same "Questions" result with only saved/cancelled. End your turn after opening it. Never read, print, diff, attach, commit, or send the populated file to tools/models. The program itself reads and edits the file locally.
 For multiple keys, prepare ALL placeholders before collecting any key, then ask for them together as several secure_entry questions in one form. By default each replaces the first remaining %%s. Use unique placeholders (or occurrence) to select a slot; unique markers are best. Replacement is literal, not printf or a shell expansion. Prepare valid quoting for the intended file format. Existing keys must never be read by you to edit another slot. Secure entry is local-terminal only, not available through the phone or server clients.
 Keep secrets in a secrets folder such as ~/.config/secrets. Crush blocks tool calls that read secrets folders, so when a task needs a secret, write a small helper program that reads the file itself and never prints it.
-</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName, h.checkInInstructions(), userSubAgentInstructions())
+</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName, h.checkInInstructions(), userSubAgentInstructions()) + richReplies()
+}
+
+// richReplies tells the agent it may draw diagrams and math while Crush
+// Desktop runs (owner, 2026-10-21: "only while the desktop app is open"); the
+// terminal shows them as plain source. Read on every call, so the note comes
+// and goes with the app.
+func richReplies() string {
+	if list, err := openchats.Open(); err != nil || !list.DesktopOpen() {
+		return ""
+	}
+	return `
+
+<crush_rich_replies>
+The user reads this chat in Crush Desktop, which draws Mermaid diagrams and LaTeX math in your replies. Use them when a picture or a formula explains better than words:
+- Diagrams: a fenced code block with the language mermaid (flowchart, sequence, state, class, ER, Gantt, mindmap and the other Mermaid kinds).
+- Math: $...$ or \(...\) inline; $$...$$ or \[...\] on their own lines for display math. A lone $ before a number stays a dollar sign.
+Put them in your reply text, not in files. The terminal Crush shows them as plain source, so keep the words around them meaningful on their own.
+</crush_rich_replies>`
 }
 
 func firstLine(s string, n int) string {

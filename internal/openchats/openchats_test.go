@@ -96,11 +96,14 @@ func TestDesktopHearsOnlyItsFoldersWhileItRuns(t *testing.T) {
 	require.NoError(t, l.change(func(f *file) { f.Apps = append(f.Apps, desktop) }))
 	require.True(t, l.DesktopHears(heard))
 	require.False(t, l.DesktopHears(other))
+	require.True(t, l.DesktopOpen())
 	// A terminal listing the same folder is not a desktop.
 	require.NoError(t, l.change(func(f *file) { f.Apps[0].Kind = "terminal" }))
 	require.False(t, l.DesktopHears(heard))
+	require.False(t, l.DesktopOpen())
 	require.NoError(t, l.change(func(f *file) { f.Apps[0].Kind = "desktop" }))
 	_ = cmd.Process.Kill()
 	_ = cmd.Wait()
 	require.False(t, l.DesktopHears(heard), "a closed desktop rings for nothing")
+	require.False(t, l.DesktopOpen())
 }

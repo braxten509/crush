@@ -5,8 +5,9 @@
   // "~/folder · 3 hours ago" in the info column (35 % budget). Enter, Tab and
   // Ctrl+Y open the selected chat; Ctrl+R renames it in its row, Ctrl+X asks
   // to delete it; both go through POST …/saved-sessions as the terminal's
-  // CatalogChange. A chat of another folder opens in that folder's window
-  // (window_open with its id). Session events rename or remove rows in place.
+  // CatalogChange. Only this folder's chats show (owner, 2026-10-20: the
+  // search shows the history of the shown chat's folder; the left list has
+  // every folder's open chats). Session events rename or remove rows in place.
   //   query? (the filter's first text: the left list's search box, START-021's id)
   import { onMount, tick, untrack } from "svelte";
   import Buttons from "../kit/Buttons.svelte";
@@ -65,7 +66,8 @@
 
   async function read() {
     try {
-      const list = (await api.savedSessions(sessions.currentId || "")) ?? [];
+      const all = (await api.savedSessions(sessions.currentId || "")) ?? [];
+      const list = all.filter((row) => inProject(row, conn.project.path || conn.project.cwd));
       const keep = rows[selected]?.ID ?? sessions.currentId;
       rows = list;
       failed = false;

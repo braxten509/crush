@@ -9,19 +9,18 @@
   // recent_folders), an error line, and the system folder dialog behind
   // "Browse…". Enter, a second click on a row, or a folder from the dialog
   // starts there: a session in this window's folder is a new chat here (as
-  // Ctrl+N); another folder switches this window to it with a new chat
-  // (project_switch; a window already showing it comes forward instead); a
-  // terminal is TERM's openTerminal. A failure shows as a notice.
+  // Ctrl+N); another folder switches this window to it in place first
+  // (switchFolder), for a new chat or a terminal there. A failure shows as a
+  // notice.
   import { onMount } from "svelte";
   import { runAction } from "../../lib/actions.js";
   import { closeDialog } from "../../lib/dialogs.js";
-  import { windowBusy } from "../../lib/busy.js";
-  import { dirList, file_info, folderPick, projectSwitch, recentFolders } from "../../lib/engine/commands.js";
+  import { dirList, file_info, folderPick, recentFolders } from "../../lib/engine/commands.js";
   import { comboOf } from "../../lib/keys.js";
   import { shownTerminal } from "../../lib/leftlist/numbers.js";
   import * as P from "../../lib/leftlist/picker.js";
   import { leftList, startTerminal } from "../../lib/leftlist/store.svelte.js";
-  import { conn } from "../../lib/stores/connection.svelte.js";
+  import { conn, inFolder, switchFolder } from "../../lib/stores/connection.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
   import { terminals } from "../../lib/terminal/tabs.svelte.js";
   import Sheet from "../kit/Sheet.svelte";
@@ -217,28 +216,17 @@
   }
 
   // Starting (2.21): the failure line is cleared by each attempt.
+  // Another folder: the window switches to it in place first (owner,
+  // 2026-10-20: the folder is per chat), then a chat starts on the landing
+  // page the switch leaves, or the terminal opens there.
   async function startIn(what, dir) {
-    if (what === "terminal") {
-      await startTerminal(dir);
+    const here = P.clean(dir) === P.clean(conn.project.cwd || "") || inFolder(dir);
+    if (!here && !(await switchFolder(dir))) {
+      notify("error", what === "terminal" ? "Couldn't start the terminal." : "Couldn't start a chat.");
       return;
     }
-    if (P.clean(dir) === P.clean(conn.project.cwd || "")) {
-      runAction("chat.new");
-      return;
-    }
-    // Another folder: this window switches to it, with a new chat (owner,
-    // 2026-10-19: no new window). A window already showing it comes forward
-    // instead. A busy agent keeps the window where it is, as Open Project.
-    if (windowBusy()) {
-      notify("warn", "Agent is busy, please wait before switching folders...");
-      return;
-    }
-    try {
-      if (await projectSwitch(dir)) location.reload();
-    } catch (error) {
-      console.error("Could not start a Crush session", error?.message ?? error);
-      notify("error", "Couldn't start a chat.");
-    }
+    if (what === "terminal") await startTerminal(dir);
+    else if (here) runAction("chat.new");
   }
 
   // Browse…: the system folder dialog; a chosen folder starts at once,

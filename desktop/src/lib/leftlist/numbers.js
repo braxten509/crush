@@ -6,6 +6,7 @@
 import { buildRows } from "../listmodel.js";
 import { closeMain, mainView } from "../mainview.js";
 import { isClosed } from "../stores/closed.svelte.js";
+import { conn, switchFolder } from "../stores/connection.svelte.js";
 import { parentOf } from "../stores/links.svelte.js";
 import { busy, openChat, sessions } from "../stores/sessions.svelte.js";
 import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
@@ -55,11 +56,25 @@ export function showRow(row) {
   if (!row) return false;
   if (row.kind === "terminal") {
     showTerminal(row.id);
+    // The window's folder follows the shown terminal's, unless the terminal
+    // works inside it (owner, 2026-10-20).
+    const cwd = terminals.find((t) => t.id === row.id)?.cwd ?? "";
+    if (cwd && !within(cwd, conn.project.path || conn.project.cwd)) {
+      switchFolder(cwd).catch((error) => console.error("folder switch failed", error));
+    }
     return true;
   }
   if (mainView.current?.kind === "terminal") closeMain();
   if (row.id !== sessions.currentId) openChat(row.id);
   return true;
+}
+
+// Whether dir is folder or inside it.
+export function within(dir, folder) {
+  const clean = (path) => String(path ?? "").replace(/\/+$/u, "");
+  const d = clean(dir);
+  const f = clean(folder);
+  return f !== "" && (d === f || d.startsWith(`${f}/`));
 }
 
 // Alt+1 … Alt+9.

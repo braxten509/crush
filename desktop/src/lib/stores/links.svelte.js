@@ -17,6 +17,45 @@ import { chatOf } from "./messages.svelte.js";
 
 export const links = $state({ byId: {}, byParentMessage: {}, originOf: {} }); // originOf: branch session id → origin ChatLink
 
+// Each folder's branch chats, by data folder, kept on this computer: the left
+// list shows other folders' chats from the all-folder catalog, which has no
+// links, and leaves their branches out (lib/leftlist/folders.js). A folder
+// the window has never joined has none listed yet.
+const BRANCHES_KEY = "crush.branches:";
+const branchCache = new Map(); // data folder → branch ids; read from the store once
+let branchVersion = $state(0); // bumped when this folder's list changes
+let dataDir = "";
+
+function storedBranches(folderDataDir) {
+  try {
+    const list = JSON.parse(globalThis.localStorage?.getItem(BRANCHES_KEY + folderDataDir) ?? "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function branchesOf(folderDataDir) {
+  void branchVersion;
+  if (!folderDataDir) return [];
+  if (!branchCache.has(folderDataDir)) branchCache.set(folderDataDir, storedBranches(folderDataDir));
+  return branchCache.get(folderDataDir);
+}
+
+function rememberBranches() {
+  if (!dataDir) return;
+  const list = Object.keys(links.originOf).sort();
+  const known = branchCache.get(dataDir) ?? storedBranches(dataDir);
+  if (known.length === list.length && known.every((id, i) => id === list[i])) return;
+  branchCache.set(dataDir, list);
+  branchVersion += 1;
+  try {
+    globalThis.localStorage?.setItem(BRANCHES_KEY + dataDir, JSON.stringify(list));
+  } catch {
+    // No room: the list shows them until the window closes.
+  }
+}
+
 // The two indexes, rebuilt from byId after every change (a project has tens
 // of links, not thousands). byParentMessage lists a message's links by start.
 // Only what changed is written: a message whose links are the same keeps its
@@ -31,6 +70,7 @@ function reindex() {
   for (const list of Object.values(byParentMessage)) list.sort((a, b) => a.highlight_start - b.highlight_start);
   merge(links.byParentMessage, byParentMessage, (a, b) => a.length === b.length && a.every((link, i) => link === b[i]));
   merge(links.originOf, originOf, (a, b) => a === b);
+  rememberBranches();
 }
 
 // Writes next's entries into target, leaving the equal ones as they are.
@@ -156,6 +196,7 @@ onEvent("session", (kind) => {
 
 // The first join reads the links; a rejoin's resync reads them again below.
 onEvent("connection", (_kind, ev) => {
+  if (ev?.state === "connected" && ev.engine?.data_dir) dataDir = ev.engine.data_dir;
   if (ev?.state === "connected" && ev.resync !== true) loadLinks();
 });
 

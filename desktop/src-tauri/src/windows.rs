@@ -318,6 +318,19 @@ pub async fn switch(app: &AppHandle, label: &str, project_dir: &str) -> AppResul
     Ok(true)
 }
 
+/// `project_enter`: this window leaves its engine and takes `project_dir`,
+/// for the page to join it in place (engine_open) with no reload: the folder
+/// is the shown chat's (owner, 2026-10-20). Another window showing the
+/// folder makes no difference; both join its workspace.
+pub async fn enter(app: &AppHandle, label: &str, project_dir: &str) -> AppResult<()> {
+    if project_dir.is_empty() || !Path::new(project_dir).is_absolute() {
+        return Err(AppError::new("bad_path", format!("Crush Desktop switches only to an absolute folder, not \"{project_dir}\".")));
+    }
+    leave_engine(app, label).await;
+    app.state::<Windows>().set_project(label, Path::new(project_dir));
+    Ok(())
+}
+
 /// The system close button: the page runs its close steps; after
 /// CLOSE_FALLBACK, a window still open is closed anyway.
 pub fn close_requested(app: &AppHandle, label: &str) {

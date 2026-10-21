@@ -460,6 +460,10 @@ pub async fn project_switch(app: AppHandle, window: Window, project_dir: String)
     windows::switch(&app, window.label(), &project_dir).await
 }
 
+pub async fn project_enter(app: AppHandle, window: Window, project_dir: String) -> AppResult<()> {
+    windows::enter(&app, window.label(), &project_dir).await
+}
+
 pub fn pty_spawn(
     app: AppHandle,
     window: Window,

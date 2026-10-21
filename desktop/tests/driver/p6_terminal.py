@@ -15,8 +15,8 @@ names a missing program, so only $VISUAL can have been used. The variables
 the tabs must not get are exported by /tmp/home/.profile, which the app's
 login shell reads (login_env.rs) and the tab's shell does not.
 
-Alt+T opens a "Terminal" tab in this window's folder with no picker (owner,
-2026-10-20; LIST-005), and the steps run on it. The rows' other parts that
+Alt+T asks where to open a "Terminal" tab, this window's folder first (owner,
+2026-10-20; LIST-005); Enter opens it there, and the steps run on it. The rows' other parts that
 need LST, KIT, THM or PAL are named in each step's NOT-RUN lines."""
 import os, re, shutil, subprocess, sys, time
 
@@ -300,10 +300,13 @@ def clear_composer():
 
 def open_shell():
     """A new terminal tab with a shell, shown; its probe entry, or None.
-    Alt+T opens it in this folder with no picker (owner, 2026-10-20)."""
+    Alt+T asks where (the folder picker, on this folder); Enter opens it here."""
     before = {t["id"] for t in tabs()}
     focus_composer()
     key("alt+t")
+    wait_for(probe_path, lambda p: "folder_picker" in ((p.get("overlay") or {}).get("dialogs") or []), 5)
+    time.sleep(0.3)
+    key("Return")
     new = wait_term(lambda t: any(x["id"] not in before and x["state"] == "running" for x in t.get("tabs") or []), 10)
     tab = next((x for x in new.get("tabs") or [] if x["id"] not in before), None)
     if not tab:
@@ -408,7 +411,7 @@ def step_new_terminal():
             return
         t = term()
         check(t.get("shown") == shell["id"], "the new tab is shown")
-        check(shell["title"] == "Terminal" and "folder_picker" not in dialogs(), f"Alt+T opens a \"Terminal\" tab with no picker ({shell['title']!r})")
+        check(shell["title"] == "Terminal" and "folder_picker" not in dialogs(), f"Alt+T then Enter opens a \"Terminal\" tab, the picker gone ({shell['title']!r})")
         check(shell["cwd"] == apps.PROJ, f"it starts in this window's folder ({shell['cwd']})")
 
 

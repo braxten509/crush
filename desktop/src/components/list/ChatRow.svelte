@@ -18,16 +18,25 @@
   // desktop-design-5-6 2.20) in the same slot: its icon and text.
   import Icon from "../Icon.svelte";
   import { rowState } from "../../lib/rowstates.js";
-  import { closeChat } from "../../lib/stores/closed.svelte.js";
+  import { closeChat, closeIn } from "../../lib/stores/closed.svelte.js";
+  import { openInFolder } from "../../lib/stores/folders.svelte.js";
   import { openChat } from "../../lib/stores/sessions.svelte.js";
   import { searchQuery } from "./listfocus.js";
 
   let { row } = $props();
   let rowButton = $state(null);
 
+  // A row of another folder (row.folder) opens in that folder: the window
+  // switches to it first, and its × closes it in that folder's set.
+  function open() {
+    if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
+    else openChat(row.id);
+  }
+
   function close(event) {
     event.stopPropagation();
-    closeChat(row.id, { query: searchQuery() }).catch((error) => console.error("closing a chat failed", error));
+    const done = row.folder ? closeIn(row.folder.dataDir, row.id) : closeChat(row.id, { query: searchQuery() });
+    done.catch((error) => console.error("closing a chat failed", error));
   }
 
   // ↑ and ↓ on the × move from its row, as from the row itself (the list's keys).
@@ -55,7 +64,7 @@
     type="button"
     aria-current={row.selected ? "page" : undefined}
     aria-expanded={row.branches > 0 ? row.expanded : undefined}
-    onclick={() => openChat(row.id)}
+    onclick={open}
   >
     <span class="title">{row.title}</span>
     <span class="line2">

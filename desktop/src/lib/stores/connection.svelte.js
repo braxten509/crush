@@ -2,13 +2,13 @@
 // state for the engine gate, the notices of SIDE-030 and 5.2, and the start-up
 // reads that seed the other stores (START-007). Importing it loads every
 // store, so all their event handlers are registered before the first batch.
-import { app_info, engine_open, engine_retry } from "../engine/commands.js";
+import { app_info, engine_open, engine_retry, projectEnter } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { probeSection } from "../probe.js";
 import { loadLimits, startLimitsPoll, stopLimitsPoll } from "./limits.svelte.js";
 import "./messages.svelte.js";
 import "./prompts.svelte.js";
-import { busy, loadSessions, openLaunchChat, sessions } from "./sessions.svelte.js";
+import { busy, loadSessions, openLaunchChat, sessions, showLanding } from "./sessions.svelte.js";
 import { notify } from "./ui.svelte.js";
 import { startWorkspace } from "./workspace.svelte.js";
 
@@ -117,6 +117,9 @@ function seed() {
 
 let joinedOnce = false;
 let joining = null;
+// A folder switch left the old engine and its join failed: "Try again" joins
+// again rather than asking Rust to reconnect a connection that is gone.
+let mustJoin = false;
 
 async function join() {
   conn.state = "connecting";
@@ -138,6 +141,7 @@ async function join() {
   }
   applyOpen(opened);
   joinedOnce = true;
+  mustJoin = false;
   pollLimits();
   await seed();
   return true;
@@ -168,7 +172,7 @@ export function start() {
 // after joining asks Rust to reconnect (engine_retry), whose progress comes
 // as connection events.
 export async function retry() {
-  if (!joinedOnce) {
+  if (!joinedOnce || mustJoin) {
     if (conn.state === "connecting") return joining;
     if (!started) return start();
     joining = join();
@@ -182,6 +186,39 @@ export async function retry() {
     conn.error = plainError(error);
   }
   return true;
+}
+
+function sameFolder(a, b) {
+  const clean = (path) => String(path ?? "").replace(/\/+$/u, "");
+  return clean(a) !== "" && clean(a) === clean(b);
+}
+
+// The window's folder is the shown chat's or terminal's (owner, 2026-10-20):
+// picking one in another folder leaves this engine and joins that folder's in
+// place, with no reload; the terminals and the list stay. The shown chat is
+// left first (its turn runs on in the engine). Resolves true once joined.
+export async function switchFolder(dir) {
+  if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
+  if (joining) await joining.catch(() => {});
+  showLanding();
+  conn.state = "connecting";
+  conn.error = null;
+  try {
+    await projectEnter(dir);
+  } catch (error) {
+    conn.state = "failed";
+    conn.error = plainError(error);
+    return false;
+  }
+  conn.project = { cwd: dir, path: dir, dataDir: "", name: baseName(dir) };
+  conn.launch = { session: "", continueLast: false };
+  mustJoin = true;
+  joining = join();
+  return joining;
+}
+
+export function inFolder(dir) {
+  return sameFolder(dir, conn.project.path || conn.project.cwd);
 }
 
 // The failed notice (SIDE-030, internal/ui/model/agent_events.go:39-41).

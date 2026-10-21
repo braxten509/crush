@@ -1421,5 +1421,20 @@
     }
    ]
   }
- ]
+ ],
+ "projects": {
+  "/tmp/home/proj2": {
+   "workspace": {
+    "id": "ws-leftlist-2",
+    "path": "/tmp/home/proj2",
+    "yolo": true,
+    "debug": false,
+    "data_dir": "/tmp/home/proj2/.crush",
+    "version": "fixture",
+    "channels": [],
+    "skills": [],
+    "protocol": 1
+   }
+  }
+ }
 }

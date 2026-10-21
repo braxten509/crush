@@ -4,11 +4,9 @@
 // settings, so every window and the next start agree), or while the page is
 // too narrow to hold it (forced; the saved choice is kept, as the terminal's
 // listOpen, internal/ui/sessionhost/host.go:443-446).
-import { runAction } from "../actions.js";
 import { COLUMN_LIMITS } from "../columns.js";
 import { hasDialog, openDialog } from "../dialogs.js";
 import { settings_set } from "../engine/commands.js";
-import { conn } from "../stores/connection.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { openTerminal } from "../terminal/tabs.svelte.js";
 
@@ -88,19 +86,15 @@ export function openPicker(kind = "session") {
 }
 
 // New chat and New terminal (the buttons, the strip's "+" and ">_", the
-// Terminals group's "+", Alt+N, Alt+T) start in this window's folder with no
-// picker: the list only shows this folder's chats and terminals (owner,
-// 2026-10-20).
+// Terminals group's "+", Alt+N, Alt+T) ask where to start, this window's
+// folder first (owner, 2026-10-20: the list shows every folder's chats, and
+// the folder is per chat). Ctrl+N stays a new chat here at once.
 export function newChat() {
-  if (hasDialog("terminal_close")) return false;
-  runAction("chat.new");
-  return true;
+  return openPicker("session");
 }
 
 export function newTerminal() {
-  if (hasDialog("terminal_close")) return false;
-  startTerminal(conn.project.cwd || "");
-  return true;
+  return openPicker("terminal");
 }
 
 // A terminal tab in dir; a shell that can't start shows as a notice.

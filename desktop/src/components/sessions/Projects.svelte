@@ -3,19 +3,18 @@
   // DLG-118): a port of internal/ui/dialog/projects.go. Rows are the saved
   // projects of projects.json (read each time the sheet opens), short paths,
   // "current" on this window's project, filtered by path. Enter/Ctrl+Y opens
-  // one: this window switches to it (project_switch, then a page reload);
+  // one: this window switches to it in place (switchFolder, no reload);
   // Ctrl+X stops saving one at once. With no saved project the sheet closes
   // at once with "no saved projects yet, use Save Project first"
   // (projects.go:66-73), drawing nothing meanwhile.
   import Field from "../kit/Field.svelte";
   import FilterList from "../kit/FilterList.svelte";
   import Sheet from "../kit/Sheet.svelte";
-  import { windowBusy } from "../../lib/busy.js";
   import { closeDialog } from "../../lib/dialogs.js";
-  import { projectRemove, projectsList, projectSwitch } from "../../lib/engine/commands.js";
+  import { projectRemove, projectsList } from "../../lib/engine/commands.js";
   import { clean, short } from "../../lib/leftlist/picker.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
-  import { conn } from "../../lib/stores/connection.svelte.js";
+  import { conn, switchFolder } from "../../lib/stores/connection.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
 
   const ID = "projects";
@@ -44,17 +43,9 @@
       notify("info", "Already in this project");
       return;
     }
-    if (windowBusy()) {
-      notify("warn", "Agent is busy, please wait before switching projects...");
-      return;
-    }
     closeDialog(ID);
-    try {
-      // False: another window shows it and came forward instead.
-      if (await projectSwitch(row.path)) location.reload();
-    } catch (error) {
-      notify("error", error?.message ?? String(error));
-    }
+    // In place, with no reload (owner, 2026-10-20: the folder is per chat).
+    if (!(await switchFolder(row.path))) notify("error", conn.error?.message ?? "Couldn't switch to that folder.");
   }
 
   // projects.go:136-150: the row goes at once, the folder stays.

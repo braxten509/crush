@@ -67,6 +67,7 @@ pub async fn call(app: AppHandle, label: String, cmd: String, args: Value) -> Re
         "api_secret" => res(commands::api_secret(app.clone(), w, app.state(), arg(&args, "path")?, arg(&args, "body")?).await),
         "window_close" => res(commands::window_close(app.clone(), w).await),
         "project_switch" => res(commands::project_switch(app.clone(), w, arg(&args, "projectDir")?).await),
+        "project_enter" => res(commands::project_enter(app.clone(), w, arg(&args, "projectDir")?).await),
         // Everything else, on the blocking pool.
         _ => blocking(move || sync_call(&app, w, &cmd, &args)).await,
     }

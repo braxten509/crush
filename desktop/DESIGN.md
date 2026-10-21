@@ -106,9 +106,16 @@ never "sessions".
 - A chat and a terminal tab have no head of their own: the chat's title, folder and Git
   branch are in the title bar (owner, 2026-10-20). Only the init and onboarding screens
   keep the wordmark head and its rule.
+- The folder is per chat (owner, 2026-10-20): the window's folder is the shown chat's or
+  terminal's, and the title bar and panel follow it. The left list shows every chat not
+  closed, from any folder, under folder headings (this folder first, then the others by
+  their newest chat; other folders' branches stay hidden once the window has seen their
+  links). Picking a chat or terminal of another folder switches the window to it in place
+  (`project_enter`, no reload; terminals and the list stay). The search (Sessions sheet)
+  shows only the shown folder's chats.
 - New chat and New terminal share one row at the list's top in equal halves. Both (and
-  the strip's "+" and ">_", the Terminals "+", Alt+N, Alt+T) start in this window's folder
-  with no picker; the folder picker opens only from the panel's folder name.
+  the strip's "+" and ">_", the Terminals "+", Alt+N, Alt+T) open the folder picker on this
+  folder; another folder switches the window first. Ctrl+N is a new chat here at once.
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).
 - Sending a message or a `!` command brings the chat to its bottom, following.
 - The title bar's icon is the heart bit alone (no tile). The title, folder and branch share

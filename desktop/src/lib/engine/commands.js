@@ -135,6 +135,12 @@ export async function projectSwitch(projectDir) {
   return invoke("project_switch", { projectDir });
 }
 
+// Leaves this window's engine and records the new folder, for the page to
+// join it in place (engine_open) with no reload.
+export async function projectEnter(projectDir) {
+  return invoke("project_enter", { projectDir });
+}
+
 // onData: a Channel that gets {data: <base64>} batches, then {exit: {code, signal}}. → {id, pid}
 export async function ptySpawn(cwd, argv, cols, rows, onData) {
   return invoke("pty_spawn", { cwd, argv, cols, rows, onData });

@@ -12,7 +12,10 @@
 //! ```
 //!
 //! - `engine_open` answers from `workspace` (without `env` and `config`) and
-//!   `engine` (optional), and pushes a `connected` connection event.
+//!   `engine` (optional), and pushes a `connected` connection event. With
+//!   `projects` (`{"/folder": {"workspace": {}, "get": {}}}`), a window opening
+//!   one of those folders gets its workspace, and its `get` answers before
+//!   the top-level ones (a folder switch in place, `project_enter`).
 //! - `api` GET answers `get[path]`, or 404 `not_found` when absent; `agent`
 //!   also answers GET "agent". Every other call is appended to
 //!   `<probe file>.api.jsonl` and answered with null.
@@ -42,6 +45,7 @@ struct FixtureFile {
     engine: Option<Ensured>,
     get: Map<String, Value>,
     events: Vec<Timed>,
+    projects: Map<String, Value>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -62,6 +66,8 @@ pub struct Fixture {
 /// One window's side of the fixture: its open answer and its batch.
 struct Player {
     opened: OpenResult,
+    /// The opened folder's own answers (`projects[cwd].get`).
+    get: Map<String, Value>,
     queue: Mutex<Queue>,
     stop: AtomicBool,
 }
@@ -95,8 +101,10 @@ impl Fixture {
             if let Some(player) = players.get(label) {
                 return Ok(player.opened.clone());
             }
-            let workspace = public_copy(&self.file.workspace);
-            let engine = self.file.engine.clone().unwrap_or_else(|| Ensured {
+            let project = self.file.projects.get(cwd.trim_end_matches('/'));
+            let workspace = public_copy(project.and_then(|p| p.get("workspace")).unwrap_or(&self.file.workspace));
+            let get = project.and_then(|p| p.get("get")).and_then(Value::as_object).cloned().unwrap_or_default();
+            let mut engine = self.file.engine.clone().unwrap_or_else(|| Ensured {
                 address: "fixture".to_string(),
                 socket: String::new(),
                 protocol: APP_PROTOCOL,
@@ -109,6 +117,10 @@ impl Fixture {
                     .to_string(),
                 started: false,
             });
+            if project.is_some() {
+                // The engine's data folder is the workspace's (connection.rs).
+                engine.data_dir = workspace.get("data_dir").and_then(Value::as_str).unwrap_or_default().to_string();
+            }
             let opened = OpenResult {
                 client_id: format!("fixture-{label}"),
                 workspace,
@@ -122,6 +134,7 @@ impl Fixture {
             };
             let player = Arc::new(Player {
                 opened,
+                get,
                 queue: Mutex::new(Queue {
                     batcher: Batcher::new(5_000),
                     ready: Vec::new(),
@@ -157,7 +170,8 @@ impl Fixture {
         call_id: Option<String>,
     ) -> AppResult<Value> {
         if method.eq_ignore_ascii_case("GET") {
-            return self.answer(path).ok_or_else(|| AppError {
+            let own = self.players.lock().unwrap().get(label).map(|p| p.get.clone()).unwrap_or_default();
+            return answer_in(&own, path).or_else(|| self.answer(path)).ok_or_else(|| AppError {
                 code: "not_found".to_string(),
                 message: format!("the fixture has no answer for GET {path}"),
                 field: None,
@@ -215,17 +229,8 @@ impl Fixture {
     }
 
     fn answer(&self, path: &str) -> Option<Value> {
-        if let Some(v) = self.file.get.get(path) {
-            return Some(v.clone());
-        }
-        // "/v1/workspaces/{id}/x" asks for the same as the relative "x".
-        if let Some((_, relative)) = path
-            .strip_prefix("/v1/workspaces/")
-            .and_then(|rest| rest.split_once('/'))
-        {
-            if let Some(v) = self.file.get.get(relative) {
-                return Some(v.clone());
-            }
+        if let Some(v) = answer_in(&self.file.get, path) {
+            return Some(v);
         }
         if path == "agent" && !self.file.agent.is_null() {
             return Some(self.file.agent.clone());
@@ -307,6 +312,15 @@ fn play(app: AppHandle, label: String, player: Arc<Player>, mut events: Vec<Time
             player.push(&app, &label, timed.entries);
         }
     });
+}
+
+/// `get[path]`; "/v1/workspaces/{id}/x" asks for the same as the relative "x".
+fn answer_in(get: &Map<String, Value>, path: &str) -> Option<Value> {
+    if let Some(v) = get.get(path) {
+        return Some(v.clone());
+    }
+    let (_, relative) = path.strip_prefix("/v1/workspaces/")?.split_once('/')?;
+    get.get(relative).cloned()
 }
 
 /// A workspace as the window may see it: without `env` and `config` (1.2.5).

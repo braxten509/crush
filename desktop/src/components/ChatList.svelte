@@ -20,8 +20,11 @@
   import { listSections } from "../lib/listsections.js";
   import { buildRows } from "../lib/listmodel.js";
   import { probeSection } from "../lib/probe.js";
-  import { isClosed } from "../lib/stores/closed.svelte.js";
-  import { parentOf } from "../lib/stores/links.svelte.js";
+  import { folderGroups, folderName } from "../lib/leftlist/folders.js";
+  import { isClosed, isClosedIn } from "../lib/stores/closed.svelte.js";
+  import { conn, inFolder } from "../lib/stores/connection.svelte.js";
+  import { folders } from "../lib/stores/folders.svelte.js";
+  import { branchesOf, parentOf } from "../lib/stores/links.svelte.js";
   import { focusField } from "../lib/stores/composer.svelte.js";
   import { busy, sessions } from "../lib/stores/sessions.svelte.js";
   import { setFocus } from "../lib/stores/ui.svelte.js";
@@ -30,8 +33,7 @@
   import ChatRow from "./list/ChatRow.svelte";
   import { searchFocused, setSearchField } from "./list/listfocus.js";
   import ListFooter from "./list/ListFooter.svelte";
-  import { startNewChat } from "./list/newchat.js";
-  import { newTerminal } from "../lib/leftlist/store.svelte.js";
+  import { newChat, newTerminal } from "../lib/leftlist/store.svelte.js";
   import { listRoom } from "./panel/panel.svelte.js";
   import { listMarks } from "./start/marks.js";
   import { start } from "./start/start.svelte.js";
@@ -89,27 +91,33 @@
   // A search shows every match.
   const SHOWN_CHATS = 6;
 
-  // Day groups for drawing: each day's label and the rows under it.
+  // The groups for drawing (owner, 2026-10-20, B): this folder's chats under
+  // its name, then every other folder's chats not closed, under theirs.
   const view = $derived.by(() => {
-    const out = [];
+    const here = { key: "folder:here", label: conn.project.name || folderName(conn.project.cwd), path: conn.project.path || conn.project.cwd, rows: [] };
     let top = 0;
     let hidden = 0;
     let keep = true;
     for (const item of built.items) {
-      if (item.kind === "day") {
-        out.push({ key: `${out.length}:${item.label}`, label: item.label, rows: [] });
-        continue;
-      }
+      if (item.kind === "day") continue;
       if (item.depth === 0) {
         top++;
         keep = query !== "" || top <= SHOWN_CHATS || item.selected;
         if (!keep) hidden++;
       }
-      if ((keep || item.selected) && out.length) out[out.length - 1].rows.push(item);
+      if (keep || item.selected) here.rows.push(item);
     }
-    return { groups: out.filter((g) => g.rows.length > 0), hidden };
+    const others = folderGroups(folders.catalog, {
+      here: inFolder,
+      isClosedIn,
+      isBranch: (dataDir, id) => branchesOf(dataDir).includes(id),
+      agentOf: (provider) => (provider ? providerName(provider, start.providerNames, ws.providers) : ""),
+      now,
+    });
+    return { groups: [here, ...others].filter((g) => g.rows.length > 0), hidden };
   });
   const groups = $derived(view.groups);
+  const empty = $derived(groups.length === 0 ? built.empty : "");
 
   const searchHint = $derived(start.platform === "macos" ? "⌘K" : "Ctrl K");
 
@@ -175,6 +183,7 @@
       query,
       empty: built.empty,
       days: groups.map((g) => g.label),
+      folders: groups.map((g) => ({ label: g.label, path: g.path, rows: g.rows.map((r) => r.id) })),
     }),
     () => ({
       rows: built.rows.map((r) => {
@@ -249,7 +258,7 @@
 
   <!-- New chat and New terminal, two equal halves of one row (owner, 2026-10-20, A). -->
   <div class="new-row" bind:this={newRow}>
-    <button class="new-chat" type="button" onclick={startNewChat}>
+    <button class="new-chat" type="button" onclick={newChat}>
       <Icon name="plus" />
       <span class="label">New chat</span>
     </button>
@@ -274,12 +283,12 @@
   {/each}
 
   <div class="scroll">
-    {#if built.empty}
-      <p class="empty">{built.empty}</p>
+    {#if empty}
+      <p class="empty">{empty}</p>
     {/if}
     {#each groups as group (group.key)}
-      <section class="group" aria-label={group.label}>
-        <h2 class="day">{group.label}</h2>
+      <section class="group" aria-label={group.label} data-folder={group.path}>
+        <h2 class="day" title={group.path}>{group.label}</h2>
         <ul class="list">
           {#each group.rows as row (row.id)}
             <ChatRow {row} />
@@ -299,7 +308,7 @@
     {#each listSections("footer") as entry (entry.id)}
       <entry.component />
     {/each}
-    {#if !built.empty}<Rule marks="both" class="end-of-list" />{/if}
+    {#if !empty}<Rule marks="both" class="end-of-list" />{/if}
   </div>
 
   <!-- Settings without the Ctrl+P menu (owner, 2026-10-19). -->

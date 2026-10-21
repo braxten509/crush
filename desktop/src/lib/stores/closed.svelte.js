@@ -19,7 +19,9 @@ import { parentOf } from "./links.svelte.js";
 import { openChat, sessions, showLanding } from "./sessions.svelte.js";
 import { notify } from "./ui.svelte.js";
 
-export const closed = $state({ ids: new SvelteSet() }); // from settings.closed_chats[engine data_dir]
+// ids: from settings.closed_chats[engine data_dir]; all: every folder's
+// closed ids by data folder, for the other folders' chats in the list.
+export const closed = $state({ ids: new SvelteSet(), all: {} });
 
 const pending = new Map(); // session id → the closed value a write on its way sets
 let lastSettings = null;
@@ -32,6 +34,7 @@ const key = () => projectKey;
 // their way laid over it.
 function apply(settings) {
   if (settings && typeof settings === "object") lastSettings = settings;
+  closed.all = lastSettings?.closed_chats ?? {};
   const project = key();
   const want = new Set(project ? (lastSettings?.closed_chats?.[project] ?? []) : []);
   for (const [id, isClosed] of pending) {
@@ -115,6 +118,26 @@ export async function reopen(sessionId) {
 
 export function isClosed(sessionId) {
   return closed.ids.has(sessionId);
+}
+
+// Whether a chat of the folder whose data folder is dataDir is closed.
+export function isClosedIn(dataDir, sessionId) {
+  if (!dataDir || dataDir === key()) return isClosed(sessionId);
+  return (closed.all[dataDir] ?? []).includes(sessionId);
+}
+
+// The list's × on another folder's chat: closed in that folder's set.
+export async function closeIn(dataDir, sessionId) {
+  if (!dataDir || dataDir === key()) return close(sessionId);
+  try {
+    const settings = await closed_set(dataDir, sessionId, true);
+    seq += 1;
+    apply(settings);
+    return true;
+  } catch (error) {
+    notify("error", `Couldn't close this chat: ${error?.message ?? String(error)}`);
+    return false;
+  }
 }
 
 // The chats the list shows, top to bottom; with the search's words, the

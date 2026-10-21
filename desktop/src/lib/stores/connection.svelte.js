@@ -8,7 +8,7 @@ import { probeSection } from "../probe.js";
 import { loadLimits, startLimitsPoll, stopLimitsPoll } from "./limits.svelte.js";
 import "./messages.svelte.js";
 import "./prompts.svelte.js";
-import { busy, loadSessions, openLaunchChat, sessions, showLanding } from "./sessions.svelte.js";
+import { busy, loadSessions, openLaunchChat, sessions, setJoinWait, showLanding } from "./sessions.svelte.js";
 import { notify } from "./ui.svelte.js";
 import { startWorkspace } from "./workspace.svelte.js";
 
@@ -116,7 +116,10 @@ function seed() {
 }
 
 let joinedOnce = false;
+// The join under way, or the last one: from a folder switch's start (its
+// leave included) to its end, so a chat picked meanwhile waits for it.
 let joining = null;
+setJoinWait(() => (conn.state === "connecting" ? joining : null));
 // A folder switch left the old engine and its join failed: "Try again" joins
 // again rather than asking Rust to reconnect a connection that is gone.
 let mustJoin = false;
@@ -199,11 +202,21 @@ function sameFolder(a, b) {
 // left first (its turn runs on in the engine), unless keepShown: a kept chat
 // of that folder already shows (openInFolder). Resolves true once joined.
 export async function switchFolder(dir, { keepShown = false } = {}) {
+  // A join or switch still under way ends first, so a chat of the folder
+  // being joined, picked again meanwhile, switches once.
+  for (let current = joining; current; current = joining) {
+    await current.catch(() => {});
+    if (joining === current) break;
+  }
   if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
-  if (joining) await joining.catch(() => {});
   if (!keepShown) showLanding();
   conn.state = "connecting";
   conn.error = null;
+  joining = enterFolder(dir);
+  return joining;
+}
+
+async function enterFolder(dir) {
   try {
     await projectEnter(dir);
   } catch (error) {
@@ -214,8 +227,7 @@ export async function switchFolder(dir, { keepShown = false } = {}) {
   conn.project = { cwd: dir, path: dir, dataDir: "", name: baseName(dir) };
   conn.launch = { session: "", continueLast: false };
   mustJoin = true;
-  joining = join();
-  return joining;
+  return join();
 }
 
 export function inFolder(dir) {

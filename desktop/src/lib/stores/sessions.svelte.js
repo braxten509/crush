@@ -499,8 +499,20 @@ async function retryHistory(id) {
   }
 }
 
+// The join or folder switch still under way, if any (connection.svelte.js
+// hands it over): a chat picked meanwhile is read once the window has its
+// engine. Read at once, it went to no engine and failed with "has not joined
+// a Crush engine" even though the switch then showed the chat (owner,
+// 2026-10-21: a second click on a chat whose folder was still joining).
+let joinWait = () => null;
+export function setJoinWait(wait) {
+  joinWait = wait;
+}
+
 async function showChat(id) {
   if (id !== sessions.currentId && isKept(id)) return showKept(id);
+  const pending = joinWait();
+  if (pending) await pending.catch(() => {});
   openSeq += 1;
   const seq = openSeq;
   if (id !== sessions.currentId) {

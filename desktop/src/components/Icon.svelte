@@ -128,9 +128,9 @@
     <path d="M8 10.6v4.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
   {:else if name === "panel" || name === "panel-on"}
     <!-- A window with its right column; filled while the right panel shows. -->
-    <!-- The box's full width, as wide as the maximize square is tall (owner, 2026-10-20: too small). -->
-    <path d="M.9 2.4h14.2v11.2H.9z" fill="none" stroke="currentColor" stroke-width="1.4" />
-    {#if name === "panel-on"}<path d="M10 2.4h5.1v11.2H10z" fill="currentColor" />{:else}<path d="M10 2.4v11.2" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
+    <!-- The box's full width and nearly the pin's height (owner, 2026-10-20: too small, then match the pin). -->
+    <path d="M.9 1.6h14.2v12.8H.9z" fill="none" stroke="currentColor" stroke-width="1.4" />
+    {#if name === "panel-on"}<path d="M10 1.6h5.1v12.8H10z" fill="currentColor" />{:else}<path d="M10 1.6v12.8" fill="none" stroke="currentColor" stroke-width="1.4" />{/if}
   {:else if name === "minimize"}
     <path d="M3 8h10" fill="none" stroke="currentColor" stroke-width="1.4" />
   {:else if name === "maximize"}

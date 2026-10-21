@@ -237,6 +237,13 @@ ul {
   inherits: false;
   initial-value: 0;
 }
+/* The chat list's width in picture px (App.svelte), registered so it can
+   glide when the list collapses to its strip and back. */
+@property --left {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
 /* Set on a scroller while its thumb shows. Nothing reads it: WebKitGTK
    redraws a scroll bar only when its scroller's own style changes, not when
    a class changes just the bar's look, so this is what puts the thumb on
@@ -246,19 +253,6 @@ ul {
   syntax: "<integer>";
   inherits: false;
   initial-value: 0;
-}
-/* A piece that arrives unrolls from its top edge (sheets, menus, figures). */
-@keyframes paper-unfold {
-  from {
-    clip-path: inset(0 0 100% 0);
-    transform: translateY(calc(-4 * var(--px)));
-    --paper-tick: 0;
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-    transform: none;
-    --paper-tick: 1;
-  }
 }
 /* A piece that arrives settles in place (new messages, notices, figures):
    a short slide, fully drawn from the first frame. */
@@ -271,53 +265,11 @@ ul {
     --paper-tick: 1;
   }
 }
-@keyframes paper-fade {
-  from {
-    opacity: 0;
-    --paper-tick: 0;
-  }
-  to {
-    --paper-tick: 1;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0s !important;
     transition-duration: 0s !important;
-  }
-}
-/* The same unroll for a piece over its opener (popups above the typing box). */
-@keyframes paper-unfold-up {
-  from {
-    clip-path: inset(100% 0 0 0);
-    transform: translateY(calc(4 * var(--px)));
-    --paper-tick: 0;
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-    transform: none;
-    --paper-tick: 1;
-  }
-}
-/* A column coming in from the right edge (the right panel). */
-@keyframes paper-slide-left {
-  from {
-    transform: translateX(calc(14 * var(--px)));
-    --paper-tick: 0;
-  }
-  to {
-    --paper-tick: 1;
-  }
-}
-/* A column coming in from the left edge (the chat list back from Settings). */
-@keyframes paper-slide-right {
-  from {
-    transform: translateX(calc(-14 * var(--px)));
-    --paper-tick: 0;
-  }
-  to {
-    --paper-tick: 1;
   }
 }

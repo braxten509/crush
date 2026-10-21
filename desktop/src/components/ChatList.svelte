@@ -15,6 +15,8 @@
   // registered (SES), the box filters the list as before.
   import { onMount } from "svelte";
   import { hasDialog, openDialog } from "../lib/dialogs.js";
+  import { slidePage } from "../lib/motion.js";
+  import { settingsOpen } from "../lib/settings/page.svelte.js";
   import { listSections } from "../lib/listsections.js";
   import { buildRows } from "../lib/listmodel.js";
   import { probeSection } from "../lib/probe.js";
@@ -242,7 +244,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<nav class="chats" aria-label="Chats" bind:this={nav} onfocusin={() => setFocus("list")} onkeydown={onKey}>
+<nav class="chats" aria-label="Chats" bind:this={nav} transition:slidePage|global={{ dir: -1, overlay: true, off: settingsOpen() }} onfocusin={() => setFocus("list")} onkeydown={onKey}>
   <h1 class="wordmark"><span class="crush">Crush</span> <span class="ai">AI</span></h1>
 
   <!-- New chat and New terminal, two equal halves of one row (owner, 2026-10-20, A). -->
@@ -309,9 +311,10 @@
 
 <style>
   /* Vertical positions follow the approved picture at 12/12 (column top = 0). */
-  /* The list slides in from the left when it comes back from Settings (the paper motion). */
+  /* The list slides in from the left, back from Settings or the strip, and
+     rolls away over the strip as it collapses (lib/motion.js; Settings'
+     own list covers it going, so then it leaves at once). */
   .chats {
-    animation: paper-slide-right var(--motion) var(--ease-paper);
     position: relative;
     display: flex;
     flex-direction: column;

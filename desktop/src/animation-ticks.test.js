@@ -45,7 +45,7 @@ const all = files(SRC).flatMap((path) => {
 
 describe("animation ticks", () => {
   it("finds the shared paper animations", () => {
-    expect(all.map((frames) => frames.name)).toEqual(expect.arrayContaining(["paper-fade", "paper-unfold", "paper-settle"]));
+    expect(all.map((frames) => frames.name)).toEqual(expect.arrayContaining(["paper-settle"]));
   });
 
   it.each(all.filter((frames) => !frames.loops).map((frames) => [`${frames.path} ${frames.name}`, frames.body]))("%s runs --paper-tick 0 to 1", (_, body) => {

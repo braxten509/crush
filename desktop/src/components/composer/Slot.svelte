@@ -3,10 +3,15 @@
   // permission prompt, the plan handoff, Customize Composer (P3.8), later
   // the question forms. It grows upward to at most 60% of the middle column
   // (Composer). entry is ui.slot; a new entry (a newer request) is a new form.
+  // It unrolls up out of the typing box's row and, going, rolls back down
+  // into it, lying over the returning row at the composer's foot.
+  import { unfold } from "../../lib/motion.js";
+
   let { entry } = $props();
+  const LEAVING = "position: absolute; left: calc(20 * var(--px)); right: calc(20 * var(--px)); bottom: calc(33 * var(--px)); z-index: 3;";
 </script>
 
-<section class="slot" data-probe="slot" data-kind={entry.kind}>
+<section class="slot" data-probe="slot" data-kind={entry.kind} transition:unfold|global={{ from: "bottom", overlay: LEAVING }}>
   {#key entry}
     <entry.component {...entry.props} />
   {/key}

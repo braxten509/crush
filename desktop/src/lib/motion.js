@@ -36,19 +36,20 @@ export function unfoldInset(from, u) {
 // CLOSE_MS easing in (the opening's time run backwards). `away(u)` adds the
 // roll that hides a closing piece fully by its end. With `overlay`, a
 // closing piece lies over whatever takes its place (Settings giving the
-// column back to the chats), so the newcomer lays out at once beneath it.
+// column back to the chats), so the newcomer lays out at once beneath it:
+// true covers the positioned parent, a string places it its own way.
 const OVER = "position: absolute; inset: 0; z-index: 3; background: var(--paper);";
 export function paper(css, { duration = MOTION_MS, delay = 0, away = null, off = false, overlay = false } = {}) {
   if (off || reducedMotion()) return { duration: 0 };
   return ({ direction }) =>
     direction === "out"
-      ? { duration: CLOSE_MS, easing: cubicIn, css: (t, u) => (overlay ? OVER : "") + css(t, u) + (away ? ` clip-path: ${away(u)};` : "") }
+      ? { duration: CLOSE_MS, easing: cubicIn, css: (t, u) => (overlay === true ? OVER : overlay || "") + css(t, u) + (away ? ` clip-path: ${away(u)};` : "") }
       : { delay, duration, easing: cubicOut, css };
 }
 
-export function unfold(node, { from = "bottom", duration = MOTION_MS, delay = 0 } = {}) {
+export function unfold(node, { from = "bottom", duration = MOTION_MS, delay = 0, overlay = false } = {}) {
   const sign = from === "top" ? -1 : 1;
-  return paper((t, u) => `clip-path: ${unfoldInset(from, u)}; transform: translateY(${(sign * u * RISE).toFixed(2)}px);${tick(t)}`, { duration, delay });
+  return paper((t, u) => `clip-path: ${unfoldInset(from, u)}; transform: translateY(${(sign * u * RISE).toFixed(2)}px);${tick(t)}`, { duration, delay, overlay });
 }
 
 // The inset that hides a piece leaving to one side: `dir` 1 rolls it away
@@ -60,9 +61,9 @@ export function sideInset(dir, u) {
 
 // A page or column coming in from one side: `dir` 1 from the right, -1 from
 // the left; closing, it slides back that way and rolls away toward it.
-export function slidePage(node, { dir = 1, duration = MOTION_MS, delay = 0, overlay = false } = {}) {
+export function slidePage(node, { dir = 1, duration = MOTION_MS, delay = 0, overlay = false, off = false } = {}) {
   // No fade: a page drawn from its first frame never blinks (owner, 2026-10-19).
-  return paper((t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px);${tick(t)}`, { duration, delay, overlay, away: (u) => sideInset(dir, u) });
+  return paper((t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px);${tick(t)}`, { duration, delay, overlay, off, away: (u) => sideInset(dir, u) });
 }
 
 // A small piece settling in place (rows, notices, new messages); closing, it

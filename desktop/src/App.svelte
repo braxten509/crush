@@ -28,7 +28,7 @@
   import { COLUMN_LIMITS, dragColumn, fitColumns, loadColumns, saveColumns } from "./lib/columns.js";
   import { app_info } from "./lib/engine/commands.js";
   import { leftList } from "./lib/leftlist/store.svelte.js";
-  import { slidePage } from "./lib/motion.js";
+  import { CLOSE_MS, MOTION_MS, slidePage } from "./lib/motion.js";
   import { settingsOpen } from "./lib/settings/page.svelte.js";
   import { mainView } from "./lib/mainview.js";
   import { focusField } from "./lib/stores/composer.svelte.js";
@@ -122,6 +122,21 @@
     if (!ui.panelHidden) panelKept = true;
   });
 
+  // The chat list's width glides as it collapses to the strip (closing,
+  // quicker) and back (opening); a divider drag stays instant (owner,
+  // 2026-10-20: everything opens and closes with motion).
+  let glide = $state(null);
+  let stripWas = leftList.strip;
+  let glideTimer = null;
+  $effect.pre(() => {
+    const strip = leftList.strip;
+    if (strip === stripWas) return;
+    stripWas = strip;
+    glide = strip ? "close" : "open";
+    clearTimeout(glideTimer);
+    glideTimer = setTimeout(() => (glide = null), strip ? CLOSE_MS : MOTION_MS);
+  });
+
   // Join the engine once the page is up (connection.svelte.js).
   onMount(() => {
     start();
@@ -137,6 +152,8 @@
   <div
     class="page"
     class:panel-hidden={!panelKept}
+    class:glide-open={glide === "open"}
+    class:glide-close={glide === "close"}
     bind:this={page}
     style:--left={leftList.strip && !settingsOpen() ? STRIP_WIDTH : widths.left}
     style:--right={widths.right}
@@ -218,6 +235,12 @@
       1px calc(var(--left) * var(--px)) 1px minmax(0, 1fr)
       1px calc(var(--right) * var(--px)) 1px;
     grid-template-rows: 1px minmax(0, 1fr) 1px;
+  }
+  .page.glide-open {
+    transition: --left var(--motion) var(--ease-paper);
+  }
+  .page.glide-close {
+    transition: --left var(--motion-quick) cubic-bezier(0.32, 0, 0.67, 0);
   }
   /* Without the panel (D11) the conversation runs to the frame's right line. */
   .page.panel-hidden {

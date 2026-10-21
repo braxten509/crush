@@ -186,7 +186,8 @@ Every dialog is a `kit/Sheet`:
   draws one stale frame at its end (a settings page jumped back after settling). Everything
   that opens also closes with motion: the opening backwards in 140 ms, easing in, ending
   wholly rolled away (the panel slides out before its column goes; Settings slides away over
-  the chat; the scrim fades). Opening pieces use `lib/motion.js` transitions, not on-mount
+  the chat; the scrim fades; the chat list's width glides as it collapses to its strip and
+  back; a typing-box form unrolls up and rolls back down over the returning row). Opening pieces use `lib/motion.js` transitions, not on-mount
   keyframes, so each has its close; `close_motion.py` checks them. The busy marks loop over 1.2 s. Nothing moves the layout when
   a state changes (no show or hide on a flag).
 - The Send square shows Stop (a filled square) while the shown chat works and nothing is

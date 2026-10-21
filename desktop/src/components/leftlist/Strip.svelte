@@ -9,6 +9,8 @@
   // notice line and no server rows (servers.go:96-99). A terminal tab's cell
   // drags like its row (LIST-009). Mounting it starts the page-width watch.
   import { onMount } from "svelte";
+  import { slidePage } from "../../lib/motion.js";
+  import { settingsOpen } from "../../lib/settings/page.svelte.js";
   import { isShown, listRows, showRow, startDrag } from "../../lib/leftlist/numbers.js";
   import { MARKS, chatState } from "../../lib/leftlist/states.js";
   import { leftList, newChat, newTerminal, toggleList, watchWidth } from "../../lib/leftlist/store.svelte.js";
@@ -43,7 +45,7 @@
   }
 </script>
 
-<nav class="strip" aria-label="Chats" bind:this={nav}>
+<nav class="strip" aria-label="Chats" bind:this={nav} transition:slidePage|global={{ dir: -1, overlay: true, off: settingsOpen() }}>
   <button class="expand" type="button" aria-label="Open the list" title="Open the list (Alt+S)" onclick={toggleList}>
     <Icon name="chevron" class="right" />
   </button>

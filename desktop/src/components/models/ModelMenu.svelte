@@ -8,6 +8,9 @@
   // Esc, a click outside or the button again close it. While it is open the
   // key router asks only the "menu" scope, so no other shortcut fires.
   // The full sheet (Large/Small Task, sign-in edits) stays on Ctrl+P.
+  // Under the effort, a Claude Code or Codex model with two or more accounts
+  // gets an Account drop-down the width of the row (owner, 2026-10-21, pick
+  // A as one drop-down); a new model of the same tool keeps the account.
   import { onMount, untrack } from "svelte";
   import Icon from "../Icon.svelte";
   import { bindKey } from "../../lib/keys.js";
@@ -15,7 +18,9 @@
   import { buildGroups, levelTitle, selectedModelOf } from "../../lib/models/groups.js";
   import { isCurrent, menuGroups, RECENT, searchRows, startGroup } from "../../lib/models/menu.js";
   import { coderModel, modelData, watchModels } from "../../lib/models/store.svelte.js";
-  import { setEffort } from "../../lib/models/toggles.js";
+  import { setAccount, setEffort } from "../../lib/models/toggles.js";
+  import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
+  import { hasAccounts } from "../../lib/fallback/blocks.js";
   import { unfold } from "../../lib/motion.js";
   import { focusField } from "../../lib/stores/composer.svelte.js";
   import { closeMenu, notify } from "../../lib/stores/ui.svelte.js";
@@ -31,6 +36,8 @@
   let query = $state("");
   let chosenGroup = $state("");
   let level = $state(""); // the level just clicked, shown until the config says so
+  let accountsOpen = $state(false);
+  let account = $state(null); // the account just picked, shown until the config says so
 
   $effect(() => watchModels());
 
@@ -44,6 +51,16 @@
   const rows = $derived(searching ? searchRows(built.items, query) : (shownGroup?.items ?? []));
   const levels = $derived(coder.info?.reasoning_levels ?? []);
   const levelNow = $derived(level || current?.reasoning_effort || coder.info?.default_reasoning_effort || "");
+  const kind = $derived(kindOf(current?.provider));
+  const accounts = $derived(hasAccounts(kind) ? fallback.accounts.filter((a) => a.kind === kind) : []);
+  const accountNow = $derived(account ?? current?.account ?? "");
+  const accountShown = $derived(accounts.find((a) => a.id === accountNow) ?? accounts[0] ?? null);
+
+  // The tool behind a configured provider id (its type), or "".
+  function kindOf(provider) {
+    for (const [id, p] of modelData.cfg?.providers ?? []) if (id === provider) return p?.type ?? "";
+    return "";
+  }
 
   // The first group: the current model's, once the models are read.
   $effect(() => {
@@ -87,7 +104,9 @@
   function pick(item) {
     if (!item) return;
     close();
-    chooseModel({ provider: item.provider, model: selectedModelOf(item), modelType: type });
+    const model = selectedModelOf(item);
+    if (accountNow && kindOf(item.provider.id) === kind) model.account = accountNow;
+    chooseModel({ provider: item.provider, model, modelType: type });
   }
 
   async function pickLevel(next) {
@@ -97,6 +116,18 @@
       await setEffort(next);
     } catch (error) {
       level = "";
+      notify("error", error?.message ?? String(error));
+    }
+  }
+
+  async function pickAccount(next) {
+    accountsOpen = false;
+    if (next.id === accountNow) return;
+    account = next.id;
+    try {
+      await setAccount(next.id, next.label || next.name);
+    } catch (error) {
+      account = null;
       notify("error", error?.message ?? String(error));
     }
   }
@@ -127,6 +158,7 @@
   onMount(() => {
     measure();
     search?.focus({ preventScroll: true });
+    if (!fallback.loaded) loadFallback();
     const unbind = [
       bindKey("menu", "Escape", () => (close(), true)),
       bindKey("menu", "ArrowDown", () => step(1)),
@@ -212,6 +244,27 @@
           {#each levels as l (l)}
             <button type="button" class="level" role="radio" data-stop aria-checked={l === levelNow} onclick={() => pickLevel(l)}>{levelTitle(l)}</button>
           {/each}
+        </div>
+      </div>
+    {/if}
+    {#if accounts.length > 1}
+      <div class="account" data-column="account">
+        <h3 class="label">Account</h3>
+        <div class="pick">
+          {#if accountsOpen}
+            <div class="accounts" role="listbox" aria-label="Accounts">
+              {#each accounts as a (a.id)}
+                <button type="button" class="option" role="option" data-stop aria-selected={a.id === accountShown?.id} onclick={() => pickAccount(a)}>
+                  <span class="name">{a.label || a.name}</span>
+                  {#if a.id === accountShown?.id}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+          <button type="button" class="drop" data-stop aria-haspopup="listbox" aria-expanded={accountsOpen} onclick={() => (accountsOpen = !accountsOpen)}>
+            <span class="name">{accountShown ? accountShown.label || accountShown.name : ""}</span>
+            <Icon name="caret" size={10} />
+          </button>
         </div>
       </div>
     {/if}
@@ -370,6 +423,61 @@
   }
   .level:hover {
     background: var(--control-hover);
+  }
+  .account {
+    margin-top: calc(12 * var(--px));
+  }
+  .pick {
+    position: relative;
+    margin: 0 calc(10 * var(--px));
+  }
+  .drop,
+  .option {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--px));
+    box-sizing: border-box;
+    width: 100%;
+    height: calc(36 * var(--px));
+    padding: 0 calc(10 * var(--px));
+    border: 0;
+    background: none;
+    font: var(--t-small);
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  .drop {
+    border: 1px solid var(--rule-control);
+  }
+  .drop :global(svg) {
+    flex: none;
+    color: var(--slate);
+  }
+  .drop[aria-expanded="true"] :global(svg) {
+    transform: rotate(180deg);
+  }
+  /* The list opens up over the models, so the menu keeps its size. */
+  .accounts {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% - 1px);
+    z-index: 1;
+    border: 1px solid var(--rule-control);
+    background: var(--paper-raised);
+  }
+  .drop:hover,
+  .option:hover {
+    background: var(--control-hover);
+  }
+  .option[aria-selected="true"] {
+    background: var(--band);
+  }
+  .drop:focus-visible,
+  .option:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: -1px;
   }
   /* The chosen level: the band inside an ink hairline, as a selected button. */
   .level[aria-checked="true"] {

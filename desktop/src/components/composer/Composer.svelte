@@ -102,17 +102,20 @@
   {#if ui.slot}
     <Slot entry={ui.slot} />
   {:else}
-    {#if sessionId}
+    {#if sessionId || hasChips()}
       <!-- Complete (owner, 2026-10-21, pick A): closes the shown chat for
-           every app, as the list's × does. -->
+           every app, as the list's × does. It sits on the right of the
+           attached files' row (owner, 2026-10-21). -->
       <div class="complete-row">
-        <button class="complete" type="button" onclick={complete}>
-          <Icon name="check" />
-          <span>Complete</span>
-        </button>
+        {#if hasChips()}<div class="chips-side"><ChipRow /></div>{/if}
+        {#if sessionId}
+          <button class="complete" type="button" onclick={complete}>
+            <Icon name="check" />
+            <span>Complete</span>
+          </button>
+        {/if}
       </div>
     {/if}
-    {#if hasChips()}<ChipRow />{/if}
     <form class="row" onsubmit={submit} in:settle>
       <div class="field" class:marked={mode !== "normal"}>
         <ModeMark {mode} />
@@ -202,7 +205,13 @@
     margin-bottom: calc(12 * var(--px));
   }
   .composer.chipped .complete-row {
-    margin-top: calc(15 * var(--px));
+    align-items: center;
+    gap: calc(16 * var(--px));
+    margin-bottom: 0;
+  }
+  .chips-side {
+    flex: 1;
+    min-width: 0;
   }
   .complete {
     display: flex;

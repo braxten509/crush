@@ -10,6 +10,7 @@
 //                         "Changes") gets the key instead
 //   Shift+← H, Shift+→ L  side-scroll a shell's output or a group's diffs
 //                         (CHAT-043)
+import AnswersSheet from "../../components/sheets/AnswersSheet.svelte";
 import ChangesSheet from "../../components/sheets/ChangesSheet.svelte";
 import { registerItemCopy } from "../copy.js";
 import { registerDialog } from "../dialogs.js";
@@ -24,6 +25,9 @@ import { toolStatus } from "../tools/status.js";
 
 // The Changes sheet draws its own scrim (outside clicks close it, DLG-308).
 registerDialog("changes", ChangesSheet, { veil: false });
+
+// Your answers to a question form, from its notice line (NoticeItem).
+registerDialog("answers", AnswersSheet);
 
 // A standalone tool (Question, Agent, Agentic Fetch) inside a timeline
 // selection copies as its c/y text (CHAT-056, CHAT-087; lib/copy.js wholeText).

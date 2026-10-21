@@ -38,6 +38,9 @@ type App struct {
 	// reused PID is not taken for the app.
 	Start string `json:"start,omitempty"`
 	Kind  string `json:"kind"`
+	// Dirs are the folders whose chats the desktop hears and rings for
+	// (owner, 2026-10-20: "only ring ONCE - from the desktop one").
+	Dirs []string `json:"dirs,omitempty"`
 }
 
 type file struct {
@@ -80,6 +83,31 @@ func (l List) Chats() []Chat {
 		return nil
 	}
 	return f.Chats
+}
+
+// DesktopHears reports whether a running desktop app rings for the chats
+// in dir, so a terminal there stays quiet and the desktop rings once.
+func (l List) DesktopHears(dir string) bool {
+	want := sameDir(dir)
+	for _, a := range liveApps(l.read().Apps) {
+		if a.Kind != "desktop" {
+			continue
+		}
+		for _, d := range a.Dirs {
+			if sameDir(d) == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sameDir is dir cleaned with its links followed, for comparing folders.
+func sameDir(dir string) string {
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		return real
+	}
+	return filepath.Clean(dir)
 }
 
 // Join signs this process in as kind. When no other app has the list open

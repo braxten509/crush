@@ -83,3 +83,24 @@ func TestAddRemoveAndSwapKeepTheOrder(t *testing.T) {
 	require.NoError(t, l.Remove("d"))
 	require.Equal(t, []string{"c"}, ids(l.Chats()))
 }
+
+// The terminal stays quiet only for folders a running desktop hears
+// (owner, 2026-10-20: "only ring ONCE - from the desktop one").
+func TestDesktopHearsOnlyItsFoldersWhileItRuns(t *testing.T) {
+	l := At(filepath.Join(t.TempDir(), "open-chats.json"))
+	heard, other := t.TempDir(), t.TempDir()
+	cmd := exec.Command("sleep", "60")
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	desktop := App{PID: cmd.Process.Pid, Start: processStart(cmd.Process.Pid), Kind: "desktop", Dirs: []string{heard + "/"}}
+	require.NoError(t, l.change(func(f *file) { f.Apps = append(f.Apps, desktop) }))
+	require.True(t, l.DesktopHears(heard))
+	require.False(t, l.DesktopHears(other))
+	// A terminal listing the same folder is not a desktop.
+	require.NoError(t, l.change(func(f *file) { f.Apps[0].Kind = "terminal" }))
+	require.False(t, l.DesktopHears(heard))
+	require.NoError(t, l.change(func(f *file) { f.Apps[0].Kind = "desktop" }))
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait()
+	require.False(t, l.DesktopHears(heard), "a closed desktop rings for nothing")
+}

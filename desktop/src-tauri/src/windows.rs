@@ -187,6 +187,17 @@ impl Windows {
             .map(|(label, _)| label.clone())
     }
 
+    /// The folders the open windows show, links resolved (watch.rs).
+    pub fn projects(&self) -> Vec<PathBuf> {
+        let inner = self.inner();
+        inner
+            .by_label
+            .iter()
+            .filter(|(label, _)| !inner.closing.contains(*label))
+            .map(|(_, entry)| entry.project.clone())
+            .collect()
+    }
+
     /// Records the window's new folder (`project_switch`); the page reloads and joins it.
     pub fn set_project(&self, label: &str, project: &Path) {
         let mut inner = self.inner();

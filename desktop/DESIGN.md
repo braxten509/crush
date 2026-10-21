@@ -149,6 +149,14 @@ never "sessions".
   helper, terminal crush), then the terminal crush (backed up) and the app (install.sh
   while it runs) are installed and the app starts again with its open chats held
   (`open-chats.restart`). Each window checks quietly once when it connects.
+- One ring when the terminal and the desktop are both open, from the desktop (owner,
+  2026-10-20). The helper (watch.rs) listens to the folders of the shared open chats that no
+  window shows, through each running engine's socket, with a `watch=1` stream that holds
+  no claim (the engine still closes when its own apps go), and rings "complete" for a
+  finished, idle turn and "message-new-instant" for new questions. The folders it hears
+  (shown or listened to) go into its entry in `open-chats.json` (`dirs`); a terminal in
+  one of them skips those two sounds (internal/openchats DesktopHears). A probe run writes
+  the ring to `alerts.jsonl` instead (tests/driver/ring_once.py).
 - The chat's scroll range ends on a whole pixel (an invisible bit of room under the last
   item), so a wheel at the bottom never nudges it (owner, 2026-10-20).
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).

@@ -152,11 +152,17 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 		c.handleError(w, r, err)
 		return
 	}
-	if err := c.backend.AttachClient(id, clientID); err != nil {
-		c.handleError(w, r, err)
-		return
+	// watch=1 is a listener that holds nothing (owner, 2026-10-20: "only
+	// ring ONCE - from the desktop one"): the desktop hears the folders of
+	// open chats no window shows, and the workspace and engine still close
+	// when their own clients go.
+	if r.URL.Query().Get("watch") != "1" {
+		if err := c.backend.AttachClient(id, clientID); err != nil {
+			c.handleError(w, r, err)
+			return
+		}
+		defer c.backend.DetachClient(id, clientID)
 	}
-	defer c.backend.DetachClient(id, clientID)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

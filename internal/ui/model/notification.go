@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/notification"
 )
@@ -26,6 +27,23 @@ func (m *UI) playNotificationSound(sound notification.Sound) tea.Cmd {
 		return nil
 	}
 	return notification.PlaySound(sound)
+}
+
+// ringUnlessDesktop plays sound unless a running Crush Desktop hears this
+// chat's folder and rings for it itself (owner, 2026-10-20: "if console and
+// desktop are open, please only ring ONCE - from the desktop one").
+func (m *UI) ringUnlessDesktop(sound notification.Sound) tea.Cmd {
+	play := m.playNotificationSound(sound)
+	if play == nil {
+		return nil
+	}
+	dir := m.com.Workspace.WorkingDir()
+	return func() tea.Msg {
+		if list, err := openchats.Open(); err == nil && list.DesktopHears(dir) {
+			return nil
+		}
+		return play()
+	}
 }
 
 // selectNotificationBackend chooses the appropriate notification backend based

@@ -223,7 +223,7 @@ func newLiveWork(t *testing.T) *liveWork {
 	model := startLiveModel(t)
 	h := newRealCreateHarness(t)
 	t.Setenv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
-	dir := t.TempDir()
+	dir := settlingDir(t)
 	cfg, err := json.Marshal(map[string]any{
 		"providers": map[string]any{"fake": map[string]any{
 			"type": "openai-compat", "base_url": model.srv.URL + "/v1", "api_key": "test-key",
@@ -242,10 +242,30 @@ func newLiveWork(t *testing.T) *liveWork {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "crush.json"), cfg, 0o600))
 
 	app := uuid.NewString()
-	ws := h.postWorkspace(t, proto.Workspace{Path: dir, DataDir: t.TempDir(), ClientID: app, YOLO: true})
+	ws := h.postWorkspace(t, proto.Workspace{Path: dir, DataDir: settlingDir(t), ClientID: app, YOLO: true})
 	t.Cleanup(func() { _ = h.backend.RetireClient(app) })
 	require.NoError(t, h.backend.InitAgent(context.Background(), ws.ID, app, true))
 	return &liveWork{h: h, model: model, ws: ws, app: app}
+}
+
+// settlingDir is a temporary folder removed once nothing writes into it any
+// more: the jobs of a closed workspace can spill their last output into its
+// folders a moment after the close (TestServersRoute's "directory not empty").
+func settlingDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "livework-")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.Eventually(t, func() bool {
+			if os.RemoveAll(dir) != nil {
+				return false
+			}
+			time.Sleep(100 * time.Millisecond)
+			_, err := os.Stat(dir)
+			return os.IsNotExist(err)
+		}, 10*time.Second, 50*time.Millisecond, "the workspace's folder settles")
+	})
+	return dir
 }
 
 // chat creates a chat through the route.

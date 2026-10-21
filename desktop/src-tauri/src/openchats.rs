@@ -26,6 +26,10 @@ struct App {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     start: String,
     kind: String,
+    /// The folders whose chats this desktop hears and rings for; a terminal
+    /// there stays quiet (watch.rs; internal/openchats DesktopHears).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    dirs: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -88,7 +92,7 @@ fn held() -> bool {
 /// Signs this process in as the desktop; the list starts empty when no other
 /// app has it open, unless an update restarts the app.
 pub fn join() {
-    let me = App { pid: std::process::id() as i32, start: process_start(std::process::id() as i32), kind: "desktop".into() };
+    let me = App { pid: std::process::id() as i32, start: process_start(std::process::id() as i32), kind: "desktop".into(), dirs: Vec::new() };
     let keep = held();
     let _ = change(|file| {
         file.apps = live(std::mem::take(&mut file.apps));
@@ -141,6 +145,16 @@ pub fn add(chat: Chat) -> Result<(), String> {
                 .unwrap_or(0);
         }
         file.chats.push(chat);
+    })
+}
+
+/// Records the folders this desktop hears (watch.rs).
+pub fn set_dirs(dirs: &[String]) -> Result<(), String> {
+    let pid = std::process::id() as i32;
+    change(|file| {
+        if let Some(me) = file.apps.iter_mut().find(|a| a.pid == pid) {
+            me.dirs = dirs.to_vec();
+        }
     })
 }
 
@@ -213,7 +227,7 @@ mod tests {
         // Another app (a running child process) has it open too.
         let mut other = std::process::Command::new("sleep").arg("30").spawn().unwrap();
         let pid = other.id() as i32;
-        change(|f| f.apps.push(App { pid, start: process_start(pid), kind: "terminal".into() })).unwrap();
+        change(|f| f.apps.push(App { pid, start: process_start(pid), kind: "terminal".into(), dirs: Vec::new() })).unwrap();
         leave();
         assert_eq!(chats().len(), 1, "the terminal still runs: the chats stay");
         let _ = other.kill();

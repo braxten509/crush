@@ -9,6 +9,7 @@
 mod alerts;
 mod appupdate;
 mod openchats;
+mod watch;
 mod applog;
 mod batch;
 mod clipboard;
@@ -105,6 +106,8 @@ fn main() {
             let _ = openchats::add(chat);
         }
         app.manage(fixture);
+    } else {
+        watch::start(app.clone());
     }
     settings::watch(app.clone());
     app.send(&json!({"t": "ready"}));

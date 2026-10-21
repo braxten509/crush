@@ -31,7 +31,7 @@ func (m *UI) handleAgentFinished(msg agentFinishedMsg) tea.Cmd {
 		m.turnOutcome = tea.ProgramStateDone
 	}
 	return tea.Batch(
-		m.guardCompletionAlert(n.SessionID, m.playNotificationSound(notification.SoundComplete)),
+		m.guardCompletionAlert(n.SessionID, m.ringUnlessDesktop(notification.SoundComplete)),
 		m.guardCompletionAlert(n.SessionID, m.sendNotification(finishedNotification(n.SessionTitle))),
 	)
 }

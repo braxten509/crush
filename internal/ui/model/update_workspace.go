@@ -88,7 +88,7 @@ func (m *UI) handleWorkspaceEvent(msg tea.Msg) (tea.Cmd, updateFlow, bool) {
 			cmds = append(cmds, cmd)
 		}
 		m.chat.ScrollToBottom()
-		cmds = append(cmds, m.playNotificationSound(notification.SoundQuestion))
+		cmds = append(cmds, m.ringUnlessDesktop(notification.SoundQuestion))
 		if cmd := m.sendNotification(notification.Notification{
 			Title:   "Crush is waiting...",
 			Message: fmt.Sprintf("%d questions need your input", len(msg.Payload.Questions)),

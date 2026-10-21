@@ -149,6 +149,7 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
         "crush_dirs" => res(commands::crush_dirs(a, w)),
         "crush_stats" => res(commands::crush_stats(a, w)),
         "docker_mcp_version" => res(commands::docker_mcp_version()),
+        "sign_in_run" => res(commands::sign_in_run(arg(args, "argv")?)),
         "projects_list" => res(commands::projects_list()),
         "project_save" => res(commands::project_save(arg(args, "path")?)),
         "project_remove" => res(commands::project_remove(arg(args, "path")?)),

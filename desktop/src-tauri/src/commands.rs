@@ -4,7 +4,7 @@
 //! AppError (1.2.2).
 
 use crate::connection::{self, OpenResult};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::files::{self, FileEntry, FileInfo};
 use crate::fixture::Fixture;
 use crate::settings::{self, Settings};
@@ -583,6 +583,24 @@ pub fn crush_stats(app: AppHandle, window: Window) -> AppResult<crushinfo::Stats
 
 pub fn docker_mcp_version() -> AppResult<docker::DockerMcp> {
     docker::mcp_version()
+}
+
+/// A sign-in that ends on its own: how long one may wait for the browser.
+const SIGN_IN_LIMIT: Duration = Duration::from_secs(10 * 60);
+
+/// Runs an account's sign-in command (`claude auth login`, `codex login`)
+/// with no terminal: the tool opens the default browser itself and waits for
+/// its answer on localhost. True when it signed in. Not in its own session,
+/// so a timeout never kills a browser the tool started.
+pub fn sign_in_run(argv: Vec<String>) -> AppResult<bool> {
+    let (program, args) = argv.split_first().ok_or_else(|| AppError::new("bad_args", "no sign-in command"))?;
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(args).env_clear().envs(crate::login_env::login_env());
+    match crate::engine_cli::run_limited(&mut cmd, SIGN_IN_LIMIT, false) {
+        Ok(crate::engine_cli::Ran::Exited { code, .. }) => Ok(code == Some(0)),
+        Ok(crate::engine_cli::Ran::TimedOut) => Ok(false),
+        Err(e) => Err(AppError::new("sign_in_failed", format!("couldn't start the sign-in: {e}"))),
+    }
 }
 
 pub fn projects_list() -> AppResult<projects::Projects> {

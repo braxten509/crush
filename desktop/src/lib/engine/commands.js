@@ -276,6 +276,11 @@ export async function dockerMcpVersion() {
   return invoke("docker_mcp_version");
 }
 
+// An account's sign-in with no terminal; resolves true once it signed in.
+export async function sign_in_run(argv) {
+  return invoke("sign_in_run", { argv });
+}
+
 // → {projects: [{path, data_dir, last_accessed, saved}]}
 export async function projectsList() {
   return invoke("projects_list");

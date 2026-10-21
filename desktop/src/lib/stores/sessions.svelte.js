@@ -13,6 +13,10 @@ export const sessions = $state({
   byId: {},
   order: [],
   currentId: "",
+  // New chat was asked for and the landing page is its empty chat: the list
+  // shows it as a row until a chat opens (owner, 2026-10-21). It is saved
+  // only at the first send (ensureSession).
+  draft: false,
   loaded: false,
   live: {}, // sid → true while a chat this window has not loaded is replying (1.5.3)
   opening: null, // null | {id, title, startedAt}: the chat a switch is opening (LIST-034)
@@ -556,6 +560,7 @@ async function showChat(id) {
   if (historyFailed) noteHistoryFailed(id);
   const old = sessions.currentId;
   sessions.currentId = id;
+  sessions.draft = false;
   if (sessions.opening?.id === id) sessions.opening = null;
   stamp(id, "live");
   delete sessions.live[id]; // its messages answer for it now (1.5.3)
@@ -578,6 +583,7 @@ export function showKept(id, { refresh = true } = {}) {
   if (!sessions.byId[id] && record) upsertSession(record);
   const old = sessions.currentId;
   sessions.currentId = id;
+  sessions.draft = false;
   stamp(id, "live");
   delete sessions.live[id];
   keepPromptsFor(id);
@@ -617,9 +623,8 @@ async function refreshKept(id) {
 // A working chat no longer blocks it (owner, 2026-10-21): it keeps working
 // in the list while the new one starts.
 export async function newChat() {
-  const sid = sessions.currentId;
-  if (!sid) return false;
-  showLanding();
+  sessions.draft = true;
+  if (sessions.currentId) showLanding();
   return true;
 }
 
@@ -638,6 +643,7 @@ export async function ensureSession() {
       readyChat(created.id);
       setFiles(created.id, []);
       sessions.currentId = created.id;
+      sessions.draft = false;
       keepPromptsFor(created.id);
       report(created.id);
       return created.id;

@@ -20,7 +20,8 @@
   import Icon from "../Icon.svelte";
   import { rowState } from "../../lib/rowstates.js";
   import { closeListed, openInFolder } from "../../lib/stores/openchats.svelte.js";
-  import { openChat } from "../../lib/stores/sessions.svelte.js";
+  import { focusField } from "../../lib/stores/composer.svelte.js";
+  import { openChat, sessions } from "../../lib/stores/sessions.svelte.js";
 
   let { row } = $props();
   let rowButton = $state(null);
@@ -28,13 +29,20 @@
   // A row of another folder (row.folder) opens in that folder: the window
   // switches to it first. The × closes the chat for every app (the open
   // chats shared with the terminal).
+  // The empty new chat (row.draft) is the landing page: a click shows it, the
+  // × takes the row away.
   function open() {
-    if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
+    if (row.draft) focusField();
+    else if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
     else openChat(row.id);
   }
 
   function close(event) {
     event.stopPropagation();
+    if (row.draft) {
+      sessions.draft = false;
+      return;
+    }
     closeListed(row.id).catch((error) => console.error("closing a chat failed", error));
   }
 

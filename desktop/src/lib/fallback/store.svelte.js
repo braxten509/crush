@@ -6,7 +6,7 @@
 import { api } from "../engine/api.js";
 import { onEvent } from "../engine/events.js";
 import { notify } from "../stores/ui.svelte.js";
-import { openTerminal, showTerminal } from "../terminal/tabs.svelte.js";
+import { sign_in_run } from "../engine/commands.js";
 
 export const fallback = $state({
   loaded: false,
@@ -57,19 +57,27 @@ export function saveOrder(order) {
   return saving;
 }
 
-// A terminal tab that runs the sign-in command (the tool's own login
-// screen opens in the browser).
-async function signInTab(login) {
+// Runs the sign-in command with no terminal: the tool opens the default
+// browser, and the list shows the account signed in once it finishes.
+async function signIn(login) {
   if (!login?.login_argv?.length) return;
-  const tab = await openTerminal({ argv: login.login_argv, title: `Sign in to ${login.account?.name ?? "the account"}` });
-  if (tab?.id) showTerminal(tab.id);
+  const name = login.account?.name ?? "the account";
+  notify("info", `Finish signing in to ${name} in your browser.`, 0);
+  let signedIn = false;
+  try {
+    signedIn = await sign_in_run(login.login_argv);
+  } finally {
+    await loadFallback();
+  }
+  if (signedIn) notify("info", `Signed in to ${name}.`);
+  else notify("error", `Signing in to ${name} didn't finish.`);
 }
 
 export async function addAccount(kind) {
   try {
     const login = await api.addAccount(kind);
     await loadFallback();
-    await signInTab(login);
+    await signIn(login);
   } catch (error) {
     notify("error", `Couldn't add the account: ${errorText(error)}`);
   }
@@ -77,7 +85,7 @@ export async function addAccount(kind) {
 
 export async function signInAccount(id) {
   try {
-    await signInTab(await api.signInAccount(id));
+    await signIn(await api.signInAccount(id));
   } catch (error) {
     notify("error", `Couldn't start the sign-in: ${errorText(error)}`);
   }

@@ -111,7 +111,7 @@ export async function startIn(what, dir) {
     return false;
   }
   if (what === "terminal") await startTerminal(dir);
-  else if (here) runAction("chat.new");
+  else runAction("chat.new");
   return true;
 }
 

@@ -545,6 +545,8 @@
   }
 
   // Each handler runs only while a chat shows; a false lets the key go on.
+  const editable = (el) => Boolean(el?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+
   function chatKey(fn) {
     return (event) => (shown && list ? fn(event) !== false : false);
   }
@@ -689,6 +691,9 @@
     if (!readOnly) {
       for (const [combos, fn] of TIMELINE_KEYS) for (const combo of combos) unbind.push(bindKey("timeline", combo, chatKey(fn)));
       for (const scope of ["timeline", "composer"]) unbind.push(bindKey(scope, "Ctrl+End", chatKey(jumpToEnd)));
+      // From the left list, the panel or nowhere, Ctrl+A selects the chat too,
+      // not the whole page (owner, 2026-10-21); a text box keeps its own.
+      unbind.push(bindKey("global", "Ctrl+A", chatKey((event) => !editable(event.target) && selectAll())));
     }
     unbind.push(bindKey("global", "Ctrl+C", chatKey(copyTimelineSelection)));
     if (!readOnly) unbind.push(bindKey("overlay", "*", heldSelectionKey));

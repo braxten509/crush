@@ -129,7 +129,13 @@ fieldKey("Tab", () => {
   return true;
 });
 
-for (const combo of ["Ctrl+A", "Home"]) fieldKey(combo, () => (C.caretToLineEdge("start"), true));
+// Ctrl+A selects all, as in any desktop text box (owner, 2026-10-21; the
+// terminal's line start stays on Home).
+fieldKey("Home", () => (C.caretToLineEdge("start"), true));
+fieldKey("Ctrl+A", () => {
+  field()?.select();
+  return true;
+});
 for (const combo of ["Ctrl+E", "End"]) fieldKey(combo, () => (C.caretToLineEdge("end"), true));
 fieldKey("Ctrl+Shift+A", () => {
   field()?.select();

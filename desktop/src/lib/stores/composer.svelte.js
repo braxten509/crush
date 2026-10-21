@@ -752,7 +752,7 @@ export function insertText(text) {
   typed({ before: value, value: next, caret: start + text.length, data: text });
 }
 
-// Ctrl+A and Home, Ctrl+E and End (TYPE-009): the caret to the start or the
+// Home, Ctrl+E and End (TYPE-009): the caret to the start or the
 // end of its line (the textarea's CursorStart and CursorEnd).
 export function caretToLineEdge(edge) {
   if (!field) return;

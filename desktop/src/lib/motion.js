@@ -67,9 +67,20 @@ export function slidePage(node, { dir = 1, duration = MOTION_MS, delay = 0, over
 }
 
 // A small piece settling in place (rows, notices, new messages); closing, it
-// sinks back and rolls up from its lower edge.
-export function settle(node, { duration = MOTION_MS, delay = 0, rise = RISE, off = false } = {}) {
-  return paper((t, u) => `transform: translateY(${(u * rise).toFixed(2)}px);${tick(t)}`, { duration, delay, off, away: (u) => unfoldInset("top", u) });
+// sinks back and rolls up from its lower edge. With `fold`, the room it
+// takes in the page grows and shrinks with it, so what lies below follows it
+// both ways instead of jumping once it has gone (owner, 2026-10-20).
+export function settle(node, { duration = MOTION_MS, delay = 0, rise = RISE, off = false, fold = false } = {}) {
+  const room = fold ? foldRoom(node) : () => "";
+  return paper((t, u) => `transform: translateY(${(u * rise).toFixed(2)}px);${room(t)}${tick(t)}`, { duration, delay, off, away: (u) => unfoldInset("top", u) });
+}
+
+// The piece's height and the space round it, scaled by t (Svelte's slide).
+export function foldRoom(node) {
+  const style = getComputedStyle(node);
+  const sides = ["height", "padding-top", "padding-bottom", "margin-top", "margin-bottom", "border-top-width", "border-bottom-width"];
+  const sizes = sides.map((side) => [side, parseFloat(style.getPropertyValue(side)) || 0]);
+  return (t) => ` overflow: hidden; ${sizes.map(([side, size]) => `${side}: ${(t * size).toFixed(2)}px;`).join(" ")}`;
 }
 
 // A sheet from the window's right edge (the Changes sheet): it slides its

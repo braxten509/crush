@@ -19,7 +19,7 @@
 </script>
 
 <div class="strip-anchor">
-  <div class="strip" role="group" aria-label="Usage" data-meter-strip transition:settle|global>
+  <div class="strip" role="group" aria-label="Usage" data-meter-strip transition:settle|global={{ fold: true }}>
     {#each model.meters as meter (meter.id)}
       <span class="item" data-meter={meter.id}>
         <span class="label">{meter.label}</span>

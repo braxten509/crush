@@ -121,6 +121,19 @@
   $effect.pre(() => {
     if (!ui.panelHidden) panelKept = true;
   });
+  // Its column's width glides with it both ways, so the conversation widens
+  // as the panel leaves, as it does beside the chat list (owner, 2026-10-20).
+  let panelGlide = $state(null);
+  let panelWas = ui.panelHidden;
+  let panelTimer = null;
+  $effect.pre(() => {
+    const hidden = ui.panelHidden;
+    if (hidden === panelWas) return;
+    panelWas = hidden;
+    panelGlide = hidden ? "close" : "open";
+    clearTimeout(panelTimer);
+    panelTimer = setTimeout(() => (panelGlide = null), hidden ? CLOSE_MS : MOTION_MS);
+  });
 
   // The chat list's width glides as it collapses to the strip (closing,
   // quicker) and back (opening); a divider drag stays instant (owner,
@@ -154,9 +167,12 @@
     class:panel-hidden={!panelKept}
     class:glide-open={glide === "open"}
     class:glide-close={glide === "close"}
+    class:panel-glide-open={panelGlide === "open"}
+    class:panel-glide-close={panelGlide === "close"}
     bind:this={page}
     style:--left={leftList.strip && !settingsOpen() ? STRIP_WIDTH : widths.left}
     style:--right={widths.right}
+    style:--panel={ui.panelHidden ? 0 : 1}
   >
     <Frame panel={panelKept} />
     <div class="column chats-column">
@@ -231,16 +247,31 @@
     bottom: calc(36 * var(--px));
     left: calc(30 * var(--px));
     display: grid;
+    /* --panel runs 1 to 0 as the panel leaves: at 0 the panel's divider
+       and column take no room, as with the panel hidden. */
     grid-template-columns:
       1px calc(var(--left) * var(--px)) 1px minmax(0, 1fr)
-      1px calc(var(--right) * var(--px)) 1px;
+      calc(var(--panel) * 1px) calc(var(--right) * var(--panel) * var(--px)) 1px;
     grid-template-rows: 1px minmax(0, 1fr) 1px;
+    transition-property: --left, --panel;
+    transition-duration: var(--left-glide, 0s), var(--panel-glide, 0s);
+    transition-timing-function: var(--left-ease, linear), var(--panel-ease, linear);
   }
   .page.glide-open {
-    transition: --left var(--motion) var(--ease-paper);
+    --left-glide: var(--motion);
+    --left-ease: var(--ease-paper);
   }
   .page.glide-close {
-    transition: --left var(--motion-quick) cubic-bezier(0.32, 0, 0.67, 0);
+    --left-glide: var(--motion-quick);
+    --left-ease: cubic-bezier(0.32, 0, 0.67, 0);
+  }
+  .page.panel-glide-open {
+    --panel-glide: var(--motion);
+    --panel-ease: var(--ease-paper);
+  }
+  .page.panel-glide-close {
+    --panel-glide: var(--motion-quick);
+    --panel-ease: cubic-bezier(0.32, 0, 0.67, 0);
   }
   /* Without the panel (D11) the conversation runs to the frame's right line. */
   .page.panel-hidden {

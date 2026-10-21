@@ -244,6 +244,11 @@ ul {
   inherits: false;
   initial-value: 0;
 }
+@property --panel {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
 /* Set on a scroller while its thumb shows. Nothing reads it: WebKitGTK
    redraws a scroll bar only when its scroller's own style changes, not when
    a class changes just the bar's look, so this is what puts the thumb on

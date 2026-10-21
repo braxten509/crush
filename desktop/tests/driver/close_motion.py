@@ -63,6 +63,25 @@ def closes(name, selector, close, settle=0.6):
     check(ok, f"{name} closes with motion ({rec})")
 
 
+# track(selector, side): every frame for 0.6 s, the element's rect side, to
+# show the room round a piece glides rather than jumps.
+def track(selector, side):
+    run(f"""
+      window.__track = [];
+      const el = document.querySelector({selector!r});
+      const t0 = performance.now();
+      const frame = () => {{ if (el) window.__track.push(Math.round(el.getBoundingClientRect()[{side!r}] * 10) / 10); if (performance.now() - t0 < 600) requestAnimationFrame(frame); }};
+      requestAnimationFrame(frame);
+      return true;
+    """)
+
+
+def glided(what):
+    values = run("return window.__track;") or []
+    between = {v for v in values if min(values or [0]) < v < max(values or [0])}
+    check(len(between) >= 3, f"{what} ({min(values or [0])}..{max(values or [0])}, {len(between)} values between)")
+
+
 def click_js(selector):
     return f"document.querySelector({selector!r}).click()"
 
@@ -72,10 +91,17 @@ time.sleep(1.5)
 ox, oy = window_geometry()[:2]
 
 # The right panel; then, with it hidden, the usage strip and the details overlay.
-closes("the right panel", ".panel-column", click_js('[data-probe="title-panel"]'))
+# The conversation widens as the panel leaves, not once it has gone (owner,
+# 2026-10-20), and narrows back as it comes.
+track("main.conversation", "width")
+closes("the right panel", ".panel-column", click_js('[data-probe="title-panel"]'), settle=0)
+glided("the conversation widens with the panel as it closes")
 run("window.__probe.runAction('details.toggle'); return true;")
 closes("the details overlay", ".details", "window.__probe.runAction('details.toggle')")
-closes("the usage strip", "[data-meter-strip]", click_js('[data-probe="title-panel"]'))
+time.sleep(0.6)
+track("main.conversation", "width")
+closes("the usage strip", "[data-meter-strip]", click_js('[data-probe="title-panel"]'), settle=0)
+glided("the conversation narrows with the panel as it opens")
 
 # A sheet and its scrim.
 run("window.__probe.openDialog('about'); return true;")
@@ -100,9 +126,22 @@ if check(bool(field), "the typing box is there"):
     closes("the / popup", '[data-probe="popup"]', lambda: key("Escape"))
     key("BackSpace")
 
-# A tool group's list.
+# A tool group's list; what lies below it rises with it as it closes.
 run(click_js(".timeline .tool-row[aria-expanded]") + "; return true;")
-closes("a tool group's list", ".timeline .group .list", click_js(".timeline .tool-row[aria-expanded]"))
+time.sleep(0.6)
+below = run("""
+  const list = document.querySelector('.timeline .group .list');
+  let el = list?.closest('.group');
+  while (el && !el.nextElementSibling) el = el.parentElement;
+  const next = el?.nextElementSibling;
+  if (next) next.setAttribute('data-probe-below', '');
+  return Boolean(next);
+""")
+if check(bool(below), "something lies below the tool group"):
+    track("[data-probe-below]", "top")
+closes("a tool group's list", ".timeline .group .list", click_js(".timeline .tool-row[aria-expanded]"), settle=0)
+if below:
+    glided("what lies below a tool group rises with its list as it closes")
 
 # The right-click menu on a message, closed with Esc.
 spot = run("const r = document.querySelector('.timeline .frame')?.getBoundingClientRect(); return r && [r.x + 40, r.y + 12];")

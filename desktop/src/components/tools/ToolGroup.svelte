@@ -211,7 +211,7 @@
       <button class="changes" type="button" bind:this={changesEl} onclick={openChanges}>Changes</button>
     {/if}
     {#if open}
-      <div class="list" bind:this={listEl} transition:settle>
+      <div class="list" bind:this={listEl} transition:settle={{ fold: true }}>
         {#if earlier > 0}
           <button class="earlier" type="button" onclick={() => showAll(openKey)}>… {earlier} earlier</button>
         {/if}

@@ -151,7 +151,7 @@
   </button>
   {#if shown && (hooks.length > 0 || view.agent || view.body.length > 0)}
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-    <div class="content" bind:this={content} transition:settle onpointerdown={bodyClick.onpointerdown} onclick={onBodyClick}>
+    <div class="content" bind:this={content} transition:settle={{ fold: true }} onpointerdown={bodyClick.onpointerdown} onclick={onBodyClick}>
       <HookLines lines={hooks} />
       {#if view.agent}
         <AgentTree bind:this={tree} {call} agent={view.agent} expanded={full} {workingDir} />

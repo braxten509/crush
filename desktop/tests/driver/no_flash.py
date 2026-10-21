@@ -4,8 +4,8 @@ clicks, the page records every running animation on every frame while the
 owner's paths run: opening the Themes sheet, switching Settings sections, back
 to the chats, opening a tool group, hovering the chat rows, opening the model
 menu. It fails when an animation fades a piece in from see-through (an opacity
-under 1 in its keyframes) anywhere but the scrim layer behind sheets
-(.veil::before), or when the settings page shows a frame with no rows during
+under 1 in its keyframes) anywhere but a scrim layer behind sheets
+(.scrim), or when the settings page shows a frame with no rows during
 a section switch. The veil itself once faded, and every sheet inside it faded
 with it (FLASHING.md, attempt 10).
 
@@ -90,7 +90,7 @@ started = run("""
       const target = a.effect?.target;
       if (!target) continue;
       // The scrim alone may fade: its own layer, under the sheets.
-      if (target.classList?.contains('veil') && a.effect.pseudoElement === '::before') continue;
+      if (target.classList?.contains('scrim')) continue;
       const fades = (a.effect.getKeyframes?.() ?? []).some((k) => k.opacity !== undefined && k.opacity !== '' && Number(k.opacity) < 0.99);
       const key = name(target) + (a.effect.pseudoElement || '') + '|' + (a.animationName || a.transitionProperty || 'svelte');
       if (fades && !seen.has(key)) { seen.add(key); window.__fades.push(key); }

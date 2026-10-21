@@ -2,14 +2,15 @@
   // The left column while Settings shows (owner, 2026-10-19: the chat list
   // swaps to the section names). The wordmark as on the chat list, "Back to
   // chats" where New chat sits, then one row per section; the chosen one has
-  // the chat list's band and vermilion edge. It slides in from the left.
+  // the chat list's band and vermilion edge. It slides in from the left, and
+  // back out over the returning chat list.
   import Icon from "../Icon.svelte";
   import Rule from "../Rule.svelte";
   import { slidePage } from "../../lib/motion.js";
   import { closeSettings, settingsPage, settingsSections } from "../../lib/settings/page.svelte.js";
 </script>
 
-<nav class="settings-nav" aria-label="Settings sections" in:slidePage={{ dir: -1 }}>
+<nav class="settings-nav" aria-label="Settings sections" transition:slidePage|global={{ dir: -1, overlay: true }}>
   <h1 class="wordmark"><span class="crush">Crush</span> <span class="ai">AI</span></h1>
 
   <button class="back" type="button" onclick={closeSettings}>

@@ -114,7 +114,7 @@ check(v["title"] == "Typing" and "Keep focus on the typing box" in v["rows"], f"
 # 3. Show the right panel off hides the panel in the chats, without the engine's compact mode.
 click(".settings-nav .row", "Appearance")
 click('[data-probe="settings-page"] [role="switch"][aria-label="Show the right panel"]')
-off = run("return document.querySelector('[aria-label=\"Show the right panel\"]').getAttribute('aria-checked');")
+off = run("return document.querySelector('[data-probe=\"settings-page\"] [aria-label=\"Show the right panel\"]').getAttribute('aria-checked');")
 check(off == "false", f"the Show the right panel switch turns off ({off})")
 click(".settings-nav button.back")
 v = view()

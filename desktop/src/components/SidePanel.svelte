@@ -107,9 +107,8 @@
 
 <style>
   /* Vertical positions follow the approved picture at 12/12 (column top = 0). */
-  /* Coming back, the panel settles in from the right (the paper motion). */
+  /* Coming and going, the panel slides from and to the right (App.svelte). */
   .panel {
-    animation: paper-slide-left var(--motion) var(--ease-paper);
     position: relative;
     display: flex;
     flex-direction: column;

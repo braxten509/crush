@@ -22,6 +22,7 @@
   // LIVE's 60-second hint, desktop-design-5-6 6.3) when it gives one.
   import { onDestroy } from "svelte";
   import { openDialog } from "../../lib/dialogs.js";
+  import { settle } from "../../lib/motion.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { selectItem } from "../../lib/stores/ui.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
@@ -210,7 +211,7 @@
       <button class="changes" type="button" bind:this={changesEl} onclick={openChanges}>Changes</button>
     {/if}
     {#if open}
-      <div class="list" bind:this={listEl}>
+      <div class="list" bind:this={listEl} transition:settle>
         {#if earlier > 0}
           <button class="earlier" type="button" onclick={() => showAll(openKey)}>… {earlier} earlier</button>
         {/if}
@@ -331,12 +332,12 @@
     color: var(--ink);
   }
   /* The open group continues the row's box (4.6). */
-  /* The calls settle in under the row (the paper motion); the box takes its
-     full height at once, so the timeline's measures never wait on it. */
+  /* The calls settle in under the row and roll up into it closing (the
+     paper motion); the box takes its full height at once, so the timeline's
+     measures never wait on it. */
   .list {
     border: 1px solid var(--rule-control);
     border-top: 0;
-    animation: paper-settle var(--motion) var(--ease-paper);
   }
   .list > :global(.entry + .entry),
   .list > .earlier + :global(.entry) {

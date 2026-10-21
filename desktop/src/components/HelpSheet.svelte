@@ -7,6 +7,7 @@
   // columns of key and action pairs under small-caps group labels. It is not
   // a sheet of the stack: keys keep their usual way (1.8). Placed by
   // OverlayHost.
+  import { unfold } from "../lib/motion.js";
   import { api } from "../lib/engine/api.js";
   import { sessions } from "../lib/stores/sessions.svelte.js";
   import { ui } from "../lib/stores/ui.svelte.js";
@@ -47,6 +48,7 @@
     role="region"
     aria-label="Keyboard help"
     data-help-sheet
+    transition:unfold={{ from: "top" }}
     style:left="{box.left}px"
     style:width="{box.width}px"
     style:bottom="{window.innerHeight - box.bottom}px"

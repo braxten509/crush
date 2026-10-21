@@ -91,6 +91,10 @@ describe("OverlayHost draws the stack", () => {
   let host;
   let target;
 
+  // jsdom runs no Web Animations: with the reduce-motion setting on, every
+  // open and close is instant (lib/motion.js), as in the app.
+  window.matchMedia ??= (query) => ({ matches: query.includes("reduce"), media: query, addEventListener() {}, removeEventListener() {} });
+
   // jsdom has no `inert` property; browsers (WebKitGTK included) reflect it
   // to the attribute, which is what this shim does.
   if (!("inert" in HTMLElement.prototype)) {

@@ -15,6 +15,7 @@
   //   toolCallIds           the run's calls, in order
   //   title                 what made the changes ("Ran 4 tools")
   import { onDestroy, onMount, tick } from "svelte";
+  import { drawer, scrim } from "../../lib/motion.js";
   import { closeDialog, frontDialog } from "../../lib/dialogs.js";
   import { api } from "../../lib/engine/api.js";
   import { bindKey } from "../../lib/keys.js";
@@ -225,8 +226,8 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="scrim" onclick={outside} oncontextmenu={(event) => event.preventDefault()}></div>
-<div class="panel" role="dialog" aria-modal="true" aria-label="Changes" tabindex="-1" bind:this={panel}>
+<div class="scrim" transition:scrim|global={{ to: 0.6 }} onclick={outside} oncontextmenu={(event) => event.preventDefault()}></div>
+<div class="panel" role="dialog" aria-modal="true" aria-label="Changes" tabindex="-1" bind:this={panel} transition:drawer|global>
   <span class="ruler" aria-hidden="true" {@attach size((rect) => (cell = rect.width / 10))}>0000000000</span>
   <header class="heading">
     <div class="titles">
@@ -305,23 +306,6 @@
     background: var(--paper);
     border-left: 1px solid var(--rule-frame);
     outline: none;
-    animation: slide-in var(--motion) var(--ease-paper);
-  }
-  /* --paper-tick keeps WebKit's copy of the transform current, so the sheet
-     doesn't jump back for a frame when the slide ends (app.css). */
-  @keyframes slide-in {
-    from {
-      transform: translateX(100%);
-      --paper-tick: 0;
-    }
-    to {
-      --paper-tick: 1;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .panel {
-      animation: none;
-    }
   }
   .ruler {
     position: absolute;

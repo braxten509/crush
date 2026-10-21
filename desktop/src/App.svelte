@@ -28,6 +28,7 @@
   import { COLUMN_LIMITS, dragColumn, fitColumns, loadColumns, saveColumns } from "./lib/columns.js";
   import { app_info } from "./lib/engine/commands.js";
   import { leftList } from "./lib/leftlist/store.svelte.js";
+  import { slidePage } from "./lib/motion.js";
   import { settingsOpen } from "./lib/settings/page.svelte.js";
   import { mainView } from "./lib/mainview.js";
   import { focusField } from "./lib/stores/composer.svelte.js";
@@ -113,6 +114,14 @@
     return () => observer.disconnect();
   });
 
+  // The panel's column stays while the panel slides away (lib/motion.js:
+  // owner, 2026-10-20, everything closes as it opens), then gives its room
+  // to the conversation.
+  let panelKept = $state(!ui.panelHidden);
+  $effect.pre(() => {
+    if (!ui.panelHidden) panelKept = true;
+  });
+
   // Join the engine once the page is up (connection.svelte.js).
   onMount(() => {
     start();
@@ -127,12 +136,12 @@
 <div class="sheet" data-probe="shell">
   <div
     class="page"
-    class:panel-hidden={ui.panelHidden}
+    class:panel-hidden={!panelKept}
     bind:this={page}
     style:--left={leftList.strip && !settingsOpen() ? STRIP_WIDTH : widths.left}
     style:--right={widths.right}
   >
-    <Frame panel={!ui.panelHidden} />
+    <Frame panel={panelKept} />
     <div class="column chats-column">
       {#if settingsOpen()}
         <SettingsNav />
@@ -163,7 +172,7 @@
         </EngineGate>
       </div>
     </div>
-    {#if !ui.panelHidden}
+    {#if panelKept}
       <ColumnDivider
         side="right"
         column="5"
@@ -174,9 +183,11 @@
         ondrag={drag}
         ondone={done}
       />
-      <div class="column panel-column">
-        <SidePanel />
-      </div>
+      {#if !ui.panelHidden}
+        <div class="column panel-column" transition:slidePage|global={{ dir: 1 }} onoutroend={() => (panelKept = false)}>
+          <SidePanel />
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -213,7 +224,10 @@
     grid-template-columns: 1px calc(var(--left) * var(--px)) 1px minmax(0, 1fr) 1px;
   }
 
+  /* Positioned, so a piece closing over its replacement lies on the column
+     (lib/motion.js, overlay). */
   .column {
+    position: relative;
     grid-row: 2;
     display: flex;
     flex-direction: column;

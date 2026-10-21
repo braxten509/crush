@@ -9,6 +9,7 @@
   // it (keypress.go:401-405); Ctrl+D toggles it (lib/plugins/panel.js). It is
   // drawn only while the panel is hidden and a chat is shown (draw.go:155,
   // :333). Placed by OverlayHost.
+  import { unfold } from "../../lib/motion.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { ui } from "../../lib/stores/ui.svelte.js";
@@ -63,6 +64,7 @@
 
 {#if open && box && info}
   <div
+    transition:unfold={{ from: "top" }}
     class="details"
     role="region"
     aria-label="Chat details"

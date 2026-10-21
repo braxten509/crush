@@ -31,6 +31,7 @@
 
 <script>
   import { onMount, tick } from "svelte";
+  import { unfold } from "../../lib/motion.js";
   import { closeDialog, dialogs, frontDialog } from "../../lib/dialogs.js";
   import { focusables, setSheet } from "../../lib/kit/sheetkeys.js";
   import { focusField } from "../../lib/stores/composer.svelte.js";
@@ -115,13 +116,23 @@
     const active = document.activeElement;
     opener = active instanceof HTMLElement && active !== document.body && !frame.contains(active) ? active : null;
     focusInside();
-    const off = setSheet(id, { onKey: () => onKey, root: () => frame, report, heavy });
+    off = setSheet(id, { onKey: () => onKey, root: () => frame, report, heavy });
     return () => {
-      off();
-      const back = opener;
-      queueMicrotask(() => giveBack(back));
+      release();
     };
   });
+
+  // Closing, the sheet rolls up first (lib/motion.js); the keys and the focus
+  // go back as it starts, not when it has gone.
+  let released = false;
+  function release() {
+    if (released) return;
+    released = true;
+    off?.();
+    const back = opener;
+    queueMicrotask(() => giveBack(back));
+  }
+  let off = null;
 
   // Back in front (the sheet over it closed, or it was opened again).
   $effect(() => {
@@ -280,6 +291,8 @@
     style:--sheet-h={maxHeight}
     bind:this={frame}
     onfocusin={(event) => (lastFocus = event.target)}
+    onoutrostart={release}
+    transition:unfold|global={{ from: "top" }}
   >
     {#if !docked}
       <span class="edge top" aria-hidden="true"></span>
@@ -351,8 +364,6 @@
     color: var(--ink);
     pointer-events: auto;
     outline: none;
-    /* The sheet unrolls from its top edge (app.css, the paper motion). */
-    animation: paper-unfold var(--motion) var(--ease-paper);
   }
   .frame.capped {
     max-height: min(calc(var(--sheet-h) * var(--px)), 100%);

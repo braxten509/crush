@@ -4,7 +4,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { settle, slidePage, unfold } from "./lib/motion.js";
+import { CLOSE_MS, drawer, scrim, settle, slidePage, unfold } from "./lib/motion.js";
 
 const SRC = new URL(".", import.meta.url).pathname;
 
@@ -53,10 +53,19 @@ describe("animation ticks", () => {
     expect(body).toMatch(/--paper-tick:\s*1/);
   });
 
-  // Svelte transitions become the same kind of animation.
-  it.each([["unfold", unfold], ["slidePage", slidePage], ["settle", settle]])("%s runs --paper-tick", (_, motion) => {
-    const { css } = motion(null);
-    expect(css(0, 1)).toMatch(/--paper-tick: 0\.000;/);
-    expect(css(1, 0)).toMatch(/--paper-tick: 1\.000;/);
+  // Svelte transitions become the same kind of animation, both ways; closing
+  // is quicker and, but for the scrim, ends wholly clipped away (the scrim fades
+  // out, the drawer leaves the window).
+  it.each([["unfold", unfold], ["slidePage", slidePage], ["settle", settle], ["scrim", scrim], ["drawer", drawer]])("%s runs --paper-tick opening and closing", (name, motion) => {
+    for (const direction of ["in", "out"]) {
+      const { css, duration } = motion(null)({ direction });
+      expect(css(0, 1)).toMatch(/--paper-tick: 0\.000;/);
+      expect(css(1, 0)).toMatch(/--paper-tick: 1\.000;/);
+      if (direction === "out") {
+        expect(duration).toBe(CLOSE_MS);
+        if (name === "drawer") expect(css(0, 1)).toMatch(/translateX\(100\.00%\)/);
+        else if (name !== "scrim") expect(css(0, 1)).toMatch(/clip-path: inset\([^)]*100\.00%/);
+      }
+    }
   });
 });

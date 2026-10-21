@@ -9,6 +9,7 @@
   // popup over the palette's commands: the name in the text face, its
   // shortcut in --mark at the right, the box as wide as its longest row.
   import { untrack } from "svelte";
+  import { unfold } from "../../lib/motion.js";
   import { MAX_ROWS, popupColumns } from "../../lib/composer/mentions.js";
   import { composer, fieldElement, focusRow, pickRow } from "../../lib/stores/composer.svelte.js";
 
@@ -147,6 +148,7 @@
     tabindex="-1"
     data-probe="popup"
     bind:this={box}
+    transition:unfold|global={{ from: "bottom" }}
     style:--columns={columns}
     style:left={place ? `${place.left}px` : null}
     style:top={place ? `${place.top}px` : null}
@@ -187,7 +189,6 @@
     font: var(--t-code);
     color: var(--ink);
     user-select: none;
-    animation: paper-unfold-up var(--motion) var(--ease-paper);
   }
   .row {
     display: flex;

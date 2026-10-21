@@ -489,7 +489,8 @@ $effect.root(() => {
 // -- The probe's `terminal` section (8.2) --
 
 export function probeLight() {
-  const box = typeof document === "undefined" ? null : document.querySelector('[data-sheet="terminal_close"]');
+  // A box rolling away as it closes is inert (lib/motion.js), and already shut.
+  const box = typeof document === "undefined" ? null : document.querySelector('[data-sheet="terminal_close"]:not([inert])');
   const tokens = typeof document === "undefined" ? null : themeFromPage();
   return {
     shown: shownId(),

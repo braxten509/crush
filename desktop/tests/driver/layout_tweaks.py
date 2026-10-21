@@ -117,6 +117,15 @@ buttons = run("""
 check(buttons.get("texts") == ["New chat", "New terminal"], f"New chat and New terminal share a row ({buttons})")
 check(buttons and abs(buttons["widths"][0] - buttons["widths"][1]) <= 1 and buttons["tops"][0] == buttons["tops"][1], f"in equal halves ({buttons})")
 check(buttons and all(buttons["whole"]), f"their words are whole with the list at its narrowest ({buttons})")
+# And New terminal keeps as much room after its words as before its icon
+# (owner, 2026-10-20: the right side was tighter at the narrowest).
+pads = run("""
+  const b = document.querySelectorAll('nav.chats .new-row > button')[1];
+  const box = b.getBoundingClientRect(), icon = b.querySelector('svg').getBoundingClientRect();
+  const range = document.createRange(); range.selectNodeContents(b.querySelector('.label'));
+  return { left: icon.left - box.left, right: box.right - range.getBoundingClientRect().right };
+""") or {}
+check(pads.get("left") is not None and pads["right"] >= pads["left"] - 0.5, f"New terminal's room after its words is at least the room before its icon ({pads})")
 
 # The panel at its narrowest: every meter's words whole and apart.
 press_on("Resize the project panel", "shift+Right", 15)

@@ -11,6 +11,7 @@
   // marked bare: no scrim behind it, while the page behind stays inert
   // (desktop-design-5-6 2.13, 5.1).
   import { dialogs, frontDialog } from "../../lib/dialogs.js";
+  import { scrim } from "../../lib/motion.js";
   import { ui } from "../../lib/stores/ui.svelte.js";
   import HelpSheet from "../HelpSheet.svelte";
   import DetailsOverlay from "../panel/DetailsOverlay.svelte";
@@ -24,6 +25,14 @@
 
 <HelpSheet />
 <DetailsOverlay />
+
+<!-- The scrim fades on its own layer under the sheets, in and out. Fading
+     the veil itself faded every sheet inside it in from see-through, and
+     WebKit then showed an older frame as the fade ended: the Themes sheet
+     flickered on every open (FLASHING.md, attempt 10). -->
+{#if dialogs.length > 0 && !bare}
+  <div class="scrim" aria-hidden="true" transition:scrim></div>
+{/if}
 
 {#if dialogs.length > 0}
   <div class="veil" class:bare data-veil={bare ? "none" : "veil"}>
@@ -52,19 +61,11 @@
     inset: var(--titlebar) 0 0;
     z-index: 10;
   }
-  /* The scrim fades in on its own layer under the sheets. Fading the veil
-     itself faded every sheet inside it in from see-through, and WebKit then
-     showed an older frame as the fade ended: the Themes sheet flickered on
-     every open (FLASHING.md, attempt 10). */
-  .veil::before {
-    content: "";
-    position: absolute;
-    inset: 0;
+  .scrim {
+    position: fixed;
+    inset: var(--titlebar) 0 0;
+    z-index: 10;
     background: var(--scrim);
-    animation: paper-fade var(--motion-quick) ease-out;
-  }
-  .veil.bare::before {
-    content: none;
   }
   /* Each sheet gets the whole window to place itself in; the front one is last, so on top. */
   .sheet {

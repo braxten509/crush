@@ -4,7 +4,9 @@
   // field: per meter the small-caps label, a 60 × 4 bar and the percent (both
   // amber under 30 % left, rose under 10 %), 20 apart from the field's left
   // edge; then the token count when "Tokens used" is on (SIDE-019). It takes no room of
-  // its own, so nothing moves when it comes and goes. Placed by Conversation.
+  // its own, so nothing moves when it comes and goes; it settles in and rolls
+  // away (lib/motion.js). Placed by Conversation.
+  import { settle } from "../../lib/motion.js";
   import { meterNow } from "./panel.svelte.js";
 
   let now = $state(Date.now());
@@ -17,7 +19,7 @@
 </script>
 
 <div class="strip-anchor">
-  <div class="strip" role="group" aria-label="Usage" data-meter-strip>
+  <div class="strip" role="group" aria-label="Usage" data-meter-strip transition:settle|global>
     {#each model.meters as meter (meter.id)}
       <span class="item" data-meter={meter.id}>
         <span class="label">{meter.label}</span>

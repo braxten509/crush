@@ -165,7 +165,7 @@
   style:left={place ? `${place.left}px` : null}
   style:top={place ? `${place.top}px` : null}
   style:visibility={place ? null : "hidden"}
-  transition:unfold={{ from: place?.from ?? "bottom" }}
+  transition:unfold|global={{ from: place?.from ?? "bottom" }}
 >
   <div class="groups" data-column="groups" role="listbox" aria-label="Agents and providers">
     <h3 class="label">Agent</h3>

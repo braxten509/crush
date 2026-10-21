@@ -32,6 +32,7 @@
   // it, a scroll gesture, the window losing focus or a run closes it (the
   // demo's core.js:337-343). A disabled entry shows its hint under it.
   // Placed by OverlayHost while ui.menu is set: {x, y, ctx} (Timeline).
+  import { unfold } from "../../lib/motion.js";
   import { onMount } from "svelte";
   import { bindKey } from "../../lib/keys.js";
   import { menuItems } from "../../lib/menu.js";
@@ -123,6 +124,7 @@
   style:left="{(place ?? menu).x}px"
   style:top="{(place ?? menu).y}px"
   style:visibility={place ? null : "hidden"}
+  transition:unfold|global={{ from: "top" }}
 >
   {#each entries as entry, i (entry.id)}
     <button
@@ -156,7 +158,6 @@
     background: var(--paper-raised);
     border: 1px solid var(--rule-control);
     outline: none;
-    animation: paper-unfold var(--motion) var(--ease-paper);
   }
   /* 36 tall: a 26 line between 5 above and 5 below. */
   .entry {

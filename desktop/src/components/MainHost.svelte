@@ -4,15 +4,17 @@
   // (TERM), drawn in the conversation's place. App keeps the conversation
   // mounted underneath, hidden, while it shows.
   // Its notices show here too (owner, 2026-10-20: a message appears where the
-  // person is working); a helper's chat draws its own line.
+  // person is working); a helper's chat draws its own line. Closing, it
+  // slides away over the conversation coming back (lib/motion.js).
   import { mainView } from "../lib/mainview.js";
+  import { slidePage } from "../lib/motion.js";
   import NoticeLine from "./NoticeLine.svelte";
 
   const view = $derived(mainView.current);
 </script>
 
 {#if view}
-  <div class="main-view" data-main-view={view.kind}>
+  <div class="main-view" data-main-view={view.kind} out:slidePage|global={{ dir: 1, overlay: true }}>
     {#key view.key ?? view.kind}
       <view.component {...view.props} />
     {/key}

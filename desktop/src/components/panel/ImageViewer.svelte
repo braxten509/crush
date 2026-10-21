@@ -8,6 +8,7 @@
   // Esc closes; focus stays inside while it is open and goes back to what
   // opened it. Its keys take the overlay scope, which is the only one asked
   // while the viewer is open (lib/keys.js). Placed by OverlayHost.
+  import { unfold } from "../../lib/motion.js";
   import { untrack } from "svelte";
   import { file_read } from "../../lib/engine/commands.js";
   import { bindKey } from "../../lib/keys.js";
@@ -185,7 +186,7 @@
 </script>
 
 {#if open}
-  <div class="viewer" role="dialog" aria-modal="true" aria-label="Picture {name}" tabindex="-1" data-image-viewer bind:this={root}>
+  <div class="viewer" role="dialog" aria-modal="true" aria-label="Picture {name}" tabindex="-1" data-image-viewer bind:this={root} transition:unfold={{ from: "top" }}>
     <div class="bar">
       <p class="name" title={name}>{name}</p>
       {#if size}<p class="size">{size}</p>{/if}

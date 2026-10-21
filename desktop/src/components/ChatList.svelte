@@ -211,8 +211,10 @@
   }
 
   // The list width New chat and New terminal need with their words whole
-  // (owner, 2026-10-20): each half's content, twice, plus the gap and what
-  // the list keeps around the row. Measured again on a zoom change.
+  // (owner, 2026-10-20): each half's content with as much room after the
+  // words as before the icon (owner, 2026-10-20: the right side was
+  // tighter), twice, plus the gap and what the list keeps around the row.
+  // Measured again on a zoom change.
   let newRow = $state(null);
   $effect(() => {
     if (!newRow) return;
@@ -222,7 +224,7 @@
       const need = (b) => {
         const style = getComputedStyle(b);
         const parts = [...b.children].reduce((sum, c) => sum + c.getBoundingClientRect().width + parseFloat(getComputedStyle(c).marginLeft), 0);
-        return parts + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + 2 * parseFloat(style.borderLeftWidth) + 2;
+        return parts + 2 * parseFloat(style.paddingLeft) + 2 * parseFloat(style.borderLeftWidth) + 2;
       };
       const gap = parseFloat(getComputedStyle(newRow).columnGap) || 0;
       const row = Math.max(...halves.map(need)) * halves.length + gap * (halves.length - 1);

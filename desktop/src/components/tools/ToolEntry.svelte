@@ -14,6 +14,7 @@
   //   sessionId   the chat
   //   xOffset     side-scroll of its diff
   import { onDestroy } from "svelte";
+  import { settle } from "../../lib/motion.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { selectItem } from "../../lib/stores/ui.svelte.js";
   import { singleClick } from "../../lib/tools/click.js";
@@ -150,7 +151,7 @@
   </button>
   {#if shown && (hooks.length > 0 || view.agent || view.body.length > 0)}
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-    <div class="content" bind:this={content} onpointerdown={bodyClick.onpointerdown} onclick={onBodyClick}>
+    <div class="content" bind:this={content} transition:settle onpointerdown={bodyClick.onpointerdown} onclick={onBodyClick}>
       <HookLines lines={hooks} />
       {#if view.agent}
         <AgentTree bind:this={tree} {call} agent={view.agent} expanded={full} {workingDir} />
@@ -217,8 +218,6 @@
   .body-box {
     min-width: 0;
   }
-  /* The call's output settles in under its line (the paper motion). */
-  .content {
-    animation: paper-settle var(--motion) var(--ease-paper);
-  }
+  /* The call's output settles in under its line and rolls up into it
+     closing (the paper motion, on the element). */
 </style>

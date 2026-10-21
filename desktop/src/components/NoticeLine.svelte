@@ -25,6 +25,7 @@
   // help line. The page's line steps aside while a sheet is open, so a
   // message shows where the person is working (owner, 2026-10-20).
   import { dialogs } from "../lib/dialogs.js";
+  import { settle } from "../lib/motion.js";
   import { clearNotice, ui } from "../lib/stores/ui.svelte.js";
   import Icon from "./Icon.svelte";
 
@@ -40,7 +41,7 @@
 
 <div class="notice-anchor" class:inline data-notice-anchor>
   {#if notice}
-    <div class="notice {notice.kind}" role="status" aria-live="polite" data-notice-kind={notice.kind}>
+    <div class="notice {notice.kind}" role="status" aria-live="polite" data-notice-kind={notice.kind} transition:settle|global={{ off: inline }}>
       <span class="mark"><Icon name={NOTICE_ICON[notice.kind] ?? "info"} size={16} /></span>
       <span class="text">{notice.text}</span>
       {#if notice.action?.label}
@@ -62,7 +63,6 @@
     z-index: 2;
   }
   .notice {
-    animation: paper-settle var(--motion) var(--ease-paper);
     position: absolute;
     left: 0;
     right: 0;
@@ -105,7 +105,6 @@
     position: static;
     padding: 0 calc(26 * var(--px));
     background: none;
-    animation: none;
   }
   /* The close cross: small to see, 24 real pixels to hit. */
   .dismiss {

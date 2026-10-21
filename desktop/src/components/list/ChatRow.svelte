@@ -1,12 +1,12 @@
 <script>
   // One chat in the left list ({row} from leftlist/openlist.listedRows): the
-  // title, the chat's folder under it ("~" for home, as the terminal's list
-  // writes it), and on the right the time or what the chat is doing
+  // title (its folder is the heading it sits under, owner 2026-10-21), and
+  // on the right the time or what the chat is doing
   // (LIST-012: "Working…", "Waiting for permission", "Waiting for your
   // answer", "Background"). The time keeps the picture's place on the row's
   // middle line; a hidden copy of it holds a column of the row's width, so a
-  // long title ends before the time instead of under it. The state shares the
-  // folder's line and the folder gives way to it. Rows deeper than the top use
+  // long title ends before the time instead of under it. The state sits on the
+  // second line. Rows deeper than the top use
   // the built branch look (phase 4 nests branches, 4.8).
   //
   // Every row reserves a close slot on the title's first line, centred on the
@@ -67,7 +67,6 @@
   >
     <span class="title">{row.title}</span>
     <span class="line2">
-      {#if row.agent}<span class="agent">{row.agent}</span>{/if}
       {#if row.state}
         <span class="state {row.stateKind}">
           <Icon name={STATE_ICONS[row.stateKind] ?? "working"} />
@@ -108,7 +107,7 @@
 
   /* Columns: the text, the time's room, and the 48 picture px the time keeps
      from the row's right edge (with the chevron in it). Rows: the title line
-     and the agent line. */
+     and the state line. */
   .row {
     position: relative;
     display: grid;
@@ -143,15 +142,6 @@
   .has-state .line2 {
     grid-column: 1 / -1;
     padding-right: calc(24 * var(--px));
-  }
-  .agent {
-    flex: 0 1 auto;
-    min-width: 0;
-    font: var(--t-meta);
-    color: var(--slate);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .state {
     display: flex;
@@ -241,10 +231,6 @@
   }
   .branch .line2 {
     margin-top: 0;
-  }
-  .branch .agent {
-    font: var(--t-meta);
-    line-height: calc(20 * var(--px));
   }
   .branch .time {
     top: calc(25 * var(--px));

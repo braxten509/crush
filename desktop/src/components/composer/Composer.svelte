@@ -16,6 +16,7 @@
   import Popup from "./Popup.svelte";
   import Slot from "./Slot.svelte";
   import { composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
+  import { closeListed } from "../../lib/stores/openchats.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { closeSlot, openSlot, ui } from "../../lib/stores/ui.svelte.js";
 
@@ -78,6 +79,10 @@
     fullTop = column && rule ? rule.getBoundingClientRect().bottom - column.getBoundingClientRect().top : 0;
   });
 
+  function complete() {
+    closeListed(sessionId).catch((error) => console.error("completing a chat failed", error));
+  }
+
   function submit(event) {
     event.preventDefault();
     send();
@@ -97,6 +102,16 @@
   {#if ui.slot}
     <Slot entry={ui.slot} />
   {:else}
+    {#if sessionId}
+      <!-- Complete (owner, 2026-10-21, pick A): closes the shown chat for
+           every app, as the list's × does. -->
+      <div class="complete-row">
+        <button class="complete" type="button" onclick={complete}>
+          <Icon name="check" />
+          <span>Complete</span>
+        </button>
+      </div>
+    {/if}
     {#if hasChips()}<ChipRow />{/if}
     <form class="row" onsubmit={submit} in:settle>
       <div class="field" class:marked={mode !== "normal"}>
@@ -181,6 +196,38 @@
   /* Square, as tall as the one-line field; the plane's drawing is balanced
      in its own box, so it sits in the exact middle (owner, 2026-10-20: the
      old nudge to the right read as off-centre). */
+  .complete-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: calc(12 * var(--px));
+  }
+  .composer.chipped .complete-row {
+    margin-top: calc(15 * var(--px));
+  }
+  .complete {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--px));
+    box-sizing: border-box;
+    height: calc(36 * var(--px));
+    padding: 0 calc(16 * var(--px));
+    border: 0;
+    background: var(--vermilion-fill);
+    color: var(--on-accent);
+    font: var(--t-button);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .complete:hover span {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: calc(4 * var(--px));
+  }
+  .complete:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
+  }
+
   .send {
     flex: none;
     align-self: flex-end;

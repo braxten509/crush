@@ -614,13 +614,11 @@ async function refreshKept(id) {
 
 // LIST-033 (newSessionFromKey and newSession, internal/ui/model/session.go:
 // 317-420): the landing state, where the next send makes the chat (TYPE-041).
+// A working chat no longer blocks it (owner, 2026-10-21): it keeps working
+// in the list while the new one starts.
 export async function newChat() {
   const sid = sessions.currentId;
   if (!sid) return false;
-  if (busy(sid)) {
-    notify("warn", "Agent is busy, please wait before starting a new session...");
-    return false;
-  }
   showLanding();
   return true;
 }

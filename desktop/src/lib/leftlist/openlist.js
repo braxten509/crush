@@ -1,7 +1,7 @@
 // The left list's rows: the open chats the desktop shares with the terminal's
 // session list (internal/openchats; owner, 2026-10-20: "the two should be in
-// sync"), in the list's own order, one flat list with each chat's folder as
-// its second line (owner's pick A). Pure, so the rules are unit-tested.
+// sync"), in the list's own order, each with its folder ({dir}), then grouped
+// under their folders (folderGroups). Pure, so the rules are unit-tested.
 //
 // A chat of the window's folder is drawn from the sessions store, with what
 // it is doing; its open branches hang under it, or under the nearest open
@@ -57,7 +57,7 @@ export function listedRows(open, options = {}) {
   const rows = [];
   for (const c of chats) {
     if (families.has(c.id)) {
-      rows.push(...families.get(c.id));
+      rows.push(...families.get(c.id).map((row) => ({ ...row, dir: c.dir })));
       continue;
     }
     if (here(c.dir) && byId[c.id]) continue; // a branch, under its chat
@@ -78,7 +78,22 @@ export function listedRows(open, options = {}) {
       branches: 0,
       expanded: false,
       folder: here(c.dir) ? null : { dir: c.dir },
+      dir: c.dir,
     });
   }
   return rows;
+}
+
+// The rows under their folders (owner, 2026-10-21): every kept folder in its
+// kept order, then any other folder a row has, in the rows' order. A kept
+// folder with no open chat still shows, with no rows. key(dir) makes one
+// folder's paths equal.
+export function folderGroups(rows, kept = [], key = (dir) => dir) {
+  const order = [];
+  for (const dir of [...kept, ...rows.map((r) => r.dir ?? "")]) {
+    if (!dir) continue;
+    const k = key(dir);
+    if (k && !order.includes(k)) order.push(k);
+  }
+  return order.map((dir) => ({ dir, rows: rows.filter((r) => key(r.dir ?? "") === dir) }));
 }

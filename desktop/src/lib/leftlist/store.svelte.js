@@ -4,11 +4,14 @@
 // settings, so every window and the next start agree), or while the page is
 // too narrow to hold it (forced; the saved choice is kept, as the terminal's
 // listOpen, internal/ui/sessionhost/host.go:443-446).
+import { runAction } from "../actions.js";
 import { COLUMN_LIMITS } from "../columns.js";
 import { hasDialog, openDialog } from "../dialogs.js";
 import { settings_set } from "../engine/commands.js";
+import { conn, inFolder, switchFolder } from "../stores/connection.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { openTerminal } from "../terminal/tabs.svelte.js";
+import { clean } from "./picker.js";
 
 export const leftList = $state({
   collapsed: false, // the saved choice
@@ -95,6 +98,21 @@ export function newChat() {
 
 export function newTerminal() {
   return openPicker("terminal");
+}
+
+// A new chat or terminal tab in dir (the folder picker, a folder heading's
+// "+"). Another folder: the window switches to it in place first (owner,
+// 2026-10-20: the folder is per chat), then a chat starts on the landing page
+// the switch leaves, or the terminal opens there.
+export async function startIn(what, dir) {
+  const here = clean(dir) === clean(conn.project.cwd || "") || inFolder(dir);
+  if (!here && !(await switchFolder(dir))) {
+    notify("error", what === "terminal" ? "Couldn't start the terminal." : "Couldn't start a chat.");
+    return false;
+  }
+  if (what === "terminal") await startTerminal(dir);
+  else if (here) runAction("chat.new");
+  return true;
 }
 
 // A terminal tab in dir; a shell that can't start shows as a notice.

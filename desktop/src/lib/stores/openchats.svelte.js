@@ -10,6 +10,7 @@ import { openChatsAdd, openChatsGet, openChatsRemove } from "../engine/commands.
 import { onEvent } from "../engine/events.js";
 import { chatClosed } from "../remote/share.js";
 import { conn, inFolder, switchFolder } from "./connection.svelte.js";
+import { keepFolders } from "./listfolders.svelte.js";
 import { isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
 
 export const openChats = $state({ list: [], loaded: false });
@@ -34,6 +35,8 @@ async function read() {
   // A chat closed in the terminal stops its phone share (owner, 2026-10-21).
   for (const c of before) if (!openChats.list.some((n) => n.id === c.id)) chatClosed(c.id);
   openChats.loaded = true;
+  // Their folders stay in the left list after their last chat closes.
+  keepFolders(openChats.list.map((c) => c.dir));
   setOpenChats(openChats.list.map((c) => c.id));
   preloadOpen();
   const shown = sessions.currentId;

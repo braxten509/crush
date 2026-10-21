@@ -10,7 +10,8 @@ import { openChats, openInFolder } from "../stores/openchats.svelte.js";
 import { parentOf } from "../stores/links.svelte.js";
 import { busy, openChat, sessions } from "../stores/sessions.svelte.js";
 import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
-import { listedRows } from "./openlist.js";
+import { folderGroups, listedRows } from "./openlist.js";
+import { folderKey, listFolders } from "../stores/listfolders.svelte.js";
 import { baseOf, clean, short } from "./picker.js";
 import { leftList } from "./store.svelte.js";
 
@@ -26,7 +27,21 @@ export function folderLabel(dir) {
   return dir ? baseOf(short(clean(dir), leftList.home)) : "";
 }
 
+// The chats under their folders (owner, 2026-10-21): [{dir, label, rows}],
+// the kept folders first (lib/stores/listfolders.svelte.js).
+export function chatGroups(now = Date.now()) {
+  return folderGroups(listedChats(now), listFolders.dirs, folderKey).map((group) => ({
+    ...group,
+    label: short(group.dir, leftList.home),
+  }));
+}
+
+// The chat rows in the list's drawn order, folder by folder.
 export function chatRows(now = Date.now()) {
+  return chatGroups(now).flatMap((group) => group.rows);
+}
+
+function listedChats(now) {
   return listedRows(openChats.list, {
     byId: sessions.byId,
     parentOf,

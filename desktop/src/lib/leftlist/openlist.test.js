@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listedRows } from "./openlist.js";
+import { folderGroups, listedRows } from "./openlist.js";
 
 const here = (dir) => dir === "/p/here";
 const session = (id, extra = {}) => ({ id, title: `Chat ${id}`, updated_at: 100, created_at: 1, ...extra });
@@ -51,5 +51,26 @@ describe("listedRows", () => {
   it("names a chat of another folder from the catalog when it has it", () => {
     const rows = listedRows([{ id: "x", dir: "/p/other", title: "New Session" }], { here, catalog: { x: { ID: "x", Title: "Named", UpdatedAt: 50 } } });
     expect([rows[0].title, rows[0].at]).toEqual(["Named", 50]);
+  });
+});
+
+describe("folderGroups", () => {
+  it("puts each chat, branches too, under its folder; kept folders first, even empty", () => {
+    const byId = { a: session("a"), branch: session("branch", { created_at: 2 }) };
+    const open = [
+      { id: "x", dir: "/p/other/" },
+      { id: "a", dir: "/p/here" },
+      { id: "branch", dir: "/p/here" },
+      { id: "y", dir: "/p/new" },
+    ];
+    const rows = listedRows(open, { byId, parentOf: (id) => (id === "branch" ? "a" : null), here, selectedId: "branch" });
+    const key = (dir) => dir.replace(/\/+$/u, "");
+    const groups = folderGroups(rows, ["/p/empty", "/p/here", "/p/other"], key);
+    expect(groups.map((g) => [g.dir, g.rows.map((r) => r.id)])).toEqual([
+      ["/p/empty", []],
+      ["/p/here", ["a", "branch"]],
+      ["/p/other", ["x"]],
+      ["/p/new", ["y"]],
+    ]);
   });
 });

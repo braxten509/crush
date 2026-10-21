@@ -40,7 +40,8 @@ var ErrHighlightOverlapsLink = errors.New("highlight overlaps a link")
 // map from old to new message IDs.
 //
 // The extras are the ones every copy brings (copyMessages and
-// copyChatExtras). The source chat's rows, head and revision are only read.
+// copyChatExtras), but not the to-do list: a sub-chat starts with none
+// (copyTodos). The source chat's rows, head and revision are only read.
 // The overlap check runs in the same transaction, so two branches cut over
 // the same words at once cannot both land.
 func (q *Queries) CopyBranch(ctx context.Context, c BranchCopy) (map[string]string, error) {

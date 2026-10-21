@@ -41,6 +41,13 @@ func (l Limit) Left() float64 {
 // their own updates as they happen.
 const limitRefresh = 3 * time.Minute
 
+var (
+	// ErrNoUsageSource is a refresh's error for a CLI that reports no usage.
+	ErrNoUsageSource = errors.New("This CLI does not report usage limits") //nolint:staticcheck
+	// errRefreshPending is a forced refresh's error while another runs.
+	errRefreshPending = errors.New("Usage refresh is already in progress") //nolint:staticcheck
+)
+
 // limitKey is one account of one CLI: account "" is the tool's own login,
 // any other an options.accounts ID.
 type limitKey struct {
@@ -298,16 +305,33 @@ func RefreshAccountLimits(ctx context.Context, kind catwalk.Type, account string
 	return refreshLimits(ctx, limitKey{kind, account}, force)
 }
 
+// ReadAccountLimitsNow reads one account's usage limits fresh into the
+// store, waiting out a refresh already on its way rather than failing. It
+// returns the reading's error; ErrNoUsageSource for a CLI without one.
+func ReadAccountLimitsNow(ctx context.Context, kind catwalk.Type, account string) error {
+	for {
+		_, err := refreshLimits(ctx, limitKey{kind, account}, true)
+		if !errors.Is(err, errRefreshPending) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
 func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 	limitStore.Lock()
 	fetch := limitFetchers[k.kind]
 	if fetch == nil {
 		limitStore.Unlock()
-		return false, errors.New("This CLI does not report usage limits")
+		return false, ErrNoUsageSource
 	}
 	if limitStore.pending[k] {
 		limitStore.Unlock()
-		return false, errors.New("Usage refresh is already in progress")
+		return false, errRefreshPending
 	}
 	if !force && time.Since(limitStore.fetched[k]) < limitRefresh {
 		limitStore.Unlock()

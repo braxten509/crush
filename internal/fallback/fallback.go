@@ -103,9 +103,9 @@ func Position(order config.FallbackOrder, kindOf KindOf, m config.SelectedModel)
 	return loose
 }
 
-// full reports whether an account has no room left for a block that moves
+// Full reports whether an account has no room left for a block that moves
 // on at moveAt percent (0: only when it runs out).
-func full(r Reading, moveAt float64) bool {
+func Full(r Reading, moveAt float64) bool {
 	if !r.Known {
 		return false
 	}
@@ -144,7 +144,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 		acct := BlockAccount(b, kindOf)
 		switch b.Type {
 		case config.FallbackUse:
-			if !full(read(acct), b.MoveAtPercent) {
+			if !Full(read(acct), b.MoveAtPercent) {
 				return Action{Kind: Switch, Block: j, Return: ret}
 			}
 		case config.FallbackRefill:
@@ -158,7 +158,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 				continue // nothing to wait for, or already waiting for another
 			}
 			r := read(acct)
-			if !full(r, 0) {
+			if !Full(r, 0) {
 				return Action{Kind: Switch, Block: target}
 			}
 			if r.OpenAt.IsZero() {
@@ -191,18 +191,18 @@ func BeforeTurn(order config.FallbackOrder, kindOf KindOf, at int, ret *Return, 
 	}
 	if ret != nil && ret.Block != at && ret.Block >= 0 && ret.Block < len(order.Blocks) && !now.Before(ret.At) {
 		b := order.Blocks[ret.Block]
-		if !full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+		if !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
 			return Action{Kind: Switch, Block: ret.Block}
 		}
 	}
 	for k := range at {
 		b := order.Blocks[k]
-		if b.Type == config.FallbackUse && b.ComeBack && !full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+		if b.Type == config.FallbackUse && b.ComeBack && !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
 			return Action{Kind: Switch, Block: k}
 		}
 	}
 	b := order.Blocks[at]
-	if b.Type == config.FallbackUse && b.MoveAtPercent > 0 && full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+	if b.Type == config.FallbackUse && b.MoveAtPercent > 0 && Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
 		if act := OnOut(order, kindOf, at, read, now, nil); act.Kind == Switch || act.Kind == Refill {
 			return act
 		}

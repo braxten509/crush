@@ -196,11 +196,12 @@ function sameFolder(a, b) {
 // The window's folder is the shown chat's or terminal's (owner, 2026-10-20):
 // picking one in another folder leaves this engine and joins that folder's in
 // place, with no reload; the terminals and the list stay. The shown chat is
-// left first (its turn runs on in the engine). Resolves true once joined.
-export async function switchFolder(dir) {
+// left first (its turn runs on in the engine), unless keepShown: a kept chat
+// of that folder already shows (openInFolder). Resolves true once joined.
+export async function switchFolder(dir, { keepShown = false } = {}) {
   if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
   if (joining) await joining.catch(() => {});
-  showLanding();
+  if (!keepShown) showLanding();
   conn.state = "connecting";
   conn.error = null;
   try {

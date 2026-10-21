@@ -127,8 +127,10 @@ never "sessions".
   fill with YOU and the time above it, also on the right; the AI's replies stay on the
   left, unboxed (owner's pick C, 2026-10-20).
 - Switching chats keeps the last 6 chats left loaded (events keep them current), so going
-  back shows one at once and reads it again behind it; words typed while a chat opens go
+  back shows one at once and reads it again behind it, even when it is in another folder
+  (the folder's engine joins behind the shown chat); words typed while a chat opens go
   into that chat's box, as a send then does (owner, 2026-10-20).
+- Alt+Backspace in the chat box deletes the word before the caret (owner, 2026-10-20).
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).
 - Sending a message or a `!` command brings the chat to its bottom, following.
 - The title bar's icon is the heart bit alone (no tile). The title, folder and branch share

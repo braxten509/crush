@@ -4,7 +4,8 @@ line height, so Chromium scrolled it a few pixels to show the caret and kept
 that after the text went: the words sat above the cursor. In the real window
 on the hidden screen: type three lines, move the caret, delete them; the box
 is never scrolled. With three lines the last line is whole (its g not cut)
-and the model button and its bar sit on the field's middle.
+and the model button and its bar sit on the field's middle. Alt+Backspace
+deletes the word before the caret.
 
 Usage: tests/check.sh --fixture tests/fixtures/model-menu.json composer_caret.py
 """
@@ -48,4 +49,11 @@ for _ in range(len("one\ntwo\nthree")):
 time.sleep(0.5)
 got = probe_eval(probe_path, STATE) or {}
 check(got.get("value") == "" and got.get("top") == 0, f"emptied, the ghost text sits unscrolled on the cursor's line ({got})")
+# Alt+Backspace deletes the word before the caret (owner, 2026-10-20: "alt+
+# backspace doesn't work, which I need").
+type_text("one two three")
+key("alt+BackSpace")
+time.sleep(0.4)
+got = probe_eval(probe_path, STATE) or {}
+check(got.get("value") == "one two ", f"Alt+Backspace deletes the word before the caret ({got.get('value')!r})")
 finish()

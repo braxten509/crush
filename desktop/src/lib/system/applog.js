@@ -172,7 +172,10 @@ export function startAppLog() {
     // (the lists measure their rows that way); it comes many times a second
     // while scrolling and is no fault.
     if (BENIGN.test(e.message ?? "")) return;
-    log("error", `${e.message} (${e.filename}:${e.lineno})`);
+    // The stack's first frames say where (a bare message once left
+    // "Cannot read properties of null" with no way to find it).
+    const stack = String(e.error?.stack ?? "").split("\n").slice(1, 6).map((line) => line.trim()).join(" | ");
+    log("error", `${e.message} (${e.filename}:${e.lineno}:${e.colno})${stack ? ` at ${stack}` : ""}`);
   });
   window.addEventListener("unhandledrejection", (e) => log("error", `unhandled: ${e.reason?.message ?? e.reason}`));
   setTimeout(sample, 3000);

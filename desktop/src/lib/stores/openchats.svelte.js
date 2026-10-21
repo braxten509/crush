@@ -8,8 +8,8 @@
 import { untrack } from "svelte";
 import { openChatsAdd, openChatsGet, openChatsRemove } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
-import { conn, switchFolder } from "./connection.svelte.js";
-import { openChat, sessions, showLanding } from "./sessions.svelte.js";
+import { conn, inFolder, switchFolder } from "./connection.svelte.js";
+import { isKept, openChat, sessions, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
 
 export const openChats = $state({ list: [], loaded: false });
 
@@ -98,8 +98,16 @@ export async function closeListed(id) {
   return true;
 }
 
-// A chat of another folder: the window joins that folder, then shows it.
+// A chat of another folder: the window joins that folder, then shows it. A
+// kept chat shows at once and the folder follows behind it (owner,
+// 2026-10-20: "switching between two chats takes just as long").
 export async function openInFolder(dir, sessionId) {
+  if (!inFolder(dir) && isKept(sessionId)) {
+    showKept(sessionId, { refresh: false });
+    const joined = await switchFolder(dir, { keepShown: true });
+    if (joined) shownJoined(sessionId);
+    return joined;
+  }
   if (!(await switchFolder(dir))) return false;
   return openChat(sessionId);
 }

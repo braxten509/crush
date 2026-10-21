@@ -155,6 +155,9 @@ pub async fn engine_open(
             .launch
             .yolo
             .unwrap_or_else(|| state.settings.lock().unwrap().yolo);
+        if let Some(wait) = fixture.delay("GET", "engine_open") {
+            tokio::time::sleep(wait).await;
+        }
         return fixture.open(&app, window.label(), &cwd, sent_yolo);
     }
     connection::open(&app, window.label(), &cwd).await

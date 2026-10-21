@@ -20,7 +20,7 @@
 //!   also answers GET "agent". Every other call is appended to
 //!   `<probe file>.api.jsonl` and answered with null.
 //! - `slow` (`{"sessions/S1/messages": 2000}`) holds a GET answer back that
-//!   many milliseconds.
+//!   many milliseconds; `"engine_open"` holds back joining a folder.
 //! - `api_abort` answers false (no fixture call runs long) and is recorded too.
 //! - The entries of `events` reach the window's batcher at their `at_ms` after
 //!   `engine_open`, through the same doorbell as the engine's events, so the

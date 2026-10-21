@@ -8,6 +8,8 @@ import { deleteModeKey } from "../composer/chips.js";
 import { atEnd, onFirstLine, onLastLine } from "../composer/history.js";
 import { modelButtonText } from "../composer/modes.js";
 import { queueRows } from "../composer/trayrows.js";
+import { areaEdit, areaState } from "../kit/areakeys.js";
+import { applyEdit } from "../kit/fieldkeys.js";
 import { bindKey } from "../keys.js";
 import { probeSection } from "../probe.js";
 import * as C from "../stores/composer.svelte.js";
@@ -80,6 +82,17 @@ fieldKey("Ctrl+J", () => {
   return true;
 });
 fieldKey("Backspace", () => C.backspaceLeavesBang());
+// Alt+Backspace deletes the word before the caret, as in the sheets' editors
+// (lib/kit/areakeys.js; owner, 2026-10-20). The browser's own delete keeps
+// the field's undo and tells the store through the input event.
+fieldKey("Alt+Backspace", () => {
+  const el = field();
+  if (!el) return false;
+  const edit = areaEdit("Alt+Backspace", areaState(el.value, el.selectionStart, el.selectionEnd, el.selectionDirection));
+  if (!edit?.chars) return false;
+  applyEdit(el, edit);
+  return true;
+});
 
 // TYPE-017: the first ↑ goes to the first line's start, the next one older.
 fieldKey("ArrowUp", () => {

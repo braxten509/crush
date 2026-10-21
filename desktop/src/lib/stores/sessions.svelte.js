@@ -94,7 +94,6 @@ export function upsertSession(s, { fromEvent = false, since = Infinity } = {}) {
 }
 
 export function removeSession(id) {
-  if (kept.has(id)) forget(id);
   childParent.delete(id);
   if (!sessions.byId[id]) return;
   delete sessions.byId[id];
@@ -296,11 +295,11 @@ function applyList(list, since) {
     listed.push(s.id);
     storeSession(s, { fromEvent: false, since });
   }
-  const kept = new Set(listed);
+  const inList = new Set(listed);
   for (const id of Object.keys(sessions.byId)) {
-    if (!kept.has(id) && id !== sessions.currentId && id !== sessions.opening?.id) removeSession(id);
+    if (!inList.has(id) && id !== sessions.currentId && id !== sessions.opening?.id) removeSession(id);
   }
-  const extra = sessions.order.filter((id) => !kept.has(id) && sessions.byId[id]);
+  const extra = sessions.order.filter((id) => !inList.has(id) && sessions.byId[id]);
   sessions.order = listed;
   for (const id of extra) place(id);
 }
@@ -382,10 +381,12 @@ function abandonOpen() {
 
 // Leaving a chat: a reply it was writing stays visible in the list through
 // the live flag. Its messages and files stay loaded (events keep them
-// current), so switching back shows it at once (owner, 2026-10-20: "keep a
-// chat loaded when I switch"); only the last KEEP chats left stay.
+// current while its folder's engine is joined; a chat of another folder is
+// read again when it shows), so switching back shows it at once, from any
+// folder (owner, 2026-10-20: "keep a chat loaded when I switch"); only the
+// last KEEP chats left stay.
 const KEEP = 6;
-const kept = new Set(); // chats left, kept loaded, oldest first
+const kept = new Map(); // chat id → its record, chats left kept loaded, oldest first
 
 function leave(sid) {
   const chat = messages.bySession[sid];
@@ -398,8 +399,8 @@ function leave(sid) {
     return;
   }
   kept.delete(sid);
-  kept.add(sid);
-  while (kept.size > KEEP) forget(kept.values().next().value);
+  kept.set(sid, sessions.byId[sid]);
+  while (kept.size > KEEP) forget(kept.keys().next().value);
 }
 
 function forget(sid) {
@@ -408,15 +409,10 @@ function forget(sid) {
   dropFiles(sid);
 }
 
-// Another engine (a folder switch, a reconnect) or a lost connection: the
-// kept chats would go stale, so they go.
-let keptFor = "";
-onEvent("connection", (_kind, ev) => {
-  const engine = ev?.state === "connected" ? `${ev.engine?.data_dir ?? ""}` : "";
-  if (engine === keptFor) return;
-  keptFor = engine;
-  for (const sid of [...kept]) forget(sid);
-});
+// A kept chat, ready to show at once (from any folder).
+export function isKept(sid) {
+  return kept.has(sid) && messages.bySession[sid]?.status === "ready";
+}
 
 // Exported for closing the last listed chat (closed.svelte.js, P4.1), which
 // leaves a busy chat too.
@@ -465,7 +461,7 @@ async function retryHistory(id) {
 }
 
 async function showChat(id) {
-  if (id !== sessions.currentId && kept.has(id) && messages.bySession[id]?.status === "ready") return showKept(id);
+  if (id !== sessions.currentId && isKept(id)) return showKept(id);
   openSeq += 1;
   const seq = openSeq;
   if (id !== sessions.currentId) {
@@ -520,22 +516,41 @@ async function showChat(id) {
 }
 
 // A kept chat shows at once; its record, files and messages are read again
-// behind it (a reload keeps the shown messages while it reads).
-function showKept(id) {
+// behind it (a reload keeps the shown messages while it reads). A chat of
+// another folder shows before its folder is joined (refresh false); the
+// caller reads it again once joined (shownJoined).
+export function showKept(id, { refresh = true } = {}) {
   openSeq += 1; // a slower switch still on its way loses
   if (sessions.opening) sessions.opening = null;
+  const record = kept.get(id);
   kept.delete(id);
-  report(id);
+  if (!sessions.byId[id] && record) upsertSession(record);
   const old = sessions.currentId;
   sessions.currentId = id;
   stamp(id, "live");
   delete sessions.live[id];
   keepPromptsFor(id);
   if (old && old !== id) leave(old);
+  if (!refresh) {
+    // The engine still joined is the old folder's: it hears of this chat,
+    // and sends held for another opening go back, once the folder is joined.
+    restoreDeferred();
+    return true;
+  }
+  report(id);
   restoreModel(id);
   runDeferred(id);
   refreshKept(id);
   return true;
+}
+
+// The shown chat's folder is joined: the engine learns it is shown, and it is
+// read again.
+export function shownJoined(id) {
+  if (!id || sessions.currentId !== id) return;
+  report(id);
+  restoreModel(id);
+  refreshKept(id);
 }
 
 async function refreshKept(id) {

@@ -94,6 +94,7 @@ export function upsertSession(s, { fromEvent = false, since = Infinity } = {}) {
 }
 
 export function removeSession(id) {
+  if (kept.has(id)) forget(id);
   childParent.delete(id);
   if (!sessions.byId[id]) return;
   delete sessions.byId[id];
@@ -283,8 +284,7 @@ function chatDeleted(id) {
     showLanding();
     if (!own) notify("info", "This chat was deleted elsewhere.");
   }
-  unload(id);
-  dropFiles(id);
+  forget(id);
 }
 
 // -- The list --
@@ -380,17 +380,43 @@ function abandonOpen() {
   report(sessions.currentId);
 }
 
-// Leaving a chat: its messages go (switching back loads them again), and a
-// reply it was writing stays visible in the list through the live flag.
+// Leaving a chat: a reply it was writing stays visible in the list through
+// the live flag. Its messages and files stay loaded (events keep them
+// current), so switching back shows it at once (owner, 2026-10-20: "keep a
+// chat loaded when I switch"); only the last KEEP chats left stay.
+const KEEP = 6;
+const kept = new Set(); // chats left, kept loaded, oldest first
+
 function leave(sid) {
   const chat = messages.bySession[sid];
   if (chat?.status === "ready" && chat.active.size > 0 && sessions.byId[sid]) {
     stamp(sid, "live");
     sessions.live[sid] = true;
   }
+  if (chat?.status !== "ready" || !sessions.byId[sid]) {
+    forget(sid);
+    return;
+  }
+  kept.delete(sid);
+  kept.add(sid);
+  while (kept.size > KEEP) forget(kept.values().next().value);
+}
+
+function forget(sid) {
+  kept.delete(sid);
   unload(sid);
   dropFiles(sid);
 }
+
+// Another engine (a folder switch, a reconnect) or a lost connection: the
+// kept chats would go stale, so they go.
+let keptFor = "";
+onEvent("connection", (_kind, ev) => {
+  const engine = ev?.state === "connected" ? `${ev.engine?.data_dir ?? ""}` : "";
+  if (engine === keptFor) return;
+  keptFor = engine;
+  for (const sid of [...kept]) forget(sid);
+});
 
 // Exported for closing the last listed chat (closed.svelte.js, P4.1), which
 // leaves a busy chat too.
@@ -439,6 +465,7 @@ async function retryHistory(id) {
 }
 
 async function showChat(id) {
+  if (id !== sessions.currentId && kept.has(id) && messages.bySession[id]?.status === "ready") return showKept(id);
   openSeq += 1;
   const seq = openSeq;
   if (id !== sessions.currentId) {
@@ -490,6 +517,33 @@ async function showChat(id) {
   restoreModel(id);
   runDeferred(id);
   return true;
+}
+
+// A kept chat shows at once; its record, files and messages are read again
+// behind it (a reload keeps the shown messages while it reads).
+function showKept(id) {
+  openSeq += 1; // a slower switch still on its way loses
+  if (sessions.opening) sessions.opening = null;
+  kept.delete(id);
+  report(id);
+  const old = sessions.currentId;
+  sessions.currentId = id;
+  stamp(id, "live");
+  delete sessions.live[id];
+  keepPromptsFor(id);
+  if (old && old !== id) leave(old);
+  restoreModel(id);
+  runDeferred(id);
+  refreshKept(id);
+  return true;
+}
+
+async function refreshKept(id) {
+  const since = readStart();
+  const filesRead = startFilesRead(id);
+  const [read, files] = await Promise.allSettled([api.getSession(id), api.history(id), load(id)]);
+  if (read.status === "fulfilled" && read.value?.id && sessions.byId[id]) upsertSession(read.value, { since });
+  if (files.status === "fulfilled" && ws.files[id]) setFiles(id, files.value, filesRead);
 }
 
 // LIST-033 (newSessionFromKey and newSession, internal/ui/model/session.go:

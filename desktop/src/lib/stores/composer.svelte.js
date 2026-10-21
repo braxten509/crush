@@ -71,12 +71,20 @@ function errorText(error) {
 
 const NO_DRAFT = Object.freeze({ text: "", attachments: Object.freeze([]), bang: false, bangEmpty: false });
 
+// The chat the field types into: the one opening while a switch is on its
+// way, as a send then is (deferSend), else the shown one. Text typed while a
+// chat loads stays when it shows (owner, 2026-10-20: "the text I type gets
+// deleted").
+export function typingChat() {
+  return sessions.opening?.id ?? sessions.currentId;
+}
+
 // The chat's draft as stored, read only (a chat with none has an empty one).
-export function draftOf(sid = sessions.currentId) {
+export function draftOf(sid = typingChat()) {
   return composer.drafts[sid ?? ""] ?? NO_DRAFT;
 }
 
-function draftFor(sid = sessions.currentId) {
+function draftFor(sid = typingChat()) {
   const key = sid ?? "";
   if (!composer.drafts[key]) composer.drafts[key] = { text: "", attachments: [], bang: false, bangEmpty: false };
   return composer.drafts[key];
@@ -124,9 +132,9 @@ function selection() {
 // Puts value in chat sid's field and the caret at `at`. The element is set at
 // once too: a change the store does not see as one (a "!" typed into an empty
 // field leaves the stored text empty) would otherwise stay on screen.
-function place(value, at = value.length, sid = sessions.currentId) {
+function place(value, at = value.length, sid = typingChat()) {
   draftFor(sid).text = value;
-  if (!field || sid !== sessions.currentId) return;
+  if (!field || sid !== typingChat()) return;
   if (field.value !== value) field.value = value;
   field.setSelectionRange(at, at);
 }
@@ -399,7 +407,7 @@ export function restoreReturned(sid = sessions.currentId) {
 // the `@` popup follow the text. before is the text before the event, data
 // the characters it typed.
 export function typed({ before, value, caret, data = "", paste = false }) {
-  const sid = sessions.currentId;
+  const sid = typingChat();
   const draft = draftFor(sid);
   let next;
   if (paste) next = bangAfterPaste({ value, caret, bang: draft.bang }) ?? { bang: draft.bang, wasEmpty: draft.bangEmpty, value, caret };
@@ -614,7 +622,7 @@ export function pasteText(raw) {
   const text = normalize(raw);
   const route = pasteRoute(text);
   if (route === "text") return false;
-  const sid = sessions.currentId;
+  const sid = typingChat();
   if (route === "attach") {
     const result = textAttachment(text, draftOf(sid).attachments);
     if (result.warn) notify("warn", result.warn);
@@ -631,7 +639,7 @@ async function pastePaths(text, sid, start, end) {
   const stat = (p) => file_info(p, dir);
   const paths = await pastedPictures(text, stat);
   if (!paths) {
-    if (sid !== sessions.currentId) return;
+    if (sid !== typingChat()) return;
     const value = draftOf(sid).text;
     const next = value.slice(0, start) + text + value.slice(end);
     await place(next, start + text.length, sid);
@@ -873,7 +881,7 @@ export async function send() {
     notify("info", SWITCHING);
     return false;
   }
-  const sid = sessions.currentId;
+  const sid = typingChat();
   const draft = draftFor(sid);
   const value = draft.text;
   if (value.endsWith("\\")) {

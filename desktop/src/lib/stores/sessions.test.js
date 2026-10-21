@@ -186,7 +186,7 @@ describe("the live flag (1.5.3, LIST-012)", () => {
     expect(S.sessions.order).toEqual(["s2", "s1"]);
   });
 
-  it("leaving a chat that is replying keeps it busy in the list", async () => {
+  it("leaving a chat that is replying keeps it loaded and busy in the list", async () => {
     await withList(chat("s1"), chat("s2"));
     openable("s1", []);
     await S.openChat("s1");
@@ -194,7 +194,7 @@ describe("the live flag (1.5.3, LIST-012)", () => {
     expect(S.busy("s1")).toBe(true);
     openable("s2", []);
     await S.openChat("s2");
-    expect(M.messages.bySession.s1).toBeUndefined();
+    expect(M.messages.bySession.s1?.status).toBe("ready"); // kept, so switching back is at once
     expect(S.busy("s1")).toBe(true);
   });
 });

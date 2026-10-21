@@ -207,6 +207,9 @@ pub async fn api(
     // The routes are checked without case, so the redaction must be too.
     let method = method.to_ascii_uppercase();
     let answer = if let Some(fixture) = app.try_state::<Fixture>() {
+        if let Some(wait) = fixture.delay(&method, &path) {
+            tokio::time::sleep(wait).await;
+        }
         fixture.api(&state.launch, window.label(), &method, &path, query, body, call_id)
     } else {
         connection::call(&app, window.label(), &method, &path, query, body, call_id).await

@@ -19,7 +19,6 @@
     pasteText,
     typed,
   } from "../../lib/stores/composer.svelte.js";
-  import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { setFocus } from "../../lib/stores/ui.svelte.js";
 
   const MAX_LINES = 15;
@@ -28,7 +27,7 @@
   let lines = $state(1);
   let scrolls = $state(false);
 
-  const value = $derived(draftOf(sessions.currentId).text);
+  const value = $derived(draftOf().text); // the chat typed into: the opening one while a switch is on its way
 
   $effect(() => (el ? attachField(el) : undefined));
 

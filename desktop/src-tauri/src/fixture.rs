@@ -19,6 +19,8 @@
 //! - `api` GET answers `get[path]`, or 404 `not_found` when absent; `agent`
 //!   also answers GET "agent". Every other call is appended to
 //!   `<probe file>.api.jsonl` and answered with null.
+//! - `slow` (`{"sessions/S1/messages": 2000}`) holds a GET answer back that
+//!   many milliseconds.
 //! - `api_abort` answers false (no fixture call runs long) and is recorded too.
 //! - The entries of `events` reach the window's batcher at their `at_ms` after
 //!   `engine_open`, through the same doorbell as the engine's events, so the
@@ -49,6 +51,9 @@ struct FixtureFile {
     /// The chats open at the start (openchats.rs); absent, every recorded
     /// top-level chat of `get.sessions`, in the workspace's folder.
     open_chats: Option<Vec<crate::openchats::Chat>>,
+    /// GET paths answered late, path → milliseconds (a chat that loads
+    /// slowly, for checks that act while it loads).
+    slow: Map<String, Value>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -95,6 +100,14 @@ impl Fixture {
             loaded: Instant::now(),
             players: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// How long a GET of path is held back (`slow`).
+    pub fn delay(&self, method: &str, path: &str) -> Option<Duration> {
+        if !method.eq_ignore_ascii_case("GET") {
+            return None;
+        }
+        answer_in(&self.file.slow, path).and_then(|ms| ms.as_u64()).map(Duration::from_millis)
     }
 
     /// The chats a fixture run starts with open.

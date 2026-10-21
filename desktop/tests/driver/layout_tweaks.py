@@ -140,6 +140,29 @@ check(click('[data-probe="title-panel"]'), "the top bar has the panel switch")
 gone = run(state) or {}
 check(not gone.get("panel") and not gone.get("tab") and gone.get("pressed") == "false", f"it hides the panel, with no tab at the edge ({gone})")
 shot(out_dir, "hidden")
+# With the panel hidden, the meter strip's words sit midway between the typing
+# box's bottom edge and the column's foot (owner, 2026-10-20), read from the
+# capture's ink.
+strip = run("""
+  const field = document.querySelector('main.conversation .composer .field')?.getBoundingClientRect() ?? document.querySelector('main.conversation textarea')?.closest('[class*="field"]')?.getBoundingClientRect();
+  const s = document.querySelector('[data-meter-strip]')?.getBoundingClientRect();
+  const col = document.querySelector('main.conversation').getBoundingClientRect();
+  return field && s ? { field_bottom: field.bottom, foot: col.bottom, x0: s.left, x1: s.right } : null;
+""") or {}
+if check(bool(strip), f"the meter strip shows under the typing box ({strip})"):
+    from PIL import Image
+    ox, oy = H.window_geometry()[:2]
+    image = Image.open(os.path.join(out_dir, "hidden.png")).convert("L")
+    xs = range(round(ox + strip["x0"]), round(ox + strip["x1"]))
+    bg = image.getpixel((xs[0], round(oy + strip["field_bottom"]) + 3))
+    marked = lambda y: sum(abs(image.getpixel((x, y)) - bg) > 40 for x in xs) / len(xs)
+    # The space runs from the typing box's bottom border to the frame line under
+    # the column (both rows inked edge to edge); the words are the rows between.
+    rows = range(round(oy + strip["field_bottom"]) - 3, round(oy + strip["foot"]) + 4)
+    lines = [y for y in rows if marked(y) > 0.9]
+    ink = [y for y in rows if 0 < marked(y) <= 0.9 and lines and lines[0] < y < lines[-1]]
+    above, below = (ink[0] - lines[0] - 1, lines[-1] - ink[-1] - 1) if ink and len(lines) >= 2 else (None, None)
+    check(ink and abs(above - below) <= 1, f"the strip's words sit midway: {above} px above, {below} px below")
 click('[data-probe="title-panel"]')
 back = run(state) or {}
 check(back.get("panel") and back.get("pressed") == "true", f"it brings the panel back ({back})")

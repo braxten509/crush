@@ -189,7 +189,8 @@ Every dialog is a `kit/Sheet`:
   typed or attached; typing turns it back into Send, which queues the message. Esc stops
   too. One button throughout, so nothing moves.
 - Usage meters (panel and the strip under the typing box) turn amber under 30 % left and
-  rose under 10 %, bar and number together; there is no warning triangle.
+  rose under 10 %, bar and number together; there is no warning triangle. The strip's
+  words sit midway between the typing box and the frame line under it.
 - "/" typed as the first letter in the typing box opens the command menu: the `@` popup's
   look over every Ctrl+P command (System, User, MCP), name left and shortcut right, best
   match lowest. Enter runs the command and clears the "/word"; Esc closes it and keeps the

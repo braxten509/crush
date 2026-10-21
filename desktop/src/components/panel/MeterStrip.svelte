@@ -38,14 +38,19 @@
     flex: none;
     height: 0;
   }
-  /* The strip fills the last 25 picture px of the composer's 33 bottom padding
-     (8 above it keep the field's focus ring clear); the field starts 20 in. */
+  /* The strip fills the composer's whole 33 picture px bottom padding, so its
+     words sit midway between the field and the column's foot (owner,
+     2026-10-20: the space above and below were unequal). Capitals and digits
+     have no descenders, so their ink rides high in the line; 4 on top brings it
+     to the middle. The field starts 20 in. */
   .strip {
     position: absolute;
     left: calc(20 * var(--px));
     right: calc(20 * var(--px));
     bottom: 0;
-    height: calc(25 * var(--px));
+    box-sizing: border-box;
+    height: calc(33 * var(--px));
+    padding-top: calc(4 * var(--px));
     display: flex;
     align-items: center;
     gap: calc(20 * var(--px));

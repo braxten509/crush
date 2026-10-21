@@ -8,6 +8,7 @@
 import { untrack } from "svelte";
 import { openChatsAdd, openChatsGet, openChatsRemove } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
+import { chatClosed } from "../remote/share.js";
 import { conn, inFolder, switchFolder } from "./connection.svelte.js";
 import { isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
 
@@ -28,7 +29,10 @@ async function read() {
     return;
   }
   if (mine !== seq) return;
+  const before = openChats.list;
   openChats.list = Array.isArray(list) ? list : [];
+  // A chat closed in the terminal stops its phone share (owner, 2026-10-21).
+  for (const c of before) if (!openChats.list.some((n) => n.id === c.id)) chatClosed(c.id);
   openChats.loaded = true;
   setOpenChats(openChats.list.map((c) => c.id));
   preloadOpen();
@@ -103,11 +107,13 @@ function leaveShown(id) {
   else showLanding();
 }
 
-// The list's ×: off the list for every app; the shown chat makes way.
+// The list's ×: off the list for every app, with its phone share; the shown
+// chat makes way.
 export async function closeListed(id) {
   if (!id) return false;
   const wasShown = sessions.currentId === id;
   openChats.list = openChats.list.filter((c) => c.id !== id);
+  chatClosed(id);
   if (wasShown) {
     seenShown = "";
     dropped = id;
@@ -150,6 +156,7 @@ $effect.root(() => {
 // A deleted chat is off the list for every app (the sessions store moves a
 // shown one away itself).
 onEvent("session", (kind, s) => {
+  if (kind === "deleted") chatClosed(s?.id);
   if (kind !== "deleted" || !openChats.list.some((c) => c.id === s?.id)) return;
   if (seenShown === s.id) seenShown = "";
   openChats.list = openChats.list.filter((c) => c.id !== s.id);

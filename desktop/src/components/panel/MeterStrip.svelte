@@ -1,14 +1,22 @@
 <script>
-  // The meter strip (4.13, SIDE-002, SIDE-014): while the right panel is
+  // The strip under the typing box. {meters}: while the right panel is
   // hidden, the same meters sit in the composer's bottom padding under the
-  // field: per meter the small-caps label, a 60 × 4 bar and the percent (both
-  // amber under 30 % left, rose under 10 %), 20 apart from the field's left
-  // edge; then the token count when "Tokens used" is on (SIDE-019). It sits
-  // in the composer's 15 bottom padding plus 18 of its own room, which grows
-  // and shrinks with it as it settles in and rolls away, so the space under
-  // the field glides along (owner, 2026-10-20: "slide the bottom area's space
-  // at the same time"). Placed by Conversation.
+  // field (4.13, SIDE-002, SIDE-014): per meter the small-caps label, a
+  // 60 × 4 bar and the percent (both amber under 30 % left, rose under 10 %),
+  // 20 apart from the field's left edge; then the token count when "Tokens
+  // used" is on (SIDE-019). {remote}: while the phone shares the shown chat,
+  // a vermilion dot and REMOTE, after the meters (owner, 2026-10-21: a status
+  // line under the typing box, with nothing after it); clicking it opens the
+  // Remote control sheet. It sits in the composer's 15 bottom padding plus 18
+  // of its own room, which grows and shrinks with it as it settles in and
+  // rolls away, so the space under the field glides along (owner,
+  // 2026-10-20: "slide the bottom area's space at the same time"). Placed by
+  // Conversation while either shows; a part that comes or goes while the
+  // other stays settles in or rolls away by itself.
   import { paper, settle, tick } from "../../lib/motion.js";
+  import { openRemote } from "../../lib/remote/share.js";
+
+  let { meters = true, remote = false } = $props();
 
   // The strip's own room, scaled with the strip's motion (no clipping: the
   // strip reaches up into the composer's padding).
@@ -29,7 +37,8 @@
 </script>
 
 <div class="strip-anchor" transition:room|global>
-  <div class="strip" role="group" aria-label="Usage" data-meter-strip transition:settle|global={{ fold: true }}>
+  <div class="strip" data-meter-strip transition:settle|global={{ fold: true }}>
+    {#if meters}<span class="meters" role="group" aria-label="Usage" transition:settle>
     {#each model.meters as meter (meter.id)}
       <span class="item" data-meter={meter.id}>
         <span class="label">{meter.label}</span>
@@ -42,6 +51,10 @@
       </span>
     {/each}
     {#if model.tokens}<span class="tokens">{model.tokens}</span>{/if}
+    </span>{/if}
+    {#if remote}<button type="button" class="item remote" data-remote-line title="Remote control" transition:settle onclick={openRemote}>
+      <span class="dot" aria-hidden="true"></span><span class="label">Remote</span>
+    </button>{/if}
   </div>
 </div>
 
@@ -71,11 +84,46 @@
     overflow: hidden;
     white-space: nowrap;
   }
+  .meters {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: calc(20 * var(--px));
+    overflow: hidden;
+  }
   .item {
     flex: none;
     display: flex;
     align-items: center;
     gap: calc(8 * var(--px));
+  }
+  /* The share's mark: a flat button, its words in ink after a whole-pixel
+     vermilion dot about as tall as the capitals. */
+  .remote {
+    gap: calc(10 * var(--px));
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+  .remote .dot {
+    flex: none;
+    width: round(calc(10 * var(--px)), 1px);
+    height: round(calc(10 * var(--px)), 1px);
+    border-radius: 50%;
+    background: var(--vermilion);
+  }
+  .remote .label {
+    color: var(--ink);
+  }
+  .remote:hover .label {
+    color: var(--vermilion-ink);
+  }
+  .remote:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
   }
   .label {
     font: var(--t-label);

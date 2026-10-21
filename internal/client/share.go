@@ -11,28 +11,31 @@ import (
 // Phone sharing and secure entry through the engine (engine-design.md 5.7
 // and 5.8). Every call names this client as the calling app.
 
-// StartRemote starts this app's phone share, or returns the running one's
-// status. launchID is the window's CRUSH_REMOTE_LAUNCH value, if any. A
-// setup problem or a failed start comes back in the status, not as an
-// error.
-func (c *Client) StartRemote(ctx context.Context, id, launchID string) (proto.RemoteStatus, error) {
+// StartRemote starts the phone share of sessionID, the chat this app shows
+// ("" for its new chat), or returns the chat's running share's status.
+// launchID is the window's CRUSH_REMOTE_LAUNCH value, if any. A setup
+// problem or a failed start comes back in the status, not as an error.
+func (c *Client) StartRemote(ctx context.Context, id, sessionID, launchID string) (proto.RemoteStatus, error) {
 	return newCall(c, rpc.RemoteStart, "start Remote Control", "Remote Control status").at(id).
-		with(c.shareAppQuery()).do(ctx, proto.RemoteStart{LaunchID: launchID})
+		with(c.shareAppQuery()).do(ctx, proto.RemoteStart{SessionID: sessionID, LaunchID: launchID})
 }
 
-// StopRemote stops this app's phone share.
-func (c *Client) StopRemote(ctx context.Context, id string) error {
-	_, err := newCall(c, rpc.RemoteStop, "stop Remote Control", "").at(id).with(c.shareAppQuery()).get(ctx)
+// StopRemote stops the phone share of sessionID ("" for this app's new
+// chat), whichever app started it.
+func (c *Client) StopRemote(ctx context.Context, id, sessionID string) error {
+	_, err := newCall(c, rpc.RemoteStop, "stop Remote Control", "").at(id).
+		with(c.shareAppQuery()).do(ctx, proto.RemoteStop{SessionID: sessionID})
 	return err
 }
 
-// RemoteStatus describes this app's phone share.
-func (c *Client) RemoteStatus(ctx context.Context, id string) (proto.RemoteStatus, error) {
-	return newCall(c, rpc.RemoteGet, "get Remote Control status", "Remote Control status").at(id).
+// RemoteShares describes the phone shares this app sees: every chat's, and
+// its own new chat's.
+func (c *Client) RemoteShares(ctx context.Context, id string) ([]proto.RemoteStatus, error) {
+	return newCall(c, rpc.RemoteGet, "list the phone shares", "phone shares").at(id).
 		with(c.shareAppQuery()).get(ctx)
 }
 
-// SetRemotePresence tells this app's phone share what the window shows.
+// SetRemotePresence tells the engine what this app's window shows.
 func (c *Client) SetRemotePresence(ctx context.Context, id string, p proto.RemotePresence) error {
 	_, err := newCall(c, rpc.RemotePresence, "set Remote Control presence", "").at(id).
 		with(c.shareAppQuery()).do(ctx, p)

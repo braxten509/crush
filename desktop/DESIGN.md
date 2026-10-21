@@ -285,6 +285,15 @@ Every dialog is a `kit/Sheet`:
 - Usage meters (panel and the strip under the typing box) turn amber under 30 % left and
   rose under 10 %, bar and number together; there is no warning triangle. The strip's
   words sit midway between the typing box and the frame line under it.
+- Remote control belongs to a chat (owner, 2026-10-21: "One remote per chat"): while the
+  phone shares the shown chat, whichever app turned it on, the strip under the typing box
+  shows a whole-pixel vermilion dot and REMOTE in ink, with nothing after it (the owner's
+  status line, its subtext removed). It slides in and away with the strip; with the panel
+  hidden it follows the meters in the same strip, so there is only ever one line. Nothing
+  inside the typing box says REMOTE any more. A click on it opens the Remote control sheet;
+  Turn off there, Turn off in the terminal, or closing the chat stops the share. Several
+  chats can be shared at once; another chat shows no line, and the phone stays on its chat
+  whatever the window shows (tests/driver/remote_line.py).
 - A Codex account's free refills show as a REFILLS count with a "Use one" button, in the
   panel when it is open and in the strip under the typing box when it is hidden; only
   while the count is above 0. Claude has none, so nothing shows for it.

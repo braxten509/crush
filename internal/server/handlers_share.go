@@ -21,35 +21,34 @@ import (
 
 func init() { backend.SetShareStarter(startEngineShare) }
 
-// startRemote starts the calling app's phone share.
+// startRemote starts the phone share of the chat the calling app shows.
 func (c *controllerV1) startRemote(r *http.Request, req proto.RemoteStart) (proto.RemoteStatus, error) {
 	clientID, err := c.clientID(r)
 	if err != nil {
 		return proto.RemoteStatus{}, err
 	}
-	return c.backend.StartRemote(r.Context(), r.PathValue("id"), clientID, req.LaunchID)
+	return c.backend.StartRemote(r.Context(), r.PathValue("id"), clientID, req.SessionID, req.LaunchID)
 }
 
-// stopRemote stops the calling app's phone share.
-func (c *controllerV1) stopRemote(r *http.Request, _ rpc.Empty) (rpc.Empty, error) {
+// stopRemote stops a chat's phone share.
+func (c *controllerV1) stopRemote(r *http.Request, req proto.RemoteStop) (rpc.Empty, error) {
 	clientID, err := c.clientID(r)
 	if err != nil {
 		return rpc.Empty{}, err
 	}
-	return rpc.Empty{}, c.backend.StopRemote(r.PathValue("id"), clientID)
+	return rpc.Empty{}, c.backend.StopRemote(r.PathValue("id"), clientID, req.SessionID)
 }
 
-// getRemoteStatus describes the calling app's phone share.
-func (c *controllerV1) getRemoteStatus(r *http.Request, _ rpc.Empty) (proto.RemoteStatus, error) {
+// getRemoteStatus describes the phone shares the calling app sees.
+func (c *controllerV1) getRemoteStatus(r *http.Request, _ rpc.Empty) ([]proto.RemoteStatus, error) {
 	clientID, err := c.clientID(r)
 	if err != nil {
-		return proto.RemoteStatus{}, err
+		return nil, err
 	}
-	return c.backend.RemoteStatus(r.PathValue("id"), clientID)
+	return c.backend.RemoteShares(r.PathValue("id"), clientID)
 }
 
-// setRemotePresence tells the calling app's phone share what its window
-// shows.
+// setRemotePresence takes what the calling app's window shows.
 func (c *controllerV1) setRemotePresence(r *http.Request, p proto.RemotePresence) (rpc.Empty, error) {
 	clientID, err := c.clientID(r)
 	if err != nil {

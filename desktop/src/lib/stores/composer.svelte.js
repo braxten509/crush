@@ -48,7 +48,6 @@ export const composer = $state({
   popup: null, // null | { kind: "@" | "/", start, query, rows: [{row, chars}], focused, loading } (TYPE-026 to TYPE-028; "/" the command menu)
   shells: {}, // request_id → ShellState (lib/types.js): live `!` commands, read by lib/timeline.js (P3.5)
   planHandoff: null, // null | { sessionId, open } (TYPE-052): a ready plan waits; open: its form is meant to show
-  badges: [], // [{ id, text }] drawn after the mode mark; phase 6 adds the Remote badge (SIDE-025)
   input: "code", // "code" | "plan": the input mode of the engine's main agent (TYPE-023)
   yolo: false, // the engine skips permission prompts (TYPE-024), as last read or set here
   picks: pickPlaceholders(), // this round's ready and working placeholders (TYPE-003)
@@ -161,12 +160,6 @@ export function currentPlaceholder() {
 function syncMode() {
   composer.mode = currentMode();
   composer.placeholder = currentPlaceholder();
-}
-
-// text null removes the badge.
-export function setBadge(id, text) {
-  const rest = composer.badges.filter((badge) => badge.id !== id);
-  composer.badges = text === null || text === undefined ? rest : [...rest, { id, text: String(text) }];
 }
 
 // -- Text, attachments and kept skills --

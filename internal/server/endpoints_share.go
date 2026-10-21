@@ -19,10 +19,13 @@ func (c *controllerV1) shareEndpoints() []apigen.Endpoint {
 	return []apigen.Endpoint{
 		route(c, rpc.RemoteStart, c.startRemote).
 			Summary("Start Remote Control").
-			Description("Starts the calling app's phone share, or returns its running share's "+
-				"status: one share per app. A setup step answers state \"setup\" with the step; "+
-				"any other failed start answers state \"off\" with error. launch_id is the "+
-				"window's CRUSH_REMOTE_LAUNCH value, which the share reports to the launcher.").
+			Description("Starts the phone share of session_id, the chat the calling app shows "+
+				"(empty for its new chat, which the share follows to the chat the app shows next), "+
+				"or returns the chat's running share's status, whichever app started it: one share "+
+				"per chat, several chats at once. Every app hears of a chat's share in remote_status "+
+				"events. A setup step answers state \"setup\" with the step; any other failed start "+
+				"answers state \"off\" with error. launch_id is the window's CRUSH_REMOTE_LAUNCH "+
+				"value, which the share reports to the launcher.").
 			Tags("remote").
 			PathParam("id", "Workspace ID").
 			RequiredQueryParam("client_id", "Client ID (UUID)").
@@ -31,16 +34,18 @@ func (c *controllerV1) shareEndpoints() []apigen.Endpoint {
 
 		route(c, rpc.RemoteStop, c.stopRemote).
 			Summary("Stop Remote Control").
-			Description("Stops the calling app's phone share. Only the app that started a share may stop it.").
+			Description("Stops the phone share of session_id (empty for the calling app's new "+
+				"chat), whichever app started it.").
 			Tags("remote").
 			PathParam("id", "Workspace ID").
 			RequiredQueryParam("client_id", "Client ID (UUID)").
-			Fails(400, 403, 404, 409).
+			Fails(400, 404, 409).
 			Build(),
 
 		route(c, rpc.RemoteGet, c.getRemoteStatus).
-			Summary("Get Remote Control status").
-			Description("Describes the calling app's phone share; state \"off\" when it runs none.").
+			Summary("List the phone shares").
+			Description("Describes the phone shares the calling app sees, by chat: every chat's, "+
+				"and its own new chat's.").
 			Tags("remote").
 			PathParam("id", "Workspace ID").
 			RequiredQueryParam("client_id", "Client ID (UUID)").
@@ -49,12 +54,13 @@ func (c *controllerV1) shareEndpoints() []apigen.Endpoint {
 
 		route(c, rpc.RemotePresence, c.setRemotePresence).
 			Summary("Set Remote Control presence").
-			Description("Tells the calling app's phone share what its window shows: the chat, "+
-				"focus and plan mode. The share follows the chat of the app that started it.").
+			Description("Tells the engine what the calling app's window shows: the chat, focus "+
+				"and plan mode. A share's phone hears whether a window showing its chat is focused, "+
+				"and the plan mode of one. The app's new-chat share moves to the chat it shows.").
 			Tags("remote").
 			PathParam("id", "Workspace ID").
 			RequiredQueryParam("client_id", "Client ID (UUID)").
-			Fails(400, 403, 404, 409).
+			Fails(400, 404, 409).
 			Build(),
 
 		route(c, rpc.RemoteActionDone, c.finishRemoteAction).

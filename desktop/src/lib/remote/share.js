@@ -1,79 +1,90 @@
-// Starting and stopping the phone share (desktop-design-5-6 2.27; the
-// terminal's internal/ui/model/remote.go:163-325). The engine runs the share;
-// the window starts it (POST remote/start, with a launch ID once), shows its
-// state, and stops it.
+// Starting and stopping phone shares (desktop-design-5-6 2.27; the
+// terminal's internal/ui/model/remote.go and remote_engine.go). The engine
+// runs one share per chat, whichever app turned it on (owner, 2026-10-21);
+// this window starts the share of the chat it shows (POST remote/start,
+// with a launch ID once), follows every share in the engine's remote_status
+// events, and stops a chat's share however it was started.
 import { closeDialog, hasDialog, openDialog } from "../dialogs.js";
 import { api } from "../engine/api.js";
-import { setBadge } from "../stores/composer.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
-import { share } from "./store.svelte.js";
+import { share, shownChat, shownShare } from "./store.svelte.js";
 
 let startSeq = 0; // bumped by every start, Cancel and stop: older answers are dropped
 let latestStart = 0; // the newest start
 let cancelledStart = 0; // the start that Cancel dropped
+let hadShare = false; // the chat the newest start is for was shared already
 
-export const isOn = () => share.state === "on";
+// What the window heard of each chat's share: a list read before a change
+// does not undo it.
+let changes = 0;
+let changed = {};
 
-function takeStatus(status) {
-  share.status = status ?? null;
-  share.phones = Array.isArray(status?.phones) ? status.phones : [];
+export const isShown = () => Boolean(shownShare());
+
+// The share of `chat` is `status`, or none when it is null.
+function heard(chat, status) {
+  changes += 1;
+  changed[chat] = changes;
+  if (status) share.shares[chat] = status;
+  else delete share.shares[chat];
 }
 
-function turnedOn(status) {
-  share.state = "on";
-  takeStatus(status);
-  setBadge("remote", "REMOTE");
-  closeDialog("remote_setup");
-}
-
-// One start. `launchId` once per launch; `quiet` opens no sheet.
+// One start for the chat this window shows. `launchId` once per launch;
+// `quiet` opens no sheet.
 export async function startShare({ launchId = null, quiet = false } = {}) {
   const mine = ++startSeq;
   latestStart = mine;
-  if (share.state !== "on") share.state = "starting";
+  const chat = shownChat();
+  hadShare = Boolean(share.shares[chat]);
+  share.state = "starting";
   share.quiet = quiet;
   share.error = "";
   let status;
   try {
-    status = await api.startRemote(launchId ? { launch_id: launchId } : {});
+    status = await api.startRemote(launchId ? { session_id: chat, launch_id: launchId } : { session_id: chat });
   } catch (error) {
     if (mine !== startSeq) return;
     const text = error?.message ?? String(error);
-    if (share.state !== "on") share.state = "off";
+    share.state = "off";
     share.error = text;
     if (quiet) notify("error", `Remote Control: ${text}`);
     else share.status = { state: "off", error: text };
     return;
   }
   // A share that came up after Cancel is stopped (remote.go:255-258),
-  // unless a newer start wants it.
+  // unless a newer start wants it or the chat was shared already.
   if (mine === cancelledStart && latestStart === mine) {
-    if (status?.state === "on") api.stopRemote().catch(() => {});
-    if (share.state !== "on") share.state = "off";
+    if (status?.state === "on" && !hadShare) api.stopRemote(status.session_id ?? chat).catch(() => {});
+    share.state = "off";
     return;
   }
   if (mine !== startSeq) return;
   if (status?.state === "on") {
-    const wasOn = share.state === "on";
-    turnedOn(status);
-    if (!quiet && !wasOn) openDialog("remote", {}, { grace: true });
+    share.state = "off";
+    share.status = null;
+    // It names the chat it shares: this window's, unless the window moved
+    // on from its new chat meanwhile.
+    heard(status.session_id ?? "", status);
+    closeDialog("remote_setup");
+    if (!quiet && shownShare()) openDialog("remote", {}, { grace: true });
     return;
   }
   if (status?.state === "setup") {
     share.state = "setup";
-    takeStatus(status);
+    share.status = status;
     if (quiet) notify("error", `Remote Control: ${status?.setup?.title || "setup is needed"}`);
     return;
   }
   share.state = "off";
-  takeStatus(status);
+  share.status = status ?? null;
   share.error = status?.error ?? "";
   if (quiet && share.error) notify("error", `Remote Control: ${share.error}`);
 }
 
-// The palette's "Remote Control" (remote.go:163-202).
+// The palette's "Remote control" (remote.go:163-202): the shown chat's
+// share, started first when it is off.
 export function openRemote() {
-  if (share.state === "on") {
+  if (shownShare()) {
     openDialog("remote", {}, { grace: true });
     return;
   }
@@ -91,34 +102,68 @@ export function openRemote() {
 export function cancelStart() {
   cancelledStart = latestStart;
   startSeq += 1;
-  if (share.state !== "on") share.state = "off";
+  share.state = "off";
 }
 
-export async function stopShare({ silent = false } = {}) {
+// Stops the share of `chat` (the shown one by default), whichever app
+// started it.
+export async function stopShare({ chat = shownChat(), silent = false } = {}) {
   startSeq += 1;
   try {
-    await api.stopRemote();
+    await api.stopRemote(chat);
   } catch (error) {
     if (!silent) notify("error", error?.message ?? String(error));
     return;
   }
-  share.state = "off";
-  share.phones = [];
-  setBadge("remote", null);
+  heard(chat, null);
   if (!silent) notify("info", "Remote Control is off");
 }
 
-// remote_status from the engine: phones come and go; the share may end.
+// Closing a chat stops its share (the list's ×, or the chat closed in the
+// terminal). Nothing happens for a chat that has none.
+export function chatClosed(chat) {
+  if (chat && share.shares[chat]) stopShare({ chat, silent: true });
+}
+
+// remote_status from the engine: a chat's share starts or ends, from any
+// app; phones come and go. A phone connecting to the shown chat's share is
+// told.
 export function onStatus(status) {
   if (!status) return;
-  const before = new Set(share.phones);
+  const chat = status.session_id ?? "";
+  const before = share.shares[chat];
   if (status.state === "on") {
-    if (share.state !== "on") turnedOn(status);
-    else takeStatus(status);
-    for (const phone of share.phones) if (!before.has(phone)) notify("info", `Remote Control: ${phone} connected`);
-  } else if (status.state === "off" && share.state === "on") {
-    share.state = "off";
-    takeStatus(status);
-    setBadge("remote", null);
+    heard(chat, status);
+    if (!before || chat !== shownChat()) return;
+    const seen = new Set(before.phones ?? []);
+    for (const phone of status.phones ?? []) if (!seen.has(phone)) notify("info", `Remote Control: ${phone} connected`);
+  } else if (status.state === "off") {
+    heard(chat, null);
   }
+}
+
+// The engine's list of shares, read once joined: the events tell every
+// change after that. A list of another folder's engine starts afresh.
+let listedFor = null;
+export async function loadShares(workspaceId = null) {
+  if (workspaceId !== listedFor) {
+    listedFor = workspaceId;
+    share.shares = {};
+    changed = {};
+  }
+  const since = changes;
+  let list;
+  try {
+    list = await api.remoteShares();
+  } catch (error) {
+    console.error("reading the phone shares failed", error?.message ?? error);
+    return;
+  }
+  const next = {};
+  for (const status of Array.isArray(list) ? list : []) {
+    const chat = status?.session_id ?? "";
+    if ((changed[chat] ?? 0) <= since) next[chat] = status;
+  }
+  for (const [chat, status] of Object.entries(share.shares)) if ((changed[chat] ?? 0) > since) next[chat] = status;
+  share.shares = next;
 }

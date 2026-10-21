@@ -99,8 +99,8 @@
   {:else}
     {#if hasChips()}<ChipRow />{/if}
     <form class="row" onsubmit={submit} in:settle>
-      <div class="field" class:marked={mode !== "normal" || composer.badges.length > 0}>
-        <ModeMark {mode} badges={composer.badges} />
+      <div class="field" class:marked={mode !== "normal"}>
+        <ModeMark {mode} />
         <Field />
         <span class="divider" aria-hidden="true"></span>
         <ModelButton />

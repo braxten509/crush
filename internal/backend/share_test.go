@@ -287,15 +287,41 @@ func shareTestView(t *testing.T, b *Backend, ws *Workspace, clientID, sessionID 
 	require.NoError(t, b.SetCurrentSession(t.Context(), ws.ID, clientID, sessionID))
 }
 
-// shareTestStart starts owner's share on a fake server and returns it.
-func shareTestStart(t *testing.T, b *Backend, ws *Workspace, owner string) *shareTestServer {
+// shareTestStart starts the share of sessionID ("" for the app's new chat)
+// from clientID on a fake server and returns it.
+func shareTestStart(t *testing.T, b *Backend, ws *Workspace, clientID, sessionID string) *shareTestServer {
 	t.Helper()
 	srv := newShareTestServer()
 	SetShareStarterForTest(ws, func(context.Context, *Workspace, string) (ShareServer, error) { return srv, nil })
-	status, err := b.StartRemote(t.Context(), ws.ID, owner, "")
+	status, err := b.StartRemote(t.Context(), ws.ID, clientID, sessionID, "")
 	require.NoError(t, err)
 	require.Equal(t, remoteStateOn, status.State)
 	return srv
+}
+
+// lastPresence is what the share last told its phone.
+func (s *shareTestServer) lastPresence() proto.RemotePresence {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.presence) == 0 {
+		return proto.RemotePresence{}
+	}
+	return s.presence[len(s.presence)-1]
+}
+
+// shareTestStatusFor waits for the next remote_status event on a stream
+// and returns its status.
+func shareTestStatusFor(t *testing.T, events <-chan any) proto.RemoteStatus {
+	t.Helper()
+	return shareTestWaitEvent(t, events, pubsub.PayloadTypeRemoteStatus).Payload.(proto.RemoteStatus)
+}
+
+// shareTestNoStatus checks that a stream holds no remote_status event now.
+func shareTestNoStatus(t *testing.T, events <-chan any) {
+	t.Helper()
+	for _, ev := range shareTestDrain(events) {
+		require.NotEqual(t, pubsub.PayloadTypeRemoteStatus, ev.Type, "a remote_status event: %+v", ev.Payload)
+	}
 }
 
 // shareTestFill queues n filler events on clientID's streams.
@@ -379,9 +405,9 @@ func shareTestConfig(t *testing.T) *config.ConfigStore {
 	return store
 }
 
-// TestRemoteStartOneSharePerApp: a second start from the same app returns
-// its running share; another app gets its own.
-func TestRemoteStartOneSharePerApp(t *testing.T) {
+// TestRemoteStartOneSharePerChat: a chat has one share whichever app
+// starts it; each chat gets its own, several at once.
+func TestRemoteStartOneSharePerChat(t *testing.T) {
 	t.Parallel()
 	b, ws := shareTestWorkspace(t, nil)
 	app1, _ := shareTestApp(t, b, ws)
@@ -398,16 +424,16 @@ func TestRemoteStartOneSharePerApp(t *testing.T) {
 		return srv, nil
 	})
 
-	first, err := b.StartRemote(t.Context(), ws.ID, app1, "launch-1")
+	first, err := b.StartRemote(t.Context(), ws.ID, app1, "chat-1", "launch-1")
 	require.NoError(t, err)
-	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7001}, first)
+	require.Equal(t, proto.RemoteStatus{State: "on", SessionID: "chat-1", Host: "test-host", Port: 7001}, first)
 
-	// Starts that race each other get the same share too.
+	// Starts that race each other, from either app, get the same share.
 	results := make(chan proto.RemoteStatus, 8)
 	var wg sync.WaitGroup
-	for range 8 {
+	for i := range 8 {
 		wg.Go(func() {
-			again, err := b.StartRemote(context.Background(), ws.ID, app1, "launch-1")
+			again, err := b.StartRemote(context.Background(), ws.ID, []string{app1, app2}[i%2], "chat-1", "")
 			if err != nil {
 				again.Error = err.Error()
 			}
@@ -420,16 +446,121 @@ func TestRemoteStartOneSharePerApp(t *testing.T) {
 		require.Equal(t, first, again)
 	}
 
-	other, err := b.StartRemote(t.Context(), ws.ID, app2, "")
+	other, err := b.StartRemote(t.Context(), ws.ID, app2, "chat-2", "")
 	require.NoError(t, err)
-	require.Equal(t, 7002, other.Port)
+	require.Equal(t, proto.RemoteStatus{State: "on", SessionID: "chat-2", Host: "test-host", Port: 7002}, other)
 	mu.Lock()
-	require.Equal(t, []string{"launch-1", ""}, launches, "one share per app, each with its own launch ID")
+	require.Equal(t, []string{"launch-1", ""}, launches, "one share per chat, each with its own launch ID")
 	mu.Unlock()
 
-	got, err := b.RemoteStatus(ws.ID, app1)
+	for _, app := range []string{app1, app2} {
+		got, err := b.RemoteShares(ws.ID, app)
+		require.NoError(t, err)
+		require.Equal(t, []proto.RemoteStatus{first, other}, got, "every app sees both")
+	}
+}
+
+// TestRemoteAnyAppStopsAChatsShare: every app hears of a chat's share,
+// whichever app started it, and any app can stop it.
+func TestRemoteAnyAppStopsAChatsShare(t *testing.T) {
+	t.Parallel()
+	b, ws := shareTestWorkspace(t, nil)
+	app1, events1 := shareTestApp(t, b, ws)
+	app2, events2 := shareTestApp(t, b, ws)
+	shareTestView(t, b, ws, app1, "chat-1")
+	srv := shareTestStart(t, b, ws, app1, "chat-1")
+	on := proto.RemoteStatus{State: "on", SessionID: "chat-1", Host: "test-host", Port: 7373}
+	require.Equal(t, on, shareTestStatusFor(t, events1))
+	require.Equal(t, on, shareTestStatusFor(t, events2))
+
+	srv.mu.Lock()
+	srv.status.Phones = []string{"Pixel"}
+	srv.mu.Unlock()
+	srv.phones <- struct{}{}
+	on.Phones = []string{"Pixel"}
+	require.Equal(t, on, shareTestStatusFor(t, events1))
+	require.Equal(t, on, shareTestStatusFor(t, events2))
+
+	require.NoError(t, b.StopRemote(ws.ID, app2, "chat-1"))
+	require.EqualValues(t, 1, srv.stops.Load())
+	off := proto.RemoteStatus{State: "off", SessionID: "chat-1"}
+	require.Equal(t, off, shareTestStatusFor(t, events1))
+	require.Equal(t, off, shareTestStatusFor(t, events2))
+	got, err := b.RemoteShares(ws.ID, app1)
 	require.NoError(t, err)
-	require.Equal(t, first, got)
+	require.Empty(t, got)
+	require.ErrorIs(t, b.StopRemote(ws.ID, app1, "chat-1"), ErrShareOff)
+}
+
+// TestRemoteNewChatShareFollowsItsWindow: a share started on an app's new
+// chat is that app's alone, moves to the first chat its window shows, and
+// stays there; on a chat shared already, it ends.
+func TestRemoteNewChatShareFollowsItsWindow(t *testing.T) {
+	t.Parallel()
+	b, ws := shareTestWorkspace(t, nil)
+	app1, events1 := shareTestApp(t, b, ws)
+	app2, events2 := shareTestApp(t, b, ws)
+	srv := shareTestStart(t, b, ws, app1, "")
+	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7373}, shareTestStatusFor(t, events1))
+	require.Equal(t, proto.RemotePresence{}, srv.lastPresence())
+	shareTestNoStatus(t, events2)
+	got, err := b.RemoteShares(ws.ID, app2)
+	require.NoError(t, err)
+	require.Empty(t, got, "another app does not see it")
+
+	shareTestView(t, b, ws, app1, "chat-9")
+	require.Equal(t, proto.RemoteStatus{State: "off"}, shareTestStatusFor(t, events1))
+	moved := proto.RemoteStatus{State: "on", SessionID: "chat-9", Host: "test-host", Port: 7373}
+	require.Equal(t, moved, shareTestStatusFor(t, events1))
+	require.Equal(t, moved, shareTestStatusFor(t, events2))
+	require.Equal(t, "chat-9", srv.lastPresence().SessionID)
+
+	shareTestView(t, b, ws, app1, "chat-10")
+	require.Equal(t, "chat-9", srv.lastPresence().SessionID, "the phone stays on its chat")
+	got, err = b.RemoteShares(ws.ID, app1)
+	require.NoError(t, err)
+	require.Equal(t, []proto.RemoteStatus{moved}, got)
+
+	shareTestView(t, b, ws, app2, "")
+	srv2 := shareTestStart(t, b, ws, app2, "")
+	shareTestView(t, b, ws, app2, "chat-9")
+	require.EqualValues(t, 1, srv2.stops.Load(), "chat-9 is shared already")
+	require.Zero(t, srv.stops.Load())
+	got, err = b.RemoteShares(ws.ID, app2)
+	require.NoError(t, err)
+	require.Equal(t, []proto.RemoteStatus{moved}, got)
+}
+
+// TestRemotePresenceFollowsTheWindowsShowingTheChat: the phone hears
+// whether a window showing its chat is focused, and the plan mode of the
+// owner's window or another one showing the chat; window actions go to a
+// window showing the chat.
+func TestRemotePresenceFollowsTheWindowsShowingTheChat(t *testing.T) {
+	t.Parallel()
+	b, ws := shareTestWorkspace(t, nil)
+	app1, events1 := shareTestApp(t, b, ws)
+	app2, events2 := shareTestApp(t, b, ws)
+	shareTestView(t, b, ws, app1, "chat-1")
+	srv := shareTestStart(t, b, ws, app1, "chat-1")
+	require.Equal(t, proto.RemotePresence{SessionID: "chat-1"}, srv.lastPresence())
+
+	require.NoError(t, b.SetRemotePresence(ws.ID, app1, proto.RemotePresence{SessionID: "chat-1", Focused: true, Plan: true}))
+	require.Equal(t, proto.RemotePresence{SessionID: "chat-1", Focused: true, Plan: true}, srv.lastPresence())
+	require.NoError(t, b.SetRemotePresence(ws.ID, app1, proto.RemotePresence{SessionID: "chat-2", Focused: true}))
+	require.Equal(t, proto.RemotePresence{SessionID: "chat-1", Plan: true}, srv.lastPresence(), "no window shows it: plan mode kept")
+	require.NoError(t, b.SetRemotePresence(ws.ID, app2, proto.RemotePresence{SessionID: "chat-1", Focused: true}))
+	require.Equal(t, proto.RemotePresence{SessionID: "chat-1", Focused: true}, srv.lastPresence())
+
+	action, reply := shareTestAction(t, ShareAction{Kind: ShareMode, SessionID: "chat-1"})
+	srv.offer(t, action)
+	ev := shareTestWaitEvent(t, events2, pubsub.PayloadTypeRemoteAction)
+	for _, other := range shareTestDrain(events1) {
+		require.NotEqual(t, pubsub.PayloadTypeRemoteAction, other.Type, "the window showing another chat got it")
+	}
+	id := ev.Payload.(proto.RemoteAction).ActionID
+	require.ErrorIs(t, b.FinishRemoteAction(ws.ID, app1, id, proto.RemoteActionDone{}), ErrNotShareOwner)
+	require.NoError(t, b.FinishRemoteAction(ws.ID, app2, id, proto.RemoteActionDone{}))
+	require.NoError(t, shareTestReply(t, reply))
 }
 
 // TestRemoteEngineRunsActions: send, cancel, interrupt, clear_queue,
@@ -452,7 +583,7 @@ func TestRemoteEngineRunsActions(t *testing.T) {
 		sends <- sent{clientID: clientID, msg: msg}
 		return b.SendMessage(workspaceID, clientID, msg)
 	}
-	srv := shareTestStart(t, b, ws, owner)
+	srv := shareTestStart(t, b, ws, owner, "chat-1")
 	run := func(a ShareAction) {
 		t.Helper()
 		action, reply := shareTestAction(t, a)
@@ -517,12 +648,16 @@ func TestRemoteEngineActionTexts(t *testing.T) {
 	})
 	owner, _ := shareTestApp(t, b, ws)
 	shareTestView(t, b, ws, owner, "chat-1")
-	srv := shareTestStart(t, b, ws, owner)
-	answer := func(a ShareAction) error {
+	srv := shareTestStart(t, b, ws, owner, "chat-1")
+	answerOn := func(srv *shareTestServer, a ShareAction) error {
 		t.Helper()
 		action, reply := shareTestAction(t, a)
 		srv.offer(t, action)
 		return shareTestReply(t, reply)
+	}
+	answer := func(a ShareAction) error {
+		t.Helper()
+		return answerOn(srv, a)
 	}
 
 	require.EqualError(t, answer(ShareAction{Kind: ShareSend, SessionID: "chat-2", Text: "x"}), "the Crush window switched to another chat")
@@ -539,14 +674,17 @@ func TestRemoteEngineActionTexts(t *testing.T) {
 	require.EqualError(t, answer(ShareAction{Kind: ShareModel, SessionID: "chat-1", Provider: "plain", Model: "nope"}), "that model is not available on the computer")
 	require.EqualError(t, answer(ShareAction{Kind: ShareBackground, SessionID: "chat-1"}), "no running command can move to the background")
 
+	// The window moved to its new chat; chat-1's share stays there.
 	shareTestView(t, b, ws, owner, "")
-	require.EqualError(t, answer(ShareAction{Kind: ShareSummarize}), "a new chat has nothing to summarize yet")
+	require.EqualError(t, answer(ShareAction{Kind: ShareSummarize}), "the Crush window switched to another chat")
+	newChat := shareTestStart(t, b, ws, owner, "")
+	require.EqualError(t, answerOn(newChat, ShareAction{Kind: ShareSummarize}), "a new chat has nothing to summarize yet")
 
 	// Before the agent started, a send has no agent to go to.
 	b2, ws2 := shareTestWorkspace(t, nil)
 	owner2, _ := shareTestApp(t, b2, ws2)
 	shareTestView(t, b2, ws2, owner2, "chat-1")
-	srv2 := shareTestStart(t, b2, ws2, owner2)
+	srv2 := shareTestStart(t, b2, ws2, owner2, "chat-1")
 	action, reply := shareTestAction(t, ShareAction{Kind: ShareSend, SessionID: "chat-1", Text: "x"})
 	srv2.offer(t, action)
 	require.EqualError(t, shareTestReply(t, reply), "the agent is not ready yet")
@@ -558,7 +696,7 @@ func TestRemoteActionNotTakenFailsFast(t *testing.T) {
 	t.Parallel()
 	b, ws := shareTestWorkspace(t, nil)
 	owner := shareTestRegister(t, b, ws)
-	srv := shareTestStart(t, b, ws, owner)
+	srv := shareTestStart(t, b, ws, owner, "")
 	check := func(name string) {
 		t.Helper()
 		start := time.Now()
@@ -587,7 +725,7 @@ func TestRemoteActionTimeout(t *testing.T) {
 	ws.share.timeout = 200 * time.Millisecond
 	owner, events := shareTestApp(t, b, ws)
 	shareTestView(t, b, ws, owner, "chat-1")
-	srv := shareTestStart(t, b, ws, owner)
+	srv := shareTestStart(t, b, ws, owner, "chat-1")
 
 	start := time.Now()
 	forwarded, forwardedReply := shareTestAction(t, ShareAction{Kind: ShareYolo, SessionID: "chat-1"})
@@ -617,7 +755,7 @@ func TestRemotePumpNeverBlocks(t *testing.T) {
 	b, ws := shareTestWorkspace(t, coord)
 	owner, _ := shareTestApp(t, b, ws)
 	shareTestView(t, b, ws, owner, "chat-1")
-	srv := shareTestStart(t, b, ws, owner)
+	srv := shareTestStart(t, b, ws, owner, "chat-1")
 
 	slow, slowReply := shareTestAction(t, ShareAction{Kind: ShareInterrupt, SessionID: "chat-1"})
 	second, secondReply := shareTestAction(t, ShareAction{Kind: ShareClearQueue, SessionID: "chat-1"})
@@ -638,36 +776,92 @@ func TestRemotePumpNeverBlocks(t *testing.T) {
 	require.NoError(t, shareTestReply(t, slowReply))
 }
 
-// TestRemoteShareStopsWhenOwnerLeaves: when the owner leaves, its share
-// stops and its waiting actions fail with "the Crush window closed".
-func TestRemoteShareStopsWhenOwnerLeaves(t *testing.T) {
+// TestRemoteShareOutlivesTheAppThatStartedIt: when the app that owns a
+// chat's share leaves, the actions its window was to answer fail with "the
+// Crush window closed", and the share keeps going while the chat is open:
+// it passes to an app showing the chat, or to another app while the chat
+// stays in the open-chats list. It ends with the chat closed, with its new
+// chat, or with the last app.
+func TestRemoteShareOutlivesTheAppThatStartedIt(t *testing.T) {
 	t.Parallel()
-	t.Run("another app stays", func(t *testing.T) {
+	t.Run("another app shows the chat", func(t *testing.T) {
 		t.Parallel()
-		b, ws := shareTestWorkspace(t, nil)
+		b, ws := shareTestWorkspace(t, newShareTestCoordinator())
 		owner, events := shareTestApp(t, b, ws)
 		other, _ := shareTestApp(t, b, ws)
-		srv := shareTestStart(t, b, ws, owner)
-		action, reply := shareTestAction(t, ShareAction{Kind: ShareYolo})
+		shareTestView(t, b, ws, owner, "chat-1")
+		shareTestView(t, b, ws, other, "chat-1")
+		senders := make(chan string, 1)
+		ws.share.send = func(_, clientID string, _ proto.AgentMessage) error {
+			senders <- clientID
+			return nil
+		}
+		srv := shareTestStart(t, b, ws, owner, "chat-1")
+		action, reply := shareTestAction(t, ShareAction{Kind: ShareYolo, SessionID: "chat-1"})
 		srv.offer(t, action)
 		shareTestWaitEvent(t, events, pubsub.PayloadTypeRemoteAction)
 
 		require.NoError(t, b.RetireClient(owner))
 		require.EqualError(t, shareTestReply(t, reply), "the Crush window closed")
-		require.EqualValues(t, 1, srv.stops.Load())
-		ws.share.mu.Lock()
-		require.Empty(t, ws.share.shares)
-		ws.share.mu.Unlock()
-		status, err := b.RemoteStatus(ws.ID, other)
+		require.Zero(t, srv.stops.Load(), "the share keeps going")
+		got, err := b.RemoteShares(ws.ID, other)
 		require.NoError(t, err)
-		require.Equal(t, remoteStateOff, status.State)
+		require.Len(t, got, 1)
+		send, sendReply := shareTestAction(t, ShareAction{Kind: ShareSend, SessionID: "chat-1", Text: "hi"})
+		srv.offer(t, send)
+		require.NoError(t, shareTestReply(t, sendReply))
+		require.Equal(t, other, shareTestRecv(t, senders, 5*time.Second), "its prompts are the new owner's")
+
+		require.NoError(t, b.RetireClient(other))
+		require.EqualValues(t, 1, srv.stops.Load(), "no app is left")
+	})
+	for _, listed := range []bool{true, false} {
+		name := "the chat stays open"
+		if !listed {
+			name = "the chat closed with the app"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			b, ws := shareTestWorkspace(t, nil)
+			owner, _ := shareTestApp(t, b, ws)
+			other, events := shareTestApp(t, b, ws)
+			shareTestView(t, b, ws, owner, "chat-1")
+			shareTestView(t, b, ws, other, "chat-2")
+			looked := make(chan string, 1)
+			ws.share.openDelay = 10 * time.Millisecond
+			ws.share.listed = func(sessionID string) bool {
+				looked <- sessionID
+				return listed
+			}
+			srv := shareTestStart(t, b, ws, owner, "chat-1")
+			require.Equal(t, remoteStateOn, shareTestStatusFor(t, events).State)
+
+			require.NoError(t, b.RetireClient(owner))
+			require.Equal(t, "chat-1", shareTestRecv(t, looked, 5*time.Second))
+			if listed {
+				require.Never(t, func() bool { return srv.stops.Load() > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+				return
+			}
+			require.Equal(t, proto.RemoteStatus{State: "off", SessionID: "chat-1"}, shareTestStatusFor(t, events))
+			require.EqualValues(t, 1, srv.stops.Load())
+		})
+	}
+	t.Run("new chat", func(t *testing.T) {
+		t.Parallel()
+		b, ws := shareTestWorkspace(t, nil)
+		owner, _ := shareTestApp(t, b, ws)
+		shareTestApp(t, b, ws)
+		srv := shareTestStart(t, b, ws, owner, "")
+		require.NoError(t, b.RetireClient(owner))
+		require.EqualValues(t, 1, srv.stops.Load())
 	})
 	t.Run("last app", func(t *testing.T) {
 		t.Parallel()
 		b, ws := shareTestWorkspace(t, nil)
 		owner, events := shareTestApp(t, b, ws)
-		srv := shareTestStart(t, b, ws, owner)
-		action, reply := shareTestAction(t, ShareAction{Kind: ShareMode})
+		shareTestView(t, b, ws, owner, "chat-1")
+		srv := shareTestStart(t, b, ws, owner, "chat-1")
+		action, reply := shareTestAction(t, ShareAction{Kind: ShareMode, SessionID: "chat-1"})
 		srv.offer(t, action)
 		shareTestWaitEvent(t, events, pubsub.PayloadTypeRemoteAction)
 
@@ -675,4 +869,61 @@ func TestRemoteShareStopsWhenOwnerLeaves(t *testing.T) {
 		require.EqualError(t, shareTestReply(t, reply), "the Crush window closed")
 		require.EqualValues(t, 1, srv.stops.Load())
 	})
+}
+
+// A share that moves to a chat (a window's new-chat share binding to it)
+// while another app's start for that chat runs stays the chat's share: the
+// late start stops its own and answers with that one.
+func TestRemoteStartKeepsAShareThatMovedToItsChat(t *testing.T) {
+	t.Parallel()
+	b, ws := shareTestWorkspace(t, nil)
+	first, _ := shareTestApp(t, b, ws)
+	second, _ := shareTestApp(t, b, ws)
+	moved := shareTestStart(t, b, ws, second, "")
+
+	late := newShareTestServer()
+	late.status.Port = 7374
+	starting, release := make(chan struct{}), make(chan struct{})
+	SetShareStarterForTest(ws, func(context.Context, *Workspace, string) (ShareServer, error) {
+		close(starting)
+		<-release
+		return late, nil
+	})
+	type result struct {
+		status proto.RemoteStatus
+		err    error
+	}
+	done := make(chan result, 1)
+	go func() {
+		status, err := b.StartRemote(context.Background(), ws.ID, first, "chat-1", "launch-1")
+		done <- result{status, err}
+	}()
+	shareTestRecv(t, starting, 5*time.Second)
+	shareTestView(t, b, ws, second, "chat-1")
+	close(release)
+	got := shareTestRecv(t, done, 5*time.Second)
+	require.NoError(t, got.err)
+	require.Equal(t, 7373, got.status.Port, "the chat keeps the share that moved there")
+	require.EqualValues(t, 1, late.stops.Load(), "the late start stops its own")
+	require.Zero(t, moved.stops.Load())
+	require.Equal(t, "launch-1", moved.reportedLaunch())
+	shares, err := b.RemoteShares(ws.ID, first)
+	require.NoError(t, err)
+	require.Len(t, shares, 1)
+}
+
+// A window report that comes in after its app left (SetCurrentSession runs
+// its hooks after its own checks) leaves no window behind to keep a closed
+// chat's share going or tell its phone the chat is in front.
+func TestRemoteLateReportOfAnAppThatLeft(t *testing.T) {
+	t.Parallel()
+	b, ws := shareTestWorkspace(t, nil)
+	gone, _ := shareTestApp(t, b, ws)
+	shareTestApp(t, b, ws)
+	require.NoError(t, b.RetireClient(gone))
+	b.shareViewChanged(ws, gone, "chat-1")
+	ws.share.mu.Lock()
+	_, kept := ws.share.windows[gone]
+	ws.share.mu.Unlock()
+	require.False(t, kept)
 }

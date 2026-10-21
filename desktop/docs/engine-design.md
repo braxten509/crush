@@ -1319,6 +1319,8 @@ var _ FileRestoration = (*ClientWorkspace)(nil)
 
 ## 5.7 Phone sharing (`/remote`)
 
+**Changed 2026-10-21 (owner: "One remote per chat"; PLAN.md 15):** a share now belongs to a chat, not to an app. The engine keeps one share per chat (an app's unsent new chat has its own, which moves to the first chat that app shows); any app starts the share of the chat it shows (`remote/start` `{session_id, launch_id}`), every app hears of it in `remote_status` (which names `session_id`), any app stops it (`remote/stop` `{session_id}`), and `GET remote` lists the shares an app sees. Every app reports what its window shows (`remote/presence`) whether or not anything is shared. When the owning app leaves, the share passes to an app showing the chat, or to another app while the chat stays open; it ends with the last app. The rules below that say "one share per app" or "the share follows the owner's window" describe the earlier design (`internal/backend/share.go` has the current one).
+
 ### Current code facts
 
 - **Starting a share.** `remote.StartContext(ctx, src)` checks Tailscale and starts one share (`remote/remote.go:112-133`, `135-170`).

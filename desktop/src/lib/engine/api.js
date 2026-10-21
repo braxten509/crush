@@ -272,9 +272,11 @@ export const api = {
   background: (sid) => post(`${chat(sid)}/background`),
   servers: () => get("servers"),
 
-  startRemote: ({ launch_id } = {}) => post("remote/start", launch_id ? { launch_id } : {}),
-  stopRemote: () => post("remote/stop"),
-  remote: () => get("remote"),
+  // One share per chat (owner, 2026-10-21); session_id "" is this window's
+  // new chat.
+  startRemote: ({ session_id = "", launch_id } = {}) => post("remote/start", launch_id ? { session_id, launch_id } : { session_id }),
+  stopRemote: (sessionId = "") => post("remote/stop", { session_id: sessionId }),
+  remoteShares: () => get("remote"),
   remotePresence: (presence) => post("remote/presence", presence),
   remoteActionDone: (aid, done) => post(`remote/actions/${seg(aid)}/done`, done),
 

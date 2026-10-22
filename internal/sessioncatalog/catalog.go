@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/session"
 )
@@ -225,4 +226,42 @@ func (c Catalog) DiscardEmpty(ctx context.Context, id string) error {
  AND NOT EXISTS(SELECT 1 FROM messages WHERE session_id=sessions.id AND role='assistant' AND finished_at IS NULL)
  AND NOT EXISTS(SELECT 1 FROM sessions child WHERE child.parent_session_id=sessions.id)`, id)
 	return err
+}
+
+// Read gives one chat of a registered folder from that folder's own
+// database: its record and, with messages, its messages (oldest first).
+// The desktop draws the open chats of folders it has not joined with it
+// (owner, 2026-10-22: every listed chat stays drawn), so their engines need
+// not run. The folder must be registered, so a client cannot name an
+// arbitrary database.
+func (c Catalog) Read(ctx context.Context, dir, id string, messages bool) (session.Session, []message.Message, error) {
+	locations, err := c.locations()
+	if err != nil {
+		return session.Session{}, nil, err
+	}
+	for _, project := range locations {
+		if project.DataDir == "" || catalogPath(project.Path) != catalogPath(dir) {
+			continue
+		}
+		data := catalogPath(project.DataDir)
+		if _, err := os.Stat(filepath.Join(data, "crush.db")); err != nil {
+			return session.Session{}, nil, err
+		}
+		conn, err := db.Connect(ctx, data)
+		if err != nil {
+			return session.Session{}, nil, err
+		}
+		defer db.Release(data)
+		queries := db.New(conn)
+		record, err := session.NewService(queries, conn).Get(ctx, id)
+		if err != nil {
+			return session.Session{}, nil, err
+		}
+		if !messages {
+			return record, nil, nil
+		}
+		list, err := message.NewService(queries).List(ctx, id)
+		return record, list, err
+	}
+	return session.Session{}, nil, fmt.Errorf("the folder %s is not a registered project", dir)
 }

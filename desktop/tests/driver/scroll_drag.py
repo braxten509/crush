@@ -29,7 +29,7 @@ bar = None
 end = time.time() + 20
 while time.time() < end and not bar:
     bar = run("""
-      const s = document.querySelector('main.conversation .scroller');
+      const s = document.querySelector('main.conversation .slot:not(.parked) .scroller');
       if (!s || s.scrollHeight < s.clientHeight * 20) return '';
       s.scrollTop = (s.scrollHeight - s.clientHeight) / 2;
       const r = s.getBoundingClientRect();
@@ -45,7 +45,7 @@ if not bar:
 
 # Every frame: does the chat's middle show a row?
 run("""
-  const s = document.querySelector('main.conversation .scroller');
+  const s = document.querySelector('main.conversation .slot:not(.parked) .scroller');
   const r = s.getBoundingClientRect();
   const pts = [0.3, 0.5, 0.7].map((f) => [r.left + r.width * 0.4, r.top + r.height * f]);
   window.__drag = { frames: 0, blank: 0, tops: [], on: true, last: 0, gaps: [], start: s.scrollTop };
@@ -66,7 +66,7 @@ run("""
 # The real pixels: the chat's text area recorded at 60 frames a second
 # while the bar is dragged; a frame with no text in it is blank.
 area = run("""
-  const r = document.querySelector('main.conversation .scroller').getBoundingClientRect();
+  const r = document.querySelector('main.conversation .slot:not(.parked) .scroller').getBoundingClientRect();
   return { x: r.left + 66, y: r.top + 40, w: Math.floor((r.width - 110) / 2) * 2, h: Math.floor((r.height - 160) / 2) * 2 };
 """)
 ax, ay = H._screen(area["x"], area["y"])

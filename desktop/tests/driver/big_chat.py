@@ -84,7 +84,7 @@ H.shot(out_dir, "big-chat")
 lowest_first = min(questions() or [99999])
 lowest = lowest_first
 for _ in range(12):
-    run("const s = document.querySelector('main.conversation .scroller[role=feed]'); s.scrollTop = 0; s.dispatchEvent(new Event('scroll')); return true;")
+    run("const s = document.querySelector('main.conversation .slot:not(.parked) .scroller[role=feed]'); s.scrollTop = 0; s.dispatchEvent(new Event('scroll')); return true;")
     time.sleep(0.6)
     lowest = min([lowest] + questions())
     if lowest < lowest_first - 400:

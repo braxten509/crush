@@ -4,7 +4,7 @@
 // what those chats are doing, asked of their own folders' engines (states).
 import { api } from "../engine/api.js";
 import { folderChatStates } from "../engine/commands.js";
-import { onEvent } from "../engine/events.js";
+import { onEvent, onFolderEvent } from "../engine/events.js";
 import { conn, inFolder } from "./connection.svelte.js";
 import { openChats } from "./openchats.svelte.js";
 import { sessions, setChatState } from "./sessions.svelte.js";
@@ -49,6 +49,17 @@ export async function loadStates() {
   }
   folders.states = states;
 }
+
+// Between the checks, a running folder's chat state comes as its work
+// starts, ends or begins waiting (the helper's watch.rs reads the record
+// then), so the left list's dots follow at once (owner, 2026-10-22).
+onFolderEvent("chat_state", (_kind, s) => {
+  const listed = s?.id && openChats.list.find((c) => c.id === s.id);
+  if (!listed || inFolder(listed.dir)) return;
+  const state = { is_busy: s.is_busy === true, has_unfinished_work: s.has_unfinished_work === true, pending_prompt: s.pending_prompt ?? "" };
+  folders.states = { ...folders.states, [s.id]: state };
+  if (sessions.byId[s.id]) setChatState(s.id, state);
+});
 
 let timer = null;
 

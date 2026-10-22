@@ -215,8 +215,8 @@ if "engine" in parts:
     # -- A reply's footer --
     xdo("type", "--delay", "15", "--", "Seed turn short")
     key("Return")
-    done = until("return [...document.querySelectorAll('.timeline [data-kind=footer]')].length > 0 && !document.querySelector('.timeline .status');", 20)
-    footer = run("return [...document.querySelectorAll('.timeline [data-kind=footer]')].map((e) => e.textContent.trim()).pop() ?? null;")
+    done = until("return [...document.querySelectorAll('.slot:not(.parked) .timeline [data-kind=footer]')].length > 0 && !document.querySelector('.slot:not(.parked) .timeline .status');", 20)
+    footer = run("return [...document.querySelectorAll('.slot:not(.parked) .timeline [data-kind=footer]')].map((e) => e.textContent.trim()).pop() ?? null;")
     check(done and footer is not None, f"the reply finishes with its footer ({footer!r})")
     check(footer is not None and "Unknown Model" not in footer and footer.startswith("Fake Large via Fake AI in "), f"the footer names the model and provider from the config ({footer!r})")
 
@@ -225,11 +225,11 @@ if "engine" in parts:
     click_at(rect(".composer textarea"))
     xdo("type", "--delay", "15", "--", "leftlist slow reply")
     key("Return")
-    working = until("return !!document.querySelector('.timeline .status');", 10)
+    working = until("return !!document.querySelector('.slot:not(.parked) .timeline .status');", 10)
     check(working, "the slow reply runs (the live status shows)")
     time.sleep(0.3)
     check(label() == "Stop", f"while it runs with an empty box, the square is Stop ({label()})")
-    dots = run("return [...document.querySelectorAll('.timeline .status .mark .dot')].map((d) => d.getBoundingClientRect().width);") or []
+    dots = run("return [...document.querySelectorAll('.slot:not(.parked) .timeline .status .mark .dot')].map((d) => d.getBoundingClientRect().width);") or []
     check(len(dots) == 3 and max(dots) - min(dots) < 0.01 and all(abs(w - round(w)) < 0.01 for w in dots), f"its three dots are whole pixels of one width ({dots})")
     shot("stop")
     xdo("type", "--delay", "15", "--", "x")
@@ -239,7 +239,7 @@ if "engine" in parts:
     time.sleep(0.3)
     check(label() == "Stop", f"clearing the box turns it into Stop again ({label()})")
     click_at(rect(".composer .send"))
-    stopped = until("return !document.querySelector('.timeline .status');", 8)
+    stopped = until("return !document.querySelector('.slot:not(.parked) .timeline .status');", 8)
     check(stopped, "a click on Stop ends the run")
     time.sleep(0.4)
     check(label() == "Send", f"and the square is Send again ({label()})")
@@ -248,14 +248,14 @@ if "engine" in parts:
     # -- One beat --
     xdo("type", "--delay", "15", "--", "leftlist slow reply")
     key("Return")
-    if check(until("return !!document.querySelector('.timeline .status .mark');", 10), "another slow reply runs"):
+    if check(until("return !!document.querySelector('.slot:not(.parked) .timeline .status .mark');", 10), "another slow reply runs"):
         time.sleep(0.3)
-        dots = beat(".timeline .status .mark .dot")
+        dots = beat(".slot:not(.parked) .timeline .status .mark .dot")
         check(dots == ["on beat"] * 3, f"its dots pulse on the page's one beat ({dots})")
         click_at(rect("nav.chats button.settings"))
         time.sleep(0.7)
         click_at(rect(".settings-nav button.back"))
         time.sleep(0.7)
-        dots = beat(".timeline .status .mark .dot")
+        dots = beat(".slot:not(.parked) .timeline .status .mark .dot")
         check(dots == ["on beat"] * 3, f"and keep it after Settings hid the chat and gave it back ({dots})")
 finish()

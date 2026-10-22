@@ -15,6 +15,16 @@ const chat = (sid) => `sessions/${seg(sid)}`;
 const run = (sid) => `agent/sessions/${seg(sid)}`;
 
 const get = (path, query) => commands.api("GET", path, query);
+
+// A chat of another folder (every listed chat stays drawn, owner
+// 2026-10-22) is read from that folder's saved files through this window's
+// engine, so that folder's engine need not run. The open chats store tells
+// each chat's folder: "" for this folder's chats.
+let otherFolder = () => "";
+export function setOtherFolder(fn) {
+  otherFolder = fn;
+}
+const saved = (sid) => `saved-sessions/${seg(sid)}`;
 const post = (path, body, query, callId) => commands.api("POST", path, query, body, callId);
 
 // config.Scope travels as a number (internal/config/scope.go:6-13): global 0,
@@ -91,7 +101,10 @@ export const api = {
 
   listSessions: () => get("sessions"),
   createSession: (session) => post("sessions", session),
-  getSession: (sid) => get(chat(sid)),
+  getSession: (sid) => {
+    const dir = otherFolder(sid);
+    return dir ? get(saved(sid), { dir }) : get(chat(sid));
+  },
   // The whole record as last read (engine design 5.1(a)).
   saveSession: (session) => commands.api("PUT", chat(session.id), undefined, session),
   deleteSession: (sid) => commands.api("DELETE", chat(sid)),
@@ -101,6 +114,8 @@ export const api = {
     const query = {};
     if (last > 0) query.last = String(last);
     if (before) query.before = before;
+    const dir = otherFolder(sid);
+    if (dir) return get(`${saved(sid)}/messages`, { ...query, dir });
     return get(`${chat(sid)}/messages`, Object.keys(query).length ? query : undefined);
   },
   userMessages: (sid) => get(`${chat(sid)}/messages/user`),

@@ -52,18 +52,20 @@ var (
 
 // Session endpoints.
 var (
-	ListSavedSessions   = Op[Empty, []session.Session]{Method: get, Path: "/v1/workspaces/{id}/saved-sessions"}
-	ChangeSavedSession  = Op[session.CatalogChange, struct{}]{Method: post, Path: "/v1/workspaces/{id}/saved-sessions"}
-	ListSessions        = Op[Empty, []proto.Session]{Method: get, Path: "/v1/workspaces/{id}/sessions"}
-	CreateSession       = Op[proto.Session, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions"}
-	GetSession          = Op[Empty, proto.Session]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}"}
-	SaveSession         = Op[proto.Session, proto.Session]{Method: put, Path: "/v1/workspaces/{id}/sessions/{sid}"}
-	DeleteSession       = Op[Empty, Empty]{Method: del, Path: "/v1/workspaces/{id}/sessions/{sid}"}
-	SessionHistory      = Op[Empty, []proto.File]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/history"}
-	SessionMessages     = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages"}
-	MessageReview       = Op[Empty, proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages/{mid}/review"}
-	SessionUserMessages = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages/user"}
-	SetKeptSkill        = Op[proto.SetKeptSkillRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/kept-skills"}
+	ListSavedSessions    = Op[Empty, []session.Session]{Method: get, Path: "/v1/workspaces/{id}/saved-sessions"}
+	ChangeSavedSession   = Op[session.CatalogChange, struct{}]{Method: post, Path: "/v1/workspaces/{id}/saved-sessions"}
+	GetSavedSession      = Op[Empty, proto.Session]{Method: get, Path: "/v1/workspaces/{id}/saved-sessions/{sid}"}
+	SavedSessionMessages = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/saved-sessions/{sid}/messages"}
+	ListSessions         = Op[Empty, []proto.Session]{Method: get, Path: "/v1/workspaces/{id}/sessions"}
+	CreateSession        = Op[proto.Session, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions"}
+	GetSession           = Op[Empty, proto.Session]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}"}
+	SaveSession          = Op[proto.Session, proto.Session]{Method: put, Path: "/v1/workspaces/{id}/sessions/{sid}"}
+	DeleteSession        = Op[Empty, Empty]{Method: del, Path: "/v1/workspaces/{id}/sessions/{sid}"}
+	SessionHistory       = Op[Empty, []proto.File]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/history"}
+	SessionMessages      = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages"}
+	MessageReview        = Op[Empty, proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages/{mid}/review"}
+	SessionUserMessages  = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages/user"}
+	SetKeptSkill         = Op[proto.SetKeptSkillRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/kept-skills"}
 )
 
 // File tracker endpoints.

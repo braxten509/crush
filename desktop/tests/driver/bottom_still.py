@@ -22,7 +22,7 @@ def run(script):
 
 
 WHERE = """
-  const s = document.querySelector('main.conversation .scroller');
+  const s = document.querySelector('main.conversation .slot:not(.parked) .scroller');
   if (!s) return null;
   const r = s.getBoundingClientRect();
   return { gap: s.scrollHeight - s.clientHeight - s.scrollTop, x: r.x + r.width / 2, y: r.y + r.height / 2 };
@@ -31,7 +31,7 @@ WHERE = """
 # Every frame: the scroller's gap to its end and the last row's top on screen.
 SAMPLE = """
   window.__still = [];
-  const s = document.querySelector('main.conversation .scroller');
+  const s = document.querySelector('main.conversation .slot:not(.parked) .scroller');
   if (!window.__sets) {
     window.__sets = [];
     const d = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');

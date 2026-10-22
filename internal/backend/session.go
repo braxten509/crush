@@ -187,6 +187,16 @@ func (b *Backend) ChangeSavedSession(ctx context.Context, workspaceID string, ch
 	return o.ChangeSavedSession(ctx, change.Session, change.Remove)
 }
 
+// ReadSavedSession reads a chat of the registered folder dir from that
+// folder's own database: its record and, with messages, its messages.
+func (b *Backend) ReadSavedSession(ctx context.Context, workspaceID, dir, sessionID string, messages bool) (session.Session, []message.Message, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return session.Session{}, nil, err
+	}
+	return o.savedSessions().Read(ctx, dir, sessionID, messages)
+}
+
 // FileTrackerRecordRead records a file read for a session.
 func (b *Backend) FileTrackerRecordRead(ctx context.Context, workspaceID, sessionID, path string) error {
 	o, err := b.ops(workspaceID)

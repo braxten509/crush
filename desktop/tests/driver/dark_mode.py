@@ -126,7 +126,7 @@ if "scroll" in parts:
     xdo("windowsize", wid, 1600, 420)
     time.sleep(1.5)
 bar = None if "scroll" not in parts else run("""
-  const s = document.querySelector('.timeline .scroller') || document.querySelector('.scroller');
+  const s = document.querySelector('.slot:not(.parked) .scroller') || document.querySelector('.scroller');
   if (!s) return null;
   const r = s.getBoundingClientRect();
   const x = r.right - 3, y = r.top + r.height / 2;
@@ -140,18 +140,18 @@ if "scroll" in parts and check(bar is not None and "x" in bar, f"the chat scroll
     check(bar["inside"], f"the point on the scroll bar belongs to the chat, not the column grip (hit {bar['hit']})")
     # Real wheel turns over the chat.
     xdo("mousemove", geo_x + round(bar["left"] + bar["width"] / 2), geo_y + round(bar["y"]))
-    before = run("return document.querySelector('.timeline .scroller, .scroller').scrollTop;")
+    before = run("return document.querySelector('.slot:not(.parked) .scroller, .scroller').scrollTop;")
     for _ in range(4):
         xdo("click", 4)
         time.sleep(0.05)
     time.sleep(0.25)
-    shown = run("return document.querySelector('.timeline .scroller, .scroller').classList.contains('bar-shown');")
+    shown = run("return document.querySelector('.slot:not(.parked) .scroller, .scroller').classList.contains('bar-shown');")
     strip = (round(bar["x"]) - 2, round(bar["top"] + 20), 5, round(bar["height"] - 40))
     during = column_mean(shot("bar-scrolling", 0), *strip)
     time.sleep(BAR_SHOW_MS / 1000 + 1.5)
-    hidden = run("return !document.querySelector('.timeline .scroller, .scroller').classList.contains('bar-shown');")
+    hidden = run("return !document.querySelector('.slot:not(.parked) .scroller, .scroller').classList.contains('bar-shown');")
     after = column_mean(shot("bar-still", 0.2), *strip)
-    moved = run("return document.querySelector('.timeline .scroller, .scroller').scrollTop;")
+    moved = run("return document.querySelector('.slot:not(.parked) .scroller, .scroller').scrollTop;")
     check(before is not None and moved is not None and moved != before, f"the wheel scrolls the chat ({before} to {moved})")
     check(shown is True, "the thumb shows while the wheel turns")
     check(hidden is True, "the thumb's class goes once scrolling stops")
@@ -209,7 +209,7 @@ if "diagram" in parts:
         nums = [int(float(v)) for v in got[got.find("(") + 1:got.find(")")].split(",")[:3]] if "(" in got else []
         paper = [0x23, 0x23, 0x21]
         check(len(nums) == 3 and all(abs(a - b) <= 10 for a, b in zip(nums, paper)), f"the diagram's box fills with the graphite paper ({got.strip()} vs #232321)")
-run("document.querySelector('.timeline .scroller, .scroller')?.scrollBy(0, -1200); return true;")
+run("document.querySelector('.slot:not(.parked) .scroller, .scroller')?.scrollBy(0, -1200); return true;")
 shot("dark-chat-top")
 run("window.__probe.openDialog('theme'); return true;")
 shot("dark-themes-sheet")

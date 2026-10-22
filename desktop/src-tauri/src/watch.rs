@@ -10,6 +10,12 @@
 //! update_workspace.go). The folders heard, shown or listened to, go into
 //! the shared file, and a terminal in one of them stays quiet
 //! (internal/openchats DesktopHears).
+//!
+//! Every listed chat stays drawn and current in the windows (owner,
+//! 2026-10-22), so a folder a window shows is listened to as well, and each
+//! stream's chat events go to the windows that did not join its folder
+//! (connection::push_folder), after a resync of that folder as the stream
+//! starts. Rings stay for folders no window shows.
 
 use crate::host::async_runtime as host;
 use crate::host::AppHandle;
@@ -22,6 +28,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const TICK: Duration = Duration::from_secs(2);
+/// The events that keep another folder's drawn chats current.
+const CHAT_EVENTS: &[&str] = &["message"];
 const CALL_LIMIT: Duration = Duration::from_secs(3);
 
 /// One folder's stream; dropping it stops the stream.
@@ -65,7 +73,7 @@ fn tick(app: &AppHandle, listeners: &mut HashMap<PathBuf, Listener>, written: &m
             continue;
         }
         let dir = resolved(&chat.dir);
-        if !shown.contains(&dir) && !wanted.contains(&dir) {
+        if !wanted.contains(&dir) {
             wanted.push(dir);
         }
     }
@@ -165,19 +173,60 @@ fn listen(app: AppHandle, dir: PathBuf, socket: String, workspace: String) -> Li
         let client = uuid::Uuid::new_v4().to_string();
         let Ok(mut stream) = http.stream(&format!("{base}/events?watch=1&client_id={client}")).await else { return };
         opened.store(true, Ordering::SeqCst);
+        let folder = dir.to_string_lossy().into_owned();
+        // What happened before the stream started is read again.
+        crate::connection::push_folder(&app, &folder, Vec::new(), true);
         let mut lines = crate::sse::LineSplitter::new();
         let mut out = Vec::new();
         while let Some(Ok(chunk)) = stream.next_chunk().await {
             lines.push(&chunk, &mut out);
+            let mut chat_events = Vec::new();
+            let mut changed: Vec<String> = Vec::new();
             for line in out.drain(..) {
+                if let Some(ev) = crate::batch::parse_sse_line(&line) {
+                    if let Some(sid) = work_changed(&ev).filter(|sid| !changed.contains(sid)) {
+                        changed.push(sid);
+                    }
+                    if CHAT_EVENTS.contains(&ev.ty.as_str()) {
+                        chat_events.push(ev);
+                    }
+                }
                 let Some(event) = line.strip_prefix("data:").and_then(|d| serde_json::from_str::<Value>(d.trim()).ok()) else { continue };
                 if let Some(ring) = ring_for(&event) {
                     ring_once(&app, &http, &base, &dir, ring).await;
                 }
             }
+            // The record's busy state is computed on read, so it is read
+            // again: the left list's dots follow it at once (owner,
+            // 2026-10-22: "I DO want live busy dots").
+            if !crate::connection::heard_elsewhere(&app, &folder) {
+                continue;
+            }
+            for sid in changed {
+                let path = format!("{base}/sessions/{}", encode(&sid));
+                if let Ok(reply) = http.call("GET", &path, None, Some(CALL_LIMIT)).await {
+                    if (200..300).contains(&reply.status) && reply.body.get("id").and_then(Value::as_str) == Some(sid.as_str()) {
+                        chat_events.push(crate::batch::Event { ty: "chat_state".to_string(), kind: crate::batch::Kind::Updated, payload: reply.body });
+                    }
+                }
+            }
+            crate::connection::push_folder(&app, &folder, chat_events, false);
         }
     });
     Listener { task, open }
+}
+
+/// The chat whose work may have started, ended or begun waiting: a new
+/// message, an agent event, a finished run or a prompt's change. Agent tool
+/// chats ("message$$call") have no record of their own.
+fn work_changed(ev: &crate::batch::Event) -> Option<String> {
+    let starts = match ev.ty.as_str() {
+        "message" => ev.kind == crate::batch::Kind::Created,
+        "agent_event" | "run_complete" | "prompt_pending" => true,
+        _ => false,
+    };
+    let sid = ev.payload.get("session_id").and_then(Value::as_str).unwrap_or_default();
+    (starts && !sid.is_empty() && !sid.contains("$$")).then(|| sid.to_string())
 }
 
 #[derive(Debug, PartialEq)]
@@ -255,6 +304,18 @@ fn encode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn work_changes_are_new_messages_agent_events_run_ends_and_prompts() {
+        use crate::batch::{Event, Kind};
+        let ev = |ty: &str, kind: Kind, sid: &str| Event { ty: ty.to_string(), kind, payload: json!({"session_id": sid}) };
+        assert_eq!(work_changed(&ev("message", Kind::Created, "s1")), Some("s1".into()));
+        assert_eq!(work_changed(&ev("message", Kind::Updated, "s1")), None, "a streaming update is not a change of work");
+        assert_eq!(work_changed(&ev("run_complete", Kind::Created, "s2")), Some("s2".into()));
+        assert_eq!(work_changed(&ev("prompt_pending", Kind::Updated, "s3")), Some("s3".into()));
+        assert_eq!(work_changed(&ev("agent_event", Kind::Created, "m$$call")), None);
+        assert_eq!(work_changed(&ev("session", Kind::Updated, "s1")), None);
+    }
 
     #[test]
     fn rings_for_a_finished_turn_and_a_new_question_only() {

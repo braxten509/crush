@@ -151,7 +151,7 @@ def send(text):
     time.sleep(0.2)
     xdo("type", "--delay", "15", "--", text)
     key("Return")
-    return until("return [...document.querySelectorAll('.timeline [data-kind=footer]')].length > 0 && !document.querySelector('.timeline .status');", 20)
+    return until("return [...document.querySelectorAll('.slot:not(.parked) .timeline [data-kind=footer]')].length > 0 && !document.querySelector('.slot:not(.parked) .timeline .status');", 20)
 
 
 check(send("Seed turn short"), "a first chat starts and its reply finishes")

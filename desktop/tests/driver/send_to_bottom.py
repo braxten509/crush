@@ -21,7 +21,7 @@ def run(script):
 
 
 WHERE = """
-  const s = document.querySelector('main.conversation .scroller');
+  const s = document.querySelector('main.conversation .slot:not(.parked) .scroller');
   if (!s) return null;
   const r = s.getBoundingClientRect();
   return { gap: s.scrollHeight - s.clientHeight - s.scrollTop, top: s.scrollTop, x: r.x + r.width / 2, y: r.y + r.height / 2 };

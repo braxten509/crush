@@ -7,10 +7,12 @@
 // change made here. A deleted chat leaves the list.
 import { untrack } from "svelte";
 import { openChatsAdd, openChatsGet, openChatsRemove } from "../engine/commands.js";
-import { onEvent } from "../engine/events.js";
+import { setOtherFolder } from "../engine/api.js";
+import { onEvent, onFolderResync } from "../engine/events.js";
 import { chatClosed } from "../remote/share.js";
 import { conn, inFolder, switchFolder } from "./connection.svelte.js";
 import { keepFolders } from "./listfolders.svelte.js";
+import { load, messages, rootChatOf } from "./messages.svelte.js";
 import { isHelperChat, isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
 
 export const openChats = $state({ list: [], loaded: false });
@@ -49,10 +51,11 @@ async function read() {
   }
 }
 
-// The open chats of the joined folder are loaded and kept behind the shown
-// one, one at a time, so each shows at once when picked (owner, 2026-10-21).
-// Chats of other folders load when their folder is joined. Each is tried
-// once per folder.
+// Every open chat is loaded and kept behind the shown one, one at a time,
+// this folder's first, so each shows at once when picked (owner,
+// 2026-10-21) and stays drawn (TimelineStack; owner, 2026-10-22: "all chats
+// should stay open"). Chats of other folders are read from their saved
+// files (api.js setOtherFolder). Each is tried once per joined folder.
 const tried = new Set();
 let preloading = false;
 async function preloadOpen() {
@@ -61,7 +64,8 @@ async function preloadOpen() {
   try {
     for (;;) {
       const dir = folderNow();
-      const next = openChats.list.find((c) => c.dir === dir && !tried.has(`${dir}\n${c.id}`) && c.id !== sessions.currentId);
+      const untried = (c) => !tried.has(`${dir}\n${c.id}`) && c.id !== sessions.currentId;
+      const next = openChats.list.find((c) => c.dir === dir && untried(c)) ?? openChats.list.find(untried);
       if (!next || conn.state !== "connected") break;
       tried.add(`${dir}\n${next.id}`);
       await preloadChat(next.id);
@@ -70,6 +74,34 @@ async function preloadOpen() {
     preloading = false;
   }
 }
+
+const sameDir = (a, b) => {
+  const clean = (path) => String(path ?? "").replace(/\/+$/u, "");
+  return clean(a) !== "" && clean(a) === clean(b);
+};
+
+// The folder of a listed chat (or of an agent's chat inside one) that this
+// window has not joined, else "".
+function otherFolderOf(sid) {
+  // Until the window knows its own folder, every chat is read as before; so
+  // is the chat it shows or opens, whose folder it joins.
+  if (!folderNow()) return "";
+  const root = rootChatOf(sid);
+  if (!root || root === sessions.currentId || root === sessions.opening?.id) return "";
+  const dir = root ? openChats.list.find((c) => c.id === root)?.dir : "";
+  return dir && !inFolder(dir) ? dir : "";
+}
+setOtherFolder(otherFolderOf);
+
+// The drawn chats of another folder are read again: that folder's events may
+// have been missed (its stream just started, or this window just left it).
+function rereadFolder(dir) {
+  for (const c of openChats.list) {
+    if (c.id === sessions.currentId || (dir && !sameDir(c.dir, dir)) || inFolder(c.dir)) continue;
+    if (messages.bySession[c.id]?.status === "ready") load(c.id).catch((error) => console.error("rereading a chat failed", error?.message ?? error));
+  }
+}
+onFolderResync(rereadFolder);
 
 function folderNow() {
   return conn.project.path || conn.project.cwd || "";
@@ -178,6 +210,8 @@ let timer = null;
 onEvent("connection", (_kind, ev) => {
   if (ev?.state !== "connected") return;
   read();
+  // The folder just left is another folder now: its drawn chats catch up.
+  rereadFolder("");
   timer ??= setInterval(() => {
     if (globalThis.document?.visibilityState !== "hidden") read();
   }, POLL_MS);

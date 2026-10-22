@@ -3,7 +3,8 @@
   // its rail (or a start screen in its place), the notice line over the
   // timeline's bottom, the tray, the composer, and the strip under it while
   // the right panel is hidden (the meters) or the phone shares the shown chat
-  // (REMOTE). Each part is drawn by its own piece; this shell only places
+  // (REMOTE). Every listed chat's timeline stays drawn under the shown one
+  // (TimelineStack). Each part is drawn by its own piece; this shell only places
   // them.
   import ChatHead from "./ChatHead.svelte";
   import Composer from "./composer/Composer.svelte";
@@ -15,7 +16,9 @@
   import Landing from "./start/Landing.svelte";
   import Onboarding from "./start/Onboarding.svelte";
   import Opening from "./start/Opening.svelte";
-  import Timeline from "./timeline/Timeline.svelte";
+  import Rail from "./timeline/Rail.svelte";
+  import TimelineStack from "./timeline/TimelineStack.svelte";
+  import { messages } from "../lib/stores/messages.svelte.js";
   import { shownShare } from "../lib/remote/store.svelte.js";
   import { sessions } from "../lib/stores/sessions.svelte.js";
   import { ui } from "../lib/stores/ui.svelte.js";
@@ -31,9 +34,12 @@
   // A chat has no head of its own any more (its title, folder and branch are
   // in the top bar; owner, 2026-10-20): only the wordmark screens draw one.
   const branded = $derived(["init", "onboarding"].includes(screen()));
+  // The rail draws under the shown chat once its messages are in.
+  const chatShown = $derived(Boolean(sessionId) && !sessions.opening && messages.bySession[sessionId]?.status === "ready");
+  let column = $state(null);
 </script>
 
-<main class="conversation" aria-label={session?.title || "Conversation"}>
+<main class="conversation" bind:this={column} aria-label={session?.title || "Conversation"}>
   {#if headed}
     <ChatHead {session} />
     {#if branded}<Rule marks="both" class="under-head" />{/if}
@@ -44,7 +50,8 @@
   <InitPrompt />
   <Landing />
   <Opening />
-  <Timeline {sessionId} />
+  <TimelineStack {sessionId} />
+  {#if column}<Rail {column} shown={chatShown} />{/if}
 
   <NoticeLine />
   <Tray />

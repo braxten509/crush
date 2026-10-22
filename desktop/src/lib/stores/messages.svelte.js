@@ -4,7 +4,7 @@
 // a copy (withInterrupt), so the stored object stays the event's.
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { api, onInterrupt, onSend, uuid } from "../engine/api.js";
-import { onEvent, onResync } from "../engine/events.js";
+import { onEvent, onFolderEvent, onResync } from "../engine/events.js";
 import { prompts } from "./prompts.svelte.js";
 import { queue } from "./queue.svelte.js";
 import { noteChatMessage, sessions, settleBusy } from "./sessions.svelte.js";
@@ -57,6 +57,20 @@ export const agentChatId = (messageId, toolCallId) => `${messageId}$$${toolCallI
 export function parseAgentChatId(sid) {
   const parts = String(sid ?? "").split("$$");
   return parts.length === 2 ? { messageId: parts[0], toolCallId: parts[1] } : null;
+}
+
+// The top-level chat an agent tool's chat belongs to (its message's chat, up
+// through nested agents); a top-level chat is its own.
+export function rootChatOf(sid) {
+  let id = sid;
+  for (let depth = 0; depth < 8; depth++) {
+    const agent = parseAgentChatId(id);
+    if (!agent) return id;
+    const owner = Object.keys(messages.bySession).find((other) => messages.bySession[other]?.byId?.has(agent.messageId));
+    if (!owner) return "";
+    id = owner;
+  }
+  return "";
 }
 
 function chatFor(sid) {
@@ -387,6 +401,8 @@ export function applyMessage(event, m) {
 }
 
 onEvent("message", applyMessage);
+// Another folder's drawn chats stay current (TimelineStack).
+onFolderEvent("message", (event, m) => applyMessage(event, m));
 
 // tree_changed for the shown chat reloads it (1.5.3); the path may differ.
 onEvent("tree_changed", (_kind, change) => {

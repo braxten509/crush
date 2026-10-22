@@ -395,6 +395,10 @@ const ROUTES: &[(&str, &str)] = &[
     ("DELETE", "accounts/{aid}"),
     ("POST", "accounts/{aid}/login"),
     ("POST", "/v1/limits/refill"),
+    // Another folder's open chat, read from its folder's saved files so it
+    // stays drawn without that folder's engine (owner, 2026-10-22).
+    ("GET", "saved-sessions/{sid}"),
+    ("GET", "saved-sessions/{sid}/messages"),
 ];
 
 /// The only routes `api_secret` posts to (6.4): a secure form's answers,
@@ -557,11 +561,30 @@ struct Inner {
 
 struct Queue {
     batcher: Batcher,
+    /// Events of other folders' engines (watch.rs), by folder: each listed
+    /// chat stays drawn and current in the window (owner, 2026-10-22).
+    side: HashMap<String, Side>,
     /// A doorbell went out and no take has happened since.
     rung: bool,
     /// Events pushed since the last take; tests wait on it.
     #[cfg(test)]
     pushed: usize,
+}
+
+/// One other folder's waiting events; `resync` asks the page to read that
+/// folder's chats again (its stream just started, or events overflowed).
+struct Side {
+    batcher: Batcher,
+    resync: bool,
+}
+
+/// An entry of another folder's batch, tagged with the folder.
+fn side_entry(dir: &str, entry: batch::Entry) -> Value {
+    let mut value = fixture::wire_entry(entry);
+    if let Some(object) = value.as_object_mut() {
+        object.insert("folder".to_string(), json!(dir));
+    }
+    value
 }
 
 /// A running `api` call with a `callId` (1.2.4).
@@ -597,6 +620,7 @@ impl WindowConn {
             debug,
             queue: Mutex::new(Queue {
                 batcher: Batcher::new(BATCH_MAX),
+                side: HashMap::new(),
                 rung: false,
                 #[cfg(test)]
                 pushed: 0,
@@ -673,7 +697,38 @@ impl WindowConn {
         {
             queue.pushed = 0;
         }
-        queue.batcher.take().into_iter().map(fixture::wire_entry).collect()
+        let mut out: Vec<Value> = queue.batcher.take().into_iter().map(fixture::wire_entry).collect();
+        for (dir, mut side) in queue.side.drain() {
+            if side.resync {
+                out.push(side_entry(&dir, batch::Entry::Resync));
+            }
+            out.extend(side.batcher.take().into_iter().map(|entry| side_entry(&dir, entry)));
+        }
+        out
+    }
+
+    /// The folder this window joined (resolved), once it has a plan.
+    fn folder(&self) -> Option<String> {
+        self.inner().plan.as_ref().map(|plan| plan.cwd.clone())
+    }
+
+    /// Another folder's events (or, with none, a resync of that folder)
+    /// into this window's batch; the folder the window joined hears them
+    /// through its own stream.
+    fn push_side(&self, dir: &str, events: Vec<Event>, resync: bool) {
+        if self.folder().as_deref() == Some(dir) || (events.is_empty() && !resync) {
+            return;
+        }
+        let due = {
+            let mut queue = self.queue.lock().unwrap();
+            let side = queue.side.entry(dir.to_string()).or_insert_with(|| Side { batcher: Batcher::new(BATCH_MAX), resync: false });
+            side.resync |= resync;
+            for ev in events {
+                side.batcher.push(ev);
+            }
+            !std::mem::replace(&mut queue.rung, true)
+        };
+        self.ring_if(due);
     }
 
     // Join (1.2.6).
@@ -1384,6 +1439,22 @@ pub async fn set_current_session(
     connection(app, label).ok_or_else(not_open)?.set_current_session(session_id).await
 }
 
+/// Events of another folder's engine for every window that did not join
+/// that folder (watch.rs); `resync` alone asks them to read its chats again.
+pub fn push_folder(app: &crate::host::AppHandle, dir: &str, events: Vec<Event>, resync: bool) {
+    let conns: Vec<Arc<WindowConn>> = app.state::<AppState>().windows.lock().unwrap().values().cloned().collect();
+    for conn in conns {
+        conn.push_side(dir, events.clone(), resync);
+    }
+}
+
+/// Whether a window joined some other folder than `dir`, so `dir`'s events
+/// are wanted by push_folder.
+pub fn heard_elsewhere(app: &crate::host::AppHandle, dir: &str) -> bool {
+    let conns: Vec<Arc<WindowConn>> = app.state::<AppState>().windows.lock().unwrap().values().cloned().collect();
+    conns.iter().any(|conn| conn.folder().as_deref() != Some(dir))
+}
+
 /// The wire form of 1.4.2.
 pub fn take(app: &crate::host::AppHandle, label: &str) -> Vec<serde_json::Value> {
     connection(app, label).map(|conn| conn.take()).unwrap_or_default()
@@ -1874,8 +1945,9 @@ mod tests {
         listed.sort();
         design.extend(DESIGN_5_6_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))));
         design.extend(FALLBACK_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))));
+        design.extend(OTHER_FOLDER_ROUTES.iter().map(|p| ("GET", *p)));
         design.sort();
-        assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5 and the fallback routes, no more and no less");
+        assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5, the fallback and other-folder routes, no more and no less");
         for (method, pattern) in ROUTES {
             let path = pattern
                 .replace("{sid}", "s-1")
@@ -2006,6 +2078,9 @@ mod tests {
         ("PUT", &["/v1/memory/limit", "/v1/themes/{name}"]),
         ("DELETE", &["/v1/themes/{name}"]),
     ];
+
+    /// Other folders' open chats, read from their saved files (TimelineStack).
+    const OTHER_FOLDER_ROUTES: &[&str] = &["saved-sessions/{sid}", "saved-sessions/{sid}/messages"];
 
     /// Accounts and the fallback order (internal/rpc/routes_fallback.go), row by row.
     const FALLBACK_ROUTES: &[(&str, &[&str])] = &[

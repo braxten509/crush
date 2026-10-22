@@ -3,9 +3,9 @@
 // sync": a chat opened in either shows in both, and closing it in either
 // closes it in both). The list lives in one small file,
 // $XDG_STATE_HOME/crush/open-chats.json, with the apps that have it open.
-// The chats stay while any of those apps runs; once the last one is closed
-// (or found gone, after a crash) the list empties, so the next app starts
-// with none.
+// The chats stay until they are closed in either app (owner,
+// 2026-10-21: they stay even when every app quits, so quitting Crush
+// doesn't lose the list).
 //
 // The desktop's helper (desktop/src-tauri/src/openchats.rs) reads and
 // writes the same file the same way: every change takes the lock file
@@ -75,14 +75,9 @@ func Open() (List, error) {
 // At returns the list kept at path (tests).
 func At(path string) List { return List{path: path} }
 
-// Chats returns the open chats, oldest first; none when no app that has
-// the list open is still running.
+// Chats returns the open chats, oldest first, whatever apps run.
 func (l List) Chats() []Chat {
-	f := l.read()
-	if len(liveApps(f.Apps)) == 0 {
-		return nil
-	}
-	return f.Chats
+	return l.read().Chats
 }
 
 // DesktopHears reports whether a running desktop app rings for the chats
@@ -127,15 +122,12 @@ func sameDir(dir string) string {
 }
 
 // Join signs this process in as kind. When no other app has the list open
-// it starts empty: both apps were closed. leave signs it out again, and
-// empties the list when it was the last app.
+// it keeps its chats. leave signs it out again. The chats only leave the
+// list through Remove, whatever apps run (owner, 2026-10-21).
 func (l List) Join(kind string) (leave func(), err error) {
 	me := App{PID: os.Getpid(), Start: processStart(os.Getpid()), Kind: kind}
 	err = l.change(func(f *file) {
 		f.Apps = liveApps(f.Apps)
-		if len(f.Apps) == 0 {
-			f.Chats = nil
-		}
 		f.Apps = append(slices.DeleteFunc(f.Apps, func(a App) bool { return a.PID == me.PID }), me)
 	})
 	if err != nil {
@@ -144,9 +136,6 @@ func (l List) Join(kind string) (leave func(), err error) {
 	return func() {
 		_ = l.change(func(f *file) {
 			f.Apps = slices.DeleteFunc(liveApps(f.Apps), func(a App) bool { return a.PID == me.PID })
-			if len(f.Apps) == 0 {
-				f.Chats = nil
-			}
 		})
 	}, nil
 }

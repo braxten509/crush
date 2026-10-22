@@ -32,9 +32,9 @@ func ids(chats []Chat) []string {
 	return out
 }
 
-// The chats stay while either app runs and close once both are closed
-// (owner, 2026-10-20: "IFF both apps are closed, those chats close").
-func TestChatsCloseOnlyWhenEveryAppIsClosed(t *testing.T) {
+// The chats stay until they are closed in either app; quitting every app
+// keeps them (owner, 2026-10-21).
+func TestChatsStayOnlyOnceClosedManually(t *testing.T) {
 	l := At(filepath.Join(t.TempDir(), "open-chats.json"))
 	endDesktop := otherApp(t, l)
 	require.NoError(t, l.Add(Chat{ID: "a", Dir: "/p"}))
@@ -48,18 +48,21 @@ func TestChatsCloseOnlyWhenEveryAppIsClosed(t *testing.T) {
 	require.Equal(t, []string{"a", "b"}, ids(l.Chats()), "the terminal quitting keeps them: the desktop still runs")
 
 	endDesktop()
-	require.Empty(t, l.Chats(), "with no app running (the desktop crashed) the list is empty")
+	require.Equal(t, []string{"a", "b"}, ids(l.Chats()), "no app running (both quit) still keeps the chats")
 	leave, err = l.Join("terminal")
 	require.NoError(t, err)
-	require.Empty(t, l.Chats(), "and the next app starts with none")
-	require.NoError(t, l.Add(Chat{ID: "c", Dir: "/p"}))
+	require.Equal(t, []string{"a", "b"}, ids(l.Chats()), "and a new app joins the kept chats")
+	leave()
+	require.NoError(t, l.Remove("b"))
+	leave, err = l.Join("desktop")
+	require.NoError(t, err)
+	require.Equal(t, []string{"a"}, ids(l.Chats()), "a manual close takes one chat off")
 	leave()
 	b, err := os.ReadFile(l.path)
 	require.NoError(t, err)
 	var f file
 	require.NoError(t, json.Unmarshal(b, &f))
-	require.Empty(t, f.Chats, "the last app leaving empties the file")
-	require.Empty(t, f.Apps)
+	require.Equal(t, []Chat{{ID: "a", Dir: "/p", Opened: f.Chats[0].Opened}}, f.Chats, "the file keeps the rest")
 }
 
 func TestAddRemoveAndSwapKeepTheOrder(t *testing.T) {

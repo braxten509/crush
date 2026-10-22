@@ -199,10 +199,8 @@
     cursor: pointer;
     white-space: pre;
   }
-  /* The arrow keys' row: the pick band with the vermilion edge (owner, 2026-10-21). */
   .row.focused {
     background: var(--pick);
-    box-shadow: inset calc(4 * var(--px)) 0 0 var(--vermilion);
   }
   .commands {
     width: max-content;

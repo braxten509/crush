@@ -178,12 +178,9 @@
   .entry:focus-visible {
     outline: none;
   }
-  /* The pointer's row: the pick band with the vermilion edge, as the chat
-     list's selected row (owner, 2026-10-21). */
   .entry:not(:disabled):hover,
   .entry.active {
     background: var(--pick);
-    box-shadow: inset calc(4 * var(--px)) 0 0 var(--vermilion);
   }
   .entry:disabled {
     color: var(--mark);

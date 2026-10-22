@@ -101,7 +101,7 @@ const DERIVED = {
 // keep their strength.
 const DARK_SOFTER = new Set(["--rule-frame", "--rule-faint", "--rule-table-inner", "--meter-edge"]);
 const DARK_RULE_SCALE = 0.75;
-const PICK_LIFT = { dark: 0.18, light: 0.06 };
+const PICK_LIFT = 0.12;
 
 // The eight code classes (3.1) → their syntax keys.
 const SYNTAX = {
@@ -179,12 +179,10 @@ export function tokensOf(view) {
   ANSI.forEach((name, i) => {
     if (role(name)) tokens[`--ansi-${i}`] = role(name);
   });
-  // The highlighted row in menus: the paper moved toward the ink, farther on
-  // dark paper. The band alone could not be told apart from the menu (owner,
-  // 2026-10-21: "still isn't very noticeable"), so the row also gets the
-  // vermilion edge where it is a menu's pointer row.
-  if (fg && bg) tokens["--pick"] = mix(fg, bg, isDark(view) ? PICK_LIFT.dark : PICK_LIFT.light);
-  else if (tokens["--band"]) tokens["--pick"] = tokens["--band"];
+  // The highlighted row in menus: the band in light mode; on dark paper the
+  // band sat 3 steps off the menu and could not be told apart (owner,
+  // 2026-10-21), so it is lifted an eighth of the way toward the ink.
+  if (tokens["--band"]) tokens["--pick"] = isDark(view) && fg && bg ? mix(fg, bg, PICK_LIFT) : tokens["--band"];
   const paper = parseHex(bg);
   if (paper) tokens["--scrim"] = `rgb(${paper.join(" ")} / 0.92)`;
   return tokens;

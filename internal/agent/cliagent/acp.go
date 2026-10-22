@@ -51,6 +51,8 @@ type acpContent struct {
 	Path    string `json:"path"`
 	OldText string `json:"oldText"`
 	NewText string `json:"newText"`
+	// TerminalID names the terminal Crush runs a call's command in.
+	TerminalID string `json:"terminalId"`
 }
 
 type acpUsage struct {
@@ -87,6 +89,9 @@ type acpRun struct {
 
 	session atomic.Pointer[string]
 	calls   map[string]*acpTool
+	// terms runs the commands the agent asks Crush to run; nil when
+	// Crush doesn't offer it (see [offersTerminal]).
+	terms *acpTerminals
 	// loading is set while session/load replays history, which is skipped.
 	loading bool
 	// loaded is the native session session/load opened, if any.
@@ -133,9 +138,16 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 		return err
 	}
 	defer p.finish()
+	var terms *acpTerminals
+	if offersTerminal(m, t, name) {
+		terms = newACPTerminals(m.Dir)
+		defer terms.closeAll()
+		t.Emit = terms.attach(t.Emit)
+	}
 	t.Emit = p.reviewEvents(t.Emit)
 	r := &acpRun{
 		ctx: ctx, m: m, t: t, p: p, name: name, setModel: setModel,
+		terms:    terms,
 		calls:    map[string]*acpTool{},
 		loading:  t.Resume != "",
 		steerIDs: map[string]string{},
@@ -152,7 +164,7 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 
 	_ = p.send(map[string]any{"jsonrpc": "2.0", "id": acpInitID, "method": "initialize", "params": map[string]any{
 		"protocolVersion":    1,
-		"clientCapabilities": map[string]any{"fs": map[string]any{"readTextFile": false, "writeTextFile": false}, "terminal": false},
+		"clientCapabilities": map[string]any{"fs": map[string]any{"readTextFile": false, "writeTextFile": false}, "terminal": terms != nil},
 	}})
 
 	r.stopSteer = func() {}
@@ -168,7 +180,7 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 		id := strings.Trim(string(msg.ID), `"`)
 
 		if msg.Method != "" && id != "" {
-			go acpRequest(ctx, m, r.t, p, msg)
+			go acpRequest(ctx, m, r.t, p, msg, r.terms)
 			continue
 		}
 
@@ -421,6 +433,15 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 			return err
 		}
 	}
+	if r.terms != nil {
+		var parts []acpContent
+		_ = json.Unmarshal(params.Update.Content, &parts)
+		for _, c := range parts {
+			if c.Type == "terminal" && c.TerminalID != "" {
+				r.terms.claim(c.TerminalID, params.Update.ToolCallID)
+			}
+		}
+	}
 	if err := acpHandleUpdate(params.Update, r.calls, r.t.Emit); err != nil {
 		return err
 	}
@@ -601,9 +622,27 @@ func acpTurnUsage(usage, meta *acpUsage) *fantasy.Usage {
 	return nil
 }
 
+// offersTerminal reports whether Crush runs the agent's commands itself:
+// only Grok's, whose long-lived shell hides which command changed what.
+// Never for a read-only turn, whose commands must stay in its sandbox, or
+// a turn without tools.
+func offersTerminal(m *Model, t Turn, name string) bool {
+	return name == "grok" && !m.ReadOnly && !t.NoTools
+}
+
 // acpRequest answers an agent request. Permission prompts go to Crush's
-// dialog, the answer picked from the options the agent offered.
-func acpRequest(ctx context.Context, m *Model, t Turn, p *proc, msg rpcMessage) {
+// dialog, the answer picked from the options the agent offered; terminal
+// requests run the agent's commands (acp_terminal.go).
+func acpRequest(ctx context.Context, m *Model, t Turn, p *proc, msg rpcMessage, terms *acpTerminals) {
+	if terms != nil && strings.HasPrefix(msg.Method, "terminal/") {
+		result, err := terms.handle(ctx, msg.Method, msg.Params)
+		if err != nil {
+			_ = p.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "error": map[string]any{"code": -32603, "message": err.Error()}})
+			return
+		}
+		_ = p.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": result})
+		return
+	}
 	if msg.Method != "session/request_permission" {
 		_ = p.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "error": map[string]any{"code": -32601, "message": "not supported by Crush"}})
 		return

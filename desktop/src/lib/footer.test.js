@@ -290,6 +290,17 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
     ...fields,
   });
 
+  it("an AGY model with an effort in its name reads the entry without it, or its effort-tiered one (owner, 2026-10-22)", () => {
+    const agy = reading({ kind: "agy-cli", windows: [
+      { name: "Quota", used: 5, model: "gemini-3.8-flash-tiered" },
+      { name: "Quota", used: 20, model: "gemini-3.5-flash" },
+      { name: "Quota", used: 50, model: "gemini-3.5-flash-lite" },
+    ] });
+    expect(limitWindows(agy, "gemini-3.8-flash-high", now).map((w) => w.left)).toEqual([95]);
+    expect(limitWindows(agy, "gemini-3.5-flash-medium", now).map((w) => w.left)).toEqual([80]);
+    expect(limitWindows(agy, "gemini-3.7-flash-high", now)).toEqual([]);
+  });
+
   it("the windows for every model and for this one, with what is left and the time to the reset", () => {
     expect(limitWindows(reading(), "opus", now)).toEqual([
       { name: "5h", left: 14, resetsIn: (2 * 60 + 41) * 60_000 },

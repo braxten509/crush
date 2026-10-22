@@ -5,6 +5,7 @@ package providers
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -284,6 +285,10 @@ func reasoningObjectOptions[T fantasy.ProviderOptionsData](name string, parse fu
 	}
 }
 
+// openRouterHostOrder reads a model's OpenRouter hosts, cheapest first;
+// tests replace it.
+var openRouterHostOrder = discover.OpenRouterHostOrder
+
 // openrouterOptions asks OpenRouter for the cheapest host first (provider
 // sort "price"; owner, 2026-10-22) unless the provider's switch is off or
 // the user's own options already pick a sort or an order. The account's own
@@ -297,6 +302,11 @@ func openrouterOptions(c *optionsCall) fantasy.ProviderOptions {
 				next = map[string]any{}
 			}
 			next["sort"] = "price"
+			// Once the model's hosts are read, they go first by price with
+			// cache reads breaking ties (discover.OpenRouterHostOrder).
+			if order := openRouterHostOrder(context.Background(), c.provider.BaseURL, c.model.CatwalkCfg.ID); len(order) > 0 {
+				next["order"] = order
+			}
 			c.merged["provider"] = next
 		}
 	}

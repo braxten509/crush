@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -324,4 +325,24 @@ func TestOpenRouterAsksForTheCheapestHost(t *testing.T) {
 	off := false
 	p.CheapestHost = &off
 	require.Nil(t, routing(p, config.SelectedModel{}))
+}
+
+// Once OpenRouter's hosts for the model are read, the request names them
+// cheapest first, so a cheaper cache read wins a tie (owner, 2026-10-22).
+func TestOpenRouterNamesItsHostsCheapestFirst(t *testing.T) {
+	restore := openRouterHostOrder
+	openRouterHostOrder = func(_ context.Context, baseURL, model string) []string {
+		if model == "deepseek/deepseek-v4.1-flash" {
+			return []string{"cheap-cache", "cheap/fp8"}
+		}
+		return nil
+	}
+	t.Cleanup(func() { openRouterHostOrder = restore })
+	price := "price"
+	p := config.ProviderConfig{ID: "openrouter", Type: openrouter.Name, BaseURL: "https://openrouter.ai/api/v1"}
+	options := Options(catwalk.Model{ID: "deepseek/deepseek-v4.1-flash"}, config.SelectedModel{}, p)
+	require.Equal(t, &openrouter.Provider{Order: []string{"cheap-cache", "cheap/fp8"}, Sort: &price}, options[openrouter.Name].(*openrouter.ProviderOptions).Provider)
+	// Not read yet: the plain cheapest-first sort.
+	options = Options(catwalk.Model{ID: "other/model"}, config.SelectedModel{}, p)
+	require.Equal(t, &openrouter.Provider{Sort: &price}, options[openrouter.Name].(*openrouter.ProviderOptions).Provider)
 }

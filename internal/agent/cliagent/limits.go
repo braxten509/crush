@@ -200,13 +200,43 @@ func Limits(kind catwalk.Type, model string) []Limit {
 func AccountLimits(kind catwalk.Type, account, model string) []Limit {
 	limitStore.Lock()
 	defer limitStore.Unlock()
+	stored := limitStore.byKind[limitKey{kind, account}]
+	named := usageModel(stored, model)
 	var limits []Limit
-	for _, l := range limitStore.byKind[limitKey{kind, account}] {
-		if l.Model == "" || l.Model == model {
+	for _, l := range stored {
+		if l.Model == "" || l.Model == named {
 			limits = append(limits, l)
 		}
 	}
 	return limits
+}
+
+// effortWords are the effort levels a CLI's model name may end in.
+var effortWords = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+
+// usageModel is the per-model name model's usage is stored under: its own,
+// else its name without the effort word, else that name's effort-tiered
+// entry (AGY lists gemini-3.8-flash-high's usage as
+// gemini-3.8-flash-tiered; owner, 2026-10-22). "" when none is stored.
+func usageModel(limits []Limit, model string) string {
+	has := func(name string) bool {
+		return name != "" && slices.ContainsFunc(limits, func(l Limit) bool { return l.Model == name })
+	}
+	if has(model) {
+		return model
+	}
+	for _, word := range effortWords {
+		base, ok := strings.CutSuffix(model, "-"+word)
+		if !ok {
+			continue
+		}
+		for _, name := range []string{base, base + "-tiered"} {
+			if has(name) {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // Refills is how many free refills an account has left, as last read.
@@ -373,10 +403,11 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 }
 
 var limitFetchers = map[catwalk.Type]func(context.Context) ([]Limit, error){
-	config.TypeClaudeCode: fetchClaudeLimits,
-	config.TypeCodexCLI:   fetchCodexLimits,
-	config.TypeAGYCLI:     fetchAGYLimits,
-	config.TypeGrokCLI:    fetchGrokLimits,
+	config.TypeClaudeCode:  fetchClaudeLimits,
+	config.TypeCodexCLI:    fetchCodexLimits,
+	config.TypeAGYCLI:      fetchAGYLimits,
+	config.TypeGrokCLI:     fetchGrokLimits,
+	config.TypeOpenCodeCLI: fetchOpenCodeLimits,
 }
 
 // fetchGrokLimits asks `grok agent stdio` for the billing config behind

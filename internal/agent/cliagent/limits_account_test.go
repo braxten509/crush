@@ -116,9 +116,11 @@ func TestAGYWindowsAreNamedByTheirLength(t *testing.T) {
 }
 
 // A whole AGY reading reaches the selected Gemini model's meter: the
-// tiered quota, named for the five-hour window the meters show.
+// tiered quota, named for the five-hour window the meters show. The resets
+// count from now: Left() reports a window that has already reset as full
+// again, so a fixed clock passed with the day it names.
 func TestAGYGeminiQuotaReachesItsMeter(t *testing.T) {
-	now := time.Date(2026, 10, 22, 13, 55, 0, 0, time.UTC)
+	now := time.Now()
 	geminiReset, weeklyReset := now.Add(4*time.Hour), now.Add(5*24*time.Hour)
 	require.True(t, StoreAccountLimits(config.TypeAGYCLI, "", []Limit{
 		{Name: agyWindowName(now, geminiReset), Used: 12, ResetsAt: geminiReset, Model: "gemini-3.8-flash-tiered"},

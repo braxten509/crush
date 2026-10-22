@@ -85,3 +85,21 @@ describe("the refill meter", () => {
     expect(two.lines).toContain("2 free refills");
   });
 });
+
+describe("per-model lists", () => {
+  it("each model's list is edited on its own; every other model keeps order.blocks", async () => {
+    const { addList, listBlocks, listKey, listsOf, removeList, withListBlocks } = await import("./blocks.js");
+    const opus = { type: "use", provider: "claude-code", model: "opus" };
+    let order = { on: true, blocks: [opus] };
+    order = addList(order, "codex-cli", "gpt-5.6-sol");
+    const gpt = listKey("codex-cli", "gpt-5.6-sol");
+    expect(listsOf(order).map((l) => l.key)).toEqual([gpt, ""]);
+    expect(listBlocks(order, gpt)).toEqual([{ type: "use", provider: "codex-cli", model: "gpt-5.6-sol" }]);
+    order = withListBlocks(order, gpt, [...listBlocks(order, gpt), { ...opus, account: "claude-2" }]);
+    expect(listBlocks(order, gpt).map((b) => b.account ?? "")).toEqual(["", "claude-2"]);
+    expect(listBlocks(order, "")).toEqual([opus]);
+    expect(addList(order, "codex-cli", "gpt-5.6-sol")).toBe(order); // one list per model
+    order = removeList(order, gpt);
+    expect([order.lists, listBlocks(order, gpt)]).toEqual([[], [opus]]);
+  });
+});

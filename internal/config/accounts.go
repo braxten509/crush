@@ -65,8 +65,21 @@ type FallbackBlock struct {
 
 // FallbackOrder is the order chats move through when an account runs out.
 type FallbackOrder struct {
-	On     bool            `json:"on"`
+	On bool `json:"on"`
+	// Blocks is the order of chats whose model has no list of its own.
 	Blocks []FallbackBlock `json:"blocks,omitempty"`
+	// Lists are the orders of chats that started on one model, effort
+	// aside (owner, 2026-10-21).
+	Lists []FallbackList `json:"lists,omitempty"`
+}
+
+// FallbackList is the fallback order of the chats and sub-agents that
+// started on one model: the model the user picked, or the one a sub-agent
+// was started on. The order's own switches keep that start.
+type FallbackList struct {
+	Provider string          `json:"provider"`
+	Model    string          `json:"model"`
+	Blocks   []FallbackBlock `json:"blocks,omitempty"`
 }
 
 // AccountKinds are the tools that can have more than one account.

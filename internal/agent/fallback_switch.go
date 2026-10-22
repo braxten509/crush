@@ -70,13 +70,15 @@ func (c *coordinator) SetModelSwitchHook(fn func()) {
 	c.fallback.switched = fn
 }
 
-// fallbackOrder is the order when it is on.
-func (c *coordinator) fallbackOrder() (config.FallbackOrder, bool) {
+// fallbackOrder is the order a chat on cur follows (its picked model's
+// list, else every other model's) when the order is on.
+func (c *coordinator) fallbackOrder(cur config.SelectedModel) (config.FallbackOrder, bool) {
 	cfg := c.cfg.Config()
 	if cfg.Options == nil || cfg.Options.Fallback == nil || !cfg.Options.Fallback.On {
 		return config.FallbackOrder{}, false
 	}
-	return *cfg.Options.Fallback, true
+	provider, model := fallback.Chosen(cur)
+	return fallback.For(*cfg.Options.Fallback, provider, model), true
 }
 
 func (c *coordinator) providerKind(provider string) catwalk.Type {
@@ -220,17 +222,18 @@ func fallbackHolds(store *config.ConfigStore, m config.SelectedModel) bool {
 		}
 		return p.Type
 	}
-	return fallback.Position(*cfg.Options.Fallback, kindOf, m) >= 0
+	provider, model := fallback.Chosen(m)
+	return fallback.Position(fallback.For(*cfg.Options.Fallback, provider, model), kindOf, m) >= 0
 }
 
 // fallbackBeforeTurn moves the chat first when the order says so: back to
 // an account that refilled, or on from one past its block's own limit.
 func (c *coordinator) fallbackBeforeTurn(ctx context.Context, sessionID string) {
-	order, ok := c.fallbackOrder()
+	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
+	order, ok := c.fallbackOrder(cur)
 	if !ok || !c.interactiveTurn(ctx) {
 		return
 	}
-	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
 	at := fallback.Position(order, c.providerKind, cur)
 	if at < 0 {
 		return
@@ -250,11 +253,11 @@ func (c *coordinator) fallbackOnOut(ctx context.Context, sessionID string, err e
 	if !c.interactiveTurn(ctx) || !isUsageLimit(err) {
 		return false
 	}
-	order, ok := c.fallbackOrder()
+	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
+	order, ok := c.fallbackOrder(cur)
 	if !ok {
 		return false
 	}
-	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
 	at := fallback.Position(order, c.providerKind, cur)
 	if at < 0 {
 		return false
@@ -369,7 +372,12 @@ func (c *coordinator) switchModel(m config.SelectedModel) error {
 		return nil
 	}
 	next := cur
+	// The picked model stays the chat's start, so its list still applies.
+	next.ChosenProvider, next.ChosenModel = fallback.Chosen(cur)
 	next.Provider, next.Model, next.Account = m.Provider, m.Model, m.Account
+	if next.ChosenProvider == next.Provider && next.ChosenModel == next.Model {
+		next.ChosenProvider, next.ChosenModel = "", ""
+	}
 	if m.ReasoningEffort != "" {
 		next.ReasoningEffort = m.ReasoningEffort
 	}

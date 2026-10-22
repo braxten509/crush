@@ -191,6 +191,28 @@
         "type"
       ]
     },
+    "FallbackList": {
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/FallbackBlock"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "provider",
+        "model"
+      ]
+    },
     "FallbackOrder": {
       "properties": {
         "on": {
@@ -199,6 +221,12 @@
         "blocks": {
           "items": {
             "$ref": "#/$defs/FallbackBlock"
+          },
+          "type": "array"
+        },
+        "lists": {
+          "items": {
+            "$ref": "#/$defs/FallbackList"
           },
           "type": "array"
         }
@@ -964,6 +992,14 @@
         "account": {
           "type": "string",
           "description": "ID of the options.accounts sign-in this Claude Code or Codex model runs on; empty is the tool's own login"
+        },
+        "chosen_provider": {
+          "type": "string",
+          "description": "Provider of the model the user picked"
+        },
+        "chosen_model": {
+          "type": "string",
+          "description": "The model the user picked"
         },
         "reasoning_effort": {
           "type": "string",

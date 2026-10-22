@@ -59,6 +59,12 @@ type SelectedModel struct {
 	// of an entry in options.accounts, or empty for the tool's own login.
 	Account string `json:"account,omitempty" jsonschema:"description=ID of the options.accounts sign-in this Claude Code or Codex model runs on; empty is the tool's own login"`
 
+	// ChosenProvider and ChosenModel are the model the user picked when the
+	// fallback order has since moved the chat to another one; empty when
+	// this is the picked model. The order follows the picked model's list.
+	ChosenProvider string `json:"chosen_provider,omitempty" jsonschema:"description=Provider of the model the user picked, kept while the fallback order runs another"`
+	ChosenModel    string `json:"chosen_model,omitempty" jsonschema:"description=The model the user picked, kept while the fallback order runs another"`
+
 	// Only used by models that use the openai provider and need this set.
 	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"description=Reasoning effort level supported by the selected model,enum=none,enum=minimal,enum=low,enum=medium,enum=high,enum=xhigh,enum=max,enum=ultra"`
 

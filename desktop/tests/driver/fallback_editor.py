@@ -225,6 +225,31 @@ texts = [b["text"] for b in blocks()]
 check(len(texts) == 4 and "at most 1 h" in texts[3], f"the block's line says so ({texts[3:]})")
 picture("added.png")
 
+# 8. Per-model lists (layout C, owner 2026-10-21): + Add a model makes the
+# picked model's own list, shown at once with one block on that model; every
+# other model's list keeps its four; x removes the list.
+click('[data-probe="fallback-lists"] .start-add .word', "+ Add a model")
+first = run("return document.querySelector('[data-probe=\"word-menu\"] .pick')?.textContent.trim() ?? null;")
+check(bool(first), f"+ Add a model lists the models ({first})")
+picture("add-list-menu.png")
+click('[data-probe="word-menu"] .pick', first)
+puts = calls("fallback/order")
+last = body(puts[-1]) if puts else {}
+lists = last.get("lists") or []
+check(len(lists) == 1 and len(lists[0].get("blocks", [])) == 1 and lists[0]["blocks"][0].get("model") == lists[0].get("model") and len(last.get("blocks", [])) == 4,
+      f"the new list is saved with one block on its model, beside the four others ({lists})")
+side = run("""return [...document.querySelectorAll('[data-probe="fallback-lists"] .start-pick')].map((e) => ({ text: e.textContent.trim(), on: e.getAttribute('aria-current') === 'true' }));""") or []
+texts = [b["text"] for b in blocks()]
+check(len(side) == 2 and side[0]["text"] == first and side[0]["on"] and side[1]["text"] == "Every other model" and len(texts) == 1,
+      f"the left column shows the model's list, picked, with its one block on the right ({side}, {texts})")
+picture("lists.png")
+click('[data-probe="fallback-lists"] .start-pick', "Every other model")
+check(len(blocks()) == 4, f"Every other model still shows its four blocks ({len(blocks())})")
+click('[data-probe="fallback-lists"] .start-remove')
+puts = calls("fallback/order")
+last = body(puts[-1]) if puts else {}
+check(not last.get("lists") and len(last.get("blocks", [])) == 4, f"x removes the list, the others stay ({last.get('lists')})")
+
 # 7. With the right panel hidden the refills show under the composer.
 click(".settings-nav .row", "Appearance")
 click('[data-probe="settings-page"] [role="switch"][aria-label="Show the right panel"]')

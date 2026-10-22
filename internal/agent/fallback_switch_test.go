@@ -222,7 +222,7 @@ func TestASwitchSkipsAnAccountWithNoRoomLeft(t *testing.T) {
 	usage["claude-code/claude-2"] = 100 // used up since its last reading
 
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
-	require.Equal(t, config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol"}, large(c))
+	require.Equal(t, config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol", ChosenProvider: "claude-code", ChosenModel: "opus"}, large(c))
 	require.Equal(t, []string{"Switched to Codex 1 · GPT-5.6 Sol: Claude 1 it ran out."}, chatLines(t, c, sid))
 }
 
@@ -242,7 +242,7 @@ func TestASwitchTriesAnAccountWhoseUsageCantBeRead(t *testing.T) {
 		line   string
 	}{
 		{"it answers", nil, config.SelectedModel{Provider: "claude-code", Model: "opus", Account: "claude-2"}, "Switched to Claude 2 · Claude Opus: Claude 1 it ran out."},
-		{"it is out too", errors.New("claude: You've hit your limit · resets 11:59pm"), config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol"}, "Switched to Codex 1 · GPT-5.6 Sol: Claude 1 it ran out."},
+		{"it is out too", errors.New("claude: You've hit your limit · resets 11:59pm"), config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol", ChosenProvider: "claude-code", ChosenModel: "opus"}, "Switched to Codex 1 · GPT-5.6 Sol: Claude 1 it ran out."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			usage := map[string]float64{"claude-code/": 100}
@@ -260,4 +260,35 @@ func TestASwitchTriesAnAccountWhoseUsageCantBeRead(t *testing.T) {
 			require.Equal(t, []string{tc.line}, chatLines(t, c, sid))
 		})
 	}
+}
+
+// The owner's example (2026-10-21): each picked model has its own list.
+// A chat picked on GPT follows GPT's list (on to Claude 2), where every
+// other model's list has nothing after GPT; the picked model stays its
+// start after the move. A sub-agent started on GPT follows the same list.
+func TestEachPickedModelFollowsItsOwnList(t *testing.T) {
+	blocks := []config.FallbackBlock{
+		useBlock(config.TypeClaudeCode, "", "opus"),
+		useBlock(config.TypeCodexCLI, "", "gpt-5.6-sol"),
+	}
+	c, sid := fallbackCoordinator(t, blocks, map[string]float64{"codex-cli/": 100}, nil)
+	cfg := c.cfg.Config()
+	cfg.Options.Fallback.Lists = []config.FallbackList{{Provider: string(config.TypeCodexCLI), Model: "gpt-5.6-sol", Blocks: []config.FallbackBlock{
+		useBlock(config.TypeCodexCLI, "", "gpt-5.6-sol"),
+		useBlock(config.TypeClaudeCode, "claude-2", "opus"),
+	}}}
+	gpt := fallbackModelOf(blocks[1])
+	cfg.Models[config.SelectedModelTypeLarge] = gpt
+
+	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
+	got := large(c)
+	require.Equal(t, [3]string{"claude-code", "opus", "claude-2"}, [3]string{got.Provider, got.Model, got.Account})
+	require.Equal(t, [2]string{"codex-cli", "gpt-5.6-sol"}, [2]string{got.ChosenProvider, got.ChosenModel}, "the picked model stays the start")
+
+	hub := &taskHub{c: c, dir: t.TempDir()}
+	task := &Task{ID: "t1", SessionID: sid, ChildID: sid}
+	next, ok := hub.subAgentFallback(t.Context(), task, gpt, gpt, errOut)
+	require.True(t, ok, "a sub-agent started on GPT follows GPT's list")
+	require.Equal(t, [2]string{"opus", "claude-2"}, [2]string{next.model.ModelCfg.Model, next.model.ModelCfg.Account})
+	require.Equal(t, "opus", task.Model)
 }

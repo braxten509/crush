@@ -80,6 +80,28 @@ func BlockAccount(b config.FallbackBlock, kindOf KindOf) Account {
 	return Account{Kind: kind, ID: b.Account}
 }
 
+// Chosen is the model a chat started on: the one the user picked, which
+// the order's own switches keep (config.SelectedModel.ChosenModel).
+func Chosen(m config.SelectedModel) (provider, model string) {
+	if m.ChosenModel != "" {
+		return m.ChosenProvider, m.ChosenModel
+	}
+	return m.Provider, m.Model
+}
+
+// For is the order a chat that started on provider and model follows: that
+// model's own list, else the list of every other model.
+func For(order config.FallbackOrder, provider, model string) config.FallbackOrder {
+	out := config.FallbackOrder{On: order.On, Blocks: order.Blocks}
+	for _, l := range order.Lists {
+		if l.Provider == provider && l.Model == model {
+			out.Blocks = l.Blocks
+			break
+		}
+	}
+	return out
+}
+
 // Position is the use block a chat on this model is at: the first use
 // block with the same provider, model and account, else the first with the
 // same tool and account; -1 when the order does not hold the chat.

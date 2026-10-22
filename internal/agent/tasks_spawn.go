@@ -249,6 +249,23 @@ func (h *taskHub) startRun(ctx context.Context, release func(), t *Task, sub Ses
 			NonInteractive:  true,
 			ProviderOptions: getProviderOptions(m, provider),
 		})
+		// Out of usage: the order of the model it started on moves it,
+		// and it continues there.
+		start, cur := m.ModelCfg, m.ModelCfg
+		for range subAgentFallbackMoves {
+			next, ok := h.subAgentFallback(runCtx, t, start, cur, err)
+			if !ok {
+				break
+			}
+			cur = next.model.ModelCfg
+			result, err = runSubAgentReport(runCtx, next.sub, SessionAgentCall{
+				SessionID:       t.ChildID,
+				Prompt:          limitRetryPrompt,
+				MaxOutputTokens: subAgentMaxTokens(next.model),
+				NonInteractive:  true,
+				ProviderOptions: getProviderOptions(next.model, next.provider),
+			})
+		}
 		removeCheckIn()
 		h.finishRun(ctx, t, subAgentOutput(result), err)
 	}()

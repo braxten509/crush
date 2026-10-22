@@ -85,7 +85,33 @@ func (b *Backend) SetFallbackOrder(workspaceID string, order config.FallbackOrde
 }
 
 func checkFallbackOrder(cfg *config.Config, order config.FallbackOrder) error {
-	for i, blk := range order.Blocks {
+	if err := checkFallbackBlocks(cfg, order.Blocks, ""); err != nil {
+		return err
+	}
+	seen := map[[2]string]bool{}
+	for _, l := range order.Lists {
+		p, ok := cfg.Providers.Get(l.Provider)
+		if !ok || l.Model == "" {
+			return invalidFallback("a list for an unknown model %q of %q", l.Model, l.Provider)
+		}
+		if seen[[2]string{l.Provider, l.Model}] {
+			return invalidFallback("%s has two lists", l.Model)
+		}
+		seen[[2]string{l.Provider, l.Model}] = true
+		if err := checkFallbackBlocks(cfg, l.Blocks, fmt.Sprintf("%s %s list, ", p.Name, l.Model)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkFallbackBlocks checks one list's blocks; where names the list in
+// errors ("" for every other model's).
+func checkFallbackBlocks(cfg *config.Config, blocks []config.FallbackBlock, where string) error {
+	invalidFallback := func(format string, args ...any) error {
+		return invalidFallback(where+format, args...)
+	}
+	for i, blk := range blocks {
 		n := i + 1
 		kind := blk.Kind
 		switch blk.Type {
@@ -255,7 +281,7 @@ func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings,
 	fields := map[string]any{"options.accounts": slices.Delete(slices.Clone(cfg.Options.Accounts), i, i+1)}
 	if cfg.Options.Fallback != nil {
 		order := *cfg.Options.Fallback
-		order.Blocks = slices.DeleteFunc(slices.Clone(order.Blocks), func(blk config.FallbackBlock) bool {
+		onAccount := func(blk config.FallbackBlock) bool {
 			kind := blk.Kind
 			if blk.Type == config.FallbackUse {
 				if p, ok := cfg.Providers.Get(blk.Provider); ok {
@@ -263,7 +289,12 @@ func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings,
 				}
 			}
 			return kind == a.Kind && blk.Account == id
-		})
+		}
+		order.Blocks = slices.DeleteFunc(slices.Clone(order.Blocks), onAccount)
+		order.Lists = slices.Clone(order.Lists)
+		for i := range order.Lists {
+			order.Lists[i].Blocks = slices.DeleteFunc(slices.Clone(order.Lists[i].Blocks), onAccount)
+		}
 		fields["options.fallback"] = order
 	}
 	if err := ws.Cfg.SetConfigFields(config.ScopeGlobal, fields); err != nil {

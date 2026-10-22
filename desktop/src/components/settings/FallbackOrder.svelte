@@ -12,7 +12,7 @@
   // setting on, nothing slides.
   import { onMount, tick } from "svelte";
   import { fallback, loadFallback, saveOrder } from "../../lib/fallback/store.svelte.js";
-  import { accountChoices, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, moveBlock, newBlock, sentence } from "../../lib/fallback/blocks.js";
+  import { accountChoices, addList, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, listBlocks, listsOf, modelName, moveBlock, newBlock, removeList, sentence, withListBlocks } from "../../lib/fallback/blocks.js";
   import { modelData, watchModels } from "../../lib/models/store.svelte.js";
   import { MOTION_MS, reducedMotion, settle } from "../../lib/motion.js";
   import WordMenu from "./WordMenu.svelte";
@@ -25,6 +25,15 @@
   const ctx = $derived({ accounts: fallback.accounts, providers });
 
   const LABELS = { model: "Model", account: "Account", effort: "Effort", leave: "Move on", wait: "How long", meanwhile: "Meanwhile" };
+
+  // The list shown (layout C, owner 2026-10-21): each picked model's own
+  // list on the left, then every other model's (key ""); its blocks on the
+  // right.
+  let shownList = $state("");
+  const lists = $derived(listsOf(fallback.order));
+  const current = $derived(lists.some((l) => l.key === shownList) ? shownList : "");
+  const blocks = $derived(listBlocks(fallback.order, current));
+  const listName = (l) => (l.key ? modelName(providers, l.provider, l.model) : "Every other model");
 
   let adding = $state(false);
   let menu = $state(""); // the open word menu: "<block key>:<menu>"
@@ -69,7 +78,7 @@
     return keys;
   }
 
-  const shown = $derived(drag ? moveBlock(fallback.order.blocks, drag.from, drag.to) : fallback.order.blocks);
+  const shown = $derived(drag ? moveBlock(blocks, drag.from, drag.to) : blocks);
   const rows = $derived.by(() => {
     const keys = keysOf(shown);
     return shown.map((block, i) => ({ key: keys[i], block }));
@@ -91,23 +100,42 @@
   });
 
   function save(nextBlocks, on = fallback.order.on) {
-    saveOrder({ on, blocks: nextBlocks });
+    saveOrder(withListBlocks({ ...fallback.order, on }, current, nextBlocks));
   }
 
+  function showList(key) {
+    menu = "";
+    adding = false;
+    shownList = key;
+  }
+
+  function newList(provider, model) {
+    saveOrder(addList(fallback.order, provider, model));
+    showList(`${provider}\n${model}`);
+  }
+
+  function dropList(key) {
+    if (current === key) showList("");
+    saveOrder(removeList(fallback.order, key));
+  }
+
+  // The models that have no list yet, by tool.
+  const unlisted = $derived(tools.map((p) => ({ ...p, models: p.models.filter((m) => !lists.some((l) => l.provider === p.id && l.model === m.id)) })).filter((p) => p.models.length));
+
   function change(i, fields) {
-    const next = [...fallback.order.blocks];
+    const next = [...blocks];
     next[i] = changeBlock(next[i], fields);
     save(next);
   }
 
   function add(type) {
     adding = false;
-    save([...fallback.order.blocks, newBlock(type, { providers: tools })]);
+    save([...blocks, newBlock(type, { providers: tools })]);
   }
 
   function remove(i) {
     menu = "";
-    save(fallback.order.blocks.filter((_, n) => n !== i));
+    save(blocks.filter((_, n) => n !== i));
   }
 
   // The motion. Rows that change places slide from where they were drawn to
@@ -137,10 +165,10 @@
   }
 
   async function move(i, to, key) {
-    if (to < 0 || to >= fallback.order.blocks.length) return;
+    if (to < 0 || to >= blocks.length) return;
     menu = "";
     const before = drawnTops();
-    save(moveBlock(fallback.order.blocks, i, to));
+    save(moveBlock(blocks, i, to));
     await slideFrom(before);
     // The keys follow the block, so its handle keeps the focus.
     list?.querySelector(`[data-key="${key}"] .handle`)?.focus({ preventScroll: true });
@@ -214,7 +242,7 @@
     const offset = held.top + held.dy - li.offsetTop;
     held = null;
     drag = null;
-    if (from !== to) save(moveBlock(fallback.order.blocks, from, to));
+    if (from !== to) save(moveBlock(blocks, from, to));
     // It settles from under the pointer into its place.
     li.style.transform = "";
     if (Math.abs(offset) >= 0.5 && !reducedMotion()) slide(li, offset);
@@ -319,11 +347,31 @@
 <div class="fallback" data-probe="fallback-order">
   <div class="row head">
     <span class="name">Use the fallback order</span>
-    <button type="button" class="switch" role="switch" aria-checked={fallback.order.on} aria-label="Use the fallback order" onclick={() => save(fallback.order.blocks, !fallback.order.on)}></button>
+    <button type="button" class="switch" role="switch" aria-checked={fallback.order.on} aria-label="Use the fallback order" onclick={() => save(blocks, !fallback.order.on)}></button>
   </div>
-  <p class="quiet">When a chat's account runs out, it moves down this list. Chats on a model that isn't in the list stay where they are.</p>
+  <p class="quiet">When a chat's account runs out, it moves down the list of the model it started on: the one you picked, or the one a sub-agent was started on. A model with no list of its own uses Every other model.</p>
   {#if fallback.error}<p class="error" role="alert">{fallback.error}</p>{/if}
 
+  <div class="lists">
+  <nav class="starts" aria-label="Lists by starting model" data-probe="fallback-lists">
+    <span class="starts-head">Starts on</span>
+    {#each lists as l (l.key)}
+      <div class="start" class:on={l.key === current}>
+        <button type="button" class="start-pick" aria-current={l.key === current ? "true" : undefined} data-list={l.key} onclick={() => showList(l.key)}>{listName(l)}</button>
+        {#if l.key}<button type="button" class="start-remove" aria-label="Remove the {listName(l)} list" onclick={() => dropList(l.key)}>×</button>{/if}
+      </div>
+    {/each}
+    {#if unlisted.length}
+      <span class="start-add"><WordMenu text="+ Add a model" label="Add a list for a model" open={menu === "add-list"} ontoggle={(on) => (menu = on ? "add-list" : "")}
+          >{#snippet children(done)}{#each unlisted as p (p.id)}<span class="heading" role="presentation">{p.name}</span>{#each p.models as m (m.id)}{@render pick(false, m.name || m.id, () => {
+                  done();
+                  newList(p.id, m.id);
+                })}{/each}{/each}{/snippet}</WordMenu
+        ></span>
+    {/if}
+  </nav>
+  <div class="list-body">
+  {#key current}
   <ol class="blocks" bind:this={list} class:off={!fallback.order.on} class:dragging={Boolean(drag)} aria-label="Fallback order">
     {#each rows as { key, block }, i (key)}
       <li class="item" data-block={i} data-key={key} class:lead={i === 0} class:raised={menu.startsWith(`${key}:`)} class:held={held?.key === key} in:settle={{ fold: true, off: !ready }} out:settle={{ fold: true }}>
@@ -344,6 +392,7 @@
       </li>
     {/each}
   </ol>
+  {/key}
 
   <div class="adder">
     {#if adding}
@@ -357,11 +406,13 @@
       <button type="button" class="add" onclick={() => (adding = true)}>+ Add block</button>
     {/if}
   </div>
+  </div>
+  </div>
 </div>
 
 <style>
   .fallback {
-    max-width: calc(840 * var(--px));
+    max-width: calc(1060 * var(--px));
   }
   .row {
     display: flex;
@@ -385,6 +436,65 @@
     margin: calc(12 * var(--px)) 0 0;
     font: var(--t-small);
     color: var(--rose, var(--vermilion));
+  }
+  .lists {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+  .starts {
+    display: flex;
+    flex-direction: column;
+    padding: calc(28 * var(--px)) calc(12 * var(--px)) 0 0;
+    border-right: 1px solid var(--rule-faint);
+  }
+  .starts-head {
+    padding: 0 calc(10 * var(--px)) calc(6 * var(--px));
+    font: var(--t-small);
+    color: var(--slate);
+  }
+  .start {
+    display: flex;
+    align-items: center;
+  }
+  .start.on {
+    background: var(--band);
+    box-shadow: inset 2px 0 var(--vermilion);
+  }
+  .start-pick {
+    flex: 1;
+    min-width: 0;
+    padding: calc(8 * var(--px)) calc(10 * var(--px));
+    border: 0;
+    background: none;
+    font: var(--t-item);
+    color: var(--ink);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .start-remove {
+    flex: none;
+    width: calc(28 * var(--px));
+    border: 0;
+    background: none;
+    font: var(--t-item);
+    color: var(--slate);
+    cursor: pointer;
+    opacity: 0;
+  }
+  .start:hover .start-remove,
+  .start-remove:focus-visible {
+    opacity: 1;
+  }
+  .start-add {
+    position: relative;
+    padding: calc(8 * var(--px)) calc(10 * var(--px));
+    font: var(--t-small);
+    color: var(--slate);
+  }
+  .list-body {
+    min-width: 0;
+    padding-left: calc(20 * var(--px));
   }
   .blocks {
     list-style: none;

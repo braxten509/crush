@@ -163,3 +163,41 @@ export function changeBlock(block, fields) {
 export function accountsOf(accounts, kind) {
   return (accounts ?? []).filter((a) => a.kind === kind);
 }
+
+// Per-model lists (owner, 2026-10-21): a chat or sub-agent follows the list
+// of the model it started on (the one picked, effort aside), else the list
+// of every other model (order.blocks). A list is named by its key:
+// "provider\nmodel", or "" for every other model.
+export const listKey = (provider, model) => `${provider}\n${model}`;
+
+// The lists in their order: [{key, provider, model}], every other model last.
+export function listsOf(order) {
+  const own = (order?.lists ?? []).map((l) => ({ key: listKey(l.provider, l.model), provider: l.provider, model: l.model }));
+  return [...own, { key: "", provider: "", model: "" }];
+}
+
+// A list's blocks; an unknown key is every other model's.
+export function listBlocks(order, key) {
+  const found = key ? (order?.lists ?? []).find((l) => listKey(l.provider, l.model) === key) : null;
+  return (found ? found.blocks : order?.blocks) ?? [];
+}
+
+// The order with one list's blocks replaced.
+export function withListBlocks(order, key, blocks) {
+  const lists = order?.lists ?? [];
+  if (key && lists.some((l) => listKey(l.provider, l.model) === key)) {
+    return { ...order, lists: lists.map((l) => (listKey(l.provider, l.model) === key ? { ...l, blocks } : l)) };
+  }
+  return { ...order, blocks };
+}
+
+// The order with a new list for a model, which starts on that model.
+export function addList(order, provider, model) {
+  const lists = order?.lists ?? [];
+  if (lists.some((l) => l.provider === provider && l.model === model)) return order;
+  return { ...order, lists: [...lists, { provider, model, blocks: [{ type: "use", provider, model }] }] };
+}
+
+export function removeList(order, key) {
+  return { ...order, lists: (order?.lists ?? []).filter((l) => listKey(l.provider, l.model) !== key) };
+}

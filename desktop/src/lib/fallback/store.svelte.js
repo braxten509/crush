@@ -11,14 +11,19 @@ import { sign_in_run } from "../engine/commands.js";
 export const fallback = $state({
   loaded: false,
   accounts: [], // proto.AccountInfo[]: each tool's own login (id "") first
-  order: { on: false, blocks: [] },
+  order: { on: false, blocks: [], lists: [] }, // lists: each picked model's own blocks
   error: "",
 });
 
 function take(settings) {
   if (!settings || typeof settings !== "object") return;
   fallback.accounts = Array.isArray(settings.accounts) ? settings.accounts : [];
-  fallback.order = { on: Boolean(settings.order?.on), blocks: Array.isArray(settings.order?.blocks) ? settings.order.blocks : [] };
+  const order = settings.order ?? {};
+  fallback.order = {
+    on: Boolean(order.on),
+    blocks: Array.isArray(order.blocks) ? order.blocks : [],
+    lists: (Array.isArray(order.lists) ? order.lists : []).map((l) => ({ ...l, blocks: Array.isArray(l?.blocks) ? l.blocks : [] })),
+  };
   fallback.loaded = true;
 }
 

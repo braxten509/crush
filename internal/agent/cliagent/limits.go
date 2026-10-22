@@ -517,14 +517,34 @@ func fetchAGYLimits(ctx context.Context) ([]Limit, error) {
 		return nil, err
 	}
 	var limits []Limit
+	now := time.Now()
 	for id, m := range res.Models {
 		if m.Quota == nil {
 			continue
 		}
 		reset, _ := time.Parse(time.RFC3339, m.Quota.ResetTime)
-		limits = append(limits, Limit{Name: "Quota", Used: (1 - m.Quota.Remaining) * 100, ResetsAt: reset, Model: id})
+		limits = append(limits, Limit{Name: agyWindowName(now, reset), Used: (1 - m.Quota.Remaining) * 100, ResetsAt: reset, Model: id})
 	}
 	return limits, nil
+}
+
+// agyWindowName names a quota window by what it has left. Antigravity
+// reports no window length: its Gemini quotas reset every five hours and
+// its Claude and GPT-OSS quotas every week, so the time to the reset says
+// which window it is. A weekly window in its last hours reads as the
+// five-hour one.
+func agyWindowName(now, reset time.Time) string {
+	if reset.IsZero() {
+		return "Limit"
+	}
+	left := reset.Sub(now)
+	switch {
+	case left <= 5*time.Hour+30*time.Minute:
+		return "5h"
+	case left <= 8*24*time.Hour:
+		return "Weekly"
+	}
+	return fmt.Sprintf("%dd", max(int(left.Round(24*time.Hour)/(24*time.Hour)), 1))
 }
 
 func agyToken(ctx context.Context) (string, error) {

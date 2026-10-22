@@ -310,13 +310,20 @@ function usageModel(windows, model) {
   return "";
 }
 
+// The windows that apply to a model: those for every model and those for
+// this one, found by its per-model name (usageModel). AGY lists each
+// model's quota under one entry, so the sheet and the meters read the same
+// windows.
+export function usageWindows(windows, model) {
+  const list = windows ?? [];
+  const named = usageModel(list, model);
+  return list.filter((w) => !w.model || w.model === named);
+}
+
 export function limitWindows(reading, model, now = Date.now()) {
   if (!reading) return [];
   if (goTime(reading.read_at) === null) return null;
-  const windows = reading.windows ?? [];
-  const named = usageModel(windows, model);
-  return windows
-    .filter((w) => !w.model || w.model === named)
+  return usageWindows(reading.windows ?? [], model)
     .map((w) => {
       const resets = goTime(w.resets_at);
       const left = resets !== null && now > resets ? 100 : Math.max(0, 100 - (Number(w.used) || 0));

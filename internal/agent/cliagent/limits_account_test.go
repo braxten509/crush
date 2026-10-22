@@ -3,6 +3,7 @@ package cliagent
 import (
 	"context"
 	"testing"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
@@ -98,4 +99,33 @@ func TestAGYModelsReadTheirEffortTieredUsage(t *testing.T) {
 	require.Equal(t, []float64{20}, used("gemini-3.5-flash-medium"))
 	require.Equal(t, []float64{100}, used("claude-sonnet-4-6"))
 	require.Empty(t, used("gemini-3.7-flash-high"), "a model AGY doesn't list reads nothing")
+}
+
+// AGY reports no window length, so each quota is named by the time to its
+// reset: its Gemini quotas reset within five hours and its Claude and
+// GPT-OSS quotas within a week or more (owner, 2026-10-22: the meters show
+// only the 5-hour and weekly windows).
+func TestAGYWindowsAreNamedByTheirLength(t *testing.T) {
+	now := time.Date(2026, 10, 22, 13, 55, 0, 0, time.UTC)
+	require.Equal(t, "5h", agyWindowName(now, now.Add(4*time.Hour)))
+	require.Equal(t, "5h", agyWindowName(now, now.Add(5*time.Hour+20*time.Minute)))
+	require.Equal(t, "Weekly", agyWindowName(now, now.Add(4*24*time.Hour)))
+	require.Equal(t, "Weekly", agyWindowName(now, now.Add(7*24*time.Hour)))
+	require.Equal(t, "12d", agyWindowName(now, now.Add(12*24*time.Hour+3*time.Hour)))
+	require.Equal(t, "Limit", agyWindowName(now, time.Time{}))
+}
+
+// A whole AGY reading reaches the selected Gemini model's meter: the
+// tiered quota, named for the five-hour window the meters show.
+func TestAGYGeminiQuotaReachesItsMeter(t *testing.T) {
+	now := time.Date(2026, 10, 22, 13, 55, 0, 0, time.UTC)
+	geminiReset, weeklyReset := now.Add(4*time.Hour), now.Add(5*24*time.Hour)
+	require.True(t, StoreAccountLimits(config.TypeAGYCLI, "", []Limit{
+		{Name: agyWindowName(now, geminiReset), Used: 12, ResetsAt: geminiReset, Model: "gemini-3.8-flash-tiered"},
+		{Name: agyWindowName(now, weeklyReset), Used: 87, ResetsAt: weeklyReset, Model: "claude-opus-4-6-thinking"},
+	}, -1))
+	limits := AccountLimits(config.TypeAGYCLI, "", "gemini-3.8-flash-high")
+	require.Len(t, limits, 1)
+	require.Equal(t, "5h", limits[0].Name)
+	require.InDelta(t, 88, limits[0].Left(), 0.01)
 }

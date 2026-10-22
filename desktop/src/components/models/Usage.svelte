@@ -12,7 +12,7 @@
   import Rule from "../Rule.svelte";
   import { compactionLimit } from "../../lib/compaction.js";
   import { api } from "../../lib/engine/api.js";
-  import { cliKind } from "../../lib/footer.js";
+  import { cliKind, usageWindows } from "../../lib/footer.js";
   import { modelData, watchModels } from "../../lib/models/store.svelte.js";
   import { limits, readTime } from "../../lib/stores/limits.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
@@ -37,7 +37,7 @@
     return modelData.cfg?.providers.get(id)?.name || "Current model";
   });
   const reading = $derived(kind ? limits.byKind[kind] : null);
-  const windows = $derived((reading?.windows ?? []).filter((w) => !w.model || w.model === modelId));
+  const windows = $derived(usageWindows(reading?.windows ?? [], modelId));
   const session = $derived(sessions.currentId ? sessions.byId[sessions.currentId] : null);
   const compactAt = $derived(compactionLimit({ agent, session, providers: ws.providers, options: ws.config?.options }));
   const context = $derived(session ? (Number(session.prompt_tokens) || 0) + (Number(session.completion_tokens) || 0) : 0);

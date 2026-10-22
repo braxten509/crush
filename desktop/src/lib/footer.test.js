@@ -14,6 +14,7 @@ import {
   meterModel,
   modelInfo,
   shortDuration,
+  usageWindows,
 } from "./footer.js";
 
 // SIDE-014, SIDE-019 to SIDE-024: ports of composer_footer.go, sidebar.go and
@@ -330,5 +331,24 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
       ["5-HOUR", "14% left", true, "resets 2h41m"],
       ["WEEK", "69% left", false, "resets 3d0h"],
     ]);
+  });
+
+  it("an AGY Gemini quota feeds the 5-HOUR meter the owner shows (2026-10-22)", () => {
+    const agy = reading({ kind: "agy-cli", windows: [
+      { name: "5h", used: 12, resets_at: "2026-10-18T16:00:00Z", model: "gemini-3.8-flash-tiered" },
+      { name: "Weekly", used: 87, resets_at: "2026-10-23T20:03:34Z", model: "claude-opus-4-6-thinking" },
+    ] });
+    // The owner's saved composer footer: 5-hour and weekly, no "other".
+    const items = ["model", "settings", "context", "limit_5h", "limit_weekly", "resets"];
+    expect(meterModel({ items, limits: limitWindows(agy, "gemini-3.8-flash-high", now) }).meters.map((m) => [m.label, m.text])).toEqual([
+      ["CONTEXT", "–"],
+      ["5-HOUR", "88% left"],
+    ]);
+    expect(meterModel({ items, limits: limitWindows(agy, "claude-opus-4-6-thinking", now) }).meters.map((m) => [m.label, m.text])).toEqual([
+      ["CONTEXT", "–"],
+      ["WEEK", "13% left"],
+    ]);
+    // The Usage sheet lists the same windows, not the raw model's name.
+    expect(usageWindows(agy.windows, "gemini-3.8-flash-high").map((w) => w.name)).toEqual(["5h"]);
   });
 });

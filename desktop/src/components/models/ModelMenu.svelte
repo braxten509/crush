@@ -4,10 +4,11 @@
   // It unrolls up from the button: the agents and providers on the left, the
   // chosen one's models on the right with a search line over them, and the
   // coder model's effort levels at the bottom, shown only while the coder
-  // model is among the listed rows (owner, 2026-10-22). A click on a model chooses it
-  // (lib/models/choose.js) and closes the menu; a click on a level saves it.
-  // Esc, a click outside or the button again close it. While it is open the
-  // key router asks only the "menu" scope, so no other shortcut fires.
+  // model is among the listed rows (owner, 2026-10-22). A click on a model
+  // chooses it (lib/models/choose.js) and keeps the menu open, so its effort
+  // level can be picked next; a click on a level saves it. Esc, a click
+  // outside or the button again close it. While it is open the key router asks
+  // only the "menu" scope, so no other shortcut fires.
   // The full sheet (Large/Small Task, sign-in edits) stays on Ctrl+P.
   // Under the effort, a Claude Code or Codex model with two or more accounts
   // gets an Account drop-down the width of the row (owner, 2026-10-21, pick
@@ -26,7 +27,7 @@
   import { effortShown, isCurrent, menuGroups, RECENT, searchRows, startGroup } from "../../lib/models/menu.js";
   import { coderModel, modelData, refreshModels, watchModels } from "../../lib/models/store.svelte.js";
   import { addableProviders, cheapestHostOn, savedWithout } from "../../lib/models/openrouter.js";
-  import { openDialog } from "../../lib/dialogs.js";
+  import { dialogs, openDialog } from "../../lib/dialogs.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { setAccount, setEffort } from "../../lib/models/toggles.js";
   import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
@@ -119,12 +120,17 @@
     if (refocus) focusField();
   }
 
-  function pick(item) {
+  // A choice keeps the menu open (owner, 2026-10-22): the effort levels below
+  // follow the model that was just chosen, so a model and its effort can be
+  // picked in one visit. The button again, Esc or a click outside closes it.
+  // A choice that goes to a sign-in sheet hands the window over instead.
+  async function pick(item) {
     if (!item) return;
-    close();
+    const sheetsBefore = dialogs.length;
     const model = selectedModelOf(item, modelData.cfg?.model_efforts);
     if (accountNow && kindOf(item.provider.id) === kind) model.account = accountNow;
-    chooseModel({ provider: item.provider, model, modelType: type });
+    await chooseModel({ provider: item.provider, model, modelType: type });
+    if (dialogs.length > sheetsBefore) close({ refocus: false });
   }
 
   async function pickLevel(next) {
@@ -195,7 +201,11 @@
     }
   }
 
-  // Arrow keys move between the rows of a column, ← → between the columns.
+  // Arrow keys move between the rows of a column (the groups, the models, the
+  // route, the effort levels and the account), ← → between those columns in the
+  // order they are drawn.
+  const COLUMNS = ["groups", "models", "route", "effort", "account"];
+  const nextColumn = (from, delta) => COLUMNS[(COLUMNS.indexOf(from) + delta + COLUMNS.length) % COLUMNS.length];
   function columnOf(element) {
     return element?.closest?.("[data-column]")?.dataset.column ?? "";
   }
@@ -218,6 +228,20 @@
     return true;
   }
 
+  // ← → step to the neighbouring column that has rows, wrapping at the ends:
+  // the route, the effort and the account columns show only sometimes.
+  function moveAcross(delta) {
+    const from = columnOf(document.activeElement) || "models";
+    for (let step = 0; step < COLUMNS.length; step += 1) {
+      const column = nextColumn(from, delta * (step + 1));
+      if (stops(column).length > 0) {
+        across(column);
+        return true;
+      }
+    }
+    return true;
+  }
+
   onMount(() => {
     measure();
     search?.focus({ preventScroll: true });
@@ -226,8 +250,8 @@
       bindKey("menu", "Escape", () => (removing ? (removing = null) : close(), true)),
       bindKey("menu", "ArrowDown", () => step(1)),
       bindKey("menu", "ArrowUp", () => step(-1)),
-      bindKey("menu", "ArrowLeft", () => (columnOf(document.activeElement) === "search" ? false : across("groups"))),
-      bindKey("menu", "ArrowRight", () => (columnOf(document.activeElement) === "search" ? false : across("models"))),
+      bindKey("menu", "ArrowLeft", () => (columnOf(document.activeElement) === "search" ? false : moveAcross(-1))),
+      bindKey("menu", "ArrowRight", () => (columnOf(document.activeElement) === "search" ? false : moveAcross(1))),
       bindKey("menu", "Enter", () => {
         if (columnOf(document.activeElement) === "search") {
           pick(rows[0]);
@@ -236,10 +260,12 @@
         return false; // a focused button clicks itself
       }),
     ];
-    // A press outside closes; the model button's own click toggles it.
+    // A press outside closes; the model button's own click toggles it. A click
+    // in a sheet over the menu is the sheet's own.
     const down = (event) => {
       if (removing && !event.target?.closest?.(".remove-menu")) removing = null;
       if (box?.contains(event.target) || menu.anchor?.contains(event.target)) return;
+      if (dialogs.length > 0) return;
       close({ refocus: false });
     };
     window.addEventListener("pointerdown", down, true);

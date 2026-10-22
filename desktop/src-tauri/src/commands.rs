@@ -316,7 +316,7 @@ fn bare_url(url: &str) -> String {
 }
 
 fn redact_config(config: &mut Value) {
-    const PROVIDER_KEEP: &[&str] = &["id", "name", "type", "disable", "models", "chatgpt_models", "grok_models", "discover_models", "flat_rate"];
+    const PROVIDER_KEEP: &[&str] = &["id", "name", "type", "disable", "models", "chatgpt_models", "grok_models", "discover_models", "flat_rate", "cheapest_host"];
     const ENTRY_KEEP: &[&str] = &["type", "disabled", "timeout"];
     let Some(root) = config.as_object_mut() else { return };
     if let Some(providers) = root.get_mut("providers").and_then(Value::as_object_mut) {
@@ -671,6 +671,20 @@ mod scrub_tests {
         assert_eq!(out["mcp"]["srv"], json!({"type": "http", "disabled": true}));
         assert_eq!(out["lsp"]["go"], json!({"timeout": 5}));
         assert_eq!(out["options"]["engine"], "shared", "plain options still cross");
+    }
+
+    // The model menu's OpenRouter "Cheapest host" switch saves through
+    // providers.<id>.cheapest_host and reads it back afterwards: a cut field
+    // showed the switch on again right after it was turned off (owner,
+    // 2026-10-22).
+    #[test]
+    fn the_cheapest_host_switch_survives_the_cut() {
+        let config = json!({"providers": {"openrouter": {"id": "openrouter", "type": "openrouter", "cheapest_host": false}}});
+        let out = redact_answer("GET", "/config", config);
+        assert_eq!(out["providers"]["openrouter"]["cheapest_host"], false);
+        let config = json!({"providers": {"openrouter": {"id": "openrouter", "type": "openrouter", "cheapest_host": true}}});
+        let out = redact_answer("GET", "/config", config);
+        assert_eq!(out["providers"]["openrouter"]["cheapest_host"], true);
     }
 
     #[test]

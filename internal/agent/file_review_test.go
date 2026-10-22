@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/agent/tools"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
@@ -106,13 +105,13 @@ printf '%s\n' '{"type":"result","subtype":"success"}'
 	require.Len(t, results[0].Review.Changes, 1)
 	require.Equal(t, "before\n", results[0].Review.Changes[0].Before.Content)
 	require.Equal(t, "after\n", results[0].Review.Changes[0].After.Content)
-	var meta tools.EditResponseMetadata
-	require.NoError(t, json.Unmarshal([]byte(results[0].Metadata), &meta))
-	require.Equal(t, "before\n", meta.OldContent)
-	require.Equal(t, "after\n", meta.NewContent)
-	files := diffreview.Build([]diffreview.Edit{{Path: "changed.txt", Before: meta.OldContent, After: meta.NewContent}})
+	change := results[0].Review.Changes[0]
+	files := diffreview.Build([]diffreview.Edit{{Path: change.Path, Snapshot: &change}})
 	require.Len(t, files, 1)
-	require.Equal(t, "changed.txt", files[0].Path)
+	require.Equal(t, "changed.txt", filepath.Base(files[0].Path))
+	adds, dels := diffreview.Stats(files)
+	require.Equal(t, 1, adds)
+	require.Equal(t, 1, dels)
 }
 
 func TestFileReviewPersistsFailedAndLateChanges(t *testing.T) {

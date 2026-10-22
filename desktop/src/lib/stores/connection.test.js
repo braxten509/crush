@@ -322,6 +322,30 @@ describe("losing the engine (SIDE-030)", () => {
     expect(joinNotices).toEqual([]);
     expect(C.conn.notices).toEqual([]);
   });
+
+  // Rust sends this connected event when the window shows another folder
+  // (connection.rs:958-964): no link dropped, the page just reads the folder it
+  // shows again, so there is nothing to reconnect to.
+  it("showing another folder is no reconnection: no notice, the chat reads again", async () => {
+    S.upsertSession({ id: "s1", title: "One", updated_at: 1 });
+    h.routes.set("GET sessions", [{ id: "s1", title: "One", updated_at: 1 }]);
+    h.routes.set("GET sessions/s1", { id: "s1", title: "One", updated_at: 1 });
+    h.routes.set("GET sessions/s1/history", []);
+    h.routes.set("GET sessions/s1/messages", []);
+    await S.openChat("s1");
+    const reads = () => h.calls.filter((c) => c.path === "sessions/s1/messages").length;
+    const before = reads();
+    await deliver(ev("connection", "updated", {
+      state: "connected",
+      attempt: 0,
+      resync: true,
+      fresh_engine: false,
+      workspace: workspace({ id: "ws-other", path: "/tmp/home/other" }),
+    }));
+    expect(C.conn.state).toBe("connected");
+    expect(h.notices).toEqual([]);
+    expect(reads()).toBe(before + 1);
+  });
 });
 
 it("the limits poll runs while connected and asks only while the shown chat is idle (SIDE-007)", async () => {

@@ -336,7 +336,9 @@ export function refusedWhileFailed(error) {
 
 // The connection event (1.4.2; SIDE-030, internal/ui/model/agent_events.go:
 // 25-65). A connected event with resync: true also runs every resync, which
-// reloads the shown chat (events.js).
+// reloads the shown chat (events.js). Only a link that dropped says so:
+// showing another folder also resyncs (connection.rs:958-964) but was never
+// lost, so it arrives while the window is already connected.
 onEvent("connection", (_kind, ev) => {
   if (!ev?.state) return;
   const before = conn.state;
@@ -355,7 +357,7 @@ onEvent("connection", (_kind, ev) => {
     note("warn", "Lost connection to the Crush server — reconnecting…", 30_000);
   } else if (ev.state === "failed" && joinedOnce) {
     note("error", FAILED_TEXT, 60_000, { label: "Try again", run: retry });
-  } else if (ev.state === "connected" && (ev.resync === true || before === "reconnecting" || before === "failed") && before !== "connecting") {
+  } else if (ev.state === "connected" && (before === "reconnecting" || before === "failed")) {
     note("success", "Reconnected to the Crush server.", 5000);
   }
 });

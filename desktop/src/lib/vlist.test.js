@@ -13,6 +13,7 @@ vi.mock("svelte", () => import("../../node_modules/svelte/src/index-client.js"))
 import {
   anchorAt,
   atBottom,
+  nearBottom,
   createHeights,
   estimate,
   gapBefore,
@@ -124,6 +125,14 @@ describe("the view stays still (CHAT-092, CHAT-099)", () => {
     expect(atBottom(maxTop(l, 600) - 2, 600, l.total)).toBe(false);
     // Scrolling to it shows its top; End shows its end.
     expect(scrollToShow(l, 0, maxTop(l, 600), 600)).toBe(itemTop(l, 0));
+  });
+
+  test("within about two lines of the bottom counts as the bottom for following (owner, 2026-10-22)", () => {
+    expect(nearBottom(1000 - 600 - 2, 600, 1000)).toBe(true);
+    expect(nearBottom(1000 - 600 - 40, 600, 1000)).toBe(true);
+    expect(nearBottom(1000 - 600 - 41, 600, 1000)).toBe(false);
+    expect(nearBottom(1000 - 600 - 80, 600, 1000, 2)).toBe(true);
+    expect(nearBottom(1000 - 600 - 81, 600, 1000, 2)).toBe(false);
   });
 
   test("scrolling to an item below the view puts its end at the bottom", () => {

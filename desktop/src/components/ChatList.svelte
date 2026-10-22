@@ -417,9 +417,14 @@
 
   /* A folder: its path in quiet italic, the "+" (and an empty folder's ×)
      on the right, plain marks with no box (owner, 2026-10-21). Kept tight
-     (owner, 2026-10-22: the list took too much room). */
+     (owner, 2026-10-22: the list took too much room), with a blank row
+     between folders and 3 screen px between the line and its chats, so the "+" box
+     and the open chat's band never touch (owner, 2026-10-22). */
   .group + .group {
-    margin-top: calc(6 * var(--px));
+    margin-top: calc(22 * var(--px));
+  }
+  .list {
+    margin-top: 3px;
   }
   .folder {
     display: flex;

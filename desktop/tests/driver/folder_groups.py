@@ -74,6 +74,22 @@ check(bool(rows) and all(r["row"] <= 1.75 * r["line"] for r in rows),
       f"each chat is one line tall ({[(round(r['row']), round(r['line'])) for r in rows]})")
 check(all(r["time"] is None or abs(r["time"] - r["title"]) <= 2 for r in rows),
       f"the time sits on the title's line ({[(round(r['title']), r['time'] and round(r['time'])) for r in rows]})")
+
+# Room around the rows (owner, 2026-10-22): 1-4 px between a folder's line
+# and its first chat and between chats, so a band never touches the next
+# line's box; a blank row (at least 20 picture px) before the next folder.
+space = run("""
+  const box = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; };
+  return [...document.querySelectorAll('nav.chats section.group')].map((g) => ({
+    head: box(g.querySelector('.folder')), rows: [...g.querySelectorAll('.chat > .row')].map(box),
+    unit: (g.querySelector('.chat > .row')?.getBoundingClientRect().height ?? 44) / 44 }));
+""") or []
+gaps = [round(g["rows"][0]["top"] - g["head"]["bottom"], 1) for g in space if g["rows"]]
+check(bool(gaps) and all(1 <= x <= 4 for x in gaps), f"1-4 px between each folder's line and its first chat ({gaps})")
+between = [round(b["top"] - a["bottom"], 1) for g in space for a, b in zip(g["rows"], g["rows"][1:])]
+check(bool(between) and all(1 <= x <= 4 for x in between), f"1-4 px between chats ({between})")
+blank = [(round(b["head"]["top"] - (a["rows"] or [a["head"]])[-1]["bottom"], 1), a["unit"]) for a, b in zip(space, space[1:])]
+check(bool(blank) and all(x >= 20 * u for x, u in blank), f"a blank row between folders ({blank})")
 shot(out_dir, "groups")
 
 # Complete: on the right above the typing box; a real click closes the chat.

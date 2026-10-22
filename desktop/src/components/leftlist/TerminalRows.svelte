@@ -76,10 +76,11 @@
 </section>
 
 <style>
-  /* Set apart from the chats by a 24 gap and a clear-ended rule, the heading
-     10 below it (owner's pick D, 2026-10-21). */
+  /* Set apart from the chats by a 24 gap plus a blank row (owner,
+     2026-10-22) and a clear-ended rule, the heading 10 below it (owner's
+     pick D, 2026-10-21). */
   .terminals :global(.rule.above-terminals) {
-    margin-top: calc(24 * var(--px));
+    margin-top: calc(46 * var(--px));
   }
   /* The day heading's style (ChatList.svelte .day), with the "+" 20 x 20 at
      the list's right edge minus 19, on the heading's centre line. */

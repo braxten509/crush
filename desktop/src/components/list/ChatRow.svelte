@@ -114,7 +114,10 @@
   .chat {
     position: relative;
   }
+  /* 2 screen px between rows, so two bands never touch (owner, 2026-10-22:
+     1-4 px). */
   :global(.chat) + .chat {
+    margin-top: 2px;
     border-top: 1px solid var(--rule);
   }
   :global(.chat.expanded) + .chat,
@@ -265,7 +268,8 @@
     position: absolute;
     z-index: 1;
     left: calc((35 + 28 * (var(--depth) - 1)) * var(--px));
-    top: 0;
+    /* Up through the 2px between rows, so the line stays whole. */
+    top: -2px;
     bottom: 0;
     width: max(1px, calc(1.5 * var(--px)));
     background: var(--figure);

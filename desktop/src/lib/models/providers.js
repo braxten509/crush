@@ -30,6 +30,10 @@ export function safeProvider(id, cfg) {
     name: typeof cfg?.name === "string" ? cfg.name : "",
     type: typeof cfg?.type === "string" ? cfg.type : "",
     disable: cfg?.disable === true,
+    // OpenRouter: the model menu's "Cheapest host" switch reads this back
+    // after saving, so it must survive the cut (owner, 2026-10-22: it
+    // flipped straight back on).
+    cheapest_host: cfg?.cheapest_host !== false,
     has_api_key: cfg?.has_api_key === true,
     has_oauth: cfg?.has_oauth === true,
     oauth_expired: cfg?.has_oauth === true && oauthExpired(cfg.oauth_times),

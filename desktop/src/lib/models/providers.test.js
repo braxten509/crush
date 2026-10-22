@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { footerText } from "../timeline.js";
-import { footerProviders } from "./providers.js";
+import { footerProviders, safeProvider } from "./providers.js";
+import { cheapestHostOn } from "./openrouter.js";
 
 const cfg = {
   providers: new Map([
@@ -35,5 +36,15 @@ describe("footerProviders (the terminal's cfg.GetModel order)", () => {
   test("catalog providers missing from the config still name their models; before the config loads, the catalog alone", () => {
     expect(footerText(finished("anthropic", "claude-haiku-5-5"), footerProviders(cfg, catalog), 20).text).toBe("Haiku 5.5 via Anthropic in 0s");
     expect(footerProviders(null, catalog)).toEqual(catalog);
+  });
+});
+
+describe("the picker's provider view keeps the cheapest host switch (owner, 2026-10-22)", () => {
+  test("turning it off survives the read the switch does next; a provider without it asks for the cheapest host", () => {
+    const read = (saved) => ({ providers: new Map([["openrouter", safeProvider("openrouter", saved)]]) });
+    expect(safeProvider("openrouter", { type: "openrouter", cheapest_host: false }).cheapest_host).toBe(false);
+    expect(cheapestHostOn(read({ type: "openrouter", cheapest_host: false }), "openrouter")).toBe(false);
+    expect(cheapestHostOn(read({ type: "openrouter", cheapest_host: true }), "openrouter")).toBe(true);
+    expect(cheapestHostOn(read({ type: "openrouter" }), "openrouter")).toBe(true);
   });
 });

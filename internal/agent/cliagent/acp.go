@@ -493,8 +493,9 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 		}
 		done := u.Status == "completed" || u.Status == "failed"
 		// Announce once the input is known; some agents only fill it in
-		// when the call starts running.
-		if !tc.announced && (len(tc.input) > 0 || tc.diff != nil || done) {
+		// when the call starts running. OpenCode sends a shell call first
+		// with only its folder, so a command waits for its text.
+		if !tc.announced && (tc.ready() || tc.diff != nil || done) {
 			tc.announced = true
 			name, input := acpTool2Crush(tc)
 			tc.crushName = name
@@ -528,24 +529,26 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 	return nil
 }
 
-// acpTool2Crush maps an ACP tool call onto the Crush tool with the same job,
-// using its standard kind and the common spellings of its input fields.
-func acpTool2Crush(tc *acpTool) (string, string) {
-	in := func(keys ...string) string {
-		for _, k := range keys {
-			if s, ok := tc.input[k].(string); ok && s != "" {
-				return s
-			}
-		}
-		return ""
+// ready reports whether the call's input says enough to announce it.
+func (tc *acpTool) ready() bool {
+	if len(tc.input) == 0 {
+		return false
 	}
+	return toolKind(tc.kind, tc.title) != "execute" || inputField(tc.input, commandFields...) != ""
+}
+
+// acpTool2Crush maps an ACP tool call onto the Crush tool with the same job,
+// using its kind (see [toolKind]) and the common spellings of its input
+// fields.
+func acpTool2Crush(tc *acpTool) (string, string) {
+	in := func(keys ...string) string { return inputField(tc.input, keys...) }
 	if input, ok := todoInput(tc.input["todos"]); ok {
 		return tools.TodosToolName, input
 	}
-	path := in("file_path", "filePath", "target_file", "path", "absolute_path")
-	switch tc.kind {
+	path := in(pathFields...)
+	switch toolKind(tc.kind, tc.title) {
 	case "execute":
-		if cmd := in("command", "cmd"); cmd != "" {
+		if cmd := in(commandFields...); cmd != "" {
 			return tools.BashToolName, marshal(map[string]string{"command": cmd, "description": in("description")})
 		}
 	case "read":

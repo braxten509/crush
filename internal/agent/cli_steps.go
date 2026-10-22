@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"charm.land/fantasy"
 
@@ -521,7 +522,11 @@ func (s *cliSteps) handleToolResult(e cliagent.Event) error {
 		s.known = map[string]string{}
 	}
 	if edit, ok := s.edits[e.ID]; ok && !e.IsError {
-		e.Metadata = s.editMetadata(e, edit)
+		var late *filechange.Review
+		e.Metadata, late = s.editMetadata(e, edit)
+		if reportedReview == nil {
+			reportedReview = late
+		}
 	}
 	if meta, ok := s.todoMeta[e.ID]; ok && !e.IsError {
 		e.Metadata = meta
@@ -539,16 +544,20 @@ func (s *cliSteps) handleToolResult(e cliagent.Event) error {
 }
 
 // editMetadata records a successful edit of edit's file (its path and its
-// contents before the call) and returns the result's metadata.
-func (s *cliSteps) editMetadata(e cliagent.Event, edit [2]string) string {
+// contents before the call) and returns the result's metadata. When the
+// CLI wrote the file before Crush read its "before" copy, the change
+// tracker saw nothing, so the rebuilt change comes back as its record.
+func (s *cliSteps) editMetadata(e cliagent.Event, edit [2]string) (string, *filechange.Review) {
 	after, _ := os.ReadFile(edit[0])
-	if edit[1] == string(after) {
-		// The CLI wrote the file before Crush read its "before" copy.
+	late := edit[1] == string(after)
+	if late {
 		var reported tools.EditResponseMetadata
 		_ = json.Unmarshal([]byte(e.Metadata), &reported)
 		switch old, known := s.known[edit[0]]; {
 		case reported.Additions+reported.Removals > 0 && reported.NewContent == string(after):
 			edit[1] = reported.OldContent // a full-file diff from the CLI itself
+		case undoable(s.inputs[e.ID], string(after)):
+			edit[1] = undoReplacement(s.inputs[e.ID], string(after))
 		case known:
 			edit[1] = old
 		case e.Name == tools.WriteToolName && e.Metadata == "":
@@ -568,9 +577,46 @@ func (s *cliSteps) editMetadata(e cliagent.Event, edit [2]string) string {
 	if edit[1] != string(after) || e.Metadata == "" {
 		_, adds, dels := diff.GenerateDiff(edit[1], string(after), edit[0])
 		meta, _ := json.Marshal(tools.EditResponseMetadata{Additions: adds, Removals: dels, OldContent: edit[1], NewContent: string(after)})
-		return string(meta)
+		var review *filechange.Review
+		if late && edit[1] != string(after) && filechange.InRepository(filechange.RepositoryRoot(s.m.Dir), s.m.Dir, edit[0]) {
+			review = lateChange(s.m.Dir, edit[0], edit[1], string(after))
+		}
+		return string(meta), review
 	}
-	return e.Metadata
+	return e.Metadata, nil
+}
+
+// undoable reports whether an edit's input says exactly what it replaced:
+// its new text is in the file once, so swapping it back gives the file
+// before the edit.
+func undoable(input, after string) bool {
+	var in tools.EditParams
+	if json.Unmarshal([]byte(input), &in) != nil || in.NewString == "" || in.OldString == in.NewString {
+		return false
+	}
+	return strings.Count(after, in.NewString) == 1
+}
+
+// undoReplacement is the file before an [undoable] edit.
+func undoReplacement(input, after string) string {
+	var in tools.EditParams
+	_ = json.Unmarshal([]byte(input), &in)
+	return strings.Replace(after, in.NewString, in.OldString, 1)
+}
+
+// lateChange is the change record of a file edited before Crush looked:
+// before is the rebuilt copy, "" for a new file.
+func lateChange(dir, path, before, after string) *filechange.Review {
+	mode := uint32(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = uint32(info.Mode())
+	}
+	change := filechange.Change{Path: path, Order: time.Now().UnixNano()}
+	if before != "" {
+		change.Before = &filechange.State{Content: before, Size: int64(len(before)), Mode: mode}
+	}
+	change.After = &filechange.State{Content: after, Size: int64(len(after)), Mode: mode}
+	return &filechange.Review{Root: dir, Changes: []filechange.Change{change}}
 }
 
 func (s *cliSteps) result() *fantasy.AgentResult {

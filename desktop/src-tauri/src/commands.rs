@@ -3,7 +3,7 @@
 //! fixture player instead of the engine connection (6.3). Every failure is an
 //! AppError (1.2.2).
 
-use crate::connection::{self, OpenResult};
+use crate::connection::{self, OpenedFolder, OpenResult};
 use crate::error::{AppError, AppResult};
 use crate::files::{self, FileEntry, FileInfo};
 use crate::fixture::Fixture;
@@ -163,6 +163,30 @@ pub async fn engine_open(
     connection::open(&app, window.label(), &cwd).await
 }
 
+/// A folder the window keeps joined beside the one it shows (owner, 2026-10-22).
+pub async fn engine_open_folder(app: AppHandle, window: Window, cwd: String) -> AppResult<OpenedFolder> {
+    if let Some(fixture) = app.try_state::<Fixture>() {
+        return fixture.open_folder(window.label(), &cwd);
+    }
+    connection::open_folder(&app, window.label(), &cwd).await
+}
+
+/// Shows another folder: nothing leaves, so a switch costs no engine restart.
+pub async fn engine_show_folder(app: AppHandle, window: Window, cwd: String) -> AppResult<OpenResult> {
+    if let Some(fixture) = app.try_state::<Fixture>() {
+        return fixture.show_folder(&app, window.label(), &cwd);
+    }
+    connection::show_folder(&app, window.label(), &cwd).await
+}
+
+/// A folder off the left list: its running work finishes before it closes.
+pub async fn engine_leave_folder(app: AppHandle, window: Window, cwd: String) -> AppResult<()> {
+    if app.try_state::<Fixture>().is_some() {
+        return Ok(());
+    }
+    connection::leave_folder(&app, window.label(), &cwd).await
+}
+
 pub async fn engine_retry(app: AppHandle, window: Window) -> AppResult<()> {
     if app.try_state::<Fixture>().is_some() {
         return Ok(());
@@ -206,6 +230,7 @@ pub async fn api(
     query: Option<Map<String, Value>>,
     body: Option<Value>,
     call_id: Option<String>,
+    dir: Option<String>,
 ) -> AppResult<Value> {
     // The routes are checked without case, so the redaction must be too.
     let method = method.to_ascii_uppercase();
@@ -213,9 +238,9 @@ pub async fn api(
         if let Some(wait) = fixture.delay(&method, &path) {
             tokio::time::sleep(wait).await;
         }
-        fixture.api(&state.launch, window.label(), &method, &path, query, body, call_id)
+        fixture.api(&state.launch, window.label(), &method, &path, query, body, call_id, dir.as_deref())
     } else {
-        connection::call(&app, window.label(), &method, &path, query, body, call_id).await
+        connection::call(&app, window.label(), &method, &path, query, body, call_id, dir.as_deref()).await
     };
     answer.map(|value| redact_answer(&method, &path, value))
 }

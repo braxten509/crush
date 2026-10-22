@@ -136,7 +136,9 @@ def main():
         state = run(probe_path, f"return document.querySelector('nav.chats .chat[data-id=\"{sid}\"]')?.innerText ?? '';") or ""
         check("Done" not in state and "Working" not in state, f"the read chat stays plain in another folder ({state!r})")
         closed, _, _ = rc.poll(lambda: reply_state(sock, wid, sid), lambda s: s is None, 15)
-        check(closed, "proj's workspace closes once its work is done")
+        # Multi-folder: the window keeps proj joined, so its workspace stays
+        # (owner, 2026-10-22). Only its reply ends here.
+        check(not closed and bool(reply_state(sock, wid, sid)), "proj's workspace stays: the window still keeps the folder joined")
 
     with step("keep-4-other-folder", out_dir):
         # Another app sends in proj while the window shows beta: the 30 s

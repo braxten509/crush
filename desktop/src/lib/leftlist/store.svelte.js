@@ -8,7 +8,7 @@ import { runAction } from "../actions.js";
 import { COLUMN_LIMITS } from "../columns.js";
 import { hasDialog, openDialog } from "../dialogs.js";
 import { settings_set } from "../engine/commands.js";
-import { conn, inFolder, switchFolder } from "../stores/connection.svelte.js";
+import { switchFolder } from "../stores/connection.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { openTerminal } from "../terminal/tabs.svelte.js";
 import { clean } from "./picker.js";
@@ -101,17 +101,21 @@ export function newTerminal() {
 }
 
 // A new chat or terminal tab in dir (the folder picker, a folder heading's
-// "+"). Another folder: the window switches to it in place first (owner,
-// 2026-10-20: the folder is per chat), then a chat starts on the landing page
-// the switch leaves, or the terminal opens there.
+// "+"). A terminal opens there as it is: every tab carries its own folder. A
+// chat belongs to the folder the window shows, so another folder is shown
+// first (owner, 2026-10-20: the folder is per chat), and the chat starts on
+// the landing page that leaves (owner, 2026-10-22: the folder it left stays
+// joined, so nothing restarts).
 export async function startIn(what, dir) {
-  const here = clean(dir) === clean(conn.project.cwd || "") || inFolder(dir);
-  if (!here && !(await switchFolder(dir))) {
-    notify("error", what === "terminal" ? "Couldn't start the terminal." : "Couldn't start a chat.");
+  if (what === "terminal") {
+    await startTerminal(dir);
+    return true;
+  }
+  if (!(await switchFolder(dir))) {
+    notify("error", "Couldn't start a chat.");
     return false;
   }
-  if (what === "terminal") await startTerminal(dir);
-  else runAction("chat.new");
+  runAction("chat.new");
   return true;
 }
 

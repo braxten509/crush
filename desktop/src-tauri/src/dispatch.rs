@@ -49,6 +49,9 @@ pub async fn call(app: AppHandle, label: String, cmd: String, args: Value) -> Re
     match cmd.as_str() {
         // Async commands.
         "engine_open" => res(commands::engine_open(app.clone(), w, app.state(), arg(&args, "cwd")?).await),
+        "engine_open_folder" => res(commands::engine_open_folder(app.clone(), w, arg(&args, "cwd")?).await),
+        "engine_show_folder" => res(commands::engine_show_folder(app.clone(), w, arg(&args, "cwd")?).await),
+        "engine_leave_folder" => res(commands::engine_leave_folder(app.clone(), w, arg(&args, "cwd")?).await),
         "engine_retry" => res(commands::engine_retry(app.clone(), w).await),
         "engine_set_current_session" => {
             res(commands::engine_set_current_session(app.clone(), w, app.state(), arg(&args, "sessionId")?).await)
@@ -62,6 +65,7 @@ pub async fn call(app: AppHandle, label: String, cmd: String, args: Value) -> Re
             arg(&args, "query")?,
             arg(&args, "body")?,
             arg(&args, "callId")?,
+            arg(&args, "dir")?,
         )
         .await),
         "api_secret" => res(commands::api_secret(app.clone(), w, app.state(), arg(&args, "path")?, arg(&args, "body")?).await),

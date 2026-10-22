@@ -543,22 +543,83 @@ struct Link {
     workspace_id: String,
 }
 
+/// How many folders a window keeps joined at once: the one it shows and three
+/// others (owner, 2026-10-22). A fifth leaves the one shown longest ago.
+pub const FOLDER_CAP: usize = 4;
+
+/// One folder the window keeps joined. Its claim on the engine is its event
+/// stream, which the engine gives up 10 s after the last one closes
+/// (internal/backend/clients.go:336-377), so the stream stays open for the
+/// folder's whole life; only the shown folder's events reach the page.
+struct Folder {
+    link: Link,
+    plan: Arc<Plan>,
+    client_id: String,
+    opened: OpenResult,
+    /// A stamp: the higher, the more recently the window showed this folder.
+    seen: u64,
+    /// The identity of its stream, so the end of an older one starts nothing.
+    generation: u64,
+    reader: Option<Owned>,
+}
+
+/// A folder the window opened besides the one it joined (`engine_open_folder`).
+#[derive(Clone, serde::Serialize)]
+pub struct OpenedFolder {
+    pub dir: String,
+    pub client_id: String,
+    pub workspace: Value,
+    pub engine: engine_cli::Ensured,
+}
+
+/// A folder's path written one way, as the page writes it: no trailing slash
+/// ("/" stays itself).
+fn folder_key(dir: &str) -> String {
+    if dir == "/" {
+        return "/".to_string();
+    }
+    dir.trim_end_matches('/').to_string()
+}
+
 struct Inner {
     phase: Phase,
+    /// The shown folder's plan, from its join.
     plan: Option<Arc<Plan>>,
-    link: Option<Link>,
+    /// The folder the page shows: its stream feeds the batch untagged.
+    shown: Option<String>,
+    /// Every joined folder, the shown one included.
+    folders: HashMap<String, Folder>,
+    /// The stamp of the last shown folder; each show takes the next.
+    stamp: u64,
     opened: Option<OpenResult>,
     /// The chat the window last reported (`""` is the landing page); sent again after a rejoin.
     current_session: Option<String>,
-    /// The join the window is on; the end of an older join's stream, or a
-    /// failed call made through it, starts nothing.
-    generation: u64,
     counter: u64,
     /// The join under way, and whether its event stream already ended.
     joining: Option<u64>,
     joining_lost: bool,
-    reader: Option<JoinHandle<()>>,
     reconnect: Option<JoinHandle<()>>,
+}
+
+impl Inner {
+    /// Drops the folders shown longest ago until FOLDER_CAP are left, the
+    /// shown one always among them; answers them, for leaving the engine.
+    fn evict(&mut self) -> Vec<Folder> {
+        let mut out = Vec::new();
+        while self.folders.len() > FOLDER_CAP {
+            let oldest = self
+                .folders
+                .iter()
+                .filter(|(dir, _)| Some(*dir) != self.shown.as_ref())
+                .min_by_key(|(_, folder)| folder.seen)
+                .map(|(dir, _)| dir.clone());
+            let Some(dir) = oldest else { return out };
+            if let Some(folder) = self.folders.remove(&dir) {
+                out.push(folder);
+            }
+        }
+        out
+    }
 }
 
 struct Queue {
@@ -630,14 +691,14 @@ impl WindowConn {
             inner: Mutex::new(Inner {
                 phase: Phase::Idle,
                 plan: None,
-                link: None,
+                shown: None,
+                folders: HashMap::new(),
+                stamp: 0,
                 opened: None,
                 current_session: None,
-                generation: 0,
                 counter: 0,
                 joining: None,
                 joining_lost: false,
-                reader: None,
                 reconnect: None,
             }),
             calls: Mutex::default(),
@@ -709,9 +770,22 @@ impl WindowConn {
         out
     }
 
-    /// The folder this window joined (resolved), once it has a plan.
+    /// The folder this window shows (resolved), once it has one.
     fn folder(&self) -> Option<String> {
-        self.inner().plan.as_ref().map(|plan| plan.cwd.clone())
+        self.inner().shown.clone()
+    }
+
+    /// Whether `dir` is the folder the window shows, so its events reach the
+    /// page untagged (the others stay live for their chats through watch.rs).
+    fn is_shown(&self, dir: &str) -> bool {
+        self.inner().shown.as_deref() == Some(dir)
+    }
+
+    /// The next stamp for a shown folder.
+    fn touch(&self) -> u64 {
+        let mut inner = self.inner();
+        inner.stamp += 1;
+        inner.stamp
     }
 
     /// Another folder's events (or, with none, a resync of that folder)
@@ -774,12 +848,167 @@ impl WindowConn {
         }
     }
 
-    /// Join steps 2-8 (the first join, attempt 0, and every rejoin): the
+    /// Opens a folder beside the one the window shows (`engine_open_folder`):
+    /// the window keeps it joined, so its chats answer at once without the
+    /// folder being shown. A folder already joined answers as it is. At most
+    /// FOLDER_CAP folders stay joined: a new one drops the folder shown
+    /// longest ago (owner, 2026-10-22).
+    async fn open_folder(self: &Arc<Self>, plan: impl Future<Output = AppResult<Plan>>) -> AppResult<OpenedFolder> {
+        let _one_at_a_time = self.opening.lock().await;
+        if self.inner().phase == Phase::Closed {
+            return Err(closed());
+        }
+        let plan = match plan.await {
+            Ok(plan) => Arc::new(plan),
+            Err(e) => {
+                self.log(&format!("could not start: {} ({})", e.message, e.code));
+                return Err(e);
+            }
+        };
+        let dir = folder_key(&plan.cwd);
+        if let Some(folder) = self.inner().folders.get(&dir) {
+            return Ok(OpenedFolder {
+                dir: dir.clone(),
+                client_id: folder.client_id.clone(),
+                workspace: folder.opened.workspace.clone(),
+                engine: folder.opened.engine.clone(),
+            });
+        }
+        match self.join_as(&plan, 0, false).await {
+            Ok(opened) => Ok(OpenedFolder {
+                dir,
+                client_id: opened.client_id,
+                workspace: opened.workspace,
+                engine: opened.engine,
+            }),
+            Err((e, holder)) => {
+                if let Some(http) = holder {
+                    // That engine holds a claim for this client: give it back.
+                    self.retire(&http, &plan.client_id).await;
+                }
+                self.log(&format!("could not keep {dir} joined: {} ({})", e.message, e.code));
+                Err(e)
+            }
+        }
+    }
+
+    /// Shows `dir` (`engine_show_folder`): opens it first when the window does
+    /// not keep it joined, then makes it the folder the page reads. Nothing
+    /// leaves: the folder it showed before stays joined (owner, 2026-10-22).
+    async fn show(self: &Arc<Self>, dir: &str, plan: impl Future<Output = AppResult<Plan>>) -> AppResult<OpenResult> {
+        let dir = folder_key(dir);
+        if self.inner().shown.as_deref() == Some(dir.as_str()) {
+            if let Some(opened) = self.inner().opened.clone() {
+                return Ok(opened);
+            }
+        }
+        if !self.inner().folders.contains_key(&dir) {
+            self.open_folder(plan).await?;
+        }
+        let (opened, from, link, client_id) = {
+            let mut inner = self.inner();
+            if inner.phase == Phase::Closed {
+                return Err(closed());
+            }
+            let Some(folder) = inner.folders.get(&dir) else {
+                return Err(AppError::new(
+                    "engine_unavailable",
+                    format!("Crush Desktop has not joined {dir}."),
+                ));
+            };
+            let parts = (folder.opened.clone(), folder.link.clone(), folder.client_id.clone());
+            inner.plan = Some(folder.plan.clone());
+            let from = inner.shown.replace(dir.clone());
+            // The folder it leaves was shown until now, so it counts as the
+            // next most recent: a fifth folder never takes the one just left.
+            inner.stamp += 1;
+            let left_stamp = inner.stamp;
+            if let Some(old) = from.as_ref().and_then(|old| inner.folders.get_mut(old)) {
+                old.seen = left_stamp;
+            }
+            inner.stamp += 1;
+            let stamp = inner.stamp;
+            if let Some(folder) = inner.folders.get_mut(&dir) {
+                folder.seen = stamp;
+            }
+            inner.current_session = None;
+            inner.opened = Some(parts.0.clone());
+            (parts.0, from, parts.1, parts.2)
+        };
+        let base = format!("/v1/workspaces/{}", encode(&link.workspace_id));
+        let client = format!("client_id={}", encode(&client_id));
+        // The folder it left reports no chat, so no phone of a share there
+        // thinks one of its chats is on this window's screen.
+        let left = from.filter(|old| old != &dir).and_then(|old| {
+            self.inner()
+                .folders
+                .get(&old)
+                .map(|folder| (folder.link.clone(), folder.client_id.clone()))
+        });
+        if let Some((old_link, old_client)) = left {
+            let old_base = format!("/v1/workspaces/{}", encode(&old_link.workspace_id));
+            let old_client = format!("client_id={}", encode(&old_client));
+            self.send_current_session(&old_link.http, &old_base, &old_client, "").await;
+        }
+        // A folder the window only kept joined runs its agent now (it needs
+        // one for the chats the page will send here).
+        let init = json!({"interactive": true});
+        if let Err(e) = link.http.call("POST", &format!("{base}/agent/init?{client}"), Some(&init), Some(self.tuning.call_limit)).await {
+            self.log(&format!("agent init failed: {} ({})", e.message, e.code));
+        }
+        let due = self.enqueue(vec![connection_event(json!({
+            "state": "connected",
+            "attempt": 0,
+            "resync": true,
+            "fresh_engine": false,
+            "workspace": opened.workspace,
+            "engine": opened.engine,
+        }))]);
+        self.ring_if(due);
+        self.log(&format!("showing {dir} (workspace {})", opened.workspace["id"]));
+        Ok(opened)
+    }
+
+    /// Lets a folder go (`engine_leave_folder`): the engine keeps its running
+    /// work going (keep_work), and the page drops it. The shown folder stays
+    /// until another one is shown.
+    async fn leave_folder(self: &Arc<Self>, dir: &str) -> AppResult<()> {
+        let dir = folder_key(dir);
+        let folder = {
+            let mut inner = self.inner();
+            if inner.shown.as_deref() == Some(dir.as_str()) {
+                return Err(AppError::new(
+                    "folder_shown",
+                    "Crush Desktop shows this folder; show another one first.",
+                ));
+            }
+            inner.folders.remove(&dir)
+        };
+        if let Some(folder) = folder {
+            self.log(&format!("letting {dir} go"));
+            self.retire_keeping(&folder.link.http, &folder.client_id, true).await;
+            drop(folder.reader);
+        }
+        Ok(())
+    }
+
     /// engine, its version, the workspace, the event stream, agent init and
     /// the current chat. On success the window is connected and its
     /// `connected` event is in the batch. A failure after the create also
     /// answers the engine that holds this client's claim.
     async fn join(self: &Arc<Self>, plan: &Arc<Plan>, attempt: u32) -> Result<OpenResult, (AppError, Option<Arc<EngineHttp>>)> {
+        self.join_as(plan, attempt, true).await
+    }
+
+    /// join, for the folder the window shows (`shown` true) or for one it
+    /// keeps joined beside it: that one runs no agent init and reports no
+    /// chat, and its join reaches the page as no connection event.
+    async fn join_as(
+        self: &Arc<Self>,
+        plan: &Arc<Plan>,
+        attempt: u32,
+        shown: bool,
+    ) -> Result<OpenResult, (AppError, Option<Arc<EngineHttp>>)> {
         let limit = Some(self.tuning.call_limit);
         self.still_open().map_err(|e| (e, None))?;
         let (mut engine, mut http, mut version) = self.dial(plan).await.map_err(|e| (e, None))?;
@@ -804,7 +1033,7 @@ impl WindowConn {
         let base = format!("/v1/workspaces/{}", encode(&workspace_id));
         let client = format!("client_id={}", encode(&plan.client_id));
 
-        let generation = self.begin_join();
+        let generation = self.begin_join(shown);
         let stream = match http.stream(&format!("{base}/events?{client}")).await {
             Ok(stream) => stream,
             Err(e) => {
@@ -812,18 +1041,22 @@ impl WindowConn {
                 return Err(held(e));
             }
         };
-        let reader = Owned(Some(self.start_reader(stream, generation)));
+        let reader = Owned(Some(self.start_reader(stream, folder_key(&plan.cwd), generation)));
 
         // Agent init: a failure is logged, not fatal, as in the terminal
         // (internal/cmd/workspace_setup.go:204-208): a project with no model
-        // yet still opens, for onboarding.
-        let init = json!({"interactive": true});
-        if let Err(e) = http.call("POST", &format!("{base}/agent/init?{client}"), Some(&init), limit).await {
-            self.log(&format!("agent init failed: {} ({})", e.message, e.code));
-        }
-        let reported = self.inner().current_session.clone();
-        if let Some(session_id) = &reported {
-            self.send_current_session(&http, &base, &client, session_id).await;
+        // yet still opens, for onboarding. A folder the window only keeps
+        // joined runs no work, so it needs none.
+        let mut reported = None;
+        if shown {
+            let init = json!({"interactive": true});
+            if let Err(e) = http.call("POST", &format!("{base}/agent/init?{client}"), Some(&init), limit).await {
+                self.log(&format!("agent init failed: {} ({})", e.message, e.code));
+            }
+            reported = self.inner().current_session.clone();
+            if let Some(session_id) = &reported {
+                self.send_current_session(&http, &base, &client, session_id).await;
+            }
         }
 
         let opened = OpenResult {
@@ -834,11 +1067,24 @@ impl WindowConn {
             sent_yolo: plan.sent_yolo,
             cwd: plan.cwd.clone(),
         };
-        let link = Link {
-            http: http.clone(),
-            workspace_id,
+        let folder = Folder {
+            link: Link {
+                http: http.clone(),
+                workspace_id,
+            },
+            plan: plan.clone(),
+            client_id: plan.client_id.clone(),
+            opened: opened.clone(),
+            seen: self.touch(),
+            generation,
+            reader: None,
         };
-        let opened = self.install(generation, reader, link, opened, attempt).map_err(held)?;
+        if !shown {
+            // The page learns of it from the command's answer, not an event.
+            self.install_folder(folder, reader).await.map_err(|e| (e, None))?;
+            return Ok(opened);
+        }
+        let opened = self.install(generation, reader, folder, opened, attempt).await.map_err(held)?;
         // A chat reported while this join ran was only remembered: send it now.
         let now = self.inner().current_session.clone();
         if let Some(session_id) = now.filter(|now| reported.as_ref() != Some(now)) {
@@ -904,12 +1150,15 @@ impl WindowConn {
         }
     }
 
-    fn begin_join(&self) -> u64 {
+    fn begin_join(&self, shown: bool) -> u64 {
         let mut inner = self.inner();
         inner.counter += 1;
-        inner.joining = Some(inner.counter);
-        inner.joining_lost = false;
-        inner.counter
+        let generation = inner.counter;
+        if shown {
+            inner.joining = Some(generation);
+            inner.joining_lost = false;
+        }
+        generation
     }
 
     fn end_join(&self, generation: u64) {
@@ -920,11 +1169,12 @@ impl WindowConn {
         }
     }
 
-    /// The last join step: the window is connected, and its `connected` event
-    /// goes into the batch under the same lock as the state change, so it
-    /// keeps its order with the reconnect's events.
-    fn install(&self, generation: u64, reader: Owned, link: Link, opened: OpenResult, attempt: u32) -> AppResult<OpenResult> {
-        let due = {
+    /// The last join step for the folder the window shows: the window is
+    /// connected, and its `connected` event goes into the batch under the same
+    /// lock as the state change, so it keeps its order with the reconnect's
+    /// events.
+    async fn install(&self, generation: u64, reader: Owned, mut folder: Folder, opened: OpenResult, attempt: u32) -> AppResult<OpenResult> {
+        let (due, evicted) = {
             let mut inner = self.inner();
             let lost = inner.joining == Some(generation) && inner.joining_lost;
             if inner.joining == Some(generation) {
@@ -937,21 +1187,24 @@ impl WindowConn {
             if lost {
                 return Err(AppError::new("transport", "The Crush engine's event stream ended while the window joined it."));
             }
-            let fresh_engine = attempt > 0 && inner.link.as_ref().is_some_and(|old| old.workspace_id != link.workspace_id);
+            let key = folder_key(&opened.cwd);
+            let fresh_engine = attempt > 0 && inner.folders.get(&key).is_some_and(|old| old.link.workspace_id != folder.link.workspace_id);
+            folder.reader = Some(reader);
+            inner.folders.insert(key.clone(), folder);
+            inner.shown = Some(key);
             inner.phase = Phase::Connected;
-            inner.generation = generation;
-            inner.link = Some(link);
-            inner.reader = Some(reader.keep());
             inner.reconnect = None;
             inner.opened = Some(opened.clone());
-            self.enqueue(vec![connection_event(json!({
+            let evicted = inner.evict();
+            let due = self.enqueue(vec![connection_event(json!({
                 "state": "connected",
                 "attempt": attempt,
                 "resync": attempt > 0,
                 "fresh_engine": fresh_engine,
                 "workspace": opened.workspace,
                 "engine": opened.engine,
-            }))])
+            }))]);
+            (due, evicted)
         };
         self.ring_if(due);
         self.log(&format!(
@@ -960,22 +1213,70 @@ impl WindowConn {
             opened.engine.socket,
             opened.engine.pid
         ));
+        self.give_up(evicted).await;
         Ok(opened)
     }
 
-    /// Join step 5's reader: the event stream's lines into the batch. Its end
-    /// starts a reconnect (1.2.5 step 4).
-    fn start_reader(self: &Arc<Self>, mut stream: ByteStream, generation: u64) -> JoinHandle<()> {
+    /// The last join step for a folder the window keeps beside the one it
+    /// shows: it joins quietly, reaching the page as no connection event.
+    async fn install_folder(&self, mut folder: Folder, reader: Owned) -> AppResult<OpenedFolder> {
+        let dir = folder_key(&folder.opened.cwd);
+        let opened = OpenedFolder {
+            dir: dir.clone(),
+            client_id: folder.client_id.clone(),
+            workspace: folder.opened.workspace.clone(),
+            engine: folder.opened.engine.clone(),
+        };
+        folder.reader = Some(reader);
+        let evicted = {
+            let mut inner = self.inner();
+            if inner.phase == Phase::Closed {
+                return Err(closed());
+            }
+            inner.folders.insert(dir.clone(), folder);
+            inner.evict()
+        };
+        self.log(&format!("kept {dir} joined (workspace {})", opened.workspace["id"]));
+        self.give_up(evicted).await;
+        Ok(opened)
+    }
+
+    /// The folders that made room for a new one leave the engine, which keeps
+    /// their running work going (owner, 2026-10-22: a fifth folder leaves the
+    /// one shown longest ago).
+    async fn give_up(&self, folders: Vec<Folder>) {
+        for folder in folders {
+            self.log(&format!("letting {} go: {} folders are enough", folder.opened.cwd, FOLDER_CAP));
+            self.retire_keeping(&folder.link.http, &folder.client_id, true).await;
+        }
+    }
+
+    /// The folders the window keeps joined, in order.
+    #[cfg_attr(not(test), allow(dead_code))] // the tests read it
+    fn folders_joined(&self) -> Vec<String> {
+        let mut dirs: Vec<String> = self.inner().folders.keys().cloned().collect();
+        dirs.sort();
+        dirs
+    }
+
+    /// Join step 5's reader: the event stream's lines. The shown folder's go
+    /// into the batch; another folder's stay live for their chats through
+    /// watch.rs's files and only keep its claim on the engine. Its end starts
+    /// a reconnect (1.2.5 step 4), or a quieter revive for another folder.
+    fn start_reader(self: &Arc<Self>, mut stream: ByteStream, dir: String, generation: u64) -> JoinHandle<()> {
         let me = self.clone();
         crate::host::async_runtime::spawn(async move {
             let mut lines = LineSplitter::new();
             let mut out = Vec::new();
             while let Some(Ok(chunk)) = stream.next_chunk().await {
                 lines.push(&chunk, &mut out);
-                me.push_all(out.drain(..).filter_map(|line| batch::parse_sse_line(&line)).collect());
+                let events: Vec<Event> = out.drain(..).filter_map(|line| batch::parse_sse_line(&line)).collect();
+                if me.is_shown(&dir) {
+                    me.push_all(events);
+                }
             }
             drop(stream);
-            me.lost(generation, "the event stream ended");
+            me.lost(&dir, generation, "the event stream ended");
         })
     }
 
@@ -999,21 +1300,84 @@ impl WindowConn {
     // Losing the engine (1.2.6).
 
     /// Starts one reconnect; a second trigger while one runs, or a trigger
-    /// from an older join, is ignored.
-    fn lost(self: &Arc<Self>, generation: u64, why: &str) {
+    /// from an older stream, is ignored.
+    fn lost(self: &Arc<Self>, dir: &str, generation: u64, why: &str) {
+        let (shown, current, joining) = {
+            let inner = self.inner();
+            (
+                inner.shown.as_deref() == Some(dir),
+                inner.folders.get(dir).map(|folder| folder.generation),
+                inner.joining,
+            )
+        };
+        if shown && joining == Some(generation) {
+            self.inner().joining_lost = true;
+            return;
+        }
+        if current != Some(generation) {
+            return;
+        }
+        if shown {
+            let mut inner = self.inner();
+            if inner.phase != Phase::Connected {
+                return;
+            }
+            self.log(&format!("lost the engine ({why}); reconnecting"));
+            if let Some(reader) = inner.folders.get_mut(dir).and_then(|folder| folder.reader.take()) {
+                drop(reader);
+            }
+            self.start_reconnect(&mut inner);
+            return;
+        }
+        // A folder the window keeps beside the shown one: take its stream up
+        // again, since that stream is what holds its claim on the engine.
+        self.log(&format!("{dir}'s stream ended ({why}); taking it up again"));
+        self.revive_stream(dir.to_string());
+    }
+
+    /// Opens a folder's event stream again, quietly, with the same backoff the
+    /// reconnect uses; the folder keeps its client id and its workspace.
+    fn revive_stream(self: &Arc<Self>, dir: String) {
+        let me = self.clone();
+        crate::host::async_runtime::spawn(async move {
+            let mut backoff = Backoff::new(me.tuning.first_wait, me.tuning.max_wait);
+            for _ in 0..me.tuning.max_failures {
+                tokio::time::sleep(backoff.next()).await;
+                let Some((link, client_id, generation)) = me.stream_next(&dir) else { return };
+                let base = format!("/v1/workspaces/{}", encode(&link.workspace_id));
+                let client = format!("client_id={}", encode(&client_id));
+                let stream = match link.http.stream(&format!("{base}/events?{client}")).await {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        me.log(&format!("could not open {dir}'s stream again: {} ({})", e.message, e.code));
+                        continue;
+                    }
+                };
+                let reader = Owned(Some(me.start_reader(stream, dir.clone(), generation)));
+                me.keep_reader(&dir, generation, reader);
+                return;
+            }
+            me.log(&format!("{dir}'s stream stays closed"));
+        });
+    }
+
+    /// The link of a joined folder with a new stream generation, or None once
+    /// it has left the window.
+    fn stream_next(&self, dir: &str) -> Option<(Link, String, u64)> {
         let mut inner = self.inner();
-        if inner.joining == Some(generation) {
-            inner.joining_lost = true;
-            return;
+        inner.counter += 1;
+        let generation = inner.counter;
+        let folder = inner.folders.get_mut(dir)?;
+        folder.generation = generation;
+        Some((folder.link.clone(), folder.client_id.clone(), generation))
+    }
+
+    fn keep_reader(&self, dir: &str, generation: u64, reader: Owned) {
+        let mut inner = self.inner();
+        if let Some(folder) = inner.folders.get_mut(dir).filter(|folder| folder.generation == generation) {
+            let old = folder.reader.replace(reader);
+            drop(old);
         }
-        if inner.phase != Phase::Connected || inner.generation != generation {
-            return;
-        }
-        self.log(&format!("lost the engine ({why}); reconnecting"));
-        if let Some(reader) = inner.reader.take() {
-            reader.abort();
-        }
-        self.start_reconnect(&mut inner);
     }
 
     fn start_reconnect(self: &Arc<Self>, inner: &mut Inner) {
@@ -1087,24 +1451,40 @@ impl WindowConn {
 
     // Calls (1.3).
 
-    /// The link while connected; `engine_unavailable` at once otherwise (nothing is sent).
-    fn ready(&self) -> AppResult<(Link, String, u64)> {
+    /// The link for `dir` (the shown folder with none): its client id, its
+    /// stream's generation and its key. `engine_unavailable` at once
+    /// otherwise, so nothing is sent.
+    fn ready_at(&self, dir: Option<&str>) -> AppResult<(Link, String, u64, String)> {
         let inner = self.inner();
-        let plan = inner.plan.as_ref().filter(|_| inner.opened.is_some());
-        match (inner.phase, &inner.link, plan) {
-            (Phase::Connected, Some(link), Some(plan)) => Ok((link.clone(), plan.client_id.clone(), inner.generation)),
-            (Phase::Reconnecting, ..) => Err(AppError::new(
+        if inner.phase == Phase::Closed || inner.phase == Phase::Idle {
+            return Err(not_open());
+        }
+        if inner.phase == Phase::Reconnecting {
+            return Err(AppError::new(
                 "engine_unavailable",
                 "Crush Desktop is reconnecting to the Crush engine; nothing was sent.",
-            )),
-            (Phase::Failed, ..) => Err(AppError::new(
+            ));
+        }
+        if inner.phase == Phase::Failed {
+            return Err(AppError::new(
                 "engine_unavailable",
                 "Crush Desktop lost its connection to the Crush engine; nothing was sent.",
-            )),
-            _ => Err(not_open()),
+            ));
         }
+        let key = match dir.map(folder_key) {
+            Some(key) if !key.is_empty() => key,
+            _ => inner.shown.clone().ok_or_else(not_open)?,
+        };
+        let folder = inner.folders.get(&key).ok_or_else(|| {
+            AppError::new(
+                "engine_unavailable",
+                format!("Crush Desktop has not joined {key} yet; nothing was sent."),
+            )
+        })?;
+        Ok((folder.link.clone(), folder.client_id.clone(), folder.generation, key))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // the tests' calls go through it
     async fn call(
         self: &Arc<Self>,
         method: &str,
@@ -1113,9 +1493,23 @@ impl WindowConn {
         body: Option<Value>,
         call_id: Option<String>,
     ) -> AppResult<Value> {
+        self.call_in(None, method, path, query, body, call_id).await
+    }
+
+    /// call, in `dir`'s folder (the shown folder with None): a chat of another
+    /// joined folder reaches its own folder's engine (owner, 2026-10-22).
+    async fn call_in(
+        self: &Arc<Self>,
+        dir: Option<&str>,
+        method: &str,
+        path: &str,
+        query: Option<Map<String, Value>>,
+        body: Option<Value>,
+        call_id: Option<String>,
+    ) -> AppResult<Value> {
         let method = method.to_ascii_uppercase();
         let route = Route::find(&method, path)?;
-        let (link, client_id, generation) = self.ready()?;
+        let (link, client_id, generation, dir) = self.ready_at(dir)?;
         let target = route.target(&link.workspace_id, query.as_ref(), &client_id);
         let started = Instant::now();
         let result = match call_id {
@@ -1128,7 +1522,7 @@ impl WindowConn {
             Err(e) => {
                 self.debug_log(&format!("{method} {path}: {} in {took} ms", e.code));
                 if lost_engine(e) {
-                    self.lost(generation, &e.code);
+                    self.lost(&dir, generation, &e.code);
                 }
             }
         }
@@ -1149,7 +1543,7 @@ impl WindowConn {
 
     async fn send_secret(self: &Arc<Self>, path: &str, body: &[u8]) -> AppResult<Value> {
         let route = Route::secret(path)?;
-        let (link, client_id, generation) = self.ready()?;
+        let (link, client_id, generation, dir) = self.ready_at(None)?;
         let target = route.target(&link.workspace_id, None, &client_id);
         let mut value: Value = serde_json::from_slice(body)
             .map_err(|_| AppError::new("bad_request", "The secret's body is not JSON."))?;
@@ -1162,7 +1556,7 @@ impl WindowConn {
             Err(e) => {
                 self.debug_log(&format!("POST {path}: {} in {took} ms", e.code));
                 if lost_engine(e) {
-                    self.lost(generation, &e.code);
+                    self.lost(&dir, generation, &e.code);
                 }
             }
         }
@@ -1205,17 +1599,20 @@ impl WindowConn {
     }
 
     async fn set_current_session(self: &Arc<Self>, session_id: &str) -> AppResult<()> {
-        let (link, client_id, generation) = {
+        let (link, client_id, generation, dir) = {
             let mut inner = self.inner();
-            if inner.opened.is_none() || inner.phase == Phase::Closed {
+            if inner.phase == Phase::Closed || inner.phase == Phase::Idle {
                 return Err(not_open());
             }
             inner.current_session = Some(session_id.to_string());
-            match (&inner.phase, &inner.link, &inner.plan) {
-                (Phase::Connected, Some(link), Some(plan)) => (link.clone(), plan.client_id.clone(), inner.generation),
+            match inner.phase {
+                Phase::Connected => {}
                 // Remembered: the rejoin sends it (1.2.6 step 3).
                 _ => return Ok(()),
             }
+            let Some(dir) = inner.shown.clone() else { return Ok(()) };
+            let Some(folder) = inner.folders.get(&dir) else { return Ok(()) };
+            (folder.link.clone(), folder.client_id.clone(), folder.generation, dir)
         };
         let target = format!(
             "/v1/workspaces/{}/current-session?client_id={}",
@@ -1227,7 +1624,7 @@ impl WindowConn {
             Ok(_) => Ok(()),
             Err(e) => {
                 if lost_engine(&e) {
-                    self.lost(generation, &e.code);
+                    self.lost(&dir, generation, &e.code);
                 }
                 Err(e)
             }
@@ -1240,26 +1637,24 @@ impl WindowConn {
     }
 
     /// As close, for a window moving to another folder: the engine keeps
-    /// the folder's running work going.
+    /// the folders' running work going.
     async fn end(&self, keep_work: bool) {
         let running: Vec<Running> = self.calls.lock().unwrap().drain().map(|(_, r)| r).collect();
         for call in running {
             call.abort.abort();
         }
-        let (link, client_id, reader, reconnect) = {
+        let (folders, reconnect) = {
             let mut inner = self.inner();
             inner.phase = Phase::Closed;
-            let client_id = inner.plan.as_ref().map(|p| p.client_id.clone());
-            (inner.link.take(), client_id, inner.reader.take(), inner.reconnect.take())
+            inner.shown = None;
+            (std::mem::take(&mut inner.folders), inner.reconnect.take())
         };
         if let Some(task) = reconnect {
             task.abort();
         }
-        if let (Some(link), Some(client_id)) = (link, client_id) {
-            self.retire_keeping(&link.http, &client_id, keep_work).await;
-        }
-        if let Some(reader) = reader {
-            reader.abort();
+        for (_, folder) in folders {
+            self.retire_keeping(&folder.link.http, &folder.client_id, keep_work).await;
+            drop(folder.reader);
         }
     }
 }
@@ -1276,12 +1671,6 @@ fn connection_event(payload: Value) -> Event {
 /// A task that stops when this handle is dropped, unless it was kept: a
 /// join given up halfway leaves no reader behind.
 struct Owned(Option<JoinHandle<()>>);
-
-impl Owned {
-    fn keep(mut self) -> JoinHandle<()> {
-        self.0.take().expect("a task is kept once")
-    }
-}
 
 impl Drop for Owned {
     fn drop(&mut self) {
@@ -1411,6 +1800,7 @@ pub async fn retry(app: &crate::host::AppHandle, label: &str) -> AppResult<()> {
 
 /// Generic call for the window (section 1.3, `api`): adds client_id, checks the route list.
 /// With `call_id`: no time limit, and the call is registered for `abort` until it ends (1.2.4).
+/// `dir`: the folder of the chat the call is about (the shown folder with none).
 pub async fn call(
     app: &crate::host::AppHandle,
     label: &str,
@@ -1419,12 +1809,53 @@ pub async fn call(
     query: Option<serde_json::Map<String, serde_json::Value>>,
     body: Option<serde_json::Value>,
     call_id: Option<String>,
+    dir: Option<&str>,
 ) -> AppResult<serde_json::Value> {
     let Some(conn) = connection(app, label) else {
         Route::find(&method.to_ascii_uppercase(), path)?;
         return Err(not_open());
     };
-    conn.call(method, path, query, body, call_id).await
+    conn.call_in(dir, method, path, query, body, call_id).await
+}
+
+/// Opens a folder beside the one the window shows (`engine_open_folder`); the
+/// window keeps it joined, so its chats answer at once.
+pub async fn open_folder(app: &crate::host::AppHandle, label: &str, cwd: &str) -> AppResult<OpenedFolder> {
+    let (conn, plan) = plan_for_window(app, label, cwd)?;
+    conn.open_folder(plan).await
+}
+
+/// Shows a folder (`engine_show_folder`), opening it first when the window does
+/// not keep it joined; nothing leaves, so a switch costs no engine restart.
+pub async fn show_folder(app: &crate::host::AppHandle, label: &str, cwd: &str) -> AppResult<OpenResult> {
+    let (conn, plan) = plan_for_window(app, label, cwd)?;
+    conn.show(cwd, plan).await
+}
+
+/// Lets a folder go (`engine_leave_folder`); its running work finishes
+/// (keep_work), as it did when a window moved away before.
+pub async fn leave_folder(app: &crate::host::AppHandle, label: &str, cwd: &str) -> AppResult<()> {
+    connection(app, label).ok_or_else(not_open)?.leave_folder(cwd).await
+}
+
+/// The window's connection and the plan for `cwd`, as open builds them; the
+/// window must have joined before it can take another folder.
+fn plan_for_window(
+    app: &crate::host::AppHandle,
+    label: &str,
+    cwd: &str,
+) -> AppResult<(Arc<WindowConn>, impl Future<Output = AppResult<Plan>>)> {
+    let conn = connection(app, label).ok_or_else(not_open)?;
+    let state = app.state::<AppState>();
+    let launch = state.launch.clone();
+    let cwd = cwd.to_string();
+    let (crush_path, settings_yolo) = {
+        let settings = state.settings.lock().unwrap();
+        (settings.crush_path.clone(), settings.yolo)
+    };
+    let env: EnvSource = Arc::new(login_env::login_env);
+    let plan = async move { plan_for(&launch, settings_yolo, &cwd, env, crush_check(crush_path)).await };
+    Ok((conn, plan))
 }
 
 /// `api_abort` (1.3): aborts that window's running call with this id; false when none is
@@ -1598,10 +2029,15 @@ mod tests {
 
     /// A plan as `plan_for` makes one, with `finder` in place of crush.
     fn plan(finder: Arc<dyn Finder>) -> Plan {
+        plan_at(finder, "/tmp/proj")
+    }
+
+    /// A plan for `cwd`, as `plan_for` makes one for another folder.
+    fn plan_at(finder: Arc<dyn Finder>, cwd: &str) -> Plan {
         let client_id = uuid::Uuid::new_v4().to_string();
         Plan {
-            cwd: "/tmp/proj".into(),
-            body: create_body("/tmp/proj", None, &client_id, true, false, &[]),
+            cwd: cwd.into(),
+            body: create_body(cwd, None, &client_id, true, false, &[]),
             client_id,
             finder,
             version: Some(EngineVersion { version: "v0.0.0-test".into(), protocol: 1 }),
@@ -1620,13 +2056,21 @@ mod tests {
         (Arc::new(WindowConn::new("main", ring, tuning, debug)), rings)
     }
 
+    /// Another folder the window opened, its fake engine kept alive by the test.
+    struct Extra {
+        fake: FakeEngine,
+        opened: OpenedFolder,
+    }
+
     /// A window joined to a new fake engine (workspace `ws-1`); it closes when dropped.
     struct Joined {
+        name: String,
         fake: FakeEngine,
         finder: Arc<FakeFinder>,
         conn: Arc<WindowConn>,
         rings: Arc<AtomicUsize>,
         opened: OpenResult,
+        extras: Mutex<Vec<Extra>>,
     }
 
     fn joined(name: &str, tuning: Tuning) -> Joined {
@@ -1634,7 +2078,82 @@ mod tests {
         let finder = FakeFinder::new(&fake);
         let (conn, rings) = window(tuning, false);
         let opened = run(conn.open(std::future::ready(Ok(plan(finder.clone()))))).unwrap();
-        Joined { fake, finder, conn, rings, opened }
+        Joined {
+            name: name.to_string(),
+            fake,
+            finder,
+            conn,
+            rings,
+            opened,
+            extras: Mutex::default(),
+        }
+    }
+
+    impl Joined {
+        /// Opens `dir` as another folder of the window (engine_open_folder),
+        /// on a fake engine whose workspace is `workspace`.
+        fn folder(&self, dir: &str, workspace: &'static str) -> OpenedFolder {
+            let n = self.extras.lock().unwrap().len();
+            let fake = FakeEngine::start(&format!("{}-folder-{n}", self.name), engine(workspace));
+            let finder = FakeFinder::new(&fake);
+            let opened = run(self.conn.open_folder(std::future::ready(Ok(plan_at(finder, dir))))).expect("the folder joined");
+            self.extras.lock().unwrap().push(Extra { fake, opened: opened.clone() });
+            opened
+        }
+
+        fn extra(&self, dir: &str) -> Option<()> {
+            self.extras.lock().unwrap().iter().find(|x| x.opened.dir == dir).map(|_| ())
+        }
+
+        /// Every DELETE the window's folders heard, by folder ("" is the one
+        /// it joined first), in the order they were heard.
+        fn deletes(&self) -> Vec<(String, String)> {
+            let mut out = Vec::new();
+            let mut collect = |dir: &str, fake: &FakeEngine| {
+                for seen in fake.seen().iter().filter(|s| s.method == "DELETE") {
+                    out.push((dir.to_string(), seen.target.clone()));
+                }
+            };
+            collect("", &self.fake);
+            for extra in self.extras.lock().unwrap().iter() {
+                collect(&extra.opened.dir, &extra.fake);
+            }
+            out.sort();
+            out
+        }
+
+        /// The event stream requests `dir`'s engine heard.
+        fn extra_streams(&self, dir: &str) -> usize {
+            match self.extras.lock().unwrap().iter().find(|x| x.opened.dir == dir) {
+                Some(extra) => extra.fake.seen().iter().filter(|s| s.path().ends_with("/events")).count(),
+                None => 0,
+            }
+        }
+
+        /// Shows `dir` (engine_show_folder); a folder the window keeps joined
+        /// needs no plan, and an unjoined one joins on this window's engine.
+        fn show(&self, dir: &str) -> OpenResult {
+            let finder: Arc<dyn Finder> = self.finder.clone();
+            let plan = std::future::ready(Ok(plan_at(finder, dir)));
+            run(self.conn.show(dir, plan)).expect("the folder shows")
+        }
+
+        fn end_extra_streams(&self, dir: &str) {
+            if let Some(extra) = self.extras.lock().unwrap().iter().find(|x| x.opened.dir == dir) {
+                extra.fake.end_streams();
+            }
+        }
+
+        fn wait_extra_streams(&self, dir: &str, n: usize) -> bool {
+            let end = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < end {
+                if self.extra_streams(dir) >= n {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            false
+        }
     }
 
     impl Drop for Joined {
@@ -1927,9 +2446,9 @@ mod tests {
         // Two triggers at once: one reconnect.
         j.finder.fail.store(true, SeqCst);
         let ensured = j.finder.runs().len();
-        let generation = j.conn.inner().generation;
-        j.conn.lost(generation, "first trigger");
-        j.conn.lost(generation, "second trigger");
+        let generation = j.conn.inner().folders["/tmp/proj"].generation;
+        j.conn.lost("/tmp/proj", generation, "first trigger");
+        j.conn.lost("/tmp/proj", generation, "second trigger");
         let taken = take_until(&j.conn, "failed");
         assert_eq!(
             states(&taken),
@@ -2141,7 +2660,15 @@ mod tests {
             let finder = FakeFinder::new(&fake);
             let (conn, rings) = window(TEST_TUNING, true);
             let opened = run(conn.open(std::future::ready(Ok(plan(finder.clone()))))).unwrap();
-            Joined { fake, finder, conn, rings, opened }
+            Joined {
+                name: "conn-secret-logs".to_string(),
+                fake,
+                finder,
+                conn,
+                rings,
+                opened,
+                extras: Mutex::default(),
+            }
         };
         LOGGED.lock().unwrap().clear();
         // A refused key: the engine's error keeps its code and message only.
@@ -2572,6 +3099,116 @@ esac"#,
         assert_eq!(opened.workspace["id"], "ws-1");
         assert_eq!(states(&conn.take()), pairs(&[("connected", 0)]));
         run(conn.close());
+    }
+
+    #[test]
+    fn a_fifth_folder_leaves_the_one_shown_longest_ago() {
+        let j = joined("conn-cap", TEST_TUNING);
+        let one = j.folder("/tmp/one", "ws-one");
+        let two = j.folder("/tmp/two", "ws-two");
+        let three = j.folder("/tmp/three", "ws-three");
+        assert_eq!(j.conn.folders_joined(), ["/tmp/one", "/tmp/proj", "/tmp/three", "/tmp/two"], "four folders fit");
+        assert!(j.deletes().is_empty(), "nothing was given up");
+        // Showing /tmp/two makes it the newest again: /tmp/three is the oldest.
+        j.show("/tmp/two");
+        let four = j.folder("/tmp/four", "ws-four");
+        assert_eq!(
+            j.deletes(),
+            [("/tmp/one".to_string(), format!("/v1/clients/{}?keep_work=1", one.client_id))],
+            "the folder shown longest ago leaves, keeping its work; the one just left stays"
+        );
+        assert_eq!(j.conn.folders_joined(), ["/tmp/four", "/tmp/proj", "/tmp/three", "/tmp/two"]);
+        assert!(!j.conn.folders_joined().contains(&"/tmp/one".to_string()));
+        // Its chats are read from its saved files again, and nothing is sent to it.
+        let e = run(j.conn.call_in(Some("/tmp/one"), "GET", "sessions", None, None, None)).err().unwrap();
+        assert_eq!(e.code, "engine_unavailable");
+        assert!(j.extra("/tmp/three").is_some() && j.extra("/tmp/two").is_some() && j.extra("/tmp/four").is_some());
+        assert_eq!(three.dir, "/tmp/three");
+        assert_eq!(two.dir, "/tmp/two");
+        assert_eq!(four.dir, "/tmp/four");
+    }
+
+    #[test]
+    fn a_call_with_a_folder_reaches_that_folder() {
+        let j = joined("conn-route", TEST_TUNING);
+        let other = j.folder("/tmp/other", "ws-other");
+        j.fake.forget();
+        let echoed = run(j.conn.call_in(Some("/tmp/other"), "GET", "sessions", None, None, None)).unwrap();
+        let target = echoed["echo"].as_str().unwrap_or_default();
+        assert!(target.starts_with("/v1/workspaces/ws-other/sessions"), "{target}");
+        assert!(target.contains(&format!("client_id={}", other.client_id)), "{target}");
+        assert!(j.fake.seen().is_empty(), "the shown folder hears nothing of it");
+        // A folder the window has not joined is refused, and nothing is sent.
+        let e = run(j.conn.call_in(Some("/tmp/nowhere"), "GET", "sessions", None, None, None)).err().unwrap();
+        assert_eq!(e.code, "engine_unavailable");
+        // A call without a folder goes to the folder the window shows.
+        let echoed = run(j.conn.call("GET", "sessions", None, None, None)).unwrap();
+        assert!(echoed["echo"].as_str().unwrap_or_default().starts_with("/v1/workspaces/ws-1/"));
+    }
+
+    #[test]
+    fn showing_another_folder_keeps_every_folder_claimed() {
+        let j = joined("conn-show", TEST_TUNING);
+        let other = j.folder("/tmp/other", "ws-other");
+        run(j.conn.set_current_session("s1"));
+        j.fake.forget();
+        j.conn.take();
+        let opened = j.show("/tmp/other");
+        assert_eq!(opened.cwd, "/tmp/other");
+        assert_eq!(opened.workspace["id"], "ws-other");
+        assert_eq!(opened.client_id, other.client_id);
+        // The folder it left no longer reports a shown chat, so no phone thinks
+        // that chat is on its screen.
+        let cleared: Vec<(String, Value)> = j
+            .fake
+            .seen()
+            .iter()
+            .filter(|s| s.path().ends_with("/current-session"))
+            .map(|s| (s.target.clone(), s.json()))
+            .collect();
+        assert_eq!(cleared, [(format!("/v1/workspaces/ws-1/current-session?client_id={}", j.opened.client_id), json!({"session_id": ""}))]);
+        assert!(j.deletes().is_empty(), "showing a folder gives none up");
+        assert!(!j.fake.wait_closed(1, Duration::from_millis(300)), "the folder it left keeps its stream");
+        let taken = j.conn.take();
+        let connected = payload(&taken, "connected");
+        assert_eq!(connected["resync"], true, "the page reloads what it shows");
+        assert_eq!(connected["workspace"]["id"], "ws-other");
+        // Calls without a folder now go to the folder it shows.
+        let echoed = run(j.conn.call("GET", "sessions", None, None, None)).unwrap();
+        assert!(echoed["echo"].as_str().unwrap_or_default().starts_with("/v1/workspaces/ws-other/"));
+        // Showing a folder it has not joined opens it.
+        let opened = j.show("/tmp/proj");
+        assert_eq!(opened.workspace["id"], "ws-1");
+        assert!(j.deletes().is_empty(), "going back gives none up either");
+    }
+
+    #[test]
+    fn an_other_folders_lost_stream_is_taken_up_again_without_a_reconnect() {
+        let j = joined("conn-extra-lost", TEST_TUNING);
+        j.folder("/tmp/other", "ws-other");
+        let ensured = j.finder.runs().len();
+        j.conn.take();
+        j.end_extra_streams("/tmp/other");
+        assert!(j.wait_extra_streams("/tmp/other", 2), "the folder's claim is taken up again");
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(j.conn.take().is_empty(), "the page heard nothing of it");
+        assert_eq!(j.finder.runs().len(), ensured, "the window did not rejoin");
+    }
+
+    #[test]
+    fn closing_the_window_retires_every_folder() {
+        let j = joined("conn-close-all", TEST_TUNING);
+        let other = j.folder("/tmp/other", "ws-other");
+        j.conn.take();
+        run(j.conn.close());
+        assert_eq!(
+            j.deletes(),
+            [
+                ("".to_string(), format!("/v1/clients/{}", j.opened.client_id)),
+                ("/tmp/other".to_string(), format!("/v1/clients/{}", other.client_id)),
+            ],
+            "every folder hears the window left"
+        );
     }
 
     #[test]

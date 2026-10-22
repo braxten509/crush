@@ -29,7 +29,7 @@
 //!   frame loop and the stores run as they do with the engine.
 
 use crate::batch::{Batcher, Entry, Event, Kind};
-use crate::connection::OpenResult;
+use crate::connection::{OpenedFolder, OpenResult};
 use crate::engine_cli::{EngineVersion, Ensured, APP_PROTOCOL};
 use crate::error::{AppError, AppResult};
 use crate::state::{append_json_line, Launch};
@@ -206,7 +206,66 @@ impl Fixture {
         Ok(player.opened.clone())
     }
 
+    /// The answer of `engine_open` for `cwd`, built the same way, without a
+    /// player or an event stream: a folder the window only keeps joined.
+    /// The engine a fixture run reports when the file names none.
+    fn fake_engine(&self) -> Ensured {
+        self.file.engine.clone().unwrap_or_else(|| Ensured {
+            address: "fixture".to_string(),
+            socket: String::new(),
+            protocol: APP_PROTOCOL,
+            version: "fixture".to_string(),
+            pid: 0,
+            data_dir: String::new(),
+            started: false,
+        })
+    }
+
+    fn folder_answer(&self, label: &str, cwd: &str) -> OpenedFolder {
+        let key = cwd.trim_end_matches('/');
+        let project = self.file.projects.get(key);
+        let workspace = public_copy(project.and_then(|p| p.get("workspace")).unwrap_or(&self.file.workspace));
+        let engine = self.file.engine.clone().unwrap_or_else(|| self.fake_engine());
+        OpenedFolder {
+            dir: key.to_string(),
+            client_id: format!("fixture-{label}-{key}"),
+            workspace,
+            engine,
+        }
+    }
+
+    /// `engine_open_folder`: a folder beside the one the window shows.
+    pub fn open_folder(&self, label: &str, cwd: &str) -> AppResult<OpenedFolder> {
+        Ok(self.folder_answer(label, cwd))
+    }
+
+    /// `engine_show_folder`: the page hears the folder it shows now, as it
+    /// does with a real engine (a `connected` event that asks for a reload).
+    pub fn show_folder(&self, app: &AppHandle, label: &str, cwd: &str) -> AppResult<OpenResult> {
+        let folder = self.folder_answer(label, cwd);
+        let opened = OpenResult {
+            client_id: folder.client_id.clone(),
+            workspace: folder.workspace.clone(),
+            version: EngineVersion { version: folder.engine.version.clone(), protocol: folder.engine.protocol },
+            engine: folder.engine.clone(),
+            sent_yolo: false,
+            cwd: cwd.to_string(),
+        };
+        let connected = json!({
+            "kind": "event", "type": "connection", "event": "updated",
+            "payload": {
+                "state": "connected", "attempt": 0, "resync": true, "fresh_engine": false,
+                "workspace": opened.workspace, "engine": opened.engine,
+            },
+        });
+        if let Some(player) = self.players.lock().unwrap().get(label) {
+            player.push(app, label, vec![connected]);
+        }
+        Ok(opened)
+    }
+
     /// `api`: GET from the recording, everything else recorded and answered with null.
+    #[allow(clippy::too_many_arguments)] // mirrors connection::call
     #[allow(clippy::too_many_arguments)] // mirrors connection::call
     pub fn api(
         &self,
@@ -217,10 +276,21 @@ impl Fixture {
         query: Option<Map<String, Value>>,
         body: Option<Value>,
         call_id: Option<String>,
+        dir: Option<&str>,
     ) -> AppResult<Value> {
         crate::connection::check_route(&method.to_ascii_uppercase(), path)?;
         if method.eq_ignore_ascii_case("GET") {
-            let own = self.players.lock().unwrap().get(label).map(|p| p.get.clone()).unwrap_or_default();
+            // A call about a chat of another folder answers from that
+            // folder's recording (owner, 2026-10-22: several folders at once).
+            let folder = dir
+                .and_then(|dir| self.file.projects.get(dir.trim_end_matches('/')))
+                .and_then(|project| project.get("get"))
+                .and_then(Value::as_object)
+                .cloned();
+            let own = match folder {
+                Some(get) => get,
+                None => self.players.lock().unwrap().get(label).map(|p| p.get.clone()).unwrap_or_default(),
+            };
             let found = answer_in(&own, path).or_else(|| self.answer(path));
             let found = if path.ends_with("/messages") { found.map(|list| page_messages(list, query.as_ref())) } else { found };
             return found.ok_or_else(|| AppError {
@@ -516,7 +586,7 @@ mod tests {
             players: Mutex::new(HashMap::new()),
         };
         let launch = Launch::default();
-        let get = |path: &str| fixture.api(&launch, "main", "GET", path, None, None, None);
+        let get = |path: &str| fixture.api(&launch, "main", "GET", path, None, None, None, None);
         assert_eq!(get("sessions").unwrap(), json!([1]));
         // A route the real connection refuses is refused here too.
         assert_eq!(get("/v1/workspaces/w1/sessions").unwrap_err().code, "route_not_allowed");
@@ -524,7 +594,7 @@ mod tests {
         assert_eq!(get("agent").unwrap(), json!({"is_ready": true}));
         let missing = get("config").unwrap_err();
         assert_eq!((missing.code.as_str(), missing.status), ("not_found", Some(404)));
-        let post = fixture.api(&launch, "main", "POST", "agent", None, Some(json!({})), Some("c1".into()));
+        let post = fixture.api(&launch, "main", "POST", "agent", None, Some(json!({})), Some("c1".into()), None);
         assert_eq!(post.unwrap(), Value::Null);
         assert!(!fixture.abort(&launch, "main", "c1"));
     }

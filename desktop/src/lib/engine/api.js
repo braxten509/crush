@@ -14,18 +14,41 @@ const seg = (value) => (String(value).includes("/") ? ".." : String(value));
 const chat = (sid) => `sessions/${seg(sid)}`;
 const run = (sid) => `agent/sessions/${seg(sid)}`;
 
-const get = (path, query) => commands.api("GET", path, query);
-
-// A chat of another folder (every listed chat stays drawn, owner
-// 2026-10-22) is read from that folder's saved files through this window's
-// engine, so that folder's engine need not run. The open chats store tells
-// each chat's folder: "" for this folder's chats.
-let otherFolder = () => "";
-export function setOtherFolder(fn) {
-  otherFolder = fn;
+// A chat of another folder (owner, 2026-10-22: several folders are open at
+// once; every listed chat stays drawn) is read from that folder's saved files
+// only while this window does not keep that folder joined; a joined folder's
+// chats are read and changed through its own engine. The open chats store
+// tells each chat's folder and whether it is joined.
+let chatFolder = () => null;
+export function setChatFolder(fn) {
+  chatFolder = fn;
 }
+
+// The folder a chat's calls go to ("" for the shown folder).
+const folderOf = (sid) => (sid ? (chatFolder(sid)?.dir ?? "") : "");
+// That folder's saved files, for a folder this window has not joined.
+const unjoined = (sid) => {
+  const folder = chatFolder(sid);
+  return folder?.dir && !folder.joined ? folder.dir : "";
+};
+
+// The chat a call is about, from its path, query or body: every call about a
+// chat goes to that chat's folder's engine. A saved-sessions read stays on the
+// folder the window shows: that engine reads any folder's files, and the chat's
+// own folder may not be joined at all.
+function chatOf(path, query, body) {
+  const parts = String(path ?? "").split("/");
+  const at = (n) => (parts.length > n && parts[n] ? parts[n] : "");
+  if (parts[0] === "sessions") return at(1);
+  if (parts[0] === "agent" && parts[1] === "sessions") return at(2);
+  if (parts[0] === "saved-sessions") return "";
+  return String(body?.session_id ?? query?.session_id ?? "");
+}
+
+const get = (path, query) => commands.api("GET", path, query, undefined, undefined, folderOf(chatOf(path, query)));
+const post = (path, body, query, callId) =>
+  commands.api("POST", path, query, body, callId, folderOf(chatOf(path, query, body)));
 const saved = (sid) => `saved-sessions/${seg(sid)}`;
-const post = (path, body, query, callId) => commands.api("POST", path, query, body, callId);
 
 // config.Scope travels as a number (internal/config/scope.go:6-13): global 0,
 // workspace 1. The functions below also take the two names.
@@ -102,19 +125,19 @@ export const api = {
   listSessions: () => get("sessions"),
   createSession: (session) => post("sessions", session),
   getSession: (sid) => {
-    const dir = otherFolder(sid);
+    const dir = unjoined(sid);
     return dir ? get(saved(sid), { dir }) : get(chat(sid));
   },
   // The whole record as last read (engine design 5.1(a)).
-  saveSession: (session) => commands.api("PUT", chat(session.id), undefined, session),
-  deleteSession: (sid) => commands.api("DELETE", chat(sid)),
+  saveSession: (session) => commands.api("PUT", chat(session.id), undefined, session, undefined, folderOf(session.id)),
+  deleteSession: (sid) => commands.api("DELETE", chat(sid), undefined, undefined, undefined, folderOf(sid)),
   // `last` reads about the newest N, `before` only those older than a message
   // (internal/server/handlers_session.go pageMessages).
   messages: (sid, { last = 0, before = "" } = {}) => {
     const query = {};
     if (last > 0) query.last = String(last);
     if (before) query.before = before;
-    const dir = otherFolder(sid);
+    const dir = unjoined(sid);
     if (dir) return get(`${saved(sid)}/messages`, { ...query, dir });
     return get(`${chat(sid)}/messages`, Object.keys(query).length ? query : undefined);
   },

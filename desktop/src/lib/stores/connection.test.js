@@ -2,7 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The real event loop (events.js) with fake Tauri calls (see prompts.test.js),
 // plus app_info, engine_open and engine_retry.
-const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], ring: null, current: [], notices: [], info: null, open: null, retries: 0 }));
+const h = vi.hoisted(() => ({
+  routes: new Map(),
+  calls: [],
+  entries: [],
+  ring: null,
+  current: [],
+  notices: [],
+  info: null,
+  open: null,
+  retries: 0,
+  storage: {},
+  opened: [],
+  shown: [],
+}));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
   getCurrentWebviewWindow: () => ({
@@ -14,8 +27,8 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
 }));
 
 vi.mock("../engine/commands.js", () => ({
-  api: async (method, path, query, body, callId) => {
-    h.calls.push({ method, path, query, body, callId });
+  api: async (method, path, query, body, callId, dir) => {
+    h.calls.push({ method, path, query, body, callId, dir });
     const route = h.routes.get(`${method} ${path}`);
     if (typeof route === "function") return route({ query, body, callId });
     if (route !== undefined) return route;
@@ -30,6 +43,14 @@ vi.mock("../engine/commands.js", () => ({
   events_take: async () => h.entries.splice(0),
   app_info: async () => h.info,
   engine_open: async (cwd) => h.open(cwd),
+  engine_open_folder: async (cwd) => {
+    h.opened.push(cwd);
+    return opened({ cwd, client_id: `client-${cwd}`, workspace: { id: `ws-${cwd}`, path: cwd } });
+  },
+  engine_show_folder: async (cwd) => {
+    h.shown.push(cwd);
+    return opened({ cwd, client_id: `client-${cwd}`, workspace: { id: `ws-${cwd}`, path: cwd } });
+  },
   engine_retry: async () => {
     h.retries += 1;
     return null;
@@ -75,9 +96,19 @@ beforeEach(async () => {
   h.current.length = 0;
   h.notices.length = 0;
   h.retries = 0;
+  h.storage = {};
+  h.opened.length = 0;
+  h.shown.length = 0;
   h.info = { version: "0.1.0", probe: false, fixture: false, cwd: "/tmp/home/proj", session: "", continue_last: false, ui_debug: false, platform: "linux" };
   h.open = async () => opened();
   vi.stubGlobal("requestAnimationFrame", (fn) => setTimeout(() => fn(0), 0));
+  vi.stubGlobal("localStorage", {
+    getItem: (key) => h.storage[key] ?? null,
+    setItem: (key, value) => {
+      h.storage[key] = value;
+    },
+    addEventListener: () => {},
+  });
   vi.doMock("./ui.svelte.js", async (importOriginal) => {
     const real = await importOriginal();
     return {
@@ -376,6 +407,7 @@ it("the probe's connection section has the pinned fields (1.9)", async () => {
     error: null,
     workspace_id: "ws-1",
     client_id: "client-1",
+    folders: [],
     engine_version: "v0.70.0",
     fresh_engine: false,
     engine: { socket: "", pid: 0 },
@@ -403,4 +435,56 @@ it("the probe's engine is the last connected event's socket and pid (1.9)", asyn
   await deliver(ev("connection", "updated", { state: "connected", attempt: 1, resync: true, fresh_engine: true, engine: ensured(77) }));
   expect(engine()).toEqual({ socket: "/run/crush.sock", pid: 77 });
   vi.doUnmock("../probe.js");
+});
+
+describe("several folders at once (owner, 2026-10-22)", () => {
+  it("showing another folder costs no engine restart", async () => {
+    await C.start();
+    expect(C.conn.state).toBe("connected");
+    h.entries.length = 0;
+    expect(await C.switchFolder("/tmp/home/other")).toBe(true);
+    await settle();
+    expect(h.shown).toEqual(["/tmp/home/other"]);
+    expect(C.conn.project.cwd).toBe("/tmp/home/other");
+    expect(C.conn.project.name).toBe("other");
+    expect(C.conn.state).toBe("connected");
+    expect(C.inFolder("/tmp/home/other")).toBe(true);
+    expect(C.joinedFolder("/tmp/home/other")).toBe(true);
+    // Nothing left: no project_enter, no join, no failed gate.
+    expect(C.conn.error).toBeNull();
+    expect(h.notices).toEqual([]);
+  });
+
+  it("every folder in the left list joins after the first join", async () => {
+    (await import("./listfolders.svelte.js")).keepFolders(["/tmp/home/proj", "/tmp/home/two", "/tmp/home/three"]);
+    await C.start();
+    await settle();
+    expect(h.opened).toEqual(["/tmp/home/three", "/tmp/home/two"]);
+    expect(C.joinedFolder("/tmp/home/two")).toBe(true);
+    expect(C.joinedFolder("/tmp/home/three")).toBe(true);
+    expect(C.conn.folders["/tmp/home/two"]).toMatchObject({ clientId: "client-/tmp/home/two" });
+    // The folder it shows is not joined twice.
+    expect(h.opened).not.toContain("/tmp/home/proj");
+  });
+
+  it("keeps at most FOLDER_CAP folders joined, the shown one first", async () => {
+    expect(C.FOLDER_CAP).toBe(4);
+    (await import("./listfolders.svelte.js")).keepFolders(["/tmp/home/a", "/tmp/home/b", "/tmp/home/c", "/tmp/home/d", "/tmp/home/e"]);
+    await C.start();
+    await settle();
+    // Three others at most: the newest of the list.
+    expect(h.opened).toEqual(["/tmp/home/e", "/tmp/home/d", "/tmp/home/c"]);
+  });
+
+  it("a chat's calls go to its folder once that folder is joined", async () => {
+    const api = await import("../engine/api.js");
+    const seen = [];
+    api.setChatFolder((sid) => (sid === "S2" ? { dir: "/tmp/home/two", joined: true } : null));
+    expect(seen).toEqual([]);
+    const { api: routes } = api;
+    h.routes.set("GET sessions/S2", { id: "S2" });
+    await routes.getSession("S2");
+    const call = h.calls.filter((c) => c.path === "sessions/S2").at(-1);
+    expect(call?.dir).toBe("/tmp/home/two");
+  });
 });

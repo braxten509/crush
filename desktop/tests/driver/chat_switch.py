@@ -19,7 +19,7 @@ import json, os, sys, time
 
 sys.path.insert(0, os.path.dirname(__file__))
 import harness as H
-from harness import check, finish, key, probe_eval, type_text, wait_for
+from harness import check, finish, key, probe_eval, read_probe, type_text, wait_for
 
 probe_path, out_dir = sys.argv[1], sys.argv[2]
 A = "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01"
@@ -67,7 +67,10 @@ def shown(cid, limit):
 
 
 wait_for(probe_path, lambda p: (p.get("connection") or {}).get("state") == "connected", 40)
-check(shown(A, 10) is not None, "the first chat shows")
+first = read_probe(probe_path) or {}
+check(shown(A, 10) is not None,
+      f"the first chat shows ({run(STATE)}, chat {((first.get('chat') or {}).get('id'))}, "
+      f"rows {[(r.get('id'), r.get('shown')) for r in ((first.get('leftlist') or {}).get('rows') or [])]})")
 
 # Open the slow chat and type at once, while it loads.
 click(f'nav.chats .chat[data-id="{B}"] .row')

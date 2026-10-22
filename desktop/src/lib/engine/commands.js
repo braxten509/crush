@@ -57,9 +57,22 @@ export async function events_take() {
 // method: "GET" | "POST" | "PUT" | "DELETE"; path relative to the window's
 // workspace ("sessions") or absolute ("/v1/limits"); query and body optional.
 // A call with a callId has no time limit and can be stopped with api_abort (1.2.4).
-export async function api(method, path, query, body, callId) {
-  return invoke("api", { method, path, query, body, callId });
+// dir: the folder of the chat the call is about (the shown folder with none).
+export async function api(method, path, query, body, callId, dir) {
+  return invoke("api", { method, path, query, body, callId, dir });
 }
+
+// A folder the window keeps joined beside the one it shows (owner, 2026-10-22:
+// several folders are open at once). A folder already joined answers as it is.
+export async function engine_open_folder(cwd) {
+  return invoke("engine_open_folder", { cwd });
+}
+
+// Shows another folder: nothing leaves, so a switch costs no engine restart.
+export async function engine_show_folder(cwd) {
+  return invoke("engine_show_folder", { cwd });
+}
+
 
 // Stops the api call with this callId; false when it already ended.
 export async function api_abort(callId) {
@@ -152,12 +165,6 @@ export async function folderChatStates(chats) {
 
 export async function openChatsRemove(id) {
   return invoke("open_chats_remove", { id });
-}
-
-// Leaves this window's engine and records the new folder, for the page to
-// join it in place (engine_open) with no reload.
-export async function projectEnter(projectDir) {
-  return invoke("project_enter", { projectDir });
 }
 
 // onData: a Channel that gets {data: <base64>} batches, then {exit: {code, signal}}. → {id, pid}

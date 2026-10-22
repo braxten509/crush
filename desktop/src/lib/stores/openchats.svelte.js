@@ -7,10 +7,10 @@
 // change made here. A deleted chat leaves the list.
 import { untrack } from "svelte";
 import { openChatsAdd, openChatsGet, openChatsRemove } from "../engine/commands.js";
-import { setOtherFolder } from "../engine/api.js";
+import { setChatFolder } from "../engine/api.js";
 import { onEvent, onFolderResync } from "../engine/events.js";
 import { chatClosed } from "../remote/share.js";
-import { conn, inFolder, switchFolder } from "./connection.svelte.js";
+import { conn, inFolder, joinedFolder, switchFolder } from "./connection.svelte.js";
 import { keepFolders } from "./listfolders.svelte.js";
 import { load, messages, rootChatOf } from "./messages.svelte.js";
 import { isHelperChat, isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
@@ -80,18 +80,18 @@ const sameDir = (a, b) => {
   return clean(a) !== "" && clean(a) === clean(b);
 };
 
-// The folder of a listed chat (or of an agent's chat inside one) that this
-// window has not joined, else "".
-function otherFolderOf(sid) {
-  // Until the window knows its own folder, every chat is read as before; so
-  // is the chat it shows or opens, whose folder it joins.
-  if (!folderNow()) return "";
+// The folder of a listed chat (or of an agent's chat inside one), and whether
+// this window keeps that folder joined: a joined folder answers through its own
+// engine, and only a folder the window has not joined is read from its saved
+// files (owner, 2026-10-22: several folders are open at once).
+function chatFolderOf(sid) {
   const root = rootChatOf(sid);
-  if (!root || root === sessions.currentId || root === sessions.opening?.id) return "";
-  const dir = root ? openChats.list.find((c) => c.id === root)?.dir : "";
-  return dir && !inFolder(dir) ? dir : "";
+  if (!root || root === sessions.opening?.id) return null;
+  const dir = openChats.list.find((c) => c.id === root)?.dir ?? "";
+  if (!dir) return null;
+  return { dir, joined: inFolder(dir) || joinedFolder(dir) };
 }
-setOtherFolder(otherFolderOf);
+setChatFolder(chatFolderOf);
 
 // The drawn chats of another folder are read again: that folder's events may
 // have been missed (its stream just started, or this window just left it).

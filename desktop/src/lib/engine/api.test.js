@@ -12,21 +12,22 @@ vi.mock("./commands.js", () => ({
 vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ listen: async () => () => {} }) }));
 
 const commands = await import("./commands.js");
-const { api, onInterrupt, onSend, setCurrentSession, uuid } = await import("./api.js");
+const { api, onInterrupt, onSend, setChatFolder, setCurrentSession, uuid } = await import("./api.js");
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 beforeEach(() => {
+  setChatFolder(() => null);
   commands.api.mockReset();
   commands.api.mockImplementation(async () => null);
   commands.api_abort.mockClear();
   commands.engine_set_current_session.mockClear();
 });
 
-// [method, path, query, body, callId] of the last call
+// [method, path, query, body, callId, dir] of the last call
 function last() {
   const call = commands.api.mock.calls.at(-1);
-  return { method: call[0], path: call[1], query: call[2], body: call[3], callId: call[4] };
+  return { method: call[0], path: call[1], query: call[2], body: call[3], callId: call[4], dir: call[5] };
 }
 
 describe("paths and bodies (desktop-design 1.5.2, the routes of 1.3)", () => {
@@ -98,7 +99,7 @@ describe("paths and bodies (desktop-design 1.5.2, the routes of 1.3)", () => {
   for (const [name, args, method, path, query, body] of cases) {
     it(`${name}(${args.map((a) => JSON.stringify(a)).join(", ")}) → ${method} ${path}`, async () => {
       await api[name](...args);
-      expect(last()).toEqual({ method, path, query, body, callId: undefined });
+      expect(last()).toEqual({ method, path, query, body, callId: undefined, dir: "" });
     });
   }
 
@@ -251,6 +252,7 @@ describe("calls that run inside their request (1.2.4)", () => {
       query: { request_id: "req-1" },
       body: { command: "ls", term_width: 100, is_first_message: true },
       callId: "req-1",
+      dir: "",
     });
   });
 
@@ -285,5 +287,65 @@ describe("setCurrentSession and uuid", () => {
     } finally {
       Object.defineProperty(globalThis.crypto, "randomUUID", { value: real, configurable: true, writable: true });
     }
+  });
+});
+
+describe("a chat's calls go to that chat's folder (owner, 2026-10-22: several folders at once)", () => {
+  const here = { dir: "/tmp/home/proj", joined: true };
+  const other = { dir: "/tmp/home/other", joined: true };
+  const folders = { S1: here, S2: other, M1: other };
+
+  beforeEach(() => {
+    setChatFolder((sid) => folders[sid] ?? null);
+  });
+
+  it("a chat route carries its chat's folder", async () => {
+    await api.messages("S2");
+    expect(last()).toMatchObject({ method: "GET", path: "sessions/S2/messages", dir: "/tmp/home/other" });
+    await api.interrupt("S2");
+    expect(last()).toMatchObject({ method: "POST", path: "agent/sessions/S2/interrupt", dir: "/tmp/home/other" });
+    await api.send({ session_id: "S1", prompt: "hi" });
+    expect(last()).toMatchObject({ method: "POST", path: "agent", dir: "/tmp/home/proj" });
+    await api.saveSession({ id: "S2", title: "T" });
+    expect(last()).toMatchObject({ method: "PUT", path: "sessions/S2", dir: "/tmp/home/other" });
+    await api.deleteSession("S2");
+    expect(last()).toMatchObject({ method: "DELETE", path: "sessions/S2", dir: "/tmp/home/other" });
+  });
+
+  it("a chat's sub-agent chat goes to the folder of the chat it belongs to", async () => {
+    setChatFolder((sid) => (sid === "A1" ? other : null));
+    await api.agentSession("A1");
+    expect(last()).toMatchObject({ path: "agent/sessions/A1", dir: "/tmp/home/other" });
+  });
+
+  it("a folder-level call carries no folder: it is about the folder the window shows", async () => {
+    await api.config();
+    expect(last()).toMatchObject({ path: "config", dir: "" });
+    await api.limits();
+    expect(last().dir).toBe("");
+  });
+
+  it("a share's calls carry the chat's folder", async () => {
+    await api.startRemote({ session_id: "S2" });
+    expect(last()).toMatchObject({ path: "remote/start", dir: "/tmp/home/other" });
+    await api.stopRemote("S2");
+    expect(last()).toMatchObject({ path: "remote/stop", body: { session_id: "S2" }, dir: "/tmp/home/other" });
+    // A window's own new chat ("" session) belongs to the folder it shows.
+    await api.startRemote({});
+    expect(last().dir).toBe("");
+  });
+
+  it("a chat of a folder the window has not joined is read from that folder's saved files", async () => {
+    setChatFolder(() => ({ dir: "/tmp/home/gone", joined: false }));
+    await api.getSession("S9");
+    // Saved files are read through the folder the window shows, which is
+    // joined; the chat's own folder need not be.
+    expect(last()).toMatchObject({ method: "GET", path: "saved-sessions/S9", query: { dir: "/tmp/home/gone" }, dir: "" });
+    await api.messages("S9", { last: 20 });
+    expect(last()).toMatchObject({ path: "saved-sessions/S9/messages", query: { last: "20", dir: "/tmp/home/gone" } });
+    // A joined folder answers through its own engine.
+    setChatFolder(() => other);
+    await api.getSession("S9");
+    expect(last()).toMatchObject({ path: "sessions/S9", dir: "/tmp/home/other" });
   });
 });

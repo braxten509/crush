@@ -2,11 +2,13 @@
 // state for the engine gate, the notices of SIDE-030 and 5.2, and the start-up
 // reads that seed the other stores (START-007). Importing it loads every
 // store, so all their event handlers are registered before the first batch.
-import { app_info, engine_open, engine_retry, projectEnter } from "../engine/commands.js";
+import { untrack } from "svelte";
+import { app_info, engine_open, engine_open_folder, engine_retry, engine_show_folder } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { probeSection } from "../probe.js";
 import { accountPollConnected } from "./accountmeters.svelte.js";
 import { loadLimits, startLimitsPoll, stopLimitsPoll } from "./limits.svelte.js";
+import { listFolders } from "./listfolders.svelte.js";
 import "./messages.svelte.js";
 import "./prompts.svelte.js";
 import { busy, loadSessions, openLaunchChat, sessions, setJoinWait, showLanding } from "./sessions.svelte.js";
@@ -21,6 +23,10 @@ export const conn = $state({
   engine: null, // Ensured
   clientId: "",
   project: { cwd: "", path: "", dataDir: "", name: "" },
+  // Every folder this window keeps joined, by cleaned path: one engine link
+  // each, so a chat of any of them answers at once (owner, 2026-10-22).
+  // { [dir]: { clientId, workspace, engine, name } }
+  folders: {},
   notices: [], // [{kind, text, at}] the connection notices shown, newest last (the probe's list)
   version: null, // EngineVersion {version, protocol}
   freshEngine: false, // the last rejoin met a new engine (its workspace id changed)
@@ -28,6 +34,10 @@ export const conn = $state({
   launch: { session: "", continueLast: false }, // -s and -C (START-006)
   switching: 0, // folder switches under way: the shown chat may not be this folder's yet
 });
+
+// The helper keeps at most this many folders joined (connection.rs FOLDER_CAP);
+// it drops the one shown longest ago when another joins.
+export const FOLDER_CAP = 4;
 
 const NOTICE_LIMIT = 20;
 const STARTING_DELAY_MS = 400;
@@ -58,6 +68,12 @@ function baseName(path) {
   return parts[parts.length - 1] ?? "";
 }
 
+// A folder's path written one way, as Rust writes it.
+function cleanDir(path) {
+  const dir = String(path ?? "").trim();
+  return dir === "/" ? dir : dir.replace(/\/+$/u, "");
+}
+
 // The answer of engine_open (1.2.6 OpenResult). The workspace is kept as Rust
 // gave it: Rust already removed env and config (public_workspace, 1.2.5).
 function applyOpen(opened) {
@@ -76,6 +92,7 @@ function applyOpen(opened) {
     dataDir: opened?.workspace?.data_dir || opened?.engine?.data_dir || "",
     name: baseName(path),
   };
+  remember(opened, cwd);
   // The 5.2 notices (engine-design.md:545-550): the first window on a
   // project fixed its folder and its YOLO choice.
   const joined = [];
@@ -90,6 +107,25 @@ function applyOpen(opened) {
     joined.push({ kind: "info", text, ttlMs: 5000 });
   }
   noteInTurn(joined);
+}
+
+// One joined folder, as the page keeps it.
+function remember(opened, dir) {
+  const key = cleanDir(opened?.cwd || dir);
+  if (!key) return "";
+  conn.folders[key] = {
+    clientId: opened?.client_id ?? "",
+    workspace: opened?.workspace ?? null,
+    engine: opened?.engine ?? null,
+    name: baseName(opened?.workspace?.path || key),
+  };
+  return key;
+}
+
+// Whether this window keeps `dir` joined.
+export function joinedFolder(dir) {
+  const key = cleanDir(dir);
+  return key !== "" && conn.folders[key] !== undefined;
 }
 
 function quietly(promise, what) {
@@ -122,7 +158,7 @@ let joinedOnce = false;
 // The join under way, or the last one: from a folder switch's start (its
 // leave included) to its end, so a chat picked meanwhile waits for it.
 let joining = null;
-setJoinWait(() => (conn.state === "connecting" ? joining : null));
+setJoinWait(() => (conn.state === "connecting" || conn.switching > 0 ? joining : null));
 // A folder switch left the old engine and its join failed: "Try again" joins
 // again rather than asking Rust to reconnect a connection that is gone.
 let mustJoin = false;
@@ -149,6 +185,7 @@ async function join() {
   joinedOnce = true;
   mustJoin = false;
   pollLimits();
+  joinListFolders();
   await seed();
   return true;
 }
@@ -199,48 +236,90 @@ function sameFolder(a, b) {
   return clean(a) !== "" && clean(a) === clean(b);
 }
 
-// The window's folder is the shown chat's or terminal's (owner, 2026-10-20):
-// picking one in another folder leaves this engine and joins that folder's in
-// place, with no reload; the terminals and the list stay. The shown chat is
-// left first (its turn runs on in the engine), unless keepShown: a kept chat
-// of that folder already shows (openInFolder). Resolves true once joined.
+// The window's folder is the shown chat's or terminal's (owner, 2026-10-20).
+// Showing another folder no longer leaves this one: every folder the window
+// keeps joined stays joined, and the one shown just becomes the one the page
+// reads (owner, 2026-10-22: several folders open at once), so a switch costs
+// no engine restart. The shown chat moves first (showLanding), unless
+// keepShown: a kept chat of that folder already shows (openInFolder).
+// Resolves true once the folder shows.
 export async function switchFolder(dir, { keepShown = false } = {}) {
   conn.switching += 1;
   try {
     // A join or switch still under way ends first, so a chat of the folder
-    // being joined, picked again meanwhile, switches once.
+    // being shown, picked again meanwhile, switches once.
     for (let current = joining; current; current = joining) {
       await current.catch(() => {});
       if (joining === current) break;
     }
     if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
     if (!keepShown) showLanding();
-    conn.state = "connecting";
     conn.error = null;
-    joining = enterFolder(dir);
+    joining = showFolder(dir);
     return await joining;
   } finally {
     conn.switching -= 1;
   }
 }
 
-async function enterFolder(dir) {
+// Shows a folder: Rust joins it when this window does not keep it joined yet
+// (dropping the folder shown longest ago when the cap is full), then makes it
+// the one the page reads.
+async function showFolder(dir) {
+  let opened;
   try {
-    await projectEnter(dir);
+    opened = await engine_show_folder(dir);
   } catch (error) {
-    conn.state = "failed";
+    console.error("could not show a folder", error?.message ?? error);
     conn.error = plainError(error);
     return false;
   }
-  conn.project = { cwd: dir, path: dir, dataDir: "", name: baseName(dir) };
   conn.launch = { session: "", continueLast: false };
-  mustJoin = true;
-  return join();
+  applyOpen(opened);
+  return true;
 }
 
 export function inFolder(dir) {
   return sameFolder(dir, conn.project.path || conn.project.cwd);
 }
+
+// The folders the window keeps joined: the one it shows and, up to FOLDER_CAP
+// in all, the rest of the left list, newest first (owner, 2026-10-22: every
+// folder in the list joins and stays). A folder the window has no room for
+// joins when it is shown.
+let joins = Promise.resolve();
+function joinListFolders() {
+  joins = joins.then(joinMissingFolders).catch(() => {});
+  return joins;
+}
+
+async function joinMissingFolders() {
+  if (conn.state !== "connected") return;
+  const here = conn.project.path || conn.project.cwd;
+  const extras = Object.keys(conn.folders).filter((dir) => !sameFolder(dir, here)).length;
+  const room = FOLDER_CAP - 1 - extras;
+  const missing = listFolders.dirs.filter((dir) => cleanDir(dir) !== "" && !sameFolder(dir, here) && !joinedFolder(dir));
+  if (room <= 0 || missing.length === 0) return;
+  for (const dir of missing.reverse().slice(0, room)) {
+    try {
+      remember(await engine_open_folder(dir), dir);
+    } catch (error) {
+      console.error(`could not keep ${dir} joined`, error?.message ?? error);
+    }
+  }
+}
+
+// A folder a chat is opened in joins as the left list grows, so every folder
+// the list keeps is live whether or not it has been shown.
+$effect.root(() => {
+  $effect(() => {
+    const connected = conn.state === "connected";
+    const dirs = listFolders.dirs.length; // read, so a new folder runs this
+    if (!connected || dirs === 0) return;
+    untrack(() => joinListFolders());
+  });
+});
+
 
 // The failed notice (SIDE-030, internal/ui/model/agent_events.go:39-41).
 const FAILED_TEXT = "Can't restore the connection to the Crush server. Restart Crush to recover.";
@@ -287,6 +366,8 @@ probeSection("connection", () => ({
   error: conn.error,
   workspace_id: conn.workspace?.id ?? "",
   client_id: conn.clientId,
+  // Every folder this window keeps joined, the shown one included.
+  folders: Object.keys(conn.folders),
   engine_version: conn.version?.version ?? conn.engine?.version ?? "",
   fresh_engine: conn.freshEngine,
   // The last connected event's engine: drivers read the socket for ground

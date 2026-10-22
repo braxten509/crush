@@ -123,16 +123,18 @@
     border-top: 1px solid var(--rule);
   }
 
-  /* The chat row's geometry (list/ChatRow.svelte): 81 high, text from 23. */
+  /* The chat row's geometry (list/ChatRow.svelte): one line 44 high, text
+     from 23, the folder in the time's place. */
   .row {
     position: relative;
     display: grid;
-    grid-template-rows: calc(28 * var(--px)) auto;
-    align-content: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: calc(16 * var(--px));
     box-sizing: border-box;
     width: 100%;
-    height: calc(81 * var(--px));
-    padding: calc(12 * var(--px)) calc(48 * var(--px)) 0 calc(23 * var(--px));
+    height: calc(44 * var(--px));
+    padding: 0 calc(48 * var(--px)) 0 calc(23 * var(--px));
     text-align: left;
     touch-action: none;
   }
@@ -156,8 +158,8 @@
     align-items: center;
     gap: calc(6 * var(--px));
     min-width: 0;
-    margin-top: calc(5 * var(--px));
-    font: var(--t-meta);
+    max-width: calc(140 * var(--px));
+    font: var(--t-small);
     color: var(--slate);
   }
   .path {
@@ -203,12 +205,12 @@
   /* The close slot, where the chat row keeps its own (ChatRow.svelte .close). */
   .close {
     position: absolute;
-    top: calc(20 * var(--px));
+    top: 0;
+    bottom: 0;
     right: calc(11.5 * var(--px));
     display: grid;
     place-items: center;
     width: calc(28 * var(--px));
-    height: calc(12 * var(--px));
     padding: 0;
     color: var(--slate);
     visibility: hidden;

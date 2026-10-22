@@ -414,21 +414,19 @@
     color: var(--slate);
   }
 
-  .list {
-    margin-top: calc(4 * var(--px));
-  }
 
   /* A folder: its path in quiet italic, the "+" (and an empty folder's ×)
-     on the right, plain marks with no box (owner, 2026-10-21). */
+     on the right, plain marks with no box (owner, 2026-10-21). Kept tight
+     (owner, 2026-10-22: the list took too much room). */
   .group + .group {
-    margin-top: calc(14 * var(--px));
+    margin-top: calc(6 * var(--px));
   }
   .folder {
     display: flex;
     align-items: center;
     gap: calc(4 * var(--px));
-    height: calc(36 * var(--px));
-    margin-top: calc(10 * var(--px));
+    height: calc(32 * var(--px));
+    margin-top: calc(4 * var(--px));
     padding: 0 calc(12 * var(--px)) 0 calc(23 * var(--px));
   }
   .folder :global(.folder-icon) {
@@ -450,8 +448,8 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: calc(32 * var(--px));
-    height: calc(32 * var(--px));
+    width: calc(30 * var(--px));
+    height: calc(30 * var(--px));
     padding: 0;
     border: 0;
     background: none;
@@ -474,7 +472,7 @@
     opacity: 1;
   }
   .folder-empty {
-    margin: calc(2 * var(--px)) 0 calc(6 * var(--px)) calc(23 * var(--px));
+    margin: 0 0 calc(4 * var(--px)) calc(23 * var(--px));
     font: var(--t-small);
     font-style: italic;
     color: var(--slate);

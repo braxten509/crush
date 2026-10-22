@@ -60,6 +60,20 @@ check([g["dir"].rsplit("/", 1)[-1] for g in seen] == ["proj", "beta", "gamma"], 
 check(len(seen) == 3 and len(seen[0]["ids"]) == 5 and seen[1]["ids"] == [BETA] and seen[2]["ids"] == [GAMMA],
       f"each chat sits under its own folder ({[(g['label'], g['ids']) for g in seen]})")
 check(all(g["plus"] and g["drop"] is None for g in seen), "each heading has a + and no x while it has chats")
+
+# One line per chat (owner, 2026-10-22, pick C): a row is little taller than
+# its title, and the time sits on the title's line.
+rows = run("""
+  const mid = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return r.y + r.height / 2; };
+  return [...document.querySelectorAll('nav.chats .chat')].map((c) => ({
+    row: c.querySelector('.row').getBoundingClientRect().height,
+    line: parseFloat(getComputedStyle(c.querySelector('.title')).lineHeight),
+    title: mid(c.querySelector('.title')), time: mid(c.querySelector('.time')) }));
+""") or []
+check(bool(rows) and all(r["row"] <= 1.75 * r["line"] for r in rows),
+      f"each chat is one line tall ({[(round(r['row']), round(r['line'])) for r in rows]})")
+check(all(r["time"] is None or abs(r["time"] - r["title"]) <= 2 for r in rows),
+      f"the time sits on the title's line ({[(round(r['title']), r['time'] and round(r['time'])) for r in rows]})")
 shot(out_dir, "groups")
 
 # Complete: on the right above the typing box; a real click closes the chat.

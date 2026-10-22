@@ -60,6 +60,12 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	if c.tasks == nil {
 		return c.runTurn(ctx, accept, sessionID, prompt, attachments...)
 	}
+	// An app's prompt in a sub-agent's own chat goes to the sub-agent.
+	if message.SubmissionID(ctx) != "" {
+		if result, ok, err := c.tasks.chatMessage(ctx, accept, sessionID, prompt, attachments); ok {
+			return result, err
+		}
+	}
 	var run *sessionRun
 	owner := false
 	if c.interactiveTurn(ctx) {

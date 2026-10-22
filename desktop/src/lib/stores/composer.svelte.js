@@ -48,7 +48,6 @@ export const composer = $state({
   popup: null, // null | { kind: "@" | "/", start, query, rows: [{row, chars}], focused, loading } (TYPE-026 to TYPE-028; "/" the command menu)
   shells: {}, // request_id → ShellState (lib/types.js): live `!` commands, read by lib/timeline.js (P3.5)
   planHandoff: null, // null | { sessionId, open } (TYPE-052): a ready plan waits; open: its form is meant to show
-  badges: [], // [{ id, text }] drawn after the mode mark; phase 6 adds the Remote badge (SIDE-025)
   input: "code", // "code" | "plan": the input mode of the engine's main agent (TYPE-023)
   yolo: false, // the engine skips permission prompts (TYPE-024), as last read or set here
   picks: pickPlaceholders(), // this round's ready and working placeholders (TYPE-003)
@@ -161,12 +160,6 @@ export function currentPlaceholder() {
 function syncMode() {
   composer.mode = currentMode();
   composer.placeholder = currentPlaceholder();
-}
-
-// text null removes the badge.
-export function setBadge(id, text) {
-  const rest = composer.badges.filter((badge) => badge.id !== id);
-  composer.badges = text === null || text === undefined ? rest : [...rest, { id, text: String(text) }];
 }
 
 // -- Text, attachments and kept skills --
@@ -425,6 +418,8 @@ export function typed({ before, value, caret, data = "", paste = false }) {
     openSlash();
   } else if (composer.popup) {
     followMention(next.value, next.caret);
+  } else {
+    resumePopup();
   }
 }
 
@@ -441,12 +436,16 @@ export function backspaceLeavesBang() {
 
 // The caret moved without typing (arrows, a click): the popup follows it.
 export function caretMoved() {
-  if (!composer.popup) return;
+  if (!composer.popup) {
+    resumePopup();
+    return;
+  }
   const [at] = selection();
   followMention(draftOf().text, at);
 }
 
 let fileList = []; // every row of the open popup, as files_list gave them
+let resumable = null; // {kind, start} of a popup closed because the field lost focus
 let listTurn = 0;
 
 // The project's folder (the engine's working directory for this window).
@@ -526,12 +525,37 @@ function followMention(value, caret) {
 }
 
 export function closePopup() {
+  resumable = null;
   if (!composer.popup) return;
   listTurn += 1;
   composer.popup = null;
   fileList = [];
   slashStop?.();
   slashStop = null;
+}
+
+// The field lost focus (another window, a click elsewhere): the popup closes
+// but comes back on focus or the next keystroke while the caret is still in
+// its word (owner, 2026-10-21). Escape and picks close it for good.
+export function blurPopup() {
+  const popup = composer.popup;
+  closePopup();
+  if (popup) resumable = { kind: popup.kind, start: popup.start };
+}
+
+export function resumePopup() {
+  if (!resumable || composer.popup) return;
+  // A click's focus comes before its caret: until the caret is back in the
+  // word the popup stays remembered (caretMoved tries again).
+  const { kind, start } = resumable;
+  const text = draftOf().text;
+  const [at] = selection();
+  if (draftOf().bang && kind === "/") return;
+  if ((kind === "/" ? slashQuery(text, at) : mentionQuery(text, at, start)) === null) return;
+  resumable = null;
+  if (kind === "/") openSlash();
+  else openMention(start);
+  followMention(text, at);
 }
 
 // ↑ and ↓ in the popup (moveFocus: the best row is drawn lowest).
@@ -728,7 +752,7 @@ export function insertText(text) {
   typed({ before: value, value: next, caret: start + text.length, data: text });
 }
 
-// Ctrl+A and Home, Ctrl+E and End (TYPE-009): the caret to the start or the
+// Home, Ctrl+E and End (TYPE-009): the caret to the start or the
 // end of its line (the textarea's CursorStart and CursorEnd).
 export function caretToLineEdge(edge) {
   if (!field) return;

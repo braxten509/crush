@@ -233,7 +233,7 @@
     <div class="titles">
       <h2 class="title">Changes</h2>
       <p class="source">
-        {source.text}{#if source.adds !== null}<span class="sep"> · </span><span class="adds">+{source.adds}</span>
+        {source.text}{#if source.adds !== null}<span class="sep">{" · "}</span><span class="adds">+{source.adds}</span>
           <span class="dels">−{source.dels}</span>{/if}
       </p>
     </div>

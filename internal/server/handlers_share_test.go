@@ -220,16 +220,18 @@ func (h *shareHarness) streamAs(t *testing.T, clientID string) *shareStream {
 	return s
 }
 
-// startShare starts clientID's share on a fake remote server.
-func (h *shareHarness) startShare(t *testing.T, clientID string) *shareFakeRemote {
+// startShare starts the share of sessionID ("" for clientID's new chat)
+// from clientID on a fake remote server.
+func (h *shareHarness) startShare(t *testing.T, clientID, sessionID string) *shareFakeRemote {
 	t.Helper()
 	fake := newShareFakeRemote()
 	backend.SetShareStarterForTest(h.ws, func(context.Context, *backend.Workspace, string) (backend.ShareServer, error) {
 		return newEngineShare(fake), nil
 	})
 	var status proto.RemoteStatus
-	h.expectOK(t, http.MethodPost, h.wsPath("/remote/start"), clientID, proto.RemoteStart{}, &status)
+	h.expectOK(t, http.MethodPost, h.wsPath("/remote/start"), clientID, proto.RemoteStart{SessionID: sessionID}, &status)
 	require.Equal(t, "on", status.State)
+	require.Equal(t, sessionID, status.SessionID)
 	return fake
 }
 
@@ -465,9 +467,10 @@ func (a *shareFakeAgent) Model() agent.Model                              { retu
 func (a *shareFakeAgent) UpdateModels(context.Context) error              { return nil }
 func (a *shareFakeAgent) GenerateTitle(context.Context, string, string)   {}
 
-// TestRemoteOwnerOnlyRoutes: stop, presence and done are the share owner's;
-// another app gets 403 not_owner, and with no share at all 404 share_off.
-func TestRemoteOwnerOnlyRoutes(t *testing.T) {
+// TestRemoteRoutes: any app may stop a chat's share and tell what its
+// window shows; GET remote lists the shares; only the window an action went
+// to may answer it.
+func TestRemoteRoutes(t *testing.T) {
 	t.Parallel()
 	h := newShareHarness(t)
 	owner, _ := h.stream(t)
@@ -476,50 +479,54 @@ func TestRemoteOwnerOnlyRoutes(t *testing.T) {
 	presence := h.wsPath("/remote/presence")
 	done := h.wsPath("/remote/actions/" + uuid.NewString() + "/done")
 
-	h.expectError(t, http.MethodPost, stop, owner, nil, http.StatusNotFound, "share_off")
-	h.expectError(t, http.MethodPost, presence, owner, proto.RemotePresence{}, http.StatusNotFound, "share_off")
+	h.expectError(t, http.MethodPost, stop, owner, proto.RemoteStop{SessionID: "chat-1"}, http.StatusNotFound, "share_off")
 	h.expectError(t, http.MethodPost, done, owner, proto.RemoteActionDone{}, http.StatusNotFound, "share_off")
+	h.expectOK(t, http.MethodPost, presence, other, proto.RemotePresence{SessionID: "chat-1", Focused: true}, nil)
 
-	fake := h.startShare(t, owner)
-	h.expectError(t, http.MethodPost, stop, other, nil, http.StatusForbidden, "not_owner")
-	h.expectError(t, http.MethodPost, presence, other, proto.RemotePresence{SessionID: "x"}, http.StatusForbidden, "not_owner")
-	h.expectError(t, http.MethodPost, done, other, proto.RemoteActionDone{}, http.StatusForbidden, "not_owner")
-	var otherStatus proto.RemoteStatus
-	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), other, nil, &otherStatus)
-	require.Equal(t, proto.RemoteStatus{State: "off"}, otherStatus)
-
-	h.expectOK(t, http.MethodPost, presence, owner, proto.RemotePresence{SessionID: "chat-1", Focused: true}, nil)
-	require.Equal(t, []remote.Presence{{SessionID: "chat-1", Focused: true}}, fake.presences())
+	h.view(t, owner, "chat-1")
+	fake := h.startShare(t, owner, "chat-1")
+	require.Equal(t, []remote.Presence{{SessionID: "chat-1", Focused: true}}, fake.presences(), "the other app's window shows the chat")
 	h.expectError(t, http.MethodPost, done, owner, proto.RemoteActionDone{}, http.StatusNotFound, "action_not_found")
-	var ownerStatus proto.RemoteStatus
-	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &ownerStatus)
-	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7373}, ownerStatus)
-	h.expectOK(t, http.MethodPost, stop, owner, nil, nil)
+	var listed []proto.RemoteStatus
+	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), other, nil, &listed)
+	require.Equal(t, []proto.RemoteStatus{{State: "on", SessionID: "chat-1", Host: "test-host", Port: 7373}}, listed)
+
+	// The other app turns it off; the owner's window never answered.
+	reply := fake.offer(t, remote.Action{Kind: remote.ActYolo, SessionID: "chat-1"})
+	h.expectOK(t, http.MethodPost, stop, other, proto.RemoteStop{SessionID: "chat-1"}, nil)
 	select {
 	case <-fake.Stopped():
 	case <-time.After(5 * time.Second):
 		t.Fatal("the share did not stop")
 	}
+	require.EqualError(t, shareReply(t, reply), "Remote Control is off")
+	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &listed)
+	require.Empty(t, listed)
 }
 
-// TestRemoteActionGoesToOwnerOnly: a forwarded yolo reaches the owner's
-// stream as remote_action and no other stream; the owner's done answers the
-// phone.
-func TestRemoteActionGoesToOwnerOnly(t *testing.T) {
+// TestRemoteActionGoesToTheWindowShowingTheChat: a forwarded yolo reaches
+// the stream of the app showing the shared chat as remote_action and no
+// other stream; that app's done answers the phone, another's is refused.
+func TestRemoteActionGoesToTheWindowShowingTheChat(t *testing.T) {
 	t.Parallel()
 	h := newShareHarness(t)
 	owner, ownerEvents := h.stream(t)
-	_, otherEvents := h.stream(t)
-	fake := h.startShare(t, owner)
+	other, otherEvents := h.stream(t)
+	h.view(t, owner, "chat-1")
+	fake := h.startShare(t, owner, "chat-1")
+	h.view(t, owner, "chat-2")
+	h.view(t, other, "chat-1")
 
-	reply := fake.offer(t, remote.Action{Kind: remote.ActYolo})
+	reply := fake.offer(t, remote.Action{Kind: remote.ActYolo, SessionID: "chat-1"})
 	var action proto.RemoteAction
-	ownerEvents.waitFor(t, pubsub.PayloadTypeRemoteAction, &action)
+	otherEvents.waitFor(t, pubsub.PayloadTypeRemoteAction, &action)
 	require.Equal(t, "yolo", action.Kind)
 	h.mark()
-	otherEvents.quietUntilMarker(t, pubsub.PayloadTypeRemoteAction)
+	ownerEvents.quietUntilMarker(t, pubsub.PayloadTypeRemoteAction)
 
-	h.expectOK(t, http.MethodPost, h.wsPath("/remote/actions/"+action.ActionID+"/done"), owner, proto.RemoteActionDone{}, nil)
+	path := h.wsPath("/remote/actions/" + action.ActionID + "/done")
+	h.expectError(t, http.MethodPost, path, owner, proto.RemoteActionDone{}, http.StatusForbidden, "not_owner")
+	h.expectOK(t, http.MethodPost, path, other, proto.RemoteActionDone{}, nil)
 	require.NoError(t, shareReply(t, reply))
 }
 
@@ -530,7 +537,7 @@ func TestRemoteNewChatSendKeepsUploadsInEngine(t *testing.T) {
 	t.Parallel()
 	h := newShareHarness(t)
 	owner, events := h.stream(t)
-	fake := h.startShare(t, owner)
+	fake := h.startShare(t, owner, "")
 	big := bytes.Repeat([]byte("0123456789abcdef"), (5<<20)/16)
 	attachment := message.Attachment{FilePath: "/uploads/big.bin", FileName: "big.bin", MimeType: "application/octet-stream", Content: big}
 
@@ -545,8 +552,13 @@ func TestRemoteNewChatSendKeepsUploadsInEngine(t *testing.T) {
 	require.NotEmpty(t, action.Uploads[0].UploadID)
 	require.Equal(t, proto.RemoteUpload{UploadID: action.Uploads[0].UploadID, Name: "big.bin", Mime: "application/octet-stream", Size: len(big)}, action.Uploads[0])
 
-	// The window creates its new chat, shows it and reports it.
+	// The window creates its new chat, shows it and reports it: the share
+	// moves there.
 	h.view(t, owner, "new-chat")
+	var listed []proto.RemoteStatus
+	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &listed)
+	require.Len(t, listed, 1)
+	require.Equal(t, "new-chat", listed[0].SessionID)
 	h.expectOK(t, http.MethodPost, h.wsPath("/remote/actions/"+action.ActionID+"/done"), owner, proto.RemoteActionDone{SessionID: "new-chat"}, nil)
 	require.NoError(t, shareReply(t, reply))
 	require.Eventually(t, func() bool { return len(h.agent.recorded()) == 1 }, 5*time.Second, 10*time.Millisecond)
@@ -559,31 +571,49 @@ func TestRemoteNewChatSendKeepsUploadsInEngine(t *testing.T) {
 	require.Less(t, len(events.bytes()), 64<<10, "no upload bytes on the stream")
 }
 
-// TestRemoteStatusEvents: phone changes and the share's stop reach the owner
-// only, and a stopped share is no longer listed.
+// TestRemoteStatusEvents: a chat's share, its phone changes and its stop
+// reach every app with the chat's ID; a new chat's share is heard of by its
+// app only; a stopped share is no longer listed.
 func TestRemoteStatusEvents(t *testing.T) {
 	t.Parallel()
 	h := newShareHarness(t)
 	owner, ownerEvents := h.stream(t)
 	_, otherEvents := h.stream(t)
-	fake := h.startShare(t, owner)
+	h.view(t, owner, "chat-1")
+	fake := h.startShare(t, owner, "chat-1")
+	on := proto.RemoteStatus{State: "on", SessionID: "chat-1", Host: "test-host", Port: 7373}
+	for _, events := range []*shareStream{ownerEvents, otherEvents} {
+		var started proto.RemoteStatus
+		events.waitFor(t, pubsub.PayloadTypeRemoteStatus, &started)
+		require.Equal(t, on, started)
+	}
 
 	fake.mu.Lock()
 	fake.status.Phones = []string{"Pixel"}
 	fake.mu.Unlock()
 	fake.phones <- struct{}{}
-	var changed proto.RemoteStatus
-	ownerEvents.waitFor(t, pubsub.PayloadTypeRemoteStatus, &changed)
-	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7373, Phones: []string{"Pixel"}}, changed)
+	on.Phones = []string{"Pixel"}
+	for _, events := range []*shareStream{ownerEvents, otherEvents} {
+		var changed proto.RemoteStatus
+		events.waitFor(t, pubsub.PayloadTypeRemoteStatus, &changed)
+		require.Equal(t, on, changed)
+	}
 
 	fake.Stop() // the share stopped on its own
-	var stopped proto.RemoteStatus
-	ownerEvents.waitFor(t, pubsub.PayloadTypeRemoteStatus, &stopped)
-	require.Equal(t, proto.RemoteStatus{State: "off"}, stopped)
-	var listed proto.RemoteStatus
+	for _, events := range []*shareStream{ownerEvents, otherEvents} {
+		var stopped proto.RemoteStatus
+		events.waitFor(t, pubsub.PayloadTypeRemoteStatus, &stopped)
+		require.Equal(t, proto.RemoteStatus{State: "off", SessionID: "chat-1"}, stopped)
+	}
+	var listed []proto.RemoteStatus
 	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &listed)
-	require.Equal(t, proto.RemoteStatus{State: "off"}, listed)
+	require.Empty(t, listed)
 
+	h.view(t, owner, "")
+	h.startShare(t, owner, "")
+	var started proto.RemoteStatus
+	ownerEvents.waitFor(t, pubsub.PayloadTypeRemoteStatus, &started)
+	require.Equal(t, proto.RemoteStatus{State: "on", Host: "test-host", Port: 7373}, started)
 	h.mark()
 	otherEvents.quietUntilMarker(t, pubsub.PayloadTypeRemoteStatus)
 }

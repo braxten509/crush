@@ -452,10 +452,41 @@ ipcMain.on("crush-window", (event, action, value) => {
       return;
     }
     quitting = true;
-    app.relaunch();
+    app.relaunch({ args: relaunchArgs(value) });
     app.quit();
   }
 });
+
+// The command line of the start after an update: this one, with the
+// window's folder and chat (where = {cwd, session}) in place of any folder,
+// chat, --continue or --new-chat it began with (owner, 2026-10-21: the app
+// came back in the folder it was first started in, not the window's).
+// Without where, the same command line again.
+function relaunchArgs(where) {
+  if (!where) return process.argv.slice(1);
+  const cwd = typeof where.cwd === "string" ? where.cwd : "";
+  const session = typeof where.session === "string" ? where.session : "";
+  const head = app.isPackaged ? 1 : 2; // a plain electron also takes the app's folder
+  const out = process.argv.slice(1, head);
+  const rest = process.argv.slice(head);
+  const folder = new Set(["-c", "--cwd", "--project"]);
+  const chat = new Set(["-s", "--session", "--launch-id"]);
+  const switches = new Set(["-C", "--continue", "--new-chat"]);
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    const name = arg.startsWith("--") ? arg.split("=")[0] : arg;
+    const glued = /^-[cs]./.test(arg) ? arg[1] : ""; // -cDIR, -sID: the value glued on
+    if ((folder.has(name) && cwd) || chat.has(name)) {
+      if (!arg.includes("=")) i += 1; // its value is the next argument
+      continue;
+    }
+    if (switches.has(name) || glued === "s" || (glued === "c" && cwd)) continue;
+    out.push(arg);
+  }
+  if (cwd) out.push("--cwd", cwd);
+  if (session) out.push("-s", session);
+  return out;
+}
 
 ipcMain.on("crush-window-state", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);

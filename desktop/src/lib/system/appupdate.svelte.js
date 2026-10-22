@@ -8,6 +8,8 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { appRestartHold, appUpdateCheck, appUpdateRun } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
+import { conn } from "../stores/connection.svelte.js";
+import { sessions } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 
 // phase: idle | checking | current (a moment after "Up to date") | ready |
@@ -70,7 +72,9 @@ export async function updateApp() {
   } catch (error) {
     console.error("holding the open chats failed", error?.message ?? error);
   }
-  setTimeout(() => getCurrentWebviewWindow().relaunch(), 800);
+  // The app starts again on this window's folder and chat (owner,
+  // 2026-10-21: it came back in the folder it was first started in).
+  setTimeout(() => getCurrentWebviewWindow().relaunch({ cwd: conn.project.cwd || conn.project.path, session: sessions.currentId }), 800);
 }
 
 // The one button: Update once a newer build is known, else a check.

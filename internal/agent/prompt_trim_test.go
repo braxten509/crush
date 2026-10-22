@@ -234,3 +234,38 @@ func TestCLIHandoffWithTranscriptIncludesSearchablePathWhenClipped(t *testing.T)
 	require.NoError(t, err)
 	require.Contains(t, string(saved), "MIDDLE_SECRET_42")
 }
+
+func TestPreparePrompt_PreservesErrorFinish(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv(t)
+	sa := NewSessionAgent(SessionAgentOptions{Sessions: env.sessions, Messages: env.messages}).(*sessionAgent)
+
+	errMsg := message.Message{
+		ID:       "2",
+		Role:     message.Assistant,
+		Provider: "gemini",
+		Model:    "gemini-2.5-flash",
+	}
+	errMsg.AddFinish(message.FinishReasonError, "Payment Required", "prepayment credits depleted")
+
+	msgs := []message.Message{
+		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "do something"}}},
+		errMsg,
+		{ID: "3", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "continue"}}},
+	}
+
+	history, _ := sa.preparePrompt(msgs, false)
+	found := false
+	for _, m := range history {
+		if m.Role == fantasy.MessageRoleAssistant {
+			for _, part := range m.Content {
+				if tp, ok := fantasy.AsMessagePart[fantasy.TextPart](part); ok && strings.Contains(tp.Text, "[error: Payment Required]") {
+					found = true
+					break
+				}
+			}
+		}
+	}
+	require.True(t, found, "error finish must be preserved in assistant message for native models")
+}

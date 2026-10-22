@@ -53,6 +53,10 @@ func (m *UI) handleConnectionEvent(msg workspace.ConnectionEvent) []tea.Cmd {
 		if cmd := m.requestMCPRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		// Shares that started or ended while the stream was down.
+		if cmd := m.loadEngineShares(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		if m.session != nil {
 			id := m.session.ID
 			if m.sessionLoad.active {

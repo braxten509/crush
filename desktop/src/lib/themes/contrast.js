@@ -6,7 +6,7 @@
 import { contrast, luminance, mix } from "./tokens.js";
 
 export const PAIRS = [
-  [["--ink"], ["--paper", "--paper-raised", "--band", "--control-rest", "--control-hover", "--selection"], 4.5],
+  [["--ink"], ["--paper", "--paper-raised", "--band", "--control-rest", "--control-hover", "--selection", "--pick"], 4.5],
   [["--slate"], ["--paper", "--band"], 4.5],
   [["--link", "--keyword", "--error-ink", "--amber-ink", "--diff-add-ink", "--info-soft", "--code-inline"], ["--paper"], 4.5],
   [["--hl-keyword", "--hl-string", "--hl-number", "--hl-comment", "--hl-function", "--hl-type", "--hl-attr", "--hl-meta", "--code-inline"], ["--code-bg"], 4.5],

@@ -565,7 +565,7 @@ func (m *UI) Init() tea.Cmd {
 	}
 	// load the user commands async
 	m.logoShineStart = time.Now()
-	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs(), m.checkCLIUpdates(false), m.checkSelfUpdate(false), m.logoShineTick(), m.memoryCheckTick(), m.applySavedMemoryLimit())
+	cmds = append(cmds, m.loadCustomCommands(), m.pollBgProcs(), m.checkCLIUpdates(false), m.checkSelfUpdate(false), m.logoShineTick(), m.memoryCheckTick(), m.applySavedMemoryLimit(), m.loadEngineShares())
 	// Prime the memoized LSP state off-thread.
 	if cmd := m.requestLSPRefresh(); cmd != nil {
 		cmds = append(cmds, cmd)

@@ -1,20 +1,28 @@
 <script>
   // Remote Control status (desktop-design-5-6 2.27, look 5.20; REM-006 to
-  // REM-008): internal/ui/dialog/remotecontrol/remote.go. The computer and
-  // the phones (kept current by remote_status); "Turn off" stops the share,
-  // "Keep on" (selected first) and Esc close without stopping.
+  // REM-008): internal/ui/dialog/remotecontrol/remote.go. The shown chat's
+  // share, whichever app turned it on: the computer and the phones (kept
+  // current by remote_status); "Turn off" stops it, "Keep on" (selected
+  // first) and Esc close without stopping. It closes itself when the share
+  // ends or the window shows another chat.
   import Buttons from "../kit/Buttons.svelte";
   import Sheet from "../kit/Sheet.svelte";
   import { closeDialog } from "../../lib/dialogs.js";
   import { stopShare } from "../../lib/remote/share.js";
-  import { share } from "../../lib/remote/store.svelte.js";
+  import { shownChat, shownShare } from "../../lib/remote/store.svelte.js";
 
   const ID = "remote";
 
   let selected = $state("keep");
 
-  const computer = $derived(share.status?.host ? `${share.status.host} · port ${share.status.port}` : "");
-  const phones = $derived(share.phones.length > 0 ? share.phones.join(", ") : "none yet");
+  const chat = shownChat();
+  const status = $derived(shownShare());
+  const computer = $derived(status?.host ? `${status.host} · port ${status.port}` : "");
+  const phones = $derived(status?.phones?.length > 0 ? status.phones.join(", ") : "none yet");
+
+  $effect(() => {
+    if (!status || shownChat() !== chat) closeDialog(ID);
+  });
   const help = [
     { key: "←/→", text: "choose" },
     { key: "enter", text: "confirm" },
@@ -23,7 +31,7 @@
 
   function press(id) {
     closeDialog(ID);
-    if (id === "off") stopShare();
+    if (id === "off") stopShare({ chat });
   }
 
   function onKey(event, combo) {

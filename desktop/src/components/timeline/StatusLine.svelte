@@ -16,7 +16,7 @@
 </script>
 
 <p class="status {size}" data-words={item.words}>
-  <ActivityMark {size} /><span class="words">{item.words}</span>{#if elapsed}<span class="elapsed"> · {elapsed}</span>{/if}{#if item.thought}<span class="thought"> · {item.thought}</span>{/if}
+  <ActivityMark {size} /><span class="words">{item.words}</span>{#if elapsed}<span class="elapsed">{" · "}{elapsed}</span>{/if}{#if item.thought}<span class="thought">{" · "}{item.thought}</span>{/if}
 </p>
 
 <style>

@@ -34,9 +34,10 @@ const current = {
   async setPinned(on) {
     bridge().window("pin", Boolean(on));
   },
-  // The app starts again (after an update, lib/system/appupdate.svelte.js).
-  async relaunch() {
-    bridge().window("relaunch");
+  // The app starts again (after an update, lib/system/appupdate.svelte.js),
+  // on `where` ({cwd, session}): this window's folder and chat.
+  async relaunch(where = null) {
+    bridge().window("relaunch", where);
   },
   // { bar, maximized, fullscreen, pinned }: bar is true where the page draws the title bar.
   windowState() {

@@ -45,6 +45,25 @@ func TestCLIHandoff(t *testing.T) {
 	require.Empty(t, resume)
 }
 
+func TestCLIHandoff_ErrorFinish(t *testing.T) {
+	errMsg := message.Message{
+		ID:       "2",
+		Role:     message.Assistant,
+		Provider: "opencode-cli",
+		Model:    "glm-5.3-flash",
+	}
+	errMsg.AddFinish(message.FinishReasonError, "Provider Error", "model access is disabled")
+
+	history := []message.Message{
+		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "run"}}},
+		errMsg,
+		{ID: "3", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "continue"}}},
+	}
+
+	prompt, _ := cliHandoff(history, cliagent.Link{}, "next")
+	require.Contains(t, prompt, "[error: Provider Error]\nmodel access is disabled")
+}
+
 func TestCLISteer(t *testing.T) {
 	t.Parallel()
 	env := testEnv(t)

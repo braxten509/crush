@@ -120,6 +120,8 @@ func (m *UI) handleRemoteMsg(msg tea.Msg) (tea.Cmd, bool) {
 		cmds = append(cmds, m.handleRemotePhones())
 	case remoteEngineStartedMsg:
 		cmds = append(cmds, m.handleRemoteEngineStarted(msg))
+	case remoteEngineSharesMsg:
+		m.handleEngineShares(msg)
 	case workspace.RemoteStatusMsg:
 		cmds = append(cmds, m.handleRemoteEngineStatus(msg.Status))
 	case workspace.RemoteActionMsg:

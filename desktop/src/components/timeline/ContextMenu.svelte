@@ -180,7 +180,7 @@
   }
   .entry:not(:disabled):hover,
   .entry.active {
-    background: var(--band);
+    background: var(--pick);
   }
   .entry:disabled {
     color: var(--mark);

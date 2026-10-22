@@ -51,8 +51,13 @@ func (c *controllerV1) getConfig(*http.Request, rpc.Empty) (*config.ConfigStore,
 	return c.backend.Config(), nil
 }
 
-// deleteClient retires a client, releasing every claim it holds.
+// deleteClient retires a client, releasing every claim it holds. With
+// keep_work=1 a workspace it was the last app on stays while its work runs
+// (the desktop moving to another folder).
 func (c *controllerV1) deleteClient(r *http.Request, _ rpc.Empty) (rpc.Empty, error) {
+	if r.URL.Query().Get("keep_work") == "1" {
+		return rpc.Empty{}, c.backend.RetireClientKeepWork(r.PathValue("client_id"))
+	}
 	return rpc.Empty{}, c.backend.RetireClient(r.PathValue("client_id"))
 }
 

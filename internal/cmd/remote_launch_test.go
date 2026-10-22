@@ -21,7 +21,8 @@ func TestLauncherTargetDesktop(t *testing.T) {
 	bin := t.TempDir()
 	desktop := filepath.Join(bin, remote.DesktopAppCommand)
 	require.NoError(t, os.WriteFile(desktop, []byte("#!/bin/sh\nexit 0\n"), 0o755))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// Only the fake app: the real one may be installed on this computer.
+	t.Setenv("PATH", bin)
 	home := t.TempDir()
 	setTarget := func(target string) {
 		t.Helper()

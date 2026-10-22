@@ -85,6 +85,9 @@ type Workspace struct {
 	// clients tracks each client's claim on this workspace. Refcount
 	// is a derived value: len(clients).
 	clients map[string]*clientState
+	// lingering is set while [Backend.linger] keeps this workspace for
+	// its running work with no app on it. Guarded by clientsMu.
+	lingering bool
 
 	// rootCache memoizes [Backend.RootSessionID] resolutions, keyed by
 	// session ID. Session parentage is fixed at creation, so entries

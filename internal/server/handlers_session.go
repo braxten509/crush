@@ -129,6 +129,27 @@ func (c *controllerV1) changeSavedSession(r *http.Request, change session.Catalo
 	return struct{}{}, c.backend.ChangeSavedSession(r.Context(), r.PathValue("id"), change)
 }
 
+// getSavedSession reads a chat of another registered folder (?dir=) from
+// that folder's database, so its engine need not run.
+func (c *controllerV1) getSavedSession(r *http.Request, _ rpc.Empty) (proto.Session, error) {
+	sess, _, err := c.backend.ReadSavedSession(r.Context(), r.PathValue("id"), r.URL.Query().Get("dir"), r.PathValue("sid"), false)
+	if err != nil {
+		return proto.Session{}, err
+	}
+	return proto.SessionFromDomain(sess), nil
+}
+
+// getSavedSessionMessages is getSessionMessages for a chat of another
+// registered folder (?dir=), read from that folder's database.
+func (c *controllerV1) getSavedSessionMessages(r *http.Request, _ rpc.Empty) ([]proto.Message, error) {
+	_, messages, err := c.backend.ReadSavedSession(r.Context(), r.PathValue("id"), r.URL.Query().Get("dir"), r.PathValue("sid"), true)
+	if err != nil {
+		return nil, err
+	}
+	last, _ := strconv.Atoi(r.URL.Query().Get("last"))
+	return proto.MessagesFromDomain(pageMessages(messages, last, r.URL.Query().Get("before"))), nil
+}
+
 // getSessionHistory returns the file versions recorded for a session.
 func (c *controllerV1) getSessionHistory(r *http.Request, _ rpc.Empty) ([]proto.File, error) {
 	history, err := c.backend.ListSessionHistory(r.Context(), r.PathValue("id"), r.PathValue("sid"))

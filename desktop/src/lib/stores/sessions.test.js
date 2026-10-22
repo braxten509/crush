@@ -121,6 +121,16 @@ async function withList(...records) {
 }
 
 describe("the live flag (1.5.3, LIST-012)", () => {
+  it("keeps an open chat's status and activity when another folder's list loads", async () => {
+    await withList(chat("s1", { has_unfinished_work: true }));
+    S.setOpenChats(["s1"]);
+    await deliver(ev("message", "created", reply("m1", "s1", { at: 40, finished: true })));
+    await withList(chat("s2"));
+    expect(S.sessions.byId.s1?.has_unfinished_work).toBe(true);
+    expect(S.sessions.activity.s1).toBe(40);
+    expect(S.sessions.order).toContain("s1");
+  });
+
   it("an assistant message without finish for a chat not loaded turns it busy; its run_complete turns it idle", async () => {
     await withList(chat("s1"), chat("s2"));
     expect(S.busy("s2")).toBe(false);
@@ -551,15 +561,13 @@ describe("deleted, new and first chats (LIST-037, LIST-033, TYPE-041)", () => {
     expect(ui.ui.notice).toBeNull();
   });
 
-  it("New chat while busy warns and stays; otherwise the landing state", async () => {
+  it("New chat while busy shows the landing state; the chat keeps working", async () => {
     await withList(chat("s1", { is_busy: true }));
     openable("s1", [], { is_busy: true });
     await S.openChat("s1");
-    expect(await S.newChat()).toBe(false);
-    expect(ui.ui.notice).toMatchObject({ kind: "warn", text: "Agent is busy, please wait before starting a new session..." });
-    expect(S.sessions.currentId).toBe("s1");
-    await deliver(ev("run_complete", "updated", { session_id: "s1" }));
     expect(await S.newChat()).toBe(true);
+    expect(ui.ui.notice).toBeNull();
+    expect(S.busy("s1")).toBe(true);
     expect(S.sessions.currentId).toBe("");
     expect(h.current.at(-1)).toBe("");
     expect(h.calls.some((c) => c.method === "POST" && c.path === "sessions")).toBe(false); // no record before the first send

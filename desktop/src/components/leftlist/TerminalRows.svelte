@@ -13,6 +13,7 @@
   import { baseOf, clean, short } from "../../lib/leftlist/picker.js";
   import { leftList, newTerminal } from "../../lib/leftlist/store.svelte.js";
   import Icon from "../Icon.svelte";
+  import Rule from "../Rule.svelte";
 
   let list = $state(null);
 
@@ -46,6 +47,7 @@
 </script>
 
 <section class="terminals" aria-label="Terminals">
+  <Rule marks="both" class="above-terminals" />
   <h2 class="group">
     <span class="label">Terminals [{tabs.length}]</span>
     <button class="add" type="button" aria-label="New terminal" title="New terminal (Alt+T)" onclick={newTerminal}>
@@ -63,7 +65,7 @@
           onpointerdown={(event) => press(event, tab)}
         >
           <span class="title"><Icon name="terminal" size={18} /><span class="name">{titleOf(tab)}</span></span>
-          <span class="folder">{folderOf(tab)}</span>
+          <span class="folder"><Icon name="folder-filled" size={12} /><span class="path">{folderOf(tab)}</span></span>
         </button>
         <button class="close" type="button" aria-label="Close {titleOf(tab)}" onclick={(event) => close(event, tab)}>
           <Icon name="close" size={12} />
@@ -74,13 +76,19 @@
 </section>
 
 <style>
-  /* The day heading's style and place (ChatList.svelte .day), with the "+"
-     20 x 20 at the list's right edge minus 19, on the heading's centre line. */
+  /* Set apart from the chats by a 24 gap plus a blank row (owner,
+     2026-10-22) and a clear-ended rule, the heading 10 below it (owner's
+     pick D, 2026-10-21). */
+  .terminals :global(.rule.above-terminals) {
+    margin-top: calc(46 * var(--px));
+  }
+  /* The day heading's style (ChatList.svelte .day), with the "+" 20 x 20 at
+     the list's right edge minus 19, on the heading's centre line. */
   .group {
     position: relative;
     display: flex;
     align-items: center;
-    margin: calc(14 * var(--px)) 0 0 calc(20 * var(--px));
+    margin: calc(10 * var(--px)) 0 0 calc(20 * var(--px));
     font: var(--t-label);
     letter-spacing: var(--track-label);
     text-transform: uppercase;
@@ -116,16 +124,18 @@
     border-top: 1px solid var(--rule);
   }
 
-  /* The chat row's geometry (list/ChatRow.svelte): 81 high, text from 23. */
+  /* The chat row's geometry (list/ChatRow.svelte): one line 44 high, text
+     from 23, the folder in the time's place. */
   .row {
     position: relative;
     display: grid;
-    grid-template-rows: calc(28 * var(--px)) auto;
-    align-content: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: calc(16 * var(--px));
     box-sizing: border-box;
     width: 100%;
-    height: calc(81 * var(--px));
-    padding: calc(12 * var(--px)) calc(48 * var(--px)) 0 calc(23 * var(--px));
+    height: calc(44 * var(--px));
+    padding: 0 calc(48 * var(--px)) 0 calc(23 * var(--px));
     text-align: left;
     touch-action: none;
   }
@@ -145,9 +155,16 @@
     text-overflow: ellipsis;
   }
   .folder {
-    margin-top: calc(5 * var(--px));
-    font: var(--t-meta);
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--px));
+    min-width: 0;
+    max-width: calc(140 * var(--px));
+    font: var(--t-small);
     color: var(--slate);
+  }
+  .path {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -189,12 +206,12 @@
   /* The close slot, where the chat row keeps its own (ChatRow.svelte .close). */
   .close {
     position: absolute;
-    top: calc(20 * var(--px));
+    top: 0;
+    bottom: 0;
     right: calc(11.5 * var(--px));
     display: grid;
     place-items: center;
     width: calc(28 * var(--px));
-    height: calc(12 * var(--px));
     padding: 0;
     color: var(--slate);
     visibility: hidden;

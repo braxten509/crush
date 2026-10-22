@@ -1,6 +1,7 @@
 package accounts
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,4 +89,66 @@ func TestCodexAccountKeepsItsOwnLoginAndDaemon(t *testing.T) {
 		require.Equal(t, linked, err == nil, name)
 	}
 	require.Equal(t, "codex-3", NewID(config.TypeCodexCLI, []config.Account{{ID: "codex-2", Kind: config.TypeCodexCLI}}))
+}
+
+// An account is named by the name it was given, else the email it signed in
+// with (Claude's settings file, Codex's ID token), else its number; where
+// two accounts end up with the same name, the label adds the tool, or the
+// tool's number when both are the same tool's.
+func TestNamesComeFromTheGivenNameThenTheEmail(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(home, "data"))
+	write := func(path, text string) {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(text), 0o600))
+	}
+	token := func(claims string) string {
+		return "eyJhbGciOiJSUzI1NiJ9." + base64.RawURLEncoding.EncodeToString([]byte(claims)) + ".c2ln"
+	}
+	write(filepath.Join(home, ".claude.json"), `{"oauthAccount":{"emailAddress":"you@example.com"},"mcpServers":{}}`)
+	write(filepath.Join(home, ".codex", "auth.json"), `{"tokens":{"id_token":"`+token(`{"email":"you@example.com","name":"You"}`)+`"}}`)
+	write(filepath.Join(home, "data", "accounts", "claude-2", ".claude.json"), `{"oauthAccount":{"emailAddress":"work@example.com"}}`)
+	cfg := &config.Config{Options: &config.Options{Accounts: []config.Account{
+		{ID: "claude-2", Kind: config.TypeClaudeCode},
+		{ID: "codex-2", Kind: config.TypeCodexCLI},
+	}}}
+
+	require.Equal(t, "you@example.com", Email(config.TypeClaudeCode, ""))
+	require.Equal(t, "you@example.com", Email(config.TypeCodexCLI, ""))
+	require.Equal(t, "work@example.com", Email(config.TypeClaudeCode, "claude-2"))
+	require.Empty(t, Email(config.TypeCodexCLI, "codex-2"), "not signed in yet")
+
+	labels := func() map[string]string {
+		out := map[string]string{}
+		for _, a := range Every(cfg) {
+			out[string(a.Kind)+"/"+a.ID] = a.Label
+		}
+		return out
+	}
+	require.Equal(t, map[string]string{
+		"claude-code/":         "you@example.com (Claude)",
+		"claude-code/claude-2": "work@example.com",
+		"codex-cli/":           "you@example.com (Codex)",
+		"codex-cli/codex-2":    "Codex 2",
+	}, labels())
+	require.Equal(t, "you@example.com", Name(cfg, config.TypeClaudeCode, ""))
+	require.Equal(t, "you@example.com (Codex)", Label(cfg, config.TypeCodexCLI, ""))
+
+	// A given name wins, for an added account and for a tool's own login.
+	cfg.Options.OwnAccountNames = map[string]string{"claude-code": "Personal"}
+	cfg.Options.Accounts[0].Name = "Personal"
+	require.Equal(t, map[string]string{
+		"claude-code/":         "Personal (Claude 1)",
+		"claude-code/claude-2": "Personal (Claude 2)",
+		"codex-cli/":           "you@example.com",
+		"codex-cli/codex-2":    "Codex 2",
+	}, labels())
+
+	// A token that can't be read leaves the number.
+	write(filepath.Join(home, ".codex", "auth.json"), `{"tokens":{"id_token":"not-a-token"}}`)
+	require.Empty(t, Email(config.TypeCodexCLI, ""))
+	require.Equal(t, "Codex 1", Name(cfg, config.TypeCodexCLI, ""))
 }

@@ -27,6 +27,9 @@ the real behavior. When something fails, fix only the failing part and say
 what is off limits; do not redo parts that already passed or widen the
 change. If the same part still fails after three fixes, stop: the plan is
 probably wrong. Report what you learned and ask before changing the plan.
+You MUST write the tests first, before adding any code: write a test that
+fails without the change, run it and see it fail, then add the code that
+makes it pass.
 </crush_work_checks>
 
 <crush_todo_list>

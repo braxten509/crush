@@ -68,6 +68,11 @@ pub async fn call(app: AppHandle, label: String, cmd: String, args: Value) -> Re
         "window_close" => res(commands::window_close(app.clone(), w).await),
         "project_switch" => res(commands::project_switch(app.clone(), w, arg(&args, "projectDir")?).await),
         "project_enter" => res(commands::project_enter(app.clone(), w, arg(&args, "projectDir")?).await),
+        // No engines in fixture runs: a list with nothing in it.
+        "folder_chat_states" => match app.try_state::<crate::fixture::Fixture>() {
+            Some(_) => ok(json!({})),
+            None => ok(crate::watch::chat_states(arg(&args, "chats")?).await),
+        },
         // Everything else, on the blocking pool.
         _ => blocking(move || sync_call(&app, w, &cmd, &args)).await,
     }
@@ -149,6 +154,7 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
         "crush_dirs" => res(commands::crush_dirs(a, w)),
         "crush_stats" => res(commands::crush_stats(a, w)),
         "docker_mcp_version" => res(commands::docker_mcp_version()),
+        "sign_in_run" => res(commands::sign_in_run(arg(args, "argv")?)),
         "projects_list" => res(commands::projects_list()),
         "project_save" => res(commands::project_save(arg(args, "path")?)),
         "project_remove" => res(commands::project_remove(arg(args, "path")?)),

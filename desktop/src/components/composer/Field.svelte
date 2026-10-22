@@ -8,8 +8,8 @@
   import { dropText, fileUriPaths } from "../../lib/composer/paste.js";
   import {
     attachField,
+    blurPopup,
     caretMoved,
-    closePopup,
     composer,
     currentPlaceholder,
     draftOf,
@@ -17,6 +17,7 @@
     insertText,
     pastePicture,
     pasteText,
+    resumePopup,
     typed,
   } from "../../lib/stores/composer.svelte.js";
   import { setFocus } from "../../lib/stores/ui.svelte.js";
@@ -139,8 +140,11 @@
   placeholder={currentPlaceholder()}
   aria-label="Message"
   style:--lines={lines}
-  onfocus={() => setFocus("composer")}
-  onblur={() => closePopup()}
+  onfocus={() => {
+    setFocus("composer");
+    resumePopup();
+  }}
+  onblur={() => blurPopup()}
   oninput={input}
   onpaste={paste}
   onkeydown={keydown}

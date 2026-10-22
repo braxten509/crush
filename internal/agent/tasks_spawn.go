@@ -113,6 +113,9 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 
 // subAgent builds the agent a task runs on.
 func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly bool) (SessionAgent, Model, error) {
+	if h.subAgentHook != nil {
+		return h.subAgentHook(provider, model), Model{CatwalkCfg: model, ModelCfg: selected}, nil
+	}
 	fp, err := h.c.providerBuilder().Provider(provider, selected, true)
 	if err != nil {
 		return nil, Model{}, err
@@ -220,6 +223,13 @@ func (h *taskHub) startRun(ctx context.Context, release func(), t *Task, sub Ses
 	runCtx, cancel := context.WithCancel(ctx)
 	h.cancels[t.ID] = cancel
 	h.tasks[t.ID] = t
+	if h.runs == nil {
+		h.runs = map[string]*taskRun{}
+	}
+	run := &taskRun{ctx: runCtx, sub: sub, model: m, provider: provider}
+	h.runs[t.ID] = run
+	chat := t.chat
+	t.chat = nil
 	delete(h.interrupting, t.ID)
 	if run := h.sessionRuns[t.SessionID]; run != nil {
 		h.sessionRuns[t.ChildID] = run
@@ -242,13 +252,38 @@ func (h *taskHub) startRun(ctx context.Context, release func(), t *Task, sub Ses
 		removeCheckIn := h.addCheckIn(snapshot.SessionID, checkInWork{id: snapshot.ID, name: snapshot.Name, started: snapshot.Started, ctx: runCtx, progress: func() string {
 			return h.subAgentProgress(runCtx, snapshot)
 		}})
-		result, err := runSubAgentReport(runCtx, sub, SessionAgentCall{
+		first := SessionAgentCall{
 			SessionID:       t.ChildID,
 			Prompt:          prompt,
 			MaxOutputTokens: subAgentMaxTokens(m),
 			NonInteractive:  true,
 			ProviderOptions: getProviderOptions(m, provider),
-		})
+		}
+		if chat != nil {
+			first.SubmissionID, first.RunID = chat.submissionID, chat.runID
+		}
+		result, err := runSubAgentReport(runCtx, sub, first)
+		// Out of usage: the order of the model it started on moves it,
+		// and it continues there.
+		start, cur := m.ModelCfg, m.ModelCfg
+		for range subAgentFallbackMoves {
+			next, ok := h.subAgentFallback(runCtx, t, start, cur, err)
+			if !ok {
+				break
+			}
+			cur = next.model.ModelCfg
+			h.mu.Lock()
+			run.sub, run.model, run.provider = next.sub, next.model, next.provider
+			h.mu.Unlock()
+			result, err = runSubAgentReport(runCtx, next.sub, SessionAgentCall{
+				SessionID:       t.ChildID,
+				Prompt:          limitRetryPrompt,
+				MaxOutputTokens: subAgentMaxTokens(next.model),
+				NonInteractive:  true,
+				ProviderOptions: getProviderOptions(next.model, next.provider),
+			})
+		}
+		result, err = h.awaitChatMessages(runCtx, t.ID, result, err)
 		removeCheckIn()
 		h.finishRun(ctx, t, subAgentOutput(result), err)
 	}()

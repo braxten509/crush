@@ -10,7 +10,7 @@
 </script>
 
 <div class="user">
-  <Byline author="You" time={clockTime(item.time ?? 0)} />
+  <Byline author="You" time={clockTime(item.time ?? 0)} end />
   <UserBox text={item.text} chips={item.chips} messageId={item.messageId} />
 </div>
 

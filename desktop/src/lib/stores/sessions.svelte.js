@@ -8,11 +8,16 @@ import { chatOf, isFinished, load, messages, parseAgentChatId, readyChat, return
 import { keepPromptsFor, seedMarks } from "./prompts.svelte.js";
 import { clearNotice, notify } from "./ui.svelte.js";
 import { dropFiles, setFiles, startFilesRead, ws } from "./workspace.svelte.js";
+import { rememberedModel } from "../models/groups.js";
 
 export const sessions = $state({
   byId: {},
   order: [],
   currentId: "",
+  // New chat was asked for and the landing page is its empty chat: the list
+  // shows it as a row until a chat opens (owner, 2026-10-21). It is saved
+  // only at the first send (ensureSession).
+  draft: false,
   loaded: false,
   live: {}, // sid → true while a chat this window has not loaded is replying (1.5.3)
   opening: null, // null | {id, title, startedAt}: the chat a switch is opening (LIST-034)
@@ -87,10 +92,34 @@ export function upsertSession(s, { fromEvent = false, since = Infinity } = {}) {
   if (!s?.id) return;
   if (s.parent_session_id) {
     childParent.set(s.id, s.parent_session_id);
+    // A sub-agent's chat opened as a chat of its own is kept like any
+    // chat, but out of the list's order (helperchats.svelte.js).
+    if (helperChatIds.has(s.id)) storeSession(s, { fromEvent, since });
     return;
   }
   storeSession(s, { fromEvent, since });
   place(s.id);
+}
+
+// The sub-agent chats this window shows as chats (owner, 2026-10-21).
+const helperChatIds = new Set();
+export function allowHelperChat(id, allowed) {
+  if (allowed) helperChatIds.add(id);
+  else helperChatIds.delete(id);
+}
+export function isHelperChat(id) {
+  return helperChatIds.has(id);
+}
+
+// What a chat of another folder is doing, from that folder's engine (the
+// left list's 30 s check, owner 2026-10-21): its record's busy, background
+// and prompt fields, and its live flag.
+export function setChatState(id, state) {
+  const stored = sessions.byId[id];
+  if (!stored || !state) return;
+  sessions.byId[id] = { ...stored, is_busy: state.is_busy === true, has_unfinished_work: state.has_unfinished_work === true, pending_prompt: state.pending_prompt ?? "" };
+  if (state.is_busy === true) sessions.live[id] = true;
+  else delete sessions.live[id];
 }
 
 export function removeSession(id) {
@@ -241,7 +270,7 @@ onEvent("session", (kind, s) => {
     chatDeleted(s.id);
     return;
   }
-  if (s.parent_session_id) {
+  if (s.parent_session_id && !helperChatIds.has(s.id)) {
     childParent.set(s.id, s.parent_session_id);
     return;
   }
@@ -297,7 +326,7 @@ function applyList(list, since) {
   }
   const inList = new Set(listed);
   for (const id of Object.keys(sessions.byId)) {
-    if (!inList.has(id) && id !== sessions.currentId && id !== sessions.opening?.id) removeSession(id);
+    if (!inList.has(id) && !openIds.has(id) && !helperChatIds.has(id) && id !== sessions.currentId && id !== sessions.opening?.id) removeSession(id);
   }
   const extra = sessions.order.filter((id) => !inList.has(id) && sessions.byId[id]);
   sessions.order = listed;
@@ -388,7 +417,14 @@ function abandonOpen() {
 const KEEP = 6;
 const kept = new Map(); // chat id → its record, chats left kept loaded, oldest first
 
+// Called with each chat the window leaves, after the next one is set.
+const leaveHooks = [];
+export function onLeave(hook) {
+  leaveHooks.push(hook);
+}
+
 function leave(sid) {
+  for (const hook of leaveHooks) hook(sid);
   const chat = messages.bySession[sid];
   if (chat?.status === "ready" && chat.active.size > 0 && sessions.byId[sid]) {
     stamp(sid, "live");
@@ -499,8 +535,20 @@ async function retryHistory(id) {
   }
 }
 
+// The join or folder switch still under way, if any (connection.svelte.js
+// hands it over): a chat picked meanwhile is read once the window has its
+// engine. Read at once, it went to no engine and failed with "has not joined
+// a Crush engine" even though the switch then showed the chat (owner,
+// 2026-10-21: a second click on a chat whose folder was still joining).
+let joinWait = () => null;
+export function setJoinWait(wait) {
+  joinWait = wait;
+}
+
 async function showChat(id) {
   if (id !== sessions.currentId && isKept(id)) return showKept(id);
+  const pending = joinWait();
+  if (pending) await pending.catch(() => {});
   openSeq += 1;
   const seq = openSeq;
   if (id !== sessions.currentId) {
@@ -544,6 +592,7 @@ async function showChat(id) {
   if (historyFailed) noteHistoryFailed(id);
   const old = sessions.currentId;
   sessions.currentId = id;
+  sessions.draft = false;
   if (sessions.opening?.id === id) sessions.opening = null;
   stamp(id, "live");
   delete sessions.live[id]; // its messages answer for it now (1.5.3)
@@ -566,6 +615,7 @@ export function showKept(id, { refresh = true } = {}) {
   if (!sessions.byId[id] && record) upsertSession(record);
   const old = sessions.currentId;
   sessions.currentId = id;
+  sessions.draft = false;
   stamp(id, "live");
   delete sessions.live[id];
   keepPromptsFor(id);
@@ -602,14 +652,11 @@ async function refreshKept(id) {
 
 // LIST-033 (newSessionFromKey and newSession, internal/ui/model/session.go:
 // 317-420): the landing state, where the next send makes the chat (TYPE-041).
+// A working chat no longer blocks it (owner, 2026-10-21): it keeps working
+// in the list while the new one starts.
 export async function newChat() {
-  const sid = sessions.currentId;
-  if (!sid) return false;
-  if (busy(sid)) {
-    notify("warn", "Agent is busy, please wait before starting a new session...");
-    return false;
-  }
-  showLanding();
+  sessions.draft = true;
+  if (sessions.currentId) showLanding();
   return true;
 }
 
@@ -628,6 +675,7 @@ export async function ensureSession() {
       readyChat(created.id);
       setFiles(created.id, []);
       sessions.currentId = created.id;
+      sessions.draft = false;
       keepPromptsFor(created.id);
       report(created.id);
       return created.id;
@@ -661,7 +709,8 @@ function modelAvailable(config, provider, model) {
 
 async function restoreModel(sid) {
   const chat = messages.bySession[sid];
-  if (!chat) return;
+  // A sub-agent's chat runs on the sub-agent's model, not the window's.
+  if (!chat || helperChatIds.has(sid)) return;
   let last = null;
   for (let i = chat.ids.length - 1; i >= 0 && !last; i -= 1) {
     const m = chat.byId.get(chat.ids[i]);
@@ -672,6 +721,7 @@ async function restoreModel(sid) {
   if (shown?.provider === last.provider && shown?.model === last.model) return;
   let available = false;
   let hasSmall = false;
+  let model = null;
   try {
     // The whole config holds the providers' keys: it is read here and never kept.
     const config = await api.config();
@@ -679,12 +729,14 @@ async function restoreModel(sid) {
     if (large?.provider === last.provider && large?.model === last.model) return;
     available = modelAvailable(config, last.provider, last.model);
     hasSmall = Boolean(config?.models?.small);
+    // The model comes back with the effort last used with it, not its
+    // default (owner, 2026-10-22: the effort was lost on opening a chat).
+    model = rememberedModel(config, last.provider, last.model);
   } catch (error) {
     console.error("model restore: config read failed", errorText(error));
     return;
   }
   if (!available || sessions.currentId !== sid) return;
-  const model = { provider: last.provider, model: last.model };
   try {
     await api.setModel("global", "large", model);
   } catch (error) {

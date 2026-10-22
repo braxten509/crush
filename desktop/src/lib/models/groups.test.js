@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGroups, filterQuery, filterValue, levelTitle, selectedModelOf } from "./groups.js";
+import { buildGroups, filterQuery, filterValue, levelTitle, rememberedModel, selectedModelOf } from "./groups.js";
 import { safeProvider } from "./providers.js";
 
 // The model picker's groups (desktop-design-5-6 2.3): a slip shows the wrong
@@ -63,5 +63,22 @@ describe("row helpers", () => {
     expect(selectedModelOf(item)).toEqual({ model: "m", provider: "p", reasoning_effort: "high", max_tokens: 8 });
     expect(levelTitle("xhigh")).toBe("X-High");
     expect(levelTitle("extra_low")).toBe("Extra Low");
+  });
+
+  it("chooses a model with the effort last used with it while the model still has it (owner, 2026-10-22)", () => {
+    const model = { id: "m", reasoning_levels: ["low", "high", "max"], default_reasoning_effort: "high", default_max_tokens: 8 };
+    const item = { provider: { id: "p" }, model };
+    expect(selectedModelOf(item, { "p:m": "max" })).toEqual({ model: "m", provider: "p", reasoning_effort: "max", max_tokens: 8 });
+    expect(selectedModelOf(item, { "p:m": "ultra" }).reasoning_effort).toBe("high");
+    expect(selectedModelOf(item, { "p:other": "low" }).reasoning_effort).toBe("high");
+  });
+
+  it("brings a chat's model back with its remembered effort", () => {
+    const config = {
+      providers: { p: { models: [{ id: "m", reasoning_levels: ["low", "high", "max"], default_reasoning_effort: "high", default_max_tokens: 8 }] } },
+      model_efforts: { "p:m": "max" },
+    };
+    expect(rememberedModel(config, "p", "m")).toEqual({ model: "m", provider: "p", reasoning_effort: "max", max_tokens: 8 });
+    expect(rememberedModel(config, "p", "gone")).toEqual({ model: "gone", provider: "p" });
   });
 });

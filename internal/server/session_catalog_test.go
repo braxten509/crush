@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -74,4 +75,47 @@ func TestSavedSessionEndpointsListOnlyCurrentServerFolder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, foreign.Title, renamed.Title)
 	require.EqualValues(t, 1, renamed.MessageCount)
+}
+
+func TestSavedSessionReadsAnotherFoldersChatFromItsDatabase(t *testing.T) {
+	h := newRealCreateHarness(t)
+	h.backend.SetCreateGrace(time.Hour)
+	first := h.postWorkspace(t, proto.Workspace{Path: t.TempDir(), DataDir: t.TempDir(), ClientID: uuid.NewString()})
+	second := h.postWorkspace(t, proto.Workspace{Path: t.TempDir(), DataDir: t.TempDir(), ClientID: uuid.NewString()})
+	for _, ws := range []proto.Workspace{first, second} {
+		require.NoError(t, projects.Register(ws.Path, ws.DataDir))
+	}
+	running, err := h.backend.GetWorkspace(second.ID)
+	require.NoError(t, err)
+	chat, err := running.Sessions.Create(t.Context(), "Other folder")
+	require.NoError(t, err)
+	for _, text := range []string{"one", "two", "three"} {
+		_, err = running.Messages.Create(t.Context(), chat.ID, message.CreateMessageParams{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: text}}})
+		require.NoError(t, err)
+	}
+	get := func(path string, out any) int {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, h.httpSrv.URL+"/v1/workspaces/"+first.ID+path, nil)
+		require.NoError(t, err)
+		response, err := h.httpSrv.Client().Do(req)
+		require.NoError(t, err)
+		defer response.Body.Close()
+		if response.StatusCode == http.StatusOK {
+			require.NoError(t, json.NewDecoder(response.Body).Decode(out))
+		}
+		return response.StatusCode
+	}
+	dir := "?dir=" + url.QueryEscape(second.Path)
+
+	var record proto.Session
+	require.Equal(t, http.StatusOK, get("/saved-sessions/"+chat.ID+dir, &record))
+	require.Equal(t, chat.ID, record.ID)
+	require.Equal(t, "Other folder", record.Title)
+
+	var messages []proto.Message
+	require.Equal(t, http.StatusOK, get("/saved-sessions/"+chat.ID+"/messages"+dir+"&last=2", &messages))
+	require.Len(t, messages, 2)
+	require.Equal(t, "three", messages[1].Content().Text)
+
+	// A folder that is not a registered project is never read.
+	require.NotEqual(t, http.StatusOK, get("/saved-sessions/"+chat.ID+"?dir="+url.QueryEscape(t.TempDir()), &record))
 }

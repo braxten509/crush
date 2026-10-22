@@ -51,8 +51,9 @@ Fixture run: tests/check.sh --fixture tests/fixtures/list-states.json p3_start.p
   The app is started again on a copy of the fixture whose days are moved so
   its anchor day is today (its times are local clock times).
   LIST-012      the four states as the engine reports them, and a chat another
-                app replies in (fixture events): "Working…", then nothing.
-  LIST-days     day groups and row times, newest first.
+                app replies in (fixture events): "Working…", then nothing,
+                keeping its place.
+  LIST-days     every chat listed, no day groups, and the row times.
   LIST-search   Ctrl+K focuses the search ("Ctrl K" hint); it filters by
                 title; "No chats match “zzz”."; Esc clears it.
   START-003     more LSPs and skills than fit: "…and N more", rows never run
@@ -90,7 +91,6 @@ def load(name, path):
 
 # --- The list's rules, written from the design (an independent oracle) -------
 
-DAY_LABELS = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"]
 WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 STATES = {"busy": "Working…", "permission": "Waiting for permission", "question": "Waiting for your answer", "background": "Background"}
@@ -98,11 +98,6 @@ STATES = {"busy": "Working…", "permission": "Waiting for permission", "questio
 
 def days_ago(at, now):
     return (datetime.fromtimestamp(now).date() - datetime.fromtimestamp(at).date()).days
-
-
-def day_label(at, now):
-    d = days_ago(at, now)
-    return DAY_LABELS[0] if d <= 0 else DAY_LABELS[1] if d == 1 else DAY_LABELS[2] if d <= 7 else DAY_LABELS[3] if d <= 30 else DAY_LABELS[4]
 
 
 def row_time(at, now):
@@ -577,9 +572,11 @@ def engine_run():
             check(ok, "the shown chat is busy (its row says Working…)")
             focus(main)
             key("ctrl+n")
-            ok, overlay = wait_on(main, "overlay", lambda o: (o.get("notice") or {}).get("text") == BUSY_WARNING, 5)
-            check(ok, f"Ctrl+N on a busy chat says \"{BUSY_WARNING}\" ({(overlay.get('notice') or {})})")
-            check(section(main, "start").get("screen") == "chat" and selected(main) == init_chat, "and the chat stays")
+            # A working chat no longer blocks a new one (owner, 2026-10-21).
+            ok, screen = screen_is(main, "landing", 5)
+            check(ok and (section(main, "overlay").get("notice") or {}).get("text") != BUSY_WARNING, f"Ctrl+N on a busy chat shows the landing page, no busy warning (screen {screen})")
+            ok, _, _ = poll(lambda: next((r for r in rows(main) if r.get("id") == init_chat), {}), lambda r: r.get("state") == "Working…", 5)
+            check(ok, "and the busy chat keeps working in the list")
             client.post(f"agent/sessions/{init_chat}/cancel")
             ok, _, _ = poll(lambda: next((r for r in rows(main) if r.get("id") == init_chat), {}), lambda r: not r.get("state"), 20)
             check(ok, "once the run is cancelled the row has no state")
@@ -967,9 +964,12 @@ def fixture_run():
             h, _ = heavy(app)
             hr = {r["id"]: r for r in (h.get("list") or {}).get("rows") or []}
             check(all(hr.get(s, {}).get("state") and not hr.get(s, {}).get("time") for s in STATES), "a state takes the time's place on its row")
+            before = [r["id"] for r in lst.get("rows") or []]
             ok, lst = wait_on(app, "list", lambda l: next((r for r in l.get("rows") or [] if r["id"] == "live"), {}).get("state") == "Working…", 12)
             check(ok, "a chat another app replies in says Working… (an unfinished assistant message)")
-            check((lst.get("rows") or [{}])[0].get("id") == "live", "and moves to the top")
+            # The rows follow the open chats shared with the terminal (owner,
+            # 2026-10-20), not the newest reply, so the chat keeps its place.
+            check([r["id"] for r in lst.get("rows") or []] == before, "and keeps its place")
             ok, _ = wait_on(app, "list", lambda l: next((r for r in l.get("rows") or [] if r["id"] == "live"), {}).get("state") == "", 8)
             check(ok, "and has no state once the reply finishes")
 
@@ -979,15 +979,9 @@ def fixture_run():
             when = {s["id"]: (live_at if s["id"] == "live" else s["updated_at"]) for s in sessions}
             order = sorted(when, key=lambda k: -when[k])
             lst = section(app, "list")
-            check([r["id"] for r in lst.get("rows") or []] == order, f"newest first: {[r['id'] for r in lst.get('rows') or []]}")
-            # The list draws the newest 6 chats, then "All chats" (owner,
-            # 2026-10-19); the probe's rows are all of them, its days the drawn ones.
-            want_days = []
-            for sid in order[:6]:
-                label = day_label(when[sid], now)
-                if not want_days or want_days[-1] != label:
-                    want_days.append(label)
-            check(lst.get("days") == want_days, f"day groups {lst.get('days')} (want {want_days})")
+            # Chats sit under their folders, not day groups (owner, 2026-10-21).
+            check(sorted(r["id"] for r in lst.get("rows") or []) == sorted(order), f"every chat listed: {[r['id'] for r in lst.get('rows') or []]}")
+            check(lst.get("days") == [], f"no day groups ({lst.get('days')})")
             times = {r["id"]: r.get("time") for r in lst.get("rows") or []}
             bad = {sid: (times.get(sid), row_time(when[sid], now)) for sid in order if times.get(sid) != row_time(when[sid], now)}
             check(not bad, f"row times as the design writes them {bad or ''}")

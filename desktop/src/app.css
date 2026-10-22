@@ -20,6 +20,7 @@
   --paper: #f9f8ef;
   --paper-raised: #fbfaf2;
   --band: #f3f1e6;
+  --pick: var(--band); /* the highlighted row in menus (tokens.js) */
   --ink: #0f0f0f;
   --slate: #353533;
   --link: #14323f;

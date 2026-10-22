@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -357,6 +358,17 @@ func (s *ConfigStore) updatePreferredModelFields(c *Config, modelType SelectedMo
 		}
 		c.RecentModels[modelType] = updated
 		fields[fmt.Sprintf("recent_models.%s", modelType)] = updated
+	}
+	// The whole map is written: model IDs hold dots, which a key path
+	// would split.
+	if key := modelEffortKey(model.Provider, model.Model); key != "" && model.ReasoningEffort != "" && c.ModelEfforts[key] != model.ReasoningEffort {
+		efforts := maps.Clone(c.ModelEfforts)
+		if efforts == nil {
+			efforts = map[string]string{}
+		}
+		efforts[key] = model.ReasoningEffort
+		c.ModelEfforts = efforts
+		fields["model_efforts"] = efforts
 	}
 	return fields
 }

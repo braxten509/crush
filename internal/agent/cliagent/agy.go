@@ -216,6 +216,21 @@ func agyTool(name string, params map[string]any) (string, string) {
 	case "replace_file_content", "multi_replace_file_content", "write_to_file", "sed_file":
 		return tools.EditToolName, marshal(map[string]string{"file_path": str("TargetFile")})
 	}
+	// Newer AGY names (edit_file, read_file) by their words and fields.
+	switch path := inputField(params, pathFields...); toolKind("", name) {
+	case "execute":
+		if cmd := inputField(params, commandFields...); cmd != "" {
+			return tools.BashToolName, marshal(map[string]string{"command": cmd, "description": ""})
+		}
+	case "read":
+		if path != "" {
+			return tools.ViewToolName, marshal(map[string]string{"file_path": path})
+		}
+	case "edit":
+		if path != "" {
+			return tools.EditToolName, marshal(map[string]string{"file_path": path})
+		}
+	}
 	if params == nil {
 		return name, "{}"
 	}

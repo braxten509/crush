@@ -1,17 +1,18 @@
 <script>
   // One chat in the left list ({row} from leftlist/openlist.listedRows): the
-  // title, the chat's folder under it ("~" for home, as the terminal's list
-  // writes it), and on the right the time or what the chat is doing
+  // title (its folder is the heading it sits under, owner 2026-10-21), and
+  // on the right the time or what the chat is doing
   // (LIST-012: "Working…", "Waiting for permission", "Waiting for your
-  // answer", "Background"). The time keeps the picture's place on the row's
-  // middle line; a hidden copy of it holds a column of the row's width, so a
-  // long title ends before the time instead of under it. The state shares the
-  // folder's line and the folder gives way to it. Rows deeper than the top use
+  // answer", "Background"). Every row is one line (owner, 2026-10-22, pick
+  // C): the state takes the time's place. A hidden copy of the time holds a
+  // column of the row's width, so a long title ends before the time instead
+  // of under it. Rows deeper than the top use
   // the built branch look (phase 4 nests branches, 4.8).
   //
-  // Every row reserves a close slot on the title's first line, centred on the
-  // chevron's column (4.8, review finding 13): the × shows in it while the
-  // row is hovered, focused or selected, and nothing else on the row moves.
+  // Every row reserves a close slot at its right end (4.8, review finding
+  // 13): the × shows in it while the row is hovered, focused or selected,
+  // and nothing else on the row moves. A row with branches has its chevron
+  // just left of that slot, and its time moves over to make room.
   // The × is the row button's sibling (a button cannot hold a button).
   //
   // A row with none of phase 3's states draws the first registered phase 6
@@ -20,7 +21,9 @@
   import Icon from "../Icon.svelte";
   import { rowState } from "../../lib/rowstates.js";
   import { closeListed, openInFolder } from "../../lib/stores/openchats.svelte.js";
-  import { openChat } from "../../lib/stores/sessions.svelte.js";
+  import { hideHelperChat } from "../../lib/stores/helperchats.svelte.js";
+  import { focusField } from "../../lib/stores/composer.svelte.js";
+  import { openChat, sessions } from "../../lib/stores/sessions.svelte.js";
 
   let { row } = $props();
   let rowButton = $state(null);
@@ -28,13 +31,25 @@
   // A row of another folder (row.folder) opens in that folder: the window
   // switches to it first. The × closes the chat for every app (the open
   // chats shared with the terminal).
+  // The empty new chat (row.draft) is the landing page: a click shows it, the
+  // × takes the row away.
   function open() {
-    if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
+    if (row.draft) focusField();
+    else if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
     else openChat(row.id);
   }
 
   function close(event) {
     event.stopPropagation();
+    if (row.draft) {
+      sessions.draft = false;
+      return;
+    }
+    // A sub-agent's row only hides; the sub-agent keeps working.
+    if (row.helper) {
+      hideHelperChat(row.id);
+      return;
+    }
     closeListed(row.id).catch((error) => console.error("closing a chat failed", error));
   }
 
@@ -60,6 +75,7 @@
     bind:this={rowButton}
     class="row"
     class:has-state={row.state !== "" || extra !== null}
+    class:has-branches={row.branches > 0}
     type="button"
     aria-current={row.selected ? "page" : undefined}
     aria-expanded={row.branches > 0 ? row.expanded : undefined}
@@ -67,7 +83,7 @@
   >
     <span class="title">{row.title}</span>
     <span class="line2">
-      {#if row.agent}<span class="agent">{row.agent}</span>{/if}
+      {#if row.helper}<span class="helper-mark">Subagent</span>{/if}
       {#if row.state}
         <span class="state {row.stateKind}">
           <Icon name={STATE_ICONS[row.stateKind] ?? "working"} />
@@ -77,6 +93,7 @@
         <span class="state registered">
           <Icon name={extra.icon} />
           <span>{extra.text}</span>
+          {#if row.time}<span>{row.time}</span>{/if}
         </span>
       {/if}
     </span>
@@ -97,7 +114,10 @@
   .chat {
     position: relative;
   }
+  /* 2 screen px between rows, so two bands never touch (owner, 2026-10-22:
+     1-4 px). */
   :global(.chat) + .chat {
+    margin-top: 2px;
     border-top: 1px solid var(--rule);
   }
   :global(.chat.expanded) + .chat,
@@ -106,65 +126,74 @@
     border-top: 0;
   }
 
-  /* Columns: the text, the time's room, and the 48 picture px the time keeps
-     from the row's right edge (with the chevron in it). Rows: the title line
-     and the agent line. */
+  /* Columns: the title, what sits on its right (the sub-agent mark and the
+     state), the time's room, and the 48 picture px the time keeps from the
+     row's right edge (the close slot). One line (owner, 2026-10-22); the
+     title keeps at least half the row, so a long state is cut instead. */
   .row {
+    --end: calc(48 * var(--px));
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto calc(48 * var(--px));
-    grid-template-rows: calc(28 * var(--px)) auto;
-    align-content: start;
+    grid-template-columns: minmax(50%, 1fr) minmax(0, auto) auto var(--end);
+    align-items: center;
     box-sizing: border-box;
     width: 100%;
-    height: calc(81 * var(--px));
-    padding: calc(12 * var(--px)) 0 0 calc(23 * var(--px));
+    height: calc(44 * var(--px));
+    padding: 0 0 0 calc(23 * var(--px));
     text-align: left;
+  }
+  .row.has-branches {
+    --end: calc(74 * var(--px));
   }
   .title {
     grid-column: 1;
     grid-row: 1;
-    padding-right: calc(32 * var(--px));
+    padding-right: calc(16 * var(--px));
     font: var(--t-item);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .line2 {
-    grid-column: 1;
-    grid-row: 2;
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
     align-items: center;
     gap: calc(12 * var(--px));
     min-width: 0;
-    margin-top: calc(5 * var(--px));
-    padding-right: calc(32 * var(--px));
+    overflow: hidden;
   }
   .has-state .line2 {
-    grid-column: 1 / -1;
-    padding-right: calc(24 * var(--px));
+    padding-right: calc(4 * var(--px));
   }
-  .agent {
-    flex: 0 1 auto;
-    min-width: 0;
-    font: var(--t-meta);
+  /* A sub-agent's chat (owner, 2026-10-21), in the panel headings' type. */
+  .helper-mark {
+    flex: none;
+    font: var(--t-label);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
     color: var(--slate);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .state {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
     align-items: center;
     gap: calc(8 * var(--px));
-    margin-left: auto;
     font: var(--t-small);
     color: var(--slate);
     white-space: nowrap;
   }
+  .state > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .state :global(svg) {
+    flex: none;
+  }
   .time-room {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1;
     height: 0;
     overflow: hidden;
@@ -175,7 +204,7 @@
   /* The time and the chevron sit on the row's middle line. */
   .time {
     position: absolute;
-    right: calc(48 * var(--px));
+    right: var(--end);
     top: 50%;
     transform: translateY(-50%);
     font: var(--t-small);
@@ -184,7 +213,7 @@
   }
   .row :global(.chevron) {
     position: absolute;
-    right: calc(19 * var(--px));
+    right: calc(45 * var(--px));
     top: 50%;
     transform: translateY(-50%);
     color: var(--ink);
@@ -199,13 +228,8 @@
      where it was. */
   .selected .row {
     margin: -1px 0;
-    height: calc(81 * var(--px) + 2px);
-    padding-top: calc(12 * var(--px) + 1px);
+    height: calc(44 * var(--px) + 2px);
     background: var(--band);
-  }
-  .selected.branch .row {
-    height: calc(72 * var(--px) + 2px);
-    padding-top: calc(13 * var(--px) + 1px);
   }
   .selected .row::before {
     content: "";
@@ -232,29 +256,20 @@
 
   /* Branch rows (phase 4, 4.8): the built branch look, indented by depth. */
   .branch .row {
-    height: calc(72 * var(--px));
-    padding: calc(13 * var(--px)) 0 0 calc((64 + 28 * (var(--depth) - 1)) * var(--px));
-    grid-template-rows: calc(26 * var(--px)) auto;
+    padding-left: calc((64 + 28 * (var(--depth) - 1)) * var(--px));
   }
   .branch .title {
     font: var(--t-branch);
   }
-  .branch .line2 {
-    margin-top: 0;
-  }
-  .branch .agent {
-    font: var(--t-meta);
-    line-height: calc(20 * var(--px));
-  }
-  .branch .time {
-    top: calc(25 * var(--px));
-    transform: none;
-  }
+  /* Over the row's band, so the open or hovered branch keeps its line
+     (owner, 2026-10-21: it vanished while the dash stayed). */
   .branch::before {
     content: "";
     position: absolute;
+    z-index: 1;
     left: calc((35 + 28 * (var(--depth) - 1)) * var(--px));
-    top: 0;
+    /* Up through the 2px between rows, so the line stays whole. */
+    top: -2px;
     bottom: 0;
     width: max(1px, calc(1.5 * var(--px)));
     background: var(--figure);
@@ -263,7 +278,7 @@
     content: "";
     position: absolute;
     left: calc((35 + 28 * (var(--depth) - 1)) * var(--px));
-    top: calc(34 * var(--px));
+    top: 50%;
     width: calc(16 * var(--px));
     height: max(1px, calc(1.5 * var(--px)));
     background: var(--figure);
@@ -275,22 +290,18 @@
     text-underline-offset: calc(4 * var(--px));
   }
 
-  /* The close slot: the × (12) centred on the chevron's column (right 19 +
-     13 / 2 = 25.5 from the row's right edge) and on the title's first line
-     (26 from the row's top on chat and branch rows alike, selected or not).
-     Its hit area is as big as the row allows (owner, 2026-10-20: small
-     controls get a bigger click area): 36 wide, from the row's top to just
-     above the chevron (from 32.5 on a branch row), so a click there stays
-     the row's. */
+  /* The close slot: the × (12) centred 25.5 from the row's right edge, on
+     the row's middle line. Its hit area is as big as the row allows (owner,
+     2026-10-20: small controls get a bigger click area): 36 wide and the
+     row's full height, clear of the chevron (right 45 to 58). */
   .close {
     position: absolute;
     top: 0;
+    bottom: 0;
     right: calc(7.5 * var(--px));
     display: grid;
-    justify-items: center;
-    align-items: end;
+    place-items: center;
     width: calc(36 * var(--px));
-    height: calc(32 * var(--px));
     padding: 0;
     color: var(--slate);
     visibility: hidden;

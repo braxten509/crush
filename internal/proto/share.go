@@ -3,11 +3,20 @@ package proto
 // Phone sharing (/remote) and secure entry through the Crush engine
 // (engine-design.md 5.7 and 5.8).
 
-// RemoteStart starts the calling app's phone share.
+// RemoteStart starts the phone share of the chat the calling app shows.
 type RemoteStart struct {
+	// SessionID is the chat; "" for the app's new chat, which the share
+	// moves to once the app shows a chat.
+	SessionID string `json:"session_id,omitempty"`
 	// LaunchID is the window's CRUSH_REMOTE_LAUNCH value, if the launcher
 	// opened it.
 	LaunchID string `json:"launch_id,omitempty"`
+}
+
+// RemoteStop stops a chat's phone share, whichever app started it.
+type RemoteStop struct {
+	// SessionID is the chat; "" for the calling app's new chat.
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // RemoteSetup is a setup step that keeps sharing from starting
@@ -24,19 +33,25 @@ type RemoteSetup struct {
 	Button string `json:"button,omitempty"`
 }
 
-// RemoteStatus describes the calling app's phone share.
+// RemoteStatus describes a chat's phone share.
 type RemoteStatus struct {
 	// State is "off", "on" or "setup".
-	State  string       `json:"state"`
-	Host   string       `json:"host,omitempty"`
-	Port   int          `json:"port,omitempty"`
-	Phones []string     `json:"phones,omitempty"`
-	Setup  *RemoteSetup `json:"setup,omitempty"`
+	State string `json:"state"`
+	// SessionID is the shared chat; "" for the receiving app's new chat.
+	SessionID string       `json:"session_id"`
+	Host      string       `json:"host,omitempty"`
+	Port      int          `json:"port,omitempty"`
+	Phones    []string     `json:"phones,omitempty"`
+	Setup     *RemoteSetup `json:"setup,omitempty"`
 	// Error is a failed start that is not a setup issue.
 	Error string `json:"error,omitempty"`
+	// Started is set only in a start's answer, when that start turned the
+	// share on: a start dropped by Cancel stops only such a share, never
+	// one the chat had already (from any app).
+	Started bool `json:"started,omitempty"`
 }
 
-// RemotePresence is what the share owner's window shows.
+// RemotePresence is what an app's window shows.
 type RemotePresence struct {
 	// SessionID is the chat the window shows; "" on the start screen.
 	SessionID string `json:"session_id"`
@@ -44,8 +59,8 @@ type RemotePresence struct {
 	Plan      bool   `json:"plan"`
 }
 
-// RemoteAction is a phone action that only the share owner's window can
-// run, because it changes the window's own state.
+// RemoteAction is a phone action that only a window showing the shared chat
+// can run, because it changes the window's own state.
 type RemoteAction struct {
 	ActionID string `json:"action_id"`
 	// Kind is "new_chat_send", "yolo" or "mode".

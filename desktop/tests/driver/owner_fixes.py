@@ -7,7 +7,12 @@ panels (the live-tray recording, its chat with three to-dos):
 - the collapsed list's "›" cell is 44 picture px tall with the arrow in its
   middle (the arrow sat low in a 67-tall box);
 - the Send square is square, its plane in the exact middle (it sat 3 picture
-  px right).
+  px right);
+- the step in progress shows the busy dots, pulsing on the page's one beat
+  (owner, 2026-10-21: it was a still "…");
+- the panel foot's words are Settings' size, inside their button (owner,
+  2026-10-21); the line before the model button runs the typing box's
+  height as the box grows (owner, 2026-10-21).
 
 engine (the real engine and the fake AI server):
 - a reply's footer names the model and provider from the config, "Fake Large
@@ -16,7 +21,9 @@ engine (the real engine and the fake AI server):
   choice A); typing turns it back into Send and clearing it into Stop again;
   a click on Stop ends the run and the typing box keeps the focus;
 - the running reply's three dots are whole pixels of one width (the last one
-  came out thinner, "cut off").
+  came out thinner, "cut off");
+- they pulse on the page's one beat, and keep it after Settings hides the chat
+  and gives it back (owner, 2026-10-21: "so it's not two different rythms").
 
 Usage: CHECK_ARGS="-s 1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01" \\
        tests/check.sh --fixture tests/fixtures/live-tray.json owner_fixes.py panels
@@ -71,6 +78,23 @@ def key(*combos):
         xdo("key", "--clearmodifiers", combo)
 
 
+# Where each busy dot of `selector` stands against the page's one beat (motion.js
+# busyBeat): its fade runs 1.2 s, each dot 0.2 s after the one before, counted
+# from the page's start.
+def beat(selector):
+    return run("""
+      const now = document.timeline.currentTime;
+      return [...document.querySelectorAll(%s)].map((dot) => {
+        const fades = dot.getAnimations().filter((a) => a.playState === 'running');
+        if (fades.length !== 1) return fades.length + ' fades';
+        const at = [...dot.parentNode.children].indexOf(dot);
+        const want = ((((now - 200 * at) %% 1200) + 1200) %% 1200) / 1200;
+        const off = Math.abs(fades[0].effect.getComputedTiming().progress - want);
+        return Math.min(off, 1 - off) < 0.02 ? 'on beat' : 'off by ' + Math.round(Math.min(off, 1 - off) * 1200) + ' ms';
+      });
+    """ % json.dumps(selector))
+
+
 def until(script, timeout=10, step=0.2):
     end = time.time() + timeout
     while time.time() < end:
@@ -104,8 +128,7 @@ if "panels" in parts:
       const box = sec.getBoundingClientRect();
       const rows = [...sec.querySelectorAll('li.line')].map((li) => { const r = li.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, bottom: r.bottom }; });
       const text = sec.querySelector('li.line .text');
-      return { width: box.width, rows, line: text ? parseFloat(getComputedStyle(text).lineHeight) : 0,
-               mark: sec.querySelector('li.in_progress .mark')?.textContent.trim() ?? null };
+      return { width: box.width, rows, line: text ? parseFloat(getComputedStyle(text).lineHeight) : 0 };
     """)
     if check(todo is not None and len(todo.get("rows", [])) == 3, f"the TO-DO section lists the chat's three steps ({todo and len(todo.get('rows', []))})"):
         rows = todo["rows"]
@@ -113,7 +136,8 @@ if "panels" in parts:
         check(all(abs(r["x"] - rows[0]["x"]) <= 1 for r in rows), "every step starts at the same left edge")
         check(all(r["w"] >= 0.8 * todo["width"] for r in rows), f"every step takes the panel's width ({[round(r['w']) for r in rows]} of {round(todo['width'])})")
         check(all(r["h"] <= 2.5 * todo["line"] for r in rows), f"no step wraps letter by letter (heights {[round(r['h']) for r in rows]}, line {todo['line']:.1f})")
-        check(todo["mark"] == "…", f"the step in progress shows three dots ({todo['mark']!r})")
+        dots = beat('[data-section="todos"] li.in_progress .mark .dot')
+        check(dots == ["on beat"] * 3, f"the step in progress shows the busy dots, on the page's one beat ({dots})")
     shot("panels")
 
     # -- The Send square --
@@ -146,6 +170,36 @@ if "panels" in parts:
         check(until("return !document.querySelector('.strip');", 5), "Alt+S opens the list again")
     xdo("mousemove", geo_x + 5, geo_y + 980)
 
+    # -- The feet's words --
+    feet = run("""
+      const foot = document.querySelector('[data-probe="update-foot"]');
+      const words = [document.querySelector('nav.chats button.settings .label'), foot?.querySelector('.version'), foot?.querySelector('.update .label')];
+      if (words.some((w) => !w)) return null;
+      const button = foot.querySelector('.update').getBoundingClientRect(), label = words[2].getBoundingClientRect();
+      return { sizes: words.map((w) => getComputedStyle(w).fontSize), inside: label.top >= button.top - 0.5 && label.bottom <= button.bottom + 0.5, label: [label.top, label.bottom], button: [button.top, button.bottom] };
+    """)
+    if check(feet is not None, "both feet show their words"):
+        check(len(set(feet["sizes"])) == 1, f"the panel foot's words are as big as Settings' ({feet['sizes']})")
+        check(feet["inside"], f"the update button's words fit inside it (words {feet['label']}, button {feet['button']})")
+
+    # -- The line before the model button --
+    def line_span():
+        return run("""
+          const field = document.querySelector('.composer .field').getBoundingClientRect();
+          const line = document.querySelector('.composer .divider').getBoundingClientRect();
+          return { field: field.height, top: line.top - field.top, bottom: field.bottom - line.bottom };
+        """)
+    one = line_span()
+    click_at(rect(".composer textarea"))
+    for _ in range(3):
+        key("shift+Return")
+    time.sleep(0.4)
+    four = line_span()
+    gap = 7 * PX + 1  # 7 picture px inside the field's one-pixel border
+    spans = lambda g: g is not None and abs(g["top"] - gap) <= 1 and abs(g["bottom"] - gap) <= 1
+    check(spans(one) and spans(four) and four["field"] > one["field"] + 40, f"the line runs the typing box's height as it grows ({one} -> {four})")
+    key("ctrl+a", "BackSpace")
+
 if "engine" in parts:
     # The new project's init question holds the keys until it is answered.
     nope = run("const b = [...document.querySelectorAll('button')].find((e) => e.textContent.trim() === 'Not now'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height };")
@@ -161,8 +215,8 @@ if "engine" in parts:
     # -- A reply's footer --
     xdo("type", "--delay", "15", "--", "Seed turn short")
     key("Return")
-    done = until("return [...document.querySelectorAll('.timeline [data-kind=footer]')].length > 0 && !document.querySelector('.timeline .status');", 20)
-    footer = run("return [...document.querySelectorAll('.timeline [data-kind=footer]')].map((e) => e.textContent.trim()).pop() ?? null;")
+    done = until("return [...document.querySelectorAll('.slot:not(.parked) .timeline [data-kind=footer]')].length > 0 && !document.querySelector('.slot:not(.parked) .timeline .status');", 20)
+    footer = run("return [...document.querySelectorAll('.slot:not(.parked) .timeline [data-kind=footer]')].map((e) => e.textContent.trim()).pop() ?? null;")
     check(done and footer is not None, f"the reply finishes with its footer ({footer!r})")
     check(footer is not None and "Unknown Model" not in footer and footer.startswith("Fake Large via Fake AI in "), f"the footer names the model and provider from the config ({footer!r})")
 
@@ -171,11 +225,11 @@ if "engine" in parts:
     click_at(rect(".composer textarea"))
     xdo("type", "--delay", "15", "--", "leftlist slow reply")
     key("Return")
-    working = until("return !!document.querySelector('.timeline .status');", 10)
+    working = until("return !!document.querySelector('.slot:not(.parked) .timeline .status');", 10)
     check(working, "the slow reply runs (the live status shows)")
     time.sleep(0.3)
     check(label() == "Stop", f"while it runs with an empty box, the square is Stop ({label()})")
-    dots = run("return [...document.querySelectorAll('.timeline .status .mark .dot')].map((d) => d.getBoundingClientRect().width);") or []
+    dots = run("return [...document.querySelectorAll('.slot:not(.parked) .timeline .status .mark .dot')].map((d) => d.getBoundingClientRect().width);") or []
     check(len(dots) == 3 and max(dots) - min(dots) < 0.01 and all(abs(w - round(w)) < 0.01 for w in dots), f"its three dots are whole pixels of one width ({dots})")
     shot("stop")
     xdo("type", "--delay", "15", "--", "x")
@@ -185,9 +239,23 @@ if "engine" in parts:
     time.sleep(0.3)
     check(label() == "Stop", f"clearing the box turns it into Stop again ({label()})")
     click_at(rect(".composer .send"))
-    stopped = until("return !document.querySelector('.timeline .status');", 8)
+    stopped = until("return !document.querySelector('.slot:not(.parked) .timeline .status');", 8)
     check(stopped, "a click on Stop ends the run")
     time.sleep(0.4)
     check(label() == "Send", f"and the square is Send again ({label()})")
     check(run("return document.activeElement === document.querySelector('.composer textarea');") is True, "the typing box keeps the focus")
+
+    # -- One beat --
+    xdo("type", "--delay", "15", "--", "leftlist slow reply")
+    key("Return")
+    if check(until("return !!document.querySelector('.slot:not(.parked) .timeline .status .mark');", 10), "another slow reply runs"):
+        time.sleep(0.3)
+        dots = beat(".slot:not(.parked) .timeline .status .mark .dot")
+        check(dots == ["on beat"] * 3, f"its dots pulse on the page's one beat ({dots})")
+        click_at(rect("nav.chats button.settings"))
+        time.sleep(0.7)
+        click_at(rect(".settings-nav button.back"))
+        time.sleep(0.7)
+        dots = beat(".slot:not(.parked) .timeline .status .mark .dot")
+        check(dots == ["on beat"] * 3, f"and keep it after Settings hid the chat and gave it back ({dots})")
 finish()

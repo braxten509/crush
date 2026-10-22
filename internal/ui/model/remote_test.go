@@ -3,16 +3,21 @@ package model
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
 
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/remote"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
+	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
 func TestRemoteActionsRunLikeKeys(t *testing.T) {
@@ -140,4 +145,99 @@ func TestRemoteBadge(t *testing.T) {
 	require.NotContains(t, m.status.modeBadge(), "REMOTE")
 	m.status.SetRemote(true)
 	require.Contains(t, m.status.modeBadge(), "REMOTE")
+}
+
+// TestEngineRemoteFollowsTheShownChat: on the shared engine, REMOTE shows
+// while the chat the window shows is shared, whichever app turned it on;
+// switching chats follows each chat's share; a share list read before a
+// change does not undo it.
+func TestEngineRemoteFollowsTheShownChat(t *testing.T) {
+	t.Parallel()
+	m := newBusyUI(&countingWorkspace{})
+	on := func(chat string, phones ...string) proto.RemoteStatus {
+		return proto.RemoteStatus{State: "on", SessionID: chat, Phones: phones}
+	}
+	shows := func() bool { return strings.Contains(m.status.modeBadge(), "REMOTE") }
+
+	require.Nil(t, m.handleRemoteEngineStatus(on("s2")))
+	require.False(t, shows(), "another chat's share")
+	require.Nil(t, m.handleRemoteEngineStatus(on("s1")))
+	require.True(t, shows())
+	require.True(t, m.remoteActive())
+	cmd := m.handleRemoteEngineStatus(on("s1", "Pixel"))
+	require.NotNil(t, cmd)
+	require.Equal(t, "Remote Control: Pixel connected", cmd().(util.InfoMsg).Msg)
+
+	m.session = &session.Session{ID: "s2"}
+	m.syncRemotePresence()
+	require.True(t, shows(), "s2 is shared too")
+	m.session = &session.Session{ID: "s3"}
+	m.syncRemotePresence()
+	require.False(t, shows())
+	m.session = &session.Session{ID: "s1"}
+	m.syncRemotePresence()
+
+	// Turned off in the other app.
+	require.Nil(t, m.handleRemoteEngineStatus(proto.RemoteStatus{State: "off", SessionID: "s1"}))
+	require.False(t, shows())
+	require.False(t, m.remoteActive())
+
+	since := m.remote.changes
+	m.handleRemoteEngineStatus(on("s1"))
+	m.handleRemoteEngineStatus(proto.RemoteStatus{State: "off", SessionID: "s2"})
+	m.handleEngineShares(remoteEngineSharesMsg{shares: []proto.RemoteStatus{on("s2"), on("s4")}, changes: since})
+	require.True(t, shows(), "s1 started after the list was asked for")
+	require.NotContains(t, m.remote.engine, "s2", "s2 ended after the list was asked for")
+	require.Contains(t, m.remote.engine, "s4")
+	m.handleEngineShares(remoteEngineSharesMsg{shares: []proto.RemoteStatus{on("s4")}, changes: m.remote.changes})
+	require.False(t, shows(), "a newer list")
+}
+
+// The list read at start-up can come before any change: a change heard
+// after it must not crash the window (turning Remote off from the dialog
+// did, 2026-10-21).
+func TestEngineRemoteChangeAfterTheFirstList(t *testing.T) {
+	t.Parallel()
+	m := newBusyUI(&countingWorkspace{})
+	m.handleEngineShares(remoteEngineSharesMsg{shares: []proto.RemoteStatus{{State: "on", SessionID: "s1"}}})
+	require.True(t, m.engineShared())
+	require.NotPanics(t, func() {
+		m.handleRemoteEngineStatus(proto.RemoteStatus{State: "off", SessionID: "s1"})
+	})
+	require.False(t, m.engineShared())
+}
+
+// A window's reports reach the engine one at a time, newest first in line:
+// reports waiting behind one in flight give way to the newest (review t1,
+// 2026-10-21).
+func TestPresenceSenderSendsTheNewest(t *testing.T) {
+	t.Parallel()
+	var s presenceSender
+	var mu sync.Mutex
+	var sent []int
+	record := func(n int) {
+		mu.Lock()
+		defer mu.Unlock()
+		sent = append(sent, n)
+	}
+	holding, release := make(chan struct{}), make(chan struct{})
+	s.send(func() {
+		close(holding)
+		<-release
+		record(1)
+	})
+	<-holding
+	for n := 2; n <= 4; n++ {
+		s.send(func() { record(n) })
+	}
+	close(release)
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(sent) >= 2
+	}, 5*time.Second, time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []int{1, 4}, sent)
 }

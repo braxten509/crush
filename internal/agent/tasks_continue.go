@@ -152,8 +152,14 @@ func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 		h.seq = n
 	}
 	h.mu.Unlock()
+	// What the user typed in its chat goes as typed.
+	if req.chat != nil {
+		t.chat = req.chat
+	} else {
+		prompt = continuePreamble + prompt
+	}
 	started = true
-	snapshot, err := h.start(ctx, release, &t, sub, m, provider, continuePreamble+prompt)
+	snapshot, err := h.start(ctx, release, &t, sub, m, provider, prompt)
 	if err != nil {
 		return nil, err
 	}

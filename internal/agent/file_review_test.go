@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/agent/tools"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
@@ -102,14 +101,17 @@ printf '%s\n' '{"type":"result","subtype":"success"}'
 	}
 	require.Len(t, results, 1)
 	require.False(t, results[0].IsError)
-	require.Nil(t, results[0].Review, "a late snapshot must not hide the CLI's diff")
-	var meta tools.EditResponseMetadata
-	require.NoError(t, json.Unmarshal([]byte(results[0].Metadata), &meta))
-	require.Equal(t, "before\n", meta.OldContent)
-	require.Equal(t, "after\n", meta.NewContent)
-	files := diffreview.Build([]diffreview.Edit{{Path: "changed.txt", Before: meta.OldContent, After: meta.NewContent}})
+	require.NotNil(t, results[0].Review, "a late edit is recorded from its rebuilt before copy")
+	require.Len(t, results[0].Review.Changes, 1)
+	require.Equal(t, "before\n", results[0].Review.Changes[0].Before.Content)
+	require.Equal(t, "after\n", results[0].Review.Changes[0].After.Content)
+	change := results[0].Review.Changes[0]
+	files := diffreview.Build([]diffreview.Edit{{Path: change.Path, Snapshot: &change}})
 	require.Len(t, files, 1)
-	require.Equal(t, "changed.txt", files[0].Path)
+	require.Equal(t, "changed.txt", filepath.Base(files[0].Path))
+	adds, dels := diffreview.Stats(files)
+	require.Equal(t, 1, adds)
+	require.Equal(t, 1, dels)
 }
 
 func TestFileReviewPersistsFailedAndLateChanges(t *testing.T) {

@@ -73,6 +73,49 @@ func resultMetadata(name, input, output string) string {
 	return ""
 }
 
+// The common spellings of a CLI tool's path and command fields: Claude's,
+// OpenCode's, Grok's and AGY's.
+var (
+	pathFields    = []string{"file_path", "filePath", "target_file", "path", "absolute_path", "Path", "TargetFile", "AbsolutePath"}
+	commandFields = []string{"command", "cmd", "CommandLine"}
+)
+
+// inputField is the first of keys that holds non-empty text in input.
+func inputField(input map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if s, ok := input[k].(string); ok && s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// toolKind is the job of a CLI tool in ACP's standard kinds: its own kind
+// when it gives one Crush maps, else one read from the words in its name.
+// Grok gives its tools no such kind and AGY renamed its own
+// (run_terminal_command, search_replace, edit_file, read_file).
+func toolKind(kind, name string) string {
+	switch kind {
+	case "execute", "read", "edit", "fetch":
+		return kind
+	}
+	name = strings.ToLower(name)
+	has := func(words ...string) bool {
+		return slices.ContainsFunc(words, func(w string) bool { return strings.Contains(name, w) })
+	}
+	switch {
+	case has("terminal", "shell", "bash", "command"):
+		return "execute"
+	case has("edit", "replace", "write", "patch"):
+		return "edit"
+	case has("read", "view"):
+		return "read"
+	case has("fetch"):
+		return "fetch"
+	}
+	return kind
+}
+
 // markBackground flags a bash result whose command kept running in the
 // background, so Crush shows it as moved rather than finished.
 func markBackground(name, meta string) string {

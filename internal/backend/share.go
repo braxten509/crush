@@ -15,16 +15,27 @@ import (
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/google/uuid"
 )
 
-// Phone sharing through the engine (engine-design.md 5.7). Each app may run
-// one share of the project. The engine runs every phone action that does not
-// need the window's own state, with the terminal's checks and texts, and
-// forwards only new_chat_send, yolo and mode to the app that started the
-// share.
+// Phone sharing through the engine (engine-design.md 5.7). A share belongs
+// to a chat, not to an app (owner, 2026-10-21: "One remote per chat - the
+// chat GUI should be equivalent oon the phone and doesn't matter if the
+// terminal or gui started it"). An app starts it for the chat it shows,
+// every app hears of it, any app may stop it, and several chats may be
+// shared at once, each a share and a phone item of its own. The phone stays
+// on its chat whatever the apps show. A share started on an app's new chat,
+// before the chat exists, is that app's alone until its window shows a
+// chat: the one the first message makes, or one it opens.
+//
+// The engine runs every phone action that does not need a window's own
+// state, with the terminal's checks and texts, and forwards only
+// new_chat_send, yolo and mode to a window showing the chat. A share's
+// prompts count as its owner's: the app that started it, or the app it
+// passed to when that one left while the chat was still open.
 //
 // The share itself is a remote.Server. The backend cannot import package
 // remote, which imports the backend through package workspace, so it works
@@ -33,11 +44,11 @@ import (
 
 // Phone sharing errors (engine-design.md, section 0.1).
 var (
-	// ErrNotShareOwner is returned when an app acts on a phone share that
-	// another app started.
-	ErrNotShareOwner = errors.New("another app started this phone share")
-	// ErrShareOff is returned when no app runs a phone share.
-	ErrShareOff = errors.New("this app runs no phone share")
+	// ErrNotShareOwner is returned when an app answers a phone action the
+	// engine handed to another app.
+	ErrNotShareOwner = errors.New("the engine handed that phone action to another app")
+	// ErrShareOff is returned when the chat has no phone share.
+	ErrShareOff = errors.New("this chat has no phone share")
 	// ErrActionNotFound is returned when no phone action waits under the
 	// given ID.
 	ErrActionNotFound = errors.New("no phone action waits under that ID")
@@ -71,6 +82,11 @@ var (
 // answers for it. It is under the share's own 30 s wait (remote/remote.go),
 // so the phone hears the engine's answer, not the share's 504.
 const shareReplyTimeout = 25 * time.Second
+
+// shareOpenDelay is how long after its owner left a share whose chat no app
+// shows waits before it looks for the chat in the open-chats list: a
+// terminal row takes its chat off the list only once its Crush has quit.
+const shareOpenDelay = 2 * time.Second
 
 // The states of [proto.RemoteStatus].
 const (
@@ -135,7 +151,7 @@ type ShareServer interface {
 	PhonesChanged() <-chan struct{}
 	// Stopped is closed once the share stops.
 	Stopped() <-chan struct{}
-	// SetPresence tells the phone what the owner's window shows.
+	// SetPresence tells the phone the share's chat and how the apps show it.
 	SetPresence(proto.RemotePresence)
 	// SetLaunch changes the launch ID the share reports to the launcher.
 	SetLaunch(id string)
@@ -183,12 +199,16 @@ func SetShareStarterForTest(ws *Workspace, start ShareStarter) {
 // errShareUnavailable is a start's error when no starter is installed.
 var errShareUnavailable = errors.New("phone sharing is not available in this Crush")
 
-// shareState is piece D's state per workspace: the apps' phone shares (5.7)
-// and the secure forms sent to its apps (5.8).
+// shareState is piece D's state per workspace: the chats' phone shares
+// (5.7) and the secure forms sent to its apps (5.8).
 type shareState struct {
 	mu sync.Mutex
-	// shares holds the running shares by owner client ID; one per app.
+	// shares holds the running shares by [shareKey].
 	shares map[string]*share
+	// windows holds what each app's window shows: the chat it reported
+	// last (SetCurrentSession or SetRemotePresence), its focus and plan
+	// mode.
+	windows map[string]proto.RemotePresence
 	// forms holds the open secure forms by form ID (5.8).
 	forms map[string]*secureForm
 	// detach disconnects the workspace from secure entry (5.8). It is set
@@ -198,22 +218,33 @@ type shareState struct {
 	// after it.
 	closed bool
 
-	// startMu keeps one app from starting two shares at once.
+	// startMu keeps two starts from racing: one share per chat.
 	startMu sync.Mutex
 
 	// Test seams: start replaces the installed starter, timeout replaces
-	// shareReplyTimeout and send replaces [Backend.SendMessage].
-	start   ShareStarter
-	timeout time.Duration
-	send    func(workspaceID, clientID string, msg proto.AgentMessage) error
+	// shareReplyTimeout, send replaces [Backend.SendMessage], openDelay
+	// replaces shareOpenDelay and listed replaces the look at the
+	// open-chats list.
+	start     ShareStarter
+	timeout   time.Duration
+	send      func(workspaceID, clientID string, msg proto.AgentMessage) error
+	openDelay time.Duration
+	listed    func(sessionID string) bool
 }
 
-// share is one app's running phone share.
+// share is one chat's running phone share.
 type share struct {
+	// chat is the chat the share shows; "" while it is its owner's new chat.
+	// Guarded by shareState.mu.
+	chat string
+	// owner is the app the share's prompts count as. Guarded by
+	// shareState.mu.
 	owner string
 	srv   ShareServer
-	// pending holds the actions forwarded to the owner's window that wait
-	// for its done, by action ID. Guarded by shareState.mu.
+	// presence is what the phone was last told. Guarded by shareState.mu.
+	presence proto.RemotePresence
+	// pending holds the actions forwarded to a window that wait for its
+	// done, by action ID. Guarded by shareState.mu.
 	pending map[string]*pendingAction
 	// ended is set once the share was removed. Guarded by shareState.mu.
 	ended bool
@@ -221,11 +252,29 @@ type share struct {
 	quit chan struct{}
 }
 
-// pendingAction is a phone action forwarded to the share owner's window.
+// newChatKey begins the key of an app's new-chat share. No session ID
+// begins with it.
+const newChatKey = "new chat of "
+
+// shareKey is the key of a share in shareState.shares: its chat, or for
+// clientID's new chat (sessionID ""), the app.
+func shareKey(clientID, sessionID string) string {
+	if sessionID == "" {
+		return newChatKey + clientID
+	}
+	return sessionID
+}
+
+// key is sh's key in shareState.shares. Callers hold shareState.mu.
+func (sh *share) key() string { return shareKey(sh.owner, sh.chat) }
+
+// pendingAction is a phone action forwarded to a window.
 type pendingAction struct {
-	kind  string // the RemoteAction kind
-	reply func(error)
-	timer *time.Timer
+	kind string // the RemoteAction kind
+	// client is the app whose window got the action; only it may answer.
+	client string
+	reply  func(error)
+	timer  *time.Timer
 	// text and attachments are new_chat_send's prompt. The engine keeps
 	// them until the window has created the chat, and drops them when the
 	// action ends.
@@ -246,12 +295,13 @@ func (pa *pendingAction) fail(err error) {
 	pa.reply(err)
 }
 
-// StartRemote starts clientID's phone share, or returns its running share's
-// status: one share per app. A repeat start with a launch ID makes the
+// StartRemote starts the phone share of sessionID, the chat clientID shows
+// ("" for its new chat), or returns the chat's running share's status,
+// whichever app started it. A repeat start with a launch ID makes the
 // running share report that ID, so the launcher finds the window again; an
 // empty one changes nothing. A setup step answers state "setup" with its
 // info; any other failure answers state "off" with the error.
-func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, launchID string) (proto.RemoteStatus, error) {
+func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, sessionID, launchID string) (proto.RemoteStatus, error) {
 	ws, err := b.shareWorkspace(workspaceID, clientID)
 	if err != nil {
 		return proto.RemoteStatus{}, err
@@ -261,7 +311,14 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, launch
 	defer st.startMu.Unlock()
 
 	st.mu.Lock()
-	closed, running, start := st.closed, st.shares[clientID], st.start
+	closed, running, start := st.closed, st.shares[shareKey(clientID, sessionID)], st.start
+	// What the window was last reported to show: a report older than this
+	// start can still name the chat it left for its new chat.
+	before := st.windows[clientID].SessionID
+	var status proto.RemoteStatus
+	if running != nil {
+		status = running.status()
+	}
 	st.mu.Unlock()
 	switch {
 	case closed:
@@ -270,7 +327,7 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, launch
 		if launchID != "" {
 			running.srv.SetLaunch(launchID)
 		}
-		return running.status(), nil
+		return status, nil
 	}
 	if start == nil {
 		shareStarter.Lock()
@@ -278,19 +335,19 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, launch
 		shareStarter.Unlock()
 	}
 	if start == nil {
-		return proto.RemoteStatus{State: remoteStateOff, Error: errShareUnavailable.Error()}, nil
+		return proto.RemoteStatus{State: remoteStateOff, SessionID: sessionID, Error: errShareUnavailable.Error()}, nil
 	}
 	srv, err := start(ctx, ws, launchID)
 	if err != nil {
 		var setup *ShareSetupError
 		if errors.As(err, &setup) {
 			info := setup.Setup
-			return proto.RemoteStatus{State: remoteStateSetup, Setup: &info}, nil
+			return proto.RemoteStatus{State: remoteStateSetup, SessionID: sessionID, Setup: &info}, nil
 		}
-		return proto.RemoteStatus{State: remoteStateOff, Error: err.Error()}, nil
+		return proto.RemoteStatus{State: remoteStateOff, SessionID: sessionID, Error: err.Error()}, nil
 	}
 
-	sh := &share{owner: clientID, srv: srv, pending: make(map[string]*pendingAction), quit: make(chan struct{})}
+	sh := &share{chat: sessionID, owner: clientID, srv: srv, pending: make(map[string]*pendingAction), quit: make(chan struct{})}
 	st.mu.Lock()
 	// The app may have left, or the workspace closed, while the share
 	// started; its gone and teardown hooks found nothing to stop then.
@@ -303,64 +360,227 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, launch
 		}
 		return proto.RemoteStatus{}, ErrClientNotAttached
 	}
+	// Another app's new-chat share may have moved to this chat while this
+	// one started: the chat keeps that one.
+	if other := st.shares[sh.key()]; other != nil {
+		status := other.status()
+		st.mu.Unlock()
+		srv.Stop()
+		if launchID != "" {
+			other.srv.SetLaunch(launchID)
+		}
+		return status, nil
+	}
 	if st.shares == nil {
 		st.shares = make(map[string]*share)
 	}
-	st.shares[clientID] = sh
+	st.shares[sh.key()] = sh
+	st.tellPhone(sh, true)
+	b.announceShare(ws, sh, sh.status())
+	// The window may have shown a chat while its new chat's share started:
+	// only a report that changed during the start counts.
+	shown := ""
+	if now := st.windows[clientID].SessionID; sessionID == "" && now != before {
+		shown = now
+	}
 	st.mu.Unlock()
 	go b.pumpShare(ws, sh)
-	return sh.status(), nil
+	if shown != "" {
+		b.bindNewChat(ws, clientID, shown)
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if sh.ended {
+		// It ended on binding: the chat it would show had a share already.
+		if other := st.shares[shareKey(clientID, shown)]; other != nil {
+			return other.status(), nil
+		}
+		return proto.RemoteStatus{State: remoteStateOff, SessionID: shown}, nil
+	}
+	status = sh.status()
+	status.Started = true
+	return status, nil
 }
 
-// StopRemote stops clientID's phone share.
-func (b *Backend) StopRemote(workspaceID, clientID string) error {
+// StopRemote stops the phone share of sessionID ("" for clientID's new
+// chat), whichever app started it.
+func (b *Backend) StopRemote(workspaceID, clientID, sessionID string) error {
 	ws, err := b.shareWorkspace(workspaceID, clientID)
 	if err != nil {
 		return err
 	}
-	sh, err := shareOwnedBy(ws, clientID)
-	if err != nil {
-		return err
+	ws.share.mu.Lock()
+	sh := ws.share.shares[shareKey(clientID, sessionID)]
+	ws.share.mu.Unlock()
+	if sh == nil {
+		return ErrShareOff
 	}
 	b.endShare(ws, sh, errPhoneShareOff)
 	return nil
 }
 
-// RemoteStatus describes clientID's phone share; state "off" when it runs
-// none.
-func (b *Backend) RemoteStatus(workspaceID, clientID string) (proto.RemoteStatus, error) {
+// RemoteShares describes the phone shares clientID sees: every chat's, and
+// its own new chat's, in the order of their chats.
+func (b *Backend) RemoteShares(workspaceID, clientID string) ([]proto.RemoteStatus, error) {
 	ws, err := b.shareWorkspace(workspaceID, clientID)
 	if err != nil {
-		return proto.RemoteStatus{}, err
+		return nil, err
 	}
 	ws.share.mu.Lock()
-	sh := ws.share.shares[clientID]
-	ws.share.mu.Unlock()
-	if sh == nil {
-		return proto.RemoteStatus{State: remoteStateOff}, nil
+	defer ws.share.mu.Unlock()
+	out := []proto.RemoteStatus{}
+	for _, sh := range ws.share.shares {
+		if sh.chat != "" || sh.owner == clientID {
+			out = append(out, sh.status())
+		}
 	}
-	return sh.status(), nil
+	slices.SortFunc(out, func(a, b proto.RemoteStatus) int { return cmp.Compare(a.SessionID, b.SessionID) })
+	return out, nil
 }
 
-// SetRemotePresence tells clientID's phone share what the window shows. The
-// share follows the chat of the app that started it.
+// SetRemotePresence takes what clientID's window shows: the chat, its focus
+// and plan mode. Every app may tell it, sharing or not. A share's phone
+// hears whether a window showing its chat is focused, and the plan mode of
+// one; clientID's new-chat share moves to a chat its window shows.
 func (b *Backend) SetRemotePresence(workspaceID, clientID string, p proto.RemotePresence) error {
 	ws, err := b.shareWorkspace(workspaceID, clientID)
 	if err != nil {
 		return err
 	}
-	sh, err := shareOwnedBy(ws, clientID)
-	if err != nil {
-		return err
-	}
-	sh.srv.SetPresence(p)
+	b.windowShows(ws, clientID, func(w *proto.RemotePresence) { *w = p })
 	return nil
+}
+
+// shareViewChanged follows the chat clientID reports it shows
+// (SetCurrentSession), as SetRemotePresence does.
+func (b *Backend) shareViewChanged(ws *Workspace, clientID, sessionID string) {
+	b.windowShows(ws, clientID, func(w *proto.RemotePresence) { w.SessionID = sessionID })
+}
+
+// windowShows changes what clientID's window shows with change, tells the
+// shares' phones, and moves the app's new-chat share to a chat it shows.
+func (b *Backend) windowShows(ws *Workspace, clientID string, change func(*proto.RemotePresence)) {
+	st := &ws.share
+	st.mu.Lock()
+	// A report that raced with its app leaving leaves no window behind: the
+	// gone hook runs after the app is unregistered and takes st.mu after
+	// this.
+	if !shareClientRegistered(ws, clientID) {
+		st.mu.Unlock()
+		return
+	}
+	if st.windows == nil {
+		st.windows = make(map[string]proto.RemotePresence)
+	}
+	w := st.windows[clientID]
+	change(&w)
+	st.windows[clientID] = w
+	for _, sh := range st.shares {
+		st.tellPhone(sh, false)
+	}
+	st.mu.Unlock()
+	if w.SessionID != "" {
+		b.bindNewChat(ws, clientID, w.SessionID)
+	}
+}
+
+// bindNewChat moves clientID's new-chat share to sessionID, the chat its
+// window now shows; the phone stays on that chat from now on. When that
+// chat has a share already, the new chat's share ends.
+func (b *Backend) bindNewChat(ws *Workspace, clientID, sessionID string) {
+	st := &ws.share
+	st.mu.Lock()
+	sh := st.shares[shareKey(clientID, "")]
+	if sh == nil {
+		st.mu.Unlock()
+		return
+	}
+	if st.shares[sessionID] != nil {
+		st.mu.Unlock()
+		b.endShare(ws, sh, errPhoneShareOff)
+		return
+	}
+	// Its app hears the new chat's share is gone, then every app hears the
+	// chat's share is on.
+	delete(st.shares, sh.key())
+	b.announceShare(ws, sh, proto.RemoteStatus{State: remoteStateOff})
+	sh.chat = sessionID
+	st.shares[sh.key()] = sh
+	st.tellPhone(sh, false)
+	b.announceShare(ws, sh, sh.status())
+	st.mu.Unlock()
+}
+
+// tellPhone tells sh's phone its chat, whether a window showing the chat is
+// focused, and the plan mode of the owner's window or another one showing
+// the chat (kept while none does). A new chat's share follows its app's
+// window. Only a change reaches the phone, unless always. Callers hold
+// shareState.mu.
+func (st *shareState) tellPhone(sh *share, always bool) {
+	p := proto.RemotePresence{SessionID: sh.chat, Plan: sh.presence.Plan}
+	shows := func(id string) bool {
+		w, ok := st.windows[id]
+		return ok && w.SessionID == sh.chat && (sh.chat != "" || id == sh.owner)
+	}
+	if shows(sh.owner) {
+		p.Plan = st.windows[sh.owner].Plan
+	} else if id := st.windowShowing(sh.chat, ""); id != "" && sh.chat != "" {
+		p.Plan = st.windows[id].Plan
+	}
+	for id, w := range st.windows {
+		if shows(id) && w.Focused {
+			p.Focused = true
+		}
+	}
+	if !always && p == sh.presence {
+		return
+	}
+	sh.presence = p
+	sh.srv.SetPresence(p)
+}
+
+// windowShowing returns the first app, by ID, whose window shows chat,
+// skipping skip; "" when none does. Callers hold shareState.mu.
+func (st *shareState) windowShowing(chat, skip string) string {
+	for _, id := range slices.Sorted(maps.Keys(st.windows)) {
+		if id != skip && st.windows[id].SessionID == chat {
+			return id
+		}
+	}
+	return ""
+}
+
+// windowFor returns the app whose window runs sh's window actions: the
+// owner while it shows the chat, else another app showing it, else the
+// owner, whose window then answers that it shows another chat. Callers
+// hold shareState.mu.
+func (st *shareState) windowFor(sh *share) string {
+	if sh.chat == "" || st.windows[sh.owner].SessionID == sh.chat {
+		return sh.owner
+	}
+	if id := st.windowShowing(sh.chat, ""); id != "" {
+		return id
+	}
+	return sh.owner
+}
+
+// announceShare tells the apps a share's status: every app for a chat's
+// share, only its app for a new chat's. Callers hold shareState.mu, so a
+// phone change never follows the "off" endShare sends.
+func (b *Backend) announceShare(ws *Workspace, sh *share, status proto.RemoteStatus) {
+	status.SessionID = sh.chat
+	ev := EngineEvent{Type: pubsub.PayloadTypeRemoteStatus, Kind: pubsub.UpdatedEvent, Payload: status}
+	if sh.chat == "" {
+		b.SendTo(ws.ID, sh.owner, ev)
+		return
+	}
+	b.SendAll(ws.ID, ev)
 }
 
 // FinishRemoteAction takes the window's outcome of a forwarded phone action.
 // An empty Error means done. For new_chat_send, the window has created its
-// new chat and shows it; the engine then sends the kept prompt there, and
-// the phone hears that send's outcome.
+// new chat and shows it; the share moves there, the engine sends the kept
+// prompt there, and the phone hears that send's outcome.
 func (b *Backend) FinishRemoteAction(workspaceID, clientID, actionID string, done proto.RemoteActionDone) error {
 	ws, err := b.shareWorkspace(workspaceID, clientID)
 	if err != nil {
@@ -376,19 +596,32 @@ func (b *Backend) FinishRemoteAction(workspaceID, clientID, actionID string, don
 		pa.fail(errors.New(done.Error))
 	case pa.kind != remoteKindNewChatSend:
 		pa.reply(nil)
+	case done.SessionID == "":
+		pa.fail(errPhoneOtherChat)
 	default:
 		text, atts := pa.take()
-		if current, _ := b.ClientCurrentSession(ws.ID, sh.owner); done.SessionID == "" || done.SessionID != current {
+		// The window's report of the chat it shows may not have moved the
+		// share yet. A new-chat share is its app's, so its owner is clientID.
+		b.bindNewChat(ws, clientID, done.SessionID)
+		ws.share.mu.Lock()
+		chat, owner, ended := sh.chat, sh.owner, sh.ended
+		ws.share.mu.Unlock()
+		switch {
+		case ended:
+			// Turned off meanwhile: the phone's prompt is not sent.
+			pa.reply(errPhoneShareOff)
+		case chat != done.SessionID:
+			// The window had opened another chat, which the share now shows.
 			pa.reply(errPhoneOtherChat)
-			return nil
+		default:
+			pa.reply(b.shareSend(ws, owner, done.SessionID, text, atts))
 		}
-		pa.reply(b.shareSend(ws, sh.owner, done.SessionID, text, atts))
 	}
 	return nil
 }
 
-// takeFinishedAction removes actionID from the share of clientID that waits
-// for it.
+// takeFinishedAction removes actionID from the share that waits for
+// clientID's answer to it.
 func takeFinishedAction(ws *Workspace, clientID, actionID string) (*share, *pendingAction, error) {
 	st := &ws.share
 	st.mu.Lock()
@@ -398,20 +631,16 @@ func takeFinishedAction(ws *Workspace, clientID, actionID string) (*share, *pend
 		if pa == nil {
 			continue
 		}
-		if sh.owner != clientID {
+		if pa.client != clientID {
 			return nil, nil, ErrNotShareOwner
 		}
 		delete(sh.pending, actionID)
 		return sh, pa, nil
 	}
-	switch {
-	case st.shares[clientID] != nil:
-		return nil, nil, ErrActionNotFound
-	case len(st.shares) > 0:
-		return nil, nil, ErrNotShareOwner
-	default:
+	if len(st.shares) == 0 {
 		return nil, nil, ErrShareOff
 	}
+	return nil, nil, ErrActionNotFound
 }
 
 // shareWorkspace finds the workspace and checks that clientID is one of its
@@ -439,25 +668,10 @@ func shareClientRegistered(ws *Workspace, clientID string) bool {
 	return ok
 }
 
-// shareOwnedBy returns clientID's running share. Without one it reports
-// ErrNotShareOwner while another app shares, else ErrShareOff.
-func shareOwnedBy(ws *Workspace, clientID string) (*share, error) {
-	st := &ws.share
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if sh := st.shares[clientID]; sh != nil {
-		return sh, nil
-	}
-	if len(st.shares) > 0 {
-		return nil, ErrNotShareOwner
-	}
-	return nil, ErrShareOff
-}
-
-// status describes the running share.
+// status describes the running share. Callers hold shareState.mu.
 func (sh *share) status() proto.RemoteStatus {
 	s := sh.srv.Status()
-	return proto.RemoteStatus{State: remoteStateOn, Host: s.Host, Port: s.Port, Phones: s.Phones}
+	return proto.RemoteStatus{State: remoteStateOn, SessionID: sh.chat, Host: s.Host, Port: s.Port, Phones: s.Phones}
 }
 
 // shareTimeout is how long ws's phone actions may take.
@@ -469,8 +683,8 @@ func shareTimeout(ws *Workspace) time.Duration {
 
 // pumpShare takes each phone action from the share at once and never waits
 // on an app or on the work: the share answers 503 when an action is not
-// taken within 5 s. It also tells the owner when phones change, and ends
-// the share when it stops.
+// taken within 5 s. It also tells the apps when phones change, and ends the
+// share when it stops.
 func (b *Backend) pumpShare(ws *Workspace, sh *share) {
 	for {
 		select {
@@ -481,12 +695,9 @@ func (b *Backend) pumpShare(ws *Workspace, sh *share) {
 			}
 			b.takeShareAction(ws, sh, a)
 		case <-sh.srv.PhonesChanged():
-			status := sh.status()
-			// Under the lock, so this never follows the "off" that
-			// endShare sends.
 			ws.share.mu.Lock()
 			if !sh.ended {
-				b.SendTo(ws.ID, sh.owner, EngineEvent{Type: pubsub.PayloadTypeRemoteStatus, Kind: pubsub.UpdatedEvent, Payload: status})
+				b.announceShare(ws, sh, sh.status())
 			}
 			ws.share.mu.Unlock()
 		case <-sh.srv.Stopped():
@@ -499,7 +710,9 @@ func (b *Backend) pumpShare(ws *Workspace, sh *share) {
 }
 
 // takeShareAction starts a phone action without waiting for it. Every
-// action gets exactly one answer within the share's reply timeout.
+// action gets exactly one answer within the share's reply timeout. An
+// action on another chat than the share's (the phone had not heard that
+// the share moved to its new chat's chat) fails at once.
 func (b *Backend) takeShareAction(ws *Workspace, sh *share, a *ShareAction) {
 	var once sync.Once
 	reply := func(err error) {
@@ -509,6 +722,13 @@ func (b *Backend) takeShareAction(ws *Workspace, sh *share, a *ShareAction) {
 			}
 		})
 	}
+	ws.share.mu.Lock()
+	chat, owner := sh.chat, sh.owner
+	ws.share.mu.Unlock()
+	if a.SessionID != chat {
+		reply(errPhoneOtherChat)
+		return
+	}
 	timeout := shareTimeout(ws)
 	if kind, ok := shareWindowKind(a); ok {
 		b.forwardShareAction(ws, sh, a, kind, timeout, reply)
@@ -516,7 +736,7 @@ func (b *Backend) takeShareAction(ws *Workspace, sh *share, a *ShareAction) {
 	}
 	go func() {
 		result := make(chan error, 1)
-		go func() { result <- b.runShareAction(ws, sh.owner, a) }()
+		go func() { result <- b.runShareAction(ws, owner, chat, a) }()
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 		select {
@@ -530,8 +750,8 @@ func (b *Backend) takeShareAction(ws *Workspace, sh *share, a *ShareAction) {
 	}()
 }
 
-// shareWindowKind reports whether only the owner's window can run a, with
-// its RemoteAction kind: a send to the window's new chat, YOLO and the input
+// shareWindowKind reports whether only a window can run a, with its
+// RemoteAction kind: a send to the window's new chat, YOLO and the input
 // mode change the window's own state.
 func shareWindowKind(a *ShareAction) (string, bool) {
 	switch {
@@ -545,10 +765,10 @@ func shareWindowKind(a *ShareAction) (string, bool) {
 	return "", false
 }
 
-// forwardShareAction hands a to the owner's window as a remote_action event
-// and waits for its done, up to timeout. An event no stream took fails at
-// once. A new_chat_send event carries only references to its uploads: the
-// bytes stay here.
+// forwardShareAction hands a to the window that runs sh's window actions as
+// a remote_action event and waits for its done, up to timeout. An event no
+// stream took fails at once. A new_chat_send event carries only references
+// to its uploads: the bytes stay here.
 func (b *Backend) forwardShareAction(ws *Workspace, sh *share, a *ShareAction, kind string, timeout time.Duration, reply func(error)) {
 	id := uuid.NewString()
 	ev := proto.RemoteAction{ActionID: id, Kind: kind, SessionID: a.SessionID}
@@ -573,6 +793,7 @@ func (b *Backend) forwardShareAction(ws *Workspace, sh *share, a *ShareAction, k
 		pa.fail(errPhoneShareOff)
 		return
 	}
+	pa.client = st.windowFor(sh)
 	pa.timer = time.AfterFunc(timeout, func() {
 		if pa := takePendingAction(ws, sh, id); pa != nil {
 			pa.fail(errPhoneWindowNoAnswer)
@@ -581,7 +802,7 @@ func (b *Backend) forwardShareAction(ws *Workspace, sh *share, a *ShareAction, k
 	sh.pending[id] = pa
 	st.mu.Unlock()
 
-	if b.SendTo(ws.ID, sh.owner, EngineEvent{Type: pubsub.PayloadTypeRemoteAction, Kind: pubsub.CreatedEvent, Payload: ev}) == 0 {
+	if b.SendTo(ws.ID, pa.client, EngineEvent{Type: pubsub.PayloadTypeRemoteAction, Kind: pubsub.CreatedEvent, Payload: ev}) == 0 {
 		// No stream took it, so no window will answer.
 		if pa := takePendingAction(ws, sh, id); pa != nil {
 			pa.timer.Stop()
@@ -601,7 +822,7 @@ func takePendingAction(ws *Workspace, sh *share, id string) *pendingAction {
 }
 
 // endShare removes sh, fails its waiting actions with reason, stops the
-// share and tells the owner it is off. It does nothing once sh ended.
+// share and tells the apps it is off. It does nothing once sh ended.
 func (b *Backend) endShare(ws *Workspace, sh *share, reason error) {
 	st := &ws.share
 	st.mu.Lock()
@@ -610,12 +831,14 @@ func (b *Backend) endShare(ws *Workspace, sh *share, reason error) {
 		return
 	}
 	sh.ended = true
-	if st.shares[sh.owner] == sh {
-		delete(st.shares, sh.owner)
+	if st.shares[sh.key()] == sh {
+		delete(st.shares, sh.key())
 	}
 	pending := sh.pending
 	sh.pending = nil
 	close(sh.quit)
+	// Under the lock, so a share the chat starts next is heard of after.
+	b.announceShare(ws, sh, proto.RemoteStatus{State: remoteStateOff})
 	st.mu.Unlock()
 
 	for _, pa := range pending {
@@ -623,17 +846,107 @@ func (b *Backend) endShare(ws *Workspace, sh *share, reason error) {
 		pa.fail(reason)
 	}
 	sh.srv.Stop()
-	b.SendTo(ws.ID, sh.owner, EngineEvent{Type: pubsub.PayloadTypeRemoteStatus, Kind: pubsub.UpdatedEvent, Payload: proto.RemoteStatus{State: remoteStateOff}})
 }
 
-// runShareAction runs a phone action in the engine with the terminal's
-// checks and texts (ui/model/remote.go runRemoteAction), on behalf of the
-// share owner.
-func (b *Backend) runShareAction(ws *Workspace, owner string, a *ShareAction) error {
-	current, _ := b.ClientCurrentSession(ws.ID, owner)
-	if a.SessionID != current {
-		return errPhoneOtherChat
+// shareClientGone follows an app that left (5.7): its window shows
+// nothing, the actions it was to answer fail, and its new chat's share
+// ends. A chat's share it owned keeps going while the chat is open (owner,
+// 2026-10-21): it passes to an app showing the chat, or to another app
+// while the chat stays in the open-chats list; it ends when no app is
+// left.
+func (b *Backend) shareClientGone(ws *Workspace, clientID string, _ GoneReason, workspaceEmpty bool) {
+	st := &ws.share
+	st.mu.Lock()
+	delete(st.windows, clientID)
+	var failed []*pendingAction
+	var ending, unshown []*share
+	for _, sh := range st.shares {
+		for id, pa := range sh.pending {
+			if pa.client == clientID {
+				delete(sh.pending, id)
+				failed = append(failed, pa)
+			}
+		}
+		if sh.owner != clientID {
+			st.tellPhone(sh, false)
+			continue
+		}
+		heir := ""
+		if sh.chat != "" && !workspaceEmpty {
+			heir = st.windowShowing(sh.chat, clientID)
+			if heir == "" {
+				heir = otherClient(ws, clientID)
+				unshown = append(unshown, sh)
+			}
+		}
+		if heir == "" {
+			ending = append(ending, sh)
+			continue
+		}
+		sh.owner = heir
+		st.tellPhone(sh, false)
 	}
+	delay := cmp.Or(st.openDelay, shareOpenDelay)
+	st.mu.Unlock()
+
+	for _, pa := range failed {
+		pa.timer.Stop()
+		pa.fail(errPhoneWindowClosed)
+	}
+	for _, sh := range ending {
+		b.endShare(ws, sh, errPhoneWindowClosed)
+	}
+	for _, sh := range unshown {
+		time.AfterFunc(delay, func() { b.endUnlessOpen(ws, sh) })
+	}
+}
+
+// otherClient returns the first app of ws by ID other than skip, or "".
+// Callers may hold shareState.mu.
+func otherClient(ws *Workspace, skip string) string {
+	ws.clientsMu.Lock()
+	defer ws.clientsMu.Unlock()
+	for _, id := range slices.Sorted(maps.Keys(ws.clients)) {
+		if id != skip {
+			return id
+		}
+	}
+	return ""
+}
+
+// endUnlessOpen ends sh when no window shows its chat and the chat is not
+// in the open-chats list: it was closed with the app that owned the share.
+func (b *Backend) endUnlessOpen(ws *Workspace, sh *share) {
+	st := &ws.share
+	st.mu.Lock()
+	chat, ended, listed := sh.chat, sh.ended, st.listed
+	shown := !ended && st.windowShowing(chat, "") != ""
+	st.mu.Unlock()
+	if ended || shown {
+		return
+	}
+	if listed == nil {
+		listed = chatListed
+	}
+	if !listed(chat) {
+		b.endShare(ws, sh, errPhoneWindowClosed)
+	}
+}
+
+// chatListed reports whether the chat is in the open-chats list the apps
+// share (internal/openchats).
+func chatListed(sessionID string) bool {
+	list, err := openchats.Open()
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(list.Chats(), func(c openchats.Chat) bool { return c.ID == sessionID })
+}
+
+// runShareAction runs a phone action on the share's chat (current, "" for
+// its app's new chat) in the engine with the terminal's checks and texts
+// (ui/model/remote.go runRemoteAction), on behalf of the share's owner.
+func (b *Backend) runShareAction(ws *Workspace, owner, current string, a *ShareAction) error {
 	coord := shareCoordinator(ws)
 	switch a.Kind {
 	case ShareSend:
@@ -960,21 +1273,18 @@ func shareContext(ws *Workspace) context.Context {
 	return ws.ctx
 }
 
-// shareHooks are piece D's client hooks: an app's share ends when it leaves
-// (5.7), and secure entry follows the apps' agent starts and chats (5.8).
+// shareHooks are piece D's client hooks: the phone shares follow the chats
+// the apps show and the apps that leave (5.7), and secure entry follows the
+// apps' agent starts and chats (5.8).
 func (b *Backend) shareHooks() clientHooks {
 	return clientHooks{
-		viewChanged: b.secureViewChanged,
-		agentInit:   b.secureAgentInit,
-		gone: func(ws *Workspace, clientID string, _ GoneReason, _ bool) {
-			ws.share.mu.Lock()
-			sh := ws.share.shares[clientID]
-			ws.share.mu.Unlock()
-			if sh != nil {
-				b.endShare(ws, sh, errPhoneWindowClosed)
-			}
+		viewChanged: func(ws *Workspace, clientID, sessionID string) {
+			b.secureViewChanged(ws, clientID, sessionID)
+			b.shareViewChanged(ws, clientID, sessionID)
 		},
-		teardown: b.shareTeardown,
+		agentInit: b.secureAgentInit,
+		gone:      b.shareClientGone,
+		teardown:  b.shareTeardown,
 	}
 }
 

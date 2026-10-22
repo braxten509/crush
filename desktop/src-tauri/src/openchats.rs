@@ -3,8 +3,8 @@
 //! same rules as internal/openchats (Go): $XDG_STATE_HOME/crush/open-chats.json
 //! lists the chats and the apps that have it open; every change takes the
 //! lock file beside it, reads, changes and writes through a temporary file.
-//! The chats stay while any of those apps runs and empty once the last one
-//! is closed (or found gone after a crash). This helper signs in when it
+//! The chats stay until they are closed in either app; quitting every app
+//! keeps them (owner, 2026-10-21). This helper signs in when it
 //! starts and out when Electron goes.
 
 use serde::{Deserialize, Serialize};
@@ -55,15 +55,11 @@ fn read(path: &Path) -> File {
     std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
 }
 
-/// The open chats, oldest first; none when no app that has the list open
-/// still runs.
+/// The open chats, oldest first, whatever apps run (owner, 2026-10-21:
+/// the chats stay until closed manually, even when every app quits).
 pub fn chats() -> Vec<Chat> {
     let Some(path) = path() else { return Vec::new() };
-    let file = read(&path);
-    if live(file.apps).is_empty() {
-        return Vec::new();
-    }
-    file.chats
+    read(&path).chats
 }
 
 /// The marker of an update's restart (appupdate.rs): while it is fresh, the
@@ -72,53 +68,33 @@ fn hold_path() -> Option<PathBuf> {
     path().map(|p| p.with_extension("restart"))
 }
 
-const HOLD: std::time::Duration = std::time::Duration::from_secs(120);
-
-/// The next leave and join keep the open chats (an update's restart).
+/// The next leave and join keep the open chats (an update's restart). The
+/// chats now stay through every leave and join anyway (owner, 2026-10-21),
+/// so this only records that a restart was held.
 pub fn hold_for_restart() {
     if let Some(p) = hold_path() {
         let _ = std::fs::write(p, b"restart\n");
     }
 }
 
-fn held() -> bool {
-    hold_path()
-        .and_then(|p| std::fs::metadata(p).ok())
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.elapsed().ok())
-        .is_some_and(|age| age < HOLD)
-}
-
-/// Signs this process in as the desktop; the list starts empty when no other
-/// app has it open, unless an update restarts the app.
+/// Signs this process in as the desktop; a fresh start keeps the chats
+/// from the last run (owner, 2026-10-21).
 pub fn join() {
     let me = App { pid: std::process::id() as i32, start: process_start(std::process::id() as i32), kind: "desktop".into(), dirs: Vec::new() };
-    let keep = held();
     let _ = change(|file| {
         file.apps = live(std::mem::take(&mut file.apps));
-        if file.apps.is_empty() && !keep {
-            file.chats.clear();
-        }
         file.apps.retain(|a| a.pid != me.pid);
         file.apps.push(me.clone());
     });
-    if keep {
-        if let Some(p) = hold_path() {
-            let _ = std::fs::remove_file(p);
-        }
-    }
 }
 
-/// Signs this process out; the last app out empties the list.
+/// Signs this process out; the chats stay for the next app (owner,
+/// 2026-10-21).
 pub fn leave() {
     let pid = std::process::id() as i32;
-    let keep = held();
     let _ = change(|file| {
         file.apps = live(std::mem::take(&mut file.apps));
         file.apps.retain(|a| a.pid != pid);
-        if file.apps.is_empty() && !keep {
-            file.chats.clear();
-        }
     });
 }
 
@@ -216,7 +192,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_last_app_out_empties_the_list_and_another_app_keeps_it() {
+    fn the_chats_stay_through_apps_leaving_and_joining() {
         let dir = std::env::temp_dir().join(format!("openchats-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::env::set_var("XDG_STATE_HOME", &dir);
@@ -232,7 +208,11 @@ mod tests {
         assert_eq!(chats().len(), 1, "the terminal still runs: the chats stay");
         let _ = other.kill();
         let _ = other.wait();
-        assert!(chats().is_empty(), "with no app running the list is empty");
+        assert_eq!(chats().len(), 1, "no app running keeps the chats (owner, 2026-10-21)");
+        join();
+        assert_eq!(chats().len(), 1, "a new app joins the kept chats");
+        remove("a").unwrap();
+        assert!(chats().is_empty(), "only a manual close takes a chat off");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

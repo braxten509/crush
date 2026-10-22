@@ -225,6 +225,9 @@ func (q *Queries) CopyTree(ctx context.Context, source, target, newID string) er
 	if err = copyChatExtras(ctx, tx, source, newID); err != nil {
 		return err
 	}
+	if err = copyTodos(ctx, tx, source, newID); err != nil {
+		return err
+	}
 	if err = pointAtSummary(ctx, tx, newID); err != nil {
 		return err
 	}
@@ -353,8 +356,8 @@ func copyLinks(ctx context.Context, tx *sql.Tx, newID, pairs string) error {
 }
 
 // copyChatExtras copies what belongs to the whole chat: kept skills, the
-// context budget, read-file records and to-dos. Cost and token totals stay
-// 0, so usage reports never count the source twice.
+// context budget and read-file records. Cost and token totals stay 0, so
+// usage reports never count the source twice.
 func copyChatExtras(ctx context.Context, tx *sql.Tx, source, newID string) error {
 	for _, statement := range []string{
 		`INSERT INTO session_kept_skills(session_id,skill_id,name,position,turned_off,by_agent)
@@ -367,6 +370,12 @@ func copyChatExtras(ctx context.Context, tx *sql.Tx, source, newID string) error
 			return err
 		}
 	}
+	return nil
+}
+
+// copyTodos copies the chat's to-do list. Fork and clone carry it on; a
+// branch, a sub-chat, starts with none (owner, 2026-10-21).
+func copyTodos(ctx context.Context, tx *sql.Tx, source, newID string) error {
 	_, err := tx.ExecContext(ctx, `UPDATE sessions SET todos=(SELECT todos FROM sessions WHERE id=?) WHERE id=?`, source, newID)
 	return err
 }

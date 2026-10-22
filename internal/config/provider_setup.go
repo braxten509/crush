@@ -458,7 +458,9 @@ func (s *providerSetup) validateCustomProvider(id string, providerConfig *Provid
 		}
 	}
 
-	if len(providerConfig.Models) == 0 {
+	// OpenRouter's models are saved from its catalog in the app, so it stays
+	// with none saved yet: the app shows its "+" there.
+	if len(providerConfig.Models) == 0 && providerConfig.Type != catwalk.TypeOpenRouter {
 		slog.Warn("Skipping custom provider because the provider has no models", "provider", id)
 		return false, nil
 	}

@@ -28,6 +28,7 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 		c.shareEndpoints(),
 		c.desktopEndpoints(),
 		c.fallbackEndpoints(),
+		c.openRouterEndpoints(),
 	)
 }
 
@@ -155,6 +156,28 @@ func (c *controllerV1) sessionEndpoints() []apigen.Endpoint {
 			Tags("sessions").
 			PathParam("id", "Workspace ID").
 			Fails(400, 404, 500).
+			Build(),
+
+		route(c, rpc.GetSavedSession, c.getSavedSession).
+			Summary("Get a saved chat of another folder").
+			Description("Reads the chat from the database of the registered folder dir, so that folder's engine need not run.").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			RequiredQueryParam("dir", "The chat's registered project folder").
+			Fails(404, 500).
+			Build(),
+
+		route(c, rpc.SavedSessionMessages, c.getSavedSessionMessages).
+			Summary("Get a saved chat's messages from another folder").
+			Description("Reads the messages from the database of the registered folder dir, so that folder's engine need not run.").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			RequiredQueryParam("dir", "The chat's registered project folder").
+			QueryParam("last", "Only about the newest N messages, starting at a user message").
+			QueryParam("before", "Only messages older than this message ID").
+			Fails(404, 500).
 			Build(),
 
 		route(c, rpc.ListSessions, c.listSessions).

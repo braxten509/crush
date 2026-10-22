@@ -181,6 +181,13 @@ func TestChatContinuesAfterUsageLimitResets(t *testing.T) {
 		t.Skip("python3 is required for the fake native CLI")
 	}
 	dir := t.TempDir()
+	// A reset two hours ahead, whatever the time of day: one named for an
+	// hour that has just passed is retried a minute from now instead
+	// (limitRetryTime), so a fixed hour failed for an hour every morning.
+	boise, err := time.LoadLocation("America/Boise")
+	require.NoError(t, err)
+	reset := time.Now().In(boise).Add(2 * time.Hour).Truncate(time.Minute)
+	resetText := strings.ToLower(reset.Format("3:04pm"))
 	script := `#!` + python + `
 import json, os
 root = os.environ["CRUSH_LIMIT_FIXTURE"]
@@ -202,7 +209,7 @@ while True:
     open(count, "w").write(str(n))
     emit({"type":"system","subtype":"init","session_id":"limit"})
     if n == 1:
-        emit({"type":"result","subtype":"success","is_error":True,"result":"You've hit your session limit · resets 5:20am (America/Boise)"})
+        emit({"type":"result","subtype":"success","is_error":True,"result":"You've hit your session limit · resets ` + resetText + ` (America/Boise)"})
     else:
         emit({"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"picked up"}}})
         emit({"type":"result","subtype":"success","result":"picked up"})
@@ -229,16 +236,14 @@ while True:
 	t.Cleanup(func() { _ = cliagent.CloseForTree(sess.ID) })
 
 	_, err = c.Run(t.Context(), sess.ID, "do the work")
-	require.ErrorContains(t, err, "resets 5:20am")
+	require.ErrorContains(t, err, "resets "+resetText)
 
 	msgs, err := c.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
 	finish := msgs[len(msgs)-1].FinishPart()
 	require.NotNil(t, finish)
-	// 5:21 AM in Boise, shown in this computer's own time zone.
-	boise, err := time.LoadLocation("America/Boise")
-	require.NoError(t, err)
-	shown := time.Date(2026, 10, 19, 5, 21, 0, 0, boise).Local().Format("3:04 PM")
+	// A minute past the reset, shown in this computer's own time zone.
+	shown := reset.Add(time.Minute).Local().Format("3:04 PM")
 	require.Contains(t, finish.Details, `Crush will send "continue" at `+shown)
 	require.Len(t, c.limitRetries.pending, 1)
 

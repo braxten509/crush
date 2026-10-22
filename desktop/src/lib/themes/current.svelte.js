@@ -11,7 +11,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { api } from "../engine/api.js";
 import { settings_get, settings_set } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
-import { applyView } from "./apply.js";
+import { applyView, themeTokens } from "./apply.js";
 import { readCache, writeCache } from "./cache.js";
 import { notify } from "../stores/ui.svelte.js";
 import { darkView, wantsDark } from "./dark.js";
@@ -77,7 +77,11 @@ export async function loadCurrent({ force = false } = {}) {
   }
   if (mine !== loadSeq || previewing) return;
   const cache = readCache();
-  if (!force && cache?.name === view.name && cache?.revision === view.revision && (cache?.appearance ?? "light") === modeKey() && theme.name === view.name && theme.revision === view.revision) {
+  // The saved colors are reused only when this version would make the same
+  // ones: a copy saved before an update kept new colors from ever showing
+  // (owner, 2026-10-21).
+  const same = () => JSON.stringify(cache?.tokens) === JSON.stringify(themeTokens(wantsDark(theme.appearance, systemDark()) ? darkView(view) : view).tokens);
+  if (!force && cache?.name === view.name && cache?.revision === view.revision && (cache?.appearance ?? "light") === modeKey() && theme.name === view.name && theme.revision === view.revision && same()) {
     lastView = view;
     return;
   }

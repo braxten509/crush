@@ -62,7 +62,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font: var(--t-small);
+    /* The foot's words are as big as Settings' across the window (owner,
+       2026-10-21). */
+    font: var(--t-body-small);
     font-variant-numeric: tabular-nums;
     color: var(--slate);
   }
@@ -95,7 +97,7 @@
     color: var(--slate);
   }
   .label {
-    font: var(--t-button);
+    font: var(--t-body-small);
     white-space: nowrap;
   }
   .mark {

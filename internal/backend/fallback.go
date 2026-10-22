@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 
@@ -41,11 +43,8 @@ func (b *Backend) FallbackSettings(workspaceID string) (proto.FallbackSettings, 
 
 func fallbackSettings(cfg *config.Config) proto.FallbackSettings {
 	out := proto.FallbackSettings{Accounts: []proto.AccountInfo{}}
-	for _, kind := range config.AccountKinds {
-		out.Accounts = append(out.Accounts, proto.AccountInfo{Kind: string(kind), Name: cfg.AccountName(kind, ""), SignedIn: true})
-		for _, a := range cfg.Accounts(kind) {
-			out.Accounts = append(out.Accounts, proto.AccountInfo{ID: a.ID, Kind: string(kind), Name: cfg.AccountName(kind, a.ID), SignedIn: accounts.SignedIn(kind, a.ID)})
-		}
+	for _, a := range accounts.Every(cfg) {
+		out.Accounts = append(out.Accounts, proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: a.Name, Label: a.Label, SignedIn: accounts.SignedIn(a.Kind, a.ID)})
 	}
 	if cfg.Options != nil && cfg.Options.Fallback != nil {
 		out.Order = *cfg.Options.Fallback
@@ -54,6 +53,17 @@ func fallbackSettings(cfg *config.Config) proto.FallbackSettings {
 		out.Order.Blocks = []config.FallbackBlock{}
 	}
 	return out
+}
+
+// freshConfig is ws's config with the edit just written: an edit's own
+// reload is skipped while another reload runs (the folder's config watcher
+// reloads after every write; config.autoReload), and the answer would then
+// be the settings from before the edit.
+func freshConfig(ws *Workspace) *config.Config {
+	if err := ws.Cfg.ReloadFromDisk(context.Background()); err != nil {
+		slog.Warn("Failed to reload the config after an account edit", "error", err)
+	}
+	return ws.Cfg.Config()
 }
 
 // SetFallbackOrder checks and saves the order.
@@ -69,12 +79,39 @@ func (b *Backend) SetFallbackOrder(workspaceID string, order config.FallbackOrde
 	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "options.fallback", order); err != nil {
 		return proto.FallbackSettings{}, err
 	}
+	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
-	return fallbackSettings(ws.Cfg.Config()), nil
+	return fallbackSettings(cfg), nil
 }
 
 func checkFallbackOrder(cfg *config.Config, order config.FallbackOrder) error {
-	for i, blk := range order.Blocks {
+	if err := checkFallbackBlocks(cfg, order.Blocks, ""); err != nil {
+		return err
+	}
+	seen := map[[2]string]bool{}
+	for _, l := range order.Lists {
+		p, ok := cfg.Providers.Get(l.Provider)
+		if !ok || l.Model == "" {
+			return invalidFallback("a list for an unknown model %q of %q", l.Model, l.Provider)
+		}
+		if seen[[2]string{l.Provider, l.Model}] {
+			return invalidFallback("%s has two lists", l.Model)
+		}
+		seen[[2]string{l.Provider, l.Model}] = true
+		if err := checkFallbackBlocks(cfg, l.Blocks, fmt.Sprintf("%s %s list, ", p.Name, l.Model)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkFallbackBlocks checks one list's blocks; where names the list in
+// errors ("" for every other model's).
+func checkFallbackBlocks(cfg *config.Config, blocks []config.FallbackBlock, where string) error {
+	invalidFallback := func(format string, args ...any) error {
+		return invalidFallback(where+format, args...)
+	}
+	for i, blk := range blocks {
 		n := i + 1
 		kind := blk.Kind
 		switch blk.Type {
@@ -138,8 +175,9 @@ func (b *Backend) AddAccount(workspaceID, kind string) (proto.AccountLogin, erro
 		_ = accounts.Remove(a.ID)
 		return proto.AccountLogin{}, err
 	}
+	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
-	return accountLogin(ws.Cfg.Config(), a)
+	return accountLogin(cfg, a)
 }
 
 func accountLogin(cfg *config.Config, a config.Account) (proto.AccountLogin, error) {
@@ -147,7 +185,7 @@ func accountLogin(cfg *config.Config, a config.Account) (proto.AccountLogin, err
 	if err != nil {
 		return proto.AccountLogin{}, err
 	}
-	info := proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: cfg.AccountName(a.Kind, a.ID), SignedIn: accounts.SignedIn(a.Kind, a.ID)}
+	info := proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: accounts.Name(cfg, a.Kind, a.ID), Label: accounts.Label(cfg, a.Kind, a.ID), SignedIn: accounts.SignedIn(a.Kind, a.ID)}
 	return proto.AccountLogin{Account: info, LoginArgv: argv}, nil
 }
 
@@ -180,24 +218,51 @@ func (b *Backend) SignInAccount(workspaceID, id string) (proto.AccountLogin, err
 	return accountLogin(cfg, a)
 }
 
-// RenameAccount names an account; an empty name goes back to its number.
+// RenameAccount names an account: id is an options.accounts ID, or a tool
+// (claude-code, codex-cli) for that tool's own login, whose name is kept in
+// options.own_account_names. An empty name goes back to the account's
+// email, else its number.
 func (b *Backend) RenameAccount(workspaceID, id, name string) (proto.FallbackSettings, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return proto.FallbackSettings{}, err
 	}
 	cfg := ws.Cfg.Config()
+	name = strings.TrimSpace(name)
+	if config.HasAccounts(catwalk.Type(id)) {
+		names := map[string]string{}
+		if cfg.Options != nil {
+			maps.Copy(names, cfg.Options.OwnAccountNames)
+		}
+		if name == "" {
+			delete(names, id)
+		} else {
+			names[id] = name
+		}
+		if len(names) == 0 {
+			err = ws.Cfg.RemoveConfigField(config.ScopeGlobal, "options.own_account_names")
+		} else {
+			err = ws.Cfg.SetConfigField(config.ScopeGlobal, "options.own_account_names", names)
+		}
+		if err != nil {
+			return proto.FallbackSettings{}, err
+		}
+		cfg = freshConfig(ws)
+		sendConfigChanged(ws)
+		return fallbackSettings(cfg), nil
+	}
 	_, i, err := findAccount(cfg, id)
 	if err != nil {
 		return proto.FallbackSettings{}, err
 	}
 	list := slices.Clone(cfg.Options.Accounts)
-	list[i].Name = strings.TrimSpace(name)
+	list[i].Name = name
 	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "options.accounts", list); err != nil {
 		return proto.FallbackSettings{}, err
 	}
+	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
-	return fallbackSettings(ws.Cfg.Config()), nil
+	return fallbackSettings(cfg), nil
 }
 
 // RemoveAccount deletes an account: its folder (its login and links; what
@@ -216,7 +281,7 @@ func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings,
 	fields := map[string]any{"options.accounts": slices.Delete(slices.Clone(cfg.Options.Accounts), i, i+1)}
 	if cfg.Options.Fallback != nil {
 		order := *cfg.Options.Fallback
-		order.Blocks = slices.DeleteFunc(slices.Clone(order.Blocks), func(blk config.FallbackBlock) bool {
+		onAccount := func(blk config.FallbackBlock) bool {
 			kind := blk.Kind
 			if blk.Type == config.FallbackUse {
 				if p, ok := cfg.Providers.Get(blk.Provider); ok {
@@ -224,7 +289,12 @@ func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings,
 				}
 			}
 			return kind == a.Kind && blk.Account == id
-		})
+		}
+		order.Blocks = slices.DeleteFunc(slices.Clone(order.Blocks), onAccount)
+		order.Lists = slices.Clone(order.Lists)
+		for i := range order.Lists {
+			order.Lists[i].Blocks = slices.DeleteFunc(slices.Clone(order.Lists[i].Blocks), onAccount)
+		}
 		fields["options.fallback"] = order
 	}
 	if err := ws.Cfg.SetConfigFields(config.ScopeGlobal, fields); err != nil {
@@ -241,8 +311,9 @@ func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings,
 	if err := accounts.Remove(id); err != nil {
 		return proto.FallbackSettings{}, err
 	}
+	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
-	return fallbackSettings(ws.Cfg.Config()), nil
+	return fallbackSettings(cfg), nil
 }
 
 // UseRefill spends one of a Codex account's free refills.

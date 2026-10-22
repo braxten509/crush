@@ -144,6 +144,12 @@ export async function openChatsAdd(id, dir, title = "") {
   return invoke("open_chats_add", { id, dir, title });
 }
 
+// What open chats of other folders are doing, from their own engines
+// (watch.rs chat_states): {id: record}. chats: [{id, dir}].
+export async function folderChatStates(chats) {
+  return invoke("folder_chat_states", { chats });
+}
+
 export async function openChatsRemove(id) {
   return invoke("open_chats_remove", { id });
 }
@@ -274,6 +280,11 @@ export async function crushStats() {
 // → {ok, version?, error?}
 export async function dockerMcpVersion() {
   return invoke("docker_mcp_version");
+}
+
+// An account's sign-in with no terminal; resolves true once it signed in.
+export async function sign_in_run(argv) {
+  return invoke("sign_in_run", { argv });
 }
 
 // → {projects: [{path, data_dir, last_accessed, saved}]}

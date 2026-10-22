@@ -35,6 +35,7 @@
   } from "../../lib/settings/store.svelte.js";
   import { chooseAppearance, chosenTheme, theme } from "../../lib/themes/current.svelte.js";
   import { panelSetting } from "../../lib/stores/ui.svelte.js";
+  import { accountMeters, setAccountMeters } from "../../lib/stores/accountmeters.svelte.js";
   import FallbackOrder from "./FallbackOrder.svelte";
   import ToolAccounts from "./ToolAccounts.svelte";
 
@@ -149,6 +150,10 @@
     <div class="row">
       <span class="name">Show the right panel</span>
       <button type="button" class="switch" role="switch" aria-checked={!panelSetting.off} aria-label="Show the right panel" onclick={() => setSidebarShown(panelSetting.off)}></button>
+    </div>
+    <div class="row">
+      <span class="name">Show every account's usage</span>
+      <button type="button" class="switch" role="switch" aria-checked={accountMeters.on} aria-label="Show every account's usage" onclick={() => setAccountMeters(!accountMeters.on)}></button>
     </div>
   {/if}
   {#if section === "typing"}

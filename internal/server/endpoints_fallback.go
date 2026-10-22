@@ -52,9 +52,12 @@ func (c *controllerV1) fallbackEndpoints() []apigen.Endpoint {
 			return c.backend.RenameAccount(r.PathValue("id"), r.PathValue("aid"), req.Name)
 		}).
 			Summary("Rename an account").
+			Description("Saves the name in the global config. A tool (claude-code, codex-cli) in place of "+
+				"the account ID names that tool's own login. An empty name goes back to the account's "+
+				"email, else its number.").
 			Tags("fallback").
 			PathParam("id", "Workspace ID").
-			PathParam("aid", "Account ID").
+			PathParam("aid", "Account ID, or claude-code / codex-cli for that tool's own login").
 			Fails(404, 500).
 			Build(),
 

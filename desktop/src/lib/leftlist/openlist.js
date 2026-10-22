@@ -1,7 +1,7 @@
 // The left list's rows: the open chats the desktop shares with the terminal's
 // session list (internal/openchats; owner, 2026-10-20: "the two should be in
-// sync"), in the list's own order, one flat list with each chat's folder as
-// its second line (owner's pick A). Pure, so the rules are unit-tested.
+// sync"), in the list's own order, each with its folder ({dir}), then grouped
+// under their folders (folderGroups). Pure, so the rules are unit-tested.
 //
 // A chat of the window's folder is drawn from the sessions store, with what
 // it is doing; its open branches hang under it, or under the nearest open
@@ -10,13 +10,14 @@
 // there first; its title and time come from the all-folder catalog when it
 // has them, else from the list.
 
-import { buildRows, rowTime } from "../listmodel.js";
+import { buildRows, rowState, rowTime } from "../listmodel.js";
 
 /**
  * open: [{id, dir, title}] in the list's order. Options: byId (the sessions
  * store's records), parentOf, here(dir) → the window's folder, selectedId,
  * busy, now (ms), timeOf(session), folderOf(dir) → the second line, catalog
- * ({id: saved-sessions row}).
+ * ({id: saved-sessions row}), states ({id: what another folder's chat is
+ * doing, from its engine}).
  */
 export function listedRows(open, options = {}) {
   const {
@@ -29,6 +30,7 @@ export function listedRows(open, options = {}) {
     timeOf = (s) => s?.updated_at ?? 0,
     folderOf = (dir) => dir,
     catalog = {},
+    states = {},
   } = options;
   const chats = (Array.isArray(open) ? open : []).filter((c) => c?.id);
   const listed = new Set(chats.map((c) => c.id));
@@ -57,12 +59,16 @@ export function listedRows(open, options = {}) {
   const rows = [];
   for (const c of chats) {
     if (families.has(c.id)) {
-      rows.push(...families.get(c.id));
+      rows.push(...families.get(c.id).map((row) => {
+        const dir = dirOf.get(row.id) ?? c.dir;
+        return { ...row, dir, folder: here(dir) ? null : { dir } };
+      }));
       continue;
     }
-    if (here(c.dir) && byId[c.id]) continue; // a branch, under its chat
+    if (byId[c.id]) continue; // a cached branch, already drawn under its chat
     const saved = catalog[c.id];
     const at = saved?.UpdatedAt ?? 0;
+    const doing = states[c.id] ? rowState(states[c.id], states[c.id].is_busy) : null;
     rows.push({
       kind: "chat",
       id: c.id,
@@ -71,14 +77,43 @@ export function listedRows(open, options = {}) {
       time: rowTime(at, now),
       at,
       depth: 0,
-      selected: false,
+      selected: c.id === selectedId,
       closed: false,
-      state: "",
-      stateKind: "",
+      state: doing?.text ?? "",
+      stateKind: doing?.kind ?? "",
       branches: 0,
       expanded: false,
       folder: here(c.dir) ? null : { dir: c.dir },
+      dir: c.dir,
     });
   }
   return rows;
+}
+
+// Sub-agent chat rows ({parent}, helperchats.svelte.js) among the list's
+// rows: each after its parent's row and the helper rows already there, or at
+// the end when its parent is not listed.
+export function placeHelperRows(rows, helpers) {
+  const out = [...rows];
+  for (const row of helpers) {
+    let at = out.findIndex((r) => r.id === row.parent);
+    if (at < 0) at = out.length - 1;
+    while (at + 1 < out.length && out[at + 1].helper) at += 1;
+    out.splice(at + 1, 0, row);
+  }
+  return out;
+}
+
+// The rows under their folders (owner, 2026-10-21): every kept folder in its
+// kept order, then any other folder a row has, in the rows' order. A kept
+// folder with no open chat still shows, with no rows. key(dir) makes one
+// folder's paths equal.
+export function folderGroups(rows, kept = [], key = (dir) => dir) {
+  const order = [];
+  for (const dir of [...kept, ...rows.map((r) => r.dir ?? "")]) {
+    if (!dir) continue;
+    const k = key(dir);
+    if (k && !order.includes(k)) order.push(k);
+  }
+  return order.map((dir) => ({ dir, rows: rows.filter((r) => key(r.dir ?? "") === dir) }));
 }

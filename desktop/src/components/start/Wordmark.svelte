@@ -9,7 +9,7 @@
 
 <div class="mark" role="img" aria-label="{hyper ? 'Hypercrush' : 'Crush'} AI, Charm{version ? `, version ${version}` : ''}">
   <p class="word" aria-hidden="true"><span class="crush">{hyper ? "Hypercrush" : "Crush"}</span> <span class="ai">AI</span></p>
-  <p class="charm" aria-hidden="true">Charm™{#if version} · v{version}{/if}</p>
+  <p class="charm" aria-hidden="true">Charm™{#if version}{" · "}v{version}{/if}</p>
 </div>
 
 <style>

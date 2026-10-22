@@ -6,6 +6,7 @@
 import Background from "../../components/live/Background.svelte";
 import SubAgents from "../../components/live/SubAgents.svelte";
 import { dialogs, registerDialog } from "../dialogs.js";
+import { helperChats, startHelperChats } from "../stores/helperchats.svelte.js";
 import { bindKey } from "../keys.js";
 import { backgroundKey } from "../live/ctrlb.js";
 import { hintedCalls, hintFor } from "../live/hint.js";
@@ -71,6 +72,7 @@ registerToolHint((item) => hintFor(item));
 // -- Reading --
 
 startHelpers();
+startHelperChats();
 startJobs();
 startMemory();
 startWatches();
@@ -105,6 +107,7 @@ probeSection(
       tray_selected: ui.focus === "tray" ? traySelected() : null,
       helpers: runningHelpers().map((h) => ({ id: h.id, name: h.name, status: h.status, child_session_id: h.child_session_id ?? "" })),
       helper_records: [...helpers.byId.values()].map((h) => ({ id: h.id, name: h.name, status: h.status })),
+      helper_chats: Object.values(helperChats.byId).map((c) => ({ id: c.id, parent: c.parent, running: c.running })),
       jobs: trayJobs().map((job) => ({ job_id: job.job_id ?? "", pid: job.pid ?? 0, command: job.command ?? "" })),
       server_jobs: serverJobs().map((job) => ({ job_id: job.job_id ?? "", pid: job.pid ?? 0 })),
       jobs_read: jobs.sid || null,

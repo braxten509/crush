@@ -91,12 +91,23 @@ Titles use a capital on the first word only ("Switch model"); the app's own conf
 name their action ("Quit / Cancel"), agent questions keep Yes / No. Things are "chats",
 never "sessions".
 
+A separator dot (·, •) always has a space on each side: "Claude 1 · Claude Code", never
+"Claude 1· Claude Code" (owner, 2026-10-21, a rule for every project). Svelte drops the
+spaces at the edges of an element's or a block's text, so `<span> · x</span>` draws "· x";
+write the dot as `{" · "}` or between pieces. `src/dot-spaces.test.js` reads every
+component and fails where a space beside a dot would be lost.
+
 ## Layout
 
 - Three columns in a frame: the chat list (left), the conversation (middle), the side panel
   (right). The frame and column dividers are one-pixel rules that meet at the frame's
   corners and run into its top and bottom lines; section rules inside a column keep 20 clear
-  of the left divider and 19 of the right. The left column can collapse to a strip.
+  of the left divider and 19 of the right. The left column can collapse to a strip. While
+  its width glides, the list inside keeps its open width, so the column's edge covers and
+  uncovers it and no word squeezes; the strip slides in once the list has gone and leaves
+  at once when the list opens (look A, owner 2026-10-21; `list_fold.py`,
+  `close_motion.py`). A sub-chat's tree line stays drawn over the open or hovered row's
+  band (owner, 2026-10-21).
 - The conversation reads at a fixed measure in the middle column; the typing box sits on the
   bottom rule. The red rail shows only under an open chat, never on a start screen.
 - The notice line over the composer starts its words 66 in, where reply text starts, with
@@ -127,8 +138,8 @@ never "sessions".
   the strip's "+" and ">_", the Terminals "+", Alt+N, Alt+T) open the folder picker on this
   folder; another folder switches the window first. Ctrl+N is a new chat here at once.
 - Your messages sit on the right, at most 70% of the measure wide, in a box on the band's
-  fill with YOU and the time above it, also on the right; the AI's replies stay on the
-  left, unboxed (owner's pick C, 2026-10-20).
+  fill with the time and then YOU above it, also on the right, YOU at the edge (owner,
+  2026-10-21); the AI's replies stay on the left, unboxed (owner's pick C, 2026-10-20).
 - Switching chats keeps the last 6 chats left loaded (events keep them current), so going
   back shows one at once and reads it again behind it, even when it is in another folder
   (the folder's engine joins behind the shown chat); words typed while a chat opens go
@@ -142,8 +153,8 @@ never "sessions".
 - The notice line unrolls up from the composer rule and rolls back down to it; while an
   update runs, its sync mark turns about its own middle (the whole <svg> turns, centre
   50% 50% = the ring's centre) (owner, 2026-10-20).
-- The right panel's foot shows the build the app runs and one button that changes state
-  (owner, 2026-10-20): Check for updates → Checking… → Up to date, or Update (vermilion,
+- The right panel's foot shows the build the app runs and one button that changes state,
+  in the 19 of Settings at the left foot (owner, 2026-10-20 and 2026-10-21): Check for updates → Checking… → Up to date, or Update (vermilion,
   "old → new" beside it) → Updating… → Restarting…. Update runs `update.sh` (shipped beside
   the helper): a fresh copy of the fork's main branch in the cache is built (screens,
   helper, terminal crush), then the terminal crush (backed up) and the app (install.sh
@@ -182,14 +193,26 @@ never "sessions".
   it shows; the same switch as Settings and Ctrl+P); it is the only control for it there. The open chat's band, its faint lines and its
   vermilion edge reach one pixel past the row at each end, and the rules beside it go
   clear. The vermilion rail starts at the chat column's top.
-- The typing box never scrolls under 15 lines, so its words stay on the cursor's line.
+- The typing box never scrolls under 15 lines, so its words stay on the cursor's line. The
+  line before its model button runs the box's height and grows with it (owner,
+  2026-10-21).
 - The terminal falls back to installed Nerd Font faces for prompt symbols, and the space
   under its last row is `--paper` with no native scroll bar.
 - Settings rows stop at 840 picture pixels, so each switch sits near its name.
-- Settings > Fallback order is a stacked list (look A): numbered blocks 560 wide, each
-  with a drag handle, its one-line summary and ×; a small "↓ how it leaves" line sits
-  between blocks (and under the last one when it has its own settings). A click opens a
-  block's options below it as choice buttons; "+ Add block" is a dashed row.
+- Settings > Accounts lists each tool's own login, its added accounts and "Another …
+  account"; a rule parts the tools, not a tool's own rows. Every account, the own logins
+  too (`options.own_account_names`), can be renamed; one not renamed shows the email it
+  signed in with (Claude's `.claude.json`, Codex's ID token), else "Claude 2". Where both
+  tools' accounts are named together (the fallback order, a chat's switch notes), a
+  shared name adds the tool, "you@gmail.com (Codex)", or the number within one tool
+  (owner, 2026-10-21; `internal/accounts` Every).
+- Settings > Fallback order is one sentence per block (look C, owner 2026-10-21): numbered
+  blocks as wide as the switch row, each with a drag handle, its sentence and ×, a small ↓
+  in the room above every block but the first. The sentence's dotted-underlined words
+  open a menu under them (`settings/WordMenu.svelte`: unfolds from the word, Esc closes);
+  every pick saves at once. A dragged block follows the pointer while the others slide out
+  of its way, then settles into its place; Alt+Up/Down slides the same way; added and
+  removed blocks grow and shrink with their room. "+ Add block" is a dashed row.
 
 ## Title bar
 
@@ -253,7 +276,9 @@ Every dialog is a `kit/Sheet`:
   it both ways, so nothing beside or below it jumps once it has gone: the chat list's and the
   panel's column widths glide as they collapse and come back, and pieces in the flow (the
   usage strip, a tool group's list, a tool's details) fold their height (`settle`'s `fold`). Opening pieces use `lib/motion.js` transitions, not on-mount
-  keyframes, so each has its close; `close_motion.py` checks them. The busy marks loop over 1.2 s. Nothing moves the layout when
+  keyframes, so each has its close; `close_motion.py` checks them. The busy marks loop over 1.2 s
+  on one beat (`busyBeat`, counted from the page's start), so every mark on the page pulses
+  together, the to-do list's step in progress too (owner, 2026-10-21). Nothing moves the layout when
   a state changes (no show or hide on a flag).
 - The Send square shows Stop (a filled square) while the shown chat works and nothing is
   typed or attached; typing turns it back into Send, which queues the message. Esc stops
@@ -261,6 +286,15 @@ Every dialog is a `kit/Sheet`:
 - Usage meters (panel and the strip under the typing box) turn amber under 30 % left and
   rose under 10 %, bar and number together; there is no warning triangle. The strip's
   words sit midway between the typing box and the frame line under it.
+- Remote control belongs to a chat (owner, 2026-10-21: "One remote per chat"): while the
+  phone shares the shown chat, whichever app turned it on, the strip under the typing box
+  shows a whole-pixel vermilion dot and REMOTE in ink, with nothing after it (the owner's
+  status line, its subtext removed). It slides in and away with the strip; with the panel
+  hidden it follows the meters in the same strip, so there is only ever one line. Nothing
+  inside the typing box says REMOTE any more. A click on it opens the Remote control sheet;
+  Turn off there, Turn off in the terminal, or closing the chat stops the share. Several
+  chats can be shared at once; another chat shows no line, and the phone stays on its chat
+  whatever the window shows (tests/driver/remote_line.py).
 - A Codex account's free refills show as a REFILLS count with a "Use one" button, in the
   panel when it is open and in the strip under the typing box when it is hidden; only
   while the count is above 0. Claude has none, so nothing shows for it.
@@ -278,7 +312,8 @@ Every dialog is a `kit/Sheet`:
 
 - `tests/driver/owner_fixes.py` checks, at Compact zoom: the to-do steps stack, the
   strip's "›" cell and the Send square are centred, reply footers name the configured
-  model, the busy dots are whole pixels, and Send turns into Stop and back.
+  model, the busy dots are whole pixels and keep the page's one beat (the to-do step's
+  too, and after Settings hides the chat), and Send turns into Stop and back.
 - `tests/driver/dark_mode.py` turns dark mode on and off in the real window, checks the
   graphite paper, the soft ink (10 to 13:1), that the ink reads on every dark surface, that
   quiet text stays quieter and the frame rules faint, that a diagram's box fills with the

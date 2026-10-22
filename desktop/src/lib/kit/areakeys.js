@@ -9,7 +9,8 @@
 //                             caret as ↑/↓ do, by drawn lines)
 //   Alt+< / Alt+>             the start / end of the text
 //   Alt+Shift+←, Alt+Shift+B  select a word back; Alt+Shift+→, Alt+Shift+F forward
-//   Ctrl+G                    select all; Ctrl+Shift+C copies the selection
+//   Ctrl+G, Ctrl+A            select all (Ctrl+A: owner, 2026-10-21); Ctrl+Shift+C
+//                             copies the selection
 //   Alt+C / Alt+L / Alt+U     capitalize / lowercase / uppercase the next word
 //   Ctrl+T                    swap the characters around the caret
 //
@@ -63,7 +64,7 @@ export function areaEdit(combo, state) {
     case "Alt+ArrowLeft":
       return moveTo(wordLeft(lines, at(caret)));
     case "Ctrl+A":
-      return moveTo({ row: caret.row, col: 0 });
+      return done(lines, { row: 0, col: 0 }, { row: lines.length - 1, col: lines[lines.length - 1].length });
     case "Ctrl+E":
       return moveTo({ row: caret.row, col: lines[caret.row].length });
     case "Alt+<":

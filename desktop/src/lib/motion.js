@@ -95,3 +95,25 @@ export function drawer(node, { duration = MOTION_MS } = {}) {
 export function scrim(node, { duration = 140, to = 1 } = {}) {
   return paper((t) => `opacity: ${(t * to).toFixed(3)};${tick(t)}`, { duration });
 }
+
+// The busy dots' one beat (desktop-design 4.10; owner, 2026-10-21: "so it's
+// not two different rythms"): each of a mark's dots fades 0.25 → 1 → 0.25
+// over 1.2 s, 0.2 s after the one before, counted from the page's start, so
+// every mark on the page pulses together however late it came. Script
+// animations, unlike CSS ones, keep their time while a view is hidden. With
+// reduce motion the dots stay at full ink. <span use:busyBeat>dots</span>
+export function busyBeat(node) {
+  if (typeof node.animate !== "function" || reducedMotion()) return;
+  const fades = [...node.children].map((dot, i) => {
+    // Eased per half, as a CSS keyframe's timing function is.
+    const fade = dot.animate([{ opacity: 0.25, easing: "ease-in-out" }, { opacity: 1, easing: "ease-in-out" }, { opacity: 0.25 }], {
+      duration: 1200,
+      delay: 200 * i,
+      iterations: Infinity,
+      fill: "both",
+    });
+    fade.startTime = 0;
+    return fade;
+  });
+  return { destroy: () => fades.forEach((fade) => fade.cancel()) };
+}

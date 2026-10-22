@@ -1,0 +1,30 @@
+{
+ "about": "subagent_chat.py's script (owner, 2026-10-21: a sub-agent's chat is a normal chat). \"Worker task: stream slowly\" is the sub-agent's first turn, about 25 s of text, so the window can type into its chat while it runs; \"Worker chat message one\" is the message typed then, and \"Worker chat message two\" the follow-up typed after it is done.",
+ "turns": [
+  {
+   "when": "Worker task: stream slowly",
+   "steps": [
+    {
+     "delay_ms": 200,
+     "text": "The worker reads each file in turn and notes what it finds, so the report at the end can say exactly what changed and why. The worker reads each file in turn and notes what it finds, so the report at the end can say exactly what changed and why. The worker reads each file in turn and notes what it finds, so the report at the end can say exactly what changed and why. The worker reads each file in turn and notes what it finds, so the report at the end can say exactly what changed and why. The worker reads each file in turn and notes what it finds, so the report at the end can say exactly what changed and why."
+    }
+   ]
+  },
+  {
+   "when": "Worker chat message one",
+   "steps": [
+    {
+     "text": "Worker heard the first message."
+    }
+   ]
+  },
+  {
+   "when": "Worker chat message two",
+   "steps": [
+    {
+     "text": "Worker answered the follow-up."
+    }
+   ]
+  }
+ ]
+}

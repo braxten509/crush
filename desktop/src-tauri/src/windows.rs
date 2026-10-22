@@ -303,6 +303,16 @@ async fn leave_engine(app: &AppHandle, label: &str) {
     connection::close(app, label).await;
 }
 
+/// leave_engine for a window moving to another folder: the folder it leaves
+/// keeps its running work (connection::leave).
+async fn leave_folder(app: &AppHandle, label: &str) {
+    if let Some(fixture) = app.try_state::<fixture::Fixture>() {
+        fixture.close(label);
+        return;
+    }
+    connection::leave(app, label).await;
+}
+
 /// `project_switch` (6.4): this window leaves its engine and takes
 /// `project_dir` (true; the page reloads). When another window already shows
 /// the folder, that one comes forward with a new chat and this window stays
@@ -324,7 +334,7 @@ pub async fn switch(app: &AppHandle, label: &str, project_dir: &str) -> AppResul
         }
         return Ok(false);
     }
-    leave_engine(app, label).await;
+    leave_folder(app, label).await;
     windows.set_project(label, Path::new(project_dir));
     Ok(true)
 }
@@ -337,7 +347,7 @@ pub async fn enter(app: &AppHandle, label: &str, project_dir: &str) -> AppResult
     if project_dir.is_empty() || !Path::new(project_dir).is_absolute() {
         return Err(AppError::new("bad_path", format!("Crush Desktop switches only to an absolute folder, not \"{project_dir}\".")));
     }
-    leave_engine(app, label).await;
+    leave_folder(app, label).await;
     app.state::<Windows>().set_project(label, Path::new(project_dir));
     Ok(())
 }

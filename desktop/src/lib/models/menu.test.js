@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { menuGroups, RECENT, searchRows, startGroup } from "./menu.js";
+import { effortShown, menuGroups, RECENT, searchRows, startGroup } from "./menu.js";
 
 const row = (group, provider, model, extra = {}) => ({ id: `${group}:${model}`, group, provider: { id: provider, name: group }, model: { id: model, name: model }, configured: false, recent: false, ...extra });
 const rows = [
@@ -24,9 +24,32 @@ describe("model menu", () => {
     expect(startGroup(menuGroups(rows), { provider: "none", model: "x" })).toBe("Claude Code");
   });
 
+  it("shows effort only where the model in use is listed (owner, 2026-10-22)", () => {
+    const groups = menuGroups(rows);
+    const opus = { provider: "claude", model: "opus" };
+    expect(effortShown(groups[1].items, opus)).toBe(true);
+    expect(effortShown(groups[0].items, opus)).toBe(true);
+    expect(effortShown(groups[2].items, opus)).toBe(false);
+    expect(effortShown([], opus)).toBe(false);
+    expect(effortShown(groups[1].items, null)).toBe(false);
+  });
+
   it("searches provider and model names across groups without recent copies", () => {
     expect(searchRows(rows, "  ").length).toBe(0);
     expect(searchRows(rows, "code OP").map((r) => r.id)).toEqual(["Claude Code:opus"]);
     expect(searchRows(rows, "gpt").map((r) => r.id)).toEqual(["Codex:gpt-6"]);
+  });
+
+  it("shows an OpenRouter provider with nothing saved yet, in name order, and marks where + adds", () => {
+    const groups = menuGroups(rows, [{ id: "openrouter", name: "OpenRouter" }]);
+    expect(groups.map((g) => [g.name, g.items.length, g.addTo ?? ""])).toEqual([
+      [RECENT, 1, ""],
+      ["Claude Code", 2, ""],
+      ["Codex", 1, ""],
+      ["OpenRouter", 0, "openrouter"],
+    ]);
+    const saved = [...rows, row("OpenRouter", "openrouter", "moonshot/kimi-k3", { configured: true })];
+    expect(menuGroups(saved, [{ id: "openrouter", name: "OpenRouter" }]).map((g) => [g.name, g.items.length, g.addTo ?? ""]).at(-1)).toEqual(["OpenRouter", 1, "openrouter"]);
+    expect(menuGroups(rows, [{ id: "a-first", name: "Aardvark" }]).map((g) => g.name)).toEqual([RECENT, "Aardvark", "Claude Code", "Codex"]);
   });
 });

@@ -5,10 +5,11 @@
 import { app_info, engine_open, engine_retry, projectEnter } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { probeSection } from "../probe.js";
+import { accountPollConnected } from "./accountmeters.svelte.js";
 import { loadLimits, startLimitsPoll, stopLimitsPoll } from "./limits.svelte.js";
 import "./messages.svelte.js";
 import "./prompts.svelte.js";
-import { busy, loadSessions, openLaunchChat, sessions, showLanding } from "./sessions.svelte.js";
+import { busy, loadSessions, openLaunchChat, sessions, setJoinWait, showLanding } from "./sessions.svelte.js";
 import { notify } from "./ui.svelte.js";
 import { startWorkspace } from "./workspace.svelte.js";
 
@@ -25,6 +26,7 @@ export const conn = $state({
   freshEngine: false, // the last rejoin met a new engine (its workspace id changed)
   slow: false, // the join has taken over 400 ms: the gate shows "Starting Crush…" (2.9)
   launch: { session: "", continueLast: false }, // -s and -C (START-006)
+  switching: 0, // folder switches under way: the shown chat may not be this folder's yet
 });
 
 const NOTICE_LIMIT = 20;
@@ -100,6 +102,7 @@ function quietly(promise, what) {
 function pollLimits() {
   if (conn.state === "connected") startLimitsPoll({ idle: () => !busy(sessions.currentId) });
   else stopLimitsPoll();
+  accountPollConnected(conn.state === "connected");
 }
 
 // START-007: the stores load in parallel and each may fail alone. The chat
@@ -116,7 +119,10 @@ function seed() {
 }
 
 let joinedOnce = false;
+// The join under way, or the last one: from a folder switch's start (its
+// leave included) to its end, so a chat picked meanwhile waits for it.
 let joining = null;
+setJoinWait(() => (conn.state === "connecting" ? joining : null));
 // A folder switch left the old engine and its join failed: "Try again" joins
 // again rather than asking Rust to reconnect a connection that is gone.
 let mustJoin = false;
@@ -199,11 +205,26 @@ function sameFolder(a, b) {
 // left first (its turn runs on in the engine), unless keepShown: a kept chat
 // of that folder already shows (openInFolder). Resolves true once joined.
 export async function switchFolder(dir, { keepShown = false } = {}) {
-  if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
-  if (joining) await joining.catch(() => {});
-  if (!keepShown) showLanding();
-  conn.state = "connecting";
-  conn.error = null;
+  conn.switching += 1;
+  try {
+    // A join or switch still under way ends first, so a chat of the folder
+    // being joined, picked again meanwhile, switches once.
+    for (let current = joining; current; current = joining) {
+      await current.catch(() => {});
+      if (joining === current) break;
+    }
+    if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
+    if (!keepShown) showLanding();
+    conn.state = "connecting";
+    conn.error = null;
+    joining = enterFolder(dir);
+    return await joining;
+  } finally {
+    conn.switching -= 1;
+  }
+}
+
+async function enterFolder(dir) {
   try {
     await projectEnter(dir);
   } catch (error) {
@@ -214,8 +235,7 @@ export async function switchFolder(dir, { keepShown = false } = {}) {
   conn.project = { cwd: dir, path: dir, dataDir: "", name: baseName(dir) };
   conn.launch = { session: "", continueLast: false };
   mustJoin = true;
-  joining = join();
-  return joining;
+  return join();
 }
 
 export function inFolder(dir) {

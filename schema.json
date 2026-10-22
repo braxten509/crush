@@ -191,6 +191,28 @@
         "type"
       ]
     },
+    "FallbackList": {
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/FallbackBlock"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "provider",
+        "model"
+      ]
+    },
     "FallbackOrder": {
       "properties": {
         "on": {
@@ -199,6 +221,12 @@
         "blocks": {
           "items": {
             "$ref": "#/$defs/FallbackBlock"
+          },
+          "type": "array"
+        },
+        "lists": {
+          "items": {
+            "$ref": "#/$defs/FallbackList"
           },
           "type": "array"
         }
@@ -620,6 +648,13 @@
           "type": "array",
           "description": "More Claude Code and Codex sign-ins"
         },
+        "own_account_names": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Names given to each tool's own login (account 1) by tool (claude-code or codex-cli); an unnamed login shows the email it signed in with"
+        },
         "fallback": {
           "$ref": "#/$defs/FallbackOrder",
           "description": "The fallback order: which account and model a chat moves to when one runs out"
@@ -927,6 +962,11 @@
           "description": "Auto-discover models from /v1/models endpoint. When true with existing models they are merged (yours win)",
           "default": true
         },
+        "cheapest_host": {
+          "type": "boolean",
+          "description": "OpenRouter only: route each request to the cheapest host first",
+          "default": true
+        },
         "models": {
           "items": {
             "$ref": "#/$defs/Model"
@@ -957,6 +997,14 @@
         "account": {
           "type": "string",
           "description": "ID of the options.accounts sign-in this Claude Code or Codex model runs on; empty is the tool's own login"
+        },
+        "chosen_provider": {
+          "type": "string",
+          "description": "Provider of the model the user picked"
+        },
+        "chosen_model": {
+          "type": "string",
+          "description": "The model the user picked"
         },
         "reasoning_effort": {
           "type": "string",

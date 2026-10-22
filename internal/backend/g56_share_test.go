@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRemoteRestartUpdatesLaunch: a repeat start from the owner of a
-// running share with a new launch ID answers on from the same share,
+// TestRemoteRestartUpdatesLaunch: a repeat start for a shared chat with a
+// new launch ID answers on from the same share,
 // starts no second one, and the share reports the new ID; an empty ID
 // keeps the old one (G-26b).
 func TestRemoteRestartUpdatesLaunch(t *testing.T) {
@@ -25,18 +25,20 @@ func TestRemoteRestartUpdatesLaunch(t *testing.T) {
 		return srv, nil
 	})
 
-	first, err := b.StartRemote(t.Context(), ws.ID, app, "launch-1")
+	first, err := b.StartRemote(t.Context(), ws.ID, app, "chat-1", "launch-1")
 	require.NoError(t, err)
 	require.Equal(t, remoteStateOn, first.State)
+	require.True(t, first.Started)
 	require.Equal(t, "launch-1", srv.reportedLaunch())
 
-	again, err := b.StartRemote(t.Context(), ws.ID, app, "launch-2")
+	again, err := b.StartRemote(t.Context(), ws.ID, app, "chat-1", "launch-2")
 	require.NoError(t, err)
+	first.Started = false // this start did not turn it on
 	require.Equal(t, first, again, "the answer is the running share's status")
 	require.Equal(t, int32(1), starts.Load(), "no second share starts")
 	require.Equal(t, "launch-2", srv.reportedLaunch(), "the share reports the new launch")
 
-	_, err = b.StartRemote(t.Context(), ws.ID, app, "")
+	_, err = b.StartRemote(t.Context(), ws.ID, app, "chat-1", "")
 	require.NoError(t, err)
 	require.Equal(t, "launch-2", srv.reportedLaunch(), "an empty launch ID changes nothing")
 	require.Equal(t, int32(1), starts.Load())

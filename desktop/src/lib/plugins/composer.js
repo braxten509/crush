@@ -33,7 +33,8 @@ registerAction({ id: "mode.cycle", title: "Switch input mode", keys: ["Shift+Tab
 registerTraySection({
   id: "queue",
   order: 20,
-  visible: () => queued().length > 0,
+  // Without chips the queue sits on Complete's row instead (QueueLine.svelte).
+  visible: () => queued().length > 0 && C.hasChips(),
   header: () => `QUEUE ${queued().length}`,
   component: QueueSection,
 });
@@ -129,7 +130,13 @@ fieldKey("Tab", () => {
   return true;
 });
 
-for (const combo of ["Ctrl+A", "Home"]) fieldKey(combo, () => (C.caretToLineEdge("start"), true));
+// Ctrl+A selects all, as in any desktop text box (owner, 2026-10-21; the
+// terminal's line start stays on Home).
+fieldKey("Home", () => (C.caretToLineEdge("start"), true));
+fieldKey("Ctrl+A", () => {
+  field()?.select();
+  return true;
+});
 for (const combo of ["Ctrl+E", "End"]) fieldKey(combo, () => (C.caretToLineEdge("end"), true));
 fieldKey("Ctrl+Shift+A", () => {
   field()?.select();

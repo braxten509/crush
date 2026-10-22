@@ -92,7 +92,7 @@
 
   function choose(item, reAuthenticate = false) {
     if (!item) return;
-    chooseModel({ provider: item.provider, model: selectedModelOf(item), modelType: type, reAuthenticate, onboarding });
+    chooseModel({ provider: item.provider, model: selectedModelOf(item, modelData.cfg?.model_efforts), modelType: type, reAuthenticate, onboarding });
   }
 
   function toggleType() {

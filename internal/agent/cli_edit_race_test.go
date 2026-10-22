@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,4 +55,36 @@ func TestCLINewFileWrittenBeforeReadIsACreation(t *testing.T) {
 	require.Empty(t, meta.OldContent)
 	require.Equal(t, "hello\nworld\n", meta.NewContent)
 	require.Equal(t, 2, meta.Additions)
+}
+
+// A CLI that reports an edit only after writing it, with just the replaced
+// text (Grok, OpenCode when it wins the race): the before copy is rebuilt
+// by undoing the replacement, and the change is recorded.
+func TestCLIEditReportedLateIsUndoneFromItsReplacement(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+	path := filepath.Join(dir, "notes.txt")
+	require.NoError(t, os.WriteFile(path, []byte("one\nbanana\nthree\n"), 0o644))
+	input, err := json.Marshal(tools.EditParams{FilePath: path, OldString: "apple", NewString: "banana"})
+	require.NoError(t, err)
+	reported, err := json.Marshal(tools.EditResponseMetadata{OldContent: "apple", NewContent: "banana"})
+	require.NoError(t, err)
+	var saved string
+	s := &cliSteps{ctx: t.Context(), m: &cliagent.Model{Dir: dir}, sc: fantasy.AgentStreamCall{
+		OnToolCall:   func(fantasy.ToolCallContent) error { return nil },
+		OnToolResult: func(r fantasy.ToolResultContent) error { saved = r.ClientMetadata; return nil },
+	}}
+	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventToolCall, ID: "call", Name: tools.EditToolName, Input: string(input)}))
+	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventToolResult, ID: "call", Name: tools.EditToolName, Output: "ok", Metadata: string(reported)}))
+	metadata, review := filechange.TakeReview(saved)
+	var meta tools.EditResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(metadata), &meta))
+	require.Equal(t, "one\napple\nthree\n", meta.OldContent)
+	require.Equal(t, 1, meta.Additions)
+	require.Equal(t, 1, meta.Removals)
+	require.NotNil(t, review, "the change is recorded")
+	require.Len(t, review.Changes, 1)
+	require.Equal(t, "one\napple\nthree\n", review.Changes[0].Before.Content)
+	require.Equal(t, "one\nbanana\nthree\n", review.Changes[0].After.Content)
 }

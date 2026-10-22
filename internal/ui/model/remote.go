@@ -68,15 +68,56 @@ type remoteShare struct {
 	// without opening the Remote Control dialog over the new window.
 	quiet bool
 
-	// engineOn: the shared engine runs this window's share
-	// (remote_engine.go); engineStatus is its last state.
-	engineOn     bool
-	engineStatus proto.RemoteStatus
+	// engine holds the phone shares the shared engine runs that this
+	// window sees, by chat ("" for its new chat): one per chat, whichever
+	// app started it (remote_engine.go).
+	engine map[string]proto.RemoteStatus
+	// reports sends what the window shows to the engine, in order.
+	reports *presenceSender
+	// changes counts what this window heard of the engine's shares, and
+	// changed holds the count at each chat's last change: a list read
+	// before a change does not undo it.
+	changes uint64
+	changed map[string]uint64
 }
 
-// active reports whether the share runs or is starting.
-func (r *remoteShare) active() bool {
-	return r.server != nil || r.engineOn || r.starting
+// heard records a change to the share of chat: st, or none when off.
+func (r *remoteShare) heard(chat string, st proto.RemoteStatus, on bool) {
+	// The engine's list may have made engine already (handleEngineShares).
+	if r.engine == nil {
+		r.engine = make(map[string]proto.RemoteStatus)
+	}
+	if r.changed == nil {
+		r.changed = make(map[string]uint64)
+	}
+	r.changes++
+	r.changed[chat] = r.changes
+	if on {
+		r.engine[chat] = st
+	} else {
+		delete(r.engine, chat)
+	}
+}
+
+// remoteActive reports whether the phone shares the chat this window
+// shows, or a share is starting.
+func (m *UI) remoteActive() bool {
+	return m.remote.server != nil || m.remote.starting || m.engineShared()
+}
+
+// shownChat is the chat this window shows; "" for its new chat.
+func (m *UI) shownChat() string {
+	if m.hasSession() {
+		return m.session.ID
+	}
+	return ""
+}
+
+// engineShared reports whether the engine shares the chat this window
+// shows.
+func (m *UI) engineShared() bool {
+	_, ok := m.remote.engine[m.shownChat()]
+	return ok
 }
 
 // beginStart marks a start attempt in flight and returns its generation
@@ -166,9 +207,10 @@ func (r *remoteShare) wait() tea.Cmd {
 	}
 }
 
-// openRemote shows the share, starting it first when it is off.
+// openRemote shows the share of the chat this window shows, starting it
+// first when it is off.
 func (m *UI) openRemote() tea.Cmd {
-	if m.remote.server != nil || m.remote.engineOn {
+	if m.remote.server != nil || m.engineShared() {
 		m.openRemoteDialog()
 		return nil
 	}
@@ -314,7 +356,7 @@ func (m *UI) openRemoteDialog() {
 		m.dialog.BringToFront(dialog.RemoteID)
 		return
 	}
-	if m.remote.engineOn {
+	if m.engineShared() {
 		m.dialog.OpenDialog(remotecontrol.NewRemote(m.com, m.engineRemoteStatus))
 		return
 	}
@@ -326,11 +368,12 @@ func (m *UI) openRemoteDialog() {
 	}))
 }
 
-// stopRemote turns the share off and disconnects the phones.
+// stopRemote turns the share of the chat this window shows off and
+// disconnects its phones.
 func (m *UI) stopRemote() tea.Cmd {
 	m.closeRemoteSetup()
 	m.dialog.CloseDialog(dialog.RemoteID)
-	if ws, shared := m.engineWorkspace(); shared && m.remote.engineOn {
+	if ws, shared := m.engineWorkspace(); shared && m.engineShared() {
 		return m.stopEngineRemote(ws)
 	}
 	stop := m.remote.stop()
@@ -354,9 +397,15 @@ func (m *UI) handleRemotePhones() tea.Cmd {
 }
 
 // syncRemotePresence tells the phone what the window shows. It runs after
-// every update and only reaches the server on a change.
+// every update and only reaches the server on a change. A window on the
+// shared engine always tells the engine, which shares chats whichever app
+// started it, and shows REMOTE while the chat it shows is shared.
 func (m *UI) syncRemotePresence() {
-	if m.remote.server == nil && !m.remote.engineOn {
+	if m.remote.engine != nil {
+		m.status.SetRemote(m.engineShared())
+	}
+	_, shared := m.engineWorkspace()
+	if m.remote.server == nil && !shared {
 		return
 	}
 	p := remote.Presence{
@@ -366,7 +415,7 @@ func (m *UI) syncRemotePresence() {
 	if m.hasSession() {
 		p.SessionID = m.session.ID
 	}
-	if m.remote.engineOn {
+	if shared {
 		m.syncEnginePresence(p)
 		return
 	}

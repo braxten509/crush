@@ -274,6 +274,10 @@ func (c *coordinator) BeginAccepted(sessionID string) *AcceptedRun {
 func (c *coordinator) Cancel(sessionID string) {
 	if c.tasks != nil {
 		c.tasks.cancelSessionRun(sessionID)
+		// Stop in a sub-agent's own chat stops the sub-agent.
+		if c.tasks.stopChild(sessionID) {
+			return
+		}
 	}
 	c.currentAgent().Cancel(sessionID)
 }
@@ -302,6 +306,10 @@ func (c *coordinator) IsBusy() bool {
 }
 
 func (c *coordinator) IsSessionBusy(sessionID string) bool {
+	// A sub-agent's chat is busy while the sub-agent runs.
+	if c.tasks != nil && c.tasks.childRunning(sessionID) {
+		return true
+	}
 	return c.currentAgent().IsSessionBusy(sessionID)
 }
 

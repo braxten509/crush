@@ -1519,6 +1519,8 @@ The terminal's client-mode refusal "Remote Control needs Crush running in this t
 
 **Concurrent terminal changes.** One share per app (engine design 5.7): the terminal app may share its own window at the same time. Each app sees only its own share.
 
+**Changed 2026-10-21 (owner: "One remote per chat"; PLAN.md 15).** A share belongs to a chat: both apps show it on that chat whoever turned it on (the desktop as "● REMOTE" in the strip under the typing box, no longer a badge inside it; the terminal as its REMOTE mark), either app turns it off, several chats can be shared at once, and the phone stays on its chat whatever the window shows. State per window: the shares it sees by chat (`lib/remote/store.svelte.js`) and the start in flight; closing a chat stops its share; a closing window leaves its shares to the engine.
+
 ### 2.28 Log viewer, Usage report, About and version, crash guard and notice, debug overlay (SYS; MISC-002, MISC-016 to MISC-018, MISC-023, MISC-025, START-020)
 
 **Log viewer (MISC-016).** Palette "Logs" (2.2) opens a wide sheet titled "Logs" (inferred) on the project's log, `<data folder>/logs/crush.log` (`internal/cmd/logs.go:54-58` reads the folder from `options.data_directory`). `logs.rs` takes the folder from the window's `Ensured.data_dir` (3-4 design §1.2.3), the same folder, since the engine runs one per data folder (engine design 5.2):

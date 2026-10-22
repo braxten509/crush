@@ -8,9 +8,12 @@ import { conn, inFolder, switchFolder } from "../stores/connection.svelte.js";
 import { folders } from "../stores/folders.svelte.js";
 import { openChats, openInFolder } from "../stores/openchats.svelte.js";
 import { parentOf } from "../stores/links.svelte.js";
-import { busy, openChat, sessions } from "../stores/sessions.svelte.js";
+import { busy, isHelperChat, openChat, sessions } from "../stores/sessions.svelte.js";
+import { helperRows } from "../stores/helperchats.svelte.js";
+import { rowState } from "../listmodel.js";
 import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
-import { listedRows } from "./openlist.js";
+import { folderGroups, listedRows, placeHelperRows } from "./openlist.js";
+import { folderKey, listFolders } from "../stores/listfolders.svelte.js";
 import { baseOf, clean, short } from "./picker.js";
 import { leftList } from "./store.svelte.js";
 
@@ -26,17 +29,71 @@ export function folderLabel(dir) {
   return dir ? baseOf(short(clean(dir), leftList.home)) : "";
 }
 
+// The empty chat New chat shows (sessions.draft): a row of its own until a
+// chat opens; it is saved only at the first send (owner, 2026-10-21).
+export const DRAFT_ID = "new-chat";
+
+function draftRow() {
+  const dir = conn.project.path || conn.project.cwd || "";
+  if (!sessions.draft || sessions.currentId || !dir) return null;
+  return {
+    kind: "chat",
+    id: DRAFT_ID,
+    title: "New chat",
+    agent: "",
+    time: "",
+    at: 0,
+    depth: 0,
+    selected: true,
+    closed: false,
+    state: "",
+    stateKind: "",
+    branches: 0,
+    expanded: false,
+    folder: null,
+    dir,
+    draft: true,
+  };
+}
+
+// The chats under their folders (owner, 2026-10-21): [{dir, label, rows}],
+// the kept folders first (lib/stores/listfolders.svelte.js).
+export function chatGroups(now = Date.now()) {
+  const draft = draftRow();
+  const rows = withHelpers(draft ? [draft, ...listedChats(now)] : listedChats(now));
+  return folderGroups(rows, listFolders.dirs, folderKey).map((group) => ({
+    ...group,
+    label: short(group.dir, leftList.home),
+  }));
+}
+
+// The chat rows in the list's drawn order, folder by folder.
 export function chatRows(now = Date.now()) {
+  return chatGroups(now).flatMap((group) => group.rows);
+}
+
+// The sub-agent chats this window shows (helperchats.svelte.js), each after
+// its parent's row when the parent is listed, else at the end.
+function withHelpers(rows) {
+  const selectedId = shownTerminal() ? "" : sessions.currentId;
+  return placeHelperRows(rows, helperRows({ here: inFolder, busy, rowState, selectedId }));
+}
+
+function listedChats(now) {
+  // A sub-agent's chat is drawn by withHelpers, not as a branch.
+  const byId = Object.fromEntries(Object.entries(sessions.byId).filter(([id]) => !isHelperChat(id)));
   return listedRows(openChats.list, {
-    byId: sessions.byId,
+    byId,
     parentOf,
     here: inFolder,
-    selectedId: sessions.currentId,
+    // A shown terminal takes the band; no chat stays marked open beside it.
+    selectedId: shownTerminal() ? "" : sessions.currentId,
     busy,
     now,
     timeOf: (s) => Math.max(s?.updated_at ?? 0, sessions.activity[s?.id] ?? 0),
     folderOf: folderLabel,
     catalog: folders.byId,
+    states: folders.states,
   });
 }
 
@@ -57,7 +114,8 @@ export function listRows() {
 // The shown row: the terminal tab in the main column, else the open chat.
 export function isShown(row) {
   const tab = shownTerminal();
-  return row.kind === "terminal" ? row.id === tab : !tab && row.id === sessions.currentId;
+  if (row.kind === "terminal") return row.id === tab;
+  return !tab && (row.id === DRAFT_ID ? !sessions.currentId : row.id === sessions.currentId);
 }
 
 // Shows a row in this window: a chat in the conversation's place (a terminal
@@ -76,6 +134,7 @@ export function showRow(row) {
     return true;
   }
   if (mainView.current?.kind === "terminal") closeMain();
+  if (row.id === DRAFT_ID) return true;
   // A chat of another folder opens in that folder, as the list's own rows do.
   if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
   else if (row.id !== sessions.currentId) openChat(row.id);

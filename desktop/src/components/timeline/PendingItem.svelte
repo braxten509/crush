@@ -15,7 +15,7 @@
 </script>
 
 <div class="pending">
-  <Byline author="You" note={uncertain ? "" : "sending…"} />
+  <Byline author="You" note={uncertain ? "" : "sending…"} end />
   <UserBox text={item.text} chips={item.chips} />
   {#if uncertain}
     <p class="warn"><Icon name="warning" size={16} /><span>This message may not have been sent</span></p>

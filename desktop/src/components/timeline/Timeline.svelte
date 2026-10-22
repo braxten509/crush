@@ -3,7 +3,8 @@
   // it; with no timeline it says no chat is shown.
   import { probeSection } from "../../lib/probe.js";
 
-  let shownProbe = null; // {light(), heavy()} of the mounted timeline
+  let shownProbe = null; // {light(), heavy()} of the shown chat's timeline
+  const models = { asked: false }; // one read of the config for every timeline
   const NO_CHAT = { id: "", title: "", path: "", busy: false, follow: true, status: "", scroll_offset: 0, mounted: 0, items: [], messages: [] };
   probeSection(
     "chat",
@@ -25,10 +26,10 @@
   // (applyChatScroll, transcript.go:14-28); Tab from the chat
   // (keypress.go:516-518). Desktop rules: CHAT-087 to CHAT-101.
   //
-  // The rail runs from the column's top to the top edge of the composer block,
-  // measured from the layout: the end follows `.rule.above-composer`'s bottom
-  // edge (the composer block starts there), so a taller composer (chips
-  // queued, a slot form) never lets the rail run into it.
+  // The rail is the column's (Rail.svelte). TimelineStack keeps one timeline
+  // per listed chat drawn: only the `active` one (the shown chat's) owns the
+  // window's selection, keys, follow and probe; the others keep their own
+  // follow and selection, and take them back when their chat shows again.
   //
   // readOnly (a helper's chat in the main column, desktop-design-5-6 7.1):
   // no rail, no item selection or letters, no right-click menu (so no entry
@@ -67,7 +68,7 @@
   import { markFresh } from "./ItemFrame.svelte";
   import VirtualList from "./VirtualList.svelte";
 
-  let { sessionId, readOnly = false } = $props();
+  let { sessionId, readOnly = false, active = true } = $props();
 
   // With composer_focus_only the typing box takes the focus back this long
   // after a press ends, so a double click still selects its word.
@@ -79,19 +80,22 @@
   let list = $state(null); // the VirtualList
   let pins = $state.raw([]); // the keys holding the text selection's ends (CHAT-087)
   let tick = $state(0); // bumped when a status word expires ("Responding", CHAT-019)
-  let ownFollow = $state(true); // readOnly: this timeline's own follow, apart from ui.follow
-  const follow = $derived(readOnly ? ownFollow : ui.follow);
+  let ownFollow = $state(true); // this timeline's own follow; the active one mirrors it in ui.follow
+  const follow = $derived(ownFollow);
 
   function setFollowed(on) {
-    if (readOnly) ownFollow = on;
-    else setFollow(on);
+    ownFollow = on;
+    if (!readOnly && active) setFollow(on);
   }
 
   // -- Items --
 
   const chat = $derived(sessionId ? (messages.bySession[sessionId] ?? null) : null);
-  // The opening screen takes the timeline's place while a chat opens (LIST-034).
-  const shown = $derived(Boolean(sessionId) && !sessions.opening && chat?.status === "ready");
+  // The opening screen takes the timeline's place while a chat opens
+  // (LIST-034): the shown chat's timeline then acts as not shown, but stays
+  // drawn (ready), hidden by TimelineStack, so it comes back as it was.
+  const ready = $derived(Boolean(sessionId) && chat?.status === "ready");
+  const shown = $derived(ready && !(active && sessions.opening));
 
   let kept = { sessionId: null, state: null };
   function stateFor(sid) {
@@ -99,26 +103,25 @@
     return kept.state;
   }
 
-  const pending = $derived(shown ? pendingFor(sessionId) : []);
+  const pending = $derived(ready ? pendingFor(sessionId) : []);
   // This window's send marks the chat busy at once (send.go:114-121), so the
   // prompt gets its waiting status before the engine's first event.
-  const isBusy = $derived(shown && (busy(sessionId) || pending.some((p) => p.state === "working")));
+  const isBusy = $derived(ready && (busy(sessionId) || pending.some((p) => p.state === "working")));
   // Footers and authors name models as the terminal does: the configured
   // providers (agent CLIs included) first, then the catalog.
   const providers = $derived(footerProviders(modelData.cfg, ws.providers));
   // The config holds the agent CLIs' models: read it once connected (the
   // model menu shares the read; config_changed keeps it fresh after).
-  let modelsAsked = false;
   $effect(() => {
-    if (conn.state !== "connected" || modelData.cfg !== null || modelsAsked) return;
-    modelsAsked = true;
+    if (conn.state !== "connected" || modelData.cfg !== null || models.asked) return;
+    models.asked = true;
     untrack(() => refreshModels()).then((ok) => {
-      if (!ok) modelsAsked = false;
+      if (!ok) models.asked = false;
     });
   });
   const built = $derived.by(() => {
     tick;
-    if (!shown) return { items: [], status: "", refreshAt: Infinity };
+    if (!ready) return { items: [], status: "", refreshAt: Infinity };
     return buildTimeline(
       {
         sessionId,
@@ -183,14 +186,44 @@
     return () => clearTimeout(timer);
   });
 
-  // Another chat: nothing selected, and its bottom in view (CHAT-105).
+  // Another chat: nothing selected, and its bottom in view (CHAT-105). A
+  // timeline TimelineStack kept drawn keeps its chat, so a chat picked again
+  // comes back where it was left instead (owner, 2026-10-22).
   $effect.pre(() => {
     sessionId;
     untrack(() => {
       setFollowed(true);
-      if (!readOnly && ui.selectedItem) selectItem(null);
+      if (!readOnly && active && ui.selectedItem) selectItem(null);
       pins = [];
     });
+  });
+
+  // While active, the window's selection is this chat's; it is kept, and
+  // given back with the follow when the chat shows again.
+  let ownSelected = $state(null);
+  $effect.pre(() => {
+    const key = ui.selectedItem;
+    if (active && !readOnly) ownSelected = key;
+  });
+  let wasActive = untrack(() => active);
+  $effect.pre(() => {
+    const on = active;
+    untrack(() => {
+      if (on === wasActive) return;
+      wasActive = on;
+      if (!on || readOnly) return;
+      setFollow(ownFollow);
+      const key = ownSelected && indexOf.has(ownSelected) ? ownSelected : null;
+      if (ui.selectedItem !== key) selectItem(key);
+    });
+  });
+  $effect(() => {
+    if (readOnly || !active) return;
+    const probe = { light: probeLight, heavy: probeHeavy };
+    shownProbe = probe;
+    return () => {
+      if (shownProbe === probe) shownProbe = null;
+    };
   });
 
   // A selected item that left the timeline: the item that took it over (a
@@ -198,7 +231,7 @@
   $effect(() => {
     const list = items;
     const key = ui.selectedItem;
-    if (readOnly || !key || !shown) return;
+    if (readOnly || !active || !key || !shown) return;
     untrack(() => {
       const next = carrySelection(key, list);
       if (next !== key) selectItem(next);
@@ -211,11 +244,11 @@
   $effect(() => {
     const focus = ui.focus;
     const key = ui.selectedItem;
-    const ready = shown && list !== null;
+    const listed = shown && list !== null;
     untrack(() => {
       const before = lastFocus;
       lastFocus = focus;
-      if (readOnly || focus !== "timeline" || !ready) return;
+      if (readOnly || !active || focus !== "timeline" || !listed) return;
       const inside = root?.contains(document.activeElement);
       // Tab from the typing box selects the last item (keypress.go:262-267);
       // focus coming back from the panel keeps the selection.
@@ -545,8 +578,10 @@
   }
 
   // Each handler runs only while a chat shows; a false lets the key go on.
+  const editable = (el) => Boolean(el?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+
   function chatKey(fn) {
-    return (event) => (shown && list ? fn(event) !== false : false);
+    return (event) => (active && shown && list ? fn(event) !== false : false);
   }
 
   const line = () => READING_LINE * zoom();
@@ -634,7 +669,7 @@
     if (n === endSeen) return;
     endSeen = n;
     untrack(() => {
-      if (shown && list && !readOnly) jumpToEnd();
+      if (active && shown && list && !readOnly) jumpToEnd();
     });
   });
 
@@ -652,43 +687,14 @@
     if (shown && list) jumpToEnd();
   }
 
-  // -- The rail's end --
-
-  let railBottom = $state(null); // CSS px from the column's bottom to the composer block's top
-
-  function measureRail() {
-    const column = root?.parentElement;
-    const rule = column?.querySelector(":scope > .rule.above-composer");
-    if (!column || !rule) {
-      railBottom = null;
-      return;
-    }
-    const bottom = column.clientHeight - (rule.offsetTop + rule.offsetHeight);
-    if (bottom !== railBottom) railBottom = bottom;
-  }
-
-  let rail = $state(null);
-
   onMount(() => {
-    const column = root.parentElement;
-    const sizes = new ResizeObserver(measureRail);
-    const watch = () => {
-      sizes.disconnect();
-      sizes.observe(column);
-      for (const part of column.children) if (part !== rail) sizes.observe(part);
-    };
-    const parts = new MutationObserver(() => {
-      watch();
-      measureRail();
-    });
-    parts.observe(column, { childList: true });
-    watch();
-    measureRail();
-
     const unbind = [];
     if (!readOnly) {
       for (const [combos, fn] of TIMELINE_KEYS) for (const combo of combos) unbind.push(bindKey("timeline", combo, chatKey(fn)));
       for (const scope of ["timeline", "composer"]) unbind.push(bindKey(scope, "Ctrl+End", chatKey(jumpToEnd)));
+      // From the left list, the panel or nowhere, Ctrl+A selects the chat too,
+      // not the whole page (owner, 2026-10-21); a text box keeps its own.
+      unbind.push(bindKey("global", "Ctrl+A", chatKey((event) => !editable(event.target) && selectAll())));
     }
     unbind.push(bindKey("global", "Ctrl+C", chatKey(copyTimelineSelection)));
     if (!readOnly) unbind.push(bindKey("overlay", "*", heldSelectionKey));
@@ -696,16 +702,12 @@
     document.addEventListener("selectionchange", onSelectionChange);
     window.addEventListener("mouseup", onMouseUp, true);
     window.addEventListener("mousemove", onMouseMove, true);
-    if (!readOnly) shownProbe = { light: probeLight, heavy: probeHeavy };
     return () => {
-      sizes.disconnect();
-      parts.disconnect();
       for (const fn of unbind) fn();
       document.removeEventListener("selectionchange", onSelectionChange);
       window.removeEventListener("mouseup", onMouseUp, true);
       window.removeEventListener("mousemove", onMouseMove, true);
       clearTimeout(refocusTimer);
-      if (shownProbe?.light === probeLight) shownProbe = null;
     };
   });
 
@@ -730,7 +732,7 @@
 
   $effect(() => {
     const target = ui.scrollTo;
-    if (readOnly || !target || !shown || !list) return;
+    if (readOnly || !active || !target || !shown || !list) return;
     untrack(() => {
       if (target.sessionId === sessionId) reveal(target);
       clearScrollTo();
@@ -764,7 +766,7 @@
       title: (shown && sessions.byId[sid]?.title) || "",
       path: shown ? conn.project.path || conn.project.cwd || "" : "",
       busy: Boolean(isBusy),
-      follow: ui.follow,
+      follow,
       status: built.status,
       scroll_offset: list ? Math.round(list.lastOffset() * 100) / 100 : 0,
       mounted: list ? list.mountedCount() : 0,
@@ -829,8 +831,9 @@
     const scroller = list.element();
     const canvas = scroller.firstElementChild;
     const style = canvas ? getComputedStyle(canvas) : null;
-    const column = root?.parentElement;
+    const column = root?.closest(".conversation") ?? root?.parentElement;
     const rule = column?.querySelector(":scope > .rule.above-composer");
+    const rail = column?.querySelector(":scope > .rail");
     const links = [];
     const frames = [];
     for (const item of items) {
@@ -873,19 +876,13 @@
   }
 </script>
 
-<!-- Only under an open chat: a start screen covers the rail, and rounding
-     left its last pixel row showing above the composer (owner, 2026-10-20). -->
-{#if shown && railBottom !== null && !readOnly}
-  <div class="rail" bind:this={rail} style:bottom="{railBottom}px" aria-hidden="true"></div>
-{/if}
-
 <section class="timeline" aria-label="Conversation" bind:this={root} use:wire use:linkGuard>
-  {#if shown}
+  {#if ready}
     {#key sessionId}
       <VirtualList
         bind:this={list}
         items={drawn}
-        selectedKey={readOnly ? null : ui.selectedItem}
+        selectedKey={readOnly ? null : active ? ui.selectedItem : ownSelected}
         focusKey={readOnly || focusOnly ? null : tabKey}
         pinnedKeys={pins}
         {follow}
@@ -899,18 +896,6 @@
 </section>
 
 <style>
-  /* The rail runs from the column's top (chats have no head since
-     2026-10-20) to the top of the composer block; no dot at its top (owner,
-     2026-10-20). */
-  .rail {
-    position: absolute;
-    left: calc(30 * var(--px));
-    top: 0;
-    width: calc(3 * var(--px));
-    background: var(--vermilion);
-    pointer-events: none;
-  }
-
   .timeline {
     flex: 1;
     min-height: 0;

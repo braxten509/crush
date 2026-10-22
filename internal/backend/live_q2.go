@@ -367,6 +367,16 @@ func (b *Backend) liveGone(ws *Workspace, clientID string, reason GoneReason, wo
 	l.mu.Lock()
 	delete(l.nonInteractiveApps, clientID)
 	l.mu.Unlock()
+	if reason == GoneFolderSwitch {
+		// Folder switches leave chats working: no departure cleanup, now or
+		// at a later join. The next app to join takes the work over.
+		l.mu.Lock()
+		if !l.closed && !slices.Contains(l.switchedAway, clientID) {
+			l.switchedAway = append(l.switchedAway, clientID)
+		}
+		l.mu.Unlock()
+		return
+	}
 	if !workspaceEmpty {
 		go b.applyQ2(ws, clientID)
 		return
@@ -383,6 +393,37 @@ func (b *Backend) liveGone(ws *Workspace, clientID string, reason GoneReason, wo
 	ws.clientsMu.Unlock()
 	if joined {
 		b.runPendingQ2(ws)
+	}
+}
+
+// adoptSwitchedWork hands the prompts, helpers and jobs of the apps that
+// left for another folder to clientID, the app that just joined.
+func (l *liveState) adoptSwitchedWork(clientID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed || clientID == "" || len(l.switchedAway) == 0 {
+		return
+	}
+	away := l.switchedAway
+	l.switchedAway = nil
+	for id, p := range l.prompts {
+		if slices.Contains(away, p.client) {
+			p.client = clientID
+			l.prompts[id] = p
+		}
+	}
+	for key, owner := range l.owners {
+		if slices.Contains(away, owner) {
+			l.owners[key] = clientID
+		}
+	}
+	for root, sender := range l.lastSender {
+		if slices.Contains(away, sender) {
+			l.lastSender[root] = clientID
+		}
+	}
+	if slices.Contains(away, l.lastInit) {
+		l.lastInit = clientID
 	}
 }
 

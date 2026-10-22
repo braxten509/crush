@@ -13,9 +13,11 @@
   import ModeMark from "./ModeMark.svelte";
   import PermissionPrompt from "./PermissionPrompt.svelte";
   import PlanHandoff from "./PlanHandoff.svelte";
+  import QueueLine from "./QueueLine.svelte";
   import Popup from "./Popup.svelte";
   import Slot from "./Slot.svelte";
   import { composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
+  import { closeListed } from "../../lib/stores/openchats.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { closeSlot, openSlot, ui } from "../../lib/stores/ui.svelte.js";
 
@@ -78,6 +80,10 @@
     fullTop = column && rule ? rule.getBoundingClientRect().bottom - column.getBoundingClientRect().top : 0;
   });
 
+  function complete() {
+    closeListed(sessionId).catch((error) => console.error("completing a chat failed", error));
+  }
+
   function submit(event) {
     event.preventDefault();
     send();
@@ -97,10 +103,23 @@
   {#if ui.slot}
     <Slot entry={ui.slot} />
   {:else}
-    {#if hasChips()}<ChipRow />{/if}
+    {#if sessionId || hasChips()}
+      <!-- Complete (owner, 2026-10-21, pick A): closes the shown chat for
+           every app, as the list's × does. It sits on the right of the
+           attached files' row (owner, 2026-10-21). -->
+      <div class="complete-row">
+        {#if hasChips()}<div class="chips-side"><ChipRow /></div>{:else if sessionId}<QueueLine />{/if}
+        {#if sessionId}
+          <button class="complete" type="button" onclick={complete}>
+            <Icon name="check" />
+            <span>Complete</span>
+          </button>
+        {/if}
+      </div>
+    {/if}
     <form class="row" onsubmit={submit} in:settle>
-      <div class="field" class:marked={mode !== "normal" || composer.badges.length > 0}>
-        <ModeMark {mode} badges={composer.badges} />
+      <div class="field" class:marked={mode !== "normal"}>
+        <ModeMark {mode} />
         <Field />
         <span class="divider" aria-hidden="true"></span>
         <ModelButton />
@@ -168,19 +187,57 @@
   .field.marked :global(.input) {
     margin-left: calc(8 * var(--px));
   }
-  /* The divider and the model button stay centred as the field grows
-     (owner, 2026-10-20). */
+  /* The model button stays centred as the field grows (owner, 2026-10-20);
+     the divider runs the field's whole height, 7 short of each end, so it
+     grows with it (owner, 2026-10-21). */
   .divider {
     flex: none;
-    align-self: center;
+    align-self: stretch;
     width: 1px;
-    height: calc(42 * var(--px));
     margin: calc(7 * var(--px)) 0;
     background: var(--rule);
   }
   /* Square, as tall as the one-line field; the plane's drawing is balanced
      in its own box, so it sits in the exact middle (owner, 2026-10-20: the
      old nudge to the right read as off-centre). */
+  .complete-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: calc(16 * var(--px));
+    margin-bottom: calc(12 * var(--px));
+  }
+  .composer.chipped .complete-row {
+    margin-bottom: 0;
+  }
+  .chips-side {
+    flex: 1;
+    min-width: 0;
+  }
+  .complete {
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--px));
+    box-sizing: border-box;
+    height: calc(36 * var(--px));
+    padding: 0 calc(16 * var(--px));
+    border: 0;
+    background: var(--vermilion-fill);
+    color: var(--on-accent);
+    font: var(--t-button);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .complete:hover span {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: calc(4 * var(--px));
+  }
+  .complete:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
+  }
+
   .send {
     flex: none;
     align-self: flex-end;

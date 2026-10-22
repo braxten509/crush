@@ -14,9 +14,11 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/secureentry"
@@ -79,6 +81,9 @@ type Task struct {
 	// accepted, so a turn ending in that gap doesn't ding as if all work
 	// were done. The result's own turn may still ding.
 	awaitingHandoff bool
+	// chat, set for a follow-up the user typed in the task's chat, gives
+	// its first turn the app's prompt IDs.
+	chat *chatCall
 }
 
 // TaskRequest is what `crush spawn` writes; TaskReply is Crush's answer.
@@ -104,6 +109,8 @@ type TaskRequest struct {
 	Background  *BackgroundRequest `json:"background,omitempty"`
 	// Skill turns a skill on or off for the whole chat (`crush skill`).
 	Skill *SkillRequest `json:"skill,omitempty"`
+	// chat marks a follow-up the user typed in the task's own chat.
+	chat *chatCall
 }
 
 type TaskReply struct {
@@ -154,6 +161,10 @@ type taskHub struct {
 	// checkIns holds each session's one check-in loop; see addCheckIn.
 	checkIns   map[string]*sessionCheckIns
 	checkInSeq int
+	// runs holds what running tasks' chat messages need (tasks_chat.go).
+	runs map[string]*taskRun
+	// subAgentHook lets tests build the agent a task runs on.
+	subAgentHook func(config.ProviderConfig, catwalk.Model) SessionAgent
 	// checkInEvery lets tests shorten check-ins; zero uses the setting.
 	checkInEvery time.Duration
 	// reaper is the write end of the reaper's pipe; see startReaper.
@@ -459,6 +470,45 @@ func (h *taskHub) finishRun(ctx context.Context, t *Task, output string, err err
 	h.mu.Unlock()
 }
 
+// HasRunningWork reports whether c is running anything that would be cut
+// off if its workspace closed now: a reply, a sub-agent, a background job
+// (not a service), or open questions.
+func HasRunningWork(c Coordinator) bool {
+	if c == nil {
+		return false
+	}
+	if c.IsBusy() {
+		return true
+	}
+	hubsMu.Lock()
+	defer hubsMu.Unlock()
+	for _, h := range hubs {
+		if Coordinator(h.c) == c && h.hasAnyWork() {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *taskHub) hasAnyWork() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.asking || h.askSession != "" {
+		return true
+	}
+	for _, t := range h.tasks {
+		if t.Status == TaskRunning || t.awaitingHandoff || t.delivering {
+			return true
+		}
+	}
+	for _, job := range h.backgroundShells {
+		if !h.backgroundServices[job.ID] && !job.IsDone() {
+			return true
+		}
+	}
+	return false
+}
+
 // hasRunning reports whether any sub-agent or managed background command
 // belonging to this session is still running. Explicit services stay visible
 // and manageable but do not hold back completion notifications.
@@ -638,7 +688,25 @@ For secrets alone, run:
 That is shorthand for a one-question form with a secure_entry question: same form, same "Questions" result with only saved/cancelled. End your turn after opening it. Never read, print, diff, attach, commit, or send the populated file to tools/models. The program itself reads and edits the file locally.
 For multiple keys, prepare ALL placeholders before collecting any key, then ask for them together as several secure_entry questions in one form. By default each replaces the first remaining %%s. Use unique placeholders (or occurrence) to select a slot; unique markers are best. Replacement is literal, not printf or a shell expansion. Prepare valid quoting for the intended file format. Existing keys must never be read by you to edit another slot. Secure entry is local-terminal only, not available through the phone or server clients.
 Keep secrets in a secrets folder such as ~/.config/secrets. Crush blocks tool calls that read secrets folders, so when a task needs a secret, write a small helper program that reads the file itself and never prints it.
-</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName, h.checkInInstructions(), userSubAgentInstructions())
+</crush_secure_entry>`, bin, clis.String(), TaskNotificationTag, question.MaxQuestions, AskName, h.checkInInstructions(), userSubAgentInstructions()) + richReplies()
+}
+
+// richReplies tells the agent it may draw diagrams and math while Crush
+// Desktop runs (owner, 2026-10-21: "only while the desktop app is open"); the
+// terminal shows them as plain source. Read on every call, so the note comes
+// and goes with the app.
+func richReplies() string {
+	if list, err := openchats.Open(); err != nil || !list.DesktopOpen() {
+		return ""
+	}
+	return `
+
+<crush_rich_replies>
+The user reads this chat in Crush Desktop, which draws Mermaid diagrams and LaTeX math in your replies. Use them when a picture or a formula explains better than words:
+- Diagrams: a fenced code block with the language mermaid (flowchart, sequence, state, class, ER, Gantt, mindmap and the other Mermaid kinds).
+- Math: $...$ or \(...\) inline; $$...$$ or \[...\] on their own lines for display math. A lone $ before a number stays a dollar sign.
+Put them in your reply text, not in files. The terminal Crush shows them as plain source, so keep the words around them meaningful on their own.
+</crush_rich_replies>`
 }
 
 func firstLine(s string, n int) string {

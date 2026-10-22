@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	"charm.land/catwalk/pkg/catwalk"
 )
@@ -64,8 +65,21 @@ type FallbackBlock struct {
 
 // FallbackOrder is the order chats move through when an account runs out.
 type FallbackOrder struct {
-	On     bool            `json:"on"`
+	On bool `json:"on"`
+	// Blocks is the order of chats whose model has no list of its own.
 	Blocks []FallbackBlock `json:"blocks,omitempty"`
+	// Lists are the orders of chats that started on one model, effort
+	// aside (owner, 2026-10-21).
+	Lists []FallbackList `json:"lists,omitempty"`
+}
+
+// FallbackList is the fallback order of the chats and sub-agents that
+// started on one model: the model the user picked, or the one a sub-agent
+// was started on. The order's own switches keep that start.
+type FallbackList struct {
+	Provider string          `json:"provider"`
+	Model    string          `json:"model"`
+	Blocks   []FallbackBlock `json:"blocks,omitempty"`
 }
 
 // AccountKinds are the tools that can have more than one account.
@@ -113,9 +127,28 @@ func AccountKindName(kind catwalk.Type) string {
 	return string(kind)
 }
 
-// AccountName is an account's shown name: its own, else the tool's name
-// and its number ("Claude 1" for the tool's own login).
-func (c *Config) AccountName(kind catwalk.Type, id string) string {
+// AccountGivenName is the name an account was given, or "": a listed
+// account's own, the tool's own login's in options.own_account_names. The
+// shown name falls back to the account's email, then to its number
+// (accounts.Name).
+func (c *Config) AccountGivenName(kind catwalk.Type, id string) string {
+	if c.Options == nil {
+		return ""
+	}
+	if id == "" {
+		return strings.TrimSpace(c.Options.OwnAccountNames[string(kind)])
+	}
+	for _, a := range c.Options.Accounts {
+		if a.Kind == kind && a.ID == id {
+			return strings.TrimSpace(a.Name)
+		}
+	}
+	return ""
+}
+
+// AccountNumberName is an account's tool and number: "Claude 1" for the
+// tool's own login, "Claude 2" for its first added account.
+func (c *Config) AccountNumberName(kind catwalk.Type, id string) string {
 	if id == "" {
 		return AccountKindName(kind) + " 1"
 	}
@@ -127,9 +160,6 @@ func (c *Config) AccountName(kind catwalk.Type, id string) string {
 			}
 			n++
 			if a.ID == id {
-				if a.Name != "" {
-					return a.Name
-				}
 				return AccountKindName(kind) + " " + strconv.Itoa(n)
 			}
 		}

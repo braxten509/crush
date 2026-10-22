@@ -66,6 +66,11 @@ type ProviderConfig struct {
 	// only explicitly listed models are used.
 	AutoDiscoverModels *bool `json:"discover_models,omitempty" jsonschema:"description=Auto-discover models from /v1/models endpoint. When true with existing models they are merged (yours win),default=true"`
 
+	// CheapestHost asks OpenRouter for the cheapest host that fits the
+	// account's own settings (provider sort "price"); unset means on
+	// (owner, 2026-10-22).
+	CheapestHost *bool `json:"cheapest_host,omitempty" jsonschema:"description=OpenRouter only: route each request to the cheapest host first,default=true"`
+
 	// The provider models
 	Models []catwalk.Model `json:"models,omitempty" jsonschema:"description=List of models available from this provider"`
 
@@ -149,4 +154,9 @@ func (c *ProviderConfig) TestConnection(resolver VariableResolver) error {
 		BaseURL:      c.BaseURL,
 		ExtraHeaders: c.ExtraHeaders,
 	}, resolver)
+}
+
+// CheapestHostOn reports whether OpenRouter is asked for the cheapest host.
+func (p ProviderConfig) CheapestHostOn() bool {
+	return p.CheapestHost == nil || *p.CheapestHost
 }

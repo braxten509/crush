@@ -226,3 +226,29 @@ Other open items from wave 1:
 
 - Phase 7: checklist sweep, look review (with a fixed `align_real.py`), DESIGN.md, Mac build path (never built or run on a Mac), docs, OpenCode live fork check.
 - Final Fable review of the whole app; then merge to main, push, install and the app-menu entry.
+
+## Chat switching, 2026-10-21
+
+- Expected: each chat opens in its own folder; selecting it keeps status and finish time; folder switches keep replies, helpers and jobs running. Remove the right-panel folder section.
+- Reported: cached chats show with the old folder, status disappears, and switching still cancels work. No error text was reported.
+- Source findings: cached-family rows in `leftlist/openlist.js` omit `folder`; `sessions.applyList` removes other-folder records and activity; completion display uses unread state, which selecting a chat clears. `RetireClientKeepWork` invokes ordinary departure hooks, so `liveGone` runs or defers `applyQ2`, stopping unviewed work even though the workspace lingers.
+- Independent investigation: Crush task t1, Codex gpt-6.1-sol, read-only. Confirmed the cached-row bug and immediate/deferred cleanup paths; ruled out normal HTTP-request cancellation and a selected-row CSS hiding rule.
+- Research: https://github.com/charmbracelet/crush/blob/main/internal/ui/model/ui.go (retrieved 2026-10-21) describes session-local busy/queue state. This fork's folder-leave cleanup is local; no matching upstream defect established.
+- Approved scope: cached row metadata, retaining open-chat state, separate completion display, right-panel folder removal, and a distinct departure reason that skips work-stopping cleanup. Ordinary close cleanup is off limits.
+- Check budget: six focused cases (cached rows, retained state, two completion cases, and two real-backend departure scenarios); extend existing chat-switch, keep-work and panel drivers. Tests use fake models and isolated app data, not the owner's sessions. No performance claim; a sampling profile does not discriminate these explicit state/cleanup paths.
+- Attempt 1, before fixes: four frontend regressions failed (job 003: missing folder metadata, removed open-chat record/activity, and both completion cases); both backend scenarios failed with held reply count 0 instead of 1 (job 004). These establish the missing behavior before implementation; the new completion file was exercised while deliberately broken by the unchanged implementation.
+- Fix 1: preserve per-row folder and selected state, retain open-chat records/activity, separate completed from unread state, show completion time, remove the right-panel folder section, and pass `GoneFolderSwitch` through retirement so neither immediate nor deferred departure cleanup stops work. Focused frontend checks: 52/52 (job 005). Backend folder-switch, ordinary Q2 and linger checks passed (job 006).
+- Review 2 (t1) found cached foreign branches duplicated by fallback rows and delayed status replies accepted after a join changed. Added a branch to the existing cached-row regression and one focused delayed-response test (seven scenarios total, justified by the review). Both failed before correction (job 008).
+- Fix 2: skip the fallback for every cached nested row, guard queued status reads by folder, and accept status answers only for the same connected client/join. Focused frontend checks: 53/53 (job 009); full frontend suite: 103 files, 1,983 tests passed (job 00A). No changes to normal close cleanup. UI, release helper and test-engine builds passed (job 007); latest frontend rebuilt after fix 2 (job 009). Existing unrelated build warnings remain.
+- Original-flow checks: cached A→B→A and selected Working status, right-panel removal, and real streaming reply with a second app and a return are running on `gpu-screen` (sway 2560×1440 at 170 Hz). The scratch launcher uses the existing fake server and drivers in a read-only sandbox with a private home, no real desktop/bus/sound and disabled test notifications. Screenshots use `grim`; outside-world fingerprints guard the owner's files. These are isolated fake chats on the real app, not the owner's live chats or providers.
+
+# Debugging: a done sub-agent's left-list row stayed after leaving its chat (2026-10-21)
+
+## Attempts
+1. Read the parents' helpers on each switch (helper events can be dropped): still failed.
+2. `void sessions.currentId` → a used value, in case the build dropped the read: still failed.
+3. Probe counters: the `$effect` on `sessions.currentId` ran for "", the parent and the sub-agent's chat, then never again, although `sessions.currentId` was the parent afterwards. Cause of the stop not found.
+4. Fix: `sessions.onLeave` hook, called by `leave()` on every switch; it settles the rows. Then a plain "worker" row stayed: opening the chat had listed it in the open chats shared with the terminal (`listShown`). Sub-agent chats are now kept out of that list. `tests/driver/subagent_chat.py` passes.
+
+## Open
+- Why the store-level `$effect` stopped re-running. helpers.svelte.js uses the same pattern.

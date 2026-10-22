@@ -15,7 +15,7 @@ answering its messages 2 s late (fixture `slow`):
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/chat-switch.json chat_switch.py
 """
-import os, sys, time
+import json, os, sys, time
 
 sys.path.insert(0, os.path.dirname(__file__))
 import harness as H
@@ -47,6 +47,8 @@ def rect(selector):
 
 
 def click(selector):
+    if not os.environ.get("DISPLAY"):
+        return bool(run(f"const el = document.querySelector({selector!r}); el?.click(); return !!el;"))
     r = rect(selector)
     if r:
         H.click(r["x"] + r["w"] / 2, r["y"] + r["h"] / 2)
@@ -71,7 +73,10 @@ check(shown(A, 10) is not None, "the first chat shows")
 click(f'nav.chats .chat[data-id="{B}"] .row')
 time.sleep(0.2)
 click("textarea.input")
-type_text(WORDS)
+if os.environ.get("DISPLAY"):
+    type_text(WORDS)
+else:
+    run(f"const el = document.querySelector('textarea.input'); el.value = {json.dumps(WORDS)}; el.dispatchEvent(new Event('input', {{bubbles:true}})); return true;")
 took = shown(B, 8)
 after = run(STATE) or {}
 check(took is not None and after.get("value") == WORDS, f"words typed while it loads are in its box once it shows ({after.get('value')!r})")
@@ -93,6 +98,21 @@ click(f'nav.chats .chat[data-id="{A}"] .row')
 back = shown(A, 6)
 check(back is not None and back < 0.8, f"the first chat of proj shows again at once from beta ({back and round(back, 2)} s; joining takes 1.5 s)")
 wait_for(probe_path, lambda p: (p.get("connection") or {}).get("workspace_id") != "ws-beta" and (p.get("connection") or {}).get("state") == "connected", 10)
+status = run(f"const row = document.querySelector('nav.chats .chat[data-id=\"{B}\"]'); return {{selected: row?.classList.contains('selected'), text: row?.innerText}};") or {}
+check("Working" in (status.get("text") or ""), f"the cached working chat keeps its status after changing folders ({status})")
+click(f'nav.chats .chat[data-id="{B}"] .row')
+check(shown(B, 5) is not None, "the cached working chat can be selected again")
+# The fixture's list says busy, but its fresh chat read says idle: it ends
+# while shown, so it is read at once: no "Done", and its time shows (owner,
+# 2026-10-21: "Done" only until the chat is opened).
+status = {}
+for _ in range(20):
+    status = run("const row = document.querySelector('nav.chats .chat.selected'); return {text: row?.innerText, time: row?.querySelector('.time')?.textContent};") or {}
+    if "Working" not in (status.get("text") or ""):
+        break
+    time.sleep(0.2)
+check("Done" not in (status.get("text") or "") and bool(status.get("time")),
+      f"the opened chat shows its time and no Done ({status})")
 click(f'nav.chats .chat[data-id="{BETA}"] .row')
 again = shown(BETA, 6)
 check(again is not None and again < 0.8, f"and beta's chat again at once ({again and round(again, 2)} s)")
@@ -102,7 +122,10 @@ check(bool(ok) and title == "beta", f"and the window joins beta's folder behind 
 
 # Alt+number: a chat of proj never opened yet, from beta's folder.
 number = run(f"return [...document.querySelectorAll('nav.chats .chat')].findIndex((el) => el.getAttribute('data-id') === '{NEVER}') + 1;")
-key(f"alt+{number}")
+if os.environ.get("DISPLAY"):
+    key(f"alt+{number}")
+else:
+    run(f"document.dispatchEvent(new KeyboardEvent('keydown', {{key:'{number}', code:'Digit{number}', altKey:true, bubbles:true}})); return true;")
 got = shown(NEVER, 8)
 ok = wait_for(probe_path, lambda p: (p.get("connection") or {}).get("workspace_id") != "ws-beta" and (p.get("connection") or {}).get("state") == "connected", 10)
 check(number > 0 and got is not None and bool(ok), f"Alt+{number} opens a chat of proj in its own folder")

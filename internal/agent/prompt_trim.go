@@ -135,18 +135,24 @@ func writeSearchableTranscript(dataDir, sessionID string, msgs []message.Message
 			}
 			text := strings.TrimSpace(msg.Content().Text)
 			calls := msg.ToolCalls()
-			if text == "" && len(calls) == 0 {
+			errText := msg.ErrorText()
+			if text == "" && len(calls) == 0 && errText == "" {
 				continue
 			}
-			writeBlock(fmt.Sprintf("\n## Message %d [%s]\n", i+1, who))
-			if text != "" {
-				writeBlock(text + "\n")
-			}
-			for _, tc := range calls {
-				start, end := writeBlock(fmt.Sprintf("\n### Tool Call: %s (id: %s)\n%s\n", tc.Name, tc.ID, tc.Input))
-				if tc.ID != "" {
-					idx.toolCalls[tc.ID] = [2]int{start, end}
+			if text != "" || len(calls) > 0 {
+				writeBlock(fmt.Sprintf("\n## Message %d [%s]\n", i+1, who))
+				if text != "" {
+					writeBlock(text + "\n")
 				}
+				for _, tc := range calls {
+					start, end := writeBlock(fmt.Sprintf("\n### Tool Call: %s (id: %s)\n%s\n", tc.Name, tc.ID, tc.Input))
+					if tc.ID != "" {
+						idx.toolCalls[tc.ID] = [2]int{start, end}
+					}
+				}
+			}
+			if errText != "" {
+				writeBlock(fmt.Sprintf("\n%s\n", errText))
 			}
 		case message.Tool:
 			for _, tr := range msg.ToolResults() {

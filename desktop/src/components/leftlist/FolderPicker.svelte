@@ -13,15 +13,13 @@
   // (switchFolder), for a new chat or a terminal there. A failure shows as a
   // notice.
   import { onMount } from "svelte";
-  import { runAction } from "../../lib/actions.js";
   import { closeDialog } from "../../lib/dialogs.js";
   import { dirList, file_info, folderPick, recentFolders } from "../../lib/engine/commands.js";
   import { comboOf } from "../../lib/keys.js";
   import { shownTerminal } from "../../lib/leftlist/numbers.js";
   import * as P from "../../lib/leftlist/picker.js";
-  import { leftList, startTerminal } from "../../lib/leftlist/store.svelte.js";
-  import { conn, inFolder, switchFolder } from "../../lib/stores/connection.svelte.js";
-  import { notify } from "../../lib/stores/ui.svelte.js";
+  import { leftList, startIn } from "../../lib/leftlist/store.svelte.js";
+  import { conn } from "../../lib/stores/connection.svelte.js";
   import { terminals } from "../../lib/terminal/tabs.svelte.js";
   import Sheet from "../kit/Sheet.svelte";
 
@@ -159,8 +157,8 @@
         });
         return true;
       case "Ctrl+A":
-        P.caretHome(mine);
-        syncField();
+        // Select all, as desktop fields do (owner, 2026-10-21).
+        field?.select();
         return true;
       case "Ctrl+E":
         P.caretEnd(mine);
@@ -215,19 +213,7 @@
     }
   }
 
-  // Starting (2.21): the failure line is cleared by each attempt.
-  // Another folder: the window switches to it in place first (owner,
-  // 2026-10-20: the folder is per chat), then a chat starts on the landing
-  // page the switch leaves, or the terminal opens there.
-  async function startIn(what, dir) {
-    const here = P.clean(dir) === P.clean(conn.project.cwd || "") || inFolder(dir);
-    if (!here && !(await switchFolder(dir))) {
-      notify("error", what === "terminal" ? "Couldn't start the terminal." : "Couldn't start a chat.");
-      return;
-    }
-    if (what === "terminal") await startTerminal(dir);
-    else if (here) runAction("chat.new");
-  }
+  // Starting (2.21): startIn in lib/leftlist/store.svelte.js.
 
   // Browse…: the system folder dialog; a chosen folder starts at once,
   // cancelling changes nothing.
@@ -450,7 +436,7 @@
     background: var(--control-hover);
   }
   .row.picked::before {
-    background: var(--band);
+    background: var(--pick);
     border-top: 1px solid var(--rule-faint);
     border-bottom: 1px solid var(--rule-faint);
   }

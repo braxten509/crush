@@ -80,6 +80,28 @@ func BlockAccount(b config.FallbackBlock, kindOf KindOf) Account {
 	return Account{Kind: kind, ID: b.Account}
 }
 
+// Chosen is the model a chat started on: the one the user picked, which
+// the order's own switches keep (config.SelectedModel.ChosenModel).
+func Chosen(m config.SelectedModel) (provider, model string) {
+	if m.ChosenModel != "" {
+		return m.ChosenProvider, m.ChosenModel
+	}
+	return m.Provider, m.Model
+}
+
+// For is the order a chat that started on provider and model follows: that
+// model's own list, else the list of every other model.
+func For(order config.FallbackOrder, provider, model string) config.FallbackOrder {
+	out := config.FallbackOrder{On: order.On, Blocks: order.Blocks}
+	for _, l := range order.Lists {
+		if l.Provider == provider && l.Model == model {
+			out.Blocks = l.Blocks
+			break
+		}
+	}
+	return out
+}
+
 // Position is the use block a chat on this model is at: the first use
 // block with the same provider, model and account, else the first with the
 // same tool and account; -1 when the order does not hold the chat.
@@ -103,9 +125,9 @@ func Position(order config.FallbackOrder, kindOf KindOf, m config.SelectedModel)
 	return loose
 }
 
-// full reports whether an account has no room left for a block that moves
+// Full reports whether an account has no room left for a block that moves
 // on at moveAt percent (0: only when it runs out).
-func full(r Reading, moveAt float64) bool {
+func Full(r Reading, moveAt float64) bool {
 	if !r.Known {
 		return false
 	}
@@ -144,7 +166,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 		acct := BlockAccount(b, kindOf)
 		switch b.Type {
 		case config.FallbackUse:
-			if !full(read(acct), b.MoveAtPercent) {
+			if !Full(read(acct), b.MoveAtPercent) {
 				return Action{Kind: Switch, Block: j, Return: ret}
 			}
 		case config.FallbackRefill:
@@ -158,7 +180,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 				continue // nothing to wait for, or already waiting for another
 			}
 			r := read(acct)
-			if !full(r, 0) {
+			if !Full(r, 0) {
 				return Action{Kind: Switch, Block: target}
 			}
 			if r.OpenAt.IsZero() {
@@ -178,7 +200,33 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 		// Nothing after the wait block has room: wait after all.
 		return Action{Kind: Wait, Block: ret.Block, Until: ret.At}
 	}
-	return Action{Kind: Stay}
+	return soonestComeBack(order, kindOf, at, read)
+}
+
+// soonestComeBack is the wait for the earlier "come back" block whose
+// account refills first, once nothing has room (owner, 2026-10-22). When
+// the chat's own account refills sooner, or no time is known, it stays:
+// the plain reset retry continues it there.
+func soonestComeBack(order config.FallbackOrder, kindOf KindOf, at int, read Readings) Action {
+	act := Action{Kind: Stay}
+	if own := read(BlockAccount(order.Blocks[at], kindOf)); !own.OpenAt.IsZero() {
+		act.Until = own.OpenAt
+	}
+	for k := range at {
+		b := order.Blocks[k]
+		if b.Type != config.FallbackUse || !b.ComeBack {
+			continue
+		}
+		r := read(BlockAccount(b, kindOf))
+		if r.OpenAt.IsZero() || (!act.Until.IsZero() && !r.OpenAt.Before(act.Until)) {
+			continue
+		}
+		act = Action{Kind: Wait, Block: k, Until: r.OpenAt}
+	}
+	if act.Kind == Stay {
+		return Action{Kind: Stay}
+	}
+	return act
 }
 
 // BeforeTurn decides, as a turn starts on block `at`, whether the chat
@@ -191,18 +239,18 @@ func BeforeTurn(order config.FallbackOrder, kindOf KindOf, at int, ret *Return, 
 	}
 	if ret != nil && ret.Block != at && ret.Block >= 0 && ret.Block < len(order.Blocks) && !now.Before(ret.At) {
 		b := order.Blocks[ret.Block]
-		if !full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+		if !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
 			return Action{Kind: Switch, Block: ret.Block}
 		}
 	}
 	for k := range at {
 		b := order.Blocks[k]
-		if b.Type == config.FallbackUse && b.ComeBack && !full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+		if b.Type == config.FallbackUse && b.ComeBack && !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
 			return Action{Kind: Switch, Block: k}
 		}
 	}
 	b := order.Blocks[at]
-	if b.Type == config.FallbackUse && b.MoveAtPercent > 0 && full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+	if b.Type == config.FallbackUse && b.MoveAtPercent > 0 && Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
 		if act := OnOut(order, kindOf, at, read, now, nil); act.Kind == Switch || act.Kind == Refill {
 			return act
 		}

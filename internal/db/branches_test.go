@@ -147,6 +147,9 @@ func TestCopyBranchThroughCutWithToolResults(t *testing.T) {
 	sameMessages(t, []message.Message{u, a, newer}, s.path(t, res.SessionID))
 }
 
+// packTodos is the to-do list seedExtras gives the chat.
+const packTodos = `[{"content":"pack","status":"pending","active_form":"Packing"}]`
+
 // seedExtras gives the chat one of everything a copy brings along, and a
 // branch from c.u1 whose link a later copy of u1 must bring.
 func (s branchStore) seedExtras(t *testing.T, sessionID string, c toolChat) message.BranchResult {
@@ -157,7 +160,7 @@ func (s branchStore) seedExtras(t *testing.T, sessionID string, c toolChat) mess
 	s.exec(t, `INSERT INTO session_context_budgets(session_id,provider,model,token_limit,estimated) VALUES(?,?,?,?,?)`, sessionID, "anthropic", "claude", 200000, 1)
 	s.exec(t, `INSERT INTO read_files(session_id,path,read_at) VALUES(?,?,?),(?,?,?)`, sessionID, "/work/a.go", 100, sessionID, "/work/b.go", 200)
 	s.exec(t, `UPDATE sessions SET todos=?, cost=?, prompt_tokens=?, completion_tokens=? WHERE id=?`,
-		`[{"content":"pack","status":"pending","active_form":"Packing"}]`, 2.5, 100, 50, sessionID)
+		packTodos, 2.5, 100, 50, sessionID)
 	s.exec(t, `UPDATE messages SET prism_model_id=?, prism_model_name=?, prism_hypercredit_savings=?, prism_dollar_savings=? WHERE id=?`,
 		"prism-1", "Prism One", 1.5, 0.25, c.a1.ID)
 	require.NoError(t, s.q.RecordMarker(t.Context(), db.MessageMarker{MessageID: c.a1.ID, SessionID: sessionID, CLI: "claude-code", NativeSession: "native-1", Marker: "uuid-a1", MarkerKind: "message"}))
@@ -166,9 +169,10 @@ func (s branchStore) seedExtras(t *testing.T, sessionID string, c toolChat) mess
 }
 
 // checkExtras checks that the copy newID holds the extras seedExtras gave
-// its source, on its own copies of u1, a1, t1 and t2 (path[0:4]), and that
-// its cost and token totals start at 0.
-func (s branchStore) checkExtras(t *testing.T, newID string, sibling message.BranchResult) {
+// its source, on its own copies of u1, a1, t1 and t2 (path[0:4]), that its
+// cost and token totals start at 0, and that its to-do list is todos ("" for
+// none).
+func (s branchStore) checkExtras(t *testing.T, newID string, sibling message.BranchResult, todos string) {
 	t.Helper()
 	ctx := t.Context()
 	path := s.path(t, newID)
@@ -205,7 +209,7 @@ func (s branchStore) checkExtras(t *testing.T, newID string, sibling message.Bra
 
 	copied, err := s.q.GetSessionByID(ctx, newID)
 	require.NoError(t, err)
-	require.Equal(t, `[{"content":"pack","status":"pending","active_form":"Packing"}]`, copied.Todos.String)
+	require.Equal(t, todos, copied.Todos.String)
 	require.Zero(t, copied.Cost)
 	require.Zero(t, copied.PromptTokens)
 	require.Zero(t, copied.CompletionTokens)
@@ -242,7 +246,8 @@ func TestCopyBranchCopiesExtras(t *testing.T) {
 	c := s.toolChat(t, "src")
 	sibling := s.seedExtras(t, "src", c)
 	res := s.branch(t, c.a1, "map", "Maps")
-	s.checkExtras(t, res.SessionID, sibling)
+	// A sub-chat starts with no to-do list (owner, 2026-10-21).
+	s.checkExtras(t, res.SessionID, sibling, "")
 }
 
 // dump renders a chat's own rows: everything a copy could touch. A

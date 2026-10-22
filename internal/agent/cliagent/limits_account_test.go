@@ -74,3 +74,28 @@ func TestConsumeRefillReadsTheAccountAgain(t *testing.T) {
 	require.Equal(t, 0, Refills(kind, "codex-2"))
 	require.Equal(t, 0.0, AccountLimits(kind, "codex-2", "m")[0].Used)
 }
+
+// AGY lists usage per model under its own names: a model with an effort in
+// its name reads the entry without it, or that model's effort-tiered entry
+// (owner, 2026-10-22: gemini-3.8-flash-high reads gemini-3.8-flash-tiered).
+func TestAGYModelsReadTheirEffortTieredUsage(t *testing.T) {
+	kind := config.TypeAGYCLI
+	require.True(t, StoreAccountLimits(kind, "", []Limit{
+		{Name: "Quota", Used: 5, Model: "gemini-3.8-flash-tiered"},
+		{Name: "Quota", Used: 20, Model: "gemini-3.5-flash"},
+		{Name: "Quota", Used: 100, Model: "claude-sonnet-4-6"},
+		{Name: "Quota", Used: 50, Model: "gemini-3.5-flash-lite"},
+	}, -1))
+	used := func(model string) []float64 {
+		var out []float64
+		for _, l := range AccountLimits(kind, "", model) {
+			out = append(out, l.Used)
+		}
+		return out
+	}
+	require.Equal(t, []float64{5}, used("gemini-3.8-flash-high"))
+	require.Equal(t, []float64{5}, used("gemini-3.8-flash-low"))
+	require.Equal(t, []float64{20}, used("gemini-3.5-flash-medium"))
+	require.Equal(t, []float64{100}, used("claude-sonnet-4-6"))
+	require.Empty(t, used("gemini-3.7-flash-high"), "a model AGY doesn't list reads nothing")
+}

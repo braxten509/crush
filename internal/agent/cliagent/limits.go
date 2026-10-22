@@ -41,6 +41,13 @@ func (l Limit) Left() float64 {
 // their own updates as they happen.
 const limitRefresh = 3 * time.Minute
 
+var (
+	// ErrNoUsageSource is a refresh's error for a CLI that reports no usage.
+	ErrNoUsageSource = errors.New("This CLI does not report usage limits") //nolint:staticcheck
+	// errRefreshPending is a forced refresh's error while another runs.
+	errRefreshPending = errors.New("Usage refresh is already in progress") //nolint:staticcheck
+)
+
 // limitKey is one account of one CLI: account "" is the tool's own login,
 // any other an options.accounts ID.
 type limitKey struct {
@@ -193,13 +200,43 @@ func Limits(kind catwalk.Type, model string) []Limit {
 func AccountLimits(kind catwalk.Type, account, model string) []Limit {
 	limitStore.Lock()
 	defer limitStore.Unlock()
+	stored := limitStore.byKind[limitKey{kind, account}]
+	named := usageModel(stored, model)
 	var limits []Limit
-	for _, l := range limitStore.byKind[limitKey{kind, account}] {
-		if l.Model == "" || l.Model == model {
+	for _, l := range stored {
+		if l.Model == "" || l.Model == named {
 			limits = append(limits, l)
 		}
 	}
 	return limits
+}
+
+// effortWords are the effort levels a CLI's model name may end in.
+var effortWords = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+
+// usageModel is the per-model name model's usage is stored under: its own,
+// else its name without the effort word, else that name's effort-tiered
+// entry (AGY lists gemini-3.8-flash-high's usage as
+// gemini-3.8-flash-tiered; owner, 2026-10-22). "" when none is stored.
+func usageModel(limits []Limit, model string) string {
+	has := func(name string) bool {
+		return name != "" && slices.ContainsFunc(limits, func(l Limit) bool { return l.Model == name })
+	}
+	if has(model) {
+		return model
+	}
+	for _, word := range effortWords {
+		base, ok := strings.CutSuffix(model, "-"+word)
+		if !ok {
+			continue
+		}
+		for _, name := range []string{base, base + "-tiered"} {
+			if has(name) {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // Refills is how many free refills an account has left, as last read.
@@ -298,16 +335,33 @@ func RefreshAccountLimits(ctx context.Context, kind catwalk.Type, account string
 	return refreshLimits(ctx, limitKey{kind, account}, force)
 }
 
+// ReadAccountLimitsNow reads one account's usage limits fresh into the
+// store, waiting out a refresh already on its way rather than failing. It
+// returns the reading's error; ErrNoUsageSource for a CLI without one.
+func ReadAccountLimitsNow(ctx context.Context, kind catwalk.Type, account string) error {
+	for {
+		_, err := refreshLimits(ctx, limitKey{kind, account}, true)
+		if !errors.Is(err, errRefreshPending) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
 func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 	limitStore.Lock()
 	fetch := limitFetchers[k.kind]
 	if fetch == nil {
 		limitStore.Unlock()
-		return false, errors.New("This CLI does not report usage limits")
+		return false, ErrNoUsageSource
 	}
 	if limitStore.pending[k] {
 		limitStore.Unlock()
-		return false, errors.New("Usage refresh is already in progress")
+		return false, errRefreshPending
 	}
 	if !force && time.Since(limitStore.fetched[k]) < limitRefresh {
 		limitStore.Unlock()
@@ -349,10 +403,11 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 }
 
 var limitFetchers = map[catwalk.Type]func(context.Context) ([]Limit, error){
-	config.TypeClaudeCode: fetchClaudeLimits,
-	config.TypeCodexCLI:   fetchCodexLimits,
-	config.TypeAGYCLI:     fetchAGYLimits,
-	config.TypeGrokCLI:    fetchGrokLimits,
+	config.TypeClaudeCode:  fetchClaudeLimits,
+	config.TypeCodexCLI:    fetchCodexLimits,
+	config.TypeAGYCLI:      fetchAGYLimits,
+	config.TypeGrokCLI:     fetchGrokLimits,
+	config.TypeOpenCodeCLI: fetchOpenCodeLimits,
 }
 
 // fetchGrokLimits asks `grok agent stdio` for the billing config behind

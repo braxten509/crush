@@ -8,6 +8,8 @@ type GoneReason string
 const (
 	// GoneRetired: the app said goodbye ([Backend.RetireClient]).
 	GoneRetired GoneReason = "retired"
+	// GoneFolderSwitch: the app moved to another folder; its work continues.
+	GoneFolderSwitch GoneReason = "folder_switch"
 	// GoneExpired: its hold ran out, or its last stream dropped while the
 	// detach grace is 0.
 	GoneExpired GoneReason = "expired"

@@ -173,3 +173,36 @@ func TestResetStreamedContentEmpty(t *testing.T) {
 	msg.ResetStreamedContent()
 	require.Empty(t, msg.Parts)
 }
+
+func TestToAIMessage_AssistantError(t *testing.T) {
+	t.Parallel()
+
+	msg := &Message{
+		Role: Assistant,
+	}
+	msg.AddFinish(FinishReasonError, "Provider Error", "model access disabled")
+
+	messages := msg.ToAIMessage()
+	require.Len(t, messages, 1)
+	require.Len(t, messages[0].Content, 1)
+
+	part, ok := messages[0].Content[0].(fantasy.TextPart)
+	require.True(t, ok)
+	require.Equal(t, "[error: Provider Error]\nmodel access disabled", part.Text)
+}
+
+func TestMessage_ErrorText(t *testing.T) {
+	t.Parallel()
+
+	msg := &Message{Role: Assistant}
+	require.Empty(t, msg.ErrorText())
+
+	msg.AddFinish(FinishReasonEndTurn, "", "")
+	require.Empty(t, msg.ErrorText())
+
+	msg.AddFinish(FinishReasonError, "Payment Required", "prepayment credits depleted")
+	require.Equal(t, "[error: Payment Required]\nprepayment credits depleted", msg.ErrorText())
+
+	msg.AddFinish(FinishReasonError, "", "")
+	require.Equal(t, "[error: Error]", msg.ErrorText())
+}

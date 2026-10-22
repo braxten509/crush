@@ -21,6 +21,7 @@
   import {
     anchorAt,
     atBottom,
+    nearBottom,
     clampTop,
     createHeights,
     estimate,
@@ -332,9 +333,12 @@
     // typing box shrank after a send), not the user, so the thumb stays off.
     if (follow && bottom) return;
     flashBar();
-    if (up && !bottom) {
+    // Within about two lines of the bottom still counts as the bottom, so a
+    // tiny nudge keeps following (owner, 2026-10-22).
+    const near = nearBottom(t, scroller.clientHeight, scroller.scrollHeight, zoom);
+    if (up && !near) {
       if (follow) onfollow?.(false);
-    } else if (bottom && !follow) onfollow?.(true);
+    } else if (near && !follow) onfollow?.(true);
     onscrolled?.({ up });
   }
 

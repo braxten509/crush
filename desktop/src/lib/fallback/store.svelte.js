@@ -6,19 +6,24 @@
 import { api } from "../engine/api.js";
 import { onEvent } from "../engine/events.js";
 import { notify } from "../stores/ui.svelte.js";
-import { openTerminal, showTerminal } from "../terminal/tabs.svelte.js";
+import { sign_in_run } from "../engine/commands.js";
 
 export const fallback = $state({
   loaded: false,
   accounts: [], // proto.AccountInfo[]: each tool's own login (id "") first
-  order: { on: false, blocks: [] },
+  order: { on: false, blocks: [], lists: [] }, // lists: each picked model's own blocks
   error: "",
 });
 
 function take(settings) {
   if (!settings || typeof settings !== "object") return;
   fallback.accounts = Array.isArray(settings.accounts) ? settings.accounts : [];
-  fallback.order = { on: Boolean(settings.order?.on), blocks: Array.isArray(settings.order?.blocks) ? settings.order.blocks : [] };
+  const order = settings.order ?? {};
+  fallback.order = {
+    on: Boolean(order.on),
+    blocks: Array.isArray(order.blocks) ? order.blocks : [],
+    lists: (Array.isArray(order.lists) ? order.lists : []).map((l) => ({ ...l, blocks: Array.isArray(l?.blocks) ? l.blocks : [] })),
+  };
   fallback.loaded = true;
 }
 
@@ -39,7 +44,8 @@ onEvent("config_changed", () => {
 
 let saving = Promise.resolve();
 
-// Saves the order; shown at once, the engine's answer replaces it.
+// Saves the order; shown at once, the engine's answer replaces it. A refused
+// order goes back to the saved one, with the reason above the list.
 export function saveOrder(order) {
   fallback.order = order;
   saving = saving.then(async () => {
@@ -47,26 +53,36 @@ export function saveOrder(order) {
       take(await api.setFallbackOrder(order));
       fallback.error = "";
     } catch (error) {
-      fallback.error = errorText(error);
       notify("error", `Couldn't save the fallback order: ${errorText(error)}`);
+      // Show what is really saved, not the refused order.
+      await loadFallback();
+      fallback.error = errorText(error);
     }
   });
   return saving;
 }
 
-// A terminal tab that runs the sign-in command (the tool's own login
-// screen opens in the browser).
-async function signInTab(login) {
+// Runs the sign-in command with no terminal: the tool opens the default
+// browser, and the list shows the account signed in once it finishes.
+async function signIn(login) {
   if (!login?.login_argv?.length) return;
-  const tab = await openTerminal({ argv: login.login_argv, title: `Sign in to ${login.account?.name ?? "the account"}` });
-  if (tab?.id) showTerminal(tab.id);
+  const name = login.account?.name ?? "the account";
+  notify("info", `Finish signing in to ${name} in your browser.`, 0);
+  let signedIn = false;
+  try {
+    signedIn = await sign_in_run(login.login_argv);
+  } finally {
+    await loadFallback();
+  }
+  if (signedIn) notify("info", `Signed in to ${name}.`);
+  else notify("error", `Signing in to ${name} didn't finish.`);
 }
 
 export async function addAccount(kind) {
   try {
     const login = await api.addAccount(kind);
     await loadFallback();
-    await signInTab(login);
+    await signIn(login);
   } catch (error) {
     notify("error", `Couldn't add the account: ${errorText(error)}`);
   }
@@ -74,7 +90,7 @@ export async function addAccount(kind) {
 
 export async function signInAccount(id) {
   try {
-    await signInTab(await api.signInAccount(id));
+    await signIn(await api.signInAccount(id));
   } catch (error) {
     notify("error", `Couldn't start the sign-in: ${errorText(error)}`);
   }

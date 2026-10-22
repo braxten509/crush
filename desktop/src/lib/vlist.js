@@ -233,4 +233,14 @@ export function atBottom(top, viewport, total) {
   return top + viewport >= total - 1;
 }
 
+// NEAR_BOTTOM is about two reading lines, in CSS pixels at zoom 1.
+const NEAR_BOTTOM = 40;
+
+// Whether the view is within about two lines of the bottom: there, a scroll
+// keeps following, so a touchpad's tiny nudge doesn't leave the next reply
+// out of view (owner, 2026-10-22).
+export function nearBottom(top, viewport, total, zoom = 1) {
+  return top + viewport >= total - NEAR_BOTTOM * zoom;
+}
+
 export { itemTop, itemBottom };

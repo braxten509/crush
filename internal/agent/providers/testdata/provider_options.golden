@@ -658,61 +658,61 @@ anthropic: &ProviderOptions{Effort: &"max"}
 == bedrock/bedrock-europe claude-think
 anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
 == openrouter/openrouter plain
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter reasoning-default
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"medium"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"medium"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter reasoning-selected
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter reasoning-invalid
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter reasoning-none
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"none"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"none"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter think
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter think-off
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter think-cannot-reason
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter explicit-options
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &false}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &false}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter explicit-thinking
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter extra-body
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}, User: &"catwalk-user"}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, ExtraBody: {catwalk: (bool)true, custom: (string)"selected", thinking: (map[string]interface {}){type: (string)"explicit"}}, User: &"catwalk-user", Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter top-k
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter catwalk-top-k
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter malformed
 == openrouter/openrouter malformed-no-top-k
 == openrouter/openrouter gpt-5-fast
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter gpt-5.2-standard
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter gpt-5-pro
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter gpt-4o
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter abacus-format
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter gemini-2
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"low"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter gemini-3
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter minimax-m3
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"high"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter minimax-m2-think
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter minimax-off
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter deepseek-none
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"none"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"none"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter zai-org
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter claude
-openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"max"}}
+openrouter: &ProviderOptions{Reasoning: &ReasoningOptions{Enabled: &true, Effort: &"max"}, Provider: &Provider{Sort: &"price"}}
 == openrouter/openrouter claude-think
-openrouter: &ProviderOptions{}
+openrouter: &ProviderOptions{Provider: &Provider{Sort: &"price"}}
 == vercel/vercel plain
 vercel: &ProviderOptions{}
 == vercel/vercel reasoning-default

@@ -293,11 +293,30 @@ function goTime(value) {
 // window past its reset is whole again (Limit.Left, limits.go:30-36). null
 // while the kind is checking (a reading without read_at); [] when the kind
 // reports no limits at all.
+const EFFORT_WORDS = ["minimal", "low", "medium", "high", "xhigh", "max"];
+
+// The per-model name a model's usage is stored under (cliagent.usageModel):
+// its own, else its name without the effort word, else that name's
+// effort-tiered entry (AGY: gemini-3.8-flash-high reads
+// gemini-3.8-flash-tiered; owner, 2026-10-22). "" when none is.
+function usageModel(windows, model) {
+  const has = (name) => Boolean(name) && windows.some((w) => w.model === name);
+  if (has(model)) return model;
+  for (const word of EFFORT_WORDS) {
+    if (!String(model ?? "").endsWith(`-${word}`)) continue;
+    const base = model.slice(0, -word.length - 1);
+    for (const name of [base, `${base}-tiered`]) if (has(name)) return name;
+  }
+  return "";
+}
+
 export function limitWindows(reading, model, now = Date.now()) {
   if (!reading) return [];
   if (goTime(reading.read_at) === null) return null;
-  return (reading.windows ?? [])
-    .filter((w) => !w.model || w.model === model)
+  const windows = reading.windows ?? [];
+  const named = usageModel(windows, model);
+  return windows
+    .filter((w) => !w.model || w.model === named)
     .map((w) => {
       const resets = goTime(w.resets_at);
       const left = resets !== null && now > resets ? 100 : Math.max(0, 100 - (Number(w.used) || 0));

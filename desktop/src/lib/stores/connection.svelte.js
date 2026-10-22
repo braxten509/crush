@@ -5,6 +5,7 @@
 import { app_info, engine_open, engine_retry, projectEnter } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { probeSection } from "../probe.js";
+import { accountPollConnected } from "./accountmeters.svelte.js";
 import { loadLimits, startLimitsPoll, stopLimitsPoll } from "./limits.svelte.js";
 import "./messages.svelte.js";
 import "./prompts.svelte.js";
@@ -100,6 +101,7 @@ function quietly(promise, what) {
 function pollLimits() {
   if (conn.state === "connected") startLimitsPoll({ idle: () => !busy(sessions.currentId) });
   else stopLimitsPoll();
+  accountPollConnected(conn.state === "connected");
 }
 
 // START-007: the stores load in parallel and each may fail alone. The chat

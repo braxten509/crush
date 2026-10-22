@@ -336,6 +336,27 @@ func (m *Message) IsErrorLike() bool {
 	return false
 }
 
+// ErrorText returns a formatted error banner string if the message finished
+// with an error or content filter refusal, or empty string otherwise.
+func (m *Message) ErrorText() string {
+	if !m.IsErrorLike() {
+		return ""
+	}
+	f := m.FinishPart()
+	if f == nil {
+		return ""
+	}
+	title := strings.TrimSpace(f.Message)
+	if title == "" {
+		title = "Error"
+	}
+	details := strings.TrimSpace(f.Details)
+	if details != "" {
+		return fmt.Sprintf("[error: %s]\n%s", title, details)
+	}
+	return fmt.Sprintf("[error: %s]", title)
+}
+
 func (m *Message) IsThinking() bool {
 	reasoning := m.ReasoningContent()
 	return (reasoning.StartedAt > 0 || reasoning.Thinking != "") && reasoning.FinishedAt == 0 && m.Content().Text == "" && !m.IsFinished()
@@ -612,6 +633,9 @@ func (m *Message) assistantParts() []fantasy.MessagePart {
 			}
 		}
 		emit(len(text), len(calls))
+		if errText := m.ErrorText(); errText != "" {
+			parts = append(parts, fantasy.TextPart{Text: errText})
+		}
 		return parts
 	}
 
@@ -622,6 +646,9 @@ func (m *Message) assistantParts() []fantasy.MessagePart {
 		}
 	}
 	emit(len(text), len(calls))
+	if errText := m.ErrorText(); errText != "" {
+		parts = append(parts, fantasy.TextPart{Text: errText})
+	}
 	return parts
 }
 

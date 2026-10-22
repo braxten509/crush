@@ -147,8 +147,8 @@ If not, please feel free to ignore. Again do not mention this message to the use
 		if len(m.Parts) == 0 {
 			continue
 		}
-		// Assistant message without content or tool calls (cancelled before it returned anything).
-		if m.Role == message.Assistant && len(m.ToolCalls()) == 0 && m.Content().Text == "" && m.ReasoningContent().String() == "" {
+		// Assistant message without content, tool calls, or error (e.g. cancelled before it returned anything).
+		if m.Role == message.Assistant && len(m.ToolCalls()) == 0 && m.Content().Text == "" && m.ReasoningContent().String() == "" && !m.IsErrorLike() {
 			continue
 		}
 		// Tool results are emitted right after their assistant message.

@@ -131,15 +131,24 @@ func renderMessageDetails(msg message.Message) (string, bool) {
 		}
 		text := msg.Content().Text
 		calls := msg.ToolCalls()
-		if text == "" && len(calls) == 0 {
+		errText := msg.ErrorText()
+		if text == "" && len(calls) == 0 && errText == "" {
 			return "", false
 		}
-		fmt.Fprintf(&b, "[%s]\n", who)
-		if text != "" {
-			b.WriteString(clipTrack(text, handoffTextMax) + "\n")
+		if text != "" || len(calls) > 0 {
+			fmt.Fprintf(&b, "[%s]\n", who)
+			if text != "" {
+				b.WriteString(clipTrack(text, handoffTextMax) + "\n")
+			}
+			for _, tc := range calls {
+				fmt.Fprintf(&b, "-> %s %s\n", tc.Name, clipTrack(tc.Input, handoffToolArgMax))
+			}
 		}
-		for _, tc := range calls {
-			fmt.Fprintf(&b, "-> %s %s\n", tc.Name, clipTrack(tc.Input, handoffToolArgMax))
+		if errText != "" {
+			if b.Len() > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(clipTrack(errText, handoffTextMax) + "\n")
 		}
 	case message.Tool:
 		for _, tr := range msg.ToolResults() {

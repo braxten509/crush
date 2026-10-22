@@ -102,6 +102,7 @@ const DERIVED = {
 const DARK_SOFTER = new Set(["--rule-frame", "--rule-faint", "--rule-table-inner", "--meter-edge"]);
 const DARK_RULE_SCALE = 0.75;
 const PICK_LIFT = 0.12;
+const HOVER_LIFT = 0.16;
 
 // The eight code classes (3.1) → their syntax keys.
 const SYNTAX = {
@@ -183,6 +184,11 @@ export function tokensOf(view) {
   // band sat 3 steps off the menu and could not be told apart (owner,
   // 2026-10-21), so it is lifted an eighth of the way toward the ink.
   if (tokens["--band"]) tokens["--pick"] = isDark(view) && fg && bg ? mix(fg, bg, PICK_LIFT) : tokens["--band"];
+  // The hovered row or button: on dark paper the theme's hover sat 4 steps
+  // off the menu, so it is lifted a sixth of the way toward the ink, a step
+  // past the picked row (owner, 2026-10-21: "hovered rows are still not very
+  // visible").
+  if (isDark(view) && fg && bg) tokens["--control-hover"] = mix(fg, bg, HOVER_LIFT);
   const paper = parseHex(bg);
   if (paper) tokens["--scrim"] = `rgb(${paper.join(" ")} / 0.92)`;
   return tokens;

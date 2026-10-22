@@ -113,6 +113,11 @@ func (l List) DesktopOpen() bool {
 	return false
 }
 
+// AppOpen reports whether any app (desktop or terminal) is running.
+func (l List) AppOpen() bool {
+	return len(liveApps(l.read().Apps)) > 0
+}
+
 // sameDir is dir cleaned with its links followed, for comparing folders.
 func sameDir(dir string) string {
 	if real, err := filepath.EvalSymlinks(dir); err == nil {

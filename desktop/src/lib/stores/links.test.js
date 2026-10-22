@@ -30,7 +30,9 @@ vi.mock("../engine/commands.js", () => ({
   // The open chats shared with the terminal (openchats.svelte.js).
   openChatsGet: async () => structuredClone(h.open),
   openChatsAdd: async (id, dir, title) => {
-    if (!h.open.some((c) => c.id === id)) h.open.push({ id, dir, title });
+    const known = h.open.find((c) => c.id === id);
+    if (known) Object.assign(known, { dir, title });
+    else h.open.push({ id, dir, title });
   },
   openChatsRemove: async (id) => {
     h.open = h.open.filter((c) => c.id !== id);
@@ -243,6 +245,19 @@ describe("closing (3.3, 4.8)", () => {
     await settle();
     expect([S.sessions.currentId, h.open, ui.notice?.text ?? null]).toEqual(["", [], null]);
   });
+});
+
+it("a listed chat of another folder keeps its folder while it shows before the window joins it (owner, 2026-10-21)", async () => {
+  const { conn } = await import("./connection.svelte.js");
+  conn.project = { ...conn.project, cwd: DIR, path: DIR };
+  h.open = [{ id: "s1", dir: DIR, title: "" }, { id: "o1", dir: "/tmp/home/other", title: "" }];
+  await withList(chat("s1"), chat("o1"));
+  await (await import("./openchats.svelte.js")).refreshOpenChats();
+  openable("o1");
+  await S.openChat("o1");
+  await settle();
+  expect(h.open.map((c) => [c.id, c.dir])).toEqual([["s1", DIR], ["o1", "/tmp/home/other"]]);
+  expect(h.open[1].title).toBe("Chat o1"); // its title still follows
 });
 
 it("the tree store keeps its own revision: another app's tree_changed only marks it stale (P4.4's base)", async () => {

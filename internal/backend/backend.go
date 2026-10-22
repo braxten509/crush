@@ -119,9 +119,14 @@ type Backend struct {
 	// workspace this mechanism exists to prevent. The cost is one UUID per
 	// client process, and the server only outlives its clients for as long
 	// as sessions keep arriving inside the idle-shutdown window.
-	retired  map[string]struct{}
-	mu       sync.Mutex
-	recallMu sync.Mutex
+	retired map[string]struct{}
+	// workRunning, appOpen and lingerPoll drive [Backend.linger]; nil and
+	// zero mean the real checks and one second (tests set their own).
+	workRunning func(*Workspace) bool
+	appOpen     func() bool
+	lingerPoll  time.Duration
+	mu          sync.Mutex
+	recallMu    sync.Mutex
 	// Unacknowledged recalls retain their payload across failed responses.
 	recalledPrompts map[string]*retainedRecall
 

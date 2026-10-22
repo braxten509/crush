@@ -1677,6 +1677,56 @@ func TestRetireClient_ReleasesEveryClaim(t *testing.T) {
 	require.Equal(t, int32(1), streamedShutdowns.Load())
 }
 
+// TestRetireClientKeepWork_KeepsRunningWork: the desktop moving to another
+// folder leaves with keep_work, and the folder it left keeps its running
+// work until that ends or no app is open; an app coming back keeps it.
+func TestRetireClientKeepWork_KeepsRunningWork(t *testing.T) {
+	t.Parallel()
+
+	b, _ := newTestBackend(t)
+	var working, appOpen atomic.Bool
+	b.workRunning = func(*Workspace) bool { return working.Load() }
+	b.appOpen = func() bool { return appOpen.Load() }
+	b.lingerPoll = 5 * time.Millisecond
+	gone := func(n *atomic.Int32) func() bool { return func() bool { return n.Load() == 1 } }
+
+	working.Store(true)
+	appOpen.Store(true)
+	ws, shutdowns := insertTestWorkspace(t, b, "/tmp/keep-work")
+	cid := newClientID(t)
+	b.registerClient(ws, cid)
+	require.NoError(t, b.RetireClientKeepWork(cid))
+	time.Sleep(50 * time.Millisecond)
+	require.Zero(t, shutdowns.Load(), "running work keeps the folder")
+	working.Store(false)
+	require.Eventually(t, gone(shutdowns), time.Second, 5*time.Millisecond, "closes once the work ends")
+
+	working.Store(true)
+	ws, shutdowns = insertTestWorkspace(t, b, "/tmp/keep-work-app-closed")
+	cid = newClientID(t)
+	b.registerClient(ws, cid)
+	require.NoError(t, b.RetireClientKeepWork(cid))
+	time.Sleep(20 * time.Millisecond)
+	appOpen.Store(false)
+	require.Eventually(t, gone(shutdowns), time.Second, 5*time.Millisecond, "every app closed stops the work")
+
+	appOpen.Store(true)
+	ws, shutdowns = insertTestWorkspace(t, b, "/tmp/keep-work-back")
+	cid = newClientID(t)
+	b.registerClient(ws, cid)
+	require.NoError(t, b.RetireClientKeepWork(cid))
+	b.registerClient(ws, newClientID(t)) // an app comes back
+	working.Store(false)
+	time.Sleep(50 * time.Millisecond)
+	require.Zero(t, shutdowns.Load(), "a folder an app is on again stays")
+
+	ws, shutdowns = insertTestWorkspace(t, b, "/tmp/keep-work-idle")
+	cid = newClientID(t)
+	b.registerClient(ws, cid)
+	require.NoError(t, b.RetireClientKeepWork(cid))
+	require.Eventually(t, gone(shutdowns), time.Second, 5*time.Millisecond, "nothing running closes at once")
+}
+
 // TestRetireClient_RefusesLaterCreates is what makes teardown exact
 // without timing guesses. A recovery create whose response the client
 // never saw can still land on the server afterwards; refusing it is the

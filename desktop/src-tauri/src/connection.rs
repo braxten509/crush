@@ -924,7 +924,16 @@ impl WindowConn {
 
     /// Gives a client's claim back (a failed open, or a closing window).
     async fn retire(&self, http: &EngineHttp, client_id: &str) {
-        let path = format!("/v1/clients/{}", encode(client_id));
+        self.retire_keeping(http, client_id, false).await;
+    }
+
+    /// keep_work: the engine keeps this folder's running work going after
+    /// this client leaves it (the window moves to another folder; owner,
+    /// 2026-10-21). The engine closes the folder once that work ends or no
+    /// app is open.
+    async fn retire_keeping(&self, http: &EngineHttp, client_id: &str, keep_work: bool) {
+        let keep = if keep_work { "?keep_work=1" } else { "" };
+        let path = format!("/v1/clients/{}{keep}", encode(client_id));
         if let Err(e) = http.call("DELETE", &path, None, Some(self.tuning.close_limit)).await {
             self.log(&format!("could not leave the engine: {} ({})", e.message, e.code));
         }
@@ -1170,6 +1179,12 @@ impl WindowConn {
 
     /// The window is closing: stop its calls, leave the engine, stop reading.
     async fn close(&self) {
+        self.end(false).await;
+    }
+
+    /// As close, for a window moving to another folder: the engine keeps
+    /// the folder's running work going.
+    async fn end(&self, keep_work: bool) {
         let running: Vec<Running> = self.calls.lock().unwrap().drain().map(|(_, r)| r).collect();
         for call in running {
             call.abort.abort();
@@ -1184,7 +1199,7 @@ impl WindowConn {
             task.abort();
         }
         if let (Some(link), Some(client_id)) = (link, client_id) {
-            self.retire(&link.http, &client_id).await;
+            self.retire_keeping(&link.http, &client_id, keep_work).await;
         }
         if let Some(reader) = reader {
             reader.abort();
@@ -1398,6 +1413,15 @@ pub async fn close(app: &crate::host::AppHandle, label: &str) {
     let conn = app.state::<AppState>().windows.lock().unwrap().remove(label);
     if let Some(conn) = conn {
         conn.close().await;
+    }
+}
+
+/// As close, for a window moving to another folder: the folder it leaves
+/// keeps its running work (WindowConn::end).
+pub async fn leave(app: &crate::host::AppHandle, label: &str) {
+    let conn = app.state::<AppState>().windows.lock().unwrap().remove(label);
+    if let Some(conn) = conn {
+        conn.end(true).await;
     }
 }
 
@@ -2467,6 +2491,15 @@ esac"#,
         assert_eq!(opened.workspace["id"], "ws-1");
         assert_eq!(states(&conn.take()), pairs(&[("connected", 0)]));
         run(conn.close());
+    }
+
+    #[test]
+    fn leaving_for_another_folder_asks_the_engine_to_keep_its_work() {
+        let j = joined("conn-leave", TEST_TUNING);
+        j.conn.take();
+        run(j.conn.end(true));
+        let retired: Vec<String> = j.fake.seen().iter().filter(|s| s.method == "DELETE").map(|s| s.target.clone()).collect();
+        assert_eq!(retired, [format!("/v1/clients/{}?keep_work=1", j.opened.client_id)]);
     }
 
     #[test]

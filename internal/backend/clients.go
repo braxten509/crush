@@ -6,6 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/google/uuid"
 )
 
@@ -88,6 +90,19 @@ func (b *Backend) admitLocked(clientID string) error {
 // for workspaces the client was last on run after b.mu is released and
 // re-check under both locks.
 func (b *Backend) RetireClient(clientID string) error {
+	return b.retire(clientID, false)
+}
+
+// RetireClientKeepWork retires clientID like [Backend.RetireClient], but a
+// workspace it was the last app on stays while its work still runs (a
+// reply, a sub-agent, a background job, open questions) and some app is
+// open: the desktop left the folder for another one, and that folder's
+// chats keep working (owner, 2026-10-21). See [Backend.linger].
+func (b *Backend) RetireClientKeepWork(clientID string) error {
+	return b.retire(clientID, true)
+}
+
+func (b *Backend) retire(clientID string, keepWork bool) error {
 	if _, err := validateClientID(clientID); err != nil {
 		return err
 	}
@@ -97,7 +112,7 @@ func (b *Backend) RetireClient(clientID string) error {
 		b.retired = make(map[string]struct{})
 	}
 	b.retired[clientID] = struct{}{}
-	var left, orphaned []*Workspace
+	var left, orphaned, kept []*Workspace
 	for _, ws := range b.workspaces.Seq2() {
 		ws.clientsMu.Lock()
 		if cs, ok := ws.clients[clientID]; ok {
@@ -108,6 +123,10 @@ func (b *Backend) RetireClient(clientID string) error {
 			left = append(left, ws)
 			if len(ws.clients) == 0 {
 				orphaned = append(orphaned, ws)
+				if keepWork && !ws.lingering {
+					ws.lingering = true
+					kept = append(kept, ws)
+				}
 			}
 		}
 		ws.clientsMu.Unlock()
@@ -118,9 +137,67 @@ func (b *Backend) RetireClient(clientID string) error {
 		b.clientGone(ws, clientID, GoneRetired, slices.Contains(orphaned, ws))
 	}
 	for _, ws := range orphaned {
-		b.teardown(ws)
+		switch {
+		case slices.Contains(kept, ws):
+			go b.linger(ws)
+		case keepWork:
+			// Already lingering: that watch decides.
+		default:
+			b.teardown(ws)
+		}
 	}
 	return nil
+}
+
+// linger keeps a workspace no app is on while its work runs and some app
+// is open, checking every lingerPoll; then it tears it down, as the last
+// app leaving would have. An app coming back ends the watch (a later
+// leave starts another).
+func (b *Backend) linger(ws *Workspace) {
+	working, appOpen, poll := b.workRunning, b.appOpen, b.lingerPoll
+	if working == nil {
+		working = workspaceWorking
+	}
+	if appOpen == nil {
+		appOpen = anyAppOpen
+	}
+	if poll <= 0 {
+		poll = time.Second
+	}
+	for first := true; ; first = false {
+		if !first {
+			time.Sleep(poll)
+		}
+		b.mu.Lock()
+		_, live := b.workspaces.Get(ws.ID)
+		ws.clientsMu.Lock()
+		back := len(ws.clients) > 0
+		if !live || back {
+			ws.lingering = false
+		}
+		ws.clientsMu.Unlock()
+		b.mu.Unlock()
+		if !live || back {
+			return
+		}
+		if working(ws) && appOpen() {
+			continue
+		}
+		ws.clientsMu.Lock()
+		ws.lingering = false
+		ws.clientsMu.Unlock()
+		b.teardown(ws)
+		return
+	}
+}
+
+func workspaceWorking(ws *Workspace) bool {
+	return ws.App != nil && agent.HasRunningWork(ws.AgentCoordinator)
+}
+
+func anyAppOpen() bool {
+	list, err := openchats.Open()
+	return err == nil && list.AppOpen()
 }
 
 // DeleteWorkspace is the public entry point used by the HTTP DELETE

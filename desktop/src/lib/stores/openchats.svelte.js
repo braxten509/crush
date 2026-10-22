@@ -80,9 +80,12 @@ let lastWrite = ""; // the last add sent, so a write the file did not take is no
 
 // Lists the chat this window shows, or writes its new title.
 async function listShown(id, title) {
-  const dir = folderNow();
-  if (!id || !dir || id === dropped) return;
+  // A listed chat keeps its own folder: a chat of another folder shows
+  // before the window has joined it (openInFolder), and was briefly listed
+  // under the folder being left (owner, 2026-10-21).
   const known = openChats.list.find((c) => c.id === id);
+  const dir = known?.dir || folderNow();
+  if (!id || !dir || id === dropped) return;
   if (known && known.dir === dir && (known.title === title || !title)) return;
   const write = JSON.stringify([id, dir, title]);
   if (known && write === lastWrite) return;
@@ -150,7 +153,8 @@ $effect.root(() => {
   $effect(() => {
     const id = sessions.currentId;
     const title = id ? (sessions.byId[id]?.title ?? "") : "";
-    const connected = conn.state === "connected";
+    // An unlisted chat waits for the folder switch to end.
+    const connected = conn.state === "connected" && conn.switching === 0;
     if (id !== dropped) dropped = "";
     if (id && connected) untrack(() => listShown(id, title));
   });

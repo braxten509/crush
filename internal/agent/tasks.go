@@ -460,6 +460,45 @@ func (h *taskHub) finishRun(ctx context.Context, t *Task, output string, err err
 	h.mu.Unlock()
 }
 
+// HasRunningWork reports whether c is running anything that would be cut
+// off if its workspace closed now: a reply, a sub-agent, a background job
+// (not a service), or open questions.
+func HasRunningWork(c Coordinator) bool {
+	if c == nil {
+		return false
+	}
+	if c.IsBusy() {
+		return true
+	}
+	hubsMu.Lock()
+	defer hubsMu.Unlock()
+	for _, h := range hubs {
+		if Coordinator(h.c) == c && h.hasAnyWork() {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *taskHub) hasAnyWork() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.asking || h.askSession != "" {
+		return true
+	}
+	for _, t := range h.tasks {
+		if t.Status == TaskRunning || t.awaitingHandoff || t.delivering {
+			return true
+		}
+	}
+	for _, job := range h.backgroundShells {
+		if !h.backgroundServices[job.ID] && !job.IsDone() {
+			return true
+		}
+	}
+	return false
+}
+
 // hasRunning reports whether any sub-agent or managed background command
 // belonging to this session is still running. Explicit services stay visible
 // and manageable but do not hold back completion notifications.

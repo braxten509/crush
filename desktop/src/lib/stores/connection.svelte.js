@@ -26,6 +26,7 @@ export const conn = $state({
   freshEngine: false, // the last rejoin met a new engine (its workspace id changed)
   slow: false, // the join has taken over 400 ms: the gate shows "Starting Crush…" (2.9)
   launch: { session: "", continueLast: false }, // -s and -C (START-006)
+  switching: 0, // folder switches under way: the shown chat may not be this folder's yet
 });
 
 const NOTICE_LIMIT = 20;
@@ -204,18 +205,23 @@ function sameFolder(a, b) {
 // left first (its turn runs on in the engine), unless keepShown: a kept chat
 // of that folder already shows (openInFolder). Resolves true once joined.
 export async function switchFolder(dir, { keepShown = false } = {}) {
-  // A join or switch still under way ends first, so a chat of the folder
-  // being joined, picked again meanwhile, switches once.
-  for (let current = joining; current; current = joining) {
-    await current.catch(() => {});
-    if (joining === current) break;
+  conn.switching += 1;
+  try {
+    // A join or switch still under way ends first, so a chat of the folder
+    // being joined, picked again meanwhile, switches once.
+    for (let current = joining; current; current = joining) {
+      await current.catch(() => {});
+      if (joining === current) break;
+    }
+    if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
+    if (!keepShown) showLanding();
+    conn.state = "connecting";
+    conn.error = null;
+    joining = enterFolder(dir);
+    return await joining;
+  } finally {
+    conn.switching -= 1;
   }
-  if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
-  if (!keepShown) showLanding();
-  conn.state = "connecting";
-  conn.error = null;
-  joining = enterFolder(dir);
-  return joining;
 }
 
 async function enterFolder(dir) {

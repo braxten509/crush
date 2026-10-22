@@ -50,7 +50,10 @@ def run(probe_path, script):
 def main():
     probe_path, out_dir, port = sys.argv[1], sys.argv[2], sys.argv[3]
     side = rc.WindowSide(probe_path)
-    slot = lambda cid: run(probe_path, f"const el = document.querySelector('[data-timeline-slot=\"{cid}\"]');"
+    def slot(cid):
+        got = read_slot(cid)
+        return got if isinstance(got, dict) and "seen" in got else None
+    read_slot = lambda cid: run(probe_path, f"const el = document.querySelector('[data-timeline-slot=\"{cid}\"]');"
                            " return el ? { seen: !el.classList.contains('parked'), text: el.textContent } : null;")
     row = lambda cid: run(probe_path, f"return document.querySelector('nav.chats .chat[data-id=\"{cid}\"]')?.innerText ?? '';") or ""
 
@@ -70,7 +73,7 @@ def main():
         chat = beta.call("POST", f"/v1/workspaces/{beta_ws}/sessions?client_id={client}", {"title": "Beta live chat"})["id"]
         list_open_chat({"id": chat, "dir": BETA, "title": "Beta live chat"})
         drawn, got, _ = rc.poll(lambda: slot(chat), lambda s: s is not None and not s["seen"], 15)
-        check(drawn, f"beta's chat is drawn, hidden, without being picked ({got})")
+        check(drawn, f"beta's chat is drawn, hidden, without being picked ({got or read_slot(chat)})")
         conn = side.conn()
         check(conn.get("workspace_id") == wid, "the window stays in proj")
 

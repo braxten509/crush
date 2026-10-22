@@ -283,6 +283,20 @@ func (ws *Workspace) hasLiveShare() bool {
 	return false
 }
 
+// letGoClosedShares ends the shares of chats that were closed while no
+// window showed them: a chat closed from another folder leaves the list,
+// and its share would otherwise keep its folder running for nothing. The
+// linger calls it for a folder no app is on ([Backend.linger]).
+func (b *Backend) letGoClosedShares(ws *Workspace) {
+	st := &ws.share
+	st.mu.Lock()
+	shares := slices.Collect(maps.Values(st.shares))
+	st.mu.Unlock()
+	for _, sh := range shares {
+		b.endUnlessOpen(ws, sh)
+	}
+}
+
 // pendingAction is a phone action forwarded to a window.
 type pendingAction struct {
 	kind string // the RemoteAction kind

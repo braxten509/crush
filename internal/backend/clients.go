@@ -185,6 +185,7 @@ func (b *Backend) linger(ws *Workspace) {
 			return
 		}
 		if working(ws) && appOpen() {
+			b.letGoClosedShares(ws)
 			continue
 		}
 		ws.clientsMu.Lock()

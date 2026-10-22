@@ -877,7 +877,8 @@ func TestRemoteShareOutlivesTheAppThatStartedIt(t *testing.T) {
 // TestRemoteShareKeepsItsFolderRunning: a chat's share is running work, so
 // the folder keeps going while a window that left it still shares a chat
 // with the phone (owner, 2026-10-22: Remote vanished from a chat after
-// clicking another folder's chat). It closes once the share ends.
+// clicking another folder's chat). The chat leaving the open-chats list
+// (closed from another folder) ends the share and its folder.
 func TestRemoteShareKeepsItsFolderRunning(t *testing.T) {
 	t.Parallel()
 	b, ws := shareTestWorkspace(t, nil)
@@ -887,6 +888,9 @@ func TestRemoteShareKeepsItsFolderRunning(t *testing.T) {
 	b.lingerPoll = 5 * time.Millisecond
 	owner, _ := shareTestApp(t, b, ws)
 	shareTestView(t, b, ws, owner, "chat-1")
+	ws.share.mu.Lock()
+	ws.share.listed = func(string) bool { return true }
+	ws.share.mu.Unlock()
 	srv := shareTestStart(t, b, ws, owner, "chat-1")
 
 	require.NoError(t, b.RetireClientKeepWork(owner))
@@ -895,11 +899,10 @@ func TestRemoteShareKeepsItsFolderRunning(t *testing.T) {
 	require.Zero(t, srv.stops.Load(), "the share keeps running")
 
 	ws.share.mu.Lock()
-	sh := ws.share.shares[shareKey(owner, "chat-1")]
+	ws.share.listed = func(string) bool { return false }
 	ws.share.mu.Unlock()
-	require.NotNil(t, sh)
-	b.endShare(ws, sh, errPhoneShareOff)
-	require.Eventually(t, func() bool { return shutdowns.Load() == 1 }, time.Second, 5*time.Millisecond, "closes once the share ends")
+	require.Eventually(t, func() bool { return srv.stops.Load() == 1 }, time.Second, 5*time.Millisecond, "the closed chat's share ends")
+	require.Eventually(t, func() bool { return shutdowns.Load() == 1 }, time.Second, 5*time.Millisecond, "its folder closes with it")
 }
 
 // A share that moves to a chat (a window's new-chat share binding to it)

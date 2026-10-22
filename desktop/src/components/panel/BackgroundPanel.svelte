@@ -6,8 +6,10 @@
   // A sub-agent's row shows only how long it has run; its model is in the
   // name's hover text (owner, 2026-10-21). The stop cross keeps its place on
   // every row and shows on hover; it stops a helper or kills a job at once,
-  // as the sheet's Stop and Kill.
+  // as the sheet's Stop and Kill. A sub-agent's name opens its chat
+  // (helperchats.svelte.js, owner 2026-10-21).
   import Icon from "../Icon.svelte";
+  import { openHelperChat } from "../../lib/stores/helperchats.svelte.js";
   import { helperInfo, runningHelpers, secondNow, since, stopHelper } from "../../lib/live/helpers.svelte.js";
   import { jobInfo, jobKey, killJob, trayJobs } from "../../lib/live/jobs.svelte.js";
 
@@ -16,7 +18,7 @@
     {
       id: "subagents",
       title: "Subagents",
-      rows: runningHelpers().map((h) => ({ key: `helper:${h.id}`, text: h.name || "sub-agent", title: `${h.name || "sub-agent"} · ${helperInfo(h, now)}`, info: since(h.started, now), stop: () => stopHelper(h), label: "Stop" })),
+      rows: runningHelpers().map((h) => ({ key: `helper:${h.id}`, text: h.name || "sub-agent", title: `${h.name || "sub-agent"} · ${helperInfo(h, now)}`, info: since(h.started, now), open: () => openHelperChat(h), stop: () => stopHelper(h), label: "Stop" })),
     },
     {
       id: "background",
@@ -35,7 +37,11 @@
     {#each section.rows as row (row.key)}
       <li class="line row">
         <span class="bullet" aria-hidden="true">•</span>
-        <span class="text" title={row.title ?? row.text}>{row.text}</span>
+        {#if row.open}
+          <button class="text open" type="button" title={row.title ?? row.text} onclick={row.open}>{row.text}</button>
+        {:else}
+          <span class="text" title={row.title ?? row.text}>{row.text}</span>
+        {/if}
         <span class="info">{row.info}</span>
         <button class="stop" type="button" tabindex="-1" title={row.label} aria-label="{row.label} {row.text}" onclick={row.stop}><Icon name="cross" size={12} /></button>
       </li>
@@ -75,6 +81,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .open {
+    text-align: left;
+    cursor: pointer;
+  }
+  .open:hover {
+    text-decoration: underline;
   }
   .info {
     flex: none;

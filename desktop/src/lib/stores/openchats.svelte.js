@@ -11,7 +11,7 @@ import { onEvent } from "../engine/events.js";
 import { chatClosed } from "../remote/share.js";
 import { conn, inFolder, switchFolder } from "./connection.svelte.js";
 import { keepFolders } from "./listfolders.svelte.js";
-import { isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
+import { isHelperChat, isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
 
 export const openChats = $state({ list: [], loaded: false });
 
@@ -85,7 +85,8 @@ async function listShown(id, title) {
   // under the folder being left (owner, 2026-10-21).
   const known = openChats.list.find((c) => c.id === id);
   const dir = known?.dir || folderNow();
-  if (!id || !dir || id === dropped) return;
+  // A sub-agent's chat is this window's only (helperchats.svelte.js).
+  if (!id || !dir || id === dropped || isHelperChat(id)) return;
   if (known && known.dir === dir && (known.title === title || !title)) return;
   const write = JSON.stringify([id, dir, title]);
   if (known && write === lastWrite) return;

@@ -91,10 +91,23 @@ export function upsertSession(s, { fromEvent = false, since = Infinity } = {}) {
   if (!s?.id) return;
   if (s.parent_session_id) {
     childParent.set(s.id, s.parent_session_id);
+    // A sub-agent's chat opened as a chat of its own is kept like any
+    // chat, but out of the list's order (helperchats.svelte.js).
+    if (helperChatIds.has(s.id)) storeSession(s, { fromEvent, since });
     return;
   }
   storeSession(s, { fromEvent, since });
   place(s.id);
+}
+
+// The sub-agent chats this window shows as chats (owner, 2026-10-21).
+const helperChatIds = new Set();
+export function allowHelperChat(id, allowed) {
+  if (allowed) helperChatIds.add(id);
+  else helperChatIds.delete(id);
+}
+export function isHelperChat(id) {
+  return helperChatIds.has(id);
 }
 
 // What a chat of another folder is doing, from that folder's engine (the
@@ -256,7 +269,7 @@ onEvent("session", (kind, s) => {
     chatDeleted(s.id);
     return;
   }
-  if (s.parent_session_id) {
+  if (s.parent_session_id && !helperChatIds.has(s.id)) {
     childParent.set(s.id, s.parent_session_id);
     return;
   }
@@ -312,7 +325,7 @@ function applyList(list, since) {
   }
   const inList = new Set(listed);
   for (const id of Object.keys(sessions.byId)) {
-    if (!inList.has(id) && !openIds.has(id) && id !== sessions.currentId && id !== sessions.opening?.id) removeSession(id);
+    if (!inList.has(id) && !openIds.has(id) && !helperChatIds.has(id) && id !== sessions.currentId && id !== sessions.opening?.id) removeSession(id);
   }
   const extra = sessions.order.filter((id) => !inList.has(id) && sessions.byId[id]);
   sessions.order = listed;
@@ -403,7 +416,14 @@ function abandonOpen() {
 const KEEP = 6;
 const kept = new Map(); // chat id → its record, chats left kept loaded, oldest first
 
+// Called with each chat the window leaves, after the next one is set.
+const leaveHooks = [];
+export function onLeave(hook) {
+  leaveHooks.push(hook);
+}
+
 function leave(sid) {
+  for (const hook of leaveHooks) hook(sid);
   const chat = messages.bySession[sid];
   if (chat?.status === "ready" && chat.active.size > 0 && sessions.byId[sid]) {
     stamp(sid, "live");
@@ -688,7 +708,8 @@ function modelAvailable(config, provider, model) {
 
 async function restoreModel(sid) {
   const chat = messages.bySession[sid];
-  if (!chat) return;
+  // A sub-agent's chat runs on the sub-agent's model, not the window's.
+  if (!chat || helperChatIds.has(sid)) return;
   let last = null;
   for (let i = chat.ids.length - 1; i >= 0 && !last; i -= 1) {
     const m = chat.byId.get(chat.ids[i]);

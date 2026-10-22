@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { folderGroups, listedRows } from "./openlist.js";
+import { folderGroups, listedRows, placeHelperRows } from "./openlist.js";
 
 const here = (dir) => dir === "/p/here";
 const session = (id, extra = {}) => ({ id, title: `Chat ${id}`, updated_at: 100, created_at: 1, ...extra });
@@ -92,5 +92,18 @@ describe("folderGroups", () => {
       ["/p/other", ["x"]],
       ["/p/new", ["y"]],
     ]);
+  });
+});
+
+describe("placeHelperRows", () => {
+  it("puts a sub-agent's chat after its parent and its earlier sub-agents, or last without a listed parent", () => {
+    const rows = [{ id: "a" }, { id: "b" }];
+    const helpers = [
+      { id: "h1", parent: "a", helper: true },
+      { id: "h2", parent: "a", helper: true },
+      { id: "h3", parent: "gone", helper: true },
+    ];
+    expect(placeHelperRows(rows, helpers).map((r) => r.id)).toEqual(["a", "h1", "h2", "b", "h3"]);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
   });
 });

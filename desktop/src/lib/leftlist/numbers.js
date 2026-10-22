@@ -8,9 +8,11 @@ import { conn, inFolder, switchFolder } from "../stores/connection.svelte.js";
 import { folders } from "../stores/folders.svelte.js";
 import { openChats, openInFolder } from "../stores/openchats.svelte.js";
 import { parentOf } from "../stores/links.svelte.js";
-import { busy, openChat, sessions } from "../stores/sessions.svelte.js";
+import { busy, isHelperChat, openChat, sessions } from "../stores/sessions.svelte.js";
+import { helperRows } from "../stores/helperchats.svelte.js";
+import { rowState } from "../listmodel.js";
 import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
-import { folderGroups, listedRows } from "./openlist.js";
+import { folderGroups, listedRows, placeHelperRows } from "./openlist.js";
 import { folderKey, listFolders } from "../stores/listfolders.svelte.js";
 import { baseOf, clean, short } from "./picker.js";
 import { leftList } from "./store.svelte.js";
@@ -58,7 +60,7 @@ function draftRow() {
 // the kept folders first (lib/stores/listfolders.svelte.js).
 export function chatGroups(now = Date.now()) {
   const draft = draftRow();
-  const rows = draft ? [draft, ...listedChats(now)] : listedChats(now);
+  const rows = withHelpers(draft ? [draft, ...listedChats(now)] : listedChats(now));
   return folderGroups(rows, listFolders.dirs, folderKey).map((group) => ({
     ...group,
     label: short(group.dir, leftList.home),
@@ -70,9 +72,18 @@ export function chatRows(now = Date.now()) {
   return chatGroups(now).flatMap((group) => group.rows);
 }
 
+// The sub-agent chats this window shows (helperchats.svelte.js), each after
+// its parent's row when the parent is listed, else at the end.
+function withHelpers(rows) {
+  const selectedId = shownTerminal() ? "" : sessions.currentId;
+  return placeHelperRows(rows, helperRows({ here: inFolder, busy, rowState, selectedId }));
+}
+
 function listedChats(now) {
+  // A sub-agent's chat is drawn by withHelpers, not as a branch.
+  const byId = Object.fromEntries(Object.entries(sessions.byId).filter(([id]) => !isHelperChat(id)));
   return listedRows(openChats.list, {
-    byId: sessions.byId,
+    byId,
     parentOf,
     here: inFolder,
     // A shown terminal takes the band; no chat stays marked open beside it.

@@ -20,6 +20,7 @@
   import Icon from "../Icon.svelte";
   import { rowState } from "../../lib/rowstates.js";
   import { closeListed, openInFolder } from "../../lib/stores/openchats.svelte.js";
+  import { hideHelperChat } from "../../lib/stores/helperchats.svelte.js";
   import { focusField } from "../../lib/stores/composer.svelte.js";
   import { openChat, sessions } from "../../lib/stores/sessions.svelte.js";
 
@@ -41,6 +42,11 @@
     event.stopPropagation();
     if (row.draft) {
       sessions.draft = false;
+      return;
+    }
+    // A sub-agent's row only hides; the sub-agent keeps working.
+    if (row.helper) {
+      hideHelperChat(row.id);
       return;
     }
     closeListed(row.id).catch((error) => console.error("closing a chat failed", error));
@@ -75,6 +81,7 @@
   >
     <span class="title">{row.title}</span>
     <span class="line2">
+      {#if row.helper}<span class="helper-mark">Subagent</span>{/if}
       {#if row.state}
         <span class="state {row.stateKind}">
           <Icon name={STATE_ICONS[row.stateKind] ?? "working"} />
@@ -151,6 +158,14 @@
   .has-state .line2 {
     grid-column: 1 / -1;
     padding-right: calc(24 * var(--px));
+  }
+  /* A sub-agent's chat (owner, 2026-10-21), in the panel headings' type. */
+  .helper-mark {
+    flex: none;
+    font: var(--t-label);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--slate);
   }
   .state {
     display: flex;

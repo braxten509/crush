@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -80,6 +81,9 @@ type Task struct {
 	// accepted, so a turn ending in that gap doesn't ding as if all work
 	// were done. The result's own turn may still ding.
 	awaitingHandoff bool
+	// chat, set for a follow-up the user typed in the task's chat, gives
+	// its first turn the app's prompt IDs.
+	chat *chatCall
 }
 
 // TaskRequest is what `crush spawn` writes; TaskReply is Crush's answer.
@@ -105,6 +109,8 @@ type TaskRequest struct {
 	Background  *BackgroundRequest `json:"background,omitempty"`
 	// Skill turns a skill on or off for the whole chat (`crush skill`).
 	Skill *SkillRequest `json:"skill,omitempty"`
+	// chat marks a follow-up the user typed in the task's own chat.
+	chat *chatCall
 }
 
 type TaskReply struct {
@@ -155,6 +161,10 @@ type taskHub struct {
 	// checkIns holds each session's one check-in loop; see addCheckIn.
 	checkIns   map[string]*sessionCheckIns
 	checkInSeq int
+	// runs holds what running tasks' chat messages need (tasks_chat.go).
+	runs map[string]*taskRun
+	// subAgentHook lets tests build the agent a task runs on.
+	subAgentHook func(config.ProviderConfig, catwalk.Model) SessionAgent
 	// checkInEvery lets tests shorten check-ins; zero uses the setting.
 	checkInEvery time.Duration
 	// reaper is the write end of the reaper's pipe; see startReaper.

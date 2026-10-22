@@ -241,3 +241,14 @@ Other open items from wave 1:
 - Review 2 (t1) found cached foreign branches duplicated by fallback rows and delayed status replies accepted after a join changed. Added a branch to the existing cached-row regression and one focused delayed-response test (seven scenarios total, justified by the review). Both failed before correction (job 008).
 - Fix 2: skip the fallback for every cached nested row, guard queued status reads by folder, and accept status answers only for the same connected client/join. Focused frontend checks: 53/53 (job 009); full frontend suite: 103 files, 1,983 tests passed (job 00A). No changes to normal close cleanup. UI, release helper and test-engine builds passed (job 007); latest frontend rebuilt after fix 2 (job 009). Existing unrelated build warnings remain.
 - Original-flow checks: cached A→B→A and selected Working status, right-panel removal, and real streaming reply with a second app and a return are running on `gpu-screen` (sway 2560×1440 at 170 Hz). The scratch launcher uses the existing fake server and drivers in a read-only sandbox with a private home, no real desktop/bus/sound and disabled test notifications. Screenshots use `grim`; outside-world fingerprints guard the owner's files. These are isolated fake chats on the real app, not the owner's live chats or providers.
+
+# Debugging: a done sub-agent's left-list row stayed after leaving its chat (2026-10-21)
+
+## Attempts
+1. Read the parents' helpers on each switch (helper events can be dropped): still failed.
+2. `void sessions.currentId` → a used value, in case the build dropped the read: still failed.
+3. Probe counters: the `$effect` on `sessions.currentId` ran for "", the parent and the sub-agent's chat, then never again, although `sessions.currentId` was the parent afterwards. Cause of the stop not found.
+4. Fix: `sessions.onLeave` hook, called by `leave()` on every switch; it settles the rows. Then a plain "worker" row stayed: opening the chat had listed it in the open chats shared with the terminal (`listShown`). Sub-agent chats are now kept out of that list. `tests/driver/subagent_chat.py` passes.
+
+## Open
+- Why the store-level `$effect` stopped re-running. helpers.svelte.js uses the same pattern.

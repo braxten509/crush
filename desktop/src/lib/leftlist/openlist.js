@@ -90,6 +90,20 @@ export function listedRows(open, options = {}) {
   return rows;
 }
 
+// Sub-agent chat rows ({parent}, helperchats.svelte.js) among the list's
+// rows: each after its parent's row and the helper rows already there, or at
+// the end when its parent is not listed.
+export function placeHelperRows(rows, helpers) {
+  const out = [...rows];
+  for (const row of helpers) {
+    let at = out.findIndex((r) => r.id === row.parent);
+    if (at < 0) at = out.length - 1;
+    while (at + 1 < out.length && out[at + 1].helper) at += 1;
+    out.splice(at + 1, 0, row);
+  }
+  return out;
+}
+
 // The rows under their folders (owner, 2026-10-21): every kept folder in its
 // kept order, then any other folder a row has, in the rows' order. A kept
 // folder with no open chat still shows, with no rows. key(dir) makes one

@@ -11,7 +11,7 @@ import { api } from "../engine/api.js";
 import { alertHandler, alertNotify, alertSound } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { projectDir } from "../stores/composer.svelte.js";
-import { sessions } from "../stores/sessions.svelte.js";
+import { isHelperChat, sessions } from "../stores/sessions.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
 import { windowFocus } from "./focus.js";
 import { markDone, markError } from "./badge.svelte.js";
@@ -62,7 +62,9 @@ async function idle(sid) {
 
 async function finished(event) {
   const sid = event?.session_id;
-  if (!sid || !(await idle(sid))) return;
+  // A sub-agent's chat never dings (owner, 2026-10-21).
+  if (!sid || isHelperChat(sid) || sessions.byId[sid]?.parent_session_id) return;
+  if (!(await idle(sid))) return;
   if (!windowFocus.focused && sid === sessions.currentId) markDone();
   if (!(await idle(sid))) return;
   const title = event.session_title || sessions.byId[sid]?.title || "New session";

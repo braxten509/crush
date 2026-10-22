@@ -121,6 +121,16 @@ async function withList(...records) {
 }
 
 describe("the live flag (1.5.3, LIST-012)", () => {
+  it("keeps an open chat's status and activity when another folder's list loads", async () => {
+    await withList(chat("s1", { has_unfinished_work: true }));
+    S.setOpenChats(["s1"]);
+    await deliver(ev("message", "created", reply("m1", "s1", { at: 40, finished: true })));
+    await withList(chat("s2"));
+    expect(S.sessions.byId.s1?.has_unfinished_work).toBe(true);
+    expect(S.sessions.activity.s1).toBe(40);
+    expect(S.sessions.order).toContain("s1");
+  });
+
   it("an assistant message without finish for a chat not loaded turns it busy; its run_complete turns it idle", async () => {
     await withList(chat("s1"), chat("s2"));
     expect(S.busy("s2")).toBe(false);

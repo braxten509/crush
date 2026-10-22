@@ -68,6 +68,11 @@ pub async fn call(app: AppHandle, label: String, cmd: String, args: Value) -> Re
         "window_close" => res(commands::window_close(app.clone(), w).await),
         "project_switch" => res(commands::project_switch(app.clone(), w, arg(&args, "projectDir")?).await),
         "project_enter" => res(commands::project_enter(app.clone(), w, arg(&args, "projectDir")?).await),
+        // No engines in fixture runs: a list with nothing in it.
+        "folder_chat_states" => match app.try_state::<crate::fixture::Fixture>() {
+            Some(_) => ok(json!({})),
+            None => ok(crate::watch::chat_states(arg(&args, "chats")?).await),
+        },
         // Everything else, on the blocking pool.
         _ => blocking(move || sync_call(&app, w, &cmd, &args)).await,
     }

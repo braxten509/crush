@@ -144,6 +144,12 @@ export async function openChatsAdd(id, dir, title = "") {
   return invoke("open_chats_add", { id, dir, title });
 }
 
+// What open chats of other folders are doing, from their own engines
+// (watch.rs chat_states): {id: record}. chats: [{id, dir}].
+export async function folderChatStates(chats) {
+  return invoke("folder_chat_states", { chats });
+}
+
 export async function openChatsRemove(id) {
   return invoke("open_chats_remove", { id });
 }

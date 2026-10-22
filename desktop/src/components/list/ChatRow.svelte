@@ -84,6 +84,7 @@
         <span class="state registered">
           <Icon name={extra.icon} />
           <span>{extra.text}</span>
+          {#if row.time}<span>{row.time}</span>{/if}
         </span>
       {/if}
     </span>

@@ -97,6 +97,17 @@ export function upsertSession(s, { fromEvent = false, since = Infinity } = {}) {
   place(s.id);
 }
 
+// What a chat of another folder is doing, from that folder's engine (the
+// left list's 30 s check, owner 2026-10-21): its record's busy, background
+// and prompt fields, and its live flag.
+export function setChatState(id, state) {
+  const stored = sessions.byId[id];
+  if (!stored || !state) return;
+  sessions.byId[id] = { ...stored, is_busy: state.is_busy === true, has_unfinished_work: state.has_unfinished_work === true, pending_prompt: state.pending_prompt ?? "" };
+  if (state.is_busy === true) sessions.live[id] = true;
+  else delete sessions.live[id];
+}
+
 export function removeSession(id) {
   childParent.delete(id);
   if (!sessions.byId[id]) return;
@@ -301,7 +312,7 @@ function applyList(list, since) {
   }
   const inList = new Set(listed);
   for (const id of Object.keys(sessions.byId)) {
-    if (!inList.has(id) && id !== sessions.currentId && id !== sessions.opening?.id) removeSession(id);
+    if (!inList.has(id) && !openIds.has(id) && id !== sessions.currentId && id !== sessions.opening?.id) removeSession(id);
   }
   const extra = sessions.order.filter((id) => !inList.has(id) && sessions.byId[id]);
   sessions.order = listed;

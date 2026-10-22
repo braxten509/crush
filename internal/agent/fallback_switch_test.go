@@ -114,11 +114,13 @@ func TestRunningOutSwitchesToTheNextAccountAndContinues(t *testing.T) {
 	sent := make(chan string, 1)
 	c.fallback.send = func(id string) { sent <- id }
 	switched := 0
-	c.SetModelSwitchHook(func() { switched++ })
+	var seen string // the agent's account when the apps are told
+	c.SetModelSwitchHook(func() { switched++; seen = c.Model().ModelCfg.Account })
 
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
 	require.Equal(t, "claude-2", large(c).Account)
 	require.Equal(t, 1, switched)
+	require.Equal(t, "claude-2", seen, "the agent runs on the new account before the apps read it")
 	lines := chatLines(t, c, sid)
 	require.Len(t, lines, 1)
 	require.Equal(t, "Switched to Claude 2 · Claude Opus: Claude 1 it ran out.", lines[0])

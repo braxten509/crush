@@ -27,6 +27,53 @@ import (
 // Ownership (Q2, engine-design.md 5.5), on real turns, helpers and jobs of
 // the fake model.
 
+func TestFolderSwitchKeepsOwnedWork(t *testing.T) {
+	for _, otherStays := range []bool{true, false} {
+		t.Run(fmt.Sprintf("other_stays_%t", otherStays), func(t *testing.T) {
+			r := newLiveRig(t)
+			r.b.appOpen = func() bool { return true }
+			a, other := newClientID(t), newClientID(t)
+			p := r.project(t)
+			ws := r.open(t, p, a)
+			if otherStays {
+				r.open(t, p, other)
+			}
+			chat := r.chat(t, ws, "Keeps working")
+			helper, _ := r.spawnWork(t, ws, a, chat, "switch")
+			require.NoError(t, r.b.RetireClientKeepWork(a))
+			if !otherStays {
+				r.open(t, p, other)
+			}
+			// Ordinary departure cleanup stops this held reply and its helper
+			// before this interval; returning must not queue that cleanup.
+			time.Sleep(300 * time.Millisecond)
+			require.Equal(t, 1, r.model.heldNow("switch"), "the reply keeps running")
+			require.Equal(t, 1, r.model.heldNow("switch-helper"), "the helper keeps running")
+			require.NotEmpty(t, agent.SessionBackgroundProcesses(chat), "the job keeps running")
+			ws.live.mu.Lock()
+			pending := slices.Clone(ws.live.pendingQ2)
+			ws.live.mu.Unlock()
+			require.Empty(t, pending, "no delayed departure cleanup")
+			task, ok := sessionTask(chat, helper.Name)
+			require.True(t, ok)
+			require.Equal(t, agent.TaskRunning, task.Status)
+
+			// The first app to join after the switch takes the work over:
+			// its ordinary departure, with another app staying, stops it.
+			adopter := other
+			if otherStays {
+				adopter = newClientID(t)
+				r.open(t, p, adopter)
+			} else {
+				r.open(t, p, newClientID(t))
+			}
+			require.NoError(t, r.b.RetireClient(adopter))
+			r.model.waitHeld(t, "switch", 0)
+			r.model.waitHeld(t, "switch-helper", 0)
+		})
+	}
+}
+
 // completions collects a workspace's RunComplete events by submission ID.
 type completions struct {
 	mu   sync.Mutex
@@ -470,7 +517,8 @@ func TestQ2WhenTeardownAborts(t *testing.T) {
 	r.model.waitHeld(t, "a1", 0)
 	r.model.waitHeld(t, "a1-helper", 0)
 	requireReleased(t, p, "tasks.json", helper.ID)
-	require.Empty(t, promptsOf(ws, a))
+	// The prompt's entry goes at its RunComplete, just after the turn ends.
+	require.Eventually(t, func() bool { return len(promptsOf(ws, a)) == 0 }, 10*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, r.b.AttachClient(ws.ID, joiner))
 	require.NoError(t, r.b.InitAgent(context.Background(), ws.ID, joiner, true))

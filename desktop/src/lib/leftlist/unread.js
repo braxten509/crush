@@ -1,7 +1,8 @@
 // Unread chats (desktop-design-5-6 2.20, LIST-012's phase 6 part): a chat
 // whose work ended while this window did not show it waits as "Done" until it
 // is shown or works again, as the session host's statusChanged and show
-// (internal/ui/sessionhost/host.go:381-401, :353). The set is per window.
+// (internal/ui/sessionhost/host.go:381-401, :353; owner, 2026-10-21: keep
+// it so). The set is per window.
 import { SvelteSet } from "svelte/reactivity";
 
 export const unread = new SvelteSet();

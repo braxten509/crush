@@ -16,7 +16,6 @@
   import { panel, setPanelBody, toField } from "./panel/panel.svelte.js";
   import BackgroundPanel from "./panel/BackgroundPanel.svelte";
   import AccountMeters from "./panel/AccountMeters.svelte";
-  import FolderSection from "./panel/FolderSection.svelte";
   import ServersPanel from "./panel/ServersPanel.svelte";
   import UpdateFoot from "./panel/UpdateFoot.svelte";
   import TodoPanel from "./panel/TodoPanel.svelte";
@@ -101,7 +100,6 @@
     onwheel={wheel}
   >
     <AccountMeters />
-    <FolderSection />
     <TodoPanel />
     <BackgroundPanel />
     <ServersPanel />

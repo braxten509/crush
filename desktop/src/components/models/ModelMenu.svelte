@@ -55,6 +55,10 @@
   const accounts = $derived(hasAccounts(kind) ? fallback.accounts.filter((a) => a.kind === kind) : []);
   const accountNow = $derived(account ?? current?.account ?? "");
   const accountShown = $derived(accounts.find((a) => a.id === accountNow) ?? accounts[0] ?? null);
+  // The account belongs to the model in use, so it shows only on that
+  // model's own provider, not while another one is browsed (owner,
+  // 2026-10-21).
+  const onCurrentGroup = $derived(!searching && shownGroup?.name === startGroup(groups, current));
 
   // The tool behind a configured provider id (its type), or "".
   function kindOf(provider) {
@@ -247,7 +251,7 @@
         </div>
       </div>
     {/if}
-    {#if accounts.length > 1}
+    {#if accounts.length > 1 && onCurrentGroup}
       <div class="account" data-column="account">
         <h3 class="label">Account</h3>
         <div class="pick">

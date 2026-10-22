@@ -14,6 +14,8 @@ import { api } from "../engine/api.js";
 import { rowState } from "../listmodel.js";
 import { busy, readStart, rootOf, sessions, upsertSession } from "../stores/sessions.svelte.js";
 import { unread } from "./unread.js";
+import { conn, inFolder } from "../stores/connection.svelte.js";
+import { openChats } from "../stores/openchats.svelte.js";
 
 // Chats an event brought that no read has answered yet.
 export const unknown = new SvelteSet();
@@ -53,6 +55,11 @@ export const MARKS = {
 const READ_GAP_MS = 500;
 const reads = new Map(); // sid → {inFlight, again, last, timer}
 
+function joinedFolder(id) {
+  const listed = openChats.list.find((chat) => chat.id === id);
+  return !listed?.dir || inFolder(listed.dir);
+}
+
 // The chat an event names, as a listed chat: a branch or helper's own chat
 // counts for the chat it belongs to.
 function listedChat(sid) {
@@ -65,6 +72,7 @@ function listedChat(sid) {
 export function readSoon(sid) {
   const id = listedChat(sid);
   if (!id) return;
+  if (!joinedFolder(id)) return;
   let entry = reads.get(id);
   if (!entry) {
     entry = { inFlight: false, again: false, last: 0, timer: null };
@@ -80,12 +88,14 @@ export function readSoon(sid) {
 
 async function readNow(id, entry) {
   entry.timer = null;
+  if (!joinedFolder(id)) return;
   entry.inFlight = true;
   entry.last = Date.now();
   const since = readStart();
+  const client = conn.clientId;
   try {
     const record = await api.getSession(id);
-    if (record?.id === id && sessions.byId[id]) {
+    if (conn.state === "connected" && conn.clientId === client && joinedFolder(id) && record?.id === id && sessions.byId[id]) {
       upsertSession(record, { since });
       unknown.delete(id);
     }

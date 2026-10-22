@@ -3,10 +3,12 @@
   // tray's entries; 2026-10-21: sub-agents get their own list): the shown
   // chat's running helpers, then its background jobs that are no server
   // (the Background Processes sheet's rows), each with how long it has run.
-  // The stop cross keeps its place on every row and shows on hover; it stops
-  // a helper or kills a job at once, as the sheet's Stop and Kill.
+  // A sub-agent's row shows only how long it has run; its model is in the
+  // name's hover text (owner, 2026-10-21). The stop cross keeps its place on
+  // every row and shows on hover; it stops a helper or kills a job at once,
+  // as the sheet's Stop and Kill.
   import Icon from "../Icon.svelte";
-  import { helperInfo, runningHelpers, secondNow, stopHelper } from "../../lib/live/helpers.svelte.js";
+  import { helperInfo, runningHelpers, secondNow, since, stopHelper } from "../../lib/live/helpers.svelte.js";
   import { jobInfo, jobKey, killJob, trayJobs } from "../../lib/live/jobs.svelte.js";
 
   const now = $derived(secondNow());
@@ -14,7 +16,7 @@
     {
       id: "subagents",
       title: "Subagents",
-      rows: runningHelpers().map((h) => ({ key: `helper:${h.id}`, text: h.name || "sub-agent", info: helperInfo(h, now), stop: () => stopHelper(h), label: "Stop" })),
+      rows: runningHelpers().map((h) => ({ key: `helper:${h.id}`, text: h.name || "sub-agent", title: `${h.name || "sub-agent"} · ${helperInfo(h, now)}`, info: since(h.started, now), stop: () => stopHelper(h), label: "Stop" })),
     },
     {
       id: "background",
@@ -33,7 +35,7 @@
     {#each section.rows as row (row.key)}
       <li class="line row">
         <span class="bullet" aria-hidden="true">•</span>
-        <span class="text" title={row.text}>{row.text}</span>
+        <span class="text" title={row.title ?? row.text}>{row.text}</span>
         <span class="info">{row.info}</span>
         <button class="stop" type="button" tabindex="-1" title={row.label} aria-label="{row.label} {row.text}" onclick={row.stop}><Icon name="cross" size={12} /></button>
       </li>

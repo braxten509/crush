@@ -124,6 +124,38 @@ async fn engines() -> HashMap<PathBuf, (String, String)> {
     found
 }
 
+/// What each open chat of another folder is doing, by chat id: its record
+/// from that folder's engine, for the left list's 30 s check (owner,
+/// 2026-10-21). A folder with no running engine runs nothing, so its chats
+/// get an idle stand-in; a chat its engine cannot read is left out.
+pub async fn chat_states(chats: Vec<ChatDir>) -> HashMap<String, Value> {
+    let engines = engines().await;
+    let mut states = HashMap::new();
+    for chat in chats {
+        if chat.id.is_empty() || chat.dir.is_empty() {
+            continue;
+        }
+        let Some((socket, workspace)) = engines.get(&resolved(&chat.dir)) else {
+            states.insert(chat.id.clone(), json!({ "id": chat.id, "is_busy": false, "has_unfinished_work": false, "pending_prompt": "" }));
+            continue;
+        };
+        let path = format!("/v1/workspaces/{}/sessions/{}", encode(workspace), encode(&chat.id));
+        if let Ok(reply) = EngineHttp::new(socket).call("GET", &path, None, Some(CALL_LIMIT)).await {
+            if (200..300).contains(&reply.status) && reply.body.get("id").and_then(Value::as_str) == Some(chat.id.as_str()) {
+                states.insert(chat.id, reply.body);
+            }
+        }
+    }
+    states
+}
+
+/// A chat and its folder, as the page sends them to chat_states.
+#[derive(serde::Deserialize)]
+pub struct ChatDir {
+    pub id: String,
+    pub dir: String,
+}
+
 fn listen(app: AppHandle, dir: PathBuf, socket: String, workspace: String) -> Listener {
     let open = Arc::new(AtomicBool::new(false));
     let opened = open.clone();

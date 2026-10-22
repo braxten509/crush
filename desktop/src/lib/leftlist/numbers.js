@@ -82,6 +82,7 @@ function listedChats(now) {
     timeOf: (s) => Math.max(s?.updated_at ?? 0, sessions.activity[s?.id] ?? 0),
     folderOf: folderLabel,
     catalog: folders.byId,
+    states: folders.states,
   });
 }
 

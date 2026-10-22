@@ -133,8 +133,12 @@ func (b *Backend) retire(clientID string, keepWork bool) error {
 	}
 	b.mu.Unlock()
 
+	reason := GoneRetired
+	if keepWork {
+		reason = GoneFolderSwitch
+	}
 	for _, ws := range left {
-		b.clientGone(ws, clientID, GoneRetired, slices.Contains(orphaned, ws))
+		b.clientGone(ws, clientID, reason, slices.Contains(orphaned, ws))
 	}
 	for _, ws := range orphaned {
 		switch {

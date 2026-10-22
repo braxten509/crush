@@ -25,8 +25,10 @@ import { DRAFT_STEP, closeThisWindow, discardDraft } from "../leftlist/windowclo
 import { registerListSection } from "../listsections.js";
 import { closeMain, mainView } from "../mainview.js";
 import { probeSection } from "../probe.js";
+import { rowState as listRowState } from "../listmodel.js";
 import { registerRowState } from "../rowstates.js";
 import { conn } from "../stores/connection.svelte.js";
+import { folders } from "../stores/folders.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { askCloseTerminal, terminals } from "../terminal/tabs.svelte.js";
 
@@ -91,6 +93,10 @@ if (typeof document !== "undefined") {
 watch(() => {
   const shownChat = shownTerminal() ? "" : sessions.currentId;
   for (const id of sessions.order) noteState(id, phase3Kind(id), id === shownChat);
+  // Other folders' chats this window holds no record of: their 30 s check.
+  for (const [id, st] of Object.entries(folders.states)) {
+    if (!sessions.byId[id]) noteState(id, listRowState(st, st.is_busy)?.kind ?? "", false);
+  }
 });
 
 // A read when an event names a chat; a new chat is unknown until one lands.

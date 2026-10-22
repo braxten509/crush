@@ -8,6 +8,26 @@ describe("listedRows", () => {
   const byId = { a: session("a"), b: session("b"), branch: session("branch", { created_at: 2 }), lone: session("lone") };
   const parentOf = (id) => ({ branch: "a", lone: "gone" })[id] ?? null;
 
+  it("keeps a cached chat's folder, status and time when it is selected from another folder", () => {
+    const open = [{ id: "branch", dir: "/p/other" }, { id: "a", dir: "/p/other" }];
+    const cached = { a: session("a", { has_unfinished_work: true }), branch: session("branch") };
+    const rows = listedRows(open, { byId: cached, here, selectedId: "a", parentOf });
+    expect(rows.map((row) => row.id)).toEqual(["a", "branch"]);
+    expect(rows[1].folder).toEqual({ dir: "/p/other" });
+    const row = rows[0];
+    expect(row.folder).toEqual({ dir: "/p/other" });
+    expect(row.selected).toBe(true);
+    expect(row.state).toBe("Background");
+    expect(row.time).not.toBe("");
+  });
+
+  it("shows what another folder's unloaded chat is doing, from its engine's check", () => {
+    const open = [{ id: "x", dir: "/p/other" }, { id: "y", dir: "/p/other" }];
+    const states = { x: { is_busy: true }, y: { is_busy: false, has_unfinished_work: false } };
+    const rows = listedRows(open, { here, states });
+    expect(rows.map((r) => [r.id, r.state, r.stateKind])).toEqual([["x", "Working…", "working"], ["y", "", ""]]);
+  });
+
   it("draws the open chats in the list's order, each with its folder", () => {
     const open = [
       { id: "b", dir: "/p/here" },

@@ -296,7 +296,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 			c.fallback.ret = nil
 		}
 		c.fallback.mu.Unlock()
-		if err := c.switchModel(fallback.Model(b)); err != nil {
+		if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
 			slog.Warn("The fallback order could not switch the model", "error", err)
 			return false
 		}
@@ -325,7 +325,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 					return
 				}
 			}
-			if err := c.switchModel(fallback.Model(b)); err != nil {
+			if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
 				slog.Warn("The fallback order could not switch the model", "error", err)
 			}
 			c.sendContinue(sessionID)
@@ -351,7 +351,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 		line := fmt.Sprintf("Used a free refill on %s.", accounts.Label(cfg, act.Account.Kind, act.Account.ID))
 		if act.Block != at {
 			b := order.Blocks[act.Block]
-			if err := c.switchModel(fallback.Model(b)); err != nil {
+			if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
 				return false
 			}
 			line = fmt.Sprintf("Used a free refill on %s and switched to it.", accounts.Label(cfg, act.Account.Kind, act.Account.ID))
@@ -366,7 +366,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 }
 
 // switchModel makes m the selected large model and tells the apps.
-func (c *coordinator) switchModel(m config.SelectedModel) error {
+func (c *coordinator) switchModel(ctx context.Context, m config.SelectedModel) error {
 	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
 	if cur.Provider == m.Provider && cur.Model == m.Model && cur.Account == m.Account && (m.ReasoningEffort == "" || cur.ReasoningEffort == m.ReasoningEffort) {
 		return nil
@@ -383,6 +383,14 @@ func (c *coordinator) switchModel(m config.SelectedModel) error {
 	}
 	if err := c.cfg.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeLarge, next); err != nil {
 		return err
+	}
+	// The agent takes the new model now, not at its next turn, so the apps'
+	// read after the hook below shows the new account and model (owner,
+	// 2026-10-21: the usage meters kept the old account).
+	if agent, name := c.activeAgent(); agent != nil {
+		if err := c.updateAgentModels(context.WithoutCancel(ctx), agent, name); err != nil {
+			slog.Warn("The fallback order could not refresh the agent's model", "error", err)
+		}
 	}
 	c.fallback.mu.Lock()
 	switched := c.fallback.switched

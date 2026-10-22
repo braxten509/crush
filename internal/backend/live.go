@@ -65,6 +65,10 @@ type liveState struct {
 	// for the teardown that follows: it runs only if an app joins first,
 	// aborting that teardown (runPendingQ2).
 	pendingQ2 []string
+	// switchedAway lists the apps that left for another folder with their
+	// work kept running (GoneFolderSwitch). The next app to join takes that
+	// work over, so it stops when that app leaves (owner, 2026-10-21).
+	switchedAway []string
 
 	// initMu makes InitAgent calls take turns; nonInteractive records that
 	// the coordinator running is a non-interactive one, which a start makes
@@ -116,9 +120,10 @@ func (b *Backend) liveHooks() clientHooks {
 // refresh at the first one, and the memory checks while any exists. A join
 // also aborts the teardown the last app's departure began, so that app's Q2
 // runs now.
-func (b *Backend) liveJoined(ws *Workspace, _ string) {
+func (b *Backend) liveJoined(ws *Workspace, clientID string) {
 	b.liveEngine().limitsOnce.Do(b.startLimits)
 	b.startMemoryChecks()
+	ws.live.adoptSwitchedWork(clientID)
 	b.runPendingQ2(ws)
 }
 
@@ -133,7 +138,7 @@ func (b *Backend) liveTeardown(ws *Workspace) {
 	hooked := l.hooked
 	l.hooked = false
 	l.prompts, l.lastSender, l.owners, l.workChats, l.workGens = nil, nil, nil, nil, nil
-	l.pendingQ2, l.nonInteractiveApps = nil, nil
+	l.pendingQ2, l.switchedAway, l.nonInteractiveApps = nil, nil, nil
 	l.mu.Unlock()
 	if stop != nil {
 		stop()

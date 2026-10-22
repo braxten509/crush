@@ -100,6 +100,11 @@ type Config struct {
 	// Recently used models stored in the data directory config.
 	RecentModels map[SelectedModelType][]SelectedModel `json:"recent_models,omitempty" jsonschema:"-"`
 
+	// The reasoning effort last used with each model, by "provider:model",
+	// stored in the data directory config. A model chosen again (picked, or
+	// brought back by opening a chat) gets it back (owner, 2026-10-22).
+	ModelEfforts map[string]string `json:"model_efforts,omitempty" jsonschema:"-"`
+
 	// The providers that are configured
 	Providers *csync.Map[string, ProviderConfig] `json:"providers,omitempty" jsonschema:"description=AI provider configurations"`
 
@@ -136,6 +141,7 @@ func (c *Config) cloneForWrite() *Config {
 	nc := *c
 	nc.Models = maps.Clone(c.Models)
 	nc.RecentModels = maps.Clone(c.RecentModels)
+	nc.ModelEfforts = maps.Clone(c.ModelEfforts)
 	nc.MCP = maps.Clone(c.MCP)
 	if c.Options != nil {
 		opts := *c.Options

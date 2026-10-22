@@ -71,10 +71,8 @@ func (m *UI) restoreModelFromSession(msgs []message.Message) tea.Cmd {
 		return nil
 	}
 
-	selectedModel := config.SelectedModel{
-		Provider: lastAssistant.Provider,
-		Model:    lastAssistant.Model,
-	}
+	// The model comes back with the effort last used with it.
+	selectedModel := cfg.Remembered(lastAssistant.Provider, lastAssistant.Model)
 	_, hasSmall := cfg.Models[config.SelectedModelTypeSmall]
 	ws := m.com.Workspace
 	// The preference writes run off the Update goroutine; the theme
@@ -212,6 +210,11 @@ func (m *UI) selectModel(msg dialog.ActionSelectModel, copilotImported bool) tea
 	// The dialogs close (and onboarding ends) at once; the preference
 	// writes run off the Update goroutine and finishModelSelection picks
 	// up once they landed.
+	// A picked model comes with the effort last used with it, not its
+	// default (owner, 2026-10-22).
+	if effort := cfg.ModelEffort(providerID, msg.Model.Model); effort != "" {
+		msg.Model.ReasoningEffort = effort
+	}
 	_, hasSmall := cfg.Models[config.SelectedModelTypeSmall]
 	// Ensure the small model is set when it is unset.
 	fillSmall := !hasSmall && msg.ModelType != config.SelectedModelTypeSmall

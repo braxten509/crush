@@ -98,10 +98,10 @@ if not SWITCH:
         focused: field?.contains(document.activeElement) ?? false,
       };
     """) or {}
-    order = ["folder", "todos", "background", "servers"]
+    order = ["folder", "todos", "subagents", "background", "servers"]
     shown = got.get("sections") or []
-    check(shown[:1] == ["folder"] and shown == [n for n in order if n in shown], f"the panel shows the folder, then to-do, background, servers in that order ({shown})")
-    check(got.get("emptyShown") == [], f"an empty to-do, background or servers section is not shown ({got.get('emptyShown')})")
+    check(shown[:1] == ["folder"] and shown == [n for n in order if n in shown], f"the panel shows the folder, then to-do, subagents, background, servers in that order ({shown})")
+    check(got.get("emptyShown") == [], f"an empty to-do, subagents, background or servers section is not shown ({got.get('emptyShown')})")
     check("VISUALS" not in got.get("panelText", "").upper(), "the panel has no visuals section")
     check(bool(got.get("folder")), f"the panel names the folder ({got.get('folder')!r})")
     check("diagram" in got.get("figures", []) and "table" in got.get("figures", []), f"the diagram and the table are drawn in the message ({got.get('figures')})")

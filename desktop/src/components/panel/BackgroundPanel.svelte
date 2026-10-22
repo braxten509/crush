@@ -1,26 +1,36 @@
 <script>
-  // BACKGROUND (owner, 2026-10-19: moved here from the tray's entries): the
-  // shown chat's running helpers, then its background jobs that are no
-  // server (the Background Processes sheet's rows), each with how long it
-  // has run. The stop cross keeps its place on every row and shows on hover;
-  // it stops a helper or kills a job at once, as the sheet's Stop and Kill.
+  // SUBAGENTS, then BACKGROUND (owner, 2026-10-19: moved here from the
+  // tray's entries; 2026-10-21: sub-agents get their own list): the shown
+  // chat's running helpers, then its background jobs that are no server
+  // (the Background Processes sheet's rows), each with how long it has run.
+  // The stop cross keeps its place on every row and shows on hover; it stops
+  // a helper or kills a job at once, as the sheet's Stop and Kill.
   import Icon from "../Icon.svelte";
   import { helperInfo, runningHelpers, secondNow, stopHelper } from "../../lib/live/helpers.svelte.js";
   import { jobInfo, jobKey, killJob, trayJobs } from "../../lib/live/jobs.svelte.js";
 
   const now = $derived(secondNow());
-  const rows = $derived([
-    ...runningHelpers().map((h) => ({ key: `helper:${h.id}`, text: h.name || "sub-agent", info: helperInfo(h, now), stop: () => stopHelper(h), label: "Stop" })),
-    ...trayJobs().map((job) => ({ key: jobKey(job), text: job.command ?? "", info: jobInfo(job, now), stop: () => killJob(job), label: "Kill" })),
+  const sections = $derived([
+    {
+      id: "subagents",
+      title: "Subagents",
+      rows: runningHelpers().map((h) => ({ key: `helper:${h.id}`, text: h.name || "sub-agent", info: helperInfo(h, now), stop: () => stopHelper(h), label: "Stop" })),
+    },
+    {
+      id: "background",
+      title: "Background",
+      rows: trayJobs().map((job) => ({ key: jobKey(job), text: job.command ?? "", info: jobInfo(job, now), stop: () => killJob(job), label: "Kill" })),
+    },
   ]);
 </script>
 
-<!-- Shown only while it has something in it (owner, 2026-10-20). -->
-{#if rows.length > 0}
-<section class="panel-section" data-section="background" aria-label="Background">
-  <h2 class="label">Background</h2>
+<!-- Each list is shown only while it has something in it (owner, 2026-10-20). -->
+{#each sections as section (section.id)}
+{#if section.rows.length > 0}
+<section class="panel-section" data-section={section.id} aria-label={section.title}>
+  <h2 class="label">{section.title}</h2>
   <ul class="rows">
-    {#each rows as row (row.key)}
+    {#each section.rows as row (row.key)}
       <li class="line row">
         <span class="bullet" aria-hidden="true">•</span>
         <span class="text" title={row.text}>{row.text}</span>
@@ -31,6 +41,7 @@
   </ul>
 </section>
 {/if}
+{/each}
 
 <style>
   .label {

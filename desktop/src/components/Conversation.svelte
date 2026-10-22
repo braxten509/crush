@@ -50,8 +50,10 @@
   <InitPrompt />
   <Landing />
   <Opening />
-  <TimelineStack {sessionId} />
+  <!-- The rail is drawn before the chats, so their keys cover it (owner,
+       2026-10-22: the line ran through the "A" boxes). -->
   {#if column}<Rail {column} shown={chatShown} />{/if}
+  <TimelineStack {sessionId} />
 
   <NoticeLine />
   <Tray />

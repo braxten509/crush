@@ -38,7 +38,10 @@ func TestRowsFollowTheSharedChatList(t *testing.T) {
 	h.chats = &list
 
 	// Each row's chat is listed once it reports it.
-	for id, chat := range map[int]string{1: "c1", 2: "c2"} {
+	// In row order: a map's order is random, and the list keeps the order
+	// chats are reported in.
+	for i, chat := range []string{"c1", "c2"} {
+		id := i + 1
 		s := h.byID(id)
 		s.status.Session, s.status.Dir = chat, "/p"
 		h.statusChanged(id)

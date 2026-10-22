@@ -234,7 +234,7 @@ func (b *Backend) newWorkspace(args proto.Workspace, key string) (*Workspace, er
 	}
 
 	wsCtx, wsCancel := context.WithCancel(b.ctx)
-	return &Workspace{
+	workspace := &Workspace{
 		App:          appWorkspace,
 		ID:           id,
 		Path:         args.Path,
@@ -245,7 +245,12 @@ func (b *Backend) newWorkspace(args proto.Workspace, key string) (*Workspace, er
 		ctx:          wsCtx,
 		cancel:       wsCancel,
 		clients:      make(map[string]*clientState),
-	}, nil
+	}
+	// app.New started this project's agent, and a desktop opening a
+	// configured project reads no init on that path again: the fallback
+	// order's switches reach the apps from here.
+	installModelSwitchHook(workspace)
+	return workspace, nil
 }
 
 // skillsDiscoveryConfig adapts a *config.ConfigStore to the

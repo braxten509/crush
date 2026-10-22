@@ -225,11 +225,21 @@ func initCoder(ctx context.Context, ws *Workspace, interactive bool) error {
 		return err
 	}
 	l.nonInteractive = false
-	// The fallback order switches the model itself; the apps refresh it.
+	installModelSwitchHook(ws)
+	return nil
+}
+
+// installModelSwitchHook lets the workspace's coordinator tell the apps when
+// the fallback order switches the selected model, so they read it again: the
+// desktop's usage meters then show the account the chat runs on and not the
+// one it left (owner, 2026-10-22). Installed wherever a coordinator comes to
+// life, not only on an interactive init: a configured project's coordinator
+// starts when the workspace is created (app.New), and the desktop calls
+// nothing on this path again.
+func installModelSwitchHook(ws *Workspace) {
 	if s, ok := ws.coordinator().(interface{ SetModelSwitchHook(func()) }); ok {
 		s.SetModelSwitchHook(func() { sendConfigChanged(ws) })
 	}
-	return nil
 }
 
 // UpdateAgent reloads the agent model configuration.

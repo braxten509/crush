@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addableProviders, catalogRows, contextText, priceText, savedWith, savedWithout } from "./openrouter.js";
+import { addableProviders, catalogRows, cheapestHostOn, contextText, priceText, savedWith, savedWithout } from "./openrouter.js";
 
 // The OpenRouter "+" (owner, 2026-10-22): a slip lists a model twice, drops
 // a saved one, or shows the wrong price.
@@ -37,5 +37,15 @@ describe("OpenRouter models", () => {
     expect(savedWith([kimi], [glm, kimi]).map((m) => m.id)).toEqual(["moonshot/kimi-k3", "z-ai/glm-5.3"]);
     expect(savedWith(undefined, [glm]).map((m) => m.id)).toEqual(["z-ai/glm-5.3"]);
     expect(savedWithout([kimi, glm], "moonshot/kimi-k3").map((m) => m.id)).toEqual(["z-ai/glm-5.3"]);
+  });
+});
+
+describe("cheapest host switch", () => {
+  it("is on unless the provider turned it off (owner, 2026-10-22)", () => {
+    const cfg = (p) => ({ providers: [["openrouter", { type: "openrouter", ...p }]] });
+    expect(cheapestHostOn(cfg({}), "openrouter")).toBe(true);
+    expect(cheapestHostOn(cfg({ cheapest_host: true }), "openrouter")).toBe(true);
+    expect(cheapestHostOn(cfg({ cheapest_host: false }), "openrouter")).toBe(false);
+    expect(cheapestHostOn(cfg({ cheapest_host: false }), "other")).toBe(true);
   });
 });

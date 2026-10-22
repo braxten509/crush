@@ -10,6 +10,13 @@ export function addableProviders(cfg) {
   return out;
 }
 
+// Whether an OpenRouter provider asks for the cheapest host first (its
+// cheapest_host, on unless turned off; owner, 2026-10-22).
+export function cheapestHostOn(cfg, id) {
+  for (const [pid, p] of cfg?.providers ?? []) if (pid === id) return p?.cheapest_host !== false;
+  return true;
+}
+
 const squash = (text) => String(text ?? "").replace(/\s+/g, "").toLowerCase();
 
 // The catalog models whose name or id hold the words, spaces and case ignored.

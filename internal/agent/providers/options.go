@@ -98,7 +98,7 @@ var optionsBuilders = map[catwalk.Type]optionsBuilder{
 	azure.Name:        openaiOptions,
 	anthropic.Name:    anthropicOptions,
 	bedrock.Name:      anthropicOptions,
-	openrouter.Name:   reasoningObjectOptions(openrouter.Name, openrouter.ParseOptions),
+	openrouter.Name:   openrouterOptions,
 	vercel.Name:       reasoningObjectOptions(vercel.Name, vercel.ParseOptions),
 	google.Name:       googleOptions,
 	openaicompat.Name: compatOptions,
@@ -282,6 +282,25 @@ func reasoningObjectOptions[T fantasy.ProviderOptionsData](name string, parse fu
 		}
 		return options
 	}
+}
+
+// openrouterOptions asks OpenRouter for the cheapest host first (provider
+// sort "price"; owner, 2026-10-22) unless the provider's switch is off or
+// the user's own options already pick a sort or an order. The account's own
+// provider and privacy settings still apply on OpenRouter's side.
+func openrouterOptions(c *optionsCall) fantasy.ProviderOptions {
+	if c.provider.CheapestHostOn() {
+		routing, _ := c.merged["provider"].(map[string]any)
+		if routing["sort"] == nil && routing["order"] == nil {
+			next := maps.Clone(routing)
+			if next == nil {
+				next = map[string]any{}
+			}
+			next["sort"] = "price"
+			c.merged["provider"] = next
+		}
+	}
+	return reasoningObjectOptions(openrouter.Name, openrouter.ParseOptions)(c)
 }
 
 // googleOptions builds options for Gemini: a thinking budget for Gemini 2

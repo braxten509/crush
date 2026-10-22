@@ -962,6 +962,11 @@
           "description": "Auto-discover models from /v1/models endpoint. When true with existing models they are merged (yours win)",
           "default": true
         },
+        "cheapest_host": {
+          "type": "boolean",
+          "description": "OpenRouter only: route each request to the cheapest host first",
+          "default": true
+        },
         "models": {
           "items": {
             "$ref": "#/$defs/Model"

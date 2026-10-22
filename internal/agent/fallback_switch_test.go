@@ -12,6 +12,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/fallback"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
@@ -293,4 +294,82 @@ func TestEachPickedModelFollowsItsOwnList(t *testing.T) {
 	require.True(t, ok, "a sub-agent started on GPT follows GPT's list")
 	require.Equal(t, [2]string{"opus", "claude-2"}, [2]string{next.model.ModelCfg.Model, next.model.ModelCfg.Account})
 	require.Equal(t, "opus", task.Model)
+}
+
+// opusOrder is the owner's real order (2026-10-22): a list for Claude Opus
+// with three Claude accounts at high effort, the first two marked "come
+// back", and an empty list for every other model. A chat starts on Opus on
+// the owner's own login, the list's second block.
+func opusOrder(t *testing.T, usage map[string]float64) (*coordinator, string, *fakeClock) {
+	t.Helper()
+	list := []config.FallbackBlock{
+		useBlock(config.TypeClaudeCode, "claude-2", "opus"),
+		useBlock(config.TypeClaudeCode, "", "opus"),
+		useBlock(config.TypeClaudeCode, "claude-3", "opus"),
+	}
+	for i := range list {
+		list[i].Effort = "high"
+	}
+	list[0].ComeBack, list[1].ComeBack = true, true
+	c, sid := fallbackCoordinator(t, list[1:2], usage, nil)
+	cfg := c.cfg.Config()
+	cfg.Options.Accounts = append(cfg.Options.Accounts, config.Account{ID: "claude-3", Kind: config.TypeClaudeCode})
+	require.NoError(t, os.MkdirAll(config.AccountDir("claude-3"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(config.AccountDir("claude-3"), ".credentials.json"), []byte("{}"), 0o600))
+	_, err := cliagent.RefreshAccountLimits(t.Context(), config.TypeClaudeCode, "claude-3", true)
+	require.NoError(t, err)
+	cfg.Options.Fallback = &config.FallbackOrder{On: true, Lists: []config.FallbackList{{Provider: string(config.TypeClaudeCode), Model: "opus", Blocks: list}}}
+	clock := &fakeClock{now: time.Now()}
+	c.fallback.now = clock.Now
+	c.limitRetries.now = clock.Now
+	return c, sid, clock
+}
+
+// where is the chat's account and effort, and the model whose list it
+// follows.
+func where(c *coordinator) [3]string {
+	m := large(c)
+	provider, model := fallback.Chosen(m)
+	return [3]string{m.Account, m.ReasoningEffort, provider + "/" + model}
+}
+
+// The owner's order walked through: back to account 1 before the first
+// turn, on to 2 and then 3 as each runs out, then back to 2 once it
+// refills while 1 is still out, then back to 1.
+func TestTheOwnersOpusOrderStepByStep(t *testing.T) {
+	usage := map[string]float64{}
+	c, sid, clock := opusOrder(t, usage)
+	start := clock.Now()
+
+	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(c), "account 1 has room: the chat comes back to it")
+
+	usage["claude-code/claude-2"] = 100
+	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 2h")))
+	require.Equal(t, [3]string{"", "high", "claude-code/opus"}, where(c))
+
+	usage["claude-code/"] = 100
+	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 3h")))
+	require.Equal(t, [3]string{"claude-3", "high", "claude-code/opus"}, where(c))
+
+	// Account 2 refilled (3h on), account 1 is still out: back to 2.
+	usage["claude-code/"] = 0
+	clock.Set(start.Add(3*time.Hour + time.Minute))
+	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Equal(t, [3]string{"", "high", "claude-code/opus"}, where(c))
+
+	// Account 1 refilled too, as the between-turns reading shows: back to 1.
+	usage["claude-code/claude-2"] = 0
+	_, err := cliagent.RefreshAccountLimits(t.Context(), config.TypeClaudeCode, "claude-2", true)
+	require.NoError(t, err)
+	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(c))
+
+	require.Equal(t, []string{
+		"Switched to Claude 2 · Claude Opus by the fallback order.",
+		"Switched to Claude 1 · Claude Opus: Claude 2 it ran out.",
+		"Switched to Claude 3 · Claude Opus: Claude 1 it ran out.",
+		"Switched to Claude 1 · Claude Opus by the fallback order.",
+		"Switched to Claude 2 · Claude Opus by the fallback order.",
+	}, chatLines(t, c, sid))
 }

@@ -7,6 +7,7 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/bedrock"
 	"charm.land/fantasy/providers/openaicompat"
+	"charm.land/fantasy/providers/openrouter"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/discover"
 	"github.com/stretchr/testify/assert"
@@ -296,3 +297,31 @@ func TestCallTopK(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// OpenRouter is asked for the cheapest host first unless its switch is off
+// or the user's own options pick a sort or an order (owner, 2026-10-22).
+func TestOpenRouterAsksForTheCheapestHost(t *testing.T) {
+	t.Parallel()
+	routing := func(p config.ProviderConfig, selected config.SelectedModel) *openrouter.Provider {
+		options := Options(catwalk.Model{ID: "deepseek/deepseek-v4.1-flash"}, selected, p)
+		parsed, ok := options[openrouter.Name].(*openrouter.ProviderOptions)
+		require.True(t, ok)
+		return parsed.Provider
+	}
+	price := "price"
+	p := config.ProviderConfig{ID: "openrouter", Type: openrouter.Name}
+	require.Equal(t, &openrouter.Provider{Sort: &price}, routing(p, config.SelectedModel{}))
+
+	// The user's own routing keeps its other fields; its own sort or order wins.
+	own := config.SelectedModel{ProviderOptions: map[string]any{"provider": map[string]any{"ignore": []any{"x"}}}}
+	require.Equal(t, &openrouter.Provider{Sort: &price, Ignore: []string{"x"}}, routing(p, own))
+	latency := "latency"
+	own = config.SelectedModel{ProviderOptions: map[string]any{"provider": map[string]any{"sort": "latency"}}}
+	require.Equal(t, &openrouter.Provider{Sort: &latency}, routing(p, own))
+	own = config.SelectedModel{ProviderOptions: map[string]any{"provider": map[string]any{"order": []any{"deepseek"}}}}
+	require.Equal(t, &openrouter.Provider{Order: []string{"deepseek"}}, routing(p, own))
+
+	off := false
+	p.CheapestHost = &off
+	require.Nil(t, routing(p, config.SelectedModel{}))
+}

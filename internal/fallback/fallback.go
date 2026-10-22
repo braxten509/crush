@@ -200,7 +200,33 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 		// Nothing after the wait block has room: wait after all.
 		return Action{Kind: Wait, Block: ret.Block, Until: ret.At}
 	}
-	return Action{Kind: Stay}
+	return soonestComeBack(order, kindOf, at, read)
+}
+
+// soonestComeBack is the wait for the earlier "come back" block whose
+// account refills first, once nothing has room (owner, 2026-10-22). When
+// the chat's own account refills sooner, or no time is known, it stays:
+// the plain reset retry continues it there.
+func soonestComeBack(order config.FallbackOrder, kindOf KindOf, at int, read Readings) Action {
+	act := Action{Kind: Stay}
+	if own := read(BlockAccount(order.Blocks[at], kindOf)); !own.OpenAt.IsZero() {
+		act.Until = own.OpenAt
+	}
+	for k := range at {
+		b := order.Blocks[k]
+		if b.Type != config.FallbackUse || !b.ComeBack {
+			continue
+		}
+		r := read(BlockAccount(b, kindOf))
+		if r.OpenAt.IsZero() || (!act.Until.IsZero() && !r.OpenAt.Before(act.Until)) {
+			continue
+		}
+		act = Action{Kind: Wait, Block: k, Until: r.OpenAt}
+	}
+	if act.Kind == Stay {
+		return Action{Kind: Stay}
+	}
+	return act
 }
 
 // BeforeTurn decides, as a turn starts on block `at`, whether the chat

@@ -3,6 +3,8 @@
 - choosing Sonnet saves it with the effort last used with it (Low, from
   the fixture's model_efforts), not its default (High);
 - the OpenRouter group lists only its saved model, with "Add model" under;
+- there, no Effort row (the model in use is elsewhere) and a "Cheapest
+  host" switch, on by default, that saves providers.openrouter.cheapest_host;
 - a right-click on the saved model offers Remove, which saves the list
   without it (POST config/set providers.openrouter.models);
 - "Add model" opens the catalog sheet: every catalog model with its price,
@@ -127,6 +129,28 @@ time.sleep(0.3)
 rows = shown_rows()
 check(rows == ["Moonshot: Kimi K3", "Add model"], f"OpenRouter lists its saved model, then Add model ({rows})")
 snap("saved")
+
+# 2b. In OpenRouter (the model in use is not there): no Effort row, and the
+# "Cheapest host" switch, on by default, saves off when clicked (owner,
+# 2026-10-22). Back on the model in use's own group, Effort shows.
+look = run("""const m = document.querySelector('[data-menu="model"]');
+  return { effort: Boolean(m.querySelector('[data-column="effort"]')),
+           cheapest: m.querySelector('[data-column="route"] [role=switch]')?.getAttribute('aria-checked') ?? null };""")
+check(look and not look["effort"], f"OpenRouter without the model in use shows no Effort ({look})")
+check(look and look["cheapest"] == "true", f"the Cheapest host switch shows, on by default ({look})")
+since = api_count()
+click_at(center('[data-menu="model"] [data-column="route"] [role=switch]'))
+time.sleep(1.0)
+got = calls(since, "config/set")
+body = got[0].get("body") if got else {}
+check(body.get("key") == "providers.openrouter.cheapest_host" and body.get("value") is False, f"a click saves Cheapest host off ({body})")
+click_at(center(GROUP, "Claude Code"))
+time.sleep(0.3)
+back = run("""const m = document.querySelector('[data-menu="model"]');
+  return { effort: Boolean(m.querySelector('[data-column="effort"]')), route: Boolean(m.querySelector('[data-column="route"]')) };""")
+check(back == {"effort": True, "route": False}, f"the model in use's own group shows Effort and no switch ({back})")
+click_at(center(GROUP, "OpenRouter"))
+time.sleep(0.3)
 
 # 3. Right-click, Remove.
 click_at(center(ROW, "Moonshot: Kimi K3"), 3)

@@ -3,7 +3,8 @@
   // button and drawn by OverlayHost while ui.menu is {kind: "model", anchor}.
   // It unrolls up from the button: the agents and providers on the left, the
   // chosen one's models on the right with a search line over them, and the
-  // coder model's effort levels at the bottom. A click on a model chooses it
+  // coder model's effort levels at the bottom, shown only while the coder
+  // model is among the listed rows (owner, 2026-10-22). A click on a model chooses it
   // (lib/models/choose.js) and closes the menu; a click on a level saves it.
   // Esc, a click outside or the button again close it. While it is open the
   // key router asks only the "menu" scope, so no other shortcut fires.
@@ -13,16 +14,18 @@
   // A as one drop-down); a new model of the same tool keeps the account.
   // Under OpenRouter's saved models, "+ Add model" opens the catalog sheet
   // (OpenRouterAdd.svelte, owner 2026-10-22, pick B); a right-click on a
-  // saved one offers Remove. A model is chosen with the effort last used
+  // saved one offers Remove, and a "Cheapest host" switch over the effort
+  // (owner, 2026-10-22; on by default) saves providers.<id>.cheapest_host.
+  // A model is chosen with the effort last used
   // with it (lib/models/groups.js selectedModelOf).
   import { onMount, untrack } from "svelte";
   import Icon from "../Icon.svelte";
   import { bindKey } from "../../lib/keys.js";
   import { chooseModel } from "../../lib/models/choose.js";
   import { buildGroups, levelTitle, selectedModelOf } from "../../lib/models/groups.js";
-  import { isCurrent, menuGroups, RECENT, searchRows, startGroup } from "../../lib/models/menu.js";
+  import { effortShown, isCurrent, menuGroups, RECENT, searchRows, startGroup } from "../../lib/models/menu.js";
   import { coderModel, modelData, refreshModels, watchModels } from "../../lib/models/store.svelte.js";
-  import { addableProviders, savedWithout } from "../../lib/models/openrouter.js";
+  import { addableProviders, cheapestHostOn, savedWithout } from "../../lib/models/openrouter.js";
   import { openDialog } from "../../lib/dialogs.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { setAccount, setEffort } from "../../lib/models/toggles.js";
@@ -46,6 +49,7 @@
   let level = $state(""); // the level just clicked, shown until the config says so
   let accountsOpen = $state(false);
   let account = $state(null); // the account just picked, shown until the config says so
+  let cheapest = $state(null); // the switch just flipped, shown until the config says so
 
   $effect(() => watchModels());
 
@@ -57,7 +61,7 @@
   const shownGroup = $derived(groups.find((g) => g.name === chosenGroup) ?? groups.find((g) => g.name === startGroup(groups, current)) ?? null);
   const searching = $derived(query.trim() !== "");
   const rows = $derived(searching ? searchRows(built.items, query) : (shownGroup?.items ?? []));
-  const levels = $derived(coder.info?.reasoning_levels ?? []);
+  const levels = $derived(effortShown(rows, current) ? (coder.info?.reasoning_levels ?? []) : []);
   const levelNow = $derived(level || current?.reasoning_effort || coder.info?.default_reasoning_effort || "");
   const kind = $derived(kindOf(current?.provider));
   const accounts = $derived(hasAccounts(kind) ? fallback.accounts.filter((a) => a.kind === kind) : []);
@@ -66,6 +70,8 @@
   // The account belongs to the model in use, so it shows only on that
   // model's own provider, not while another one is browsed (owner,
   // 2026-10-21).
+  const routeTo = $derived(!searching ? (shownGroup?.addTo ?? "") : "");
+  const cheapestNow = $derived(cheapest ?? cheapestHostOn(modelData.cfg, routeTo));
   const onCurrentGroup = $derived(!searching && shownGroup?.name === startGroup(groups, current));
 
   // The tool behind a configured provider id (its type), or "".
@@ -129,6 +135,19 @@
     } catch (error) {
       level = "";
       notify("error", error?.message ?? String(error));
+    }
+  }
+
+  async function flipCheapest() {
+    const next = !cheapestNow;
+    cheapest = next;
+    try {
+      await api.setConfig(SCOPE.global, `providers.${routeTo}.cheapest_host`, next);
+      await refreshModels();
+    } catch (error) {
+      notify("error", error?.message ?? String(error));
+    } finally {
+      cheapest = null;
     }
   }
 
@@ -288,6 +307,12 @@
         </button>
       {/if}
     </div>
+    {#if routeTo}
+      <div class="route" data-column="route">
+        <span class="route-name">Cheapest host</span>
+        <button type="button" class="switch" role="switch" data-stop aria-checked={cheapestNow} aria-label="Cheapest host" onclick={flipCheapest}></button>
+      </div>
+    {/if}
     {#if levels.length > 0}
       <div class="effort" data-column="effort">
         <h3 class="label">Effort</h3>
@@ -472,6 +497,49 @@
   .empty {
     margin: calc(10 * var(--px)) calc(10 * var(--px));
     color: var(--slate);
+  }
+  .route {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(10 * var(--px));
+    margin-top: calc(12 * var(--px));
+    padding: calc(12 * var(--px)) calc(10 * var(--px)) 0;
+    border-top: 1px solid var(--rule-control);
+  }
+  .route-name {
+    font: var(--t-small);
+    color: var(--ink);
+  }
+  .switch {
+    position: relative;
+    flex: none;
+    width: calc(44 * var(--px));
+    height: calc(24 * var(--px));
+    border: 1px solid var(--rule-control);
+    border-radius: 0;
+    background: var(--control-rest);
+    cursor: pointer;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: calc(3 * var(--px));
+    left: calc(3 * var(--px));
+    width: calc(16 * var(--px));
+    height: calc(16 * var(--px));
+    background: var(--rule-control);
+  }
+  .switch[aria-checked="true"] {
+    border-color: var(--ink);
+  }
+  .switch[aria-checked="true"]::after {
+    left: calc(23 * var(--px));
+    background: var(--choice);
+  }
+  .switch:focus-visible {
+    outline: 1px solid var(--vermilion);
+    outline-offset: calc(2 * var(--px));
   }
   .effort {
     margin-top: calc(12 * var(--px));

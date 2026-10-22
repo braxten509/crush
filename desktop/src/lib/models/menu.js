@@ -34,6 +34,11 @@ export function menuGroups(items, addable = []) {
 
 export const isCurrent = (item, current) => Boolean(current) && item.model.id === current.model && item.provider.id === current.provider;
 
+// The effort row belongs to the model in use, so it shows only while that
+// model is among the listed rows: a provider opened without it shows none
+// (owner, 2026-10-22).
+export const effortShown = (rows, current) => rows.some((item) => isCurrent(item, current));
+
 // The group shown first: the one with the current model (its own provider
 // rather than Recently used), else the first set-up one, else the first.
 export function startGroup(groups, current) {

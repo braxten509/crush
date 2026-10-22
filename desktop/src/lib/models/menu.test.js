@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { menuGroups, RECENT, searchRows, startGroup } from "./menu.js";
+import { effortShown, menuGroups, RECENT, searchRows, startGroup } from "./menu.js";
 
 const row = (group, provider, model, extra = {}) => ({ id: `${group}:${model}`, group, provider: { id: provider, name: group }, model: { id: model, name: model }, configured: false, recent: false, ...extra });
 const rows = [
@@ -22,6 +22,16 @@ describe("model menu", () => {
   it("starts on the current model's own provider, not Recently used", () => {
     expect(startGroup(menuGroups(rows), { provider: "claude", model: "opus" })).toBe("Claude Code");
     expect(startGroup(menuGroups(rows), { provider: "none", model: "x" })).toBe("Claude Code");
+  });
+
+  it("shows effort only where the model in use is listed (owner, 2026-10-22)", () => {
+    const groups = menuGroups(rows);
+    const opus = { provider: "claude", model: "opus" };
+    expect(effortShown(groups[1].items, opus)).toBe(true);
+    expect(effortShown(groups[0].items, opus)).toBe(true);
+    expect(effortShown(groups[2].items, opus)).toBe(false);
+    expect(effortShown([], opus)).toBe(false);
+    expect(effortShown(groups[1].items, null)).toBe(false);
   });
 
   it("searches provider and model names across groups without recent copies", () => {

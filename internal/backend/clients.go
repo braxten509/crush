@@ -195,8 +195,12 @@ func (b *Backend) linger(ws *Workspace) {
 	}
 }
 
+// workspaceWorking reports whether closing ws now would cut work off: a
+// reply, a sub-agent, a job, open questions, or a chat the phone is sharing
+// (owner, 2026-10-22: Remote vanished from a chat after clicking another
+// folder's chat; its folder closed with the share still on).
 func workspaceWorking(ws *Workspace) bool {
-	return ws.App != nil && agent.HasRunningWork(ws.AgentCoordinator)
+	return ws.App != nil && (agent.HasRunningWork(ws.AgentCoordinator) || ws.hasLiveShare())
 }
 
 func anyAppOpen() bool {

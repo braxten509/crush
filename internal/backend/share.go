@@ -268,6 +268,21 @@ func shareKey(clientID, sessionID string) string {
 // key is sh's key in shareState.shares. Callers hold shareState.mu.
 func (sh *share) key() string { return shareKey(sh.owner, sh.chat) }
 
+// hasLiveShare reports whether ws shares a chat with the phone: the phone
+// stays on the chat while the folder keeps running, so a share is work
+// ([workspaceWorking]).
+func (ws *Workspace) hasLiveShare() bool {
+	st := &ws.share
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	for _, sh := range st.shares {
+		if !sh.ended {
+			return true
+		}
+	}
+	return false
+}
+
 // pendingAction is a phone action forwarded to a window.
 type pendingAction struct {
 	kind string // the RemoteAction kind
@@ -852,12 +867,16 @@ func (b *Backend) endShare(ws *Workspace, sh *share, reason error) {
 // nothing, the actions it was to answer fail, and its new chat's share
 // ends. A chat's share it owned keeps going while the chat is open (owner,
 // 2026-10-21): it passes to an app showing the chat, or to another app
-// while the chat stays in the open-chats list; it ends when no app is
-// left.
-func (b *Backend) shareClientGone(ws *Workspace, clientID string, _ GoneReason, workspaceEmpty bool) {
+// while the chat stays in the open-chats list; it ends when no app is left.
+// An app that left for another folder leaves its folder running, so its
+// chats' shares are handled as if another app were still there (owner,
+// 2026-10-22: Remote vanished from a chat after clicking another folder's
+// chat).
+func (b *Backend) shareClientGone(ws *Workspace, clientID string, reason GoneReason, workspaceEmpty bool) {
 	st := &ws.share
 	st.mu.Lock()
 	delete(st.windows, clientID)
+	kept := reason == GoneFolderSwitch
 	var failed []*pendingAction
 	var ending, unshown []*share
 	for _, sh := range st.shares {
@@ -872,7 +891,7 @@ func (b *Backend) shareClientGone(ws *Workspace, clientID string, _ GoneReason, 
 			continue
 		}
 		heir := ""
-		if sh.chat != "" && !workspaceEmpty {
+		if sh.chat != "" && (!workspaceEmpty || kept) {
 			heir = st.windowShowing(sh.chat, clientID)
 			if heir == "" {
 				heir = otherClient(ws, clientID)
@@ -880,7 +899,14 @@ func (b *Backend) shareClientGone(ws *Workspace, clientID string, _ GoneReason, 
 			}
 		}
 		if heir == "" {
-			ending = append(ending, sh)
+			if !kept {
+				ending = append(ending, sh)
+				continue
+			}
+			// Its folder keeps running for the chats' shares: no window
+			// shows the chat now, so the look below keeps it while the chat
+			// is open (a window that shows it again answers its actions).
+			unshown = append(unshown, sh)
 			continue
 		}
 		sh.owner = heir

@@ -6,7 +6,7 @@
 #
 #   update.sh check   {"current","latest","newer"}: the build this app runs
 #                     (build.json beside it) against the newest commit of the
-#                     fork's desktop branch.
+#                     fork's main branch.
 #   update.sh run     {"ok","commit","error","log"}: a fresh copy of that
 #                     branch in the cache (never the owner's checkout) is
 #                     built (the screens, the helper, the terminal crush);
@@ -22,7 +22,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="${CRUSH_UPDATE_REPO:-https://github.com/braxten509/crush.git}"
-BRANCH="${CRUSH_UPDATE_BRANCH:-desktop}"
+BRANCH="${CRUSH_UPDATE_BRANCH:-main}"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}"
 WORK="${CRUSH_UPDATE_WORK:-${XDG_CACHE_HOME:-$HOME/.cache}/crush-desktop-update}"
 LIB="${CRUSH_UPDATE_LIB:-$HOME/.local/lib/crush-desktop/app}"

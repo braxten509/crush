@@ -145,10 +145,11 @@ never "sessions".
 - The right panel's foot shows the build the app runs and one button that changes state
   (owner, 2026-10-20): Check for updates → Checking… → Up to date, or Update (vermilion,
   "old → new" beside it) → Updating… → Restarting…. Update runs `update.sh` (shipped beside
-  the helper): a fresh copy of the fork's desktop branch in the cache is built (screens,
+  the helper): a fresh copy of the fork's main branch in the cache is built (screens,
   helper, terminal crush), then the terminal crush (backed up) and the app (install.sh
   while it runs) are installed and the app starts again with its open chats held
-  (`open-chats.restart`). Each window checks quietly once when it connects.
+  (`open-chats.restart`). Each window checks quietly once when it connects. One branch
+  only (owner, 2026-10-22): `main`.
 - One ring when the terminal and the desktop are both open, from the desktop (owner,
   2026-10-20). The helper (watch.rs) listens to the folders of the shared open chats that no
   window shows, through each running engine's socket, with a `watch=1` stream that holds

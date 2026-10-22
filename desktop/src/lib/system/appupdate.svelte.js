@@ -1,7 +1,7 @@
 // Crush Desktop's own updates (owner, 2026-10-20: "an update button ... that
 // automatically installs new versions ... and restarts it"; one button that
 // changes state, at the foot of the right panel). The button checks the
-// fork's desktop branch; when it has a newer build it offers Update, which
+// fork's main branch; when it has a newer build it offers Update, which
 // builds and installs the app and the terminal crush (update.sh) and starts
 // the app again with its chats still open. Each window checks quietly once
 // when it first connects (a quick look at the branch's newest commit).

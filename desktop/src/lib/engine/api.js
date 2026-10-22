@@ -172,6 +172,8 @@ export const api = {
   abort: (callId) => commands.api_abort(callId),
 
   setConfig: (scope, key, value) => post("config/set", { scope: scopeOf(scope), key, value }),
+  // OpenRouter's catalog, the account's preferences applied (the model menu's "+").
+  openRouterCatalog: () => get("openrouter/catalog"),
   removeConfig: (scope, key) => post("config/remove", { scope: scopeOf(scope), key }),
   // model_type: "large" | "small"; model: {provider, model, …} (config.SelectedModel).
   setModel: (scope, model_type, model) => post("config/model", { scope: scopeOf(scope), model_type, model }),

@@ -1,9 +1,10 @@
 // MOD's registrations (desktop-design-5-6 2.3, 7.3; loaded by lib/plugins.js):
-// the sheets `models`, `reasoning` and `usage`; the actions `model.fast`,
+// the sheets `models`, `reasoning`, `usage` and `openrouter_add`; the actions `model.fast`,
 // `model.ultracode`, `model.thinking` (shown by the palette only while the
 // coder model supports them) and `providers.refresh` (MISC-019).
 import Effort from "../../components/models/Effort.svelte";
 import ModelPicker from "../../components/models/ModelPicker.svelte";
+import OpenRouterAdd from "../../components/models/OpenRouterAdd.svelte";
 import Usage from "../../components/models/Usage.svelte";
 import { registerAction } from "../actions.js";
 import { registerDialog } from "../dialogs.js";
@@ -17,6 +18,7 @@ import { loadProviders } from "../stores/workspace.svelte.js";
 registerDialog("models", ModelPicker);
 registerDialog("reasoning", Effort);
 registerDialog("usage", Usage);
+registerDialog("openrouter_add", OpenRouterAdd);
 
 registerAction({ id: "model.fast", title: "Toggle FAST mode", enabled: () => capabilities.supports_fast, run: toggleFast });
 registerAction({ id: "model.ultracode", title: "Toggle Ultracode", enabled: () => capabilities.supports_ultracode, run: toggleUltracode });

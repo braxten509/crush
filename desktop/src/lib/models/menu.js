@@ -3,8 +3,11 @@
 // the right, effort under them. Built from lib/models/groups.js's rows.
 export const RECENT = "Recently used";
 
-// [{name, configured, items}] in the rows' order.
-export function menuGroups(items) {
+// [{name, configured, items, addTo?}] in the rows' order. `addable` are the
+// providers that take models saved from a catalog (lib/models/openrouter.js):
+// each shows even with nothing saved yet, among the others by name, and its
+// group's addTo names it for the "+ Add model" row.
+export function menuGroups(items, addable = []) {
   const groups = [];
   const byName = new Map();
   for (const item of items) {
@@ -16,6 +19,15 @@ export function menuGroups(items) {
     }
     group.items.push(item);
     if (item.configured) group.configured = true;
+  }
+  for (const p of addable) {
+    let group = groups.find((g) => g.name !== RECENT && g.items.some((item) => item.provider.id === p.id));
+    if (!group) {
+      group = { name: p.name, configured: true, items: [] };
+      const at = groups.findIndex((g) => g.name !== RECENT && g.name.localeCompare(p.name) > 0);
+      groups.splice(at < 0 ? groups.length : at, 0, group);
+    }
+    group.addTo = p.id;
   }
   return groups;
 }

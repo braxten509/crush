@@ -11,13 +11,20 @@
   // Under the effort, a Claude Code or Codex model with two or more accounts
   // gets an Account drop-down the width of the row (owner, 2026-10-21, pick
   // A as one drop-down); a new model of the same tool keeps the account.
+  // Under OpenRouter's saved models, "+ Add model" opens the catalog sheet
+  // (OpenRouterAdd.svelte, owner 2026-10-22, pick B); a right-click on a
+  // saved one offers Remove. A model is chosen with the effort last used
+  // with it (lib/models/groups.js selectedModelOf).
   import { onMount, untrack } from "svelte";
   import Icon from "../Icon.svelte";
   import { bindKey } from "../../lib/keys.js";
   import { chooseModel } from "../../lib/models/choose.js";
   import { buildGroups, levelTitle, selectedModelOf } from "../../lib/models/groups.js";
   import { isCurrent, menuGroups, RECENT, searchRows, startGroup } from "../../lib/models/menu.js";
-  import { coderModel, modelData, watchModels } from "../../lib/models/store.svelte.js";
+  import { coderModel, modelData, refreshModels, watchModels } from "../../lib/models/store.svelte.js";
+  import { addableProviders, savedWithout } from "../../lib/models/openrouter.js";
+  import { openDialog } from "../../lib/dialogs.js";
+  import { api, SCOPE } from "../../lib/engine/api.js";
   import { setAccount, setEffort } from "../../lib/models/toggles.js";
   import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
   import { hasAccounts } from "../../lib/fallback/blocks.js";
@@ -34,7 +41,8 @@
   let search = $state(null);
   let place = $state(null);
   let query = $state("");
-  let chosenGroup = $state("");
+  let chosenGroup = $state(untrack(() => menu.group ?? ""));
+  let removing = $state(null); // {item, left, top}: the right-click's Remove
   let level = $state(""); // the level just clicked, shown until the config says so
   let accountsOpen = $state(false);
   let account = $state(null); // the account just picked, shown until the config says so
@@ -45,7 +53,7 @@
   const type = $derived(coder.type ?? "large");
   const current = $derived(coder.selected);
   const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type }) : { items: [] });
-  const groups = $derived(menuGroups(built.items));
+  const groups = $derived(menuGroups(built.items, addableProviders(modelData.cfg)));
   const shownGroup = $derived(groups.find((g) => g.name === chosenGroup) ?? groups.find((g) => g.name === startGroup(groups, current)) ?? null);
   const searching = $derived(query.trim() !== "");
   const rows = $derived(searching ? searchRows(built.items, query) : (shownGroup?.items ?? []));
@@ -108,7 +116,7 @@
   function pick(item) {
     if (!item) return;
     close();
-    const model = selectedModelOf(item);
+    const model = selectedModelOf(item, modelData.cfg?.model_efforts);
     if (accountNow && kindOf(item.provider.id) === kind) model.account = accountNow;
     chooseModel({ provider: item.provider, model, modelType: type });
   }
@@ -132,6 +140,38 @@
       await setAccount(next.id, next.label || next.name);
     } catch (error) {
       account = null;
+      notify("error", error?.message ?? String(error));
+    }
+  }
+
+  // "+ Add model": the catalog sheet, which opens this menu again on the
+  // group once the picked models are saved.
+  function addModels(group) {
+    const anchor = menu.anchor;
+    close({ refocus: false });
+    openDialog("openrouter_add", { providerId: group.addTo, providerName: group.name, anchor });
+  }
+
+  function offerRemove(event, item) {
+    if (!shownGroup?.addTo || item.provider.id !== shownGroup.addTo || searching) return;
+    event.preventDefault();
+    const at = box.getBoundingClientRect();
+    removing = { item, left: event.clientX - at.left, top: event.clientY - at.top };
+  }
+
+  async function remove(item) {
+    removing = null;
+    if (isCurrent(item, current)) {
+      notify("warn", "This model is in use; choose another one first");
+      return;
+    }
+    try {
+      // The saved entries as the engine holds them, prices included.
+      const raw = await api.config();
+      const id = item.provider.id;
+      await api.setConfig(SCOPE.global, `providers.${id}.models`, savedWithout(raw?.providers?.[id]?.models, item.model.id));
+      await refreshModels();
+    } catch (error) {
       notify("error", error?.message ?? String(error));
     }
   }
@@ -164,7 +204,7 @@
     search?.focus({ preventScroll: true });
     if (!fallback.loaded) loadFallback();
     const unbind = [
-      bindKey("menu", "Escape", () => (close(), true)),
+      bindKey("menu", "Escape", () => (removing ? (removing = null) : close(), true)),
       bindKey("menu", "ArrowDown", () => step(1)),
       bindKey("menu", "ArrowUp", () => step(-1)),
       bindKey("menu", "ArrowLeft", () => (columnOf(document.activeElement) === "search" ? false : across("groups"))),
@@ -179,6 +219,7 @@
     ];
     // A press outside closes; the model button's own click toggles it.
     const down = (event) => {
+      if (removing && !event.target?.closest?.(".remove-menu")) removing = null;
       if (box?.contains(event.target) || menu.anchor?.contains(event.target)) return;
       close({ refocus: false });
     };
@@ -232,14 +273,20 @@
     </label>
     <div class="rows" role="listbox" aria-label="Models">
       {#each rows as item (item.id)}
-        <button type="button" class="model" role="option" data-stop aria-selected={isCurrent(item, current)} onclick={() => pick(item)}>
+        <button type="button" class="model" role="option" data-stop aria-selected={isCurrent(item, current)} onclick={() => pick(item)} oncontextmenu={(event) => offerRemove(event, item)}>
           <span class="name">{item.model.name || item.model.id}</span>
           {#if searching}<span class="info">{item.group}</span>{/if}
           {#if isCurrent(item, current)}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
         </button>
       {:else}
-        <p class="empty">{searching ? "No models match." : modelData.cfg ? "No models here." : "Reading models…"}</p>
+        <p class="empty">{searching ? "No models match." : shownGroup?.addTo ? "No models saved yet." : modelData.cfg ? "No models here." : "Reading models…"}</p>
       {/each}
+      {#if shownGroup?.addTo && !searching}
+        <button type="button" class="model add" data-stop onclick={() => addModels(shownGroup)}>
+          <Icon name="plus" size={14} />
+          <span class="name">Add model</span>
+        </button>
+      {/if}
     </div>
     {#if levels.length > 0}
       <div class="effort" data-column="effort">
@@ -249,6 +296,11 @@
             <button type="button" class="level" role="radio" data-stop aria-checked={l === levelNow} onclick={() => pickLevel(l)}>{levelTitle(l)}</button>
           {/each}
         </div>
+      </div>
+    {/if}
+    {#if removing}
+      <div class="remove-menu" role="menu" style:left="{removing.left}px" style:top="{removing.top}px">
+        <button type="button" class="option" role="menuitem" onclick={() => remove(removing.item)}>Remove</button>
       </div>
     {/if}
     {#if accounts.length > 1 && onCurrentGroup}
@@ -399,6 +451,23 @@
   }
   .model[aria-selected="true"] {
     background: var(--pick);
+  }
+  .model.add {
+    color: var(--slate);
+  }
+  .model.add :global(svg) {
+    flex: none;
+  }
+  .model.add:hover {
+    color: var(--ink);
+  }
+  /* The right-click's Remove, at the pointer, over the rows. */
+  .remove-menu {
+    position: absolute;
+    z-index: 2;
+    min-width: calc(140 * var(--px));
+    border: 1px solid var(--rule-control);
+    background: var(--paper-raised);
   }
   .empty {
     margin: calc(10 * var(--px)) calc(10 * var(--px));

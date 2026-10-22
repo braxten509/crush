@@ -111,11 +111,24 @@ export const filterValue = (item) => `${item.group}${item.model.name || item.mod
 export const filterQuery = (query) => String(query ?? "").replace(/\s+/g, "").toLowerCase();
 
 // The SelectedModel a row chooses (item.go:91-98).
-export function selectedModelOf(item) {
+// efforts is the config's model_efforts ("provider:model" → the effort last
+// used with it): a model chosen again gets that effort back while it still
+// offers it (owner, 2026-10-22), else its default.
+export function selectedModelOf(item, efforts = {}) {
   const out = { model: item.model.id, provider: item.provider.id };
-  if (item.model.default_reasoning_effort) out.reasoning_effort = item.model.default_reasoning_effort;
+  const remembered = efforts?.[modelKey(item.provider.id, item.model.id)];
+  const effort = remembered && (item.model.reasoning_levels ?? []).includes(remembered) ? remembered : item.model.default_reasoning_effort;
+  if (effort) out.reasoning_effort = effort;
   if (item.model.default_max_tokens) out.max_tokens = item.model.default_max_tokens;
   return out;
+}
+
+// The selection that brings back a chat's model from GET …/config's raw
+// answer (config.Remembered): its defaults and remembered effort.
+export function rememberedModel(config, provider, model) {
+  const p = config?.providers?.[provider];
+  const found = [p?.models, p?.chatgpt_models, p?.grok_models].flatMap((list) => (Array.isArray(list) ? list : [])).find((m) => m?.id === model);
+  return selectedModelOf({ provider: { id: provider }, model: found ?? { id: model } }, config?.model_efforts);
 }
 
 // Title Case for effort levels ("xhigh" shows "X-High", reasoning.go:270).

@@ -8,6 +8,7 @@ import { chatOf, isFinished, load, messages, parseAgentChatId, readyChat, return
 import { keepPromptsFor, seedMarks } from "./prompts.svelte.js";
 import { clearNotice, notify } from "./ui.svelte.js";
 import { dropFiles, setFiles, startFilesRead, ws } from "./workspace.svelte.js";
+import { rememberedModel } from "../models/groups.js";
 
 export const sessions = $state({
   byId: {},
@@ -720,6 +721,7 @@ async function restoreModel(sid) {
   if (shown?.provider === last.provider && shown?.model === last.model) return;
   let available = false;
   let hasSmall = false;
+  let model = null;
   try {
     // The whole config holds the providers' keys: it is read here and never kept.
     const config = await api.config();
@@ -727,12 +729,14 @@ async function restoreModel(sid) {
     if (large?.provider === last.provider && large?.model === last.model) return;
     available = modelAvailable(config, last.provider, last.model);
     hasSmall = Boolean(config?.models?.small);
+    // The model comes back with the effort last used with it, not its
+    // default (owner, 2026-10-22: the effort was lost on opening a chat).
+    model = rememberedModel(config, last.provider, last.model);
   } catch (error) {
     console.error("model restore: config read failed", errorText(error));
     return;
   }
   if (!available || sessions.currentId !== sid) return;
-  const model = { provider: last.provider, model: last.model };
   try {
     await api.setModel("global", "large", model);
   } catch (error) {

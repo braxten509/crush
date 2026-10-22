@@ -51,6 +51,7 @@ export async function readModelConfig() {
   return {
     models: structuredClone(raw?.models ?? {}),
     recent_models: structuredClone(raw?.recent_models ?? {}),
+    model_efforts: structuredClone(raw?.model_efforts ?? {}),
     coderType: raw?.agents?.coder?.model === "small" ? "small" : "large",
     providers,
   };

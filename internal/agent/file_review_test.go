@@ -102,7 +102,10 @@ printf '%s\n' '{"type":"result","subtype":"success"}'
 	}
 	require.Len(t, results, 1)
 	require.False(t, results[0].IsError)
-	require.Nil(t, results[0].Review, "a late snapshot must not hide the CLI's diff")
+	require.NotNil(t, results[0].Review, "a late edit is recorded from its rebuilt before copy")
+	require.Len(t, results[0].Review.Changes, 1)
+	require.Equal(t, "before\n", results[0].Review.Changes[0].Before.Content)
+	require.Equal(t, "after\n", results[0].Review.Changes[0].After.Content)
 	var meta tools.EditResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(results[0].Metadata), &meta))
 	require.Equal(t, "before\n", meta.OldContent)

@@ -187,7 +187,8 @@ impl Windows {
             .map(|(label, _)| label.clone())
     }
 
-    /// The folders the open windows show, links resolved (watch.rs).
+    /// The folders the windows were opened with, links resolved.
+    #[allow(dead_code)] // kept for the launch registry's own reads
     pub fn projects(&self) -> Vec<PathBuf> {
         let inner = self.inner();
         inner

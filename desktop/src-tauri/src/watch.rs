@@ -61,8 +61,33 @@ fn resolved(dir: &str) -> PathBuf {
     std::fs::canonicalize(dir).unwrap_or_else(|_| PathBuf::from(dir))
 }
 
+/// The folders open windows show: what each window reports showing (its page
+/// knows, and follows a folder picked in the left list), else the folder it
+/// was opened with.
 fn shown(app: &AppHandle) -> Vec<PathBuf> {
-    app.try_state::<crate::windows::Windows>().map(|w| w.projects()).unwrap_or_default()
+    let open: Vec<String> = app.webview_windows().keys().cloned().collect();
+    let reported = app.try_state::<crate::alerts::Alerts>().map(|a| a.projects(&open)).unwrap_or_default();
+    let launched: Vec<(String, String)> = open
+        .iter()
+        .filter_map(|label| crate::windows::launch_for(app, label).map(|l| (label.clone(), l.cwd.to_string_lossy().into_owned())))
+        .collect();
+    shown_folders(&reported, &launched)
+}
+
+/// shown_folders reads the reported folders, leaving a window that has not
+/// reported yet to the folder it was opened with.
+fn shown_folders(reported: &[(String, String)], launched: &[(String, String)]) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = reported.iter().map(|(_, dir)| resolved(dir)).filter(|dir| !dir.as_os_str().is_empty()).collect();
+    for (label, dir) in launched {
+        if reported.iter().any(|(reported, _)| reported == label) {
+            continue; // the window said what it shows
+        }
+        let dir = resolved(dir);
+        if !dir.as_os_str().is_empty() {
+            out.push(dir);
+        }
+    }
+    out
 }
 
 fn tick(app: &AppHandle, listeners: &mut HashMap<PathBuf, Listener>, written: &mut Option<Vec<String>>) {
@@ -315,6 +340,16 @@ mod tests {
         assert_eq!(work_changed(&ev("prompt_pending", Kind::Updated, "s3")), Some("s3".into()));
         assert_eq!(work_changed(&ev("agent_event", Kind::Created, "m$$call")), None);
         assert_eq!(work_changed(&ev("session", Kind::Updated, "s1")), None);
+    }
+
+    // A window rings for the folder it reports showing, not the one it was
+    // opened with, so a folder it stopped showing still rings once.
+    #[test]
+    fn shown_follows_the_folder_each_window_reports() {
+        let reported = vec![("w1".to_string(), "/p/b".to_string())];
+        let launched = vec![("w1".to_string(), "/p/a".to_string()), ("w2".to_string(), "/p/c".to_string())];
+        assert_eq!(shown_folders(&reported, &launched), vec![PathBuf::from("/p/b"), PathBuf::from("/p/c")], "a window that reported nothing keeps its launch folder");
+        assert_eq!(shown_folders(&[], &launched), vec![PathBuf::from("/p/a"), PathBuf::from("/p/c")]);
     }
 
     #[test]

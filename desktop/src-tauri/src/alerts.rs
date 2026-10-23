@@ -19,12 +19,34 @@ struct WindowState {
     state: String,
     project: String,
     session: String,
+    /// When the window first reported, so the earliest window leads.
+    since: Instant,
 }
 
 /// The window states behind the badge and progress (managed by main.rs).
 #[derive(Default)]
 pub struct Alerts {
     windows: Mutex<HashMap<String, WindowState>>,
+}
+
+impl Alerts {
+    /// What each open window reports showing (label, folder, chat, when it
+    /// first reported), earliest first.
+    fn reported(&self, open: &[String]) -> Vec<(String, String, String, Instant)> {
+        let windows = self.windows.lock().unwrap();
+        let mut out: Vec<(String, String, String, Instant)> = windows
+            .iter()
+            .filter(|(label, _)| open.contains(label))
+            .map(|(label, w)| (label.clone(), w.project.clone(), w.session.clone(), w.since))
+            .collect();
+        out.sort_by_key(|(_, _, _, since)| *since);
+        out
+    }
+
+    /// The folder each open window reports showing (watch.rs), by label.
+    pub fn projects(&self, open: &[String]) -> Vec<(String, String)> {
+        self.reported(open).into_iter().map(|(label, project, _, _)| (label, project)).collect()
+    }
 }
 
 #[derive(Serialize)]
@@ -124,7 +146,8 @@ pub fn window_state(app: &AppHandle, label: &str, state: &str, project_dir: &str
         let open: Vec<String> = app.webview_windows().keys().cloned().collect();
         windows.retain(|l, _| open.contains(l));
         let was_blocked = windows.get(label).is_some_and(|w| w.state == "blocked");
-        windows.insert(label.to_string(), WindowState { state: state.to_string(), project: project_dir.to_string(), session: session_id.to_string() });
+        let since = windows.get(label).map_or_else(Instant::now, |w| w.since);
+        windows.insert(label.to_string(), WindowState { state: state.to_string(), project: project_dir.to_string(), session: session_id.to_string(), since });
         let badge = windows.values().filter(|w| matches!(w.state.as_str(), "blocked" | "done" | "error")).count() as u32;
         let working = windows.values().any(|w| w.state == "working");
         (badge, working, state == "blocked" && !was_blocked && !focused)
@@ -146,19 +169,68 @@ pub fn window_gone(app: &AppHandle, label: &str) {
     let _ = crate::taskbar::apply(app, Some(badge), working.then_some("indeterminate"), None);
 }
 
-/// `alert_handler`: the window that shows the chat, else the project's lead window.
+/// `alert_handler`: the window that shows the chat, else the window showing
+/// its folder, else the project's lead window.
 pub fn handler(app: &AppHandle, project_dir: &str, session_id: &str) -> AppResult<String> {
-    {
-        let windows = app.state::<Alerts>().windows.lock().unwrap().clone();
-        let open: Vec<String> = app.webview_windows().keys().cloned().collect();
-        if let Some((label, _)) = windows.iter().find(|(l, w)| open.contains(l) && !session_id.is_empty() && w.session == session_id && same_folder(&w.project, project_dir)) {
-            return Ok(label.clone());
-        }
+    let open: Vec<String> = app.webview_windows().keys().cloned().collect();
+    if let Some(label) = pick_handler(&app.state::<Alerts>().reported(&open), project_dir, session_id) {
+        return Ok(label);
     }
     crate::windows::lead_window(app, Path::new(project_dir)).ok_or_else(|| AppError::new("no_window", "no window shows this project"))
+}
+
+/// pick_handler chooses from the windows that reported what they show (label,
+/// folder, chat, when): the one showing the chat, else the earliest showing
+/// its folder. None when no window reports the folder.
+fn pick_handler(reported: &[(String, String, String, Instant)], project_dir: &str, session_id: &str) -> Option<String> {
+    let mut reported = reported.to_vec();
+    reported.sort_by_key(|(_, _, _, since)| *since);
+    let showing_chat = reported.iter().find(|(_, project, session, _)| !session_id.is_empty() && session == session_id && same_folder(project, project_dir));
+    showing_chat
+        .or_else(|| reported.iter().find(|(_, project, _, _)| same_folder(project, project_dir)))
+        .map(|(label, ..)| label.clone())
 }
 
 fn same_folder(a: &str, b: &str) -> bool {
     let canon = |p: &str| std::fs::canonicalize(p).unwrap_or_else(|_| p.into());
     a == b || canon(a) == canon(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shown(label: &str, project: &str, session: &str, order: u64) -> (String, String, String, Instant) {
+        let base = Instant::now();
+        (label.to_string(), project.to_string(), session.to_string(), base + Duration::from_millis(order))
+    }
+
+    // A chat that is not the selected one still finds the window showing its
+    // folder, from the folder the window reports (owner, 2026-10-22: dings
+    // missed for chats that aren't selected).
+    #[test]
+    fn picks_the_window_that_reports_the_chats_folder() {
+        let reported = vec![shown("w1", "/p/a", "s-a", 1), shown("w2", "/p/b", "s-b", 2)];
+        assert_eq!(pick_handler(&reported, "/p/b", "s-other").as_deref(), Some("w2"));
+        assert_eq!(pick_handler(&reported, "/p/a", "s-other").as_deref(), Some("w1"));
+    }
+
+    // The window showing the chat wins over one that shows only its folder,
+    // whichever reported first.
+    #[test]
+    fn picks_the_window_showing_the_chat_first() {
+        let reported = vec![shown("w1", "/p/a", "s-a", 1), shown("w2", "/p/a", "s-a", 2)];
+        assert_eq!(pick_handler(&reported, "/p/a", "s-a").as_deref(), Some("w1"));
+        let reported = vec![shown("w1", "/p/a", "s-b", 1), shown("w2", "/p/a", "s-a", 2)];
+        assert_eq!(pick_handler(&reported, "/p/a", "s-a").as_deref(), Some("w2"));
+    }
+
+    // No window reports the folder: the caller falls back to the launch
+    // registry.
+    #[test]
+    fn none_when_no_window_reports_the_folder() {
+        let reported = vec![shown("w1", "/p/a", "s-a", 1)];
+        assert_eq!(pick_handler(&reported, "/p/c", "s-c"), None);
+        assert_eq!(pick_handler(&[], "/p/c", "s-c"), None);
+    }
 }

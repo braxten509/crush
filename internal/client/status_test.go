@@ -201,6 +201,10 @@ func clientCalls() map[string]func(context.Context, *Client) error {
 			_, err := c.SetKeptSkill(ctx, ws, sid, proto.KeptSkill{ID: "s"}, true)
 			return err
 		},
+		"SetSessionModel": func(ctx context.Context, c *Client) error {
+			_, err := c.SetSessionModel(ctx, ws, sid, json.RawMessage(`{"provider":"p","model":"m"}`))
+			return err
+		},
 		"GitBranch": func(ctx context.Context, c *Client) error { _, err := c.GitBranch(ctx, ws); return err },
 		"LoadMessageReview": func(ctx context.Context, c *Client) error {
 			_, err := c.LoadMessageReview(ctx, ws, sid, "m1")

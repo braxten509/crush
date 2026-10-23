@@ -4,6 +4,7 @@
 // model. Support comes from G-8's capabilities, not ported rules.
 import { windowBusy } from "../busy.js";
 import { api, SCOPE } from "../engine/api.js";
+import { sessions } from "../stores/sessions.svelte.js";
 import { loadAgent } from "../stores/workspace.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { capabilities } from "./capabilities.svelte.js";
@@ -21,8 +22,26 @@ async function coder() {
   return { type, selected: { ...selected } };
 }
 
-async function save(type, selected, info) {
+// A model picked in a chat is saved with that chat (owner, 2026-10-23), so
+// another chat keeps its own; the workspace's copy stays the default for
+// chats without one and for new chats.
+export async function saveModelChoice(type, selected) {
+  const sid = sessions.currentId;
+  if (sid && type === "large") {
+    // A chat of a folder this window has not joined may refuse the write;
+    // the workspace's copy is saved either way.
+    try {
+      await api.setSessionModel(sid, selected);
+      sessions.byId[sid] = { ...sessions.byId[sid], model: { ...selected } };
+    } catch (error) {
+      console.error("saving the chat's model failed", error?.message ?? error);
+    }
+  }
   await api.setModel(SCOPE.global, type, selected);
+}
+
+async function save(type, selected, info) {
+  await saveModelChoice(type, selected);
   await api.updateAgent();
   notify("info", info);
   loadAgent();
@@ -78,7 +97,7 @@ export async function setEffort(effort, ultracode = null) {
     selected.ultracode = ultracode;
     info += ` · Ultracode ${onOff(ultracode)}`;
   }
-  await api.setModel(SCOPE.global, type, selected);
+  await saveModelChoice(type, selected);
   api
     .updateAgent()
     .then(() => {

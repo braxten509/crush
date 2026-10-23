@@ -9,6 +9,7 @@ import { COLUMN_LIMITS } from "../columns.js";
 import { hasDialog, openDialog } from "../dialogs.js";
 import { settings_set } from "../engine/commands.js";
 import { switchFolder } from "../stores/connection.svelte.js";
+import { newChat as newChatIn } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { openTerminal } from "../terminal/tabs.svelte.js";
 import { clean } from "./picker.js";
@@ -116,7 +117,8 @@ export async function startIn(what, dir) {
     notify("error", "Couldn't start a chat.");
     return false;
   }
-  runAction("chat.new");
+  // The draft row shows in the folder the chat will belong to.
+  newChatIn(dir).catch((error) => console.error("starting a chat failed", error?.message ?? error));
   return true;
 }
 

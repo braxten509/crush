@@ -614,34 +614,40 @@ describe("the chat's last model (LIST-035)", () => {
   }
   const posts = () => h.calls.filter((c) => c.method === "POST").map((c) => [c.path, c.body]);
 
-  it("restores an available model globally, fills a missing small model, then rebuilds the agent", async () => {
+  it("saves the chat's last model with the chat, leaving the workspace's alone", async () => {
     await openWithLastModel("codex-cli", "gpt-6-sol", config({ provider: "claude-code", model: "opus" }, { "codex-cli": cliProvider(["gpt-6-sol"]) }));
     expect(posts()).toEqual([
-      ["config/model", { scope: 0, model_type: "large", model: { provider: "codex-cli", model: "gpt-6-sol" } }],
-      ["config/model", { scope: 0, model_type: "small", model: { provider: "codex-cli", model: "small-one" } }],
-      ["agent/update", undefined],
+      ["sessions/s1/model", { model: { provider: "codex-cli", model: "gpt-6-sol" } }],
     ]);
+    expect(S.sessions.byId.s1.model).toEqual({ provider: "codex-cli", model: "gpt-6-sol" });
+    expect(ws.config.models.large).toEqual({ provider: "claude-code", model: "opus" });
   });
 
-  it("skips the summary and keeps the small model when one is set", async () => {
+  it("skips the summary when reading the chat's last model", async () => {
     const cfg = config({ provider: "claude-code", model: "opus" }, { "codex-cli": cliProvider(["gpt-6-sol"]) });
     cfg.models.small = { provider: "claude-code", model: "haiku" };
     await openWithLastModel("codex-cli", "gpt-6-sol", cfg, { summary: true });
-    expect(posts().map(([path, body]) => `${path} ${body?.model_type ?? ""}`)).toEqual(["config/model large", "agent/update "]);
+    expect(posts()).toEqual([["sessions/s1/model", { model: { provider: "codex-cli", model: "gpt-6-sol" } }]]);
   });
 
-  it("does nothing when the model is gone, the provider disabled, or already the model", async () => {
+  it("does nothing when the model is gone, the provider disabled, or already the chat's", async () => {
     await openWithLastModel("codex-cli", "gpt-old", config(null, { "codex-cli": cliProvider(["gpt-6-sol"]) }));
     expect(posts()).toEqual([]);
     await openWithLastModel("codex-cli", "gpt-6-sol", config(null, { "codex-cli": { ...cliProvider(["gpt-6-sol"]), disable: true } }));
     expect(posts()).toEqual([]);
-    await openWithLastModel("claude-code", "opus", config(null, {}));
+    // A chat that already keeps its own model is left alone.
+    openable("s2", [user("u1", "s2"), reply("a1", "s2", { finished: true, provider: "codex-cli", model: "gpt-6-sol" })], { model: { provider: "claude-code", model: "sonnet" } });
+    await withList(chat("s2", { model: { provider: "claude-code", model: "sonnet" } }));
+    h.calls.length = 0;
+    await S.openChat("s2");
+    await settle();
     expect(posts()).toEqual([]);
+    expect(S.sessions.byId.s2.model).toEqual({ provider: "claude-code", model: "sonnet" });
   });
 
   it("a subscription catalog counts (chatgpt_models, grok_models)", async () => {
     await openWithLastModel("openai", "gpt-sub", config({ provider: "claude-code", model: "opus" }, { openai: { id: "openai", models: [], chatgpt_models: [{ id: "gpt-sub" }] } }));
-    expect(posts()[0]).toEqual(["config/model", { scope: 0, model_type: "large", model: { provider: "openai", model: "gpt-sub" } }]);
+    expect(posts()[0]).toEqual(["sessions/s1/model", { model: { provider: "openai", model: "gpt-sub" } }]);
   });
 
   it("never keeps the whole config", async () => {
@@ -650,9 +656,12 @@ describe("the chat's last model (LIST-035)", () => {
     expect(JSON.stringify(S.sessions)).not.toContain("sk-secret");
   });
 
-  it("a failed rebuild shows its error, as the terminal reports it", async () => {
-    h.routes.set("POST agent/update", () => Promise.reject({ code: "internal", message: "failed to update agent model" }));
+  it("a failed save is logged and leaves the chat as it was", async () => {
+    h.routes.set("POST sessions/s1/model", () => Promise.reject({ code: "internal", message: "no such chat" }));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     await openWithLastModel("codex-cli", "gpt-6-sol", config({ provider: "claude-code", model: "opus" }, { "codex-cli": cliProvider(["gpt-6-sol"]) }));
-    expect(h.notices).toEqual([{ kind: "error", text: "failed to update agent model" }]);
+    expect(S.sessions.byId.s1.model).toBeUndefined();
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
   });
 });

@@ -151,6 +151,9 @@ type SessionService interface {
 	// SetKeptSkill turns a skill on or off for a whole session: while on,
 	// every turn reminds the agent of it.
 	SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error)
+	// SetSessionModel saves the model one chat runs on, so a model picked
+	// in a chat never reaches another chat.
+	SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error)
 }
 
 // MessageService reads a workspace's messages.

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"time"
 
@@ -52,6 +53,16 @@ func (c *Client) DeleteSession(ctx context.Context, id string, sessionID string)
 func (c *Client) SetKeptSkill(ctx context.Context, id, sessionID string, skill proto.KeptSkill, on bool) (*proto.Session, error) {
 	sess, err := newCall(c, rpc.SetKeptSkill, "set kept skill", "session").at(id, sessionID).
 		do(ctx, proto.SetKeptSkillRequest{ID: skill.ID, Name: skill.Name, On: on, Toggleable: skill.ByAgent})
+	if err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
+// SetSessionModel saves the model one chat runs on.
+func (c *Client) SetSessionModel(ctx context.Context, id, sessionID string, model json.RawMessage) (*proto.Session, error) {
+	sess, err := newCall(c, rpc.SetSessionModel, "set session model", "session").at(id, sessionID).
+		do(ctx, proto.SetSessionModelRequest{Model: model})
 	if err != nil {
 		return nil, err
 	}

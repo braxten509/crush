@@ -88,6 +88,7 @@ var wantRequests = map[string]string{
 	"ListMCPPrompts":                       "GET /v1/workspaces/ws1/mcp/prompts",
 	"GetMCPPrompt":                         "POST /v1/workspaces/ws1/mcp/get-prompt",
 	"SetKeptSkill":                         "POST /v1/workspaces/ws1/sessions/sess1/kept-skills",
+	"SetSessionModel":                      "POST /v1/workspaces/ws1/sessions/sess1/model",
 	"GitBranch":                            "GET /v1/workspaces/ws1/git/branch",
 	"LoadMessageReview":                    "GET /v1/workspaces/ws1/sessions/sess1/messages/m1/review",
 	"ListSavedSessions":                    "GET /v1/workspaces/ws1/saved-sessions selected=",

@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/question"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/questionform"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -32,6 +33,8 @@ type prefWorkspace struct {
 	prefErr error
 	// copilot is added to the providers by ImportCopilot when set.
 	copilot *config.ProviderConfig
+	// chatModel is the model the last chat was given.
+	chatModel session.ModelChoice
 }
 
 func (w *prefWorkspace) Config() *config.Config { return w.cfg }
@@ -46,6 +49,15 @@ func (w *prefWorkspace) recorded() []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return append([]string(nil), w.calls...)
+}
+
+// SetSessionModel keeps the model a chat was given (owner, 2026-10-23).
+func (w *prefWorkspace) SetSessionModel(_ context.Context, sessionID string, model session.ModelChoice) (session.Session, error) {
+	w.record("chat model " + sessionID)
+	w.mu.Lock()
+	w.chatModel = model
+	w.mu.Unlock()
+	return session.Session{ID: sessionID}, nil
 }
 
 func (w *prefWorkspace) UpdatePreferredModel(_ config.Scope, kind config.SelectedModelType, model config.SelectedModel) error {
@@ -148,6 +160,7 @@ func TestSelectModelWritesPreferenceOffLoop(t *testing.T) {
 		"pref large p/m1",
 		"default small p",
 		"pref small p/small",
+		"chat model s1",
 		"update agent model",
 	}, ws.recorded())
 	info, ok := findMsg[util.InfoMsg](msgs)
@@ -162,7 +175,8 @@ func TestSelectModelReportsFailedWrite(t *testing.T) {
 	ws.prefErr = os.ErrPermission
 	cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: config.SelectedModel{Provider: "p", Model: "m1"}})
 	msgs := runAll(u, cmd)
-	// As before, the coordinator still rebuilds after a failed write.
+	// As before, the coordinator still rebuilds after a failed write; the
+	// chat keeps no model of its own then.
 	require.Equal(t, []string{"pref large p/m1", "update agent model"}, ws.recorded())
 	var types []util.InfoType
 	for _, msg := range msgs {
@@ -189,7 +203,7 @@ func TestSelectModelOnboardingStartsCoderAfterWrite(t *testing.T) {
 	require.Nil(t, ws.cfg.Agents, "the agents are set up once the model was written")
 
 	runAll(u, cmd)
-	require.Equal(t, []string{"pref large p/m1", "init coder", "update agent model"}, ws.recorded())
+	require.Equal(t, []string{"pref large p/m1", "chat model s1", "init coder", "update agent model"}, ws.recorded())
 	require.Contains(t, ws.cfg.Agents, config.AgentCoder)
 }
 
@@ -219,7 +233,7 @@ func TestSelectModelImportsCopilotOffLoop(t *testing.T) {
 		require.False(t, u.dialog.ContainsDialog(dialog.ModelsID))
 		if imported {
 			runAll(u, cmd)
-			require.Equal(t, []string{"import copilot", "pref large copilot/c1", "default small copilot", "pref small copilot/small", "update agent model"}, ws.recorded())
+			require.Equal(t, []string{"import copilot", "pref large copilot/c1", "default small copilot", "pref small copilot/small", "chat model s1", "update agent model"}, ws.recorded())
 		} else {
 			// Still not configured: the sign-in opens, without importing again.
 			require.Equal(t, []string{"import copilot"}, ws.recorded())
@@ -240,8 +254,10 @@ func TestRestoreModelFromSessionWritesOffLoop(t *testing.T) {
 	require.Empty(t, ws.recorded())
 
 	runAll(u, cmd)
-	require.Equal(t, []string{"pref large p/m1", "update agent model"}, ws.recorded())
+	// The chat keeps the model it last replied with (owner, 2026-10-23).
+	require.Equal(t, []string{"pref large p/m1", "chat model s1", "update agent model"}, ws.recorded())
 	require.Equal(t, "m1", ws.cfg.Models[config.SelectedModelTypeLarge].Model)
+	require.JSONEq(t, `{"provider":"p","model":"m1"}`, string(ws.chatModel))
 }
 
 func TestToggleThinkingCapturesModel(t *testing.T) {

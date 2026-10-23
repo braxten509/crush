@@ -450,6 +450,14 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Build(),
 
+		route(c, rpc.SetSessionModel, c.setSessionModel).
+			Summary("Save the model one chat runs on").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Fails(400, 404, 500).
+			Build(),
+
 		route(c, rpc.InterruptAgent, c.interruptAgent).
 			Summary("Interrupt the active run and send the next queued prompt").
 			Tags("agent").

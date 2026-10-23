@@ -9,6 +9,7 @@
 // The field (Field.svelte) registers its textarea, so the caret can follow
 // what the store puts in it; the slot's form registers how to focus it.
 import { untrack } from "svelte";
+import { agentWithModel } from "../models/chatmodel.js";
 import { openDialog } from "../dialogs.js";
 import { api, uuid } from "../engine/api.js";
 import { clipboard_read, clipboard_write, file_info, file_read, files_list } from "../engine/commands.js";
@@ -37,6 +38,12 @@ import { queue, recall as recallQueued, recalled, refresh as refreshQueue } from
 import { busy, deferSend, ensureSession, sessions, upsertSession } from "./sessions.svelte.js";
 import { notify, requestEnd, setFocus, ui } from "./ui.svelte.js";
 import { loadAgent, ws } from "./workspace.svelte.js";
+
+// The agent info as the shown chat sees it: its own model when the chat has
+// one (owner, 2026-10-23), else the workspace's.
+function shownAgent() {
+  return agentWithModel(ws.agent, sessions.byId[sessions.currentId], ws.providers);
+}
 
 export const composer = $state({
   drafts: {}, // sid ("" = the landing page) → { text, attachments: Attachment[] (lib/types.js), bang, bangEmpty }
@@ -627,7 +634,7 @@ async function attachPicked(path, sid) {
   const result = await pickFile(path, {
     sessionId: sid,
     absolute: absolutePath(dir, path),
-    supportsImages: supportsImages(ws.agent),
+    supportsImages: supportsImages(shownAgent()),
     reads,
     stat: (p) => file_info(p, dir),
     read: (p, max) => file_read(p, dir, max),
@@ -670,7 +677,7 @@ async function pastePaths(text, sid, start, end) {
     typed({ before: value, value: next, caret: start + text.length, paste: true });
     return;
   }
-  if (!supportsImages(ws.agent)) {
+  if (!supportsImages(shownAgent())) {
     notify("warn", NO_PICTURES);
     return;
   }
@@ -707,7 +714,7 @@ export async function pasteFromClipboard() {
 // A picture on the clipboard (pasteImageFromClipboard, paste.go:186-259):
 // file is the clipboard's File; a type that is not a picture asks for one.
 export async function pastePicture(file) {
-  if (!supportsImages(ws.agent)) {
+  if (!supportsImages(shownAgent())) {
     notify("warn", NO_PICTURES);
     return;
   }

@@ -8,6 +8,7 @@ import { chatOf, isFinished, load, messages, parseAgentChatId, readyChat, return
 import { keepPromptsFor, seedMarks } from "./prompts.svelte.js";
 import { clearNotice, notify } from "./ui.svelte.js";
 import { dropFiles, setFiles, startFilesRead, ws } from "./workspace.svelte.js";
+import { shownChatModel } from "../models/chatmodel.js";
 import { rememberedModel } from "../models/groups.js";
 
 export const sessions = $state({
@@ -16,6 +17,8 @@ export const sessions = $state({
   currentId: "",
   // The temporary row while a requested new chat is being saved.
   draft: false,
+  // The folder the draft row belongs to, while it shows.
+  draftDir: "",
   loaded: false,
   live: {}, // sid → true while a chat this window has not loaded is replying (1.5.3)
   opening: null, // null | {id, title, startedAt}: the chat a switch is opening (LIST-034)
@@ -650,7 +653,11 @@ async function refreshKept(id) {
 
 // Save an empty chat when requested, so leaving it does not remove its row.
 // A working chat keeps working in the list while the new one starts.
-export async function newChat() {
+// dir is the folder the chat will belong to when the caller knows it (the
+// left list's "+" on a folder): the draft row sits there, not under this
+// window's folder (owner, 2026-10-23: the row showed under another folder).
+export async function newChat(dir = "") {
+  sessions.draftDir = dir;
   sessions.draft = true;
   if (sessions.currentId) showLanding();
   await ensureSession();
@@ -673,6 +680,7 @@ export async function ensureSession() {
       setFiles(created.id, []);
       sessions.currentId = created.id;
       sessions.draft = false;
+      sessions.draftDir = "";
       keepPromptsFor(created.id);
       report(created.id);
       return created.id;
@@ -714,18 +722,15 @@ async function restoreModel(sid) {
     if (m?.role === "assistant" && !m.is_summary_message) last = m;
   }
   if (!last?.provider || !last.model) return;
-  const shown = ws.config?.models?.large;
-  if (shown?.provider === last.provider && shown?.model === last.model) return;
+  // A chat that already keeps its own model needs nothing (owner, 2026-10-23:
+  // a model picked in one chat never reaches another).
+  if (shownChatModel(sessions.byId[sid])) return;
   let available = false;
-  let hasSmall = false;
   let model = null;
   try {
     // The whole config holds the providers' keys: it is read here and never kept.
     const config = await api.config();
-    const large = config?.models?.large;
-    if (large?.provider === last.provider && large?.model === last.model) return;
     available = modelAvailable(config, last.provider, last.model);
-    hasSmall = Boolean(config?.models?.small);
     // The model comes back with the effort last used with it, not its
     // default (owner, 2026-10-22: the effort was lost on opening a chat).
     model = rememberedModel(config, last.provider, last.model);
@@ -734,22 +739,12 @@ async function restoreModel(sid) {
     return;
   }
   if (!available || sessions.currentId !== sid) return;
+  // The chat adopts the model it last replied with, saved with the chat: the
+  // workspace's copy stays the default for chats without one.
   try {
-    await api.setModel("global", "large", model);
+    await api.setSessionModel(sid, model);
+    if (sessions.byId[sid]) sessions.byId[sid] = { ...sessions.byId[sid], model: { ...model } };
   } catch (error) {
     console.error("Failed to restore model from session", errorText(error));
-    return;
-  }
-  if (!hasSmall) {
-    try {
-      await api.setModel("global", "small", await api.defaultSmallModel(model.provider));
-    } catch (error) {
-      console.error("Failed to set small model during session restore", errorText(error));
-    }
-  }
-  try {
-    await api.updateAgent();
-  } catch (error) {
-    notify("error", errorText(error)); // util.ReportError, model_select.go:91-95
   }
 }

@@ -37,6 +37,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		Tools:                nil,
 		Notify:               c.notify,
 		RunComplete:          c.runComplete,
+		ModelFor:             c.modelForSelection,
 	})
 
 	// The readiness goroutines below perform one-time setup — building the
@@ -141,6 +142,28 @@ func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Mo
 	}
 
 	return large, small, nil
+}
+
+// modelForSelection builds one model from a saved choice (a chat's own
+// model), for a turn on that chat.
+func (c *coordinator) modelForSelection(ctx context.Context, selection config.SelectedModel) (Model, error) {
+	providerCfg, ok := c.cfg.Config().Providers.Get(selection.Provider)
+	if !ok {
+		return Model{}, fmt.Errorf("provider %q is not configured", selection.Provider)
+	}
+	provider, err := c.providerBuilder().Provider(providerCfg, selection, false)
+	if err != nil {
+		return Model{}, err
+	}
+	catwalkModel := c.cfg.Config().GetModel(selection.Provider, selection.Model)
+	if catwalkModel == nil {
+		return Model{}, fmt.Errorf("model %q is not offered by %q", selection.Model, selection.Provider)
+	}
+	languageModel, err := c.providerBuilder().LanguageModel(ctx, provider, providerCfg, selection)
+	if err != nil {
+		return Model{}, err
+	}
+	return Model{Model: languageModel, CatwalkCfg: *catwalkModel, ModelCfg: selection, FlatRate: providerCfg.FlatRate}, nil
 }
 
 // providerBuilder builds providers and models from the live config.

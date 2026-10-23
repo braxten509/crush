@@ -785,6 +785,14 @@ func (w *ClientWorkspace) MCPAuthURL(name string) string {
 
 // -- Lifecycle --
 
+func (w *ClientWorkspace) SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error) {
+	sess, err := w.client.SetSessionModel(ctx, w.workspaceID(), sessionID, model)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return proto.SessionToDomain(*sess), nil
+}
+
 func (w *ClientWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {
 	sess, err := w.client.SetKeptSkill(ctx, w.workspaceID(), sessionID, proto.KeptSkill{ID: skill.ID, Name: skill.Name, ByAgent: skill.ByAgent}, on)
 	if err != nil {

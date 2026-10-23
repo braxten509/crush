@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"slices"
 	"strconv"
@@ -110,6 +111,23 @@ func (c *controllerV1) setKeptSkill(r *http.Request, req proto.SetKeptSkillReque
 	}
 	sess, err := c.backend.SetKeptSkill(r.Context(), r.PathValue("id"), r.PathValue("sid"),
 		session.KeptSkill{ID: req.ID, Name: req.Name, ByAgent: req.Toggleable}, req.On)
+	if err != nil {
+		return proto.Session{}, err
+	}
+	return proto.SessionFromDomain(sess), nil
+}
+
+// setSessionModel saves the model one chat runs on.
+func (c *controllerV1) setSessionModel(r *http.Request, req proto.SetSessionModelRequest) (proto.Session, error) {
+	var choice struct {
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
+	}
+	if json.Unmarshal(req.Model, &choice) != nil || choice.Provider == "" || choice.Model == "" {
+		return proto.Session{}, badRequest("model is required")
+	}
+	sess, err := c.backend.SetSessionModel(r.Context(), r.PathValue("id"), r.PathValue("sid"),
+		proto.SessionModelToDomain(req.Model))
 	if err != nil {
 		return proto.Session{}, err
 	}

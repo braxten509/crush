@@ -16,6 +16,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -197,6 +198,22 @@ type sessionAgent struct {
 
 	// sessionScheduler queues and dispatches the session's runs.
 	sessionScheduler
+
+	// chatModels builds the model a chat runs on (session.ModelChoice) and
+	// keeps the ones already built, so a turn on a chat's own model never
+	// rebuilds it twice (owner, 2026-10-23: a model picked in one chat must
+	// not reach another).
+	chatModels chatModelCache
+}
+
+// chatModelBuilder builds a model from a chat's saved choice.
+type chatModelBuilder func(ctx context.Context, selection config.SelectedModel) (Model, error)
+
+// chatModelCache holds the models built for chats' own choices.
+type chatModelCache struct {
+	mu    sync.Mutex
+	build chatModelBuilder
+	byKey map[string]Model
 }
 
 type SessionAgentOptions struct {
@@ -215,6 +232,9 @@ type SessionAgentOptions struct {
 	Tools                []fantasy.AgentTool
 	Notify               pubsub.Publisher[notify.Notification]
 	RunComplete          pubsub.Publisher[notify.RunComplete]
+	// ModelFor builds the model a chat runs on from its saved choice. Nil
+	// keeps every chat on the workspace's model.
+	ModelFor chatModelBuilder
 }
 
 func NewSessionAgent(
@@ -235,6 +255,7 @@ func NewSessionAgent(
 		isYolo:               opts.IsYolo,
 		notify:               opts.Notify,
 		runComplete:          opts.RunComplete,
+		chatModels:           chatModelCache{build: opts.ModelFor, byKey: map[string]Model{}},
 	}
 	a.sessionScheduler = newSessionScheduler(a)
 	return a
@@ -491,6 +512,36 @@ func sessionHeaders(sessionID string) map[string]string {
 func (a *sessionAgent) SetModels(large Model, small Model) {
 	a.largeModel.Set(large)
 	a.smallModel.Set(small)
+}
+
+// modelForChat returns the model a chat runs on: the one saved with the
+// chat, else the workspace's. Built once per choice and kept, so a chat's
+// own model costs nothing after its first turn.
+func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
+	if len(choice) == 0 || a.chatModels.build == nil {
+		return Model{}, false
+	}
+	var selection config.SelectedModel
+	if err := json.Unmarshal(choice, &selection); err != nil || selection.Provider == "" || selection.Model == "" {
+		slog.Warn("Could not read the chat's own model", "error", err)
+		return Model{}, false
+	}
+	key := selection.Provider + "\x00" + selection.Model + "\x00" + selection.ReasoningEffort + "\x00" + strconv.FormatInt(selection.MaxTokens, 10)
+	a.chatModels.mu.Lock()
+	if built, ok := a.chatModels.byKey[key]; ok {
+		a.chatModels.mu.Unlock()
+		return built, true
+	}
+	a.chatModels.mu.Unlock()
+	built, err := a.chatModels.build(context.Background(), selection)
+	if err != nil {
+		slog.Warn("Could not build the chat's own model", "provider", selection.Provider, "model", selection.Model, "error", err)
+		return Model{}, false
+	}
+	a.chatModels.mu.Lock()
+	a.chatModels.byKey[key] = built
+	a.chatModels.mu.Unlock()
+	return built, true
 }
 
 func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {

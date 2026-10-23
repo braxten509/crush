@@ -67,8 +67,10 @@ type Session struct {
 	// KeptSkills stay on for this chat: every turn reminds the agent of them
 	// until the user turns them off.
 	KeptSkills []KeptSkill
-	CreatedAt  int64
-	UpdatedAt  int64
+	// Model is the model this chat runs on; zero means the workspace's.
+	Model     ModelChoice
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 // KeptSkill is a skill turned on for a whole chat. ID is the skill's
@@ -90,6 +92,12 @@ type ContextBudget struct {
 	Estimated bool
 }
 
+// ModelChoice is the model one chat runs on, as config.SelectedModel JSON so
+// every setting of it (effort, FAST, thinking, account) stays with the chat.
+// A chat without one uses the workspace's model: a model picked in a chat
+// never reaches another (owner, 2026-10-23).
+type ModelChoice = json.RawMessage
+
 type Service interface {
 	pubsub.Subscriber[Session]
 	Create(ctx context.Context, title string) (Session, error)
@@ -99,6 +107,9 @@ type Service interface {
 	GetLast(ctx context.Context) (Session, error)
 	List(ctx context.Context) ([]Session, error)
 	Save(ctx context.Context, session Session) (Session, error)
+	// SetModel saves the model this chat runs on; nil clears it, so the chat
+	// follows the workspace again.
+	SetModel(ctx context.Context, sessionID string, model ModelChoice) (Session, error)
 	SetChannel(ctx context.Context, sessionID, channel string) (Session, error)
 	UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens int64, cost float64) error
 	Rename(ctx context.Context, id string, title string) error
@@ -378,6 +389,10 @@ func (s *service) fromDBItem(item db.Session) Session {
 	if errBudget != nil && errBudget != sql.ErrNoRows {
 		slog.Error("Failed to read context budget", "error", errBudget, "session_id", item.ID)
 	}
+	model, errModel := s.readModel(item.ID)
+	if errModel != nil && errModel != sql.ErrNoRows {
+		slog.Error("Failed to read the chat's model", "error", errModel, "session_id", item.ID)
+	}
 	kept, errKept := s.keptSkills(item.ID)
 	if errKept != nil {
 		slog.Error("Failed to read kept skills", "error", errKept, "session_id", item.ID)
@@ -388,6 +403,7 @@ func (s *service) fromDBItem(item db.Session) Session {
 	}
 	return Session{
 		ContextBudget:    budget,
+		Model:            model,
 		ID:               item.ID,
 		ParentSessionID:  item.ParentSessionID.String,
 		Title:            item.Title,
@@ -402,6 +418,37 @@ func (s *service) fromDBItem(item db.Session) Session {
 		CreatedAt:        item.CreatedAt,
 		UpdatedAt:        item.UpdatedAt,
 	}
+}
+
+// readModel reads the model the chat runs on; sql.ErrNoRows means the chat
+// follows the workspace's model.
+func (s *service) readModel(sessionID string) (ModelChoice, error) {
+	var choice string
+	err := s.db.QueryRow(`SELECT choice FROM session_models WHERE session_id = ?`, sessionID).Scan(&choice)
+	if err != nil {
+		return nil, err
+	}
+	return ModelChoice(choice), nil
+}
+
+// SetModel saves the model this chat runs on. An empty choice clears it, so
+// the chat follows the workspace again.
+func (s *service) SetModel(ctx context.Context, sessionID string, model ModelChoice) (Session, error) {
+	if len(model) == 0 {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM session_models WHERE session_id = ?`, sessionID); err != nil {
+			return Session{}, err
+		}
+	} else if _, err := s.db.ExecContext(ctx, `INSERT INTO session_models (session_id, choice)
+		VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET choice=excluded.choice`,
+		sessionID, string(model)); err != nil {
+		return Session{}, err
+	}
+	current, err := s.Get(ctx, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	s.Publish(pubsub.UpdatedEvent, current)
+	return current, nil
 }
 
 func (s *service) keptSkills(sessionID string) ([]KeptSkill, error) {

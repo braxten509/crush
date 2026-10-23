@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -13,7 +14,8 @@ import (
 
 type modelSelectionWorkspace struct {
 	*sessionSpecificWorkspace
-	cfg *config.Config
+	cfg       *config.Config
+	chatModel session.ModelChoice
 }
 
 func (w *modelSelectionWorkspace) Config() *config.Config { return w.cfg }
@@ -21,6 +23,12 @@ func (w *modelSelectionWorkspace) Config() *config.Config { return w.cfg }
 func (w *modelSelectionWorkspace) UpdatePreferredModel(_ config.Scope, kind config.SelectedModelType, selected config.SelectedModel) error {
 	w.cfg.Models[kind] = selected
 	return nil
+}
+
+// The chat's own model (owner, 2026-10-23): kept, so a test can read it.
+func (w *modelSelectionWorkspace) SetSessionModel(_ context.Context, _ string, model session.ModelChoice) (session.Session, error) {
+	w.chatModel = model
+	return session.Session{}, nil
 }
 
 func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {

@@ -31,6 +31,7 @@ import { busy, sessions } from "../../lib/stores/sessions.svelte.js";
 import { todos } from "../../lib/stores/todos.svelte.js";
 import { setFocus, ui } from "../../lib/stores/ui.svelte.js";
 import { ws } from "../../lib/stores/workspace.svelte.js";
+import { agentWithModel } from "../../lib/models/chatmodel.js";
 import { helperChats } from "../../lib/stores/helperchats.svelte.js";
 import { helperAgent } from "../../lib/live/helpers.svelte.js";
 import { lspRows, mcpRows, skillRows } from "./rows.js";
@@ -59,7 +60,9 @@ const shownSession = () => (sessions.currentId ? (sessions.byId[sessions.current
 
 export function agentNow() {
   const helper = helperChats.byId[sessions.currentId];
-  return helper ? helperAgent(helper, ws.providers).agent : ws.agent;
+  if (helper) return helperAgent(helper, ws.providers).agent;
+  // The shown chat's own model, when it has one (owner, 2026-10-23).
+  return agentWithModel(ws.agent, sessions.byId[sessions.currentId], ws.providers);
 }
 
 // The reading of the account the agent runs on, or null.

@@ -10,6 +10,7 @@ import { loadAgent } from "../stores/workspace.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { modelInfo } from "./providers.js";
 import { modelData, refreshModels } from "./store.svelte.js";
+import { saveModelChoice } from "./toggles.js";
 
 const BUSY = "Agent is busy, please wait...";
 const HYPER_REFRESH_MS = 15000;
@@ -118,7 +119,7 @@ export async function chooseModel(choice) {
   closeDialog("models");
   const fillSmall = !cfg.models?.small && modelType !== "small";
   try {
-    await api.setModel(SCOPE.global, modelType, model);
+    await saveModelChoice(modelType, model);
   } catch (error) {
     notify("error", errorText(error));
     return false;

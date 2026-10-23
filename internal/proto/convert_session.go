@@ -1,6 +1,8 @@
 package proto
 
 import (
+	"encoding/json"
+
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/session"
 )
@@ -30,6 +32,7 @@ func SessionFromDomain(s session.Session) Session {
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
 		ContextBudget:    ContextBudgetFromDomain(s.ContextBudget),
+		Model:            SessionModelFromDomain(s.Model),
 		EstimatedUsage:   s.EstimatedUsage,
 	}
 }
@@ -56,8 +59,23 @@ func SessionToDomain(s Session) session.Session {
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
 		ContextBudget:    ContextBudgetToDomain(s.ContextBudget),
+		Model:            SessionModelToDomain(s.Model),
 		EstimatedUsage:   s.EstimatedUsage,
 	}
+}
+
+// SessionModelFromDomain converts the model a chat runs on into its wire
+// form. It returns nil when the chat follows the workspace's model.
+func SessionModelFromDomain(m session.ModelChoice) json.RawMessage {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+// SessionModelToDomain converts a wire session model back.
+func SessionModelToDomain(m json.RawMessage) session.ModelChoice {
+	return m
 }
 
 // ContextBudgetFromDomain converts a session's context budget into its

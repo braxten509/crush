@@ -77,7 +77,9 @@ func (m *UI) restoreModelFromSession(msgs []message.Message) tea.Cmd {
 	ws := m.com.Workspace
 	// The preference writes run off the Update goroutine; the theme
 	// follows the provider and the coordinator rebuilds once they landed.
-	return savePreferredModel(ws, config.SelectedModelTypeLarge, selectedModel, !hasSmall, func(err, smallErr error) tea.Cmd {
+	// The chat adopts the model it last replied with, saved with the chat, so
+	// another chat's switch never reaches it (owner, 2026-10-23).
+	return saveChatModel(ws, m.currentSessionID(), config.SelectedModelTypeLarge, selectedModel, !hasSmall, func(err, smallErr error) tea.Cmd {
 		if err != nil {
 			slog.Error("Failed to restore model from session", "error", err)
 			return nil
@@ -218,7 +220,13 @@ func (m *UI) selectModel(msg dialog.ActionSelectModel, copilotImported bool) tea
 	_, hasSmall := cfg.Models[config.SelectedModelTypeSmall]
 	// Ensure the small model is set when it is unset.
 	fillSmall := !hasSmall && msg.ModelType != config.SelectedModelTypeSmall
-	cmds = append(cmds, savePreferredModel(m.com.Workspace, msg.ModelType, msg.Model, fillSmall, func(err, smallErr error) tea.Cmd {
+	// A model picked here belongs to the chat it was picked in, as in the
+	// desktop app (owner, 2026-10-23); the workspace keeps it as the default.
+	sessionID := ""
+	if m.hasSession() {
+		sessionID = m.currentSessionID()
+	}
+	cmds = append(cmds, saveChatModel(m.com.Workspace, sessionID, msg.ModelType, msg.Model, fillSmall, func(err, smallErr error) tea.Cmd {
 		return m.finishModelSelection(msg, isOnboarding, err, smallErr)
 	}))
 

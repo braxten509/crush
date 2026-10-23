@@ -110,6 +110,15 @@ func (b *Backend) SetKeptSkill(ctx context.Context, workspaceID, sessionID strin
 	return o.SetKeptSkill(ctx, sessionID, skill, on)
 }
 
+// SetSessionModel saves the model one chat runs on.
+func (b *Backend) SetSessionModel(ctx context.Context, workspaceID, sessionID string, model session.ModelChoice) (session.Session, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return o.SetSessionModel(ctx, sessionID, model)
+}
+
 // ListUserMessages returns user-role messages for a session.
 func (b *Backend) ListUserMessages(ctx context.Context, workspaceID, sessionID string) ([]message.Message, error) {
 	o, err := b.ops(workspaceID)

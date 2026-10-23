@@ -33,7 +33,9 @@ export function folderLabel(dir) {
 export const DRAFT_ID = "new-chat";
 
 function draftRow() {
-  const dir = conn.project.path || conn.project.cwd || "";
+  // The folder the chat will belong to: the one the draft started in, else
+  // this window's (owner, 2026-10-23: the row showed under another folder).
+  const dir = sessions.draftDir || conn.project.path || conn.project.cwd || "";
   if (!sessions.draft || sessions.currentId || !dir) return null;
   return {
     kind: "chat",
@@ -62,7 +64,10 @@ export function chatGroups(now = Date.now()) {
   const rows = withHelpers(draft ? [draft, ...listedChats(now)] : listedChats(now));
   return folderGroups(rows, listFolders.dirs, folderKey).map((group) => ({
     ...group,
-    label: short(group.dir, leftList.home),
+    // A heading always says where it is: a folder whose short name came out
+    // empty falls back to its own path, never an empty box (owner,
+    // 2026-10-23: the new-chat flash).
+    label: short(group.dir, leftList.home) || group.dir,
   }));
 }
 

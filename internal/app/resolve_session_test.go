@@ -92,6 +92,10 @@ func (m *mockSessionService) SetKeptSkill(context.Context, string, session.KeptS
 	return session.Session{}, nil
 }
 
+func (m *mockSessionService) SetModel(context.Context, string, session.ModelChoice) (session.Session, error) {
+	return session.Session{}, nil
+}
+
 func (m *mockSessionService) TurnedOffSkills(context.Context, string) ([]session.KeptSkill, error) {
 	return nil, nil
 }

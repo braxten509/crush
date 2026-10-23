@@ -216,7 +216,12 @@ func (t *turn) modelProvider() fantasy.LanguageModel {
 			slog.Error("Failed to clear retry status", "error", err)
 		}
 	}
-	m := t.a.largeModel.Get()
+	// The turn's own snapshot, not the agent's: a chat may run on its own
+	// model, and a switch made elsewhere mid-turn must not swap it.
+	m := t.largeModel
+	if m.Model == nil {
+		m = t.a.largeModel.Get()
+	}
 	slog.Info("ModelProvider called",
 		"provider", m.ModelCfg.Provider,
 		"model", m.ModelCfg.Model)

@@ -128,6 +128,9 @@ export const api = {
     const dir = unjoined(sid);
     return dir ? get(saved(sid), { dir }) : get(chat(sid));
   },
+  // The model one chat runs on (internal/rpc/routes.go SetSessionModel): a
+  // model picked in a chat never reaches another chat.
+  setSessionModel: (sid, model) => commands.api("POST", `${chat(sid)}/model`, undefined, { model }, undefined, folderOf(sid)),
   // The whole record as last read (engine design 5.1(a)).
   saveSession: (session) => commands.api("PUT", chat(session.id), undefined, session, undefined, folderOf(session.id)),
   deleteSession: (sid) => commands.api("DELETE", chat(sid), undefined, undefined, undefined, folderOf(sid)),

@@ -497,3 +497,7 @@ func (w *AppWorkspace) Store() *config.ConfigStore {
 func (w *AppWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {
 	return w.ops.SetKeptSkill(ctx, sessionID, skill, on)
 }
+
+func (w *AppWorkspace) SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error) {
+	return w.ops.SetSessionModel(ctx, sessionID, model)
+}

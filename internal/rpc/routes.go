@@ -66,6 +66,7 @@ var (
 	MessageReview        = Op[Empty, proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages/{mid}/review"}
 	SessionUserMessages  = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages/user"}
 	SetKeptSkill         = Op[proto.SetKeptSkillRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/kept-skills"}
+	SetSessionModel      = Op[proto.SetSessionModelRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/model"}
 )
 
 // File tracker endpoints.

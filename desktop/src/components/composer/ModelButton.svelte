@@ -8,6 +8,7 @@
   // it started (owner, 2026-10-22).
   import Icon from "../Icon.svelte";
   import { modelButtonText } from "../../lib/composer/modes.js";
+  import { agentWithModel } from "../../lib/models/chatmodel.js";
   import { helperAgent } from "../../lib/live/helpers.svelte.js";
   import { helperChats } from "../../lib/stores/helperchats.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
@@ -16,7 +17,7 @@
 
   const items = $derived(ws.config?.options?.tui?.composer_footer);
   const helper = $derived(helperChats.byId[sessions.currentId] ?? null);
-  const label = $derived(helper ? modelButtonText(helperAgent(helper, ws.providers).agent, items) : modelButtonText(ws.agent, items));
+  const label = $derived(helper ? modelButtonText(helperAgent(helper, ws.providers).agent, items) : modelButtonText(agentWithModel(ws.agent, sessions.byId[sessions.currentId], ws.providers), items));
   const open = $derived(ui.menu?.kind === "model");
   let button = $state();
 

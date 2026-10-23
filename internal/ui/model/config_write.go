@@ -1,7 +1,10 @@
 package model
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
@@ -66,6 +69,29 @@ func savePreferredModel(ws workspace.Workspace, kind config.SelectedModelType, m
 	}, func(err error) tea.Cmd {
 		return then(err, smallErr)
 	})
+}
+
+// saveChatModel saves a model picked in the terminal both as the workspace's
+// default and on the chat it was picked in, so another chat keeps its own
+// model (owner, 2026-10-23).
+func saveChatModel(ws workspace.Workspace, sessionID string, kind config.SelectedModelType, model config.SelectedModel, fillSmall bool, then func(err, smallErr error) tea.Cmd) tea.Cmd {
+	return savePreferredModel(ws, kind, model, fillSmall, func(err, smallErr error) tea.Cmd {
+		if err == nil && sessionID != "" && kind == config.SelectedModelTypeLarge {
+			if _, chatErr := ws.SetSessionModel(context.Background(), sessionID, modelJSON(model)); chatErr != nil {
+				slog.Warn("Could not save the chat's model", "session_id", sessionID, "error", chatErr)
+			}
+		}
+		return then(err, smallErr)
+	})
+}
+
+// modelJSON is a model as the chat stores it (config.SelectedModel JSON).
+func modelJSON(model config.SelectedModel) json.RawMessage {
+	data, err := json.Marshal(model)
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 // saveCompactMode saves the compact mode setting off the Update goroutine

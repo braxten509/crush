@@ -102,6 +102,11 @@ func (o Ops) SetKeptSkill(ctx context.Context, sessionID string, skill session.K
 	return o.App.Sessions.SetKeptSkill(ctx, sessionID, skill, on)
 }
 
+// SetSessionModel saves the model one chat runs on.
+func (o Ops) SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error) {
+	return o.App.Sessions.SetModel(ctx, sessionID, model)
+}
+
 // savedSessions returns the all-project catalog rooted at this
 // workspace.
 func (o Ops) savedSessions() sessioncatalog.Catalog {

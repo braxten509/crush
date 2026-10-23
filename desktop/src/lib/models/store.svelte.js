@@ -3,6 +3,8 @@
 // config_changed while one is open (the terminal app may change them), and
 // the palette's labels that depend on the coder model.
 import { onEvent } from "../engine/events.js";
+import { sessions } from "../stores/sessions.svelte.js";
+import { shownChatModel } from "./chatmodel.js";
 import { modelInfo, readCatalog, readModelConfig } from "./providers.js";
 
 export const modelData = $state({
@@ -48,11 +50,14 @@ onEvent("config_changed", () => {
   if (watchers > 0 || modelData.cfg !== null) refreshModels();
 });
 
-// The coder's selected model and its catalog entry.
-export function coderModel(data = modelData) {
+// The coder's selected model and its catalog entry: the shown chat's own
+// model when it has one (owner, 2026-10-23: a model picked in one chat must
+// not reach another), else the workspace's.
+export function coderModel(data = modelData, chat = null) {
   const cfg = data.cfg;
   if (!cfg) return { type: "large", selected: null, info: null };
   const type = cfg.coderType;
-  const selected = cfg.models?.[type] ?? null;
+  const shown = chat ?? sessions.byId[sessions.currentId];
+  const selected = shownChatModel(shown) ?? cfg.models?.[type] ?? null;
   return { type, selected, info: modelInfo(cfg, data.catalog, selected) };
 }

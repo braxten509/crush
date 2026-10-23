@@ -491,13 +491,13 @@ describe("several folders at once (owner, 2026-10-22)", () => {
     expect(h.opened).not.toContain("/tmp/home/proj");
   });
 
-  it("keeps at most FOLDER_CAP folders joined, the shown one first", async () => {
-    expect(C.FOLDER_CAP).toBe(4);
+  it("keeps every sidebar folder joined past four", async () => {
     (await import("./listfolders.svelte.js")).keepFolders(["/tmp/home/a", "/tmp/home/b", "/tmp/home/c", "/tmp/home/d", "/tmp/home/e"]);
     await C.start();
     await settle();
-    // Three others at most: the newest of the list.
-    expect(h.opened).toEqual(["/tmp/home/e", "/tmp/home/d", "/tmp/home/c"]);
+    // Every listed folder joins, newest first.
+    expect(h.opened).toEqual(["/tmp/home/e", "/tmp/home/d", "/tmp/home/c", "/tmp/home/b", "/tmp/home/a"]);
+    expect(Object.keys(C.conn.folders)).toHaveLength(6);
   });
 
   it("a chat's calls go to its folder once that folder is joined", async () => {

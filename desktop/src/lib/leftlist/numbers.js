@@ -29,8 +29,7 @@ export function folderLabel(dir) {
   return dir ? baseOf(short(clean(dir), leftList.home)) : "";
 }
 
-// The empty chat New chat shows (sessions.draft): a row of its own until a
-// chat opens; it is saved only at the first send (owner, 2026-10-21).
+// A temporary row while New chat saves its empty conversation.
 export const DRAFT_ID = "new-chat";
 
 function draftRow() {

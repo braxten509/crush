@@ -35,10 +35,6 @@ export const conn = $state({
   switching: 0, // folder switches under way: the shown chat may not be this folder's yet
 });
 
-// The helper keeps at most this many folders joined (connection.rs FOLDER_CAP);
-// it drops the one shown longest ago when another joins.
-export const FOLDER_CAP = 4;
-
 const NOTICE_LIMIT = 20;
 const STARTING_DELAY_MS = 400;
 
@@ -283,10 +279,7 @@ export function inFolder(dir) {
   return sameFolder(dir, conn.project.path || conn.project.cwd);
 }
 
-// The folders the window keeps joined: the one it shows and, up to FOLDER_CAP
-// in all, the rest of the left list, newest first (owner, 2026-10-22: every
-// folder in the list joins and stays). A folder the window has no room for
-// joins when it is shown.
+// Every folder in the left list joins and stays until explicitly closed.
 let joins = Promise.resolve();
 function joinListFolders() {
   joins = joins.then(joinMissingFolders).catch(() => {});
@@ -296,11 +289,8 @@ function joinListFolders() {
 async function joinMissingFolders() {
   if (conn.state !== "connected") return;
   const here = conn.project.path || conn.project.cwd;
-  const extras = Object.keys(conn.folders).filter((dir) => !sameFolder(dir, here)).length;
-  const room = FOLDER_CAP - 1 - extras;
   const missing = listFolders.dirs.filter((dir) => cleanDir(dir) !== "" && !sameFolder(dir, here) && !joinedFolder(dir));
-  if (room <= 0 || missing.length === 0) return;
-  for (const dir of missing.reverse().slice(0, room)) {
+  for (const dir of missing.reverse()) {
     try {
       remember(await engine_open_folder(dir), dir);
     } catch (error) {

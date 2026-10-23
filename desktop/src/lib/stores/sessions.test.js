@@ -561,16 +561,24 @@ describe("deleted, new and first chats (LIST-037, LIST-033, TYPE-041)", () => {
     expect(ui.ui.notice).toBeNull();
   });
 
-  it("New chat while busy shows the landing state; the chat keeps working", async () => {
+  it("New chat is saved immediately and survives leaving without sending; the old chat keeps working", async () => {
     await withList(chat("s1", { is_busy: true }));
     openable("s1", [], { is_busy: true });
     await S.openChat("s1");
+    h.routes.set("POST sessions", ({ body }) => chat("fresh", { title: body.title }));
     expect(await S.newChat()).toBe(true);
     expect(ui.ui.notice).toBeNull();
     expect(S.busy("s1")).toBe(true);
-    expect(S.sessions.currentId).toBe("");
-    expect(h.current.at(-1)).toBe("");
-    expect(h.calls.some((c) => c.method === "POST" && c.path === "sessions")).toBe(false); // no record before the first send
+    expect(S.sessions.currentId).toBe("fresh");
+    expect(h.current.at(-1)).toBe("fresh");
+    expect(h.calls.filter((c) => c.method === "POST" && c.path === "sessions")).toHaveLength(1);
+    openable("fresh");
+    await S.openChat("s1");
+    expect(S.sessions.order).toContain("fresh");
+    expect(S.sessions.byId.fresh.message_count).toBe(0);
+    expect(await S.openChat("fresh")).toBe(true);
+    expect(await S.ensureSession()).toBe("fresh");
+    expect(h.calls.filter((c) => c.method === "POST" && c.path === "sessions")).toHaveLength(1);
   });
 
   it("ensureSession makes one \"New Session\" for two quick sends", async () => {

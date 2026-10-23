@@ -14,9 +14,7 @@ export const sessions = $state({
   byId: {},
   order: [],
   currentId: "",
-  // New chat was asked for and the landing page is its empty chat: the list
-  // shows it as a row until a chat opens (owner, 2026-10-21). It is saved
-  // only at the first send (ensureSession).
+  // The temporary row while a requested new chat is being saved.
   draft: false,
   loaded: false,
   live: {}, // sid → true while a chat this window has not loaded is replying (1.5.3)
@@ -650,13 +648,12 @@ async function refreshKept(id) {
   if (files.status === "fulfilled" && ws.files[id]) setFiles(id, files.value, filesRead);
 }
 
-// LIST-033 (newSessionFromKey and newSession, internal/ui/model/session.go:
-// 317-420): the landing state, where the next send makes the chat (TYPE-041).
-// A working chat no longer blocks it (owner, 2026-10-21): it keeps working
-// in the list while the new one starts.
+// Save an empty chat when requested, so leaving it does not remove its row.
+// A working chat keeps working in the list while the new one starts.
 export async function newChat() {
   sessions.draft = true;
   if (sessions.currentId) showLanding();
+  await ensureSession();
   return true;
 }
 

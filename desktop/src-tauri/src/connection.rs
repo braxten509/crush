@@ -543,10 +543,6 @@ struct Link {
     workspace_id: String,
 }
 
-/// How many folders a window keeps joined at once: the one it shows and three
-/// others (owner, 2026-10-22). A fifth leaves the one shown longest ago.
-pub const FOLDER_CAP: usize = 4;
-
 /// One folder the window keeps joined. Its claim on the engine is its event
 /// stream, which the engine gives up 10 s after the last one closes
 /// (internal/backend/clients.go:336-377), so the stream stays open for the
@@ -556,8 +552,6 @@ struct Folder {
     plan: Arc<Plan>,
     client_id: String,
     opened: OpenResult,
-    /// A stamp: the higher, the more recently the window showed this folder.
-    seen: u64,
     /// The identity of its stream, so the end of an older one starts nothing.
     generation: u64,
     reader: Option<Owned>,
@@ -589,8 +583,6 @@ struct Inner {
     shown: Option<String>,
     /// Every joined folder, the shown one included.
     folders: HashMap<String, Folder>,
-    /// The stamp of the last shown folder; each show takes the next.
-    stamp: u64,
     opened: Option<OpenResult>,
     /// The chat the window last reported (`""` is the landing page); sent again after a rejoin.
     current_session: Option<String>,
@@ -599,27 +591,6 @@ struct Inner {
     joining: Option<u64>,
     joining_lost: bool,
     reconnect: Option<JoinHandle<()>>,
-}
-
-impl Inner {
-    /// Drops the folders shown longest ago until FOLDER_CAP are left, the
-    /// shown one always among them; answers them, for leaving the engine.
-    fn evict(&mut self) -> Vec<Folder> {
-        let mut out = Vec::new();
-        while self.folders.len() > FOLDER_CAP {
-            let oldest = self
-                .folders
-                .iter()
-                .filter(|(dir, _)| Some(*dir) != self.shown.as_ref())
-                .min_by_key(|(_, folder)| folder.seen)
-                .map(|(dir, _)| dir.clone());
-            let Some(dir) = oldest else { return out };
-            if let Some(folder) = self.folders.remove(&dir) {
-                out.push(folder);
-            }
-        }
-        out
-    }
 }
 
 struct Queue {
@@ -693,7 +664,6 @@ impl WindowConn {
                 plan: None,
                 shown: None,
                 folders: HashMap::new(),
-                stamp: 0,
                 opened: None,
                 current_session: None,
                 counter: 0,
@@ -781,13 +751,6 @@ impl WindowConn {
         self.inner().shown.as_deref() == Some(dir)
     }
 
-    /// The next stamp for a shown folder.
-    fn touch(&self) -> u64 {
-        let mut inner = self.inner();
-        inner.stamp += 1;
-        inner.stamp
-    }
-
     /// Another folder's events (or, with none, a resync of that folder)
     /// into this window's batch; the folder the window joined hears them
     /// through its own stream.
@@ -850,9 +813,7 @@ impl WindowConn {
 
     /// Opens a folder beside the one the window shows (`engine_open_folder`):
     /// the window keeps it joined, so its chats answer at once without the
-    /// folder being shown. A folder already joined answers as it is. At most
-    /// FOLDER_CAP folders stay joined: a new one drops the folder shown
-    /// longest ago (owner, 2026-10-22).
+    /// folder being shown. A folder already joined answers as it is.
     async fn open_folder(self: &Arc<Self>, plan: impl Future<Output = AppResult<Plan>>) -> AppResult<OpenedFolder> {
         let _one_at_a_time = self.opening.lock().await;
         if self.inner().phase == Phase::Closed {
@@ -919,18 +880,6 @@ impl WindowConn {
             let parts = (folder.opened.clone(), folder.link.clone(), folder.client_id.clone());
             inner.plan = Some(folder.plan.clone());
             let from = inner.shown.replace(dir.clone());
-            // The folder it leaves was shown until now, so it counts as the
-            // next most recent: a fifth folder never takes the one just left.
-            inner.stamp += 1;
-            let left_stamp = inner.stamp;
-            if let Some(old) = from.as_ref().and_then(|old| inner.folders.get_mut(old)) {
-                old.seen = left_stamp;
-            }
-            inner.stamp += 1;
-            let stamp = inner.stamp;
-            if let Some(folder) = inner.folders.get_mut(&dir) {
-                folder.seen = stamp;
-            }
             inner.current_session = None;
             inner.opened = Some(parts.0.clone());
             (parts.0, from, parts.1, parts.2)
@@ -1075,7 +1024,6 @@ impl WindowConn {
             plan: plan.clone(),
             client_id: plan.client_id.clone(),
             opened: opened.clone(),
-            seen: self.touch(),
             generation,
             reader: None,
         };
@@ -1174,7 +1122,7 @@ impl WindowConn {
     /// lock as the state change, so it keeps its order with the reconnect's
     /// events.
     async fn install(&self, generation: u64, reader: Owned, mut folder: Folder, opened: OpenResult, attempt: u32) -> AppResult<OpenResult> {
-        let (due, evicted) = {
+        let due = {
             let mut inner = self.inner();
             let lost = inner.joining == Some(generation) && inner.joining_lost;
             if inner.joining == Some(generation) {
@@ -1195,7 +1143,6 @@ impl WindowConn {
             inner.phase = Phase::Connected;
             inner.reconnect = None;
             inner.opened = Some(opened.clone());
-            let evicted = inner.evict();
             let due = self.enqueue(vec![connection_event(json!({
                 "state": "connected",
                 "attempt": attempt,
@@ -1204,7 +1151,7 @@ impl WindowConn {
                 "workspace": opened.workspace,
                 "engine": opened.engine,
             }))]);
-            (due, evicted)
+            due
         };
         self.ring_if(due);
         self.log(&format!(
@@ -1213,7 +1160,6 @@ impl WindowConn {
             opened.engine.socket,
             opened.engine.pid
         ));
-        self.give_up(evicted).await;
         Ok(opened)
     }
 
@@ -1228,27 +1174,15 @@ impl WindowConn {
             engine: folder.opened.engine.clone(),
         };
         folder.reader = Some(reader);
-        let evicted = {
+        {
             let mut inner = self.inner();
             if inner.phase == Phase::Closed {
                 return Err(closed());
             }
             inner.folders.insert(dir.clone(), folder);
-            inner.evict()
         };
         self.log(&format!("kept {dir} joined (workspace {})", opened.workspace["id"]));
-        self.give_up(evicted).await;
         Ok(opened)
-    }
-
-    /// The folders that made room for a new one leave the engine, which keeps
-    /// their running work going (owner, 2026-10-22: a fifth folder leaves the
-    /// one shown longest ago).
-    async fn give_up(&self, folders: Vec<Folder>) {
-        for folder in folders {
-            self.log(&format!("letting {} go: {} folders are enough", folder.opened.cwd, FOLDER_CAP));
-            self.retire_keeping(&folder.link.http, &folder.client_id, true).await;
-        }
     }
 
     /// The folders the window keeps joined, in order.
@@ -3102,30 +3036,28 @@ esac"#,
     }
 
     #[test]
-    fn a_fifth_folder_leaves_the_one_shown_longest_ago() {
+    fn opening_more_than_four_folders_keeps_every_folder_connected() {
         let j = joined("conn-cap", TEST_TUNING);
         let one = j.folder("/tmp/one", "ws-one");
         let two = j.folder("/tmp/two", "ws-two");
         let three = j.folder("/tmp/three", "ws-three");
         assert_eq!(j.conn.folders_joined(), ["/tmp/one", "/tmp/proj", "/tmp/three", "/tmp/two"], "four folders fit");
         assert!(j.deletes().is_empty(), "nothing was given up");
-        // Showing /tmp/two makes it the newest again: /tmp/three is the oldest.
+        // Switching folders must not make an older folder disposable.
         j.show("/tmp/two");
         let four = j.folder("/tmp/four", "ws-four");
-        assert_eq!(
-            j.deletes(),
-            [("/tmp/one".to_string(), format!("/v1/clients/{}?keep_work=1", one.client_id))],
-            "the folder shown longest ago leaves, keeping its work; the one just left stays"
-        );
-        assert_eq!(j.conn.folders_joined(), ["/tmp/four", "/tmp/proj", "/tmp/three", "/tmp/two"]);
-        assert!(!j.conn.folders_joined().contains(&"/tmp/one".to_string()));
-        // Its chats are read from its saved files again, and nothing is sent to it.
-        let e = run(j.conn.call_in(Some("/tmp/one"), "GET", "sessions", None, None, None)).err().unwrap();
-        assert_eq!(e.code, "engine_unavailable");
+        let five = j.folder("/tmp/five", "ws-five");
+        assert!(j.deletes().is_empty(), "opening more folders never disconnects older ones");
+        assert_eq!(j.conn.folders_joined(), ["/tmp/five", "/tmp/four", "/tmp/one", "/tmp/proj", "/tmp/three", "/tmp/two"]);
+        let answer = run(j.conn.call_in(Some("/tmp/one"), "GET", "sessions", None, None, None)).unwrap();
+        let target = answer["echo"].as_str().unwrap();
+        assert!(target.starts_with("/v1/workspaces/ws-one/sessions"));
+        assert!(target.contains(&format!("client_id={}", one.client_id)));
         assert!(j.extra("/tmp/three").is_some() && j.extra("/tmp/two").is_some() && j.extra("/tmp/four").is_some());
         assert_eq!(three.dir, "/tmp/three");
         assert_eq!(two.dir, "/tmp/two");
         assert_eq!(four.dir, "/tmp/four");
+        assert_eq!(five.dir, "/tmp/five");
     }
 
     #[test]

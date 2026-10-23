@@ -143,7 +143,11 @@ function startHelper() {
 
 function fail(text) {
   console.error(`crush-desktop: ${text}`);
-  if (app.isReady() && !process.env.CRUSH_DESKTOP_NO_DIALOGS) dialog.showErrorBox("Crush Desktop", text);
+  if (app.isReady() && !process.env.CRUSH_DESKTOP_NO_DIALOGS) {
+    const parent = BrowserWindow.getFocusedWindow() ?? [...windows.values()].find((win) => !win.isDestroyed());
+    if (parent) dialog.showMessageBoxSync(parent, { type: "error", title: "Crush Desktop", message: text });
+    else dialog.showErrorBox("Crush Desktop", text);
+  }
   quitting = true;
   app.exit(1);
 }
@@ -194,7 +198,7 @@ async function answer(message) {
       new Notification({ title: message.title, body: message.body, icon: ICON }).show();
       return true;
     case "pick-folder": {
-      const parent = BrowserWindow.getFocusedWindow() ?? undefined;
+      const parent = BrowserWindow.getFocusedWindow() ?? [...windows.values()].find((win) => !win.isDestroyed());
       const picked = await dialog.showOpenDialog(parent, {
         title: message.title,
         defaultPath: message.start || undefined,
@@ -311,16 +315,49 @@ function setPinned(win, on) {
 // The script picks this app's window: the only one, else the active one
 // (the pin was just clicked there), else the one with this window's title.
 let kwinScripts = 0;
+let kwinDialogWatch = null;
 function kwinKeepAbove(win, on) {
   const name = `crush-desktop-pin-${process.pid}-${++kwinScripts}`;
   const file = path.join(os.tmpdir(), `${name}.js`);
+  const watch = !kwinDialogWatch;
+  if (watch) kwinDialogWatch = name;
   const script = `(function () {
   const pid = ${process.pid};
   const title = ${JSON.stringify(win.getTitle())};
   const mine = workspace.windowList().filter((w) => w.pid === pid && w.normalWindow);
   const w = mine.length === 1 ? mine[0]
-    : mine.find((w) => w === workspace.activeWindow) || mine.find((w) => w.caption === title || w.caption.startsWith(title + " <"));
-  if (w) w.keepAbove = ${on ? "true" : "false"};
+    : mine.find((w) => w.caption === title || w.caption.startsWith(title + " <")) || mine.find((w) => w === workspace.activeWindow);
+  if (!w) throw new Error("the window to pin is missing");
+  w.keepAbove = ${on ? "true" : "false"};
+  if (!${watch}) return;
+  // Portal dialogs can belong to another process. Follow the transient
+  // parent chain, including confirmations opened over a file picker.
+  const original = new Map();
+  function sync() {
+    workspace.windowList().forEach((child) => {
+      const seen = new Set();
+      let parent = child.transientFor;
+      while (parent && parent.transientFor && !seen.has(parent)) {
+        seen.add(parent);
+        parent = parent.transientFor;
+      }
+      if (parent && parent.pid === pid && parent.normalWindow && parent.keepAbove) {
+        if (!original.has(child)) original.set(child, child.keepAbove);
+        child.keepAbove = true;
+      } else if (original.has(child)) {
+        child.keepAbove = original.get(child);
+        original.delete(child);
+      }
+    });
+  }
+  function added(child) {
+    child.transientChanged.connect(sync);
+    child.closed.connect(() => original.delete(child));
+    if (child.pid === pid && child.normalWindow) child.keepAboveChanged.connect(sync);
+    sync();
+  }
+  workspace.windowList().forEach(added);
+  workspace.windowAdded.connect(added);
 })();
 `;
   const gdbus = (call, ...rest) =>
@@ -329,6 +366,9 @@ function kwinKeepAbove(win, on) {
         e ? reject(e) : resolve(out),
       ),
     );
+  const unload = () => gdbus(["--object-path", "/Scripting", "--method", "org.kde.kwin.Scripting.unloadScript"], name).catch(() => {});
+  // One watcher covers all of this app's windows until the app quits.
+  if (watch) app.once("will-quit", unload);
   fs.promises
     .writeFile(file, script)
     .then(() => gdbus(["--object-path", "/Scripting", "--method", "org.kde.kwin.Scripting.loadScript"], file, name))
@@ -337,9 +377,13 @@ function kwinKeepAbove(win, on) {
       if (!id || Number(id) < 0) throw new Error(`KWin refused the script (${out.trim()})`);
       return gdbus(["--object-path", `/Scripting/Script${id}`, "--method", "org.kde.kwin.Script.run"]);
     })
-    .catch((e) => console.error(`crush-desktop: KWin did not take the pin: ${e.message}`))
+    .catch((e) => {
+      if (watch) kwinDialogWatch = null;
+      unload();
+      console.error(`crush-desktop: KWin did not take the pin: ${e.message}`);
+    })
     .finally(() => {
-      gdbus(["--object-path", "/Scripting", "--method", "org.kde.kwin.Scripting.unloadScript"], name).catch(() => {});
+      if (!watch) unload();
       fs.promises.rm(file, { force: true }).catch(() => {});
     });
 }

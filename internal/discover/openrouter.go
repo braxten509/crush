@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 
 	"charm.land/catwalk/pkg/catwalk"
 )
@@ -76,6 +77,19 @@ func OpenRouterCatalog(ctx context.Context, baseURL, apiKey string, headers map[
 	return models, nil
 }
 
+// OpenRouterModelName drops the vendor word OpenRouter puts before a
+// model's name ("DeepSeek: DeepSeek V4.1 Flash 1017"), which reads badly
+// beside the provider's own name in the model lists (owner, 2026-10-22). A
+// name whose first words are longer than a vendor's, or that has no such
+// prefix, comes back as it is.
+func OpenRouterModelName(name string) string {
+	prefix, rest, ok := strings.Cut(name, ": ")
+	if !ok || strings.TrimSpace(rest) == "" || len([]rune(prefix)) > 24 || len(strings.Fields(prefix)) > 3 {
+		return name
+	}
+	return rest
+}
+
 func openRouterCatwalkModel(entry openRouterModel) catwalk.Model {
 	maxTokens := entry.TopProvider.MaxCompletionTokens
 	if maxTokens <= 0 || maxTokens > openRouterMaxTokens {
@@ -83,7 +97,7 @@ func openRouterCatwalkModel(entry openRouterModel) catwalk.Model {
 	}
 	model := catwalk.Model{
 		ID:                 entry.ID,
-		Name:               entry.Name,
+		Name:               OpenRouterModelName(entry.Name),
 		ContextWindow:      entry.ContextLength,
 		DefaultMaxTokens:   maxTokens,
 		SupportsImages:     slices.Contains(entry.Architecture.InputModalities, "image"),

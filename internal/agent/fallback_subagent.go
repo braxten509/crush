@@ -71,6 +71,7 @@ func (h *taskHub) subAgentFallback(ctx context.Context, t *Task, start, cur conf
 			c.fallback.mu.Lock()
 			delete(c.fallback.out, act.Account)
 			c.fallback.mu.Unlock()
+			c.saveFallbackMemory()
 			return h.subAgentOn(ctx, t, order.Blocks[act.Block], fmt.Sprintf("Used a free refill on %s.", accounts.Label(cfg, act.Account.Kind, act.Account.ID)))
 		case fallback.Wait:
 			b := order.Blocks[act.Block]

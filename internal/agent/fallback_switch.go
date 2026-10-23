@@ -177,6 +177,7 @@ func (c *coordinator) markOut(acct fallback.Account, err error, now time.Time) {
 	}
 	c.fallback.out[acct] = o
 	c.fallback.mu.Unlock()
+	c.saveFallbackMemory()
 }
 
 // redecide asks the order again once the account it picked could not take
@@ -296,6 +297,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 			c.fallback.ret = nil
 		}
 		c.fallback.mu.Unlock()
+		c.saveFallbackMemory()
 		if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
 			slog.Warn("The fallback order could not switch the model", "error", err)
 			return false
@@ -316,19 +318,11 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 		b := order.Blocks[act.Block]
 		to := fallback.BlockAccount(b, c.providerKind)
 		c.fallbackNotice(ctx, sessionID, fmt.Sprintf("%s %s. Waiting for %s to refill at %s.", accounts.Label(cfg, from.Kind, from.ID), why, accounts.Label(cfg, to.Kind, to.ID), act.Until.Local().Format("3:04 PM")))
-		c.limitRetries.plan(sessionID, act.Until.Add(limitRetryDelay), func() {
-			// Still no room at the refill time: the order decides again,
-			// quietly; with nowhere else to go the chat tries it anyway.
-			if ctx := context.Background(); !c.fallbackReady(ctx, b, to) {
-				skip := map[fallback.Account]bool{to: true}
-				if next := c.redecide(order, at, true, nil, skip); next.Kind != fallback.Stay && c.applyFallback(ctx, sessionID, order, at, next, true, nil, skip) {
-					return
-				}
-			}
-			if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
-				slog.Warn("The fallback order could not switch the model", "error", err)
-			}
-			c.sendContinue(sessionID)
+		c.planWait(savedWait{
+			SessionID: sessionID, At: act.Until.Add(limitRetryDelay), Kind: waitKindFallback,
+			Provider: b.Provider, Model: b.Model, Account: b.Account,
+		}, func() {
+			c.waitForRoom(context.Background(), sessionID, order, at, b)
 		})
 		return true
 	case fallback.Refill:
@@ -348,6 +342,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 		c.fallback.mu.Lock()
 		delete(c.fallback.out, act.Account)
 		c.fallback.mu.Unlock()
+		c.saveFallbackMemory()
 		line := fmt.Sprintf("Used a free refill on %s.", accounts.Label(cfg, act.Account.Kind, act.Account.ID))
 		if act.Block != at {
 			b := order.Blocks[act.Block]
@@ -419,9 +414,27 @@ func (c *coordinator) fallbackNotice(ctx context.Context, sessionID, text string
 	})
 }
 
+// waitForRoom sends the chat to block b once its account has room, asking
+// the order again first when it still has none.
+func (c *coordinator) waitForRoom(ctx context.Context, sessionID string, order config.FallbackOrder, at int, b config.FallbackBlock) {
+	to := fallback.BlockAccount(b, c.providerKind)
+	// Still no room at the refill time: the order decides again, quietly;
+	// with nowhere else to go the chat tries it anyway.
+	if !c.fallbackReady(ctx, b, to) {
+		skip := map[fallback.Account]bool{to: true}
+		if next := c.redecide(order, at, true, nil, skip); next.Kind != fallback.Stay && c.applyFallback(ctx, sessionID, order, at, next, true, nil, skip) {
+			return
+		}
+	}
+	if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
+		slog.Warn("The fallback order could not switch the model", "error", err)
+	}
+	c.sendContinue(sessionID)
+}
+
 // continueChat sends the chat "continue" once its cut-short turn is over.
 func (c *coordinator) continueChat(sessionID string, now time.Time) {
-	c.limitRetries.plan(sessionID, now, func() { c.sendContinue(sessionID) })
+	c.planWait(savedWait{SessionID: sessionID, At: now, Kind: waitKindContinue}, func() { c.sendContinue(sessionID) })
 }
 
 func (c *coordinator) sendContinue(sessionID string) {

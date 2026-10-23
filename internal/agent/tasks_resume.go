@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -79,14 +78,10 @@ func (h *taskHub) savedTasksPath() string {
 // savedDataPath is where this hub saves the named file of running work, or
 // "" when it doesn't: non-interactive runs end with their work.
 func (h *taskHub) savedDataPath(name string) string {
-	if h.c == nil || h.c.cfg == nil || !h.c.interactive {
+	if h.c == nil {
 		return ""
 	}
-	dir := h.c.cfg.Config().Options.DataDirectory
-	if dir == "" {
-		return ""
-	}
-	return filepath.Join(dir, name)
+	return h.c.savedDataPath(name)
 }
 
 // editSaved changes the saved tasks under a lock shared by every Crush in
@@ -207,6 +202,12 @@ func (h *taskHub) resumeInterrupted(ctx context.Context) {
 		slog.Warn("Failed to read interrupted background jobs", "error", err)
 	}
 	h.mu.Unlock()
+	// The chats' pending work comes back with the helpers: the waits an
+	// earlier engine planned, the prompts it left queued behind a turn, and
+	// the fallback order's memory of accounts that ran out.
+	h.c.loadFallbackMemory()
+	h.c.restoreWaits()
+	h.c.restorePrompts()
 	h.resumeClaimed(ctx, claimed, jobs)
 }
 

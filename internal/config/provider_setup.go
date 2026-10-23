@@ -120,7 +120,34 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 		return s.pending, fmt.Errorf("default providers are disabled and there are no custom providers are configured")
 	}
 
+	s.dropVendorWords()
+
 	return s.pending, nil
+}
+
+// dropVendorWords drops the vendor word OpenRouter puts before its model
+// names, for the models saved in the config and the catalog's own alike, so
+// the apps show "DeepSeek V4.1 Flash 1017" rather than "DeepSeek: DeepSeek
+// V4.1 Flash 1017" (owner, 2026-10-22). Other providers keep their names.
+func (s *providerSetup) dropVendorWords() {
+	for id, providerConfig := range s.cfg.Providers.Seq2() {
+		if providerConfig.Type != catwalk.TypeOpenRouter {
+			continue
+		}
+		changed := false
+		models := slices.Clone(providerConfig.Models)
+		for i, model := range models {
+			if plain := discover.OpenRouterModelName(model.Name); plain != model.Name {
+				models[i].Name = plain
+				changed = true
+			}
+		}
+		if !changed {
+			continue
+		}
+		providerConfig.Models = models
+		s.cfg.Providers.Set(id, providerConfig)
+	}
 }
 
 // configureKnownProvider configures one catalog provider: it merges the

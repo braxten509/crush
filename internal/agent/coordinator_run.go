@@ -52,8 +52,10 @@ func (c *coordinator) interactiveTurn(ctx context.Context) bool {
 // applies.
 func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
 	// Anything new in the chat replaces a planned usage-limit retry; if
-	// it hits the limit too, it plans its own.
+	// it hits the limit too, it plans its own. The saved copy goes with it,
+	// so a restart doesn't continue a chat you took over.
 	c.limitRetries.drop(sessionID)
+	c.clearWait(sessionID)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

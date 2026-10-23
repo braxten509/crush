@@ -167,6 +167,14 @@ type taskHub struct {
 	subAgentHook func(config.ProviderConfig, catwalk.Model) SessionAgent
 	// checkInEvery lets tests shorten check-ins; zero uses the setting.
 	checkInEvery time.Duration
+	// queueStop ends the loop that saves the prompts waiting behind a
+	// chat's turn (queueStopOnce, since stopAll runs more than once);
+	// queueSaved is the last queue written, so an unchanged one is not
+	// written again.
+	queueStop     chan struct{}
+	queueStopOnce sync.Once
+	queueMu       sync.Mutex
+	queueSaved    string
 	// reaper is the write end of the reaper's pipe; see startReaper.
 	reaper *os.File
 }
@@ -188,12 +196,13 @@ func newTaskHub(c *coordinator, events pubsub.Publisher[Task]) *taskHub {
 		_ = os.Remove(dir)
 		return nil
 	}
-	h := &taskHub{c: c, dir: dir, root: root, events: events, cancels: map[string]context.CancelFunc{}, tasks: map[string]*Task{}, userStopped: map[string]bool{}}
+	h := &taskHub{c: c, dir: dir, root: root, events: events, cancels: map[string]context.CancelFunc{}, tasks: map[string]*Task{}, userStopped: map[string]bool{}, queueStop: make(chan struct{})}
 	if !testing.Testing() {
 		if h.reaper, err = startReaper(TasksDirEnv + "=" + dir); err != nil {
 			slog.Warn("Processes may outlive a crash: no reaper", "error", err)
 		}
 	}
+	go h.watchQueues()
 	go h.watch()
 	go h.watchDetached()
 	if !testing.Testing() {
@@ -384,6 +393,12 @@ func (h *taskHub) stopAll() {
 	reaper := h.reaper
 	h.reaper = nil
 	h.mu.Unlock()
+	// The last look at the queues, then the loop ends (a hub tests build by
+	// hand has none).
+	h.writeQueues()
+	if h.queueStop != nil {
+		h.queueStopOnce.Do(func() { close(h.queueStop) })
+	}
 	// Closing the pipe has the reaper stop what the hub's agents left.
 	if reaper != nil {
 		_ = reaper.Close()

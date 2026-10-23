@@ -52,7 +52,8 @@ func TestOpenRouterCatalogFollowsAccountPreferences(t *testing.T) {
 	require.Equal(t, []string{"moonshot/kimi-k3", "free/coder:free", "openrouter/auto"}, ids)
 
 	kimi := models[0]
-	require.Equal(t, "Moonshot: Kimi K3", kimi.Name)
+	// OpenRouter's "Vendor: Model" names lose the vendor word.
+	require.Equal(t, "Kimi K3", kimi.Name)
 	require.EqualValues(t, 262144, kimi.ContextWindow)
 	require.EqualValues(t, 32000, kimi.DefaultMaxTokens)
 	// It reasons, but lists no effort choice: no levels.

@@ -250,6 +250,14 @@ func (r *limitRetries) drop(sessionID string) {
 	}
 }
 
+// has reports whether the chat already has a planned retry in this Crush.
+func (r *limitRetries) has(sessionID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.pending[sessionID]
+	return ok
+}
+
 // planLimitRetry continues a chat whose turn failed on a usage limit that
 // names its reset time. Only interactive chats do: helpers and headless
 // runs report their failure to whoever started them instead.
@@ -262,7 +270,7 @@ func (c *coordinator) planLimitRetry(sessionID string, err error) {
 		return
 	}
 	slog.Info("Usage limit hit; continuing the chat when it resets", "session_id", sessionID, "at", at)
-	c.limitRetries.plan(sessionID, at, func() {
+	c.planWait(savedWait{SessionID: sessionID, At: at, Kind: waitKindLimit}, func() {
 		if c.tasks != nil && c.tasks.isClosing() {
 			return
 		}

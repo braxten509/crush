@@ -84,6 +84,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
+	selected.Account = h.taskAccount(*provider, "")
 	sub, m, err := h.subAgent(ctx, *provider, model, selected, req.ReadOnly)
 	if err != nil {
 		return nil, err
@@ -109,6 +110,17 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		return nil, err
 	}
 	return &snapshot, nil
+}
+
+// Same-provider workers follow the parent's current login, including its
+// default login. Other providers retain their own account.
+func (h *taskHub) taskAccount(provider config.ProviderConfig, previous string) string {
+	cur := h.c.cfg.Config().Models[config.SelectedModelTypeLarge]
+	parent, ok := h.c.cfg.Config().Providers.Get(cur.Provider)
+	if ok && parent.Type == provider.Type {
+		return cur.Account
+	}
+	return previous
 }
 
 // subAgent builds the agent a task runs on.
@@ -220,6 +232,7 @@ func (h *taskHub) startRun(ctx context.Context, release func(), t *Task, sub Ses
 		h.seq++
 		t.ID = fmt.Sprintf("t%d", h.seq)
 	}
+	t.Account = m.ModelCfg.Account
 	runCtx, cancel := context.WithCancel(ctx)
 	h.cancels[t.ID] = cancel
 	h.tasks[t.ID] = t

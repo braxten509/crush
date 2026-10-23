@@ -384,12 +384,13 @@
     return scroller ? scroller.clientHeight : 0;
   }
 
-  // Scrolls by dy real pixels (keys); returns whether the view is then at the bottom.
+  // Scrolls by dy real pixels (keys); returns whether the view should follow,
+  // using the same allowance as a wheel scroll.
   export function scrollByPx(dy) {
     reveal = null;
     setTop(scroller.scrollTop + dy);
     flashBar();
-    return atBottom(scroller.scrollTop, scroller.clientHeight, scroller.scrollHeight);
+    return nearBottom(scroller.scrollTop, scroller.clientHeight, scroller.scrollHeight, zoom);
   }
 
   export function scrollToTop() {

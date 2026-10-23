@@ -86,6 +86,20 @@ afterEach(() => {
 });
 
 describe("the meters follow the agent after a model change", () => {
+  it("a sub-agent's meters follow its own account and later fallback events", async () => {
+    h.routes.set("GET agent", agent("claude-code"));
+    await workspace.loadAgent();
+    workspace.ws.providers = [{ id: "claude-code", type: "claude-code", models: [{ id: "opus" }] }];
+    await limits.loadLimits();
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    const { helperChats, startHelperChats } = await import("../../lib/stores/helperchats.svelte.js");
+    sessions.currentId = "child";
+    helperChats.byId.child = { id: "child", parent: "parent", cli: "claude", model: "opus", account: "claude-2", running: true };
+    startHelperChats();
+    expect(fiveHourText(panel.meterNow().meters)).toBe("40% left");
+    await deliver(ev("helper", "updated", { child_session_id: "child", status: "running", cli: "claude", model: "opus", account: "" }));
+    expect(fiveHourText(panel.meterNow().meters)).toBe("90% left");
+  });
   it("a fallback to another provider shows that provider's usage", async () => {
     h.routes.set("GET agent", agent("claude-code"));
     await workspace.loadAgent();

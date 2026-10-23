@@ -3,7 +3,8 @@
 // silently either way.
 import { api } from "../engine/api.js";
 import { prompts } from "../stores/prompts.svelte.js";
-import { closeSlot, notify, ui } from "../stores/ui.svelte.js";
+import { closeSlot, notify, requestEnd, ui } from "../stores/ui.svelte.js";
+import { sessions } from "../stores/sessions.svelte.js";
 import { answerBody } from "./form.js";
 
 // Only this request's form closes: a newer one that arrived meanwhile stays.
@@ -15,6 +16,7 @@ function done(request) {
 export async function submitAnswers(request, answers) {
   try {
     await api.answerQuestions(answerBody(request, answers));
+    if (request.session_id === sessions.currentId && ui.follow) requestEnd();
     done(request);
     return true;
   } catch (error) {

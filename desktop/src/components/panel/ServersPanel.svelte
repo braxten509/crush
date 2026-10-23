@@ -6,10 +6,10 @@
   // that opens to list them. The stop cross keeps its place and shows on
   // hover; it stops that server's job (a program's: all its ports).
   import Icon from "../Icon.svelte";
-  import { foldOf, rowTexts, serverRows, stopServer, useRow } from "../../lib/leftlist/servers.js";
+  import { foldOf, rowTexts, serverRows, stopServer, useRow, visibleServers } from "../../lib/leftlist/servers.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
 
-  const rows = $derived(serverRows(leftList.servers, leftList.openFolds));
+  const rows = $derived(serverRows(visibleServers(), leftList.openFolds));
   const key = (row) => (row.ports > 0 ? `fold:${foldOf(row.server)}` : `${row.child ? "child" : "port"}:${row.server.port}`);
 </script>
 

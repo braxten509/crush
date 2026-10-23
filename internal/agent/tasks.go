@@ -62,6 +62,7 @@ type Task struct {
 	Name      string `json:"name"`
 	CLI       string `json:"cli"`
 	Model     string `json:"model"`
+	Account   string `json:"account,omitempty"`
 	Effort    string `json:"effort,omitempty"`
 	Fast      bool   `json:"fast,omitempty"`
 	// ReadOnly runs the sub-agent where it can't change the project's

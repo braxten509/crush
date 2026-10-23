@@ -84,7 +84,13 @@ export function serverRows(servers, openFolds = {}) {
 // servers.go:94-104). None in the strip.
 export function shownRows() {
   if (leftList.strip) return [];
-  return serverRows(leftList.servers, leftList.openFolds).slice(0, Math.max(leftList.serverRoom ?? Infinity, 0));
+  return serverRows(visibleServers(), leftList.openFolds).slice(0, Math.max(leftList.serverRoom ?? Infinity, 0));
+}
+
+// Changing folders invalidates the previous connection's ports immediately,
+// before the next poll or its answer can arrive.
+export function visibleServers() {
+  return conn.clientId && leftList.serversClientId === conn.clientId ? leftList.servers : [];
 }
 
 // A row's label and right-hand text, as the session host draws them
@@ -153,6 +159,7 @@ export function stopServer(server) {
 
 // One read of G-18; an answer older than a newer read or a stop is dropped.
 export async function readServers() {
+  const clientId = conn.clientId;
   const mine = ++reads;
   const stopsBefore = stops;
   let answer = [];
@@ -161,8 +168,9 @@ export async function readServers() {
   } catch {
     answer = []; // no route (an older engine) or no engine: no rows
   }
-  if (mine !== reads || stopsBefore !== stops) return;
+  if (mine !== reads || stopsBefore !== stops || clientId !== conn.clientId) return;
   leftList.servers = orderServers(answer, sessions.order);
+  leftList.serversClientId = clientId;
 }
 
 // serverKey (servers.go:181-210), while a shown row is picked: Enter uses it,

@@ -38,6 +38,16 @@ func (h *taskHub) subAgentFallback(ctx context.Context, t *Task, start, cur conf
 	if !isUsageLimit(err) {
 		return subAgentNext{}, false
 	}
+	// A parent that already moved accounts has made this decision for its
+	// same-provider workers too. Keep the worker's own model and effort.
+	if provider, ok := c.cfg.Config().Providers.Get(cur.Provider); ok {
+		account := h.taskAccount(provider, cur.Account)
+		if account != cur.Account {
+			return h.subAgentOn(ctx, t, config.FallbackBlock{
+				Provider: cur.Provider, Model: cur.Model, Account: account, Effort: cur.ReasoningEffort,
+			}, fmt.Sprintf("Following the parent's account: %s.", accounts.Label(c.cfg.Config(), provider.Type, account)))
+		}
+	}
 	cfg := c.cfg.Config()
 	if cfg.Options == nil || cfg.Options.Fallback == nil || !cfg.Options.Fallback.On {
 		return subAgentNext{}, false
@@ -117,6 +127,7 @@ func (h *taskHub) subAgentOn(ctx context.Context, t *Task, b config.FallbackBloc
 	}
 	h.mu.Lock()
 	t.CLI, t.Model, t.Effort = taskProviderName(provider), model.ID, selected.ReasoningEffort
+	t.Account = selected.Account
 	snapshot := *t
 	h.mu.Unlock()
 	h.publish(snapshot)

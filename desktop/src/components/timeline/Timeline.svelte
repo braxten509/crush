@@ -437,12 +437,9 @@
     return Number.isFinite(size) && size > 0 ? size / 16 : 1;
   }
 
-  // ScrollBy (chat_scroll.go:66-77): up turns following off; down turns it on
-  // at the bottom.
+  // Keys and wheel scrolling share the near-bottom allowance.
   function scrollBy(dy) {
-    const bottom = list.scrollByPx(dy);
-    if (dy < 0) setFollowed(false);
-    else if (bottom) setFollowed(true);
+    setFollowed(list.scrollByPx(dy));
   }
 
   function selectedIndex() {

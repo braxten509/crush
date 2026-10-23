@@ -1,0 +1,7 @@
+<html><body><ul id="rows"></ul><script type="module">
+import {mount} from 'svelte';
+import ChatRow from '/src/components/list/ChatRow.svelte';
+import '/src/app.css';
+document.documentElement.style.fontSize='10.6667px';
+for (const [i,title,state,stateKind] of [[0,'Keep Dialogue Box Side Edges Visible','Working…','working'],[1,'Short chat','Waiting for your answer','waiting']]) mount(ChatRow,{target:document.querySelector('#rows'),props:{row:{id:'check'+i,title,state,stateKind,selected:true,branches:0,depth:0}}});
+</script><style>body{width:370px;background:#272725;color:#d8d8d0}#rows{margin-top:5px} :root{--band:#30302e;--slate:#aaa9a3;--icon-ring:#77766f;--busy:#aaa9a3}</style></body></html>

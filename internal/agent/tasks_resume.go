@@ -257,6 +257,7 @@ func (h *taskHub) resume(ctx context.Context, s savedTask) error {
 			return err
 		}
 	}
+	selected.Account = h.taskAccount(provider, s.Account)
 	sub, m, err := h.subAgent(ctx, provider, model, selected, s.ReadOnly)
 	if err != nil {
 		return err

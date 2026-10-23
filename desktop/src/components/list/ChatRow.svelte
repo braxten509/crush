@@ -149,6 +149,7 @@
     grid-row: 1;
     padding-right: calc(16 * var(--px));
     font: var(--t-item);
+    text-box: trim-both cap alphabetic;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -184,9 +185,17 @@
     white-space: nowrap;
   }
   .state > span {
+    text-box: trim-both cap alphabetic;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* Keep accents and descenders inside the clipping area without changing
+     the capital-height center used beside the icons. */
+  .title,
+  .state > span {
+    padding-block: 0.3em;
+    margin-block: -0.3em;
   }
   .state :global(svg) {
     flex: none;
@@ -207,6 +216,7 @@
     top: 50%;
     transform: translateY(-50%);
     font: var(--t-small);
+    text-box: trim-both cap alphabetic;
     color: var(--slate);
     white-space: nowrap;
   }

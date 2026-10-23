@@ -130,7 +130,7 @@ watch(() => {
 // -- Server rows (2.22): G-18 every 1 s while connected --
 
 watch(() => {
-  if (conn.state !== "connected") return;
+  if (conn.state !== "connected" || !conn.clientId) return;
   untrack(readServers);
   const timer = setInterval(readServers, 1000);
   return () => clearInterval(timer);

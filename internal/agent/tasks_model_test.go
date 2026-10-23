@@ -1,14 +1,44 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTaskInheritsCurrentProviderAccount(t *testing.T) {
+	c := sessionRunTestCoordinator(t, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		return fakeSessionReply(call, "received"), nil
+	})
+	h := resumeTestHub(t, c)
+	c.tasks = h
+	provider := config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus"}}}
+	c.cfg.Config().Providers.Set(provider.ID, provider)
+	c.cfg.Config().Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: provider.ID, Model: "opus", Account: "claude-2"}
+	parent, _ := helperChats(t, c)
+	h.subAgentHook = func(config.ProviderConfig, catwalk.Model) SessionAgent {
+		return newMockAgent("claude", 4096, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+			return agentResultWithText("done"), nil
+		})
+	}
+	task, err := h.spawn(TaskRequest{Session: parent.ID, CLI: "claude", Prompt: "work"})
+	require.NoError(t, err)
+	require.Equal(t, "claude-2", task.Account)
+	require.Equal(t, "claude-2", h.taskAccount(provider, ""))
+	cur := config.SelectedModel{Provider: provider.ID, Model: "opus"}
+	next, ok := h.subAgentFallback(t.Context(), task, cur, cur, errOut)
+	require.True(t, ok, "a worker hitting its old account's limit follows the parent's new account")
+	require.Equal(t, "claude-2", next.model.ModelCfg.Account)
+	c.cfg.Config().Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: provider.ID, Account: ""}
+	require.Empty(t, h.taskAccount(provider, "claude-2"), "returning to the default account also follows")
+	require.Equal(t, "codex-2", h.taskAccount(config.ProviderConfig{Type: config.TypeCodexCLI}, "codex-2"), "other providers keep their own account")
+}
 
 // Background tasks build their models through the same path as the main
 // agents, so they get the whole decorator chain and the provider's prompt

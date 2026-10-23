@@ -22,6 +22,7 @@ export const leftList = $state({
   home: "", // the home folder (app_info), written "~" in the picker
   dragging: "", // the terminal tab a drag is moving
   servers: [], // the listening ports of the project's chats, each once, in list order (servers.js)
+  serversClientId: "", // the engine connection that supplied these ports
   openFolds: {}, // fold → true: a program's row opened to show its servers
   picked: null, // null | {fold} | {port}: the picked server row
   serverRoom: Infinity, // how many server rows fit while leaving room for one chat (no longer measured: the servers are the right panel's)

@@ -378,6 +378,8 @@
      corners (owner, 2026-10-20: the outer box is closed). */
   .edge {
     position: absolute;
+    /* List fades and row backgrounds stay inside the visible frame. */
+    z-index: 1;
     background: var(--rule-frame);
     pointer-events: none;
   }

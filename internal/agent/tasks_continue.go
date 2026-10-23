@@ -133,6 +133,7 @@ func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
+	selected.Account = h.taskAccount(provider, prev.Account)
 	readOnly := prev.ReadOnly || req.ReadOnly
 	sub, m, err := h.subAgent(ctx, provider, model, selected, readOnly)
 	if err != nil {

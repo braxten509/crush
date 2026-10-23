@@ -26,6 +26,7 @@ export function openHelperChat(h) {
     running: h.status === "running",
     cli: h.cli ?? "",
     model: h.model ?? "",
+    account: h.account ?? "",
     effort: h.effort ?? "",
     fast: Boolean(h.fast),
   };
@@ -39,6 +40,7 @@ function adopt(chat, h) {
   chat.running = h.status === "running";
   chat.cli = h.cli ?? chat.cli;
   chat.model = h.model ?? chat.model;
+  chat.account = h.account ?? "";
   chat.effort = h.effort ?? chat.effort;
   chat.fast = Boolean(h.fast);
 }

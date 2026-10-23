@@ -17,6 +17,7 @@ type Helper struct {
 	Name           string    `json:"name"`
 	CLI            string    `json:"cli"`
 	Model          string    `json:"model"`
+	Account        string    `json:"account,omitempty"`
 	Effort         string    `json:"effort,omitempty"`
 	Fast           bool      `json:"fast,omitempty"`
 	ReadOnly       bool      `json:"read_only,omitempty"`
@@ -36,6 +37,7 @@ func HelperFromTask(t agent.Task) Helper {
 		Name:           t.Name,
 		CLI:            t.CLI,
 		Model:          t.Model,
+		Account:        t.Account,
 		Effort:         t.Effort,
 		Fast:           t.Fast,
 		ReadOnly:       t.ReadOnly,
@@ -203,8 +205,8 @@ type CLILimits struct {
 	Kind    string        `json:"kind"`              // catwalk type string of the AI tool
 	Account string        `json:"account,omitempty"` // options.accounts ID; empty for the tool's own login
 	Refills int           `json:"refills,omitempty"` // free refills left (Codex)
-	State   string        `json:"state"`            // "checking" | "ready" | "error"
-	ReadAt  time.Time     `json:"read_at,omitzero"` // when this engine got the reading (UTC); zero until the first
+	State   string        `json:"state"`             // "checking" | "ready" | "error"
+	ReadAt  time.Time     `json:"read_at,omitzero"`  // when this engine got the reading (UTC); zero until the first
 	Error   string        `json:"error,omitempty"`
 	Windows []LimitWindow `json:"windows"`
 }

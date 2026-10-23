@@ -93,7 +93,7 @@ export function helperInfo(h, now = Date.now()) {
 // provider's type for its usage windows.
 export function helperAgent(h, providers = []) {
   const list = Array.isArray(providers) ? providers : [];
-  const cfg = { model: h?.model ?? "", reasoning_effort: h?.effort ?? "", provider: "" };
+  const cfg = { model: h?.model ?? "", reasoning_effort: h?.effort ?? "", provider: "", account: h?.account ?? "" };
   if (h?.fast) cfg.service_tier = "fast";
   let model = { name: h?.model ?? "" };
   let kind = "";

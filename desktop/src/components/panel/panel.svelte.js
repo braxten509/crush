@@ -31,6 +31,8 @@ import { busy, sessions } from "../../lib/stores/sessions.svelte.js";
 import { todos } from "../../lib/stores/todos.svelte.js";
 import { setFocus, ui } from "../../lib/stores/ui.svelte.js";
 import { ws } from "../../lib/stores/workspace.svelte.js";
+import { helperChats } from "../../lib/stores/helperchats.svelte.js";
+import { helperAgent } from "../../lib/live/helpers.svelte.js";
 import { lspRows, mcpRows, skillRows } from "./rows.js";
 
 export const panel = $state({ detailsOpen: false, focused: false, wheeled: false, needsInit: false });
@@ -55,16 +57,23 @@ export function closeDetails() {
 
 const shownSession = () => (sessions.currentId ? (sessions.byId[sessions.currentId] ?? null) : null);
 
+export function agentNow() {
+  const helper = helperChats.byId[sessions.currentId];
+  return helper ? helperAgent(helper, ws.providers).agent : ws.agent;
+}
+
 // The reading of the account the agent runs on, or null.
 function readingNow() {
-  const kind = cliKind(ws.agent, ws.providers);
-  return kind ? (limits.byKind[limitsKey(kind, ws.agent?.model_cfg?.account ?? "")] ?? null) : null;
+  const agent = agentNow();
+  const kind = cliKind(agent, ws.providers);
+  return kind ? (limits.byKind[limitsKey(kind, agent?.model_cfg?.account ?? "")] ?? null) : null;
 }
 
 // The agent CLI's windows for the model: null while checking, [] for none.
 function windowsNow(now) {
-  const kind = cliKind(ws.agent, ws.providers);
-  return kind ? limitWindows(readingNow(), ws.agent?.model_cfg?.model ?? "", now) : [];
+  const agent = agentNow();
+  const kind = cliKind(agent, ws.providers);
+  return kind ? limitWindows(readingNow(), agent?.model_cfg?.model ?? "", now) : [];
 }
 
 // The account the agent runs on, with its free refills (Codex), for the
@@ -75,13 +84,14 @@ export function refillNow() {
 }
 
 export function meterNow(now = Date.now()) {
+  const agent = agentNow();
   const session = shownSession();
-  const limit = compactionLimit({ agent: ws.agent, session, providers: ws.providers, options: ws.config?.options });
-  return meterModel({ items: footerItems(ws.config), session, limit, limits: windowsNow(now), api: Boolean(ws.agent?.model_cfg?.provider) && !cliKind(ws.agent, ws.providers), refills: refillNow().count });
+  const limit = compactionLimit({ agent, session, providers: ws.providers, options: ws.config?.options });
+  return meterModel({ items: footerItems(ws.config), session, limit, limits: windowsNow(now), api: Boolean(agent?.model_cfg?.provider) && !cliKind(agent, ws.providers), refills: refillNow().count });
 }
 
 export function modelNow(now = Date.now()) {
-  return modelInfo({ agent: ws.agent, providers: ws.providers, session: shownSession(), limits: windowsNow(now) ?? [] });
+  return modelInfo({ agent: agentNow(), providers: ws.providers, session: shownSession(), limits: windowsNow(now) ?? [] });
 }
 
 // Each list as {rows, more}; files' more is its "…and N more" text, the

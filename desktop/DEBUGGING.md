@@ -1,5 +1,68 @@
 # Skipped and partly done steps
 
+## Following the chat after a question answer, 2026-10-23
+
+### Symptom
+2026-10-23: the owner reports that answering a question occasionally does not
+scroll to the new reply when the chat is only a few pixels above the bottom.
+There is no error message. The start date is unknown.
+
+### Suspects (ranked)
+1. The answer path does not request following, unlike an ordinary sent message.
+2. Keyboard scrolling disables following even inside the near-bottom range.
+3. Closing the question changes the viewport before the next message arrives.
+
+### Evidence
+- `ask/answers.js` closes the form after success without requesting the bottom.
+- `Timeline.svelte` explicitly enables following for `ui.endRequest` on a send.
+- `Timeline.svelte` disables following for every upward keyboard scroll, while
+  `VirtualList.svelte` tolerates a small wheel scroll through `nearBottom`.
+
+### Attempts
+- Read the answer, timeline, virtual-list and existing near-bottom test paths.
+  No scroll code changed yet. Next check: successful answers must request the
+  current chat's bottom, failed answers and answers for another chat must not.
+
+### Research
+- https://developer.mozilla.org/en-US/docs/Web/API/Element/scrollHeight:
+  scrollTop can be fractional while heights are rounded. The current one-pixel
+  exact-bottom tolerance already accounts for this; widening it alone would
+  not reconnect question submission to following.
+
+### Test setup
+Tests use fake engine responses, not the owner's chats. UI checks run on the
+hidden GPU screen. No live account, question or desktop is changed.
+Test budget: one focused answer-flow test file, one real-renderer question flow.
+
+### Sub-agent reviews
+- Codex gpt-6.1-sol (read-only): found the real mismatch. Keyboard scrolling
+  used exact-bottom while the wheel used the 40 px allowance, and answering a
+  question restored nothing. Confirmed the patch has no clear regression and
+  asked for a behavioural check, which is now `tests/scroll-near.*`.
+
+### Current best explanation
+Two causes, both in the client:
+1. `Timeline.scrollBy` turned following off for any upward keyboard scroll and
+   back on only exactly at the bottom, while a wheel scroll tolerated about two
+   lines (`nearBottom`). Reading a few pixels above the bottom with a key left
+   following off, so the next reply stayed out of view.
+2. Answering a question never asked for the bottom, unlike sending a message
+   (`requestEnd`).
+
+Fix: keys and wheel share `nearBottom`; a successful answer requests the bottom
+only for the chat that asked and only while already following, so a reader far
+up keeps their place. Checks: `desktop/tests/scroll-near.*` (real VirtualList,
+fails before the change) and `desktop/src/lib/ask/answers.test.js`.
+
+### Unrelated failures in this environment
+`TestBackgroundCountAfterCtrlB`,
+`TestNativeBackgroundJobListedOnceAndUserStopIsReported` and
+`TestShellFileReviewCLIEndToEnd` fail identically on a clean checkout of
+03a45a7d (`git worktree` at HEAD, no changes): this Crush's own
+`CRUSH_TASKS_DIR` and `CRUSH_NATIVE_SHELL` markers are inherited by the tests'
+fixture processes, and the file-review keeper cannot observe them here. Not
+caused by these changes.
+
 What the build process (PLAN.md, the ultrabuild review and test rules) called for but was skipped, cut short or left open. Newest first. Each item says what is missing and where it would be done. Details and decisions stay in PLAN.md; this file is the to-do list of gaps.
 
 ## Phase 7, terminal switch-over (engine design 5.13), 2026-10-19

@@ -1,0 +1,15 @@
+<html><body><main style="height:200px;width:500px;display:flex"></main><script type="module">
+import {mount,flushSync} from 'svelte';
+import VirtualList from '/src/components/timeline/VirtualList.svelte';
+import '/src/app.css';
+const list=mount(VirtualList,{target:document.querySelector('main'),props:{items:Array.from({length:80},(_,i)=>({key:'row'+i,kind:'footer',text:'Earlier message '+i})),follow:false}});
+window.scrollCheck=async()=>{
+ await document.fonts.ready;
+ await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ list.scrollToBottom();
+ const near=list.scrollByPx(-3);
+ const gap=list.element().scrollHeight-list.element().clientHeight-list.element().scrollTop;
+ const far=list.scrollByPx(-200);
+ return {near,far,gap};
+};
+</script></body></html>

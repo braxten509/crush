@@ -51,7 +51,7 @@ func TestOpenCodeZenKeepsOnlyFreeModels(t *testing.T) {
 	script := `#!/bin/sh
 if [ "$2" = "opencode" ]; then
 printf 'opencode/paid-model\n{"id":"paid-model","name":"Paid Model","cost":{"input":1,"output":2}}\n'
-printf 'opencode/free-model\n{"id":"free-model","name":"Free Model","cost":{"input":0,"output":0}}\n'
+printf 'opencode/free-model\n{"id":"free-model","name":"Free Model","cost":{"input":0,"output":0},"variants":{"low":{"reasoningEffort":"low"},"high":{"reasoningEffort":"high"},"max":{"reasoningEffort":"max"}}}\n'
 fi
 if [ "$2" = "opencode-go" ]; then
 printf 'opencode-go/go-only\n{"id":"go-only","name":"go-only","cost":{"input":1,"output":2}}\n'
@@ -68,6 +68,13 @@ fi
 	}
 	require.Equal(t, []string{"opencode/free-model=Free Model"}, ids(TypeOpenCodeZenCLI))
 	require.Equal(t, []string{"opencode-go/go-only=go-only"}, ids(TypeOpenCodeCLI))
+
+	models, err := cliDiscovery[TypeOpenCodeZenCLI](t.Context(), filepath.Join(dir, "opencode"))
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+	require.Equal(t, []string{"low", "high", "max"}, models[0].ReasoningLevels)
+	require.Equal(t, "low", models[0].DefaultReasoningEffort)
+	require.True(t, models[0].CanReason)
 }
 
 func TestOpenCodeZenRegistersAsFreeProvider(t *testing.T) {

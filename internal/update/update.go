@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -97,6 +98,9 @@ func (c *github) Latest(ctx context.Context) (*Release, error) {
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	if token := githubToken(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -115,4 +119,14 @@ func (c *github) Latest(ctx context.Context) (*Release, error) {
 	}
 
 	return &release, nil
+}
+
+// githubToken returns a GitHub token from the environment so update checks
+// authenticate instead of hitting the unauthenticated rate limit. GH_TOKEN
+// is what the gh CLI exports; GITHUB_TOKEN is the Actions convention.
+func githubToken() string {
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		return token
+	}
+	return os.Getenv("GH_TOKEN")
 }

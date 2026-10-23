@@ -387,6 +387,9 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 		if r.setModel {
 			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-model", "method": "session/set_model", "params": map[string]any{"sessionId": sid, "modelId": r.m.ID}})
 		}
+		if r.name == "opencode" && r.t.Effort != "" {
+			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-effort", "method": "session/set_config_option", "params": map[string]any{"sessionId": sid, "configId": "effort", "value": r.t.Effort}})
+		}
 		_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": acpPromptID, "method": "session/prompt", "params": map[string]any{
 			"sessionId": sid,
 			"prompt":    []any{map[string]any{"type": "text", "text": withImagePaths(r.t.Prompt, r.t.Attachments)}},

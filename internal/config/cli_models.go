@@ -175,6 +175,21 @@ func openCodeModels(provider string, freeOnly bool) func(context.Context, string
 			if model.DefaultMaxTokens <= 0 {
 				model.DefaultMaxTokens = 32_000
 			}
+			if len(entry.Variants) > 0 {
+				model.CanReason = true
+				model.ReasoningLevels = make([]string, 0, len(entry.Variants))
+				for level := range entry.Variants {
+					model.ReasoningLevels = append(model.ReasoningLevels, level)
+				}
+				slices.SortFunc(model.ReasoningLevels, func(a, b string) int {
+					return cmp.Compare(reasoningRank(a), reasoningRank(b))
+				})
+				if slices.Contains(model.ReasoningLevels, "low") {
+					model.DefaultReasoningEffort = "low"
+				} else {
+					model.DefaultReasoningEffort = model.ReasoningLevels[0]
+				}
+			}
 			models = append(models, model)
 		}
 		return models, nil
@@ -182,10 +197,13 @@ func openCodeModels(provider string, freeOnly bool) func(context.Context, string
 }
 
 type openCodeEntry struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Cost   *struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Variants map[string]struct {
+		ReasoningEffort string `json:"reasoningEffort"`
+	} `json:"variants"`
+	Cost *struct {
 		Input  float64 `json:"input"`
 		Output float64 `json:"output"`
 	} `json:"cost"`
@@ -435,4 +453,26 @@ func discoverCodex(ctx context.Context, bin string) ([]catwalk.Model, error) {
 		models = append(models, m)
 	}
 	return models, nil
+}
+
+// reasoningRank orders the effort levels an agent CLI reports in the
+// conventional progression rather than alphabetically. Unknown levels sort
+// last so a new one still appears without displacing the known ones.
+func reasoningRank(level string) int {
+	switch level {
+	case "minimal":
+		return 0
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	case "xhigh":
+		return 4
+	case "max":
+		return 5
+	default:
+		return 6
+	}
 }

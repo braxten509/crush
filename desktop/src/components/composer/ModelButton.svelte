@@ -3,13 +3,20 @@
   // agent's model and effort as the footer items allow, "Unknown" until the
   // agent has a model. A click opens the model menu over the button
   // (ModelMenu.svelte, owner 2026-10-19), and a second click closes it; the
-  // full models sheet stays on Ctrl+P.
+  // full models sheet stays on Ctrl+P. A sub-agent's chat shows that
+  // sub-agent's model in its place, with no picker: its model was fixed when
+  // it started (owner, 2026-10-22).
   import Icon from "../Icon.svelte";
   import { modelButtonText } from "../../lib/composer/modes.js";
+  import { helperAgent } from "../../lib/live/helpers.svelte.js";
+  import { helperChats } from "../../lib/stores/helperchats.svelte.js";
+  import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { closeMenu, openMenu, ui } from "../../lib/stores/ui.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
 
-  const label = $derived(modelButtonText(ws.agent, ws.config?.options?.tui?.composer_footer));
+  const items = $derived(ws.config?.options?.tui?.composer_footer);
+  const helper = $derived(helperChats.byId[sessions.currentId] ?? null);
+  const label = $derived(helper ? modelButtonText(helperAgent(helper, ws.providers).agent, items) : modelButtonText(ws.agent, items));
   const open = $derived(ui.menu?.kind === "model");
   let button = $state();
 
@@ -19,10 +26,16 @@
   }
 </script>
 
-<button bind:this={button} class="model" class:open type="button" aria-label={label ? `Model: ${label}` : "Model"} aria-haspopup="dialog" aria-expanded={open} onclick={toggle}>
-  <span class="label">{label}</span>
-  <Icon name="caret" />
-</button>
+{#if helper}
+  <span class="model" class:open data-helper-model title="This sub-agent's model">
+    <span class="label">{label}</span>
+  </span>
+{:else}
+  <button bind:this={button} class="model" class:open type="button" aria-label={label ? `Model: ${label}` : "Model"} aria-haspopup="dialog" aria-expanded={open} onclick={toggle}>
+    <span class="label">{label}</span>
+    <Icon name="caret" />
+  </button>
+{/if}
 
 <style>
   /* The one-line field's full inner height, centred as the field grows

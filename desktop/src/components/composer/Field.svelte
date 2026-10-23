@@ -24,6 +24,11 @@
 
   const MAX_LINES = 15;
 
+  // A sub-agent's chat shows its field but takes no typing (owner,
+  // 2026-10-22): the text stays readable and selectable, and no key of the
+  // field's own acts.
+  let { readOnly = false } = $props();
+
   let el = $state(null);
   let lines = $state(1);
   let scrolls = $state(false);
@@ -139,15 +144,18 @@
   {value}
   placeholder={currentPlaceholder()}
   aria-label="Message"
+  readonly={readOnly}
+  tabindex={readOnly ? -1 : undefined}
+  aria-disabled={readOnly ? "true" : undefined}
   style:--lines={lines}
   onfocus={() => {
     setFocus("composer");
     resumePopup();
   }}
   onblur={() => blurPopup()}
-  oninput={input}
-  onpaste={paste}
-  onkeydown={keydown}
+  oninput={readOnly ? undefined : input}
+  onpaste={readOnly ? undefined : paste}
+  onkeydown={readOnly ? undefined : keydown}
   onkeyup={caretMoved}
   onpointerup={caretMoved}
   onscroll={scrolled}

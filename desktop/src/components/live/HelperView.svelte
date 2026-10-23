@@ -29,7 +29,7 @@
   import { onEvent } from "../../lib/engine/events.js";
   import { footerFields, footerItems, footerText, limitWindows } from "../../lib/footer.js";
   import { bindKey } from "../../lib/keys.js";
-  import { helperById, helpersLabel, probes, runningHelpers } from "../../lib/live/helpers.svelte.js";
+  import { helperAgent, helperById, helpersLabel, probes, runningHelpers } from "../../lib/live/helpers.svelte.js";
   import { jobsLabel, trayJobs } from "../../lib/live/jobs.svelte.js";
   import { closeMain, mainView } from "../../lib/mainview.js";
   import { timelineRange } from "../../lib/selection.js";
@@ -128,21 +128,7 @@
   const footer = $derived.by(() => {
     const h = record;
     const providers = Array.isArray(ws.providers) ? ws.providers : [];
-    const cfg = { model: h.model ?? "", reasoning_effort: h.effort ?? "", provider: "" };
-    if (h.fast) cfg.service_tier = "fast";
-    let found = { name: h.model ?? "" };
-    let kind = "";
-    for (const p of providers) {
-      const cliName = String(p?.type ?? "")
-        .replace(/-cli$/u, "")
-        .replace(/-code$/u, "");
-      if (h.cli !== p?.id && h.cli !== cliName) continue;
-      found = (p.models ?? []).find((m) => m?.id === h.model) ?? found;
-      cfg.provider = p.id;
-      kind = p.type ?? "";
-      break;
-    }
-    const agent = { model: found, model_cfg: cfg };
+    const { agent, kind } = helperAgent(h, providers);
     const limit = compactionLimit({ agent, session: child, providers, options: ws.config?.options });
     const windows = CLI_KINDS.has(kind) ? (limitWindows(limits.byKind[kind], h.model ?? "", Date.now()) ?? []) : [];
     return footerText(footerFields({ items: footerItems(ws.config), agent, session: child, limit, windows }));

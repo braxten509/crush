@@ -4,7 +4,8 @@
 // cadence, internal/ui/model/tasks.go:146-152), kept current between reads by
 // `helper` events. A helper's own helpers belong to its chat, so only the
 // chat's direct helpers count (tasks.go:56-69). Also the words both sheets,
-// the tray and the helper view share, the stop call, opening the two sheets,
+// the tray and the helper view share, a helper's model as the model box and
+// the helper view's footer read it, the stop call, opening the two sheets,
 // the tray entries' hint, a one-second clock for the elapsed times, and the
 // probe's hooks for the open sheet and view.
 import { untrack } from "svelte";
@@ -84,6 +85,29 @@ export function helperInfo(h, now = Date.now()) {
   if (h.effort) model += `/${h.effort}`;
   if (h.read_only) model += " · read-only";
   return `${h.cli ?? ""}/${model} · ${since(h.started, now)}`;
+}
+
+// The model a helper runs, as the agent block the composer's model box and the
+// helper view's footer read (owner, 2026-10-22): the model's own name from the
+// provider its CLI names, with the helper's effort and fast tier, and that
+// provider's type for its usage windows.
+export function helperAgent(h, providers = []) {
+  const list = Array.isArray(providers) ? providers : [];
+  const cfg = { model: h?.model ?? "", reasoning_effort: h?.effort ?? "", provider: "" };
+  if (h?.fast) cfg.service_tier = "fast";
+  let model = { name: h?.model ?? "" };
+  let kind = "";
+  for (const p of list) {
+    const cliName = String(p?.type ?? "")
+      .replace(/-cli$/u, "")
+      .replace(/-code$/u, "");
+    if (h?.cli !== p?.id && h?.cli !== cliName) continue;
+    model = (p.models ?? []).find((m) => m?.id === h.model) ?? model;
+    cfg.provider = p.id;
+    kind = p.type ?? "";
+    break;
+  }
+  return { agent: { model, model_cfg: cfg }, kind };
 }
 
 // The tray entry's label (tasks.go:245-248).

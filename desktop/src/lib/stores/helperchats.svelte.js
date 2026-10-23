@@ -1,16 +1,17 @@
 // Sub-agent chats (owner, 2026-10-21): a SUBAGENTS row's click opens the
-// sub-agent's own chat as a normal chat (typing box, Stop, scroll); what is
-// typed there goes to the sub-agent (the engine's tasks_chat.go). Its left-list
-// row sits under its folder, marked Subagent, in this window only (not in the
-// open chats shared with the terminal). The row leaves once the sub-agent is
-// done and its chat is not shown; its × hides the row and never stops the
-// sub-agent.
+// sub-agent's own chat as a normal chat (Stop, scroll); its typing box shows
+// but takes no typing, and its model box shows the sub-agent's own model
+// without the picker (owner, 2026-10-22), since the sub-agent's model is
+// fixed once it started. Its left-list row sits under its folder, marked
+// Subagent, in this window only (not in the open chats shared with the
+// terminal). The row leaves once the sub-agent is done and its chat is not
+// shown; its × hides the row and never stops the sub-agent.
 import { api } from "../engine/api.js";
 import { onEvent } from "../engine/events.js";
 import { conn } from "./connection.svelte.js";
 import { allowHelperChat, onLeave, openChat, removeSession, sessions } from "./sessions.svelte.js";
 
-export const helperChats = $state({ byId: {} }); // child chat id → {id, parent, name, dir, running}
+export const helperChats = $state({ byId: {} }); // child chat id → {id, parent, name, dir, running, cli, model, effort, fast}
 
 
 // Opens helper h's (proto.Helper) chat. Resolves true when it shows.
@@ -23,9 +24,23 @@ export function openHelperChat(h) {
     name: h.name || "sub-agent",
     dir: conn.project.path || conn.project.cwd || "",
     running: h.status === "running",
+    cli: h.cli ?? "",
+    model: h.model ?? "",
+    effort: h.effort ?? "",
+    fast: Boolean(h.fast),
   };
   allowHelperChat(id, true);
   return openChat(id);
+}
+
+// The record's own words change while it runs (its status, and the model a
+// fallback moved it to): the row and the model box follow.
+function adopt(chat, h) {
+  chat.running = h.status === "running";
+  chat.cli = h.cli ?? chat.cli;
+  chat.model = h.model ?? chat.model;
+  chat.effort = h.effort ?? chat.effort;
+  chat.fast = Boolean(h.fast);
 }
 
 // The × : the row goes; a shown chat gives its place to its parent.
@@ -63,7 +78,7 @@ async function refresh() {
     }
     for (const h of Array.isArray(list) ? list : []) {
       const chat = helperChats.byId[h?.child_session_id];
-      if (chat) chat.running = h.status === "running";
+      if (chat) adopt(chat, h);
     }
   }));
   settle();
@@ -77,7 +92,7 @@ export function startHelperChats() {
   onEvent("helper", (_kind, h) => {
     const chat = h?.child_session_id ? helperChats.byId[h.child_session_id] : null;
     if (!chat) return;
-    chat.running = h.status === "running";
+    adopt(chat, h);
     settle();
   });
   // Leaving a sub-agent's chat settles its row; an effect on the shown chat

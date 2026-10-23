@@ -17,6 +17,7 @@
   import Popup from "./Popup.svelte";
   import Slot from "./Slot.svelte";
   import { composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
+  import { helperChats } from "../../lib/stores/helperchats.svelte.js";
   import { closeListed } from "../../lib/stores/openchats.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { closeSlot, openSlot, ui } from "../../lib/stores/ui.svelte.js";
@@ -27,6 +28,10 @@
   let fullTop = $state(0);
 
   const mode = $derived(currentMode());
+
+  // A sub-agent's chat keeps its typing box but takes no typing (owner,
+  // 2026-10-22): what it is asked belongs to whoever started it.
+  const readOnly = $derived(Boolean(helperChats.byId[sessionId]));
 
   // The send square shows Stop while the shown chat works and nothing is
   // typed or attached (owner, 2026-10-20, choice A); typing turns it back
@@ -86,6 +91,7 @@
 
   function submit(event) {
     event.preventDefault();
+    if (readOnly) return;
     send();
   }
 </script>
@@ -120,11 +126,11 @@
     <form class="row" onsubmit={submit} in:settle>
       <div class="field" class:marked={mode !== "normal"}>
         <ModeMark {mode} />
-        <Field />
+        <Field {readOnly} />
         <span class="divider" aria-hidden="true"></span>
         <ModelButton />
       </div>
-      <button class="send" class:stopping type={stopping ? "button" : "submit"} aria-label={stopping ? "Stop" : "Send"} title={stopping ? "Stop (Esc)" : "Send (Enter)"} onclick={sendClick}>
+      <button class="send" class:stopping type={stopping ? "button" : "submit"} disabled={readOnly && !stopping} aria-label={stopping ? "Stop" : "Send"} title={stopping ? "Stop (Esc)" : "Send (Enter)"} onclick={sendClick}>
         {#if stopping}<Icon name="stop" size={20} />{:else}<Icon name="send" />{/if}
       </button>
     </form>

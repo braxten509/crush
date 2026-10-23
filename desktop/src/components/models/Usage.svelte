@@ -241,7 +241,7 @@
     box-sizing: border-box;
     height: calc(13 * var(--px));
     margin: calc(6 * var(--px)) 0;
-    border: 1px solid var(--meter-edge);
+    box-shadow: inset 0 0 0 1px var(--meter-edge);
     background: var(--meter-track);
   }
   .meter span {

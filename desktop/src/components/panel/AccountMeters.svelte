@@ -128,14 +128,14 @@
     flex: 1;
     box-sizing: border-box;
     height: calc(7 * var(--px));
-    border: 1px solid var(--meter-edge);
+    box-shadow: inset 0 0 0 1px var(--meter-edge);
     background: var(--meter-track);
   }
   .fill {
     position: absolute;
-    left: -1px;
-    top: -1px;
-    bottom: -1px;
+    left: 0;
+    top: 0;
+    bottom: 0;
     background: var(--meter);
     transition: width 400ms var(--ease-paper);
   }

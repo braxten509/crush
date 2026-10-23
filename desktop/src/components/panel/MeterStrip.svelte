@@ -136,14 +136,14 @@
     box-sizing: border-box;
     width: calc(60 * var(--px));
     height: calc(4 * var(--px));
-    border: 1px solid var(--meter-edge);
+    box-shadow: inset 0 0 0 1px var(--meter-edge);
     background: var(--meter-track);
   }
   .fill {
     position: absolute;
-    left: -1px;
-    top: -1px;
-    bottom: -1px;
+    left: 0;
+    top: 0;
+    bottom: 0;
     background: var(--meter);
     /* A changed amount eases to its new length and color. */
     transition:

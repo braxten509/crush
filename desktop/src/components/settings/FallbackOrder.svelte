@@ -12,16 +12,15 @@
   // setting on, nothing slides.
   import { onMount, tick } from "svelte";
   import { fallback, loadFallback, saveOrder } from "../../lib/fallback/store.svelte.js";
-  import { accountChoices, addList, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, listBlocks, listsOf, modelName, moveBlock, newBlock, removeList, sentence, withListBlocks } from "../../lib/fallback/blocks.js";
+  import { accountChoices, addList, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, listBlocks, listsOf, menuProviders, modelName, moveBlock, newBlock, removeList, sentence, withListBlocks } from "../../lib/fallback/blocks.js";
   import { modelData, watchModels } from "../../lib/models/store.svelte.js";
   import { MOTION_MS, reducedMotion, settle } from "../../lib/motion.js";
   import WordMenu from "./WordMenu.svelte";
 
-  // The model choices: the configured providers, as the engine checks blocks
-  // against them; only the agent CLIs (accounts live there) when there are any.
+  // The model choices: every configured provider, as the engine checks blocks
+  // against them, the agent CLIs (accounts live there) first.
   const providers = $derived(fallbackProviders(modelData.cfg, modelData.catalog));
-  const cliProviders = $derived(providers.filter((p) => /cli$|^claude-code$|^codex$/u.test(p.type ?? "")));
-  const tools = $derived(cliProviders.length ? cliProviders : providers);
+  const tools = $derived(menuProviders(providers));
   const ctx = $derived({ accounts: fallback.accounts, providers });
 
   const LABELS = { model: "Model", account: "Account", effort: "Effort", leave: "Move on", wait: "How long", meanwhile: "Meanwhile" };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changeBlock, fallbackProviders, moveBlock, newBlock, sentence, sentenceText } from "./blocks.js";
+import { changeBlock, fallbackProviders, menuProviders, moveBlock, newBlock, sentence, sentenceText } from "./blocks.js";
 import { meterModel } from "../footer.js";
 
 const providers = [
@@ -73,6 +73,20 @@ describe("the providers a use block may pick", () => {
       { id: "openai", name: "OpenAI", type: "openai", models: [{ id: "gpt" }] },
     ]);
     expect(fallbackProviders(null, catalog)).toEqual([]);
+  });
+});
+
+describe("the providers the model menu offers", () => {
+  it("are every configured provider, the agent CLIs first", () => {
+    const providers = [
+      { id: "openrouter", name: "OpenRouter", type: "openrouter", models: [{ id: "m1" }] },
+      { id: "claude-code", name: "Claude Code", type: "claude-code", models: [{ id: "opus" }] },
+      { id: "zag", name: "Antigravity", type: "agy-cli", models: [{ id: "gemini" }] },
+      { id: "anthropic", name: "Anthropic", type: "anthropic", models: [{ id: "sonnet" }] },
+    ];
+    expect(menuProviders(providers).map((p) => p.id)).toEqual(["claude-code", "zag", "openrouter", "anthropic"]);
+    expect(menuProviders([])).toEqual([]);
+    expect(menuProviders(null)).toEqual([]);
   });
 });
 

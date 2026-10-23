@@ -28,6 +28,15 @@ export function fallbackProviders(cfg, catalog = []) {
   return out;
 }
 
+// The providers the model menu offers: every configured one, with the agent
+// CLIs (where accounts live) first (owner, 2026-10-22: OpenRouter and other
+// API providers were missing from the menu).
+export function menuProviders(providers) {
+  const list = Array.isArray(providers) ? providers : [];
+  const cli = list.filter((p) => /cli$|^claude-code$|^codex$/u.test(p?.type ?? ""));
+  return [...cli, ...list.filter((p) => !cli.includes(p))];
+}
+
 // The tool behind a provider id (its type), or "".
 export function providerKind(providers, id) {
   return (providers ?? []).find((p) => p?.id === id)?.type ?? "";

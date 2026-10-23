@@ -148,9 +148,59 @@ type openCall struct {
 	command string
 	words   []string // the command split as a shell would, if it could be
 	at      time.Time
+	asked   bool // Crush asked the CLI to move it to the background
 }
 
 type openCallsKey struct{}
+
+// autoBackgroundAfter is how long a command may hold a turn before Crush
+// moves it to the background itself, as Ctrl+B would (owner, 2026-10-21: a
+// command running 2 minutes or more is forced to the background). The
+// native bash tool caps its own wait the same way.
+var autoBackgroundAfter = time.Duration(tools.MaxAutoBackgroundAfter) * time.Second
+
+// autoBackgroundCheck is how often the watcher looks for commands past the
+// cap; a variable so tests can shorten it.
+var autoBackgroundCheck = 2 * time.Second
+
+// autoBackground moves the session's commands that have waited longer than
+// autoBackgroundAfter to the background, asking the CLI the way Ctrl+B does.
+// The returned func stops watching.
+func (o *openCalls) autoBackground(sessionID string) (stop func()) {
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(autoBackgroundCheck)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case now := <-ticker.C:
+				if o.due(now) {
+					Background(sessionID)
+				}
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
+// due marks the calls that have held the turn for autoBackgroundAfter and
+// reports whether one of them still needs asking about.
+func (o *openCalls) due(now time.Time) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	found := false
+	for id, c := range o.calls {
+		if c.asked || now.Sub(c.at) < autoBackgroundAfter {
+			continue
+		}
+		c.asked = true
+		o.calls[id] = c
+		found = true
+	}
+	return found
+}
 
 func (o *openCalls) track(emit func(Event) error) func(Event) error {
 	return func(e Event) error {

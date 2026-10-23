@@ -208,6 +208,11 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 	if t.Emit != nil {
 		t.Emit = calls.track(t.Emit)
 	}
+	// A command the CLI waits on for 2 minutes is moved to the background,
+	// never holding the turn past the cap Crush's own bash tool keeps.
+	if t.SessionID != "" && CanBackground(m.Kind) {
+		defer calls.autoBackground(t.SessionID)()
+	}
 	ctx = context.WithValue(ctx, openCallsKey{}, calls)
 	switch m.Kind {
 	case config.TypeClaudeCode:

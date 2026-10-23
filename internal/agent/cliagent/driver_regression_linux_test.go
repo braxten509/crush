@@ -160,7 +160,7 @@ func TestLinksSerializeSeparateProviders(t *testing.T) {
 	var wait sync.WaitGroup
 	errors := make(chan error, count)
 	for i := range count {
-		provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, "", false, "").(*provider)
+		provider := NewProvider(config.TypeCodexCLI, dir, dir, nil, nil, "", false, "", false).(*provider)
 		wait.Add(1)
 		go func() {
 			defer wait.Done()

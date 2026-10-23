@@ -168,12 +168,20 @@ type Model struct {
 	// Account is the Claude Code or Codex sign-in the model runs on (an
 	// options.accounts ID); empty is the tool's own login.
 	Account string
+	// ContextWindow, when set, is the size Crush gives this model instead of
+	// the one its CLI reports: OpenCode Zen's free DeepSeek keeps its whole
+	// window, and OpenCode stops compacting that chat by itself.
+	ContextWindow int64
 }
+
+// KeepsWholeContext reports whether Crush gave this model its own size, which
+// only happens for OpenCode Zen's free DeepSeek while the switch is on.
+func (m *Model) KeepsWholeContext() bool { return m != nil && m.ContextWindow > 0 }
 
 // NewProvider returns a [fantasy.Provider] whose models run through the
 // agent CLI of the given kind.
-func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string, ultracode bool, account string) fantasy.Provider {
-	return &provider{kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, ultracode: ultracode, account: account, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
+func NewProvider(kind catwalk.Type, dir, dataDir string, perms permission.Service, files history.Service, serviceTier string, ultracode bool, account string, freeDeepSeekFullContext bool) fantasy.Provider {
+	return &provider{kind: kind, dir: dir, perms: perms, files: files, serviceTier: serviceTier, ultracode: ultracode, account: account, freeDeepSeekFullContext: freeDeepSeekFullContext, links: &Links{path: filepath.Join(dataDir, "cli-sessions.json")}}
 }
 
 type provider struct {
@@ -181,16 +189,23 @@ type provider struct {
 	serviceTier string
 	ultracode   bool
 	account     string
-	dir         string
-	perms       permission.Service
-	files       history.Service
-	links       *Links
+	// freeDeepSeekFullContext is options.opencode_zen_free_deepseek_full_context:
+	// the free DeepSeek runs on its whole window, not Zen's 200000.
+	freeDeepSeekFullContext bool
+	dir                     string
+	perms                   permission.Service
+	files                   history.Service
+	links                   *Links
 }
 
 func (p *provider) Name() string { return string(p.kind) }
 
 func (p *provider) LanguageModel(_ context.Context, modelID string) (fantasy.LanguageModel, error) {
-	return &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, Ultracode: p.ultracode, Account: p.account, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}, nil
+	m := &Model{Kind: p.kind, ID: modelID, ServiceTier: p.serviceTier, Ultracode: p.ultracode, Account: p.account, Dir: p.dir, Perms: p.perms, Files: p.files, Links: p.links}
+	if p.freeDeepSeekFullContext && p.kind == config.TypeOpenCodeZenCLI && modelID == config.OpenCodeZenFreeDeepSeekModel {
+		m.ContextWindow = config.OpenCodeZenFreeDeepSeekWindow
+	}
+	return m, nil
 }
 
 // Run executes one turn, emitting events until the CLI finishes it.

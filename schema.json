@@ -641,6 +641,11 @@
           "minimum": 1000,
           "description": "Fallback compaction threshold for models without native compaction; defaults to 400000"
         },
+        "opencode_zen_free_deepseek_full_context": {
+          "type": "boolean",
+          "description": "Let OpenCode Zen's free DeepSeek use its whole 1000000-token context instead of the 200000 it reports",
+          "default": false
+        },
         "accounts": {
           "items": {
             "$ref": "#/$defs/Account"

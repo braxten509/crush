@@ -56,3 +56,12 @@ export function compactionLimit({ agent = null, session = null, providers = [], 
   if (model) return fallbackCompactionLimit(Number(model.model?.context_window) || 0, fallback);
   return fallback;
 }
+
+// The switch that keeps OpenCode Zen's free DeepSeek on its whole 1,000,000
+// tokens instead of the 200,000 Zen reports, with OpenCode's own compaction
+// off (options.opencode_zen_free_deepseek_full_context, config/options.go).
+export const ZEN_FREE_DEEPSEEK_FULL_CONTEXT = "opencode_zen_free_deepseek_full_context";
+
+export function zenFreeDeepSeekFullContext(options) {
+  return options?.[ZEN_FREE_DEEPSEEK_FULL_CONTEXT] === true;
+}

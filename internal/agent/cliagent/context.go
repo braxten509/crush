@@ -102,3 +102,13 @@ const openCodeOutputReserve = 32_000
 func openCodeContextBudget(window int64) Event {
 	return Event{Type: EventContextBudget, ContextLimit: max(0, window-openCodeOutputReserve), ContextEstimated: true}
 }
+
+// openCodeBudgetWindow is the window the context meter measures against: the
+// size Crush gives the model when it keeps its whole context, else the one
+// OpenCode reports.
+func openCodeBudgetWindow(reported int64, m *Model) int64 {
+	if m.KeepsWholeContext() {
+		return m.ContextWindow
+	}
+	return reported
+}

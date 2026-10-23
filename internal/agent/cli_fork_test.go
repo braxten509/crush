@@ -219,7 +219,7 @@ func newForkRig(t *testing.T, kind catwalk.Type, failFork bool) *forkRig {
 		filetracker: &tracker,
 		lspClients:  csync.NewMap[string, *lsp.Client](),
 	}
-	provider := cliagent.NewProvider(kind, dir, t.TempDir(), r.env.permissions, r.env.history, "", false, "")
+	provider := cliagent.NewProvider(kind, dir, t.TempDir(), r.env.permissions, r.env.history, "", false, "", false)
 	lm, err := provider.LanguageModel(t.Context(), "fixture")
 	require.NoError(t, err)
 	r.model = lm.(*cliagent.Model)

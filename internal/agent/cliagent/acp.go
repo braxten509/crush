@@ -125,7 +125,7 @@ type acpRun struct {
 // session/set_model for agents that take no model flag.
 func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, setModel bool) error {
 	if name == "opencode" && !t.NoTools {
-		if env, signal := opencodeEnv(); signal != "" {
+		if env, signal := opencodeEnv(m.KeepsWholeContext()); signal != "" {
 			t.Env = append(slices.Clone(t.Env), env...)
 			defer os.Remove(signal)
 			if t.SessionID != "" {
@@ -432,7 +432,7 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 		r.boundary = false
 	}
 	if r.name == "opencode" && params.Update.SessionUpdate == "usage_update" && params.Update.Size > 0 {
-		if err := r.t.Emit(openCodeContextBudget(params.Update.Size)); err != nil {
+		if err := r.t.Emit(openCodeContextBudget(openCodeBudgetWindow(params.Update.Size, r.m))); err != nil {
 			return err
 		}
 	}

@@ -3,6 +3,7 @@ package cliagent
 import (
 	"bytes"
 	_ "embed"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,8 +17,10 @@ import (
 var opencodeBash []byte
 
 // opencodeEnv readies Crush's OpenCode config dir and returns the env for an
-// OpenCode turn, plus the file the tool watches for Ctrl+B.
-func opencodeEnv() (env []string, signal string) {
+// OpenCode turn, plus the file the tool watches for Ctrl+B. noAutoCompact
+// stops OpenCode compacting the chat by itself, for the free DeepSeek's
+// whole-context switch.
+func opencodeEnv(noAutoCompact bool) (env []string, signal string) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return nil, ""
@@ -29,6 +32,7 @@ func opencodeEnv() (env []string, signal string) {
 			return nil, "" // OpenCode's own bash tool still works
 		}
 	}
+	writeCompactionSwitch(dir, noAutoCompact)
 	f, err := os.CreateTemp("", "crush-ctrl-b-*")
 	if err != nil {
 		return nil, ""
@@ -39,6 +43,31 @@ func opencodeEnv() (env []string, signal string) {
 	old := time.Now().Add(-time.Hour)
 	_ = os.Chtimes(signal, old, old)
 	return []string{"OPENCODE_CONFIG_DIR=" + dir, "CRUSH_BG_SIGNAL=" + signal}, signal
+}
+
+// opencodeNoCompaction is the config that turns OpenCode's own compaction
+// off. OpenCode layers this dir on top of the user's own config, so nothing
+// of the user's is replaced.
+var opencodeNoCompaction = []byte("{\n  \"compaction\": {\n    \"auto\": false\n  }\n}\n")
+
+// writeCompactionSwitch leaves OpenCode's config as the switch asks: its own
+// compaction off while Crush gives the model its whole window, and the file
+// gone again otherwise. Only a file Crush wrote is removed.
+func writeCompactionSwitch(dir string, noAutoCompact bool) {
+	file := filepath.Join(dir, "opencode.json")
+	old, _ := os.ReadFile(file)
+	if !noAutoCompact {
+		if bytes.Equal(old, opencodeNoCompaction) {
+			_ = os.Remove(file)
+		}
+		return
+	}
+	if bytes.Equal(old, opencodeNoCompaction) {
+		return
+	}
+	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(file, opencodeNoCompaction, 0o600) != nil {
+		slog.Debug("Writing OpenCode's compaction switch failed")
+	}
 }
 
 // pressCtrlB tells OpenCode's bash tool to move its running commands to the

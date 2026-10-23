@@ -5,6 +5,7 @@
 // terminal shows here too.
 import { windowBusy } from "../busy.js";
 import { api, SCOPE } from "../engine/api.js";
+import { ZEN_FREE_DEEPSEEK_FULL_CONTEXT, zenFreeDeepSeekFullContext } from "../compaction.js";
 import { focusField } from "../stores/composer.svelte.js";
 import { notify, panelSetting, setPanelShown } from "../stores/ui.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
@@ -133,6 +134,21 @@ export async function saveAutoCompact(value) {
   } catch (error) {
     notify("error", errorText(error));
     return false;
+  }
+}
+
+// -- OpenCode Zen's free DeepSeek (cli_providers.go:31-38) --
+
+// Keeps that one model on its whole 1,000,000 tokens and stops OpenCode
+// compacting its chats by itself; every other model is untouched.
+export async function toggleZenFreeDeepSeekFullContext() {
+  const next = !zenFreeDeepSeekFullContext(options());
+  try {
+    await setOption(`options.${ZEN_FREE_DEEPSEEK_FULL_CONTEXT}`, next);
+    await api.updateAgent();
+    notify("info", next ? "Free DeepSeek keeps its whole 1,000,000 tokens" : "Free DeepSeek compacts at 200,000 tokens again");
+  } catch (error) {
+    notify("error", errorText(error));
   }
 }
 

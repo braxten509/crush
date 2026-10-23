@@ -27,6 +27,14 @@ func IsCLIProviderType(t catwalk.Type) bool {
 
 var claudeEfforts = []string{"low", "medium", "high", "xhigh", "max"}
 
+// OpenCode Zen's free DeepSeek is the one model with a switch that keeps it
+// on its whole context (options.opencode_zen_free_deepseek_full_context).
+// Zen caps it at 200000 tokens; the paid model of its family holds a million.
+const (
+	OpenCodeZenFreeDeepSeekModel  = "opencode/deepseek-v4.1-flash-free"
+	OpenCodeZenFreeDeepSeekWindow = 1_000_000
+)
+
 type cliProvider struct {
 	bin string
 	cfg ProviderConfig
@@ -183,7 +191,7 @@ func (c *Config) addCLIProviders(path string) {
 				continue
 			}
 			cfg = p.cfg
-			cfg.Models = p.models()
+			cfg.Models = c.keepFreeDeepSeekContext(cfg, p.models())
 			c.Providers.Set(p.cfg.ID, cfg)
 			continue
 		}
@@ -195,8 +203,26 @@ func (c *Config) addCLIProviders(path string) {
 			cfg.Models = p.models()
 		}
 		cfg.FlatRate = true
+		cfg.Models = c.keepFreeDeepSeekContext(cfg, cfg.Models)
 		c.Providers.Set(p.cfg.ID, cfg)
 	}
+}
+
+// keepFreeDeepSeekContext gives OpenCode Zen's free DeepSeek its whole
+// window while the switch is on, whatever size the CLI reports. Every other
+// model, and the switch being off, gets models unchanged. The list is copied
+// so turning the switch back off restores the reported size.
+func (c *Config) keepFreeDeepSeekContext(cfg ProviderConfig, models []catwalk.Model) []catwalk.Model {
+	if cfg.Type != TypeOpenCodeZenCLI || c.Options == nil || !c.Options.OpenCodeZenFreeDeepSeekFullContext {
+		return models
+	}
+	models = slices.Clone(models)
+	for i := range models {
+		if models[i].ID == OpenCodeZenFreeDeepSeekModel {
+			models[i].ContextWindow = OpenCodeZenFreeDeepSeekWindow
+		}
+	}
+	return models
 }
 
 // defaultCLIModels picks the first enabled agent CLI's first model as the

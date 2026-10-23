@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"testing"
 
-
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/diffreview"
@@ -83,7 +82,7 @@ printf '%s\n' '{"type":"result","subtype":"success"}'
 	for path, content := range map[string]string{"changed.txt": "before\n", "unrelated.txt": "not edited\n"} {
 		require.NoError(t, os.WriteFile(filepath.Join(env.workingDir, path), []byte(content), 0o644))
 	}
-	provider := cliagent.NewProvider(config.TypeClaudeCode, env.workingDir, t.TempDir(), env.permissions, env.history, "", false, "")
+	provider := cliagent.NewProvider(config.TypeClaudeCode, env.workingDir, t.TempDir(), env.permissions, env.history, "", false, "", false)
 	model, err := provider.LanguageModel(t.Context(), "fixture")
 	require.NoError(t, err)
 	// Avoid title generation starting another CLI process for the fixture.

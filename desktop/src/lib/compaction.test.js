@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoCompactTokenLimit, compactionLimit, fallbackCompactionLimit, nativeCompaction, providerKind } from "./compaction.js";
+import { autoCompactTokenLimit, compactionLimit, fallbackCompactionLimit, nativeCompaction, providerKind, zenFreeDeepSeekFullContext } from "./compaction.js";
 
 // SIDE-015: the port of composer_footer.go:183-207 and config/autocompact.go.
 const agent = (provider, model = "opus", window = 200_000) => ({
@@ -71,5 +71,16 @@ describe("the config rules", () => {
     expect(providerKind("x", [{ id: "x", type: "codex-cli" }])).toBe("codex-cli");
     expect(providerKind("y", [{ id: "x", type: "codex-cli" }])).toBe("y");
     expect(providerKind("", null)).toBe("");
+  });
+});
+
+// The switch that keeps OpenCode Zen's free DeepSeek on its whole window
+// (options.opencode_zen_free_deepseek_full_context, owner 2026-10-23).
+describe("zenFreeDeepSeekFullContext", () => {
+  it("is on only when it was turned on", () => {
+    expect(zenFreeDeepSeekFullContext(undefined)).toBe(false);
+    expect(zenFreeDeepSeekFullContext({})).toBe(false);
+    expect(zenFreeDeepSeekFullContext({ opencode_zen_free_deepseek_full_context: false })).toBe(false);
+    expect(zenFreeDeepSeekFullContext({ opencode_zen_free_deepseek_full_context: true })).toBe(true);
   });
 });

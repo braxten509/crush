@@ -75,7 +75,7 @@ sys.stdout.flush()
 // of kind, and returns the chat's messages and the markers it recorded.
 func cliChat(t *testing.T, env fakeEnv, q *db.Queries, kind catwalk.Type, prompts ...string) ([]message.Message, []db.MessageMarker) {
 	t.Helper()
-	provider := cliagent.NewProvider(kind, env.workingDir, t.TempDir(), env.permissions, env.history, "", false, "")
+	provider := cliagent.NewProvider(kind, env.workingDir, t.TempDir(), env.permissions, env.history, "", false, "", false)
 	model, err := provider.LanguageModel(t.Context(), "fixture")
 	require.NoError(t, err)
 	a := testSessionAgent(env, model, &finishStreamModel{text: "fixture"}, "system").(*sessionAgent)

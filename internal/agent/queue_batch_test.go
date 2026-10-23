@@ -452,7 +452,7 @@ echo '{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}'
 	t.Setenv("HOME", dir)
 	cache, err := os.UserCacheDir()
 	require.NoError(t, err)
-	provider := cliagent.NewProvider(config.TypeGrokCLI, dir, dir, nil, nil, "", false, "")
+	provider := cliagent.NewProvider(config.TypeGrokCLI, dir, dir, nil, nil, "", false, "", false)
 	model, err := provider.LanguageModel(t.Context(), "fixture")
 	require.NoError(t, err)
 	capture := filepath.Join(dir, "capture.jsonl")

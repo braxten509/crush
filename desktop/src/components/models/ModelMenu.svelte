@@ -15,11 +15,10 @@
   // A as one drop-down); a new model of the same tool keeps the account.
   // Under OpenRouter's saved models, "+ Add model" opens the catalog sheet
   // (OpenRouterAdd.svelte, owner 2026-10-22, pick B); a right-click on a
-  // saved one offers Remove, and a "Cheapest host" switch over the effort
-  // (owner, 2026-10-22; on by default) saves providers.<id>.cheapest_host,
-  // with an "FP8 floor" switch under it for refusing hosts compressed
-  // below FP8 (owner, 2026-10-22; on by default) that saves
-  // providers.<id>.quality_floor.
+  // saved one offers Remove, and a "Cheapest" switch beside an "FP8 floor"
+  // one over the effort (owner, 2026-10-22; both on by default), the first
+  // saving providers.<id>.cheapest_host and the second refusing hosts
+  // compressed below FP8 through providers.<id>.quality_floor.
   // A model is chosen with the effort last used
   // with it (lib/models/groups.js selectedModelOf).
   import { onMount, untrack } from "svelte";
@@ -360,12 +359,14 @@
     <Scrollbar target={rowsBox} mode={barMode} />
     {#if routeTo}
       <div class="route" data-column="route">
-        <span class="route-name">Cheapest host</span>
-        <button type="button" class="switch" role="switch" data-stop aria-checked={cheapestNow} aria-label="Cheapest host" onclick={flipCheapest}></button>
-      </div>
-      <div class="route" data-column="route">
-        <span class="route-name">FP8 floor</span>
-        <button type="button" class="switch" role="switch" data-stop aria-checked={floorNow} aria-label="FP8 floor" onclick={flipFloor}></button>
+        <div class="route-item">
+          <span class="route-name">Cheapest</span>
+          <button type="button" class="switch" role="switch" data-stop aria-checked={cheapestNow} aria-label="Cheapest" onclick={flipCheapest}></button>
+        </div>
+        <div class="route-item">
+          <span class="route-name">FP8 floor</span>
+          <button type="button" class="switch" role="switch" data-stop aria-checked={floorNow} aria-label="FP8 floor" onclick={flipFloor}></button>
+        </div>
       </div>
     {/if}
     {#if levels.length > 0}
@@ -556,15 +557,25 @@
   .route {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: calc(10 * var(--px));
+    gap: calc(14 * var(--px));
     margin-top: calc(12 * var(--px));
     padding: calc(12 * var(--px)) calc(10 * var(--px)) 0;
     border-top: 1px solid var(--rule-control);
   }
+  .route-item {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--px));
+    min-width: 0;
+  }
   .route-name {
     font: var(--t-small);
     color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .switch {
     position: relative;

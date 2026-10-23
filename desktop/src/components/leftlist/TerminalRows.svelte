@@ -120,9 +120,6 @@
   .terminal {
     position: relative;
   }
-  .terminal + .terminal {
-    border-top: 1px solid var(--rule);
-  }
 
   /* The chat row's geometry (list/ChatRow.svelte): one line 44 high, text
      from 23, the folder in the time's place. */

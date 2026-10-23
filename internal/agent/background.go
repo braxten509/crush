@@ -51,6 +51,7 @@ type proc struct {
 	// busService is set on services a D-Bus daemon started on demand for a
 	// command (portals, secret stores); they aren't commands the agent ran.
 	busService bool
+	cliHelper bool
 }
 
 // markedProcs lists the processes carrying one of the hubs' environment
@@ -65,6 +66,7 @@ var markedProcs = func(markers []string) map[int]proc {
 	for pid, e := range entries {
 		marked[pid] = procFromEntry(e)
 	}
+	backgroundHelpers.classify(marked)
 	return marked
 }
 
@@ -129,7 +131,7 @@ func strayProcesses(markers []string) []Process {
 		if managedBackgroundJob(cmp.Or(p.managedJobID, p.nativeShellID)) != nil {
 			continue
 		}
-		if p.session == "" {
+		if p.session == "" || p.cliHelper {
 			continue
 		}
 		if p.nativeShellID == "" && !isDetached(p, procs) && now.Sub(p.started) < backgroundMinAge && !p.started.Before(moved) {
@@ -224,7 +226,7 @@ func completedDetached(seen map[detachedKey]detachedProc, procs map[int]proc) ma
 		key := detachedKey{p.pid, p.started}
 		// A previously tracked process stays alive even if it is reparented.
 		alive[key] = true
-		if p.session == "" || p.busService || p.nativeShellID != "" || !isDetached(p, procs) {
+		if p.session == "" || p.busService || p.cliHelper || p.nativeShellID != "" || !isDetached(p, procs) {
 			continue
 		}
 		if _, ok := seen[key]; !ok {

@@ -118,7 +118,6 @@
      1-4 px). */
   :global(.chat) + .chat {
     margin-top: 2px;
-    border-top: 1px solid var(--rule);
   }
   :global(.chat.expanded) + .chat,
   .chat.branch,

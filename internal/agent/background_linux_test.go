@@ -1,12 +1,15 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -19,6 +22,60 @@ import (
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCLIHelpersStayHiddenAfterTheirCLIExits(t *testing.T) {
+	noMinAge(t)
+	t.Setenv(tools.NativeShellEnv, "")
+	t.Setenv(managedJobEnv, "")
+	for _, protocol := range []string{"mcp", "stdio", "node-job"} {
+		t.Run(protocol, func(t *testing.T) {
+			h := registerTestHub(t)
+			cmd := exec.Command("python3", "-c", `import subprocess, sys
+args = [sys.executable, "-c", "import time; time.sleep(30)"]
+if sys.argv[1] == "stdio":
+    args.append("--stdio")
+if sys.argv[1] == "node-job":
+    args = ["node", "-e", "setInterval(() => {}, 1000)"]
+child = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=sys.argv[1] != "mcp")
+print(child.pid, flush=True)
+sys.stdin.readline()
+`, protocol)
+			cmd.Env = append(os.Environ(), h.env(t.Name())...)
+			input, err := cmd.StdinPipe()
+			require.NoError(t, err)
+			output, err := cmd.StdoutPipe()
+			require.NoError(t, err)
+			require.NoError(t, cmd.Start())
+			line, err := bufio.NewReader(output).ReadString('\n')
+			require.NoError(t, err)
+			pid, err := strconv.Atoi(strings.TrimSpace(line))
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+				_ = input.Close()
+				_ = cmd.Wait()
+			})
+			markers := []string{TasksDirEnv + "=" + h.dir}
+			seen := map[detachedKey]detachedProc{}
+			if protocol == "node-job" {
+				require.Eventually(t, func() bool { return len(strayProcesses(markers)) == 1 }, 2*time.Second, 20*time.Millisecond, "a real Node command remains visible")
+				require.NoError(t, input.Close())
+				require.NoError(t, cmd.Wait())
+				require.Len(t, strayProcesses(markers), 1, "a real Node command remains visible after its CLI exits")
+				require.Empty(t, completedDetached(seen, markedProcs(markers)))
+				require.Len(t, seen, 1, "real Node jobs still get completion notices")
+				return
+			}
+			require.Empty(t, strayProcesses(markers), "an attached CLI helper is not a job")
+			require.Empty(t, completedDetached(seen, markedProcs(markers)))
+			require.NoError(t, input.Close())
+			require.NoError(t, cmd.Wait())
+			require.Empty(t, strayProcesses(markers), "losing its CLI must not turn a helper into a job")
+			require.Empty(t, completedDetached(seen, markedProcs(markers)))
+			require.Empty(t, seen, "helper exits must not trigger another agent turn")
+		})
+	}
+}
 
 func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 	env := testEnv(t)

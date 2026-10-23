@@ -315,6 +315,10 @@
   .live :global(.status) {
     display: inline;
   }
+  .live :global(.status) {
+    overflow: visible;
+    text-overflow: clip;
+  }
   .changes {
     position: absolute;
     top: 0;

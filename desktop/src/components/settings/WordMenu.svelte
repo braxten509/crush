@@ -146,7 +146,7 @@
   }
   .word.open {
     background: var(--band);
-    text-decoration-style: solid;
+    text-decoration-style: dotted;
     text-decoration-color: var(--ink);
   }
   .word:focus-visible {

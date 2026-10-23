@@ -21,10 +21,11 @@ import (
 // readOnlyStateDirs are the folders, under home, where each CLI keeps the
 // login, history and settings it must still write.
 var readOnlyStateDirs = map[catwalk.Type][]string{
-	config.TypeClaudeCode:  {".claude", ".local/share/claude", ".local/state/claude"},
-	config.TypeGrokCLI:     {".grok"},
-	config.TypeOpenCodeCLI: {".local/share/opencode", ".local/state/opencode", ".config/opencode"},
-	config.TypeAGYCLI:      {".gemini"},
+	config.TypeClaudeCode:     {".claude", ".local/share/claude", ".local/state/claude"},
+	config.TypeGrokCLI:        {".grok"},
+	config.TypeOpenCodeCLI:    {".local/share/opencode", ".local/state/opencode", ".config/opencode"},
+	config.TypeOpenCodeZenCLI: {".local/share/opencode", ".local/state/opencode", ".config/opencode"},
+	config.TypeAGYCLI:         {".gemini"},
 }
 
 // startTurnProc starts the CLI for a turn: read-only when the model is,

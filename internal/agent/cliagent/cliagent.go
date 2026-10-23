@@ -227,7 +227,7 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 		// Crush hands every CLI the shared memory; Grok's own stays off.
 		t.Env = append(slices.Clone(t.Env), "GROK_MEMORY=0")
 		return runACP(ctx, m, t, "grok", append(args, "stdio"), false)
-	case config.TypeOpenCodeCLI:
+	case config.TypeOpenCodeCLI, config.TypeOpenCodeZenCLI:
 		return runACP(ctx, m, t, "opencode", []string{"acp"}, true)
 	case config.TypeAGYCLI:
 		return runAGY(ctx, m, t)
@@ -412,7 +412,7 @@ func LastBackground() time.Time {
 // CanBackground reports whether a CLI's running commands can be moved to
 // the background with [Background].
 func CanBackground(kind catwalk.Type) bool {
-	return kind == config.TypeClaudeCode || kind == config.TypeCodexCLI || kind == config.TypeOpenCodeCLI
+	return kind == config.TypeClaudeCode || kind == config.TypeCodexCLI || kind == config.TypeOpenCodeCLI || kind == config.TypeOpenCodeZenCLI
 }
 
 // unprompted holds the handlers [OnUnprompted] registered, one per

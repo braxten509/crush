@@ -10,7 +10,7 @@ import (
 // An unavailable budget report must not enable a competing Crush compactor.
 func NativeCompaction(kind catwalk.Type) bool {
 	switch kind {
-	case TypeClaudeCode, TypeCodexCLI, TypeOpenCodeCLI, TypeGrokCLI, TypeAGYCLI:
+	case TypeClaudeCode, TypeCodexCLI, TypeOpenCodeCLI, TypeOpenCodeZenCLI, TypeGrokCLI, TypeAGYCLI:
 		return true
 	default:
 		return false

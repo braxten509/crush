@@ -46,13 +46,78 @@ func TestAddCLIProviders(t *testing.T) {
 	require.Equal(t, "haiku", small.Model)
 }
 
+func TestOpenCodeZenKeepsOnlyFreeModels(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+if [ "$2" = "opencode" ]; then
+printf 'opencode/paid-model\n{"id":"paid-model","name":"Paid Model","cost":{"input":1,"output":2}}\n'
+printf 'opencode/free-model\n{"id":"free-model","name":"Free Model","cost":{"input":0,"output":0}}\n'
+fi
+if [ "$2" = "opencode-go" ]; then
+printf 'opencode-go/go-only\n{"id":"go-only","name":"go-only","cost":{"input":1,"output":2}}\n'
+fi
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "opencode"), []byte(script), 0o755))
+	ids := func(typ catwalk.Type) (out []string) {
+		models, err := cliDiscovery[typ](t.Context(), filepath.Join(dir, "opencode"))
+		require.NoError(t, err)
+		for _, m := range models {
+			out = append(out, m.ID+"="+m.Name)
+		}
+		return out
+	}
+	require.Equal(t, []string{"opencode/free-model=Free Model"}, ids(TypeOpenCodeZenCLI))
+	require.Equal(t, []string{"opencode-go/go-only=go-only"}, ids(TypeOpenCodeCLI))
+}
+
+func TestOpenCodeZenRegistersAsFreeProvider(t *testing.T) {
+	detectCLIs = true
+	t.Cleanup(func() { detectCLIs = false })
+	isolateModelCache(t)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "opencode"), []byte("#!/bin/sh\n"), 0o755))
+
+	cfg := &Config{Providers: csync.NewMapFrom(map[string]ProviderConfig{})}
+	cfg.addCLIProviders(dir)
+
+	zen, ok := cfg.Providers.Get("opencode-zen-cli")
+	require.True(t, ok, "opencode on PATH registers Zen beside Go")
+	require.Equal(t, "OpenCode Zen", zen.Name)
+	require.Equal(t, TypeOpenCodeZenCLI, zen.Type)
+	require.NotEmpty(t, zen.Models)
+	require.Equal(t, "opencode/deepseek-v4.1-flash-free", zen.Models[0].ID)
+	var ids []string
+	for _, model := range zen.Models {
+		ids = append(ids, model.ID)
+	}
+	require.Equal(t, []string{
+		"opencode/deepseek-v4.1-flash-free",
+		"opencode/beam-free",
+		"opencode/big-pickle",
+		"opencode/flint-40b-free",
+		"opencode/glm-5.3-flash-free",
+		"opencode/mimo-v2.6-flash-free",
+		"opencode/nemotron-3-ultra-free",
+		"opencode/nemotron-3.5-lightning-free",
+		"opencode/nemotron-3.5-super-vl-free",
+	}, ids, "Zen lists free models only")
+
+	goProvider, ok := cfg.Providers.Get(string(TypeOpenCodeCLI))
+	require.True(t, ok)
+	require.Equal(t, "OpenCode Go", goProvider.Name)
+}
+
 func TestListModels(t *testing.T) {
 	dir := t.TempDir()
 	write := func(bin, out string) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, bin), []byte("#!/bin/sh\ncat <<'EOF'\n"+out+"EOF\n"), 0o755))
 	}
 	write("agy", "Fetching available models...\ngemini-x-high\tGemini X (High)\n")
-	write("opencode", "opencode-go/glm-5.3\nopencode-go/kimi-k3\n")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "opencode"), []byte(`#!/bin/sh
+printf 'opencode-go/glm-5.3\n{"id":"glm-5.3","name":"glm-5.3","status":"active","cost":{"input":1.4,"output":4.4},"limit":{"context":200000,"output":32000}}\n'
+printf 'opencode-go/kimi-k3\n{"id":"kimi-k3","name":"kimi-k3","status":"active","cost":{"input":3,"output":15},"limit":{"context":1000000,"output":128000}}\n'
+`), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", t.TempDir())
 
@@ -66,6 +131,11 @@ func TestListModels(t *testing.T) {
 	}
 	require.Equal(t, []string{"gemini-x-high=Gemini X (High)"}, ids(TypeAGYCLI, "agy"))
 	require.Equal(t, []string{"opencode-go/glm-5.3=glm-5.3", "opencode-go/kimi-k3=kimi-k3"}, ids(TypeOpenCodeCLI, "opencode"))
+
+	goModels, err := cliDiscovery[TypeOpenCodeCLI](t.Context(), filepath.Join(dir, "opencode"))
+	require.NoError(t, err)
+	require.Equal(t, int64(200_000), goModels[0].ContextWindow)
+	require.Equal(t, int64(1_000_000), goModels[1].ContextWindow)
 }
 
 func TestCodexImageCapabilities(t *testing.T) {

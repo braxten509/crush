@@ -105,7 +105,7 @@ func refreshCLIModels(path string) {
 						known.ReasoningLevels = slices.Clone(m.ReasoningLevels)
 						known.DefaultReasoningEffort = m.DefaultReasoningEffort
 					}
-					if p.cfg.Type == TypeGrokCLI && m.ContextWindow > 0 {
+					if cliReportsContext(p.cfg.Type) && m.ContextWindow > 0 {
 						known.ContextWindow = m.ContextWindow
 					}
 					if p.cfg.Type == TypeCodexCLI {
@@ -132,10 +132,93 @@ func refreshCLIModels(path string) {
 }
 
 var cliDiscovery = map[catwalk.Type]func(context.Context, string) ([]catwalk.Model, error){
-	TypeCodexCLI:    discoverCodex,
-	TypeGrokCLI:     discoverGrok,
-	TypeAGYCLI:      listModels(regexp.MustCompile(`^(\S+)\t(.+)$`), "", "models"),
-	TypeOpenCodeCLI: listModels(regexp.MustCompile(`^(opencode-go/(\S+))$`), "opencode-go/", "models", "opencode-go"),
+	TypeCodexCLI:       discoverCodex,
+	TypeGrokCLI:        discoverGrok,
+	TypeAGYCLI:         listModels(regexp.MustCompile(`^(\S+)\t(.+)$`), "", "models"),
+	TypeOpenCodeCLI:    openCodeModels("opencode-go", false),
+	TypeOpenCodeZenCLI: openCodeModels("opencode", true),
+}
+
+// cliReportsContext lists the agent CLIs whose model catalogue carries real
+// context sizes, so discovery replaces Crush's hand-written defaults.
+func cliReportsContext(t catwalk.Type) bool {
+	return t == TypeGrokCLI || t == TypeOpenCodeCLI || t == TypeOpenCodeZenCLI
+}
+
+// openCodeModels asks the OpenCode CLI for one provider's catalogue, with
+// the metadata (name, context size, price) only --verbose prints. Zen's
+// free tier keeps the models that cost nothing; Go bills by plan and keeps
+// all of them.
+func openCodeModels(provider string, freeOnly bool) func(context.Context, string) ([]catwalk.Model, error) {
+	return func(ctx context.Context, bin string) ([]catwalk.Model, error) {
+		out, err := exec.CommandContext(ctx, bin, "models", provider, "--verbose").Output()
+		if err != nil {
+			return nil, err
+		}
+		var models []catwalk.Model
+		for _, entry := range openCodeCatalogue(string(out)) {
+			if freeOnly && (entry.Cost == nil || entry.Cost.Input != 0 || entry.Cost.Output != 0) {
+				continue
+			}
+			if entry.ID == "" || entry.Status == "deprecated" {
+				continue
+			}
+			model := catwalk.Model{
+				ID:               provider + "/" + entry.ID,
+				Name:             cmp.Or(entry.Name, entry.ID),
+				ContextWindow:    entry.Limit.Context,
+				DefaultMaxTokens: entry.Limit.Output,
+			}
+			if model.ContextWindow <= 0 {
+				model.ContextWindow = 400_000
+			}
+			if model.DefaultMaxTokens <= 0 {
+				model.DefaultMaxTokens = 32_000
+			}
+			models = append(models, model)
+		}
+		return models, nil
+	}
+}
+
+type openCodeEntry struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Cost   *struct {
+		Input  float64 `json:"input"`
+		Output float64 `json:"output"`
+	} `json:"cost"`
+	Limit struct {
+		Context int64 `json:"context"`
+		Output  int64 `json:"output"`
+	} `json:"limit"`
+}
+
+// openCodeCatalogue reads the model ids and the JSON objects --verbose
+// prints after each one.
+func openCodeCatalogue(out string) []openCodeEntry {
+	var entries []openCodeEntry
+	var block []string
+	depth := 0
+	for line := range strings.SplitSeq(out, "\n") {
+		switch {
+		case depth == 0 && strings.HasPrefix(line, "{"):
+			block, depth = []string{line}, strings.Count(line, "{")-strings.Count(line, "}")
+		case depth > 0:
+			block = append(block, line)
+			depth += strings.Count(line, "{") - strings.Count(line, "}")
+		}
+		if depth > 0 || len(block) == 0 {
+			continue
+		}
+		var entry openCodeEntry
+		if json.Unmarshal([]byte(strings.Join(block, "\n")), &entry) == nil {
+			entries = append(entries, entry)
+		}
+		block = nil
+	}
+	return entries
 }
 
 // Grok's plain `models` output only has names. Its ACP initialization response

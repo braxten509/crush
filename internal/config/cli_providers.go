@@ -12,11 +12,12 @@ import (
 // Turns run through the CLI itself (its own tools, login and settings), and
 // Crush hands the conversation over when the user switches between them.
 const (
-	TypeClaudeCode  catwalk.Type = "claude-code"
-	TypeCodexCLI    catwalk.Type = "codex-cli"
-	TypeGrokCLI     catwalk.Type = "grok-cli"
-	TypeAGYCLI      catwalk.Type = "agy-cli"
-	TypeOpenCodeCLI catwalk.Type = "opencode-cli"
+	TypeClaudeCode     catwalk.Type = "claude-code"
+	TypeCodexCLI       catwalk.Type = "codex-cli"
+	TypeGrokCLI        catwalk.Type = "grok-cli"
+	TypeAGYCLI         catwalk.Type = "agy-cli"
+	TypeOpenCodeCLI    catwalk.Type = "opencode-cli"
+	TypeOpenCodeZenCLI catwalk.Type = "opencode-zen-cli"
 )
 
 // IsCLIProviderType reports whether t is driven through an agent CLI.
@@ -111,6 +112,23 @@ var cliProviders = []cliProvider{
 			"opencode-go/step-5-preview", "step-5-preview",
 		),
 	}, "opencode-go/glm-5.3-flash"},
+	{"opencode", ProviderConfig{
+		ID:       string(TypeOpenCodeZenCLI),
+		Name:     "OpenCode Zen",
+		Type:     TypeOpenCodeZenCLI,
+		FlatRate: true,
+		Models: []catwalk.Model{
+			{ID: "opencode/deepseek-v4.1-flash-free", Name: "DeepSeek V4.1 Flash Free", ContextWindow: 200_000, DefaultMaxTokens: 32_000},
+			{ID: "opencode/beam-free", Name: "Beam Free", ContextWindow: 1_048_576, DefaultMaxTokens: 131_072},
+			{ID: "opencode/big-pickle", Name: "Big Pickle", ContextWindow: 200_000, DefaultMaxTokens: 32_000},
+			{ID: "opencode/flint-40b-free", Name: "Flint 40B Free", ContextWindow: 262_144, DefaultMaxTokens: 65_536},
+			{ID: "opencode/glm-5.3-flash-free", Name: "GLM-5.3-Flash Free", ContextWindow: 200_000, DefaultMaxTokens: 32_000},
+			{ID: "opencode/mimo-v2.6-flash-free", Name: "MiMo-V2.6-Flash Free", ContextWindow: 200_000, DefaultMaxTokens: 32_000},
+			{ID: "opencode/nemotron-3-ultra-free", Name: "Nemotron 3 Ultra Free", ContextWindow: 1_000_000, DefaultMaxTokens: 128_000},
+			{ID: "opencode/nemotron-3.5-lightning-free", Name: "Nemotron 3.5 Lightning Free", ContextWindow: 262_144, DefaultMaxTokens: 262_144},
+			{ID: "opencode/nemotron-3.5-super-vl-free", Name: "Nemotron 3.5 Super VL Free", ContextWindow: 1_048_576, DefaultMaxTokens: 131_072},
+		},
+	}, "opencode/deepseek-v4.1-flash-free"},
 }
 
 // cliModels builds models from id, name pairs. These CLIs don't report

@@ -128,3 +128,20 @@ func isolateModelCache(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
 	t.Setenv("LocalAppData", filepath.Join(dir, "cache"))
 }
+
+// The top-right context figure and the compaction budget come from the
+// model's own window, so a CLI that reports one must be believed: the free
+// DeepSeek is 200k, not Crush's 400k default (owner, 2026-10-22).
+func TestRefreshKeepsReportedContextWindow(t *testing.T) {
+	isolateModelCache(t)
+	dir := t.TempDir()
+	script := `#!/bin/sh
+printf 'opencode-go/deepseek-v4.1-flash\n{"id":"deepseek-v4.1-flash","name":"DeepSeek V4.1 Flash","status":"active","cost":{"input":0.15,"output":0.6},"limit":{"context":1000000,"output":384000}}\n'
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "opencode"), []byte(script), 0o755))
+	refreshCLIModels(dir)
+
+	models := cachedModels(string(TypeOpenCodeCLI))
+	require.Len(t, models, 1)
+	require.Equal(t, int64(1_000_000), models[0].ContextWindow)
+}

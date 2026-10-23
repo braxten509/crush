@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,4 +42,11 @@ func TestOpenCodeGoUsageIsRead(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(data, "opencode", "auth.json")))
 	_, err = fetchOpenCodeLimits(context.Background())
 	require.Error(t, err, "no saved Go key, no reading")
+}
+
+// Zen pays per model from credits, so it reports no usage windows: no
+// fetcher is registered for it and the meter stays hidden (owner, 2026-10-22).
+func TestOpenCodeZenReportsNoUsage(t *testing.T) {
+	_, err := RefreshAccountLimits(t.Context(), config.TypeOpenCodeZenCLI, "", true)
+	require.ErrorIs(t, err, ErrNoUsageSource)
 }

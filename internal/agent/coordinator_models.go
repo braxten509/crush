@@ -171,6 +171,15 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 	c.cfg.RefetchOpenAIChatGPTModels(ctx)
 	c.cfg.RefetchGrokModels(ctx)
 
+	// A model switch in another chat must not swap the model under a run
+	// that is already streaming: the in-flight request would go out on the
+	// new model, which may be one the provider cannot serve. The next turn
+	// rebuilds models from config anyway (runTurn calls updateAgentModels),
+	// so the switch still lands as soon as the run finishes.
+	if c.IsBusy() {
+		return nil
+	}
+
 	agent, name := c.activeAgent()
 	return c.updateAgentModels(ctx, agent, name)
 }

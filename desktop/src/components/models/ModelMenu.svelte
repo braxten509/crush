@@ -24,6 +24,7 @@
   // with it (lib/models/groups.js selectedModelOf).
   import { onMount, untrack } from "svelte";
   import Icon from "../Icon.svelte";
+  import Scrollbar from "../kit/Scrollbar.svelte";
   import { bindKey } from "../../lib/keys.js";
   import { chooseModel } from "../../lib/models/choose.js";
   import { buildGroups, levelTitle, selectedModelOf } from "../../lib/models/groups.js";
@@ -39,6 +40,7 @@
   import { dialogs } from "../../lib/dialogs.js";
   import { focusField } from "../../lib/stores/composer.svelte.js";
   import { closeMenu, notify } from "../../lib/stores/ui.svelte.js";
+  import { ws } from "../../lib/stores/workspace.svelte.js";
 
   let { menu } = $props();
 
@@ -46,6 +48,8 @@
   const MARGIN = 8; // picture px kept from the window's edges
 
   let box = $state(null);
+  let groupsBox = $state(null);
+  let rowsBox = $state(null);
   let search = $state(null);
   let place = $state(null);
   let query = $state("");
@@ -60,6 +64,7 @@
   $effect(() => watchModels());
 
   const coder = $derived(coderModel(modelData));
+  const barMode = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
   const type = $derived(coder.type ?? "large");
   const current = $derived(coder.selected);
   const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type }) : { items: [] });
@@ -307,7 +312,7 @@
   style:visibility={place ? null : "hidden"}
   transition:unfold|global={{ from: place?.from ?? "bottom" }}
 >
-  <div class="groups" data-column="groups" role="listbox" aria-label="Agents and providers">
+  <div class="groups" data-column="groups" role="listbox" aria-label="Agents and providers" bind:this={groupsBox}>
     <h3 class="label">Agent</h3>
     {#each groups as group (group.name)}
       <button
@@ -328,13 +333,14 @@
       </button>
     {/each}
   </div>
+  <Scrollbar target={groupsBox} mode={barMode} />
 
   <div class="models" data-column="models">
     <label class="search" data-column="search">
       <Icon name="search" size={16} />
       <input bind:this={search} bind:value={query} type="text" placeholder="Search models" aria-label="Search models" spellcheck="false" />
     </label>
-    <div class="rows" role="listbox" aria-label="Models">
+    <div class="rows" role="listbox" aria-label="Models" bind:this={rowsBox}>
       {#each rows as item (item.id)}
         <button type="button" class="model" role="option" data-stop aria-selected={isCurrent(item, current)} onclick={() => pick(item)} oncontextmenu={(event) => offerRemove(event, item)}>
           <span class="name">{item.model.name || item.model.id}</span>
@@ -351,6 +357,7 @@
         </button>
       {/if}
     </div>
+    <Scrollbar target={rowsBox} mode={barMode} />
     {#if routeTo}
       <div class="route" data-column="route">
         <span class="route-name">Cheapest host</span>

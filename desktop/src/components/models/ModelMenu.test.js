@@ -173,6 +173,14 @@ describe("the model menu (ModelMenu.svelte)", () => {
     expect(ui.menu?.kind).toBe("model");
   });
 
+  it("draws the app's scrollbar on both of its lists", async () => {
+    state.routes["GET config"] = config();
+    mount();
+    await settle();
+    expect(document.querySelector(".model-menu .groups").classList.contains("kit-scroll")).toBe(true);
+    expect(document.querySelector(".model-menu .rows").classList.contains("kit-scroll")).toBe(true);
+  });
+
   it("a click outside, or Escape, closes it", async () => {
     state.routes["GET config"] = config();
     mount();

@@ -289,26 +289,39 @@ func reasoningObjectOptions[T fantasy.ProviderOptionsData](name string, parse fu
 // tests replace it.
 var openRouterHostOrder = discover.OpenRouterHostOrder
 
+// openRouterQuantizations is the quality floor every OpenRouter request
+// carries: FP8 and better, and hosts that do not say their precision.
+// Anything compressed further (fp6, fp4, int4) never answers (owner,
+// 2026-10-22).
+var openRouterQuantizations = []string{"fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"}
+
 // openrouterOptions asks OpenRouter for the cheapest host first (provider
 // sort "price"; owner, 2026-10-22) unless the provider's switch is off or
-// the user's own options already pick a sort or an order. The account's own
-// provider and privacy settings still apply on OpenRouter's side.
+// the user's own options already pick a sort or an order, and refuses hosts
+// compressed below FP8 unless that switch is off or the user names their own
+// precisions. Both share one provider object. The account's own provider and
+// privacy settings still apply on OpenRouter's side.
 func openrouterOptions(c *optionsCall) fantasy.ProviderOptions {
-	if c.provider.CheapestHostOn() {
-		routing, _ := c.merged["provider"].(map[string]any)
-		if routing["sort"] == nil && routing["order"] == nil {
-			next := maps.Clone(routing)
-			if next == nil {
-				next = map[string]any{}
-			}
+	routing, _ := c.merged["provider"].(map[string]any)
+	floor := c.provider.QualityFloorOn() && routing["quantizations"] == nil
+	cheapest := c.provider.CheapestHostOn() && routing["sort"] == nil && routing["order"] == nil
+	if floor || cheapest {
+		next := maps.Clone(routing)
+		if next == nil {
+			next = map[string]any{}
+		}
+		if floor {
+			next["quantizations"] = slices.Clone(openRouterQuantizations)
+		}
+		if cheapest {
 			next["sort"] = "price"
 			// Once the model's hosts are read, they go first by price with
 			// cache reads breaking ties (discover.OpenRouterHostOrder).
 			if order := openRouterHostOrder(context.Background(), c.provider.BaseURL, c.model.CatwalkCfg.ID); len(order) > 0 {
 				next["order"] = order
 			}
-			c.merged["provider"] = next
 		}
+		c.merged["provider"] = next
 	}
 	return reasoningObjectOptions(openrouter.Name, openrouter.ParseOptions)(c)
 }

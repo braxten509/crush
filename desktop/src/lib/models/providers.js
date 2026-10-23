@@ -32,8 +32,10 @@ export function safeProvider(id, cfg) {
     disable: cfg?.disable === true,
     // OpenRouter: the model menu's "Cheapest host" switch reads this back
     // after saving, so it must survive the cut (owner, 2026-10-22: it
-    // flipped straight back on).
+    // flipped straight back on). The "FP8 floor" switch reads its own that
+    // way too.
     cheapest_host: cfg?.cheapest_host !== false,
+    quality_floor: cfg?.quality_floor !== false,
     has_api_key: cfg?.has_api_key === true,
     has_oauth: cfg?.has_oauth === true,
     oauth_expired: cfg?.has_oauth === true && oauthExpired(cfg.oauth_times),

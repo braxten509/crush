@@ -16,7 +16,10 @@
   // Under OpenRouter's saved models, "+ Add model" opens the catalog sheet
   // (OpenRouterAdd.svelte, owner 2026-10-22, pick B); a right-click on a
   // saved one offers Remove, and a "Cheapest host" switch over the effort
-  // (owner, 2026-10-22; on by default) saves providers.<id>.cheapest_host.
+  // (owner, 2026-10-22; on by default) saves providers.<id>.cheapest_host,
+  // with an "FP8 floor" switch under it for refusing hosts compressed
+  // below FP8 (owner, 2026-10-22; on by default) that saves
+  // providers.<id>.quality_floor.
   // A model is chosen with the effort last used
   // with it (lib/models/groups.js selectedModelOf).
   import { onMount, untrack } from "svelte";
@@ -26,7 +29,7 @@
   import { buildGroups, levelTitle, selectedModelOf } from "../../lib/models/groups.js";
   import { effortShown, isCurrent, menuGroups, RECENT, searchRows, startGroup } from "../../lib/models/menu.js";
   import { coderModel, modelData, refreshModels, watchModels } from "../../lib/models/store.svelte.js";
-  import { addableProviders, cheapestHostOn, savedWithout } from "../../lib/models/openrouter.js";
+  import { addableProviders, cheapestHostOn, qualityFloorOn, savedWithout } from "../../lib/models/openrouter.js";
   import { openDialog } from "../../lib/dialogs.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { setAccount, setEffort } from "../../lib/models/toggles.js";
@@ -52,6 +55,7 @@
   let accountsOpen = $state(false);
   let account = $state(null); // the account just picked, shown until the config says so
   let cheapest = $state(null); // the switch just flipped, shown until the config says so
+  let floor = $state(null); // the FP8 floor switch just flipped
 
   $effect(() => watchModels());
 
@@ -74,6 +78,7 @@
   // 2026-10-21).
   const routeTo = $derived(!searching ? (shownGroup?.addTo ?? "") : "");
   const cheapestNow = $derived(cheapest ?? cheapestHostOn(modelData.cfg, routeTo));
+  const floorNow = $derived(floor ?? qualityFloorOn(modelData.cfg, routeTo));
   const onCurrentGroup = $derived(!searching && shownGroup?.name === startGroup(groups, current));
 
   // The tool behind a configured provider id (its type), or "".
@@ -155,6 +160,19 @@
       notify("error", error?.message ?? String(error));
     } finally {
       cheapest = null;
+    }
+  }
+
+  async function flipFloor() {
+    const next = !floorNow;
+    floor = next;
+    try {
+      await api.setConfig(SCOPE.global, `providers.${routeTo}.quality_floor`, next);
+      await refreshModels();
+    } catch (error) {
+      notify("error", error?.message ?? String(error));
+    } finally {
+      floor = null;
     }
   }
 
@@ -337,6 +355,10 @@
       <div class="route" data-column="route">
         <span class="route-name">Cheapest host</span>
         <button type="button" class="switch" role="switch" data-stop aria-checked={cheapestNow} aria-label="Cheapest host" onclick={flipCheapest}></button>
+      </div>
+      <div class="route" data-column="route">
+        <span class="route-name">FP8 floor</span>
+        <button type="button" class="switch" role="switch" data-stop aria-checked={floorNow} aria-label="FP8 floor" onclick={flipFloor}></button>
       </div>
     {/if}
     {#if levels.length > 0}

@@ -17,6 +17,13 @@ export function cheapestHostOn(cfg, id) {
   return true;
 }
 
+// Whether an OpenRouter provider refuses hosts compressed below FP8 (its
+// quality_floor, on unless turned off; owner, 2026-10-22).
+export function qualityFloorOn(cfg, id) {
+  for (const [pid, p] of cfg?.providers ?? []) if (pid === id) return p?.quality_floor !== false;
+  return true;
+}
+
 const squash = (text) => String(text ?? "").replace(/\s+/g, "").toLowerCase();
 
 // The catalog models whose name or id hold the words, spaces and case ignored.

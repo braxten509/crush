@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -300,7 +301,8 @@ func TestCallTopK(t *testing.T) {
 func ptr[T any](v T) *T { return &v }
 
 // OpenRouter is asked for the cheapest host first unless its switch is off
-// or the user's own options pick a sort or an order (owner, 2026-10-22).
+// or the user's own options pick a sort or an order, and for FP8 quality or
+// better (owner, 2026-10-22).
 func TestOpenRouterAsksForTheCheapestHost(t *testing.T) {
 	t.Parallel()
 	routing := func(p config.ProviderConfig, selected config.SelectedModel) *openrouter.Provider {
@@ -310,20 +312,22 @@ func TestOpenRouterAsksForTheCheapestHost(t *testing.T) {
 		return parsed.Provider
 	}
 	price := "price"
+	floor := slices.Clone(openRouterQuantizations)
 	p := config.ProviderConfig{ID: "openrouter", Type: openrouter.Name}
-	require.Equal(t, &openrouter.Provider{Sort: &price}, routing(p, config.SelectedModel{}))
+	require.Equal(t, &openrouter.Provider{Sort: &price, Quantizations: floor}, routing(p, config.SelectedModel{}))
 
 	// The user's own routing keeps its other fields; its own sort or order wins.
 	own := config.SelectedModel{ProviderOptions: map[string]any{"provider": map[string]any{"ignore": []any{"x"}}}}
-	require.Equal(t, &openrouter.Provider{Sort: &price, Ignore: []string{"x"}}, routing(p, own))
+	require.Equal(t, &openrouter.Provider{Sort: &price, Quantizations: floor, Ignore: []string{"x"}}, routing(p, own))
 	latency := "latency"
 	own = config.SelectedModel{ProviderOptions: map[string]any{"provider": map[string]any{"sort": "latency"}}}
-	require.Equal(t, &openrouter.Provider{Sort: &latency}, routing(p, own))
+	require.Equal(t, &openrouter.Provider{Sort: &latency, Quantizations: floor}, routing(p, own))
 	own = config.SelectedModel{ProviderOptions: map[string]any{"provider": map[string]any{"order": []any{"deepseek"}}}}
-	require.Equal(t, &openrouter.Provider{Order: []string{"deepseek"}}, routing(p, own))
+	require.Equal(t, &openrouter.Provider{Order: []string{"deepseek"}, Quantizations: floor}, routing(p, own))
 
 	off := false
 	p.CheapestHost = &off
+	p.QualityFloor = &off
 	require.Nil(t, routing(p, config.SelectedModel{}))
 }
 
@@ -339,10 +343,11 @@ func TestOpenRouterNamesItsHostsCheapestFirst(t *testing.T) {
 	}
 	t.Cleanup(func() { openRouterHostOrder = restore })
 	price := "price"
+	floor := slices.Clone(openRouterQuantizations)
 	p := config.ProviderConfig{ID: "openrouter", Type: openrouter.Name, BaseURL: "https://openrouter.ai/api/v1"}
 	options := Options(catwalk.Model{ID: "deepseek/deepseek-v4.1-flash"}, config.SelectedModel{}, p)
-	require.Equal(t, &openrouter.Provider{Order: []string{"cheap-cache", "cheap/fp8"}, Sort: &price}, options[openrouter.Name].(*openrouter.ProviderOptions).Provider)
+	require.Equal(t, &openrouter.Provider{Order: []string{"cheap-cache", "cheap/fp8"}, Sort: &price, Quantizations: floor}, options[openrouter.Name].(*openrouter.ProviderOptions).Provider)
 	// Not read yet: the plain cheapest-first sort.
 	options = Options(catwalk.Model{ID: "other/model"}, config.SelectedModel{}, p)
-	require.Equal(t, &openrouter.Provider{Sort: &price}, options[openrouter.Name].(*openrouter.ProviderOptions).Provider)
+	require.Equal(t, &openrouter.Provider{Sort: &price, Quantizations: floor}, options[openrouter.Name].(*openrouter.ProviderOptions).Provider)
 }

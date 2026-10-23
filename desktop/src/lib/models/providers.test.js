@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { footerText } from "../timeline.js";
 import { footerProviders, safeProvider } from "./providers.js";
-import { cheapestHostOn } from "./openrouter.js";
+import { cheapestHostOn, qualityFloorOn } from "./openrouter.js";
 
 const cfg = {
   providers: new Map([
@@ -46,5 +46,17 @@ describe("the picker's provider view keeps the cheapest host switch (owner, 2026
     expect(cheapestHostOn(read({ type: "openrouter", cheapest_host: false }), "openrouter")).toBe(false);
     expect(cheapestHostOn(read({ type: "openrouter", cheapest_host: true }), "openrouter")).toBe(true);
     expect(cheapestHostOn(read({ type: "openrouter" }), "openrouter")).toBe(true);
+  });
+});
+
+// The FP8 floor switch sits under the cheapest host one and reads back the
+// same way (owner, 2026-10-22).
+describe("the picker's provider view keeps the FP8 floor switch (owner, 2026-10-22)", () => {
+  test("turning it off survives the read the switch does next; a provider without it refuses hosts below FP8", () => {
+    const read = (saved) => ({ providers: new Map([["openrouter", safeProvider("openrouter", saved)]]) });
+    expect(safeProvider("openrouter", { type: "openrouter", quality_floor: false }).quality_floor).toBe(false);
+    expect(qualityFloorOn(read({ type: "openrouter", quality_floor: false }), "openrouter")).toBe(false);
+    expect(qualityFloorOn(read({ type: "openrouter", quality_floor: true }), "openrouter")).toBe(true);
+    expect(qualityFloorOn(read({ type: "openrouter" }), "openrouter")).toBe(true);
   });
 });

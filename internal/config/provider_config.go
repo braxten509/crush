@@ -71,6 +71,11 @@ type ProviderConfig struct {
 	// (owner, 2026-10-22).
 	CheapestHost *bool `json:"cheapest_host,omitempty" jsonschema:"description=OpenRouter only: route each request to the cheapest host first,default=true"`
 
+	// QualityFloor refuses OpenRouter hosts compressed below FP8 (owner,
+	// 2026-10-22): only fp8, mxfp8, fp16, bf16 and fp32 hosts answer, and
+	// hosts that do not say their precision stay allowed. Unset means on.
+	QualityFloor *bool `json:"quality_floor,omitempty" jsonschema:"description=OpenRouter only: refuse hosts compressed below FP8,default=true"`
+
 	// The provider models
 	Models []catwalk.Model `json:"models,omitempty" jsonschema:"description=List of models available from this provider"`
 
@@ -159,4 +164,10 @@ func (c *ProviderConfig) TestConnection(resolver VariableResolver) error {
 // CheapestHostOn reports whether OpenRouter is asked for the cheapest host.
 func (p ProviderConfig) CheapestHostOn() bool {
 	return p.CheapestHost == nil || *p.CheapestHost
+}
+
+// QualityFloorOn reports whether OpenRouter is asked to refuse hosts
+// compressed below FP8.
+func (p ProviderConfig) QualityFloorOn() bool {
+	return p.QualityFloor == nil || *p.QualityFloor
 }

@@ -131,6 +131,15 @@ func (s *ConfigStore) CaptureStalenessSnapshot(paths []string) {
 		}
 	}
 
+	// The CLI model list is tracked too: a background refresh rewrites it
+	// with models and effort levels the running app has not loaded yet, and
+	// its watcher reloads on a change (owner, 2026-10-22).
+	if cache := cliModelCachePath(); cache != "" {
+		if abs, err := filepath.Abs(cache); err == nil {
+			seen[abs] = struct{}{}
+		}
+	}
+
 	// Build sorted list for deterministic ordering
 	s.trackedConfigPaths = make([]string, 0, len(seen))
 	for p := range seen {

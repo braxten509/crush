@@ -3,8 +3,9 @@
 - choosing Sonnet saves it with the effort last used with it (Low, from
   the fixture's model_efforts), not its default (High);
 - the OpenRouter group lists only its saved model, with "Add model" under;
-- there, no Effort row (the model in use is elsewhere) and a "Cheapest
-  host" switch, on by default, that saves providers.openrouter.cheapest_host;
+- there, no Effort row (the model in use is elsewhere), a "Cheapest host"
+  switch, on by default, that saves providers.openrouter.cheapest_host, and
+  an "FP8 floor" switch under it that saves providers.openrouter.quality_floor;
 - a right-click on the saved model offers Remove, which saves the list
   without it (POST config/set providers.openrouter.models);
 - "Add model" opens the catalog sheet: every catalog model with its price,
@@ -83,6 +84,10 @@ def menu_open():
 
 
 def open_menu():
+    # A model click keeps the menu open, so asking for it again must not
+    # toggle it shut.
+    if menu_open():
+        return
     click_at(center(".composer button.model"))
     end = time.time() + 3
     while time.time() < end and not menu_open():
@@ -144,6 +149,20 @@ time.sleep(1.0)
 got = calls(since, "config/set")
 body = got[0].get("body") if got else {}
 check(body.get("key") == "providers.openrouter.cheapest_host" and body.get("value") is False, f"a click saves Cheapest host off ({body})")
+
+# The "FP8 floor" switch sits under it (owner, 2026-10-22): on by default,
+# and a click saves providers.openrouter.quality_floor off.
+floors = run("""const m = document.querySelector('[data-menu="model"]');
+  return { switches: m.querySelectorAll('[data-column="route"] [role=switch]').length,
+           floor: m.querySelector('[aria-label="FP8 floor"]')?.getAttribute('aria-checked') ?? null };""")
+check(floors == {"switches": 2, "floor": "true"}, f"the FP8 floor switch shows under Cheapest host, on by default ({floors})")
+since = api_count()
+click_at(center('[data-menu="model"] [aria-label="FP8 floor"]'))
+time.sleep(1.0)
+got = calls(since, "config/set")
+body = got[0].get("body") if got else {}
+check(body.get("key") == "providers.openrouter.quality_floor" and body.get("value") is False, f"a click saves FP8 floor off ({body})")
+
 click_at(center(GROUP, "Claude Code"))
 time.sleep(0.3)
 back = run("""const m = document.querySelector('[data-menu="model"]');

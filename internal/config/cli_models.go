@@ -21,23 +21,43 @@ import (
 )
 
 // Agent CLIs change their model lists often, so Crush asks each one what it
-// offers and caches the answer. Startup reads the cache; a background
-// refresh updates it for the next launch.
-// ponytail: new models appear one launch late; refresh synchronously if
-// that ever matters.
+// offers and caches the answer. A load reads the cache, refreshing it first
+// when it is stale (owner, 2026-10-22: a newly reported effort level used to
+// appear one launch late); the cache file is one of the store's tracked
+// files, so a background refresh reaches a running app as a config change.
 
 var refreshOnce sync.Once
 
 const modelCacheTTL = time.Hour
 
-// maybeRefreshCLIModels starts a background refresh when the cache is
-// missing or older than modelCacheTTL, at most once per process.
+// refreshCLIModelList reloads every installed CLI's model list; tests
+// replace it.
+var refreshCLIModelList = refreshCLIModels
+
+// modelRefreshWait caps how long a load waits for a stale list, so a CLI
+// that hangs cannot hold the app's start.
+var modelRefreshWait = 10 * time.Second
+
+// maybeRefreshCLIModels refreshes the cache when it is missing or older
+// than modelCacheTTL, at most once per process. A stale list is read before
+// the load goes on, so the models and effort levels a CLI reports appear on
+// the launch that first sees them; the wait is capped so a hanging CLI
+// cannot hold the app's start.
 func maybeRefreshCLIModels(path string) {
 	refreshOnce.Do(func() {
 		if fi, err := os.Stat(cliModelCachePath()); err == nil && time.Since(fi.ModTime()) < modelCacheTTL {
 			return
 		}
-		go refreshCLIModels(path)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			refreshCLIModelList(path)
+		}()
+		select {
+		case <-done:
+		case <-time.After(modelRefreshWait):
+			slog.Debug("Agent CLI model list is still refreshing; loading the list already cached")
+		}
 	})
 }
 

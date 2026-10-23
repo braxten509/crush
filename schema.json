@@ -967,6 +967,11 @@
           "description": "OpenRouter only: route each request to the cheapest host first",
           "default": true
         },
+        "quality_floor": {
+          "type": "boolean",
+          "description": "OpenRouter only: refuse hosts compressed below FP8",
+          "default": true
+        },
         "models": {
           "items": {
             "$ref": "#/$defs/Model"

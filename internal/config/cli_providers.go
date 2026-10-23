@@ -170,6 +170,12 @@ func init() {
 // back to the defaults, so `{"claude-code": {"disable": true}}` is all it
 // takes to hide one.
 func (c *Config) addCLIProviders(path string) {
+	// Before the lists are read: a stale cache is refreshed here so the
+	// providers below carry the models and effort levels their CLI just
+	// reported (owner, 2026-10-22).
+	if detectCLIs && refreshModels {
+		maybeRefreshCLIModels(path)
+	}
 	for _, p := range cliProviders {
 		cfg, exists := c.Providers.Get(p.cfg.ID)
 		if !exists {
@@ -190,9 +196,6 @@ func (c *Config) addCLIProviders(path string) {
 		}
 		cfg.FlatRate = true
 		c.Providers.Set(p.cfg.ID, cfg)
-	}
-	if detectCLIs && refreshModels {
-		maybeRefreshCLIModels(path)
 	}
 }
 

@@ -534,7 +534,7 @@ class ACP(Proto):
         elif method == "session/load":
             self.session = params.get("sessionId")
             send({"jsonrpc": "2.0", "id": rid, "result": {}})
-        elif method == "session/set_model":
+        elif method in ("session/set_model", "session/set_config_option"):
             send({"jsonrpc": "2.0", "id": rid, "result": {}})
         elif method == "session/prompt":
             if self.busy():

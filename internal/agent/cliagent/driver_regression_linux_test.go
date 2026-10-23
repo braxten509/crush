@@ -278,3 +278,57 @@ func TestGrokBillingRejectsEmptyPeriodName(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, limits)
 }
+
+func TestOpenCodeSetsModelViaConfigOption(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "calls.log")
+	script := `#!/bin/sh
+cat << 'EOF' > run.py
+import sys, json
+
+with open(sys.argv[1], "a") as log:
+    for line in sys.stdin:
+        msg = json.loads(line)
+        method = msg.get("method")
+        mid = msg.get("id")
+        params = msg.get("params") or {}
+        log.write(json.dumps({"method": method, "params": params}) + "\n")
+        log.flush()
+        if method == "initialize":
+            print(json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"protocolVersion": 1, "agentCapabilities": {}}}))
+            sys.stdout.flush()
+        elif method == "session/new":
+            print(json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"sessionId": "ses-123"}}))
+            sys.stdout.flush()
+        elif method == "session/set_model":
+            print(json.dumps({"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "\"Method not found\": session/set_model"}}))
+            sys.stdout.flush()
+        elif method == "session/set_config_option":
+            print(json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"configOptions": []}}))
+            sys.stdout.flush()
+        elif method == "session/prompt":
+            print(json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"stopReason": "end_turn"}}))
+            sys.stdout.flush()
+EOF
+exec python3 run.py "` + logFile + `"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "opencode"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	model := &Model{Kind: config.TypeOpenCodeCLI, ID: "opencode-go/deepseek-v4.1-flash", Dir: dir}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	err := model.Run(ctx, Turn{
+		SessionID: "sess-1",
+		Prompt:    "hi",
+		Emit:      func(Event) error { return nil },
+	})
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	require.Contains(t, string(content), `"method": "session/set_config_option"`)
+	require.Contains(t, string(content), `"configId": "model"`)
+	require.Contains(t, string(content), `"value": "opencode-go/deepseek-v4.1-flash"`)
+}

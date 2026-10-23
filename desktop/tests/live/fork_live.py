@@ -419,9 +419,12 @@ class Acp:
             sid = p.request("session/new", {"cwd": self.cwd, "mcpServers": []})["sessionId"]
         if self.set_model:
             try:
-                p.request("session/set_model", {"sessionId": sid, "modelId": self.model})
-            except RpcError as e:
-                log.rec(label, "note", {"set_model_error": str(e)})
+                p.request("session/set_config_option", {"sessionId": sid, "configId": "model", "value": self.model})
+            except RpcError:
+                try:
+                    p.request("session/set_model", {"sessionId": sid, "modelId": self.model})
+                except RpcError as e:
+                    log.rec(label, "note", {"set_model_error": str(e)})
         return p, sid
 
     def _prompt(self, p, log, label, sid, prompt, on_first=None, mid_prompt=None):

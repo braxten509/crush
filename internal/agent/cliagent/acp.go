@@ -122,7 +122,7 @@ type acpRun struct {
 }
 
 // runACP drives an ACP agent started with args. setModel selects m.ID with
-// session/set_model for agents that take no model flag.
+// session/set_config_option (or legacy session/set_model) for agents that take no model flag.
 func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, setModel bool) error {
 	if name == "opencode" && !t.NoTools {
 		if env, signal := opencodeEnv(m.KeepsWholeContext()); signal != "" {
@@ -352,6 +352,12 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 		if id == acpSessionID && r.t.Resume != "" {
 			return true, ErrResume
 		}
+		if id == "set-model" && strings.Contains(msg.Error.Message, "Method not found") {
+			if sid := r.session.Load(); sid != nil {
+				_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-model-fallback", "method": "session/set_model", "params": map[string]any{"sessionId": *sid, "modelId": r.m.ID}})
+				return false, nil
+			}
+		}
 		return true, fmt.Errorf("%s: %s", r.name, msg.Error.Message)
 	}
 	switch id {
@@ -385,7 +391,7 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 			return true, err
 		}
 		if r.setModel {
-			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-model", "method": "session/set_model", "params": map[string]any{"sessionId": sid, "modelId": r.m.ID}})
+			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-model", "method": "session/set_config_option", "params": map[string]any{"sessionId": sid, "configId": "model", "value": r.m.ID}})
 		}
 		if r.name == "opencode" && r.t.Effort != "" {
 			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-effort", "method": "session/set_config_option", "params": map[string]any{"sessionId": sid, "configId": "effort", "value": r.t.Effort}})

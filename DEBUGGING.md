@@ -69,4 +69,17 @@ process or any other live process.
 ## Checks
 
 - `TestPromptsOfThisCrushAreLeftAlone` fails before and passes after.
-- `go test ./internal/agent ./internal/backend ./internal/server`.
+- `go build ./...` passes.
+- `go test ./internal/agent ./internal/backend ./internal/server` has
+  failures that are not from this change:
+  - `TestBackgroundCountAfterCtrlB`,
+    `TestNativeBackgroundJobListedOnceAndUserStopIsReported` and
+    `TestShellFileReviewCLIEndToEnd` fail the same way on a clean checkout
+    of `7bb01c90`; this Crush's own `CRUSH_TASKS_DIR` and
+    `CRUSH_NATIVE_SHELL` markers leak into the fixture processes, and the
+    file-review keeper cannot observe them while tests run inside Crush
+    (already noted in `desktop/DEBUGGING.md`).
+  - `TestFolderSwitchKeepsOwnedWork`, `TestQ2DropPastGraceStopsUnviewedWork`,
+    `TestQ2KeepsWorkAnotherAppViews`, `TestListHelpersScopedToChat` and
+    `TestEndedWorkLeavesOwners` fail in the full backend run (21 s waits)
+    and pass alone; a clean checkout of `7bb01c90` fails them identically.

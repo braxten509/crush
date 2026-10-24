@@ -264,6 +264,9 @@ func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider,
 		wg.Wait()
 
 		list := slices.Collect(collected.Seq())
+		if !customProvidersOnly {
+			list = withIFMProvider(list)
+		}
 		if hyperProvider.ID != "" {
 			list = append([]catwalk.Provider{hyperProvider}, list...)
 		}

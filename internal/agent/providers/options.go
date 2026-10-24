@@ -366,6 +366,20 @@ type compatQuirk struct {
 // compatQuirks are the OpenAI-compatible providers with their own
 // reasoning controls.
 var compatQuirks = map[string]compatQuirk{
+	config.IFMProviderID: {effort: func(c *optionsCall, extraBody map[string]any) {
+		if existing, ok := c.merged["extra_body"].(map[string]any); ok {
+			maps.Copy(extraBody, existing)
+		}
+		kwargs, _ := extraBody["chat_template_kwargs"].(map[string]any)
+		kwargs = maps.Clone(kwargs)
+		if kwargs == nil {
+			kwargs = make(map[string]any)
+		}
+		if _, explicit := kwargs["reasoning_effort"]; !explicit {
+			kwargs["reasoning_effort"] = c.effort
+		}
+		extraBody["chat_template_kwargs"] = kwargs
+	}},
 	config.AbacusProviderID: {thinking: abacusThinking},
 	hyper.Name: {thinking: func(c *optionsCall, extraBody map[string]any) {
 		extraBody["thinking"] = c.model.ModelCfg.Think

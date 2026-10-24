@@ -306,7 +306,7 @@ func TestProviders_KeepsCatalogWhenCachingFails(t *testing.T) {
 
 	// The failure is reported, but as a warning alongside a usable catalog.
 	require.Error(t, err)
-	require.Len(t, providers, 2)
+	require.Len(t, providers, 3)
 	require.Equal(t, catwalk.InferenceProvider("hyper"), providers[0].ID, "Hyper stays at the front")
 	require.Equal(t, catwalk.InferenceProvider("p1"), providers[1].ID)
 }
@@ -333,7 +333,7 @@ func TestProviders_FallsBackToEmbeddedHyper(t *testing.T) {
 
 	providers, err := Providers(&Config{Options: &Options{}})
 	require.NoError(t, err)
-	require.Len(t, providers, 2)
+	require.Len(t, providers, 3)
 	require.Equal(t, catwalk.InferenceProvider("hyper"), providers[0].ID)
 	require.NotEmpty(t, providers[0].Models, "the embedded Hyper provider carries models")
 }

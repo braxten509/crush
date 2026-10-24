@@ -46,6 +46,21 @@ export function hasAccounts(kind) {
   return ACCOUNT_KINDS.includes(kind);
 }
 
+// The tools whose usage needs a fresh read after the account list changed:
+// a new account, or one that just finished signing in. A tool whose accounts
+// are unchanged is left to the usage timer.
+export function kindsToRefresh(before, after) {
+  const was = new Map((before ?? []).map((a) => [`${a?.kind}/${a?.id ?? ""}`, a?.signed_in === true]));
+  const kinds = [];
+  for (const a of after ?? []) {
+    if (!a?.signed_in) continue;
+    const key = `${a.kind}/${a.id ?? ""}`;
+    if (was.get(key) === true) continue;
+    if (!kinds.includes(a.kind)) kinds.push(a.kind);
+  }
+  return kinds;
+}
+
 // The tool a block's account belongs to.
 export function blockKind(block, providers) {
   return block?.type === "use" ? providerKind(providers, block.provider) : (block?.kind ?? "");

@@ -7,6 +7,7 @@ import { api } from "../engine/api.js";
 import { onEvent } from "../engine/events.js";
 import { notify } from "../stores/ui.svelte.js";
 import { sign_in_run } from "../engine/commands.js";
+import { kindsToRefresh } from "./blocks.js";
 
 export const fallback = $state({
   loaded: false,
@@ -17,7 +18,9 @@ export const fallback = $state({
 
 function take(settings) {
   if (!settings || typeof settings !== "object") return;
-  fallback.accounts = Array.isArray(settings.accounts) ? settings.accounts : [];
+  const accounts = Array.isArray(settings.accounts) ? settings.accounts : [];
+  const refresh = kindsToRefresh(fallback.accounts, accounts);
+  fallback.accounts = accounts;
   const order = settings.order ?? {};
   fallback.order = {
     on: Boolean(order.on),
@@ -25,6 +28,7 @@ function take(settings) {
     lists: (Array.isArray(order.lists) ? order.lists : []).map((l) => ({ ...l, blocks: Array.isArray(l?.blocks) ? l.blocks : [] })),
   };
   fallback.loaded = true;
+  for (const kind of refresh) api.refreshLimits(kind).catch((error) => console.error("account limits refresh failed", error));
 }
 
 const errorText = (error) => error?.message ?? String(error ?? "");
@@ -74,8 +78,13 @@ async function signIn(login) {
   } finally {
     await loadFallback();
   }
-  if (signedIn) notify("info", `Signed in to ${name}.`);
-  else notify("error", `Signing in to ${name} didn't finish.`);
+  if (signedIn) {
+    notify("info", `Signed in to ${name}.`);
+    const kind = login.account?.kind;
+    if (kind) api.refreshLimits(kind).catch((error) => console.error("account limits refresh failed", error));
+  } else {
+    notify("error", `Signing in to ${name} didn't finish.`);
+  }
 }
 
 export async function addAccount(kind) {

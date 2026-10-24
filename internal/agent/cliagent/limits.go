@@ -690,9 +690,54 @@ func claudeRateLimit(raw json.RawMessage) []Limit {
 	return limits
 }
 
+// claudeUsageURL is Anthropic's usage endpoint (the one behind Claude
+// Code's /usage). Tests point it at a local server.
+var claudeUsageURL = "https://api.anthropic.com/api/oauth/usage"
+
+// claudeCredentials is the OAuth part of Claude Code's credentials file.
+type claudeCredentials struct {
+	OAuth struct {
+		AccessToken string `json:"accessToken"`
+		ExpiresAt   int64  `json:"expiresAt"`
+	} `json:"claudeAiOauth"`
+}
+
+func readClaudeCredentials(dir string) (claudeCredentials, error) {
+	var creds claudeCredentials
+	data, err := os.ReadFile(filepath.Join(dir, ".credentials.json"))
+	if err != nil {
+		return creds, err
+	}
+	err = json.Unmarshal(data, &creds)
+	return creds, err
+}
+
+// claudeLoginExpired reports whether the login needs renewing; a token
+// about to expire counts as expired.
+func claudeLoginExpired(creds claudeCredentials) bool {
+	return creds.OAuth.AccessToken == "" || time.Now().Add(time.Minute).After(time.UnixMilli(creds.OAuth.ExpiresAt))
+}
+
+// refreshClaudeLogin has Claude Code renew the account's login. Its status
+// command refreshes the OAuth token, without a browser or a model request.
+func refreshClaudeLogin(ctx context.Context, account string) error {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "claude", "auth", "status")
+	cmd.Env = append(os.Environ(), config.AccountEnv(config.TypeClaudeCode, account)...)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	if msg := strings.TrimSpace(string(out)); msg != "" {
+		return fmt.Errorf("%w: %s", err, msg)
+	}
+	return err
+}
+
 // fetchClaudeLimits asks Anthropic's usage endpoint (the one behind
 // Claude Code's /usage) with the account's Claude Code login. An expired
-// token is left for Claude Code to refresh on its next run.
+// token is renewed first through Claude Code's own status command.
 func fetchClaudeLimits(ctx context.Context) ([]Limit, error) {
 	dir := config.AccountDir(LimitAccount(ctx))
 	if dir == "" {
@@ -702,24 +747,24 @@ func fetchClaudeLimits(ctx context.Context) ([]Limit, error) {
 		}
 		dir = filepath.Join(home, ".claude")
 	}
-	data, err := os.ReadFile(filepath.Join(dir, ".credentials.json"))
+	creds, err := readClaudeCredentials(dir)
 	if err != nil {
 		return nil, err
 	}
-	var creds struct {
-		OAuth struct {
-			AccessToken string `json:"accessToken"`
-			ExpiresAt   int64  `json:"expiresAt"`
-		} `json:"claudeAiOauth"`
-	}
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, err
-	}
-	if creds.OAuth.AccessToken == "" || time.Now().After(time.UnixMilli(creds.OAuth.ExpiresAt)) {
-		return nil, errors.New("claude login expired")
+	if claudeLoginExpired(creds) {
+		if err := refreshClaudeLogin(ctx, LimitAccount(ctx)); err != nil {
+			return nil, fmt.Errorf("claude login expired: %w", err)
+		}
+		creds, err = readClaudeCredentials(dir)
+		if err != nil {
+			return nil, err
+		}
+		if claudeLoginExpired(creds) {
+			return nil, errors.New("claude login expired")
+		}
 	}
 	var usage map[string]json.RawMessage
-	err = getJSON(ctx, "https://api.anthropic.com/api/oauth/usage", map[string]string{
+	err = getJSON(ctx, claudeUsageURL, map[string]string{
 		"Authorization":  "Bearer " + creds.OAuth.AccessToken,
 		"anthropic-beta": "oauth-2025-04-20",
 	}, &usage)

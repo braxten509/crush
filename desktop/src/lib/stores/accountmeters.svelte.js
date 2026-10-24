@@ -11,7 +11,7 @@ import { api } from "../engine/api.js";
 import { ACCOUNT_KINDS, CLAUDE, CODEX } from "../fallback/blocks.js";
 import { fallback, loadFallback } from "../fallback/store.svelte.js";
 import { meterLevel } from "../footer.js";
-import { leftPercent, limitsKey, readTime } from "./limits.svelte.js";
+import { leftPercent, limits, limitsKey, readTime } from "./limits.svelte.js";
 
 const KEY = "crush-desktop.account-meters";
 
@@ -26,6 +26,11 @@ function readOn() {
 export const accountMeters = $state({ on: readOn() });
 
 export const READ_EVERY_MS = { [CODEX]: 60_000, [CLAUDE]: 10 * 60_000 };
+
+// A tool with an account still checking is asked again this often: Codex
+// within a minute, Claude at the terminal's 3-minute floor, since its usage
+// address refuses frequent reads. A reading that arrives stops the retries.
+export const MISSING_EVERY_MS = { [CODEX]: 60_000, [CLAUDE]: 3 * 60_000 };
 
 const TOOL_NAMES = { [CLAUDE]: "Claude Code", [CODEX]: "Codex" };
 
@@ -44,6 +49,15 @@ export function listedKinds(accounts) {
   return ACCOUNT_KINDS.filter((kind) => (accounts ?? []).filter((a) => a.kind === kind).length >= 2);
 }
 
+// The listed tools with a signed-in account that has no reading yet: their
+// row says "checking…". A tool whose accounts all have a reading is left to
+// its normal interval.
+export function checkingKinds(accounts = [], byKind = {}) {
+  return listedKinds(accounts).filter((kind) =>
+    (accounts ?? []).some((a) => a.kind === kind && a.signed_in && !readTime(byKind[limitsKey(kind, a.id)]?.read_at)),
+  );
+}
+
 function windowOf(reading, name, now) {
   const window = (reading?.windows ?? []).find((w) => !w.model && w.name === name);
   if (!window) return null;
@@ -52,10 +66,10 @@ function windowOf(reading, name, now) {
 }
 
 // The panel's groups: [{kind, title, rows: [{id, name, inUse, state, five,
-// week}]}]. state is "ready", "checking" (no reading yet), "idle" (the last
-// read failed, so the numbers are old: an unused Claude login expires until
-// Claude Code runs on it again) or "signed-out". five and week are {left,
-// level} or null.
+// week}]}]. state is "ready", "checking" (no reading yet), "error" (the first
+// read failed), "idle" (the last read failed, so the numbers are old: an
+// unused Claude login expires until Claude Code runs on it again) or
+// "signed-out". five and week are {left, level} or null.
 export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", account: "" }, now = Date.now() } = {}) {
   return listedKinds(accounts).map((kind) => ({
     kind,
@@ -67,7 +81,7 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
         const read = Boolean(readTime(reading?.read_at));
         let state = "ready";
         if (!a.signed_in) state = "signed-out";
-        else if (!read) state = "checking";
+        else if (!read) state = reading?.state === "error" ? "error" : "checking";
         else if (reading.state === "error") state = "idle";
         return {
           id: a.id,
@@ -85,6 +99,7 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
 
 let connected = false;
 let timers = [];
+const askedAt = new Map(); // kind → when this window last asked (ms)
 
 // connection.svelte.js says when the window joins or leaves its engine.
 export function accountPollConnected(on) {
@@ -95,7 +110,20 @@ export function accountPollConnected(on) {
 function readKind(kind) {
   if (globalThis.document?.visibilityState === "hidden") return;
   if (!listedKinds(fallback.accounts).includes(kind)) return;
+  askedAt.set(kind, Date.now());
   api.refreshLimits(kind).catch((error) => console.error("account limits refresh failed", error));
+}
+
+// Ask again for the tools with an account still checking, no more often than
+// its safe interval. A reading that arrives removes the tool from this list.
+function readMissing() {
+  if (!connected || !accountMeters.on) return;
+  if (globalThis.document?.visibilityState === "hidden") return;
+  const now = Date.now();
+  for (const kind of checkingKinds(fallback.accounts, limits.byKind)) {
+    if (now - (askedAt.get(kind) ?? 0) < MISSING_EVERY_MS[kind]) continue;
+    readKind(kind);
+  }
 }
 
 function restart() {
@@ -106,6 +134,14 @@ function restart() {
   first.then(() => {
     if (!connected || !accountMeters.on) return;
     for (const kind of ACCOUNT_KINDS) readKind(kind);
+    readMissing();
   });
   for (const kind of ACCOUNT_KINDS) timers.push(setInterval(() => readKind(kind), READ_EVERY_MS[kind]));
+  timers.push(setInterval(readMissing, 60_000));
 }
+
+// A window that was hidden while the first read was due takes one as soon as
+// it is shown again, instead of waiting for the next timer.
+globalThis.document?.addEventListener?.("visibilitychange", () => {
+  if (globalThis.document?.visibilityState !== "hidden") readMissing();
+});

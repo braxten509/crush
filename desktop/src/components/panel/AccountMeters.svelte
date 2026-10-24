@@ -21,7 +21,7 @@
       : [],
   );
 
-  const NOTE = { checking: "checking…", "signed-out": "signed out" };
+  const NOTE = { checking: "checking…", "signed-out": "signed out", error: "can't read" };
 </script>
 
 {#if groups.length > 0}

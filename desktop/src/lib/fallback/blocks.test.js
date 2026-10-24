@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changeBlock, fallbackProviders, menuProviders, moveBlock, newBlock, sentence, sentenceText } from "./blocks.js";
+import { changeBlock, fallbackProviders, kindsToRefresh, menuProviders, moveBlock, newBlock, sentence, sentenceText } from "./blocks.js";
 import { meterModel } from "../footer.js";
 
 const providers = [
@@ -51,6 +51,24 @@ describe("the fallback order's blocks", () => {
   it("start from the first agent CLI", () => {
     expect(newBlock("use", { providers })).toEqual({ type: "use", provider: "claude-code", model: "opus", account: "" });
     expect(newBlock("refill").kind).toBe("codex-cli");
+  });
+});
+
+describe("account usage refreshes", () => {
+  it("ask for each tool whose account was added or just signed in", () => {
+    const first = [
+      { id: "", kind: "claude-code", signed_in: true },
+      { id: "claude-2", kind: "claude-code", signed_in: false },
+    ];
+    const signedIn = [
+      { id: "", kind: "claude-code", signed_in: true },
+      { id: "claude-2", kind: "claude-code", signed_in: true },
+      { id: "", kind: "codex-cli", signed_in: true },
+    ];
+    expect(kindsToRefresh([], first)).toEqual(["claude-code"]);
+    expect(kindsToRefresh(first, signedIn)).toEqual(["claude-code", "codex-cli"]);
+    expect(kindsToRefresh(signedIn, signedIn)).toEqual([]);
+    expect(kindsToRefresh(first, [{ id: "claude-3", kind: "claude-code", signed_in: false }])).toEqual([]);
   });
 });
 

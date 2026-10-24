@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { accountGroups, listedKinds } from "./accountmeters.svelte.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const calls = vi.hoisted(() => ({ fallback: vi.fn(), refreshLimits: vi.fn() }));
+vi.mock("../engine/api.js", () => ({ api: { fallback: calls.fallback, refreshLimits: calls.refreshLimits } }));
+vi.mock("../engine/events.js", () => ({ onEvent: vi.fn(), onResync: vi.fn() }));
+vi.mock("../engine/commands.js", () => ({ sign_in_run: vi.fn() }));
+
+import { accountGroups, accountMeters, accountPollConnected, checkingKinds, listedKinds } from "./accountmeters.svelte.js";
+import { fallback } from "../fallback/store.svelte.js";
+import { limits } from "./limits.svelte.js";
 
 const now = Date.parse("2026-10-21T12:00:00Z");
 const accounts = [
@@ -33,5 +41,50 @@ describe("account meters", () => {
     const rows = accountGroups({ accounts, byKind, now })[0].rows;
     expect(rows.map((r) => r.state)).toEqual(["checking", "idle"]);
     expect(rows[1].five).toEqual({ left: 50, level: "" });
+  });
+
+  it("stops saying checking when the first read failed", () => {
+    const byKind = { "claude-code#c2": reading("claude-code", "c2", 0, 0, { read_at: undefined, state: "error", error: "claude login expired" }) };
+    const rows = accountGroups({ accounts, byKind, now })[0].rows;
+    expect(rows.map((r) => r.state)).toEqual(["checking", "error"]);
+  });
+
+  it("names the tools with a signed-in account still checking", () => {
+    const byKind = { "claude-code": reading("claude-code", "", 0, 31) };
+    expect(checkingKinds(accounts, byKind)).toEqual(["claude-code"]);
+    byKind["claude-code#c2"] = reading("claude-code", "c2", 50, 50);
+    expect(checkingKinds(accounts, byKind)).toEqual([]);
+    const signedOut = accounts.map((a) => (a.id === "c2" ? { ...a, signed_in: false } : a));
+    expect(checkingKinds(signedOut, { "claude-code": reading("claude-code", "", 0, 31) })).toEqual([]);
+  });
+});
+
+describe("the account meter timer", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    calls.refreshLimits.mockReset();
+    calls.refreshLimits.mockResolvedValue(undefined);
+    fallback.loaded = true;
+    fallback.accounts = accounts;
+    limits.byKind = { "claude-code": reading("claude-code", "", 0, 31) };
+    accountMeters.on = true;
+  });
+
+  afterEach(() => {
+    accountPollConnected(false);
+    accountMeters.on = false;
+    vi.useRealTimers();
+  });
+
+  it("asks again for a Claude account still checking after three minutes", async () => {
+    accountPollConnected(true);
+    await Promise.resolve(); // the first read after the accounts load
+    calls.refreshLimits.mockClear();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(calls.refreshLimits).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(calls.refreshLimits).toHaveBeenCalledWith("claude-code");
   });
 });

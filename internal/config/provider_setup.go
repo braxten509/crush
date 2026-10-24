@@ -109,6 +109,7 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 	}
 
 	discovered := s.discoverCustomModels(ctx)
+	s.applyDynamicModels(discovered)
 
 	c.addCLIProviders(env.Get("PATH"))
 
@@ -353,7 +354,20 @@ func (s *providerSetup) discoverCustomModels(ctx context.Context) map[string]dis
 	discoverCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	for id, pc := range s.cfg.Providers.Seq2() {
-		if s.known[id] || !needsModelDiscovery(pc) {
+		dynamic := dynamicModelProvider(id)
+		if s.known[id] && !dynamic {
+			continue
+		}
+		if pc.Disable || pc.BaseURL == "" {
+			continue
+		}
+		if dynamic {
+			// The provider's own list is the model list, so it is read
+			// whenever a key can pay for the request.
+			if !pc.HasAPIKey(s.resolver) {
+				continue
+			}
+		} else if !needsModelDiscovery(pc) {
 			continue
 		}
 		providerType := cmp.Or(pc.Type, catwalk.TypeOpenAICompat)
@@ -391,6 +405,31 @@ func needsModelDiscovery(pc ProviderConfig) bool {
 	wantsDiscovery := pc.AutoDiscoverModels != nil && *pc.AutoDiscoverModels
 	autoTrigger := len(pc.Models) == 0 && (pc.AutoDiscoverModels == nil || *pc.AutoDiscoverModels)
 	return wantsDiscovery || autoTrigger
+}
+
+// dynamicModelProvider lists the catalog providers whose model list always
+// comes from their own API, even though the catalog carries a list for
+// them: Kimi changes its plans' models without a Crush release (owner,
+// 2026-10-24). Their catalog models supply the details of the ids that
+// come back, and nothing is listed that the API does not return.
+func dynamicModelProvider(id string) bool {
+	return catwalk.InferenceProvider(id) == catwalk.InferenceKimiCoding
+}
+
+// applyDynamicModels writes a dynamic provider's freshly read model list
+// over the catalog's, so the apps offer exactly what the API lists.
+func (s *providerSetup) applyDynamicModels(discovered map[string]discoveryResult) {
+	for id, result := range discovered {
+		if !dynamicModelProvider(id) || result.err != nil || len(result.models) == 0 {
+			continue
+		}
+		providerConfig, ok := s.cfg.Providers.Get(id)
+		if !ok {
+			continue
+		}
+		providerConfig.Models = result.models
+		s.cfg.Providers.Set(id, providerConfig)
+	}
 }
 
 // validateCustomProviders normalizes every custom provider and drops the

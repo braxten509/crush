@@ -99,6 +99,23 @@ func (o Ops) GitBranch() string {
 	return gitutil.CurrentBranch(o.Cfg.WorkingDir())
 }
 
+// ProviderAvailability says, by provider id, why a provider cannot run in
+// the workspace's folder. Empty when every provider can run.
+func (o Ops) ProviderAvailability() map[string]string {
+	dir := o.Cfg.WorkingDir()
+	ids := []string{agent.KimiProviderID}
+	for id := range o.Cfg.Config().Providers.Seq2() {
+		ids = append(ids, id)
+	}
+	out := make(map[string]string)
+	for _, id := range ids {
+		if reason := agent.KimiUnusable(id, dir); reason != "" {
+			out[id] = reason
+		}
+	}
+	return out
+}
+
 // -- MCP --
 
 // EnableDockerMCP validates Docker MCP availability, stages the

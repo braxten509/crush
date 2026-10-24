@@ -237,6 +237,7 @@ type ConfigService interface {
 	Config() *config.Config
 	WorkingDir() string
 	GitBranch(ctx context.Context) (string, error)
+	ProviderAvailability(ctx context.Context) (map[string]string, error)
 	Resolver() config.VariableResolver
 	UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error
 	SetCompactMode(scope config.Scope, enabled bool) error

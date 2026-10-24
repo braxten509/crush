@@ -277,6 +277,22 @@ export function cliKind(agent, providers) {
   return CLI_KINDS.has(kind) ? kind : "";
 }
 
+// LIMIT_KINDS are the providers whose account reports usage windows: the
+// agent CLIs, and Moonshot AI, whose plan meters the desktop shows even
+// though it is an API provider (owner, 2026-10-24).
+export const LIMIT_KINDS = new Set([...CLI_KINDS, "kimi-coding"]);
+
+// limitKind is the kind whose usage windows apply, or "".
+export function limitKind(agent, providers) {
+  const provider = agent?.model_cfg?.provider;
+  if (!provider) return "";
+  // An API provider that meters its own account is keyed by its id, not
+  // by its API type (Moonshot AI: "kimi-coding", engine-side too).
+  if (LIMIT_KINDS.has(provider)) return provider;
+  const kind = providerKind(provider, providers);
+  return CLI_KINDS.has(kind) ? kind : "";
+}
+
 // Go's RFC 3339 time (up to nine fraction digits) in ms, or null for none or
 // Go's zero time.
 const RFC3339 = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/iu;

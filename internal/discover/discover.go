@@ -106,6 +106,9 @@ type modelsResponse struct {
 // Models whose IDs already appear in cfg.ExistingModels are skipped —
 // user-specified models take precedence.
 func DiscoverModels(ctx context.Context, cfg Config, resolver Resolver) ([]catwalk.Model, error) {
+	if catwalk.InferenceProvider(cfg.ID) == catwalk.InferenceKimiCoding {
+		return discoverKimiModels(ctx, cfg, resolver)
+	}
 	if cfg.Type == catwalk.TypeGoogle {
 		return discoverGeminiModels(ctx, cfg, resolver)
 	}

@@ -78,6 +78,13 @@ func (c *controllerV1) getGitBranch(r *http.Request, _ rpc.Empty) (proto.GitBran
 	return proto.GitBranchResponse{Branch: branch}, err
 }
 
+// getProviderAvailability returns, by provider id, why a provider cannot
+// run in the workspace's folder.
+func (c *controllerV1) getProviderAvailability(r *http.Request, _ rpc.Empty) (proto.ProviderAvailabilityResponse, error) {
+	providers, err := c.backend.ProviderAvailability(r.PathValue("id"))
+	return proto.ProviderAvailabilityResponse{Providers: providers}, err
+}
+
 // listSkills returns the effective visible skills.
 func (c *controllerV1) listSkills(r *http.Request, _ rpc.Empty) ([]proto.SkillInfo, error) {
 	return c.backend.ListSkills(r.PathValue("id"))

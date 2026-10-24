@@ -92,6 +92,8 @@ export const api = {
   // The engine reads provider_id (internal/server/handlers_agent.go:102-104).
   defaultSmallModel: (providerId) => get("agent/default-small-model", providerId ? { provider_id: providerId } : undefined),
   gitBranch: () => get("git/branch"),
+  // Why a provider cannot run in this folder, by provider id (rpc.ProviderUsable).
+  providerAvailability: () => get("providers/availability"),
   lsps: () => get("lsps"),
   // One server's diagnostics by file (rpc/routes.go:79), counted per severity for SIDE-009.
   lspDiagnostics: (name) => get(`lsps/${seg(name)}/diagnostics`),

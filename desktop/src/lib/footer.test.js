@@ -10,6 +10,7 @@ import {
   footerTokenCount,
   formatReasoningEffort,
   goFixed,
+  limitKind,
   limitWindows,
   meterModel,
   modelInfo,
@@ -330,5 +331,30 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
       ["5-HOUR", "14% left", true, "resets 2h41m"],
       ["WEEK", "69% left", false, "resets 3d0h"],
     ]);
+  });
+});
+
+describe("Moonshot AI's usage windows", () => {
+  it("uses the provider kind for limits but stays an API provider everywhere else", () => {
+    const agent = { model_cfg: { provider: "kimi-coding", model: "k3.1-pro" } };
+    // The catalog lists the provider as an Anthropic-style API one; the
+    // meters must still key on its own id, as the engine stores them.
+    const providers = [{ id: "kimi-coding", name: "Moonshot AI", type: "anthropic" }];
+    expect(limitKind(agent, providers)).toBe("kimi-coding");
+    expect(cliKind(agent, providers)).toBe("");
+  });
+
+  it("shows the window the engine sent, with no weekly row invented", () => {
+    const reading = {
+      kind: "kimi-coding",
+      read_at: "2026-10-24T12:00:00Z",
+      windows: [
+        { name: "5h", used: 40 },
+        { name: "Monthly", used: 10 },
+      ],
+    };
+    const windows = limitWindows(reading, "k3.1-pro", Date.parse("2026-10-24T13:00:00Z"));
+    expect(windows.map((w) => w.name)).toEqual(["5h", "Monthly"]);
+    expect(windows.map((w) => w.left)).toEqual([60, 90]);
   });
 });

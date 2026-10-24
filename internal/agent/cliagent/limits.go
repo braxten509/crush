@@ -74,6 +74,43 @@ var limitStore struct {
 	hook func(kind catwalk.Type, account string)
 	// replaced is set while a test's fetchers stand in for the real ones.
 	replaced bool
+	// providerKey answers the API key of a provider whose usage the
+	// engine tracks outside the agent CLIs (Kimi). The engine sets it
+	// from the workspace config; nil means no key is known.
+	providerKey func(string) string
+}
+
+// SetLimitProviderKeySource sets where a provider's API key comes from for
+// usage reads. nil forgets it.
+func SetLimitProviderKeySource(fn func(provider string) string) {
+	limitStore.Lock()
+	defer limitStore.Unlock()
+	limitStore.providerKey = fn
+}
+
+// ReplaceLimitProviderKeySourceForTest stands in for the engine's key
+// source until restore runs.
+func ReplaceLimitProviderKeySourceForTest(fn func(provider string) string) (restore func()) {
+	limitStore.Lock()
+	saved := limitStore.providerKey
+	limitStore.providerKey = fn
+	limitStore.Unlock()
+	return func() {
+		limitStore.Lock()
+		defer limitStore.Unlock()
+		limitStore.providerKey = saved
+	}
+}
+
+// limitProviderKey is the API key to read a provider's usage with.
+func limitProviderKey(provider string) string {
+	limitStore.Lock()
+	fn := limitStore.providerKey
+	limitStore.Unlock()
+	if fn == nil {
+		return ""
+	}
+	return fn(provider)
 }
 
 // KindLimits is what the store knows about one account's usage limits.
@@ -403,11 +440,12 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 }
 
 var limitFetchers = map[catwalk.Type]func(context.Context) ([]Limit, error){
-	config.TypeClaudeCode:  fetchClaudeLimits,
-	config.TypeCodexCLI:    fetchCodexLimits,
-	config.TypeAGYCLI:      fetchAGYLimits,
-	config.TypeGrokCLI:     fetchGrokLimits,
-	config.TypeOpenCodeCLI: fetchOpenCodeLimits,
+	config.TypeClaudeCode:                     fetchClaudeLimits,
+	config.TypeCodexCLI:                       fetchCodexLimits,
+	config.TypeAGYCLI:                         fetchAGYLimits,
+	config.TypeGrokCLI:                        fetchGrokLimits,
+	config.TypeOpenCodeCLI:                    fetchOpenCodeLimits,
+	catwalk.Type(catwalk.InferenceKimiCoding): fetchKimiLimits,
 }
 
 // fetchGrokLimits asks `grok agent stdio` for the billing config behind

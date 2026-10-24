@@ -109,6 +109,13 @@ type GitBranchResponse struct {
 	Branch string `json:"branch"`
 }
 
+// ProviderAvailabilityResponse carries, by provider id, why a provider
+// cannot run in the workspace's folder. A provider that can run is absent
+// (owner, 2026-10-24: Moonshot AI only runs in Git projects).
+type ProviderAvailabilityResponse struct {
+	Providers map[string]string `json:"providers"`
+}
+
 // AgentInitRequest represents a request to initialize the agent.
 type AgentInitRequest struct {
 	Interactive bool `json:"interactive"`

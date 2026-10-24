@@ -584,6 +584,13 @@ func (c *controllerV1) configEndpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Build(),
 
+		route(c, rpc.ProviderUsable, c.getProviderAvailability).
+			Summary("Why providers cannot run in this folder").
+			Tags("providers").
+			PathParam("id", "Workspace ID").
+			Fails(404, 500).
+			Build(),
+
 		route(c, rpc.ListSkills, c.listSkills).
 			Summary("List visible skills").
 			Tags("skills").

@@ -28,6 +28,8 @@
   import { coderModel, modelData, refreshModels, watchModels } from "../../lib/models/store.svelte.js";
   import { addableProviders, cheapestHostOn, savedWithout } from "../../lib/models/openrouter.js";
   import { dialogs, openDialog } from "../../lib/dialogs.js";
+  import { shortUnavailable, unavailableReason } from "../../lib/availability.js";
+  import { availability } from "../../lib/stores/availability.svelte.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { setAccount, setEffort } from "../../lib/models/toggles.js";
   import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
@@ -318,9 +320,22 @@
     </label>
     <div class="rows" role="listbox" aria-label="Models">
       {#each rows as item (item.id)}
-        <button type="button" class="model" role="option" data-stop aria-selected={isCurrent(item, current)} onclick={() => pick(item)} oncontextmenu={(event) => offerRemove(event, item)}>
+        {@const blocked = unavailableReason(item.provider.id, availability.byProvider)}
+        <button
+          type="button"
+          class="model"
+          class:blocked={Boolean(blocked)}
+          role="option"
+          data-stop
+          aria-selected={isCurrent(item, current)}
+          aria-disabled={blocked ? "true" : undefined}
+          disabled={Boolean(blocked)}
+          title={blocked || undefined}
+          onclick={() => pick(item)}
+          oncontextmenu={(event) => offerRemove(event, item)}
+        >
           <span class="name">{item.model.name || item.model.id}</span>
-          {#if searching}<span class="info">{item.group}</span>{/if}
+          {#if blocked}<span class="info">{shortUnavailable(blocked)}</span>{:else if searching}<span class="info">{item.group}</span>{/if}
           {#if isCurrent(item, current)}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
         </button>
       {:else}
@@ -502,6 +517,15 @@
   }
   .model[aria-selected="true"] {
     background: var(--pick);
+  }
+  /* A provider that cannot run in this folder: dimmed, with the reason
+     beside its name and the engine's whole sentence on hover. */
+  .model.blocked {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .model.blocked:hover {
+    background: none;
   }
   .model.add {
     color: var(--slate);

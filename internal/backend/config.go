@@ -195,6 +195,16 @@ func (b *Backend) GitBranch(workspaceID string) (string, error) {
 	return o.GitBranch(), nil
 }
 
+// ProviderAvailability says, by provider id, why a provider cannot run in
+// the workspace's folder. Empty when every provider can run.
+func (b *Backend) ProviderAvailability(workspaceID string) (map[string]string, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return o.ProviderAvailability(), nil
+}
+
 // ReadSkill reads a skill's content by ID.
 func (b *Backend) ReadSkill(_ context.Context, workspaceID, skillID string) ([]byte, proto.SkillReadResult, error) {
 	o, err := b.ops(workspaceID)

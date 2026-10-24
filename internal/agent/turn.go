@@ -300,6 +300,13 @@ func (t *turn) publishOutcome(retErr *error) {
 // → stream → finish.
 func (t *turn) run() (*fantasy.AgentResult, error) {
 	a := t.a
+	workingDir := ""
+	if a.cfg != nil {
+		workingDir = a.cfg.WorkingDir()
+	}
+	if reason := KimiUnusable(t.largeModel.ModelCfg.Provider, workingDir); reason != "" {
+		return nil, errors.New(reason)
+	}
 	agentTools, systemPrompt := t.buildSystemPrompt()
 	if note := a.handOverTodos(t.ctx, t.call.SessionID, t.largeModel.ModelCfg.Provider, t.largeModel.ModelCfg.Model); note != "" {
 		if t.isCLI {

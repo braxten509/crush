@@ -3,6 +3,7 @@
 // and read again on the events that change it and on every resync; a failed
 // read keeps what the store had.
 import { api } from "../engine/api.js";
+import { loadAvailability } from "./availability.svelte.js";
 import { onEvent, onResync, withHeld } from "../engine/events.js";
 import { agentProviderChanged } from "./limits.svelte.js";
 
@@ -299,6 +300,7 @@ export function startWorkspace({ currentChat = () => "", connected = () => true 
     quietly(loadMcps(), "MCP"),
     quietly(loadSkills(), "skills"),
     quietly(loadBranch(), "Git branch"),
+    quietly(loadAvailability(), "provider availability"),
   ]);
 }
 

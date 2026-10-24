@@ -133,6 +133,12 @@ export function answersView(text, earlier) {
     if (a.yes !== null) picks.push(a.yes ? "Yes" : "No");
     if (a.provided) picks.push(a.provided);
     const notes = a.notes.map((n) => (n.choice ? `${same ? labelOf(q, n.choice) : n.choice}: ${n.text}` : n.text));
-    return { question: a.question || (same ? String(q.question ?? "") : ""), picks, skipped: a.skipped || (!picks.length && !notes.length), notes };
+    return {
+      description: same ? String(q.description ?? "") : "",
+      question: a.question || (same ? String(q.question ?? "") : ""),
+      picks,
+      skipped: a.skipped || (!picks.length && !notes.length),
+      notes,
+    };
   });
 }

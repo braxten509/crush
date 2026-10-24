@@ -32,7 +32,7 @@ const ASK = {
         name: "Bash",
         input: JSON.stringify({
           command: `crush ask <<'EOF'
-{"questions":[{"type":"single_choice","question":"How should the one ring work?","choices":[{"id":"a","label":"Desktop hears every open chat"},{"id":"b","label":"Per-folder hand-off"}]},{"type":"free_text","question":"Anything else?"}]}
+{"questions":[{"type":"single_choice","question":"How should the one ring work?","description":"Choose how alerts should reach you.","choices":[{"id":"a","label":"Desktop hears every open chat"},{"id":"b","label":"Per-folder hand-off"}]},{"type":"free_text","question":"Anything else?"}]}
 EOF`,
         }),
       },
@@ -59,7 +59,7 @@ describe("answers", () => {
   it("shows the picked choices by label, from the newest ask before the line", () => {
     const older = { role: "assistant", parts: [{ type: "tool_call", data: { input: JSON.stringify({ command: "crush ask <<'EOF'\n{\"questions\":[{\"question\":\"How should the one ring work?\",\"choices\":[{\"id\":\"a\",\"label\":\"Old label\"}]}]}\nEOF" }) } }] };
     const view = answersView(RESULT, [ASK, older]);
-    expect(view[0]).toEqual({ question: "How should the one ring work?", picks: ["Desktop hears every open chat"], skipped: false, notes: ["only for now"] });
+    expect(view[0]).toEqual({ description: "Choose how alerts should reach you.", question: "How should the one ring work?", picks: ["Desktop hears every open chat"], skipped: false, notes: ["only for now"] });
     expect(view[1].picks).toEqual(["Two lines\nof text"]);
     expect(view[2].picks).toEqual(["Yes"]);
     expect(view[3].skipped).toBe(true);

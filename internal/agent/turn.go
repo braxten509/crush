@@ -69,10 +69,6 @@ type turn struct {
 	folded             []foldedPrompt
 	sanitizedToolCalls map[string]bool
 	toolCallMu         sync.Mutex
-	// limitsRead forces the turn's first metered-usage read and keeps the
-	// refresh interval for later ones (see refreshProviderLimits). Written
-	// only from the streaming callbacks, which run sequentially.
-	limitsRead bool
 	// completedToolCalls are the full names of tool calls that completed
 	// without error this turn. Written only from the streaming callbacks
 	// (which run sequentially) and read after Stream returns, where

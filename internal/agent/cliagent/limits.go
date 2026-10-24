@@ -373,17 +373,14 @@ func RefreshAccountLimits(ctx context.Context, kind catwalk.Type, account string
 }
 
 // RefreshLimitsDuringTurn starts a usage reading for a turn that is still
-// working, so its meter moves mid-turn instead of only when the turn ends.
-// read is the caller's once-per-turn flag, owned by the turn's own
-// goroutine: the first call forces a fresh read (an idle poll may have
-// just read), and later calls keep the refresh interval, so a long turn
-// asks the service at most once per [limitRefresh].
-func RefreshLimitsDuringTurn(ctx context.Context, kind catwalk.Type, account string, read *bool) {
-	force := !*read
-	*read = true
+// working, so its meter moves every tool step instead of only when the
+// turn ends. Every call fetches fresh: a reading belongs to the moment it
+// was asked for, so the idle refresh interval does not apply. Overlapping
+// reads are still shared by the pending guard.
+func RefreshLimitsDuringTurn(ctx context.Context, kind catwalk.Type, account string) {
 	ctx = context.WithoutCancel(ctx)
 	go func() {
-		_, _ = RefreshAccountLimits(ctx, kind, account, force)
+		_, _ = RefreshAccountLimits(ctx, kind, account, true)
 	}()
 }
 

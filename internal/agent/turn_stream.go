@@ -290,14 +290,14 @@ func (t *turn) onToolResult(result fantasy.ToolResultContent) error {
 }
 
 // refreshProviderLimits reads a metered provider's plan usage while the
-// turn is still working, so its meter moves mid-turn instead of only when
-// the turn ends. Only Moonshot AI reports usage this way: its plan is read
-// over HTTP, so nothing in its stream carries new limits.
+// turn is still working, so its meter moves every tool step. Only
+// Moonshot AI reports usage this way: its plan is read over HTTP, so
+// nothing in its stream carries new limits.
 func (t *turn) refreshProviderLimits() {
 	if t.largeModel.ModelCfg.Provider != KimiProviderID {
 		return
 	}
-	cliagent.RefreshLimitsDuringTurn(t.ctx, catwalk.Type(catwalk.InferenceKimiCoding), t.largeModel.ModelCfg.Account, &t.limitsRead)
+	cliagent.RefreshLimitsDuringTurn(t.ctx, catwalk.Type(catwalk.InferenceKimiCoding), t.largeModel.ModelCfg.Account)
 }
 
 func (t *turn) onStepFinish(stepResult fantasy.StepResult) error {

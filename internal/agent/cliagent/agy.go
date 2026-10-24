@@ -114,7 +114,6 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	defer stopSteer()
 
 	announced := map[int]bool{}
-	limitsRead := false
 	conversation := t.Resume
 	for p.lines.Scan() {
 		if ctx.Err() != nil {
@@ -138,9 +137,9 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			}
 		case "step_update":
 			// AGY's plan is read over HTTP, so its stream carries no new
-			// usage: read it as the tool steps run, not only at the end.
+			// usage: read it as each tool step runs, not only at the end.
 			if line.StepUpdate.StepType == "tool" {
-				RefreshLimitsDuringTurn(ctx, m.Kind, m.Account, &limitsRead)
+				RefreshLimitsDuringTurn(ctx, m.Kind, m.Account)
 			}
 			if err := agyStep(line, announced, t.Emit); err != nil {
 				return err

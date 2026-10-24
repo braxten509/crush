@@ -111,7 +111,7 @@ export function formatReasoningEffort(effort) {
 // A window's id among the footer's stats.
 function windowId(name) {
   if (name === "5h") return FOOTER.limit5h;
-  if (name === "Weekly") return FOOTER.limitWeekly;
+  if (name === "Weekly" || name === "Monthly") return FOOTER.limitWeekly;
   return FOOTER.limitOther;
 }
 
@@ -242,7 +242,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
     const limitWords = windowWords(window, show(FOOTER.resets));
     meters.push({
       id: id === FOOTER.limitOther ? `${id}:${window.name}` : id,
-      label: id === FOOTER.limit5h ? "5-HOUR" : id === FOOTER.limitWeekly ? "WEEK" : String(window.name).toUpperCase(),
+      label: id === FOOTER.limit5h ? "5-HOUR" : window.name === "Weekly" ? "WEEK" : String(window.name).toUpperCase(),
       left: window.left,
       text: `${goFixed(window.left, 0)}% left`,
       // Under 20 % left (sidebar.go:136-139).
@@ -273,6 +273,22 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
 export function cliKind(agent, providers) {
   const provider = agent?.model_cfg?.provider;
   if (!provider) return "";
+  const kind = providerKind(provider, providers);
+  return CLI_KINDS.has(kind) ? kind : "";
+}
+
+// LIMIT_KINDS are the providers whose account reports usage windows: the
+// agent CLIs, and Moonshot AI, whose plan meters the desktop shows even
+// though it is an API provider (owner, 2026-10-24).
+export const LIMIT_KINDS = new Set([...CLI_KINDS, "kimi-coding"]);
+
+// limitKind is the kind whose usage windows apply, or "".
+export function limitKind(agent, providers) {
+  const provider = agent?.model_cfg?.provider;
+  if (!provider) return "";
+  // An API provider that meters its own account is keyed by its id, not
+  // by its API type (Moonshot AI: "kimi-coding", engine-side too).
+  if (LIMIT_KINDS.has(provider)) return provider;
   const kind = providerKind(provider, providers);
   return CLI_KINDS.has(kind) ? kind : "";
 }

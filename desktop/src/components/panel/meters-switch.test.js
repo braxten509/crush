@@ -125,4 +125,37 @@ describe("the meters follow the agent after a model change", () => {
     await deliver(ev("config_changed", "updated", { workspace_id: "w" }));
     expect(fiveHourText(panel.meterNow().meters)).toBe("40% left");
   });
+
+  it("shows Moonshot AI's 5h and Monthly meters for a chat whose own model is Moonshot", async () => {
+    h.routes.set("GET config", { options: { tui: { composer_footer: ["model", "settings", "context", "limit_5h", "limit_weekly", "resets"] } }, models: {} });
+    h.routes.set("GET providers", [{ id: "kimi-coding", name: "Moonshot AI", type: "anthropic", models: [{ id: "k3.1-pro" }] }]);
+    h.routes.set("GET /v1/limits", {
+      clis: [
+        reading("claude-code", 10),
+        {
+          kind: "kimi-coding",
+          account: "",
+          state: "ready",
+          read_at: "2026-10-24T10:00:00Z",
+          windows: [
+            { name: "5h", used: 25, resets_at: "2099-01-01T00:00:00Z" },
+            { name: "Monthly", used: 15, resets_at: "2099-02-01T00:00:00Z" },
+          ],
+        },
+      ],
+    });
+    h.routes.set("GET agent", agent("claude-code"));
+    await workspace.loadConfig();
+    await workspace.loadProviders();
+    await workspace.loadAgent();
+    await limits.loadLimits();
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    sessions.currentId = "chat-kimi";
+    sessions.byId["chat-kimi"] = { id: "chat-kimi", model: { provider: "kimi-coding", model: "k3.1-pro" } };
+    expect(panel.meterNow().meters.map((m) => [m.label, m.text])).toEqual([
+      ["CONTEXT", "100% left"],
+      ["5-HOUR", "75% left"],
+      ["MONTHLY", "85% left"],
+    ]);
+  });
 });

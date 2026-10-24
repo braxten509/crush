@@ -31,6 +31,7 @@ vi.mock("../../lib/engine/commands.js", () => ({
 
 let svelte;
 let ModelMenu;
+let availabilityStore;
 let uiStore;
 let ui;
 let host;
@@ -73,6 +74,7 @@ beforeEach(async () => {
   // The key router, so the menu's Escape binding is reachable like in the app.
   (await import("../../lib/keys.js")).startKeys(window);
   ModelMenu = (await import("../models/ModelMenu.svelte")).default;
+  availabilityStore = (await import("../../lib/stores/availability.svelte.js")).availability;
 });
 
 // jsdom has no Web Animations: the menu's unfold transition gets a stub that
@@ -124,6 +126,17 @@ describe("the model menu (ModelMenu.svelte)", () => {
     await settle();
     expect(modelRows().map((row) => row.textContent.trim())).toEqual(["Claude A", "Claude B"]);
     expect(levelButtons()).toEqual([]);
+  });
+
+  it("dims a provider that cannot run in this folder, and says why", async () => {
+    state.routes["GET config"] = config();
+    availabilityStore.byProvider = { anthropic: "Moonshot AI is not usable here: this folder is not a git project." };
+    mount();
+    await settle();
+    const rows = modelRows();
+    expect(rows.every((row) => row.disabled)).toBe(true);
+    expect(rows[0].textContent).toContain("this folder is not a git project.");
+    availabilityStore.byProvider = {};
   });
 
   it("keeps the menu open after a choice, so the effort level can be picked too", async () => {

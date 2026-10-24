@@ -21,7 +21,7 @@
 // the engine for anything. panel.needsInit is the answer HelpSheet asks for
 // when help opens with no chat shown.
 import { compactionLimit } from "../../lib/compaction.js";
-import { cliKind, footerItems, limitWindows, meterModel, modelInfo } from "../../lib/footer.js";
+import { cliKind, footerItems, limitKind, limitWindows, meterModel, modelInfo } from "../../lib/footer.js";
 import { fileRows, modifiedFiles } from "../../lib/modified.js";
 import { composer, focusField, hasChips } from "../../lib/stores/composer.svelte.js";
 import { conn } from "../../lib/stores/connection.svelte.js";
@@ -68,14 +68,14 @@ export function agentNow() {
 // The reading of the account the agent runs on, or null.
 function readingNow() {
   const agent = agentNow();
-  const kind = cliKind(agent, ws.providers);
+  const kind = limitKind(agent, ws.providers);
   return kind ? (limits.byKind[limitsKey(kind, agent?.model_cfg?.account ?? "")] ?? null) : null;
 }
 
 // The agent CLI's windows for the model: null while checking, [] for none.
 function windowsNow(now) {
   const agent = agentNow();
-  const kind = cliKind(agent, ws.providers);
+  const kind = limitKind(agent, ws.providers);
   return kind ? limitWindows(readingNow(), agent?.model_cfg?.model ?? "", now) : [];
 }
 

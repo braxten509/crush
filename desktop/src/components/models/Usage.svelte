@@ -12,12 +12,13 @@
   import Rule from "../Rule.svelte";
   import { compactionLimit } from "../../lib/compaction.js";
   import { api } from "../../lib/engine/api.js";
-  import { cliKind, usageWindows } from "../../lib/footer.js";
+  import { limitKind, usageWindows } from "../../lib/footer.js";
   import { modelData, watchModels } from "../../lib/models/store.svelte.js";
   import { limits, readTime } from "../../lib/stores/limits.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
   import { secondNow } from "../../lib/live/helpers.svelte.js";
+  import { agentNow } from "../panel/panel.svelte.js";
 
   const ID = "usage";
   const REFRESH_LIMIT_MS = 25000; // usage.go: RefreshLimitsNow's 25 s
@@ -28,9 +29,9 @@
   let askedBefore = null; // the reading's read_at when the refresh was asked
   let refreshTimer = null;
 
-  const agent = $derived(ws.agent);
+  const agent = $derived(agentNow());
   const modelId = $derived(agent?.model_cfg?.model ?? "");
-  const kind = $derived(cliKind(agent, ws.providers));
+  const kind = $derived(limitKind(agent, ws.providers));
   const providerName = $derived.by(() => {
     const id = agent?.model_cfg?.provider;
     if (!id) return "Current model";

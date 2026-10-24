@@ -323,7 +323,7 @@ func renderFooterItems(t *styles.Styles, items []string, model *workspace.AgentM
 		switch limit.Name {
 		case "5h":
 			id, style = footerLimit5h, s.Limit5h
-		case "Weekly":
+		case "Weekly", "Monthly":
 			id, style = footerLimitWeekly, s.LimitWeekly
 		}
 		if !show(id) {

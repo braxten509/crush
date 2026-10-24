@@ -86,3 +86,29 @@ func TestTerminalShowsTheSelectedAccount(t *testing.T) {
 	require.NotContains(t, ansi.Strip(usageLimits(&sty, limits, 0, 60)), "refills")
 	require.Equal(t, "1 free refill", refillsText(1))
 }
+
+func TestTerminalShowsMoonshotLimits(t *testing.T) {
+	ws := newLoadWorkspace()
+	ws.cfg.Providers.Set("kimi-coding", config.ProviderConfig{
+		ID: "kimi-coding", Type: catwalk.TypeAnthropic,
+		Models: []catwalk.Model{{ID: "k3.1-pro", Name: "Kimi K3.1 Pro"}},
+	})
+	u := newLoadTestUI(t, ws)
+	u.agentReady = true
+	u.agentModel = workspace.AgentModel{
+		CatwalkCfg: catwalk.Model{ID: "k3.1-pro", Name: "Kimi K3.1 Pro"},
+		ModelCfg:   config.SelectedModel{Provider: "kimi-coding", Model: "k3.1-pro"},
+	}
+	cliagent.StoreAccountLimits(catwalk.Type(catwalk.InferenceKimiCoding), "", []cliagent.Limit{
+		{Name: "5h", Used: 40},
+		{Name: "Monthly", Used: 10},
+	}, -1)
+
+	limits := u.selectedCLILimits()
+	require.Len(t, limits, 2)
+	sty := styles.ThemeFromConfig("claude-code")
+	items := []string{footerModel, footerSettings, footerContext, footerLimit5h, footerLimitWeekly, footerResets}
+	view := ansi.Strip(renderFooterItems(&sty, items, &u.agentModel, nil, 0, limits, 120))
+	require.Contains(t, view, "5h 60% left")
+	require.Contains(t, view, "Monthly 90% left")
+}

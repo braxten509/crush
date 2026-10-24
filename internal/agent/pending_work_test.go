@@ -220,6 +220,22 @@ func TestSavedQueuedPromptRunsAfterRestart(t *testing.T) {
 	require.Empty(t, readPendingFile(t, c).Queue, "the entry is claimed once")
 }
 
+// A queue this Crush saved itself is not taken from the file: its prompts
+// are still in this Crush's agent queue, and running them again repeats
+// them, doubling the queue at every look until the chat fills with copies.
+func TestPromptsOfThisCrushAreLeftAlone(t *testing.T) {
+	c, sessionID := queueTestCoordinator(t)
+	require.NoError(t, c.updatePending(func(p *pendingWork) bool {
+		p.Queue = []savedPrompt{{SessionID: sessionID, Prompt: "still queued", Owner: os.Getpid()}}
+		return true
+	}))
+
+	claimed, err := c.claimPrompts()
+	require.NoError(t, err)
+	require.Empty(t, claimed, "this Crush's own queue is not replayed")
+	require.Len(t, readPendingFile(t, c).Queue, 1, "the entry stays saved for it")
+}
+
 // queueTestCoordinator is an interactive coordinator whose agent answers
 // with a fixed reply, for the queued-prompt tests.
 func queueTestCoordinator(t *testing.T) (*coordinator, string) {

@@ -340,7 +340,9 @@ func queuedBySession(prompts []savedPrompt) map[string][]savedPrompt {
 
 // claimPrompts takes the saved prompts whose Crush is gone and drops the
 // ones whose chat is gone. They are dropped from the file as they are
-// taken, so only one Crush runs them.
+// taken, so only one Crush runs them. Prompts of a Crush that still runs,
+// this one included, stay: its agent queue already holds them, so running
+// them here would repeat them.
 func (c *coordinator) claimPrompts() ([]savedPrompt, error) {
 	self := os.Getpid()
 	var claimed []savedPrompt
@@ -348,7 +350,7 @@ func (c *coordinator) claimPrompts() ([]savedPrompt, error) {
 		kept := p.Queue[:0]
 		for _, q := range p.Queue {
 			switch {
-			case q.Owner != self && taskProcessAlive(q.Owner):
+			case q.Owner == self || taskProcessAlive(q.Owner):
 				kept = append(kept, q)
 			case !c.sessionExists(q.SessionID):
 				slog.Info("Dropping a queued prompt whose chat is gone", "session_id", q.SessionID)

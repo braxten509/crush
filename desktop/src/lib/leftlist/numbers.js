@@ -12,7 +12,7 @@ import { busy, isHelperChat, openChat, sessions } from "../stores/sessions.svelt
 import { helperRows } from "../stores/helperchats.svelte.js";
 import { rowState } from "../listmodel.js";
 import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
-import { folderGroups, listedRows, placeHelperRows } from "./openlist.js";
+import { draftRow, folderGroups, listedRows, placeHelperRows } from "./openlist.js";
 import { folderKey, listFolders } from "../stores/listfolders.svelte.js";
 import { baseOf, clean, short } from "./picker.js";
 import { leftList } from "./store.svelte.js";
@@ -29,39 +29,22 @@ export function folderLabel(dir) {
   return dir ? baseOf(short(clean(dir), leftList.home)) : "";
 }
 
-// A temporary row while New chat saves its empty conversation.
+// New chat's temporary row (openlist.draftRow).
 export const DRAFT_ID = "new-chat";
 
-function draftRow() {
-  // The folder the chat will belong to: the one the draft started in, else
-  // this window's (owner, 2026-10-23: the row showed under another folder).
+// The folder New chat's chat will belong to: the one the draft started in,
+// else this window's (owner, 2026-10-23: the row showed under another
+// folder); "" when there is no draft.
+function draftDir() {
   const dir = sessions.draftDir || conn.project.path || conn.project.cwd || "";
-  if (!sessions.draft || sessions.currentId || !dir) return null;
-  return {
-    kind: "chat",
-    id: DRAFT_ID,
-    title: "New chat",
-    agent: "",
-    time: "",
-    at: 0,
-    depth: 0,
-    selected: true,
-    closed: false,
-    state: "",
-    stateKind: "",
-    branches: 0,
-    expanded: false,
-    folder: null,
-    dir,
-    draft: true,
-  };
+  return sessions.draft && !sessions.currentId ? dir : "";
 }
 
 // The chats under their folders (owner, 2026-10-21): [{dir, label, rows}],
 // the kept folders first (lib/stores/listfolders.svelte.js).
 export function chatGroups(now = Date.now()) {
-  const draft = draftRow();
-  const rows = withHelpers(draft ? [draft, ...listedChats(now)] : listedChats(now));
+  const dir = draftDir();
+  const rows = withHelpers(dir ? draftRow(listedChats(now), dir, now) : listedChats(now));
   return folderGroups(rows, listFolders.dirs, folderKey).map((group) => ({
     ...group,
     // A heading always says where it is: a folder whose short name came out

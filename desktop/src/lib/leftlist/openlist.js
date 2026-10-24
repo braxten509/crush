@@ -90,6 +90,34 @@ export function listedRows(open, options = {}) {
   return rows;
 }
 
+// New chat's temporary row while its empty chat saves, after rows: where and
+// as the saved chat will show (owner, 2026-10-23: it flashed "New chat" at
+// the top, then the chat landed at the bottom as "New Session").
+export function draftRow(rows, dir, now) {
+  const at = Math.floor(now / 1000);
+  return [
+    ...rows,
+    {
+      kind: "chat",
+      id: "new-chat",
+      title: "New Session",
+      agent: "",
+      time: rowTime(at, now),
+      at,
+      depth: 0,
+      selected: true,
+      closed: false,
+      state: "",
+      stateKind: "",
+      branches: 0,
+      expanded: false,
+      folder: null,
+      dir,
+      draft: true,
+    },
+  ];
+}
+
 // Sub-agent chat rows ({parent}, helperchats.svelte.js) among the list's
 // rows: each after its parent's row and the helper rows already there, or at
 // the end when its parent is not listed.

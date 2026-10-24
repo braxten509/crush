@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { folderGroups, listedRows, placeHelperRows } from "./openlist.js";
+import { draftRow, folderGroups, listedRows, placeHelperRows } from "./openlist.js";
 
 const here = (dir) => dir === "/p/here";
 const session = (id, extra = {}) => ({ id, title: `Chat ${id}`, updated_at: 100, created_at: 1, ...extra });
@@ -105,5 +105,16 @@ describe("placeHelperRows", () => {
     ];
     expect(placeHelperRows(rows, helpers).map((r) => r.id)).toEqual(["a", "h1", "h2", "b", "h3"]);
     expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("draftRow", () => {
+  it("adds New chat's temporary row last, named and timed like the saved chat (owner, 2026-10-23)", () => {
+    const now = Date.UTC(2026, 9, 23, 12);
+    const rows = draftRow([{ id: "a", dir: "/p/here" }], "/p/here", now);
+    expect(rows.map((row) => row.id)).toEqual(["a", "new-chat"]);
+    expect(rows[1].title).toBe("New Session");
+    expect(rows[1].time).not.toBe("");
+    expect(rows[1].dir).toBe("/p/here");
   });
 });

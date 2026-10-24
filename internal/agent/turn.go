@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 )
@@ -47,9 +48,13 @@ type turn struct {
 	// terminal ownership until it finishes.
 	skipRunComplete bool
 	// notifyOnSuccess is set once the turn finished and may notify.
-	notifyOnSuccess bool
-	userMsgCreated  bool
-	shouldSummarize bool
+	notifyOnSuccess        bool
+	userMsgCreated         bool
+	shouldSummarize        bool
+	toolCallLimit          int
+	toolCallCount          int
+	visibleAssistantText   bool
+	interruptedForProgress bool
 
 	// currentAssistant is the assistant message of the current step; the
 	// final one is what the turn reports.
@@ -63,6 +68,7 @@ type turn struct {
 	// folded are the queued prompts taken in at tool boundaries this turn.
 	folded             []foldedPrompt
 	sanitizedToolCalls map[string]bool
+	toolCallMu         sync.Mutex
 	// completedToolCalls are the full names of tool calls that completed
 	// without error this turn. Written only from the streaming callbacks
 	// (which run sequentially) and read after Stream returns, where
@@ -210,6 +216,70 @@ func (t *turn) dispatch(ctx context.Context) dispatchOutcome {
 	return dispatchActive
 }
 
+const progressUpdatePrompt = "Before making another tool call, update the user briefly with what you have completed and what remains. Then continue the original task. Do not mention this reminder."
+
+// interruptOnToolCall counts main-agent tool calls since the last visible
+// assistant text. It cancels the active turn at the limit and queues an
+// invisible progress nudge before the task resumes.
+func (t *turn) interruptOnToolCall() bool {
+	if t.a == nil || t.a.isSubAgent {
+		return false
+	}
+	t.toolCallMu.Lock()
+	if t.interruptedForProgress {
+		t.toolCallMu.Unlock()
+		return true
+	}
+	if t.genCtx != nil && t.genCtx.Err() != nil {
+		t.toolCallMu.Unlock()
+		return false
+	}
+	interrupt := t.call.ProgressUpdateRequired && !t.visibleAssistantText
+	if !interrupt {
+		if t.toolCallLimit <= 0 {
+			t.toolCallMu.Unlock()
+			return false
+		}
+		t.toolCallCount++
+		interrupt = t.toolCallCount >= t.toolCallLimit
+	}
+	if !interrupt {
+		t.toolCallMu.Unlock()
+		return false
+	}
+	t.interruptedForProgress = true
+	t.toolCallMu.Unlock()
+	if t.cancel != nil {
+		t.cancel()
+	}
+	t.a.requeueFront(t.call.SessionID, []SessionAgentCall{{
+		SessionID:              t.call.SessionID,
+		Prompt:                 progressUpdatePrompt,
+		Channel:                t.call.Channel,
+		NonInteractive:         t.call.NonInteractive,
+		channelMeta:            t.call.channelMeta,
+		HiddenUserMessage:      true,
+		NotRecallable:          true,
+		ProgressUpdateRequired: true,
+	}})
+	return true
+}
+
+// noteVisibleAssistantText resets the consecutive tool-call count and
+// satisfies a pending progress nudge.
+func (t *turn) noteVisibleAssistantText() {
+	t.toolCallMu.Lock()
+	defer t.toolCallMu.Unlock()
+	t.visibleAssistantText = true
+	t.toolCallCount = 0
+}
+
+func (t *turn) wasInterruptedForProgress() bool {
+	t.toolCallMu.Lock()
+	defer t.toolCallMu.Unlock()
+	return t.interruptedForProgress
+}
+
 // cancelOnEntry persists a canceled turn for a call canceled before it
 // became active.
 //
@@ -340,7 +410,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 				return ""
 			}
 			return t.fileReview.lastTool
-		})
+		}, t.interruptOnToolCall)
 	}
 	streamCall := t.buildStreamCall(history, files)
 	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID)
@@ -349,6 +419,9 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 
 	a.eventPromptResponded(t.call.SessionID, time.Since(startTime).Truncate(time.Second))
 
+	if t.wasInterruptedForProgress() && err == nil {
+		err = context.Canceled
+	}
 	if err != nil {
 		return t.handleStreamError(result, err)
 	}
@@ -359,6 +432,10 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 // builds its system prompt.
 func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 	a := t.a
+	t.toolCallLimit = config.DefaultInterruptAfterToolCalls
+	if a.cfg != nil {
+		t.toolCallLimit = a.cfg.Config().Options.GetInterruptAfterToolCalls()
+	}
 	// Copy mutable fields under lock to avoid races with SetTools/SetModels.
 	agentTools := a.callTools(t.call)
 	t.largeModel = a.largeModel.Get()

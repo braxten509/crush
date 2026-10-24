@@ -269,7 +269,17 @@ func (s *sessionScheduler) requeueFront(sessionID string, calls []SessionAgentCa
 // requeueFrontLocked requires the session's dispatch mutex.
 func (s *sessionScheduler) requeueFrontLocked(sessionID string, calls []SessionAgentCall) {
 	queued, _ := s.messageQueue.Get(sessionID)
-	s.messageQueue.Set(sessionID, append(slices.Clone(calls), queued...))
+	merged := append(slices.Clone(calls), queued...)
+	priority := make([]SessionAgentCall, 0, len(merged))
+	remaining := make([]SessionAgentCall, 0, len(merged))
+	for _, call := range merged {
+		if call.ProgressUpdateRequired {
+			priority = append(priority, call)
+		} else {
+			remaining = append(remaining, call)
+		}
+	}
+	s.messageQueue.Set(sessionID, append(priority, remaining...))
 }
 
 // compatibleQueuedCalls keeps channel tool scope and reply destinations
@@ -670,11 +680,15 @@ func (s *sessionScheduler) QueuedPromptsList(sessionID string) []string {
 	}
 	pending, _ := s.interrupting.Get(sessionID)
 	for _, call := range pending {
-		prompts = append(prompts, call.Prompt)
+		if !call.ProgressUpdateRequired {
+			prompts = append(prompts, call.Prompt)
+		}
 	}
 	l, _ := s.messageQueue.Get(sessionID)
 	for _, call := range l {
-		prompts = append(prompts, call.Prompt)
+		if !call.ProgressUpdateRequired {
+			prompts = append(prompts, call.Prompt)
+		}
 	}
 	return prompts
 }

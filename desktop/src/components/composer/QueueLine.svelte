@@ -1,10 +1,11 @@
 <script>
   // The queue on Complete's row while no chips take it (owner, 2026-10-21,
   // pick A): "QUEUE 2", the next prompt, "waiting · sends next", "+1 more"
-  // and Clear, on one line. With chips on the row the queue stays in the
+  // and Interrupt, on one line. With chips on the row the queue stays in the
   // tray (QueueSection.svelte).
   import { queueRows } from "../../lib/composer/trayrows.js";
-  import { clear, visibleItems } from "../../lib/stores/queue.svelte.js";
+  import { visibleItems } from "../../lib/stores/queue.svelte.js";
+  import { interruptAndSend } from "../../lib/stores/composer.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
 
   const rows = $derived(queueRows(visibleItems(sessions.currentId)));
@@ -18,7 +19,7 @@
     <span class="text" title={first.text}>{first.text}</span>
     {#if first.tag}<span class="tag">{first.tag}</span>{/if}
     {#if rows.length > 1}<span class="more">+{rows.length - 1} more</span>{/if}
-    <button class="clear" type="button" onclick={() => clear(sessions.currentId)}>Clear</button>
+    <button class="interrupt" type="button" onclick={() => interruptAndSend()}>Interrupt</button>
   </div>
 {/if}
 
@@ -55,18 +56,18 @@
     flex: none;
     white-space: nowrap;
   }
-  .clear {
+  .interrupt {
     flex: none;
     margin-left: auto;
     font: var(--t-small);
     color: var(--ink);
   }
-  .clear:hover {
+  .interrupt:hover {
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: calc(4 * var(--px));
   }
-  .clear:focus-visible {
+  .interrupt:focus-visible {
     outline: 1px solid var(--vermilion);
     outline-offset: calc(2 * var(--px));
   }

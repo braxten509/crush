@@ -69,6 +69,9 @@ type SessionAgentCall struct {
 	RunID             string
 	Channel           string
 	HiddenUserMessage bool
+	// ProgressUpdateRequired marks Crush's hidden nudge. The agent must
+	// produce visible text before another tool call can run.
+	ProgressUpdateRequired bool
 	// CLIContinue shows a reply the agent CLI started on its own between
 	// turns instead of sending Prompt (cliagent.Turn.Continue).
 	CLIContinue      bool

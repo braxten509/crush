@@ -61,6 +61,9 @@ func (t *turn) handleStreamError(result *fantasy.AgentResult, err error) (*fanta
 		return nil, err
 	}
 	reason, title, details := classifyRunError(err, isHyper, t.largeModel.CatwalkCfg.Name)
+	if t.wasInterruptedForProgress() {
+		reason, title, details = message.FinishReasonCanceled, "Interrupted for a progress update", ""
+	}
 	// Interactive chats continue on their own once a usage limit resets
 	// (coordinator.planLimitRetry); say when.
 	// The fallback order says for itself where a chat it steers goes.
@@ -130,7 +133,9 @@ func (t *turn) closeDanglingToolCalls(cleanupCtx context.Context, isCancelErr bo
 			continue
 		}
 		content := "There was an error while executing the tool"
-		if isCancelErr {
+		if t.wasInterruptedForProgress() {
+			content = "Tool call interrupted so the agent can update the user before continuing."
+		} else if isCancelErr {
 			content = "Error: user cancelled assistant tool calling"
 		}
 		toolResult := message.ToolResult{

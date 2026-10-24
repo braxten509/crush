@@ -30,14 +30,15 @@ type cliSteps struct {
 	call          SessionAgentCall
 	onQueuedInput func([]SessionAgentCall)
 
-	ctx          context.Context
-	sc           fantasy.AgentStreamCall
-	m            *cliagent.Model
-	a            *sessionAgent
-	sessionID    string
-	onCompacting func(bool) error
-	onActivity   func(activity, detail string) error
-	compacting   bool
+	ctx             context.Context
+	sc              fantasy.AgentStreamCall
+	m               *cliagent.Model
+	a               *sessionAgent
+	sessionID       string
+	onCompacting    func(bool) error
+	onActivity      func(activity, detail string) error
+	onToolInterrupt func() bool
+	compacting      bool
 	// File content before each pending edit, by tool call ID.
 	edits map[string][2]string
 	// Last full content seen per file, for CLIs that report an edit only
@@ -79,13 +80,17 @@ type cliSteps struct {
 
 // setToolRunning records a tool call starting or returning. A start wakes
 // the steering poller so queued prompts reach the CLI while it runs.
-func (s *cliSteps) setToolRunning(id string, running bool) {
+func (s *cliSteps) setToolRunning(id string, running bool) bool {
+	started := false
 	s.runningMu.Lock()
 	if running {
 		if s.running == nil {
 			s.running = map[string]bool{}
 		}
-		s.running[id] = true
+		if !s.running[id] {
+			started = true
+			s.running[id] = true
+		}
 	} else {
 		delete(s.running, id)
 	}
@@ -96,6 +101,7 @@ func (s *cliSteps) setToolRunning(id string, running bool) {
 		default:
 		}
 	}
+	return started
 }
 
 func (s *cliSteps) toolRunning() bool {
@@ -130,7 +136,9 @@ func (s *cliSteps) pendingSteered() []string {
 	var prompts []string
 	for _, st := range s.steered {
 		for _, q := range st.calls {
-			prompts = append(prompts, q.Prompt)
+			if !q.ProgressUpdateRequired {
+				prompts = append(prompts, q.Prompt)
+			}
 		}
 	}
 	return prompts
@@ -468,15 +476,21 @@ func (s *cliSteps) handleToolStart(e cliagent.Event) error {
 		return err
 	}
 	s.tools++
-	s.setToolRunning(e.ID, true)
-	return s.sc.OnToolInputStart(e.ID, e.Name)
+	started := s.setToolRunning(e.ID, true)
+	if err := s.sc.OnToolInputStart(e.ID, e.Name); err != nil {
+		return err
+	}
+	if started && s.onToolInterrupt != nil && s.onToolInterrupt() {
+		return context.Canceled
+	}
+	return nil
 }
 
 // handleToolCall records a tool call, keeping the file an edit is about to
 // change so its result can carry a whole-file diff.
 func (s *cliSteps) handleToolCall(e cliagent.Event) error {
 	s.tools++
-	s.setToolRunning(e.ID, true)
+	started := s.setToolRunning(e.ID, true)
 	if path := cliagent.EditedFile(e.Name, e.Input); path != "" {
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(s.m.Dir, path)
@@ -505,7 +519,13 @@ func (s *cliSteps) handleToolCall(e cliagent.Event) error {
 	}
 	tc := fantasy.ToolCallContent{ToolCallID: e.ID, ToolName: e.Name, Input: e.Input}
 	s.content = append(s.content, tc)
-	return s.sc.OnToolCall(tc)
+	if err := s.sc.OnToolCall(tc); err != nil {
+		return err
+	}
+	if started && s.onToolInterrupt != nil && s.onToolInterrupt() {
+		return context.Canceled
+	}
+	return nil
 }
 
 // handleToolResult records a tool result, with the whole-file diff of an

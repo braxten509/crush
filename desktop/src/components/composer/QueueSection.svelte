@@ -1,9 +1,10 @@
 <script>
   // The tray's queue (TYPE-044, TYPE-045, TYPE-050; a port of
-  // internal/ui/model/pills.go:87-120): "QUEUE 2" and Clear, then one slate
+  // internal/ui/model/pills.go:87-120): "QUEUE 2" and Interrupt, then one slate
   // line per queued prompt, the first tagged "waiting · sends next".
   import { queueRows } from "../../lib/composer/trayrows.js";
-  import { clear, visibleItems } from "../../lib/stores/queue.svelte.js";
+  import { visibleItems } from "../../lib/stores/queue.svelte.js";
+  import { interruptAndSend } from "../../lib/stores/composer.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
 
   const rows = $derived(queueRows(visibleItems(sessions.currentId)));
@@ -12,7 +13,7 @@
 <div class="head" data-tray-row>
   <span class="name">Queue</span>
   <span class="count">{rows.length}</span>
-  <button class="clear" type="button" onclick={() => clear(sessions.currentId)}>Clear</button>
+  <button class="interrupt" type="button" onclick={() => interruptAndSend()}>Interrupt</button>
 </div>
 <ul class="list">
   {#each rows as row, at (at)}
@@ -42,12 +43,12 @@
   .count {
     font-variant-numeric: tabular-nums;
   }
-  .clear {
+  .interrupt {
     margin-left: auto;
     font: var(--t-small);
     color: var(--ink);
   }
-  .clear:hover {
+  .interrupt:hover {
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: calc(4 * var(--px));

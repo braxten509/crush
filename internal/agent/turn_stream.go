@@ -57,6 +57,11 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 	// change), filtered for the call and minus MCP servers
 	// disabled for this repository.
 	prepared.Tools = a.filterDisabledMCPTools(callContext, a.callTools(call))
+	if !t.isCLI {
+		for i, tool := range prepared.Tools {
+			prepared.Tools[i] = progressInterruptTool{AgentTool: tool, turn: t}
+		}
+	}
 
 	// Prompts queued during the turn join it at the next tool
 	// boundary: every step after the first follows tool results.
@@ -119,6 +124,20 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 	return callContext, prepared, err
 }
 
+// progressInterruptTool lets the turn cancel the command at its configured
+// consecutive tool-call limit before that call can continue running.
+type progressInterruptTool struct {
+	fantasy.AgentTool
+	turn *turn
+}
+
+func (p progressInterruptTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+	if p.turn.interruptOnToolCall() {
+		return fantasy.ToolResponse{}, context.Canceled
+	}
+	return p.AgentTool.Run(ctx, call)
+}
+
 func (t *turn) onReasoningStart(id string, reasoning fantasy.ReasoningContent) error {
 	t.currentAssistant.ActivityDetail = ""
 	t.currentAssistant.Activity = "thinking"
@@ -165,6 +184,9 @@ func (t *turn) onTextDelta(id string, text string) error {
 	t.currentAssistant.ActivityDetail = ""
 	t.currentAssistant.Activity = "responding"
 	t.currentAssistant.ActivityAt = time.Now().Unix()
+	if strings.TrimSpace(text) != "" {
+		t.noteVisibleAssistantText()
+	}
 	// Strip leading newline from initial text content. This is is
 	// particularly important in non-interactive mode where leading
 	// newlines are very visible.

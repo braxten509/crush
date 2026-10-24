@@ -21,11 +21,13 @@
   import {
     DEFAULT_AUTOCOMPACT,
     DEFAULT_CHECK_IN,
+    DEFAULT_INTERRUPT_AFTER_TOOL_CALLS,
     NOTIFICATION_STYLES,
     notificationStyle,
     options,
     setAgentCpus,
     setCheckInMinutes,
+    setInterruptAfterToolCalls,
     setLaunchTarget,
     setSidebarShown,
     toggleAgentCpus,
@@ -48,17 +50,20 @@
   ];
 
   let checkIn = $state(String(options().check_in_minutes ?? DEFAULT_CHECK_IN));
+  let interruptAfterToolCalls = $state(String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS));
   let cpus = $state(String(options().agent_cpus ?? ""));
   let hasPassword = $state(false);
-  let editing = $state(""); // the focused field: "check_in" | "cpus" | ""
+  let editing = $state(""); // the focused field: check-in, tool limit, CPUs, or ""
   let atFocus = ""; // its text when it took the focus
 
   // A field not being typed in follows the config, so leaving it untouched
   // never writes an old value over a change made elsewhere.
   $effect(() => {
     const minutes = String(options().check_in_minutes ?? DEFAULT_CHECK_IN);
+    const toolCalls = String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS);
     const set = String(options().agent_cpus ?? "");
     if (editing !== "check_in") checkIn = minutes;
+    if (editing !== "interrupt_after_tool_calls") interruptAfterToolCalls = toolCalls;
     if (editing !== "cpus") cpus = set;
   });
 
@@ -86,6 +91,15 @@
     if (checkIn === atFocus) return; // focused but not changed: nothing to save
     if (String(options().check_in_minutes ?? DEFAULT_CHECK_IN) === checkIn.trim()) return;
     if (!(await setCheckInMinutes(checkIn))) checkIn = String(options().check_in_minutes ?? DEFAULT_CHECK_IN);
+  }
+
+  async function saveInterruptAfterToolCalls() {
+    editing = "";
+    if (interruptAfterToolCalls === atFocus) return;
+    if (String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS) === interruptAfterToolCalls.trim()) return;
+    if (!(await setInterruptAfterToolCalls(interruptAfterToolCalls))) {
+      interruptAfterToolCalls = String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS);
+    }
   }
 
   async function saveCpus() {
@@ -197,6 +211,10 @@
     <div class="row">
       <span class="name">Check-in messages every</span>
       <span class="field"><input type="text" inputmode="numeric" bind:value={checkIn} onfocus={() => ((editing = "check_in"), (atFocus = checkIn))} onblur={saveCheckIn} onkeydown={fieldKey} aria-label="Check-in minutes" /> minutes</span>
+    </div>
+    <div class="row">
+      <span class="name">Interrupt after</span>
+      <span class="field"><input type="text" inputmode="numeric" bind:value={interruptAfterToolCalls} onfocus={() => ((editing = "interrupt_after_tool_calls"), (atFocus = interruptAfterToolCalls))} onblur={saveInterruptAfterToolCalls} onkeydown={fieldKey} aria-label="Tool calls without an update" /> consecutive tool calls without an update (0 disables)</span>
     </div>
     <div class="row">
       <span class="name">Sub-agent instructions</span>

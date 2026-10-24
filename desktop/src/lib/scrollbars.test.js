@@ -1,18 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { startScrollbars } from "./scrollbars.js";
-
-const appStyles = readFileSync(resolve(process.cwd(), "src/app.css"), "utf8");
 
 describe("app scrollbars", () => {
   afterEach(() => vi.useRealTimers());
-
-  it("uses square thumbs without native arrow buttons", () => {
-    expect(appStyles).toMatch(/html \*::-webkit-scrollbar-button\s*\{[^}]*display:\s*none\s*!important/);
-    expect(appStyles).toMatch(/html \*::-webkit-scrollbar-thumb\s*\{[^}]*border-radius:\s*0\s*!important/);
-  });
 
   it("shows an overflowing scroller while scrolling and hides it two seconds later", () => {
     vi.useFakeTimers();

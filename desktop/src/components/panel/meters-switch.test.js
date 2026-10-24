@@ -158,4 +158,35 @@ describe("the meters follow the agent after a model change", () => {
       ["MONTHLY", "85% left"],
     ]);
   });
+
+  it("an OpenCode Go account with weekly and monthly windows draws one meter per window", async () => {
+    h.routes.set("GET config", { options: { tui: { composer_footer: ["model", "settings", "context", "limit_5h", "limit_weekly", "resets"] } }, models: {} });
+    h.routes.set("GET providers", [{ id: "opencode-cli", name: "OpenCode Go", type: "opencode-cli", models: [{ id: "opencode-go/deepseek-v4.1-flash" }] }]);
+    h.routes.set("GET /v1/limits", {
+      clis: [
+        {
+          kind: "opencode-cli",
+          account: "",
+          state: "ready",
+          read_at: "2026-10-24T10:00:00Z",
+          windows: [
+            { name: "5h", used: 52, resets_at: "2099-01-01T00:00:00Z" },
+            { name: "Weekly", used: 22, resets_at: "2099-01-01T00:00:00Z" },
+            { name: "Monthly", used: 11, resets_at: "2099-01-01T00:00:00Z" },
+          ],
+        },
+      ],
+    });
+    h.routes.set("GET agent", agent("opencode-cli"));
+    await workspace.loadConfig();
+    await workspace.loadProviders();
+    await workspace.loadAgent();
+    await limits.loadLimits();
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    sessions.currentId = "chat-opencode";
+    sessions.byId["chat-opencode"] = { id: "chat-opencode", model: { provider: "opencode-cli", model: "opencode-go/deepseek-v4.1-flash" } };
+    const meters = panel.meterNow().meters;
+    expect(meters.map((m) => m.label)).toEqual(["CONTEXT", "5-HOUR", "WEEK", "MONTHLY"]);
+    expect(new Set(meters.map((m) => m.id)).size).toBe(meters.length);
+  });
 });

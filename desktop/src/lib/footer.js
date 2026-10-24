@@ -236,12 +236,18 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
     }
     return { meters, lines, tokens };
   }
+  const seen = new Set();
   for (const window of limits) {
     const id = windowId(window.name);
     if (!show(id)) continue;
+    // A provider can report a weekly and a monthly window under the same
+    // footer id (OpenCode Go): the second keeps its name in the id so the
+    // panel's keyed list stays unique (owner, 2026-10-24).
+    const meterID = id === FOOTER.limitOther || seen.has(id) ? `${id}:${window.name}` : id;
+    seen.add(id);
     const limitWords = windowWords(window, show(FOOTER.resets));
     meters.push({
-      id: id === FOOTER.limitOther ? `${id}:${window.name}` : id,
+      id: meterID,
       label: id === FOOTER.limit5h ? "5-HOUR" : window.name === "Weekly" ? "WEEK" : String(window.name).toUpperCase(),
       left: window.left,
       text: `${goFixed(window.left, 0)}% left`,

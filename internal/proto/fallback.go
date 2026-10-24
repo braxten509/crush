@@ -2,7 +2,7 @@ package proto
 
 import "github.com/charmbracelet/crush/internal/config"
 
-// AccountInfo is one Claude Code or Codex sign-in. ID "" is the tool's
+// AccountInfo is one Claude Code, Codex or Grok sign-in. ID "" is the tool's
 // own login (account 1). Name is the name it was given, else its email,
 // else its tool and number; Label is Name with the tool added where
 // another account has the same name (accounts.Shown).
@@ -20,7 +20,8 @@ type FallbackSettings struct {
 	Order    config.FallbackOrder `json:"order"`
 }
 
-// AccountAddRequest adds an account of a tool ("claude-code", "codex-cli").
+// AccountAddRequest adds an account of a tool ("claude-code", "codex-cli",
+// "grok-cli") or of an API provider (its provider id, for another entry).
 type AccountAddRequest struct {
 	Kind string `json:"kind"`
 }

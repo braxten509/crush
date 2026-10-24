@@ -19,8 +19,8 @@ func (c *controllerV1) fallbackEndpoints() []apigen.Endpoint {
 			return c.backend.FallbackSettings(r.PathValue("id"))
 		}).
 			Summary("Get the accounts and the fallback order").
-			Description("Lists each Claude Code and Codex account, the tool's own login (ID \"\") first, "+
-				"and the order chats move through when an account runs out.").
+			Description("Lists each Claude Code, Codex and Grok account, the tool's own login (ID "+
+				"\"\") first, and the order chats move through when an account runs out.").
 			Tags("fallback").
 			PathParam("id", "Workspace ID").
 			Fails(404, 500).
@@ -40,9 +40,11 @@ func (c *controllerV1) fallbackEndpoints() []apigen.Endpoint {
 		route(c, rpc.AddAccount, func(r *http.Request, req proto.AccountAddRequest) (proto.AccountLogin, error) {
 			return c.backend.AddAccount(r.PathValue("id"), req.Kind)
 		}).
-			Summary("Add a Claude Code or Codex account").
-			Description("Makes the account's folder, with the tool's own settings, skills, plugins, "+
-				"MCP tools and saved sessions linked in, and returns the command that signs it in.").
+			Summary("Add an account").
+			Description("For Claude Code, Codex or Grok, makes the account's folder, with the tool's own "+
+				"settings, skills, plugins, MCP tools and saved sessions linked in, and returns the command "+
+				"that signs it in. For an API provider, makes a provider entry that copies it without its "+
+				"key; the app then asks for the new account's key.").
 			Tags("fallback").
 			PathParam("id", "Workspace ID").
 			Fails(400, 404, 500).

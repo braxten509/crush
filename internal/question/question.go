@@ -315,13 +315,24 @@ func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error
 
 	defer func() {
 		s.mu.Lock()
-		if s.pending == pending {
+		owned := s.pending == pending
+		batchID, batchSession := s.pendingID, s.pendingReq.SessionID
+		if owned {
 			s.pending = nil
 			s.cancelled = nil
 			s.pendingID = ""
 			s.pendingReq = Request{}
 		}
 		s.mu.Unlock()
+		// A wait that ends without an answer (its run finished or was
+		// cancelled) leaves clients showing a form nothing can answer:
+		// tell them to close it.
+		if owned && batchID != "" {
+			s.notificationBroker.Publish(pubsub.CreatedEvent, Notification{
+				BatchID:   batchID,
+				SessionID: batchSession,
+			})
+		}
 	}()
 
 	s.broker.Publish(pubsub.CreatedEvent, req)

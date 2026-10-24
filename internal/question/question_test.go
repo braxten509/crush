@@ -77,6 +77,27 @@ func TestScopedResolutionRejectsStaleRequestAndSession(t *testing.T) {
 	}
 }
 
+// When the asking run ends before the user answers, clients must close the
+// form: an answer to it can never reach anyone.
+func TestAskEndedContextNotifiesClients(t *testing.T) {
+	t.Parallel()
+	s := NewService()
+	events := s.Subscribe(t.Context())
+	notifications := s.SubscribeNotifications(t.Context())
+	ctx, cancel := context.WithCancel(t.Context())
+	done := startQuestion(t, s, ctx, events, "batch", "session")
+	cancel()
+	result := awaitQuestion(t, done)
+	require.ErrorIs(t, result.err, context.Canceled)
+	select {
+	case n := <-notifications:
+		require.Equal(t, "batch", n.Payload.BatchID)
+	case <-time.After(5 * time.Second):
+		t.Fatal("clients were not told the form ended")
+	}
+	require.False(t, s.Answer(nil), "the stale form must not stay pending")
+}
+
 func TestConcurrentQuestionResolutionHasOneWinner(t *testing.T) {
 	t.Parallel()
 	s := NewService()

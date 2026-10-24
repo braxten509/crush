@@ -43,6 +43,10 @@ func (h *taskHub) ask(req TaskRequest) error {
 		return err
 	}
 	ctx, release := h.reserveFollowUp(req.Session)
+	// The form outlives the turn that opened it: the agent ends its turn
+	// and the user answers later, when ctx may be gone. Waiting and
+	// delivering on ctx would close the form (or drop the answers) first.
+	waitCtx := context.WithoutCancel(ctx)
 	started := false
 	defer func() {
 		if !started {
@@ -82,19 +86,13 @@ func (h *taskHub) ask(req TaskRequest) error {
 		switch {
 		case form != nil:
 			var result secureentry.FormResult
-			select {
-			case result = <-form.Result():
-			case <-ctx.Done():
-				err = ctx.Err()
-				form.Cancel()
-				result = <-form.Result()
-			}
+			result = <-form.Result()
 			answers, statuses = result.Answers, result.Statuses
-			if err == nil && result.Cancelled {
+			if result.Cancelled {
 				err = question.ErrCancelled
 			}
 		case interactive:
-			answers, err = h.c.questions.Ask(ctx, r)
+			answers, err = h.c.questions.Ask(waitCtx, r)
 		default:
 			err = question.ErrCancelled
 		}
@@ -123,7 +121,10 @@ func (h *taskHub) ask(req TaskRequest) error {
 			}
 		})
 		defer accept.Close()
-		if _, err := h.c.RunAccepted(ctx, accept, req.Session, msg); err != nil && !errors.Is(err, context.Canceled) {
+		// The chat must hear the outcome even when the turn that opened the
+		// form has ended: by the time the user answers, ctx is gone, and
+		// RunAccepted would drop the answer with it.
+		if _, err := h.c.RunAccepted(context.WithoutCancel(ctx), accept, req.Session, msg); err != nil {
 			slog.Error("Failed to hand answers to their session", "error", err)
 		}
 	}()

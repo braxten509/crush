@@ -15,7 +15,14 @@ function done(request) {
 
 export async function submitAnswers(request, answers) {
   try {
-    await api.answerQuestions(answerBody(request, answers));
+    const result = await api.answerQuestions(answerBody(request, answers));
+    if (result && result.resolved === false) {
+      // The form outlived the question (its run ended): the answer could
+      // not reach the chat. Say so instead of closing as if it had.
+      notify("error", "That question is no longer open; ask me again.");
+      done(request);
+      return false;
+    }
     if (request.session_id === sessions.currentId && ui.follow) requestEnd();
     done(request);
     return true;

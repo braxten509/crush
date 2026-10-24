@@ -38,6 +38,13 @@ it("a failed answer or a reply after switching chats does not move the shown cha
   expect(h.end).not.toHaveBeenCalled();
 });
 
+it("a question that is no longer open is reported, not closed silently", async () => {
+  h.answer.mockResolvedValueOnce({ resolved: false });
+  expect(await submitAnswers(request, [{ question_id: "answer", yes: true }])).toBe(false);
+  expect(h.notify).toHaveBeenCalledOnce();
+  expect(h.close).toHaveBeenCalledWith("question");
+});
+
 it("answering while reading well above the bottom preserves the reading position", async () => {
   h.ui.follow = false;
   expect(await submitAnswers(request, [])).toBe(true);

@@ -45,6 +45,7 @@ var (
 	WorkspaceEvents   = Op[Empty, Empty]{Method: get, Path: "/v1/workspaces/{id}/events"}
 	AllUserMessages   = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/messages/user"}
 	GitBranch         = Op[Empty, proto.GitBranchResponse]{Method: get, Path: "/v1/workspaces/{id}/git/branch"}
+	ProviderUsable    = Op[Empty, proto.ProviderAvailabilityResponse]{Method: get, Path: "/v1/workspaces/{id}/providers/availability"}
 	ProjectNeedsInit  = Op[Empty, proto.ProjectNeedsInitResponse]{Method: get, Path: "/v1/workspaces/{id}/project/needs-init"}
 	ProjectInit       = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/project/init"}
 	ProjectInitPrompt = Op[Empty, proto.ProjectInitPromptResponse]{Method: get, Path: "/v1/workspaces/{id}/project/init-prompt"}

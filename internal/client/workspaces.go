@@ -77,6 +77,13 @@ func (c *Client) GitBranch(ctx context.Context, id string) (string, error) {
 	return result.Branch, err
 }
 
+// ProviderAvailability returns, by provider id, why a provider cannot run
+// in the workspace's folder.
+func (c *Client) ProviderAvailability(ctx context.Context, id string) (map[string]string, error) {
+	result, err := newCall(c, rpc.ProviderUsable, "get provider availability", "provider availability response").at(id).get(ctx)
+	return result.Providers, err
+}
+
 // ProjectNeedsInitialization checks if the project needs
 // initialization.
 func (c *Client) ProjectNeedsInitialization(ctx context.Context, id string) (bool, error) {

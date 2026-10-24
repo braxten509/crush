@@ -326,6 +326,10 @@ func (w *AppWorkspace) GitBranch(context.Context) (string, error) {
 	return w.ops.GitBranch(), nil
 }
 
+func (w *AppWorkspace) ProviderAvailability(context.Context) (map[string]string, error) {
+	return w.ops.ProviderAvailability(), nil
+}
+
 func (w *AppWorkspace) Resolver() config.VariableResolver {
 	return w.store.Resolver()
 }

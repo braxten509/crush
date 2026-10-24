@@ -546,6 +546,12 @@ func (w *ClientWorkspace) GitBranch(ctx context.Context) (string, error) {
 	return w.client.GitBranch(ctx, w.workspaceID())
 }
 
+// ProviderAvailability asks the server why a provider cannot run in the
+// workspace's folder. The model menu uses it to grey those rows out.
+func (w *ClientWorkspace) ProviderAvailability(ctx context.Context) (map[string]string, error) {
+	return w.client.ProviderAvailability(ctx, w.workspaceID())
+}
+
 func (w *ClientWorkspace) Resolver() config.VariableResolver {
 	return config.IdentityResolver()
 }

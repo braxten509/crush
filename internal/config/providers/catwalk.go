@@ -99,7 +99,25 @@ func (s *CatwalkSync) Get(ctx context.Context) ([]catwalk.Provider, error) {
 		s.err = s.cache.Store(result)
 		s.updated.Store(true)
 	})
-	return s.result, s.err
+	return patchCatalog(s.result), s.err
+}
+
+// displayNames are the catalog providers the apps show under another
+// name (owner, 2026-10-24: Kimi's plan is sold as Moonshot AI).
+var displayNames = map[catwalk.InferenceProvider]string{
+	catwalk.InferenceKimiCoding: "Moonshot AI",
+}
+
+// patchCatalog renames the catalog entries the apps call differently. It
+// runs on every path, fetched or cached, so the name never depends on
+// which copy answered.
+func patchCatalog(providers []catwalk.Provider) []catwalk.Provider {
+	for i := range providers {
+		if name, ok := displayNames[providers[i].ID]; ok && name != "" {
+			providers[i].Name = name
+		}
+	}
+	return providers
 }
 
 // Updated reports whether the last Get replaced the catalog with fresh

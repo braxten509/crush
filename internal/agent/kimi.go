@@ -13,8 +13,8 @@ import (
 const KimiProviderID = string(catwalk.InferenceKimiCoding)
 
 const (
-	kimiNoGitMessage = "Moonshot AI is not usable here: this folder is not a git project."
-	kimiHomeMessage  = "Moonshot AI is not usable here: this is your home folder."
+	kimiNoGitMessage = "Moonshot AI is not usable here: this folder is not a git project"
+	kimiHomeMessage  = "Moonshot AI is not usable here: this is your home folder"
 )
 
 // KimiUnusable returns why a provider cannot run in dir, or "" when it

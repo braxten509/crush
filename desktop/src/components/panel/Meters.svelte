@@ -4,9 +4,11 @@
   // (5-HOUR, WEEK, and other windows when "Other usage limits" is on), each
   // the part left as a percent and a bar; under 30 % left both turn amber,
   // under 10 % rose (owner, 2026-10-20, in place of the warning triangle).
-  // Three share a row at the approved picture's proportions; more go on the
+  // Three share a row at the approved picture's proportions; four go two and
+  // two (owner, 2026-10-24: no lone meter left under three); more go on the
   // next row, fewer share the row evenly. No hover box (owner,
   // 2026-10-19): the meters say it all; Ctrl+P keeps Customize.
+  import { metersPerRow } from "./metergrid.js";
   import { meterNow, meterRoom, refillNow } from "./panel.svelte.js";
   import { useRefill } from "../../lib/fallback/store.svelte.js";
 
@@ -19,7 +21,7 @@
 
   const model = $derived(meterNow(now));
   const meters = $derived(model.meters);
-  const perRow = $derived(Math.min(3, Math.max(1, meters.length)));
+  const perRow = $derived(metersPerRow(meters.length));
   const columns = $derived(perRow === 3 ? "116fr 32fr 115fr 31fr 114fr" : Array.from({ length: perRow }, () => "115fr").join(" 31fr "));
   const resets = $derived(meters.some((m) => m.resets));
 

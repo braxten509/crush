@@ -299,6 +299,13 @@ describe("a chat's calls go to that chat's folder (owner, 2026-10-22: several fo
     setChatFolder((sid) => folders[sid] ?? null);
   });
 
+  it("checks provider availability in the chat's folder", async () => {
+    await api.providerAvailability("S2");
+    expect(last()).toMatchObject({ method: "GET", path: "providers/availability", dir: other.dir });
+    await api.providerAvailability();
+    expect(last().dir).toBe("");
+  });
+
   it("a chat route carries its chat's folder", async () => {
     await api.messages("S2");
     expect(last()).toMatchObject({ method: "GET", path: "sessions/S2/messages", dir: "/tmp/home/other" });

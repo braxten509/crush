@@ -32,7 +32,8 @@
   import { addableProviders, cheapestHostOn, qualityFloorOn, savedWithout } from "../../lib/models/openrouter.js";
   import { openDialog } from "../../lib/dialogs.js";
   import { shortUnavailable, unavailableReason } from "../../lib/availability.js";
-  import { availability } from "../../lib/stores/availability.svelte.js";
+  import { availability, loadAvailability } from "../../lib/stores/availability.svelte.js";
+  import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { setAccount, setEffort } from "../../lib/models/toggles.js";
   import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
@@ -62,6 +63,11 @@
   let floor = $state(null); // the FP8 floor switch just flipped
 
   $effect(() => watchModels());
+  $effect(() => {
+    loadAvailability(sessions.currentId).catch((error) => console.error("provider availability", error));
+  });
+
+  const byProvider = $derived(availability.sessionId === sessions.currentId ? availability.byProvider : {});
 
   const coder = $derived(coderModel(modelData));
   const barMode = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
@@ -340,7 +346,7 @@
     </label>
     <div class="rows" role="listbox" aria-label="Models" bind:this={rowsBox}>
       {#each rows as item (item.id)}
-        {@const blocked = unavailableReason(item.provider.id, availability.byProvider)}
+        {@const blocked = unavailableReason(item.provider.id, byProvider)}
         <button
           type="button"
           class="model"

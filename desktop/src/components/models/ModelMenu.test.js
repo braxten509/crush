@@ -12,7 +12,7 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
   getCurrentWebviewWindow: () => ({ listen: async () => () => {} }),
 }));
 vi.mock("../../lib/engine/commands.js", () => ({
-  api: vi.fn(async (method, path, _query, body) => {
+  api: vi.fn(async (method, path, _query, body, _callId, dir) => {
     if (method === "POST") state.posts.push({ path, body: body ?? {} });
     if (method === "POST" && path === "config/model") {
       const cfg = state.routes["GET config"] ?? {};
@@ -23,7 +23,7 @@ vi.mock("../../lib/engine/commands.js", () => ({
     // refresh sees the model the engine just saved.
     if (key === "GET config" && orders.config.length > 0) return orders.config.shift();
     const route = state.routes[key];
-    return typeof route === "function" ? route(body) : route ?? null;
+    return typeof route === "function" ? route(body, dir) : route ?? null;
   }),
   events_take: vi.fn(async () => []),
   api_abort: vi.fn(async () => true),
@@ -131,12 +131,45 @@ describe("the model menu (ModelMenu.svelte)", () => {
   it("dims a provider that cannot run in this folder, and says why", async () => {
     state.routes["GET config"] = config();
     availabilityStore.byProvider = { anthropic: "Moonshot AI is not usable here: this folder is not a git project." };
+    state.routes["GET providers/availability"] = { providers: availabilityStore.byProvider };
     mount();
     await settle();
     const rows = modelRows();
     expect(rows.every((row) => row.disabled)).toBe(true);
     expect(rows[0].textContent).toContain("this folder is not a git project.");
     availabilityStore.byProvider = {};
+  });
+
+  it("checks the shown chat and ignores a late home-folder reply", async () => {
+    state.routes["GET config"] = config();
+    const { setChatFolder } = await import("../../lib/engine/api.js");
+    const { loadAvailability } = await import("../../lib/stores/availability.svelte.js");
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    const home = { providers: { anthropic: "Moonshot AI is not usable here: this is your home folder" } };
+    state.routes["GET providers/availability"] = home;
+    await loadAvailability();
+    let finishHome;
+    state.routes["GET providers/availability"] = (_body, dir) => dir === "/home/test/dev/crush"
+      ? { providers: {} }
+      : new Promise((resolve) => { finishHome = resolve; });
+    const pending = loadAvailability();
+    setChatFolder((sid) => sid === "project" ? { dir: "/home/test/dev/crush", joined: true } : null);
+    sessions.currentId = "project";
+    mount();
+    await settle();
+    expect(modelRows().every((row) => !row.disabled)).toBe(true);
+    finishHome(home);
+    await pending;
+    await settle();
+    expect(modelRows().every((row) => !row.disabled)).toBe(true);
+    expect(document.querySelector(".model-menu").textContent).not.toContain("this is your home folder");
+
+    // Switching back to a home chat must still enforce the restriction.
+    state.routes["GET providers/availability"] = home;
+    sessions.currentId = "home";
+    await settle();
+    expect(modelRows().every((row) => row.disabled)).toBe(true);
+    expect(document.querySelector(".model-menu").textContent).toContain("this is your home folder");
   });
 
   it("keeps the menu open after a choice, so the effort level can be picked too", async () => {

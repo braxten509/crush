@@ -7,11 +7,9 @@ import "./lib/plugins.js";
 import { startProbe } from "./lib/probe.js";
 import { startAppLog } from "./lib/system/applog.js";
 import { startZoom } from "./lib/zoom.js";
-import { startScrollbars } from "./lib/scrollbars.js";
 
 startZoom();
 startKeys();
-startScrollbars();
 const app = mount(App, { target: document.getElementById("app") });
 startProbe();
 startEvents();

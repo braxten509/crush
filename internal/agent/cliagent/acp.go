@@ -1,17 +1,22 @@
 package cliagent
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -118,6 +123,11 @@ type acpRun struct {
 	// result reports all its steps together, too many for the context meter.
 	contextUsed  int64
 	contextLimit int64
+	// steerURL and steerPassword reach OpenCode's own server. ACP refuses a
+	// second session/prompt while one runs; the server's delivery:"steer"
+	// folds the message in at the next step.
+	steerURL      string
+	steerPassword string
 
 	// Markers (engine-design.md 5.11). prompts counts the prompts the
 	// native session holds: those session/load replays, then each
@@ -181,7 +191,7 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 
 	r.stopSteer = func() {}
 	if name == "opencode" {
-		r.stopSteer = pollSteer(r.t, func() bool { return r.prompted.Load() && r.toolRunning.Load() }, r.steer)
+		r.stopSteer = pollSteerReady(r.t, r.prompted.Load, r.steer)
 	}
 	defer r.stopSteer()
 	for p.lines.Scan() {
@@ -239,8 +249,16 @@ func (r *acpRun) openSession(resume string) {
 	_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": acpSessionID, "method": method, "params": params})
 }
 
-// steer sends a prompt queued mid-turn to the running session.
-func (r *acpRun) steer(text string) {
+// steer sends a prompt queued mid-turn to the running session. OpenCode's
+// own server takes it at any step; the ACP fallback waits for a tool, the
+// only time its server may fold a second prompt into the turn.
+func (r *acpRun) steer(text string) bool {
+	if r.steerHTTP(text) {
+		return true
+	}
+	if !r.toolRunning.Load() {
+		return false
+	}
 	r.steerMu.Lock()
 	r.steerN++
 	id := "steer-" + strconv.Itoa(r.steerN)
@@ -255,11 +273,49 @@ func (r *acpRun) steer(text string) {
 		delete(r.steerIDs, id)
 		r.steerMu.Unlock()
 		r.sent.take(text)
-		return
+		return false
 	}
 	r.steerMu.Lock()
 	r.prompts++
 	r.steerMu.Unlock()
+	return true
+}
+
+// steerHTTP folds a queued prompt into the running turn through OpenCode's
+// own server. Its ACP endpoint refuses a second prompt while one runs, but
+// the server's delivery:"steer" is what OpenCode's own client uses.
+func (r *acpRun) steerHTTP(text string) bool {
+	session := r.session.Load()
+	if r.steerURL == "" || r.steerPassword == "" || session == nil {
+		return false
+	}
+	body, err := json.Marshal(map[string]any{"text": text, "delivery": "steer"})
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.steerURL+"/api/session/"+url.PathEscape(*session)+"/prompt", bytes.NewReader(body))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("opencode:"+r.steerPassword)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	r.steerMu.Lock()
+	r.prompts++
+	r.steerMu.Unlock()
+	// The server admitted it; a failed emit only means the chat cannot show
+	// it, not that the message should be sent twice.
+	_ = r.t.Emit(Event{Type: EventUserMessage, Text: text})
+	return true
 }
 
 // countReplayed counts the user prompts session/load replays. A run of
@@ -409,6 +465,9 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 		_ = json.Unmarshal(msg.Result, &res)
 		sid := cmp.Or(res.SessionID, r.loaded)
 		r.session.Store(&sid)
+		if r.name == "opencode" {
+			r.steerURL, r.steerPassword = openCodeSteerServer(r.p)
+		}
 		if err := r.t.Emit(Event{Type: EventSession, Session: sid}); err != nil {
 			return true, err
 		}

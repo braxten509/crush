@@ -29,6 +29,13 @@ func pollSteerInput(t Turn, ready func() bool, send func(string, []message.Attac
 	})
 }
 
+// pollSteerReady is pollSteer with a sender that reports whether it took the
+// text; one that refuses keeps it queued for the next chance.
+func pollSteerReady(t Turn, ready func() bool, send func(string) bool) (stop func()) {
+	t.SteerInput = nil
+	return pollSteerInputRetry(t, ready, func(text string, _ []message.Attachment) bool { return send(text) })
+}
+
 // pollSteerInputRetry retains input when a turn transition prevents delivery.
 func pollSteerInputRetry(t Turn, ready func() bool, send func(string, []message.Attachment) bool) (stop func()) {
 	if (t.Steer == nil && t.SteerInput == nil) || t.NoTools {

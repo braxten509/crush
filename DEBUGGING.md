@@ -83,3 +83,35 @@ process or any other live process.
     `TestQ2KeepsWorkAnotherAppViews`, `TestListHelpersScopedToChat` and
     `TestEndedWorkLeavesOwners` fail in the full backend run (21 s waits)
     and pass alone; a clean checkout of `7bb01c90` fails them identically.
+
+## Folder + closes the shown chat (2026-10-24)
+
+- Report: the + beside a sidebar folder closes the current view without
+  opening a new chat. The exact live failure has not been reproduced.
+- Clean reproduction: an isolated real app on gpu-screen creates chats in
+  the current folder and another folder and keeps them through refreshes.
+  First test launches mistakenly shared the owner's sidebar state; all
+  subsequent launches hide HOME, /tmp and XDG state in a separate namespace.
+  The new driver refuses to run without the isolated HOME and state paths.
+- Confirmed failure path: newChat cleared currentId before POST sessions
+  succeeded. Its caller returned true immediately and only logged errors.
+  A regression with a rejected creation failed before the fix: currentId
+  was empty while the save was pending. The folder action also returned
+  true for a false creation result.
+- Fix: create before leaving the shown chat, report save errors, await the
+  result, serialize folder + operations, and restore the previous folder
+  when creation fails. Tests for folder rollback and overlapping clicks
+  failed before the second part was implemented.
+- Independent review t1 identified the rollback and overlapping-click gaps;
+  those gaps have targeted regression checks. Other hypotheses (duplicate
+  helper rows and the missing question form) remain unproven and untouched.
+- Research: https://svelte.dev/docs/svelte/runtime-errors documents
+  each_key_duplicate. The live log contains that error, but its stack does
+  not identify the failing component, so it is not established as the cause.
+- Validation: initial fix passed 2,046 tests, screen/helper/Go release
+  builds, and the isolated folder-click driver. Final rollback/queue
+  version passed all 2,047 tests and the screen build. The final isolated
+  real-app driver passed all four folder + flows, verifying folder ownership,
+  previous-chat retention, and survival through sidebar refreshes. Final
+  independent review found no blocker in this focused fix. The owner's
+  live creation failure and question-form issue remain unverified.

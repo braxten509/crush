@@ -581,6 +581,25 @@ describe("deleted, new and first chats (LIST-037, LIST-033, TYPE-041)", () => {
     expect(h.calls.filter((c) => c.method === "POST" && c.path === "sessions")).toHaveLength(1);
   });
 
+  it("keeps the current chat until a new chat has saved, and reports creation failures", async () => {
+    await withList(chat("s1"));
+    openable("s1", []);
+    await S.openChat("s1");
+    const saving = later();
+    h.routes.set("POST sessions", () => saving.promise);
+    const starting = S.newChat("/project");
+    await settle();
+    expect(S.sessions.currentId).toBe("s1");
+    saving.reject(new Error("Cannot save chat"));
+    expect(await starting).toBe(false);
+    expect(S.sessions.currentId).toBe("s1");
+    expect(S.sessions.draft).toBe(false);
+    expect(ui.ui.notice).toMatchObject({ kind: "error", text: expect.stringContaining("Cannot save chat") });
+    h.routes.set("POST sessions", () => chat("fresh"));
+    expect(await S.newChat("/project")).toBe(true);
+    expect(S.sessions.currentId).toBe("fresh");
+  });
+
   it("ensureSession makes one \"New Session\" for two quick sends", async () => {
     await withList();
     h.routes.set("POST sessions", ({ body }) => chat("fresh", { title: body.title }));

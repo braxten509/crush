@@ -659,9 +659,15 @@ async function refreshKept(id) {
 export async function newChat(dir = "") {
   sessions.draftDir = dir;
   sessions.draft = true;
-  if (sessions.currentId) showLanding();
-  await ensureSession();
-  return true;
+  try {
+    await createChat();
+    return true;
+  } catch (error) {
+    sessions.draft = false;
+    sessions.draftDir = "";
+    notify("error", `Couldn't start a chat: ${errorText(error)}`);
+    return false;
+  }
 }
 
 let creating = null;
@@ -671,6 +677,10 @@ let creating = null;
 // first is on its way gets the same chat.
 export async function ensureSession() {
   if (sessions.currentId) return sessions.currentId;
+  return createChat();
+}
+
+function createChat() {
   creating ??= (async () => {
     try {
       const created = await api.createSession({ title: "New Session" });
@@ -678,6 +688,9 @@ export async function ensureSession() {
       upsertSession(created);
       readyChat(created.id);
       setFiles(created.id, []);
+      // Leave only after saving succeeds. A failed request keeps the old
+      // chat visible, and any pending open must not replace the new chat.
+      showLanding();
       sessions.currentId = created.id;
       sessions.draft = false;
       sessions.draftDir = "";

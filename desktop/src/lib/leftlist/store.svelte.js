@@ -8,7 +8,7 @@ import { runAction } from "../actions.js";
 import { COLUMN_LIMITS } from "../columns.js";
 import { hasDialog, openDialog } from "../dialogs.js";
 import { settings_set } from "../engine/commands.js";
-import { switchFolder } from "../stores/connection.svelte.js";
+import { conn, switchFolder } from "../stores/connection.svelte.js";
 import { newChat as newChatIn } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { openTerminal } from "../terminal/tabs.svelte.js";
@@ -108,18 +108,31 @@ export function newTerminal() {
 // first (owner, 2026-10-20: the folder is per chat), and the chat starts on
 // the landing page that leaves (owner, 2026-10-22: the folder it left stays
 // joined, so nothing restarts).
+let startingChats = Promise.resolve();
+
 export async function startIn(what, dir) {
   if (what === "terminal") {
     await startTerminal(dir);
     return true;
   }
-  if (!(await switchFolder(dir))) {
+  // Folder changes and saving are one operation: a second + must not
+  // change the engine while the first chat is still being created.
+  const starting = startingChats.then(() => startChatIn(dir));
+  startingChats = starting.catch(() => {});
+  return starting;
+}
+
+async function startChatIn(dir) {
+  const previous = conn.project.path || conn.project.cwd;
+  if (!(await switchFolder(dir, { keepShown: true }))) {
     notify("error", "Couldn't start a chat.");
     return false;
   }
-  // The draft row shows in the folder the chat will belong to.
-  newChatIn(dir).catch((error) => console.error("starting a chat failed", error?.message ?? error));
-  return true;
+  const started = await newChatIn(dir);
+  if (!started && previous && previous !== dir && (conn.project.path === dir || conn.project.cwd === dir)) {
+    await switchFolder(previous, { keepShown: true });
+  }
+  return started;
 }
 
 // A terminal tab in dir; a shell that can't start shows as a notice.

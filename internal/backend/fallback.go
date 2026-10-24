@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -151,7 +152,8 @@ func checkFallbackBlocks(cfg *config.Config, blocks []config.FallbackBlock, wher
 }
 
 // AddAccount makes a new account of kind and its folder, and returns the
-// command that signs it in.
+// command that signs it in. For an API provider it makes another provider
+// entry instead, a copy without its key (addProviderAccount).
 func (b *Backend) AddAccount(workspaceID, kind string) (proto.AccountLogin, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
@@ -159,7 +161,7 @@ func (b *Backend) AddAccount(workspaceID, kind string) (proto.AccountLogin, erro
 	}
 	k := catwalk.Type(kind)
 	if !config.HasAccounts(k) {
-		return proto.AccountLogin{}, invalidFallback("only Claude Code and Codex can have more accounts")
+		return b.addProviderAccount(ws, kind)
 	}
 	cfg := ws.Cfg.Config()
 	var list []config.Account
@@ -178,6 +180,41 @@ func (b *Backend) AddAccount(workspaceID, kind string) (proto.AccountLogin, erro
 	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
 	return accountLogin(cfg, a)
+}
+
+// addProviderAccount adds another account of an API provider: a provider
+// entry of its own, with the same type, endpoint, headers and models, a name
+// that says which account it is, and no key. The app then opens the key
+// sheet for the new provider (owner, 2026-10-24: every provider the model
+// picker offers can have more than one account).
+func (b *Backend) addProviderAccount(ws *Workspace, id string) (proto.AccountLogin, error) {
+	cfg := ws.Cfg.Config()
+	original, ok := cfg.Providers.Get(id)
+	if !ok {
+		return proto.AccountLogin{}, invalidFallback("unknown provider %q", id)
+	}
+	if config.IsCLIProviderType(original.Type) {
+		return proto.AccountLogin{}, invalidFallback("%s signs in with its own CLI", id)
+	}
+	n := 2
+	for {
+		if _, taken := cfg.Providers.Get(fmt.Sprintf("%s-%d", id, n)); !taken {
+			break
+		}
+		n++
+	}
+	next := original
+	next.ID = fmt.Sprintf("%s-%d", id, n)
+	next.Name = fmt.Sprintf("%s (%d)", cmp.Or(original.Name, id), n)
+	next.APIKey = ""
+	next.APIKeyTemplate = ""
+	next.OAuthToken = nil
+	if err := ws.Cfg.SetConfigField(config.ScopeGlobal, "providers."+next.ID, next); err != nil {
+		return proto.AccountLogin{}, err
+	}
+	sendConfigChanged(ws)
+	info := proto.AccountInfo{ID: next.ID, Kind: id, Name: next.Name, Label: next.Name}
+	return proto.AccountLogin{Account: info}, nil
 }
 
 func accountLogin(cfg *config.Config, a config.Account) (proto.AccountLogin, error) {

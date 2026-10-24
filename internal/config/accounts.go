@@ -10,12 +10,12 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 )
 
-// Account is one more sign-in of Claude Code or Codex, kept in a folder of
-// its own (AccountDir). Each tool's own folder (~/.claude, ~/.codex) is
+// Account is one more sign-in of a tool, kept in a folder of its own
+// (AccountDir). Each tool's own folder (~/.claude, ~/.codex, ~/.grok) is
 // account 1 and is never listed.
 type Account struct {
 	ID   string       `json:"id" jsonschema:"description=Stable ID; also the account folder's name"`
-	Kind catwalk.Type `json:"kind" jsonschema:"description=The tool signed in,enum=claude-code,enum=codex-cli"`
+	Kind catwalk.Type `json:"kind" jsonschema:"description=The tool signed in,enum=claude-code,enum=codex-cli,enum=grok-cli"`
 	Name string       `json:"name,omitempty" jsonschema:"description=Shown name; defaults to the tool and the account's number"`
 }
 
@@ -83,7 +83,7 @@ type FallbackList struct {
 }
 
 // AccountKinds are the tools that can have more than one account.
-var AccountKinds = []catwalk.Type{TypeClaudeCode, TypeCodexCLI}
+var AccountKinds = []catwalk.Type{TypeClaudeCode, TypeCodexCLI, TypeGrokCLI}
 
 // HasAccounts reports whether kind can have more than one account.
 func HasAccounts(kind catwalk.Type) bool { return slices.Contains(AccountKinds, kind) }
@@ -112,6 +112,8 @@ func AccountEnv(kind catwalk.Type, id string) []string {
 		return []string{"CLAUDE_CONFIG_DIR=" + dir}
 	case TypeCodexCLI:
 		return []string{"CODEX_HOME=" + dir}
+	case TypeGrokCLI:
+		return []string{"GROK_HOME=" + dir}
 	}
 	return nil
 }
@@ -123,6 +125,8 @@ func AccountKindName(kind catwalk.Type) string {
 		return "Claude"
 	case TypeCodexCLI:
 		return "Codex"
+	case TypeGrokCLI:
+		return "Grok"
 	}
 	return string(kind)
 }

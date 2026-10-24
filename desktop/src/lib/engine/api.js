@@ -111,6 +111,8 @@ export const api = {
 
   config: () => get("config"),
   providers: () => get("providers"),
+  // Which agent CLIs hold their own login (rpc.GetAuthState).
+  authState: () => get("auth/state"),
   agentInfo: () => get("agent"),
   // The engine reads provider_id (internal/server/handlers_agent.go:102-104).
   defaultSmallModel: (providerId) => get("agent/default-small-model", providerId ? { provider_id: providerId } : undefined),

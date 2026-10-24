@@ -15,9 +15,7 @@
   import { closeSettings, settingsPage, settingsSections } from "../../lib/settings/page.svelte.js";
   import { runAction } from "../../lib/actions.js";
   import { crushDirs, remotePasswordExists } from "../../lib/engine/commands.js";
-  import { refreshModels, modelData } from "../../lib/models/store.svelte.js";
-  import { platform } from "../../lib/palette/entries.js";
-  import { signIn, signOut } from "../../lib/signin/accounts.js";
+  import { refreshModels } from "../../lib/models/store.svelte.js";
   import {
     DEFAULT_AUTOCOMPACT,
     DEFAULT_CHECK_IN,
@@ -40,14 +38,7 @@
   import { panelSetting } from "../../lib/stores/ui.svelte.js";
   import { accountMeters, setAccountMeters } from "../../lib/stores/accountmeters.svelte.js";
   import FallbackOrder from "./FallbackOrder.svelte";
-  import ToolAccounts from "./ToolAccounts.svelte";
-
-  const ACCOUNTS = [
-    { platform: "hyper", provider: "hyper", name: "Hyper" },
-    { platform: "copilot", provider: "copilot", name: "GitHub Copilot" },
-    { platform: "openai", provider: "openai", name: "ChatGPT" },
-    { platform: "grok", provider: "xai", name: "Grok" },
-  ];
+  import ProviderAccounts from "./ProviderAccounts.svelte";
 
   let checkIn = $state(String(options().check_in_minutes ?? DEFAULT_CHECK_IN));
   let interruptAfterToolCalls = $state(String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS));
@@ -78,10 +69,6 @@
     last = next;
   });
 
-  const signedIn = (provider) => {
-    const p = modelData.cfg?.providers.get(provider);
-    return Boolean(p && (p.has_oauth || p.has_api_key));
-  };
   const memoryText = $derived(Number(options().memory_limit_gb) > 0 ? `${options().memory_limit_gb} GB` : "No limit");
   const styleLabel = $derived(NOTIFICATION_STYLES.find((s) => s.id === notificationStyle())?.label ?? "Auto");
 
@@ -115,12 +102,6 @@
       event.preventDefault();
       event.currentTarget.blur();
     }
-  }
-
-  async function account(row) {
-    if (signedIn(row.provider)) await signOut(row.platform);
-    else await signIn(row.platform);
-    refreshModels();
   }
 
   let configDirs = $state([]);
@@ -244,14 +225,7 @@
     </div>
   {/if}
   {#if section === "accounts"}
-    {#each ACCOUNTS as row (row.platform)}
-      <div class="row">
-        <span class="name">{row.name}</span>
-        <span class="value">{signedIn(row.provider) ? "Signed in" : "Not signed in"}</span>
-        <button type="button" class="act" onclick={() => account(row)}>{signedIn(row.provider) ? "Sign out" : "Sign in"}</button>
-      </div>
-    {/each}
-    <ToolAccounts />
+    <ProviderAccounts />
   {/if}
   {#if section === "fallback"}
     <FallbackOrder />

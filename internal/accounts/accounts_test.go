@@ -91,6 +91,41 @@ func TestCodexAccountKeepsItsOwnLoginAndDaemon(t *testing.T) {
 	require.Equal(t, "codex-3", NewID(config.TypeCodexCLI, []config.Account{{ID: "codex-2", Kind: config.TypeCodexCLI}}))
 }
 
+// Grok keeps its login and its session locks to itself; settings, skills and
+// saved chats are account 1's, and the login command points the CLI at the
+// account's folder (owner, 2026-10-24: more than Claude Code and Codex).
+func TestGrokAccountKeepsItsOwnLogin(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GROK_HOME", "")
+	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(home, "data"))
+	grok := filepath.Join(home, ".grok")
+	for _, name := range []string{"sessions", "skills"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(grok, name), 0o700))
+	}
+	for _, name := range []string{"auth.json.lock", "active_sessions.json", "active_sessions.lock", "config.toml"} {
+		require.NoError(t, os.WriteFile(filepath.Join(grok, name), []byte("x"), 0o600))
+	}
+	dir, err := Prepare(config.TypeGrokCLI, "grok-2")
+	require.NoError(t, err)
+	for name, linked := range map[string]bool{
+		"sessions": true, "skills": true, "config.toml": true,
+		"auth.json": false, "auth.json.lock": false, "active_sessions.json": false, "active_sessions.lock": false,
+	} {
+		_, err := os.Lstat(filepath.Join(dir, name))
+		require.Equal(t, linked, err == nil, name)
+	}
+	require.False(t, SignedIn(config.TypeGrokCLI, "grok-2"))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"access_token":"x"}`), 0o600))
+	require.True(t, SignedIn(config.TypeGrokCLI, "grok-2"))
+
+	argv, err := LoginArgv(config.TypeGrokCLI, "grok-2")
+	require.NoError(t, err)
+	require.Equal(t, []string{"env", "GROK_HOME=" + dir, "grok", "login"}, argv)
+	require.Equal(t, "grok-3", NewID(config.TypeGrokCLI, []config.Account{{ID: "grok-2", Kind: config.TypeGrokCLI}}))
+	require.Equal(t, "Grok", config.AccountKindName(config.TypeGrokCLI))
+}
+
 // An account is named by the name it was given, else the email it signed in
 // with (Claude's settings file, Codex's ID token), else its number; where
 // two accounts end up with the same name, the label adds the tool, or the
@@ -133,6 +168,7 @@ func TestNamesComeFromTheGivenNameThenTheEmail(t *testing.T) {
 		"claude-code/claude-2": "work@example.com",
 		"codex-cli/":           "you@example.com (Codex)",
 		"codex-cli/codex-2":    "Codex 2",
+		"grok-cli/":            "Grok 1",
 	}, labels())
 	require.Equal(t, "you@example.com", Name(cfg, config.TypeClaudeCode, ""))
 	require.Equal(t, "you@example.com (Codex)", Label(cfg, config.TypeCodexCLI, ""))
@@ -145,6 +181,7 @@ func TestNamesComeFromTheGivenNameThenTheEmail(t *testing.T) {
 		"claude-code/claude-2": "Personal (Claude 2)",
 		"codex-cli/":           "you@example.com",
 		"codex-cli/codex-2":    "Codex 2",
+		"grok-cli/":            "Grok 1",
 	}, labels())
 
 	// A token that can't be read leaves the number.

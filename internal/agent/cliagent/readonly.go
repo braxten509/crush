@@ -65,6 +65,10 @@ func (m *Model) readOnlyCommand(name string, args []string) (string, string, []s
 			roots = append(roots, fmt.Sprintf("%q", dir))
 		}
 	}
+	// An added account's folder is the CLI's state while it runs there.
+	if dir := config.AccountDir(m.Account); dir != "" && !within(m.Dir, dir) {
+		roots = append(roots, fmt.Sprintf("%q", dir))
+	}
 	wrapped := []string{
 		"sandbox",
 		"-c", `sandbox_mode="workspace-write"`,

@@ -1,8 +1,9 @@
 // Package accounts keeps the folders of extra Claude Code and Codex
-// sign-ins (config.Account). Each account folder holds its own login; every
-// other file and folder links to the tool's own folder (account 1), so an
-// account has the same settings, skills, plugins, MCP tools and saved
-// sessions, and a chat moved between accounts resumes with its full memory.
+// sign-ins of the tools that take more than one (config.Account). Each
+// account folder holds its own login; every other file and folder links to
+// the tool's own folder (account 1), so an account has the same settings,
+// skills, plugins, MCP tools and saved sessions, and a chat moved between
+// accounts resumes with its full memory.
 package accounts
 
 import (
@@ -26,6 +27,7 @@ import (
 var own = map[catwalk.Type][]string{
 	config.TypeClaudeCode: {".credentials.json", ".claude.json", "daemon", "bridge-spawn", "statsig"},
 	config.TypeCodexCLI:   {"auth.json", "app-server-control", "app-server-daemon", "ipc", "process_manager", ".sqlite-maintenance.lock"},
+	config.TypeGrokCLI:    {"auth.json", "auth.json.lock", "active_sessions.json", "active_sessions.lock"},
 }
 
 // ownPrefixes are per-account lock files.
@@ -46,6 +48,12 @@ func home(kind catwalk.Type) (string, error) {
 		}
 		h, err := os.UserHomeDir()
 		return filepath.Join(h, ".codex"), err
+	case config.TypeGrokCLI:
+		if dir := os.Getenv("GROK_HOME"); dir != "" {
+			return dir, nil
+		}
+		h, err := os.UserHomeDir()
+		return filepath.Join(h, ".grok"), err
 	}
 	return "", fmt.Errorf("%s has no accounts", kind)
 }
@@ -161,6 +169,8 @@ func LoginArgv(kind catwalk.Type, id string) ([]string, error) {
 		return append(argv, "claude", "auth", "login"), nil
 	case config.TypeCodexCLI:
 		return append(argv, "codex", "login"), nil
+	case config.TypeGrokCLI:
+		return append(argv, "grok", "login"), nil
 	}
 	return nil, fmt.Errorf("%s has no accounts", kind)
 }
@@ -277,7 +287,7 @@ func SignedIn(kind catwalk.Type, id string) bool {
 		return true
 	}
 	name := ".credentials.json"
-	if kind == config.TypeCodexCLI {
+	if kind == config.TypeCodexCLI || kind == config.TypeGrokCLI {
 		name = "auth.json"
 	}
 	info, err := os.Stat(filepath.Join(dir, name))

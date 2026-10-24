@@ -93,6 +93,18 @@ func (c *controllerV1) fallbackEndpoints() []apigen.Endpoint {
 			Tags("fallback").
 			Fails(400, 502).
 			Build(),
+
+		route(c, rpc.GetAuthState, func(r *http.Request, _ rpc.Empty) (proto.AuthStateResponse, error) {
+			return c.backend.AuthState(r.PathValue("id"))
+		}).
+			Summary("Get which agent CLIs are signed in").
+			Description("Says, by provider id, whether Grok, Antigravity, OpenCode Go or OpenCode Zen "+
+				"holds its own login on this machine, read from the file or keyring the CLI keeps it "+
+				"in. No credential is returned.").
+			Tags("fallback").
+			PathParam("id", "Workspace ID").
+			Fails(404).
+			Build(),
 	}
 }
 

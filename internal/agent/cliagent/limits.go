@@ -466,7 +466,7 @@ var limitFetchers = map[catwalk.Type]func(context.Context) ([]Limit, error){
 func fetchGrokLimits(ctx context.Context) ([]Limit, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	p, err := startProc("", "grok", "agent", "--no-leader", "stdio")
+	p, err := startProcEnv("", config.AccountEnv(config.TypeGrokCLI, LimitAccount(ctx)), "grok", "agent", "--no-leader", "stdio")
 	if err != nil {
 		return nil, err
 	}

@@ -1,9 +1,10 @@
 """Accounts and the fallback order (owner, 2026-10-21). In the real window on
 the hidden screen, with real mouse clicks, on a chat running Codex with two
 free refills: the right panel shows REFILLS 2 with "Use one", and a click asks
-the engine for one; Settings > Accounts lists Claude 1, Claude 2 and Codex 1,
-each name with a space on both sides of its dot and Rename last on every row,
-in one place (owner, 2026-10-21);
+the engine for one; Settings > Accounts shows a provider bar (owner,
+2026-10-24) whose Claude Code detail lists Claude 1 and Claude 2, each name
+with a space on both sides of its dot and Rename last on every row, in one
+place (owner, 2026-10-21), and Codex's its own login;
 Settings > Fallback order shows the fixture's three blocks in order, each a
 sentence saying how the chat leaves it (look C, owner 2026-10-21); the switch
 saves the whole order (PUT fallback/order in the fixture's api.jsonl);
@@ -132,14 +133,18 @@ click('[data-probe="panel"] [data-refill-use]')
 refill = calls("limits/refill")
 check(len(refill) == 1 and body(refill[0]).get("kind") == "codex-cli", f"Use one asks the engine for one Codex refill ({refill})")
 
-# 2. Settings > Accounts lists every account.
+# 2. Settings > Accounts lists every account of the chosen tool: its own login
+#    and the added one (owner, 2026-10-24: a provider bar on the left).
 click("nav.chats button.settings")
 click(".settings-nav .row", "Accounts")
 names = run("return [...document.querySelectorAll('[data-account]')].map((e) => e.getAttribute('data-account') + ' ' + e.querySelector('.name').textContent.trim());")
-check(len(names) == 3 and any("Claude 2" in n for n in names) and any("Codex 1" in n for n in names), f"Accounts lists Claude 1, Claude 2 and Codex 1 ({names})")
+check(len(names) == 2 and any("Claude 1" in n for n in names) and any("Claude 2" in n for n in names), f"Accounts lists Claude 1 and Claude 2 ({names})")
 check(all(" · " in n for n in names), f"each name has a space on both sides of its dot ({names})")
 renames = run("return [...document.querySelectorAll('[data-account]')].map((row) => { const acts = [...row.querySelectorAll('button.act')]; return { last: acts.at(-1)?.textContent.trim() ?? '', right: Math.round((acts.at(-1)?.getBoundingClientRect().right ?? 0) * 10) / 10 }; });") or []
-check(len(renames) == 3 and all(r["last"] == "Rename" for r in renames) and len({r["right"] for r in renames}) == 1, f"every account, the own logins too, has Rename last, in one place ({renames})")
+check(len(renames) == 2 and all(r["last"] == "Rename" for r in renames) and len({r["right"] for r in renames}) == 1, f"every account, the own logins too, has Rename last, in one place ({renames})")
+click('[data-probe="accounts-providers"] .provider', "Codex")
+names = run("return [...document.querySelectorAll('[data-account]')].map((e) => e.querySelector('.name').textContent.trim());")
+check(len(names) == 1 and names[0].startswith("Codex 1"), f"Codex, one click away, lists its own login ({names})")
 picture("accounts.png")
 
 # 3. Settings > Fallback order shows the three blocks in order.

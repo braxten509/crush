@@ -242,6 +242,7 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 		}
 		// Crush hands every CLI the shared memory; Grok's own stays off.
 		t.Env = append(slices.Clone(t.Env), "GROK_MEMORY=0")
+		t.Env = append(t.Env, config.AccountEnv(m.Kind, m.Account)...)
 		return runACP(ctx, m, t, "grok", append(args, "stdio"), false)
 	case config.TypeOpenCodeCLI, config.TypeOpenCodeZenCLI:
 		return runACP(ctx, m, t, "opencode", []string{"acp"}, true)

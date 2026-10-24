@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/config/providers"
 	"github.com/charmbracelet/crush/internal/login"
@@ -397,4 +399,18 @@ func (b *Backend) sendAuthFlow(a *authFlow, state, text string) {
 	}
 	ev := proto.AuthFlowEvent{FlowID: a.id, State: state, Error: text}
 	ws.SendEvent(pubsub.Event[proto.AuthFlowEvent]{Type: pubsub.UpdatedEvent, Payload: ev})
+}
+
+// AuthState reports which agent CLIs hold their own login on this machine
+// (cliagent.SignedIn), for Settings → Accounts. Only booleans leave: no
+// credential or account name is read into the answer.
+func (b *Backend) AuthState(workspaceID string) (proto.AuthStateResponse, error) {
+	if _, err := b.GetWorkspace(workspaceID); err != nil {
+		return proto.AuthStateResponse{}, err
+	}
+	out := proto.AuthStateResponse{Providers: map[string]bool{}}
+	for _, kind := range []catwalk.Type{config.TypeGrokCLI, config.TypeAGYCLI, config.TypeOpenCodeCLI, config.TypeOpenCodeZenCLI} {
+		out.Providers[string(kind)] = cliagent.SignedIn(kind)
+	}
+	return out, nil
 }

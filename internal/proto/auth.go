@@ -50,3 +50,10 @@ type VerifyKey struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
 }
+
+// AuthStateResponse says, by provider id, whether an agent CLI holds its own
+// login on this machine. Only the CLIs that sign in themselves are listed:
+// Grok, Antigravity, OpenCode Go and OpenCode Zen.
+type AuthStateResponse struct {
+	Providers map[string]bool `json:"providers"`
+}

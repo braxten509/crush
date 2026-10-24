@@ -17,4 +17,7 @@ var (
 
 	// VerifyKey tests an API key against a provider without saving it.
 	VerifyKey = Op[proto.VerifyKeyRequest, proto.VerifyKey]{Method: post, Path: "/v1/workspaces/{id}/auth/verify-key"}
+
+	// GetAuthState says which agent CLIs hold their own login here.
+	GetAuthState = Op[Empty, proto.AuthStateResponse]{Method: get, Path: "/v1/workspaces/{id}/auth/state"}
 )

@@ -211,7 +211,7 @@ if check(look is not None, "the line has its dot and word"):
     if check(bool(dot_rows) and bool(word_rows), "the dot and the word are drawn"):
         dot_mid = (dot_rows[0] + dot_rows[-1]) / 2
         word_mid = (word_rows[0] + word_rows[-1]) / 2
-        check(abs(dot_mid - word_mid) <= 1, f"the dot sits centred on the capitals (dot rows {dot_rows[0]}-{dot_rows[-1]}, word {word_rows[0]}-{word_rows[-1]})")
+        check(abs(dot_mid - word_mid) <= 0.5, f"the dot sits centred on the capitals (dot rows {dot_rows[0]}-{dot_rows[-1]}, word {word_rows[0]}-{word_rows[-1]})")
 
 # -- The line belongs to its chat --
 run(RECORD)

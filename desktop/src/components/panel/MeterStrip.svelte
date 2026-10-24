@@ -112,6 +112,9 @@
     flex: none;
     width: round(calc(10 * var(--px)), 1px);
     height: round(calc(10 * var(--px)), 1px);
+    /* The capitals ride high in the label's line box; this lifts the dot
+       onto their middle (owner, 2026-10-24). */
+    margin-bottom: calc(3 * var(--px));
     border-radius: 50%;
     background: var(--vermilion);
   }

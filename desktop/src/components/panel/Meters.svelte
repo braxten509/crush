@@ -5,8 +5,9 @@
   // the part left as a percent and a bar; under 30 % left both turn amber,
   // under 10 % rose (owner, 2026-10-20, in place of the warning triangle).
   // Three share a row at the approved picture's proportions; four go two and
-  // two (owner, 2026-10-24: no lone meter left under three); more go on the
-  // next row, fewer share the row evenly. No hover box (owner,
+  // two (owner, 2026-10-24: no lone meter left under three, split by one
+  // horizontal rule between the rows). More go on the next row, fewer share
+  // the row evenly. No hover box (owner,
   // 2026-10-19): the meters say it all; Ctrl+P keeps Customize.
   import { metersPerRow } from "./metergrid.js";
   import { meterNow, meterRoom, refillNow } from "./panel.svelte.js";
@@ -22,6 +23,11 @@
   const model = $derived(meterNow(now));
   const meters = $derived(model.meters);
   const perRow = $derived(metersPerRow(meters.length));
+  const rows = $derived(Math.ceil(meters.length / perRow));
+  // Four meters go two over two, split by a horizontal rule between the
+  // rows rather than a vertical one between the columns (owner,
+  // 2026-10-24).
+  const ruled = $derived(perRow === 2 && rows > 1);
   const columns = $derived(perRow === 3 ? "116fr 32fr 115fr 31fr 114fr" : Array.from({ length: perRow }, () => "115fr").join(" 31fr "));
   const resets = $derived(meters.some((m) => m.resets));
 
@@ -66,12 +72,16 @@
 </script>
 
 <div class="usage-wrap">
-  <section class="usage" class:with-resets={resets} aria-label="Usage" style:grid-template-columns={columns} bind:this={section}>
+  <section class="usage" class:with-resets={resets} class:ruled aria-label="Usage" style:grid-template-columns={columns} bind:this={section}>
     {#each meters as meter, i (meter.id)}
       {@const col = i % perRow}
       {@const row = Math.floor(i / perRow) + 1}
-      {#if col > 0}<span class="separator" class:second={col === 2} style:grid-row={row} style:grid-column={2 * col} aria-hidden="true"></span>{/if}
-      <div class="cell" data-meter={meter.id} style:grid-row={row} style:grid-column={2 * col + 1}>
+      {#if ruled}
+        {#if col === 0 && row > 1}<span class="row-rule" style:grid-row={row * 2 - 2} style:grid-column="1 / -1" aria-hidden="true"></span>{/if}
+      {:else if col > 0}
+        <span class="separator" class:second={col === 2} style:grid-row={row} style:grid-column={2 * col} aria-hidden="true"></span>
+      {/if}
+      <div class="cell" data-meter={meter.id} style:grid-row={ruled ? row * 2 - 1 : row} style:grid-column={2 * col + 1}>
         <h3 class="label">{meter.label}</h3>
         <p class="value {meter.level}" class:pending={meter.text === "checking…"}>
           <span>{meter.text}</span>
@@ -102,6 +112,13 @@
   .usage.with-resets {
     grid-auto-rows: calc(134 * var(--px));
   }
+  /* A rule row of its own between the two content rows. */
+  .usage.ruled {
+    grid-auto-rows: calc(110 * var(--px)) calc(1 * var(--px));
+  }
+  .usage.ruled.with-resets {
+    grid-auto-rows: calc(134 * var(--px)) calc(1 * var(--px));
+  }
   .usage:focus-visible {
     outline-offset: calc(4 * var(--px));
   }
@@ -125,6 +142,9 @@
   }
   .separator.second {
     margin-left: calc(14 * var(--px));
+  }
+  .row-rule {
+    background: var(--rule-frame);
   }
   .value {
     display: flex;

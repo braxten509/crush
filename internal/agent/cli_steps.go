@@ -74,6 +74,10 @@ type cliSteps struct {
 	runningMu sync.Mutex
 	running   map[string]bool
 
+	// steerAnyTime lets a CLI that folds a second prompt into the running
+	// turn take queued messages before a tool starts (OpenCode).
+	steerAnyTime bool
+
 	// todoMeta is what each to-do tool call changed, shown with its result.
 	todoMeta map[string]string
 }
@@ -157,7 +161,8 @@ changes the plan, follow the new plan. Stop only if it asks you to stop or wait.
 `
 
 // steer takes the queued prompts for the CLI to fold into the running turn,
-// while one of its tools runs.
+// while one of its tools runs (or at once, for a CLI that takes them any
+// time, such as OpenCode).
 func (s *cliSteps) steer() string {
 	text, _ := s.steerCalls(false)
 	return text
@@ -175,7 +180,7 @@ func (s *cliSteps) steerCalls(images bool) (string, []message.Attachment) {
 		mu.Unlock()
 		s.a.publishCanceledQueueDrops(canceled)
 	}()
-	if s.ctx.Err() != nil || !s.toolRunning() {
+	if s.ctx.Err() != nil || (!s.steerAnyTime && !s.toolRunning()) {
 		return "", nil
 	}
 	queued, _ := s.a.messageQueue.Get(s.sessionID)

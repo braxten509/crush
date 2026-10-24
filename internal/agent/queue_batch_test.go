@@ -332,6 +332,21 @@ func TestQueueBatchProviderErrorCompletesEverySubmission(t *testing.T) {
 	require.False(t, sa.IsSessionBusy(sess.ID))
 }
 
+func TestOpenCodeSteersWhileNoToolRuns(t *testing.T) {
+	sa, _ := newCancelTestAgent(t)
+	queued := []SessionAgentCall{{SessionID: "opencode", Prompt: "queued"}}
+	sa.messageQueue.Set("opencode", queued)
+	// OpenCode folds a second ACP prompt into the running turn, so its
+	// message need not wait for a tool boundary (owner, 2026-10-24).
+	s := &cliSteps{running: map[string]bool{}, a: sa, ctx: t.Context(), sessionID: "opencode", steerAnyTime: true}
+	require.Equal(t, midTurnNote+"queued", s.steer())
+
+	// Other CLIs still wait for a tool to run.
+	sa.messageQueue.Set("opencode", queued)
+	strict := &cliSteps{running: map[string]bool{}, a: sa, ctx: t.Context(), sessionID: "opencode"}
+	require.Empty(t, strict.steer())
+}
+
 func TestQueueBatchUnconfirmedSteeringRestoresOriginalsInOrder(t *testing.T) {
 	sa, _, broker := newCancelTestAgentWithRunComplete(t)
 	events := broker.Subscribe(t.Context())

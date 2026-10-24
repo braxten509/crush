@@ -13,6 +13,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/message"
 )
 
 // AGY (Antigravity CLI) streams step updates as JSON lines in print mode.
@@ -100,6 +101,17 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	})
 	defer stop()
 	_ = p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": withImagePaths(t.Prompt, t.Attachments)}})
+
+	// A message queued mid-turn goes in as another user line; AGY runs it
+	// as its next turn in this conversation (owner, 2026-10-24).
+	stopSteer := pollSteerInputRetry(t, func() bool { return true }, func(text string, _ []message.Attachment) bool {
+		if p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": text}}) != nil {
+			return false
+		}
+		_ = t.Emit(Event{Type: EventUserMessage, Text: text})
+		return true
+	})
+	defer stopSteer()
 
 	announced := map[int]bool{}
 	limitsRead := false

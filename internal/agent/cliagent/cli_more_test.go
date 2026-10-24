@@ -1,12 +1,15 @@
 package cliagent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/secretguard"
@@ -110,6 +113,46 @@ func TestAGYTurn(t *testing.T) {
 	// An unknown conversation makes agy start a new one silently.
 	_, err = collect(t, "agy", "other")
 	require.ErrorIs(t, err, ErrResume)
+}
+
+func TestAGYSteersDuringATool(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+read -r first
+case "$first" in *'"event":"user"'*) ;; *) exit 7;; esac
+echo '{"event":"init","conversation_id":"conv1"}'
+echo '{"event":"step_update","step_update":{"step_index":1,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"ls"}}}}'
+read -r steer
+case "$steer" in *PINEAPPLE*) ;; *) exit 8;; esac
+echo '{"event":"step_update","step_update":{"step_index":1,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"ls"},"output":"a.txt"}}}'
+echo '{"event":"result","result":{"status":"SUCCESS"}}'
+cat >/dev/null
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("HOME", t.TempDir()) // skip the real ~/.local/bin/agy
+	m := &Model{Kind: config.TypeAGYCLI, ID: "m", Dir: t.TempDir()}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var given atomic.Bool
+	var confirmed []string
+	err := m.Run(ctx, Turn{
+		Prompt: "hi",
+		Emit: func(e Event) error {
+			if e.Type == EventUserMessage {
+				confirmed = append(confirmed, e.Text)
+			}
+			return nil
+		},
+		Steer: func() string {
+			if given.Swap(true) {
+				return ""
+			}
+			return "PINEAPPLE"
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"PINEAPPLE"}, confirmed)
 }
 
 func TestClaudeSettingsReachTheCLI(t *testing.T) {

@@ -19,12 +19,12 @@ describe("the fallback order's blocks", () => {
     // Claude Code has two accounts, so its account word opens a menu; the
     // model's effort levels give it an effort word, "default" when unset.
     const claude = { type: "use", provider: "claude-code", model: "opus", account: "claude-2" };
-    expect(sentenceText(claude, ctx)).toBe("Use Claude Opus on Claude 2 at default effort. Move on when it runs out.");
-    expect(words(claude)).toEqual(["model:Claude Opus", "account:Claude 2", "effort:default", "leave:when it runs out"]);
+    expect(sentenceText(claude, ctx)).toBe("Use Claude Opus (Claude Code) on Claude 2 at default effort. Move on when it runs out.");
+    expect(words(claude)).toEqual(["model:Claude Opus (Claude Code)", "account:Claude 2", "effort:default", "leave:when it runs out"]);
     // Codex has one account: plain words. The extras join the leave word.
     const codex = { type: "use", provider: "codex-cli", model: "gpt-5.6-sol", move_at_percent: 95, refill_first: true, come_back: true };
-    expect(sentenceText(codex, ctx)).toBe("Use GPT-5.6 Sol on Codex 1. Move on at 95% used, after a free refill, and come back when it refills.");
-    expect(words(codex)).toEqual(["model:GPT-5.6 Sol", "leave:at 95% used, after a free refill, and come back when it refills"]);
+    expect(sentenceText(codex, ctx)).toBe("Use GPT-5.6 Sol (Codex) on Codex 1. Move on at 95% used, after a free refill, and come back when it refills.");
+    expect(words(codex)).toEqual(["model:GPT-5.6 Sol (Codex)", "leave:at 95% used, after a free refill, and come back when it refills"]);
     const wait = { type: "wait", kind: "claude-code", max_wait_minutes: 90, meanwhile: "next" };
     expect(sentenceText(wait, ctx)).toBe("Wait for Claude 1 to refill, at most 1 h 30 min, using the next blocks meanwhile.");
     expect(words(wait)).toEqual(["account:Claude 1", "wait:at most 1 h 30 min", "meanwhile:using the next blocks meanwhile"]);

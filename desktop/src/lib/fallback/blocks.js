@@ -80,6 +80,15 @@ export function modelName(providers, provider, model) {
   return p?.models?.find((m) => m?.id === model)?.name || model || "no model";
 }
 
+// The model's name as the fallback order shows it: always with its provider
+// in parentheses, so "Claude Opus (Claude)" tells the two same-named models
+// apart. The provider name alone when there is none.
+export function modelWithProvider(providers, provider, model) {
+  const name = modelName(providers, provider, model);
+  const p = (providers ?? []).find((x) => x?.id === provider);
+  return p?.name ? `${name} (${p.name})` : name;
+}
+
 // "1 h", "90 min", "2 h 30 min".
 export function minutesText(minutes) {
   const n = Math.max(0, Math.round(Number(minutes) || 0));
@@ -123,7 +132,7 @@ export function sentence(block, ctx = {}) {
   if (accountChoices(block, ctx).length > 1) account.menu = "account";
   switch (block?.type) {
     case "use": {
-      const out = [{ text: "Use " }, { text: modelName(providers, block.provider, block.model), menu: "model" }];
+      const out = [{ text: "Use " }, { text: modelWithProvider(providers, block.provider, block.model), menu: "model" }];
       if (hasAccounts(kind)) out.push({ text: " on " }, account);
       if (effortsOf(block, providers).length) out.push({ text: " at " }, { text: block.effort || "default", menu: "effort" }, { text: " effort" });
       out.push({ text: ". Move on " }, { text: leaveWords(block), menu: "leave" }, { text: "." });

@@ -12,7 +12,7 @@
   // setting on, nothing slides.
   import { onMount, tick } from "svelte";
   import { fallback, loadFallback, saveOrder } from "../../lib/fallback/store.svelte.js";
-  import { accountChoices, addList, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, listBlocks, listsOf, menuProviders, modelName, moveBlock, newBlock, removeList, sentence, withListBlocks } from "../../lib/fallback/blocks.js";
+  import { accountChoices, addList, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, listBlocks, listsOf, menuProviders, modelWithProvider, moveBlock, newBlock, removeList, sentence, withListBlocks } from "../../lib/fallback/blocks.js";
   import { modelData, watchModels } from "../../lib/models/store.svelte.js";
   import { MOTION_MS, reducedMotion, settle } from "../../lib/motion.js";
   import WordMenu from "./WordMenu.svelte";
@@ -32,7 +32,7 @@
   const lists = $derived(listsOf(fallback.order));
   const current = $derived(lists.some((l) => l.key === shownList) ? shownList : "");
   const blocks = $derived(listBlocks(fallback.order, current));
-  const listName = (l) => (l.key ? modelName(providers, l.provider, l.model) : "Every other model");
+  const listName = (l) => (l.key ? modelWithProvider(providers, l.provider, l.model) : "Every other model");
 
   let adding = $state(false);
   let menu = $state(""); // the open word menu: "<block key>:<menu>"

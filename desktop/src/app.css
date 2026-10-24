@@ -163,6 +163,29 @@ body {
   overflow: hidden;
 }
 
+/* Every native scrollbar uses the same fine thumb. The thumb stays clear
+   until the shared scroll listener reveals it for two seconds. */
+html * {
+  scrollbar-width: thin !important;
+  scrollbar-color: transparent transparent !important;
+}
+html *::-webkit-scrollbar {
+  width: calc(6 * var(--px)) !important;
+  height: calc(6 * var(--px)) !important;
+}
+html *::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+html *::-webkit-scrollbar-thumb {
+  background: transparent !important;
+}
+html *.app-scrollbar-active {
+  scrollbar-color: var(--rule-control) transparent !important;
+}
+html *.app-scrollbar-active::-webkit-scrollbar-thumb {
+  background: var(--rule-control) !important;
+}
+
 body {
   font: var(--t-reading);
 }

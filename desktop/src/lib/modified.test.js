@@ -233,6 +233,16 @@ describe("the file list (session.go:151-299)", () => {
     ]);
   });
 
+  it("leaves anything with test in its path out of the list", () => {
+    const history = [
+      file("1", "/p/src/app.ts", 0, "a\n", 10),
+      file("2", "/p/src/app.test.ts", 0, "a\n", 11),
+      file("3", "/p/tests/app.ts", 0, "a\n", 12),
+      file("4", "/p/src/LATEST.ts", 0, "a\n", 13),
+    ];
+    expect(modifiedFiles(history).map((f) => f.path)).toEqual(["/p/src/app.ts"]);
+  });
+
   it("rows: changed files only, relative and trimmed paths, …and N more, nothing without changes", () => {
     const files = [
       { path: "/p/internal/ui/model/session.go", additions: 3, deletions: 0 },

@@ -25,6 +25,7 @@
   import { size } from "../../lib/tools/nodes.js";
   import { addProbeReader } from "../../lib/tools/probe.js";
   import { kindName } from "../../lib/tools/review.js";
+  import { withoutTestPaths } from "../../lib/testpaths.js";
   import {
     callsFromChat,
     EXPIRED_TEXT,
@@ -100,8 +101,9 @@
     try {
       const loaded = await loadSheetFiles(sessionId, inputs, (sid, mid) => api.review(sid, mid));
       if (closed) return;
-      folded = loaded.map(startsFolded);
-      files = loaded;
+      const shown = withoutTestPaths(loaded);
+      folded = shown.map(startsFolded);
+      files = shown;
     } catch (error) {
       if (closed) return;
       close();

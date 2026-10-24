@@ -215,6 +215,16 @@ describe("hidden review paths (changes_exclusions_test.go)", () => {
     expect(groupChanges(`hide-${nextGroup++}`, [saved, legacy]).map((f) => f.path)).toEqual(["main.go"]);
     expect(row.summary).toEqual({ label: "edited main.go", adds: 1, dels: 0 });
   });
+  it("leaves test paths out of the summary and the Changes button", () => {
+    const saved = tool("tests", "bash", "", {
+      content: "",
+      review: { root: "/workspace", changes: [{ path: "src/app_test.go", after: { content: "package app\n" } }, { path: "tests/run.py", after: { content: "print(1)\n" } }] },
+    });
+    expect(groupChanges(`tests-${nextGroup++}`, [saved])).toEqual([]);
+    const row = groupRow({ groupKey: `tests-${nextGroup++}`, calls: [saved] });
+    expect(row.hasChanges).toBe(false);
+    expect(row.summary).toBe(null);
+  });
 });
 
 describe("transfers (changes_transfers_test.go)", () => {

@@ -6,6 +6,7 @@
 import { cells } from "../diff.js";
 import { baseName, decode, truncate } from "./go.js";
 import { anyCounted, buildReviewChanges, DELETED, hasEdits, hiddenReviewPath, stats } from "./review.js";
+import { withoutTestPaths } from "../testpaths.js";
 import { movedToBackground, toolStatus } from "./status.js";
 
 // "Ran 4 tools" (PLAN.md:147 wording; the terminal says "4 actions").
@@ -172,7 +173,7 @@ export function groupChanges(groupKey, calls) {
     .join(";");
   const known = changesCache.get(groupKey);
   if (known && known.key === key) return known.files;
-  const files = buildReviewChanges(reviewInputs(calls));
+  const files = withoutTestPaths(buildReviewChanges(reviewInputs(calls)));
   changesCache.set(groupKey, { key, files });
   return files;
 }

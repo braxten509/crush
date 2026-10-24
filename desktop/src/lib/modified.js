@@ -1,3 +1,5 @@
+import { isTestPath } from "./testpaths.js";
+
 // FILES (SIDE-008): the shown chat's modified files, counted from its file
 // history as the terminal counts them (loadSessionFiles and fileList,
 // internal/ui/model/session.go:151-299).
@@ -698,7 +700,7 @@ function countsFor(first, last) {
 export function modifiedFiles(history) {
   const byPath = new Map();
   for (const file of Array.isArray(history) ? history : []) {
-    if (!file || typeof file.path !== "string") continue;
+    if (!file || typeof file.path !== "string" || isTestPath(file.path)) continue;
     if (!byPath.has(file.path)) byPath.set(file.path, []);
     byPath.get(file.path).push(file);
   }

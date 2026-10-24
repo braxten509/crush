@@ -4,11 +4,12 @@
   // provider — with the chosen one's detail on the right, the same left-bar
   // look as Fallback order's "Starts on". Claude Code, Codex and Grok keep
   // account rows (ToolAccounts) and "Another account"; Antigravity, OpenCode
-  // Go and Zen show their own CLI's sign-in state and a Sign in button; an
-  // API provider holds an API key, and another account is a provider entry of
-  // its own (engine AddAccount).
+  // Go and Zen offer their own CLI's sign-in; an API provider holds an API
+  // key, and another account is a provider entry of its own (engine
+  // AddAccount). A row is just a short label and its actions (owner,
+  // 2026-10-24: no subtext and no Signed in / API key set words).
   import { onMount } from "svelte";
-  import { accountGroups, keyText } from "../../lib/accounts/providers.js";
+  import { accountGroups } from "../../lib/accounts/providers.js";
   import { cliState, loadCLIState } from "../../lib/accounts/state.svelte.js";
   import { openDialog } from "../../lib/dialogs.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
@@ -147,15 +148,13 @@
           />
           {#if current.cli.subscription}
             <div class="row">
-              <span class="name">Grok subscription<span class="tool">{" · "}the xAI account behind the picker's Grok models</span></span>
-              <span class="value">{stored("xai") ? "Signed in" : "Not signed in"}</span>
+              <span class="name">Grok subscription</span>
               <button type="button" class="act" onclick={() => (stored("xai") ? signOut("grok") : signIn("grok"))}>{stored("xai") ? "Sign out" : "Sign in…"}</button>
             </div>
           {/if}
         {:else}
           <div class="row">
-            <span class="name">Sign-in<span class="tool">{" · "}{current.name}'s own login, kept by the CLI</span></span>
-            <span class="value">{cliSignedIn(current) ? "Signed in" : cliState.loaded ? "Not signed in" : "…"}</span>
+            <span class="name">Sign-in</span>
             <button type="button" class="act" disabled={busy === current.id} onclick={() => signInCLI(current)}>{cliSignedIn(current) ? "Sign in again" : "Sign in…"}</button>
           </div>
         {/if}
@@ -170,7 +169,6 @@
         {:else}
           <div class="row">
             <span class="name">API key</span>
-            <span class="value">{keyText(current)}</span>
             <button type="button" class="act" onclick={() => openKey(current)}>{current.hasKey || current.hasOAuth ? "Change…" : "Add key…"}</button>
             {#if current.hasKey}<button type="button" class="act" onclick={() => (removing = current.id)}>Remove</button>{/if}
           </div>
@@ -181,9 +179,6 @@
             <button type="button" class="act" onclick={() => addProviderAccount(current)}>Add…</button>
           </div>
         {/if}
-        {#if !current.configured}
-          <p class="quiet">Not set up yet: adding a key turns {current.name} on in the model picker.</p>
-        {/if}
       {/if}
     {:else}
       <p class="quiet">No providers are installed or configured.</p>
@@ -193,17 +188,19 @@
 
 <style>
   /* The Fallback order's two panes: a left bar of names under their group
-     headings, the chosen one's detail on the right. */
+     headings, the chosen one's detail on the right. The bar shares Fallback
+     order's width and never scrolls on its own; the page does (owner,
+     2026-10-24). */
   .accounts {
     display: grid;
-    grid-template-columns: minmax(calc(150 * var(--px)), max-content) minmax(0, 1fr);
+    grid-template-columns: max-content minmax(0, 1fr);
   }
   .providers {
     display: flex;
     flex-direction: column;
-    max-height: calc(560 * var(--px));
-    overflow-y: auto;
-    padding: calc(10 * var(--px)) calc(12 * var(--px)) calc(16 * var(--px)) 0;
+    /* The width Fallback order's left bar has (owner, 2026-10-24). */
+    min-width: calc(210 * var(--px));
+    padding: calc(14 * var(--px)) calc(12 * var(--px)) calc(16 * var(--px)) 0;
     border-right: 1px solid var(--rule-faint);
   }
   .providers-head {
@@ -260,7 +257,6 @@
     font: var(--t-item);
     color: var(--ink);
   }
-  .tool,
   .quiet-name {
     color: var(--slate);
   }

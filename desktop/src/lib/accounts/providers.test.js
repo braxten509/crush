@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { safeProvider } from "../models/providers.js";
-import { accountGroups, keyText } from "./providers.js";
+import { accountGroups } from "./providers.js";
 
 const provider = (id, fields) => [id, safeProvider(id, fields)];
 
@@ -43,14 +43,5 @@ describe("accountGroups", () => {
     const renamed = { providers: new Map([provider("anthropic", { name: "Work Anthropic", type: "anthropic" })]) };
     const groups = accountGroups(renamed, catalog);
     expect(groups[1].rows.find((row) => row.id === "anthropic").name).toBe("Work Anthropic");
-  });
-});
-
-describe("keyText", () => {
-  it("says what credential a provider holds", () => {
-    expect(keyText({ hasKey: true })).toBe("API key set");
-    expect(keyText({ hasOAuth: true })).toBe("Signed in");
-    expect(keyText({ hasOAuth: true, oauthExpired: true })).toBe("Sign-in expired");
-    expect(keyText({})).toBe("No API key");
   });
 });

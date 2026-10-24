@@ -57,11 +57,3 @@ export function accountGroups(cfg, catalog) {
     { label: "API providers", rows: [...custom, ...api] },
   ];
 }
-
-// keyText is an API provider's credential line.
-export function keyText(row) {
-  if (row.hasOAuth && !row.oauthExpired) return "Signed in";
-  if (row.hasOAuth && row.oauthExpired) return "Sign-in expired";
-  if (row.hasKey) return "API key set";
-  return "No API key";
-}

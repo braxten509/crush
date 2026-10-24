@@ -2,8 +2,8 @@
 the hidden screen, with real mouse clicks, on a chat running Codex with two
 free refills: the right panel shows REFILLS 2 with "Use one", and a click asks
 the engine for one; Settings > Accounts shows a provider bar (owner,
-2026-10-24) whose Claude Code detail lists Claude 1 and Claude 2, each name
-with a space on both sides of its dot and Rename last on every row, in one
+2026-10-24) whose Claude Code detail lists Claude 1 and Claude 2 by name
+only, with no tool or sign-in subtext and Rename last on every row, in one
 place (owner, 2026-10-21), and Codex's its own login;
 Settings > Fallback order shows the fixture's three blocks in order, each a
 sentence saying how the chat leaves it (look C, owner 2026-10-21); the switch
@@ -139,7 +139,7 @@ click("nav.chats button.settings")
 click(".settings-nav .row", "Accounts")
 names = run("return [...document.querySelectorAll('[data-account]')].map((e) => e.getAttribute('data-account') + ' ' + e.querySelector('.name').textContent.trim());")
 check(len(names) == 2 and any("Claude 1" in n for n in names) and any("Claude 2" in n for n in names), f"Accounts lists Claude 1 and Claude 2 ({names})")
-check(all(" · " in n for n in names), f"each name has a space on both sides of its dot ({names})")
+check(all(" · " not in n for n in names), f"each row is just the account's name, no tool or sign-in subtext ({names})")
 renames = run("return [...document.querySelectorAll('[data-account]')].map((row) => { const acts = [...row.querySelectorAll('button.act')]; return { last: acts.at(-1)?.textContent.trim() ?? '', right: Math.round((acts.at(-1)?.getBoundingClientRect().right ?? 0) * 10) / 10 }; });") or []
 check(len(renames) == 2 and all(r["last"] == "Rename" for r in renames) and len({r["right"] for r in renames}) == 1, f"every account, the own logins too, has Rename last, in one place ({renames})")
 click('[data-probe="accounts-providers"] .provider', "Codex")
@@ -245,7 +245,7 @@ check(len(lists) == 1 and len(lists[0].get("blocks", [])) == 1 and lists[0]["blo
       f"the new list is saved with one block on its model, beside the four others ({lists})")
 side = run("""return [...document.querySelectorAll('[data-probe="fallback-lists"] .start-pick')].map((e) => ({ text: e.textContent.trim(), on: e.getAttribute('aria-current') === 'true' }));""") or []
 texts = [b["text"] for b in blocks()]
-check(len(side) == 2 and side[0]["text"] == first and side[0]["on"] and side[1]["text"] == "Every other model" and len(texts) == 1,
+check(len(side) == 2 and side[0]["text"].startswith(first) and side[0]["on"] and side[1]["text"] == "Every other model" and len(texts) == 1,
       f"the left column shows the model's list, picked, with its one block on the right ({side}, {texts})")
 picture("lists.png")
 click('[data-probe="fallback-lists"] .start-pick', "Every other model")

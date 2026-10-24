@@ -4,8 +4,9 @@
   // shares account 1's settings, skills, tools and saved chats. "Add" makes
   // one and opens a terminal tab that signs it in. Every account, the tools'
   // own logins too, is renamed in place; one not renamed shows the email it
-  // signed in with (owner, 2026-10-21). Removing asks once more on the row
-  // itself.
+  // signed in with (owner, 2026-10-21). A row is just the account's name
+  // (owner, 2026-10-24: no tool or sign-in subtext). Removing asks once more
+  // on the row itself.
   //   kind, name, ownLogin? (argv), ownSignedIn? (state read by the engine)
   import { onMount } from "svelte";
   import { addAccount, fallback, loadFallback, removeAccount, renameAccount, signInAccount } from "../../lib/fallback/store.svelte.js";
@@ -68,7 +69,7 @@
         <!-- svelte-ignore a11y_autofocus -->
         <input class="rename" type="text" bind:value={draft} aria-label="Account name" autofocus onkeydown={(e) => finishRename(a, e)} onblur={() => finishRename(a)} />
       {:else}
-        {a.name}<span class="tool">{" · "}{name}{a.id ? "" : ", its own login"}</span>
+        {a.name}
       {/if}
     </span>
     {#if removing === a.id && a.id}
@@ -76,7 +77,6 @@
       <button type="button" class="act" onclick={() => ((removing = ""), removeAccount(a.id))}>Yes, remove</button>
       <button type="button" class="act" onclick={() => (removing = "")}>No</button>
     {:else}
-      <span class="value">{signedIn(a) ? "Signed in" : "Not signed in"}</span>
       {#if a.id}
         <button type="button" class="act" onclick={() => signInAccount(a.id)}>{a.signed_in ? "Sign in again" : "Sign in"}</button>
         <button type="button" class="act" onclick={() => (removing = a.id)}>Remove</button>
@@ -114,7 +114,6 @@
     font: var(--t-item);
     color: var(--ink);
   }
-  .tool,
   .quiet-name {
     color: var(--slate);
   }

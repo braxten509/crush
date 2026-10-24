@@ -443,6 +443,8 @@
   .starts {
     display: flex;
     flex-direction: column;
+    /* One width for the accounts page's left bar too (owner, 2026-10-24). */
+    min-width: calc(210 * var(--px));
     padding: calc(28 * var(--px)) calc(12 * var(--px)) 0 0;
     border-right: 1px solid var(--rule-faint);
   }

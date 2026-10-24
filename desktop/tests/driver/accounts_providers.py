@@ -2,11 +2,12 @@
 window on the hidden screen, with real mouse clicks, on a recorded engine
 (tests/fixtures/accounts-providers.json): the left bar lists the agent CLIs
 first and the API providers after, under their headings, with Hyper, GitHub
-Copilot and ChatGPT gone; Claude Code's detail shows its two accounts and
-Codex's its own; every account row spells its dot with spaces and keeps Rename
-last, in one place; a provider with a key says so and offers Change…, another
-account and, when it has none, Add key… opening that provider's key sheet;
-one without a key says it is not set up yet. Pictures go to
+Copilot and ChatGPT gone, has Fallback order's bar width, and never scrolls
+on its own (the page does); Claude Code's
+detail shows its two accounts by name only, with no tool or sign-in subtext,
+and Codex's its own; a provider with a key offers Change…, another account
+and, when it has none, Add key… opening that provider's key sheet; one
+without a key is not offered a second account. Pictures go to
 tests/out/accounts_providers/.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
@@ -113,14 +114,21 @@ ids = [e["id"] for e in bar if "id" in e]
 check(heads == ["Agent CLIs", "API providers"], f"the bar groups the CLIs first, the API providers after ({heads})")
 check(ids.index("claude-code") < ids.index("openrouter"), f"a CLI comes before an API provider ({ids})")
 check(not any(i in ids for i in ("hyper", "copilot", "openai")), f"Hyper, GitHub Copilot and ChatGPT are gone ({ids})")
+bar = run("""
+  const nav = document.querySelector('[data-probe="accounts-providers"]');
+  if (!nav) return null;
+  const style = getComputedStyle(nav);
+  return { overflow: style.overflowY, scroll: nav.scrollHeight - nav.clientHeight, width: Math.round(nav.getBoundingClientRect().width * 10) / 10 };
+""") or {}
+check(bar.get("overflow") == "visible" and bar.get("scroll") == 0, f"the provider bar has no scrollbar of its own ({bar})")
 picture("bar.png")
 
 # 2. Claude Code's detail: its own login and its added account.
 text = run("return document.querySelector('[data-probe=\"provider-accounts\"] .detail-name')?.textContent.trim() ?? '';")
 check(text == "Claude Code", f"the first CLI shows its detail ({text})")
 r = rows()
-check([x["text"].split(" · ")[0] for x in r] == ["Claude 1", "Claude 2"], f"Claude Code lists Claude 1 and Claude 2 ({[x['text'] for x in r]})")
-check(all(" · " in x["text"] for x in r), f"each account name has a space on both sides of its dot ({[x['text'] for x in r]})")
+check([x["text"] for x in r] == ["Claude 1", "Claude 2"], f"Claude Code lists just Claude 1 and Claude 2 ({[x['text'] for x in r]})")
+check(all(" · " not in x["text"] for x in r), f"the rows carry no tool or sign-in subtext ({[x['text'] for x in r]})")
 check(all(x["last"] == "Rename" for x in r) and len({x["right"] for x in r}) == 1, f"Rename is last on every row, in one place ({r})")
 check("Another Claude Code account" in detail()["text"], f"the detail offers another Claude Code account ({detail()['text'][:120]})")
 picture("claude.png")
@@ -133,19 +141,45 @@ check(len(r) == 1 and r[0]["text"].startswith("Codex 1"), f"Codex shows its own 
 # 4. A provider with a key: says so, and offers Change… and another account.
 click('[data-probe="accounts-providers"] .provider', "OpenRouter")
 d = detail()
-check("API key set" in d["text"] and "Change…" in d["acts"], f"OpenRouter says its key is set, with Change… ({d})")
+check("API key" in d["text"] and "Change…" in d["acts"], f"OpenRouter says its key is set, with Change… ({d})")
 check("Another OpenRouter account" in d["text"] and "Add…" in d["acts"], f"OpenRouter offers another account ({d['acts']})")
 picture("openrouter.png")
 
 # 5. A provider with no key says it is not set up yet, and Add key… opens its sheet.
 click('[data-probe="accounts-providers"] .provider', "DeepInfra")
 d = detail()
-check("No API key" in d["text"] and "Add key…" in d["acts"], f"DeepInfra says it has no key, with Add key… ({d})")
-check("Not set up yet" in d["text"] and "Another DeepInfra account" not in d["text"], f"an unconfigured provider is not offered a second account ({d['text'][:160]})")
+check("API key" in d["text"] and "Add key…" in d["acts"], f"DeepInfra offers Add key… ({d})")
+check("Another DeepInfra account" not in d["text"], f"an unconfigured provider is not offered a second account ({d['text'][:160]})")
 click('[data-probe="provider-accounts"] .detail button.act', "Add key…")
 title = run("return document.querySelector('[data-sheet=\"api_key_input\"]')?.textContent.replace(/\\s+/g, ' ').trim() ?? '';") or ""
 check("DeepInfra" in title and "Key" in title, f"Add key… opens DeepInfra's key sheet ({title[:120]})")
 picture("key-sheet.png")
 xdo("key", "Escape")
 time.sleep(0.4)
+
+# 6. Both left columns have the same width (owner, 2026-10-24), and neither
+#    scrolls.
+def left_bar(probe):
+    return run(f"""
+      const nav = document.querySelector('[data-probe="{probe}"]');
+      if (!nav) return null;
+      const style = getComputedStyle(nav);
+      return {{
+        width: Math.round(nav.getBoundingClientRect().width * 10) / 10,
+        overflow: style.overflowY,
+        scroll: nav.scrollHeight - nav.clientHeight,
+      }};
+    """)
+
+click(".settings-nav .row", "Fallback order")
+fallback_bar = left_bar("fallback-lists")
+click(".settings-nav .row", "Accounts")
+accounts_bar = left_bar("accounts-providers")
+check(
+    bool(fallback_bar) and bool(accounts_bar)
+    and abs(fallback_bar["width"] - accounts_bar["width"]) <= 1
+    and fallback_bar["overflow"] == "visible" and accounts_bar["overflow"] == "visible"
+    and fallback_bar["scroll"] == 0 and accounts_bar["scroll"] == 0,
+    f"both left columns are the same width, with no scrollbar ({fallback_bar} / {accounts_bar})",
+)
 finish()

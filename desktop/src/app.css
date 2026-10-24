@@ -173,11 +173,17 @@ html *::-webkit-scrollbar {
   width: calc(6 * var(--px)) !important;
   height: calc(6 * var(--px)) !important;
 }
+html *::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
 html *::-webkit-scrollbar-track {
   background: transparent !important;
 }
 html *::-webkit-scrollbar-thumb {
   background: transparent !important;
+  border-radius: 0 !important;
 }
 html *.app-scrollbar-active {
   scrollbar-color: var(--rule-control) transparent !important;

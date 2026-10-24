@@ -54,7 +54,6 @@
   let query = $state("");
   let chosenGroup = $state(untrack(() => menu.group ?? ""));
   let removing = $state(null); // {item, left, top}: the right-click's Remove
-  let level = $state(""); // the level just clicked, shown until the config says so
   let accountsOpen = $state(false);
   let account = $state(null); // the account just picked, shown until the config says so
   let cheapest = $state(null); // the switch just flipped, shown until the config says so
@@ -72,7 +71,7 @@
   const searching = $derived(query.trim() !== "");
   const rows = $derived(searching ? searchRows(built.items, query) : (shownGroup?.items ?? []));
   const levels = $derived(effortShown(rows, current) ? (coder.info?.reasoning_levels ?? []) : []);
-  const levelNow = $derived(level || current?.reasoning_effort || coder.info?.default_reasoning_effort || "");
+  const levelNow = $derived(current?.reasoning_effort || coder.info?.default_reasoning_effort || "");
   const kind = $derived(kindOf(current?.provider));
   const accounts = $derived(hasAccounts(kind) ? fallback.accounts.filter((a) => a.kind === kind) : []);
   const accountNow = $derived(account ?? current?.account ?? "");
@@ -135,7 +134,7 @@
   // picked in one visit. The button again, Esc or a click outside closes it.
   // A choice that goes to a sign-in sheet hands the window over instead.
   async function pick(item) {
-    if (!item) return;
+    if (!item || isCurrent(item, current)) return;
     const sheetsBefore = dialogs.length;
     const model = selectedModelOf(item, modelData.cfg?.model_efforts);
     if (accountNow && kindOf(item.provider.id) === kind) model.account = accountNow;
@@ -145,11 +144,9 @@
 
   async function pickLevel(next) {
     if (next === levelNow) return;
-    level = next;
     try {
       await setEffort(next);
     } catch (error) {
-      level = "";
       notify("error", error?.message ?? String(error));
     }
   }

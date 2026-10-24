@@ -14,11 +14,16 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
 vi.mock("../../lib/engine/commands.js", () => ({
   api: vi.fn(async (method, path, _query, body) => {
     if (method === "POST") state.posts.push({ path, body: body ?? {} });
+    if (method === "POST" && path === "config/model") {
+      const cfg = state.routes["GET config"] ?? {};
+      state.routes["GET config"] = { ...cfg, models: { ...cfg.models, [body.model_type]: body.model } };
+    }
     const key = `${method} ${path}`;
     // A queued answer serves the config reads in order, so a choice's own
     // refresh sees the model the engine just saved.
     if (key === "GET config" && orders.config.length > 0) return orders.config.shift();
-    return state.routes[key] ?? null;
+    const route = state.routes[key];
+    return typeof route === "function" ? route(body) : route ?? null;
   }),
   events_take: vi.fn(async () => []),
   api_abort: vi.fn(async () => true),
@@ -171,6 +176,86 @@ describe("the model menu (ModelMenu.svelte)", () => {
     await settle();
     expect(state.posts.filter((post) => post.path === "config/model").at(-1).body.model.reasoning_effort).toBe("high");
     expect(ui.menu?.kind).toBe("model");
+  });
+
+  it("browses providers without saving and leaves the current model's effort alone", async () => {
+    const own = { provider: "anthropic", model: "claude-a", reasoning_effort: "high" };
+    state.routes["GET config"] = { ...config(own), model_efforts: { "anthropic:claude-a": "low" } };
+    state.routes["GET providers"] = [...PROVIDERS, { id: "second", name: "Second", models: [{ id: "other", name: "Other" }] }];
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    sessions.currentId = "here";
+    sessions.byId.here = { id: "here", model: own };
+    mount();
+    await settle();
+    const group = (name) => [...document.querySelectorAll('[data-column="groups"] button')].find((b) => b.textContent.trim() === name);
+    group("Second").click();
+    await settle();
+    modelRows()[0].focus();
+    group("Anthropic").click();
+    await settle();
+    expect(state.posts).toEqual([]);
+    modelRows()[0].click();
+    await settle();
+    expect(state.posts).toEqual([]);
+    expect(sessions.byId.here.model).toEqual(own);
+  });
+
+  it("saves effort on this chat's model while another model is the shared default", async () => {
+    const other = { provider: "anthropic", model: "claude-b" };
+    state.routes["GET config"] = config(other);
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    sessions.currentId = "here";
+    sessions.byId.here = { id: "here", model: { provider: "anthropic", model: "claude-a", reasoning_effort: "low" } };
+    sessions.byId.there = { id: "there", model: other };
+    mount();
+    await settle();
+    levelButtons()[1].click();
+    await settle();
+    const expected = { provider: "anthropic", model: "claude-a", reasoning_effort: "high" };
+    expect(state.posts.find((p) => p.path === "sessions/here/model").body.model).toEqual(expected);
+    expect(sessions.byId.here.model).toEqual(expected);
+    expect(sessions.byId.there.model).toEqual(other);
+    expect(levelButtons()[1].getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("reports a failed chat save without changing the shared default or claiming success", async () => {
+    const own = { provider: "anthropic", model: "claude-a", reasoning_effort: "low" };
+    state.routes["GET config"] = config(own);
+    state.routes["POST sessions/here/model"] = () => { throw new Error("chat save refused"); };
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    sessions.currentId = "here";
+    sessions.byId.here = { id: "here", model: own };
+    mount();
+    await settle();
+    levelButtons()[1].click();
+    await settle();
+    expect(state.posts.some((p) => p.path === "config/model" || p.path === "agent/update")).toBe(false);
+    expect(sessions.byId.here.model).toEqual(own);
+    expect(levelButtons()[0].getAttribute("aria-checked")).toBe("true");
+    expect(JSON.stringify(ui)).toContain("chat save refused");
+  });
+
+  it("shows a newly chosen model's effort instead of the previous model's clicked effort", async () => {
+    const own = { provider: "anthropic", model: "claude-a", reasoning_effort: "low" };
+    const providers = structuredClone(PROVIDERS);
+    providers[0].models[1] = { id: "claude-b", name: "Claude B", reasoning_levels: ["low", "high"], default_reasoning_effort: "low" };
+    state.routes["GET providers"] = providers;
+    state.routes["GET config"] = config(own);
+    state.routes["POST config/model"] = (body) => { state.routes["GET config"] = config(body.model); };
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    sessions.currentId = "here";
+    sessions.byId.here = { id: "here", model: own };
+    mount();
+    await settle();
+    levelButtons()[1].click();
+    await settle();
+    modelRows()[1].click();
+    await settle();
+    expect(sessions.byId.here.model.model).toBe("claude-b");
+    expect(levelButtons()[0].getAttribute("aria-checked")).toBe("true");
+    levelButtons()[1].click();
+    await settle();
+    expect(sessions.byId.here.model.reasoning_effort).toBe("high");
   });
 
   it("draws the app's scrollbar on both of its lists", async () => {

@@ -28,14 +28,10 @@ async function coder() {
 export async function saveModelChoice(type, selected) {
   const sid = sessions.currentId;
   if (sid && type === "large") {
-    // A chat of a folder this window has not joined may refuse the write;
-    // the workspace's copy is saved either way.
-    try {
-      await api.setSessionModel(sid, selected);
-      sessions.byId[sid] = { ...sessions.byId[sid], model: { ...selected } };
-    } catch (error) {
-      console.error("saving the chat's model failed", error?.message ?? error);
-    }
+    // A failed chat save must reach the picker: changing only the shared
+    // default would leave this chat running its previous model or effort.
+    await api.setSessionModel(sid, selected);
+    sessions.byId[sid] = { ...sessions.byId[sid], model: { ...selected } };
   }
   await api.setModel(SCOPE.global, type, selected);
 }

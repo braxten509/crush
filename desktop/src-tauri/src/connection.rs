@@ -288,6 +288,7 @@ const ROUTES: &[(&str, &str)] = &[
     ("GET", "sessions/{sid}/history"),
     ("GET", "sessions/{sid}/filetracker/files"),
     ("POST", "sessions/{sid}/kept-skills"),
+    ("POST", "sessions/{sid}/model"),
     ("POST", "agent"),
     ("POST", "agent/main"),
     // The model restore after `config/model` (routes.go:98).
@@ -2497,7 +2498,7 @@ mod tests {
         ("PUT", &["sessions/{sid}"]),
         ("DELETE", &["sessions/{sid}"]),
         ("GET", &["sessions/{sid}/messages", "sessions/{sid}/messages/user", "sessions/{sid}/messages/{mid}/review", "sessions/{sid}/history", "sessions/{sid}/filetracker/files"]),
-        ("POST", &["sessions/{sid}/kept-skills"]),
+        ("POST", &["sessions/{sid}/kept-skills", "sessions/{sid}/model"]),
         ("POST", &["agent", "agent/main", "agent/update"]),
         ("GET", &["lsps/{lsp}/diagnostics"]),
         ("GET", &["agent/sessions/{sid}", "agent/sessions/{sid}/prompts/queued", "agent/sessions/{sid}/prompts/list"]),
@@ -2548,6 +2549,20 @@ mod tests {
         ("POST", &["accounts", "accounts/{aid}/login", "/v1/limits/refill"]),
         ("DELETE", &["accounts/{aid}"]),
     ];
+
+    #[test]
+    fn chat_model_save_reaches_engine() {
+        let j = joined("conn-chat-model", TEST_TUNING);
+        j.fake.forget();
+        let body = json!({"model": {"provider": "codex-cli", "model": "gpt-6-sol", "reasoning_effort": "high"}});
+        run(j.conn.call("POST", "sessions/s-1/model", None, Some(body.clone()), None)).unwrap();
+        let seen = j.fake.seen();
+        let request = seen.iter().find(|s| s.line() == "POST /v1/workspaces/ws-1/sessions/s-1/model")
+            .expect("chat model save reached the engine");
+        assert_eq!(request.json(), body);
+        assert_eq!(request.query("client_id").as_deref(), Some(j.opened.client_id.as_str()));
+        assert!(check_route("DELETE", "sessions/s-1/model").is_err());
+    }
 
     #[test]
     fn route_list_has_fallback_routes() {

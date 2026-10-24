@@ -27,6 +27,7 @@ type acpUpdate struct {
 	} `json:"_meta"`
 	SessionUpdate string          `json:"sessionUpdate"`
 	Entries       any             `json:"entries"` // plan: the agent's steps
+	Used          int64           `json:"used"`    // usage_update: the context in use now
 	Size          int64           `json:"size"`    // usage_update: the model's context window
 	Content       json.RawMessage `json:"content"`
 	ToolCallID    string          `json:"toolCallId"`
@@ -102,15 +103,21 @@ type acpRun struct {
 	// at its next step, then answers it with the turn's own result. It
 	// sends no echo, so a message counts as taken once a tool call ends
 	// and the model moves on, or once its prompt is answered. Grok would
-	// only queue it as a separate turn.
-	steerMu   sync.Mutex
-	steerIDs  map[string]string // unanswered steered prompts
-	steerN    int
-	sent      steered
-	prompted  atomic.Bool
-	boundary  bool   // a tool call ended since the last confirm
-	final     []byte // the turn's result, held while steered prompts are open
-	stopSteer func()
+	// only queue it as a separate turn. A step accepts one only while a
+	// tool runs; sent between steps it waits for the turn to end.
+	steerMu     sync.Mutex
+	steerIDs    map[string]string // unanswered steered prompts
+	steerN      int
+	sent        steered
+	prompted    atomic.Bool
+	toolRunning atomic.Bool
+	boundary    bool   // a tool call ended since the last confirm
+	final       []byte // the turn's result, held while steered prompts are open
+	stopSteer   func()
+	// contextUsed and contextLimit are the last usage_update; the turn's
+	// result reports all its steps together, too many for the context meter.
+	contextUsed  int64
+	contextLimit int64
 
 	// Markers (engine-design.md 5.11). prompts counts the prompts the
 	// native session holds: those session/load replays, then each
@@ -174,7 +181,7 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 
 	r.stopSteer = func() {}
 	if name == "opencode" {
-		r.stopSteer = pollSteer(r.t, r.prompted.Load, r.steer)
+		r.stopSteer = pollSteer(r.t, func() bool { return r.prompted.Load() && r.toolRunning.Load() }, r.steer)
 	}
 	defer r.stopSteer()
 	for p.lines.Scan() {
@@ -274,6 +281,16 @@ func (r *acpRun) countReplayed(msg rpcMessage) {
 	}
 	r.steerMu.Unlock()
 	r.replayedUser, r.replayedID = true, u.MessageID
+}
+
+// emitContextUsed reports the last usage_update again after the turn's own
+// usage: that result sums every step, so it would otherwise replace the
+// current context size with the turn's total.
+func (r *acpRun) emitContextUsed() error {
+	if r.contextUsed <= 0 || r.contextLimit <= 0 {
+		return nil
+	}
+	return r.t.Emit(Event{Type: EventContextBudget, ContextLimit: r.contextLimit, ContextUsed: r.contextUsed, ContextEstimated: true})
 }
 
 // emitPromptMarker reports Grok's prompt count once a prompt ended: the
@@ -419,7 +436,11 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 			r.final = msg.Result
 			return false, nil
 		}
-		return true, acpFinish(r.name, msg.Result, r.t.Emit)
+		finishErr := acpFinish(r.name, msg.Result, r.t.Emit)
+		if err := r.emitContextUsed(); err != nil {
+			return true, err
+		}
+		return true, finishErr
 	}
 	return false, nil
 }
@@ -446,7 +467,10 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 		RefreshLimitsDuringTurn(r.ctx, r.m.Kind, r.m.Account, &r.limitsRead)
 	}
 	if r.name == "opencode" && params.Update.SessionUpdate == "usage_update" && params.Update.Size > 0 {
-		if err := r.t.Emit(openCodeContextBudget(openCodeBudgetWindow(params.Update.Size, r.m))); err != nil {
+		event := openCodeContextBudget(openCodeBudgetWindow(params.Update.Size, r.m))
+		event.ContextUsed = params.Update.Used
+		r.contextUsed, r.contextLimit = params.Update.Used, event.ContextLimit
+		if err := r.t.Emit(event); err != nil {
 			return err
 		}
 	}
@@ -462,6 +486,7 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 	if err := acpHandleUpdate(params.Update, r.calls, r.t.Emit); err != nil {
 		return err
 	}
+	r.toolRunning.Store(len(r.calls) > 0)
 	return r.emitMessageMarker(params.Update)
 }
 

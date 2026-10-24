@@ -90,6 +90,7 @@ const TextBreak = "\n\n"
 // use its native renderers.
 type Event struct {
 	ContextLimit     int64
+	ContextUsed      int64
 	ContextEstimated bool
 	Compacting       bool
 	Type             EventType

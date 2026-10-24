@@ -52,6 +52,9 @@ type cliSteps struct {
 	tools    int
 	steps    []fantasy.StepResult
 	native   string
+	// contextUsed is the CLI's own count of the context in use, when it
+	// reports one. The turn's usage sums every step and is too large.
+	contextUsed int64
 
 	// assistant is the open step's assistant message, from its step
 	// context. lastToolMessage reports the newest tool message the turn
@@ -291,7 +294,13 @@ func (s *cliSteps) finish(reason fantasy.FinishReason) error {
 		return err
 	}
 	s.open = false
-	step := fantasy.StepResult{Response: fantasy.Response{Content: s.content, FinishReason: reason, Usage: s.usage}}
+	usage := s.usage
+	if s.contextUsed > 0 {
+		// A CLI's turn usage sums every step. The context in use is the
+		// last step's prompt, which the CLI reports on its own.
+		usage = fantasy.Usage{InputTokens: s.contextUsed, TotalTokens: s.contextUsed}
+	}
+	step := fantasy.StepResult{Response: fantasy.Response{Content: s.content, FinishReason: reason, Usage: usage}}
 	s.steps = append(s.steps, step)
 	return s.sc.OnStepFinish(step)
 }
@@ -417,10 +426,19 @@ func (s *cliSteps) handleContextBudget(e cliagent.Event) error {
 		Provider: string(s.m.Kind), Model: s.m.ID,
 		Tokens: e.ContextLimit, Estimated: e.ContextEstimated,
 	}
-	if current.ContextBudget == budget {
+	if e.ContextUsed > 0 {
+		s.contextUsed = e.ContextUsed
+	}
+	if current.ContextBudget == budget && (e.ContextUsed <= 0 || current.PromptTokens == e.ContextUsed) {
 		return nil
 	}
 	current.ContextBudget = budget
+	if e.ContextUsed > 0 {
+		// The CLI's own count of the context in use; its turn total counts
+		// every step and is far too large for the meter.
+		current.PromptTokens = e.ContextUsed
+		current.CompletionTokens = 0
+	}
 	_, err = s.a.sessions.Save(s.ctx, current)
 	return err
 }

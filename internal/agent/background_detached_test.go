@@ -40,7 +40,7 @@ func TestDetachedCompletionIgnoresHelpersSubagentsAndOwnedShells(t *testing.T) {
 
 func TestDetachedNotificationDoesNotInventExitStatus(t *testing.T) {
 	start := time.Now()
-	notice := detachedNotification(detachedKey{77, start}, detachedProc{command: "sleep 10"}, start.Add(10*time.Second))
+	notice := detachedNotification(detachedKey{77, start}, detachedProc{command: "npm run dev"}, start.Add(10*time.Second))
 	require.Contains(t, notice, "<status>ended</status>")
 	require.Contains(t, notice, "can't see its exit status")
 }

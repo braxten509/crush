@@ -161,10 +161,10 @@ func TestTaskResultMatchesEarlierFormats(t *testing.T) {
 		fmt.Sprintf("<%s>\n<name>%s</name>\n<status>%s</status>\n<result>\n%s\n</result>\n</%s>", TaskNotificationTag, AskName, AskAnswered, "Q1: yes", TaskNotificationTag),
 		taskResult{Name: AskName, Status: AskAnswered, Body: "Q1: yes"}.String())
 
-	key, process := detachedKey{pid: 42, started: time.Unix(0, 0)}, detachedProc{session: "s", command: "sleep 9"}
+	key, process := detachedKey{pid: 42, started: time.Unix(0, 0)}, detachedProc{session: "s", command: "npm run dev"}
 	require.Equal(t,
 		fmt.Sprintf("<%s>\n<name>%s</name>\n<status>ended</status>\n<result>\nThe background process `%s` (PID %d) ended after about %s. Crush can't see its exit status; check its output file if it wrote one.\n</result>\n</%s>",
-			TaskNotificationTag, BackgroundProcessName, "sleep 9", 42, 9*time.Second, TaskNotificationTag),
+			TaskNotificationTag, BackgroundProcessName, "npm run dev", 42, 9*time.Second, TaskNotificationTag),
 		detachedNotification(key, process, time.Unix(9, 0)))
 
 	now := time.Now()

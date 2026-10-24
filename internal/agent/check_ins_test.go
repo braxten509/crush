@@ -191,10 +191,12 @@ func TestSessionGetsOneCheckInForAllItsWork(t *testing.T) {
 	removeB := h.addCheckIn(first.ID, fixedWork("Job B", "tests", "b out", time.Now()))
 	removeC := h.addCheckIn(second.ID, fixedWork("Job C", "other", "c out", time.Now()))
 
+	// Collect until each chat has had two rounds (the limit only matters
+	// if check-ins stop).
 	perSession := map[string]int{}
-	deadline := time.After(time.Second)
+	deadline := time.After(2 * time.Second)
 collect:
-	for {
+	for perSession[first.ID] < 2 || perSession[second.ID] < 2 {
 		select {
 		case call := <-calls:
 			perSession[call.SessionID]++
@@ -212,7 +214,9 @@ collect:
 		}
 	}
 	require.GreaterOrEqual(t, perSession[first.ID], 2)
-	require.LessOrEqual(t, perSession[first.ID], 6, "one message per round, not one per item")
+	// One message per item would give the first chat (two items) twice the
+	// second chat's count.
+	require.LessOrEqual(t, perSession[first.ID], perSession[second.ID]+1, "one message per round, not one per item")
 	require.GreaterOrEqual(t, perSession[second.ID], 2)
 
 	removeA()
@@ -232,7 +236,7 @@ collect:
 	for len(calls) > 0 {
 		<-calls
 	}
-	require.Never(t, func() bool { return len(calls) > 0 }, 700*time.Millisecond, 20*time.Millisecond, "check-ins continue after all work ended")
+	require.Never(t, func() bool { return len(calls) > 0 }, 400*time.Millisecond, 20*time.Millisecond, "check-ins continue after all work ended")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	require.Empty(t, h.checkIns)
@@ -241,11 +245,12 @@ collect:
 // Real background jobs in one session share check-ins too.
 func TestBackgroundJobsShareOneCheckIn(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
-	// Each start takes about a second; the round leaves room for both on a
-	// busy machine.
-	h.checkInEvery = 4 * time.Second
-	first := startNativeJob(t, h, sessionID, "printf one; sleep 10")
-	second := startNativeJob(t, h, sessionID, "printf two; sleep 10")
+	// Each start takes FastFailureWait (short in tests); the round leaves
+	// room for both.
+	h.checkInEvery = 400 * time.Millisecond
+	hold, _ := gate(t)
+	first := startNativeJob(t, h, sessionID, "printf one; "+hold)
+	second := startNativeJob(t, h, sessionID, "printf two; "+hold)
 	select {
 	case notice := <-notices:
 		require.Contains(t, notice, "<status>running</status>")
@@ -284,10 +289,16 @@ func TestServiceOnlyCheckInsStopAfterThree(t *testing.T) {
 	removeService := h.addCheckIn(session.ID, service)
 	defer removeService()
 
+	// The notes come every 100 ms: wait for three (the limit only matters
+	// if they stop early), then three rounds of quiet show no fourth.
 	quietNotes := func() int {
 		count := 0
-		deadline := time.After(time.Second)
+		limit := time.After(2 * time.Second)
+		var quiet <-chan time.Time
 		for {
+			if count == serviceOnlyCheckIns && quiet == nil {
+				quiet = time.After(300 * time.Millisecond)
+			}
 			select {
 			case call := <-calls:
 				if strings.Contains(call.Prompt, "[Job A]") {
@@ -297,7 +308,9 @@ func TestServiceOnlyCheckInsStopAfterThree(t *testing.T) {
 				require.Contains(t, call.Prompt, "crush bg --stop")
 				require.NotContains(t, call.Prompt, "noisy log")
 				count++
-			case <-deadline:
+			case <-limit:
+				return count
+			case <-quiet:
 				return count
 			}
 		}
@@ -344,10 +357,16 @@ func TestStrayProcessesGetCheckIns(t *testing.T) {
 	}
 
 	h.syncStrays(known, []Server{adb}, nil)
+	// Three notes (the limit only matters if they stop early), then three
+	// rounds of quiet show no fourth.
 	notes := 0
-	deadline := time.After(time.Second)
+	limit := time.After(2 * time.Second)
+	var quiet <-chan time.Time
 collect:
 	for {
+		if notes == serviceOnlyCheckIns && quiet == nil {
+			quiet = time.After(300 * time.Millisecond)
+		}
 		select {
 		case call := <-calls:
 			if strings.Contains(call.Prompt, "[PID 202]") {
@@ -356,7 +375,9 @@ collect:
 			require.Contains(t, call.Prompt, "[PID 101] adb · 5037")
 			require.Contains(t, call.Prompt, "kill <PID>")
 			notes++
-		case <-deadline:
+		case <-limit:
+			break collect
+		case <-quiet:
 			break collect
 		}
 	}

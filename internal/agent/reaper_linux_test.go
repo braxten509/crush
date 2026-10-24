@@ -18,8 +18,12 @@ import (
 // D-Bus-started services alone.
 func TestReaperStopsMarkedProcessesWhenCrushDies(t *testing.T) {
 	marker := TasksDirEnv + "=/reaper-test-" + uuid.NewString()
+	grace := reapGrace
+	reapGrace = 200 * time.Millisecond
+	t.Cleanup(func() { reapGrace = grace })
+	hold, _ := gate(t)
 	start := func(env ...string) *exec.Cmd {
-		cmd := exec.Command("sleep", "60")
+		cmd := exec.Command("sh", "-c", "exec "+hold)
 		cmd.Env = append(os.Environ(), env...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		require.NoError(t, cmd.Start())
@@ -27,7 +31,7 @@ func TestReaperStopsMarkedProcessesWhenCrushDies(t *testing.T) {
 		return cmd
 	}
 	job := start(marker)
-	ignores := exec.Command("sh", "-c", `trap "" TERM; echo ready; exec sleep 60`)
+	ignores := exec.Command("sh", "-c", `trap "" TERM; echo ready; exec `+hold)
 	ignores.Env = append(os.Environ(), marker)
 	ignores.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	out, err := ignores.StdoutPipe()
@@ -66,14 +70,15 @@ func TestReaperStopsMarkedProcessesWhenCrushDies(t *testing.T) {
 // While Crush lives, the reaper waits.
 func TestReaperWaitsWhileCrushLives(t *testing.T) {
 	marker := TasksDirEnv + "=/reaper-test-" + uuid.NewString()
-	job := exec.Command("sleep", "60")
+	hold, _ := gate(t)
+	job := exec.Command("sh", "-c", "exec "+hold)
 	job.Env = append(os.Environ(), marker)
 	require.NoError(t, job.Start())
 	t.Cleanup(func() { _ = job.Process.Kill(); _ = job.Wait() })
 	owner, err := startReaper(marker)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = owner.Close() })
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 	require.True(t, running(job.Process.Pid))
 }
 

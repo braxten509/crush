@@ -86,8 +86,10 @@ func startJobWithEnv(t *testing.T, h *taskHub, env []string, sessionID, command 
 // it ends, after the agent's turn is over.
 func TestNativeBackgroundJobReportsOnceWhenItEnds(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
-	job := startNativeJob(t, h, sessionID, "sleep 2; printf finished")
+	hold, finish := gate(t)
+	job := startNativeJob(t, h, sessionID, hold+"; printf finished")
 	require.True(t, h.hasRunning(sessionID), "a running job holds the finished alert")
+	finish()
 	select {
 	case notice := <-notices:
 		require.Contains(t, notice, "<name>Background process</name>")
@@ -97,7 +99,7 @@ func TestNativeBackgroundJobReportsOnceWhenItEnds(t *testing.T) {
 	case <-time.After(8 * time.Second):
 		t.Fatal("completion notification missing")
 	}
-	require.Never(t, func() bool { return len(notices) > 0 }, time.Second, 50*time.Millisecond, "the job was reported twice")
+	require.Never(t, func() bool { return len(notices) > 0 }, 300*time.Millisecond, 20*time.Millisecond, "the job was reported twice")
 	require.Eventually(t, func() bool { return !h.hasRunning(sessionID) }, 2*time.Second, 20*time.Millisecond)
 }
 
@@ -105,12 +107,13 @@ func TestNativeBackgroundJobReportsOnceWhenItEnds(t *testing.T) {
 // there tells the agent.
 func TestNativeBackgroundJobListedOnceAndUserStopIsReported(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
-	job := startNativeJob(t, h, sessionID, "sleep 30; printf never")
+	hold, _ := gate(t)
+	job := startNativeJob(t, h, sessionID, hold+"; printf never")
 	var listed []Process
 	require.Eventually(t, func() bool {
 		listed = nil
 		for _, p := range BackgroundProcesses() {
-			if p.JobID == job.ID || strings.Contains(p.Command, "sleep 30") {
+			if p.JobID == job.ID || strings.Contains(p.Command, hold) {
 				listed = append(listed, p)
 			}
 		}
@@ -119,12 +122,12 @@ func TestNativeBackgroundJobListedOnceAndUserStopIsReported(t *testing.T) {
 	require.Never(t, func() bool {
 		count := 0
 		for _, p := range BackgroundProcesses() {
-			if p.JobID == job.ID || strings.Contains(p.Command, "sleep 30") {
+			if p.JobID == job.ID || strings.Contains(p.Command, hold) {
 				count++
 			}
 		}
 		return count != 1
-	}, 500*time.Millisecond, 50*time.Millisecond, "the job must be listed exactly once")
+	}, 300*time.Millisecond, 20*time.Millisecond, "the job must be listed exactly once")
 	require.Equal(t, job.ID, listed[0].JobID)
 	require.NoError(t, StopBackgroundProcess(listed[0]))
 	select {
@@ -138,17 +141,18 @@ func TestNativeBackgroundJobListedOnceAndUserStopIsReported(t *testing.T) {
 // A job the agent stopped with job_kill sends no message: the agent knows.
 func TestNativeBackgroundJobStoppedByAgentSendsNothing(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
-	job := startNativeJob(t, h, sessionID, "sleep 30")
+	hold, _ := gate(t)
+	job := startNativeJob(t, h, sessionID, hold)
 	runNativeTool(t, h.env(sessionID), sessionID, shelltool.NewJobKillTool(), tools.JobKillParams{ShellID: job.ID})
 	require.True(t, job.IsDone())
-	require.Never(t, func() bool { return len(notices) > 0 }, 1500*time.Millisecond, 50*time.Millisecond, "the agent's own stop was reported")
+	require.Never(t, func() bool { return len(notices) > 0 }, 300*time.Millisecond, 20*time.Millisecond, "the agent's own stop was reported")
 	require.Eventually(t, func() bool { return !h.hasRunning(sessionID) }, 2*time.Second, 20*time.Millisecond)
 }
 
 // Stopping a job that has already ended leaves no mark behind.
 func TestJobKillOfEndedJobLeavesNoMark(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
-	job := startNativeJob(t, h, sessionID, "sleep 1.5")
+	job := startNativeJob(t, h, sessionID, "sleep 0.3")
 	select {
 	case <-notices:
 	case <-time.After(8 * time.Second):
@@ -163,22 +167,23 @@ func TestJobKillOfEndedJobLeavesNoMark(t *testing.T) {
 // end. A job whose environment names another Crush isn't taken either.
 func TestJobsOutsideTheMainChatAreNotWatched(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
+	hold, _ := gate(t)
 	for _, env := range [][]string{
 		{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "="},
 		{TasksDirEnv + "=" + t.TempDir(), TasksSessionEnv + "=" + sessionID},
 	} {
-		job, response := startJobWithEnv(t, h, env, sessionID, "sleep 30")
+		job, response := startJobWithEnv(t, h, env, sessionID, hold)
 		require.NotContains(t, response.Content, "Crush will report when it ends")
 		require.NoError(t, shell.GetBackgroundShellManager().Kill(job.ID))
 	}
 	require.False(t, h.hasRunning(sessionID))
-	require.Never(t, func() bool { return len(notices) > 0 }, time.Second, 50*time.Millisecond)
+	require.Never(t, func() bool { return len(notices) > 0 }, 300*time.Millisecond, 20*time.Millisecond)
 }
 
 // crush bg jobs go through the same watcher and still report exactly once.
 func TestManagedBackgroundJobReportsOnce(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
-	response := h.background(TaskRequest{Session: sessionID, Background: &BackgroundRequest{Command: "sleep 1; printf managed", WorkingDir: t.TempDir()}})
+	response := h.background(TaskRequest{Session: sessionID, Background: &BackgroundRequest{Command: "sleep 0.3; printf managed", WorkingDir: t.TempDir()}})
 	require.Empty(t, response.Error)
 	var meta tools.BashResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(response.Background.Metadata), &meta))
@@ -189,7 +194,7 @@ func TestManagedBackgroundJobReportsOnce(t *testing.T) {
 	case <-time.After(8 * time.Second):
 		t.Fatal("completion notification missing")
 	}
-	require.Never(t, func() bool { return len(notices) > 0 }, time.Second, 50*time.Millisecond, "the job was reported twice")
+	require.Never(t, func() bool { return len(notices) > 0 }, 300*time.Millisecond, 20*time.Millisecond, "the job was reported twice")
 }
 
 // A job whose command leaves a helper holding its output (D-Bus portals do)
@@ -197,15 +202,16 @@ func TestManagedBackgroundJobReportsOnce(t *testing.T) {
 // notice names the helper.
 func TestJobEndsDespiteLeftoverHoldingItsOutput(t *testing.T) {
 	h, sessionID, notices := nativeJobTest(t)
-	job := startNativeJob(t, h, sessionID, "sh -c 'sleep 9 & printf started'")
+	hold, _ := gate(t)
+	job := startNativeJob(t, h, sessionID, `sh -c "`+hold+` & printf started"`)
 	select {
 	case notice := <-notices:
 		require.Contains(t, notice, "ended with exit code 0")
 		require.Contains(t, notice, "started")
 		require.Contains(t, notice, "still running")
-		require.Contains(t, notice, "sleep 9")
+		require.Contains(t, notice, "cat ")
 	case <-time.After(7 * time.Second):
 		t.Fatal("the job waited for the leftover helper")
 	}
-	require.True(t, job.IsDone())
+	require.Eventually(t, job.IsDone, 2*time.Second, 10*time.Millisecond)
 }

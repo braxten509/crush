@@ -281,6 +281,11 @@ func isSafeReadOnlyCommand(command string) bool {
 	return false
 }
 
+// FastFailureWait is how long a new background command is watched for a
+// quick failure before it is left running as a job; a variable so tests can
+// shorten it.
+var FastFailureWait = time.Second
+
 // runInBackground starts a command the model asked to run in the
 // background. It reports whether the command was left running as a job.
 func (t *bashTool) runInBackground(ctx context.Context, r *bashRun, movedSleep bool) (fantasy.ToolResponse, bool, error) {
@@ -294,7 +299,7 @@ func (t *bashTool) runInBackground(ctx context.Context, r *bashRun, movedSleep b
 	}
 
 	// Wait a short time to detect fast failures (blocked commands, syntax errors, etc.)
-	time.Sleep(1 * time.Second)
+	time.Sleep(FastFailureWait)
 	stdout, stderr, done, execErr := bgShell.GetOutput()
 
 	if done {

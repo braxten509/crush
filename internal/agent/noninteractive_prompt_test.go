@@ -216,7 +216,8 @@ func TestNonInteractivePromptJobIsNotSaved(t *testing.T) {
 	parent, _ := helperChats(t, c)
 	jobs := shell.GetBackgroundShellManager()
 	saved := func(ctx context.Context) bool {
-		job, err := jobs.Start(t.Context(), t.TempDir(), nil, "sleep 30", "job", h.env(parent.ID)...)
+		hold, _ := gate(t)
+		job, err := jobs.Start(t.Context(), t.TempDir(), nil, hold, "job", h.env(parent.ID)...)
 		require.NoError(t, err)
 		t.Cleanup(func() {
 			_ = jobs.Kill(job.ID)

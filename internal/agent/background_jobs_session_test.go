@@ -14,7 +14,8 @@ func TestManagedJobsCarrySession(t *testing.T) {
 	require.NoError(t, err)
 	other, err := h.c.sessions.Create(t.Context(), "other")
 	require.NoError(t, err)
-	job := startJob(t, h, chat.ID, "sleep 30")
+	hold, _ := gate(t)
+	job := startJob(t, h, chat.ID, hold)
 
 	isJob := func(p Process) bool { return p.JobID == job.ID }
 	all := BackgroundProcesses()

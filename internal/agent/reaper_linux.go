@@ -19,11 +19,15 @@ import (
 const reaperArgument = "__crush-reaper"
 
 // reapGrace is how long processes get to exit after SIGTERM before the
-// reaper kills what is left.
-const reapGrace = 3 * time.Second
+// reaper kills what is left. The reaper gets it as its last argument, so a
+// test can shorten it.
+var reapGrace = 3 * time.Second
 
 func init() {
-	if len(os.Args) == 3 && os.Args[1] == reaperArgument {
+	if len(os.Args) == 4 && os.Args[1] == reaperArgument {
+		if grace, err := time.ParseDuration(os.Args[3]); err == nil {
+			reapGrace = grace
+		}
 		_, _ = io.Copy(io.Discard, os.NewFile(3, "owner"))
 		reap(os.Args[2])
 		os.Exit(0)
@@ -39,7 +43,7 @@ func startReaper(marker string) (*os.File, error) {
 		return nil, err
 	}
 	defer read.Close()
-	cmd := exec.Command("/proc/self/exe", reaperArgument, marker)
+	cmd := exec.Command("/proc/self/exe", reaperArgument, marker, reapGrace.String())
 	// No marker in its own environment, so it never stops itself and isn't
 	// listed as background work.
 	cmd.Env = []string{}

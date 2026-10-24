@@ -14,11 +14,14 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/x/vcr"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,6 +36,12 @@ func TestMain(m *testing.M) {
 	os.Unsetenv("DBUS_STARTER_BUS_TYPE")
 	// Recorded prompts must not depend on how full this machine's memory is.
 	memoryStatus = func() memwatch.Status { return memwatch.Status{} }
+	// Every wait a passing test sits through is 0.5 s or less (owner,
+	// 2026-10-23), so the engine's own delays are short here.
+	shelltool.FastFailureWait = 100 * time.Millisecond
+	killGrace = 200 * time.Millisecond
+	shell.LeftoverWait = 300 * time.Millisecond
+	cliagent.WindDownGrace = 200 * time.Millisecond
 	m.Run()
 }
 

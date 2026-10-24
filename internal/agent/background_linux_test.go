@@ -92,9 +92,12 @@ func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, t.Name()))
 	defer cancel()
 	ctx = context.WithValue(ctx, tools.ShellEnvContextKey, []string{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "=" + t.Name()})
+	hold, finish := gate(t)
+	input, err := json.Marshal(map[string]string{"command": hold, "description": "native background fixture"})
+	require.NoError(t, err)
 	done := make(chan fantasy.ToolResponse, 1)
 	go func() {
-		response, err := tool.Run(ctx, fantasy.ToolCall{ID: "fixture", Name: tools.BashToolName, Input: `{"command":"sleep 3","description":"native background fixture"}`})
+		response, err := tool.Run(ctx, fantasy.ToolCall{ID: "fixture", Name: tools.BashToolName, Input: string(input)})
 		require.NoError(t, err)
 		done <- response
 	}()
@@ -114,7 +117,7 @@ func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(response.Metadata), &metadata))
 	require.Eventually(t, func() bool {
 		for _, process := range BackgroundProcesses() {
-			if process.Command == "sleep 3" {
+			if strings.ReplaceAll(process.Command, "'", "") == strings.ReplaceAll(hold, "'", "") {
 				return true
 			}
 		}
@@ -123,6 +126,7 @@ func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 	cancel()
 	job, ok := shell.GetBackgroundShellManager().Get(metadata.ShellID)
 	require.True(t, ok)
+	finish()
 	job.Wait()
 	require.NoError(t, shell.GetBackgroundShellManager().Remove(metadata.ShellID))
 }
@@ -144,7 +148,9 @@ func TestBackgroundCountAfterCtrlB(t *testing.T) {
 	})
 	// A protocol fixture starts a real command, then hands it back still
 	// running when Ctrl+B is requested. No real model or credentials are used.
-	script := `#!/usr/bin/env python3
+	hold, _ := gate(t)
+	command := hold + "; true"
+	script := strings.ReplaceAll(`#!/usr/bin/env python3
 import json, os, signal, subprocess, sys
 def emit(message):
     print(json.dumps(message), flush=True)
@@ -152,8 +158,8 @@ for raw in sys.stdin:
     if json.loads(raw).get("type") == "user":
         break
 emit({"type":"system", "subtype":"init", "session_id":"native"})
-emit({"type":"assistant", "message":{"content":[{"type":"tool_use", "id":"command", "name":"Bash", "input":{"command":"sleep 30; true"}}]}})
-child = subprocess.Popen(["bash", "-c", "sleep 30; true"], start_new_session=True)
+emit({"type":"assistant", "message":{"content":[{"type":"tool_use", "id":"command", "name":"Bash", "input":{"command":"GATE_COMMAND"}}]}})
+child = subprocess.Popen(["bash", "-c", "GATE_COMMAND"], start_new_session=True)
 emit({"type":"system", "subtype":"task_started", "tool_use_id":"command"})
 try:
     for raw in sys.stdin:
@@ -169,7 +175,7 @@ finally:
     except ProcessLookupError:
         pass
     child.wait()
-`
+`, "GATE_COMMAND", command)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -194,7 +200,7 @@ finally:
 	require.Eventually(t, func() bool {
 		procs := markedProcs(hubMarkers())
 		for _, p := range procs {
-			if isCommandRoot(p, procs) && commandText(p.args) == "sleep 30; true" && isForegroundCommand(p, procs) {
+			if isCommandRoot(p, procs) && commandText(p.args) == command && isForegroundCommand(p, procs) {
 				return true
 			}
 		}
@@ -204,7 +210,7 @@ finally:
 	require.True(t, cliagent.Background(t.Name()))
 	require.Eventually(t, func() bool {
 		procs := BackgroundProcesses()
-		return len(procs) == 1 && procs[0].Command == "sleep 30; true"
+		return len(procs) == 1 && procs[0].Command == command
 	}, 5*time.Second, 20*time.Millisecond, "Ctrl+B adds the still-running command to the background list")
 }
 
@@ -222,7 +228,9 @@ func TestBackgroundProcesses(t *testing.T) {
 
 	// A stand-in CLI (not a shell) that runs a command through a shell,
 	// like an agent's bash tool does.
-	cli := exec.Command("python3", "-c", `import subprocess; subprocess.run(["bash", "-c", "sleep 30; true"])`)
+	hold, _ := gate(t)
+	command := hold + "; true"
+	cli := exec.Command("python3", "-c", `import subprocess, sys; subprocess.run(["bash", "-c", sys.argv[1]])`, command)
 	cli.Env = append(os.Environ(), TasksDirEnv+"="+h.dir, TasksSessionEnv+"="+t.Name())
 	require.NoError(t, cli.Start())
 	t.Cleanup(func() { _ = cli.Process.Kill(); _ = cli.Wait() })
@@ -232,14 +240,14 @@ func TestBackgroundProcesses(t *testing.T) {
 		found = BackgroundProcesses()
 		return len(found) == 1
 	}, 5*time.Second, 50*time.Millisecond, "the CLI itself and the sleep under the shell are not listed")
-	require.Equal(t, "sleep 30; true", found[0].Command)
+	require.Equal(t, command, found[0].Command)
 	require.Equal(t, found[0].Started, BackgroundProcesses()[0].Started, "start times remain stable for process identity checks")
 
-	// A PID under the listed command (the sleep) finds the command, in its
+	// A PID under the listed command (the cat) finds the command, in its
 	// chat only.
 	var sleepPID int
 	for pid, q := range markedProcs(hubMarkers()) {
-		if len(q.args) > 0 && filepath.Base(q.args[0]) == "sleep" {
+		if len(q.args) > 0 && filepath.Base(q.args[0]) == "cat" {
 			sleepPID = pid
 		}
 	}
@@ -277,8 +285,9 @@ func TestBackgroundProcessesSkipBusServices(t *testing.T) {
 
 	// Two commands that outlive their shell; one looks like a service a
 	// D-Bus daemon started, which isn't the agent's own command.
+	hold, _ := gate(t)
 	orphan := func(extraEnv ...string) {
-		cmd := exec.Command("sh", "-c", "sleep 30 >/dev/null 2>&1 &")
+		cmd := exec.Command("sh", "-c", hold+" >/dev/null 2>&1 &")
 		cmd.Env = append(append(os.Environ(), TasksDirEnv+"="+h.dir, TasksSessionEnv+"="+t.Name()), extraEnv...)
 		require.NoError(t, cmd.Run())
 	}
@@ -293,7 +302,7 @@ func TestBackgroundProcessesSkipBusServices(t *testing.T) {
 	require.Eventually(t, func() bool { return len(markedProcs(hubMarkers())) == 2 }, 5*time.Second, 50*time.Millisecond)
 	found := BackgroundProcesses()
 	require.Len(t, found, 1)
-	require.Equal(t, "sleep 30", found[0].Command)
+	require.Equal(t, strings.ReplaceAll(hold, "'", ""), found[0].Command)
 }
 
 func noMinAge(t *testing.T) {
@@ -306,7 +315,8 @@ func noMinAge(t *testing.T) {
 // CLI, like Codex runs commands and hooks.
 func startDetached(t *testing.T, h *taskHub, session string) {
 	t.Helper()
-	cmd := exec.Command("sh", "-c", "setsid sleep 30 >/dev/null 2>&1 &")
+	hold, _ := gate(t)
+	cmd := exec.Command("sh", "-c", "setsid "+hold+" >/dev/null 2>&1 &")
 	cmd.Env = append(os.Environ(), TasksDirEnv+"="+h.dir, TasksSessionEnv+"="+session)
 	require.NoError(t, cmd.Run())
 	t.Cleanup(func() {

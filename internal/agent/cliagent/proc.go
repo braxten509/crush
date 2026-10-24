@@ -228,8 +228,13 @@ func (o *openCalls) list() []openCall {
 	return slices.Collect(maps.Values(o.calls))
 }
 
-// watchCancel calls interrupt once ctx is done, then gives the CLI a few
-// seconds to wind down before killing it. The returned func stops watching.
+// WindDownGrace is how long a CLI gets to wind down after an interrupt
+// before it is killed; a variable so tests can shorten it.
+var WindDownGrace = 5 * time.Second
+
+// watchCancel calls interrupt once ctx is done, then gives the CLI
+// WindDownGrace to wind down before killing it. The returned func stops
+// watching.
 func (p *proc) watchCancel(ctx context.Context, interrupt func()) func() {
 	calls, _ := ctx.Value(openCallsKey{}).(*openCalls)
 	if calls != nil {
@@ -239,7 +244,7 @@ func (p *proc) watchCancel(ctx context.Context, interrupt func()) func() {
 	go func() {
 		select {
 		case <-ctx.Done():
-			timer := time.AfterFunc(5*time.Second, func() {
+			timer := time.AfterFunc(WindDownGrace, func() {
 				p.kill()
 				p.closeInput()
 			})

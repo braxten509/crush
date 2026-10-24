@@ -39,7 +39,8 @@ func TestBackgroundJobRoundTripAndCompletion(t *testing.T) {
 		}
 		hubsMu.Unlock()
 	})
-	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "sleep 3; printf finished; exit 7", WorkingDir: t.TempDir(), Name: "example"}})
+	hold, finish := gate(t)
+	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: hold + "; printf finished; exit 7", WorkingDir: t.TempDir(), Name: "example"}})
 	require.Empty(t, response.Error)
 	require.NotNil(t, response.Background)
 	require.False(t, response.Background.IsError, response.Background.Content)
@@ -62,6 +63,7 @@ func TestBackgroundJobRoundTripAndCompletion(t *testing.T) {
 	require.NoError(t, err)
 	denied := h.background(TaskRequest{Session: stranger.ID, Background: &BackgroundRequest{StopID: job.ID}})
 	require.Contains(t, denied.Error, "no background job")
+	finish()
 	select {
 	case notice := <-notices:
 		require.Contains(t, notice, "<status>failed</status>")
@@ -99,7 +101,7 @@ func TestBackgroundJobResultHandoffHoldsCompletionAlert(t *testing.T) {
 			close(hold)
 		}
 	})
-	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "sleep 2", WorkingDir: t.TempDir()}})
+	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "sleep 0.2", WorkingDir: t.TempDir()}})
 	require.Empty(t, response.Error)
 	var meta tools.BashResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(response.Background.Metadata), &meta))
@@ -193,7 +195,8 @@ func TestBackgroundJobStopFromProcessListCancelsWholeScript(t *testing.T) {
 		hubsMu.Unlock()
 	})
 	directory := t.TempDir()
-	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "sleep 30; printf wrong > should-not-exist", WorkingDir: directory}})
+	hold, _ := gate(t)
+	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: hold + "; printf wrong > should-not-exist", WorkingDir: directory}})
 	require.Empty(t, response.Error)
 	require.NotNil(t, response.Background)
 	var metadata tools.BashResponseMetadata
@@ -240,7 +243,7 @@ func TestBackgroundJobPersistsLateFileReview(t *testing.T) {
 	h.dir = t.TempDir()
 	directory, err := filepath.EvalSymlinks(visibleReviewRoot(t))
 	require.NoError(t, err)
-	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "sleep 2; printf changed > output.txt", WorkingDir: directory}})
+	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "sleep 0.3; printf changed > output.txt", WorkingDir: directory}})
 	require.Empty(t, response.Error)
 	require.NotNil(t, response.Background)
 	var metadata tools.BashResponseMetadata
@@ -273,7 +276,8 @@ func TestBackgroundJobPersistsLateFileReview(t *testing.T) {
 
 func TestManagedJobsAreVisibleWithoutMarkedChildProcesses(t *testing.T) {
 	h := registerTestHub(t)
-	job, err := shell.GetBackgroundShellManager().Start(t.Context(), t.TempDir(), nil, "sleep 30", "logical job")
+	hold, _ := gate(t)
+	job, err := shell.GetBackgroundShellManager().Start(t.Context(), t.TempDir(), nil, hold, "logical job")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = shell.GetBackgroundShellManager().Kill(job.ID) })
 	h.mu.Lock()
@@ -285,7 +289,7 @@ func TestManagedJobsAreVisibleWithoutMarkedChildProcesses(t *testing.T) {
 	for _, process := range listed {
 		if process.JobID == job.ID {
 			found = true
-			require.Equal(t, "sleep 30", process.Command)
+			require.Equal(t, hold, process.Command)
 		}
 	}
 	require.True(t, found, "managed jobs must not depend on process-table discovery")
@@ -295,8 +299,9 @@ func TestBackgroundServiceRemainsTrackedWithoutBlockingCompletion(t *testing.T) 
 	h, _, savedPath := savingJobHub(t)
 	sess, err := h.c.sessions.Create(t.Context(), "service")
 	require.NoError(t, err)
+	hold, _ := gate(t)
 	response := h.background(TaskRequest{Session: sess.ID, Background: &BackgroundRequest{
-		Command: "sleep 30", WorkingDir: t.TempDir(), Name: "service", Service: true,
+		Command: hold, WorkingDir: t.TempDir(), Name: "service", Service: true,
 	}})
 	require.Empty(t, response.Error)
 	require.NotNil(t, response.Background)

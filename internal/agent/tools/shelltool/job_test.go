@@ -295,10 +295,8 @@ func TestBackgroundShell_AutoBackground(t *testing.T) {
 		bgShell, err := bgManager.Start(ctx, workingDir, nil, "echo 'quick'", "")
 		require.NoError(t, err)
 
-		// Wait threshold time
-		time.Sleep(5 * time.Second)
-
-		// Should be done by now
+		// Should be done shortly.
+		require.Eventually(t, bgShell.IsDone, 2*time.Second, 20*time.Millisecond, "Quick command should be done")
 		stdout, stderr, done, err := bgShell.GetOutput()
 		require.NoError(t, err)
 		require.True(t, done, "Quick command should be done")
@@ -317,8 +315,8 @@ func TestBackgroundShell_AutoBackground(t *testing.T) {
 		require.NoError(t, err)
 		defer bgManager.Kill(bgShell.ID)
 
-		// Wait threshold time
-		time.Sleep(5 * time.Second)
+		// A moment later it is still running.
+		time.Sleep(300 * time.Millisecond)
 
 		// Should still be running
 		stdout, stderr, done, err := bgShell.GetOutput()

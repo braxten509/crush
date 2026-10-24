@@ -344,6 +344,10 @@ func StopBackgroundProcess(process Process) error {
 	return KillProcess(process.PID)
 }
 
+// killGrace is how long a stopped process gets to exit after SIGTERM before
+// SIGKILL; a variable so tests can shorten it.
+var killGrace = 3 * time.Second
+
 // KillProcess ends a listed background process and everything it started:
 // SIGTERM first, then SIGKILL for whatever is left a few seconds later.
 func KillProcess(pid int) error {
@@ -370,7 +374,7 @@ func KillProcess(pid int) error {
 		signal(p, syscall.SIGTERM)
 	}
 	go func() {
-		time.Sleep(3 * time.Second)
+		time.Sleep(killGrace)
 		// Only what is still the same process: check it still carries
 		// the marker before killing, since PIDs get reused.
 		left := markedProcs(markers)

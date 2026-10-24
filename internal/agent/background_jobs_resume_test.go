@@ -62,14 +62,15 @@ func TestFinishedBackgroundJobIsForgotten(t *testing.T) {
 	h, calls, path := savingJobHub(t)
 	session, err := h.c.sessions.Create(t.Context(), "jobs")
 	require.NoError(t, err)
-	// Long enough that a busy machine still reads the save before the
-	// job ends and is forgotten.
-	job := startJob(t, h, session.ID, "sleep 3; echo done")
+	// The job runs until the save has been read, then ends and is forgotten.
+	hold, finish := gate(t)
+	job := startJob(t, h, session.ID, hold+"; echo done")
 	saved := readSavedJobs(t, path)
 	require.Len(t, saved, 1)
 	require.Equal(t, job.ID, saved[0].ID)
 	require.Equal(t, session.ID, saved[0].SessionID)
 	require.Equal(t, os.Getpid(), saved[0].Owner)
+	finish()
 
 	select {
 	case call := <-calls:
@@ -84,7 +85,8 @@ func TestShutdownJobIsReportedByTheNextCrush(t *testing.T) {
 	h, calls, path := savingJobHub(t)
 	session, err := h.c.sessions.Create(t.Context(), "jobs")
 	require.NoError(t, err)
-	job := startJob(t, h, session.ID, "echo halfway; sleep 30")
+	hold, _ := gate(t)
+	job := startJob(t, h, session.ID, "echo halfway; "+hold)
 	require.Eventually(t, func() bool { out, _, _, _ := job.GetOutput(); return out != "" }, 2*time.Second, 20*time.Millisecond)
 
 	// Crush quits: agents stop first, then background shells are killed.
@@ -118,7 +120,7 @@ func TestShutdownJobIsReportedByTheNextCrush(t *testing.T) {
 		require.Equal(t, BackgroundProcessName, name)
 		require.Equal(t, string(TaskStopped), status)
 		require.Contains(t, call.Prompt, "Job "+job.ID+" (author)")
-		require.Contains(t, call.Prompt, "sleep 30")
+		require.Contains(t, call.Prompt, hold)
 		require.Contains(t, call.Prompt, "halfway")
 		require.Contains(t, call.Prompt, "Don't end your turn waiting")
 	case <-time.After(5 * time.Second):

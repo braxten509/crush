@@ -318,7 +318,7 @@ func TestClosingHubNeverClaims(t *testing.T) {
 	runningHelper(h1, helperTask(parent, child))
 	now := time.Now()
 	require.NoError(t, h1.editSavedJobs(func([]savedJob) []savedJob {
-		return []savedJob{{ID: "J1", SessionID: parent.ID, Name: "build", Command: "sleep 30", Started: now, Interrupted: now}}
+		return []savedJob{{ID: "J1", SessionID: parent.ID, Name: "build", Command: "make build", Started: now, Interrupted: now}}
 	}))
 
 	h1.stopAll()
@@ -366,7 +366,8 @@ func TestTeardownRacingResumeKeepsWork(t *testing.T) {
 	for round := range 200 {
 		h := resumeTestHub(t, c)
 		runningHelper(h, helperTask(parent, child))
-		job := watchedJob(t, h, parent.ID, "sleep 30")
+		hold, _ := gate(t)
+		job := watchedJob(t, h, parent.ID, hold)
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {

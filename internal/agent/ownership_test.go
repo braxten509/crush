@@ -17,7 +17,8 @@ func TestInterruptJobNoHandoff(t *testing.T) {
 	listTestHub(t, h)
 	session, err := h.c.sessions.Create(t.Context(), "jobs")
 	require.NoError(t, err)
-	job := startJob(t, h, session.ID, "echo halfway; sleep 30")
+	hold, _ := gate(t)
+	job := startJob(t, h, session.ID, "echo halfway; "+hold)
 	require.Eventually(t, func() bool { out, _, _, _ := job.GetOutput(); return out != "" }, 2*time.Second, 20*time.Millisecond)
 
 	require.NoError(t, InterruptJob(Process{JobID: job.ID}))

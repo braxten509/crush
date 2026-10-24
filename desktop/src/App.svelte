@@ -97,13 +97,16 @@
     // Again when the words' room changes a side's minimum.
     void mins;
     // Settings takes the window (owner, 2026-10-19): the panel steps aside.
-    const off = panelSetting.off || settingsOpen();
+    const off = panelSetting.off;
+    const settings = settingsOpen();
     const update = () => {
-      const hidden = off || inner() < panelRoom() || page.parentElement.clientHeight / scale() < PANEL_MIN_HEIGHT;
-      if (hidden !== ui.panelHidden) {
+      const gone = off || inner() < panelRoom() || page.parentElement.clientHeight / scale() < PANEL_MIN_HEIGHT;
+      const hidden = gone || settings;
+      const aside = hidden && !gone;
+      if (hidden !== ui.panelHidden || aside !== ui.panelAside) {
         // Focus in the panel moves to the field (SIDE-002; the terminal's compact switch, internal/ui/model/layout.go:70-79).
         if (hidden && ui.focus === "panel") focusField();
-        setPanelHidden(hidden);
+        setPanelHidden(hidden, aside);
       }
       const fitted = fit(widths);
       if (fitted.left !== widths.left || fitted.right !== widths.right) widths = fitted;

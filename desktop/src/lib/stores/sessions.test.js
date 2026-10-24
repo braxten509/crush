@@ -645,6 +645,16 @@ describe("the chat's last model (LIST-035)", () => {
     expect(S.sessions.byId.s2.model).toEqual({ provider: "claude-code", model: "sonnet" });
   });
 
+  // The chat ran on the workspace's model until now, so it keeps that
+  // model's account rather than falling back to the tool's own login.
+  it("keeps the workspace's account when the last model is on the same tool", async () => {
+    await openWithLastModel("codex-cli", "gpt-6-sol", config({ provider: "codex-cli", model: "gpt-6-luna", account: "codex-2" }, { "codex-cli": cliProvider(["gpt-6-sol"]) }));
+    expect(posts()).toEqual([["sessions/s1/model", { model: { provider: "codex-cli", model: "gpt-6-sol", account: "codex-2" } }]]);
+    h.calls.length = 0;
+    await openWithLastModel("codex-cli", "gpt-6-sol", config({ provider: "claude-code", model: "opus", account: "claude-3" }, { "codex-cli": cliProvider(["gpt-6-sol"]) }));
+    expect(posts()).toEqual([["sessions/s1/model", { model: { provider: "codex-cli", model: "gpt-6-sol" } }]]);
+  });
+
   it("a subscription catalog counts (chatgpt_models, grok_models)", async () => {
     await openWithLastModel("openai", "gpt-sub", config({ provider: "claude-code", model: "opus" }, { openai: { id: "openai", models: [], chatgpt_models: [{ id: "gpt-sub" }] } }));
     expect(posts()[0]).toEqual(["sessions/s1/model", { model: { provider: "openai", model: "gpt-sub" } }]);

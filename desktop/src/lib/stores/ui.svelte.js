@@ -12,6 +12,7 @@ export const ui = $state({
   help: false,
   notice: null, // null | {id, kind, text, action}
   panelHidden: false,
+  panelAside: false, // hidden only because Settings has the window: it comes back as it was
   follow: true, // the timeline keeps its bottom in view (CHAT-099)
   endRequest: 0, // counts up: each step brings the timeline to its bottom, following
   slot: null, // null | SlotEntry (lib/types.js): what holds the typing box's place (Q8)
@@ -93,8 +94,18 @@ export function requestEnd() {
   ui.endRequest += 1;
 }
 
-export function setPanelHidden(hidden) {
+// aside: hidden only because Settings has the window, not for room or the
+// panel's switch.
+export function setPanelHidden(hidden, aside = false) {
   ui.panelHidden = hidden;
+  ui.panelAside = hidden && aside;
+}
+
+// The meters sit under the typing box only while the panel is really gone:
+// a panel Settings set aside comes back with its meters, so they never show
+// under the field on the way back (owner, 2026-10-23).
+export function metersUnderField() {
+  return ui.panelHidden && !ui.panelAside;
 }
 
 // The right panel's own switch (owner, 2026-10-19): the desktop app keeps it

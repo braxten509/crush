@@ -46,13 +46,22 @@ func TestTurnUsesTheChatsOwnModel(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, built, 1, "a chat's model is built once")
 
+	// Another account (or FAST, Ultracode) on the same model runs elsewhere,
+	// so it is built again rather than reusing the first account's model.
+	_, err = env.sessions.SetModel(t.Context(), chat.ID, session.ModelChoice(`{"provider":"claude-code","model":"sonnet","reasoning_effort":"high","account":"claude-2"}`))
+	require.NoError(t, err)
+	_, err = agent.Run(t.Context(), SessionAgentCall{SessionID: chat.ID, Prompt: "other account", NonInteractive: true})
+	require.NoError(t, err)
+	require.Len(t, built, 2, "a new account builds the model again")
+	require.Equal(t, "claude-2", built[1].Account)
+
 	// A chat without a model of its own keeps the workspace's.
 	other, err := env.sessions.Create(t.Context(), "workspace model")
 	require.NoError(t, err)
 	require.Empty(t, other.Model)
 	_, err = agent.Run(t.Context(), SessionAgentCall{SessionID: other.ID, Prompt: "hello", NonInteractive: true})
 	require.NoError(t, err)
-	require.Len(t, built, 1, "the workspace's model is not rebuilt")
+	require.Len(t, built, 2, "the workspace's model is not rebuilt")
 }
 
 // SetModel stores the chat's model and clearing it puts the chat back on the

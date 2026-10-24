@@ -65,3 +65,18 @@ describe("clearNotice(text) (desktop-design-5-6 7.1)", () => {
     expect(store.ui.notice).toBe(null);
   });
 });
+
+// The meters move under the typing box only while the panel is really gone
+// (too little room, or its switch off). Settings only sets it aside, so on
+// the way back the meters never show under the field.
+describe("the meters under the typing box", () => {
+  it("show while the panel is hidden, not while Settings sets it aside", () => {
+    expect(store.metersUnderField()).toBe(false);
+    store.setPanelHidden(true);
+    expect(store.metersUnderField()).toBe(true);
+    store.setPanelHidden(true, true);
+    expect(store.metersUnderField()).toBe(false);
+    store.setPanelHidden(false);
+    expect(store.metersUnderField()).toBe(false);
+  });
+});

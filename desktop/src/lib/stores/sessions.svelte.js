@@ -734,6 +734,11 @@ async function restoreModel(sid) {
     // The model comes back with the effort last used with it, not its
     // default (owner, 2026-10-22: the effort was lost on opening a chat).
     model = rememberedModel(config, last.provider, last.model);
+    // Until now the chat ran on the workspace's model, so on the same tool
+    // it keeps that model's account, not the tool's own login (owner,
+    // 2026-10-23: an old chat showed the default account).
+    const shared = config?.models?.large;
+    if (shared?.account && shared.provider === last.provider) model.account = shared.account;
   } catch (error) {
     console.error("model restore: config read failed", errorText(error));
     return;

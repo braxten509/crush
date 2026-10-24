@@ -21,7 +21,7 @@
   import { messages } from "../lib/stores/messages.svelte.js";
   import { shownShare } from "../lib/remote/store.svelte.js";
   import { sessions } from "../lib/stores/sessions.svelte.js";
-  import { ui } from "../lib/stores/ui.svelte.js";
+  import { metersUnderField } from "../lib/stores/ui.svelte.js";
   import { screen } from "./start/start.svelte.js";
 
   const sessionId = $derived(sessions.currentId);
@@ -61,7 +61,7 @@
   <Rule marks="both" class="above-composer" />
 
   <Composer {sessionId} />
-  {#if ui.panelHidden || remote}<MeterStrip meters={ui.panelHidden} {remote} />{/if}
+  {#if metersUnderField() || remote}<MeterStrip meters={metersUnderField()} {remote} />{/if}
 </main>
 
 <style>

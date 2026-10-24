@@ -526,7 +526,10 @@ func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
 		slog.Warn("Could not read the chat's own model", "error", err)
 		return Model{}, false
 	}
-	key := selection.Provider + "\x00" + selection.Model + "\x00" + selection.ReasoningEffort + "\x00" + strconv.FormatInt(selection.MaxTokens, 10)
+	// The whole choice is the key: another account, FAST or Ultracode on the
+	// same model runs elsewhere, so it gets its own build (owner, 2026-10-23).
+	keyJSON, _ := json.Marshal(selection)
+	key := string(keyJSON)
 	a.chatModels.mu.Lock()
 	if built, ok := a.chatModels.byKey[key]; ok {
 		a.chatModels.mu.Unlock()

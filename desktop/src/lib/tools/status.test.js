@@ -84,7 +84,7 @@ describe("live group words (CHAT-085)", () => {
     const words = {
       agent: "Waiting for subagent",
       task: "Waiting for subagent",
-      bash: "Running a command",
+      bash: "Waiting for a tool response...",
       job_output: "Checking a command",
       job_kill: "Checking a command",
       view: "Reading a file",
@@ -111,7 +111,7 @@ describe("live group words (CHAT-085)", () => {
   });
   it("follows the group's last step", () => {
     const tool = (name, status) => ({ kind: "tool", name, status });
-    expect(groupStatus({ live: true, busy: true, last: tool("bash", "running") })).toBe("Running a command");
+    expect(groupStatus({ live: true, busy: true, last: tool("bash", "running") })).toBe("Waiting for a tool response...");
     expect(groupStatus({ live: true, busy: true, last: tool("edit", "pending") })).toBe("Editing a file");
     expect(groupStatus({ live: true, busy: true, last: tool("bash", "permission") })).toBe("Waiting for approval");
     expect(groupStatus({ live: true, busy: true, last: tool("bash", "cancelled") })).toBe("");
@@ -144,13 +144,13 @@ describe("activity timer (activity_test.go)", () => {
   it("restarts per tool call but not for a thinking heartbeat", () => {
     const group = `timer-${Math.random()}`;
     const t0 = 1_000_000;
-    expect(activityStart(group, activityKey("Running a command", "first"), t0)).toBe(t0);
-    expect(activityStart(group, activityKey("Running a command", "first"), t0 + 20_000)).toBe(t0);
+    expect(activityStart(group, activityKey("Waiting for a tool response...", "first"), t0)).toBe(t0);
+    expect(activityStart(group, activityKey("Waiting for a tool response...", "first"), t0 + 20_000)).toBe(t0);
     // The tool finished: thinking starts its own timer, and a heartbeat keeps it.
     expect(activityStart(group, activityKey("Thinking", "first"), t0 + 21_000)).toBe(t0 + 21_000);
     expect(activityStart(group, activityKey("Thinking", "first"), t0 + 30_000)).toBe(t0 + 21_000);
-    expect(activityStart(group, activityKey("Running a command", "second"), t0 + 31_000)).toBe(t0 + 31_000);
-    expect(activityStart(group, activityKey("Running a command", "third"), t0 + 40_000)).toBe(t0 + 40_000);
+    expect(activityStart(group, activityKey("Waiting for a tool response...", "second"), t0 + 31_000)).toBe(t0 + 31_000);
+    expect(activityStart(group, activityKey("Waiting for a tool response...", "third"), t0 + 40_000)).toBe(t0 + 40_000);
     expect(activityKey("", "x")).toBe("");
     expect(activityKey("Thinking", "")).toBe("Thinking");
   });

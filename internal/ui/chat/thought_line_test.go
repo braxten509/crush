@@ -67,7 +67,7 @@ func TestToolGroupShowsThoughtLineWhileThinking(t *testing.T) {
 	running := message.ToolCall{ID: "t2", Name: "bash", Input: `{"command":"sleep 5"}`, Finished: true}
 	g.SetChildren([]MessageItem{tool, NewAssistantMessageItem(&sty, msg), NewToolMessageItem(&sty, "m3", running, nil, false, "")})
 	header = ansi.Strip(g.header(200))
-	require.Contains(t, header, "Running a command")
+	require.Contains(t, header, "Waiting for a tool response...")
 	require.NotContains(t, header, "Pick the next file")
 }
 

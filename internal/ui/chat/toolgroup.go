@@ -44,7 +44,7 @@ type ToolGroupItem struct {
 	// routing clicks to it.
 	childLines []int
 	shown      []MessageItem
-	// anim animates the "| Running a command" status while working.
+	// anim animates the live status while working.
 	anim      *anim.Anim
 	animLabel string
 	activity  activityTimer
@@ -344,7 +344,7 @@ func toolActivity(name string) string {
 	case "agent", "task":
 		return "Waiting for subagent"
 	case tools.BashToolName:
-		return "Running a command"
+		return "Waiting for a tool response..."
 	case tools.JobOutputToolName, tools.JobKillToolName:
 		return "Checking a command"
 	case tools.ViewToolName:

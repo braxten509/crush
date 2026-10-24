@@ -34,7 +34,7 @@ type Item struct {
 	Steps []Step `json:"steps,omitempty"`
 	// Live marks the group at the end of the chat while the agent works.
 	Live bool `json:"live,omitempty"`
-	// Activity says what a live group is doing ("Running a command").
+	// Activity says what a live group is doing ("Waiting for a tool response...").
 	Activity string `json:"activity,omitempty"`
 	// Summary names the files a finished group edited and its failures.
 	Summary string `json:"summary,omitempty"`

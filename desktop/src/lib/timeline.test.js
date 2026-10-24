@@ -451,7 +451,7 @@ describe("groups and keys (CHAT-080, 4.4)", () => {
 
   test("the live group says what it is doing; a finished last tool leaves Thinking while busy", () => {
     const working = [user("u1", "q"), assistant("a1", [call("c1", "bash", '{"command":"sleep 5"}')])];
-    expect(build(working, { busy: true }).items.at(-1)).toMatchObject({ kind: "tools", working: true, live: { kind: "status", words: "Running a command" } });
+    expect(build(working, { busy: true }).items.at(-1)).toMatchObject({ kind: "tools", working: true, live: { kind: "status", words: "Waiting for a tool response..." } });
     expect(build(working, { busy: true, callMarks: { c1: "permission" } }).status).toBe("Waiting for approval");
     const between = [...working, tool("t1", [result("c1", "bash")])];
     expect(build(between, { busy: true }).status).toBe("Thinking");
@@ -465,7 +465,7 @@ describe("groups and keys (CHAT-080, 4.4)", () => {
   });
 
   test.each([
-    ["bash", "Running a command"],
+    ["bash", "Waiting for a tool response..."],
     ["view", "Reading a file"],
     ["multiedit", "Editing a file"],
     ["glob", "Searching"],

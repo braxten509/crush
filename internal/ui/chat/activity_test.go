@@ -23,8 +23,8 @@ func TestToolGroupActivityTimer(t *testing.T) {
 	require.Equal(t, "", g.activity.elapsed(now))
 	g.syncActivity(now.Add(20 * time.Second))
 	require.Equal(t, "20s", g.activity.elapsed(now.Add(20*time.Second)))
-	require.Contains(t, ansi.Strip(g.header(120)), "Running a command")
-	require.Regexp(t, `Running a command\.* *$`, ansi.Strip(g.header(120)))
+	require.Contains(t, ansi.Strip(g.header(120)), "Waiting for a tool response...")
+	require.Regexp(t, `Waiting for a tool response\.+ *$`, ansi.Strip(g.header(120)))
 
 	tool.SetResult(&message.ToolResult{ToolCallID: call.ID, Content: "done"})
 	g.syncActivity(now.Add(21 * time.Second))
@@ -96,7 +96,7 @@ func TestActivityTimerVisibilityThreshold(t *testing.T) {
 	timer.update("Thinking", now)
 	require.Empty(t, timer.elapsed(now.Add(9999*time.Millisecond)))
 	require.Equal(t, "10s", timer.elapsed(now.Add(10*time.Second)))
-	timer.update("Running a command", now.Add(11*time.Second))
+	timer.update("Waiting for a tool response...", now.Add(11*time.Second))
 	require.Empty(t, timer.elapsed(now.Add(11*time.Second)))
 }
 

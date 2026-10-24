@@ -96,7 +96,7 @@ export function toolActivity(name) {
     case "task":
       return "Waiting for subagent";
     case "bash":
-      return "Running a command";
+      return "Waiting for a tool response...";
     case "job_output":
     case "job_kill":
       return "Checking a command";

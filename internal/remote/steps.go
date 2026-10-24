@@ -68,7 +68,7 @@ func groupActivity(steps []Step) string {
 func activityFor(kind string) string {
 	switch kind {
 	case "bash":
-		return "Running a command"
+		return "Waiting for a tool response..."
 	case "read":
 		return "Reading a file"
 	case "edit", "write":

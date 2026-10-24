@@ -175,8 +175,15 @@ func (s *ConfigStore) LoadedPaths() []string {
 
 // NewTestStore creates a ConfigStore for testing purposes.
 func NewTestStore(cfg *Config, loadedPaths ...string) *ConfigStore {
+	return NewTestStoreAt("", cfg, loadedPaths...)
+}
+
+// NewTestStoreAt is NewTestStore with a working directory, for tests that
+// need a real path (Kimi runs only inside git projects).
+func NewTestStoreAt(dir string, cfg *Config, loadedPaths ...string) *ConfigStore {
 	return &ConfigStore{
 		config:      cfg,
+		workingDir:  dir,
 		loadedPaths: loadedPaths,
 		resolver:    NewShellVariableResolver(env.New()),
 	}

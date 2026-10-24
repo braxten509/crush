@@ -15,6 +15,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/config"
 )
 
 // Grok and OpenCode speak the Agent Client Protocol (agentclientprotocol.com):
@@ -119,6 +120,10 @@ type acpRun struct {
 	replayedUser bool   // the replay's last update was a user chunk
 	replayedID   string // its message ID, if any
 	lastMessage  string
+
+	// limitsRead makes the turn's first tool step force a usage reading
+	// and later ones keep the refresh interval (RefreshLimitsDuringTurn).
+	limitsRead bool
 }
 
 // runACP drives an ACP agent started with args. setModel selects m.ID with
@@ -436,6 +441,9 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 			}
 		}
 		r.boundary = false
+	}
+	if r.name == "opencode" && r.m.Kind == config.TypeOpenCodeCLI && params.Update.SessionUpdate == "tool_call" {
+		RefreshLimitsDuringTurn(r.ctx, r.m.Kind, r.m.Account, &r.limitsRead)
 	}
 	if r.name == "opencode" && params.Update.SessionUpdate == "usage_update" && params.Update.Size > 0 {
 		if err := r.t.Emit(openCodeContextBudget(openCodeBudgetWindow(params.Update.Size, r.m))); err != nil {

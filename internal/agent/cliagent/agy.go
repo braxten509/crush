@@ -102,6 +102,7 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	_ = p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": withImagePaths(t.Prompt, t.Attachments)}})
 
 	announced := map[int]bool{}
+	limitsRead := false
 	conversation := t.Resume
 	for p.lines.Scan() {
 		if ctx.Err() != nil {
@@ -124,6 +125,11 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 				return err
 			}
 		case "step_update":
+			// AGY's plan is read over HTTP, so its stream carries no new
+			// usage: read it as the tool steps run, not only at the end.
+			if line.StepUpdate.StepType == "tool" {
+				RefreshLimitsDuringTurn(ctx, m.Kind, m.Account, &limitsRead)
+			}
 			if err := agyStep(line, announced, t.Emit); err != nil {
 				return err
 			}

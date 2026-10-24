@@ -3,6 +3,7 @@ package cliagent
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
@@ -61,6 +63,38 @@ func TestOpenCodeGoNeedsConsoleSignIn(t *testing.T) {
 
 	_, err := fetchOpenCodeLimits(context.Background())
 	require.ErrorContains(t, err, "OpenCode Console is not signed in")
+}
+
+func TestOpenCodeGoLimitsRefreshDuringToolSteps(t *testing.T) {
+	fetched := make(chan struct{}, 1)
+	restore := SetLimitFetchersForTest(map[catwalk.Type]func(context.Context) ([]Limit, error){
+		config.TypeOpenCodeCLI: func(context.Context) ([]Limit, error) {
+			select {
+			case fetched <- struct{}{}:
+			default:
+			}
+			return []Limit{{Name: "5h", Used: 42}}, nil
+		},
+	})
+	defer restore()
+	r := &acpRun{
+		ctx:   context.Background(),
+		m:     &Model{Kind: config.TypeOpenCodeCLI},
+		t:     Turn{Emit: func(Event) error { return nil }},
+		name:  "opencode",
+		calls: map[string]*acpTool{},
+	}
+	msg := rpcMessage{Params: json.RawMessage(`{"update":{"sessionUpdate":"tool_call","toolCallId":"call-1","kind":"read","status":"in_progress","rawInput":{"path":"README.md"}}}`)}
+	require.NoError(t, r.handleUpdate(msg))
+	select {
+	case <-fetched:
+	case <-time.After(time.Second):
+		t.Fatal("OpenCode tool step did not refresh usage limits")
+	}
+	require.Eventually(t, func() bool {
+		limits := Limits(config.TypeOpenCodeCLI, "")
+		return len(limits) == 1 && limits[0].Used == 42
+	}, time.Second, 10*time.Millisecond)
 }
 
 // writeOpenCodeCredential makes the credential table OpenCode v2 keeps in

@@ -8,11 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
 
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
@@ -287,8 +289,22 @@ func (t *turn) onToolResult(result fantasy.ToolResultContent) error {
 	return nil
 }
 
+// refreshProviderLimits reads a metered provider's plan usage while the
+// turn is still working, so its meter moves mid-turn instead of only when
+// the turn ends. Only Moonshot AI reports usage this way: its plan is read
+// over HTTP, so nothing in its stream carries new limits.
+func (t *turn) refreshProviderLimits() {
+	if t.largeModel.ModelCfg.Provider != KimiProviderID {
+		return
+	}
+	cliagent.RefreshLimitsDuringTurn(t.ctx, catwalk.Type(catwalk.InferenceKimiCoding), t.largeModel.ModelCfg.Account, &t.limitsRead)
+}
+
 func (t *turn) onStepFinish(stepResult fantasy.StepResult) error {
 	a := t.a
+	if stepResult.FinishReason == fantasy.FinishReasonToolCalls {
+		t.refreshProviderLimits()
+	}
 	for _, w := range stepResult.Warnings {
 		slog.Warn("Provider warning", "type", w.Type, "message", w.Message)
 	}

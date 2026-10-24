@@ -2,6 +2,7 @@ package cliagent
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,20 +12,29 @@ import (
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite"
 )
 
-// OpenCode Go's usage comes from its usage address with OpenCode's own
-// saved Go key (owner, 2026-10-22): the 5-hour, weekly and monthly windows.
+// OpenCode Go's usage comes from its usage address with the active Console
+// sign-in OpenCode itself uses (owner, 2026-10-23): the 5-hour, weekly and
+// monthly windows. The old opencode-go key in auth.json is a different
+// account and must not be used.
 func TestOpenCodeGoUsageIsRead(t *testing.T) {
 	data := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", data)
-	require.NoError(t, os.MkdirAll(filepath.Join(data, "opencode"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(data, "opencode", "auth.json"), []byte(`{"opencode-go":{"type":"api","key":"go-key"}}`), 0o600))
+	dir := filepath.Join(data, "opencode")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	writeOpenCodeCredential(t, filepath.Join(dir, "opencode.db"), `{"type":"oauth","access":"console-token"}`)
+	// A stale key from another account: a reading must never use it.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"opencode-go":{"type":"api","key":"go-key"}}`), 0o600))
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "Bearer go-key", r.Header.Get("Authorization"))
-		_, _ = w.Write([]byte(`{"usage":{"rolling":{"status":"ok","percent":12,"resetsAt":"2026-10-22T14:01:22.291Z"},
-			"weekly":{"status":"rate-limited","percent":100,"resetsAt":"2026-10-26T00:00:00.000Z"},
-			"monthly":{"status":"ok","percent":78,"resetsAt":"2026-11-10T00:25:27.000Z"}}}`))
+		if r.Header.Get("Authorization") != "Bearer console-token" {
+			http.Error(w, "wrong sign-in", http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"usage":{"rolling":{"status":"ok","percent":3,"resetsAt":"2026-10-24T04:42:22.000Z"},
+			"weekly":{"status":"ok","percent":1,"resetsAt":"2026-10-26T00:00:00.000Z"},
+			"monthly":{"status":"ok","percent":0,"resetsAt":"2026-11-23T23:29:52.000Z"}}}`))
 	}))
 	defer server.Close()
 	restore := openCodeUsageURL
@@ -34,14 +44,43 @@ func TestOpenCodeGoUsageIsRead(t *testing.T) {
 	limits, err := fetchOpenCodeLimits(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, []Limit{
-		{Name: "5h", Used: 12, ResetsAt: time.Date(2026, 10, 22, 14, 1, 22, 291_000_000, time.UTC)},
-		{Name: "Weekly", Used: 100, ResetsAt: time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)},
-		{Name: "Monthly", Used: 78, ResetsAt: time.Date(2026, 11, 10, 0, 25, 27, 0, time.UTC)},
+		{Name: "5h", Used: 3, ResetsAt: time.Date(2026, 10, 24, 4, 42, 22, 0, time.UTC)},
+		{Name: "Weekly", Used: 1, ResetsAt: time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)},
+		{Name: "Monthly", Used: 0, ResetsAt: time.Date(2026, 11, 23, 23, 29, 52, 0, time.UTC)},
 	}, limits)
+}
 
-	require.NoError(t, os.Remove(filepath.Join(data, "opencode", "auth.json")))
-	_, err = fetchOpenCodeLimits(context.Background())
-	require.Error(t, err, "no saved Go key, no reading")
+// Without an active Console sign-in there is no reading: the stale
+// opencode-go key in auth.json is not a fallback (owner, 2026-10-23).
+func TestOpenCodeGoNeedsConsoleSignIn(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	dir := filepath.Join(data, "opencode")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"opencode-go":{"type":"api","key":"go-key"}}`), 0o600))
+
+	_, err := fetchOpenCodeLimits(context.Background())
+	require.ErrorContains(t, err, "OpenCode Console is not signed in")
+}
+
+// writeOpenCodeCredential makes the credential table OpenCode v2 keeps in
+// opencode.db, with one active Console sign-in.
+func writeOpenCodeCredential(t *testing.T, path, value string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE credential (
+		id text PRIMARY KEY,
+		integration_id text,
+		label text NOT NULL,
+		value text NOT NULL,
+		active integer
+	)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO credential (id, integration_id, label, value, active)
+		VALUES ('cred-1', 'opencode', 'Personal', ?, 1)`, value)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
 }
 
 // Zen pays per model from credits, so it reports no usage windows: no

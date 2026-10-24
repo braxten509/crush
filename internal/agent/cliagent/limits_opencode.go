@@ -2,24 +2,28 @@ package cliagent
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 // openCodeUsageURL is OpenCode Go's usage address (unlisted; it answers
 // with the 5-hour, weekly and monthly windows). Tests replace it.
 var openCodeUsageURL = "https://opencode.ai/zen/go/v1/usage"
 
-// fetchOpenCodeLimits reads OpenCode Go's usage with the Go key OpenCode
-// itself saved (owner, 2026-10-22), so OpenCode's chats and the meter use
-// one key. The key is never logged or shown.
+// fetchOpenCodeLimits reads OpenCode Go's usage with the active Console
+// sign-in OpenCode itself uses (owner, 2026-10-23), so OpenCode's page and
+// the meter show the same account. The token is never logged or shown.
 func fetchOpenCodeLimits(ctx context.Context) ([]Limit, error) {
-	key, err := openCodeGoKey()
+	key, err := openCodeConsoleToken()
 	if err != nil {
 		return nil, err
 	}
@@ -64,9 +68,12 @@ func fetchOpenCodeLimits(ctx context.Context) ([]Limit, error) {
 	return limits, nil
 }
 
-// openCodeGoKey is the opencode-go key in OpenCode's auth.json, in its
-// data folder ($XDG_DATA_HOME/opencode, else ~/.local/share/opencode).
-func openCodeGoKey() (string, error) {
+// openCodeConsoleToken is the access token of the active Console sign-in in
+// OpenCode's database, in its data folder ($XDG_DATA_HOME/opencode, else
+// ~/.local/share/opencode). The legacy opencode-go key in auth.json is not
+// read: it can belong to another account, whose windows are not the ones
+// the page shows (owner, 2026-10-23).
+func openCodeConsoleToken() (string, error) {
 	dir := os.Getenv("XDG_DATA_HOME")
 	if dir == "" {
 		home, err := os.UserHomeDir()
@@ -75,15 +82,32 @@ func openCodeGoKey() (string, error) {
 		}
 		dir = filepath.Join(home, ".local", "share")
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "opencode", "auth.json"))
+	dbPath := filepath.Join(dir, "opencode", "opencode.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		return "", errors.New("OpenCode Console is not signed in")
+	}
+	params := url.Values{}
+	params.Set("mode", "ro")
+	params.Set("_pragma", "busy_timeout(5000)")
+	dsn := (&url.URL{Scheme: "file", Path: dbPath, RawQuery: params.Encode()}).String()
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return "", errors.New("OpenCode Go is not signed in")
+		return "", fmt.Errorf("open OpenCode database: %w", err)
 	}
-	var auth map[string]struct {
-		Key string `json:"key"`
+	defer db.Close()
+	var raw string
+	err = db.QueryRow(`SELECT value FROM credential WHERE integration_id = 'opencode' AND active = 1 LIMIT 1`).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", errors.New("OpenCode Console is not signed in")
 	}
-	if json.Unmarshal(raw, &auth) != nil || auth["opencode-go"].Key == "" {
-		return "", errors.New("OpenCode Go is not signed in")
+	if err != nil {
+		return "", fmt.Errorf("read OpenCode Console sign-in: %w", err)
 	}
-	return auth["opencode-go"].Key, nil
+	var credential struct {
+		Access string `json:"access"`
+	}
+	if json.Unmarshal([]byte(raw), &credential) != nil || credential.Access == "" {
+		return "", errors.New("OpenCode Console is not signed in")
+	}
+	return credential.Access, nil
 }

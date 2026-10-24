@@ -12,12 +12,16 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/diffreview"
+	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/stretchr/testify/require"
 )
 
 // Exercise the real CLI protocol, persistence and the action-group diff. The
 // shell computes a filename in a sibling folder of the same Git repository.
 func TestShellFileReviewCLIEndToEnd(t *testing.T) {
+	if err := filechange.WatchUnavailable(); err != nil {
+		t.Skipf("commands cannot be watched here (run outside a Crush command): %v", err)
+	}
 	for _, late := range []bool{false, true} {
 		t.Run(fmt.Sprintf("late=%v", late), func(t *testing.T) {
 			env := testEnv(t)

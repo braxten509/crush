@@ -69,6 +69,26 @@ func startObservedProcess(cmd *exec.Cmd, review *ProcessReview) error {
 	return started.err
 }
 
+// WatchUnavailable explains why commands run here without a review, or is
+// nil. Linux lets one process tree hold a single seccomp listener, so a
+// Crush started inside a command another Crush already watches gets EBUSY
+// and runs its own commands unwatched. Probed once, on a thread that exits.
+var WatchUnavailable = sync.OnceValue(func() error {
+	result := make(chan error, 1)
+	go func() {
+		runtime.LockOSThread() // never unlocked: the filtered thread dies here
+		listener, err := installFilter([]unix.SockFilter{{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ALLOW}})
+		if err == nil {
+			unix.Close(listener)
+		}
+		result <- err
+	}()
+	if err := <-result; err != nil {
+		return fmt.Errorf("a seccomp listener cannot be installed: %w", err)
+	}
+	return nil
+})
+
 // installMutationFilter applies the filter to the calling thread only.
 func installMutationFilter(address uint64) (int, error) {
 	if address == 0 {

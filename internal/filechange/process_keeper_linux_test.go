@@ -36,6 +36,7 @@ func TestKeeperReleasesNotificationWhenWatcherExitsBeforeReply(t *testing.T) {
 		}
 		return
 	}
+	requireWatch(t)
 
 	control, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	require.NoError(t, err)

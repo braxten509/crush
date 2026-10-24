@@ -18,6 +18,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// requireWatch skips a test that needs a command watched where none can be:
+// inside a command another Crush already watches (Linux allows one seccomp
+// listener per process tree), commands run here without a review.
+func requireWatch(t *testing.T) {
+	t.Helper()
+	if err := WatchUnavailable(); err != nil {
+		t.Skipf("commands cannot be watched here (run outside a Crush command): %v", err)
+	}
+}
+
 func runObserved(t *testing.T, root, command string) (*Review, error) {
 	t.Helper()
 	return runObservedScript(t, root, command, command)
@@ -27,6 +37,7 @@ func runObserved(t *testing.T, root, command string) (*Review, error) {
 // a CLI runs its call inside its own wrapper.
 func runObservedScript(t *testing.T, root, command, script string) (*Review, error) {
 	t.Helper()
+	requireWatch(t)
 	// The fake agent starts a shell only after its tool call has been reported.
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

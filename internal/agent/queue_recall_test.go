@@ -48,7 +48,7 @@ func TestRecallQueuedPromptLeavesSteeredMessagesWithCLI(t *testing.T) {
 	sa.messageQueue.Set("s1", []SessionAgentCall{{SessionID: "s1", Prompt: "still queued"}})
 	require.Equal(t, "still queued", sa.RecallQueuedPrompt("s1").Prompt)
 	require.Equal(t, []string{"already handed off"}, sa.QueuedPromptsList("s1"))
-	require.Len(t, s.takeSteered(midTurnNote + "already handed off"), 1)
+	require.Len(t, s.takeSteered(midTurnNote+"already handed off"), 1)
 }
 
 func TestRecallQueuedPromptDuringInterrupt(t *testing.T) {

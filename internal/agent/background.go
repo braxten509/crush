@@ -51,7 +51,7 @@ type proc struct {
 	// busService is set on services a D-Bus daemon started on demand for a
 	// command (portals, secret stores); they aren't commands the agent ran.
 	busService bool
-	cliHelper bool
+	cliHelper  bool
 }
 
 // markedProcs lists the processes carrying one of the hubs' environment
@@ -70,14 +70,23 @@ var markedProcs = func(markers []string) map[int]proc {
 	return marked
 }
 
+// inheritedJob and inheritedShell are the job and shell markers this Crush
+// got from its own parent: started from another Crush's shell or job, every
+// process of this one inherits them, yet they name the other Crush's job, so
+// they mark nothing here (a CLI read as a native shell showed as background).
+var (
+	inheritedJob   = os.Getenv(managedJobEnv)
+	inheritedShell = os.Getenv(tools.NativeShellEnv)
+)
+
 // procFromEntry reads what Crush set in a process's environment.
 func procFromEntry(e procs.Entry) proc {
 	p := proc{pid: e.PID, ppid: e.PPID, sid: e.SID, args: e.Args, started: e.Started}
 	for _, variable := range e.Env {
-		if value, ok := strings.CutPrefix(string(variable), managedJobEnv+"="); ok {
+		if value, ok := strings.CutPrefix(string(variable), managedJobEnv+"="); ok && value != inheritedJob {
 			p.managedJobID = value
 		}
-		if value, ok := strings.CutPrefix(string(variable), tools.NativeShellEnv+"="); ok {
+		if value, ok := strings.CutPrefix(string(variable), tools.NativeShellEnv+"="); ok && value != inheritedShell {
 			p.nativeShellID = value
 		}
 		if value, ok := strings.CutPrefix(string(variable), TasksSessionEnv+"="); ok {

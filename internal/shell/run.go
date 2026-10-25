@@ -338,6 +338,12 @@ func builtinHandler() execMiddleware {
 // blockHandler returns middleware that rejects commands matched by any of
 // the provided [BlockFunc]s before they reach the underlying exec path.
 // A nil or empty blockFuncs slice is a no-op.
+//
+// The block list only sees programs this interpreter starts itself,
+// including those in shell scripts without a #! line, which run in-process.
+// Commands run by another interpreter are out of its reach: a #! script's
+// body, `bash -c '...'`, `env curl`, `xargs`, python and the like. It is a
+// guard against habits, not a sandbox; the permission prompt is the gate.
 func blockHandler(blockFuncs []BlockFunc) execMiddleware {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {

@@ -343,7 +343,12 @@ func (c *coordinator) QueuedPromptsList(sessionID string) []string {
 
 func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 	agent := c.currentAgent()
-	providerCfg, ok := c.cfg.Config().Providers.Get(agent.Model().ModelCfg.Provider)
+	// The chat is compacted on its own model (owner, 2026-10-24).
+	model, err := agent.ChatModel(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
 		return errModelProviderNotConfigured
 	}
@@ -354,7 +359,7 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 
 	// Auth failures during summarize flow through fantasy's OnAuthRefresh,
 	// the same path used by regular turns.
-	return agent.Summarize(ctx, sessionID, getProviderOptions(agent.Model(), providerCfg), c.makeAuthRefreshCallback(providerCfg))
+	return agent.Summarize(ctx, sessionID, getProviderOptions(model, providerCfg), c.makeAuthRefreshCallback(providerCfg))
 }
 
 // GenerateTitle generates a session title using the current agent.

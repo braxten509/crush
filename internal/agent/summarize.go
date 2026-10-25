@@ -26,9 +26,9 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	// A summary replaces the agent's memory: resend kept skills in full.
 	defer forgetKeptSkillsSent(sessionID)
 
-	// Copy mutable fields under lock to avoid races with SetModels.
-	largeModel := a.largeModel.Get()
-	systemPromptPrefix := a.systemPromptPrefix.Get()
+	// A chat is compacted on its own model (owner, 2026-10-24).
+	largeModel := a.turnModel(ctx, sessionID)
+	systemPromptPrefix := a.promptPrefixFor(largeModel)
 
 	currentSession, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
@@ -79,7 +79,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		resp, err = a.cliSummarize(genCtx, cliModel, sessionID, largeModel.ModelCfg.ReasoningEffort, msgs, summaryPromptText, &summaryMessage)
 	}
 	if resp == nil && err == nil {
-		resp, err = agent.Stream(genCtx, a.summaryStreamCall(genCtx, sessionID, summaryPromptText, aiMsgs, opts, onAuthRefresh, systemPromptPrefix, &summaryMessage))
+		resp, err = agent.Stream(genCtx, a.summaryStreamCall(genCtx, sessionID, largeModel, summaryPromptText, aiMsgs, opts, onAuthRefresh, systemPromptPrefix, &summaryMessage))
 	}
 	if err != nil {
 		return a.failSummary(ctx, &summaryMessage, err)
@@ -98,7 +98,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 }
 
 // summaryStreamCall streams the summary into summaryMessage as it arrives.
-func (a *sessionAgent) summaryStreamCall(genCtx context.Context, sessionID, summaryPromptText string, aiMsgs []fantasy.Message, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, systemPromptPrefix string, summaryMessage *message.Message) fantasy.AgentStreamCall {
+func (a *sessionAgent) summaryStreamCall(genCtx context.Context, sessionID string, model Model, summaryPromptText string, aiMsgs []fantasy.Message, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, systemPromptPrefix string, summaryMessage *message.Message) fantasy.AgentStreamCall {
 	return fantasy.AgentStreamCall{
 		Prompt:          summaryPromptText,
 		Messages:        aiMsgs,
@@ -106,7 +106,7 @@ func (a *sessionAgent) summaryStreamCall(genCtx context.Context, sessionID, summ
 		ProviderOptions: opts,
 		OnAuthRefresh:   onAuthRefresh,
 		ModelProvider: func() fantasy.LanguageModel {
-			return a.largeModel.Get().Model
+			return model.Model
 		},
 		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
 			prepared.Messages = options.Messages

@@ -606,6 +606,30 @@ func (a *sessionAgent) ChatModel(ctx context.Context, sessionID string) (Model, 
 	return Model{}, fmt.Errorf("the chat's model could not be built")
 }
 
+// turnModel is the chat's model for work outside a turn's own snapshot (a
+// summary, a canceled turn's record); a one-model agent's own when the
+// chat's can't be had.
+func (a *sessionAgent) turnModel(ctx context.Context, sessionID string) Model {
+	m, err := a.ChatModel(ctx, sessionID)
+	if err != nil {
+		slog.Warn("Could not read the chat's model", "session_id", sessionID, "error", err)
+		return a.largeModel.Get()
+	}
+	return m
+}
+
+// promptPrefixFor is the system prompt prefix the model's provider asks
+// for (an OAuth login may need one), not the one of another chat's.
+func (a *sessionAgent) promptPrefixFor(m Model) string {
+	if a.cfg == nil || a.chatModels.build == nil || m.ModelCfg.Provider == "" {
+		return a.systemPromptPrefix.Get()
+	}
+	if p, ok := a.cfg.Config().Providers.Get(m.ModelCfg.Provider); ok {
+		return p.SystemPromptPrefix
+	}
+	return ""
+}
+
 // knownAccount runs a model whose added account was since removed on the
 // tool's own login; the chat keeps its saved choice.
 func knownAccount(store *config.ConfigStore, m config.SelectedModel) config.SelectedModel {

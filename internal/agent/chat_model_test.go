@@ -187,3 +187,25 @@ func TestARefreshedSignInRebuildsTheChatsModel(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, *built, "the refresh built the chat's model again")
 }
+
+// A chat is compacted on its own model (owner, 2026-10-24: compaction stays
+// on the chat's model), never on another chat's or a shared one.
+func TestCompactionRunsOnTheChatsModel(t *testing.T) {
+	env := testEnv(t)
+	shared := &recordingStreamModel{finishStreamModel: finishStreamModel{text: "shared summary"}}
+	agent := testSessionAgent(env, shared, &finishStreamModel{text: "title"}, "system").(*sessionAgent)
+	own := &recordingStreamModel{finishStreamModel: finishStreamModel{text: "the chat's summary"}}
+	agent.chatModels.build = func(_ context.Context, selection config.SelectedModel) (Model, error) {
+		return Model{Model: own, CatwalkCfg: catwalk.Model{ContextWindow: 200_000, DefaultMaxTokens: 10_000}, ModelCfg: selection}, nil
+	}
+	chat, err := env.sessions.Create(t.Context(), "own model")
+	require.NoError(t, err)
+	_, err = env.sessions.SetModel(t.Context(), chat.ID, session.ModelChoice(`{"provider":"claude-code","model":"sonnet"}`))
+	require.NoError(t, err)
+	_, err = agent.Run(t.Context(), SessionAgentCall{SessionID: chat.ID, Prompt: "hello", NonInteractive: true})
+	require.NoError(t, err)
+
+	require.NoError(t, agent.Summarize(t.Context(), chat.ID, nil, nil))
+	require.Empty(t, shared.calls, "nothing went to another model")
+	require.Len(t, own.calls, 2, "the turn and the summary both ran on the chat's model")
+}

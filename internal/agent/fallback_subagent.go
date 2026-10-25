@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -41,7 +42,7 @@ func (h *taskHub) subAgentFallback(ctx context.Context, t *Task, start, cur conf
 	// A parent that already moved accounts has made this decision for its
 	// same-provider workers too. Keep the worker's own model and effort.
 	if provider, ok := c.cfg.Config().Providers.Get(cur.Provider); ok {
-		account := h.taskAccount(provider, cur.Account)
+		account := h.taskAccount(t.SessionID, provider, cur.Account)
 		if account != cur.Account {
 			return h.subAgentOn(ctx, t, config.FallbackBlock{
 				Provider: cur.Provider, Model: cur.Model, Account: account, Effort: cur.ReasoningEffort,
@@ -124,6 +125,12 @@ func (h *taskHub) subAgentOn(ctx context.Context, t *Task, b config.FallbackBloc
 	}
 	if line != "" {
 		h.c.fallbackNotice(ctx, t.ChildID, line)
+	}
+	// The worker's chat shows the model it runs on now.
+	if choice, err := json.Marshal(selected); err == nil {
+		if _, err := h.c.sessions.SetModel(context.WithoutCancel(ctx), t.ChildID, choice); err != nil {
+			slog.Warn("Could not save a moved sub-agent's model", "task", t.ID, "error", err)
+		}
 	}
 	h.mu.Lock()
 	t.CLI, t.Model, t.Effort = taskProviderName(provider), model.ID, selected.ReasoningEffort

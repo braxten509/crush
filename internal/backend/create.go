@@ -246,10 +246,6 @@ func (b *Backend) newWorkspace(args proto.Workspace, key string) (*Workspace, er
 		cancel:       wsCancel,
 		clients:      make(map[string]*clientState),
 	}
-	// app.New started this project's agent, and a desktop opening a
-	// configured project reads no init on that path again: the fallback
-	// order's switches reach the apps from here.
-	installModelSwitchHook(workspace)
 	return workspace, nil
 }
 

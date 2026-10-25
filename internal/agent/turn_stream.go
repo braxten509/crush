@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -240,11 +241,19 @@ func (t *turn) modelProvider() fantasy.LanguageModel {
 			slog.Error("Failed to clear retry status", "error", err)
 		}
 	}
-	// The turn's own snapshot, not the agent's: a chat may run on its own
-	// model, and a switch made elsewhere mid-turn must not swap it.
+	// The turn's own snapshot, not the agent's: a switch made elsewhere
+	// mid-turn must not swap it. The same choice is looked up again, so a
+	// sign-in refreshed mid-turn (the retry after a 401) reaches the next
+	// request in a model built with the new credentials.
 	m := t.largeModel
 	if m.Model == nil {
 		m = t.a.largeModel.Get()
+	} else if t.a.chatModels.build != nil && m.ModelCfg.Provider != "" {
+		if choice, err := json.Marshal(m.ModelCfg); err == nil {
+			if fresh, ok := t.a.modelForChat(choice); ok {
+				m = fresh
+			}
+		}
 	}
 	slog.Info("ModelProvider called",
 		"provider", m.ModelCfg.Provider,

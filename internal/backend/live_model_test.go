@@ -418,6 +418,15 @@ func (r *liveRig) spawnWork(t *testing.T, ws *Workspace, app, chat, name string)
 		}
 		return okTask && okJob
 	}, 20*time.Second, 20*time.Millisecond, "the helper and the job of %s must run", name)
+	// The job writes into the test's folders until it ends: stop it and
+	// wait, before the folders are removed (cleanups run last-first).
+	t.Cleanup(func() {
+		_ = agent.StopBackgroundProcess(job)
+		deadline := time.Now().Add(5 * time.Second)
+		for len(agent.SessionBackgroundProcesses(chat)) > 0 && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+	})
 	return task, job
 }
 

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/event"
@@ -110,6 +111,12 @@ type Service interface {
 	// SetModel saves the model this chat runs on; nil clears it, so the chat
 	// follows the workspace again.
 	SetModel(ctx context.Context, sessionID string, model ModelChoice) (Session, error)
+	// SetNewChatModel sets where a new chat's model comes from (the last
+	// pick); Create saves it with the chat.
+	SetNewChatModel(fn func(context.Context) ModelChoice)
+	// AdoptModels gives every top-level chat without a model the one pick
+	// returns, and reports how many it gave one.
+	AdoptModels(ctx context.Context, pick func(context.Context, Session) ModelChoice) (int, error)
 	SetChannel(ctx context.Context, sessionID, channel string) (Session, error)
 	UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens int64, cost float64) error
 	Rename(ctx context.Context, id string, title string) error
@@ -140,34 +147,112 @@ type service struct {
 	// SQLite and incorrectly clear the UI "~" marker.
 	estimatedUsageMu sync.RWMutex
 	estimatedUsage   map[string]bool
+
+	newChatModel atomic.Pointer[func(context.Context) ModelChoice]
 }
 
-func (s *service) Create(ctx context.Context, title string) (Session, error) {
-	dbSession, err := s.q.CreateSession(ctx, db.CreateSessionParams{
-		ID:    uuid.New().String(),
-		Title: title,
-	})
+func (s *service) SetNewChatModel(fn func(context.Context) ModelChoice) {
+	s.newChatModel.Store(&fn)
+}
+
+// createWithModel makes a chat and saves model with it in one transaction,
+// so no chat is ever seen without its model.
+func (s *service) createWithModel(ctx context.Context, params db.CreateSessionParams, model ModelChoice) (Session, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Session{}, err
 	}
-	session := s.fromDBItem(dbSession)
+	defer tx.Rollback() //nolint:errcheck
+	dbSession, err := s.q.WithTx(tx).CreateSession(ctx, params)
+	if err != nil {
+		return Session{}, err
+	}
+	if len(model) > 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO session_models (session_id, choice) VALUES (?, ?)`, dbSession.ID, string(model)); err != nil {
+			return Session{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Session{}, err
+	}
+	return s.fromDBItem(dbSession), nil
+}
+
+func (s *service) Create(ctx context.Context, title string) (Session, error) {
+	var model ModelChoice
+	if fn := s.newChatModel.Load(); fn != nil && *fn != nil {
+		model = (*fn)(ctx)
+	}
+	session, err := s.createWithModel(ctx, db.CreateSessionParams{
+		ID:    uuid.New().String(),
+		Title: title,
+	}, model)
+	if err != nil {
+		return Session{}, err
+	}
 	s.Publish(pubsub.CreatedEvent, session)
 	event.SessionCreated()
 	return session, nil
 }
 
+// CreateTaskSession makes a sub-agent's chat. It starts on its parent's
+// model; a sub-agent on another model saves its own over it.
 func (s *service) CreateTaskSession(ctx context.Context, toolCallID, parentSessionID, title string) (Session, error) {
-	dbSession, err := s.q.CreateSession(ctx, db.CreateSessionParams{
+	model, err := s.readModel(parentSessionID)
+	if err != nil && err != sql.ErrNoRows {
+		return Session{}, err
+	}
+	session, err := s.createWithModel(ctx, db.CreateSessionParams{
 		ID:              toolCallID,
 		ParentSessionID: sql.NullString{String: parentSessionID, Valid: true},
 		Title:           title,
-	})
+	}, model)
 	if err != nil {
 		return Session{}, err
 	}
-	session := s.fromDBItem(dbSession)
 	s.Publish(pubsub.CreatedEvent, session)
 	return session, nil
+}
+
+// AdoptModels gives each top-level chat that has no model the one pick
+// returns; an empty choice leaves the chat as it is.
+func (s *service) AdoptModels(ctx context.Context, pick func(context.Context, Session) ModelChoice) (int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM sessions
+		WHERE (parent_session_id IS NULL OR parent_session_id = '')
+		AND id NOT IN (SELECT session_id FROM session_models)`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	adopted := 0
+	for _, id := range ids {
+		chat, err := s.Get(ctx, id)
+		if err != nil {
+			continue
+		}
+		model := pick(ctx, chat)
+		if len(model) == 0 {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO session_models (session_id, choice) VALUES (?, ?)
+			ON CONFLICT(session_id) DO NOTHING`, id, string(model)); err != nil {
+			return adopted, err
+		}
+		adopted++
+	}
+	return adopted, nil
 }
 
 func (s *service) CreateTitleSession(ctx context.Context, parentSessionID string) (Session, error) {

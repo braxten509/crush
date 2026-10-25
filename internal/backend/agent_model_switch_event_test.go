@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/proto/prototest"
+	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +44,7 @@ func TestFallbackSwitchTellsTheAppsTheModelChanged(t *testing.T) {
 		{Type: config.FallbackUse, Provider: string(config.TypeClaudeCode), Model: "opus", Account: "claude-2", MoveAtPercent: 1},
 		{Type: config.FallbackUse, Provider: "fake", Model: "fake-model"},
 	}}
-	cfg.Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: string(config.TypeClaudeCode), Model: "opus", Account: "claude-2"}
+	shared := cfg.Models[config.SelectedModelTypeLarge]
 	t.Cleanup(cliagent.SetLimitFetchersForTest(map[catwalk.Type]func(context.Context) ([]cliagent.Limit, error){
 		config.TypeClaudeCode: func(context.Context) ([]cliagent.Limit, error) {
 			return []cliagent.Limit{{Name: "5h", Used: 100, ResetsAt: time.Now().Add(time.Hour)}}, nil
@@ -57,10 +60,21 @@ func TestFallbackSwitchTellsTheAppsTheModelChanged(t *testing.T) {
 	t.Cleanup(cancel)
 	events := ws.Events(ctx)
 	chat := r.chat(t, ws, "C")
+	_, err = ws.App.Sessions.SetModel(t.Context(), chat, session.ModelChoice(`{"provider":"claude-code","model":"opus","account":"claude-2"}`))
+	require.NoError(t, err)
 	r.send(t, ws, app, chat, "s1", "hello")
 
-	require.Eventually(t, func() bool {
-		return ws.Cfg.Config().Models[config.SelectedModelTypeLarge].Provider == "fake"
-	}, 20*time.Second, 20*time.Millisecond, "the fallback order switches the chat to the fake model")
-	awaitConfigChanged(t, events, ws.ID)
+	// The chat's own model moves, and its update reaches the apps; the old
+	// shared model is not written (owner, 2026-10-24).
+	for {
+		select {
+		case ev := <-events:
+			if updated, ok := ev.Payload.(pubsub.Event[session.Session]); ok && updated.Payload.ID == chat && strings.Contains(string(updated.Payload.Model), `"fake"`) {
+				require.Equal(t, shared, ws.Cfg.Config().Models[config.SelectedModelTypeLarge], "no shared model is written")
+				return
+			}
+		case <-time.After(20 * time.Second):
+			t.Fatal("the fallback order did not switch the chat to the fake model")
+		}
+	}
 }

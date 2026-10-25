@@ -3,8 +3,10 @@ package agent
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -84,7 +86,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	selected.Account = h.taskAccount(*provider, "")
+	selected.Account = h.taskAccount(req.Session, *provider, "")
 	sub, m, err := h.subAgent(ctx, *provider, model, selected, req.ReadOnly)
 	if err != nil {
 		return nil, err
@@ -94,6 +96,12 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	child, err := h.c.sessions.CreateTaskSession(ctx, uuid.NewString(), req.Session, name)
 	if err != nil {
 		return nil, err
+	}
+	// The worker's chat keeps the worker's own model, not its parent's.
+	if choice, err := json.Marshal(selected); err == nil {
+		if _, err := h.c.sessions.SetModel(ctx, child.ID, choice); err != nil {
+			slog.Warn("Could not save the worker's model with its chat", "session_id", child.ID, "error", err)
+		}
 	}
 	if !config.IsCLIProviderType(provider.Type) {
 		h.c.permissions.AutoApproveSession(child.ID)
@@ -112,10 +120,13 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	return &snapshot, nil
 }
 
-// Same-provider workers follow the parent's current login, including its
-// default login. Other providers retain their own account.
-func (h *taskHub) taskAccount(provider config.ProviderConfig, previous string) string {
-	cur := h.c.cfg.Config().Models[config.SelectedModelTypeLarge]
+// Same-provider workers follow the parent chat's current login, including
+// its default login. Other providers retain their own account.
+func (h *taskHub) taskAccount(parentSessionID string, provider config.ProviderConfig, previous string) string {
+	cur, ok := h.c.chatSelection(context.Background(), parentSessionID)
+	if !ok {
+		return previous
+	}
 	parent, ok := h.c.cfg.Config().Providers.Get(cur.Provider)
 	if ok && parent.Type == provider.Type {
 		return cur.Account

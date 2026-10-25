@@ -20,8 +20,11 @@ func TestTaskInheritsCurrentProviderAccount(t *testing.T) {
 	c.tasks = h
 	provider := config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus"}}}
 	c.cfg.Config().Providers.Set(provider.ID, provider)
-	c.cfg.Config().Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: provider.ID, Model: "opus", Account: "claude-2"}
+	// The parent chat runs on its own account; the old shared model names
+	// another, which no worker may follow (owner, 2026-10-24).
+	c.cfg.Config().Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: provider.ID, Model: "opus", Account: "claude-3"}
 	parent, _ := helperChats(t, c)
+	setChatModel(t, c, parent.ID, config.SelectedModel{Provider: provider.ID, Model: "opus", Account: "claude-2"})
 	h.subAgentHook = func(config.ProviderConfig, catwalk.Model) SessionAgent {
 		return newMockAgent("claude", 4096, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
 			return agentResultWithText("done"), nil
@@ -30,14 +33,15 @@ func TestTaskInheritsCurrentProviderAccount(t *testing.T) {
 	task, err := h.spawn(TaskRequest{Session: parent.ID, CLI: "claude", Prompt: "work"})
 	require.NoError(t, err)
 	require.Equal(t, "claude-2", task.Account)
-	require.Equal(t, "claude-2", h.taskAccount(provider, ""))
+	require.Equal(t, "claude-2", chatModelOf(t, c, task.ChildID).Account, "the worker's chat keeps the worker's model")
+	require.Equal(t, "claude-2", h.taskAccount(parent.ID, provider, ""))
 	cur := config.SelectedModel{Provider: provider.ID, Model: "opus"}
 	next, ok := h.subAgentFallback(t.Context(), task, cur, cur, errOut)
 	require.True(t, ok, "a worker hitting its old account's limit follows the parent's new account")
 	require.Equal(t, "claude-2", next.model.ModelCfg.Account)
-	c.cfg.Config().Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: provider.ID, Account: ""}
-	require.Empty(t, h.taskAccount(provider, "claude-2"), "returning to the default account also follows")
-	require.Equal(t, "codex-2", h.taskAccount(config.ProviderConfig{Type: config.TypeCodexCLI}, "codex-2"), "other providers keep their own account")
+	setChatModel(t, c, parent.ID, config.SelectedModel{Provider: provider.ID, Model: "opus"})
+	require.Empty(t, h.taskAccount(parent.ID, provider, "claude-2"), "returning to the default account also follows")
+	require.Equal(t, "codex-2", h.taskAccount(parent.ID, config.ProviderConfig{Type: config.TypeCodexCLI}, "codex-2"), "other providers keep their own account")
 }
 
 // Background tasks build their models through the same path as the main

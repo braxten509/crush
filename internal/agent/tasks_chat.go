@@ -79,24 +79,28 @@ func (h *taskHub) chatMessage(ctx context.Context, accept *AcceptedRun, sessionI
 	accept.Close()
 	ids := chatCall{submissionID: message.SubmissionID(ctx), runID: RunIDFromContext(ctx)}
 
+	// The fallback order moves a sub-agent under h.mu, so its agent and
+	// model are read while it is held.
 	h.mu.Lock()
 	run := h.runs[t.ID]
 	var box *reportBox
+	var current taskRun
 	if run != nil {
 		box = newReportBox()
 		run.pending = append(run.pending, box)
+		current = taskRun{ctx: run.ctx, sub: run.sub, model: run.model, provider: run.provider}
 	}
 	h.mu.Unlock()
 	if run != nil {
-		result, err = run.sub.Run(run.ctx, SessionAgentCall{
+		result, err = current.sub.Run(current.ctx, SessionAgentCall{
 			SessionID:       sessionID,
 			SubmissionID:    ids.submissionID,
 			RunID:           ids.runID,
 			Prompt:          prompt,
 			Attachments:     attachments,
-			MaxOutputTokens: subAgentMaxTokens(run.model),
+			MaxOutputTokens: subAgentMaxTokens(current.model),
 			NonInteractive:  true,
-			ProviderOptions: getProviderOptions(run.model, run.provider),
+			ProviderOptions: getProviderOptions(current.model, current.provider),
 			report:          box,
 		})
 		// A queued message's box fills when its turn ends; a turn that

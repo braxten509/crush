@@ -329,3 +329,53 @@ func TestKeptSkillsRememberWhoTurnedThemOn(t *testing.T) {
 	require.Equal(t, mine.ID, updated.KeptSkills[0].ID, "it keeps its place in the list")
 	require.True(t, updated.KeptSkills[0].ByAgent, "after the user turned it off, the agent may turn it back on")
 }
+
+// Every chat owns its model (owner, 2026-10-24): a new chat starts on the
+// last pick, a task chat on its parent's model, and an old chat without one
+// is given one once.
+func TestNewChatStartsOnTheLastPickAndOldChatsAdoptTheirLastModel(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Cleanup(func() {
+		require.NoError(t, db.Release(dataDir))
+		db.ResetPool()
+	})
+	conn, err := db.Connect(t.Context(), dataDir)
+	require.NoError(t, err)
+	sessions := NewService(db.New(conn), conn)
+
+	// Chats made before every chat had a model.
+	old, err := sessions.Create(t.Context(), "old")
+	require.NoError(t, err)
+	require.Empty(t, old.Model)
+	kept, err := sessions.Create(t.Context(), "kept")
+	require.NoError(t, err)
+	_, err = sessions.SetModel(t.Context(), kept.ID, ModelChoice(`{"provider":"p","model":"own"}`))
+	require.NoError(t, err)
+
+	pick := ModelChoice(`{"provider":"codex-cli","model":"gpt-6-sol","reasoning_effort":"max","account":"codex-2"}`)
+	sessions.SetNewChatModel(func(context.Context) ModelChoice { return pick })
+	created, err := sessions.Create(t.Context(), "new")
+	require.NoError(t, err)
+	require.JSONEq(t, string(pick), string(created.Model), "a new chat starts on the last pick")
+
+	_, err = sessions.SetModel(t.Context(), created.ID, ModelChoice(`{"provider":"claude-code","model":"opus"}`))
+	require.NoError(t, err)
+	task, err := sessions.CreateTaskSession(t.Context(), "task-1", created.ID, "task")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"provider":"claude-code","model":"opus"}`, string(task.Model), "a task chat starts on its parent's model")
+
+	var asked []string
+	adopted, err := sessions.AdoptModels(t.Context(), func(_ context.Context, s Session) ModelChoice {
+		asked = append(asked, s.Title)
+		return ModelChoice(`{"provider":"claude-code","model":"sonnet"}`)
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, adopted)
+	require.Equal(t, []string{"old"}, asked, "only top-level chats without a model are asked")
+	read, err := sessions.Get(t.Context(), old.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"provider":"claude-code","model":"sonnet"}`, string(read.Model))
+	read, err = sessions.Get(t.Context(), kept.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"provider":"p","model":"own"}`, string(read.Model), "a chat's own model is left alone")
+}

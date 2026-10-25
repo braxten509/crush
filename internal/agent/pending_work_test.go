@@ -176,7 +176,7 @@ func TestSavedFallbackMemoryComesBack(t *testing.T) {
 	acct := fallback.Account{Kind: config.TypeClaudeCode, ID: "test-account"}
 	first.markOut(acct, errors.New("You've hit your session limit · resets 5:20am (America/Boise)"), clock.Now())
 	first.fallback.mu.Lock()
-	first.fallback.ret = &fallback.Return{Block: 1, At: clock.Now().Add(3 * time.Hour)}
+	first.fallback.ret = map[string]*fallback.Return{"chat-1": {Block: 1, At: clock.Now().Add(3 * time.Hour)}}
 	first.fallback.mu.Unlock()
 	first.saveFallbackMemory()
 
@@ -187,7 +187,7 @@ func TestSavedFallbackMemoryComesBack(t *testing.T) {
 	require.EqualValues(t, 100, reading.Used)
 	require.True(t, reading.OpenAt.Equal(time.Date(2026, 10, 19, 5, 20, 0, 0, boise)), reading.OpenAt)
 	next.fallback.mu.Lock()
-	ret := next.fallback.ret
+	ret := next.fallback.ret["chat-1"]
 	next.fallback.mu.Unlock()
 	require.NotNil(t, ret)
 	require.Equal(t, 1, ret.Block)

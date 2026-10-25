@@ -46,8 +46,12 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 		params.SessionSetup(session.ID)
 	}
 
-	// Get model configuration
-	model := params.Agent.Model()
+	// The sub-agent runs on its own chat's model, which starts as its
+	// parent chat's (owner, 2026-10-24: every chat owns its model).
+	model, err := params.Agent.ChatModel(ctx, session.ID)
+	if err != nil {
+		return fantasy.ToolResponse{}, err
+	}
 	maxTokens := subAgentMaxTokens(model)
 
 	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)

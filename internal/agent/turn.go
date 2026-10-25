@@ -404,7 +404,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	}
 
 	startTime := time.Now()
-	a.eventPromptSent(t.call.SessionID)
+	a.eventPromptSent(t.call.SessionID, t.largeModel)
 
 	t.sanitizedToolCalls = make(map[string]bool)
 	t.completedToolCalls = make(map[string]struct{})
@@ -420,11 +420,11 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 		}, t.interruptOnToolCall)
 	}
 	streamCall := t.buildStreamCall(history, files)
-	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID)
+	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID, t.largeModel)
 	defer t.fileReview.finish(t.ctx)
 	result, err := stream(t.genCtx, streamCall)
 
-	a.eventPromptResponded(t.call.SessionID, time.Since(startTime).Truncate(time.Second))
+	a.eventPromptResponded(t.call.SessionID, t.largeModel, time.Since(startTime).Truncate(time.Second))
 
 	if t.wasInterruptedForProgress() && err == nil {
 		err = context.Canceled
@@ -445,16 +445,21 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 	}
 	// Copy mutable fields under lock to avoid races with SetTools/SetModels.
 	agentTools := a.callTools(t.call)
-	t.largeModel = a.largeModel.Get()
-	// A chat runs on its own model when it has one, so a model picked in
-	// another chat never reaches it (owner, 2026-10-23).
+	// A chat runs on its own model, so a model picked in another chat never
+	// reaches it (owner, 2026-10-24: every chat owns its model). The
+	// coordinator hands in the model the call's settings came from; an
+	// agent made for one model (a sub-agent's) always runs on that one.
+	t.largeModel = t.call.model
+	if t.largeModel.Model == nil || a.chatModels.build == nil {
+		own, err := a.ChatModel(t.ctx, t.call.SessionID)
+		if err != nil {
+			slog.Warn("Could not read the chat's model", "session_id", t.call.SessionID, "error", err)
+			own = a.largeModel.Get()
+		}
+		t.largeModel = own
+	}
 	if chat, err := a.sessions.Get(t.ctx, t.call.SessionID); err == nil {
 		t.currentSession = chat
-		if own, ok := a.modelForChat(chat.Model); ok {
-			t.largeModel = own
-		}
-	} else {
-		slog.Warn("Could not read the chat's model", "session_id", t.call.SessionID, "error", err)
 	}
 	t.cliModel, t.isCLI = t.largeModel.Model.(*cliagent.Model)
 	systemPrompt := a.systemPrompt.Get()
@@ -463,7 +468,7 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 		// CLI agents get the note with their turn's text instead.
 		systemPrompt += "\n\n" + note
 	}
-	t.promptPrefix = a.systemPromptPrefix.Get()
+	t.promptPrefix = a.promptPrefixFor(t.largeModel)
 	if !t.isCLI && a.cfg != nil && a.cfg.Config().Options != nil && a.cfg.Config().Options.DisableInstructionFiles {
 		systemPrompt += "\n\n" + sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
 		if a.tasks != nil && !a.isSubAgent {

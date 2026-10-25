@@ -42,6 +42,13 @@ func TestMain(m *testing.M) {
 	killGrace = 200 * time.Millisecond
 	shell.LeftoverWait = 300 * time.Millisecond
 	cliagent.WindDownGrace = 200 * time.Millisecond
+	// A new chat's model seeds the last pick; tests never write the real one.
+	if os.Getenv("CRUSH_GLOBAL_DATA") == "" {
+		if dir, err := os.MkdirTemp("", "crush-agent-test-data-"); err == nil {
+			os.Setenv("CRUSH_GLOBAL_DATA", dir)
+			defer os.RemoveAll(dir)
+		}
+	}
 	m.Run()
 }
 

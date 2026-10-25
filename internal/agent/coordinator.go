@@ -238,6 +238,22 @@ func (c *coordinator) activeAgent() (SessionAgent, string) {
 	return c.mainAgent, c.mainAgentName
 }
 
+// forgetChatModels drops every agent's built chat models.
+func (c *coordinator) forgetChatModels() {
+	c.agentMu.RLock()
+	agents := make([]SessionAgent, 0, len(c.agents)+1)
+	for _, a := range c.agents {
+		agents = append(agents, a)
+	}
+	if c.mainAgent != nil {
+		agents = append(agents, c.mainAgent)
+	}
+	c.agentMu.RUnlock()
+	for _, a := range agents {
+		a.ForgetChatModels()
+	}
+}
+
 // currentAgent returns the current main agent.
 func (c *coordinator) currentAgent() SessionAgent {
 	agent, _ := c.activeAgent()
@@ -329,7 +345,12 @@ func (c *coordinator) QueuedPromptsList(sessionID string) []string {
 
 func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 	agent := c.currentAgent()
-	providerCfg, ok := c.cfg.Config().Providers.Get(agent.Model().ModelCfg.Provider)
+	// The chat is compacted on its own model (owner, 2026-10-24).
+	model, err := agent.ChatModel(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
 		return errModelProviderNotConfigured
 	}
@@ -340,7 +361,7 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 
 	// Auth failures during summarize flow through fantasy's OnAuthRefresh,
 	// the same path used by regular turns.
-	return agent.Summarize(ctx, sessionID, getProviderOptions(agent.Model(), providerCfg), c.makeAuthRefreshCallback(providerCfg))
+	return agent.Summarize(ctx, sessionID, getProviderOptions(model, providerCfg), c.makeAuthRefreshCallback(providerCfg))
 }
 
 // GenerateTitle generates a session title using the current agent.

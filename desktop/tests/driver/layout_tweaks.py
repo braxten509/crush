@@ -85,9 +85,10 @@ rail = run("""
 """) or {}
 check(rail.get("rail") is not None and abs(rail["rail"] - rail["column"]) <= 0.5, f"the rail starts at the column's top ({rail})")
 
-# The open chat's band reaches 1px past the lines on each side and its words
-# stay where a plain row has them. The list has no end rule under its last
-# chat (owner, 2026-10-24).
+# The open chat's band reaches 1px past its row and stays clear of the next
+# row, 1-4 px between them so two bands never touch (owner, 2026-10-22); its
+# words stay where a plain row has them. The list has no end rule under its
+# last chat (owner, 2026-10-24).
 band = run("""
   const li = document.querySelector('nav.chats .chat.selected'), next = li?.nextElementSibling;
   if (!li || !next || !next.matches('.chat')) return null;
@@ -95,7 +96,7 @@ band = run("""
   const textTop = (e) => e.querySelector('.title').getBoundingClientRect().top - e.getBoundingClientRect().top - parseFloat(getComputedStyle(e).borderTopWidth);
   return { past: r.bottom - n.top, text: textTop(li), plain: textTop(next), end: !!document.querySelector('nav.chats .rule.end-of-list') };
 """) or {}
-check(band.get("past") == 1, f"the open chat's band reaches 1px over the line under it ({band})")
+check(band.get("past") is not None and -4 <= band["past"] <= -1, f"the open chat's band stays 1-4 px clear of the row under it ({band})")
 check(band and abs(band["text"] - band["plain"]) <= 0.5, f"its title sits where a plain row's does ({band})")
 check(band.get("end") is False, f"no end rule under the list's last chat ({band})")
 
@@ -157,10 +158,13 @@ check(not meters.get("error") and not meters.get("cut") and not meters.get("over
 # only control for it there; the edge tab is gone.
 state = "return { panel: !!document.querySelector('.panel-column'), tab: !!document.querySelector('[data-probe=\"panel-tab\"]'), pressed: document.querySelector('[data-probe=\"title-panel\"]').getAttribute('aria-pressed') };"
 SPACE = """
+  // Above is to the composer's first row: Complete's row when a chat is
+  // open (owner, 2026-10-21), else the typing box.
   const field = document.querySelector('main.conversation .composer .field').getBoundingClientRect();
+  const first = document.querySelector('main.conversation .composer').firstElementChild.getBoundingClientRect();
   const rule = document.querySelector('main.conversation .above-composer').getBoundingClientRect();
   const col = document.querySelector('main.conversation').getBoundingClientRect();
-  return { above: Math.round((field.top - rule.bottom) * 100) / 100, below: Math.round((col.bottom - field.bottom) * 100) / 100 };
+  return { above: Math.round((first.top - rule.bottom) * 100) / 100, below: Math.round((col.bottom - field.bottom) * 100) / 100 };
 """
 space = run(SPACE) or {}
 check(abs(space.get("above", 0) - space.get("below", 99)) <= 1, f"with nothing under the typing box the space below equals the space above ({space})")

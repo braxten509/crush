@@ -49,6 +49,7 @@
     "updated_at": 1792321920,
     "is_busy": false,
     "attached_clients": 0,
+    "model": {"model": "opus", "provider": "claude-code", "reasoning_effort": "max"},
     "context_budget": {
      "provider": "claude-code",
      "model": "opus",
@@ -72,6 +73,7 @@
     "updated_at": 1792320900,
     "is_busy": false,
     "attached_clients": 0,
+    "model": {"model": "opus", "provider": "claude-code", "reasoning_effort": "max"},
     "context_budget": {
      "provider": "claude-code",
      "model": "opus",
@@ -95,6 +97,7 @@
     "updated_at": 1792320250,
     "is_busy": false,
     "attached_clients": 0,
+    "model": {"model": "opus", "provider": "claude-code", "reasoning_effort": "max"},
     "context_budget": {
      "provider": "claude-code",
      "model": "opus",
@@ -118,6 +121,7 @@
     "updated_at": 1792320000,
     "is_busy": true,
     "attached_clients": 1,
+    "model": {"model": "opus", "provider": "claude-code", "reasoning_effort": "max"},
     "context_budget": {
      "provider": "codex-cli",
      "model": "default",
@@ -141,6 +145,7 @@
     "updated_at": 1792318800,
     "is_busy": false,
     "attached_clients": 0,
+    "model": {"model": "opus", "provider": "claude-code", "reasoning_effort": "max"},
     "context_budget": {
      "provider": "grok-cli",
      "model": "default",
@@ -165,6 +170,7 @@
    "updated_at": 1792320250,
    "is_busy": false,
    "attached_clients": 0,
+   "model": {"model": "opus", "provider": "claude-code", "reasoning_effort": "max"},
    "context_budget": {
     "provider": "claude-code",
     "model": "opus",

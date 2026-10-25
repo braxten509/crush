@@ -3,8 +3,8 @@ itself). In the real window on the hidden screen, with real mouse clicks:
 the button opens the menu just above it, right edges lined up; the agents
 column lists the fixture's providers with the current one chosen and the
 current model ticked; a click on another provider shows its models; a click
-on a model saves it (POST config/model in the fixture's api.jsonl) and closes
-the menu; a click on an effort level saves that level; Esc and a click
+on a model saves it with the open chat (POST sessions/<id>/model in the
+fixture's api.jsonl) and keeps the menu open; a click on an effort level saves that level; Esc and a click
 outside close it. Pictures of the open menu go to tests/out/model_menu/.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
@@ -74,7 +74,10 @@ def saves(since):
             lines = [json.loads(l) for l in f if l.strip()]
     except FileNotFoundError:
         return []
-    return [c for c in lines[since:] if c.get("method") == "POST" and c.get("path") == "config/model"]
+    # A model is saved with the open chat (sessions/<id>/model; every chat
+    # owns its model, owner 2026-10-24); the effort still goes to config/model.
+    return [c for c in lines[since:] if c.get("method") == "POST"
+            and (c.get("path") == "config/model" or (c.get("path") or "").endswith("/model") and (c.get("path") or "").startswith("sessions/"))]
 
 
 def api_count():
@@ -122,7 +125,7 @@ check(menu["x"] >= 0 and menu["y"] >= 0, "it stays inside the window")
 state = run("""
   const m = document.querySelector('[data-menu="model"]');
   const groups = [...m.querySelectorAll('[data-column="groups"] button')].map((b) => ({ name: b.textContent.trim(), chosen: b.getAttribute('aria-selected') === 'true' }));
-  const models = [...m.querySelectorAll('[data-column="models"] .rows button')].map((b) => ({ name: b.textContent.trim(), current: b.getAttribute('aria-selected') === 'true' }));
+  const models = [...m.querySelectorAll('[data-column="models"] .rows button')].map((b) => ({ name: b.querySelector('.name')?.textContent.trim(), current: b.getAttribute('aria-selected') === 'true' }));
   const levels = [...m.querySelectorAll('[data-column="effort"] button')].map((b) => ({ name: b.textContent.trim(), on: b.getAttribute('aria-checked') === 'true' }));
   return { groups, models, levels };
 """)
@@ -135,22 +138,24 @@ check([l["name"] for l in state["levels"] if l["on"]] == ["Max"], f"the effort i
 # 3. Another provider shows its models.
 click_at(button_by_text("groups", "Codex"))
 time.sleep(0.3)
-shown = run("return [...document.querySelectorAll('[data-menu=\"model\"] .rows button')].map((b) => b.textContent.trim());")
+shown = run("return [...document.querySelectorAll('[data-menu=\"model\"] .rows button .name')].map((b) => b.textContent.trim());")
 check(shown == ["GPT-6.1 Sol", "GPT-6 Astra"], f"a click on Codex shows its models ({shown})")
 click_at(button_by_text("groups", "Claude Code"))
 time.sleep(0.3)
 
-# 4. A model click saves it and closes the menu.
+# 4. A model click saves it and keeps the menu open, so its effort can be
+# picked next (owner, ModelMenu.svelte).
 since = api_count()
 click_at(button_by_text("models", "Sonnet 5.5"))
 time.sleep(1.0)
 got = saves(since)
 model = (got[0].get("body") or {}).get("model", {}) if got else {}
 check(model.get("model") == "sonnet" and model.get("provider") == "claude-code", f"a click on Sonnet 5.5 saves it ({got})")
-check(not menu_open(), "choosing a model closes the menu")
+check(menu_open(), "choosing a model keeps the menu open for its effort")
 
 # 5. An effort level click saves the level.
-open_menu()
+if not menu_open():
+    open_menu()
 since = api_count()
 click_at(button_by_text("effort", "Medium"))
 time.sleep(1.0)

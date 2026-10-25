@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // Reason is what the agent sees when a tool call is blocked.
@@ -26,10 +29,47 @@ var (
 	configDir   = regexp.MustCompile(`(^|[\s~/"'=])\.config([^\w.-]|$)`)
 	// Globs that could expand to a secrets folder, like ~/.config/sec*.
 	configGlob = regexp.MustCompile(`(?i)\.config/(crush/)?s[^/\s"]*[*?\[]`)
-	// Secure entry only writes a typed secret into a prepared file.
-	secureEntry = regexp.MustCompile(`^\s*(\S*/)?crush\s+(secure-entry|ask)(\s|$)`)
-	chained     = regexp.MustCompile("[;|&`]|\\$\\(")
 )
+
+// secureEntryOnly reports whether command is one `crush secure-entry` or
+// `crush ask` call and nothing else, optionally fed by a here-doc. Secure
+// entry only writes a typed secret into a prepared file, so it may name a
+// secrets file. A second command, an input redirect or a command
+// substitution could read one, so any of those (or text that does not
+// parse) loses the exemption.
+func secureEntryOnly(command string) bool {
+	file, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil || len(file.Stmts) != 1 {
+		return false
+	}
+	stmt := file.Stmts[0]
+	if stmt.Background || stmt.Coprocess || stmt.Disown || stmt.Negated {
+		return false
+	}
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) < 2 || filepath.Base(call.Args[0].Lit()) != "crush" {
+		return false
+	}
+	if sub := call.Args[1].Lit(); sub != "secure-entry" && sub != "ask" {
+		return false
+	}
+	for _, redirect := range stmt.Redirs {
+		switch redirect.Op {
+		case syntax.Hdoc, syntax.DashHdoc, syntax.DplOut:
+		default:
+			return false
+		}
+	}
+	only := true
+	syntax.Walk(file, func(node syntax.Node) bool {
+		switch node.(type) {
+		case *syntax.CmdSubst, *syntax.ProcSubst:
+			only = false
+		}
+		return only
+	})
+	return only
+}
 
 // writesOnly reports tools that write or edit files without showing their
 // contents, which never reveals a secret.
@@ -52,7 +92,7 @@ func Blocks(tool string, input []byte) bool {
 		value = string(input)
 	}
 	if fields, ok := value.(map[string]any); ok {
-		if command, ok := fields["command"].(string); ok && secureEntry.MatchString(command) && !chained.MatchString(command) {
+		if command, ok := fields["command"].(string); ok && secureEntryOnly(command) {
 			return false
 		}
 	}

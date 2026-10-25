@@ -210,3 +210,45 @@ func TestJQ_Success(t *testing.T) {
 		t.Fatalf("stdout = %q, want %q", got, "1\n")
 	}
 }
+
+// TestJQ_UsesShellEnvAndDir pins that the jq builtin sees the shell's own
+// variables and reads file arguments from the shell's folder, not Crush's.
+func TestJQ_UsesShellEnvAndDir(t *testing.T) {
+	t.Parallel()
+
+	t.Run("env", func(t *testing.T) {
+		t.Parallel()
+		var stdout bytes.Buffer
+		err := Run(t.Context(), RunOptions{
+			Command: "export JQ_PROBE=fromshell; jq -n -r env.JQ_PROBE",
+			Cwd:     t.TempDir(),
+			Env:     []string{},
+			Stdout:  &stdout,
+		})
+		if err != nil {
+			t.Fatalf("Run returned error: %v", err)
+		}
+		if got := stdout.String(); got != "fromshell\n" {
+			t.Fatalf("stdout = %q, want %q", got, "fromshell\n")
+		}
+	})
+
+	t.Run("dir", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeScript(t, dir, "in.json", `{"a":1}`)
+		var stdout, stderr bytes.Buffer
+		err := Run(t.Context(), RunOptions{
+			Command: "jq -c .a in.json",
+			Cwd:     dir,
+			Stdout:  &stdout,
+			Stderr:  &stderr,
+		})
+		if err != nil {
+			t.Fatalf("Run returned error: %v (stderr=%q)", err, stderr.String())
+		}
+		if got := stdout.String(); got != "1\n" {
+			t.Fatalf("stdout = %q, want %q", got, "1\n")
+		}
+	})
+}

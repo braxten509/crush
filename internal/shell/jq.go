@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/itchyny/gojq"
 	"mvdan.cc/sh/v3/interp"
 )
@@ -62,13 +63,21 @@ func handleJQ(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 		return nil
 	}
 
-	code, err := compileJQ(opts.query, opts.argNames, stderr)
+	// Inside a shell, env and relative file names are the shell's own, not
+	// the Crush process's.
+	dir, environ := "", os.Environ
+	if hc, ok := shellContext(ctx); ok {
+		dir = hc.Dir
+		environ = func() []string { return execEnvList(hc.Env) }
+	}
+
+	code, err := compileJQ(opts.query, opts.argNames, environ, stderr)
 	if err != nil {
 		return err
 	}
 
 	// Build input values.
-	inputs, err := readInputs(ctx, stdin, opts.files, opts.nullInput, opts.rawInput, opts.slurp)
+	inputs, err := readInputs(ctx, dir, stdin, opts.files, opts.nullInput, opts.rawInput, opts.slurp)
 	if err != nil {
 		// Prefer surfacing ctx cancellation verbatim so timeouts are
 		// distinguishable from user input errors.
@@ -80,6 +89,18 @@ func handleJQ(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 	}
 
 	return runJQ(ctx, code, inputs, opts, stdout, stderr)
+}
+
+// shellContext returns the running shell's handler context, or false when
+// jq is called outside a shell (as the unit tests do), where
+// interp.HandlerCtx would panic.
+func shellContext(ctx context.Context) (hc interp.HandlerContext, ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	return interp.HandlerCtx(ctx), true
 }
 
 // jqOptions holds the parsed jq command line.
@@ -167,8 +188,9 @@ func parseJQArgs(args []string, stderr io.Writer) (jqOptions, error) {
 }
 
 // compileJQ parses and compiles a filter that may refer to the named
-// variables. Errors are reported on stderr and returned as exit status 3.
-func compileJQ(queryStr string, argNames []string, stderr io.Writer) (*gojq.Code, error) {
+// variables, with env and $ENV read from environ. Errors are reported on
+// stderr and returned as exit status 3.
+func compileJQ(queryStr string, argNames []string, environ func() []string, stderr io.Writer) (*gojq.Code, error) {
 	query, err := gojq.Parse(queryStr)
 	if err != nil {
 		fmt.Fprintf(stderr, "jq: %s\n", err)
@@ -176,7 +198,7 @@ func compileJQ(queryStr string, argNames []string, stderr io.Writer) (*gojq.Code
 	}
 
 	opts := []gojq.CompilerOption{
-		gojq.WithEnvironLoader(os.Environ),
+		gojq.WithEnvironLoader(environ),
 	}
 	if len(argNames) > 0 {
 		opts = append(opts, gojq.WithVariables(argNames))
@@ -225,7 +247,8 @@ func runJQ(ctx context.Context, code *gojq.Code, inputs []any, opts jqOptions, s
 	return nil
 }
 
-// readInputs reads JSON (or raw) input values from stdin or files.
+// readInputs reads JSON (or raw) input values from stdin or files. Relative
+// file names are read from dir, the shell's folder.
 //
 // ctx is polled in three places so that a cancellation observed mid-read
 // short-circuits promptly:
@@ -241,7 +264,7 @@ func runJQ(ctx context.Context, code *gojq.Code, inputs []any, opts jqOptions, s
 // still outlast ctx; the outer abandon-goroutine path in the hook
 // runner (internal/hooks/runner.go) is the authoritative enforcer for
 // that case.
-func readInputs(ctx context.Context, stdin io.Reader, files []string, nullInput, rawInput, slurp bool) ([]any, error) {
+func readInputs(ctx context.Context, dir string, stdin io.Reader, files []string, nullInput, rawInput, slurp bool) ([]any, error) {
 	if nullInput {
 		return []any{nil}, nil
 	}
@@ -249,7 +272,7 @@ func readInputs(ctx context.Context, stdin io.Reader, files []string, nullInput,
 	var readers []io.Reader
 	if len(files) > 0 {
 		for _, f := range files {
-			file, err := os.Open(f)
+			file, err := os.Open(fsext.SmartJoin(dir, f))
 			if err != nil {
 				return nil, err
 			}

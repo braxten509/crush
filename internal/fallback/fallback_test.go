@@ -78,10 +78,14 @@ func TestWaitBlockMeanwhileUsesTheNextBlockAndComesBack(t *testing.T) {
 	act := OnOut(order, kindOf, 1, readings(r), now, nil)
 	require.Equal(t, Action{Kind: Switch, Block: 3, Return: &Return{Block: 0, At: now.Add(time.Hour)}}, act)
 
-	// On Codex, before the refill time: stay. After it, with room: back.
+	// On Codex, before the refill time: stay. After it, with room: back,
+	// but only once Codex has no room left (owner, 2026-10-25).
 	require.Equal(t, Kind(Stay), BeforeTurn(order, kindOf, 3, act.Return, readings(r), now.Add(30*time.Minute)).Kind)
 	r[claude1] = Reading{Known: true, Used: 0}
+	require.Equal(t, Kind(Stay), BeforeTurn(order, kindOf, 3, act.Return, readings(r), now.Add(61*time.Minute)).Kind)
+	r[codex1] = out(now.Add(5 * time.Hour))
 	require.Equal(t, Action{Kind: Switch, Block: 0}, BeforeTurn(order, kindOf, 3, act.Return, readings(r), now.Add(61*time.Minute)))
+	delete(r, codex1)
 
 	// Nothing after the wait block has room: wait after all.
 	r[claude1] = out(now.Add(time.Hour))
@@ -139,9 +143,28 @@ func TestComeBackReturnsToAnEarlierBlockWithRoom(t *testing.T) {
 	// Without "come back" the chat stays on Claude 2.
 	require.Equal(t, Kind(Stay), BeforeTurn(order, kindOf, 1, nil, readings(r), now).Kind)
 	order.Blocks[0].ComeBack = true
+	// Claude 2 still has room: the chat stays (owner, 2026-10-25).
+	r[claude2] = Reading{Known: true, Used: 50}
+	require.Equal(t, Kind(Stay), BeforeTurn(order, kindOf, 1, nil, readings(r), now).Kind)
+	// Claude 2 past its own move-at percent, or out: back to Claude 1.
+	order.Blocks[1].MoveAtPercent = 40
 	require.Equal(t, Action{Kind: Switch, Block: 0}, BeforeTurn(order, kindOf, 1, nil, readings(r), now))
+	order.Blocks[1].MoveAtPercent = 0
+	r[claude2] = out(now.Add(time.Hour))
+	require.Equal(t, Action{Kind: Switch, Block: 0}, BeforeTurn(order, kindOf, 1, nil, readings(r), now))
+	// Claude 1 has no room either: the chat stays.
 	r[claude1] = out(now.Add(time.Hour))
 	require.Equal(t, Kind(Stay), BeforeTurn(order, kindOf, 1, nil, readings(r), now).Kind)
+}
+
+// Running out on the last block goes back up to a "come back" block that
+// has room.
+func TestOutMovesUpToAComeBackBlockWithRoom(t *testing.T) {
+	order := config.FallbackOrder{On: true, Blocks: []config.FallbackBlock{use(claude2, "opus"), use(claude1, "opus")}}
+	r := map[Account]Reading{claude1: out(now.Add(time.Hour))}
+	require.Equal(t, Kind(Stay), OnOut(order, kindOf, 1, readings(r), now, nil).Kind)
+	order.Blocks[0].ComeBack = true
+	require.Equal(t, Action{Kind: Switch, Block: 0}, OnOut(order, kindOf, 1, readings(r), now, nil))
 }
 
 func TestTheLastBlockRunningOutStays(t *testing.T) {

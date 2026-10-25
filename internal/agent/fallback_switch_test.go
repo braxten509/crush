@@ -206,8 +206,17 @@ func TestComeBackSwitchesBackBeforeATurn(t *testing.T) {
 	first := useBlock(config.TypeClaudeCode, "", "opus")
 	first.ComeBack = true
 	blocks := []config.FallbackBlock{first, useBlock(config.TypeClaudeCode, "claude-2", "opus")}
-	c, sid := fallbackCoordinator(t, blocks, map[string]float64{"claude-code/": 20}, nil)
+	usage := map[string]float64{"claude-code/": 20}
+	c, sid := fallbackCoordinator(t, blocks, usage, nil)
 	setChatModel(t, c, sid, fallbackModelOf(blocks[1]))
+	// Claude 2 still has room: the chat stays (owner, 2026-10-25).
+	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
+	require.Empty(t, chatLines(t, c, sid))
+
+	usage["claude-code/claude-2"] = 100
+	_, err := cliagent.RefreshAccountLimits(t.Context(), config.TypeClaudeCode, "claude-2", true)
+	require.NoError(t, err)
 	c.fallbackBeforeTurn(t.Context(), sid)
 	require.Equal(t, "", chatModelOf(t, c, sid).Account)
 	require.Equal(t, []string{"Switched to Claude 1 · Claude Opus by the fallback order."}, chatLines(t, c, sid))
@@ -351,36 +360,36 @@ func TestTheOwnersOpusOrderStepByStep(t *testing.T) {
 	c, sid, clock := opusOrder(t, usage)
 	start := clock.Now()
 
+	// Account 2 has room too, but the chat never moves up while its own
+	// account has room (owner, 2026-10-25).
 	c.fallbackBeforeTurn(t.Context(), sid)
-	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(t, c, sid), "account 1 has room: the chat comes back to it")
-
-	usage["claude-code/claude-2"] = 100
-	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 2h")))
-	require.Equal(t, [3]string{"", "high", "claude-code/opus"}, where(t, c, sid))
+	require.Equal(t, [3]string{"", "", "claude-code/opus"}, where(t, c, sid), "account 1 has room: the chat stays on it")
 
 	usage["claude-code/"] = 100
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 3h")))
+	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(t, c, sid), "out: up to the come-back account with room")
+
+	usage["claude-code/claude-2"] = 100
+	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 2h")))
 	require.Equal(t, [3]string{"claude-3", "high", "claude-code/opus"}, where(t, c, sid))
 
-	// Account 2 refilled (3h on), account 1 is still out: back to 2.
-	usage["claude-code/"] = 0
-	clock.Set(start.Add(3*time.Hour + time.Minute))
-	c.fallbackBeforeTurn(t.Context(), sid)
-	require.Equal(t, [3]string{"", "high", "claude-code/opus"}, where(t, c, sid))
-
-	// Account 1 refilled too, as the between-turns reading shows: back to 1.
+	// Account 2 refilled (2h on) while account 3 still has room: stay.
 	usage["claude-code/claude-2"] = 0
 	_, err := cliagent.RefreshAccountLimits(t.Context(), config.TypeClaudeCode, "claude-2", true)
 	require.NoError(t, err)
+	clock.Set(start.Add(2*time.Hour + time.Minute))
 	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Equal(t, [3]string{"claude-3", "high", "claude-code/opus"}, where(t, c, sid))
+
+	// Account 3 runs out: back up to account 2.
+	usage["claude-code/claude-3"] = 100
+	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 5h")))
 	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(t, c, sid))
 
 	require.Equal(t, []string{
-		"Switched to Claude 2 · Claude Opus by the fallback order.",
-		"Switched to Claude 1 · Claude Opus: Claude 2 it ran out.",
-		"Switched to Claude 3 · Claude Opus: Claude 1 it ran out.",
-		"Switched to Claude 1 · Claude Opus by the fallback order.",
-		"Switched to Claude 2 · Claude Opus by the fallback order.",
+		"Switched to Claude 2 · Claude Opus: Claude 1 it ran out.",
+		"Switched to Claude 3 · Claude Opus: Claude 2 it ran out.",
+		"Switched to Claude 2 · Claude Opus: Claude 3 it ran out.",
 	}, chatLines(t, c, sid))
 }
 

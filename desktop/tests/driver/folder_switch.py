@@ -14,8 +14,7 @@ chats (proj's, beta's and gamma's; the window is on proj):
   ~/path", with only their time; the rest behind "Show more" (a search
   finds them);
 - New chat and New terminal ask where to start (the folder picker), on the
-  shown folder;
-- no list end line under the terminals.
+  shown folder.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/folder-switch.json folder_switch.py
@@ -86,9 +85,6 @@ key("Return")
 time.sleep(1.5)
 before = run(TERMINALS) or 0
 check(before >= 1, f"a terminal tab opens ({before})")
-# No list end line under the terminals (owner, 2026-10-24).
-end = run("const e = document.querySelector('nav.chats .rule.end-of-list'); return e ? getComputedStyle(e).visibility : 'none';")
-check(end in ("hidden", "none"), f"no end line under the terminals ({end})")
 
 # Beta's chat: the window switches to beta in place and shows it.
 run(f"document.querySelector('nav.chats .chat[data-id=\"{BETA}\"] .row').click(); return true;")

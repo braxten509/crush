@@ -491,4 +491,8 @@
   .chats :global(.group:has(.chat.selected:last-child) + .rule.end-of-list) {
     visibility: hidden;
   }
+  /* No end rule under the terminals (owner, 2026-10-24). */
+  .chats :global(.terminals ~ .rule.end-of-list) {
+    display: none;
+  }
 </style>

@@ -115,9 +115,21 @@ func TestAGYTurn(t *testing.T) {
 	require.ErrorIs(t, err, ErrResume)
 }
 
+// A steered line either folds into AGY's turn or runs as its next turn in
+// the same process; the turn reads that answer too before it ends.
 func TestAGYSteersDuringATool(t *testing.T) {
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	previous := agyFollowUpWait
+	agyFollowUpWait = 200 * time.Millisecond
+	t.Cleanup(func() { agyFollowUpWait = previous })
+	for name, nextTurn := range map[string]string{
+		"folded": "",
+		"next turn": `echo '{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"Two."}}'
+echo '{"event":"result","result":{"status":"SUCCESS"}}'
+`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			script := `#!/bin/sh
 read -r first
 case "$first" in *'"event":"user"'*) ;; *) exit 7;; esac
 echo '{"event":"init","conversation_id":"conv1"}'
@@ -126,33 +138,41 @@ read -r steer
 case "$steer" in *PINEAPPLE*) ;; *) exit 8;; esac
 echo '{"event":"step_update","step_update":{"step_index":1,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"ls"},"output":"a.txt"}}}'
 echo '{"event":"result","result":{"status":"SUCCESS"}}'
-cat >/dev/null
+` + nextTurn + `cat >/dev/null
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte(script), 0o755))
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("HOME", t.TempDir()) // skip the real ~/.local/bin/agy
-	m := &Model{Kind: config.TypeAGYCLI, ID: "m", Dir: t.TempDir()}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	var given atomic.Bool
-	var confirmed []string
-	err := m.Run(ctx, Turn{
-		Prompt: "hi",
-		Emit: func(e Event) error {
-			if e.Type == EventUserMessage {
-				confirmed = append(confirmed, e.Text)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte(script), 0o755))
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("HOME", t.TempDir()) // skip the real ~/.local/bin/agy
+			m := &Model{Kind: config.TypeAGYCLI, ID: "m", Dir: t.TempDir()}
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			var given atomic.Bool
+			var confirmed, texts []string
+			err := m.Run(ctx, Turn{
+				Prompt: "hi",
+				Emit: func(e Event) error {
+					switch e.Type {
+					case EventUserMessage:
+						confirmed = append(confirmed, e.Text)
+					case EventText:
+						texts = append(texts, e.Text)
+					}
+					return nil
+				},
+				Steer: func() string {
+					if given.Swap(true) {
+						return ""
+					}
+					return "PINEAPPLE"
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, []string{"PINEAPPLE"}, confirmed)
+			if nextTurn != "" {
+				require.Equal(t, []string{"Two."}, texts, "the steered line's own answer is read")
 			}
-			return nil
-		},
-		Steer: func() string {
-			if given.Swap(true) {
-				return ""
-			}
-			return "PINEAPPLE"
-		},
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"PINEAPPLE"}, confirmed)
+		})
+	}
 }
 
 func TestClaudeSettingsReachTheCLI(t *testing.T) {

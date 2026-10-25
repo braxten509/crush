@@ -2,6 +2,8 @@ package backend
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"testing"
 	"time"
 
@@ -94,8 +96,33 @@ func TestUpdatePreferredModel_PublishesConfigChanged(t *testing.T) {
 	b, ws, evc := newPublishingWorkspace(t)
 
 	model := config.SelectedModel{Provider: "openai", Model: "gpt-4"}
-	require.NoError(t, b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, config.SelectedModelTypeLarge, model))
+	require.NoError(t, b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, config.SelectedModelTypeSmall, model))
 	awaitConfigChanged(t, evc, ws.ID)
+}
+
+// TestAChatPickIsTheLastPickAndNotAModel: a pick in a chat is saved on that
+// chat and as the last pick, no folder-wide model is written, and asking to
+// set the old shared ("large") model is refused.
+func TestAChatPickIsTheLastPickAndNotAModel(t *testing.T) {
+	b, ws, _ := newPublishingWorkspace(t)
+	ctx := context.Background()
+	sess, err := b.CreateSession(ctx, ws.ID, "a")
+	require.NoError(t, err)
+	before := maps.Clone(ws.Cfg.Config().Models)
+
+	pick := config.SelectedModel{Provider: "openai", Model: "gpt-4", ReasoningEffort: "high"}
+	choice, err := json.Marshal(pick)
+	require.NoError(t, err)
+	_, err = b.SetSessionModel(ctx, ws.ID, sess.ID, choice)
+	require.NoError(t, err)
+
+	got, ok := config.ReadLastPick()
+	require.True(t, ok, "a chat pick is the last pick")
+	require.Equal(t, pick, got)
+	require.Equal(t, before, ws.Cfg.Config().Models, "no folder-wide model is written")
+
+	require.Error(t, b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, "large", pick))
+	require.Equal(t, before, ws.Cfg.Config().Models)
 }
 
 func TestSetCompactMode_PublishesConfigChanged(t *testing.T) {

@@ -154,6 +154,10 @@ type SessionService interface {
 	// SetSessionModel saves the model one chat runs on, so a model picked
 	// in a chat never reaches another chat.
 	SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error)
+	// LastPick is the model a new chat starts on; SetLastPick saves a pick
+	// made with no chat open. No chat runs on the last pick.
+	LastPick(ctx context.Context) (config.SelectedModel, bool)
+	SetLastPick(ctx context.Context, model config.SelectedModel) error
 }
 
 // MessageService reads a workspace's messages.

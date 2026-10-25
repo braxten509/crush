@@ -3,6 +3,7 @@ package backend
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"maps"
@@ -1028,18 +1029,18 @@ func (b *Backend) runShareAction(ws *Workspace, owner, current string, a *ShareA
 	}
 	switch a.Kind {
 	case ShareModel:
-		return b.shareSelectModel(ws, a.Provider, a.Model)
+		return b.shareSelectModel(ws, current, a.Provider, a.Model)
 	case ShareEffort:
-		return b.shareSetEffort(ws, a.Effort)
+		return b.shareSetEffort(ws, current, a.Effort)
 	case ShareThink:
-		return b.shareToggleThinking(ws)
+		return b.shareToggleThinking(ws, current)
 	case ShareFast:
-		if p := shareCoderProvider(ws); p == nil || p.Type != config.TypeCodexCLI {
+		if p := shareChatProvider(ws, current); p == nil || p.Type != config.TypeCodexCLI {
 			return errPhoneFastNeedsCodex
 		}
-		return b.shareToggleFast(ws)
+		return b.shareToggleFast(ws, current)
 	case ShareUltracode:
-		return b.shareToggleUltracode(ws)
+		return b.shareToggleUltracode(ws, current)
 	case ShareSummarize:
 		if current == "" {
 			return errPhoneNothingToSummarize
@@ -1094,10 +1095,11 @@ func (b *Backend) shareSummarize(ws *Workspace, sessionID string) error {
 	return nil
 }
 
-// shareSelectModel switches the coder to a model of a set-up provider, as
-// picking it in the terminal's models dialog does (ui/model/remote.go
-// remoteSelectModel, then ui/model/model_select.go selectModel).
-func (b *Backend) shareSelectModel(ws *Workspace, providerID, modelID string) error {
+// shareSelectModel switches the shared chat to a model of a set-up
+// provider, as picking it in the terminal's models dialog does
+// (ui/model/remote.go remoteSelectModel, then ui/model/model_select.go
+// selectModel). With no chat open it becomes the last pick.
+func (b *Backend) shareSelectModel(ws *Workspace, sessionID, providerID, modelID string) error {
 	cfg := shareConfig(ws)
 	if cfg == nil {
 		return errPhoneNoConfig
@@ -1128,21 +1130,7 @@ func (b *Backend) shareSelectModel(ws *Workspace, providerID, modelID string) er
 		ReasoningEffort: model.DefaultReasoningEffort,
 		MaxTokens:       model.DefaultMaxTokens,
 	}
-	kind := cmp.Or(cfg.Agents[config.AgentCoder].Model, config.SelectedModelTypeLarge)
-	if err := b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, kind, selected); err != nil {
-		return err
-	}
-	// As in the terminal, a missing small model is filled in too.
-	if _, hasSmall := cfg.Models[config.SelectedModelTypeSmall]; !hasSmall && kind != config.SelectedModelTypeSmall {
-		small, err := b.GetDefaultSmallModel(ws.ID, selected.Provider)
-		if err == nil {
-			err = b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, config.SelectedModelTypeSmall, small)
-		}
-		if err != nil {
-			slog.Warn("Could not set the small model after a phone model change", "error", err)
-		}
-	}
-	return b.shareUpdateAgent(ws)
+	return b.shareSaveModel(ws, sessionID, selected)
 }
 
 // shareProviderSignedIn reports whether pc has the credential the terminal
@@ -1168,100 +1156,81 @@ func (b *Backend) shareProviderSignedIn(ws *Workspace, pc config.ProviderConfig)
 	return true
 }
 
-// shareSetEffort stores the reasoning effort for the coder's model
-// (ui/model/model_select.go setReasoningEffort). The phone hears the save's
-// outcome; a failed model rebuild is only logged, as in the terminal.
-func (b *Backend) shareSetEffort(ws *Workspace, effort string) error {
-	cfg, kind, err := shareCoderConfig(ws)
+// shareSetEffort stores the reasoning effort for the shared chat's model
+// (ui/model/model_select.go setReasoningEffort).
+func (b *Backend) shareSetEffort(ws *Workspace, sessionID, effort string) error {
+	cfg, current, err := shareChatModel(ws, sessionID)
 	if err != nil {
 		return err
 	}
-	current := cfg.Models[kind]
 	if err := cfg.ValidateReasoningEffort(current.Provider, current.Model, effort); err != nil {
 		return err
 	}
 	current.ReasoningEffort = effort
-	if err := b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, kind, current); err != nil {
-		return err
-	}
-	if err := b.shareUpdateAgent(ws); err != nil {
-		slog.Warn("Could not rebuild the agent after a phone effort change", "error", err)
-	}
-	return nil
+	return b.shareSaveModel(ws, sessionID, current)
 }
 
 // shareToggleThinking flips thinking for a model without reasoning levels
-// (ui/model/model_select.go toggleThinking). A failed model rebuild is only
-// logged, as in the terminal.
-func (b *Backend) shareToggleThinking(ws *Workspace) error {
-	cfg, kind, err := shareCoderConfig(ws)
+// (ui/model/model_select.go toggleThinking).
+func (b *Backend) shareToggleThinking(ws *Workspace, sessionID string) error {
+	cfg, current, err := shareChatModel(ws, sessionID)
 	if err != nil {
 		return err
 	}
-	provider, catalog := cfg.GetProviderForModel(kind), cfg.GetModelByType(kind)
+	provider, catalog := shareModelInfo(cfg, current)
 	if provider == nil || catalog == nil || !config.SupportsThinkingToggle(*provider, *catalog) {
 		return errPhoneNoThinkToggle
 	}
-	current := cfg.Models[kind]
 	current.Think = !current.Think
-	if err := b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, kind, current); err != nil {
-		return err
-	}
-	if err := b.shareUpdateAgent(ws); err != nil {
-		slog.Warn("Could not rebuild the agent after a phone thinking change", "error", err)
-	}
-	return nil
+	return b.shareSaveModel(ws, sessionID, current)
 }
 
 // shareToggleFast flips FAST mode (ui/model/fast_mode.go toggleFastMode).
-func (b *Backend) shareToggleFast(ws *Workspace) error {
-	cfg, kind, err := shareCoderConfig(ws)
+func (b *Backend) shareToggleFast(ws *Workspace, sessionID string) error {
+	cfg, selected, err := shareChatModel(ws, sessionID)
 	if err != nil {
 		return err
 	}
-	provider, model := cfg.GetProviderForModel(kind), cfg.GetModelByType(kind)
+	provider, model := shareModelInfo(cfg, selected)
 	if provider == nil || model == nil || !config.SupportsFastMode(*provider, *model) {
 		return errPhoneNoFastMode
 	}
-	selected := cfg.Models[kind]
 	if selected.ServiceTier == "fast" {
 		selected.ServiceTier = "default"
 	} else {
 		selected.ServiceTier = "fast"
 	}
-	if err := b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, kind, selected); err != nil {
-		return err
-	}
-	return b.shareUpdateAgent(ws)
+	return b.shareSaveModel(ws, sessionID, selected)
 }
 
 // shareToggleUltracode flips Claude's Ultracode (ui/model/fast_mode.go
 // toggleUltracode).
-func (b *Backend) shareToggleUltracode(ws *Workspace) error {
-	cfg, kind, err := shareCoderConfig(ws)
+func (b *Backend) shareToggleUltracode(ws *Workspace, sessionID string) error {
+	cfg, selected, err := shareChatModel(ws, sessionID)
 	if err != nil {
 		return err
 	}
-	provider, model := cfg.GetProviderForModel(kind), cfg.GetModelByType(kind)
+	provider, model := shareModelInfo(cfg, selected)
 	if provider == nil || model == nil || !config.SupportsUltracode(*provider, *model) {
 		return errPhoneNoUltracode
 	}
-	selected := cfg.Models[kind]
 	selected.Ultracode = !selected.Ultracode
-	if err := b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, kind, selected); err != nil {
-		return err
-	}
-	return b.shareUpdateAgent(ws)
+	return b.shareSaveModel(ws, sessionID, selected)
 }
 
-// shareUpdateAgent rebuilds the agent's models after a preference change.
-// Before the agent started there is nothing to rebuild: it reads the saved
-// preference when it starts.
-func (b *Backend) shareUpdateAgent(ws *Workspace) error {
-	if shareCoordinator(ws) == nil {
-		return nil
+// shareSaveModel saves the phone's pick on the shared chat, or as the last
+// pick when no chat is open. The chat's next turn builds it, so no agent
+// rebuild is needed.
+func (b *Backend) shareSaveModel(ws *Workspace, sessionID string, model config.SelectedModel) error {
+	if sessionID == "" {
+		return ws.ops().SetLastPick(model)
 	}
-	return b.UpdateAgent(shareContext(ws), ws.ID)
+	choice, err := json.Marshal(model)
+	if err != nil {
+		return err
+	}
+	_, err = ws.ops().SetSessionModel(shareContext(ws), sessionID, choice)
+	return err
 }
 
 // shareConfig returns ws's configuration, or nil when it has none.
@@ -1272,28 +1241,53 @@ func shareConfig(ws *Workspace) *config.Config {
 	return ws.Cfg.Config()
 }
 
-// shareCoderConfig returns ws's configuration and the coder's model type,
-// with the terminal's texts when either is missing.
-func shareCoderConfig(ws *Workspace) (*config.Config, config.SelectedModelType, error) {
+// shareChatModel returns ws's configuration and the shared chat's model, or
+// the last pick with no chat open, with the terminal's texts when either is
+// missing.
+func shareChatModel(ws *Workspace, sessionID string) (*config.Config, config.SelectedModel, error) {
 	cfg := shareConfig(ws)
 	if cfg == nil {
-		return nil, "", errPhoneNoConfig
+		return nil, config.SelectedModel{}, errPhoneNoConfig
 	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return nil, "", errPhoneNoAgentConfig
+	if sessionID == "" {
+		pick, ok := ws.ops().LastPick()
+		if !ok {
+			return nil, config.SelectedModel{}, errPhoneNoAgentConfig
+		}
+		return cfg, pick, nil
 	}
-	return cfg, agentCfg.Model, nil
+	if ws.App == nil || ws.App.Sessions == nil {
+		return nil, config.SelectedModel{}, errPhoneNoAgentConfig
+	}
+	sess, err := ws.App.Sessions.Get(shareContext(ws), sessionID)
+	if err != nil {
+		return nil, config.SelectedModel{}, err
+	}
+	var current config.SelectedModel
+	if len(sess.Model) == 0 || json.Unmarshal(sess.Model, &current) != nil || current.Provider == "" {
+		return nil, config.SelectedModel{}, errPhoneNoAgentConfig
+	}
+	return cfg, current, nil
 }
 
-// shareCoderProvider returns the provider of the coder's model, or nil
+// shareModelInfo returns the provider and catalog entry of model.
+func shareModelInfo(cfg *config.Config, model config.SelectedModel) (*config.ProviderConfig, *catwalk.Model) {
+	pc, ok := cfg.Providers.Get(model.Provider)
+	if !ok {
+		return nil, nil
+	}
+	return &pc, cfg.GetModel(model.Provider, model.Model)
+}
+
+// shareChatProvider returns the provider of the shared chat's model, or nil
 // (ui/model/remote.go coderProvider).
-func shareCoderProvider(ws *Workspace) *config.ProviderConfig {
-	cfg, kind, err := shareCoderConfig(ws)
+func shareChatProvider(ws *Workspace, sessionID string) *config.ProviderConfig {
+	cfg, model, err := shareChatModel(ws, sessionID)
 	if err != nil {
 		return nil
 	}
-	return cfg.GetProviderForModel(kind)
+	pc, _ := shareModelInfo(cfg, model)
+	return pc
 }
 
 // shareCoordinator returns ws's agent coordinator, or nil before the agent

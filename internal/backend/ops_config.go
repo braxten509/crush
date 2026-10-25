@@ -41,9 +41,16 @@ func (o Ops) RemoveConfigField(scope config.Scope, key string) error {
 	return o.mutateConfig(func() error { return o.Cfg.RemoveConfigField(scope, key) })
 }
 
+// ErrChatOwnsModel refuses a write of a folder-wide chat model: each chat
+// owns its model, and only the helper model is set in config.
+var ErrChatOwnsModel = errors.New("each chat owns its model; pick it in the chat")
+
 // UpdatePreferredModel updates the preferred model for a type and
 // persists it.
 func (o Ops) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
+	if modelType != config.SelectedModelTypeSmall {
+		return ErrChatOwnsModel
+	}
 	return o.mutateConfig(func() error { return o.Cfg.UpdatePreferredModel(scope, modelType, model) })
 }
 

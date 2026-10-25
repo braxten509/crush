@@ -505,3 +505,11 @@ func (w *AppWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill
 func (w *AppWorkspace) SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error) {
 	return w.ops.SetSessionModel(ctx, sessionID, model)
 }
+
+func (w *AppWorkspace) LastPick(context.Context) (config.SelectedModel, bool) {
+	return w.ops.LastPick()
+}
+
+func (w *AppWorkspace) SetLastPick(_ context.Context, model config.SelectedModel) error {
+	return w.ops.SetLastPick(model)
+}

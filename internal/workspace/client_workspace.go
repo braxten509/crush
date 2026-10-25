@@ -799,6 +799,19 @@ func (w *ClientWorkspace) SetSessionModel(ctx context.Context, sessionID string,
 	return proto.SessionToDomain(*sess), nil
 }
 
+func (w *ClientWorkspace) LastPick(ctx context.Context) (config.SelectedModel, bool) {
+	pick, err := w.client.LastPick(ctx, w.workspaceID())
+	if err != nil {
+		slog.Warn("Could not read the last picked model", "error", err)
+		return config.SelectedModel{}, false
+	}
+	return pick, pick.Provider != "" && pick.Model != ""
+}
+
+func (w *ClientWorkspace) SetLastPick(ctx context.Context, model config.SelectedModel) error {
+	return w.client.SetLastPick(ctx, w.workspaceID(), model)
+}
+
 func (w *ClientWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {
 	sess, err := w.client.SetKeptSkill(ctx, w.workspaceID(), sessionID, proto.KeptSkill{ID: skill.ID, Name: skill.Name, ByAgent: skill.ByAgent}, on)
 	if err != nil {

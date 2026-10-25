@@ -2,6 +2,8 @@ package backend
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -18,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -574,6 +577,10 @@ func TestRemoteEngineRunsActions(t *testing.T) {
 	coord := newShareTestCoordinator()
 	b, ws := shareTestWorkspace(t, coord)
 	ws.Cfg = store
+	chats := &shareModelSessions{models: map[string]session.ModelChoice{
+		"chat-1": json.RawMessage(`{"provider":"phone-test","model":"thinker","reasoning_effort":"low"}`),
+	}}
+	ws.App.Sessions = chats
 	owner, events := shareTestApp(t, b, ws)
 	shareTestView(t, b, ws, owner, "chat-1")
 
@@ -624,14 +631,36 @@ func TestRemoteEngineRunsActions(t *testing.T) {
 	run(ShareAction{Kind: ShareSummarize, SessionID: "chat-1"})
 	require.Equal(t, "chat-1", shareTestRecv(t, coord.summaries, 5*time.Second))
 
+	before := maps.Clone(store.Config().Models)
 	run(ShareAction{Kind: ShareEffort, SessionID: "chat-1", Effort: "high"})
-	require.Equal(t, "high", store.Config().Models[config.SelectedModelTypeLarge].ReasoningEffort)
-	_, _, _, updates := coord.recorded()
-	require.Positive(t, updates, "the agent's models are rebuilt")
+	var saved config.SelectedModel
+	require.NoError(t, json.Unmarshal(chats.models["chat-1"], &saved))
+	require.Equal(t, "high", saved.ReasoningEffort, "the shared chat's own model changes")
+	require.Equal(t, before, store.Config().Models, "no folder-wide model is written")
 
 	for _, ev := range shareTestDrain(events) {
 		require.NotEqual(t, pubsub.PayloadTypeRemoteAction, ev.Type, "an engine action reached the window")
 	}
+}
+
+// shareModelSessions keeps only the chats' models.
+type shareModelSessions struct {
+	session.Service
+	mu     sync.Mutex
+	models map[string]session.ModelChoice
+}
+
+func (s *shareModelSessions) Get(_ context.Context, id string) (session.Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return session.Session{ID: id, Model: s.models[id]}, nil
+}
+
+func (s *shareModelSessions) SetModel(_ context.Context, id string, model session.ModelChoice) (session.Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.models[id] = model
+	return session.Session{ID: id, Model: model}, nil
 }
 
 // TestRemoteEngineActionTexts: the engine answers with the terminal's exact

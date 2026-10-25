@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/backend"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
@@ -132,6 +133,19 @@ func (c *controllerV1) setSessionModel(r *http.Request, req proto.SetSessionMode
 		return proto.Session{}, err
 	}
 	return proto.SessionFromDomain(sess), nil
+}
+
+// getLastPick returns the model a new chat in this folder starts on.
+func (c *controllerV1) getLastPick(r *http.Request, _ rpc.Empty) (config.SelectedModel, error) {
+	return c.backend.LastPick(r.PathValue("id"))
+}
+
+// setLastPick saves a model picked with no chat open.
+func (c *controllerV1) setLastPick(r *http.Request, req config.SelectedModel) (rpc.Empty, error) {
+	if req.Provider == "" || req.Model == "" {
+		return rpc.Empty{}, badRequest("model is required")
+	}
+	return rpc.Empty{}, c.backend.SetLastPick(r.PathValue("id"), req)
 }
 
 // listSavedSessions lists saved chats across every project.

@@ -365,6 +365,8 @@ func copyChatExtras(ctx context.Context, tx *sql.Tx, source, newID string) error
 		`INSERT INTO session_context_budgets(session_id,provider,model,token_limit,estimated)
  SELECT ?,provider,model,token_limit,estimated FROM session_context_budgets WHERE session_id=?`,
 		`INSERT INTO read_files(session_id,path,read_at) SELECT ?,path,read_at FROM read_files WHERE session_id=?`,
+		// The copy runs on the chat's own model (owner, 2026-10-24).
+		`INSERT INTO session_models(session_id,choice) SELECT ?,choice FROM session_models WHERE session_id=?`,
 	} {
 		if _, err := tx.ExecContext(ctx, statement, newID, source); err != nil {
 			return err

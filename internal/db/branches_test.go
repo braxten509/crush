@@ -159,6 +159,7 @@ func (s branchStore) seedExtras(t *testing.T, sessionID string, c toolChat) mess
 		sessionID, "go", "Go", 0, 0, 1, sessionID, "rust", "Rust", 1, 1, 0)
 	s.exec(t, `INSERT INTO session_context_budgets(session_id,provider,model,token_limit,estimated) VALUES(?,?,?,?,?)`, sessionID, "anthropic", "claude", 200000, 1)
 	s.exec(t, `INSERT INTO read_files(session_id,path,read_at) VALUES(?,?,?),(?,?,?)`, sessionID, "/work/a.go", 100, sessionID, "/work/b.go", 200)
+	s.exec(t, `INSERT INTO session_models(session_id,choice) VALUES(?,?)`, sessionID, `{"provider":"codex-cli","model":"gpt-6-sol"}`)
 	s.exec(t, `UPDATE sessions SET todos=?, cost=?, prompt_tokens=?, completion_tokens=? WHERE id=?`,
 		packTodos, 2.5, 100, 50, sessionID)
 	s.exec(t, `UPDATE messages SET prism_model_id=?, prism_model_name=?, prism_hypercredit_savings=?, prism_dollar_savings=? WHERE id=?`,
@@ -202,6 +203,11 @@ func (s branchStore) checkExtras(t *testing.T, newID string, sibling message.Bra
 	var limit, estimated int
 	require.NoError(t, s.conn.QueryRowContext(ctx, `SELECT provider,model,token_limit,estimated FROM session_context_budgets WHERE session_id=?`, newID).Scan(&provider, &model, &limit, &estimated))
 	require.Equal(t, []any{"anthropic", "claude", 200000, 1}, []any{provider, model, limit, estimated})
+
+	// A copy runs on the chat's own model, never a shared one (owner, 2026-10-24).
+	var choice string
+	require.NoError(t, s.conn.QueryRowContext(ctx, `SELECT choice FROM session_models WHERE session_id=?`, newID).Scan(&choice), "the copy keeps the chat's model")
+	require.JSONEq(t, `{"provider":"codex-cli","model":"gpt-6-sol"}`, choice)
 
 	var reads int
 	require.NoError(t, s.conn.QueryRowContext(ctx, `SELECT count(*) FROM read_files WHERE session_id=? AND ((path='/work/a.go' AND read_at=100) OR (path='/work/b.go' AND read_at=200))`, newID).Scan(&reads))

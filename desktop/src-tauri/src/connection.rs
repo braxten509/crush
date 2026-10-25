@@ -874,6 +874,14 @@ impl WindowConn {
             if inner.phase == Phase::Closed {
                 return Err(closed());
             }
+            // The reconnect owns the shown folder until it ends: a folder shown
+            // meanwhile would be taken back by its install (owner, 2026-10-24).
+            if matches!(inner.phase, Phase::Reconnecting | Phase::Failed) {
+                return Err(AppError::new(
+                    "engine_unavailable",
+                    "Crush Desktop is reconnecting to the Crush engine; try again in a moment.",
+                ));
+            }
             let Some(folder) = inner.folders.get(&dir) else {
                 return Err(AppError::new(
                     "engine_unavailable",
@@ -1273,18 +1281,34 @@ impl WindowConn {
     }
 
     /// Opens a folder's event stream again, quietly, with the same backoff the
-    /// reconnect uses; the folder keeps its client id and its workspace.
+    /// reconnect uses; the folder keeps its client id and its workspace. When
+    /// its engine is gone or restarted (a new engine has no such workspace),
+    /// the folder joins again, ensure and create included. After the last
+    /// try fails the window forgets it, so the next show or open joins it
+    /// fresh (owner, 2026-10-24).
     fn revive_stream(self: &Arc<Self>, dir: String) {
         let me = self.clone();
         crate::host::async_runtime::spawn(async move {
             let mut backoff = Backoff::new(me.tuning.first_wait, me.tuning.max_wait);
+            let mut last = None;
             for _ in 0..me.tuning.max_failures {
                 tokio::time::sleep(backoff.next()).await;
-                let Some((link, client_id, generation)) = me.stream_next(&dir) else { return };
+                let Some((link, client_id, generation, plan)) = me.stream_next(&dir) else { return };
+                last = Some(generation);
                 let base = format!("/v1/workspaces/{}", encode(&link.workspace_id));
                 let client = format!("client_id={}", encode(&client_id));
                 let stream = match link.http.stream(&format!("{base}/events?{client}")).await {
                     Ok(stream) => stream,
+                    Err(e) if e.code == "not_found" || lost_engine(&e) => {
+                        me.log(&format!("{dir}'s engine is gone or new ({}); joining it again", e.code));
+                        match me.rejoin_folder(&dir, &plan).await {
+                            Ok(()) => return,
+                            Err(e) => {
+                                me.log(&format!("could not join {dir} again: {} ({})", e.message, e.code));
+                                continue;
+                            }
+                        }
+                    }
                     Err(e) => {
                         me.log(&format!("could not open {dir}'s stream again: {} ({})", e.message, e.code));
                         continue;
@@ -1294,19 +1318,49 @@ impl WindowConn {
                 me.keep_reader(&dir, generation, reader);
                 return;
             }
-            me.log(&format!("{dir}'s stream stays closed"));
+            if let Some(generation) = last {
+                me.forget_folder(&dir, generation);
+            }
         });
+    }
+
+    /// Joins a folder the window keeps beside the shown one again, under
+    /// the same client id (as the reconnect does). Nothing happens once it
+    /// left the window, or once it is shown (the reconnect owns it then).
+    async fn rejoin_folder(self: &Arc<Self>, dir: &str, plan: &Arc<Plan>) -> AppResult<()> {
+        let _one_at_a_time = self.opening.lock().await;
+        {
+            let inner = self.inner();
+            if inner.shown.as_deref() == Some(dir) || !inner.folders.contains_key(dir) {
+                return Ok(());
+            }
+        }
+        self.join_as(plan, 0, false).await.map_err(|(e, _)| e)?;
+        // Its chats are read again: the new engine's events start now.
+        self.push_side(dir, Vec::new(), true);
+        Ok(())
+    }
+
+    /// Drops a folder whose stream could not be taken up again, unless it is
+    /// shown or a newer stream took over.
+    fn forget_folder(&self, dir: &str, generation: u64) {
+        let mut inner = self.inner();
+        if inner.shown.as_deref() == Some(dir) || inner.folders.get(dir).is_none_or(|folder| folder.generation != generation) {
+            return;
+        }
+        inner.folders.remove(dir);
+        self.log(&format!("{dir}'s stream stays closed; the window lets it go"));
     }
 
     /// The link of a joined folder with a new stream generation, or None once
     /// it has left the window.
-    fn stream_next(&self, dir: &str) -> Option<(Link, String, u64)> {
+    fn stream_next(&self, dir: &str) -> Option<(Link, String, u64, Arc<Plan>)> {
         let mut inner = self.inner();
         inner.counter += 1;
         let generation = inner.counter;
         let folder = inner.folders.get_mut(dir)?;
         folder.generation = generation;
-        Some((folder.link.clone(), folder.client_id.clone(), generation))
+        Some((folder.link.clone(), folder.client_id.clone(), generation, folder.plan.clone()))
     }
 
     fn keep_reader(&self, dir: &str, generation: u64, reader: Owned) {
@@ -3142,6 +3196,51 @@ esac"#,
         std::thread::sleep(Duration::from_millis(200));
         assert!(j.conn.take().is_empty(), "the page heard nothing of it");
         assert_eq!(j.finder.runs().len(), ensured, "the window did not rejoin");
+    }
+
+    #[test]
+    fn an_other_folders_restarted_engine_is_joined_again() {
+        let j = joined("conn-extra-restart", TEST_TUNING);
+        j.folder("/tmp/other", "ws-other");
+        {
+            let extras = j.extras.lock().unwrap();
+            let fake = &extras[0].fake;
+            fake.forget();
+            // A new engine on the same socket: a new workspace id, the old one is gone.
+            fake.set_handler(engine_with("ws-other-2", |seen| {
+                seen.path()
+                    .starts_with("/v1/workspaces/ws-other/")
+                    .then(|| Answer::Json(404, json!({"code": "not_found", "message": "workspace not found"})))
+            }));
+            fake.end_streams();
+            let created = fake.wait_seen(Duration::from_secs(5), |seen| seen.iter().any(|s| s.line() == "POST /v1/workspaces"));            assert!(created, "the folder joined its new engine again");
+        }
+        // The create is heard just before the new link is kept.
+        let end = Instant::now() + Duration::from_secs(5);
+        let answer = loop {
+            match run(j.conn.call_in(Some("/tmp/other"), "GET", "sessions", None, None, None)) {
+                Ok(answer) => break answer,
+                Err(e) if Instant::now() > end => panic!("the folder never answered: {e:?}"),
+                Err(_) => std::thread::sleep(Duration::from_millis(5)),
+            }
+        };
+        let echo = answer["echo"].as_str().unwrap_or_default().to_string();
+        assert!(echo.starts_with("/v1/workspaces/ws-other-2/sessions"), "the call reached the new workspace: {echo}");
+    }
+
+    #[test]
+    fn showing_a_folder_while_reconnecting_is_refused() {
+        let j = joined("conn-show-reconn", TEST_TUNING);
+        j.folder("/tmp/other", "ws-other");
+        j.conn.take();
+        j.finder.fail.store(true, SeqCst);
+        j.fake.forget();
+        j.fake.end_streams();
+        take_until(&j.conn, "reconnecting");
+        let finder: Arc<dyn Finder> = j.finder.clone();
+        let shown = run(j.conn.show("/tmp/other", std::future::ready(Ok(plan_at(finder, "/tmp/other")))));
+        assert_eq!(shown.err().map(|e| e.code), Some("engine_unavailable".to_string()));
+        assert_eq!(j.conn.folder().as_deref(), Some("/tmp/proj"), "the reconnecting folder stays shown");
     }
 
     #[test]

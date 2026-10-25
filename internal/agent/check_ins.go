@@ -126,8 +126,9 @@ func (h *taskHub) runCheckIns(sessionID string, s *sessionCheckIns) {
 	var sendCtx context.Context
 	note := func(time.Duration) string {
 		var work []checkInWork
-		work, sendCtx = h.checkInSnapshot(s)
-		if !h.serviceNoteDue(s, work) {
+		var due bool
+		work, sendCtx, due = h.checkInSnapshot(s)
+		if !due {
 			return ""
 		}
 		return checkInNotification(work, time.Now())
@@ -143,36 +144,31 @@ func (h *taskHub) runCheckIns(sessionID string, s *sessionCheckIns) {
 	checkInLoop(context.Background(), h.checkInInterval(), s.done, h.isClosing, note, send)
 }
 
-// checkInSnapshot lists the session's running work, oldest first, and a
-// context of one that is still live.
-func (h *taskHub) checkInSnapshot(s *sessionCheckIns) ([]checkInWork, context.Context) {
+// checkInSnapshot lists the session's running work, oldest first, a
+// context of one that is still live, and whether a note about it is due:
+// always while other work runs, and serviceOnlyCheckIns times in a row
+// while only services do. Both are read under one lock, so work added in
+// between (which resets the count) can't let an extra service note out.
+func (h *taskHub) checkInSnapshot(s *sessionCheckIns) ([]checkInWork, context.Context, bool) {
 	h.mu.Lock()
 	work := slices.Collect(maps.Values(s.work))
+	due := true
+	switch {
+	case slices.ContainsFunc(work, func(w checkInWork) bool { return !w.service }):
+		s.serviceNotes = 0
+	case s.serviceNotes >= serviceOnlyCheckIns:
+		due = false
+	default:
+		s.serviceNotes++
+	}
 	h.mu.Unlock()
 	slices.SortFunc(work, func(a, b checkInWork) int { return a.started.Compare(b.started) })
 	for _, w := range work {
 		if w.ctx.Err() == nil {
-			return work, w.ctx
+			return work, w.ctx, due
 		}
 	}
-	return work, nil
-}
-
-// serviceNoteDue reports whether a note about work is sent: always while
-// other work runs, and serviceOnlyCheckIns times in a row while only
-// services do.
-func (h *taskHub) serviceNoteDue(s *sessionCheckIns, work []checkInWork) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if slices.ContainsFunc(work, func(w checkInWork) bool { return !w.service }) {
-		s.serviceNotes = 0
-		return true
-	}
-	if s.serviceNotes >= serviceOnlyCheckIns {
-		return false
-	}
-	s.serviceNotes++
-	return true
+	return work, nil, due
 }
 
 // checkInLoop waits interval, sends a note, and repeats; each wait starts

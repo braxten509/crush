@@ -96,6 +96,12 @@ func (m *mockSessionService) SetModel(context.Context, string, session.ModelChoi
 	return session.Session{}, nil
 }
 
+func (m *mockSessionService) SetNewChatModel(func(context.Context) session.ModelChoice) {}
+
+func (m *mockSessionService) AdoptModels(context.Context, func(context.Context, session.Session) session.ModelChoice) (int, error) {
+	return 0, nil
+}
+
 func (m *mockSessionService) TurnedOffSkills(context.Context, string) ([]session.KeptSkill, error) {
 	return nil, nil
 }

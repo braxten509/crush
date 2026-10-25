@@ -46,7 +46,7 @@ func (c *Client) MoveToBackground(ctx context.Context, workspaceID, sessionID st
 // for the last pick.
 func (c *Client) AgentCapabilities(ctx context.Context, workspaceID, sessionID string) (proto.AgentCapabilities, error) {
 	return newCall(c, rpc.AgentCapabilities, "get agent capabilities", "agent capabilities").at(workspaceID).
-		with(url.Values{"session": []string{sessionID}}).get(ctx)
+		with(url.Values{"session_id": []string{sessionID}}).get(ctx)
 }
 
 // Limits returns every AI tool's usage limits as the engine last read them.

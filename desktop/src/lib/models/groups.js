@@ -40,9 +40,11 @@ function subscriptionModels(providerId, configured) {
 
 // → {items: [{key, id, group, configured, recent, provider: {id, name, type},
 // model}], selectedKey, prunedRecent (null when nothing was dropped)}.
-// `type` is "large" or "small".
-export function buildGroups({ catalog, cfg, type }) {
-  const current = cfg.models?.[type] ?? {};
+// `type` names the recent list ("large" for the chats' picks, "small" for the
+// helper); `current` is the model shown as chosen (the chat's own, or the
+// helper), never a folder-wide model.
+export function buildGroups({ catalog, cfg, type, current = null }) {
+  current = current ?? {};
   const items = [];
   const byKey = new Map();
   let selectedKey = "";

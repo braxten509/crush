@@ -5,7 +5,6 @@
 import { api } from "../engine/api.js";
 import { loadAvailability } from "./availability.svelte.js";
 import { onEvent, onResync, withHeld } from "../engine/events.js";
-import { agentProviderChanged } from "./limits.svelte.js";
 
 export const ws = $state({
   config: null, // pickConfig(GET config)
@@ -81,7 +80,6 @@ export async function loadConfig() {
 export async function loadAgent() {
   await latest("agent", () => api.agentInfo(), (agent) => {
     ws.agent = agent ?? null;
-    if (agent?.is_ready) agentProviderChanged(agent.model_cfg?.provider ?? "");
   });
 }
 

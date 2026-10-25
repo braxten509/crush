@@ -7,7 +7,8 @@ const providers = [
   { id: "claude-code", models: [{ id: "opus", name: "Opus 5.5", context_window: 400_000 }] },
   { id: "codex-cli", models: [{ id: "gpt-6-sol", name: "GPT-6 Sol", context_window: 400_000 }] },
 ];
-const agent = { is_ready: true, model: { id: "opus", name: "Opus 5.5", context_window: 400_000 }, model_cfg: { provider: "claude-code", model: "opus", reasoning_effort: "high" } };
+// The agent info carries no model (owner, 2026-10-24: no shared model).
+const agent = { is_ready: true, is_busy: false, agent: "coder" };
 
 describe("shownChatModel", () => {
   it("is the chat's saved model, or null", () => {
@@ -27,10 +28,11 @@ describe("agentWithModel", () => {
     expect(shown.is_ready).toBe(true);
   });
 
-  it("keeps the agent's model when the chat has none", () => {
-    expect(agentWithModel(agent, { id: "s" }, providers)).toBe(agent);
-    expect(agentWithModel(agent, null, providers)).toBe(agent);
-    expect(agentWithModel(null, { model: { provider: "codex-cli", model: "gpt-6-sol" } }, providers)).toBe(null);
+  it("shows no model when the chat has none and no last pick is given", () => {
+    expect(agentWithModel(agent, { id: "s" }, providers)).toEqual({ ...agent, model: null, model_cfg: null });
+    expect(agentWithModel(null, null, providers)).toBe(null);
+    const before = agentWithModel(null, { model: { provider: "codex-cli", model: "gpt-6-sol" } }, providers);
+    expect(before.model.name).toBe("GPT-6 Sol");
   });
 
   it("names a model this window has not read by its id, never the agent's", () => {
@@ -39,14 +41,10 @@ describe("agentWithModel", () => {
     expect(shown.model.name).toBe("gone-model");
   });
 
-  // The engine keeps its old model while another chat runs (UpdateModels
-  // skips a busy agent), so a new chat shows the saved choice, as the menu
-  // does (owner, 2026-10-24).
-  it("shows the saved workspace model over a stale agent for a chat without one", () => {
-    const stale = { is_ready: true, model: { id: "flash", name: "DeepSeek V4.1 Flash" }, model_cfg: { provider: "zen", model: "flash", reasoning_effort: "max" } };
-    const saved = { provider: "claude-code", model: "opus", reasoning_effort: "high" };
-    const shown = agentWithModel(stale, null, providers, { workspace: saved });
-    expect(shown.model_cfg).toEqual(saved);
+  it("shows the last pick with no chat open", () => {
+    const pick = { provider: "claude-code", model: "opus", reasoning_effort: "high" };
+    const shown = agentWithModel(agent, null, providers, { workspace: pick });
+    expect(shown.model_cfg).toEqual(pick);
     expect(shown.model.name).toBe("Opus 5.5");
   });
 

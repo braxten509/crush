@@ -10,7 +10,6 @@ import {
   lspRows,
   lspState,
   mcpRows,
-  modelLine,
   openingElapsed,
   openingText,
   pathLine,
@@ -110,9 +109,7 @@ describe("initKey (keys.go:323-338)", () => {
   });
 });
 
-describe("the model line (sidebar.go:27-86)", () => {
-  const agent = (model, cfg) => ({ is_ready: true, model: { id: "m", name: "Model M", can_reason: false, reasoning_levels: [], ...model }, model_cfg: { model: "m", provider: "p", ...cfg } });
-
+describe("the effort and provider names", () => {
   it("writes the effort as the terminal does", () => {
     expect(formatEffort("xhigh")).toBe("X-High");
     expect(formatEffort("high")).toBe("High");
@@ -121,33 +118,9 @@ describe("the model line (sidebar.go:27-86)", () => {
     expect(formatEffort(undefined)).toBe("");
   });
 
-  it("has nothing to say before the agent has a model", () => {
-    expect(modelLine(null)).toBeNull();
-    expect(modelLine({ is_ready: false, model: { name: "x" }, model_cfg: {} })).toBeNull();
-  });
 
-  it("names the model and its provider", () => {
-    expect(modelLine(agent({}, {}), "Fake AI")).toEqual({ name: "Model M", via: "via Fake AI", reasoning: "" });
-    expect(modelLine(agent({ name: "" }, { model: "fallback-id" }))).toEqual({ name: "fallback-id", via: "", reasoning: "" });
-  });
 
-  it("says how the model reasons", () => {
-    expect(modelLine(agent({ can_reason: true, reasoning_levels: ["low", "high"], default_reasoning_effort: "low" }, { reasoning_effort: "high" })).reasoning).toBe("Reasoning High");
-    expect(modelLine(agent({ can_reason: true, reasoning_levels: ["low"], default_reasoning_effort: "xhigh" }, {})).reasoning).toBe("Reasoning X-High");
-    // A reasoning model without levels or a toggle always thinks.
-    expect(modelLine(agent({ can_reason: true }, { provider: "abacus" })).reasoning).toBe("Thinking");
-    // With the toggle: on or off.
-    expect(modelLine(agent({ can_reason: true }, { provider: "anthropic", think: true })).reasoning).toBe("Thinking On");
-    expect(modelLine(agent({ can_reason: true }, { provider: "anthropic", think: false })).reasoning).toBe("Thinking Off");
-    expect(modelLine(agent({ can_reason: true, id: "deepseek-r1" }, { provider: "abacus", think: true })).reasoning).toBe("Thinking On");
-  });
 
-  it("adds FAST and Ultracode only where the provider has them", () => {
-    const claude = agent({ can_reason: true, reasoning_levels: ["high"], default_reasoning_effort: "high" }, { provider: "claude-code", service_tier: "fast", ultracode: true });
-    expect(modelLine(claude).reasoning).toBe("Reasoning High · FAST · Ultracode");
-    expect(modelLine(agent({}, { provider: "codex-cli", service_tier: "fast", ultracode: true })).reasoning).toBe("FAST");
-    expect(modelLine(agent({}, { provider: "openai", service_tier: "fast" })).reasoning).toBe("");
-  });
 
   it("finds the provider's name: configured, else the catalog's, else the id", () => {
     expect(providerName("fake", { fake: "Fake AI" }, [{ id: "fake", name: "Catalog" }])).toBe("Fake AI");

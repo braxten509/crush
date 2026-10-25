@@ -68,13 +68,16 @@
   });
 
   const byProvider = $derived(availability.sessionId === sessions.currentId ? availability.byProvider : {});
+  // Bug 8b: rows without a known reason say the folder is still being checked,
+  // or could not be checked; they stay pickable (owner's D4a).
+  const checking = $derived(availability.sessionId !== sessions.currentId || availability.state === "loading" ? "Checking…" : availability.state === "failed" ? "Could not check" : "");
 
   const coder = $derived(coderModel(modelData));
   const barMode = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
   // The chat's model (the picker's chat list), not the helper model.
   const type = "large";
   const current = $derived(coder.selected);
-  const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type }) : { items: [] });
+  const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current }) : { items: [] });
   const groups = $derived(menuGroups(built.items, addableProviders(modelData.cfg)));
   const shownGroup = $derived(groups.find((g) => g.name === chosenGroup) ?? groups.find((g) => g.name === startGroup(groups, current)) ?? null);
   const searching = $derived(query.trim() !== "");
@@ -362,7 +365,7 @@
           oncontextmenu={(event) => offerRemove(event, item)}
         >
           <span class="name">{item.model.name || item.model.id}</span>
-          {#if blocked}<span class="info">{shortUnavailable(blocked)}</span>{:else if searching}<span class="info">{item.group}</span>{/if}
+          {#if blocked}<span class="info">{shortUnavailable(blocked)}</span>{:else if checking}<span class="info">{checking}</span>{:else if searching}<span class="info">{item.group}</span>{/if}
           {#if isCurrent(item, current)}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
         </button>
       {:else}

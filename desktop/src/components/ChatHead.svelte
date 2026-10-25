@@ -17,6 +17,7 @@
   // The branch links over a message's words are drawn by the renderer as
   // span.md-deco-branch-link (lib/render/sourcemap.js); their look (4.8) is
   // set here, the one branching component every chat shows.
+  import { coderModel } from "../lib/models/store.svelte.js";
   import { conn } from "../lib/stores/connection.svelte.js";
   import { parentOf } from "../lib/stores/links.svelte.js";
   import { sessions } from "../lib/stores/sessions.svelte.js";
@@ -31,7 +32,7 @@
   const view = $derived(screen());
   // The landing page is blank, wordmark included (owner, 2026-10-19).
   const brand = $derived(view === "init" || view === "onboarding");
-  const hyper = $derived(ws.config?.models?.large?.provider === "hyper");
+  const hyper = $derived(coderModel().selected?.provider === "hyper");
   const title = $derived(view === "opening" ? (sessions.opening?.title ?? "") : view === "chat" ? (session?.title ?? "") : "");
   // A branch whose parent is still listed names it; a deleted parent took its
   // link along (engine 5.11), and the branch reads as any other chat.

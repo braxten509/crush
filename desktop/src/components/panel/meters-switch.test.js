@@ -48,12 +48,8 @@ const reading = (kind, used, account = "") => ({
   windows: [{ name: "5h", used, resets_at: "2099-01-01T00:00:00Z" }],
 });
 
-const agent = (provider, account = "") => ({
-  is_ready: true,
-  is_busy: false,
-  model: { id: "opus" },
-  model_cfg: { provider, model: "opus", account },
-});
+// The folder's agent info: its state only; each chat owns its model.
+const agent = () => ({ is_ready: true, is_busy: false, agent: "coder" });
 
 const fiveHourText = (meters) => meters.find((m) => m.label === "5-HOUR")?.text;
 
@@ -85,9 +81,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("the meters follow the agent after a model change", () => {
+describe("the meters follow the shown chat's model after a change", () => {
   it("a sub-agent's meters follow its own account and later fallback events", async () => {
-    h.routes.set("GET agent", agent("claude-code"));
+    h.routes.set("GET agent", agent());
     await workspace.loadAgent();
     workspace.ws.providers = [{ id: "claude-code", type: "claude-code", models: [{ id: "opus" }] }];
     await limits.loadLimits();
@@ -100,31 +96,36 @@ describe("the meters follow the agent after a model change", () => {
     await deliver(ev("helper", "updated", { child_session_id: "child", status: "running", cli: "claude", model: "opus", account: "" }));
     expect(fiveHourText(panel.meterNow().meters)).toBe("90% left");
   });
-  it("a fallback to another provider shows that provider's usage", async () => {
-    h.routes.set("GET agent", agent("claude-code"));
+  // A fallback saves the new model on the chat (every chat owns its model,
+  // owner 2026-10-24); the chat's update event carries it.
+  async function showChat(provider, account = "") {
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    h.routes.set("GET agent", agent());
     await workspace.loadAgent();
     await workspace.loadConfig();
     await workspace.loadProviders();
     await limits.loadLimits();
+    await deliver(ev("session", "updated", chat(provider, account)));
+    sessions.currentId = "c";
+  }
+  const chat = (provider, account = "") => ({ id: "c", title: "Chat", updated_at: 1, model: { provider, model: "opus", account } });
+
+  it("a fallback to another provider shows that provider's usage", async () => {
+    await showChat("claude-code");
     expect(fiveHourText(panel.meterNow().meters)).toBe("90% left");
 
-    h.routes.set("GET agent", agent("codex-cli"));
-    await deliver(ev("config_changed", "updated", { workspace_id: "w" }));
+    await deliver(ev("session", "updated", chat("codex-cli")));
     expect(fiveHourText(panel.meterNow().meters)).toBe("20% left");
   });
 
   it("a fallback to another account of the same provider shows that account's usage", async () => {
-    h.routes.set("GET agent", agent("claude-code"));
-    await workspace.loadAgent();
-    await workspace.loadConfig();
-    await workspace.loadProviders();
-    await limits.loadLimits();
+    await showChat("claude-code");
     expect(fiveHourText(panel.meterNow().meters)).toBe("90% left");
 
-    h.routes.set("GET agent", agent("claude-code", "claude-2"));
-    await deliver(ev("config_changed", "updated", { workspace_id: "w" }));
+    await deliver(ev("session", "updated", chat("claude-code", "claude-2")));
     expect(fiveHourText(panel.meterNow().meters)).toBe("40% left");
   });
+
 
   it("shows Moonshot AI's 5h and Monthly meters for a chat whose own model is Moonshot", async () => {
     h.routes.set("GET config", { options: { tui: { composer_footer: ["model", "settings", "context", "limit_5h", "limit_weekly", "resets"] } }, models: {} });
@@ -144,7 +145,7 @@ describe("the meters follow the agent after a model change", () => {
         },
       ],
     });
-    h.routes.set("GET agent", agent("claude-code"));
+    h.routes.set("GET agent", agent());
     await workspace.loadConfig();
     await workspace.loadProviders();
     await workspace.loadAgent();
@@ -177,7 +178,7 @@ describe("the meters follow the agent after a model change", () => {
         },
       ],
     });
-    h.routes.set("GET agent", agent("opencode-cli"));
+    h.routes.set("GET agent", agent());
     await workspace.loadConfig();
     await workspace.loadProviders();
     await workspace.loadAgent();

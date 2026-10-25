@@ -9,8 +9,8 @@ import OAuth from "../../components/signin/OAuth.svelte";
 import SignOut from "../../components/signin/SignOut.svelte";
 import { closeDialog, hasDialog, openDialog, registerDialog } from "../dialogs.js";
 import { onEvent } from "../engine/events.js";
+import { coderModel } from "../models/store.svelte.js";
 import { rootOf, sessions } from "../stores/sessions.svelte.js";
-import { ws } from "../stores/workspace.svelte.js";
 import { awsSso, resetAwsSso } from "../signin/store.svelte.js";
 
 registerDialog("auth_method", AuthMethod);
@@ -50,8 +50,8 @@ onEvent("agent_event", (_kind, event) => {
       return;
     }
     case "re_authenticate": {
-      // G-10 names the provider; without it, the coder model's provider.
-      const coder = ws.agent?.model_cfg ?? null;
+      // G-10 names the provider; without it, the shown chat's own model's.
+      const coder = coderModel().selected;
       const providerId = event.provider_id || coder?.provider || "";
       if (!providerId) return;
       // The coder's selected model decides the method, as the terminal passes

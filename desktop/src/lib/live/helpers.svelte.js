@@ -14,6 +14,10 @@ import { closeDialog, openDialog } from "../dialogs.js";
 import { api } from "../engine/api.js";
 import { onEvent, onResync } from "../engine/events.js";
 import { refreshCapabilities } from "../models/capabilities.svelte.js";
+import { modelData, shownAgent } from "../models/store.svelte.js";
+import { helperChats } from "../stores/helperchats.svelte.js";
+import { agentProviderChanged } from "../stores/limits.svelte.js";
+import { ws } from "../stores/workspace.svelte.js";
 import { focusField } from "../stores/composer.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { notify, ui } from "../stores/ui.svelte.js";
@@ -288,17 +292,39 @@ export function startHelpers() {
 
 let watching = false;
 
-// Two watches of the shown chat for the plugin: the agent's capabilities
-// (can_background, which the 60-second hint needs) are read when a chat opens
-// (2.15; MOD's store reads them again after every config_changed, 7.4), and a
-// tray with nothing left in it gives the keys back to the typing box
+// The model the shown chat runs on, as its agent block (the composer's model
+// box, the panel and the limits read it): a helper chat's helper model, else
+// the chat's own model, else with no chat open the last pick.
+export function agentNow() {
+  const helper = helperChats.byId[sessions.currentId];
+  if (helper) return helperAgent(helper, ws.providers).agent;
+  return shownAgent();
+}
+
+// The shown chat's model as a key: a change to it is a change of model.
+function modelKey(sid) {
+  const model = sid ? sessions.byId[sid]?.model : modelData.lastPick;
+  return model ? JSON.stringify(model) : "";
+}
+
+// Three watches of the shown chat for the plugin: what its model can do
+// (can_background, which the 60-second hint needs, and the toggles) is read
+// when the chat or its model changes (2.15; MOD's store reads it again after
+// every config_changed, 7.4); the usage limits follow its model's provider;
+// and a tray with nothing left in it gives the keys back to the typing box
 // (tasks.go:101-108).
 export function startWatches() {
   if (watching) return;
   watching = true;
   $effect.root(() => {
     $effect(() => {
-      if (sessions.currentId) untrack(() => refreshCapabilities());
+      const sid = sessions.currentId ?? "";
+      void modelKey(sid);
+      untrack(() => refreshCapabilities(sid));
+    });
+    $effect(() => {
+      const provider = agentNow()?.model_cfg?.provider ?? "";
+      untrack(() => agentProviderChanged(provider));
     });
     $effect(() => {
       if (ui.focus === "tray" && traySections.length === 0) untrack(() => focusField());

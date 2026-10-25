@@ -11,9 +11,9 @@ import { registerAction } from "../actions.js";
 import { dialogRegistered, openDialog, registerDialog } from "../dialogs.js";
 import { app_info } from "../engine/commands.js";
 import { bindKey } from "../keys.js";
+import { agentNow } from "../live/helpers.svelte.js";
 import { platform } from "../palette/entries.js";
 import { sessions } from "../stores/sessions.svelte.js";
-import { ws } from "../stores/workspace.svelte.js";
 
 registerDialog("commands", Palette);
 registerDialog("arguments", Arguments);
@@ -36,7 +36,7 @@ bindKey("global", "Ctrl+P", sheetKey("commands"));
 bindKey("global", "Ctrl+L", sheetKey("models"));
 bindKey("global", "Ctrl+M", sheetKey("models"));
 bindKey("global", "Ctrl+S", sheetKey("sessions"));
-bindKey("global", "Ctrl+F", sheetKey("filepicker", () => Boolean(sessions.currentId) && ws.agent?.model?.supports_attachments === true));
+bindKey("global", "Ctrl+F", sheetKey("filepicker", () => Boolean(sessions.currentId) && agentNow()?.model?.supports_attachments === true));
 bindKey("global", "Ctrl+,", sheetKey("settings"));
 
 // CMD-001's "/" in an empty typing box now opens the composer's own `/` menu

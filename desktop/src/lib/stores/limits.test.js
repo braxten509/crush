@@ -138,16 +138,13 @@ describe("refreshed on model change", () => {
     expect(refreshes()).toEqual(["/v1/limits/claude-code/refresh", "/v1/limits/codex-cli/refresh"]);
   });
 
-  it("follows the agent the workspace reads", async () => {
-    h.routes.set("GET agent", { is_ready: true, is_busy: false, model: { id: "gpt-6-sol" }, model_cfg: { provider: "codex-cli", model: "gpt-6-sol" } });
+  // The limits follow the shown chat's own model (live/helpers startWatches,
+  // tested with the capabilities in components/models), never the folder's
+  // agent info, which carries no model.
+  it("does not follow the folder's agent info", async () => {
+    h.routes.set("GET agent", { is_ready: true, is_busy: false, model_cfg: { provider: "codex-cli", model: "gpt-6-sol" } });
     await workspace.loadAgent();
-    expect(refreshes()).toEqual(["/v1/limits/codex-cli/refresh"]);
-    await deliver(ev("config_changed", "updated", { workspace_id: "w" }));
-    expect(refreshes()).toEqual(["/v1/limits/codex-cli/refresh"]);
-    h.routes.set("GET agent", { is_ready: true, model_cfg: { provider: "claude-code", model: "opus" } });
-    h.routes.set("GET config", { models: {} });
-    await deliver(ev("config_changed", "updated", { workspace_id: "w" }));
-    expect(refreshes()).toEqual(["/v1/limits/codex-cli/refresh", "/v1/limits/claude-code/refresh"]);
+    expect(refreshes()).toEqual([]);
   });
 });
 

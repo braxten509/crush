@@ -17,7 +17,7 @@
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { chooseModel } from "../../lib/models/choose.js";
   import { buildGroups, filterQuery, filterValue, selectedModelOf } from "../../lib/models/groups.js";
-  import { modelData, watchModels } from "../../lib/models/store.svelte.js";
+  import { coderModel, modelData, watchModels } from "../../lib/models/store.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
 
   const ID = "models";
@@ -35,9 +35,10 @@
   let list = $state(null);
   let firstRead = $state(false);
 
-  const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type }) : { items: [], selectedKey: "", prunedRecent: null });
+  // The chat's own model (the last pick with no chat open), or the helper.
+  const current = $derived((type === "small" ? modelData.cfg?.models?.small : coderModel(modelData).selected) ?? {});
+  const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current }) : { items: [], selectedKey: "", prunedRecent: null });
   const items = $derived(built.items);
-  const current = $derived(modelData.cfg?.models?.[type] ?? {});
   const placeholder = $derived(onboarding ? "Find your fave" : TYPES.find((t) => t.id === type).placeholder);
   const chosenItem = $derived(selected >= 0 ? items[selected] : null);
   const editable = $derived(Boolean(chosenItem && modelData.cfg?.providers.has(chosenItem.provider.id)));

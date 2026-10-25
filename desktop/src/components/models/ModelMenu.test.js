@@ -143,6 +143,23 @@ describe("the model menu (ModelMenu.svelte)", () => {
     availabilityStore.byProvider = {};
   });
 
+  // Bug 8b: while the folder's answer is out, or after it failed, no row
+  // looks checked; the rows stay pickable and say so (owner's D4a).
+  it("says Checking… while the folder is checked, and Could not check after a failed read", async () => {
+    state.routes["GET config"] = config();
+    let answer;
+    state.routes["GET providers/availability"] = () => new Promise((resolve, reject) => (answer = { resolve, reject }));
+    mount();
+    await settle();
+    let rows = modelRows();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => !row.disabled && row.textContent.includes("Checking…"))).toBe(true);
+    answer.reject({ code: "internal", message: "engine lost" });
+    await settle();
+    rows = modelRows();
+    expect(rows.every((row) => !row.disabled && row.textContent.includes("Could not check"))).toBe(true);
+  });
+
   it("checks the shown chat and ignores a late home-folder reply", async () => {
     state.routes["GET config"] = config();
     const { setChatFolder } = await import("../../lib/engine/api.js");

@@ -262,7 +262,7 @@ export const api = {
   getMcpPrompt: ({ client_id, prompt_id, args }) => post("mcp/get-prompt", { client_id, prompt_id, args }),
   // Runs inside the request: no time limit, and abort(callId) stops it.
   summarize: (sid, callId) => post(`${run(sid)}/summarize`, undefined, undefined, callId),
-  capabilities: () => get("agent/capabilities"),
+  capabilities: (sid = "") => get("agent/capabilities", sid ? { session_id: sid } : undefined),
   refreshOAuth: (scope, provider_id) => post("config/refresh-oauth", { scope: scopeOf(scope), provider_id }),
   importCopilot: () => post("config/import-copilot"),
   initAgent: () => post("agent/init", { interactive: true }),

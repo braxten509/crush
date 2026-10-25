@@ -192,7 +192,7 @@ func TestAgentCapabilitiesRoute(t *testing.T) {
 	}
 	h.app.Sessions = chatSessions(t, chats)
 	for _, tc := range cases {
-		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"?session="+tc.provider, nil, http.StatusOK)
+		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"?session_id="+tc.provider, nil, http.StatusOK)
 		require.Equal(t, tc.provider, got.Kind, "the kind is the chat model's provider, as the hint reads it")
 		require.Equal(t, tc.want, got.CanBackground, tc.provider)
 		require.Equal(t, cliagent.CanBackground(catwalk.Type(got.Kind)) || got.Kind == config.AbacusProviderID, got.CanBackground)

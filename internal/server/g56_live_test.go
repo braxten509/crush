@@ -22,7 +22,7 @@ import (
 // (G-8); two chats on different models get different answers.
 func TestCapabilitiesReportModelSupport(t *testing.T) {
 	h := newE2EHarness(t)
-	path := "/v1/workspaces/" + h.workspace.ID + "/agent/capabilities?session="
+	path := "/v1/workspaces/" + h.workspace.ID + "/agent/capabilities?session_id="
 	models := []catwalk.Model{
 		{ID: "opus", CanReason: true, ReasoningLevels: []string{"low", "high"}},
 		{ID: "haiku"},

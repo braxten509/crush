@@ -92,18 +92,13 @@ func (w *prefWorkspace) chatChoice(t *testing.T) config.SelectedModel {
 	return m
 }
 
-func (w *prefWorkspace) UpdatePreferredModel(_ config.Scope, kind config.SelectedModelType, model config.SelectedModel) error {
-	w.record("pref " + string(kind) + " " + model.Provider + "/" + model.Model)
+func (w *prefWorkspace) SetHelperModel(_ config.Scope, model config.SelectedModel) error {
+	w.record("helper " + model.Provider + "/" + model.Model)
 	if w.prefErr != nil {
 		return w.prefErr
 	}
-	w.cfg.Models[kind] = model
+	w.cfg.Models[config.SelectedModelTypeSmall] = model
 	return nil
-}
-
-func (w *prefWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	w.record("default small " + providerID)
-	return config.SelectedModel{Provider: providerID, Model: "small"}
 }
 
 func (w *prefWorkspace) ImportCopilot() (*oauth.Token, bool) {
@@ -134,7 +129,7 @@ func newPrefUI(t *testing.T) (*UI, *prefWorkspace) {
 		cfg: &config.Config{
 			Options:   &config.Options{},
 			Providers: providers,
-			Agents:    map[string]config.Agent{config.AgentCoder: {Model: config.SelectedModelTypeLarge}},
+			Agents:    map[string]config.Agent{config.AgentCoder: {}},
 			Models:    map[config.SelectedModelType]config.SelectedModel{},
 		},
 	}
@@ -192,12 +187,12 @@ func TestSelectModelWritesPreferenceOffLoop(t *testing.T) {
 		}
 		u.dialog.OpenDialog(idDialog{id: dialog.ModelsID})
 		selected := config.SelectedModel{Provider: "p", Model: "m1"}
-		cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: selected})
+		cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeChat, Model: selected})
 		require.Empty(t, ws.recorded(), "the writes must not run on the Update goroutine")
 		require.False(t, u.dialog.ContainsDialog(dialog.ModelsID), "the dialog closes at once")
 
 		msgs := runAll(u, cmd)
-		require.Equal(t, []string{saved, "default small p", "pref small p/small"}, ws.recorded())
+		require.Equal(t, []string{saved}, ws.recorded())
 		info, ok := findMsg[util.InfoMsg](msgs)
 		require.True(t, ok)
 		require.Equal(t, "Model changed to Model One", info.Msg)
@@ -212,7 +207,7 @@ func TestSelectModelReportsFailedWrite(t *testing.T) {
 
 	u, ws := newPrefUI(t)
 	ws.prefErr = os.ErrPermission
-	cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: config.SelectedModel{Provider: "p", Model: "m1"}})
+	cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeChat, Model: config.SelectedModel{Provider: "p", Model: "m1"}})
 	msgs := runAll(u, cmd)
 	require.Equal(t, []string{"chat model s1"}, ws.recorded())
 	var types []util.InfoType
@@ -234,7 +229,7 @@ func TestSelectModelOnboardingStartsCoderAfterWrite(t *testing.T) {
 	u.state = uiOnboarding
 	ws.cfg.Models[config.SelectedModelTypeSmall] = config.SelectedModel{Provider: "p", Model: "m1"}
 	ws.cfg.Agents = nil
-	cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: config.SelectedModel{Provider: "p", Model: "m1"}})
+	cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeChat, Model: config.SelectedModel{Provider: "p", Model: "m1"}})
 	require.Equal(t, uiLanding, u.state)
 	require.Empty(t, ws.recorded())
 	require.Nil(t, ws.cfg.Agents, "the agents are set up once the model was written")
@@ -257,7 +252,7 @@ func TestSelectModelImportsCopilotOffLoop(t *testing.T) {
 		u.dialog.OpenDialog(idDialog{id: dialog.ModelsID})
 		action := dialog.ActionSelectModel{
 			Provider:  catwalk.Provider{ID: catwalk.InferenceProviderCopilot},
-			ModelType: config.SelectedModelTypeLarge,
+			ModelType: config.SelectedModelTypeChat,
 			Model:     config.SelectedModel{Provider: "copilot", Model: "c1"},
 		}
 		msgs := collectMsgs(u.handleDialogAction(action))
@@ -270,7 +265,7 @@ func TestSelectModelImportsCopilotOffLoop(t *testing.T) {
 		require.False(t, u.dialog.ContainsDialog(dialog.ModelsID))
 		if imported {
 			runAll(u, cmd)
-			require.Equal(t, []string{"import copilot", "chat model s1", "default small copilot", "pref small copilot/small"}, ws.recorded())
+			require.Equal(t, []string{"import copilot", "chat model s1"}, ws.recorded())
 		} else {
 			// Still not configured: the sign-in opens, without importing again.
 			require.Equal(t, []string{"import copilot"}, ws.recorded())

@@ -45,6 +45,9 @@ func TestTrackerFullBeforeAfterBeyondReviewLimit(t *testing.T) {
 }
 
 func TestShellCreatedFileCapturedAndRestored(t *testing.T) {
+	if err := filechange.WatchUnavailable(); err != nil {
+		t.Skipf("commands cannot be watched here (run outside a Crush command): %v", err)
+	}
 	f := setup(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

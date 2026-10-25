@@ -553,6 +553,6 @@ func (m *UI) remoteSelectModel(providerID, modelID string) (tea.Cmd, error) {
 			ReasoningEffort: model.DefaultReasoningEffort,
 			MaxTokens:       model.DefaultMaxTokens,
 		},
-		ModelType: config.SelectedModelTypeLarge,
+		ModelType: config.SelectedModelTypeChat,
 	}), nil
 }

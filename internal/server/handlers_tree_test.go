@@ -30,6 +30,7 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/server"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/workspace"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -181,9 +182,7 @@ func newTreeEngine(t *testing.T) *treeEngine {
 		BaseURL: llm.srv.URL + "/v1", APIKey: "test",
 		Models: []catwalk.Model{{ID: modelID, ContextWindow: 200_000, DefaultMaxTokens: 4096}},
 	})
-	selected := config.SelectedModel{Provider: providerID, Model: modelID}
-	ws.Cfg.OverridePreferredModel(config.SelectedModelTypeLarge, selected)
-	ws.Cfg.OverridePreferredModel(config.SelectedModelTypeSmall, selected)
+	ws.Cfg.OverrideHelperModel(config.SelectedModel{Provider: providerID, Model: modelID})
 	ws.Cfg.SetupAgents()
 	coder := ws.Cfg.Config().Agents[config.AgentCoder]
 	coder.AllowedTools = nil // the fake model never calls a tool
@@ -235,6 +234,8 @@ func (e *treeEngine) treeChat(t *testing.T) treeChat {
 	t.Helper()
 	ctx := t.Context()
 	chat, err := e.ws.Sessions.Create(ctx, "Trip")
+	require.NoError(t, err)
+	_, err = e.ws.Sessions.SetModel(ctx, chat.ID, session.ModelChoice(`{"provider":"test-openai-compat","model":"test-model"}`))
 	require.NoError(t, err)
 	add := func(role message.MessageRole, text string) string {
 		parts := []message.ContentPart{message.TextContent{Text: text}}
@@ -568,6 +569,8 @@ func (e *treeEngine) notesChat(t *testing.T) notesChat {
 	require.NoError(t, os.Chmod(c.path, 0o644))
 
 	chat, err := e.ws.Sessions.Create(ctx, "Notes")
+	require.NoError(t, err)
+	_, err = e.ws.Sessions.SetModel(ctx, chat.ID, session.ModelChoice(`{"provider":"test-openai-compat","model":"test-model"}`))
 	require.NoError(t, err)
 	c.id = chat.ID
 	add := func(role message.MessageRole, parts ...message.ContentPart) string {

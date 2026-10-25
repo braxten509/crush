@@ -51,9 +51,7 @@ func TestClientWorkspaceTreeAndFiles(t *testing.T) {
 		BaseURL: "http://127.0.0.1:0/v1", APIKey: "test",
 		Models: []catwalk.Model{{ID: modelID, DefaultMaxTokens: 4096}},
 	})
-	selected := config.SelectedModel{Provider: providerID, Model: modelID}
-	engine.Cfg.OverridePreferredModel(config.SelectedModelTypeLarge, selected)
-	engine.Cfg.OverridePreferredModel(config.SelectedModelTypeSmall, selected)
+	engine.Cfg.OverrideHelperModel(config.SelectedModel{Provider: providerID, Model: modelID})
 	engine.Cfg.SetupAgents()
 	require.NoError(t, c.InitiateAgentProcessing(ctx, created.ID, false))
 

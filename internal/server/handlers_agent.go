@@ -3,7 +3,6 @@ package server
 import (
 	"net/http"
 
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
 )
@@ -96,11 +95,6 @@ func (c *controllerV1) runShellCommand(r *http.Request, req proto.ShellCommandRe
 		return proto.ShellCommandResponse{}, badRequest("request_id must be at most 64 characters")
 	}
 	return c.backend.RunShellCommandLive(r.Context(), r.PathValue("id"), clientID, requestID, req)
-}
-
-// getDefaultSmallModel returns the default small model for a provider.
-func (c *controllerV1) getDefaultSmallModel(r *http.Request, _ rpc.Empty) (config.SelectedModel, error) {
-	return c.backend.GetDefaultSmallModel(r.PathValue("id"), r.URL.Query().Get("provider_id"))
 }
 
 // handlePostWorkspaceAgentSessionPromptRecall withdraws an editable

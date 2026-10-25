@@ -337,12 +337,12 @@ func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings,
 	if err := ws.Cfg.SetConfigFields(config.ScopeGlobal, fields); err != nil {
 		return proto.FallbackSettings{}, err
 	}
-	for _, t := range []config.SelectedModelType{config.SelectedModelTypeLarge, config.SelectedModelTypeSmall} {
-		if m, ok := ws.Cfg.Config().Models[t]; ok && m.Account == id {
-			m.Account = ""
-			if err := ws.Cfg.UpdatePreferredModel(config.ScopeGlobal, t, m); err != nil {
-				return proto.FallbackSettings{}, err
-			}
+	// The helper on the removed account goes back to the tool's own login;
+	// a chat's own model on it does so when it runs (knownAccount).
+	if m, ok := ws.Cfg.Config().Models[config.SelectedModelTypeSmall]; ok && m.Account == id {
+		m.Account = ""
+		if err := ws.Cfg.SetHelperModel(config.ScopeGlobal, m); err != nil {
+			return proto.FallbackSettings{}, err
 		}
 	}
 	if err := accounts.Remove(id); err != nil {

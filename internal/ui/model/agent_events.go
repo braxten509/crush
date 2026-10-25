@@ -207,7 +207,7 @@ func (m *UI) handleReAuthenticate(providerID string) tea.Cmd {
 	}
 	// Signing in again keeps the shown chat's own model.
 	selected, _ := m.shownChoice()
-	return m.openAuthenticationDialog(providerCfg.ToProvider(), selected, config.SelectedModelTypeLarge)
+	return m.openAuthenticationDialog(providerCfg.ToProvider(), selected, config.SelectedModelTypeChat)
 }
 
 // handleAWSSSOAuth opens the AWS SSO progress dialog (or updates the SSO URL

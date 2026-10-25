@@ -509,14 +509,6 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Build(),
 
-		route(c, rpc.DefaultSmallModel, c.getDefaultSmallModel).
-			Summary("Get default small model").
-			Description("Returns the default small model (config.SelectedModel) for the provider.").
-			Tags("agent").
-			PathParam("id", "Workspace ID").
-			QueryParam("provider_id", "Provider ID").
-			Fails(404, 500).
-			Build(),
 	}
 }
 
@@ -543,7 +535,7 @@ func (c *controllerV1) configEndpoints() []apigen.Endpoint {
 			Fails(400, 403, 404, 500).
 			Build(),
 
-		route(c, rpc.UpdatePreferredModel, c.updatePreferredModel).
+		route(c, rpc.SetHelperModel, c.setHelperModel).
 			Summary("Set the preferred model").
 			Tags("config").
 			PathParam("id", "Workspace ID").

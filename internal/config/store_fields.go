@@ -214,17 +214,16 @@ func (s *ConfigStore) updateLocked(scope Scope, mutate func(*Config) map[string]
 	return nil
 }
 
-// OverridePreferredModel sets the preferred model for the given type in
-// memory only, without persisting. It is for per-run overrides (such as the
-// non-interactive --model flags) that must not be written to the user's
-// config file.
-func (s *ConfigStore) OverridePreferredModel(modelType SelectedModelType, model SelectedModel) {
+// OverrideHelperModel sets the helper model in memory only, without
+// persisting. It is for per-run overrides (crush run --small-model) that
+// must not be written to the user's config file.
+func (s *ConfigStore) OverrideHelperModel(model SelectedModel) {
 	s.mutateInMemory(func(c *Config) {
 		if c.Models == nil {
 			c.Models = make(map[SelectedModelType]SelectedModel)
 		}
-		c.Models[modelType] = model
-		s.pinPreferredModelLocked(modelType, model)
+		c.Models[SelectedModelTypeSmall] = model
+		s.pinPreferredModelLocked(SelectedModelTypeSmall, model)
 	})
 }
 
@@ -325,33 +324,46 @@ func (s *ConfigStore) removeConfigFieldNoReload(scope Scope, key string) error {
 	})
 }
 
-// UpdatePreferredModel updates the preferred model for the given type and
-// persists it to the config file at the given scope. The selected model and
-// the recent-models list are written together in a single config write.
+// SetHelperModel sets the helper model (titles, branch summaries, web
+// fetches) and persists it to the config file at the given scope. The model
+// and the helper's recent-models list are written together in a single
+// config write.
 //
 // The write skips the full disk reparse/reload (which would rebuild the
 // provider catalog and agents on every model switch and dominate selection
 // latency); agents are refreshed separately by the caller (see
 // UpdateAgentModel).
-func (s *ConfigStore) UpdatePreferredModel(scope Scope, modelType SelectedModelType, model SelectedModel) error {
+func (s *ConfigStore) SetHelperModel(scope Scope, model SelectedModel) error {
 	return s.update(scope, func(c *Config) map[string]any {
-		return s.updatePreferredModelFields(c, modelType, model)
+		return s.helperModelFields(c, model)
 	})
 }
 
-// updatePreferredModelFields builds the fields map for persisting a preferred
-// model change. Shared between UpdatePreferredModel and direct updateLocked
-// callers (e.g. Load). Caller must hold writeMu.
-func (s *ConfigStore) updatePreferredModelFields(c *Config, modelType SelectedModelType, model SelectedModel) map[string]any {
+// RecordChatPick adds a model picked for a chat to the chats' recent list
+// and remembers its effort. No model is set: the chat owns it.
+func (s *ConfigStore) RecordChatPick(model SelectedModel) error {
+	return s.update(ScopeGlobal, func(c *Config) map[string]any {
+		return pickFields(c, SelectedModelTypeChat, model, map[string]any{})
+	})
+}
+
+// helperModelFields builds the fields map for persisting the helper model.
+// Shared between SetHelperModel and direct updateLocked callers (e.g.
+// Load). Caller must hold writeMu.
+func (s *ConfigStore) helperModelFields(c *Config, model SelectedModel) map[string]any {
 	if c.Models == nil {
 		c.Models = make(map[SelectedModelType]SelectedModel)
 	}
-	c.Models[modelType] = model
-	s.pinPreferredModelLocked(modelType, model)
+	c.Models[SelectedModelTypeSmall] = model
+	s.pinPreferredModelLocked(SelectedModelTypeSmall, model)
+	return pickFields(c, SelectedModelTypeSmall, model, map[string]any{
+		fmt.Sprintf("models.%s", SelectedModelTypeSmall): model,
+	})
+}
 
-	fields := map[string]any{
-		fmt.Sprintf("models.%s", modelType): model,
-	}
+// pickFields adds a pick's recent-list entry and remembered effort to
+// fields. Caller must hold writeMu.
+func pickFields(c *Config, modelType SelectedModelType, model SelectedModel, fields map[string]any) map[string]any {
 	if updated, changed := nextRecentModels(c, modelType, model); changed {
 		if c.RecentModels == nil {
 			c.RecentModels = make(map[SelectedModelType][]SelectedModel)

@@ -44,7 +44,7 @@ func testStoreWithPath(cfg *Config, dir string) *ConfigStore {
 func configWithRecents(recents ...SelectedModel) *Config {
 	return &Config{
 		RecentModels: map[SelectedModelType][]SelectedModel{
-			SelectedModelTypeLarge: recents,
+			SelectedModelTypeChat: recents,
 		},
 	}
 }
@@ -53,7 +53,7 @@ func TestNextRecentModels_AddsToFront(t *testing.T) {
 	t.Parallel()
 
 	cfg := configWithRecents()
-	updated, changed := nextRecentModels(cfg, SelectedModelTypeLarge, SelectedModel{Provider: "openai", Model: "gpt-4o"})
+	updated, changed := nextRecentModels(cfg, SelectedModelTypeChat, SelectedModel{Provider: "openai", Model: "gpt-4o"})
 	require.True(t, changed)
 	require.Equal(t, []SelectedModel{{Provider: "openai", Model: "gpt-4o"}}, updated)
 }
@@ -65,7 +65,7 @@ func TestNextRecentModels_DedupeAndMoveToFront(t *testing.T) {
 		SelectedModel{Provider: "anthropic", Model: "claude"},
 		SelectedModel{Provider: "openai", Model: "gpt-4o"},
 	)
-	updated, changed := nextRecentModels(cfg, SelectedModelTypeLarge, SelectedModel{Provider: "openai", Model: "gpt-4o"})
+	updated, changed := nextRecentModels(cfg, SelectedModelTypeChat, SelectedModel{Provider: "openai", Model: "gpt-4o"})
 	require.True(t, changed)
 	require.Equal(t, []SelectedModel{
 		{Provider: "openai", Model: "gpt-4o"},
@@ -82,7 +82,7 @@ func TestNextRecentModels_TrimsToMax(t *testing.T) {
 	}
 	cfg := configWithRecents(seed...)
 
-	updated, changed := nextRecentModels(cfg, SelectedModelTypeLarge, SelectedModel{Provider: "p", Model: "m6"})
+	updated, changed := nextRecentModels(cfg, SelectedModelTypeChat, SelectedModel{Provider: "p", Model: "m6"})
 	require.True(t, changed)
 	require.Len(t, updated, maxRecentModelsPerType)
 	require.Equal(t, SelectedModel{Provider: "p", Model: "m6"}, updated[0])
@@ -93,9 +93,9 @@ func TestNextRecentModels_SkipsEmptyValues(t *testing.T) {
 	t.Parallel()
 
 	cfg := configWithRecents()
-	_, changed := nextRecentModels(cfg, SelectedModelTypeLarge, SelectedModel{Provider: "", Model: "m"})
+	_, changed := nextRecentModels(cfg, SelectedModelTypeChat, SelectedModel{Provider: "", Model: "m"})
 	require.False(t, changed)
-	_, changed = nextRecentModels(cfg, SelectedModelTypeLarge, SelectedModel{Provider: "p", Model: ""})
+	_, changed = nextRecentModels(cfg, SelectedModelTypeChat, SelectedModel{Provider: "p", Model: ""})
 	require.False(t, changed)
 }
 
@@ -104,11 +104,11 @@ func TestNextRecentModels_NoChangeWhenAlreadyFront(t *testing.T) {
 
 	entry := SelectedModel{Provider: "openai", Model: "gpt-4o"}
 	cfg := configWithRecents(entry)
-	_, changed := nextRecentModels(cfg, SelectedModelTypeLarge, entry)
+	_, changed := nextRecentModels(cfg, SelectedModelTypeChat, entry)
 	require.False(t, changed)
 }
 
-func TestUpdatePreferredModel_PersistsModelAndRecents(t *testing.T) {
+func TestSetHelperModel_PersistsModelAndRecents(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -117,24 +117,24 @@ func TestUpdatePreferredModel_PersistsModelAndRecents(t *testing.T) {
 	store := testStoreWithPath(cfg, dir)
 
 	sel := SelectedModel{Provider: "openai", Model: "gpt-4o"}
-	require.NoError(t, store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, sel))
+	require.NoError(t, store.SetHelperModel(ScopeGlobal, sel))
 
 	// in-memory state (read through the store; copy-on-write publishes a
 	// new Config, so the seed cfg pointer is intentionally unchanged).
-	require.Equal(t, sel, store.Config().Models[SelectedModelTypeLarge])
-	require.Len(t, store.Config().RecentModels[SelectedModelTypeLarge], 1)
+	require.Equal(t, sel, store.Config().Models[SelectedModelTypeSmall])
+	require.Len(t, store.Config().RecentModels[SelectedModelTypeSmall], 1)
 
 	// persisted state
 	rm := readRecentModels(t, store.globalDataPath)
-	large, ok := rm[string(SelectedModelTypeLarge)].([]any)
+	small, ok := rm[string(SelectedModelTypeSmall)].([]any)
 	require.True(t, ok)
-	require.Len(t, large, 1)
-	item := large[0].(map[string]any)
+	require.Len(t, small, 1)
+	item := small[0].(map[string]any)
 	require.Equal(t, "openai", item["provider"])
 	require.Equal(t, "gpt-4o", item["model"])
 }
 
-func TestUpdatePreferredModel_TypeIsolation(t *testing.T) {
+func TestChatPickAndHelperModel_TypeIsolation(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -142,22 +142,23 @@ func TestUpdatePreferredModel_TypeIsolation(t *testing.T) {
 	cfg.setDefaults(dir, "")
 	store := testStoreWithPath(cfg, dir)
 
-	largeModel := SelectedModel{Provider: "openai", Model: "gpt-4o"}
-	smallModel := SelectedModel{Provider: "anthropic", Model: "claude"}
-	require.NoError(t, store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, largeModel))
-	require.NoError(t, store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeSmall, smallModel))
+	chatPick := SelectedModel{Provider: "openai", Model: "gpt-4o"}
+	helper := SelectedModel{Provider: "anthropic", Model: "claude"}
+	require.NoError(t, store.RecordChatPick(chatPick))
+	require.NoError(t, store.SetHelperModel(ScopeGlobal, helper))
 
-	// Adding to large leaves small untouched.
-	anotherLarge := SelectedModel{Provider: "google", Model: "gemini"}
-	require.NoError(t, store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, anotherLarge))
+	// Another chat pick leaves the helper untouched, and sets no model.
+	anotherPick := SelectedModel{Provider: "google", Model: "gemini"}
+	require.NoError(t, store.RecordChatPick(anotherPick))
 
-	require.Len(t, store.Config().RecentModels[SelectedModelTypeLarge], 2)
-	require.Equal(t, anotherLarge, store.Config().RecentModels[SelectedModelTypeLarge][0])
+	require.Len(t, store.Config().RecentModels[SelectedModelTypeChat], 2)
+	require.Equal(t, anotherPick, store.Config().RecentModels[SelectedModelTypeChat][0])
 	require.Len(t, store.Config().RecentModels[SelectedModelTypeSmall], 1)
-	require.Equal(t, smallModel, store.Config().RecentModels[SelectedModelTypeSmall][0])
+	require.Equal(t, helper, store.Config().RecentModels[SelectedModelTypeSmall][0])
+	require.Equal(t, map[SelectedModelType]SelectedModel{SelectedModelTypeSmall: helper}, store.Config().Models)
 }
 
-func TestUpdatePreferredModelServiceTier(t *testing.T) {
+func TestSetHelperModelServiceTier(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	cfg := &Config{}
@@ -166,12 +167,12 @@ func TestUpdatePreferredModelServiceTier(t *testing.T) {
 	selected := SelectedModel{Provider: "codex-cli", Model: "gpt-6-astra", ReasoningEffort: "max"}
 	for _, tier := range []string{"fast", "default"} {
 		selected.ServiceTier = tier
-		require.NoError(t, store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, selected))
+		require.NoError(t, store.SetHelperModel(ScopeGlobal, selected))
 		data, err := os.ReadFile(store.globalDataPath)
 		require.NoError(t, err)
 		var saved Config
 		require.NoError(t, json.Unmarshal(data, &saved))
-		require.Equal(t, selected, saved.Models[SelectedModelTypeLarge])
-		require.Equal(t, selected, store.Config().Models[SelectedModelTypeLarge])
+		require.Equal(t, selected, saved.Models[SelectedModelTypeSmall])
+		require.Equal(t, selected, store.Config().Models[SelectedModelTypeSmall])
 	}
 }

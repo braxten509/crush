@@ -29,7 +29,7 @@ func TestPickedModelKeepsItsEffort(t *testing.T) {
 	u, ws := effortUI(t)
 	runAll(u, u.handleDialogAction(dialog.ActionSelectModel{
 		Provider:  catwalk.Provider{ID: "p"},
-		ModelType: config.SelectedModelTypeLarge,
+		ModelType: config.SelectedModelTypeChat,
 		Model:     config.SelectedModel{Provider: "p", Model: "m1", ReasoningEffort: "high"},
 	}))
 	require.Equal(t, "max", ws.chatChoice(t).ReasoningEffort)

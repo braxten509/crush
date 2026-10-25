@@ -117,14 +117,13 @@ var (
 	InterruptAgent    = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/interrupt"}
 	SummarizeSession  = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/summarize"}
 	RunShellCommand   = Op[proto.ShellCommandRequest, proto.ShellCommandResponse]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/shell"}
-	DefaultSmallModel = Op[Empty, config.SelectedModel]{Method: get, Path: "/v1/workspaces/{id}/agent/default-small-model"}
 )
 
 // Config endpoints.
 var (
 	SetConfigField       = Op[proto.ConfigSetRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/set"}
 	RemoveConfigField    = Op[proto.ConfigRemoveRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/remove"}
-	UpdatePreferredModel = Op[proto.ConfigModelRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/model"}
+	SetHelperModel = Op[proto.ConfigModelRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/model"}
 	SetCompactMode       = Op[proto.ConfigCompactRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/compact"}
 	SetProviderAPIKey    = Op[proto.ConfigProviderKeyRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/provider-key"}
 	ImportCopilot        = Op[Empty, proto.ImportCopilotResponse]{Method: post, Path: "/v1/workspaces/{id}/config/import-copilot"}

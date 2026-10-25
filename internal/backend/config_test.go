@@ -83,7 +83,7 @@ func TestRemoveConfigField_PublishesConfigChanged(t *testing.T) {
 
 func TestUpdatePreferredModel_PublishesConfigChanged(t *testing.T) {
 	if raceEnabled {
-		// UpdatePreferredModel writes config.Models concurrently
+		// SetHelperModel writes config.Models concurrently
 		// with the agent coordinator's async sub-agent builder
 		// that reads it via buildAgentModels. That race is
 		// pre-existing in the codebase and unrelated to this
@@ -96,13 +96,13 @@ func TestUpdatePreferredModel_PublishesConfigChanged(t *testing.T) {
 	b, ws, evc := newPublishingWorkspace(t)
 
 	model := config.SelectedModel{Provider: "openai", Model: "gpt-4"}
-	require.NoError(t, b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, config.SelectedModelTypeSmall, model))
+	require.NoError(t, b.SetHelperModel(ws.ID, config.ScopeGlobal, model))
 	awaitConfigChanged(t, evc, ws.ID)
 }
 
 // TestAChatPickIsTheLastPickAndNotAModel: a pick in a chat is saved on that
-// chat and as the last pick, no folder-wide model is written, and asking to
-// set the old shared ("large") model is refused.
+// chat, as the last pick and in the recent list, and no folder-wide model
+// is written.
 func TestAChatPickIsTheLastPickAndNotAModel(t *testing.T) {
 	b, ws, _ := newPublishingWorkspace(t)
 	ctx := context.Background()
@@ -120,9 +120,10 @@ func TestAChatPickIsTheLastPickAndNotAModel(t *testing.T) {
 	require.True(t, ok, "a chat pick is the last pick")
 	require.Equal(t, pick, got)
 	require.Equal(t, before, ws.Cfg.Config().Models, "no folder-wide model is written")
-
-	require.Error(t, b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, "large", pick))
-	require.Equal(t, before, ws.Cfg.Config().Models)
+	recent := ws.Cfg.Config().RecentModels[config.SelectedModelTypeChat]
+	require.NotEmpty(t, recent, "the pick tops the recent list")
+	require.Equal(t, "openai/gpt-4", recent[0].Provider+"/"+recent[0].Model)
+	require.Equal(t, "high", ws.Cfg.Config().ModelEfforts["openai:gpt-4"], "its effort is remembered")
 }
 
 func TestSetCompactMode_PublishesConfigChanged(t *testing.T) {

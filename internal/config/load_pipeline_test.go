@@ -200,7 +200,7 @@ func TestLoadPipeline_ReloadMatchesLoad(t *testing.T) {
 	_, ok = cfg.Providers.Get("broken")
 	require.False(t, ok, "unsupported custom provider types are dropped")
 
-	large := cfg.Models[SelectedModelTypeLarge]
+	large, _ := cfg.StartModel()
 	require.Equal(t, "openai", large.Provider)
 	require.Equal(t, "gpt-4o", large.Model)
 	require.EqualValues(t, 1234, large.MaxTokens)
@@ -276,28 +276,28 @@ func TestConfigureProviders_AnthropicOAuthIsPendingWrite(t *testing.T) {
 func TestLoadPipeline_ModelFallbackPersistence(t *testing.T) {
 	e := newPipelineEnv(t)
 	const unknown = `{
-		"models": {"large": {"provider": "openai", "model": "does-not-exist"}},
+		"models": {"small": {"provider": "openai", "model": "does-not-exist"}},
 		"providers": {"openai": {"api_key": "sk-test"}}
 	}`
 	e.write(t, e.globalData, unknown)
 
 	store, err := Load(e.workDir, e.dataDir, false)
 	require.NoError(t, err)
-	large := store.Config().Models[SelectedModelTypeLarge]
-	require.Equal(t, "openai", large.Provider)
-	require.NotEqual(t, "does-not-exist", large.Model)
+	small := store.Config().Models[SelectedModelTypeSmall]
+	require.Equal(t, "openai", small.Provider)
+	require.NotEqual(t, "does-not-exist", small.Model)
 	data, err := os.ReadFile(e.globalData)
 	require.NoError(t, err)
-	require.Equal(t, large.Model, gjson.GetBytes(data, "models.large.model").String(), "load persists the fallback")
+	require.Equal(t, small.Model, gjson.GetBytes(data, "models.small.model").String(), "load persists the fallback")
 
 	// Reset the pin Load recorded so the reload sees the file's choice.
 	store.overrides.Models = nil
 	e.write(t, e.globalData, unknown)
 	require.NoError(t, store.ReloadFromDisk(context.Background()))
-	require.Equal(t, large.Model, store.Config().Models[SelectedModelTypeLarge].Model)
+	require.Equal(t, small.Model, store.Config().Models[SelectedModelTypeSmall].Model)
 	data, err = os.ReadFile(e.globalData)
 	require.NoError(t, err)
-	require.Equal(t, "does-not-exist", gjson.GetBytes(data, "models.large.model").String(), "reload must not persist the fallback")
+	require.Equal(t, "does-not-exist", gjson.GetBytes(data, "models.small.model").String(), "reload must not persist the fallback")
 }
 
 // TestLoadPipeline_UnconfiguredLoadsWithoutAgents characterizes a load

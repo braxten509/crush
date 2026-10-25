@@ -51,15 +51,7 @@ func (m *UI) writeConfigField(key string, value any, then func(err error) tea.Cm
 // the Update goroutine; then runs on the Update goroutine with the error.
 func saveHelperModel(ws workspace.Workspace, model config.SelectedModel, then func(err error) tea.Cmd) tea.Cmd {
 	return doThen(func() error {
-		return ws.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, model)
-	}, then)
-}
-
-// fillHelperModel sets provider's default small model as the helper model,
-// off the Update goroutine.
-func fillHelperModel(ws workspace.Workspace, provider string, then func(err error) tea.Cmd) tea.Cmd {
-	return doThen(func() error {
-		return ws.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, ws.GetDefaultSmallModel(provider))
+		return ws.SetHelperModel(config.ScopeGlobal, model)
 	}, then)
 }
 

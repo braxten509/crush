@@ -26,7 +26,8 @@ func (app *App) wireChatModels(ctx context.Context) {
 		if last, err := app.Messages.GetLastAssistantMessage(ctx, chat.ID); err == nil {
 			provider, model = last.Provider, last.Model
 		}
-		m, ok := adoptedModel(store.Config(), provider, model, func() (config.SelectedModel, bool) {
+		shared, hasShared := store.Config().StartModel()
+		m, ok := adoptedModel(store.Config(), provider, model, shared, hasShared, func() (config.SelectedModel, bool) {
 			return config.NewChatModel(store.Config())
 		})
 		if !ok {
@@ -44,10 +45,8 @@ func (app *App) wireChatModels(ctx context.Context) {
 // adoptedModel is the model an old chat without one adopts: the model it
 // last replied with (as the apps' restore did), with the effort last used
 // with it; else the old shared model it has been running on; else the
-// last pick.
-func adoptedModel(cfg *config.Config, provider, model string, lastPick func() (config.SelectedModel, bool)) (config.SelectedModel, bool) {
-	shared, hasShared := cfg.Models[config.SelectedModelTypeLarge]
-	hasShared = hasShared && shared.Provider != "" && shared.Model != ""
+// last pick. The old shared model is an old file's models.large, read once.
+func adoptedModel(cfg *config.Config, provider, model string, shared config.SelectedModel, hasShared bool, lastPick func() (config.SelectedModel, bool)) (config.SelectedModel, bool) {
 	if provider != "" && model != "" && cfg.IsModelAvailable(provider, model) {
 		m := cfg.Remembered(provider, model)
 		// It ran on the shared model until now, so on the same tool it

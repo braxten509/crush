@@ -75,8 +75,8 @@ func NewChatModel(cfg *Config) (SelectedModel, bool) {
 	if picked && cfg.IsModelAvailable(pick.Provider, pick.Model) {
 		return pick, true
 	}
-	start, ok := cfg.Models[SelectedModelTypeLarge]
-	if !ok || start.Provider == "" || start.Model == "" {
+	start, ok := cfg.StartModel()
+	if !ok {
 		return SelectedModel{}, false
 	}
 	if !picked {

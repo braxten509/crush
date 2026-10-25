@@ -267,7 +267,7 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 
 		cfg := &Config{
 			Models: map[SelectedModelType]SelectedModel{
-				SelectedModelTypeLarge: {Provider: "ghost", Model: "missing"},
+				"large": {Provider: "ghost", Model: "missing"},
 			},
 		}
 		cfg.setDefaults(dir, "")
@@ -276,15 +276,14 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		_, err := cfg.configureProviders(context.Background(), env, resolver, knownProviders)
 		require.NoError(t, err)
 
+		cfg.takeLegacyChatModel()
 		resolved, resolveErr := resolveSelectedModels(cfg, knownProviders)
 		require.NoError(t, resolveErr)
-		cfg.Models[SelectedModelTypeLarge] = resolved.Large
 		cfg.Models[SelectedModelTypeSmall] = resolved.Small
 
 		// In-memory falls back to default.
-		require.True(t, resolved.LargeFallback)
-		require.Equal(t, "openai", cfg.Models[SelectedModelTypeLarge].Provider)
-		require.Equal(t, "large-model", cfg.Models[SelectedModelTypeLarge].Model)
+		require.Equal(t, "openai", resolved.Start.Provider)
+		require.Equal(t, "large-model", resolved.Start.Model)
 
 		// Disk remains unchanged (resolveSelectedModels never persists).
 		data, readErr := os.ReadFile(globalPath)
@@ -329,11 +328,11 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		_, err := cfg.configureProviders(context.Background(), env, resolver, knownProviders)
 		require.NoError(t, err)
 
+		cfg.takeLegacyChatModel()
 		resolved, resolveErr := resolveSelectedModels(cfg, knownProviders)
 		require.NoError(t, resolveErr)
-		cfg.Models[SelectedModelTypeLarge] = resolved.Large
 		cfg.Models[SelectedModelTypeSmall] = resolved.Small
-		large := cfg.Models[SelectedModelTypeLarge]
+		large := resolved.Start
 		small := cfg.Models[SelectedModelTypeSmall]
 		require.Equal(t, "larger-model", large.Model)
 		require.Equal(t, "openai", large.Provider)
@@ -393,11 +392,11 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		_, err := cfg.configureProviders(context.Background(), env, resolver, knownProviders)
 		require.NoError(t, err)
 
+		cfg.takeLegacyChatModel()
 		resolved, resolveErr := resolveSelectedModels(cfg, knownProviders)
 		require.NoError(t, resolveErr)
-		cfg.Models[SelectedModelTypeLarge] = resolved.Large
 		cfg.Models[SelectedModelTypeSmall] = resolved.Small
-		large := cfg.Models[SelectedModelTypeLarge]
+		large := resolved.Start
 		small := cfg.Models[SelectedModelTypeSmall]
 		require.Equal(t, "large-model", large.Model)
 		require.Equal(t, "openai", large.Provider)
@@ -440,11 +439,11 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		_, err := cfg.configureProviders(context.Background(), env, resolver, knownProviders)
 		require.NoError(t, err)
 
+		cfg.takeLegacyChatModel()
 		resolved, resolveErr := resolveSelectedModels(cfg, knownProviders)
 		require.NoError(t, resolveErr)
-		cfg.Models[SelectedModelTypeLarge] = resolved.Large
 		cfg.Models[SelectedModelTypeSmall] = resolved.Small
-		large := cfg.Models[SelectedModelTypeLarge]
+		large := resolved.Start
 		require.Equal(t, "large-model", large.Model)
 		require.Equal(t, "openai", large.Provider)
 		require.Equal(t, int64(100), large.MaxTokens)
@@ -469,7 +468,7 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 
 		cfg := &Config{
 			Models: map[SelectedModelType]SelectedModel{
-				SelectedModelTypeLarge: {Provider: "openai", Model: "this-model-does-not-exist"},
+				"large":                {Provider: "openai", Model: "this-model-does-not-exist"},
 				SelectedModelTypeSmall: {Provider: "openai", Model: "also-does-not-exist"},
 			},
 		}
@@ -486,27 +485,19 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		// because UpdatePreferredModel re-acquired writeMu.
 		done := make(chan error, 1)
 		go func() {
+			cfg.takeLegacyChatModel()
 			resolved, resolveErr := resolveSelectedModels(cfg, knownProviders)
 			if resolveErr != nil {
 				done <- resolveErr
 				return
 			}
-			cfg.Models[SelectedModelTypeLarge] = resolved.Large
 			cfg.Models[SelectedModelTypeSmall] = resolved.Small
 
 			store.writeMu.Lock()
 			defer store.writeMu.Unlock()
-			if resolved.LargeFallback {
+			if resolved.WriteSmall {
 				if err := store.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
-					return store.updatePreferredModelFields(c, SelectedModelTypeLarge, resolved.Large)
-				}); err != nil {
-					done <- err
-					return
-				}
-			}
-			if resolved.SmallFallback {
-				if err := store.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
-					return store.updatePreferredModelFields(c, SelectedModelTypeSmall, resolved.Small)
+					return store.helperModelFields(c, resolved.Small)
 				}); err != nil {
 					done <- err
 					return
@@ -519,10 +510,63 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		case err := <-done:
 			require.NoError(t, err)
 			// Should have fallen back to defaults.
-			require.Equal(t, "large-model", cfg.Models[SelectedModelTypeLarge].Model)
 			require.Equal(t, "small-model", cfg.Models[SelectedModelTypeSmall].Model)
 		case <-time.After(5 * time.Second):
 			t.Fatal("resolve + persist deadlocked under writeMu")
 		}
 	})
+}
+
+// TestHelperModelNeverFollowsAChat: the helper model is set on its own
+// (owner, 2026-10-24: no shared model anywhere). An old file's models.large
+// does not move it, and with none set it is the default selection's helper,
+// written once, which a later chat pick does not change.
+func TestHelperModelNeverFollowsAChat(t *testing.T) {
+	t.Setenv("CRUSH_GLOBAL_DATA", t.TempDir())
+	knownProviders := []catwalk.Provider{{
+		ID:                  "openai",
+		APIKey:              "abc",
+		DefaultLargeModelID: "gpt-big",
+		DefaultSmallModelID: "gpt-mini",
+		Models:              []catwalk.Model{{ID: "gpt-big", DefaultMaxTokens: 1000}, {ID: "gpt-mini", DefaultMaxTokens: 500}},
+	}}
+	load := func(models map[SelectedModelType]SelectedModel) (*Config, resolvedModels) {
+		cfg := &Config{
+			Models: models,
+			Providers: csync.NewMapFrom(map[string]ProviderConfig{
+				"local": {APIKey: "k", BaseURL: "http://127.0.0.1:9/v1", Models: []catwalk.Model{{ID: "y1", DefaultMaxTokens: 600}}},
+			}),
+		}
+		cfg.setDefaults(t.TempDir(), "")
+		e := env.NewFromMap(map[string]string{})
+		_, err := cfg.configureProviders(context.Background(), e, NewShellVariableResolver(e), knownProviders)
+		require.NoError(t, err)
+		cfg.takeLegacyChatModel()
+		resolved, err := resolveSelectedModels(cfg, knownProviders)
+		require.NoError(t, err)
+		return cfg, resolved
+	}
+
+	// An old file: the shared model on "local", the helper on openai.
+	cfg, resolved := load(map[SelectedModelType]SelectedModel{
+		"large": {Provider: "local", Model: "y1"},
+		"small": {Provider: "openai", Model: "gpt-mini"},
+	})
+	require.Equal(t, "openai", resolved.Small.Provider, "the helper stays where it was set")
+	require.NotContains(t, cfg.Models, SelectedModelType("large"), "no folder-wide model is kept")
+	start, ok := cfg.StartModel()
+	require.True(t, ok)
+	require.Equal(t, "local", start.Provider, "the old value only seeds a new chat")
+
+	// No helper set: the default selection's, written once, and not the
+	// old shared model's provider.
+	_, resolved = load(map[SelectedModelType]SelectedModel{"large": {Provider: "local", Model: "y1"}})
+	require.Equal(t, SelectedModel{Provider: "openai", Model: "gpt-mini", MaxTokens: 500}, resolved.Small)
+	require.True(t, resolved.WriteSmall, "the default helper is written once")
+
+	// A chat pick (the last pick) on another provider leaves it alone.
+	require.NoError(t, WriteLastPick(SelectedModel{Provider: "local", Model: "y1"}))
+	_, again := load(map[SelectedModelType]SelectedModel{"small": resolved.Small})
+	require.Equal(t, resolved.Small.Provider, again.Small.Provider)
+	require.False(t, again.WriteSmall)
 }

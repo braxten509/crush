@@ -62,7 +62,7 @@ func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
 					cfg: &config.Config{
 						Providers: providers,
 						Agents: map[string]config.Agent{
-							config.AgentCoder: {Model: config.SelectedModelTypeLarge},
+							config.AgentCoder: {},
 						},
 						Models: map[config.SelectedModelType]config.SelectedModel{
 							config.SelectedModelTypeSmall: initial,
@@ -87,7 +87,7 @@ func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
 				switch setting {
 				case "model":
 					want.Model = "second"
-					cmd := m.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: want})
+					cmd := m.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeChat, Model: want})
 					// The pick is saved when the command runs.
 					require.Equal(t, initial, ws.saved)
 					runWorkDone(m, cmd)

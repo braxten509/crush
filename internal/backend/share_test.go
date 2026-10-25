@@ -670,13 +670,10 @@ func TestRemoteEngineActionTexts(t *testing.T) {
 	coord := newShareTestCoordinator()
 	b, ws := shareTestWorkspace(t, coord)
 	ws.Cfg = config.NewTestStore(&config.Config{
-		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Provider: "plain", Model: "m"},
-		},
 		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
 			"plain": {ID: "plain", Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{{ID: "m"}}},
 		}),
-		Agents: map[string]config.Agent{config.AgentCoder: {ID: config.AgentCoder, Model: config.SelectedModelTypeLarge}},
+		Agents: map[string]config.Agent{config.AgentCoder: {ID: config.AgentCoder}},
 	})
 	owner, _ := shareTestApp(t, b, ws)
 	shareTestView(t, b, ws, owner, "chat-1")

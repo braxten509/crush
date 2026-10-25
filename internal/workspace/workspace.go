@@ -205,7 +205,6 @@ type AgentService interface {
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	InitCoderAgentNonInteractive(ctx context.Context) error
-	GetDefaultSmallModel(providerID string) config.SelectedModel
 }
 
 // InteractionService resolves the permission requests and questions the
@@ -245,7 +244,7 @@ type ConfigService interface {
 	GitBranch(ctx context.Context) (string, error)
 	ProviderAvailability(ctx context.Context) (map[string]string, error)
 	Resolver() config.VariableResolver
-	UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error
+	SetHelperModel(scope config.Scope, model config.SelectedModel) error
 	SetCompactMode(scope config.Scope, enabled bool) error
 	SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error
 	SetConfigField(scope config.Scope, key string, value any) error

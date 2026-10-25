@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -137,9 +138,7 @@ func replyWorkspace(t *testing.T, llm *replyLLM) (*Backend, *Workspace, string) 
 		BaseURL: llm.srv.URL + "/v1", APIKey: "test",
 		Models: []catwalk.Model{{ID: modelID, ContextWindow: 200_000, DefaultMaxTokens: 4096}},
 	})
-	selected := config.SelectedModel{Provider: providerID, Model: modelID}
-	ws.Cfg.OverridePreferredModel(config.SelectedModelTypeLarge, selected)
-	ws.Cfg.OverridePreferredModel(config.SelectedModelTypeSmall, selected)
+	ws.Cfg.OverrideHelperModel(config.SelectedModel{Provider: providerID, Model: modelID})
 	ws.Cfg.SetupAgents()
 	coder := ws.Cfg.Config().Agents[config.AgentCoder]
 	coder.AllowedTools = nil // no tools: the fake model never calls one
@@ -202,6 +201,8 @@ func TestBranchWhileReplying(t *testing.T) {
 	updates := watchMessages(ctx, ws)
 
 	source, err := ws.Sessions.Create(ctx, "Source")
+	require.NoError(t, err)
+	_, err = ws.Sessions.SetModel(ctx, source.ID, session.ModelChoice(`{"provider":"test-openai-compat","model":"test-model"}`))
 	require.NoError(t, err)
 	words := strings.Repeat("and then some more words ", 10)
 	var lastAnswer message.Message

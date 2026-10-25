@@ -67,7 +67,7 @@ func (n nonInteractive) SetChatModel(ctx context.Context, sessionID string, mode
 
 // SetHelperModel sets the helper model in memory, for this run only.
 func (n nonInteractive) SetHelperModel(_ context.Context, model config.SelectedModel) error {
-	n.app.config.OverridePreferredModel(config.SelectedModelTypeSmall, model)
+	n.app.config.OverrideHelperModel(model)
 	return nil
 }
 

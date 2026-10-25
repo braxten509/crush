@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -371,15 +370,6 @@ func (b *Backend) QueuedPromptSummaries(workspaceID, sessionID string) ([]messag
 		return nil, err
 	}
 	return o.QueuedPromptSummaries(sessionID), nil
-}
-
-// GetDefaultSmallModel returns the default small model for a provider.
-func (b *Backend) GetDefaultSmallModel(workspaceID, providerID string) (config.SelectedModel, error) {
-	o, err := b.ops(workspaceID)
-	if err != nil {
-		return config.SelectedModel{}, err
-	}
-	return o.GetDefaultSmallModel(providerID), nil
 }
 
 // RunShellCommand runs a shell command in the workspace directory and

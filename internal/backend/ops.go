@@ -105,7 +105,8 @@ func (o Ops) SetKeptSkill(ctx context.Context, sessionID string, skill session.K
 }
 
 // SetSessionModel saves the model one chat runs on. Every call here is the
-// owner's pick, so it is also the last pick a new chat starts on; the
+// owner's pick, so it is also the last pick a new chat starts on and tops
+// the recent list; the
 // engine's own moves (fallback, sub-agents) save on the chat directly.
 func (o Ops) SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error) {
 	sess, err := o.App.Sessions.SetModel(ctx, sessionID, model)
@@ -116,6 +117,11 @@ func (o Ops) SetSessionModel(ctx context.Context, sessionID string, model sessio
 	if err := json.Unmarshal(model, &pick); err == nil && pick.Provider != "" && pick.Model != "" {
 		if err := config.WriteLastPick(pick); err != nil {
 			slog.Warn("Could not save the last picked model", "error", err)
+		}
+		if o.Cfg != nil {
+			if err := o.Cfg.RecordChatPick(pick); err != nil {
+				slog.Warn("Could not add the pick to the recent models", "error", err)
+			}
 		}
 	}
 	return sess, nil
@@ -134,7 +140,15 @@ func (o Ops) SetLastPick(model config.SelectedModel) error {
 	if model.Provider == "" || model.Model == "" {
 		return errors.New("a pick needs a provider and a model")
 	}
-	return config.WriteLastPick(model)
+	if err := config.WriteLastPick(model); err != nil {
+		return err
+	}
+	if o.Cfg != nil {
+		if err := o.Cfg.RecordChatPick(model); err != nil {
+			slog.Warn("Could not add the pick to the recent models", "error", err)
+		}
+	}
+	return nil
 }
 
 // savedSessions returns the all-project catalog rooted at this

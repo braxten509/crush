@@ -161,15 +161,9 @@ func (m *UI) selectModel(msg dialog.ActionSelectModel, copilotImported bool) tea
 		cmds = append(cmds, saveHelperModel(ws, msg.Model, func(err error) tea.Cmd { return finish(err, nil) }))
 	} else {
 		// A model picked here belongs to the chat it was picked in, or is the
-		// last pick a new chat starts on (owner, 2026-10-24).
-		_, hasSmall := cfg.Models[config.SelectedModelTypeSmall]
-		cmds = append(cmds, m.saveShownModel(msg.Model, func(err error) tea.Cmd {
-			if err != nil || hasSmall {
-				return finish(err, nil)
-			}
-			// No helper model yet: the provider's default small one.
-			return fillHelperModel(ws, msg.Model.Provider, func(smallErr error) tea.Cmd { return finish(nil, smallErr) })
-		}))
+		// last pick a new chat starts on (owner, 2026-10-24). The helper model
+		// is set on its own and never follows it.
+		cmds = append(cmds, m.saveShownModel(msg.Model, func(err error) tea.Cmd { return finish(err, nil) }))
 	}
 
 	m.dialog.CloseDialog(dialog.APIKeyInputID)

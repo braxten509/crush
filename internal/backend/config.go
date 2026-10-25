@@ -108,14 +108,14 @@ func (b *Backend) RemoveConfigFieldAs(workspaceID string, local bool, scope conf
 	return b.writeConfig(ws, func() error { return o.RemoveConfigField(scope, key) })
 }
 
-// UpdatePreferredModel updates the preferred model for the given type
-// and persists it to the config file at the given scope.
-func (b *Backend) UpdatePreferredModel(workspaceID string, scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
+// SetHelperModel sets the helper model (titles, branch summaries) and
+// persists it to the config file at the given scope.
+func (b *Backend) SetHelperModel(workspaceID string, scope config.Scope, model config.SelectedModel) error {
 	o, err := b.ops(workspaceID)
 	if err != nil {
 		return err
 	}
-	return o.UpdatePreferredModel(scope, modelType, model)
+	return o.SetHelperModel(scope, model)
 }
 
 // SetCompactMode sets the compact mode setting and persists it.

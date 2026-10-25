@@ -23,13 +23,13 @@ func (c *controllerV1) removeConfigField(r *http.Request, req proto.ConfigRemove
 	return rpc.Empty{}, c.backend.RemoveConfigFieldAs(r.PathValue("id"), secureLocalOnly(r) == nil, req.Scope, req.Key)
 }
 
-// updatePreferredModel sets the helper model. Each chat owns its model, so
-// any other model type is refused.
-func (c *controllerV1) updatePreferredModel(r *http.Request, req proto.ConfigModelRequest) (rpc.Empty, error) {
+// setHelperModel sets the helper model. Each chat owns its model, so any
+// other model type is refused.
+func (c *controllerV1) setHelperModel(r *http.Request, req proto.ConfigModelRequest) (rpc.Empty, error) {
 	if req.ModelType != config.SelectedModelTypeSmall {
 		return rpc.Empty{}, badRequest(backend.ErrChatOwnsModel.Error())
 	}
-	return rpc.Empty{}, c.backend.UpdatePreferredModel(r.PathValue("id"), req.Scope, req.ModelType, req.Model)
+	return rpc.Empty{}, c.backend.SetHelperModel(r.PathValue("id"), req.Scope, req.Model)
 }
 
 // setCompactMode sets compact mode.

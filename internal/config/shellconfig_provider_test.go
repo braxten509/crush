@@ -23,11 +23,11 @@ provider add myllm \
 model add myllm/foo-1 --name "Foo 1" --context-window 8000 \
   --price-input 1.25 --price-output 5 \
   --price-cache-create 2 --price-cache-hit 0.25
-model large myllm/foo-1 \
+model small myllm/foo-1 \
   --top-p 0.9 --top-k 40 \
   --frequency-penalty 0.2 --presence-penalty 0.1 \
   --provider-options '{"routing":{"tier":"fast"}}'
-model large myllm/foo-1 --provider-options '{"timeout":30}'`)
+model small myllm/foo-1 --provider-options '{"timeout":30}'`)
 
 	cfg := store.Config()
 
@@ -52,21 +52,21 @@ model large myllm/foo-1 --provider-options '{"timeout":30}'`)
 	require.Equal(t, 2.0, model.CostPer1MInCached)
 	require.Equal(t, 0.25, model.CostPer1MOutCached)
 
-	large := cfg.Models[config.SelectedModelTypeLarge]
-	require.Equal(t, "myllm", large.Provider)
-	require.Equal(t, "foo-1", large.Model)
-	require.NotNil(t, large.TopP)
-	require.Equal(t, 0.9, *large.TopP)
-	require.NotNil(t, large.TopK)
-	require.Equal(t, int64(40), *large.TopK)
-	require.NotNil(t, large.FrequencyPenalty)
-	require.Equal(t, 0.2, *large.FrequencyPenalty)
-	require.NotNil(t, large.PresencePenalty)
-	require.Equal(t, 0.1, *large.PresencePenalty)
+	helper := cfg.Models[config.SelectedModelTypeSmall]
+	require.Equal(t, "myllm", helper.Provider)
+	require.Equal(t, "foo-1", helper.Model)
+	require.NotNil(t, helper.TopP)
+	require.Equal(t, 0.9, *helper.TopP)
+	require.NotNil(t, helper.TopK)
+	require.Equal(t, int64(40), *helper.TopK)
+	require.NotNil(t, helper.FrequencyPenalty)
+	require.Equal(t, 0.2, *helper.FrequencyPenalty)
+	require.NotNil(t, helper.PresencePenalty)
+	require.Equal(t, 0.1, *helper.PresencePenalty)
 	require.Equal(t, map[string]any{
 		"routing": map[string]any{"tier": "fast"},
 		"timeout": float64(30),
-	}, large.ProviderOptions)
+	}, helper.ProviderOptions)
 }
 
 func TestShellConfigProviderRemove(t *testing.T) {

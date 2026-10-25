@@ -46,7 +46,6 @@ func fallbackCoordinator(t *testing.T, blocks []config.FallbackBlock, usage map[
 		require.NoError(t, os.WriteFile(filepath.Join(config.AccountDir(id), login), []byte("{}"), 0o600))
 	}
 	cfg.Options.Fallback = &config.FallbackOrder{On: true, Blocks: blocks}
-	cfg.Models[config.SelectedModelTypeLarge] = fallbackModelOf(blocks[0])
 
 	fetch := func(kind catwalk.Type) func(ctx context.Context) ([]cliagent.Limit, error) {
 		return func(ctx context.Context) ([]cliagent.Limit, error) {
@@ -394,7 +393,6 @@ func TestRunningOutMovesOnlyThatChat(t *testing.T) {
 	}
 	c, sid := fallbackCoordinator(t, blocks, map[string]float64{"claude-code/": 100}, nil)
 	shared := config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol"}
-	c.cfg.Config().Models[config.SelectedModelTypeLarge] = shared
 	other, err := c.sessions.Create(t.Context(), "other chat")
 	require.NoError(t, err)
 	setChatModel(t, c, other.ID, shared)
@@ -402,7 +400,7 @@ func TestRunningOutMovesOnlyThatChat(t *testing.T) {
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut), "the chat's own model is in the order")
 	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
 	require.Equal(t, shared, chatModelOf(t, c, other.ID), "another chat keeps its model")
-	require.Equal(t, shared, c.cfg.Config().Models[config.SelectedModelTypeLarge], "no shared model is written")
+	require.NotContains(t, c.cfg.Config().Models, config.SelectedModelTypeChat, "no shared model is written")
 }
 
 // A refill that fails before a turn only moves the chat when an account has

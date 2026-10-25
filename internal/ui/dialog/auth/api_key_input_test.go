@@ -42,7 +42,7 @@ func newVerifiedKeyInput(t *testing.T, ws *keyWorkspace) *APIKeyInput {
 	t.Helper()
 	sty := styles.CharmtonePantera()
 	m, _ := NewAPIKeyInput(&common.Common{Workspace: ws, Styles: &sty}, false,
-		catwalk.Provider{ID: "p"}, config.SelectedModel{Provider: "p", Model: "m"}, config.SelectedModelTypeLarge)
+		catwalk.Provider{ID: "p"}, config.SelectedModel{Provider: "p", Model: "m"}, config.SelectedModelTypeChat)
 	m.input.SetValue("sk-test")
 	m.state = APIKeyInputStateVerified
 	return m
@@ -68,7 +68,7 @@ func TestAPIKeyInputSavesOffLoop(t *testing.T) {
 	selected, ok := m.HandleMsg(msg).(dialog.ActionSelectModel)
 	require.True(t, ok)
 	require.Equal(t, config.SelectedModel{Provider: "p", Model: "m"}, selected.Model)
-	require.Equal(t, config.SelectedModelTypeLarge, selected.ModelType)
+	require.Equal(t, config.SelectedModelTypeChat, selected.ModelType)
 }
 
 func TestAPIKeyInputReportsFailedSave(t *testing.T) {

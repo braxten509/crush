@@ -475,8 +475,10 @@
                   {#each it.choices ?? [] as choice, at (choice.id)}
                     <div class="choice" class:cursor={at === (i === active && hovered >= 0 ? hovered : st.cursor)} onmouseenter={() => (hovered = at)} onclick={() => clickChoice(at)} role="option" aria-selected={k === "multi_choice" ? st.picked[at] : at === st.cursor} tabindex="-1">
                       <span class="mark" class:check={k === "multi_choice"} class:on={k === "multi_choice" ? st.picked[at] : at === st.cursor}></span>
-                      <span class="label">{choice.label}</span>
-                      {#if choice.description}<span class="detail">{" · "}{choice.description}</span>{/if}
+                      <span class="choice-text">
+                        <span class="label">{choice.label}</span>
+                        {#if choice.description}<span class="detail">{choice.description}</span>{/if}
+                      </span>
                     </div>
                     {#if i === active && noteKey === choice.id}
                       <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>
@@ -668,11 +670,20 @@
   }
   .choice {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: calc(12 * var(--px));
     min-height: calc(40 * var(--px));
-    padding: 0 calc(8 * var(--px));
+    padding: calc(6 * var(--px)) calc(8 * var(--px));
+    box-sizing: border-box;
     cursor: pointer;
+  }
+  /* The name, then its description on its own line under it (owner,
+     2026-10-25: side by side looked crammed). */
+  .choice-text {
+    display: flex;
+    flex-direction: column;
+    gap: calc(2 * var(--px));
+    min-width: 0;
   }
   .choice:hover {
     background: var(--control-hover);
@@ -688,6 +699,10 @@
     border: calc(1.6 * var(--px)) solid var(--figure);
     border-radius: 50%;
     position: relative;
+  }
+  /* The circle sits centered on the name's 28 px line. */
+  .choice .mark {
+    margin-top: calc(6 * var(--px));
   }
   .mark.on::after {
     content: "";

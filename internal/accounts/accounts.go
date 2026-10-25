@@ -33,6 +33,11 @@ var own = map[catwalk.Type][]string{
 // ownPrefixes are per-account lock files.
 var ownPrefixes = []string{".oauth_refresh", ".lock"}
 
+// neverLinked are names never linked into an account: a tool folder kept in
+// Git must not lend its .git, since Claude's read-only sandbox refuses to
+// start when a protected .git path is a symlink.
+var neverLinked = []string{".git"}
+
 // home is the tool's own folder, account 1's.
 func home(kind catwalk.Type) (string, error) {
 	switch kind {
@@ -77,9 +82,19 @@ func Prepare(kind catwalk.Type, id string) (string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
+	for _, name := range neverLinked {
+		// A link made before this rule is taken away; a real folder of the
+		// account's own is left alone.
+		target := filepath.Join(dir, name)
+		if link, err := os.Readlink(target); err == nil && link == filepath.Join(src, name) {
+			if err := os.Remove(target); err != nil {
+				return "", err
+			}
+		}
+	}
 	for _, e := range entries {
 		name := e.Name()
-		if slices.Contains(own[kind], name) || slices.ContainsFunc(ownPrefixes, func(p string) bool { return strings.HasPrefix(name, p) }) {
+		if slices.Contains(neverLinked, name) || slices.Contains(own[kind], name) || slices.ContainsFunc(ownPrefixes, func(p string) bool { return strings.HasPrefix(name, p) }) {
 			continue
 		}
 		target := filepath.Join(dir, name)

@@ -68,6 +68,13 @@ export function slidePage(node, { dir = 1, duration = MOTION_MS, delay = 0, over
   return paper((t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px); --slide-shift: ${(dir * u * 14).toFixed(2)}px;${tick(t)}`, { duration, delay, overlay, off, away: (u) => sideInset(dir, u) });
 }
 
+// A piece that holds still while its column's moving edge covers and
+// uncovers it (the right panel; owner, 2026-10-25: "keep it looking EXACTLY
+// the same"): it only stays drawn for the column's glide.
+export function hold(node, { duration = MOTION_MS, off = false } = {}) {
+  return paper((t) => tick(t), { duration, off });
+}
+
 // A small piece settling in place (rows, notices, new messages); closing, it
 // sinks back and rolls up from its lower edge. With `fold`, the room it
 // takes in the page grows and shrinks with it, so what lies below follows it

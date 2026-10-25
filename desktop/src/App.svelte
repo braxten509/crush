@@ -29,7 +29,7 @@
   import { COLUMN_LIMITS, dragColumn, fitColumns, loadColumns, saveColumns } from "./lib/columns.js";
   import { app_info } from "./lib/engine/commands.js";
   import { leftList } from "./lib/leftlist/store.svelte.js";
-  import { CLOSE_MS, MOTION_MS, slidePage } from "./lib/motion.js";
+  import { CLOSE_MS, MOTION_MS, hold } from "./lib/motion.js";
   import { settingsOpen } from "./lib/settings/page.svelte.js";
   import { mainView } from "./lib/mainview.js";
   import { focusField } from "./lib/stores/composer.svelte.js";
@@ -174,6 +174,7 @@
     class:list-folded={leftList.strip}
     class:panel-glide-open={panelGlide === "open"}
     class:panel-glide-close={panelGlide === "close"}
+    class:panel-leaving={panelKept && ui.panelHidden}
     bind:this={page}
     style:--left={leftList.strip && !settingsOpen() ? STRIP_WIDTH : widths.left}
     style:--left-open={widths.left}
@@ -223,7 +224,7 @@
         ondone={done}
       />
       {#if !ui.panelHidden}
-        <div class="column panel-column" transition:slidePage|global={{ dir: 1 }} onoutroend={() => (panelKept = false)}>
+        <div class="column panel-column" transition:hold|global onoutroend={() => (panelKept = false)}>
           <SidePanel />
         </div>
       {/if}
@@ -284,6 +285,23 @@
   .page.list-folded .chats-column > :global(nav.chats) {
     flex: none;
     width: calc(var(--left-open) * var(--px));
+  }
+  /* The same for the panel (owner, 2026-10-25): its words keep their open
+     width and place against the window's right edge, and the column's left
+     edge covers them closing and uncovers them opening, until the panel
+     has gone. */
+  .page.panel-glide-open .panel-column,
+  .page.panel-glide-close .panel-column,
+  .page.panel-leaving .panel-column {
+    overflow: hidden;
+  }
+  .page.panel-glide-open .panel-column > :global(*),
+  .page.panel-glide-close .panel-column > :global(*),
+  .page.panel-leaving .panel-column > :global(*) {
+    flex: none;
+    align-self: flex-end;
+    box-sizing: border-box;
+    width: calc(var(--right) * var(--px));
   }
   .page.panel-glide-open {
     --panel-glide: var(--motion);

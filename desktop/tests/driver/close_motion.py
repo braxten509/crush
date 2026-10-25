@@ -95,14 +95,47 @@ ox, oy = window_geometry()[:2]
 # The conversation widens as the panel leaves, not once it has gone (owner,
 # 2026-10-20), and narrows back as it comes.
 track("main.conversation", "width")
+# The panel's words hold still while the moving edge covers them: same
+# place, same width, never rewrapped (owner, 2026-10-25).
+run("""
+  const el = document.querySelector('.panel-column > aside');
+  window.__panelRects = [];
+  const t0 = performance.now();
+  const frame = () => {
+    if (!el.isConnected || performance.now() - t0 > 600) return;
+    const r = el.getBoundingClientRect();
+    window.__panelRects.push([Math.round(r.right * 10) / 10, Math.round(r.width * 10) / 10]);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return true;
+""")
 closes("the right panel", ".panel-column", click_js('[data-probe="title-panel"]'), settle=0)
 glided("the conversation widens with the panel as it closes")
+panel_rects = run("return window.__panelRects;") or []
+check(len(panel_rects) >= 3 and len({tuple(r) for r in panel_rects}) == 1,
+      f"the panel's content keeps its place and width as it closes ({sorted({tuple(r) for r in panel_rects})[:4]})")
 run("window.__probe.runAction('details.toggle'); return true;")
 closes("the details overlay", ".details", "window.__probe.runAction('details.toggle')")
 time.sleep(0.6)
 track("main.conversation", "width")
+run("""
+  window.__panelRects = [];
+  const t0 = performance.now();
+  const frame = () => {
+    const el = document.querySelector('.panel-column > aside');
+    if (performance.now() - t0 > 600) return;
+    if (el) { const r = el.getBoundingClientRect(); window.__panelRects.push([Math.round(r.right * 10) / 10, Math.round(r.width * 10) / 10]); }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return true;
+""")
 closes("the usage strip", "[data-meter-strip]", click_js('[data-probe="title-panel"]'), settle=0)
 glided("the conversation narrows with the panel as it opens")
+panel_rects = run("return window.__panelRects;") or []
+check(len({tuple(r) for r in panel_rects}) == 1,
+      f"the panel's content is revealed in its place as it opens ({sorted({tuple(r) for r in panel_rects})[:4]})")
 
 # A sheet and its scrim.
 run("window.__probe.openDialog('about'); return true;")
@@ -192,6 +225,27 @@ between = [w for w in widths if min(widths or [0]) < w < max(widths or [0])]
 check(len(set(between)) >= 3, f"the list's width glides as it opens ({sorted(set(widths))[:3]}..{sorted(set(widths))[-3:]}, {len(set(between))} widths between)")
 
 # A form in the typing box's place (Customize composer), closed with Esc.
+# It leaves from right where it stood, then only rolls down: no jump up
+# first (owner, 2026-10-25: "it teleports a tab's width up").
 run("window.__probe.runAction('composer.customize'); return true;")
-closes("a typing-box form", '[data-probe="slot"]', lambda: key("Escape"))
+time.sleep(0.6)
+run("""
+  const el = document.querySelector('[data-probe="slot"]');
+  const at = el.getBoundingClientRect();
+  window.__slotRects = { open: [at.top, at.bottom], frames: [] };
+  const frame = () => {
+    if (!el.isConnected) return;
+    const r = el.getBoundingClientRect();
+    window.__slotRects.frames.push([r.top, r.bottom]);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return true;
+""")
+closes("a typing-box form", '[data-probe="slot"]', lambda: key("Escape"), settle=0)
+rects = run("return window.__slotRects;") or {}
+open_top, open_bottom = (rects.get("open") or [0, 0])
+moving = [f for f in rects.get("frames") or [] if abs(f[0] - open_top) > 0.5 or abs(f[1] - open_bottom) > 0.5]
+check(bool(moving) and all(abs((f[1] - f[0]) - (open_bottom - open_top)) <= 1 and f[1] >= open_bottom - 1 for f in moving),
+      f"a closing typing-box form keeps its size and only rolls down from where it stood (open {open_top:.1f}..{open_bottom:.1f}, first moving frames {moving[:3]})")
 finish()

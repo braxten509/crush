@@ -13,10 +13,15 @@
   // shows no form again (owner, 2026-10-21).
   let last = null;
   const shown = $derived.by(() => (entry ? (last = entry) : last));
-  const LEAVING = "position: absolute; left: calc(20 * var(--px)); right: calc(20 * var(--px)); bottom: calc(33 * var(--px)); z-index: 3;";
+  // Leaving, it lies right where it stood: on the composer's 15 px bottom
+  // padding, at the height it last had (owner, 2026-10-25: it jumped up
+  // before rolling down).
+  let height = $state(0);
+  const leaving = () =>
+    `position: absolute; left: calc(20 * var(--px)); right: calc(20 * var(--px)); bottom: calc(15 * var(--px)); box-sizing: border-box; height: ${height}px; z-index: 3;`;
 </script>
 
-<section class="slot" data-probe="slot" data-kind={shown.kind} transition:unfold|global={{ from: "bottom", overlay: LEAVING }}>
+<section class="slot" data-probe="slot" data-kind={shown.kind} bind:offsetHeight={height} transition:unfold|global={{ from: "bottom", overlay: leaving() }}>
   {#key shown}
     <shown.component {...shown.props} />
   {/key}

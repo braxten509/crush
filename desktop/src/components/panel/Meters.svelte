@@ -32,7 +32,8 @@
   const resets = $derived(meters.some((m) => m.resets));
 
   // The panel width every meter's label, figure and reset time need whole
-  // (owner, 2026-10-20: none may overlap or be cut with "…"): each cell's
+  // (owner, 2026-10-20: none may overlap or be cut with "…"; a reset line's
+  // tail is left out, owner 2026-10-25): each cell's
   // widest word over its share of the row, plus what the panel keeps around
   // the meters. Measured again when the meters, their words or the zoom change.
   let section = $state(null);
@@ -54,7 +55,7 @@
         return range.getBoundingClientRect().width;
       };
       cells.forEach((cell, i) => {
-        const need = Math.max(...[".label", ".resets", ".value > span"].map((s) => width(cell.querySelector(s))));
+        const need = Math.max(...[".label", ".resets > .main", ".value > span"].map((s) => width(cell.querySelector(s))));
         row = Math.max(row, ((need + 1) * total) / shares[i % perRow]);
       });
       const column = section.closest(".panel-column") ?? section.parentElement;
@@ -90,7 +91,7 @@
         {#if meter.bar !== false}<div class="meter" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
           <span class="fill {meter.level}" style:width="{meter.left}%"></span>
         </div>{/if}
-        {#if meter.resets}<p class="resets">{meter.resets}</p>{/if}
+        {#if meter.resets}<p class="resets"><span class="main">{meter.resets}</span>{#if meter.resetsTail}<span class="tail">{meter.resetsTail}</span>{/if}</p>{/if}
         {#if meter.refill}<button type="button" class="use-refill" data-refill-use onclick={() => useRefill(refillNow().kind, refillNow().account)}>Use one</button>{/if}
       </div>
     {:else}
@@ -197,6 +198,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* A tail (CONTEXT's " tokens") shows only while it fits whole: it wraps
+     to a second line the box hides, and the panel's least width counts the
+     words before it only (owner, 2026-10-25). */
+  .resets:has(.tail) {
+    display: flex;
+    flex-wrap: wrap;
+    height: calc(24 * var(--px));
+  }
+  .tail {
+    white-space: pre;
   }
   .no-meters {
     grid-column: 1 / -1;

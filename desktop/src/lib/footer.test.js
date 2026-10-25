@@ -337,8 +337,12 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
   it("puts the tokens used and the limit under CONTEXT (owner, 2026-10-25)", () => {
     const session = { prompt_tokens: 120_000, completion_tokens: 4_000 };
     const [context] = meterModel({ items: ["context"], session, limit: 200_000 }).meters;
-    expect([context.text, context.resets]).toEqual(["38% left", "124k / 200k tokens"]);
+    // " tokens" is a separate tail the panel drops when narrow, so only the
+    // numbers set the panel's least width (owner, 2026-10-25).
+    expect([context.text, context.resets, context.resetsTail]).toEqual(["38% left", "124k / 200k", " tokens"]);
     expect(meterModel({ items: ["context"] }).meters[0].resets).toBe("");
+    const odd = meterModel({ items: ["context"], session: { prompt_tokens: 290_510, completion_tokens: 0 }, limit: 467_000 }).meters[0];
+    expect(odd.resets).toBe("291k / 467k");
   });
 
   it("an AGY Gemini quota feeds the 5-HOUR meter the owner shows (2026-10-22)", () => {

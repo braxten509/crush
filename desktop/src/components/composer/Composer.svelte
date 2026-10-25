@@ -99,7 +99,7 @@
 <div
   class="composer"
   class:slotted={Boolean(ui.slot)}
-  class:chipped={!ui.slot && hasChips()}
+  class:chipped={!ui.slot && hasChips() && !sessionId}
   class:tall={Boolean(ui.slot) && composer.slotTall}
   class:full={Boolean(ui.slot) && composer.slotFull}
   style:--full-top={fullTop ? `${fullTop}px` : null}
@@ -216,9 +216,14 @@
   .composer.chipped .complete-row {
     margin-bottom: 0;
   }
+  /* Beside Complete the attachments fit its 36 px row, so adding one
+     changes nothing above the field (owner, 2026-10-25: it moved a few px). */
   .chips-side {
     flex: 1;
     min-width: 0;
+  }
+  .chips-side :global(.chip-row) {
+    padding: 0;
   }
   .complete {
     display: flex;

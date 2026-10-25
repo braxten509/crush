@@ -91,6 +91,12 @@ export function footerTokenCount(tokens) {
   return goFixed(n / divisor, 2).replace(/0+$/u, "").replace(/\.+$/u, "") + suffix;
 }
 
+// A token count's figures without decimals ("290.51k" → "291k"), for the
+// CONTEXT meter's line (owner, 2026-10-25).
+function wholeTokens(text) {
+  return text.replace(/(\d+(?:\.\d+)?)([km])/gu, (_, n, unit) => `${Math.round(Number(n))}${unit}`);
+}
+
 // The two largest units of a time span: "2h41m", "3d4h", "7m" (at least
 // "1m"); minutes rounded half away from zero (sidebar.go:149-159).
 export function shortDuration(ms) {
@@ -218,8 +224,10 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
       // As the sidebar's context line (elements.go:144): over 80 % used.
       warn: left !== null && left < 20,
       level: meterLevel(left),
-      // Under it, the tokens used and the limit (owner, 2026-10-25).
-      resets: words ? words.tokens.replace("/", " / ") : "",
+      // Under it, the tokens used and the limit (owner, 2026-10-25); the
+      // word " tokens" is a tail the panel drops when it is narrow.
+      resets: words ? wholeTokens(words.tokens).replace("/", " / ").replace(/ tokens$/u, "") : "",
+      resetsTail: words ? " tokens" : "",
     });
     contextLine.push(words ? words.context : "Context unknown");
   }

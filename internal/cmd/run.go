@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -108,8 +110,8 @@ crush run --continue "Follow up on your last response"
 
 		opts := noninteractive.Options{
 			Prompt:            prompt,
-			LargeModel:        largeModel,
-			SmallModel:        smallModel,
+			Model:             largeModel,
+			HelperModel:       smallModel,
 			ReasoningEffort:   reasoningEffort,
 			Fast:              fast,
 			ContinueSessionID: sessionID,
@@ -128,7 +130,7 @@ func init() {
 	runCmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
 	runCmd.Flags().BoolP("verbose", "v", false, "Show logs")
 	runCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
-	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
+	runCmd.Flags().String("small-model", "", "Helper model (titles) for this run only. If not provided, uses the helper model from Settings")
 	runCmd.Flags().String("reasoning-effort", "", "Reasoning effort for the model (e.g. low, medium, high). Levels depend on the model; unsupported values are rejected with the accepted values listed")
 	runCmd.Flags().Bool("fast", false, "Run the model in fast mode (Claude Code, Codex and Abacus OpenAI priority models)")
 	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
@@ -227,7 +229,7 @@ func runTerminal(cfg *config.Config, hideSpinner bool) noninteractive.Terminal {
 
 // clientRun is the [noninteractive.Backend] for client/server mode: it
 // runs the turn on the server and streams the reply back over SSE. Model
-// changes are written to the workspace's preferred models on the server.
+// changes are saved on the run's chat.
 type clientRun struct {
 	c  *client.Client
 	ws *proto.Workspace
@@ -241,25 +243,31 @@ func (r *clientRun) Config(ctx context.Context) (*config.Config, error) {
 	return cfg, nil
 }
 
-func (r *clientRun) SetModel(ctx context.Context, typ config.SelectedModelType, model config.SelectedModel) error {
-	return r.c.UpdatePreferredModel(ctx, r.ws.ID, config.ScopeWorkspace, typ, model)
-}
-
-func (r *clientRun) DefaultSmallModel(ctx context.Context, providerID string) (*config.SelectedModel, error) {
-	return r.c.GetDefaultSmallModel(ctx, r.ws.ID, providerID)
-}
-
-func (r *clientRun) LastAssistantModel(ctx context.Context, sessionID string) (string, string, error) {
-	msgs, err := r.c.ListMessages(ctx, r.ws.ID, sessionID)
+func (r *clientRun) ChatModel(ctx context.Context, sessionID string) (config.SelectedModel, bool, error) {
+	sess, err := r.c.GetSession(ctx, r.ws.ID, sessionID)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to list messages: %w", err)
+		return config.SelectedModel{}, false, fmt.Errorf("failed to read the chat's model: %w", err)
 	}
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == proto.Assistant && !msgs[i].IsSummaryMessage {
-			return msgs[i].Provider, msgs[i].Model, nil
-		}
+	var m config.SelectedModel
+	if len(sess.Model) == 0 || json.Unmarshal(sess.Model, &m) != nil || m.Provider == "" || m.Model == "" {
+		return config.SelectedModel{}, false, nil
 	}
-	return "", "", nil
+	return m, true, nil
+}
+
+func (r *clientRun) SetChatModel(ctx context.Context, sessionID string, model config.SelectedModel) error {
+	data, err := json.Marshal(model)
+	if err != nil {
+		return err
+	}
+	_, err = r.c.SetSessionModel(ctx, r.ws.ID, sessionID, data)
+	return err
+}
+
+// SetHelperModel refuses: the server's helper model serves every app, so
+// one run cannot change it for itself.
+func (r *clientRun) SetHelperModel(context.Context, config.SelectedModel) error {
+	return errors.New("--small-model needs crush run without a running Crush engine (CRUSH_ENGINE=alone); set the helper model in Settings instead")
 }
 
 func (r *clientRun) UpdateAgent(ctx context.Context) error {

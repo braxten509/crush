@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,8 +21,8 @@ import (
 )
 
 // NonInteractive returns the in-process [noninteractive.Backend] for a
-// `crush run` turn. Model changes are in-memory overrides that are not
-// persisted.
+// `crush run` turn. The chat's model is saved with the chat; a helper model
+// override is in memory only.
 func (app *App) NonInteractive() noninteractive.Backend {
 	return nonInteractive{app: app}
 }
@@ -36,25 +37,38 @@ func (n nonInteractive) Config(context.Context) (*config.Config, error) {
 	return n.app.config.Config(), nil
 }
 
-func (n nonInteractive) SetModel(_ context.Context, typ config.SelectedModelType, model config.SelectedModel) error {
-	n.app.config.OverridePreferredModel(typ, model)
+func (n nonInteractive) ChatModel(ctx context.Context, sessionID string) (config.SelectedModel, bool, error) {
+	sess, err := n.app.Sessions.Get(ctx, sessionID)
+	if err != nil {
+		return config.SelectedModel{}, false, fmt.Errorf("failed to read the chat's model: %w", err)
+	}
+	var m config.SelectedModel
+	if len(sess.Model) == 0 || json.Unmarshal(sess.Model, &m) != nil || m.Provider == "" || m.Model == "" {
+		return config.SelectedModel{}, false, nil
+	}
+	return m, true, nil
+}
+
+// SetChatModel saves model on the chat. It is the owner's pick, so it is
+// also the last pick a new chat starts on.
+func (n nonInteractive) SetChatModel(ctx context.Context, sessionID string, model config.SelectedModel) error {
+	data, err := json.Marshal(model)
+	if err != nil {
+		return err
+	}
+	if _, err := n.app.Sessions.SetModel(ctx, sessionID, data); err != nil {
+		return err
+	}
+	if err := config.WriteLastPick(model); err != nil {
+		slog.Warn("Could not save the last picked model", "error", err)
+	}
 	return nil
 }
 
-func (n nonInteractive) DefaultSmallModel(_ context.Context, providerID string) (*config.SelectedModel, error) {
-	small := n.app.GetDefaultSmallModel(providerID)
-	return &small, nil
-}
-
-func (n nonInteractive) LastAssistantModel(ctx context.Context, sessionID string) (string, string, error) {
-	lastMsg, err := n.app.Messages.GetLastAssistantMessage(ctx, sessionID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", "", nil
-		}
-		return "", "", fmt.Errorf("failed to get last assistant message: %w", err)
-	}
-	return lastMsg.Provider, lastMsg.Model, nil
+// SetHelperModel sets the helper model in memory, for this run only.
+func (n nonInteractive) SetHelperModel(_ context.Context, model config.SelectedModel) error {
+	n.app.config.OverridePreferredModel(config.SelectedModelTypeSmall, model)
+	return nil
 }
 
 func (n nonInteractive) UpdateAgent(ctx context.Context) error {

@@ -102,7 +102,7 @@ func validateMatches(matches []ModelMatch, modelStr, label string) (ModelMatch, 
 }
 
 // ResolveModel resolves a --model style string against the configured
-// providers. label ("large" or "small") prefixes error messages.
+// providers. label ("chat" or "helper") prefixes error messages.
 func ResolveModel(providers map[string]config.ProviderConfig, modelStr, label string) (ModelMatch, error) {
 	return validateMatches(findModels(providers, modelStr), modelStr, label)
 }

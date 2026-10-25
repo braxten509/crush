@@ -1,11 +1,14 @@
 <script>
   // Every sign-in's usage (owner, 2026-10-21, the compact pick): under the
-  // meters, a heading per tool with two or more sign-ins, then one line per
-  // account: its name (a dot on the one in use), the 5-hour and weekly part
-  // left as a small bar and a percent, amber under 30 % and rose under 10 %
-  // as the meters above. Shown only while Settings > Appearance > "Show every
-  // account's usage" is on; lib/stores/accountmeters.svelte.js reads them.
-  import { cliKind } from "../../lib/footer.js";
+  // meters, a heading per tool that reports usage (owner, 2026-10-25: every
+  // tool, one sign-in or many), naming that tool's own spans (5h, Week,
+  // Month, ...), then one line per account: its name (a dot on the one in
+  // use), each span's part left as a small bar and a percent, amber under
+  // 30 % and rose under 10 % as the meters above. The span columns line up
+  // across tools: as many as the widest tool needs, never under two. Shown
+  // only while Settings > Appearance > "Show every account's usage" is on;
+  // lib/stores/accountmeters.svelte.js reads them.
+  import { limitKind } from "../../lib/footer.js";
   import { fallback } from "../../lib/fallback/store.svelte.js";
   import { accountGroups, accountMeters } from "../../lib/stores/accountmeters.svelte.js";
   import { limits } from "../../lib/stores/limits.svelte.js";
@@ -18,22 +21,22 @@
           accounts: fallback.accounts,
           byKind: limits.byKind,
           // The shown chat's agent: a sub-agent's chat marks its own account.
-          inUse: { kind: cliKind(agentNow(), ws.providers) ?? "", account: agentNow()?.model_cfg?.account ?? "" },
+          inUse: { kind: limitKind(agentNow(), ws.providers) ?? "", account: agentNow()?.model_cfg?.account ?? "" },
         })
       : [],
   );
+  const columns = $derived(Math.max(2, ...groups.map((g) => g.spans.length)));
 
   const NOTE = { checking: "checking…", "signed-out": "signed out", error: "can't read" };
 </script>
 
 {#if groups.length > 0}
-  <section class="panel-section accounts" data-section="accounts" aria-label="Accounts">
+  <section class="panel-section accounts" data-section="accounts" aria-label="Accounts" style:--spans={columns}>
     {#each groups as group (group.kind)}
       <div class="group" data-kind={group.kind}>
         <h2 class="head">
           <span class="label">{group.title}</span>
-          <span class="col">5h</span>
-          <span class="col">Week</span>
+          {#each group.spans as span (span)}<span class="col">{span}</span>{/each}
         </h2>
         {#each group.rows as row (row.id)}
           <div class="row" class:idle={row.state === "idle"} data-account={row.id}>
@@ -43,7 +46,7 @@
             {#if NOTE[row.state]}
               <span class="wide">{NOTE[row.state]}</span>
             {:else}
-              {#each [row.five, row.week] as part, at (at)}
+              {#each row.parts as part, at (at)}
                 <span class="part">
                   {#if part}
                     <span class="bar"><span class="fill {part.level}" style:width="{part.left}%"></span></span>
@@ -71,7 +74,7 @@
   .head,
   .row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) calc(78 * var(--px)) calc(78 * var(--px));
+    grid-template-columns: minmax(0, 1fr) repeat(var(--spans), calc(78 * var(--px)));
     column-gap: calc(10 * var(--px));
     align-items: center;
   }
@@ -117,7 +120,7 @@
     white-space: nowrap;
   }
   .wide {
-    grid-column: 2 / 4;
+    grid-column: 2 / -1;
   }
   .part {
     display: flex;

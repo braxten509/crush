@@ -22,17 +22,54 @@ const reading = (kind, account, used5, usedWeek, extra = {}) => ({
 });
 
 describe("account meters", () => {
-  it("lists only tools with two or more sign-ins", () => {
-    expect(listedKinds(accounts)).toEqual(["claude-code"]);
+  it("lists every sign-in tool, and a tool without sign-ins once it has a reading", () => {
+    expect(listedKinds(accounts, {})).toEqual(["claude-code", "codex-cli"]);
+    const never = { "agy-cli": { kind: "agy-cli", state: "error", error: "agy not found", windows: [] } };
+    expect(listedKinds(accounts, never)).toEqual(["claude-code", "codex-cli"]);
+    const read = { "agy-cli": reading("agy-cli", "", 0, 0), "kimi-coding": reading("kimi-coding", "", 0, 0) };
+    expect(listedKinds(accounts, read)).toEqual(["claude-code", "codex-cli", "agy-cli", "kimi-coding"]);
+  });
+
+  it("gives a tool with one sign-in its own group", () => {
+    const byKind = { "codex-cli": reading("codex-cli", "", 29, 60) };
+    const codex = accountGroups({ accounts, byKind, now }).find((g) => g.kind === "codex-cli");
+    expect(codex.title).toBe("Codex");
+    expect(codex.rows.map((r) => [r.name, r.state, r.parts])).toEqual([["Codex 1", "ready", [{ left: 71, level: "" }, { left: 40, level: "" }]]]);
+  });
+
+  it("heads each tool with its own spans, 5h, Week, Month first", () => {
+    const grokAccounts = [...accounts, { id: "", kind: "grok-cli", name: "Grok", signed_in: true }];
+    const byKind = {
+      "grok-cli": { kind: "grok-cli", state: "ready", read_at: "2026-10-21T11:59:00Z", windows: [{ name: "Monthly", used: 42 }] },
+      "opencode-cli": { kind: "opencode-cli", state: "ready", read_at: "2026-10-21T11:59:00Z", windows: [{ name: "Monthly", used: 40 }, { name: "5h", used: 5 }, { name: "Weekly", used: 23 }] },
+    };
+    const groups = accountGroups({ accounts: grokAccounts, byKind, now });
+    expect(groups.map((g) => [g.title, g.spans])).toEqual([
+      ["Claude Code", []],
+      ["Codex", []],
+      ["Grok", ["Month"]],
+      ["OpenCode", ["5h", "Week", "Month"]],
+    ]);
+    expect(groups[3].rows.map((r) => [r.name, r.parts.map((p) => p.left)])).toEqual([["OpenCode", [95, 77, 60]]]);
+  });
+
+  it("shows the lowest model for a tool that counts each model apart", () => {
+    const byKind = {
+      "agy-cli": { kind: "agy-cli", state: "ready", read_at: "2026-10-21T11:59:00Z", windows: [
+        { name: "5h", used: 10, model: "flash" }, { name: "5h", used: 75, model: "pro" }, { name: "Weekly", used: 20, model: "flash" },
+      ] },
+    };
+    const [agy] = accountGroups({ accounts: [], byKind, inUse: { kind: "agy-cli", account: "" }, now });
+    expect([agy.title, agy.spans, agy.rows[0].inUse, agy.rows[0].parts]).toEqual(["Antigravity", ["5h", "Week"], true, [{ left: 25, level: "low" }, { left: 80, level: "" }]]);
   });
 
   it("gives each account its part left, level, and in-use mark", () => {
     const byKind = { "claude-code": reading("claude-code", "", 0, 31), "claude-code#c2": reading("claude-code", "c2", 88, 95) };
     const [group] = accountGroups({ accounts, byKind, inUse: { kind: "claude-code", account: "" }, now });
-    expect(group.title).toBe("Claude Code");
-    expect(group.rows.map((r) => [r.name, r.inUse, r.state, r.five, r.week])).toEqual([
-      ["Main", true, "ready", { left: 100, level: "" }, { left: 69, level: "" }],
-      ["Work", false, "ready", { left: 12, level: "low" }, { left: 5, level: "out" }],
+    expect([group.title, group.spans]).toEqual(["Claude Code", ["5h", "Week"]]);
+    expect(group.rows.map((r) => [r.name, r.inUse, r.state, r.parts])).toEqual([
+      ["Main", true, "ready", [{ left: 100, level: "" }, { left: 69, level: "" }]],
+      ["Work", false, "ready", [{ left: 12, level: "low" }, { left: 5, level: "out" }]],
     ]);
   });
 
@@ -40,7 +77,7 @@ describe("account meters", () => {
     const byKind = { "claude-code#c2": reading("claude-code", "c2", 50, 50, { state: "error", error: "claude login expired" }) };
     const rows = accountGroups({ accounts, byKind, now })[0].rows;
     expect(rows.map((r) => r.state)).toEqual(["checking", "idle"]);
-    expect(rows[1].five).toEqual({ left: 50, level: "" });
+    expect(rows[1].parts).toEqual([{ left: 50, level: "" }, { left: 50, level: "" }]);
   });
 
   it("stops saying checking when the first read failed", () => {
@@ -50,12 +87,12 @@ describe("account meters", () => {
   });
 
   it("names the tools with a signed-in account still checking", () => {
-    const byKind = { "claude-code": reading("claude-code", "", 0, 31) };
+    const byKind = { "claude-code": reading("claude-code", "", 0, 31), "codex-cli": reading("codex-cli", "", 0, 0) };
     expect(checkingKinds(accounts, byKind)).toEqual(["claude-code"]);
     byKind["claude-code#c2"] = reading("claude-code", "c2", 50, 50);
     expect(checkingKinds(accounts, byKind)).toEqual([]);
     const signedOut = accounts.map((a) => (a.id === "c2" ? { ...a, signed_in: false } : a));
-    expect(checkingKinds(signedOut, { "claude-code": reading("claude-code", "", 0, 31) })).toEqual([]);
+    expect(checkingKinds(signedOut, { "claude-code": reading("claude-code", "", 0, 31), "codex-cli": reading("codex-cli", "", 0, 0) })).toEqual([]);
   });
 });
 
@@ -83,7 +120,7 @@ describe("the account meter timer", () => {
     calls.refreshLimits.mockClear();
 
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(calls.refreshLimits).not.toHaveBeenCalled();
+    expect(calls.refreshLimits).not.toHaveBeenCalledWith("claude-code");
     await vi.advanceTimersByTimeAsync(2 * 60_000);
     expect(calls.refreshLimits).toHaveBeenCalledWith("claude-code");
   });

@@ -3,12 +3,12 @@
 // reads that seed the other stores (START-007). Importing it loads every
 // store, so all their event handlers are registered before the first batch.
 import { untrack } from "svelte";
-import { app_info, engine_open, engine_open_folder, engine_retry, engine_show_folder } from "../engine/commands.js";
+import { app_info, engine_leave_folder, engine_open, engine_open_folder, engine_retry, engine_show_folder } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { probeSection } from "../probe.js";
 import { accountPollConnected } from "./accountmeters.svelte.js";
 import { loadLimits, startLimitsPoll, stopLimitsPoll } from "./limits.svelte.js";
-import { listFolders } from "./listfolders.svelte.js";
+import { listFolders, onFolderDropped } from "./listfolders.svelte.js";
 import "./messages.svelte.js";
 import "./prompts.svelte.js";
 import { busy, loadSessions, openLaunchChat, sessions, setJoinWait, showLanding } from "./sessions.svelte.js";
@@ -298,6 +298,20 @@ async function joinMissingFolders() {
     }
   }
 }
+
+// A folder taken off the left list (its ×, here or in another window) lets
+// its engine link go; the one shown stays until the window closes.
+async function leaveFolder(dir) {
+  if (!joinedFolder(dir) || inFolder(dir)) return;
+  try {
+    await engine_leave_folder(dir);
+    delete conn.folders[cleanDir(dir)];
+  } catch (error) {
+    console.error(`could not let ${dir} go`, error?.message ?? error);
+  }
+}
+
+onFolderDropped(leaveFolder);
 
 // A folder a chat is opened in joins as the left list grows, so every folder
 // the list keeps is live whether or not it has been shown.

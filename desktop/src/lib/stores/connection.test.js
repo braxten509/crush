@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   storage: {},
   opened: [],
   shown: [],
+  left: [],
 }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
@@ -50,6 +51,10 @@ vi.mock("../engine/commands.js", () => ({
   engine_show_folder: async (cwd) => {
     h.shown.push(cwd);
     return opened({ cwd, client_id: `client-${cwd}`, workspace: { id: `ws-${cwd}`, path: cwd } });
+  },
+  engine_leave_folder: async (cwd) => {
+    h.left.push(cwd);
+    return null;
   },
   engine_retry: async () => {
     h.retries += 1;
@@ -99,6 +104,7 @@ beforeEach(async () => {
   h.storage = {};
   h.opened.length = 0;
   h.shown.length = 0;
+  h.left.length = 0;
   h.info = { version: "0.1.0", probe: false, fixture: false, cwd: "/tmp/home/proj", session: "", continue_last: false, ui_debug: false, platform: "linux" };
   h.open = async () => opened();
   vi.stubGlobal("requestAnimationFrame", (fn) => setTimeout(() => fn(0), 0));
@@ -510,5 +516,19 @@ describe("several folders at once (owner, 2026-10-22)", () => {
     await routes.getSession("S2");
     const call = h.calls.filter((c) => c.path === "sessions/S2").at(-1);
     expect(call?.dir).toBe("/tmp/home/two");
+  });
+
+  it("a folder taken off the left list lets its engine link go", async () => {
+    const list = await import("./listfolders.svelte.js");
+    list.keepFolders(["/tmp/home/proj", "/tmp/home/two"]);
+    await C.start();
+    await settle();
+    expect(C.joinedFolder("/tmp/home/two")).toBe(true);
+    list.dropFolder("/tmp/home/two");
+    list.dropFolder("/tmp/home/proj");
+    await settle();
+    // The shown folder stays: Rust refuses to let it go.
+    expect(h.left).toEqual(["/tmp/home/two"]);
+    expect(C.joinedFolder("/tmp/home/two")).toBe(false);
   });
 });

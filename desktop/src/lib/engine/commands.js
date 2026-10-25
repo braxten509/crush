@@ -73,6 +73,12 @@ export async function engine_show_folder(cwd) {
   return invoke("engine_show_folder", { cwd });
 }
 
+// Lets a folder the window keeps joined go (its × in the left list): the
+// engine keeps its running work. Rust refuses the folder it shows.
+export async function engine_leave_folder(cwd) {
+  return invoke("engine_leave_folder", { cwd });
+}
+
 
 // Stops the api call with this callId; false when it already ended.
 export async function api_abort(callId) {

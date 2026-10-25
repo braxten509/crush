@@ -42,12 +42,33 @@ export function keepFolders(dirs) {
   if (add.length > 0) write([...listFolders.dirs, ...add]);
 }
 
+const dropped = new Set(); // fn(dir)
+
+// fn(dir) runs for each folder taken off the list, here or in another window.
+export function onFolderDropped(fn) {
+  dropped.add(fn);
+  return () => dropped.delete(fn);
+}
+
+function tellDropped(before) {
+  for (const dir of before) {
+    if (listFolders.dirs.includes(dir)) continue;
+    for (const fn of dropped) fn(dir);
+  }
+}
+
 // The folder heading's ×.
 export function dropFolder(dir) {
   const k = folderKey(dir);
-  if (listFolders.dirs.includes(k)) write(listFolders.dirs.filter((d) => d !== k));
+  if (!listFolders.dirs.includes(k)) return;
+  const before = listFolders.dirs;
+  write(listFolders.dirs.filter((d) => d !== k));
+  tellDropped(before);
 }
 
 globalThis.addEventListener?.("storage", (event) => {
-  if (event.key === KEY) listFolders.dirs = read();
+  if (event.key !== KEY) return;
+  const before = listFolders.dirs;
+  listFolders.dirs = read();
+  tellDropped(before);
 });

@@ -11,8 +11,8 @@ import (
 // (adb starting its own server, a `nohup … &`). Crush lists them but had no
 // check-ins for them (owner, 2026-10-20: "the 2 minute reminder never
 // came"), so a hub scans for them and lists each in its chat's check-ins
-// while it runs: a stray holding a local port as a service (three notes,
-// then quiet), any other as work.
+// while it runs: a stray holding a local port as a service (named in
+// other work's notes, never sent one alone), any other as work.
 
 // strayScanInterval is how often a hub looks for stray processes.
 const strayScanInterval = 10 * time.Second

@@ -276,10 +276,10 @@ func TestCheckInInstructionsNameTheInterval(t *testing.T) {
 	require.Contains(t, fmtCheckIn(time.Minute), "every minute")
 }
 
-// While only services run, the note names them and comes three times, then
-// stops until other work starts; other work's notes name the services in
-// one line, without their output.
-func TestServiceOnlyCheckInsStopAfterThree(t *testing.T) {
+// While only services run, no note comes (owner, 2026-10-25: no "Still
+// running" notice for servers); other work's notes name the services in one
+// line, without their output.
+func TestServiceOnlyCheckInsStayQuiet(t *testing.T) {
 	h, calls := checkInTest(t)
 	h.checkInEvery = 100 * time.Millisecond
 	session, err := h.c.sessions.Create(t.Context(), "services")
@@ -289,33 +289,22 @@ func TestServiceOnlyCheckInsStopAfterThree(t *testing.T) {
 	removeService := h.addCheckIn(session.ID, service)
 	defer removeService()
 
-	// The notes come every 100 ms: wait for three (the limit only matters
-	// if they stop early), then three rounds of quiet show no fourth.
-	quietNotes := func() int {
-		count := 0
-		limit := time.After(2 * time.Second)
-		var quiet <-chan time.Time
+	// Three rounds pass with no note.
+	quiet := func() {
+		limit := time.After(350 * time.Millisecond)
 		for {
-			if count == serviceOnlyCheckIns && quiet == nil {
-				quiet = time.After(300 * time.Millisecond)
-			}
 			select {
 			case call := <-calls:
 				if strings.Contains(call.Prompt, "[Job A]") {
 					continue // on its way before Job A ended
 				}
-				require.Contains(t, call.Prompt, "1 service still running in the background: [Job S] server, up")
-				require.Contains(t, call.Prompt, "crush bg --stop")
-				require.NotContains(t, call.Prompt, "noisy log")
-				count++
+				t.Fatalf("a note while only services run: %s", call.Prompt)
 			case <-limit:
-				return count
-			case <-quiet:
-				return count
+				return
 			}
 		}
 	}
-	require.Equal(t, serviceOnlyCheckIns, quietNotes(), "three notes, then quiet")
+	quiet()
 
 	removeJob := h.addCheckIn(session.ID, fixedWork("Job A", "build", "a out", time.Now()))
 	select {
@@ -328,13 +317,13 @@ func TestServiceOnlyCheckInsStopAfterThree(t *testing.T) {
 		t.Fatal("no check-in once other work started")
 	}
 	removeJob()
-	require.Equal(t, serviceOnlyCheckIns, quietNotes(), "other work starting brings the three notes back")
+	quiet()
 }
 
 // Programs a chat left running outside crush bg get check-ins too (owner,
 // 2026-10-20: "the 2 minute reminder never came"): a plain one as work,
-// with how to stop it, and one on a local port as a service, three notes
-// and then quiet; each leaves when a scan no longer finds it.
+// with how to stop it, and one on a local port as a service, named in other
+// work's notes but never sent one alone; each leaves when a scan no longer finds it.
 func TestStrayProcessesGetCheckIns(t *testing.T) {
 	h, calls := checkInTest(t)
 	h.checkInEvery = 100 * time.Millisecond
@@ -356,32 +345,21 @@ func TestStrayProcessesGetCheckIns(t *testing.T) {
 		t.Fatal("no check-in for a stray process")
 	}
 
+	// The server alone gets no note: three rounds pass quietly.
 	h.syncStrays(known, []Server{adb}, nil)
-	// Three notes (the limit only matters if they stop early), then three
-	// rounds of quiet show no fourth.
-	notes := 0
-	limit := time.After(2 * time.Second)
-	var quiet <-chan time.Time
+	limit := time.After(350 * time.Millisecond)
 collect:
 	for {
-		if notes == serviceOnlyCheckIns && quiet == nil {
-			quiet = time.After(300 * time.Millisecond)
-		}
 		select {
 		case call := <-calls:
 			if strings.Contains(call.Prompt, "[PID 202]") {
 				continue // on its way before the program ended
 			}
-			require.Contains(t, call.Prompt, "[PID 101] adb · 5037")
-			require.Contains(t, call.Prompt, "kill <PID>")
-			notes++
+			t.Fatalf("a note for a stray server alone: %s", call.Prompt)
 		case <-limit:
-			break collect
-		case <-quiet:
 			break collect
 		}
 	}
-	require.Equal(t, serviceOnlyCheckIns, notes, "a stray server gets three notes, then quiet")
 
 	h.syncStrays(known, nil, nil)
 	require.Empty(t, known)

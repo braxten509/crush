@@ -19,17 +19,14 @@ import (
 // the work is. Each note is delivered like a finished job's result. The next
 // one waits until the agent has had the previous one, so they never pile up
 // behind a busy agent. Running services are named in one line at the end;
-// when only services run, the note still comes, serviceOnlyCheckIns times,
-// then stops until other work starts.
+// when only services run, no note comes (owner, 2026-10-25: no "Still
+// running" notice for servers).
 
 // checkInTailLines and checkInTotalBytes bound the output quoted in one
 // check-in; several running items share them.
 const (
 	checkInTailLines  = 15
 	checkInTotalBytes = 3000
-	// serviceOnlyCheckIns is how many notes in a row a session gets while
-	// only services run (owner, 2026-10-19: three, then quiet).
-	serviceOnlyCheckIns = 3
 )
 
 func (h *taskHub) checkInInterval() time.Duration {
@@ -68,9 +65,6 @@ type checkInWork struct {
 type sessionCheckIns struct {
 	work map[int]checkInWork
 	done chan struct{}
-	// serviceNotes counts the notes sent in a row while only services ran;
-	// other work starting resets it.
-	serviceNotes int
 }
 
 // addCheckIn lists work in its session's check-ins until remove is called,
@@ -93,9 +87,6 @@ func (h *taskHub) addCheckIn(sessionID string, w checkInWork) (remove func()) {
 	h.checkInSeq++
 	key := h.checkInSeq
 	s.work[key] = w
-	if !w.service {
-		s.serviceNotes = 0
-	}
 	return func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
@@ -146,22 +137,12 @@ func (h *taskHub) runCheckIns(sessionID string, s *sessionCheckIns) {
 
 // checkInSnapshot lists the session's running work, oldest first, a
 // context of one that is still live, and whether a note about it is due:
-// always while other work runs, and serviceOnlyCheckIns times in a row
-// while only services do. Both are read under one lock, so work added in
-// between (which resets the count) can't let an extra service note out.
+// only while work other than services runs.
 func (h *taskHub) checkInSnapshot(s *sessionCheckIns) ([]checkInWork, context.Context, bool) {
 	h.mu.Lock()
 	work := slices.Collect(maps.Values(s.work))
-	due := true
-	switch {
-	case slices.ContainsFunc(work, func(w checkInWork) bool { return !w.service }):
-		s.serviceNotes = 0
-	case s.serviceNotes >= serviceOnlyCheckIns:
-		due = false
-	default:
-		s.serviceNotes++
-	}
 	h.mu.Unlock()
+	due := slices.ContainsFunc(work, func(w checkInWork) bool { return !w.service })
 	slices.SortFunc(work, func(a, b checkInWork) int { return a.started.Compare(b.started) })
 	for _, w := range work {
 		if w.ctx.Err() == nil {
@@ -206,7 +187,7 @@ func checkInLoop(ctx context.Context, interval time.Duration, done <-chan struct
 // checkInNotification is one task-result message with status running
 // about all of a session's running work, so the chat shows it as a
 // one-line notice like other job messages. Services are named in one line
-// at the end. It is empty without work.
+// at the end. It is empty without work other than services.
 func checkInNotification(work []checkInWork, now time.Time) string {
 	var tasks, services []checkInWork
 	for _, w := range work {
@@ -217,7 +198,7 @@ func checkInNotification(work []checkInWork, now time.Time) string {
 		}
 	}
 	if len(tasks) == 0 {
-		return serviceNotification(services, now)
+		return ""
 	}
 	// The work shares one budget, so the note stays the same size however
 	// much is running.
@@ -242,24 +223,6 @@ func checkInNotification(work []checkInWork, now time.Time) string {
 		fmt.Fprintf(&b, "\n%s still running in the background: %s\n", servicesCount(len(services)), serviceList(services, now))
 	}
 	return taskResult{ID: id, Name: name, Status: string(TaskRunning), Body: strings.TrimSuffix(b.String(), "\n")}.String()
-}
-
-// serviceNotification is the note while only services run.
-func serviceNotification(services []checkInWork, now time.Time) string {
-	if len(services) == 0 {
-		return ""
-	}
-	name, id := servicesCount(len(services)), ""
-	if len(services) == 1 {
-		name, id = services[0].name, services[0].id
-	}
-	stop := "Stop any you no longer need with crush bg --stop <ID>."
-	if slices.ContainsFunc(services, func(w checkInWork) bool { return strings.HasPrefix(w.id, "PID ") }) {
-		// Strays have no job to stop; see stray_check_ins.go.
-		stop = "Stop any you no longer need with crush bg --stop <ID>, or kill <PID> for one listed by PID."
-	}
-	body := fmt.Sprintf("Automatic check: %s still running in the background: %s\n%s", servicesCount(len(services)), serviceList(services, now), stop)
-	return taskResult{ID: id, Name: name, Status: string(TaskRunning), Body: body}.String()
 }
 
 func servicesCount(n int) string {
@@ -336,5 +299,5 @@ func fmtCheckIn(interval time.Duration) string {
 	if minutes := int(interval / time.Minute); minutes != 1 {
 		every = fmt.Sprintf("every %d minutes", minutes)
 	}
-	return fmt.Sprintf(` While your background jobs and sub-agents run, Crush also sends you one <%s> message with status %s %s that lists all of them: an automatic progress check with each one's latest output. Answer each one with a short progress update for the user (percent of the agreed work done and what is running now), then keep working or end your turn. Don't stop, restart or poll the work because of a check-in; act only if its output shows the work is broken. The same message names your running services; while only services run it comes %d times, then stops until other work starts. Stop each service with crush bg --stop <ID> once it is no longer needed.`, TaskNotificationTag, TaskRunning, every, serviceOnlyCheckIns)
+	return fmt.Sprintf(` While your background jobs and sub-agents run, Crush also sends you one <%s> message with status %s %s that lists all of them: an automatic progress check with each one's latest output. Answer each one with a short progress update for the user (percent of the agreed work done and what is running now), then keep working or end your turn. Don't stop, restart or poll the work because of a check-in; act only if its output shows the work is broken. The same message names your running services; while only services run it does not come. Stop each service with crush bg --stop <ID> once it is no longer needed.`, TaskNotificationTag, TaskRunning, every)
 }

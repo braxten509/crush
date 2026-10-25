@@ -17,8 +17,6 @@ type Agent struct {
 	// This is the id of the system prompt used by the agent
 	Disabled bool `json:"disabled,omitempty"`
 
-	Model SelectedModelType `json:"model" jsonschema:"required,description=The model type to use for this agent,enum=large,enum=small,default=large"`
-
 	// The available tools for the agent
 	//  if this is nil, all tools are available
 	AllowedTools []string `json:"allowed_tools,omitempty"`
@@ -119,7 +117,6 @@ func (c *Config) SetupAgents() {
 			ID:           AgentCoder,
 			Name:         "Coder",
 			Description:  "An agent that helps with executing coding tasks.",
-			Model:        SelectedModelTypeLarge,
 			ContextPaths: c.Options.ContextPaths,
 			AllowedTools: allowedTools,
 		},
@@ -128,7 +125,6 @@ func (c *Config) SetupAgents() {
 			ID:           AgentTask,
 			Name:         "Task",
 			Description:  "An agent that helps with searching for context and finding implementation details.",
-			Model:        SelectedModelTypeLarge,
 			ContextPaths: c.Options.ContextPaths,
 			AllowedTools: resolveReadOnlyTools(allowedTools),
 			// NO MCPs or LSPs by default
@@ -139,7 +135,6 @@ func (c *Config) SetupAgents() {
 			ID:           AgentPlan,
 			Name:         "Plan",
 			Description:  "An agent that performs deep analysis and prepares implementation plans without modifying files.",
-			Model:        SelectedModelTypeLarge,
 			ContextPaths: c.Options.ContextPaths,
 			AllowedTools: resolvePlanTools(allowedTools),
 			// NO MCPs or LSPs by default

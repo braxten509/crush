@@ -42,9 +42,11 @@ func (c *Client) MoveToBackground(ctx context.Context, workspaceID, sessionID st
 	return res.Moved, err
 }
 
-// AgentCapabilities tells what the workspace's current coder model can do.
-func (c *Client) AgentCapabilities(ctx context.Context, workspaceID string) (proto.AgentCapabilities, error) {
-	return newCall(c, rpc.AgentCapabilities, "get agent capabilities", "agent capabilities").at(workspaceID).get(ctx)
+// AgentCapabilities tells what chat sessionID's own model can do; "" asks
+// for the last pick.
+func (c *Client) AgentCapabilities(ctx context.Context, workspaceID, sessionID string) (proto.AgentCapabilities, error) {
+	return newCall(c, rpc.AgentCapabilities, "get agent capabilities", "agent capabilities").at(workspaceID).
+		with(url.Values{"session_id": []string{sessionID}}).get(ctx)
 }
 
 // Limits returns every AI tool's usage limits as the engine last read them.

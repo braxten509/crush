@@ -26,17 +26,20 @@ import (
 type ModelType int
 
 const (
-	ModelTypeLarge ModelType = iota
-	ModelTypeSmall
+	// ModelTypeChat picks the shown chat's own model (the last pick with no
+	// chat open).
+	ModelTypeChat ModelType = iota
+	// ModelTypeHelper picks the helper model (titles, branch summaries).
+	ModelTypeHelper
 )
 
 // String returns the string representation of the [ModelType].
 func (mt ModelType) String() string {
 	switch mt {
-	case ModelTypeLarge:
-		return "Large Task"
-	case ModelTypeSmall:
-		return "Small Task"
+	case ModelTypeChat:
+		return "Chat"
+	case ModelTypeHelper:
+		return "Helper (titles)"
 	default:
 		return "Unknown"
 	}
@@ -45,9 +48,9 @@ func (mt ModelType) String() string {
 // Config returns the corresponding config model type.
 func (mt ModelType) Config() config.SelectedModelType {
 	switch mt {
-	case ModelTypeLarge:
-		return config.SelectedModelTypeLarge
-	case ModelTypeSmall:
+	case ModelTypeChat:
+		return config.SelectedModelTypeChat
+	case ModelTypeHelper:
 		return config.SelectedModelTypeSmall
 	default:
 		return ""
@@ -57,10 +60,10 @@ func (mt ModelType) Config() config.SelectedModelType {
 // Placeholder returns the input placeholder for the model type.
 func (mt ModelType) Placeholder() string {
 	switch mt {
-	case ModelTypeLarge:
-		return largeModelInputPlaceholder
-	case ModelTypeSmall:
-		return smallModelInputPlaceholder
+	case ModelTypeChat:
+		return chatModelInputPlaceholder
+	case ModelTypeHelper:
+		return helperModelInputPlaceholder
 	default:
 		return ""
 	}
@@ -68,8 +71,8 @@ func (mt ModelType) Placeholder() string {
 
 const (
 	onboardingModelInputPlaceholder = "Find your fave"
-	largeModelInputPlaceholder      = "Choose a model for large, complex tasks"
-	smallModelInputPlaceholder      = "Choose a model for small, simple tasks"
+	chatModelInputPlaceholder       = "Choose a model for this chat"
+	helperModelInputPlaceholder     = "Choose a model for titles and summaries"
 )
 
 const defaultModelsDialogMaxWidth = 73
@@ -214,10 +217,10 @@ func (m *Models) HandleMsg(msg tea.Msg) dialog.Action {
 			if m.isOnboarding {
 				break
 			}
-			if m.modelType == ModelTypeLarge {
-				m.modelType = ModelTypeSmall
+			if m.modelType == ModelTypeChat {
+				m.modelType = ModelTypeHelper
 			} else {
-				m.modelType = ModelTypeLarge
+				m.modelType = ModelTypeChat
 			}
 			if err := m.setProviderItems(); err != nil {
 				return util.ReportError(err)
@@ -248,20 +251,20 @@ func (m *Models) Cursor() *tea.Cursor {
 func (m *Models) modelTypeRadioView() string {
 	t := m.com.Styles
 	textStyle := t.Radio.Label
-	largeRadioStyle := t.Radio.Off
-	smallRadioStyle := t.Radio.Off
-	if m.modelType == ModelTypeLarge {
-		largeRadioStyle = t.Radio.On
+	chatRadioStyle := t.Radio.Off
+	helperRadioStyle := t.Radio.Off
+	if m.modelType == ModelTypeChat {
+		chatRadioStyle = t.Radio.On
 	} else {
-		smallRadioStyle = t.Radio.On
+		helperRadioStyle = t.Radio.On
 	}
 
-	largeRadio := largeRadioStyle.Padding(0, 1).Render()
-	smallRadio := smallRadioStyle.Padding(0, 1).Render()
+	chatRadio := chatRadioStyle.Padding(0, 1).Render()
+	helperRadio := helperRadioStyle.Padding(0, 1).Render()
 
 	return fmt.Sprintf("%s%s  %s%s",
-		largeRadio, textStyle.Render(ModelTypeLarge.String()),
-		smallRadio, textStyle.Render(ModelTypeSmall.String()))
+		chatRadio, textStyle.Render(ModelTypeChat.String()),
+		helperRadio, textStyle.Render(ModelTypeHelper.String()))
 }
 
 // Draw implements [Dialog].
@@ -360,10 +363,16 @@ func (m *Models) setProviderItems() error {
 		return fmt.Errorf("failed to get providers: %w", err)
 	}
 
+	// The chat tab marks the shown chat's own model; the helper tab the
+	// helper model set in config.
+	currentModel := cfg.Models[config.SelectedModelTypeSmall]
+	if m.modelType != ModelTypeHelper {
+		currentModel, _, _, _ = m.com.ChatModel()
+	}
 	b := &modelGroupsBuilder{
 		t:            m.com.Styles,
 		modelType:    m.modelType,
-		currentModel: cfg.Models[selectedType],
+		currentModel: currentModel,
 		itemsMap:     make(map[string]*ModelItem),
 		groups:       []ModelGroup{},
 	}

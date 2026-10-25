@@ -74,14 +74,10 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 	titleSaved = true
 }
 
-// streamTitle asks the small model, then the large one, for a title. It
-// returns the first complete response and the model that produced it, or
-// false when every model failed or ran out of tokens.
+// streamTitle asks the helper model, then the chat's own model (owner's
+// D2a), for a title. It returns the first complete response and the model
+// that produced it, or false when every model failed or ran out of tokens.
 func (a *sessionAgent) streamTitle(ctx context.Context, sessionID, userPrompt string) (*fantasy.AgentResult, Model, bool) {
-	smallModel := a.smallModel.Get()
-	largeModel := a.largeModel.Get()
-	systemPromptPrefix := a.systemPromptPrefix.Get()
-
 	newAgent := func(m fantasy.LanguageModel, p []byte, tok int64) fantasy.Agent {
 		return fantasy.NewAgent(
 			m,
@@ -91,39 +87,47 @@ func (a *sessionAgent) streamTitle(ctx context.Context, sessionID, userPrompt st
 		)
 	}
 
-	streamCall := fantasy.AgentStreamCall{
-		Prompt:  fmt.Sprintf("Generate a concise title for the following content:\n\n%s\n <think>\n\n</think>", userPrompt),
-		Headers: sessionHeaders(sessionID),
-		PrepareStep: func(callCtx context.Context, opts fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-			prepared.Messages = opts.Messages
-			if systemPromptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{
-					fantasy.NewSystemMessage(systemPromptPrefix),
-				}, prepared.Messages...)
-			}
-			return callCtx, prepared, nil
-		},
+	// Each model gets the system prompt prefix its own provider asks for.
+	streamCall := func(systemPromptPrefix string) fantasy.AgentStreamCall {
+		return fantasy.AgentStreamCall{
+			Prompt:  fmt.Sprintf("Generate a concise title for the following content:\n\n%s\n <think>\n\n</think>", userPrompt),
+			Headers: sessionHeaders(sessionID),
+			PrepareStep: func(callCtx context.Context, opts fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+				prepared.Messages = opts.Messages
+				if systemPromptPrefix != "" {
+					prepared.Messages = append([]fantasy.Message{
+						fantasy.NewSystemMessage(systemPromptPrefix),
+					}, prepared.Messages...)
+				}
+				return callCtx, prepared, nil
+			},
+		}
 	}
 
 	type modelAttempt struct {
 		name  string
-		model Model
+		model func() (Model, error)
 	}
 	attempts := []modelAttempt{
-		{"small", smallModel},
-		{"large", largeModel},
+		{"helper", func() (Model, error) { return a.helperModel.Get(), nil }},
+		{"chat's own", func() (Model, error) { return a.ChatModel(ctx, sessionID) }},
 	}
 
 	for _, attempt := range attempts {
-		tok := int64(40)
-		if attempt.model.CatwalkCfg.CanReason {
-			tok = attempt.model.CatwalkCfg.DefaultMaxTokens
+		model, err := attempt.model()
+		if err != nil || model.Model == nil {
+			slog.Error("No "+attempt.name+" model for the title; trying next", "err", err)
+			continue
 		}
-		agent := newAgent(attempt.model.Model, titlePrompt, tok)
-		resp, err := agent.Stream(ctx, streamCall)
+		tok := int64(40)
+		if model.CatwalkCfg.CanReason {
+			tok = model.CatwalkCfg.DefaultMaxTokens
+		}
+		agent := newAgent(model.Model, titlePrompt, tok)
+		resp, err := agent.Stream(ctx, streamCall(a.promptPrefixFor(model)))
 		if err == nil && resp.Response.FinishReason != fantasy.FinishReasonLength {
-			slog.Debug("Generated title with " + attempt.name + " model")
-			return resp, attempt.model, true
+			slog.Debug("Generated title with the " + attempt.name + " model")
+			return resp, model, true
 		}
 		if err != nil {
 			slog.Error("Error generating title with "+attempt.name+" model; trying next", "err", err)

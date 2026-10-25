@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -150,24 +151,30 @@ func TestKillJobOtherChatRefused(t *testing.T) {
 		20*time.Second, 20*time.Millisecond, "the job ends")
 }
 
-// modelCoordinator is a coordinator that only reports its model.
-type modelCoordinator struct {
-	agent.Coordinator
-	model agent.Model
+// chatSessions is a session service whose chats are named by their ID and
+// carry the given models.
+func chatSessions(t *testing.T, models map[string]config.SelectedModel) *stubSessions {
+	t.Helper()
+	s := &stubSessions{}
+	for id, m := range models {
+		data, err := json.Marshal(m)
+		require.NoError(t, err)
+		s.all = append(s.all, session.Session{ID: id, Model: data})
+	}
+	return s
 }
 
-func (c modelCoordinator) Model() agent.Model { return c.model }
-
 // TestAgentCapabilitiesRoute: can_background is the terminal's Ctrl+B hint
-// for the coder model's kind (engine-design.md 5.4).
+// for the asked chat's model kind (engine-design.md 5.4).
 func TestAgentCapabilitiesRoute(t *testing.T) {
+	t.Setenv("CRUSH_GLOBAL_DATA", t.TempDir())
 	h := newE2EHarness(t)
 	path := "/v1/workspaces/" + h.workspace.ID + "/agent/capabilities"
 
 	got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path, nil, http.StatusOK)
-	require.Equal(t, proto.AgentCapabilities{}, got, "no coder: no kind, nothing moves")
+	require.Equal(t, proto.AgentCapabilities{}, got, "no chat and no last pick: no kind, nothing moves")
 
-	for _, tc := range []struct {
+	cases := []struct {
 		provider string
 		want     bool
 	}{
@@ -178,10 +185,15 @@ func TestAgentCapabilitiesRoute(t *testing.T) {
 		{string(config.TypeAGYCLI), false},
 		{config.AbacusProviderID, true},
 		{"openai", false},
-	} {
-		h.app.AgentCoordinator = modelCoordinator{model: agent.Model{ModelCfg: config.SelectedModel{Provider: tc.provider, Model: "m"}}}
-		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path, nil, http.StatusOK)
-		require.Equal(t, tc.provider, got.Kind, "the kind is the coder model's provider, as the hint reads it")
+	}
+	chats := map[string]config.SelectedModel{}
+	for _, tc := range cases {
+		chats[tc.provider] = config.SelectedModel{Provider: tc.provider, Model: "m"}
+	}
+	h.app.Sessions = chatSessions(t, chats)
+	for _, tc := range cases {
+		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"?session_id="+tc.provider, nil, http.StatusOK)
+		require.Equal(t, tc.provider, got.Kind, "the kind is the chat model's provider, as the hint reads it")
 		require.Equal(t, tc.want, got.CanBackground, tc.provider)
 		require.Equal(t, cliagent.CanBackground(catwalk.Type(got.Kind)) || got.Kind == config.AbacusProviderID, got.CanBackground)
 	}

@@ -3,6 +3,8 @@ package server
 import (
 	"net/http"
 
+	"github.com/charmbracelet/crush/internal/backend"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/skills"
@@ -21,9 +23,13 @@ func (c *controllerV1) removeConfigField(r *http.Request, req proto.ConfigRemove
 	return rpc.Empty{}, c.backend.RemoveConfigFieldAs(r.PathValue("id"), secureLocalOnly(r) == nil, req.Scope, req.Key)
 }
 
-// updatePreferredModel sets the preferred model.
-func (c *controllerV1) updatePreferredModel(r *http.Request, req proto.ConfigModelRequest) (rpc.Empty, error) {
-	return rpc.Empty{}, c.backend.UpdatePreferredModel(r.PathValue("id"), req.Scope, req.ModelType, req.Model)
+// setHelperModel sets the helper model. Each chat owns its model, so any
+// other model type is refused.
+func (c *controllerV1) setHelperModel(r *http.Request, req proto.ConfigModelRequest) (rpc.Empty, error) {
+	if req.ModelType != config.SelectedModelTypeSmall {
+		return rpc.Empty{}, badRequest(backend.ErrChatOwnsModel.Error())
+	}
+	return rpc.Empty{}, c.backend.SetHelperModel(r.PathValue("id"), req.Scope, req.Model)
 }
 
 // setCompactMode sets compact mode.

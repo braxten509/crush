@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
@@ -153,16 +152,6 @@ func (c *Client) RecallAgentSessionQueuedPrompt(ctx context.Context, id, session
 func (c *Client) RunShellCommand(ctx context.Context, id, sessionID, command string, termWidth int, isFirstMessage bool) (proto.ShellCommandResponse, error) {
 	return newCall(c, rpc.RunShellCommand, "run shell command", "shell command response").at(id, sessionID).
 		do(ctx, proto.ShellCommandRequest{Command: command, TermWidth: termWidth, IsFirstMessage: isFirstMessage})
-}
-
-// GetDefaultSmallModel retrieves the default small model for a provider.
-func (c *Client) GetDefaultSmallModel(ctx context.Context, id string, providerID string) (*config.SelectedModel, error) {
-	model, err := newCall(c, rpc.DefaultSmallModel, "get default small model", "default small model").at(id).
-		with(url.Values{"provider_id": []string{providerID}}).get(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &model, nil
 }
 
 // GrantPermission grants a permission on a workspace. The returned

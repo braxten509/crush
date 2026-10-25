@@ -11,6 +11,7 @@ import { queueRows } from "../composer/trayrows.js";
 import { areaEdit, areaState } from "../kit/areakeys.js";
 import { applyEdit } from "../kit/fieldkeys.js";
 import { bindKey } from "../keys.js";
+import { agentNow } from "../live/helpers.svelte.js";
 import { probeSection } from "../probe.js";
 import * as C from "../stores/composer.svelte.js";
 import { visibleItems } from "../stores/queue.svelte.js";
@@ -251,7 +252,7 @@ probeSection(
       todos_open: todos.open,
       queue: queueRows(queued()),
       slot: ui.slot && { kind: ui.slot.kind, buttons: C.composer.slotButtons.map((b) => ({ label: b.label, selected: b.selected })) },
-      model: modelButtonText(ws.agent, ws.config?.options?.tui?.composer_footer),
+      model: modelButtonText(agentNow(), ws.config?.options?.tui?.composer_footer),
       input: C.composer.input,
       yolo: C.composer.yolo,
       switching: C.composer.switching,

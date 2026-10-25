@@ -43,8 +43,17 @@ func (s SelectedModelType) String() string {
 }
 
 const (
-	SelectedModelTypeLarge SelectedModelType = "large"
+	// SelectedModelTypeChat names the chats' picks: the picker's chat list
+	// and its recent list (kept as "large" in the files). There is no chat
+	// model in Models: every chat owns its model (owner, 2026-10-24).
+	SelectedModelTypeChat SelectedModelType = "large"
+	// SelectedModelTypeSmall is the helper model (titles, branch summaries,
+	// web fetches), set in Settings.
 	SelectedModelTypeSmall SelectedModelType = "small"
+
+	// legacyChatModelKey is where older files kept a folder-wide model; it
+	// is read once (takeLegacyChatModel) and never written.
+	legacyChatModelKey SelectedModelType = "large"
 )
 
 type SelectedModel struct {
@@ -94,8 +103,12 @@ type SelectedModel struct {
 type Config struct {
 	Schema string `json:"$schema,omitempty"`
 
-	// We currently only support large/small as values here.
-	Models map[SelectedModelType]SelectedModel `json:"models,omitempty" jsonschema:"description=Model configurations for different model types,example={\"large\":{\"model\":\"gpt-4o\",\"provider\":\"openai\"}}"`
+	// Only the helper model ("small") lives here; each chat owns its model.
+	Models map[SelectedModelType]SelectedModel `json:"models,omitempty" jsonschema:"description=The helper model (small) for titles and summaries,example={\"small\":{\"model\":\"gpt-4o-mini\",\"provider\":\"openai\"}}"`
+
+	// startModel is the model a new chat starts on before any pick (an old
+	// file's models.large, else the default); see StartModel.
+	startModel *SelectedModel
 
 	// Recently used models stored in the data directory config.
 	RecentModels map[SelectedModelType][]SelectedModel `json:"recent_models,omitempty" jsonschema:"-"`
@@ -263,41 +276,6 @@ func (c *Config) IsModelAvailable(provider, model string) bool {
 		}
 	}
 	return false
-}
-
-func (c *Config) GetProviderForModel(modelType SelectedModelType) *ProviderConfig {
-	model, ok := c.Models[modelType]
-	if !ok {
-		return nil
-	}
-	if providerConfig, ok := c.Providers.Get(model.Provider); ok {
-		return &providerConfig
-	}
-	return nil
-}
-
-func (c *Config) GetModelByType(modelType SelectedModelType) *catwalk.Model {
-	model, ok := c.Models[modelType]
-	if !ok {
-		return nil
-	}
-	return c.GetModel(model.Provider, model.Model)
-}
-
-func (c *Config) LargeModel() *catwalk.Model {
-	model, ok := c.Models[SelectedModelTypeLarge]
-	if !ok {
-		return nil
-	}
-	return c.GetModel(model.Provider, model.Model)
-}
-
-func (c *Config) SmallModel() *catwalk.Model {
-	model, ok := c.Models[SelectedModelTypeSmall]
-	if !ok {
-		return nil
-	}
-	return c.GetModel(model.Provider, model.Model)
 }
 
 const maxRecentModelsPerType = 5

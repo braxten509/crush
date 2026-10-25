@@ -42,11 +42,8 @@ func TestSetProviderItems(t *testing.T) {
 
 	cfg := &config.Config{
 		Options: &config.Options{DisableProviderAutoUpdate: true},
-		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Provider: "anthropic", Model: "claude-b"},
-		},
 		RecentModels: map[config.SelectedModelType][]config.SelectedModel{
-			config.SelectedModelTypeLarge: {
+			config.SelectedModelTypeChat: {
 				{Provider: "openai", Model: "sub-1"},
 				{Provider: "gone", Model: "nope"},
 				{Provider: "anthropic", Model: "claude-a"},
@@ -72,10 +69,13 @@ func TestSetProviderItems(t *testing.T) {
 	ws := &modelsWorkspace{cfg: cfg, fields: map[string]any{}}
 	sty := styles.CharmtonePantera()
 	m := &Models{
-		com:       &common.Common{Workspace: ws, Styles: &sty},
+		com: &common.Common{Workspace: ws, Styles: &sty, ShownModel: func() (config.SelectedModel, bool) {
+			// The shown chat's own model is the one marked.
+			return config.SelectedModel{Provider: "anthropic", Model: "claude-b"}, true
+		}},
 		list:      NewModelsList(&sty),
 		input:     textinput.New(),
-		modelType: ModelTypeLarge,
+		modelType: ModelTypeChat,
 		providers: []catwalk.Provider{
 			{ID: "openai", Name: "OpenAI", Models: []catwalk.Model{{ID: "gpt-a", Name: "GPT A"}}},
 			{ID: "anthropic", Name: "Anthropic", Models: []catwalk.Model{{ID: "claude-a", Name: "Claude A"}, {ID: "claude-b", Name: "Claude B"}}},
@@ -141,7 +141,7 @@ func TestSetProviderItemsKeepsCatalogNames(t *testing.T) {
 		com:       &common.Common{Workspace: &modelsWorkspace{cfg: cfg, fields: map[string]any{}}, Styles: &sty},
 		list:      NewModelsList(&sty),
 		input:     textinput.New(),
-		modelType: ModelTypeLarge,
+		modelType: ModelTypeChat,
 		providers: []catwalk.Provider{
 			{ID: "anthropic", Name: "Anthropic", Models: []catwalk.Model{{ID: "claude-a", Name: "Claude A"}}},
 		},
@@ -181,7 +181,7 @@ func TestCustomProviderGroupsAreSorted(t *testing.T) {
 		com:       &common.Common{Workspace: &modelsWorkspace{cfg: cfg, fields: map[string]any{}}, Styles: &sty},
 		list:      NewModelsList(&sty),
 		input:     textinput.New(),
-		modelType: ModelTypeLarge,
+		modelType: ModelTypeChat,
 	}
 	for range 5 {
 		require.NoError(t, m.setProviderItems())

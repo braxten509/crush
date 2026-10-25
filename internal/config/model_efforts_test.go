@@ -27,8 +27,8 @@ func TestEachModelRemembersItsEffort(t *testing.T) {
 	dir := t.TempDir()
 	store := testStoreWithPath(effortsConfig(), dir)
 
-	require.NoError(t, store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, SelectedModel{Provider: "claude-code", Model: "opus", ReasoningEffort: "max"}))
-	require.NoError(t, store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, SelectedModel{Provider: "claude-code", Model: "sonnet", ReasoningEffort: "low"}))
+	require.NoError(t, store.RecordChatPick(SelectedModel{Provider: "claude-code", Model: "opus", ReasoningEffort: "max"}))
+	require.NoError(t, store.RecordChatPick(SelectedModel{Provider: "claude-code", Model: "sonnet", ReasoningEffort: "low"}))
 
 	cfg := store.Config()
 	require.Equal(t, "max", cfg.ModelEffort("claude-code", "opus"))

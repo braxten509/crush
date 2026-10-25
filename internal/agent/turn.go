@@ -34,8 +34,8 @@ type turn struct {
 	cancel context.CancelFunc
 	ac     *activeCancel
 
-	// largeModel is the model snapshot the whole turn runs on.
-	largeModel   Model
+	// chatModel is the model snapshot the whole turn runs on.
+	chatModel    Model
 	cliModel     *cliagent.Model
 	isCLI        bool
 	promptPrefix string
@@ -370,15 +370,18 @@ func (t *turn) publishOutcome(retErr *error) {
 // → stream → finish.
 func (t *turn) run() (*fantasy.AgentResult, error) {
 	a := t.a
-	agentTools, systemPrompt := t.buildSystemPrompt()
+	agentTools, systemPrompt, err := t.buildSystemPrompt()
+	if err != nil {
+		return nil, err
+	}
 	workingDir := ""
 	if a.cfg != nil {
 		workingDir = a.cfg.WorkingDir()
 	}
-	if reason := KimiUnusable(t.largeModel.ModelCfg.Provider, workingDir); reason != "" {
+	if reason := KimiUnusable(t.chatModel.ModelCfg.Provider, workingDir); reason != "" {
 		return nil, errors.New(reason)
 	}
-	if note := a.handOverTodos(t.ctx, t.call.SessionID, t.largeModel.ModelCfg.Provider, t.largeModel.ModelCfg.Model); note != "" {
+	if note := a.handOverTodos(t.ctx, t.call.SessionID, t.chatModel.ModelCfg.Provider, t.chatModel.ModelCfg.Model); note != "" {
 		if t.isCLI {
 			t.call.todoHandover = note
 		} else {
@@ -386,7 +389,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 		}
 	}
 	agent := fantasy.NewAgent(
-		t.largeModel.Model,
+		t.chatModel.Model,
 		fantasy.WithSystemPrompt(systemPrompt),
 		fantasy.WithTools(agentTools...),
 		fantasy.WithUserAgent(userAgent),
@@ -397,14 +400,14 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 		return nil, err
 	}
 	a.memoryNotice(t.ctx, t.call.SessionID)
-	history, files := a.preparePrompt(msgs, t.largeModel.CatwalkCfg.SupportsImages, t.call.Attachments...)
+	history, files := a.preparePrompt(msgs, t.chatModel.CatwalkCfg.SupportsImages, t.call.Attachments...)
 	if !t.isCLI {
 		overhead := approxTokenCount(systemPrompt) + approxTokenCount(t.promptPrefix) + approxTokenCount(t.call.Prompt) + int64(len(agentTools)*300)
-		history = a.trimPreparedPrompt(t.call.SessionID, msgs, history, t.largeModel, overhead)
+		history = a.trimPreparedPrompt(t.call.SessionID, msgs, history, t.chatModel, overhead)
 	}
 
 	startTime := time.Now()
-	a.eventPromptSent(t.call.SessionID, t.largeModel)
+	a.eventPromptSent(t.call.SessionID, t.chatModel)
 
 	t.sanitizedToolCalls = make(map[string]bool)
 	t.completedToolCalls = make(map[string]struct{})
@@ -412,7 +415,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	// callbacks from the CLI's events.
 	stream := agent.Stream
 	if t.isCLI {
-		stream = a.cliStream(t.cliModel, t.call, msgs, t.largeModel.ModelCfg.ReasoningEffort, t.onCompacting, t.onActivity, func() string {
+		stream = a.cliStream(t.cliModel, t.call, msgs, t.chatModel.ModelCfg.ReasoningEffort, t.onCompacting, t.onActivity, func() string {
 			if t.fileReview == nil {
 				return ""
 			}
@@ -420,11 +423,11 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 		}, t.interruptOnToolCall)
 	}
 	streamCall := t.buildStreamCall(history, files)
-	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID, t.largeModel)
+	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID, t.chatModel)
 	defer t.fileReview.finish(t.ctx)
 	result, err := stream(t.genCtx, streamCall)
 
-	a.eventPromptResponded(t.call.SessionID, t.largeModel, time.Since(startTime).Truncate(time.Second))
+	a.eventPromptResponded(t.call.SessionID, t.chatModel, time.Since(startTime).Truncate(time.Second))
 
 	if t.wasInterruptedForProgress() && err == nil {
 		err = context.Canceled
@@ -437,7 +440,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 
 // buildSystemPrompt snapshots the model and the tools for the turn and
 // builds its system prompt.
-func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
+func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string, error) {
 	a := t.a
 	t.toolCallLimit = config.DefaultInterruptAfterToolCalls
 	if a.cfg != nil {
@@ -449,26 +452,25 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 	// reaches it (owner, 2026-10-24: every chat owns its model). The
 	// coordinator hands in the model the call's settings came from; an
 	// agent made for one model (a sub-agent's) always runs on that one.
-	t.largeModel = t.call.model
-	if t.largeModel.Model == nil || a.chatModels.build == nil {
+	t.chatModel = t.call.model
+	if t.chatModel.Model == nil || a.chatModels.build == nil {
 		own, err := a.ChatModel(t.ctx, t.call.SessionID)
 		if err != nil {
-			slog.Warn("Could not read the chat's model", "session_id", t.call.SessionID, "error", err)
-			own = a.largeModel.Get()
+			return nil, "", err
 		}
-		t.largeModel = own
+		t.chatModel = own
 	}
 	if chat, err := a.sessions.Get(t.ctx, t.call.SessionID); err == nil {
 		t.currentSession = chat
 	}
-	t.cliModel, t.isCLI = t.largeModel.Model.(*cliagent.Model)
+	t.cliModel, t.isCLI = t.chatModel.Model.(*cliagent.Model)
 	systemPrompt := a.systemPrompt.Get()
 	systemPrompt = withCurrentSkillPolicy(systemPrompt, currentSkillPolicy(a.cfg))
 	if note := memoryStatus().AgentNote(); note != "" && !t.isCLI {
 		// CLI agents get the note with their turn's text instead.
 		systemPrompt += "\n\n" + note
 	}
-	t.promptPrefix = a.promptPrefixFor(t.largeModel)
+	t.promptPrefix = a.promptPrefixFor(t.chatModel)
 	if !t.isCLI && a.cfg != nil && a.cfg.Config().Options != nil && a.cfg.Config().Options.DisableInstructionFiles {
 		systemPrompt += "\n\n" + sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
 		if a.tasks != nil && !a.isSubAgent {
@@ -501,7 +503,7 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 			systemPrompt += "\n\n" + kept
 		}
 	}
-	return agentTools, systemPrompt
+	return agentTools, systemPrompt, nil
 }
 
 // loadHistory loads the session and its messages, starts titling a new
@@ -552,7 +554,7 @@ func (t *turn) buildStreamCall(history []fantasy.Message, files []fantasy.FilePa
 	prompt := message.PromptWithTextAttachments(call.Prompt, call.Attachments)
 	if len(call.batch) > 0 && !t.isCLI && !call.NotRecallable {
 		for _, original := range call.batch {
-			_, originalFiles := a.preparePrompt(nil, t.largeModel.CatwalkCfg.SupportsImages, original.Attachments...)
+			_, originalFiles := a.preparePrompt(nil, t.chatModel.CatwalkCfg.SupportsImages, original.Attachments...)
 			parts := []fantasy.MessagePart{}
 			if text := message.PromptWithTextAttachments(original.Prompt, original.Attachments); text != "" {
 				parts = append(parts, fantasy.TextPart{Text: text})

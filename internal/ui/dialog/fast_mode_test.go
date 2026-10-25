@@ -19,6 +19,15 @@ type fastModeWorkspace struct {
 
 func (w fastModeWorkspace) Config() *config.Config { return w.cfg }
 
+// chatCommon is a Common whose shown chat runs on model.
+func chatCommon(cfg *config.Config, sty *styles.Styles, model config.SelectedModel) *common.Common {
+	return &common.Common{
+		Workspace:  fastModeWorkspace{cfg: cfg},
+		Styles:     sty,
+		ShownModel: func() (config.SelectedModel, bool) { return model, model.Provider != "" },
+	}
+}
+
 func TestFastModeCommand(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -38,16 +47,12 @@ func TestFastModeCommand(t *testing.T) {
 		t.Run(string(tc.kind)+"/"+tc.tier, func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.Config{
-				Agents: map[string]config.Agent{config.AgentCoder: {Model: config.SelectedModelTypeLarge}},
-				Models: map[config.SelectedModelType]config.SelectedModel{
-					config.SelectedModelTypeLarge: {Provider: "cli", Model: tc.model, ServiceTier: tc.tier},
-				},
 				Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
 					"cli": {Type: tc.kind, Models: []catwalk.Model{{ID: tc.model}}},
 				}),
 			}
 			sty := styles.CharmtonePantera()
-			commands := &Commands{com: &common.Common{Workspace: fastModeWorkspace{cfg: cfg}, Styles: &sty}}
+			commands := &Commands{com: chatCommon(cfg, &sty, config.SelectedModel{Provider: "cli", Model: tc.model, ServiceTier: tc.tier})}
 			var fast *CommandItem
 			for _, item := range commands.defaultCommands() {
 				if item.ID() == "toggle_fast_mode" {

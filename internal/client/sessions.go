@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/session"
@@ -57,6 +58,17 @@ func (c *Client) SetKeptSkill(ctx context.Context, id, sessionID string, skill p
 		return nil, err
 	}
 	return &sess, nil
+}
+
+// LastPick returns the model a new chat in the workspace starts on.
+func (c *Client) LastPick(ctx context.Context, id string) (config.SelectedModel, error) {
+	return newCall(c, rpc.LastPick, "get last pick", "last pick").at(id).get(ctx)
+}
+
+// SetLastPick saves a model picked with no chat open.
+func (c *Client) SetLastPick(ctx context.Context, id string, model config.SelectedModel) error {
+	_, err := newCall(c, rpc.SetLastPick, "set last pick", "").at(id).do(ctx, model)
+	return err
 }
 
 // SetSessionModel saves the model one chat runs on.

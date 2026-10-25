@@ -2,6 +2,7 @@
 // without secrets and the catalog, read when a model sheet opens and again on
 // config_changed while one is open (the terminal app may change them), and
 // the palette's labels that depend on the coder model.
+import { api } from "../engine/api.js";
 import { onEvent } from "../engine/events.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
@@ -11,6 +12,7 @@ import { modelInfo, readCatalog, readModelConfig } from "./providers.js";
 export const modelData = $state({
   cfg: null, // readModelConfig()'s answer, or null before the first read
   catalog: [],
+  lastPick: null, // the model a new chat starts on (GET …/last-pick), or null
   error: null, // the last failed read's text
   revision: 0, // grows with each read that landed
 });
@@ -22,10 +24,11 @@ let seq = 0;
 export async function refreshModels() {
   const mine = ++seq;
   try {
-    const [cfg, catalog] = await Promise.all([readModelConfig(), readCatalog()]);
+    const [cfg, catalog, pick] = await Promise.all([readModelConfig(), readCatalog(), api.lastPick().catch(() => null)]);
     if (mine !== seq) return modelData.cfg !== null;
     modelData.cfg = cfg;
     modelData.catalog = catalog;
+    modelData.lastPick = shownChatModel({ model: pick });
     modelData.error = null;
     modelData.revision += 1;
     return true;
@@ -51,24 +54,23 @@ onEvent("config_changed", () => {
   if (watchers > 0 || modelData.cfg !== null) refreshModels();
 });
 
-// The coder's selected model and its catalog entry: the shown chat's own
-// model when it has one (owner, 2026-10-23: a model picked in one chat must
-// not reach another), else the workspace's.
+// The shown chat's model and its catalog entry: the chat's own (owner,
+// 2026-10-24: every chat owns its model), or with no chat open the last pick
+// a new chat starts on. No folder-wide model is read.
 export function coderModel(data = modelData, chat = null) {
   const cfg = data.cfg;
-  if (!cfg) return { type: "large", selected: null, info: null };
-  const type = cfg.coderType;
+  if (!cfg) return { selected: null, info: null };
   const shown = chat ?? sessions.byId[sessions.currentId];
-  const selected = shownChatModel(shown) ?? cfg.models?.[type] ?? null;
-  return { type, selected, info: modelInfo(cfg, data.catalog, selected) };
+  const selected = shownChatModel(shown) ?? (chat || sessions.currentId ? null : data.lastPick);
+  return { selected, info: modelInfo(cfg, data.catalog, selected) };
 }
 
 // The agent info as the shown chat sees it (the model button, the panel and
 // the composer), from the same saved model as the menu: the chat's own, else
-// the workspace's coder model once read, else the agent's.
+// with no chat open the last pick.
 export function shownAgent(data = modelData) {
   const cfg = data.cfg;
-  const workspace = cfg ? (cfg.models?.[cfg.coderType] ?? null) : null;
+  const pick = sessions.currentId ? null : data.lastPick;
   const infoOf = cfg ? (selected) => modelInfo(cfg, data.catalog, selected) : null;
-  return agentWithModel(ws.agent, sessions.byId[sessions.currentId], ws.providers, { workspace, infoOf });
+  return agentWithModel(ws.agent, sessions.byId[sessions.currentId], ws.providers, { workspace: pick, infoOf });
 }

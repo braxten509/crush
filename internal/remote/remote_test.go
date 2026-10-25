@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -130,6 +131,50 @@ func TestShareAndLiveUpdates(t *testing.T) {
 	require.Len(t, items, 1)
 	require.Equal(t, "elsewhere", items[0].Text)
 	require.Equal(t, "null", string(snap["permission"]), "the prompt belongs to the other chat")
+}
+
+// TestThePhoneShowsTheChatsOwnModel: the phone shows the model the shared
+// chat owns, never a folder-wide one, and follows the window to another chat.
+func TestThePhoneShowsTheChatsOwnModel(t *testing.T) {
+	t.Parallel()
+
+	env := newTestEnv(t, phoneAddr)
+	env.src.cfg = &config.Config{
+		Agents: map[string]config.Agent{config.AgentCoder: {ID: config.AgentCoder}},
+		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
+			"p": {ID: "p", Name: "P", Models: []catwalk.Model{
+				{ID: "a", Name: "Model A", ContextWindow: 100},
+				{ID: "b", Name: "Model B", ContextWindow: 200, CanReason: true, ReasoningLevels: []string{"low", "high"}},
+			}},
+		}),
+	}
+	env.src.setChat("s1", "One")
+	env.src.setChat("s2", "Two")
+	env.src.mu.Lock()
+	for id, model := range map[string]string{"s1": "a", "s2": "b"} {
+		sess := env.src.sessions[id]
+		sess.Model = []byte(`{"provider":"p","model":"` + model + `","reasoning_effort":"high"}`)
+		env.src.sessions[id] = sess
+	}
+	env.src.mu.Unlock()
+
+	env.srv.SetPresence(Presence{SessionID: "s1"})
+	events := env.stream()
+	var mv modelView
+	var usage usageView
+	snap := events.next(t)
+	require.NoError(t, json.Unmarshal(snap["model"], &mv))
+	require.NoError(t, json.Unmarshal(snap["usage"], &usage))
+	require.Equal(t, "Model A", mv.Name)
+	require.Equal(t, int64(100), usage.ContextMax)
+
+	env.srv.SetPresence(Presence{SessionID: "s2"})
+	snap = events.until(t, "snapshot")
+	require.NoError(t, json.Unmarshal(snap["model"], &mv))
+	require.NoError(t, json.Unmarshal(snap["usage"], &usage))
+	require.Equal(t, "Model B", mv.Name)
+	require.Equal(t, "high", mv.Effort)
+	require.Equal(t, int64(200), usage.ContextMax)
 }
 
 func TestLiteStreamLeavesOutTheChat(t *testing.T) {
@@ -422,6 +467,7 @@ type fakeSource struct {
 	tasks    []agent.Task
 	stopped  []string
 	working  bool
+	cfg      *config.Config
 }
 
 func newFakeSource() *fakeSource {
@@ -550,7 +596,7 @@ func (f *fakeSource) QuestionCancelRequest(id, sessionID string) bool {
 	return true
 }
 
-func (f *fakeSource) Config() *config.Config { return nil }
+func (f *fakeSource) Config() *config.Config { return f.cfg }
 func (f *fakeSource) WorkingDir() string     { return "/work" }
 
 func (f *fakeSource) Tasks(string) []agent.Task {

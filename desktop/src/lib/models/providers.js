@@ -48,7 +48,7 @@ export function safeProvider(id, cfg) {
   };
 }
 
-// {models, recent_models, coderType, providers: Map(id → safe provider)}
+// {models, recent_models, providers: Map(id → safe provider)}
 // from GET …/config; the raw answer is dropped here.
 export async function readModelConfig() {
   const raw = await api.config();
@@ -61,7 +61,6 @@ export async function readModelConfig() {
     models: structuredClone(raw?.models ?? {}),
     recent_models: structuredClone(raw?.recent_models ?? {}),
     model_efforts: structuredClone(raw?.model_efforts ?? {}),
-    coderType: raw?.agents?.coder?.model === "small" ? "small" : "large",
     providers,
   };
 }

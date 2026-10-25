@@ -31,9 +31,7 @@ import { busy, sessions } from "../../lib/stores/sessions.svelte.js";
 import { todos } from "../../lib/stores/todos.svelte.js";
 import { setFocus, ui } from "../../lib/stores/ui.svelte.js";
 import { ws } from "../../lib/stores/workspace.svelte.js";
-import { shownAgent } from "../../lib/models/store.svelte.js";
-import { helperChats } from "../../lib/stores/helperchats.svelte.js";
-import { helperAgent } from "../../lib/live/helpers.svelte.js";
+import { agentNow } from "../../lib/live/helpers.svelte.js";
 import { lspRows, mcpRows, skillRows } from "./rows.js";
 
 export const panel = $state({ detailsOpen: false, focused: false, wheeled: false, needsInit: false });
@@ -58,12 +56,7 @@ export function closeDetails() {
 
 const shownSession = () => (sessions.currentId ? (sessions.byId[sessions.currentId] ?? null) : null);
 
-export function agentNow() {
-  const helper = helperChats.byId[sessions.currentId];
-  if (helper) return helperAgent(helper, ws.providers).agent;
-  // The shown chat's own model, when it has one (owner, 2026-10-23).
-  return shownAgent();
-}
+export { agentNow };
 
 // The reading of the account the agent runs on, or null.
 function readingNow() {
@@ -132,7 +125,7 @@ export function helpNow() {
     hasSession: Boolean(sid),
     typed: Boolean(composer.drafts[sid ?? ""]?.text),
     focusOnly: ws.config?.options?.tui?.composer_focus_only === true,
-    images: ws.agent?.model?.supports_attachments === true,
+    images: agentNow()?.model?.supports_attachments === true,
     chips: hasChips(),
     backgroundable: false, // phase 6 brings background commands (help.go:44-46)
     pills: todos.open && unfinished && queued > 0,

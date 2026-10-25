@@ -26,7 +26,7 @@ type RuntimeOverrides struct {
 	// Models records the model choices made in this instance, whether
 	// persisted or not. They are reapplied after a config reload so that a
 	// selection made here always outranks whatever the shared config file
-	// happens to hold — see pinPreferredModelLocked.
+	// happens to hold — see pinHelperModelLocked.
 	Models map[SelectedModelType]SelectedModel
 }
 
@@ -40,7 +40,7 @@ type RuntimeOverrides struct {
 // races on the config file.
 //
 // writeMu serialises every operation that produces a new in-memory Config:
-// the typed copy-on-write mutators (SetCompactMode, UpdatePreferredModel,
+// the typed copy-on-write mutators (SetCompactMode, SetHelperModel,
 // ...) and ReloadFromDisk. Typed mutators take Lock; autoReload takes
 // TryLock so a write triggered re-entrantly during a reload (e.g. an OAuth
 // token refresh) skips the nested reload instead of deadlocking. The load

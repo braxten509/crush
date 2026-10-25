@@ -166,8 +166,8 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		subTasks = h
 	}
 	sub := NewSessionAgent(SessionAgentOptions{
-		LargeModel:           m,
-		SmallModel:           m,
+		Model:                m,
+		HelperModel:          m,
 		SystemPromptPrefix:   provider.SystemPromptPrefix,
 		IsSubAgent:           true,
 		DisableAutoSummarize: h.c.cfg.Config().Options.DisableAutoSummarize,

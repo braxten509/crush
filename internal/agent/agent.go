@@ -149,7 +149,8 @@ type SessionAgentCall struct {
 type SessionAgent interface {
 	Run(context.Context, SessionAgentCall) (*fantasy.AgentResult, error)
 	BeginAccepted(sessionID string) *AcceptedRun
-	SetModels(large Model, small Model)
+	// SetHelperModel sets the helper model (titles, branch summaries).
+	SetHelperModel(helper Model)
 	SetTools(tools []fantasy.AgentTool)
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)
@@ -162,7 +163,6 @@ type SessionAgent interface {
 	ClearQueue(sessionID string)
 	RecallQueuedPrompt(sessionID string) *message.QueuedPrompt
 	Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error) error
-	Model() Model
 	// ChatModel is the model the chat runs on: its own (owner, 2026-10-24:
 	// every chat owns its model).
 	ChatModel(ctx context.Context, sessionID string) (Model, error)
@@ -189,8 +189,12 @@ type activeCancel struct {
 }
 
 type sessionAgent struct {
-	largeModel         *csync.Value[Model]
-	smallModel         *csync.Value[Model]
+	// model is the one model of an agent made for one model (a sub-agent's
+	// helper run); the chat agents have none, as every chat owns its model
+	// (owner, 2026-10-24: no shared model anywhere).
+	model *csync.Value[Model]
+	// helperModel writes titles and branch summaries.
+	helperModel        *csync.Value[Model]
 	systemPromptPrefix *csync.Value[string]
 	systemPrompt       *csync.Value[string]
 	tools              *csync.Slice[fantasy.AgentTool]
@@ -230,8 +234,10 @@ type chatModelCache struct {
 }
 
 type SessionAgentOptions struct {
-	LargeModel         Model
-	SmallModel         Model
+	// Model is the one model of an agent made for one model (ModelFor nil).
+	Model Model
+	// HelperModel writes titles and branch summaries.
+	HelperModel        Model
 	SystemPromptPrefix string
 	SystemPrompt       string
 	IsSubAgent         bool
@@ -258,8 +264,8 @@ func NewSessionAgent(
 	opts SessionAgentOptions,
 ) SessionAgent {
 	a := &sessionAgent{
-		largeModel:           csync.NewValue(opts.LargeModel),
-		smallModel:           csync.NewValue(opts.SmallModel),
+		model:                csync.NewValue(opts.Model),
+		helperModel:          csync.NewValue(opts.HelperModel),
 		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
 		systemPrompt:         csync.NewValue(opts.SystemPrompt),
 		isSubAgent:           opts.IsSubAgent,
@@ -392,12 +398,12 @@ func (a *sessionAgent) persistCanceledTurn(ctx context.Context, call SessionAgen
 			return err
 		}
 	}
-	largeModel := a.turnModel(writeCtx, call.SessionID)
+	chatModel := a.turnModel(writeCtx, call.SessionID)
 	assistant, err := a.messages.Create(writeCtx, call.SessionID, message.CreateMessageParams{
 		Role:     message.Assistant,
 		Parts:    []message.ContentPart{},
-		Model:    largeModel.ModelCfg.Model,
-		Provider: largeModel.ModelCfg.Provider,
+		Model:    chatModel.ModelCfg.Model,
+		Provider: chatModel.ModelCfg.Provider,
 	})
 	if err != nil {
 		return err
@@ -527,14 +533,13 @@ func sessionHeaders(sessionID string) map[string]string {
 	}
 }
 
-func (a *sessionAgent) SetModels(large Model, small Model) {
-	a.largeModel.Set(large)
-	a.smallModel.Set(small)
+func (a *sessionAgent) SetHelperModel(helper Model) {
+	a.helperModel.Set(helper)
 }
 
 // modelForChat returns the model a chat runs on: the one saved with the
-// chat, else the workspace's. Built once per choice and kept, so a chat's
-// own model costs nothing after its first turn.
+// chat. Built once per choice and kept, so a chat's own model costs nothing
+// after its first turn.
 func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
 	if len(choice) == 0 || a.chatModels.build == nil {
 		return Model{}, false
@@ -571,12 +576,11 @@ func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
 // saved with it, so it owns that model from then on. An agent made for one
 // model (a sub-agent's) runs every chat on that model.
 func (a *sessionAgent) ChatModel(ctx context.Context, sessionID string) (Model, error) {
-	fixed := a.largeModel.Get()
 	if a.chatModels.build == nil {
-		if fixed.Model == nil {
-			return Model{}, errLargeModelNotSelected
+		if one := a.model.Get(); one.Model != nil {
+			return one, nil
 		}
-		return fixed, nil
+		return Model{}, errChatHasNoModel
 	}
 	// A chat that can't be read (it may be made later in the run) has no
 	// model yet: it runs on the new chat's, with nothing to save it with.
@@ -600,20 +604,19 @@ func (a *sessionAgent) ChatModel(ctx context.Context, sessionID string) (Model, 
 	if own, ok := a.modelForChat(choice); ok {
 		return own, nil
 	}
-	if len(choice) == 0 && fixed.Model != nil {
-		return fixed, nil
+	if len(choice) == 0 {
+		return Model{}, errChatHasNoModel
 	}
 	return Model{}, fmt.Errorf("the chat's model could not be built")
 }
 
 // turnModel is the chat's model for work outside a turn's own snapshot (a
-// summary, a canceled turn's record); a one-model agent's own when the
-// chat's can't be had.
+// summary, a canceled turn's record); empty when the chat has none.
 func (a *sessionAgent) turnModel(ctx context.Context, sessionID string) Model {
 	m, err := a.ChatModel(ctx, sessionID)
 	if err != nil {
 		slog.Warn("Could not read the chat's model", "session_id", sessionID, "error", err)
-		return a.largeModel.Get()
+		return Model{}
 	}
 	return m
 }
@@ -659,10 +662,6 @@ func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {
 
 func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 	a.systemPrompt.Set(systemPrompt)
-}
-
-func (a *sessionAgent) Model() Model {
-	return a.largeModel.Get()
 }
 
 func providerRetryLogFields(err *fantasy.ProviderError, delay time.Duration) []any {

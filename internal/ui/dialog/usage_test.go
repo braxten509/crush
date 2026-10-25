@@ -58,7 +58,7 @@ func TestUsageShowsExactResetAndDetails(t *testing.T) {
 func TestUsageCommandRegistered(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
-	c := &Commands{com: &common.Common{Styles: &sty, Workspace: fastModeWorkspace{cfg: ultracodeConfig(config.TypeClaudeCode, nil, false)}}}
+	c := &Commands{com: ultracodeCommon(&sty, config.TypeClaudeCode, nil, false)}
 	for _, item := range c.defaultCommands() {
 		if item.ID() == "usage" {
 			require.Equal(t, ActionOpenDialog{UsageID}, item.Action())

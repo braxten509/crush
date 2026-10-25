@@ -21,7 +21,7 @@ type ConfigRemoveRequest struct {
 	Key   string       `json:"key"`
 }
 
-// ConfigModelRequest represents a request to update the preferred model.
+// ConfigModelRequest represents a request to set the helper model.
 type ConfigModelRequest struct {
 	Scope     config.Scope             `json:"scope"`
 	ModelType config.SelectedModelType `json:"model_type"`

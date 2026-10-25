@@ -8,7 +8,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/stretchr/testify/require"
 )
@@ -16,9 +15,9 @@ import (
 func TestAutocompactGlobalDialog(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
-	cfg := ultracodeConfig(config.TypeCodexCLI, nil, false)
+	com := ultracodeCommon(&sty, config.TypeCodexCLI, nil, false)
+	cfg := com.Config()
 	cfg.Options = &config.Options{AutoCompactTokenLimit: 275000, TUI: &config.TUIOptions{}}
-	com := &common.Common{Workspace: fastModeWorkspace{cfg: cfg}, Styles: &sty}
 	d, err := NewAutocompact(com)
 	require.NoError(t, err)
 	require.Equal(t, "275000", d.input.Value())
@@ -52,8 +51,7 @@ func TestAutocompactGlobalDialog(t *testing.T) {
 	require.Equal(t, ActionSetAutocompact{Tokens: 400000}, d.HandleMsg(enter))
 	require.Equal(t, ActionClose{}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape}))
 	require.EqualValues(t, 275000, cfg.Options.AutoCompactTokenLimit, "the dialog only emits a save action")
-	// The value survives a model switch because it belongs to Options.
-	cfg.Models[config.SelectedModelTypeLarge] = config.SelectedModel{Model: "another", Provider: "another"}
+	// The value belongs to Options, not to a model.
 	d, err = NewAutocompact(com)
 	require.NoError(t, err)
 	require.Equal(t, "275000", d.input.Value())

@@ -383,13 +383,17 @@ type UI struct {
 	agentBusyCache    ttlCache
 	yoloCache         ttlCache
 	busyFetchInFlight bool
-	// agentReady / agentModel memoize the coordinator readiness and
-	// selected model (AgentIsReady/AgentModel are synchronous HTTP GETs in
-	// client/server mode, and modelInfo renders them every frame). Seeded
-	// once at construction and refreshed by the same off-thread probe as
-	// agentBusyCache.
+	// agentReady memoizes the coordinator readiness (AgentIsReady is a
+	// synchronous HTTP GET in client/server mode, and modelInfo renders it
+	// every frame). Seeded once at construction and refreshed by the same
+	// off-thread probe as agentBusyCache.
 	agentReady bool
-	agentModel workspace.AgentModel
+	// limitsProvider is the provider whose usage limits were last fetched
+	// for the shown chat's model.
+	limitsProvider string
+	// lastPick is the model a new chat starts on, shown on the landing
+	// page; read once at construction and kept fresh by picks made here.
+	lastPick config.SelectedModel
 	// busyFetchGen is bumped by every busy/permission state transition;
 	// like queue.gen it lets a stale in-flight probe result be
 	// discarded and re-fetched instead of clobbering newer state.
@@ -493,15 +497,24 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		skillStates:         skills.GetLatestStates(),
 	}
 
+	// Dialogs read the shown chat's model through com.
+	com.ShownModel = ui.shownChoice
 	status := NewStatus(com, ui)
 	ui.mention.popup = comp
 	ui.lspProbe.val.states = make(map[string]workspace.LSPClientInfo)
 	ui.mcpProbe.val = make(map[string]mcp.ClientInfo)
 
-	// Seed the active theme key from the large model provider so the
+	// Seed the last pick once (a synchronous round-trip in client/server
+	// mode, like the yolo seed below) so the landing page shows the model a
+	// new chat starts on; picks made here keep it fresh.
+	if pick, ok := com.Workspace.LastPick(context.Background()); ok {
+		ui.lastPick = pick
+	}
+
+	// Seed the active theme key from the shown model's provider so the
 	// first model selection can correctly skip a redundant theme swap.
 	if cfg := com.Config(); cfg != nil {
-		ui.theme.key = styles.ThemeKeyForProvider(cfg.Models[config.SelectedModelTypeLarge].Provider)
+		ui.theme.key = styles.ThemeKeyForProvider(ui.lastPick.Provider)
 		ui.theme.userSelected = common.ThemeNameFromConfig(cfg) != ""
 		ui.theme.shown = common.ThemeNameFromConfig(cfg)
 		ui.theme.revision = styles.ThemeFileRevision(ui.theme.shown)
@@ -513,12 +526,10 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	yolo := com.Workspace.PermissionSkipRequests()
 	ui.yoloCache.set(yolo)
 
-	// Seed the memoized agent ready/model state the same way so the first
-	// frame renders the model info; the busy probe keeps it fresh
-	// afterwards.
+	// Seed the memoized agent ready state the same way so the first frame
+	// renders the model info; the busy probe keeps it fresh afterwards.
 	if com.Workspace.AgentIsReady() {
 		ui.agentReady = true
-		ui.agentModel = com.Workspace.AgentModel()
 	}
 	ui.mode = uiInputModeCode
 	ui.setEditorPrompt(yolo)

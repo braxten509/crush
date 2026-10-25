@@ -13,5 +13,5 @@ Anthropic (configured=true)
 Gemini (configured=false)
   gemini:gem-a "Gem A" showProvider=false
 selected: anthropic:claude-b
-placeholder: Choose a model for large, complex tasks
+placeholder: Choose a model for this chat
 config field recent_models.large: openai:sub-1 anthropic:claude-a

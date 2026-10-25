@@ -26,7 +26,7 @@ import (
 // tells the originating channel.
 func (t *turn) handleStreamError(result *fantasy.AgentResult, err error) (*fantasy.AgentResult, error) {
 	a := t.a
-	isHyper := t.largeModel.ModelCfg.Provider == hyper.Name
+	isHyper := t.chatModel.ModelCfg.Provider == hyper.Name
 	isCancelErr := errors.Is(err, context.Canceled)
 	slog.Info("Agent stream returned error",
 		"error", err.Error(),
@@ -60,14 +60,14 @@ func (t *turn) handleStreamError(result *fantasy.AgentResult, err error) (*fanta
 	if err := t.closeDanglingToolCalls(cleanupCtx, isCancelErr); err != nil {
 		return nil, err
 	}
-	reason, title, details := classifyRunError(err, isHyper, t.largeModel.CatwalkCfg.Name)
+	reason, title, details := classifyRunError(err, isHyper, t.chatModel.CatwalkCfg.Name)
 	if t.wasInterruptedForProgress() {
 		reason, title, details = message.FinishReasonCanceled, "Interrupted for a progress update", ""
 	}
 	// Interactive chats continue on their own once a usage limit resets
 	// (coordinator.planLimitRetry); say when.
 	// The fallback order says for itself where a chat it steers goes.
-	if !t.call.NonInteractive && !a.isSubAgent && !fallbackHolds(a.cfg, t.largeModel.ModelCfg) {
+	if !t.call.NonInteractive && !a.isSubAgent && !fallbackHolds(a.cfg, t.chatModel.ModelCfg) {
 		if at, ok := limitRetryTime(err, time.Now()); ok {
 			details = strings.TrimSpace(details + "\n\n" + limitRetryNote(at))
 		}

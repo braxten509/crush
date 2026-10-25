@@ -1340,7 +1340,7 @@ var _ FileRestoration = (*ClientWorkspace)(nil)
   - `yolo`: the window's YOLO toggle (lines 400-404; `input_mode.go:126-134`). In plan mode it also leaves plan mode (`switchPlanToYolo`, `input_mode.go:43-54`). The toggle writes the engine setting and the window's own cycle flag (`workspace_cache.go:352-367`).
   - `mode`: the window's code and plan cycle (line 434; `input_mode.go:16-36`, `62-114`). The window owns the mode, the editor prompt and the plan hand-off.
   - These are refused while the window is busy (lines 407-410): `model` (line 412), `effort` (414-424), `think` (425), `fast` (427-431), `ultracode` (432), `mode` (434) and `summarize` (436-440).
-  - `model`, `effort`, `think`, `fast` and `ultracode` change the coder model's saved preference with `UpdatePreferredModel(ScopeGlobal, …)`, then call `UpdateAgentModel` (`model_select.go:403-475`, `fast_mode.go:12-77`; `remoteSelectModel` checks the provider and model first, `ui/model/remote.go:459-494`).
+  - `model`, `effort`, `think`, `fast` and `ultracode` change the shared chat's own model (`SetSessionModel`, which also makes it the last pick); each chat owns its model, and no model is set for the folder (owner, 2026-10-24; `remoteSelectModel` checks the provider and model first, `ui/model/remote.go`).
   - `summarize` calls `AgentSummarize` (`send.go:329-338`).
 - **Client mode cannot share.** `remote.NewSource` needs a `*workspace.AppWorkspace` (`remote/source.go:53-57`), and the terminal refuses `/remote` in client mode (`ui/model/remote.go:176-179`).
 - **Permission and question answers** go straight to the app's services through the Source (`source.go:21-51`, `85-91`).
@@ -1457,8 +1457,8 @@ The engine builds the Source with `remote.NewSource(workspace.NewAppWorkspace(ws
 | `cancel`, `interrupt` | engine | `Interrupt(ws, sid)` (`backend/agent.go:288-297`). The terminal treats cancel as interrupt (`send.go:309-316`) |
 | `background` | engine | B's `MoveToBackground(ws, sid)` (5.4). `moved:false` replies `no running command can move to the background` (`ui/model/remote.go:391`). The window's tool group follows from the tool's own result (inferred) |
 | `clear_queue` | engine | `ClearQueue(ws, sid)`; a new chat is a no-op (`ui/model/remote.go:395-399`) |
-| `model` | engine | the checks of `remoteSelectModel` (`ui/model/remote.go:459-494`), then `UpdatePreferredModel(ScopeGlobal, <coder model type>, selected)` and `UpdateAgent`. This matches `selectModel`'s path for a provider that is already set up (inferred; the builder confirms against `model_select.go:120` onward) |
-| `effort`, `think`, `fast`, `ultracode` | engine | the same preference change and checks as `setReasoningEffort`, `toggleThinking`, `toggleFastMode` and `toggleUltracode` (`model_select.go:403-475`, `fast_mode.go:12-77`), then `UpdateAgent` |
+| `model` | engine | the checks of `remoteSelectModel` (`ui/model/remote.go`), then the shared chat's own model is saved (`shareSaveModel` → `SetSessionModel`, `backend/share.go`). No model is set for the folder: each chat owns its model (owner, 2026-10-24) |
+| `effort`, `think`, `fast`, `ultracode` | engine | the same checks as `setReasoningEffort`, `toggleThinking`, `toggleFastMode` and `toggleUltracode`, then the change is saved on the shared chat's own model, as for `model` |
 | `summarize` | engine | `SummarizeSession(ws, sid)`, started in its own goroutine. The phone hears back at once, as from the terminal (`send.go:329-338`) |
 | `yolo` | window | forwarded: it depends on the window's plan mode and cycle flag (`input_mode.go:43-54`, `126-134`; `workspace_cache.go:352-367`) |
 | `mode` | window | forwarded: the window owns the input mode (`input_mode.go:16-36`, `62-114`) |

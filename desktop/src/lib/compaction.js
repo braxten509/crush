@@ -3,7 +3,7 @@
 // config rules it uses (internal/config/autocompact.go:11-41).
 //
 //   compactionLimit({agent, session, providers, options})
-//     agent      AgentInfo (ws.agent): its model (catwalk) and model_cfg
+//     agent      the shown chat's agent block (agentNow): its model (catwalk) and model_cfg
 //     session    the shown chat's Session (its context_budget), or null
 //     providers  ws.providers: a provider's type by its id
 //     options    ws.config.options (auto_compact_token_limit)

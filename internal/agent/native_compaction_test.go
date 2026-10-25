@@ -28,9 +28,9 @@ cat >/dev/null
 	env := testEnv(t)
 	sa := testSessionAgent(env, model, &finishStreamModel{text: "title"}, "system").(*sessionAgent)
 	sa.isSubAgent = true
-	large := sa.largeModel.Get()
+	large := sa.model.Get()
 	large.CatwalkCfg.ContextWindow = 400000
-	sa.largeModel.Set(large)
+	sa.model.Set(large)
 	sess, err := env.sessions.Create(t.Context(), "native compaction")
 	require.NoError(t, err)
 	_, err = sa.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "Finish"})

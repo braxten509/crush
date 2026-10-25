@@ -6,7 +6,6 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/stretchr/testify/require"
 )
@@ -23,12 +22,10 @@ func TestAbacusCommandControlsMatchModelCapabilities(t *testing.T) {
 	} {
 		t.Run(test.model.ID, func(t *testing.T) {
 			cfg := &config.Config{
-				Agents:    map[string]config.Agent{config.AgentCoder: {Model: config.SelectedModelTypeLarge}},
-				Models:    map[config.SelectedModelType]config.SelectedModel{config.SelectedModelTypeLarge: {Provider: "abacus", Model: test.model.ID}},
 				Providers: csync.NewMapFrom(map[string]config.ProviderConfig{"abacus": {ID: "abacus", Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{test.model}}}),
 			}
 			sty := styles.CharmtonePantera()
-			com := &common.Common{Workspace: fastModeWorkspace{cfg: cfg}, Styles: &sty}
+			com := chatCommon(cfg, &sty, config.SelectedModel{Provider: "abacus", Model: test.model.ID})
 			commands := &Commands{com: com}
 			present := map[string]bool{}
 			for _, command := range commands.defaultCommands() {

@@ -7,6 +7,7 @@
 import { actions, runAction } from "../actions.js";
 import { dialogRegistered, openDialog } from "../dialogs.js";
 import { capabilities } from "../models/capabilities.svelte.js";
+import { shownAgent } from "../models/store.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { panelSetting, ui } from "../stores/ui.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
@@ -19,8 +20,9 @@ const actionEnabled = (id) => {
 };
 const tui = () => ws.config?.options?.tui ?? {};
 const hasSession = () => Boolean(sessions.currentId);
-const coder = () => ws.config?.models?.large ?? {};
-const agentModel = () => ws.agent?.model ?? null;
+// The shown chat's own model (the last pick with no chat open).
+const coder = () => shownAgent()?.model_cfg ?? {};
+const agentModel = () => shownAgent()?.model ?? null;
 
 // {id, label, shortcut, aliases, shown(), run()}
 function action(id, label, actionId, { shortcut = "", aliases = [], when = () => true } = {}) {

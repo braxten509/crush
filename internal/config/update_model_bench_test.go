@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// BenchmarkUpdatePreferredModel measures the full write cost of a single
+// BenchmarkSetHelperModel measures the full write cost of a single
 // model selection, which is what the user experiences when picking a model
 // in the TUI. It guards against regressing back to a full config reload on
 // every selection.
-func BenchmarkUpdatePreferredModel(b *testing.B) {
+func BenchmarkSetHelperModel(b *testing.B) {
 	dir := b.TempDir()
 	configPath := filepath.Join(dir, "crush.json")
 
@@ -64,7 +64,7 @@ func BenchmarkUpdatePreferredModel(b *testing.B) {
 	i := 0
 	for b.Loop() {
 		m := models[i%len(models)]
-		if err := store.UpdatePreferredModel(ScopeGlobal, SelectedModelTypeLarge, m); err != nil {
+		if err := store.SetHelperModel(ScopeGlobal, m); err != nil {
 			b.Fatal(err)
 		}
 		i++
@@ -72,7 +72,7 @@ func BenchmarkUpdatePreferredModel(b *testing.B) {
 }
 
 // BenchmarkReloadFromDisk isolates the full reload cost for comparison with
-// BenchmarkUpdatePreferredModel.
+// BenchmarkSetHelperModel.
 func BenchmarkReloadFromDisk(b *testing.B) {
 	dir := b.TempDir()
 	configPath := filepath.Join(dir, "crush.json")

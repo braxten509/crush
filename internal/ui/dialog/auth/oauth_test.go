@@ -148,7 +148,7 @@ func TestOAuthKeys(t *testing.T) {
 
 	sty := styles.CharmtonePantera()
 	m, _ := newOAuth(&common.Common{Styles: &sty}, false, catwalk.Provider{ID: "hyper", Name: "Hyper"},
-		config.SelectedModel{}, config.SelectedModelTypeLarge, &OAuthHyper{})
+		config.SelectedModel{}, config.SelectedModelTypeChat, &OAuthHyper{})
 	m.HandleMsg(ActionInitiateOAuth{DeviceCode: "dc", UserCode: "UC", VerificationURL: "https://x"})
 	require.Equal(t, OAuthStateDisplay, m.State)
 

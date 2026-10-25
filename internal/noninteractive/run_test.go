@@ -14,11 +14,12 @@ import (
 )
 
 // fakeBackend records the calls [Run] makes, in order, and applies model
-// changes to its config like the real backends do.
+// changes like the real backends do.
 type fakeBackend struct {
 	cfg        *config.Config
 	calls      []string
-	last       [2]string // Provider and model of the last assistant message.
+	chats      map[string]config.SelectedModel // Each chat's own model.
+	helper     config.SelectedModel
 	prepareErr error
 	resolveErr error
 	sessionID  string
@@ -28,10 +29,8 @@ type fakeBackend struct {
 func newFakeBackend() *fakeBackend {
 	return &fakeBackend{
 		sessionID: "sess",
+		chats:     map[string]config.SelectedModel{"sess": {Provider: "openai", Model: "gpt-4o"}},
 		cfg: &config.Config{
-			Models: map[config.SelectedModelType]config.SelectedModel{
-				config.SelectedModelTypeLarge: {Provider: "openai", Model: "gpt-4o"},
-			},
 			Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
 				"openai": {ID: "openai", Models: []catwalk.Model{
 					{ID: "gpt-4o"},
@@ -54,20 +53,22 @@ func (f *fakeBackend) Config(context.Context) (*config.Config, error) {
 	return f.cfg, nil
 }
 
-func (f *fakeBackend) SetModel(_ context.Context, typ config.SelectedModelType, m config.SelectedModel) error {
-	f.recordf("set %s %s/%s effort=%q tier=%q", typ, m.Provider, m.Model, m.ReasoningEffort, m.ServiceTier)
-	f.cfg.Models[typ] = m
+func (f *fakeBackend) ChatModel(_ context.Context, sessionID string) (config.SelectedModel, bool, error) {
+	f.recordf("chat-model %s", sessionID)
+	m, ok := f.chats[sessionID]
+	return m, ok, nil
+}
+
+func (f *fakeBackend) SetChatModel(_ context.Context, sessionID string, m config.SelectedModel) error {
+	f.recordf("chat %s %s/%s effort=%q tier=%q", sessionID, m.Provider, m.Model, m.ReasoningEffort, m.ServiceTier)
+	f.chats[sessionID] = m
 	return nil
 }
 
-func (f *fakeBackend) DefaultSmallModel(_ context.Context, providerID string) (*config.SelectedModel, error) {
-	f.recordf("default-small %s", providerID)
-	return &config.SelectedModel{Provider: providerID, Model: "claude-small"}, nil
-}
-
-func (f *fakeBackend) LastAssistantModel(_ context.Context, sessionID string) (string, string, error) {
-	f.recordf("last-assistant %s", sessionID)
-	return f.last[0], f.last[1], nil
+func (f *fakeBackend) SetHelperModel(_ context.Context, m config.SelectedModel) error {
+	f.recordf("helper %s/%s", m.Provider, m.Model)
+	f.helper = m
+	return nil
 }
 
 func (f *fakeBackend) UpdateAgent(context.Context) error {
@@ -121,20 +122,19 @@ func TestRun_NewSessionStreamsAndEndsWithNewline(t *testing.T) {
 	}, b.calls)
 }
 
-func TestRun_LargeModelOverridePicksDefaultSmall(t *testing.T) {
+// TestRun_ModelOverrideIsSavedOnTheChat: --model is saved on the run's own
+// chat; no folder-wide model and no helper model is written.
+func TestRun_ModelOverrideIsSavedOnTheChat(t *testing.T) {
 	t.Parallel()
 
 	b := newFakeBackend()
 	var out bytes.Buffer
-	err := Run(t.Context(), b, Options{Prompt: "hi", LargeModel: "Anthropic/CLAUDE-X"}, quietTerminal(&out))
+	err := Run(t.Context(), b, Options{Prompt: "hi", Model: "Anthropic/CLAUDE-X"}, quietTerminal(&out))
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		`set large anthropic/claude-x effort="" tier=""`,
-		"default-small anthropic",
-		`set small anthropic/claude-small effort="" tier=""`,
-		"update-agent",
 		"prepare",
 		`resolve "" last=false`,
+		`chat sess anthropic/claude-x effort="" tier=""`,
 		"stream sess hi",
 	}, b.calls)
 }
@@ -144,105 +144,57 @@ func TestRun_OverrideErrorIsWrapped(t *testing.T) {
 
 	b := newFakeBackend()
 	var out bytes.Buffer
-	err := Run(t.Context(), b, Options{Prompt: "hi", LargeModel: "nope"}, quietTerminal(&out))
-	require.EqualError(t, err, `failed to override models: large model "nope" not found`)
+	err := Run(t.Context(), b, Options{Prompt: "hi", Model: "nope"}, quietTerminal(&out))
+	require.EqualError(t, err, `failed to override models: chat model "nope" not found`)
 	require.Empty(t, b.calls)
 	require.Empty(t, out.String())
 }
 
-func TestRun_EffortAppliedBeforeSessionWithoutContinue(t *testing.T) {
+func TestRun_EffortAppliesToTheModelOverride(t *testing.T) {
 	t.Parallel()
 
 	b := newFakeBackend()
 	var out bytes.Buffer
-	err := Run(t.Context(), b, Options{Prompt: "hi", LargeModel: "o3", ReasoningEffort: "high"}, quietTerminal(&out))
+	err := Run(t.Context(), b, Options{Prompt: "hi", Model: "o3", ReasoningEffort: "high"}, quietTerminal(&out))
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		`set large openai/o3 effort="" tier=""`,
-		"default-small openai",
-		`set small openai/claude-small effort="" tier=""`,
-		"update-agent",
-		`set large openai/o3 effort="high" tier=""`,
-		"update-agent",
 		"prepare",
 		`resolve "" last=false`,
+		`chat sess openai/o3 effort="high" tier=""`,
 		"stream sess hi",
 	}, b.calls)
 }
 
-func TestRun_ContinueRestoresModelThenAppliesEffort(t *testing.T) {
+// TestRun_ContinueAppliesEffortToTheChatsModel: a continued chat keeps the
+// model it owns; the effort is applied to that one.
+func TestRun_ContinueAppliesEffortToTheChatsModel(t *testing.T) {
 	t.Parallel()
 
 	b := newFakeBackend()
-	b.last = [2]string{"anthropic", "claude-x"}
+	b.chats["sess"] = config.SelectedModel{Provider: "anthropic", Model: "claude-x"}
 	var out bytes.Buffer
 	err := Run(t.Context(), b, Options{Prompt: "hi", ContinueSessionID: "sess", ReasoningEffort: "high"}, quietTerminal(&out))
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		"prepare",
 		`resolve "sess" last=false`,
-		"last-assistant sess",
-		`set large anthropic/claude-x effort="" tier=""`,
-		"default-small anthropic",
-		`set small anthropic/claude-small effort="" tier=""`,
-		"update-agent",
-		`set large anthropic/claude-x effort="high" tier=""`,
-		"update-agent",
+		"chat-model sess",
+		`chat sess anthropic/claude-x effort="high" tier=""`,
 		"stream sess hi",
 	}, b.calls)
 }
 
-func TestRun_ContinueKeepsSmallModelWhenSet(t *testing.T) {
+// TestRun_HelperModelIsForThisRunOnly: --small-model sets the helper model
+// for this run; the chat keeps its own model.
+func TestRun_HelperModelIsForThisRunOnly(t *testing.T) {
 	t.Parallel()
 
 	b := newFakeBackend()
-	b.cfg.Models[config.SelectedModelTypeSmall] = config.SelectedModel{Provider: "openai", Model: "gpt-4o"}
-	b.last = [2]string{"anthropic", "claude-x"}
 	var out bytes.Buffer
-	err := Run(t.Context(), b, Options{Prompt: "hi", UseLast: true}, quietTerminal(&out))
+	err := Run(t.Context(), b, Options{Prompt: "hi", UseLast: true, HelperModel: "gpt-4o"}, quietTerminal(&out))
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"prepare",
-		`resolve "" last=true`,
-		"last-assistant sess",
-		`set large anthropic/claude-x effort="" tier=""`,
-		"update-agent",
-		"stream sess hi",
-	}, b.calls)
-}
-
-func TestRun_ContinueSkipsUnavailableOrSameModel(t *testing.T) {
-	t.Parallel()
-
-	for _, last := range [][2]string{
-		{"gone", "model"},
-		{"openai", "gpt-4o"},
-		{"", ""},
-	} {
-		b := newFakeBackend()
-		b.last = last
-		var out bytes.Buffer
-		err := Run(t.Context(), b, Options{Prompt: "hi", UseLast: true}, quietTerminal(&out))
-		require.NoError(t, err)
-		require.Equal(t, []string{
-			"prepare",
-			`resolve "" last=true`,
-			"last-assistant sess",
-			"stream sess hi",
-		}, b.calls, "last=%v", last)
-	}
-}
-
-func TestRun_ContinueWithModelOverrideDoesNotRestore(t *testing.T) {
-	t.Parallel()
-
-	b := newFakeBackend()
-	b.last = [2]string{"anthropic", "claude-x"}
-	var out bytes.Buffer
-	err := Run(t.Context(), b, Options{Prompt: "hi", UseLast: true, SmallModel: "gpt-4o"}, quietTerminal(&out))
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		`set small openai/gpt-4o effort="" tier=""`,
+		"helper openai/gpt-4o",
 		"update-agent",
 		"prepare",
 		`resolve "" last=true`,
@@ -257,17 +209,17 @@ func TestRun_InvalidEffortFails(t *testing.T) {
 	var out bytes.Buffer
 	err := Run(t.Context(), b, Options{Prompt: "hi", ReasoningEffort: "high"}, quietTerminal(&out))
 	require.EqualError(t, err, `model "gpt-4o" does not support reasoning effort`)
-	require.Empty(t, b.calls)
+	require.Equal(t, []string{"prepare", `resolve "" last=false`, "chat-model sess"}, b.calls)
 }
 
-func TestRun_NoLargeModelForTuning(t *testing.T) {
+func TestRun_NoChatModelForTuning(t *testing.T) {
 	t.Parallel()
 
 	b := newFakeBackend()
-	delete(b.cfg.Models, config.SelectedModelTypeLarge)
+	delete(b.chats, "sess")
 	var out bytes.Buffer
 	err := Run(t.Context(), b, Options{Prompt: "hi", Fast: true}, quietTerminal(&out))
-	require.EqualError(t, err, "no large model selected; set one with the --model flag or 'model large'")
+	require.EqualError(t, err, "the chat has no model; set one with the --model flag")
 }
 
 func TestRun_PrepareAndResolveErrorsAreReturnedAsIs(t *testing.T) {

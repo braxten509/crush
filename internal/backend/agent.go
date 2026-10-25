@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -154,7 +153,7 @@ func (b *Backend) runAgent(ws *Workspace, msg proto.AgentMessage, accept *agent.
 	}
 }
 
-// GetAgentInfo returns the agent's model and busy status.
+// GetAgentInfo returns the agent's busy and ready status.
 func (b *Backend) GetAgentInfo(workspaceID string) (proto.AgentInfo, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
@@ -163,13 +162,10 @@ func (b *Backend) GetAgentInfo(workspaceID string) (proto.AgentInfo, error) {
 
 	var agentInfo proto.AgentInfo
 	if ws.AgentCoordinator != nil {
-		m := ws.AgentCoordinator.Model()
 		agentInfo = proto.AgentInfo{
-			Model:    m.CatwalkCfg,
-			ModelCfg: m.ModelCfg,
-			IsBusy:   ws.AgentCoordinator.IsBusy(),
-			IsReady:  true,
-			Agent:    ws.AgentCoordinator.MainAgentName(),
+			IsBusy:  ws.AgentCoordinator.IsBusy(),
+			IsReady: true,
+			Agent:   ws.AgentCoordinator.MainAgentName(),
 		}
 	}
 	return agentInfo, nil
@@ -374,15 +370,6 @@ func (b *Backend) QueuedPromptSummaries(workspaceID, sessionID string) ([]messag
 		return nil, err
 	}
 	return o.QueuedPromptSummaries(sessionID), nil
-}
-
-// GetDefaultSmallModel returns the default small model for a provider.
-func (b *Backend) GetDefaultSmallModel(workspaceID, providerID string) (config.SelectedModel, error) {
-	o, err := b.ops(workspaceID)
-	if err != nil {
-		return config.SelectedModel{}, err
-	}
-	return o.GetDefaultSmallModel(providerID), nil
 }
 
 // RunShellCommand runs a shell command in the workspace directory and

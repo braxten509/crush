@@ -20,7 +20,7 @@ import (
 // rebuilds them from config before each turn.
 type fixedModelsAgent struct{ SessionAgent }
 
-func (fixedModelsAgent) SetModels(Model, Model)       {}
+func (fixedModelsAgent) SetHelperModel(Model)         {}
 func (fixedModelsAgent) SetTools([]fantasy.AgentTool) {}
 
 // A headless run whose Claude turn ends while helpers Claude started itself
@@ -80,7 +80,7 @@ while True:
 	// The coordinator looks up each turn's provider in its config.
 	limits := catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 10000}
 	selected := config.SelectedModel{Provider: "mock", Model: "mock-model"}
-	sa.SetModels(Model{Model: model, CatwalkCfg: limits, ModelCfg: selected}, Model{Model: &finishStreamModel{text: "title"}, CatwalkCfg: limits, ModelCfg: selected})
+	setTestModels(sa, Model{Model: model, CatwalkCfg: limits, ModelCfg: selected}, Model{Model: &finishStreamModel{text: "title"}, CatwalkCfg: limits, ModelCfg: selected})
 	c.mainAgent = fixedModelsAgent{sa}
 	c.tasks = &taskHub{c: c, tasks: make(map[string]*Task)}
 	broker := pubsub.NewBroker[notify.RunComplete]()

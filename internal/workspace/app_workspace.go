@@ -164,17 +164,6 @@ func (w *AppWorkspace) AgentIsSessionBusy(sessionID string) bool {
 	return w.ops.IsSessionBusy(sessionID)
 }
 
-func (w *AppWorkspace) AgentModel() AgentModel {
-	if w.app.AgentCoordinator == nil {
-		return AgentModel{}
-	}
-	m := w.app.AgentCoordinator.Model()
-	return AgentModel{
-		CatwalkCfg: m.CatwalkCfg,
-		ModelCfg:   m.ModelCfg,
-	}
-}
-
 func (w *AppWorkspace) AgentIsReady() bool {
 	return w.app.AgentCoordinator != nil
 }
@@ -218,10 +207,6 @@ func (w *AppWorkspace) InitCoderAgent(ctx context.Context) error {
 
 func (w *AppWorkspace) InitCoderAgentNonInteractive(ctx context.Context) error {
 	return w.app.InitCoderAgentNonInteractive(ctx)
-}
-
-func (w *AppWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	return w.ops.GetDefaultSmallModel(providerID)
 }
 
 // -- Permissions --
@@ -336,8 +321,8 @@ func (w *AppWorkspace) Resolver() config.VariableResolver {
 
 // -- Config mutations --
 
-func (w *AppWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
-	return w.ops.UpdatePreferredModel(scope, modelType, model)
+func (w *AppWorkspace) SetHelperModel(scope config.Scope, model config.SelectedModel) error {
+	return w.ops.SetHelperModel(scope, model)
 }
 
 func (w *AppWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {
@@ -504,4 +489,12 @@ func (w *AppWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill
 
 func (w *AppWorkspace) SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error) {
 	return w.ops.SetSessionModel(ctx, sessionID, model)
+}
+
+func (w *AppWorkspace) LastPick(context.Context) (config.SelectedModel, bool) {
+	return w.ops.LastPick()
+}
+
+func (w *AppWorkspace) SetLastPick(_ context.Context, model config.SelectedModel) error {
+	return w.ops.SetLastPick(model)
 }

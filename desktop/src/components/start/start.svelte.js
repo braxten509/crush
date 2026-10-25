@@ -6,6 +6,7 @@ import { tick, untrack } from "svelte";
 import { hasDialog, openDialog } from "../../lib/dialogs.js";
 import { api } from "../../lib/engine/api.js";
 import { app_info } from "../../lib/engine/commands.js";
+import { shownAgent } from "../../lib/models/store.svelte.js";
 import { probeSection } from "../../lib/probe.js";
 import { resolveSessionId } from "../../lib/sessionid.js";
 import { conn } from "../../lib/stores/connection.svelte.js";
@@ -219,8 +220,13 @@ function contentRect(el) {
 }
 
 // Test runs only (desktop-design 1.9; this section is not pinned): which start
-// screen shows and what it says. The config fields are the ones START-017 and
-// START-019 check: the large model's id and provider, and the theme setting.
+// screen shows and what it says. The fields START-017 and START-019 check: the
+// shown chat's model (the last pick on the landing page) and the theme setting.
+function chatModelProbe() {
+  const model = shownAgent()?.model_cfg;
+  return model ? { model: model.model ?? "", provider: model.provider ?? "" } : null;
+}
+
 function registerProbe() {
   probeSection(
     "start",
@@ -231,7 +237,7 @@ function registerProbe() {
       version: start.version,
       configured: start.configured,
       agent_ready: ws.agent ? ws.agent.is_ready === true : null,
-      large_model: ws.config?.models?.large ? { model: ws.config.models.large.model ?? "", provider: ws.config.models.large.provider ?? "" } : null,
+      chat_model: chatModelProbe(),
       // The Git branch the window shows (the top bar's, since the landing page went blank).
       branch: ws.branch,
       active_theme: ws.config?.options?.tui?.active_theme ?? null,

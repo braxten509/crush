@@ -34,7 +34,6 @@ type countingWorkspace struct {
 	agentBusy      bool
 	yolo           bool
 	queued         []string
-	model          workspace.AgentModel
 	lspStates      map[string]workspace.LSPClientInfo
 	lspDiags       map[string]lsp.DiagnosticCounts
 	mcpStates      map[string]mcp.ClientInfo
@@ -49,7 +48,6 @@ type countingWorkspace struct {
 	clearQueueCalls int
 	cancelCalls     int
 	interruptCalls  int
-	modelCalls      int
 	lspStateCalls   int
 	lspDiagCalls    int
 	mcpStateCalls   int
@@ -91,11 +89,6 @@ func (w *countingWorkspace) PermissionSetSkipRequests(skip bool) {
 func (w *countingWorkspace) AgentClearQueue(string) { w.clearQueueCalls++; w.queued = nil }
 func (w *countingWorkspace) AgentCancel(string)     { w.cancelCalls++ }
 func (w *countingWorkspace) AgentInterrupt(string)  { w.interruptCalls++ }
-
-func (w *countingWorkspace) AgentModel() workspace.AgentModel {
-	w.modelCalls++
-	return w.model
-}
 
 func (w *countingWorkspace) LSPGetStates() map[string]workspace.LSPClientInfo {
 	w.lspStateCalls++
@@ -153,7 +146,7 @@ func (w *countingWorkspace) Config() *config.Config { return nil }
 func (w *countingWorkspace) syncProbes() int {
 	return w.readyCalls + w.agentBusyCalls +
 		w.queuedCalls + w.queueListCalls + w.permCalls +
-		w.modelCalls + w.lspStateCalls + w.lspDiagCalls +
+		w.lspStateCalls + w.lspDiagCalls +
 		w.mcpStateCalls
 }
 
@@ -162,7 +155,7 @@ func (w *countingWorkspace) resetCounters() {
 	w.queuedCalls, w.queueListCalls, w.permCalls = 0, 0, 0
 	w.permSetCalls, w.clearQueueCalls, w.cancelCalls = 0, 0, 0
 	w.interruptCalls = 0
-	w.modelCalls, w.lspStateCalls, w.lspDiagCalls = 0, 0, 0
+	w.lspStateCalls, w.lspDiagCalls = 0, 0
 	w.mcpStateCalls, w.mcpPendingCalls = 0, 0
 }
 
@@ -170,7 +163,7 @@ func (w *countingWorkspace) resetCounters() {
 // "s1", enough state for Update to run end to end.
 func newBusyUI(ws *countingWorkspace) *UI {
 	com := common.DefaultCommon(ws)
-	return &UI{
+	u := &UI{
 		com:         com,
 		status:      NewStatus(com, nil),
 		chat:        NewChat(com, config.ScrollbarDefault),
@@ -184,6 +177,8 @@ func newBusyUI(ws *countingWorkspace) *UI {
 		dialog:      dialog.NewOverlay(),
 		attachments: attachments.New(nil, attachments.Keymap{}),
 	}
+	com.ShownModel = u.shownChoice
+	return u
 }
 
 // pinTTLs makes the TTL backstop inert for the duration of the test so
@@ -735,10 +730,10 @@ func TestStalePromptQueuePreservesSessionScoping(t *testing.T) {
 }
 
 // TestRenderHelpersDoNotProbeWorkspace pins the render-path side of the
-// invariant for the model and LSP info: selectedLargeModel, lspInfo, and
+// invariant for the model and LSP info: shownChatModel, lspInfo, and
 // lspErrorCount render from memoized state only. They run on every frame
 // (landing view, sidebar, compact header), and the probes behind them
-// (AgentIsReady, AgentModel, LSPGetStates, LSPGetDiagnosticCounts) are
+// (AgentIsReady, LSPGetStates, LSPGetDiagnosticCounts) are
 // synchronous HTTP round-trips in client/server mode.
 func TestRenderHelpersDoNotProbeWorkspace(t *testing.T) {
 	pinTTLs(t)
@@ -746,6 +741,7 @@ func TestRenderHelpersDoNotProbeWorkspace(t *testing.T) {
 	ws := &countingWorkspace{ready: true}
 	m := newBusyUI(ws)
 	m.agentReady = true
+	m.session.Model = []byte(`{"provider":"prov","model":"test-model"}`)
 	m.lspProbe.val.states = map[string]workspace.LSPClientInfo{
 		"gopls": {Name: "gopls", State: lsp.StateReady, DiagnosticCount: 3},
 	}
@@ -754,7 +750,7 @@ func TestRenderHelpersDoNotProbeWorkspace(t *testing.T) {
 	}
 
 	for range 10 {
-		require.NotNil(t, m.selectedLargeModel())
+		require.NotNil(t, m.shownChatModel())
 		m.lspInfo(40, 5, true)
 		require.Equal(t, 3, m.lspErrorCount())
 	}
@@ -769,51 +765,43 @@ func TestRenderHelpersDoNotProbeWorkspace(t *testing.T) {
 	require.Zero(t, ws.syncProbes(), "render helpers must never probe the workspace")
 }
 
-// TestBusyRefreshCarriesReadyAndModel: the off-thread busy probe must also
-// deliver the coordinator's readiness and selected model so the sidebar and
-// landing view render them without per-frame probes.
+// TestBusyRefreshCarriesReadyAndModel: the off-thread busy probe delivers
+// the coordinator's readiness, and the sidebar and landing view then show the
+// shown chat's own model without per-frame probes.
 func TestBusyRefreshCarriesReadyAndModel(t *testing.T) {
 	pinTTLs(t)
 
-	ws := &countingWorkspace{
-		ready: true,
-		model: workspace.AgentModel{ModelCfg: config.SelectedModel{Model: "test-model", Provider: "prov"}},
-	}
+	ws := &countingWorkspace{ready: true}
 	m := newBusyUI(ws)
-	require.Nil(t, m.selectedLargeModel(), "before any probe the model is unknown")
+	m.session.Model = []byte(`{"provider":"prov","model":"test-model"}`)
+	require.Nil(t, m.shownChatModel(), "before any probe the agent is not known to be ready")
 
 	_, cmd := m.Update(plainMsg{}) // stale caches: the backstop dispatches
 	runCmds(m, cmd)
 
 	require.True(t, m.agentReady, "the probe must land readiness in the cache")
-	sel := m.selectedLargeModel()
+	sel := m.shownChatModel()
 	require.NotNil(t, sel)
-	require.Equal(t, "test-model", sel.ModelCfg.Model, "the probe must land the model in the cache")
+	require.Equal(t, "test-model", sel.ModelCfg.Model, "the chat's own model is shown")
 }
 
-// TestAgentModelChangedRefreshesModel: after a model change
-// (selection/thinking/reasoning cmds sequence agentModelChangedCmd), the
-// handler must re-fetch ready/model off-thread — no synchronous probe — and
-// the fresh model must replace the memoized one.
+// TestAgentModelChangedRefreshesModel: after an agent rebuild (a helper
+// model pick, an MCP change), the handler re-fetches readiness off-thread,
+// with no synchronous probe.
 func TestAgentModelChangedRefreshesModel(t *testing.T) {
 	pinTTLs(t)
 
-	ws := &countingWorkspace{
-		ready: true,
-		model: workspace.AgentModel{ModelCfg: config.SelectedModel{Model: "new-model"}},
-	}
+	ws := &countingWorkspace{ready: true}
 	m := newBusyUI(ws)
 	warmCaches(m, false)
-	m.agentModel = workspace.AgentModel{ModelCfg: config.SelectedModel{Model: "old-model"}}
 	ws.resetCounters()
 
 	_, cmd := m.Update(agentModelChangedMsg{})
 	require.Zero(t, ws.syncProbes(), "the model-change handler must not probe synchronously")
-	require.True(t, m.busyFetchInFlight, "a model change must schedule a ready/model refresh")
+	require.True(t, m.busyFetchInFlight, "a model change must schedule a ready refresh")
 
 	runCmds(m, cmd)
-	require.Equal(t, "new-model", m.agentModel.ModelCfg.Model,
-		"the refreshed model must land in the cache")
+	require.True(t, m.agentReady)
 }
 
 // TestMCPStateChangedRefreshesModel pins two edges of an MCP state change:
@@ -827,14 +815,12 @@ func TestMCPStateChangedRefreshesModel(t *testing.T) {
 
 	ws := &countingWorkspace{
 		ready: true,
-		model: workspace.AgentModel{ModelCfg: config.SelectedModel{Model: "post-mcp-model"}},
 		mcpStates: map[string]mcp.ClientInfo{
 			"ctx": {Name: "ctx", State: mcp.StateConnected, Counts: mcp.Counts{Tools: 4}},
 		},
 	}
 	m := newBusyUI(ws)
 	warmCaches(m, false)
-	m.agentModel = workspace.AgentModel{ModelCfg: config.SelectedModel{Model: "pre-mcp-model"}}
 	ws.resetCounters()
 
 	_, cmd := m.Update(pubsub.Event[mcp.Event]{
@@ -855,8 +841,6 @@ func TestMCPStateChangedRefreshesModel(t *testing.T) {
 	runCmds(m, cmd)
 
 	require.True(t, m.agentReady)
-	require.Equal(t, "post-mcp-model", m.agentModel.ModelCfg.Model,
-		"an MCP state change must refresh the memoized model")
 }
 
 // TestLSPEventRefreshIsOffThreadAndDeduped pins the LSP side of the

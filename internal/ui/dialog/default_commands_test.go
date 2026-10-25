@@ -8,7 +8,6 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/exp/golden"
 )
@@ -23,6 +22,7 @@ func TestDefaultCommandsList(t *testing.T) {
 	cases := []struct {
 		name     string
 		cfg      *config.Config
+		model    config.SelectedModel
 		commands Commands
 		editor   string
 	}{
@@ -32,12 +32,9 @@ func TestDefaultCommandsList(t *testing.T) {
 			commands: Commands{},
 		},
 		{
-			name: "session with thinking model",
+			name:  "session with thinking model",
+			model: config.SelectedModel{Provider: "p", Model: "think", Think: true},
 			cfg: &config.Config{
-				Agents: map[string]config.Agent{config.AgentCoder: {Model: config.SelectedModelTypeLarge}},
-				Models: map[config.SelectedModelType]config.SelectedModel{
-					config.SelectedModelTypeLarge: {Provider: "p", Model: "think", Think: true},
-				},
 				Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
 					"p": {ID: "p", Models: []catwalk.Model{reasoningModel}},
 				}),
@@ -51,12 +48,9 @@ func TestDefaultCommandsList(t *testing.T) {
 			editor:   "vi",
 		},
 		{
-			name: "claude code with effort levels",
+			name:  "claude code with effort levels",
+			model: config.SelectedModel{Provider: "cc", Model: "effort", ServiceTier: "fast", Ultracode: true},
 			cfg: &config.Config{
-				Agents: map[string]config.Agent{config.AgentCoder: {Model: config.SelectedModelTypeLarge}},
-				Models: map[config.SelectedModelType]config.SelectedModel{
-					config.SelectedModelTypeLarge: {Provider: "cc", Model: "effort", ServiceTier: "fast", Ultracode: true},
-				},
 				Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
 					"cc": {ID: "cc", Type: config.TypeClaudeCode, Models: []catwalk.Model{effortModel}},
 				}),
@@ -77,7 +71,7 @@ func TestDefaultCommandsList(t *testing.T) {
 		t.Setenv("EDITOR", tc.editor)
 		sty := styles.CharmtonePantera()
 		c := tc.commands
-		c.com = &common.Common{Workspace: fastModeWorkspace{cfg: tc.cfg}, Styles: &sty}
+		c.com = chatCommon(tc.cfg, &sty, tc.model)
 		fmt.Fprintf(&b, "=== %s\n", tc.name)
 		for _, item := range c.defaultCommands() {
 			// Whether CPU affinity is offered depends on the platform.

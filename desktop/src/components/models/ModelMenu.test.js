@@ -18,6 +18,8 @@ vi.mock("../../lib/engine/commands.js", () => ({
       const cfg = state.routes["GET config"] ?? {};
       state.routes["GET config"] = { ...cfg, models: { ...cfg.models, [body.model_type]: body.model } };
     }
+    // The engine answers the next read with the pick it saved.
+    if (method === "POST" && path === "last-pick") state.routes["GET last-pick"] = body;
     const key = `${method} ${path}`;
     // A queued answer serves the config reads in order, so a choice's own
     // refresh sees the model the engine just saved.
@@ -48,12 +50,13 @@ const PROVIDERS = [
   },
 ];
 
-// GET …/config as the engine answers it: the coder's model type, the chosen
-// model (none until one is picked) and the set-up provider.
+// GET …/config as the engine answers it: the helper model and the set-up
+// provider. Every chat owns its model; with no chat open the menu shows the
+// last pick (GET …/last-pick), which selected stands for here.
 function config(selected) {
+  state.routes["GET last-pick"] = selected ?? null;
   return {
-    agents: { coder: { model: "large" } },
-    models: selected ? { large: selected } : {},
+    models: { small: { provider: "anthropic", model: "claude-b" } },
     recent_models: {},
     providers: { anthropic: { id: "anthropic", name: "Anthropic", models: [] } },
   };
@@ -140,6 +143,23 @@ describe("the model menu (ModelMenu.svelte)", () => {
     availabilityStore.byProvider = {};
   });
 
+  // Bug 8b: while the folder's answer is out, or after it failed, no row
+  // looks checked; the rows stay pickable and say so (owner's D4a).
+  it("says Checking… while the folder is checked, and Could not check after a failed read", async () => {
+    state.routes["GET config"] = config();
+    let answer;
+    state.routes["GET providers/availability"] = () => new Promise((resolve, reject) => (answer = { resolve, reject }));
+    mount();
+    await settle();
+    let rows = modelRows();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => !row.disabled && row.textContent.includes("Checking…"))).toBe(true);
+    answer.reject({ code: "internal", message: "engine lost" });
+    await settle();
+    rows = modelRows();
+    expect(rows.every((row) => !row.disabled && row.textContent.includes("Could not check"))).toBe(true);
+  });
+
   it("checks the shown chat and ignores a late home-folder reply", async () => {
     state.routes["GET config"] = config();
     const { setChatFolder } = await import("../../lib/engine/api.js");
@@ -173,9 +193,7 @@ describe("the model menu (ModelMenu.svelte)", () => {
   });
 
   it("keeps the menu open after a choice, so the effort level can be picked too", async () => {
-    // The first read has nothing chosen; after the choice the engine answers
-    // with the saved model, as the engine's config write would.
-    orders.config = [config(), config({ provider: "anthropic", model: "claude-a", reasoning_effort: "low" })];
+    state.routes["GET config"] = config();
     mount();
     await settle();
     expect(levelButtons()).toEqual([]);
@@ -190,22 +208,55 @@ describe("the model menu (ModelMenu.svelte)", () => {
     expect(levelButtons().map((level) => level.textContent.trim())).toEqual(["Low", "High"]);
     expect(levelButtons()[0].getAttribute("aria-checked")).toBe("true");
 
-    // The choice was saved for the coder's model type.
-    expect(state.posts.find((post) => post.path === "config/model").body).toEqual({
-      scope: 0,
-      model_type: "large",
-      model: { model: "claude-a", provider: "anthropic", reasoning_effort: "low" },
-    });
+    // With no chat open the choice is the last pick a new chat starts on.
+    expect(state.posts.find((post) => post.path === "last-pick").body).toEqual({ model: "claude-a", provider: "anthropic", reasoning_effort: "low" });
 
     // An effort level is picked in the same open menu and saved with the
     // model now in force.
-    state.routes["GET config"] = config({ provider: "anthropic", model: "claude-a", reasoning_effort: "low" });
     levelButtons()[1].click();
     await settle();
 
     expect(ui.menu?.kind).toBe("model");
-    expect(state.posts.filter((post) => post.path === "config/model").at(-1).body.model.reasoning_effort).toBe("high");
+    expect(state.posts.filter((post) => post.path === "last-pick").at(-1).body.reasoning_effort).toBe("high");
     expect(levelButtons()[1].getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("a pick changes only this chat, and on the landing page only the last pick", async () => {
+    state.routes["GET config"] = config();
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    const claudeB = { provider: "anthropic", model: "claude-b" };
+    sessions.currentId = "a";
+    sessions.byId.a = { id: "a", model: { ...claudeB } };
+    sessions.byId.b = { id: "b", model: { ...claudeB } };
+    mount();
+    await settle();
+
+    modelRows()[0].click();
+    await settle();
+    expect(state.posts.map((post) => post.path)).toEqual(["sessions/a/model"]);
+    expect(sessions.byId.a.model.model).toBe("claude-a");
+    expect(sessions.byId.b.model).toEqual(claudeB);
+
+    state.posts = [];
+    sessions.currentId = "";
+    await settle();
+    modelRows()[1].click();
+    await settle();
+    expect(state.posts.map((post) => post.path)).toEqual(["last-pick"]);
+    expect(sessions.byId.b.model).toEqual(claudeB);
+
+    // A chat deleted while its save is on its way leaves no record behind.
+    let finish;
+    state.routes["POST sessions/gone/model"] = () => new Promise((resolve) => { finish = resolve; });
+    sessions.currentId = "gone";
+    sessions.byId.gone = { id: "gone", model: { ...claudeB } };
+    await settle();
+    modelRows()[0].click();
+    await settle();
+    delete sessions.byId.gone;
+    finish({});
+    await settle();
+    expect(sessions.byId.gone).toBeUndefined();
   });
 
   it("the arrow keys reach the effort levels, so one is picked with the keyboard too", async () => {
@@ -220,7 +271,7 @@ describe("the model menu (ModelMenu.svelte)", () => {
 
     levelButtons()[1].click();
     await settle();
-    expect(state.posts.filter((post) => post.path === "config/model").at(-1).body.model.reasoning_effort).toBe("high");
+    expect(state.posts.filter((post) => post.path === "last-pick").at(-1).body.reasoning_effort).toBe("high");
     expect(ui.menu?.kind).toBe("model");
   });
 
@@ -246,7 +297,7 @@ describe("the model menu (ModelMenu.svelte)", () => {
     expect(sessions.byId.here.model).toEqual(own);
   });
 
-  it("saves effort on this chat's model while another model is the shared default", async () => {
+  it("saves effort on this chat's model while another chat has another model", async () => {
     const other = { provider: "anthropic", model: "claude-b" };
     state.routes["GET config"] = config(other);
     const { sessions } = await import("../../lib/stores/sessions.svelte.js");
@@ -264,7 +315,7 @@ describe("the model menu (ModelMenu.svelte)", () => {
     expect(levelButtons()[1].getAttribute("aria-checked")).toBe("true");
   });
 
-  it("reports a failed chat save without changing the shared default or claiming success", async () => {
+  it("reports a failed chat save without writing any other model or claiming success", async () => {
     const own = { provider: "anthropic", model: "claude-a", reasoning_effort: "low" };
     state.routes["GET config"] = config(own);
     state.routes["POST sessions/here/model"] = () => { throw new Error("chat save refused"); };
@@ -275,7 +326,7 @@ describe("the model menu (ModelMenu.svelte)", () => {
     await settle();
     levelButtons()[1].click();
     await settle();
-    expect(state.posts.some((p) => p.path === "config/model" || p.path === "agent/update")).toBe(false);
+    expect(state.posts.some((p) => p.path === "config/model" || p.path === "last-pick" || p.path === "agent/update")).toBe(false);
     expect(sessions.byId.here.model).toEqual(own);
     expect(levelButtons()[0].getAttribute("aria-checked")).toBe("true");
     expect(JSON.stringify(ui)).toContain("chat save refused");
@@ -287,7 +338,6 @@ describe("the model menu (ModelMenu.svelte)", () => {
     providers[0].models[1] = { id: "claude-b", name: "Claude B", reasoning_levels: ["low", "high"], default_reasoning_effort: "low" };
     state.routes["GET providers"] = providers;
     state.routes["GET config"] = config(own);
-    state.routes["POST config/model"] = (body) => { state.routes["GET config"] = config(body.model); };
     const { sessions } = await import("../../lib/stores/sessions.svelte.js");
     sessions.currentId = "here";
     sessions.byId.here = { id: "here", model: own };

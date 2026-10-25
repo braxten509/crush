@@ -171,7 +171,7 @@ func (m *recordingPermissionService) SubscribeNotifications(ctx context.Context)
 func newBashToolForTest(workingDir string) fantasy.AgentTool {
 	permissions := &mockBashPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
-	return NewBashTool(permissions, workingDir, workingDir, attribution, "test-model", nil)
+	return NewBashTool(permissions, workingDir, workingDir, attribution, nil)
 }
 
 func newBashToolWithRecordingPerms(workingDir string, allow bool) (fantasy.AgentTool, *recordingPermissionService) {
@@ -180,7 +180,7 @@ func newBashToolWithRecordingPerms(workingDir string, allow bool) (fantasy.Agent
 		allow:  allow,
 	}
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
-	return NewBashTool(perms, workingDir, workingDir, attribution, "test-model", nil), perms
+	return NewBashTool(perms, workingDir, workingDir, attribution, nil), perms
 }
 
 func TestBashTool_ChainedCommandsRequirePermission(t *testing.T) {
@@ -264,4 +264,12 @@ func TestTruncateOutputEmoji(t *testing.T) {
 	out := TruncateOutput(content, t.TempDir())
 	require.True(t, utf8.ValidString(out), "truncated output must stay valid UTF-8")
 	require.Contains(t, out, "lines truncated")
+}
+
+// The commit record names Crush only: the tool is built once for every
+// chat, and each chat owns its model, so no one model's name fits it.
+func TestBashCommitRecordNamesNoModel(t *testing.T) {
+	desc := bashDescription(&config.Attribution{TrailerStyle: "assisted-by"})
+	require.Contains(t, desc, "Assisted-by: Crush\n")
+	require.NotContains(t, desc, "Assisted-by: Crush:")
 }

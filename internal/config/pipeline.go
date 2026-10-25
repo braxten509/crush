@@ -132,11 +132,12 @@ func buildConfig(ctx context.Context, p buildParams) (*buildResult, error) {
 		return res, nil
 	}
 
+	cfg.takeLegacyChatModel()
 	res.models, err = resolveSelectedModels(cfg, providers)
 	if err != nil {
 		return res, p.errorf("failed to configure selected models", "failed to configure selected models during reload", err)
 	}
-	cfg.Models[SelectedModelTypeLarge] = res.models.Large
+	cfg.startModel = &res.models.Start
 	cfg.Models[SelectedModelTypeSmall] = res.models.Small
 	cfg.SetupAgents()
 	res.configured = true

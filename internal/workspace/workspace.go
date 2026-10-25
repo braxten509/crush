@@ -154,6 +154,10 @@ type SessionService interface {
 	// SetSessionModel saves the model one chat runs on, so a model picked
 	// in a chat never reaches another chat.
 	SetSessionModel(ctx context.Context, sessionID string, model session.ModelChoice) (session.Session, error)
+	// LastPick is the model a new chat starts on; SetLastPick saves a pick
+	// made with no chat open. No chat runs on the last pick.
+	LastPick(ctx context.Context) (config.SelectedModel, bool)
+	SetLastPick(ctx context.Context, model config.SelectedModel) error
 }
 
 // MessageService reads a workspace's messages.
@@ -184,7 +188,6 @@ type AgentService interface {
 	// background (Ctrl+B), reporting whether the agent could be asked.
 	AgentBackground(sessionID string) bool
 	AgentIsSessionBusy(sessionID string) bool
-	AgentModel() AgentModel
 	AgentIsReady() bool
 	// AgentReadyErr reports nil when the coder agent is ready to accept
 	// work, or a descriptive error otherwise: ErrAgentNotInitialized
@@ -202,7 +205,6 @@ type AgentService interface {
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	InitCoderAgentNonInteractive(ctx context.Context) error
-	GetDefaultSmallModel(providerID string) config.SelectedModel
 }
 
 // InteractionService resolves the permission requests and questions the
@@ -242,7 +244,7 @@ type ConfigService interface {
 	GitBranch(ctx context.Context) (string, error)
 	ProviderAvailability(ctx context.Context) (map[string]string, error)
 	Resolver() config.VariableResolver
-	UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error
+	SetHelperModel(scope config.Scope, model config.SelectedModel) error
 	SetCompactMode(scope config.Scope, enabled bool) error
 	SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error
 	SetConfigField(scope config.Scope, key string, value any) error

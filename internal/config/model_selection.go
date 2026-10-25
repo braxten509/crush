@@ -93,57 +93,59 @@ func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (large
 // resolvedModels holds the result of resolving user-configured model
 // selections against the provider catalog.
 type resolvedModels struct {
-	Large         SelectedModel
-	Small         SelectedModel
-	LargeFallback bool // true if Large was corrected to a default
-	SmallFallback bool // true if Small was corrected to a default
+	// Start is the model a new chat starts on while no last pick exists: an
+	// old file's models.large when it still resolves, else the default.
+	// No chat runs on it (owner, 2026-10-24: no shared model anywhere).
+	Start SelectedModel
+	// Small is the helper model (titles, branch summaries, web fetches).
+	Small SelectedModel
+	// WriteSmall is true when Small must be saved: it was corrected to a
+	// default, or none was set and the default is written once.
+	WriteSmall bool
 }
 
 // resolveSelectedModels validates the user's configured model selections
 // against the provider catalog, falling back to defaults when a model ID is
 // invalid. It is pure resolution logic: it does not mutate the store or
-// touch disk. The caller assigns the results to c.Models and persists any
-// fallback corrections as appropriate.
+// touch disk. The caller assigns the results and persists the helper when
+// WriteSmall says so.
 func resolveSelectedModels(cfg *Config, knownProviders []catwalk.Provider) (resolvedModels, error) {
 	var result resolvedModels
-	defaultLarge, defaultSmall, err := cfg.defaultModelSelection(knownProviders)
+	defaultStart, defaultSmall, err := cfg.defaultModelSelection(knownProviders)
 	if err != nil {
 		return result, fmt.Errorf("failed to select default models: %w", err)
 	}
-	large, small := defaultLarge, defaultSmall
-
-	largeModelSelected, largeModelConfigured := cfg.Models[SelectedModelTypeLarge]
-	if largeModelConfigured {
-		large, result.LargeFallback = cfg.resolveSelectedModel(defaultLarge, largeModelSelected)
+	result.Start = defaultStart
+	if cfg.startModel != nil {
+		result.Start, _ = cfg.resolveSelectedModel(defaultStart, *cfg.startModel)
 	}
-	smallModelSelected, smallModelConfigured := cfg.Models[SelectedModelTypeSmall]
-	if smallModelConfigured {
-		small, result.SmallFallback = cfg.resolveSelectedModel(defaultSmall, smallModelSelected)
+	// The helper never follows a chat's model or the old shared one: the
+	// one set, else the default selection's, written once.
+	result.Small, result.WriteSmall = defaultSmall, true
+	if selected, ok := cfg.Models[SelectedModelTypeSmall]; ok {
+		result.Small, result.WriteSmall = cfg.resolveSelectedModel(defaultSmall, selected)
 	}
-
-	// When small isn't explicitly configured and the provider isn't a
-	// known built-in, use the large model as the small model. This
-	// prevents two different models from being requested concurrently
-	// for local/openai-compat providers.
-	if !smallModelConfigured {
-		isKnownProvider := false
-		for _, kp := range knownProviders {
-			if string(kp.ID) == small.Provider {
-				isKnownProvider = true
-				break
-			}
-		}
-		if cliSmall, ok := cfg.CLISmallModel(large.Provider); ok {
-			small = cliSmall
-		} else if !isKnownProvider {
-			slog.Warn("Using large model as small model for unknown provider", "provider", large.Provider, "model", large.Model)
-			small = large
-		}
-	}
-
-	result.Large = large
-	result.Small = small
 	return result, nil
+}
+
+// takeLegacyChatModel moves an old file's models.large out of Models: it is
+// read this once, as the model a new chat starts on before any pick and the
+// one an old chat with no model of its own takes. The file is not
+// rewritten.
+func (c *Config) takeLegacyChatModel() {
+	if m, ok := c.Models[legacyChatModelKey]; ok {
+		c.startModel = &m
+		delete(c.Models, legacyChatModelKey)
+	}
+}
+
+// StartModel is the model a new chat starts on while no last pick exists
+// (see NewChatModel); ok is false before the models are resolved.
+func (c *Config) StartModel() (SelectedModel, bool) {
+	if c.startModel == nil || c.startModel.Provider == "" || c.startModel.Model == "" {
+		return SelectedModel{}, false
+	}
+	return *c.startModel, true
 }
 
 // resolveSelectedModel lays a configured model selection over the default

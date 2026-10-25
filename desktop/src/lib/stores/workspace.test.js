@@ -63,8 +63,8 @@ afterEach(() => {
 const SECRETS = ["sk-provider-key", "x-provider-header", "env-secret-value", "hook-command-secret", "mcp-header-token", "mcp-env-token", "mcp-url-secret", "lsp-env-secret", "tool-secret"];
 const fullConfig = () => ({
   $schema: "https://charm.land/crush.json",
-  models: { large: { provider: "claude-code", model: "opus", reasoning_effort: "high" }, small: { provider: "claude-code", model: "haiku" } },
-  recent_models: { large: [{ provider: "codex-cli", model: "gpt-6-sol" }] },
+  models: { small: { provider: "claude-code", model: "opus", reasoning_effort: "high" } },
+  recent_models: { small: [{ provider: "codex-cli", model: "gpt-6-sol" }] },
   providers: {
     anthropic: { id: "anthropic", api_key: "sk-provider-key", extra_headers: { "X-Key": "x-provider-header" }, oauth: { access_token: "sk-provider-key" }, models: [{ id: "claude" }] },
   },
@@ -84,8 +84,8 @@ describe("pickConfig keeps no provider, env, hook or MCP header field", () => {
   it("keeps models, recent_models, options, permissions and each mcp and lsp entry's type and disabled", () => {
     const picked = workspace.pickConfig(fullConfig());
     expect(Object.keys(picked).sort()).toEqual(["lsp", "mcp", "models", "options", "permissions", "recent_models"]);
-    expect(picked.models.large).toEqual({ provider: "claude-code", model: "opus", reasoning_effort: "high" });
-    expect(picked.recent_models.large[0].model).toBe("gpt-6-sol");
+    expect(picked.models.small).toEqual({ provider: "claude-code", model: "opus", reasoning_effort: "high" });
+    expect(picked.recent_models.small[0].model).toBe("gpt-6-sol");
     expect(picked.options.tui.compact_mode).toBe(true);
     expect(picked.permissions.allowed_tools).toEqual(["view"]);
     expect(picked.mcp).toEqual({ github: { type: "http", disabled: false }, docker: { type: "stdio", disabled: true } });
@@ -103,8 +103,8 @@ describe("pickConfig keeps no provider, env, hook or MCP header field", () => {
   it("is a copy: changing the result never touches the engine's object", () => {
     const config = fullConfig();
     const picked = workspace.pickConfig(config);
-    picked.models.large.model = "changed";
-    expect(config.models.large.model).toBe("opus");
+    picked.models.small.model = "changed";
+    expect(config.models.small.model).toBe("opus");
   });
 
   it("gives null for no config", () => {
@@ -131,10 +131,10 @@ describe("pickConfig keeps no provider, env, hook or MCP header field", () => {
 
 describe("events and reads", () => {
   it("config_changed reads the config and the agent again", async () => {
-    h.routes.set("GET config", { models: { large: { provider: "claude-code", model: "opus" } } });
+    h.routes.set("GET config", { models: { small: { provider: "claude-code", model: "opus" } } });
     h.routes.set("GET agent", { is_ready: true, is_busy: false, model_cfg: { provider: "claude-code", model: "opus" } });
     await deliver(ev("config_changed", "updated", { workspace_id: "w" }));
-    expect(workspace.ws.config.models.large.model).toBe("opus");
+    expect(workspace.ws.config.models.small.model).toBe("opus");
     expect(workspace.ws.agent.is_ready).toBe(true);
   });
 
@@ -195,8 +195,8 @@ describe("events and reads", () => {
   });
 
   describe("an older read never overwrites a newer one", () => {
-    const older = { models: { large: { provider: "claude-code", model: "opus" } } };
-    const newer = { models: { large: { provider: "codex-cli", model: "gpt-6-sol" } } };
+    const older = { models: { small: { provider: "claude-code", model: "opus" } } };
+    const newer = { models: { small: { provider: "codex-cli", model: "gpt-6-sol" } } };
     const f1 = { id: "f1", session_id: "s1", path: "/p/a.go", version: 0, created_at: 10 };
     const f2 = { id: "f2", session_id: "s1", path: "/p/b.go", version: 0, created_at: 20 };
     // Each read of the route waits until the test answers it, in either order.
@@ -261,7 +261,7 @@ describe("events and reads", () => {
         await deliver({ kind: "resync" });
         expect(reads).toHaveLength(2);
         await answer(reads, order, older, newer);
-        expect(workspace.ws.config.models.large.provider).toBe("codex-cli");
+        expect(workspace.ws.config.models.small.provider).toBe("codex-cli");
       });
 
       it(`files: two overlapping resyncs; ${order}`, async () => {
@@ -294,7 +294,7 @@ describe("events and reads", () => {
     await deliver({ kind: "resync" });
     // Meanwhile a file is saved, a skill is added and the model changes.
     h.routes.set("GET skills", [{ name: "new-skill" }]);
-    h.routes.set("GET config", { models: { large: { provider: "codex-cli", model: "gpt-6-sol" } } });
+    h.routes.set("GET config", { models: { small: { provider: "codex-cli", model: "gpt-6-sol" } } });
     await deliver(
       ev("file", "created", { id: "f2", session_id: "s1", path: "/p/b.go", version: 0, created_at: 20 }),
       ev("skills_event", "updated", {}),
@@ -303,11 +303,11 @@ describe("events and reads", () => {
     // The resync's reads answer with what the engine had before those events.
     history.resolve([{ id: "f1", session_id: "s1", path: "/p/a.go", version: 0, created_at: 10 }]);
     skills.resolve([{ name: "old-skill" }]);
-    config.resolve({ models: { large: { provider: "claude-code", model: "opus" } } });
+    config.resolve({ models: { small: { provider: "claude-code", model: "opus" } } });
     await settle();
     expect(workspace.ws.files.s1.map((f) => f.id)).toEqual(["f1", "f2"]);
     expect(workspace.ws.skills).toEqual([{ name: "new-skill" }]);
-    expect(workspace.ws.config.models.large.provider).toBe("codex-cli");
+    expect(workspace.ws.config.models.small.provider).toBe("codex-cli");
   });
 
   it("skills_event reads the skills again", async () => {

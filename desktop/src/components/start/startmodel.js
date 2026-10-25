@@ -1,7 +1,7 @@
 // The start screens' rules (desktop-design 2.5, 2.9, 4.12), kept apart from
 // the components so they are unit-tested: the gate's words, which screen the
-// middle column shows, the init prompt's keys, and the landing page's model
-// line and LSP / MCP / skill rows.
+// middle column shows, the init prompt's keys, and the landing page's LSP /
+// MCP / skill rows.
 
 export const STARTING = "Starting Crush…";
 export const TRY_AGAIN = "Try again";
@@ -72,50 +72,6 @@ export function formatEffort(effort) {
   if (effort === "xhigh") return "X-High";
   const text = String(effort ?? "");
   return text ? text[0].toUpperCase() + text.slice(1).toLowerCase() : "";
-}
-
-// config.SupportsThinkingToggle, SupportsFastMode and SupportsUltracode
-// (internal/config/abacus.go:43-67) with what the window knows: the provider
-// id (a built-in agent CLI's id is its type) and the model. Abacus's API
-// format checks are left out: the window does not have the model's format.
-function thinkingToggle(provider, model) {
-  if (!model?.can_reason || (model.reasoning_levels ?? []).length > 0) return false;
-  if (provider !== "abacus") return true;
-  const id = String(model.id ?? "").toLowerCase();
-  return id.includes("deepseek") || id.startsWith("zai-org/") || id.includes("minimax");
-}
-
-function fastMode(provider) {
-  return provider === "claude-code" || provider === "codex-cli";
-}
-
-function ultracode(provider, model) {
-  return provider === "claude-code" && (model?.reasoning_levels ?? []).length > 0;
-}
-
-// The landing page's model line (the terminal's modelInfo,
-// internal/ui/model/sidebar.go:27-86): the model's name, "via <provider>",
-// and the reasoning words. null while the agent has no model.
-export function modelLine(agent, providerName = "") {
-  const model = agent?.model;
-  const cfg = agent?.model_cfg;
-  if (!agent?.is_ready || !model || !cfg) return null;
-  const words = [];
-  if (model.can_reason) {
-    if ((model.reasoning_levels ?? []).length === 0) {
-      if (!thinkingToggle(cfg.provider, model)) words.push("Thinking");
-      else words.push(cfg.think ? "Thinking On" : "Thinking Off");
-    } else {
-      words.push(`Reasoning ${formatEffort(cfg.reasoning_effort || model.default_reasoning_effort || "")}`.trim());
-    }
-  }
-  if (fastMode(cfg.provider) && cfg.service_tier === "fast") words.push("FAST");
-  if (ultracode(cfg.provider, model) && cfg.ultracode) words.push("Ultracode");
-  return {
-    name: model.name || cfg.model || "",
-    via: providerName ? `via ${providerName}` : "",
-    reasoning: words.join(" · "),
-  };
 }
 
 // The provider's display name: as configured, else the catalog's, else its id.

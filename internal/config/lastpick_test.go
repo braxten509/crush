@@ -22,9 +22,7 @@ func TestLastPickIsReadFreshAcrossStores(t *testing.T) {
 			"claude-code": {ID: "claude-code", Models: []catwalk.Model{{ID: "opus"}}},
 			"codex-cli":   {ID: "codex-cli", Models: []catwalk.Model{{ID: "gpt-6-sol"}}},
 		}),
-		Models: map[SelectedModelType]SelectedModel{
-			SelectedModelTypeLarge: {Provider: "claude-code", Model: "opus"},
-		},
+		startModel: &SelectedModel{Provider: "claude-code", Model: "opus"},
 	}
 	// With no pick yet, the first new chat seeds it from the starting model.
 	seeded, ok := NewChatModel(cfg)
@@ -45,8 +43,8 @@ func TestLastPickIsReadFreshAcrossStores(t *testing.T) {
 	// A folder whose config doesn't offer the pick starts on its own
 	// starting model, and the pick stays for the others.
 	other := &Config{
-		Providers: csync.NewMapFrom(map[string]ProviderConfig{"claude-code": {ID: "claude-code", Models: []catwalk.Model{{ID: "opus"}}}}),
-		Models:    map[SelectedModelType]SelectedModel{SelectedModelTypeLarge: {Provider: "claude-code", Model: "opus"}},
+		Providers:  csync.NewMapFrom(map[string]ProviderConfig{"claude-code": {ID: "claude-code", Models: []catwalk.Model{{ID: "opus"}}}}),
+		startModel: &SelectedModel{Provider: "claude-code", Model: "opus"},
 	}
 	start, ok := NewChatModel(other)
 	require.True(t, ok)
@@ -54,5 +52,5 @@ func TestLastPickIsReadFreshAcrossStores(t *testing.T) {
 	read, _ = ReadLastPick()
 	require.Equal(t, picked, read)
 
-	require.Equal(t, SelectedModel{Provider: "claude-code", Model: "opus"}, cfg.Models[SelectedModelTypeLarge], "a pick writes no model")
+	require.Empty(t, cfg.Models, "a pick writes no model")
 }

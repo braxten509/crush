@@ -318,8 +318,9 @@ func (m *UI) applyLoadedSession(msg loadSessionMsg) []tea.Cmd {
 	}
 	cmds = append(cmds, m.applyLateCancels(msg.messages, prepared.canceled)...)
 	cmds = append(cmds, m.replaySessionLoadEvents(load.events, msg.messages)...)
-	if cmd := m.restoreModelFromSession(msg.messages); cmd != nil {
-		cmds = append(cmds, cmd)
+	// The theme follows the opened chat's own model.
+	if choice, ok := m.shownChoice(); ok {
+		m.applyThemeForProvider(choice.Provider)
 	}
 	if cmd := m.autoExpandPillsIfReasonable(); cmd != nil {
 		cmds = append(cmds, cmd)

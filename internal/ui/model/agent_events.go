@@ -205,11 +205,9 @@ func (m *UI) handleReAuthenticate(providerID string) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return nil
-	}
-	return m.openAuthenticationDialog(providerCfg.ToProvider(), cfg.Models[agentCfg.Model], agentCfg.Model)
+	// Signing in again keeps the shown chat's own model.
+	selected, _ := m.shownChoice()
+	return m.openAuthenticationDialog(providerCfg.ToProvider(), selected, config.SelectedModelTypeChat)
 }
 
 // handleAWSSSOAuth opens the AWS SSO progress dialog (or updates the SSO URL

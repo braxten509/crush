@@ -38,7 +38,7 @@ type Session struct {
 	CreatedAt         int64           `json:"created_at"`
 	UpdatedAt         int64           `json:"updated_at"`
 	ContextBudget     *ContextBudget  `json:"context_budget,omitempty"` // nil when the domain Provider is ""
-	Model             json.RawMessage `json:"model,omitempty"`          // config.SelectedModel; nil when the chat follows the workspace's model
+	Model             json.RawMessage `json:"model,omitempty"`          // config.SelectedModel: the model this chat owns
 	EstimatedUsage    bool            `json:"estimated_usage"`
 	IsBusy            bool            `json:"is_busy"`
 	AttachedClients   int             `json:"attached_clients"`

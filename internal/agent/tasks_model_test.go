@@ -20,9 +20,8 @@ func TestTaskInheritsCurrentProviderAccount(t *testing.T) {
 	c.tasks = h
 	provider := config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus"}}}
 	c.cfg.Config().Providers.Set(provider.ID, provider)
-	// The parent chat runs on its own account; the old shared model names
-	// another, which no worker may follow (owner, 2026-10-24).
-	c.cfg.Config().Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: provider.ID, Model: "opus", Account: "claude-3"}
+	// The parent chat runs on its own account, which its workers follow
+	// (owner, 2026-10-24: no shared model anywhere).
 	parent, _ := helperChats(t, c)
 	setChatModel(t, c, parent.ID, config.SelectedModel{Provider: provider.ID, Model: "opus", Account: "claude-2"})
 	h.subAgentHook = func(config.ProviderConfig, catwalk.Model) SessionAgent {
@@ -74,7 +73,7 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, providerCfg.SystemPromptPrefix, agent.systemPromptPrefix.Get())
 	require.True(t, agent.disableAutoSummarize)
-	require.Same(t, m.Model, agent.largeModel.Get().Model)
+	require.Same(t, m.Model, agent.model.Get().Model)
 }
 
 // An API sub-agent that isn't read-only must be able to change files and run

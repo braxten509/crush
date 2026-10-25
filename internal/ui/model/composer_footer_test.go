@@ -50,7 +50,8 @@ func TestSubagentFooterUsesChildModelSettings(t *testing.T) {
 		Models: []catwalk.Model{{ID: "child-model", Name: "GPT-6-Astra"}},
 	})
 	u := newLoadTestUI(t, ws)
-	u.agentModel = workspace.AgentModel{CatwalkCfg: catwalk.Model{Name: "Parent model"}}
+	parent := config.SelectedModel{Provider: "p", Model: "parent-model"}
+	u.session, u.lastPick = nil, parent
 	u.subagentView = &subagentView{
 		task: agent.Task{CLI: "codex", Model: "child-model", Effort: "high", Fast: true},
 		session: &session.Session{PromptTokens: 68000, ContextBudget: session.ContextBudget{
@@ -59,7 +60,8 @@ func TestSubagentFooterUsesChildModelSettings(t *testing.T) {
 	}
 	view := ansi.Strip(u.subagentFooter(120))
 	require.Equal(t, "GPT-6-Astra high fast · 68k/400k tokens · Context 83% left", view)
-	require.Equal(t, "Parent model", u.agentModel.CatwalkCfg.Name)
+	shown, _ := u.shownChoice()
+	require.Equal(t, parent, shown, "the parent chat's model is untouched")
 	ws.cfg.Providers.Del("codex-cli")
 	require.Contains(t, ansi.Strip(u.subagentFooter(120)), "child-model high fast")
 }
@@ -74,7 +76,7 @@ func TestTerminalShowsTheSelectedAccount(t *testing.T) {
 	})
 	u := newLoadTestUI(t, ws)
 	u.agentReady = true
-	u.agentModel = workspace.AgentModel{ModelCfg: config.SelectedModel{Provider: "codex-cli", Model: "gpt-test", Account: "codex-footer-test"}}
+	u.session, u.lastPick = nil, config.SelectedModel{Provider: "codex-cli", Model: "gpt-test", Account: "codex-footer-test"}
 	cliagent.StoreAccountLimits(config.TypeCodexCLI, "codex-footer-test", []cliagent.Limit{{Name: "5h", Used: 30}}, 2)
 
 	limits := u.selectedCLILimits()
@@ -95,10 +97,7 @@ func TestTerminalShowsMoonshotLimits(t *testing.T) {
 	})
 	u := newLoadTestUI(t, ws)
 	u.agentReady = true
-	u.agentModel = workspace.AgentModel{
-		CatwalkCfg: catwalk.Model{ID: "k3.1-pro", Name: "Kimi K3.1 Pro"},
-		ModelCfg:   config.SelectedModel{Provider: "kimi-coding", Model: "k3.1-pro"},
-	}
+	u.session, u.lastPick = nil, config.SelectedModel{Provider: "kimi-coding", Model: "k3.1-pro"}
 	cliagent.StoreAccountLimits(catwalk.Type(catwalk.InferenceKimiCoding), "", []cliagent.Limit{
 		{Name: "5h", Used: 40},
 		{Name: "Monthly", Used: 10},
@@ -108,7 +107,7 @@ func TestTerminalShowsMoonshotLimits(t *testing.T) {
 	require.Len(t, limits, 2)
 	sty := styles.ThemeFromConfig("claude-code")
 	items := []string{footerModel, footerSettings, footerContext, footerLimit5h, footerLimitWeekly, footerResets}
-	view := ansi.Strip(renderFooterItems(&sty, items, &u.agentModel, nil, 0, limits, 120))
+	view := ansi.Strip(renderFooterItems(&sty, items, u.shownChatModel(), nil, 0, limits, 120))
 	require.Contains(t, view, "5h 60% left")
 	require.Contains(t, view, "Monthly 90% left")
 }

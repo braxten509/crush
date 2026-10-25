@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -117,6 +118,25 @@ func (b *Backend) SetSessionModel(ctx context.Context, workspaceID, sessionID st
 		return session.Session{}, err
 	}
 	return o.SetSessionModel(ctx, sessionID, model)
+}
+
+// LastPick is the model a new chat in the workspace's folder starts on.
+func (b *Backend) LastPick(workspaceID string) (config.SelectedModel, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return config.SelectedModel{}, err
+	}
+	pick, _ := o.LastPick()
+	return pick, nil
+}
+
+// SetLastPick saves a pick made with no chat open.
+func (b *Backend) SetLastPick(workspaceID string, model config.SelectedModel) error {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return err
+	}
+	return o.SetLastPick(model)
 }
 
 // ListUserMessages returns user-role messages for a session.

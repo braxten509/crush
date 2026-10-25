@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -44,7 +45,7 @@ func TestFallbackSwitchTellsTheAppsTheModelChanged(t *testing.T) {
 		{Type: config.FallbackUse, Provider: string(config.TypeClaudeCode), Model: "opus", Account: "claude-2", MoveAtPercent: 1},
 		{Type: config.FallbackUse, Provider: "fake", Model: "fake-model"},
 	}}
-	shared := cfg.Models[config.SelectedModelTypeLarge]
+	before := maps.Clone(cfg.Models)
 	t.Cleanup(cliagent.SetLimitFetchersForTest(map[catwalk.Type]func(context.Context) ([]cliagent.Limit, error){
 		config.TypeClaudeCode: func(context.Context) ([]cliagent.Limit, error) {
 			return []cliagent.Limit{{Name: "5h", Used: 100, ResetsAt: time.Now().Add(time.Hour)}}, nil
@@ -70,7 +71,7 @@ func TestFallbackSwitchTellsTheAppsTheModelChanged(t *testing.T) {
 		select {
 		case ev := <-events:
 			if updated, ok := ev.Payload.(pubsub.Event[session.Session]); ok && updated.Payload.ID == chat && strings.Contains(string(updated.Payload.Model), `"fake"`) {
-				require.Equal(t, shared, ws.Cfg.Config().Models[config.SelectedModelTypeLarge], "no shared model is written")
+				require.Equal(t, before, ws.Cfg.Config().Models, "no shared model is written")
 				return
 			}
 		case <-time.After(20 * time.Second):

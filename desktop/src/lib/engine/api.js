@@ -114,8 +114,6 @@ export const api = {
   // Which agent CLIs hold their own login (rpc.GetAuthState).
   authState: () => get("auth/state"),
   agentInfo: () => get("agent"),
-  // The engine reads provider_id (internal/server/handlers_agent.go:102-104).
-  defaultSmallModel: (providerId) => get("agent/default-small-model", providerId ? { provider_id: providerId } : undefined),
   gitBranch: () => get("git/branch"),
   // Use the chat's folder when a chat is shown (rpc.ProviderUsable).
   providerAvailability: (sid) => commands.api("GET", "providers/availability", undefined, undefined, undefined, folderOf(sid)),
@@ -133,8 +131,13 @@ export const api = {
     return dir ? get(saved(sid), { dir }) : get(chat(sid));
   },
   // The model one chat runs on (internal/rpc/routes.go SetSessionModel): a
-  // model picked in a chat never reaches another chat.
+  // model picked in a chat never reaches another chat, and it is also the
+  // last pick a new chat starts on.
   setSessionModel: (sid, model) => commands.api("POST", `${chat(sid)}/model`, undefined, { model }, undefined, folderOf(sid)),
+  // The last pick: the model a new chat starts on (rpc.LastPick), set by a
+  // pick made with no chat open. No chat runs on it.
+  lastPick: () => get("last-pick"),
+  setLastPick: (model) => post("last-pick", model),
   // The whole record as last read (engine design 5.1(a)).
   saveSession: (session) => commands.api("PUT", chat(session.id), undefined, session, undefined, folderOf(session.id)),
   deleteSession: (sid) => commands.api("DELETE", chat(sid), undefined, undefined, undefined, folderOf(sid)),
@@ -205,8 +208,9 @@ export const api = {
   // OpenRouter's catalog, the account's preferences applied (the model menu's "+").
   openRouterCatalog: () => get("openrouter/catalog"),
   removeConfig: (scope, key) => post("config/remove", { scope: scopeOf(scope), key }),
-  // model_type: "large" | "small"; model: {provider, model, …} (config.SelectedModel).
-  setModel: (scope, model_type, model) => post("config/model", { scope: scopeOf(scope), model_type, model }),
+  // The helper model (titles, branch summaries), set in config; model:
+  // {provider, model, …} (config.SelectedModel). Each chat owns its own model.
+  setHelperModel: (model) => post("config/model", { scope: SCOPE.global, model_type: "small", model }),
   // Accounts and the fallback order (internal/server/endpoints_fallback.go).
   fallback: () => get("fallback"),
   setFallbackOrder: (order) => commands.api("PUT", "fallback/order", undefined, order),
@@ -256,7 +260,7 @@ export const api = {
   getMcpPrompt: ({ client_id, prompt_id, args }) => post("mcp/get-prompt", { client_id, prompt_id, args }),
   // Runs inside the request: no time limit, and abort(callId) stops it.
   summarize: (sid, callId) => post(`${run(sid)}/summarize`, undefined, undefined, callId),
-  capabilities: () => get("agent/capabilities"),
+  capabilities: (sid = "") => get("agent/capabilities", sid ? { session_id: sid } : undefined),
   refreshOAuth: (scope, provider_id) => post("config/refresh-oauth", { scope: scopeOf(scope), provider_id }),
   importCopilot: () => post("config/import-copilot"),
   initAgent: () => post("agent/init", { interactive: true }),

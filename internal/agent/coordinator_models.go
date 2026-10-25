@@ -12,20 +12,20 @@ import (
 )
 
 func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, agent config.Agent, isSubAgent bool) (SessionAgent, error) {
-	large, small, err := c.buildAgentModels(ctx, isSubAgent)
+	helper, err := c.buildHelperModel(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	largeProviderCfg, _ := c.cfg.Config().Providers.Get(large.ModelCfg.Provider)
 	var tasks *taskHub
 	if agent.ID == config.AgentCoder {
 		tasks = c.tasks
 	}
+	// No model of the agent's own: every chat runs on the model it owns
+	// (owner, 2026-10-24: no shared model anywhere), and the system prompt
+	// prefix comes from that model's provider (promptPrefixFor).
 	result := NewSessionAgent(SessionAgentOptions{
-		LargeModel:           large,
-		SmallModel:           small,
-		SystemPromptPrefix:   largeProviderCfg.SystemPromptPrefix,
+		HelperModel:          helper,
 		SystemPrompt:         "",
 		IsSubAgent:           isSubAgent,
 		Tasks:                tasks,
@@ -56,7 +56,8 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 	initCtx := context.WithoutCancel(ctx)
 
 	c.readyWg.Go(func() error {
-		systemPrompt, err := prompt.Build(initCtx, large.Model.Provider(), large.Model.Model(), c.cfg)
+		// The prompt reads no model: one prompt serves every chat's.
+		systemPrompt, err := prompt.Build(initCtx, "", "", c.cfg)
 		if err != nil {
 			return err
 		}
@@ -76,75 +77,39 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 	return result, nil
 }
 
-// TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
-func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Model, Model, error) {
-	largeModelCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeLarge]
+// buildHelperModel builds the helper model (titles, branch summaries, web
+// fetches), set in Settings and never following a chat's model.
+func (c *coordinator) buildHelperModel(ctx context.Context) (Model, error) {
+	helperCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeSmall]
 	if !ok {
-		return Model{}, Model{}, errLargeModelNotSelected
+		return Model{}, errHelperModelNotSelected
 	}
-	smallModelCfg, ok := c.cfg.Config().Models[config.SelectedModelTypeSmall]
+	providerCfg, ok := c.cfg.Config().Providers.Get(helperCfg.Provider)
 	if !ok {
-		return Model{}, Model{}, errSmallModelNotSelected
+		return Model{}, errHelperModelProviderNotConfigured
 	}
-
-	largeProviderCfg, ok := c.cfg.Config().Providers.Get(largeModelCfg.Provider)
-	if !ok {
-		return Model{}, Model{}, errLargeModelProviderNotConfigured
-	}
-
-	largeProvider, err := c.providerBuilder().Provider(largeProviderCfg, largeModelCfg, isSubAgent)
+	provider, err := c.providerBuilder().Provider(providerCfg, helperCfg, true)
 	if err != nil {
-		return Model{}, Model{}, err
+		return Model{}, err
 	}
-
-	smallProviderCfg, ok := c.cfg.Config().Providers.Get(smallModelCfg.Provider)
-	if !ok {
-		return Model{}, Model{}, errSmallModelProviderNotConfigured
-	}
-
-	smallProvider, err := c.providerBuilder().Provider(smallProviderCfg, smallModelCfg, true)
-	if err != nil {
-		return Model{}, Model{}, err
-	}
-
 	// Resolve the selected model from the provider's whole catalog: an
 	// API-key model, a ChatGPT subscription model, or a Grok one. The
 	// subscription catalogs live outside Models, so looking only there
 	// strands a Grok/ChatGPT model that catwalk doesn't also publish.
-	largeCatwalkModel := c.cfg.Config().GetModel(largeModelCfg.Provider, largeModelCfg.Model)
-	smallCatwalkModel := c.cfg.Config().GetModel(smallModelCfg.Provider, smallModelCfg.Model)
-
-	if largeCatwalkModel == nil {
-		return Model{}, Model{}, errLargeModelNotFound
+	catwalkModel := c.cfg.Config().GetModel(helperCfg.Provider, helperCfg.Model)
+	if catwalkModel == nil {
+		return Model{}, errHelperModelNotFound
 	}
-
-	if smallCatwalkModel == nil {
-		return Model{}, Model{}, errSmallModelNotFound
-	}
-
-	largeModel, err := c.providerBuilder().LanguageModel(ctx, largeProvider, largeProviderCfg, largeModelCfg)
+	languageModel, err := c.providerBuilder().LanguageModel(ctx, provider, providerCfg, helperCfg)
 	if err != nil {
-		return Model{}, Model{}, err
+		return Model{}, err
 	}
-	smallModel, err := c.providerBuilder().LanguageModel(ctx, smallProvider, smallProviderCfg, smallModelCfg)
-	if err != nil {
-		return Model{}, Model{}, err
-	}
-
-	large := Model{
-		Model:      largeModel,
-		CatwalkCfg: *largeCatwalkModel,
-		ModelCfg:   largeModelCfg,
-		FlatRate:   largeProviderCfg.FlatRate,
-	}
-	small := Model{
-		Model:      smallModel,
-		CatwalkCfg: *smallCatwalkModel,
-		ModelCfg:   smallModelCfg,
-		FlatRate:   smallProviderCfg.FlatRate,
-	}
-
-	return large, small, nil
+	return Model{
+		Model:      languageModel,
+		CatwalkCfg: *catwalkModel,
+		ModelCfg:   helperCfg,
+		FlatRate:   providerCfg.FlatRate,
+	}, nil
 }
 
 // modelForSelection builds one model from a saved choice (a chat's own
@@ -218,12 +183,12 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 // updateAgentModels rebuilds the model and tool configuration for the
 // given agent from the current config.
 func (c *coordinator) updateAgentModels(ctx context.Context, agent SessionAgent, name string) error {
-	// build the models again so we make sure we get the latest config
-	large, small, err := c.buildAgentModels(ctx, false)
+	// build the helper again so we make sure we get the latest config
+	helper, err := c.buildHelperModel(ctx)
 	if err != nil {
 		return err
 	}
-	agent.SetModels(large, small)
+	agent.SetHelperModel(helper)
 
 	agentCfg, ok := c.cfg.Config().Agents[name]
 	if !ok {

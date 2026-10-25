@@ -2,6 +2,8 @@ package backend
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"testing"
 	"time"
 
@@ -79,9 +81,9 @@ func TestRemoveConfigField_PublishesConfigChanged(t *testing.T) {
 	awaitConfigChanged(t, evc, ws.ID)
 }
 
-func TestUpdatePreferredModel_PublishesConfigChanged(t *testing.T) {
+func TestSetHelperModel_PublishesConfigChanged(t *testing.T) {
 	if raceEnabled {
-		// UpdatePreferredModel writes config.Models concurrently
+		// SetHelperModel writes config.Models concurrently
 		// with the agent coordinator's async sub-agent builder
 		// that reads it via buildAgentModels. That race is
 		// pre-existing in the codebase and unrelated to this
@@ -94,8 +96,34 @@ func TestUpdatePreferredModel_PublishesConfigChanged(t *testing.T) {
 	b, ws, evc := newPublishingWorkspace(t)
 
 	model := config.SelectedModel{Provider: "openai", Model: "gpt-4"}
-	require.NoError(t, b.UpdatePreferredModel(ws.ID, config.ScopeGlobal, config.SelectedModelTypeLarge, model))
+	require.NoError(t, b.SetHelperModel(ws.ID, config.ScopeGlobal, model))
 	awaitConfigChanged(t, evc, ws.ID)
+}
+
+// TestAChatPickIsTheLastPickAndNotAModel: a pick in a chat is saved on that
+// chat, as the last pick and in the recent list, and no folder-wide model
+// is written.
+func TestAChatPickIsTheLastPickAndNotAModel(t *testing.T) {
+	b, ws, _ := newPublishingWorkspace(t)
+	ctx := context.Background()
+	sess, err := b.CreateSession(ctx, ws.ID, "a")
+	require.NoError(t, err)
+	before := maps.Clone(ws.Cfg.Config().Models)
+
+	pick := config.SelectedModel{Provider: "openai", Model: "gpt-4", ReasoningEffort: "high"}
+	choice, err := json.Marshal(pick)
+	require.NoError(t, err)
+	_, err = b.SetSessionModel(ctx, ws.ID, sess.ID, choice)
+	require.NoError(t, err)
+
+	got, ok := config.ReadLastPick()
+	require.True(t, ok, "a chat pick is the last pick")
+	require.Equal(t, pick, got)
+	require.Equal(t, before, ws.Cfg.Config().Models, "no folder-wide model is written")
+	recent := ws.Cfg.Config().RecentModels[config.SelectedModelTypeChat]
+	require.NotEmpty(t, recent, "the pick tops the recent list")
+	require.Equal(t, "openai/gpt-4", recent[0].Provider+"/"+recent[0].Model)
+	require.Equal(t, "high", ws.Cfg.Config().ModelEfforts["openai:gpt-4"], "its effort is remembered")
 }
 
 func TestSetCompactMode_PublishesConfigChanged(t *testing.T) {

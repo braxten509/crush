@@ -307,17 +307,6 @@ func (w *ClientWorkspace) AgentIsSessionBusy(sessionID string) bool {
 	return info.IsBusy
 }
 
-func (w *ClientWorkspace) AgentModel() AgentModel {
-	info, err := w.client.GetAgentInfo(context.Background(), w.workspaceID())
-	if err != nil {
-		return AgentModel{}
-	}
-	return AgentModel{
-		CatwalkCfg: info.Model,
-		ModelCfg:   info.ModelCfg,
-	}
-}
-
 func (w *ClientWorkspace) AgentIsReady() bool {
 	return w.AgentReadyErr() == nil
 }
@@ -380,14 +369,6 @@ func (w *ClientWorkspace) InitCoderAgent(ctx context.Context) error {
 
 func (w *ClientWorkspace) InitCoderAgentNonInteractive(ctx context.Context) error {
 	return w.client.InitiateAgentProcessing(ctx, w.workspaceID(), false)
-}
-
-func (w *ClientWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	model, err := w.client.GetDefaultSmallModel(context.Background(), w.workspaceID(), providerID)
-	if err != nil {
-		return config.SelectedModel{}
-	}
-	return *model
 }
 
 // -- Permissions --
@@ -558,8 +539,8 @@ func (w *ClientWorkspace) Resolver() config.VariableResolver {
 
 // -- Config mutations --
 
-func (w *ClientWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
-	err := w.client.UpdatePreferredModel(context.Background(), w.workspaceID(), scope, modelType, model)
+func (w *ClientWorkspace) SetHelperModel(scope config.Scope, model config.SelectedModel) error {
+	err := w.client.SetHelperModel(context.Background(), w.workspaceID(), scope, model)
 	if err == nil {
 		w.refreshWorkspace()
 	}
@@ -797,6 +778,19 @@ func (w *ClientWorkspace) SetSessionModel(ctx context.Context, sessionID string,
 		return session.Session{}, err
 	}
 	return proto.SessionToDomain(*sess), nil
+}
+
+func (w *ClientWorkspace) LastPick(ctx context.Context) (config.SelectedModel, bool) {
+	pick, err := w.client.LastPick(ctx, w.workspaceID())
+	if err != nil {
+		slog.Warn("Could not read the last picked model", "error", err)
+		return config.SelectedModel{}, false
+	}
+	return pick, pick.Provider != "" && pick.Model != ""
+}
+
+func (w *ClientWorkspace) SetLastPick(ctx context.Context, model config.SelectedModel) error {
+	return w.client.SetLastPick(ctx, w.workspaceID(), model)
 }
 
 func (w *ClientWorkspace) SetKeptSkill(ctx context.Context, sessionID string, skill session.KeptSkill, on bool) (session.Session, error) {

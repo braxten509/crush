@@ -116,10 +116,6 @@ func clientCalls() map[string]func(context.Context, *Client) error {
 			_, err := c.GetAgentSessionQueuedPromptSummaries(ctx, ws, sid)
 			return err
 		},
-		"GetDefaultSmallModel": func(ctx context.Context, c *Client) error {
-			_, err := c.GetDefaultSmallModel(ctx, ws, "openai")
-			return err
-		},
 		"FileTrackerRecordRead": func(ctx context.Context, c *Client) error {
 			return c.FileTrackerRecordRead(ctx, ws, sid, "a.go")
 		},
@@ -139,8 +135,8 @@ func clientCalls() map[string]func(context.Context, *Client) error {
 		"RemoveConfigField": func(ctx context.Context, c *Client) error {
 			return c.RemoveConfigField(ctx, ws, config.ScopeGlobal, "k")
 		},
-		"UpdatePreferredModel": func(ctx context.Context, c *Client) error {
-			return c.UpdatePreferredModel(ctx, ws, config.ScopeGlobal, config.SelectedModelTypeLarge, config.SelectedModel{})
+		"SetHelperModel": func(ctx context.Context, c *Client) error {
+			return c.SetHelperModel(ctx, ws, config.ScopeGlobal, config.SelectedModel{})
 		},
 		"SetCompactMode": func(ctx context.Context, c *Client) error {
 			return c.SetCompactMode(ctx, ws, config.ScopeGlobal, true)

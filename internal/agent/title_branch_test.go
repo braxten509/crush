@@ -8,8 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
 
@@ -99,4 +102,29 @@ func TestBranchTitleNeverAutoReplaced(t *testing.T) {
 	sa.GenerateTitle(ctx, branch.SessionID, "Plan a trip")
 	require.Equal(t, "Hello, explained", titleOf(branch.SessionID))
 	require.Equal(t, tried, model.titleCalls.Load())
+}
+
+// A title is asked of the helper model first; when it fails, of the chat's
+// own model, never of any other model (owner, 2026-10-24: no shared model).
+func TestTitleUsesTheHelperModel(t *testing.T) {
+	env := testEnv(t)
+	ctx := t.Context()
+	other := &titleFailModel{finishStreamModel: finishStreamModel{text: "Another chat's"}}
+	helper := &titleFailModel{finishStreamModel: finishStreamModel{text: "Helper"}}
+	sa := testSessionAgent(env, other, helper, "system").(*sessionAgent)
+	own := &finishStreamModel{text: "Trip to Lisbon"}
+	sa.chatModels.build = func(_ context.Context, selection config.SelectedModel) (Model, error) {
+		return Model{Model: own, CatwalkCfg: catwalk.Model{ContextWindow: 200_000, DefaultMaxTokens: 10_000}, ModelCfg: selection}, nil
+	}
+	chat, err := env.sessions.Create(ctx, "New Session")
+	require.NoError(t, err)
+	_, err = env.sessions.SetModel(ctx, chat.ID, session.ModelChoice(`{"provider":"p","model":"m"}`))
+	require.NoError(t, err)
+
+	sa.GenerateTitle(ctx, chat.ID, "Plan a trip to Lisbon")
+	chat, err = env.sessions.Get(ctx, chat.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Trip to Lisbon", chat.Title, "the chat's own model titled it after the helper failed")
+	require.Equal(t, int32(1), helper.titleCalls.Load(), "the helper was asked first")
+	require.Zero(t, other.titleCalls.Load(), "no other model is asked")
 }

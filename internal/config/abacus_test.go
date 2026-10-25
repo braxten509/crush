@@ -18,16 +18,17 @@ func TestAbacusControlsSurviveModelResolution(t *testing.T) {
 		Options:   &Options{DisableDefaultProviders: true},
 		Providers: csync.NewMapFrom(map[string]ProviderConfig{"abacus": {ID: "abacus", APIKey: "test-key", Models: []catwalk.Model{model}}}),
 		Models: map[SelectedModelType]SelectedModel{
-			SelectedModelTypeLarge: {Provider: "abacus", Model: model.ID, ServiceTier: "fast", ReasoningEffort: "max", MaxTokens: 64000},
+			"large":                {Provider: "abacus", Model: model.ID, ServiceTier: "fast", ReasoningEffort: "max", MaxTokens: 64000},
 			SelectedModelTypeSmall: {Provider: "abacus", Model: model.ID, ServiceTier: "default", ReasoningEffort: "low", MaxTokens: 8192},
 		},
 	}
+	cfg.takeLegacyChatModel()
 	resolved, err := resolveSelectedModels(cfg, nil)
 	require.NoError(t, err)
-	require.Equal(t, "fast", resolved.Large.ServiceTier)
+	require.Equal(t, "fast", resolved.Start.ServiceTier)
 	require.Equal(t, "default", resolved.Small.ServiceTier)
-	require.Equal(t, "max", resolved.Large.ReasoningEffort)
-	require.Equal(t, int64(64000), resolved.Large.MaxTokens)
+	require.Equal(t, "max", resolved.Start.ReasoningEffort)
+	require.Equal(t, int64(64000), resolved.Start.MaxTokens)
 }
 
 func TestAbacusDiscoveryUsesFreshControlsWithDefaultProvidersDisabled(t *testing.T) {

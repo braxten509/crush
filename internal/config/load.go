@@ -104,19 +104,13 @@ func (s *ConfigStore) publishBuild(res *buildResult) {
 	s.knownProviders = res.knownProviders
 }
 
-// persistModelFallbacks writes the model selections that resolution had
-// to correct back to the global config. Caller must hold writeMu.
+// persistModelFallbacks writes the helper model to the global config when
+// resolution corrected it or chose the default one. Caller must hold
+// writeMu.
 func (s *ConfigStore) persistModelFallbacks(resolved resolvedModels) error {
-	if resolved.LargeFallback {
+	if resolved.WriteSmall {
 		if err := s.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
-			return s.updatePreferredModelFields(c, SelectedModelTypeLarge, resolved.Large)
-		}); err != nil {
-			return fmt.Errorf("failed to update preferred large model: %w", err)
-		}
-	}
-	if resolved.SmallFallback {
-		if err := s.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
-			return s.updatePreferredModelFields(c, SelectedModelTypeSmall, resolved.Small)
+			return s.helperModelFields(c, resolved.Small)
 		}); err != nil {
 			return fmt.Errorf("failed to update preferred small model: %w", err)
 		}

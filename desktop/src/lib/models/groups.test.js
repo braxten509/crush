@@ -12,7 +12,7 @@ const catalog = [
 
 function cfg(over = {}) {
   return {
-    models: { large: { provider: "anthropic", model: "sonnet" } },
+    models: {},
     // As the app reads them: through safeProvider, as readModelConfig does.
     providers: new Map(
       Object.entries({
@@ -42,7 +42,7 @@ describe("buildGroups", () => {
 
   it("marks the chosen model, preferring its Recently used row, and drops stale recents", () => {
     const recent = [{ provider: "anthropic", model: "sonnet" }, { provider: "gone", model: "x" }];
-    const { items, selectedKey, prunedRecent } = buildGroups({ catalog, cfg: cfg({ recent_models: { large: recent } }), type: "large" });
+    const { items, selectedKey, prunedRecent } = buildGroups({ catalog, cfg: cfg({ recent_models: { large: recent } }), type: "large", current: { provider: "anthropic", model: "sonnet" } });
     expect(items[0].group).toBe("Recently used");
     expect(selectedKey).toBe(items[0].id);
     expect(prunedRecent).toEqual([{ provider: "anthropic", model: "sonnet" }]);

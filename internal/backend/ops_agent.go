@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/charmbracelet/crush/internal/agent"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/shell"
@@ -99,11 +98,6 @@ func (o Ops) Summarize(ctx context.Context, sessionID string) error {
 		return ErrAgentNotInitialized
 	}
 	return o.App.AgentCoordinator.Summarize(ctx, sessionID)
-}
-
-// GetDefaultSmallModel returns the default small model for a provider.
-func (o Ops) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	return o.App.GetDefaultSmallModel(providerID)
 }
 
 // ShellCommand describes a shell command the user typed directly,

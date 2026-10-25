@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -23,7 +25,7 @@ func TestCrushInfo_MinimalConfig(t *testing.T) {
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "[providers]")
 	require.NotContains(t, output, "[lsp]")
 	require.NotContains(t, output, "[mcp]")
@@ -39,7 +41,7 @@ func TestCrushInfo_ConfigFiles(t *testing.T) {
 		"/home/user/.config/crush/crush.json",
 		"/project/.crush/crush.json",
 	)
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[config_files]")
 	require.Contains(t, output, "/home/user/.config/crush/crush.json")
 	require.Contains(t, output, "/project/.crush/crush.json")
@@ -50,15 +52,18 @@ func TestCrushInfo_Models(t *testing.T) {
 
 	cfg := config.NewTestStore(&config.Config{
 		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Model: "claude-sonnet-4-20250514", Provider: "anthropic"},
 			config.SelectedModelTypeSmall: {Model: "claude-haiku-3-20250307", Provider: "anthropic"},
 		},
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
-	require.Contains(t, output, "[model]")
-	require.Contains(t, output, "large = claude-sonnet-4-20250514 (anthropic)")
-	require.Contains(t, output, "small = claude-haiku-3-20250307 (anthropic)")
+	chat := config.SelectedModel{Model: "gpt-5", Provider: "openai"}
+	ctx := context.WithValue(t.Context(), ChatModelContextKey, chat)
+	resp, err := NewCrushInfoTool(cfg, nil, nil, nil, nil).Run(ctx, fantasy.ToolCall{Input: "{}"})
+	require.NoError(t, err)
+	require.Contains(t, resp.Content, "[model]")
+	require.Contains(t, resp.Content, "chat = gpt-5 (openai)", "the asking chat's own model")
+	require.Contains(t, resp.Content, "helper = claude-haiku-3-20250307 (anthropic)")
+	require.NotContains(t, resp.Content, "large =", "no folder-wide model")
 }
 
 func TestCrushInfo_Providers(t *testing.T) {
@@ -69,7 +74,7 @@ func TestCrushInfo_Providers(t *testing.T) {
 	providers.Set("anthropic", config.ProviderConfig{Models: make([]catwalk.Model, 12)})
 
 	cfg := config.NewTestStore(&config.Config{Providers: providers})
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[providers]")
 	anthropicIdx := strings.Index(output, "anthropic = enabled")
 	openaiIdx := strings.Index(output, "openai = enabled")
@@ -88,7 +93,7 @@ func TestCrushInfo_DisabledProvidersOmitted(t *testing.T) {
 	providers.Set("anthropic", config.ProviderConfig{Models: make([]catwalk.Model, 12)})
 
 	cfg := config.NewTestStore(&config.Config{Providers: providers})
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "anthropic = enabled")
 	require.NotContains(t, output, "openai")
 }
@@ -108,7 +113,7 @@ func TestCrushInfo_LSPStates(t *testing.T) {
 	mgr.Clients().Set("pyright", errorClient)
 
 	cfg := config.NewTestStore(&config.Config{Providers: csync.NewMap[string, config.ProviderConfig]()})
-	output := buildCrushInfo(cfg, mgr, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, mgr, nil, nil, nil)
 	require.Contains(t, output, "[lsp]")
 	require.Contains(t, output, "gopls = ready")
 	require.Contains(t, output, "pyright = error")
@@ -159,7 +164,7 @@ func TestCrushInfo_YoloMode(t *testing.T) {
 	})
 	cfg.Overrides().SkipPermissionRequests = true
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[permissions]")
 	require.Contains(t, output, "mode = yolo")
 }
@@ -172,7 +177,7 @@ func TestCrushInfo_AllowedTools(t *testing.T) {
 		Permissions: &config.Permissions{AllowedTools: []string{"edit:write", "bash"}},
 	})
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[permissions]")
 	require.Contains(t, output, "allowed_tools = bash, edit:write")
 }
@@ -185,7 +190,7 @@ func TestCrushInfo_DisabledTools(t *testing.T) {
 		Options:   &config.Options{DisabledTools: []string{"sourcegraph", "agentic_fetch"}},
 	})
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[tools]")
 	require.Contains(t, output, "disabled = agentic_fetch, sourcegraph")
 }
@@ -202,7 +207,7 @@ func TestCrushInfo_Options(t *testing.T) {
 		},
 	})
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[options]")
 	require.Contains(t, output, "auto_lsp = true")
 	require.Contains(t, output, "auto_summarize = false")
@@ -229,7 +234,7 @@ func TestCrushInfo_TUIOptions(t *testing.T) {
 		},
 	})
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "compact_mode = true")
 	require.Contains(t, output, "diff_mode = split")
 	require.Contains(t, output, "scrollbar = never")
@@ -247,7 +252,7 @@ func TestCrushInfo_TUIOptionsUnpinnedCompletionsOmitted(t *testing.T) {
 		Options:   &config.Options{TUI: &config.TUIOptions{}},
 	})
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "transparent = false")
 	require.NotContains(t, output, "completions_max_depth")
 	require.NotContains(t, output, "completions_max_items")
@@ -260,14 +265,14 @@ func TestCrushInfo_AutoSummarizeInversion(t *testing.T) {
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 		Options:   &config.Options{DisableAutoSummarize: true},
 	})
-	outputFalse := buildCrushInfo(cfgFalse, nil, nil, nil, nil)
+	outputFalse := buildCrushInfo(config.SelectedModel{}, cfgFalse, nil, nil, nil, nil)
 	require.Contains(t, outputFalse, "auto_summarize = false")
 
 	cfgTrue := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 		Options:   &config.Options{DisableAutoSummarize: false},
 	})
-	outputTrue := buildCrushInfo(cfgTrue, nil, nil, nil, nil)
+	outputTrue := buildCrushInfo(config.SelectedModel{}, cfgTrue, nil, nil, nil, nil)
 	require.Contains(t, outputTrue, "auto_summarize = true")
 }
 
@@ -281,7 +286,7 @@ func TestCrushInfo_NoSecrets(t *testing.T) {
 	})
 
 	cfg := config.NewTestStore(&config.Config{Providers: providers})
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "sk-super-secret-key-12345")
 	require.NotContains(t, output, "secret")
 	require.Contains(t, output, "openai = enabled (8 models)")
@@ -317,7 +322,7 @@ func TestCrushInfo_DeterministicOrdering(t *testing.T) {
 	zMcpIdx := strings.Index(mcpOutput, "z-mcp = connected")
 	require.Less(t, aMcpIdx, zMcpIdx)
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 
 	alphaIdx := strings.Index(output, "alpha = enabled")
 	middleIdx := strings.Index(output, "middle = enabled")
@@ -338,7 +343,7 @@ func TestCrushInfo_EmptySectionsOmitted(t *testing.T) {
 		Options:     &config.Options{},
 	})
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "[tools]")
 	require.NotContains(t, output, "[permissions]")
 	require.NotContains(t, output, "[lsp]")
@@ -360,7 +365,7 @@ func TestCrushInfo_ConfigStaleness_Clean(t *testing.T) {
 	// Capture snapshot (normally done in Load)
 	store.CaptureStalenessSnapshot([]string{configPath})
 
-	output := buildCrushInfo(store, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, store, nil, nil, nil, nil)
 	require.Contains(t, output, "[config]")
 	require.Contains(t, output, "dirty = false")
 	require.NotContains(t, output, "changed_paths")
@@ -385,7 +390,7 @@ func TestCrushInfo_ConfigStaleness_Dirty(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	require.NoError(t, os.WriteFile(configPath, []byte(`{"debug": true}`), 0o600))
 
-	output := buildCrushInfo(store, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, store, nil, nil, nil, nil)
 	require.Contains(t, output, "[config]")
 	require.Contains(t, output, "dirty = true")
 	require.Contains(t, output, "changed_paths")
@@ -409,7 +414,7 @@ func TestCrushInfo_ConfigStaleness_MissingPath(t *testing.T) {
 	// Delete file to trigger missing state
 	require.NoError(t, os.Remove(configPath))
 
-	output := buildCrushInfo(store, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, store, nil, nil, nil, nil)
 	require.Contains(t, output, "[config]")
 	require.Contains(t, output, "dirty = true")
 	require.Contains(t, output, "missing_paths")
@@ -422,7 +427,7 @@ func TestCrushInfo_Skills_NoSkills(t *testing.T) {
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "[skills]")
 }
 
@@ -443,7 +448,7 @@ func TestCrushInfo_Skills_MixedLoadedUnloaded(t *testing.T) {
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildCrushInfo(cfg, nil, allSkills, activeSkills, tracker)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, allSkills, activeSkills, tracker)
 	require.Contains(t, output, "[skills]")
 	require.Contains(t, output, "bash = user, loaded")
 	require.Contains(t, output, "crush-config = builtin, loaded")
@@ -469,7 +474,7 @@ func TestCrushInfo_Skills_DisabledSkills(t *testing.T) {
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 		Options:   &config.Options{DisabledSkills: []string{"image-convert"}},
 	})
-	output := buildCrushInfo(cfg, nil, allSkills, activeSkills, tracker)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, allSkills, activeSkills, tracker)
 	require.Contains(t, output, "[skills]")
 	require.Contains(t, output, "bash = user, unloaded")
 	require.Contains(t, output, "crush-config = builtin, unloaded")
@@ -490,7 +495,7 @@ func TestCrushInfo_Skills_Ordering(t *testing.T) {
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildCrushInfo(cfg, nil, allSkills, activeSkills, tracker)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, allSkills, activeSkills, tracker)
 
 	aIdx := strings.Index(output, "a-skill")
 	mIdx := strings.Index(output, "m-skill")
@@ -512,7 +517,7 @@ func TestCrushInfo_Skills_BuiltinOrigin(t *testing.T) {
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildCrushInfo(cfg, nil, allSkills, activeSkills, tracker)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, allSkills, activeSkills, tracker)
 	require.Contains(t, output, "crush-config = builtin, unloaded")
 	require.Contains(t, output, "my-skill = user, unloaded")
 }
@@ -530,7 +535,7 @@ func TestCrushInfo_Hooks(t *testing.T) {
 		},
 	})
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[hooks]")
 	require.Contains(t, output, "PreToolUse (matcher: edit|write) = check-privates.sh")
 	require.Contains(t, output, "PreToolUse = audit.sh")
@@ -543,6 +548,6 @@ func TestCrushInfo_Hooks_NoHooks(t *testing.T) {
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
 
-	output := buildCrushInfo(cfg, nil, nil, nil, nil)
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "[hooks]")
 }

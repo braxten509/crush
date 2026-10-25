@@ -38,11 +38,11 @@
 /** @typedef {{id:string, path:string, yolo?:boolean, debug?:boolean, data_dir?:string, version?:string,
  *   client_id?:string, channels?:string[], skills?:object[], protocol?:number}} Workspace
  *   (internal/proto/proto.go:15-34, as the window gets it: Rust removes config and env first, 1.2.5) */
-/** @typedef {{is_busy:boolean, is_ready:boolean, model:{id:string, name:string, context_window:number,
- *   can_reason:boolean, reasoning_levels?:string[], default_reasoning_effort?:string, supports_attachments:boolean},
- *   model_cfg:{model:string, provider:string, reasoning_effort?:string, service_tier?:string, ultracode?:boolean, think?:boolean}}} AgentInfo
- *   (proto.go:123-128; catwalk Model fields: catwalk@v0.52.49/pkg/catwalk/provider.go:91-104, where
- *   SupportsImages has the JSON name supports_attachments; SelectedModel: internal/config/config.go:50-69) */
+/** @typedef {{is_busy:boolean, is_ready:boolean}} AgentInfo
+ *   (proto.go:125-133; no model: every chat owns its own, session.model, a SelectedModel:
+ *   internal/config/config.go:50-69. The window's agent block, agentNow() in live/helpers, adds
+ *   the shown chat's model (catwalk Model fields, catwalk@v0.52.49/pkg/catwalk/provider.go:91-104,
+ *   where SupportsImages has the JSON name supports_attachments) and model_cfg.) */
 /** @typedef {{session_id:string, prompt:string, submission_id?:string, hidden_user_message?:boolean,
  *   run_id?:string, channel?:string, attachments?:{file_path:string, file_name:string, mime_type:string, content:string}[]}} AgentMessage
  *   (proto.go:149-157; attachment content is base64, message.go:651-656) */

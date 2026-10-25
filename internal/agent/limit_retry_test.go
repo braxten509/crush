@@ -227,7 +227,7 @@ while True:
 	sa := testSessionAgent(env, model, &finishStreamModel{text: "title"}, "system")
 	limits := catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 10000}
 	selected := config.SelectedModel{Provider: "mock", Model: "mock-model"}
-	sa.SetModels(Model{Model: model, CatwalkCfg: limits, ModelCfg: selected}, Model{Model: &finishStreamModel{text: "title"}, CatwalkCfg: limits, ModelCfg: selected})
+	setTestModels(sa, Model{Model: model, CatwalkCfg: limits, ModelCfg: selected}, Model{Model: &finishStreamModel{text: "title"}, CatwalkCfg: limits, ModelCfg: selected})
 	c.mainAgent = fixedModelsAgent{sa}
 	clock := &fakeClock{now: time.Now()}
 	c.limitRetries.now, c.limitRetries.poll = clock.Now, time.Millisecond

@@ -371,9 +371,11 @@ it("the limits poll runs while connected and asks only while the shown chat is i
   const asks = () => h.calls.filter((c) => c.method === "POST" && c.path === "/v1/limits/claude-code/refresh").length;
   try {
     h.routes.set("GET /v1/limits", { clis: [{ kind: "claude-code", state: "ready", read_at: "2026-10-18T10:40:00Z", windows: [] }] });
-    h.routes.set("GET agent", { is_ready: true, is_busy: false, model_cfg: { provider: "claude-code", model: "opus" } });
+    h.routes.set("GET agent", { is_ready: true, is_busy: false });
     await C.start();
     await flush();
+    // The shown chat's provider (live/helpers startWatches feeds it).
+    L.agentProviderChanged("claude-code");
     expect(asks()).toBe(1); // the provider's first read
     await minutes(3); // 10:53
     expect(asks()).toBe(2);

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -135,8 +134,7 @@ func renderHeaderDetails(
 		parts = append(parts, t.LSP.ErrorDiagnostic.Render(fmt.Sprintf("%s%d", styles.LSPErrorIcon, lspErrorCount)))
 	}
 
-	agentCfg := com.Config().Agents[config.AgentCoder]
-	model := com.Config().GetModelByType(agentCfg.Model)
+	_, _, model, _ := com.ChatModel()
 	if model != nil && model.ContextWindow > 0 {
 		percentage := (float64(session.CompletionTokens+session.PromptTokens) / float64(model.ContextWindow)) * 100
 		percentageText := fmt.Sprintf("%d%%", int(percentage))

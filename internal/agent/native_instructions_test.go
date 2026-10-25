@@ -33,9 +33,9 @@ func TestNativeAgentReceivesSharedInstructionsAndTaskEnvironment(t *testing.T) {
 	sa.cfg = store
 	sa.tasks = &taskHub{dir: t.TempDir(), c: &coordinator{cfg: store}}
 	probe := &nativeInstructionProbe{finishStreamModel: finishStreamModel{text: "done"}}
-	model := sa.largeModel.Get()
+	model := sa.model.Get()
 	model.Model = probe
-	sa.largeModel.Set(model)
+	sa.model.Set(model)
 	sess, err := env.sessions.Create(t.Context(), "native instructions")
 	require.NoError(t, err)
 	_, err = sa.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "hello"})

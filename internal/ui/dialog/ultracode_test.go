@@ -12,16 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ultracodeConfig(kind catwalk.Type, levels []string, on bool) *config.Config {
-	return &config.Config{
-		Agents: map[string]config.Agent{config.AgentCoder: {Model: config.SelectedModelTypeLarge}},
-		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Provider: "cli", Model: "m", ReasoningEffort: "high", Ultracode: on},
-		},
+// ultracodeCommon is a Common whose shown chat runs model "m" of a kind CLI.
+func ultracodeCommon(sty *styles.Styles, kind catwalk.Type, levels []string, on bool) *common.Common {
+	cfg := &config.Config{
 		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
 			"cli": {Type: kind, Models: []catwalk.Model{{ID: "m", CanReason: true, ReasoningLevels: levels}}},
 		}),
 	}
+	return chatCommon(cfg, sty, config.SelectedModel{Provider: "cli", Model: "m", ReasoningEffort: "high", Ultracode: on})
 }
 
 func TestUltracodeCommand(t *testing.T) {
@@ -42,7 +40,7 @@ func TestUltracodeCommand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			sty := styles.CharmtonePantera()
-			commands := &Commands{com: &common.Common{Workspace: fastModeWorkspace{cfg: ultracodeConfig(tc.kind, tc.levels, tc.on)}, Styles: &sty}}
+			commands := &Commands{com: ultracodeCommon(&sty, tc.kind, tc.levels, tc.on)}
 			var item *CommandItem
 			for _, it := range commands.defaultCommands() {
 				if it.ID() == "toggle_ultracode" {
@@ -66,7 +64,7 @@ func TestReasoningDialogUltracodeSwitch(t *testing.T) {
 	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
 	tab := tea.KeyPressMsg{Code: tea.KeyTab}
 
-	r, err := NewReasoning(&common.Common{Workspace: fastModeWorkspace{cfg: ultracodeConfig(config.TypeClaudeCode, []string{"low", "high", "max"}, false)}, Styles: &sty})
+	r, err := NewReasoning(ultracodeCommon(&sty, config.TypeClaudeCode, []string{"low", "high", "max"}, false))
 	require.NoError(t, err)
 	require.Nil(t, r.HandleMsg(tab))
 	got := r.HandleMsg(enter).(ActionSelectReasoningEffort)
@@ -77,7 +75,7 @@ func TestReasoningDialogUltracodeSwitch(t *testing.T) {
 	require.False(t, *r.HandleMsg(enter).(ActionSelectReasoningEffort).Ultracode)
 
 	// Models without Ultracode leave it alone.
-	r, err = NewReasoning(&common.Common{Workspace: fastModeWorkspace{cfg: ultracodeConfig(config.TypeCodexCLI, []string{"low", "high"}, false)}, Styles: &sty})
+	r, err = NewReasoning(ultracodeCommon(&sty, config.TypeCodexCLI, []string{"low", "high"}, false))
 	require.NoError(t, err)
 	r.HandleMsg(tab)
 	require.Nil(t, r.HandleMsg(enter).(ActionSelectReasoningEffort).Ultracode)

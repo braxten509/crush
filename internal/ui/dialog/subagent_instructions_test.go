@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -15,9 +14,8 @@ import (
 func TestSubAgentInstructionsDialog(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
-	cfg := ultracodeConfig(config.TypeCodexCLI, nil, false)
-	cfg.Options = &config.Options{TUI: &config.TUIOptions{}}
-	com := &common.Common{Workspace: fastModeWorkspace{cfg: cfg}, Styles: &sty}
+	com := ultracodeCommon(&sty, config.TypeCodexCLI, nil, false)
+	com.Config().Options = &config.Options{TUI: &config.TUIOptions{}}
 
 	commands := &Commands{com: com}
 	var command *CommandItem

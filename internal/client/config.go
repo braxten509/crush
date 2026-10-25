@@ -26,10 +26,10 @@ func (c *Client) RemoveConfigField(ctx context.Context, id string, scope config.
 	return err
 }
 
-// UpdatePreferredModel updates the preferred model on the server.
-func (c *Client) UpdatePreferredModel(ctx context.Context, id string, scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
-	_, err := newCall(c, rpc.UpdatePreferredModel, "update preferred model", "").at(id).
-		do(ctx, proto.ConfigModelRequest{Scope: scope, ModelType: modelType, Model: model})
+// SetHelperModel sets the helper model on the server.
+func (c *Client) SetHelperModel(ctx context.Context, id string, scope config.Scope, model config.SelectedModel) error {
+	_, err := newCall(c, rpc.SetHelperModel, "set helper model", "").at(id).
+		do(ctx, proto.ConfigModelRequest{Scope: scope, ModelType: config.SelectedModelTypeSmall, Model: model})
 	return err
 }
 

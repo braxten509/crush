@@ -51,7 +51,7 @@ func (t *turn) onActivity(activity, detail string) error {
 func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
 	a := t.a
 	call := t.call
-	largeModel := t.largeModel
+	chatModel := t.chatModel
 	prepared.Messages = options.Messages
 	for i := range prepared.Messages {
 		prepared.Messages[i].ProviderOptions = nil
@@ -72,7 +72,7 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 	// Fantasy rebuilds each step's messages, so earlier folds are
 	// put back where they went in.
 	if !t.isCLI && options.StepNumber > 0 {
-		queued, err := a.takeQueuedForStep(callContext, call, largeModel.CatwalkCfg.SupportsImages)
+		queued, err := a.takeQueuedForStep(callContext, call, chatModel.CatwalkCfg.SupportsImages)
 		if err != nil {
 			return callContext, prepared, err
 		}
@@ -84,7 +84,7 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 		prepared.Messages = slices.Insert(prepared.Messages, min(f.at+i, len(prepared.Messages)), f.msg)
 	}
 
-	prepared.Messages = a.workaroundProviderMediaLimitations(prepared.Messages, largeModel)
+	prepared.Messages = a.workaroundProviderMediaLimitations(prepared.Messages, chatModel)
 
 	lastSystemRoleInx := 0
 	systemMessageUpdated := false
@@ -114,16 +114,17 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 	assistantMsg, err = a.messages.Create(callContext, call.SessionID, message.CreateMessageParams{
 		Role:     message.Assistant,
 		Parts:    []message.ContentPart{},
-		Model:    largeModel.ModelCfg.Model,
-		Provider: largeModel.ModelCfg.Provider,
+		Model:    chatModel.ModelCfg.Model,
+		Provider: chatModel.ModelCfg.Provider,
 	})
 	if err != nil {
 		return callContext, prepared, err
 	}
 	callContext = context.WithValue(callContext, tools.MessageIDContextKey, assistantMsg.ID)
 	callContext = context.WithValue(callContext, tools.ChannelContextKey, call.Channel)
-	callContext = context.WithValue(callContext, tools.SupportsImagesContextKey, largeModel.CatwalkCfg.SupportsImages)
-	callContext = context.WithValue(callContext, tools.ModelNameContextKey, largeModel.CatwalkCfg.Name)
+	callContext = context.WithValue(callContext, tools.SupportsImagesContextKey, chatModel.CatwalkCfg.SupportsImages)
+	callContext = context.WithValue(callContext, tools.ModelNameContextKey, chatModel.CatwalkCfg.Name)
+	callContext = context.WithValue(callContext, tools.ChatModelContextKey, chatModel.ModelCfg)
 	t.currentAssistant = &assistantMsg
 	return callContext, prepared, err
 }
@@ -246,10 +247,8 @@ func (t *turn) modelProvider() fantasy.LanguageModel {
 	// mid-turn must not swap it. The same choice is looked up again, so a
 	// sign-in refreshed mid-turn (the retry after a 401) reaches the next
 	// request in a model built with the new credentials.
-	m := t.largeModel
-	if m.Model == nil {
-		m = t.a.largeModel.Get()
-	} else if t.a.chatModels.build != nil && m.ModelCfg.Provider != "" {
+	m := t.chatModel
+	if m.Model != nil && t.a.chatModels.build != nil && m.ModelCfg.Provider != "" {
 		if choice, err := json.Marshal(m.ModelCfg); err == nil {
 			if fresh, ok := t.a.modelForChat(choice); ok {
 				m = fresh
@@ -304,10 +303,10 @@ func (t *turn) onToolResult(result fantasy.ToolResultContent) error {
 // Moonshot AI reports usage this way: its plan is read over HTTP, so
 // nothing in its stream carries new limits.
 func (t *turn) refreshProviderLimits() {
-	if t.largeModel.ModelCfg.Provider != KimiProviderID {
+	if t.chatModel.ModelCfg.Provider != KimiProviderID {
 		return
 	}
-	cliagent.RefreshLimitsDuringTurn(t.ctx, catwalk.Type(catwalk.InferenceKimiCoding), t.largeModel.ModelCfg.Account)
+	cliagent.RefreshLimitsDuringTurn(t.ctx, catwalk.Type(catwalk.InferenceKimiCoding), t.chatModel.ModelCfg.Account)
 }
 
 func (t *turn) onStepFinish(stepResult fantasy.StepResult) error {
@@ -359,7 +358,7 @@ func (t *turn) onStepFinish(stepResult fantasy.StepResult) error {
 	usage, estimated := fallbackStepUsage(t.stepMessages, stepResult)
 	var updatedSession session.Session
 	_, sessionErr := a.sessions.Edit(t.ctx, t.call.SessionID, func(current *session.Session) bool {
-		a.updateSessionUsage(t.largeModel, current, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
+		a.updateSessionUsage(t.chatModel, current, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
 		updatedSession = *current
 		return true
 	})
@@ -377,7 +376,7 @@ func (t *turn) shouldAutoSummarize(_ []fantasy.StepResult) bool {
 	if t.isCLI && config.NativeCompaction(t.cliModel.Kind) {
 		return false
 	}
-	cw := int64(t.largeModel.CatwalkCfg.ContextWindow)
+	cw := int64(t.chatModel.CatwalkCfg.ContextWindow)
 	tokens := t.currentSession.CompletionTokens + t.currentSession.PromptTokens
 	limit := config.DefaultAutoCompactTokenLimit
 	if a.cfg != nil {

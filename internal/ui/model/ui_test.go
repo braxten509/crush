@@ -52,7 +52,7 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 		cfg := &config.Config{
 			Providers: csync.NewMap[string, config.ProviderConfig](),
 			Agents: map[string]config.Agent{
-				config.AgentCoder: {Model: config.SelectedModelTypeLarge},
+				config.AgentCoder: {},
 			},
 		}
 		ui := newTestUIWithConfig(t, cfg)
@@ -70,20 +70,11 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 			},
 		})
 
-		cfg := &config.Config{
-			Models: map[config.SelectedModelType]config.SelectedModel{
-				config.SelectedModelTypeLarge: {
-					Provider: "test-provider",
-					Model:    "test-model",
-				},
-			},
-			Providers: providers,
-			Agents: map[string]config.Agent{
-				config.AgentCoder: {Model: config.SelectedModelTypeLarge},
-			},
-		}
+		cfg := &config.Config{Providers: providers}
 
 		ui := newTestUIWithConfig(t, cfg)
+		// The shown chat's own model decides.
+		ui.lastPick = config.SelectedModel{Provider: "test-provider", Model: "test-model"}
 		require.True(t, ui.currentModelSupportsImages())
 	})
 }
@@ -114,11 +105,13 @@ func TestMouseMode(t *testing.T) {
 func newTestUIWithConfig(t *testing.T, cfg *config.Config) *UI {
 	t.Helper()
 
-	return &UI{
+	ui := &UI{
 		com: &common.Common{
 			Workspace: &testWorkspace{cfg: cfg},
 		},
 	}
+	ui.com.ShownModel = ui.shownChoice
+	return ui
 }
 
 // testWorkspace is a minimal [workspace.Workspace] stub for unit tests.

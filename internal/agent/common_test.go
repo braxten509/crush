@@ -98,6 +98,13 @@ func testEnv(t *testing.T) fakeEnv {
 	}
 }
 
+// setTestModels sets a one-model agent's model and its helper model.
+func setTestModels(sa SessionAgent, one, helper Model) {
+	agent := sa.(*sessionAgent)
+	agent.model.Set(one)
+	agent.helperModel.Set(helper)
+}
+
 func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPrompt string, tools ...fantasy.AgentTool) SessionAgent {
 	largeModel := Model{
 		Model: large,
@@ -114,8 +121,8 @@ func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPro
 		},
 	}
 	agent := NewSessionAgent(SessionAgentOptions{
-		LargeModel:   largeModel,
-		SmallModel:   smallModel,
+		Model:        largeModel,
+		HelperModel:  smallModel,
 		SystemPrompt: systemPrompt,
 		IsYolo:       true,
 		Sessions:     env.sessions,
@@ -162,14 +169,8 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 		return nil, err
 	}
 
-	// Get the model name for the bash tool
-	modelName := large.Model() // fallback to ID if Name not available
-	if model := cfg.Config().GetModel(large.Provider(), large.Model()); model != nil {
-		modelName = model.Name
-	}
-
 	allTools := []fantasy.AgentTool{
-		shelltool.NewBashTool(env.permissions, env.workingDir, cfg.Config().Options.DataDirectory, cfg.Config().Options.Attribution, modelName, reportStartedJob),
+		shelltool.NewBashTool(env.permissions, env.workingDir, cfg.Config().Options.DataDirectory, cfg.Config().Options.Attribution, reportStartedJob),
 		webtool.NewDownloadTool(env.permissions, env.workingDir, r.GetDefaultClient()),
 		tools.NewEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
 		tools.NewMultiEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),

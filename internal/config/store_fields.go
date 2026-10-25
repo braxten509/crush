@@ -198,13 +198,15 @@ func (s *ConfigStore) update(scope Scope, mutate func(*Config) map[string]any) e
 func (s *ConfigStore) updateLocked(scope Scope, mutate func(*Config) map[string]any) error {
 	nc := s.Config().cloneForWrite()
 	fields := mutate(nc)
-	s.setConfig(nc)
 	if len(fields) == 0 {
+		s.setConfig(nc)
 		return nil
 	}
+	// Saved first: a change whose write fails never reaches memory.
 	if err := s.writeConfigFields(scope, fields); err != nil {
 		return err
 	}
+	s.setConfig(nc)
 	// Refresh the staleness snapshot so the file watcher does not treat
 	// our own write as an external change. Safe to touch the snapshot map
 	// here because we hold writeMu.

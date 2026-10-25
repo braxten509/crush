@@ -63,6 +63,17 @@ func TestChatsStayOnlyOnceClosedManually(t *testing.T) {
 	var f file
 	require.NoError(t, json.Unmarshal(b, &f))
 	require.Equal(t, []Chat{{ID: "a", Dir: "/p", Opened: f.Chats[0].Opened}}, f.Chats, "the file keeps the rest")
+	// A terminal that joins first writes no chats as [], never null, which
+	// the desktop's reader could not read (openchats.rs).
+	fresh := At(filepath.Join(t.TempDir(), "open-chats.json"))
+	leave, err = fresh.Join("terminal")
+	require.NoError(t, err)
+	defer leave()
+	b, err = os.ReadFile(fresh.path)
+	require.NoError(t, err)
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(b, &raw))
+	require.Equal(t, []any{}, raw["chats"], "no chats is an empty list")
 }
 
 func TestAddRemoveAndSwapKeepTheOrder(t *testing.T) {

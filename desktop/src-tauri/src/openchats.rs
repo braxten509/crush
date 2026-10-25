@@ -28,7 +28,7 @@ struct App {
     kind: String,
     /// The folders whose chats this desktop hears and rings for; a terminal
     /// there stays quiet (watch.rs; internal/openchats DesktopHears).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, deserialize_with = "null_as_empty", skip_serializing_if = "Vec::is_empty")]
     dirs: Vec<String>,
 }
 
@@ -36,10 +36,15 @@ struct App {
 struct File {
     #[serde(default)]
     version: u32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     apps: Vec<App>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     chats: Vec<Chat>,
+}
+
+/// Go writes an empty list as null.
+fn null_as_empty<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Vec<T>, D::Error> {
+    Ok(Option::<Vec<T>>::deserialize(d)?.unwrap_or_default())
 }
 
 /// $XDG_STATE_HOME/crush/open-chats.json, or ~/.local/state/crush/open-chats.json.
@@ -51,15 +56,25 @@ pub fn path() -> Option<PathBuf> {
     Some(state.join("crush").join("open-chats.json"))
 }
 
-fn read(path: &Path) -> File {
-    std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+/// The file, or an empty one when there is none yet; Err when it is there
+/// but cannot be read, so change never writes over it (owner, 2026-10-24).
+fn read(path: &Path) -> Result<File, String> {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(File::default()),
+        Err(e) => return Err(format!("could not read {}: {e}", path.display())),
+    };
+    if bytes.iter().all(u8::is_ascii_whitespace) {
+        return Ok(File::default());
+    }
+    serde_json::from_slice(&bytes).map_err(|e| format!("could not read {}: {e}", path.display()))
 }
 
 /// The open chats, oldest first, whatever apps run (owner, 2026-10-21:
 /// the chats stay until closed manually, even when every app quits).
 pub fn chats() -> Vec<Chat> {
     let Some(path) = path() else { return Vec::new() };
-    read(&path).chats
+    read(&path).unwrap_or_default().chats
 }
 
 /// The marker of an update's restart (appupdate.rs): while it is fresh, the
@@ -154,7 +169,7 @@ fn change(apply: impl FnOnce(&mut File)) -> Result<(), String> {
     if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) } != 0 {
         return Err(std::io::Error::last_os_error().to_string());
     }
-    let mut file = read(&path);
+    let mut file = read(&path).inspect_err(|e| eprintln!("crush-desktop: open chats left as they are: {e}"))?;
     apply(&mut file);
     file.version = 1;
     let text = serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())?;
@@ -213,6 +228,17 @@ mod tests {
         assert_eq!(chats().len(), 1, "a new app joins the kept chats");
         remove("a").unwrap();
         assert!(chats().is_empty(), "only a manual close takes a chat off");
+
+        // Go writes an empty list as null: it reads as empty, and the chats stay.
+        let file = path().unwrap();
+        std::fs::write(&file, r#"{"version":1,"apps":null,"chats":[{"id":"b","dir":"/q","opened":1}]}"#).unwrap();
+        assert_eq!(chats().len(), 1, "a null list reads as empty");
+        join();
+        assert_eq!(chats().len(), 1, "joining keeps the chats");
+        // A file it cannot read is never written over (owner, 2026-10-24).
+        std::fs::write(&file, b"{not json").unwrap();
+        assert!(add(Chat { id: "c".into(), dir: "/r".into(), ..Default::default() }).is_err());
+        assert_eq!(std::fs::read(&file).unwrap(), b"{not json");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

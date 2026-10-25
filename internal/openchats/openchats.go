@@ -215,6 +215,13 @@ func (l List) change(fn func(*file)) error {
 	f := l.read()
 	fn(&f)
 	f.Version = 1
+	// Empty lists go out as [], not null: the desktop's reader expects lists.
+	if f.Apps == nil {
+		f.Apps = []App{}
+	}
+	if f.Chats == nil {
+		f.Chats = []Chat{}
+	}
 	b, err := json.MarshalIndent(f, "", " ")
 	if err != nil {
 		return err

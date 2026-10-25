@@ -69,6 +69,9 @@ type BackgroundShell struct {
 // BackgroundShellManager manages background shell instances.
 type BackgroundShellManager struct {
 	shells *csync.Map[string, *BackgroundShell]
+	// startMu makes Start's limit check and its listing of the new job one
+	// step, so jobs started at once can't pass the limit together.
+	startMu sync.Mutex
 }
 
 var (
@@ -112,6 +115,8 @@ func leftoverWait(ctx context.Context) time.Duration {
 func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, blockFuncs []BlockFunc, command string, description string, extraEnv ...string) (*BackgroundShell, error) {
 	// Only running jobs count toward the limit. Finished jobs are kept for
 	// their output, but must never block new work.
+	m.startMu.Lock()
+	defer m.startMu.Unlock()
 	m.Cleanup()
 	if running := m.running(); running >= MaxBackgroundJobs {
 		return nil, fmt.Errorf("maximum number of running background jobs (%d) reached. Please stop or wait for some jobs to complete", MaxBackgroundJobs)

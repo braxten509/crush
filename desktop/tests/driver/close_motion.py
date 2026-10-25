@@ -83,6 +83,32 @@ def glided(what):
     check(len(between) >= 3, f"{what} ({min(values or [0])}..{max(values or [0])}, {len(between)} values between)")
 
 
+# Every frame for 0.7 s: the shortest piece in the left column against the
+# column's own height. A piece shorter than its column has its foot pushed up
+# (owner, 2026-10-25: "squished to the top during the transition").
+def watch_full_height(column):
+    run(f"""
+      window.__short = [];
+      const t0 = performance.now();
+      const frame = () => {{
+        const col = document.querySelector({column!r});
+        if (col) for (const el of col.children) {{
+          const gap = col.getBoundingClientRect().height - el.getBoundingClientRect().height;
+          if (gap > 1) window.__short.push([el.className.split(' ')[0], Math.round(gap)]);
+        }}
+        if (performance.now() - t0 < 700) requestAnimationFrame(frame);
+      }};
+      requestAnimationFrame(frame);
+      return true;
+    """)
+
+
+def full_height(what):
+    time.sleep(0.8)
+    short = run("return window.__short;") or []
+    check(not short, f"{what} keeps its full height ({short[:4]})")
+
+
 def click_js(selector):
     return f"document.querySelector({selector!r}).click()"
 
@@ -96,7 +122,8 @@ ox, oy = window_geometry()[:2]
 # 2026-10-20), and narrows back as it comes.
 track("main.conversation", "width")
 # The panel's words hold still while the moving edge covers them: same
-# place, same width, never rewrapped (owner, 2026-10-25).
+# place, same width and height, never rewrapped, the foot kept at the
+# bottom (owner, 2026-10-25).
 run("""
   const el = document.querySelector('.panel-column > aside');
   window.__panelRects = [];
@@ -104,7 +131,7 @@ run("""
   const frame = () => {
     if (!el.isConnected || performance.now() - t0 > 600) return;
     const r = el.getBoundingClientRect();
-    window.__panelRects.push([Math.round(r.right * 10) / 10, Math.round(r.width * 10) / 10]);
+    window.__panelRects.push([Math.round(r.right * 10) / 10, Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10]);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -125,7 +152,7 @@ run("""
   const frame = () => {
     const el = document.querySelector('.panel-column > aside');
     if (performance.now() - t0 > 600) return;
-    if (el) { const r = el.getBoundingClientRect(); window.__panelRects.push([Math.round(r.right * 10) / 10, Math.round(r.width * 10) / 10]); }
+    if (el) { const r = el.getBoundingClientRect(); window.__panelRects.push([Math.round(r.right * 10) / 10, Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10]); }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -184,10 +211,13 @@ if check(bool(spot), "a message to right-click"):
     closes("the right-click menu", "[data-menu]", lambda: key("Escape"))
 
 # Settings: its page slides away over the chat, its list over the chats.
+watch_full_height(".chats-column")
 run(click_js("nav.chats button.settings") + "; return true;")
-time.sleep(0.8)
+full_height("the left column as Settings opens")
 run("window.__watchStart('the Settings list', '.settings-nav'); return true;")
+watch_full_height(".chats-column")
 closes("the Settings page", ".main-view", click_js(".settings-nav button.back"), settle=0)
+full_height("the left column as Settings closes")
 rec = run("return window.__watch['the Settings list'];") or {}
 check(rec.get("found") and rec.get("gone") is not None and rec.get("moving", 0) >= 3, f"the Settings list closes with motion ({rec})")
 # The chat list collapsing to its strip and back: each side rolls away while
@@ -200,7 +230,9 @@ run("""
   requestAnimationFrame(frame);
   return true;
 """)
+watch_full_height(".chats-column")
 closes("the chat list (collapsing)", "nav.chats", click_js('button.collapse[aria-label="Collapse the list"]'), settle=0)
+full_height("the left column as the list collapses")
 widths = run("return window.__widths;") or []
 between = [w for w in widths if min(widths or [0]) < w < max(widths or [0])]
 check(len(set(between)) >= 3, f"the list's width glides as it collapses ({sorted(set(widths))[:3]}..{sorted(set(widths))[-3:]}, {len(set(between))} widths between)")
@@ -216,8 +248,9 @@ run("""
   window.__watchStart('the strip (expanding)', 'nav.strip');
   return true;
 """)
+watch_full_height(".chats-column")
 run(click_js("nav.strip button.expand") + "; return true;")
-time.sleep(0.8)
+full_height("the left column as the list opens")
 rec = run("return window.__watch['the strip (expanding)'];") or {}
 check(rec.get("found") and rec.get("gone") is not None and rec.get("moving", 0) == 0, f"the strip leaves at once as the list opens ({rec})")
 widths = run("return window.__widths;") or []

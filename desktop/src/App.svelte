@@ -281,9 +281,10 @@
   .page.glide-close .chats-column {
     overflow: hidden;
   }
+  /* Only the width is held: the piece still fills the column's height, or
+     its foot rides up mid-glide (owner, 2026-10-25). */
   .page.glide-open .chats-column > :global(nav.chats),
   .page.list-folded .chats-column > :global(nav.chats) {
-    flex: none;
     width: calc(var(--left-open) * var(--px));
   }
   /* The same for the panel (owner, 2026-10-25): its words keep their open
@@ -298,7 +299,6 @@
   .page.panel-glide-open .panel-column > :global(*),
   .page.panel-glide-close .panel-column > :global(*),
   .page.panel-leaving .panel-column > :global(*) {
-    flex: none;
     align-self: flex-end;
     box-sizing: border-box;
     width: calc(var(--right) * var(--px));

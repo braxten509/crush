@@ -19,7 +19,7 @@
     try {
       await api.removeConfig(SCOPE.global, "models.compact");
       await refreshModels();
-      notify("info", "Chats compact on their own model");
+      notify("info", "API chats compact on their own model");
     } catch (error) {
       notify("error", error?.message ?? String(error));
     }
@@ -27,7 +27,7 @@
 </script>
 
 <div class="row">
-  <span class="name">Compaction model</span>
+  <span class="name">Compaction model for API chats</span>
   <span class="value">{name}</span>
   {#if chosen}<button type="button" class="act" onclick={useChatModel}>Use the chat's model</button>{/if}
   <button type="button" class="act" onclick={() => openDialog("models", { compact: true })}>Change…</button>

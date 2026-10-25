@@ -37,7 +37,7 @@
   const current = $derived((type === "small" ? modelData.cfg?.models?.small : type === "compact" ? modelData.cfg?.models?.compact : coderModel(modelData).selected) ?? {});
   const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current }) : { items: [], selectedKey: "", prunedRecent: null });
   const items = $derived(built.items);
-  const placeholder = $derived(onboarding ? "Find your fave" : helper ? "Choose the helper model for titles" : compact ? "Choose the model that compacts chats" : "Choose a model for this chat");
+  const placeholder = $derived(onboarding ? "Find your fave" : helper ? "Choose the helper model for titles" : compact ? "Choose the model that compacts API chats" : "Choose a model for this chat");
   const chosenItem = $derived(selected >= 0 ? items[selected] : null);
   const editable = $derived(Boolean(chosenItem && modelData.cfg?.providers.has(chosenItem.provider.id)));
   const help = $derived([
@@ -116,7 +116,7 @@
   const isCurrent = (item) => item.model.id === current.model && item.provider.id === current.provider;
 </script>
 
-<Sheet id={ID} title={helper ? "Helper model" : compact ? "Compaction model" : "Switch model"} width="standard" maxHeight={720} {help} {onKey} {onboarding}>
+<Sheet id={ID} title={helper ? "Helper model" : compact ? "Compaction model for API chats" : "Switch model"} width="standard" maxHeight={720} {help} {onKey} {onboarding}>
   {#if onboarding}
     <p class="lead">To start, let's choose a provider and model.</p>
   {/if}

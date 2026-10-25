@@ -136,7 +136,7 @@ export async function chooseModel(choice) {
   try {
     if (onboarding) await api.initAgent();
     if (helper) await api.updateAgent();
-    notify("info", `${helper ? "Helper model" : compact ? "Compaction model" : "Model"} changed to ${name}`);
+    notify("info", `${helper ? "Helper model" : compact ? "Compaction model for API chats" : "Model"} changed to ${name}`);
   } catch (error) {
     notify("error", errorText(error));
   }

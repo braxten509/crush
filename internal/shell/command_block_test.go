@@ -129,6 +129,14 @@ func TestArgumentsBlocker(t *testing.T) {
 			shouldBlock: true,
 		},
 		{
+			name:        "block command by full path",
+			cmd:         "npm",
+			args:        []string{"install"},
+			flags:       []string{"-g"},
+			input:       []string{"/usr/bin/npm", "install", "-g", "package"},
+			shouldBlock: true,
+		},
+		{
 			name:        "allow different command",
 			cmd:         "npm",
 			args:        []string{"install"},
@@ -271,6 +279,12 @@ func TestCommandsBlocker(t *testing.T) {
 			name:        "block single banned command",
 			banned:      []string{"curl"},
 			input:       []string{"curl", "https://example.com"},
+			shouldBlock: true,
+		},
+		{
+			name:        "block banned command by full path",
+			banned:      []string{"curl"},
+			input:       []string{"/usr/bin/curl", "https://example.com"},
 			shouldBlock: true,
 		},
 		{

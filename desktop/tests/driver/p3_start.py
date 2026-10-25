@@ -11,15 +11,14 @@ Engine run, on the fresh /tmp/home/proj: tests/check.sh p3_start.py
                 the project; a restart asks no more.
   START-015     the data folder's .gitignore holds *.
   START-016     projects.json lists the project.
-  START-002-no  a second fresh folder: n goes to the landing page and marks it.
-  LIST-033      Ctrl+N and New chat show the landing page and make no record;
-                on a busy chat Ctrl+N says the terminal's warning and stays.
-  START-003     the landing page: the folder and branch, the model line, and the
+  START-002-no  a second fresh folder: n goes to the landing page and marks it;
+                CHAT-001 there: the landing page is blank.
+  LIST-033      Ctrl+N and New chat each save one empty "New Session" chat and
+                show it; on a busy chat Ctrl+N does the same, with no warning.
+  START-003     a new chat: the folder and branch, its model, and the
                 LSP / MCP / Skills columns as the engine lists them.
-  START-004     the wordmark and "Charm™ · v<version>", the app's own version.
-  START-005     no animation runs on the landing page.
-  CHAT-001      the landing block is centred, at most 720 wide, 60 in from the
-                column's edges.
+  START-004     the new chat's head; the app's own version.
+  START-005     no animation keeps running.
   LIST-034      opening a 500-item chat while the engine is held: "Opening
                 <title>…" with the mark and the seconds after 1 s; a second
                 switch wins once the engine answers.
@@ -77,7 +76,7 @@ import importlib.util, json, os, re, shlex, shutil, signal, struct, subprocess, 
 from datetime import datetime, timedelta, date
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from harness import check, finish, key, probe_heavy, read_probe, shot, step, type_text, xdo
+from harness import check, finish, key, list_open_chat, probe_heavy, read_probe, shot, step, type_text, xdo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.environ.get("DESKTOP_ROOT") or os.path.dirname(os.path.dirname(HERE))
@@ -433,6 +432,18 @@ def list_edges(h, label):
           f"{label}: New chat and New terminal span the search's edges ({nc.get('x')}, {sr.get('x')}; {nt.get('x', 0) + nt.get('w', 0)}, {sr.get('x', 0) + sr.get('w', 0)})")
 
 
+def ask_state(app, path):
+    """What the folder's engine holds for the window's shown chat: its
+    messages' roles and finishes, for a failed permission check."""
+    api, wid = engine_of(app, path, 5)
+    sid = selected(app)
+    if not (api and wid and sid):
+        return f"no engine or chat ({wid}, {sid})"
+    msgs = api.call("GET", f"/v1/workspaces/{wid}/sessions/{sid}/messages") or []
+    chats = [(c.get("id"), c.get("title")) for c in api.call("GET", f"/v1/workspaces/{wid}/sessions") or []]
+    return {"chats": chats, "messages": [(m.get("role"), [p.get("type") for p in m.get("parts") or []][:6]) for m in msgs]}
+
+
 def landing_checks(app, label):
     """CHAT-001 since the landing page went blank (owner, 2026-10-19): it
     reports itself blank and draws no block, and START-005."""
@@ -543,6 +554,10 @@ def engine_run():
             needs = (other_api.call("GET", f"/v1/workspaces/{wid}/project/needs-init") if wid else None) or {}
             check(bool(wid) and needs.get("needs_init") is False, f"and the folder is marked initialized ({needs})")
             check(len(other_api.call("GET", f"/v1/workspaces/{wid}/sessions") or []) == 0 if wid else False, "and no chat was made")
+            # CHAT-001 with the engine: New chat now opens a saved chat, so a
+            # folder with no chat is where the landing page still shows.
+            place(app)
+            landing_checks(app, "engine landing at 1600 x 992")
             close(app)
 
         with step("LIST-033", out_dir):
@@ -551,20 +566,29 @@ def engine_run():
                 click_row(main, init_chat)
             ok, _, _ = poll(lambda: selected(main), lambda s: s == init_chat, 10)
             check(ok, "the init chat is shown")
+            # New chat saves an empty "New Session" chat at once and shows it,
+            # so leaving it keeps its row (owner, 2026-10-23).
             count = len(client.sessions())
             focus(main)
             key("ctrl+n")
-            ok, screen = screen_is(main, "landing", 5)
-            check(ok and selected(main) is None, f"Ctrl+N shows the landing page with no chat chosen (screen {screen})")
+            ok, shown, _ = poll(lambda: (section(main, "start").get("screen"), selected(main)), lambda v: v[0] == "chat" and v[1] not in (None, init_chat), 5)
+            first = shown[1]
+            check(ok, f"Ctrl+N shows a new chat ({shown})")
             click_row(main, init_chat)
             screen_is(main, "chat", 10)
             h, _ = heavy(main)
             new_chat = (h.get("list") or {}).get("new_chat")
             check(bool(new_chat) and main.click(new_chat), "New chat is clicked")
-            ok, screen = screen_is(main, "landing", 5)
-            check(ok, f"New chat shows the landing page (screen {screen})")
-            time.sleep(1)
-            check(len(client.sessions()) == count, f"and neither made a chat record ({count} → {len(client.sessions())})")
+            # The button asks where to start, this window's folder first
+            # (owner, 2026-10-20); Ctrl+N starts here at once.
+            ok, _ = wait_on(main, "overlay", lambda o: "folder_picker" in (o.get("dialogs") or []), 5)
+            check(ok, "it asks which folder")
+            key("Return")
+            ok, shown, _ = poll(lambda: (section(main, "start").get("screen"), selected(main)), lambda v: v[0] == "chat" and v[1] not in (None, init_chat, first), 5)
+            check(ok, f"New chat shows another new chat ({shown})")
+            made = [s for s in client.sessions() if s.get("id") in (first, shown[1])]
+            check(len(client.sessions()) == count + 2 and len(made) == 2 and all(s.get("title") == "New Session" and not s.get("message_count") for s in made),
+                  f"each made one empty \"New Session\" record ({count} → {len(client.sessions())}: {[(s.get('title'), s.get('message_count')) for s in made]})")
             # Busy: a long reply runs in the shown chat.
             click_row(main, init_chat)
             screen_is(main, "chat", 10)
@@ -574,8 +598,8 @@ def engine_run():
             focus(main)
             key("ctrl+n")
             # A working chat no longer blocks a new one (owner, 2026-10-21).
-            ok, screen = screen_is(main, "landing", 5)
-            check(ok and (section(main, "overlay").get("notice") or {}).get("text") != BUSY_WARNING, f"Ctrl+N on a busy chat shows the landing page, no busy warning (screen {screen})")
+            ok, shown, _ = poll(lambda: (section(main, "start").get("screen"), selected(main)), lambda v: v[0] == "chat" and v[1] not in (None, init_chat), 5)
+            check(ok and (section(main, "overlay").get("notice") or {}).get("text") != BUSY_WARNING, f"Ctrl+N on a busy chat shows a new chat, no busy warning ({shown})")
             ok, _, _ = poll(lambda: next((r for r in rows(main) if r.get("id") == init_chat), {}), lambda r: r.get("state") == "Working…", 5)
             check(ok, "and the busy chat keeps working in the list")
             client.post(f"agent/sessions/{init_chat}/cancel")
@@ -583,14 +607,13 @@ def engine_run():
             check(ok, "once the run is cancelled the row has no state")
 
         with step("START-003", out_dir):
-            # The landing page is blank (owner, 2026-10-19); the engine's
-            # project data still reaches the window: the branch in the top
-            # bar, the model, and the LSP / MCP / skills lists of the panel.
+            # A new chat opens empty; the engine's project data still reaches
+            # the window: the branch in the top bar, the model, and the LSP /
+            # MCP / skills lists of the panel.
             focus(main)
             key("ctrl+n")
-            screen_is(main, "landing", 5)
-            ok, start = wait_on(main, "start", lambda s: s.get("landing") == {"blank": True} and (s.get("chat_model") or {}).get("model"), 10)
-            check(ok, f"the landing page is blank ({start.get('landing')})")
+            ok, start = wait_on(main, "start", lambda s: s.get("screen") == "chat" and (s.get("chat_model") or {}).get("model"), 10)
+            check(ok, f"Ctrl+N opens a new chat with its model ({start.get('screen')}, {start.get('chat_model')})")
             branch = (client.get("git/branch") or {}).get("branch") or ""
             check(start.get("branch") == branch, f"the window has the engine's branch: {start.get('branch')!r} (engine {branch!r})")
             check((start.get("chat_model") or {}).get("model") == "fake-large", f"the landing page shows the last pick, fake-large: {start.get('chat_model')}")
@@ -600,10 +623,10 @@ def engine_run():
                 check(got == n, f"the panel's {k} rows: {got} = the engine's {n}")
 
         with step("START-004", out_dir):
-            # Blank, wordmark included (owner, 2026-10-19): the wordmark and
-            # "Charm™ · v<version>" stay on the init and onboarding screens.
-            head = section(main, "start").get("head")
-            check(head is None, f"the landing page draws no head or wordmark ({head})")
+            # The new chat's head names it; the wordmark and "Charm™ ·
+            # v<version>" stay on the init and onboarding screens.
+            head = section(main, "start").get("head") or {}
+            check(head.get("title") == "New Session" and "wordmark" not in head, f"the new chat's head says New Session, with no wordmark ({head})")
             check(bool(version), f"the app knows its own version (crush-desktop --version {version})")
             check(main.report().get("heading") == "Crush AI", f"the list's wordmark is still the page's heading ({main.report().get('heading')!r})")
 
@@ -612,9 +635,6 @@ def engine_run():
             # may be caught mid-way; nothing keeps running.
             ok, anims, _ = poll(lambda: (heavy(main)[0].get("start") or {}).get("animations"), lambda a: a == [], 3, 0.3)
             check(ok, f"no animation keeps running on the landing page ({anims})")
-
-        with step("CHAT-001", out_dir):
-            landing_checks(main, "engine landing at 1600 x 992")
 
         with step("LIST-034", out_dir):
             sock = (section(main, "connection").get("engine") or {}).get("socket")
@@ -626,13 +646,22 @@ def engine_run():
                 seeded[title] = info.get("session_id")
                 check(bool(info.get("session_id")), f"seeded \"{title}\" ({info.get('messages')} items, {info.get('seconds')} s) {out.stderr.strip()[-200:]}")
             big, short = seeded.get("Five hundred items"), seeded.get("Short chat")
-            ok, _, _ = poll(lambda: {r.get("id"): r.get("title") for r in rows(main)}, lambda r: r.get(big) == "Five hundred items" and r.get(short) == "Short chat", 15)
-            check(ok, "both chats reach the list with their titles")
+            # The list draws the open chats (owner, 2026-10-21), and an open
+            # chat loads behind the shown one so a click shows it at once. The
+            # seeded chats are listed the way the terminal lists one it opens,
+            # only once the engine is held, so neither is loaded before its
+            # click and the opening line shows.
             pid = (section(main, "connection").get("engine") or {}).get("pid")
-            rect_big, rect_short = row_rect(main, big), row_rect(main, short)
-            if check(bool(pid and rect_big and rect_short), f"the engine's pid and both rows' rects ({pid})"):
+            if check(bool(pid), f"the engine's pid ({pid})"):
                 os.kill(pid, signal.SIGSTOP)
                 try:
+                    for title, sid in seeded.items():
+                        if sid:
+                            list_open_chat({"id": sid, "dir": PROJ, "title": title})
+                    ok, _, _ = poll(lambda: {r.get("id"): r.get("title") for r in rows(main)}, lambda r: r.get(big) == "Five hundred items" and r.get(short) == "Short chat", 15)
+                    check(ok, f"both chats reach the list with their titles ({[(r.get('id'), r.get('title')) for r in rows(main)]})")
+                    rect_big, rect_short = row_rect(main, big), row_rect(main, short)
+                    check(bool(rect_big and rect_short), "both rows have rects")
                     main.click(rect_big)
                     ok, start = wait_on(main, "start", lambda s: (s.get("opening") or {}).get("label") == "Opening Five hundred items…", 5)
                     check(ok and start.get("screen") == "opening", f"\"Opening Five hundred items…\" shows while the engine is held ({start.get('opening')})")
@@ -865,7 +894,7 @@ def engine_run():
                 key("Return")
                 ok, comp = wait_on(app, "composer", lambda c: (c.get("slot") or {}).get("kind") == "permission", 20)
                 shot(out_dir, "START-012")
-                check(ok, f"the reply's bash call opens the permission slot ({comp.get('slot')})")
+                check(ok, f"the reply's bash call opens the permission slot ({comp.get('slot')}; screen {section(app, 'start').get('screen')}, shown {selected(app)}, main slot {(section(main, 'composer').get('slot') or {}).get('kind')}, engine {ask_state(app, path)})")
                 buttons = [b.get("label") for b in (comp.get("slot") or {}).get("buttons") or []]
                 check(buttons == ["Allow", "Allow for session", "Deny"], f"with Allow, Allow for session and Deny ({buttons})")
                 check(not os.path.exists(os.path.join(path, "start-012.txt")), "and the command has not run")

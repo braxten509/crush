@@ -360,10 +360,16 @@ func (m *Models) setProviderItems() error {
 		return fmt.Errorf("failed to get providers: %w", err)
 	}
 
+	// The chat tab marks the shown chat's own model; the helper tab the
+	// helper model set in config.
+	currentModel := cfg.Models[config.SelectedModelTypeSmall]
+	if m.modelType != ModelTypeSmall {
+		currentModel, _, _, _ = m.com.ChatModel()
+	}
 	b := &modelGroupsBuilder{
 		t:            m.com.Styles,
 		modelType:    m.modelType,
-		currentModel: cfg.Models[selectedType],
+		currentModel: currentModel,
 		itemsMap:     make(map[string]*ModelItem),
 		groups:       []ModelGroup{},
 	}

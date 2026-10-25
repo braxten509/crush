@@ -26,8 +26,8 @@ func (m *UI) openUsageDialog() tea.Cmd {
 		m.dialog.BringToFront(dialog.UsageID)
 		return m.refreshUsage(d)
 	}
-	data := dialog.UsageData{Provider: "Current model", CompactAt: m.compactionLimit(m.selectedLargeModel(), m.session)}
-	if model := m.selectedLargeModel(); model != nil {
+	data := dialog.UsageData{Provider: "Current model", CompactAt: m.compactionLimit(m.shownChatModel(), m.session)}
+	if model := m.shownChatModel(); model != nil {
 		data.Model, data.ModelID = model.CatwalkCfg.Name, model.ModelCfg.Model
 		data.Kind = m.cliKind()
 		if cfg := m.com.Config(); cfg != nil && cfg.Providers != nil {
@@ -44,9 +44,9 @@ func (m *UI) openUsageDialog() tea.Cmd {
 
 func (m *UI) updateUsageData(d *dialog.Usage) {
 	data := d.Data()
-	data.CompactAt = m.compactionLimit(m.selectedLargeModel(), m.session)
+	data.CompactAt = m.compactionLimit(m.shownChatModel(), m.session)
 	account := ""
-	if model := m.selectedLargeModel(); model != nil {
+	if model := m.shownChatModel(); model != nil {
 		account = model.ModelCfg.Account
 	}
 	data.Limits = cliagent.AccountLimits(data.Kind, account, data.ModelID)

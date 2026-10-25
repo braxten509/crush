@@ -37,8 +37,8 @@ func (m *UI) composerFooter(width int) string {
 	line := ""
 	if m.state == uiChat && m.isCompact && m.hasSession() {
 		// Unwrapped here; the whole line wraps below.
-		stats := renderFooterItems(m.com.Styles, m.footerItems(), m.selectedLargeModel(), m.session,
-			m.compactionLimit(m.selectedLargeModel(), m.session), m.selectedCLILimits(), math.MaxInt32)
+		stats := renderFooterItems(m.com.Styles, m.footerItems(), m.shownChatModel(), m.session,
+			m.compactionLimit(m.shownChatModel(), m.session), m.selectedCLILimits(), math.MaxInt32)
 		if n := m.selectedCLIRefills(); n > 0 && stats != "" {
 			stats += m.com.Styles.ComposerFooter.Separator.Render(" · ") + m.com.Styles.ComposerFooter.LimitOther.Render(refillsText(n))
 		}

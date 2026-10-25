@@ -404,6 +404,8 @@ func (m *UI) newSession() tea.Cmd {
 		m.discardEmptySession(draftID),
 		planCmd,
 		abandonCmd,
+		// Another app may have picked since: show what a new chat starts on.
+		m.fetchLastPick(),
 		func() tea.Msg {
 			ws.LSPStopAll(context.Background())
 			return nil

@@ -26,7 +26,7 @@ import (
 // modelInfo renders the current model information including reasoning
 // settings and context usage/cost for the sidebar.
 func (m *UI) modelInfo(width int) string {
-	model := m.selectedLargeModel()
+	model := m.shownChatModel()
 	reasoningInfo := ""
 	providerName := ""
 
@@ -89,7 +89,7 @@ func (m *UI) modelInfo(width int) string {
 // cliKind is the agent CLI or metered provider (Moonshot AI) behind the
 // selected model, or "" when it reports no subscription usage.
 func (m *UI) cliKind() catwalk.Type {
-	model := m.selectedLargeModel()
+	model := m.shownChatModel()
 	cfg := m.com.Config()
 	if model == nil || cfg == nil || cfg.Providers == nil {
 		return ""
@@ -105,11 +105,12 @@ func (m *UI) cliKind() catwalk.Type {
 
 // selectedCLILimits shares the same cached subscription data across layouts.
 func (m *UI) selectedCLILimits() []cliagent.Limit {
-	if m.selectedLargeModel() == nil {
+	model := m.shownChatModel()
+	if model == nil {
 		return nil
 	}
 	if kind := m.cliKind(); kind != "" {
-		return cliagent.AccountLimits(kind, m.agentModel.ModelCfg.Account, m.agentModel.ModelCfg.Model)
+		return cliagent.AccountLimits(kind, model.ModelCfg.Account, model.ModelCfg.Model)
 	}
 	return nil
 }
@@ -117,11 +118,12 @@ func (m *UI) selectedCLILimits() []cliagent.Limit {
 // selectedCLIRefills is how many free refills the selected model's account
 // has left (Codex), as last read.
 func (m *UI) selectedCLIRefills() int {
-	if m.selectedLargeModel() == nil {
+	model := m.shownChatModel()
+	if model == nil {
 		return 0
 	}
 	if kind := m.cliKind(); kind != "" {
-		return cliagent.Refills(kind, m.agentModel.ModelCfg.Account)
+		return cliagent.Refills(kind, model.ModelCfg.Account)
 	}
 	return 0
 }

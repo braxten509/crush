@@ -10,8 +10,9 @@ package model
 // yolo and ready/model caches synchronously so the first frame has values to
 // render; Init then refreshes them off-thread.)
 //
-//   - Reads (isAgentBusy, yoloModeCached, promptQueue, selectedLargeModel,
-//     lspInfo) always return the memoized value, stale or not.
+//   - Reads (isAgentBusy, yoloModeCached, promptQueue, lspInfo) always
+//     return the memoized value, stale or not. shownChatModel reads the shown
+//     chat's own model, kept on the session, and the in-memory config.
 //   - State edges (message created, agent finished/errored, prompt
 //     submitted, cancel, session switch, yolo toggle, model change, LSP
 //     events) invalidate or write through the caches and dispatch an
@@ -34,7 +35,6 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/workspace"
 )
 
 // busyCacheTTL bounds how long the memoized busy/permission state may go
@@ -79,10 +79,6 @@ type busyStateMsg struct {
 	ready     bool
 	agentBusy bool
 	yolo      bool
-	// model is the coordinator's selected model, fetched by the same probe
-	// so the sidebar/landing model info renders from memoized state. Zero
-	// (and ignored) when ready is false.
-	model workspace.AgentModel
 }
 
 // promptQueueMsg delivers the queued prompts fetched off-thread.
@@ -158,7 +154,6 @@ func (m *UI) dispatchBusyRefresh() tea.Cmd {
 			if sessionID != "" {
 				st.agentBusy = ws.AgentIsSessionBusy(sessionID)
 			}
-			st.model = ws.AgentModel()
 		}
 		st.yolo = ws.PermissionSkipRequests()
 		return st
@@ -191,15 +186,15 @@ func (m *UI) applyBusyState(msg busyStateMsg) []tea.Cmd {
 	}
 	prevBusy := m.isAgentBusy()
 	prevYolo := m.yoloModeCached()
-	prevProvider := m.agentModel.ModelCfg.Provider
 	m.agentBusyCache.set(msg.agentBusy)
 	m.yoloCache.set(msg.yolo)
 	m.agentReady = msg.ready
-	m.agentModel = msg.model
+	shown, _ := m.shownChoice()
 
 	var cmds []tea.Cmd
-	if msg.ready && msg.model.ModelCfg.Provider != prevProvider {
-		// Show a newly selected agent CLI's usage limits right away.
+	if msg.ready && shown.Provider != m.limitsProvider {
+		// Show the shown chat's agent CLI usage limits right away.
+		m.limitsProvider = shown.Provider
 		cmds = append(cmds, m.fetchCLILimits())
 	}
 	if prevYolo != msg.yolo {
@@ -212,7 +207,7 @@ func (m *UI) applyBusyState(msg busyStateMsg) []tea.Cmd {
 
 	busy := m.isAgentBusy()
 	m.chat.SetAgentBusy(busy)
-	m.chat.SetCanBackground(cliagent.CanBackground(catwalk.Type(msg.model.ModelCfg.Provider)) || msg.model.ModelCfg.Provider == config.AbacusProviderID)
+	m.chat.SetCanBackground(cliagent.CanBackground(catwalk.Type(shown.Provider)) || shown.Provider == config.AbacusProviderID)
 	if busy {
 		// A session reload that raced an unpopulated busy cache (the
 		// zero-value read at boot) froze the animation clock even though

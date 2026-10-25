@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -14,21 +15,23 @@ import (
 
 type modelSelectionWorkspace struct {
 	*sessionSpecificWorkspace
-	cfg       *config.Config
-	chatModel session.ModelChoice
+	cfg *config.Config
+	// saved is the model the chat was given, or the last pick with no
+	// chat open.
+	saved config.SelectedModel
 }
 
 func (w *modelSelectionWorkspace) Config() *config.Config { return w.cfg }
 
-func (w *modelSelectionWorkspace) UpdatePreferredModel(_ config.Scope, kind config.SelectedModelType, selected config.SelectedModel) error {
-	w.cfg.Models[kind] = selected
-	return nil
+// The chat's own model (owner, 2026-10-23): kept, so a test can read it.
+func (w *modelSelectionWorkspace) SetSessionModel(_ context.Context, id string, model session.ModelChoice) (session.Session, error) {
+	_ = json.Unmarshal(model, &w.saved)
+	return session.Session{ID: id, Model: model}, nil
 }
 
-// The chat's own model (owner, 2026-10-23): kept, so a test can read it.
-func (w *modelSelectionWorkspace) SetSessionModel(_ context.Context, _ string, model session.ModelChoice) (session.Session, error) {
-	w.chatModel = model
-	return session.Session{}, nil
+func (w *modelSelectionWorkspace) SetLastPick(_ context.Context, model config.SelectedModel) error {
+	w.saved = model
+	return nil
 }
 
 func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
@@ -62,14 +65,21 @@ func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
 							config.AgentCoder: {Model: config.SelectedModelTypeLarge},
 						},
 						Models: map[config.SelectedModelType]config.SelectedModel{
-							config.SelectedModelTypeLarge: initial,
 							config.SelectedModelTypeSmall: initial,
 						},
 					},
+					saved: initial,
 				}
 				m := newBusyUI(base)
 				m.com.Workspace = ws
 				m.session = test.session
+				if m.hasSession() {
+					sess := *test.session
+					sess.Model, _ = json.Marshal(initial)
+					m.session = &sess
+				} else {
+					m.lastPick = initial
+				}
 				m.theme.userSelected = true
 				m.applyBusyState(m.dispatchBusyRefresh()().(busyStateMsg))
 
@@ -78,8 +88,8 @@ func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
 				case "model":
 					want.Model = "second"
 					cmd := m.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: want})
-					// The preference is written when the command runs.
-					require.Equal(t, initial, ws.cfg.Models[config.SelectedModelTypeLarge])
+					// The pick is saved when the command runs.
+					require.Equal(t, initial, ws.saved)
 					runWorkDone(m, cmd)
 				case "effort":
 					want.ReasoningEffort = "high"
@@ -95,7 +105,7 @@ func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
 				if test.busy {
 					want = initial
 				}
-				require.Equal(t, want, ws.cfg.Models[config.SelectedModelTypeLarge])
+				require.Equal(t, want, ws.saved)
 			})
 		}
 	}

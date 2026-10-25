@@ -512,16 +512,10 @@ func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
 	return nil, errors.New("unknown request " + strconv.Itoa(int(a.Kind)))
 }
 
+// coderProvider is the provider of the shown chat's model, or nil.
 func (m *UI) coderProvider() *config.ProviderConfig {
-	cfg := m.com.Config()
-	if cfg == nil {
-		return nil
-	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return nil
-	}
-	return cfg.GetProviderForModel(agentCfg.Model)
+	_, provider, _, _ := m.shownModelInfo()
+	return provider
 }
 
 // remoteSelectModel switches the coder to a model of a set-up provider,
@@ -559,6 +553,6 @@ func (m *UI) remoteSelectModel(providerID, modelID string) (tea.Cmd, error) {
 			ReasoningEffort: model.DefaultReasoningEffort,
 			MaxTokens:       model.DefaultMaxTokens,
 		},
-		ModelType: cmp.Or(cfg.Agents[config.AgentCoder].Model, config.SelectedModelTypeLarge),
+		ModelType: config.SelectedModelTypeLarge,
 	}), nil
 }

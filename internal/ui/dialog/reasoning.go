@@ -268,14 +268,10 @@ func (r *Reasoning) FullHelp() [][]key.Binding {
 }
 
 func (r *Reasoning) setReasoningItems() error {
-	cfg := r.com.Config()
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	selectedModel, provider, model, ok := r.com.ChatModel()
 	if !ok {
-		return errors.New("agent configuration not found")
+		return errors.New("no model is selected")
 	}
-
-	selectedModel := cfg.Models[agentCfg.Model]
-	model := cfg.GetModelByType(agentCfg.Model)
 	if model == nil {
 		return errors.New("model configuration not found")
 	}
@@ -284,7 +280,7 @@ func (r *Reasoning) setReasoningItems() error {
 		return errors.New("no reasoning levels available")
 	}
 
-	if provider := cfg.GetProviderForModel(agentCfg.Model); provider != nil && config.SupportsUltracode(*provider, *model) {
+	if provider != nil && config.SupportsUltracode(*provider, *model) {
 		on := selectedModel.Ultracode
 		r.ultracode = &on
 	}

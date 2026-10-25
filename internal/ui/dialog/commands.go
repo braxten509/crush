@@ -502,26 +502,22 @@ func (c *Commands) sessionCommands() []*CommandItem {
 func (c *Commands) modelCommands(cfg *config.Config) []*CommandItem {
 	var commands []*CommandItem
 	// Add reasoning toggle for models that support it
-	if agentCfg, ok := cfg.Agents[config.AgentCoder]; ok {
-		providerCfg := cfg.GetProviderForModel(agentCfg.Model)
-		model := cfg.GetModelByType(agentCfg.Model)
+	if selectedModel, providerCfg, model, ok := c.com.ChatModel(); ok {
 		if providerCfg != nil && model != nil && config.SupportsFastMode(*providerCfg, *model) {
 			status := "Enable"
-			if cfg.Models[agentCfg.Model].ServiceTier == "fast" {
+			if selectedModel.ServiceTier == "fast" {
 				status = "Disable"
 			}
 			commands = append(commands, NewCommandItem(c.com.Styles, "toggle_fast_mode", status+" FAST Mode", "", ActionToggleFastMode{}).WithAliases("fast", "speed"))
 		}
 		if providerCfg != nil && model != nil && config.SupportsUltracode(*providerCfg, *model) {
 			status := "Turn On"
-			if cfg.Models[agentCfg.Model].Ultracode {
+			if selectedModel.Ultracode {
 				status = "Turn Off"
 			}
 			commands = append(commands, NewCommandItem(c.com.Styles, "toggle_ultracode", status+" Ultracode", "", ActionToggleUltracode{}).WithAliases("ultracode", "ultra", "workflows"))
 		}
 		if providerCfg != nil && model != nil && model.CanReason {
-			selectedModel := cfg.Models[agentCfg.Model]
-
 			// Anthropic models: thinking toggle
 			if config.SupportsThinkingToggle(*providerCfg, *model) {
 				status := "Enable"
@@ -551,10 +547,7 @@ func (c *Commands) layoutCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "toggle_sidebar", "Toggle Sidebar", "", ActionToggleCompactMode{}))
 	}
 	if c.hasSession {
-		cfgPrime := c.com.Config()
-		agentCfg := cfgPrime.Agents[config.AgentCoder]
-		model := cfgPrime.GetModelByType(agentCfg.Model)
-		if model != nil && model.SupportsImages {
+		if _, _, model, _ := c.com.ChatModel(); model != nil && model.SupportsImages {
 			commands = append(commands, NewCommandItem(c.com.Styles, "file_picker", "Open File Picker", "ctrl+f", ActionOpenDialog{
 				DialogID: FilePickerID,
 			}))

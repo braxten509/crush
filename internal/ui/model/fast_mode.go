@@ -1,7 +1,6 @@
 package model
 
 import (
-	"context"
 	"errors"
 
 	tea "charm.land/bubbletea/v2"
@@ -9,70 +8,50 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
+// toggleFastMode flips FAST mode on the shown chat's model.
 func (m *UI) toggleFastMode() tea.Cmd {
 	if m.isAgentBusy() {
 		return util.ReportWarn("Agent is busy, please wait...")
 	}
-	cfg := m.com.Config()
-	if cfg == nil {
-		return util.ReportError(errors.New("configuration not found"))
-	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	selected, provider, model, ok := m.shownModelInfo()
 	if !ok {
-		return util.ReportError(errors.New("agent configuration not found"))
+		return util.ReportError(errors.New("no model is selected"))
 	}
-	provider := cfg.GetProviderForModel(agentCfg.Model)
-	model := cfg.GetModelByType(agentCfg.Model)
 	if provider == nil || model == nil || !config.SupportsFastMode(*provider, *model) {
 		return util.ReportError(errors.New("selected model does not support FAST mode"))
 	}
-	selected := cfg.Models[agentCfg.Model]
 	status := "enabled"
 	if selected.ServiceTier == "fast" {
 		selected.ServiceTier, status = "default", "disabled"
 	} else {
 		selected.ServiceTier = "fast"
 	}
-	ws := m.com.Workspace
-	return m.updateAgentModelCmd(func() tea.Msg {
-		if err := ws.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, selected); err != nil {
-			return util.ReportError(err)()
+	return m.saveShownModel(selected, func(err error) tea.Cmd {
+		if err != nil {
+			return util.ReportError(err)
 		}
-		if err := ws.UpdateAgentModel(context.Background()); err != nil {
-			return util.ReportError(err)()
-		}
-		return util.NewInfoMsg("FAST mode " + status)
+		return util.ReportInfo("FAST mode " + status)
 	})
 }
 
+// toggleUltracode flips Claude's Ultracode on the shown chat's model.
 func (m *UI) toggleUltracode() tea.Cmd {
 	if m.isAgentBusy() {
 		return util.ReportWarn("Agent is busy, please wait...")
 	}
-	cfg := m.com.Config()
-	if cfg == nil {
-		return util.ReportError(errors.New("configuration not found"))
-	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	selected, provider, model, ok := m.shownModelInfo()
 	if !ok {
-		return util.ReportError(errors.New("agent configuration not found"))
+		return util.ReportError(errors.New("no model is selected"))
 	}
-	provider := cfg.GetProviderForModel(agentCfg.Model)
-	model := cfg.GetModelByType(agentCfg.Model)
 	if provider == nil || model == nil || !config.SupportsUltracode(*provider, *model) {
 		return util.ReportError(errors.New("selected model does not support Ultracode"))
 	}
-	selected := cfg.Models[agentCfg.Model]
 	selected.Ultracode = !selected.Ultracode
-	ws := m.com.Workspace
-	return m.updateAgentModelCmd(func() tea.Msg {
-		if err := ws.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, selected); err != nil {
-			return util.ReportError(err)()
+	return m.saveShownModel(selected, func(err error) tea.Cmd {
+		if err != nil {
+			return util.ReportError(err)
 		}
-		if err := ws.UpdateAgentModel(context.Background()); err != nil {
-			return util.ReportError(err)()
-		}
-		return util.NewInfoMsg("Ultracode " + onOff(selected.Ultracode))
+		return util.ReportInfo("Ultracode " + onOff(selected.Ultracode))
 	})
 }
 

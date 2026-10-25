@@ -49,7 +49,7 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 			Group: cmp.Or(server.Process.JobID, strconv.Itoa(server.Process.PID)),
 		})
 	}
-	if model := m.selectedLargeModel(); model != nil {
+	if model := m.shownChatModel(); model != nil {
 		st.Model = model.CatwalkCfg.Name
 		if effort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.DefaultReasoningEffort); effort != "" && model.CatwalkCfg.CanReason {
 			st.Model += " · " + common.FormatReasoningEffort(effort)

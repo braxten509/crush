@@ -176,6 +176,8 @@ func (m *UI) handleUIMsg(msg tea.Msg) (tea.Cmd, bool) {
 		cmds = append(cmds, m.updateTextareaWithPrevHeight(msg, prevHeight))
 	case workDoneMsg:
 		cmds = append(cmds, m.applyWorkDone(msg))
+	case lastPickMsg:
+		m.lastPick = msg.model
 	case fileCompletionMsg:
 		cmds = append(cmds, m.applyFileCompletion(msg))
 	case filePickerDoneMsg:

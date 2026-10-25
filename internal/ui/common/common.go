@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/clipboard"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -133,6 +134,31 @@ func IsImagePath(path string) bool {
 type Common struct {
 	Workspace workspace.Workspace
 	Styles    *styles.Styles
+	// ShownModel is the model the chat on screen owns, or the last pick a
+	// new chat starts on with none open. Every chat owns its model; there
+	// is no folder-wide one to read instead (owner, 2026-10-24).
+	ShownModel func() (config.SelectedModel, bool)
+}
+
+// ChatModel is the shown chat's model with its provider and catalog entry;
+// either may be nil when the config no longer offers it. ok is false when no
+// model is known.
+func (c *Common) ChatModel() (selected config.SelectedModel, provider *config.ProviderConfig, model *catwalk.Model, ok bool) {
+	if c.ShownModel == nil {
+		return config.SelectedModel{}, nil, nil, false
+	}
+	selected, ok = c.ShownModel()
+	if !ok || c.Workspace == nil {
+		return selected, nil, nil, ok
+	}
+	cfg := c.Workspace.Config()
+	if cfg == nil {
+		return selected, nil, nil, true
+	}
+	if pc, found := cfg.Providers.Get(selected.Provider); found {
+		provider = &pc
+	}
+	return selected, provider, cfg.GetModel(selected.Provider, selected.Model), true
 }
 
 // Config returns the pure-data configuration associated with this [Common] instance.
@@ -153,19 +179,6 @@ func DefaultCommon(ws workspace.Workspace) *Common {
 		Workspace: ws,
 		Styles:    &s,
 	}
-}
-
-// largeModelProviderID returns the provider ID of the currently selected
-// large model, or the empty string if none is set or the workspace is nil.
-func largeModelProviderID(ws workspace.Workspace) string {
-	if ws == nil {
-		return ""
-	}
-	cfg := ws.Config()
-	if cfg == nil {
-		return ""
-	}
-	return cfg.Models[config.SelectedModelTypeLarge].Provider
 }
 
 // ThemeNameFromConfig extracts the theme name from config, returning ""
@@ -190,10 +203,10 @@ func ThemeStylesFromConfig(cfg *config.Config) styles.Styles {
 	return LoadThemeStyles(ThemeNameFromConfig(cfg))
 }
 
-// IsHyper reports whether the currently selected large model is provided
-// by Hyper.
+// IsHyper reports whether the shown chat's model is provided by Hyper.
 func (c *Common) IsHyper() bool {
-	return largeModelProviderID(c.Workspace) == "hyper"
+	selected, _, _, ok := c.ChatModel()
+	return ok && selected.Provider == "hyper"
 }
 
 // CenterRect returns a new [Rectangle] centered within the given area with the

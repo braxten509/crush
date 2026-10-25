@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"reflect"
 	"sync"
@@ -11,7 +12,6 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/question"
@@ -33,8 +33,10 @@ type prefWorkspace struct {
 	prefErr error
 	// copilot is added to the providers by ImportCopilot when set.
 	copilot *config.ProviderConfig
-	// chatModel is the model the last chat was given.
+	// chatModel is the model the last chat was given, lastPick the pick
+	// made with no chat open.
 	chatModel session.ModelChoice
+	lastPick  config.SelectedModel
 }
 
 func (w *prefWorkspace) Config() *config.Config { return w.cfg }
@@ -54,10 +56,40 @@ func (w *prefWorkspace) recorded() []string {
 // SetSessionModel keeps the model a chat was given (owner, 2026-10-23).
 func (w *prefWorkspace) SetSessionModel(_ context.Context, sessionID string, model session.ModelChoice) (session.Session, error) {
 	w.record("chat model " + sessionID)
+	if w.prefErr != nil {
+		return session.Session{}, w.prefErr
+	}
 	w.mu.Lock()
 	w.chatModel = model
 	w.mu.Unlock()
-	return session.Session{ID: sessionID}, nil
+	return session.Session{ID: sessionID, Model: model}, nil
+}
+
+func (w *prefWorkspace) SetLastPick(_ context.Context, model config.SelectedModel) error {
+	w.record("last pick " + model.Provider + "/" + model.Model)
+	if w.prefErr != nil {
+		return w.prefErr
+	}
+	w.mu.Lock()
+	w.lastPick = model
+	w.mu.Unlock()
+	return nil
+}
+
+func (w *prefWorkspace) LastPick(context.Context) (config.SelectedModel, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.lastPick, w.lastPick.Provider != ""
+}
+
+// chatChoice is the model the last chat was given.
+func (w *prefWorkspace) chatChoice(t *testing.T) config.SelectedModel {
+	t.Helper()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var m config.SelectedModel
+	require.NoError(t, json.Unmarshal(w.chatModel, &m))
+	return m
 }
 
 func (w *prefWorkspace) UpdatePreferredModel(_ config.Scope, kind config.SelectedModelType, model config.SelectedModel) error {
@@ -145,27 +177,34 @@ func runAll(m *UI, cmd tea.Cmd) []tea.Msg {
 	return []tea.Msg{msg}
 }
 
+// TestSelectModelWritesPreferenceOffLoop: a pick is saved on the chat it was
+// made in, or as the last pick with no chat open, off the Update goroutine;
+// no folder-wide model is written.
 func TestSelectModelWritesPreferenceOffLoop(t *testing.T) {
 	t.Parallel()
 
-	u, ws := newPrefUI(t)
-	u.dialog.OpenDialog(idDialog{id: dialog.ModelsID})
-	selected := config.SelectedModel{Provider: "p", Model: "m1"}
-	cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: selected})
-	require.Empty(t, ws.recorded(), "the writes must not run on the Update goroutine")
-	require.False(t, u.dialog.ContainsDialog(dialog.ModelsID), "the dialog closes at once")
+	for _, inChat := range []bool{true, false} {
+		u, ws := newPrefUI(t)
+		saved := "chat model s1"
+		if !inChat {
+			u.session = nil
+			saved = "last pick p/m1"
+		}
+		u.dialog.OpenDialog(idDialog{id: dialog.ModelsID})
+		selected := config.SelectedModel{Provider: "p", Model: "m1"}
+		cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: selected})
+		require.Empty(t, ws.recorded(), "the writes must not run on the Update goroutine")
+		require.False(t, u.dialog.ContainsDialog(dialog.ModelsID), "the dialog closes at once")
 
-	msgs := runAll(u, cmd)
-	require.Equal(t, []string{
-		"pref large p/m1",
-		"default small p",
-		"pref small p/small",
-		"chat model s1",
-		"update agent model",
-	}, ws.recorded())
-	info, ok := findMsg[util.InfoMsg](msgs)
-	require.True(t, ok)
-	require.Equal(t, "Large model changed to Model One", info.Msg)
+		msgs := runAll(u, cmd)
+		require.Equal(t, []string{saved, "default small p", "pref small p/small"}, ws.recorded())
+		info, ok := findMsg[util.InfoMsg](msgs)
+		require.True(t, ok)
+		require.Equal(t, "Model changed to Model One", info.Msg)
+		shown, ok := u.shownChoice()
+		require.True(t, ok)
+		require.Equal(t, selected, shown, "the pick is shown at once")
+	}
 }
 
 func TestSelectModelReportsFailedWrite(t *testing.T) {
@@ -175,9 +214,7 @@ func TestSelectModelReportsFailedWrite(t *testing.T) {
 	ws.prefErr = os.ErrPermission
 	cmd := u.handleDialogAction(dialog.ActionSelectModel{ModelType: config.SelectedModelTypeLarge, Model: config.SelectedModel{Provider: "p", Model: "m1"}})
 	msgs := runAll(u, cmd)
-	// As before, the coordinator still rebuilds after a failed write; the
-	// chat keeps no model of its own then.
-	require.Equal(t, []string{"pref large p/m1", "update agent model"}, ws.recorded())
+	require.Equal(t, []string{"chat model s1"}, ws.recorded())
 	var types []util.InfoType
 	for _, msg := range msgs {
 		if info, ok := msg.(util.InfoMsg); ok {
@@ -203,7 +240,7 @@ func TestSelectModelOnboardingStartsCoderAfterWrite(t *testing.T) {
 	require.Nil(t, ws.cfg.Agents, "the agents are set up once the model was written")
 
 	runAll(u, cmd)
-	require.Equal(t, []string{"pref large p/m1", "chat model s1", "init coder", "update agent model"}, ws.recorded())
+	require.Equal(t, []string{"chat model s1", "init coder"}, ws.recorded())
 	require.Contains(t, ws.cfg.Agents, config.AgentCoder)
 }
 
@@ -233,7 +270,7 @@ func TestSelectModelImportsCopilotOffLoop(t *testing.T) {
 		require.False(t, u.dialog.ContainsDialog(dialog.ModelsID))
 		if imported {
 			runAll(u, cmd)
-			require.Equal(t, []string{"import copilot", "pref large copilot/c1", "default small copilot", "pref small copilot/small", "chat model s1", "update agent model"}, ws.recorded())
+			require.Equal(t, []string{"import copilot", "chat model s1", "default small copilot", "pref small copilot/small"}, ws.recorded())
 		} else {
 			// Still not configured: the sign-in opens, without importing again.
 			require.Equal(t, []string{"import copilot"}, ws.recorded())
@@ -242,53 +279,22 @@ func TestSelectModelImportsCopilotOffLoop(t *testing.T) {
 	}
 }
 
-func TestRestoreModelFromSessionWritesOffLoop(t *testing.T) {
-	t.Parallel()
-
-	u, ws := newPrefUI(t)
-	ws.cfg.Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: "p", Model: "other"}
-	ws.cfg.Models[config.SelectedModelTypeSmall] = config.SelectedModel{Provider: "p", Model: "other"}
-	ws.cfg.Providers.Set("p", config.ProviderConfig{ID: "p", Models: []catwalk.Model{{ID: "m1"}, {ID: "other"}}})
-	cmd := u.restoreModelFromSession([]message.Message{{Role: message.Assistant, Provider: "p", Model: "m1"}})
-	require.NotNil(t, cmd)
-	require.Empty(t, ws.recorded())
-
-	runAll(u, cmd)
-	// The chat keeps the model it last replied with (owner, 2026-10-23).
-	require.Equal(t, []string{"pref large p/m1", "chat model s1", "update agent model"}, ws.recorded())
-	require.Equal(t, "m1", ws.cfg.Models[config.SelectedModelTypeLarge].Model)
-	require.JSONEq(t, `{"provider":"p","model":"m1"}`, string(ws.chatModel))
-}
-
+// TestToggleThinkingCapturesModel: the toggle changes the shown chat's own
+// model, off the Update goroutine.
 func TestToggleThinkingCapturesModel(t *testing.T) {
 	t.Parallel()
 
 	u, ws := newPrefUI(t)
-	ws.cfg.Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: "p", Model: "m1"}
+	u.session.Model = json.RawMessage(`{"provider":"p","model":"m1"}`)
 	ws.cfg.Providers.Set("p", config.ProviderConfig{ID: "p", Type: catwalk.TypeAnthropic, Models: []catwalk.Model{{ID: "m1", CanReason: true}}})
 	cmd := u.handleDialogAction(dialog.ActionToggleThinking{})
-	// The command must not read the model or the config.
-	var msgs []tea.Msg
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		// The rebuild is sequenced after the toggle; run the toggle.
-		seq := reflect.ValueOf(cmd())
-		msgs = collectMsgs(seq.Index(0).Interface().(tea.Cmd))
-	}()
-	com := u.com
-	for running := true; running; {
-		select {
-		case <-done:
-			running = false
-		default:
-			u.com = com
-		}
-	}
+	require.Empty(t, ws.recorded(), "the write must not run on the Update goroutine")
+	msgs := runAll(u, cmd)
 	info, ok := findMsg[util.InfoMsg](msgs)
 	require.True(t, ok)
 	require.Equal(t, "Thinking mode enabled", info.Msg)
-	require.True(t, ws.cfg.Models[config.SelectedModelTypeLarge].Think)
+	require.True(t, ws.chatChoice(t).Think)
+	require.Empty(t, ws.cfg.Models, "no folder-wide model is written")
 }
 
 // These tests pin that settings writes behind key presses and dialog

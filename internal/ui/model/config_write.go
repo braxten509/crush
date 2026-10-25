@@ -1,10 +1,8 @@
 package model
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
@@ -49,40 +47,20 @@ func (m *UI) writeConfigField(key string, value any, then func(err error) tea.Cm
 	}, then)
 }
 
-// savePreferredModel stores model as the preferred model of kind off the
-// Update goroutine. With fillSmall, a successful write also stores the
-// provider's default small model. then runs on the Update goroutine with
-// the write's error and the small model write's error.
-func savePreferredModel(ws workspace.Workspace, kind config.SelectedModelType, model config.SelectedModel, fillSmall bool, then func(err, smallErr error) tea.Cmd) tea.Cmd {
-	// Written by the command before it delivers its message, read by
-	// then after Update received it.
-	var smallErr error
+// saveHelperModel stores the helper model (titles, branch summaries) off
+// the Update goroutine; then runs on the Update goroutine with the error.
+func saveHelperModel(ws workspace.Workspace, model config.SelectedModel, then func(err error) tea.Cmd) tea.Cmd {
 	return doThen(func() error {
-		if err := ws.UpdatePreferredModel(config.ScopeGlobal, kind, model); err != nil {
-			return err
-		}
-		if fillSmall {
-			small := ws.GetDefaultSmallModel(model.Provider)
-			smallErr = ws.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, small)
-		}
-		return nil
-	}, func(err error) tea.Cmd {
-		return then(err, smallErr)
-	})
+		return ws.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, model)
+	}, then)
 }
 
-// saveChatModel saves a model picked in the terminal both as the workspace's
-// default and on the chat it was picked in, so another chat keeps its own
-// model (owner, 2026-10-23).
-func saveChatModel(ws workspace.Workspace, sessionID string, kind config.SelectedModelType, model config.SelectedModel, fillSmall bool, then func(err, smallErr error) tea.Cmd) tea.Cmd {
-	return savePreferredModel(ws, kind, model, fillSmall, func(err, smallErr error) tea.Cmd {
-		if err == nil && sessionID != "" && kind == config.SelectedModelTypeLarge {
-			if _, chatErr := ws.SetSessionModel(context.Background(), sessionID, modelJSON(model)); chatErr != nil {
-				slog.Warn("Could not save the chat's model", "session_id", sessionID, "error", chatErr)
-			}
-		}
-		return then(err, smallErr)
-	})
+// fillHelperModel sets provider's default small model as the helper model,
+// off the Update goroutine.
+func fillHelperModel(ws workspace.Workspace, provider string, then func(err error) tea.Cmd) tea.Cmd {
+	return doThen(func() error {
+		return ws.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, ws.GetDefaultSmallModel(provider))
+	}, then)
 }
 
 // modelJSON is a model as the chat stores it (config.SelectedModel JSON).

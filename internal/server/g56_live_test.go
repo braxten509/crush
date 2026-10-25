@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -19,43 +18,44 @@ import (
 )
 
 // TestCapabilitiesReportModelSupport: the capabilities carry what the
-// coder model supports, read with the terminal's own functions (G-8).
+// asked chat's own model supports, read with the terminal's own functions
+// (G-8); two chats on different models get different answers.
 func TestCapabilitiesReportModelSupport(t *testing.T) {
 	h := newE2EHarness(t)
-	path := "/v1/workspaces/" + h.workspace.ID + "/agent/capabilities"
+	path := "/v1/workspaces/" + h.workspace.ID + "/agent/capabilities?session="
+	models := []catwalk.Model{
+		{ID: "opus", CanReason: true, ReasoningLevels: []string{"low", "high"}},
+		{ID: "haiku"},
+		{ID: "thinker", CanReason: true},
+		{ID: "plain"},
+	}
 	providers := map[string]config.ProviderConfig{
-		"claude-code": {ID: "claude-code", Type: config.TypeClaudeCode},
-		"openai":      {ID: "openai", Type: catwalk.TypeOpenAI},
+		"claude-code": {ID: "claude-code", Type: config.TypeClaudeCode, Models: models[:2]},
+		"openai":      {ID: "openai", Type: catwalk.TypeOpenAI, Models: models[2:]},
 	}
 	h.workspace.Cfg = config.NewTestStore(&config.Config{Providers: csync.NewMapFrom(providers)})
-
-	for _, tc := range []struct {
-		provider string
-		model    catwalk.Model
-	}{
-		{"claude-code", catwalk.Model{ID: "opus", CanReason: true, ReasoningLevels: []string{"low", "high"}}},
-		{"claude-code", catwalk.Model{ID: "haiku"}},
-		{"openai", catwalk.Model{ID: "thinker", CanReason: true}},
-		{"openai", catwalk.Model{ID: "plain"}},
-	} {
-		h.app.AgentCoordinator = modelCoordinator{model: agent.Model{
-			CatwalkCfg: tc.model,
-			ModelCfg:   config.SelectedModel{Provider: tc.provider, Model: tc.model.ID},
-		}}
-		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path, nil, http.StatusOK)
-		pc := providers[tc.provider]
-		require.Equal(t, config.SupportsFastMode(pc, tc.model), got.SupportsFast, tc.model.ID)
-		require.Equal(t, config.SupportsUltracode(pc, tc.model), got.SupportsUltracode, tc.model.ID)
-		require.Equal(t, config.SupportsThinkingToggle(pc, tc.model), got.SupportsThinkingToggle, tc.model.ID)
+	chats := map[string]config.SelectedModel{
+		"opus":    {Provider: "claude-code", Model: "opus"},
+		"haiku":   {Provider: "claude-code", Model: "haiku"},
+		"thinker": {Provider: "openai", Model: "thinker"},
+		"plain":   {Provider: "openai", Model: "plain"},
 	}
-	h.app.AgentCoordinator = modelCoordinator{model: agent.Model{
-		CatwalkCfg: catwalk.Model{ID: "opus", ReasoningLevels: []string{"high"}},
-		ModelCfg:   config.SelectedModel{Provider: "claude-code", Model: "opus"},
-	}}
-	got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path, nil, http.StatusOK)
-	require.True(t, got.SupportsFast)
-	require.True(t, got.SupportsUltracode)
-	require.False(t, got.SupportsThinkingToggle)
+	h.app.Sessions = chatSessions(t, chats)
+
+	for _, model := range models {
+		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+model.ID, nil, http.StatusOK)
+		pc := providers[chats[model.ID].Provider]
+		require.Equal(t, pc.ID, got.Kind, model.ID)
+		require.Equal(t, config.SupportsFastMode(pc, model), got.SupportsFast, model.ID)
+		require.Equal(t, config.SupportsUltracode(pc, model), got.SupportsUltracode, model.ID)
+		require.Equal(t, config.SupportsThinkingToggle(pc, model), got.SupportsThinkingToggle, model.ID)
+	}
+	opus := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"opus", nil, http.StatusOK)
+	plain := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"plain", nil, http.StatusOK)
+	require.True(t, opus.SupportsFast)
+	require.True(t, opus.CanBackground)
+	require.False(t, plain.SupportsFast)
+	require.False(t, plain.CanBackground, "each chat answers for its own model")
 }
 
 // TestPendingQuestionRoute: the question a chat waits on can be read

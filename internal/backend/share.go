@@ -1249,25 +1249,35 @@ func shareChatModel(ws *Workspace, sessionID string) (*config.Config, config.Sel
 	if cfg == nil {
 		return nil, config.SelectedModel{}, errPhoneNoConfig
 	}
-	if sessionID == "" {
-		pick, ok := ws.ops().LastPick()
-		if !ok {
-			return nil, config.SelectedModel{}, errPhoneNoAgentConfig
-		}
-		return cfg, pick, nil
-	}
-	if ws.App == nil || ws.App.Sessions == nil {
-		return nil, config.SelectedModel{}, errPhoneNoAgentConfig
-	}
-	sess, err := ws.App.Sessions.Get(shareContext(ws), sessionID)
+	current, err := chatModel(ws, sessionID)
 	if err != nil {
 		return nil, config.SelectedModel{}, err
 	}
+	return cfg, current, nil
+}
+
+// chatModel returns the model chat sessionID owns, or the last pick when
+// sessionID is "" (no chat open).
+func chatModel(ws *Workspace, sessionID string) (config.SelectedModel, error) {
+	if sessionID == "" {
+		pick, ok := ws.ops().LastPick()
+		if !ok {
+			return config.SelectedModel{}, errPhoneNoAgentConfig
+		}
+		return pick, nil
+	}
+	if ws.App == nil || ws.App.Sessions == nil {
+		return config.SelectedModel{}, errPhoneNoAgentConfig
+	}
+	sess, err := ws.App.Sessions.Get(shareContext(ws), sessionID)
+	if err != nil {
+		return config.SelectedModel{}, err
+	}
 	var current config.SelectedModel
 	if len(sess.Model) == 0 || json.Unmarshal(sess.Model, &current) != nil || current.Provider == "" {
-		return nil, config.SelectedModel{}, errPhoneNoAgentConfig
+		return config.SelectedModel{}, errPhoneNoAgentConfig
 	}
-	return cfg, current, nil
+	return current, nil
 }
 
 // shareModelInfo returns the provider and catalog entry of model.

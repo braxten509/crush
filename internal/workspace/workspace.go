@@ -188,7 +188,6 @@ type AgentService interface {
 	// background (Ctrl+B), reporting whether the agent could be asked.
 	AgentBackground(sessionID string) bool
 	AgentIsSessionBusy(sessionID string) bool
-	AgentModel() AgentModel
 	AgentIsReady() bool
 	// AgentReadyErr reports nil when the coder agent is ready to accept
 	// work, or a descriptive error otherwise: ErrAgentNotInitialized

@@ -248,40 +248,52 @@ func (h *hub) shareLocked() Share {
 	return s
 }
 
+// chatModelLocked returns the model the shared chat owns, or the last pick
+// with no chat open.
+func (h *hub) chatModelLocked(cfg *config.Config) (config.SelectedModel, bool) {
+	if h.presence.SessionID == "" {
+		return config.NewChatModel(cfg)
+	}
+	var selected config.SelectedModel
+	if h.sess.ID != h.presence.SessionID || len(h.sess.Model) == 0 || json.Unmarshal(h.sess.Model, &selected) != nil {
+		return config.SelectedModel{}, false
+	}
+	return selected, selected.Provider != ""
+}
+
 func (h *hub) modelLocked() modelView {
 	cfg := h.src.Config()
 	mv := modelView{Yolo: h.src.PermissionSkipRequests(), Plan: h.presence.Plan}
 	if cfg == nil {
 		return mv
 	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	selected, ok := h.chatModelLocked(cfg)
 	if !ok {
 		return mv
 	}
-	selected := cfg.Models[agentCfg.Model]
 	mv.Provider, mv.Model = selected.Provider, selected.Model
-	if p := cfg.GetProviderForModel(agentCfg.Model); p != nil {
+	m := cfg.GetModel(selected.Provider, selected.Model)
+	if p, ok := cfg.Providers.Get(selected.Provider); ok {
 		mv.CLI = cmp.Or(p.Name, p.ID)
-		if model := cfg.GetModelByType(agentCfg.Model); model != nil && config.SupportsFastMode(*p, *model) {
+		if m != nil && config.SupportsFastMode(p, *m) {
 			fast := selected.ServiceTier == "fast"
 			mv.Fast = &fast
 		}
-		if model := cfg.GetModelByType(agentCfg.Model); model != nil && config.SupportsUltracode(*p, *model) {
+		if m != nil && config.SupportsUltracode(p, *m) {
 			ultra := selected.Ultracode
 			mv.Ultra = &ultra
 		}
+		if m != nil && m.CanReason && len(m.ReasoningLevels) == 0 && config.SupportsThinkingToggle(p, *m) {
+			think := selected.Think
+			mv.Think = &think
+		}
 	}
-	if m := cfg.GetModelByType(agentCfg.Model); m != nil {
+	if m != nil {
 		mv.Name = cmp.Or(m.Name, m.ID)
 		mv.Images = m.SupportsImages
-		if m.CanReason {
-			if len(m.ReasoningLevels) > 0 {
-				mv.Efforts = m.ReasoningLevels
-				mv.Effort = cmp.Or(selected.ReasoningEffort, m.DefaultReasoningEffort)
-			} else if provider := cfg.GetProviderForModel(agentCfg.Model); provider != nil && config.SupportsThinkingToggle(*provider, *m) {
-				think := selected.Think
-				mv.Think = &think
-			}
+		if m.CanReason && len(m.ReasoningLevels) > 0 {
+			mv.Efforts = m.ReasoningLevels
+			mv.Effort = cmp.Or(selected.ReasoningEffort, m.DefaultReasoningEffort)
 		}
 	}
 	mv.Name = cmp.Or(mv.Name, mv.Model)
@@ -328,11 +340,11 @@ func (h *hub) usageLocked(m modelView) usageView {
 	if cfg == nil {
 		return u
 	}
-	if agentCfg, ok := cfg.Agents[config.AgentCoder]; ok {
-		if cm := cfg.GetModelByType(agentCfg.Model); cm != nil {
+	if selected, ok := h.chatModelLocked(cfg); ok {
+		if cm := cfg.GetModel(selected.Provider, selected.Model); cm != nil {
 			u.ContextMax = cm.ContextWindow
 		}
-		if p := cfg.GetProviderForModel(agentCfg.Model); p != nil && config.IsCLIProviderType(p.Type) {
+		if p, ok := cfg.Providers.Get(selected.Provider); ok && config.IsCLIProviderType(p.Type) {
 			for _, l := range h.src.Limits(p.Type, m.Model) {
 				lv := limitView{Name: l.Name, Left: l.Left()}
 				if !l.ResetsAt.IsZero() && time.Now().Before(l.ResetsAt) {

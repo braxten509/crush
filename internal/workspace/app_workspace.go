@@ -164,17 +164,6 @@ func (w *AppWorkspace) AgentIsSessionBusy(sessionID string) bool {
 	return w.ops.IsSessionBusy(sessionID)
 }
 
-func (w *AppWorkspace) AgentModel() AgentModel {
-	if w.app.AgentCoordinator == nil {
-		return AgentModel{}
-	}
-	m := w.app.AgentCoordinator.Model()
-	return AgentModel{
-		CatwalkCfg: m.CatwalkCfg,
-		ModelCfg:   m.ModelCfg,
-	}
-}
-
 func (w *AppWorkspace) AgentIsReady() bool {
 	return w.app.AgentCoordinator != nil
 }

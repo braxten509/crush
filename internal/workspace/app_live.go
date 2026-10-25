@@ -3,11 +3,8 @@ package workspace
 import (
 	"context"
 
-	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
-	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/backend"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 )
 
@@ -33,16 +30,6 @@ func (w *AppWorkspace) KillJob(_ context.Context, sessionID string, p agent.Proc
 		}
 	}
 	return backend.ErrJobNotFound
-}
-
-// CanBackground reads the current coder model the way the terminal's
-// Ctrl+B hint does.
-func (w *AppWorkspace) CanBackground(context.Context) (bool, error) {
-	if w.app.AgentCoordinator == nil {
-		return false, nil
-	}
-	provider := w.app.AgentCoordinator.Model().ModelCfg.Provider
-	return cliagent.CanBackground(catwalk.Type(provider)) || provider == config.AbacusProviderID, nil
 }
 
 func (w *AppWorkspace) CLILimits(context.Context) ([]proto.CLILimits, error) {

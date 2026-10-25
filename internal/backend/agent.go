@@ -154,7 +154,7 @@ func (b *Backend) runAgent(ws *Workspace, msg proto.AgentMessage, accept *agent.
 	}
 }
 
-// GetAgentInfo returns the agent's model and busy status.
+// GetAgentInfo returns the agent's busy and ready status.
 func (b *Backend) GetAgentInfo(workspaceID string) (proto.AgentInfo, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
@@ -163,13 +163,10 @@ func (b *Backend) GetAgentInfo(workspaceID string) (proto.AgentInfo, error) {
 
 	var agentInfo proto.AgentInfo
 	if ws.AgentCoordinator != nil {
-		m := ws.AgentCoordinator.Model()
 		agentInfo = proto.AgentInfo{
-			Model:    m.CatwalkCfg,
-			ModelCfg: m.ModelCfg,
-			IsBusy:   ws.AgentCoordinator.IsBusy(),
-			IsReady:  true,
-			Agent:    ws.AgentCoordinator.MainAgentName(),
+			IsBusy:  ws.AgentCoordinator.IsBusy(),
+			IsReady: true,
+			Agent:   ws.AgentCoordinator.MainAgentName(),
 		}
 	}
 	return agentInfo, nil

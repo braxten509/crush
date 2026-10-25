@@ -73,9 +73,9 @@ func (c *controllerV1) moveToBackground(r *http.Request, _ rpc.Empty) (proto.Bac
 	return proto.BackgroundResult{Moved: moved}, err
 }
 
-// agentCapabilities tells what the current coder model can do.
+// agentCapabilities tells what the ?session= chat's own model can do.
 func (c *controllerV1) agentCapabilities(r *http.Request, _ rpc.Empty) (proto.AgentCapabilities, error) {
-	return c.backend.AgentCapabilities(r.PathValue("id"))
+	return c.backend.AgentCapabilities(r.PathValue("id"), r.URL.Query().Get("session"))
 }
 
 // envIsSet tells which environment variables are set, never their values.

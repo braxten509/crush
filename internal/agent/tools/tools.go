@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/config"
 )
 
 type (
@@ -15,6 +16,7 @@ type (
 	messageIDContextKey string
 	supportsImagesKey   string
 	modelNameKey        string
+	chatModelKey        string
 	channelContextKey   string
 	shellEnvContextKey  string
 )
@@ -28,6 +30,9 @@ const (
 	SupportsImagesContextKey supportsImagesKey = "supports_images"
 	// ModelNameContextKey is the key for the model name in the context.
 	ModelNameContextKey modelNameKey = "model_name"
+	// ChatModelContextKey is the key for the model choice the turn's chat
+	// runs on ([config.SelectedModel]).
+	ChatModelContextKey chatModelKey = "chat_model"
 	// ChannelContextKey is the key for the channel that originated the turn.
 	ChannelContextKey  channelContextKey  = "channel"
 	ShellEnvContextKey shellEnvContextKey = "shell_env"
@@ -69,6 +74,11 @@ func GetSupportsImagesFromContext(ctx context.Context) bool {
 // GetModelNameFromContext retrieves the model name from the context.
 func GetModelNameFromContext(ctx context.Context) string {
 	return GetContextValue(ctx, ModelNameContextKey, "")
+}
+
+// GetChatModelFromContext retrieves the model choice the turn's chat runs on.
+func GetChatModelFromContext(ctx context.Context) config.SelectedModel {
+	return GetContextValue(ctx, ChatModelContextKey, config.SelectedModel{})
 }
 
 // NewPermissionDeniedResponse returns a tool response indicating the user

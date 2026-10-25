@@ -17,7 +17,6 @@ type LiveWork interface {
 	StopHelper(ctx context.Context, sessionID, id string) error
 	Jobs(ctx context.Context, sessionID string) ([]agent.Process, error)
 	KillJob(ctx context.Context, sessionID string, p agent.Process) error
-	CanBackground(ctx context.Context) (bool, error)
 	CLILimits(ctx context.Context) ([]proto.CLILimits, error)
 }
 

@@ -34,7 +34,6 @@ type countingWorkspace struct {
 	agentBusy      bool
 	yolo           bool
 	queued         []string
-	model          workspace.AgentModel
 	lspStates      map[string]workspace.LSPClientInfo
 	lspDiags       map[string]lsp.DiagnosticCounts
 	mcpStates      map[string]mcp.ClientInfo
@@ -49,7 +48,6 @@ type countingWorkspace struct {
 	clearQueueCalls int
 	cancelCalls     int
 	interruptCalls  int
-	modelCalls      int
 	lspStateCalls   int
 	lspDiagCalls    int
 	mcpStateCalls   int
@@ -91,11 +89,6 @@ func (w *countingWorkspace) PermissionSetSkipRequests(skip bool) {
 func (w *countingWorkspace) AgentClearQueue(string) { w.clearQueueCalls++; w.queued = nil }
 func (w *countingWorkspace) AgentCancel(string)     { w.cancelCalls++ }
 func (w *countingWorkspace) AgentInterrupt(string)  { w.interruptCalls++ }
-
-func (w *countingWorkspace) AgentModel() workspace.AgentModel {
-	w.modelCalls++
-	return w.model
-}
 
 func (w *countingWorkspace) LSPGetStates() map[string]workspace.LSPClientInfo {
 	w.lspStateCalls++
@@ -153,7 +146,7 @@ func (w *countingWorkspace) Config() *config.Config { return nil }
 func (w *countingWorkspace) syncProbes() int {
 	return w.readyCalls + w.agentBusyCalls +
 		w.queuedCalls + w.queueListCalls + w.permCalls +
-		w.modelCalls + w.lspStateCalls + w.lspDiagCalls +
+		w.lspStateCalls + w.lspDiagCalls +
 		w.mcpStateCalls
 }
 
@@ -162,7 +155,7 @@ func (w *countingWorkspace) resetCounters() {
 	w.queuedCalls, w.queueListCalls, w.permCalls = 0, 0, 0
 	w.permSetCalls, w.clearQueueCalls, w.cancelCalls = 0, 0, 0
 	w.interruptCalls = 0
-	w.modelCalls, w.lspStateCalls, w.lspDiagCalls = 0, 0, 0
+	w.lspStateCalls, w.lspDiagCalls = 0, 0
 	w.mcpStateCalls, w.mcpPendingCalls = 0, 0
 }
 
@@ -740,7 +733,7 @@ func TestStalePromptQueuePreservesSessionScoping(t *testing.T) {
 // invariant for the model and LSP info: shownChatModel, lspInfo, and
 // lspErrorCount render from memoized state only. They run on every frame
 // (landing view, sidebar, compact header), and the probes behind them
-// (AgentIsReady, AgentModel, LSPGetStates, LSPGetDiagnosticCounts) are
+// (AgentIsReady, LSPGetStates, LSPGetDiagnosticCounts) are
 // synchronous HTTP round-trips in client/server mode.
 func TestRenderHelpersDoNotProbeWorkspace(t *testing.T) {
 	pinTTLs(t)

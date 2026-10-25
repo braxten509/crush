@@ -30,6 +30,9 @@ func TestMainAgentSwitchPublishesAndNamesAgent(t *testing.T) {
 
 	before := liveJSON[proto.AgentInfo](t, h, http.MethodGet, wsPath+"/agent", nil, http.StatusOK)
 	require.Equal(t, "coder", before.Agent)
+	raw := liveJSON[map[string]any](t, h, http.MethodGet, wsPath+"/agent", nil, http.StatusOK)
+	require.NotContains(t, raw, "model", "the folder has no model; each chat owns its own")
+	require.NotContains(t, raw, "model_cfg")
 
 	liveJSON[struct{}](t, h, http.MethodPost, wsPath+"/agent/main", proto.AgentSetMainRequest{AgentID: "plan"}, http.StatusOK)
 	for _, events := range []<-chan pubsub.Payload{one, two} {

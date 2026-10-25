@@ -307,17 +307,6 @@ func (w *ClientWorkspace) AgentIsSessionBusy(sessionID string) bool {
 	return info.IsBusy
 }
 
-func (w *ClientWorkspace) AgentModel() AgentModel {
-	info, err := w.client.GetAgentInfo(context.Background(), w.workspaceID())
-	if err != nil {
-		return AgentModel{}
-	}
-	return AgentModel{
-		CatwalkCfg: info.Model,
-		ModelCfg:   info.ModelCfg,
-	}
-}
-
 func (w *ClientWorkspace) AgentIsReady() bool {
 	return w.AgentReadyErr() == nil
 }

@@ -107,28 +107,28 @@ func (b *Backend) MoveToBackground(workspaceID, sessionID string) (bool, error) 
 	return cliagent.Background(sessionID) || tools.BackgroundShell(sessionID), nil
 }
 
-// AgentCapabilities tells what the current coder model can do, read the way
-// the terminal's Ctrl+B hint reads it (ui/model/workspace_cache.go).
-func (b *Backend) AgentCapabilities(workspaceID string) (proto.AgentCapabilities, error) {
+// AgentCapabilities tells what chat sessionID's own model can do (the last
+// pick when sessionID is ""), read the way the terminal's Ctrl+B hint reads
+// it (ui/model/workspace_cache.go).
+func (b *Backend) AgentCapabilities(workspaceID, sessionID string) (proto.AgentCapabilities, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return proto.AgentCapabilities{}, err
 	}
-	c := ws.coordinator()
-	if c == nil {
+	model, err := chatModel(ws, sessionID)
+	if err != nil {
 		return proto.AgentCapabilities{}, nil
 	}
-	model := c.Model()
-	provider := model.ModelCfg.Provider
+	provider := model.Provider
 	caps := proto.AgentCapabilities{
 		Kind:          provider,
 		CanBackground: cliagent.CanBackground(catwalk.Type(provider)) || provider == config.AbacusProviderID,
 	}
 	if cfg := shareConfig(ws); cfg != nil && cfg.Providers != nil {
-		if pc, ok := cfg.Providers.Get(provider); ok {
-			caps.SupportsFast = config.SupportsFastMode(pc, model.CatwalkCfg)
-			caps.SupportsUltracode = config.SupportsUltracode(pc, model.CatwalkCfg)
-			caps.SupportsThinkingToggle = config.SupportsThinkingToggle(pc, model.CatwalkCfg)
+		if pc, info := shareModelInfo(cfg, model); pc != nil && info != nil {
+			caps.SupportsFast = config.SupportsFastMode(*pc, *info)
+			caps.SupportsUltracode = config.SupportsUltracode(*pc, *info)
+			caps.SupportsThinkingToggle = config.SupportsThinkingToggle(*pc, *info)
 		}
 	}
 	return caps, nil

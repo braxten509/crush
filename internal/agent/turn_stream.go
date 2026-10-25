@@ -123,6 +123,7 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 	callContext = context.WithValue(callContext, tools.ChannelContextKey, call.Channel)
 	callContext = context.WithValue(callContext, tools.SupportsImagesContextKey, largeModel.CatwalkCfg.SupportsImages)
 	callContext = context.WithValue(callContext, tools.ModelNameContextKey, largeModel.CatwalkCfg.Name)
+	callContext = context.WithValue(callContext, tools.ChatModelContextKey, largeModel.ModelCfg)
 	t.currentAssistant = &assistantMsg
 	return callContext, prepared, err
 }

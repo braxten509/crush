@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/lsp"
 )
@@ -122,12 +121,11 @@ type SkillReadResult struct {
 	Builtin     bool   `json:"builtin"`
 }
 
-// AgentInfo represents information about the agent.
+// AgentInfo represents information about the agent. It carries no model:
+// each chat owns its own (session.Session.Model).
 type AgentInfo struct {
-	IsBusy   bool                 `json:"is_busy"`
-	IsReady  bool                 `json:"is_ready"`
-	Model    catwalk.Model        `json:"model"`
-	ModelCfg config.SelectedModel `json:"model_cfg"`
+	IsBusy  bool `json:"is_busy"`
+	IsReady bool `json:"is_ready"`
 	// Agent names the main agent: "coder" or "plan", "" while no
 	// coordinator runs.
 	Agent string `json:"agent"`
@@ -135,7 +133,7 @@ type AgentInfo struct {
 
 // IsZero checks if the AgentInfo is zero-valued.
 func (a AgentInfo) IsZero() bool {
-	return !a.IsBusy && !a.IsReady && a.Model.ID == ""
+	return !a.IsBusy && !a.IsReady
 }
 
 // AgentMessage represents a message sent to the agent.

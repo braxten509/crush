@@ -47,11 +47,6 @@ func (w *ClientWorkspace) KillJob(ctx context.Context, sessionID string, p agent
 	return w.client.KillJob(ctx, w.workspaceID(), sessionID, ref)
 }
 
-func (w *ClientWorkspace) CanBackground(ctx context.Context) (bool, error) {
-	caps, err := w.client.AgentCapabilities(ctx, w.workspaceID())
-	return caps.CanBackground, err
-}
-
 func (w *ClientWorkspace) CLILimits(ctx context.Context) ([]proto.CLILimits, error) {
 	snap, err := w.client.Limits(ctx)
 	return snap.CLIs, err

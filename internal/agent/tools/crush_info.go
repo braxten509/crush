@@ -33,17 +33,17 @@ func NewCrushInfoTool(
 		CrushInfoToolName,
 		crushInfoDescription,
 		func(ctx context.Context, _ CrushInfoParams, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			return fantasy.NewTextResponse(buildCrushInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
+			return fantasy.NewTextResponse(buildCrushInfo(GetChatModelFromContext(ctx), cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
 		},
 	)
 }
 
-func buildCrushInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {
+func buildCrushInfo(chat config.SelectedModel, cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {
 	var b strings.Builder
 
 	writeConfigFiles(&b, cfg)
 	writeConfigStaleness(&b, cfg)
-	writeModels(&b, cfg)
+	writeModels(&b, chat, cfg)
 	writeProviders(&b, cfg)
 	writeLSP(&b, lspManager, cfg)
 	writeMCP(&b, mcp.GetStates(), cfg)
@@ -96,18 +96,19 @@ func writeConfigStaleness(b *strings.Builder, cfg *config.ConfigStore) {
 	b.WriteString("\n")
 }
 
-func writeModels(b *strings.Builder, cfg *config.ConfigStore) {
-	c := cfg.Config()
-	if len(c.Models) == 0 {
+// writeModels writes the asking chat's own model and the helper model;
+// there is no folder-wide model.
+func writeModels(b *strings.Builder, chat config.SelectedModel, cfg *config.ConfigStore) {
+	helper, hasHelper := cfg.Config().Models[config.SelectedModelTypeSmall]
+	if chat.Model == "" && !hasHelper {
 		return
 	}
 	b.WriteString("[model]\n")
-	for _, typ := range []config.SelectedModelType{config.SelectedModelTypeLarge, config.SelectedModelTypeSmall} {
-		m, ok := c.Models[typ]
-		if !ok {
-			continue
-		}
-		fmt.Fprintf(b, "%s = %s (%s)\n", typ, m.Model, m.Provider)
+	if chat.Model != "" {
+		fmt.Fprintf(b, "chat = %s (%s)\n", chat.Model, chat.Provider)
+	}
+	if hasHelper {
+		fmt.Fprintf(b, "helper = %s (%s)\n", helper.Model, helper.Provider)
 	}
 	b.WriteString("\n")
 }

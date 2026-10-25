@@ -123,6 +123,9 @@ func (o Ops) SetSessionModel(ctx context.Context, sessionID string, model sessio
 
 // LastPick is the model a new chat in this folder starts on.
 func (o Ops) LastPick() (config.SelectedModel, bool) {
+	if o.Cfg == nil {
+		return config.ReadLastPick()
+	}
 	return config.NewChatModel(o.Cfg.Config())
 }
 

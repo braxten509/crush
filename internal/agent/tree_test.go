@@ -117,7 +117,8 @@ func TestTreeSummaryOptInCommonAncestorAndFailure(t *testing.T) {
 	other := create("DESTINATION")
 	require.NoError(t, tree.SwitchTree(ctx, sess.ID, old.ID))
 	model := &treeSummaryModel{finishStreamModel: finishStreamModel{text: "The old branch found amber."}}
-	sa := testSessionAgent(env, model, &finishStreamModel{text: "title"}, "system").(*sessionAgent)
+	// The branch summary is the helper model's work (owner's D1a).
+	sa := testSessionAgent(env, &finishStreamModel{text: "not the helper"}, model, "system").(*sessionAgent)
 	c := &coordinator{mainAgent: sa, messages: env.messages}
 	require.NoError(t, c.NavigateTree(ctx, sess.ID, other.ID, false))
 	require.Empty(t, model.prompt)

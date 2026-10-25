@@ -277,9 +277,9 @@ func TestSessionRunWaitsForPromptQueuedBehindExistingTurn(t *testing.T) {
 			}
 		}
 	})
-	large := sa.Model()
-	large.Model = model
-	sa.SetModels(large, sa.smallModel.Get())
+	one := sa.model.Get()
+	one.Model = model
+	sa.model.Set(one)
 	c := sessionRunTestCoordinator(t, sa.Run)
 	sess, err := env.sessions.Create(t.Context(), "session")
 	require.NoError(t, err)

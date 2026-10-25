@@ -72,7 +72,7 @@ func TestKimiLimitsRefreshDuringTurn(t *testing.T) {
 		Options:   &config.Options{DisableInstructionFiles: true},
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	agent.SetModels(
+	setTestModels(agent,
 		Model{Model: model, CatwalkCfg: catwalk.Model{ContextWindow: 200_000}, ModelCfg: config.SelectedModel{Provider: KimiProviderID, Model: "k3"}},
 		Model{Model: &finishStreamModel{text: "title"}, CatwalkCfg: catwalk.Model{ContextWindow: 200_000}, ModelCfg: config.SelectedModel{Provider: KimiProviderID, Model: "k3"}},
 	)

@@ -25,16 +25,14 @@ import (
 
 // Coordinator errors.
 var (
-	errCoderAgentNotConfigured         = errors.New("coder agent not configured")
-	errPlanAgentNotConfigured          = errors.New("plan agent not configured")
-	errMainAgentNotFound               = errors.New("main agent not found")
-	errModelProviderNotConfigured      = errors.New("model provider not configured")
-	errLargeModelNotSelected           = errors.New("large model not selected")
-	errSmallModelNotSelected           = errors.New("small model not selected")
-	errLargeModelProviderNotConfigured = errors.New("large model provider not configured")
-	errSmallModelProviderNotConfigured = errors.New("small model provider not configured")
-	errLargeModelNotFound              = errors.New("large model not found in provider config")
-	errSmallModelNotFound              = errors.New("small model not found in provider config")
+	errCoderAgentNotConfigured          = errors.New("coder agent not configured")
+	errPlanAgentNotConfigured           = errors.New("plan agent not configured")
+	errMainAgentNotFound                = errors.New("main agent not found")
+	errModelProviderNotConfigured       = errors.New("model provider not configured")
+	errChatHasNoModel                   = errors.New("this chat has no model yet; pick one for it")
+	errHelperModelNotSelected           = errors.New("helper model not selected")
+	errHelperModelProviderNotConfigured = errors.New("helper model provider not configured")
+	errHelperModelNotFound              = errors.New("helper model not found in provider config")
 )
 
 type Coordinator interface {
@@ -62,7 +60,6 @@ type Coordinator interface {
 	ClearQueue(sessionID string)
 	RecallQueuedPrompt(sessionID string) *message.QueuedPrompt
 	Summarize(context.Context, string) error
-	Model() Model
 	UpdateModels(ctx context.Context) error
 	GenerateTitle(ctx context.Context, sessionID, prompt string)
 }
@@ -329,10 +326,6 @@ func (c *coordinator) IsSessionBusy(sessionID string) bool {
 		return true
 	}
 	return c.currentAgent().IsSessionBusy(sessionID)
-}
-
-func (c *coordinator) Model() Model {
-	return c.currentAgent().Model()
 }
 
 func (c *coordinator) QueuedPrompts(sessionID string) int {

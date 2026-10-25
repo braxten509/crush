@@ -173,7 +173,7 @@ func agenticFetchPrompt(ctx context.Context, client *http.Client, params tools.A
 }
 
 // newAgenticFetchAgent builds the sub-agent that analyzes fetched content
-// in tmpDir, running on the small model.
+// in tmpDir, running on the helper model.
 func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Client, tmpDir string) (SessionAgent, error) {
 	promptOpts := []prompt.Option{
 		prompt.WithWorkingDir(tmpDir),
@@ -184,19 +184,20 @@ func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Cli
 		return nil, fmt.Errorf("error creating prompt: %s", err)
 	}
 
-	_, small, err := c.buildAgentModels(ctx, true)
+	// Web fetches run on the helper model.
+	helper, err := c.buildHelperModel(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("error building models: %s", err)
+		return nil, fmt.Errorf("error building the helper model: %s", err)
 	}
 
-	systemPrompt, err := promptTemplate.Build(ctx, small.Model.Provider(), small.Model.Model(), c.cfg)
+	systemPrompt, err := promptTemplate.Build(ctx, helper.Model.Provider(), helper.Model.Model(), c.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error building system prompt: %s", err)
 	}
 
-	smallProviderCfg, ok := c.cfg.Config().Providers.Get(small.ModelCfg.Provider)
+	helperProviderCfg, ok := c.cfg.Config().Providers.Get(helper.ModelCfg.Provider)
 	if !ok {
-		return nil, errors.New("small model provider not configured")
+		return nil, errors.New("helper model provider not configured")
 	}
 
 	webFetchTool := webtool.NewWebFetchTool(tmpDir, client)
@@ -216,9 +217,9 @@ func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Cli
 	// the user's hooks N times per delegated turn.
 
 	return NewSessionAgent(SessionAgentOptions{
-		LargeModel:           small, // Use small model for both (fetch doesn't need large)
-		SmallModel:           small,
-		SystemPromptPrefix:   smallProviderCfg.SystemPromptPrefix,
+		Model:                helper,
+		HelperModel:          helper,
+		SystemPromptPrefix:   helperProviderCfg.SystemPromptPrefix,
 		SystemPrompt:         systemPrompt,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
 		IsYolo:               c.permissions.SkipRequests(),

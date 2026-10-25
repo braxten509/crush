@@ -74,7 +74,7 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, providerCfg.SystemPromptPrefix, agent.systemPromptPrefix.Get())
 	require.True(t, agent.disableAutoSummarize)
-	require.Same(t, m.Model, agent.largeModel.Get().Model)
+	require.Same(t, m.Model, agent.model.Get().Model)
 }
 
 // An API sub-agent that isn't read-only must be able to change files and run

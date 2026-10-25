@@ -98,6 +98,13 @@ func testEnv(t *testing.T) fakeEnv {
 	}
 }
 
+// setTestModels sets a one-model agent's model and its helper model.
+func setTestModels(sa SessionAgent, one, helper Model) {
+	agent := sa.(*sessionAgent)
+	agent.model.Set(one)
+	agent.helperModel.Set(helper)
+}
+
 func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPrompt string, tools ...fantasy.AgentTool) SessionAgent {
 	largeModel := Model{
 		Model: large,
@@ -114,8 +121,8 @@ func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPro
 		},
 	}
 	agent := NewSessionAgent(SessionAgentOptions{
-		LargeModel:   largeModel,
-		SmallModel:   smallModel,
+		Model:        largeModel,
+		HelperModel:  smallModel,
 		SystemPrompt: systemPrompt,
 		IsYolo:       true,
 		Sessions:     env.sessions,

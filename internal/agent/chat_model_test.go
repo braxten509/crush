@@ -57,13 +57,14 @@ func TestTurnUsesTheChatsOwnModel(t *testing.T) {
 	require.Len(t, built, 2, "a new account builds the model again")
 	require.Equal(t, "claude-2", built[1].Account)
 
-	// A chat without a model of its own keeps the workspace's.
-	other, err := env.sessions.Create(t.Context(), "workspace model")
+	// A chat without a model of its own, and no last pick to start it on,
+	// runs on nothing else: there is no folder-wide model to fall back on.
+	other, err := env.sessions.Create(t.Context(), "no model")
 	require.NoError(t, err)
 	require.Empty(t, other.Model)
 	_, err = agent.Run(t.Context(), SessionAgentCall{SessionID: other.ID, Prompt: "hello", NonInteractive: true})
-	require.NoError(t, err)
-	require.Len(t, built, 2, "the workspace's model is not rebuilt")
+	require.ErrorIs(t, err, errChatHasNoModel)
+	require.NotContains(t, assistantText(t, env, other.ID), "workspace model")
 }
 
 // SetModel stores the chat's model and clearing it puts the chat back on the

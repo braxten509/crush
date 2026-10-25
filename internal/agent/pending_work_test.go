@@ -291,7 +291,7 @@ func queueTestCoordinator(t *testing.T) (*coordinator, string) {
 	sa := testSessionAgent(env, &finishStreamModel{text: "ran"}, &finishStreamModel{text: "title"}, "system")
 	limits := catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 10000}
 	selected := config.SelectedModel{Provider: "mock", Model: "mock-model"}
-	sa.SetModels(Model{Model: &finishStreamModel{text: "ran"}, CatwalkCfg: limits, ModelCfg: selected},
+	setTestModels(sa, Model{Model: &finishStreamModel{text: "ran"}, CatwalkCfg: limits, ModelCfg: selected},
 		Model{Model: &finishStreamModel{text: "title"}, CatwalkCfg: limits, ModelCfg: selected})
 	c.mainAgent = sa
 	c.agents[config.AgentCoder] = sa

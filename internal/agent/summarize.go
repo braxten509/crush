@@ -27,8 +27,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	defer forgetKeptSkillsSent(sessionID)
 
 	// A chat is compacted on its own model (owner, 2026-10-24).
-	largeModel := a.turnModel(ctx, sessionID)
-	systemPromptPrefix := a.promptPrefixFor(largeModel)
+	chatModel := a.turnModel(ctx, sessionID)
+	systemPromptPrefix := a.promptPrefixFor(chatModel)
 
 	currentSession, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
@@ -43,8 +43,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return nil
 	}
 
-	aiMsgs, _ := a.preparePrompt(msgs, largeModel.CatwalkCfg.SupportsImages)
-	aiMsgs = a.trimPreparedPrompt(sessionID, msgs, aiMsgs, largeModel, approxTokenCount(string(summaryPrompt))+approxTokenCount(systemPromptPrefix))
+	aiMsgs, _ := a.preparePrompt(msgs, chatModel.CatwalkCfg.SupportsImages)
+	aiMsgs = a.trimPreparedPrompt(sessionID, msgs, aiMsgs, chatModel, approxTokenCount(string(summaryPrompt))+approxTokenCount(systemPromptPrefix))
 
 	genCtx, cancel := context.WithCancel(ctx)
 	ac := &activeCancel{cancel: cancel}
@@ -58,14 +58,14 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	}()
 
 	agent := fantasy.NewAgent(
-		largeModel.Model,
+		chatModel.Model,
 		fantasy.WithSystemPrompt(string(summaryPrompt)),
 		fantasy.WithUserAgent(userAgent),
 	)
 	summaryMessage, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:             message.Assistant,
-		Model:            largeModel.ModelCfg.Model,
-		Provider:         largeModel.ModelCfg.Provider,
+		Model:            chatModel.ModelCfg.Model,
+		Provider:         chatModel.ModelCfg.Provider,
 		IsSummaryMessage: true,
 	})
 	if err != nil {
@@ -75,11 +75,11 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	summaryPromptText := buildSummaryPrompt(currentSession.Todos)
 
 	var resp *fantasy.AgentResult
-	if cliModel, ok := largeModel.Model.(*cliagent.Model); ok {
-		resp, err = a.cliSummarize(genCtx, cliModel, sessionID, largeModel.ModelCfg.ReasoningEffort, msgs, summaryPromptText, &summaryMessage)
+	if cliModel, ok := chatModel.Model.(*cliagent.Model); ok {
+		resp, err = a.cliSummarize(genCtx, cliModel, sessionID, chatModel.ModelCfg.ReasoningEffort, msgs, summaryPromptText, &summaryMessage)
 	}
 	if resp == nil && err == nil {
-		resp, err = agent.Stream(genCtx, a.summaryStreamCall(genCtx, sessionID, largeModel, summaryPromptText, aiMsgs, opts, onAuthRefresh, systemPromptPrefix, &summaryMessage))
+		resp, err = agent.Stream(genCtx, a.summaryStreamCall(genCtx, sessionID, chatModel, summaryPromptText, aiMsgs, opts, onAuthRefresh, systemPromptPrefix, &summaryMessage))
 	}
 	if err != nil {
 		return a.failSummary(ctx, &summaryMessage, err)
@@ -91,7 +91,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return err
 	}
 
-	if err := a.saveSummaryUsage(genCtx, largeModel, currentSession, resp, summaryMessage); err != nil {
+	if err := a.saveSummaryUsage(genCtx, chatModel, currentSession, resp, summaryMessage); err != nil {
 		return err
 	}
 	return a.runQueuedAfterSummary(ctx, sessionID, cancel)
@@ -157,9 +157,9 @@ func (a *sessionAgent) failSummary(ctx context.Context, summaryMessage *message.
 
 // saveSummaryUsage records the summary's cost and makes it the session's
 // summary message, resetting the context token counts.
-func (a *sessionAgent) saveSummaryUsage(ctx context.Context, largeModel Model, currentSession session.Session, resp *fantasy.AgentResult, summaryMessage message.Message) error {
+func (a *sessionAgent) saveSummaryUsage(ctx context.Context, chatModel Model, currentSession session.Session, resp *fantasy.AgentResult, summaryMessage message.Message) error {
 	openrouterCost := a.stepsOpenrouterCost(resp.Steps)
-	a.updateSessionUsage(largeModel, &currentSession, resp.TotalUsage, openrouterCost, false)
+	a.updateSessionUsage(chatModel, &currentSession, resp.TotalUsage, openrouterCost, false)
 
 	// Just in case, get just the last usage info.
 	usage := resp.Response.Usage

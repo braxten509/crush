@@ -350,16 +350,16 @@ func (a *sessionAgent) convertToToolResult(result fantasy.ToolResultContent) mes
 //
 //	BEFORE: [tool result: image data]
 //	AFTER:  [tool result: "Image loaded - see attached"], [user: image attachment]
-func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Message, largeModel Model) []fantasy.Message {
-	providerSupportsMedia := largeModel.ModelCfg.Provider == string(catwalk.InferenceProviderAnthropic) ||
-		largeModel.ModelCfg.Provider == string(catwalk.InferenceProviderBedrock) ||
-		largeModel.ModelCfg.Provider == string(catwalk.InferenceProviderBedrockEurope)
+func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Message, chatModel Model) []fantasy.Message {
+	providerSupportsMedia := chatModel.ModelCfg.Provider == string(catwalk.InferenceProviderAnthropic) ||
+		chatModel.ModelCfg.Provider == string(catwalk.InferenceProviderBedrock) ||
+		chatModel.ModelCfg.Provider == string(catwalk.InferenceProviderBedrockEurope)
 
 	if providerSupportsMedia {
 		return messages
 	}
 
-	supportsImages := largeModel.CatwalkCfg.SupportsImages
+	supportsImages := chatModel.CatwalkCfg.SupportsImages
 
 	convertedMessages := make([]fantasy.Message, 0, len(messages))
 

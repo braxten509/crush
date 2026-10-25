@@ -93,9 +93,9 @@ func TestQueueBatchNaturalAndInterrupt(t *testing.T) {
 			large := &batchRecordingModel{finishStreamModel: finishStreamModel{text: "done"}, entered: make(chan int, 10), gates: map[int]chan struct{}{1: make(chan struct{})}}
 			sa := testSessionAgent(env, large, &finishStreamModel{text: "title"}, "system").(*sessionAgent)
 			sa.isSubAgent = true
-			selected := sa.largeModel.Get()
+			selected := sa.model.Get()
 			selected.CatwalkCfg.SupportsImages = true
-			sa.largeModel.Set(selected)
+			sa.model.Set(selected)
 			broker := pubsub.NewBroker[notify.RunComplete]()
 			t.Cleanup(broker.Shutdown)
 			sa.runComplete = broker

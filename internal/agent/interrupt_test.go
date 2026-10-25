@@ -23,8 +23,8 @@ func TestInterrupt_CancelsActiveAndRunsQueued(t *testing.T) {
 	large := &gatedStreamModel{text: "done", gate: make(chan struct{}), entered: make(chan struct{})}
 	small := &finishStreamModel{text: "title"}
 	sa := NewSessionAgent(SessionAgentOptions{
-		LargeModel:  Model{Model: large, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 10000}},
-		SmallModel:  Model{Model: small, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 10000}},
+		Model:       Model{Model: large, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 10000}},
+		HelperModel: Model{Model: small, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 10000}},
 		IsYolo:      true,
 		Sessions:    env.sessions,
 		Messages:    env.messages,

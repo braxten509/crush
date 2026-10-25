@@ -29,7 +29,7 @@ func TestRetryStatusLastsOnlyDuringWait(t *testing.T) {
 			require.NoError(t, err)
 			msg.Activity, msg.ActivityDetail = "thinking", "Old thought"
 			msg.AppendReasoningContent("Partial thought")
-			turn := &turn{a: a, genCtx: t.Context(), currentAssistant: &msg}
+			turn := &turn{a: a, genCtx: t.Context(), currentAssistant: &msg, chatModel: a.model.Get()}
 			turn.onRetry(test.err, time.Second)
 			require.Equal(t, test.activity, msg.Activity)
 			require.Empty(t, msg.ActivityDetail)

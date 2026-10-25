@@ -9,7 +9,7 @@
   // provider's model. The data is read again on config_changed while open,
   // keeping the selection on the same row. During onboarding the sheet sits
   // at the bottom left of the main column without the task selector.
-  //   onboarding?, helper?
+  //   onboarding?, helper?, compact? (the compaction model, Settings)
   import { untrack } from "svelte";
   import Field from "../kit/Field.svelte";
   import FilterList from "../kit/FilterList.svelte";
@@ -23,10 +23,10 @@
 
   const ID = "models";
 
-  let { onboarding = false, helper = false } = $props();
+  let { onboarding = false, helper = false, compact = false } = $props();
 
   // "large" names the chats' recent list (config.SelectedModelTypeChat).
-  const type = $derived(helper ? "small" : "large");
+  const type = $derived(helper ? "small" : compact ? "compact" : "large");
   let query = $state("");
   let selected = $state(-1);
   let selectedId = null; // the selected row's id, kept across rebuilds
@@ -34,10 +34,10 @@
   let firstRead = $state(false);
 
   // The chat's own model (the last pick with no chat open), or the helper.
-  const current = $derived((type === "small" ? modelData.cfg?.models?.small : coderModel(modelData).selected) ?? {});
+  const current = $derived((type === "small" ? modelData.cfg?.models?.small : type === "compact" ? modelData.cfg?.models?.compact : coderModel(modelData).selected) ?? {});
   const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current }) : { items: [], selectedKey: "", prunedRecent: null });
   const items = $derived(built.items);
-  const placeholder = $derived(onboarding ? "Find your fave" : helper ? "Choose the helper model for titles" : "Choose a model for this chat");
+  const placeholder = $derived(onboarding ? "Find your fave" : helper ? "Choose the helper model for titles" : compact ? "Choose the model that compacts chats" : "Choose a model for this chat");
   const chosenItem = $derived(selected >= 0 ? items[selected] : null);
   const editable = $derived(Boolean(chosenItem && modelData.cfg?.providers.has(chosenItem.provider.id)));
   const help = $derived([
@@ -116,7 +116,7 @@
   const isCurrent = (item) => item.model.id === current.model && item.provider.id === current.provider;
 </script>
 
-<Sheet id={ID} title={helper ? "Helper model" : "Switch model"} width="standard" maxHeight={720} {help} {onKey} {onboarding}>
+<Sheet id={ID} title={helper ? "Helper model" : compact ? "Compaction model" : "Switch model"} width="standard" maxHeight={720} {help} {onKey} {onboarding}>
   {#if onboarding}
     <p class="lead">To start, let's choose a provider and model.</p>
   {/if}

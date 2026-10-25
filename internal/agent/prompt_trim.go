@@ -37,9 +37,12 @@ func (a *sessionAgent) historyTokenBudget(model Model, overheadTokens int64) int
 	cw := int64(model.CatwalkCfg.ContextWindow)
 	maxOut := int64(model.CatwalkCfg.DefaultMaxTokens)
 	configured := config.DefaultAutoCompactTokenLimit
+	var options *config.Options
 	if a.cfg != nil && a.cfg.Config() != nil && a.cfg.Config().Options != nil {
-		configured = a.cfg.Config().Options.GetAutoCompactTokenLimit()
+		options = a.cfg.Config().Options
+		configured = options.GetAutoCompactTokenLimit()
 	}
+	configured = options.PriceStepCompactionLimit(model.ModelCfg.Provider, configured)
 	return promptHistoryBudget(cw, maxOut, configured, overheadTokens)
 }
 

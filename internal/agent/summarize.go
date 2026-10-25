@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 )
@@ -26,8 +28,12 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	// A summary replaces the agent's memory: resend kept skills in full.
 	defer forgetKeptSkillsSent(sessionID)
 
-	// A chat is compacted on its own model (owner, 2026-10-24).
+	// A chat is compacted on its own model (owner, 2026-10-24), or on the
+	// compaction model set in Settings (owner, 2026-10-25).
 	chatModel := a.turnModel(ctx, sessionID)
+	if m, modelOpts, ok := a.compactionModel(chatModel); ok {
+		chatModel, opts, onAuthRefresh = m, modelOpts, nil
+	}
 	systemPromptPrefix := a.promptPrefixFor(chatModel)
 
 	currentSession, err := a.sessions.Get(ctx, sessionID)
@@ -221,4 +227,47 @@ func summaryCompletionTokens(usage fantasy.Usage, summaryMessage message.Message
 		return usage.OutputTokens
 	}
 	return approxTokenCount(summaryMessage.Content().Text) + approxTokenCount(summaryMessage.ReasoningContent().String())
+}
+
+// compactionChoice is the model set in Settings to compact a chat on chat,
+// when it can: an agent CLI chat keeps its own memory, an agent CLI can't
+// compact another chat, and a missing or disabled provider (or the chat's
+// own model) means the chat compacts on its own model.
+func compactionChoice(cfg *config.Config, chat config.SelectedModel, chatIsCLI bool) (config.SelectedModel, bool) {
+	if cfg == nil || chatIsCLI {
+		return config.SelectedModel{}, false
+	}
+	choice, ok := cfg.Models[config.SelectedModelTypeCompact]
+	if !ok || choice.Provider == "" || choice.Model == "" || choice.Provider == chat.Provider && choice.Model == chat.Model {
+		return config.SelectedModel{}, false
+	}
+	provider, ok := cfg.Providers.Get(choice.Provider)
+	if !ok || provider.Disable || config.IsCLIProviderType(provider.Type) {
+		return config.SelectedModel{}, false
+	}
+	return choice, true
+}
+
+// compactionModel builds the compaction model for a chat on chatModel, with
+// its own call options. ok is false when the chat compacts on its own model,
+// including when the set model can't be built.
+func (a *sessionAgent) compactionModel(chatModel Model) (Model, fantasy.ProviderOptions, bool) {
+	if a.cfg == nil {
+		return Model{}, nil, false
+	}
+	_, chatIsCLI := chatModel.Model.(*cliagent.Model)
+	choice, ok := compactionChoice(a.cfg.Config(), chatModel.ModelCfg, chatIsCLI)
+	if !ok {
+		return Model{}, nil, false
+	}
+	data, err := json.Marshal(choice)
+	if err != nil {
+		return Model{}, nil, false
+	}
+	built, ok := a.modelForChat(data)
+	if !ok {
+		return Model{}, nil, false
+	}
+	provider, _ := a.cfg.Config().Providers.Get(choice.Provider)
+	return built, getProviderOptions(built, provider), true
 }

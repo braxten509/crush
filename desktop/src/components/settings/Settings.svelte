@@ -30,6 +30,7 @@
     setSidebarShown,
     toggleAgentCpus,
     toggleComposerFocusOnly,
+    toggleCodexAPICompactBeforePriceStep,
     toggleThoughtLine,
     toggleZenFreeDeepSeekFullContext,
     tui,
@@ -37,6 +38,7 @@
   import { chooseAppearance, chosenTheme, theme } from "../../lib/themes/current.svelte.js";
   import { panelSetting } from "../../lib/stores/ui.svelte.js";
   import { accountMeters, setAccountMeters } from "../../lib/stores/accountmeters.svelte.js";
+  import CompactionModel from "./CompactionModel.svelte";
   import FallbackOrder from "./FallbackOrder.svelte";
   import HelperModel from "./HelperModel.svelte";
   import ProviderAccounts from "./ProviderAccounts.svelte";
@@ -176,6 +178,7 @@
   {/if}
   {#if section === "work"}
     <HelperModel />
+    <CompactionModel />
     <div class="row">
       <span class="name">Fallback compaction</span>
       <span class="value">{(Number(options().auto_compact_token_limit) || DEFAULT_AUTOCOMPACT).toLocaleString("en-US")} tokens</span>
@@ -190,6 +193,17 @@
         aria-checked={options().opencode_zen_free_deepseek_full_context === true}
         aria-label="Free DeepSeek keeps its whole 1,000,000 tokens"
         onclick={toggleZenFreeDeepSeekFullContext}></button>
+    </div>
+    <div class="row">
+      <span class="name">Codex API compacts before the price goes up</span>
+      <span class="value">at 240,000 tokens</span>
+      <button
+        type="button"
+        class="switch"
+        role="switch"
+        aria-checked={options().codex_api_compact_before_price_step !== false}
+        aria-label="Codex API compacts before the price goes up"
+        onclick={toggleCodexAPICompactBeforePriceStep}></button>
     </div>
     <div class="row">
       <span class="name">Check-in messages every</span>

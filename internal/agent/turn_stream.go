@@ -379,10 +379,13 @@ func (t *turn) shouldAutoSummarize(_ []fantasy.StepResult) bool {
 	cw := int64(t.chatModel.CatwalkCfg.ContextWindow)
 	tokens := t.currentSession.CompletionTokens + t.currentSession.PromptTokens
 	limit := config.DefaultAutoCompactTokenLimit
+	var options *config.Options
 	if a.cfg != nil {
-		limit = a.cfg.Config().Options.GetAutoCompactTokenLimit()
+		options = a.cfg.Config().Options
+		limit = options.GetAutoCompactTokenLimit()
 	}
-	if tokens >= config.FallbackCompactionLimit(cw, limit) && !a.disableAutoSummarize {
+	limit = options.PriceStepCompactionLimit(t.chatModel.ModelCfg.Provider, config.FallbackCompactionLimit(cw, limit))
+	if tokens >= limit && !a.disableAutoSummarize {
 		t.shouldSummarize = true
 		return true
 	}

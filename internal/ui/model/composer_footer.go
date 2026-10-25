@@ -204,7 +204,11 @@ func (m *UI) compactionLimit(model *workspace.AgentModel, sess *session.Session)
 		return 0 // Missing native telemetry is not a fallback compaction policy.
 	}
 	if model != nil {
-		return config.FallbackCompactionLimit(int64(model.CatwalkCfg.ContextWindow), fallback)
+		limit := config.FallbackCompactionLimit(int64(model.CatwalkCfg.ContextWindow), fallback)
+		if cfg := m.com.Config(); cfg != nil {
+			limit = cfg.Options.PriceStepCompactionLimit(model.ModelCfg.Provider, limit)
+		}
+		return limit
 	}
 	return fallback
 }

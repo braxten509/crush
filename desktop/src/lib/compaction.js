@@ -53,8 +53,24 @@ export function compactionLimit({ agent = null, session = null, providers = [], 
     if (budget && budget.provider === kind && budget.model === model.model_cfg.model) return Number(budget.tokens) || 0;
     return 0;
   }
-  if (model) return fallbackCompactionLimit(Number(model.model?.context_window) || 0, fallback);
+  if (model) return priceStepCompactionLimit(model.model_cfg.provider, fallbackCompactionLimit(Number(model.model?.context_window) || 0, fallback), options);
   return fallback;
+}
+
+// The Codex API compacts at 240,000 tokens so no request reaches OpenAI's
+// long-context price at 272,000 input tokens, unless the switch is off
+// (options.codex_api_compact_before_price_step, unset means on;
+// config/codex_api_provider.go PriceStepCompactionLimit).
+export const CODEX_API_COMPACT_BEFORE_PRICE_STEP = "codex_api_compact_before_price_step";
+const CODEX_API_COMPACT_AT = 240_000;
+
+export function codexAPICompactBeforePriceStep(options) {
+  return options?.[CODEX_API_COMPACT_BEFORE_PRICE_STEP] !== false;
+}
+
+export function priceStepCompactionLimit(providerId, limit, options) {
+  if (providerId !== "codex-api" || !codexAPICompactBeforePriceStep(options)) return limit;
+  return Math.min(limit, CODEX_API_COMPACT_AT);
 }
 
 // The switch that keeps OpenCode Zen's free DeepSeek on its whole 1,000,000

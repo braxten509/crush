@@ -84,3 +84,16 @@ describe("zenFreeDeepSeekFullContext", () => {
     expect(zenFreeDeepSeekFullContext({ opencode_zen_free_deepseek_full_context: true })).toBe(true);
   });
 });
+
+describe("the Codex API compacts before OpenAI's long-context price", () => {
+  const agent = { model: { context_window: 1_050_000 }, model_cfg: { provider: "codex-api", model: "gpt-6.1-sol" } };
+  const providers = [{ id: "codex-api", type: "openai" }];
+
+  it("at 240,000 tokens while the switch is on (its default)", () => {
+    expect(compactionLimit({ agent, providers, options: {} })).toBe(240_000);
+  });
+
+  it("at the usual limit with the switch off", () => {
+    expect(compactionLimit({ agent, providers, options: { codex_api_compact_before_price_step: false } })).toBe(400_000);
+  });
+});

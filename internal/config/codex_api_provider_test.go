@@ -80,3 +80,35 @@ func TestCodexAPIKeyOnlyEntrySurvivesLoad(t *testing.T) {
 	require.Equal(t, "sk-test", p.APIKey)
 	require.Len(t, p.Models, 4)
 }
+
+// OpenAI bills a whole request at its long-context rates once its input
+// passes 272K tokens: input and cached input 2x, output 1.5x.
+func TestCodexAPILongContextPrice(t *testing.T) {
+	t.Parallel()
+	var sol catwalk.Model
+	for _, m := range codexAPIModels() {
+		if m.ID == "gpt-6.1-sol-ultrafast" {
+			sol = m
+		}
+	}
+	short := PriceForRequest(sol, 272000)
+	require.Equal(t, 12.0, short.CostPer1MIn)
+	long := PriceForRequest(sol, 272001)
+	require.Equal(t, 24.0, long.CostPer1MIn)
+	require.Equal(t, 1.2, long.CostPer1MOutCached)
+	require.Equal(t, 90.0, long.CostPer1MOut)
+	other := catwalk.Model{ID: "claude-opus-5-5", CostPer1MIn: 4}
+	require.Equal(t, 4.0, PriceForRequest(other, 900000).CostPer1MIn)
+}
+
+// The Codex API compacts before a request would reach OpenAI's long-context
+// price, unless the switch is off; other providers keep their limit.
+func TestCodexAPIPriceStepCompaction(t *testing.T) {
+	t.Parallel()
+	var none *Options
+	require.Equal(t, int64(240000), none.PriceStepCompactionLimit(CodexAPIProviderID, 400000))
+	require.Equal(t, int64(100000), none.PriceStepCompactionLimit(CodexAPIProviderID, 100000))
+	off := false
+	require.Equal(t, int64(400000), (&Options{CodexAPICompactBeforePriceStep: &off}).PriceStepCompactionLimit(CodexAPIProviderID, 400000))
+	require.Equal(t, int64(400000), none.PriceStepCompactionLimit("anthropic", 400000))
+}

@@ -82,3 +82,14 @@ describe("row helpers", () => {
     expect(rememberedModel(config, "p", "gone")).toEqual({ model: "gone", provider: "p" });
   });
 });
+
+describe("the compaction model's picker", () => {
+  it("leaves out the agent CLIs, which can't compact another chat", () => {
+    const withCLI = cfg();
+    withCLI.providers.set("claude-code", safeProvider("claude-code", { name: "Claude Code", type: "claude-code", models: [{ id: "opus", name: "Opus" }] }));
+    const ids = (type) => buildGroups({ catalog, cfg: withCLI, type }).items.map((item) => item.provider.id);
+    expect(ids("large")).toContain("claude-code");
+    expect(ids("compact")).not.toContain("claude-code");
+    expect(ids("compact")).toContain("zeta");
+  });
+});

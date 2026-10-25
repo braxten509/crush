@@ -5,7 +5,7 @@
 // terminal shows here too.
 import { windowBusy } from "../busy.js";
 import { api, SCOPE } from "../engine/api.js";
-import { ZEN_FREE_DEEPSEEK_FULL_CONTEXT, zenFreeDeepSeekFullContext } from "../compaction.js";
+import { CODEX_API_COMPACT_BEFORE_PRICE_STEP, codexAPICompactBeforePriceStep, ZEN_FREE_DEEPSEEK_FULL_CONTEXT, zenFreeDeepSeekFullContext } from "../compaction.js";
 import { focusField } from "../stores/composer.svelte.js";
 import { notify, panelSetting, setPanelShown } from "../stores/ui.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
@@ -163,6 +163,21 @@ export async function toggleZenFreeDeepSeekFullContext() {
     await setOption(`options.${ZEN_FREE_DEEPSEEK_FULL_CONTEXT}`, next);
     await api.updateAgent();
     notify("info", next ? "Free DeepSeek keeps its whole 1,000,000 tokens" : "Free DeepSeek compacts at 200,000 tokens again");
+  } catch (error) {
+    notify("error", errorText(error));
+  }
+}
+
+// -- Codex API's price step (config/codex_api_provider.go) --
+
+// Compacts Codex API chats at 240,000 tokens, before OpenAI bills a request
+// at its long-context price; on unless turned off.
+export async function toggleCodexAPICompactBeforePriceStep() {
+  const next = !codexAPICompactBeforePriceStep(options());
+  try {
+    await setOption(`options.${CODEX_API_COMPACT_BEFORE_PRICE_STEP}`, next);
+    await api.updateAgent();
+    notify("info", next ? "Codex API chats compact at 240,000 tokens, before the price goes up" : "Codex API chats compact at the usual limit");
   } catch (error) {
     notify("error", errorText(error));
   }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -166,7 +167,7 @@ func cleanTitle(text, userPrompt string) string {
 // titleCost prices a title request from the model's rates, preferring the
 // cost OpenRouter reported. Flat-rate models cost nothing.
 func titleCost(model Model, usage fantasy.Usage, openrouterCost *float64) float64 {
-	modelConfig := model.CatwalkCfg
+	modelConfig := config.PriceForRequest(model.CatwalkCfg, usage.InputTokens+usage.CacheReadTokens+usage.CacheCreationTokens)
 	cost := modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
 		modelConfig.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
 		modelConfig.CostPer1MIn/1e6*float64(usage.InputTokens) +

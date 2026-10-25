@@ -5,6 +5,8 @@
 // ChatGPT or Grok sign-in with the account's models; "Recently used" on top,
 // its stale entries dropped (and the pruned list returned for saving).
 
+import { cliOf } from "../accounts/clis.js";
+
 const OPENAI = "openai";
 const XAI = "xai";
 
@@ -100,8 +102,11 @@ export function buildGroups({ catalog, cfg, type, current = null }) {
     recentItems.push(copy);
     if (recent.model === current.model && recent.provider === current.provider) selectedKey = copy.id;
   }
+  // The compaction model's picker leaves out the agent CLIs: they keep
+  // their own memory and can't compact another chat (agent/summarize.go).
+  const shown = type === "compact" ? [...recentItems, ...items].filter((item) => !cliOf(item.provider.id)) : [...recentItems, ...items];
   return {
-    items: [...recentItems, ...items],
+    items: shown,
     selectedKey,
     prunedRecent: valid.length !== recentList.length ? valid : null,
   };

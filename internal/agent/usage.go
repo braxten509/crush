@@ -9,6 +9,7 @@ import (
 	"charm.land/fantasy/providers/openrouter"
 
 	"github.com/charmbracelet/crush/internal/agent/hyper"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/session"
 )
 
@@ -92,7 +93,7 @@ func (a *sessionAgent) updateSessionUsage(model Model, session *session.Session,
 		session.EstimatedUsage = estimated
 	}
 
-	modelConfig := model.CatwalkCfg
+	modelConfig := config.PriceForRequest(model.CatwalkCfg, usage.InputTokens+usage.CacheReadTokens+usage.CacheCreationTokens)
 	cost := modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
 		modelConfig.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
 		modelConfig.CostPer1MIn/1e6*float64(usage.InputTokens) +

@@ -118,8 +118,12 @@ export async function chooseModel(choice) {
   closeDialog("oauth");
   closeDialog("models");
   const helper = modelType === "small";
+  // The compaction model is set in config too (models.compact), read when a
+  // chat compacts (agent/summarize.go), so nothing needs rebuilding.
+  const compact = modelType === "compact";
   try {
     if (helper) await api.setHelperModel(model);
+    else if (compact) await api.setConfig(SCOPE.global, "models.compact", model);
     else await saveModelChoice(model);
   } catch (error) {
     notify("error", errorText(error));
@@ -132,7 +136,7 @@ export async function chooseModel(choice) {
   try {
     if (onboarding) await api.initAgent();
     if (helper) await api.updateAgent();
-    notify("info", `${helper ? "Helper model" : "Model"} changed to ${name}`);
+    notify("info", `${helper ? "Helper model" : compact ? "Compaction model" : "Model"} changed to ${name}`);
   } catch (error) {
     notify("error", errorText(error));
   }

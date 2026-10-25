@@ -50,6 +50,10 @@ const (
 	// SelectedModelTypeSmall is the helper model (titles, branch summaries,
 	// web fetches), set in Settings.
 	SelectedModelTypeSmall SelectedModelType = "small"
+	// SelectedModelTypeCompact is the model that compacts chats on an API
+	// model, set in Settings so a costly model need not compact itself
+	// (owner, 2026-10-25). Unset, a chat compacts on its own model.
+	SelectedModelTypeCompact SelectedModelType = "compact"
 
 	// legacyChatModelKey is where older files kept a folder-wide model; it
 	// is read once (takeLegacyChatModel) and never written.

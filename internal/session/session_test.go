@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -159,6 +160,36 @@ func TestDeleteSucceedsWhenHistoryCleanupFails(t *testing.T) {
 	require.True(t, called)
 	_, err = sessions.Get(t.Context(), chat.ID)
 	require.Error(t, err)
+}
+
+// testSessions is a session service on a fresh database, with the database
+// for raw edits.
+func testSessions(t *testing.T) (Service, *sql.DB) {
+	t.Helper()
+	directory := t.TempDir()
+	conn, err := db.Connect(t.Context(), directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Release(directory) })
+	return NewService(db.New(conn), conn), conn
+}
+
+// `crush run --continue` resumes the last top-level chat, never a
+// sub-agent's or title chat under it.
+func TestGetLastSkipsChildChats(t *testing.T) {
+	sessions, conn := testSessions(t)
+	parent, err := sessions.Create(t.Context(), "parent")
+	require.NoError(t, err)
+	child, err := sessions.CreateTaskSession(t.Context(), "call-1", parent.ID, "helper")
+	require.NoError(t, err)
+	// The trigger stamps updated_at with now, so drop it to set the times.
+	_, err = conn.ExecContext(t.Context(), `DROP TRIGGER update_sessions_updated_at`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(t.Context(), `UPDATE sessions SET updated_at = CASE id WHEN ? THEN 1000 ELSE 2000 END`, parent.ID)
+	require.NoError(t, err)
+
+	last, err := sessions.GetLast(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, parent.ID, last.ID, "not the child %s", child.ID)
 }
 
 func TestKeptSkillsPersistInOrder(t *testing.T) {

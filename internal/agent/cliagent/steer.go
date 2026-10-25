@@ -184,3 +184,12 @@ func (s *steered) pending() int {
 	defer s.mu.Unlock()
 	return len(s.texts)
 }
+
+// takeAll removes and returns every text still waiting.
+func (s *steered) takeAll() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	texts := s.texts
+	s.texts = nil
+	return texts
+}

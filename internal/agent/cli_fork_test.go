@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/lsp"
+	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/session"
@@ -165,11 +166,12 @@ for line in sys.stdin:
         send({'jsonrpc': '2.0', 'id': mid, 'result': {}})
 `
 
-// The fake AGY names its conversations conv<n>, or keeps --conversation.
+// The fake AGY names its conversations conv<n>, or keeps --conversation;
+// with FAIL it has lost every conversation and always starts a new one.
 const forkFakeAGY = `
 def flag(name):
     return args[args.index(name) + 1] if name in args else None
-conv = flag('--conversation') or 'conv%d' % bump('sessions')
+conv = (None if FAIL else flag('--conversation')) or 'conv%d' % bump('sessions')
 for line in sys.stdin:
     log({'stdin': line.rstrip('\n')})
     text = 'Reply %d.' % bump('replies')
@@ -578,6 +580,25 @@ func TestAGYWrittenCopy(t *testing.T) {
 	require.Contains(t, prompt, writtenCopyIntro)
 	require.Contains(t, prompt, "Reply 1.")
 	require.NotContains(t, prompt, "Second")
+}
+
+// A lost conversation starts a fresh one with the written copy, and that
+// prompt keeps the turn's notes (here the memory warning) like the first.
+func TestAGYLostConversationKeepsTurnNotes(t *testing.T) {
+	previous := memoryStatus
+	memoryStatus = func() memwatch.Status { return memwatch.Status{High: true, Percent: 95} }
+	t.Cleanup(func() { memoryStatus = previous })
+	r := newForkRig(t, config.TypeAGYCLI, true)
+	chat := r.chat("First")
+	r.calls()
+
+	r.send(chat, "Second")
+	calls := r.calls()
+	require.Len(t, argv(calls), 2, "the resume fails, then a fresh conversation runs")
+	retry := slices.IndexFunc(calls[1:], func(c forkCall) bool { return c.Args != nil }) + 1
+	prompt := promptText(t, calls[retry:])
+	require.Contains(t, prompt, writtenCopyIntro)
+	require.Contains(t, prompt, "<crush_memory_warning>")
 }
 
 // A fork call the tool refuses leads to the written copy in a new session;

@@ -494,6 +494,15 @@ func (r *claudeRun) readLoop(pending [][]byte) (done bool, err error) {
 				}
 				raw = line
 			case <-r.steerWait:
+				// Claude has the messages and may still run them; queueing
+				// them again would get them answered twice. They count as
+				// taken, and a late reply comes as an unprompted one.
+				r.stopSteer()
+				for _, text := range r.sent.takeAll() {
+					if err := r.t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
+						return true, err
+					}
+				}
 				r.finished = true
 				return true, nil
 			}

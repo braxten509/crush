@@ -90,46 +90,54 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		if fork != nil && len(fork.note) > 0 {
 			text = handoffPromptWithTranscript(branchNoteIntro, fork.note, history, text, a.transcriptDataDir(), call.SessionID)
 		}
-		if call.todoHandover != "" {
-			text = call.todoHandover + "\n\n" + text
-		}
 		// Refresh even resumed CLI sessions: their native skill catalogs and
 		// kept system prompts may predate a /skills toggle or installation.
 		skillPolicy := currentNativeSkillPolicy(a.cfg)
-		if skillPolicy != "" {
-			text = skillPolicy + "\n\n" + text
-		}
-		if note := memoryStatus().AgentNote(); note != "" {
-			text = note + "\n\n" + text
-		}
+		memoryNote := memoryStatus().AgentNote()
 		turnedOff := func() []session.KeptSkill { return a.sessionTurnedOffSkills(ctx, call.SessionID) }
-		if kept := cliKeptSkillsText(call.SessionID, string(m.Kind), a.sessionKeptSkills(ctx, call.SessionID, true), turnedOff, resume == ""); kept != "" {
-			text = kept + "\n\n" + text
-		}
 		env := slices.Clone(m.Env)
-		var instructions, taskInstructionsHash string
+		var instructions, taskInstructions, taskInstructionsHash string
 		if a.tasks != nil {
-			taskInstructions := a.tasks.instructions()
+			taskInstructions = a.tasks.instructions()
 			taskInstructionsHash = fmt.Sprintf("%x", sha256.Sum256([]byte(taskInstructions)))
 			env = append(env, a.tasks.env(call.SessionID)...)
-			switch {
-			case m.Kind == config.TypeClaudeCode:
+			if m.Kind == config.TypeClaudeCode {
 				// Claude takes them as part of its system prompt, which
 				// survives its own compaction.
 				instructions = taskInstructions
-			case resume == "" || !link.Tasks || link.TaskInstructionsHash != taskInstructionsHash:
-				text = taskInstructions + "\n\n" + text
 			}
 		}
 		// Native memory is disabled; every CLI receives Crush's shared store.
 		memory := sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
 		if m.Kind == config.TypeClaudeCode && memory != "" {
 			instructions = memory + "\n\n" + instructions
-		} else if memory != "" && (resume == "" || !link.SharedInstructions) {
-			text = memory + "\n\n" + text
 		}
+		// wrap adds the turn's notes to a handoff prompt. A retry in a fresh
+		// session calls it again, so it keeps every note the first try had.
+		wrap := func(text string, link cliagent.Link, resume string) string {
+			if call.todoHandover != "" {
+				text = call.todoHandover + "\n\n" + text
+			}
+			if skillPolicy != "" {
+				text = skillPolicy + "\n\n" + text
+			}
+			if memoryNote != "" {
+				text = memoryNote + "\n\n" + text
+			}
+			if kept := cliKeptSkillsText(call.SessionID, string(m.Kind), a.sessionKeptSkills(ctx, call.SessionID, true), turnedOff, resume == ""); kept != "" {
+				text = kept + "\n\n" + text
+			}
+			if a.tasks != nil && m.Kind != config.TypeClaudeCode && (resume == "" || !link.Tasks || link.TaskInstructionsHash != taskInstructionsHash) {
+				text = taskInstructions + "\n\n" + text
+			}
+			if m.Kind != config.TypeClaudeCode && memory != "" && (resume == "" || !link.SharedInstructions) {
+				text = memory + "\n\n" + text
+			}
+			return text
+		}
+		text = wrap(text, link, resume)
 
-		s := &cliSteps{call: call, onQueuedInput: call.onQueuedInput, ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, onActivity: onActivity, onToolInterrupt: interruptToolCall, lastToolMessage: lastToolMessage, steerReady: make(chan struct{}, 1), steerAnyTime: m.Kind == config.TypeOpenCodeCLI}
+		s := &cliSteps{call: call, onQueuedInput: call.onQueuedInput, ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, onActivity: onActivity, onToolInterrupt: interruptToolCall, lastToolMessage: lastToolMessage, steerReady: make(chan struct{}, 1), steerAnyTime: cliagent.SteersAnyTime(m.Kind)}
 		if err := s.begin(); err != nil {
 			return nil, err
 		}
@@ -155,15 +163,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			}
 			turn.Fork = nil
 			turn.Prompt, turn.Resume = cliHandoffWithTranscript(history, cliagent.Link{}, prompt, a.transcriptDataDir(), call.SessionID)
-			if skillPolicy != "" {
-				turn.Prompt = skillPolicy + "\n\n" + turn.Prompt
-			}
-			if a.tasks != nil && instructions == "" {
-				turn.Prompt = a.tasks.instructions() + "\n\n" + turn.Prompt
-			}
-			if memory != "" {
-				turn.Prompt = memory + "\n\n" + turn.Prompt
-			}
+			turn.Prompt = wrap(turn.Prompt, cliagent.Link{}, turn.Resume)
 			err = m.Run(ctx, turn)
 		}
 

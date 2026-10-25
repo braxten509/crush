@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -58,6 +60,11 @@ func agyBin() string {
 	return "agy"
 }
 
+// agyFollowUpWait is how long a finished turn waits for AGY to start on a
+// line steered into it. AGY may have folded the line into the turn, so a
+// quiet wait ends it.
+var agyFollowUpWait = 15 * time.Second
+
 func isExec(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0
@@ -104,25 +111,49 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 
 	// A message queued mid-turn goes in as another user line; AGY runs it
 	// as its next turn in this conversation (owner, 2026-10-24).
-	stopSteer := pollSteerInputRetry(t, func() bool { return true }, func(text string, _ []message.Attachment) bool {
-		if p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": text}}) != nil {
-			return false
-		}
-		_ = t.Emit(Event{Type: EventUserMessage, Text: text})
-		return true
-	})
-	defer stopSteer()
+	var steered atomic.Int32
+	startSteer := func() func() {
+		return pollSteerInputRetry(t, func() bool { return true }, func(text string, _ []message.Attachment) bool {
+			if p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": text}}) != nil {
+				return false
+			}
+			steered.Add(1)
+			_ = t.Emit(Event{Type: EventUserMessage, Text: text})
+			return true
+		})
+	}
+	stopSteer := startSteer()
+	defer func() { stopSteer() }()
 
 	announced := map[int]bool{}
 	conversation := t.Resume
-	for p.lines.Scan() {
+	lines := p.readLines()
+	// followUp is armed after a result while steered lines may still run
+	// as AGY's next turns; any new line disarms it.
+	var followUp <-chan time.Time
+	results := 0
+	for {
+		var raw []byte
+		select {
+		case l, ok := <-lines:
+			if !ok {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return exitError("agy", p)
+			}
+			raw = l
+			followUp = nil
+		case <-followUp:
+			return nil
+		}
 		if ctx.Err() != nil {
 			// Interrupted: let agy stop its commands and exit by itself;
 			// closing its input early cuts that short.
 			continue
 		}
 		var line agyLine
-		if json.Unmarshal(p.lines.Bytes(), &line) != nil {
+		if json.Unmarshal(raw, &line) != nil {
 			continue
 		}
 		switch line.Event {
@@ -151,13 +182,17 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			if line.Result.Status != "SUCCESS" {
 				return errors.New("AGY: " + cmp.Or(line.Result.Response, "turn failed"))
 			}
-			return nil
+			// Each steered line may run as one more turn with its own
+			// result. Stop steering first so the count is final.
+			results++
+			stopSteer()
+			if int(steered.Load()) < results {
+				return nil
+			}
+			stopSteer = startSteer()
+			followUp = time.After(agyFollowUpWait)
 		}
 	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	return exitError("agy", p)
 }
 
 func agyStep(line agyLine, announced map[int]bool, emit func(Event) error) error {

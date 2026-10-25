@@ -36,13 +36,35 @@ func IsForegroundCommand(cliPID int, args []string, started time.Time) bool {
 // shell's script, or run directly with the words the shell would give it.
 func (c openCall) runBy(args []string) bool {
 	command := CommandText(args)
-	if (command != strings.Join(args, " ") && strings.Contains(command, c.command)) || slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, c.command) }) {
+	if (command != strings.Join(args, " ") && containsCommand(command, c.command)) || slices.ContainsFunc(args, func(a string) bool { return containsCommand(a, c.command) }) {
 		return true
 	}
 	if len(c.words) == 0 || len(args) < len(c.words) {
 		return false
 	}
 	return filepath.Base(args[0]) == filepath.Base(c.words[0]) && slices.Equal(args[1:len(c.words)], c.words[1:])
+}
+
+// containsCommand reports whether command appears in text as whole words:
+// "ls" is in "cd /tmp && ls", not in "/usr/bin/false" or "tools.txt".
+func containsCommand(text, command string) bool {
+	if command == "" {
+		return false
+	}
+	word := func(r byte) bool {
+		return r == '_' || r == '.' || r == '/' || r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+	}
+	for at := 0; ; {
+		i := strings.Index(text[at:], command)
+		if i < 0 {
+			return false
+		}
+		start, end := at+i, at+i+len(command)
+		if (start == 0 || !word(text[start-1]) || !word(command[0])) && (end == len(text) || !word(text[end]) || !word(command[len(command)-1])) {
+			return true
+		}
+		at = start + 1
+	}
 }
 
 // CommandText returns the script a shell runs, decoding the CLI's eval wrapper.

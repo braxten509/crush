@@ -3,6 +3,7 @@ package cliagent
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -53,5 +54,36 @@ func TestOpenCodeSteersThroughItsServer(t *testing.T) {
 	require.True(t, called.Load())
 	require.Equal(t, "QUEUED", gotText)
 	require.Equal(t, "steer", gotDelivery)
+	require.Equal(t, []Event{{Type: EventUserMessage, Text: "QUEUED"}}, events)
+}
+
+// A request the server read may have been taken even if its reply is
+// lost; sending it again would get it answered twice.
+func TestOpenCodeSteerNotResentAfterLostReply(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		calls.Add(1)
+		conn, _, err := w.(http.Hijacker).Hijack()
+		require.NoError(t, err)
+		_ = conn.Close()
+	}))
+	t.Cleanup(server.Close)
+
+	var events []Event
+	r := &acpRun{
+		ctx:           context.Background(),
+		steerURL:      server.URL,
+		steerPassword: "secret",
+		t: Turn{Emit: func(e Event) error {
+			events = append(events, e)
+			return nil
+		}},
+	}
+	sid := "ses1"
+	r.session.Store(&sid)
+
+	require.True(t, r.steer("QUEUED"), "a written request counts as sent")
+	require.EqualValues(t, 1, calls.Load())
 	require.Equal(t, []Event{{Type: EventUserMessage, Text: "QUEUED"}}, events)
 }

@@ -83,6 +83,10 @@ type cliSteps struct {
 
 	// todoMeta is what each to-do tool call changed, shown with its result.
 	todoMeta map[string]string
+
+	// handleMu keeps one event at a time: some drivers confirm steered
+	// prompts from their steering goroutine while the read loop emits.
+	handleMu sync.Mutex
 }
 
 // setToolRunning records a tool call starting or returning. A start wakes
@@ -327,6 +331,8 @@ func (s *cliSteps) talk() error {
 // handle drives the turn's callbacks from one event of the agent CLI, then
 // records the event's marker once its own handler has succeeded.
 func (s *cliSteps) handle(e cliagent.Event) error {
+	s.handleMu.Lock()
+	defer s.handleMu.Unlock()
 	if err := s.handleEvent(e); err != nil {
 		return err
 	}

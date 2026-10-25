@@ -50,4 +50,10 @@ func TestForegroundDirectArgumentsDoNotMatchPrefixes(t *testing.T) {
 	call := openCall{command: "sleep 3", words: []string{"sleep", "3"}}
 	require.False(t, call.runBy([]string{"sleep", "30"}))
 	require.True(t, call.runBy([]string{"sleep", "3"}))
+
+	// A short command matches only as its own words, never inside others.
+	ls := openCall{command: "ls", words: []string{"ls"}}
+	require.False(t, ls.runBy([]string{"/usr/bin/false"}))
+	require.False(t, ls.runBy([]string{"bash", "-c", "cat tools.txt"}))
+	require.True(t, ls.runBy([]string{"bash", "-c", "cd /tmp && ls"}))
 }

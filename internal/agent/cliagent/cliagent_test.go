@@ -111,6 +111,13 @@ func TestUnwrapShellMixedAndNestedQuotes(t *testing.T) {
 	require.Equal(t, "echo 'hello'", unwrapShell(`/bin/zsh -lc 'echo '"'hello'"`))
 }
 
+// Both OpenCode providers run the same driver and its steering server.
+func TestOpenCodeKindsSteerAnyTime(t *testing.T) {
+	require.True(t, SteersAnyTime(config.TypeOpenCodeCLI))
+	require.True(t, SteersAnyTime(config.TypeOpenCodeZenCLI))
+	require.False(t, SteersAnyTime(config.TypeClaudeCode))
+}
+
 func TestHelpers(t *testing.T) {
 	require.Equal(t, "echo 'a b'", unwrapShell(`/bin/zsh -lc 'echo '\''a b'\'''`))
 	require.Equal(t, `say "x" $HOME`, unwrapShell(`/bin/bash -lc "say \"x\" \$HOME"`))
@@ -136,6 +143,9 @@ func types(events []Event) []EventType {
 func TestCodexNestedShellReview(t *testing.T) {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("requires the Linux amd64 syscall observer; other platforms do not trace arbitrary shell writes")
+	}
+	if err := filechange.WatchUnavailable(); err != nil {
+		t.Skipf("commands cannot be watched here (run outside a Crush command): %v", err)
 	}
 	outside := visibleReviewRoot(t)
 	command := fmt.Sprintf("python3 - <<'PY'\nfrom pathlib import Path\nPath(%q).write_text('hello\\n')\nPY", filepath.Join(outside, "hello.txt"))

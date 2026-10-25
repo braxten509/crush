@@ -105,10 +105,11 @@ class Engine:
     def post(self, path, body=None):
         return self.api.call("POST", "%s/%s%s" % (self.base, path, self.q), body, timeout=60)
 
-    def use(self, provider, model):
-        """The project's model, as the terminal's model picker sets it."""
-        self.post("config/model", {"scope": 1, "model_type": "large", "model": {"model": model, "provider": provider}})
-        self.post("agent/update")
+    def use(self, sid, provider, model):
+        """One chat's own model, as the terminal's model picker sets it. Each
+        chat owns its model; the pick is also the last pick, which the branch,
+        made with no model, starts on."""
+        self.post("sessions/%s/model" % sid, {"model": {"model": model, "provider": provider}})
 
     def new_chat(self, title):
         return self.post("sessions", {"title": title})["id"]
@@ -141,8 +142,8 @@ def branch_at_first_reply(engine, sid):
 
 
 def run_tool(engine, tool, provider, model):
-    engine.use(provider, model)
     source = engine.new_chat("B17 %s source" % tool)
+    engine.use(source, provider, model)
     start = len(log_lines())
     engine.send(source, "First")
     engine.send(source, "Second")

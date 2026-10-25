@@ -33,9 +33,18 @@ function take(settings) {
 
 const errorText = (error) => error?.message ?? String(error ?? "");
 
+// Saves started, and saves not answered yet: an answer that is not the
+// newest one never replaces a newer edit shown meanwhile.
+let saves = 0;
+let pending = 0;
+
 export async function loadFallback() {
+  const at = saves;
   try {
-    take(await api.fallback());
+    const settings = await api.fallback();
+    // A read started before a save, or landing while one waits, is older
+    // than what is shown.
+    if (at === saves && pending === 0) take(settings);
     fallback.error = "";
   } catch (error) {
     fallback.error = errorText(error);
@@ -51,17 +60,30 @@ let saving = Promise.resolve();
 // Saves the order; shown at once, the engine's answer replaces it. A refused
 // order goes back to the saved one, with the reason above the list.
 export function saveOrder(order) {
+  const mine = ++saves;
+  pending += 1;
   fallback.order = order;
   saving = saving.then(async () => {
+    let answer;
+    let failure = null;
     try {
-      take(await api.setFallbackOrder(order));
-      fallback.error = "";
+      answer = await api.setFallbackOrder(order);
     } catch (error) {
-      notify("error", `Couldn't save the fallback order: ${errorText(error)}`);
-      // Show what is really saved, not the refused order.
-      await loadFallback();
-      fallback.error = errorText(error);
+      failure = error;
     }
+    pending -= 1;
+    if (failure) {
+      notify("error", `Couldn't save the fallback order: ${errorText(failure)}`);
+      // Show what is really saved, not the refused order (a newer save's
+      // answer shows it otherwise).
+      if (mine === saves) {
+        await loadFallback();
+        fallback.error = errorText(failure);
+      }
+      return;
+    }
+    if (mine === saves) take(answer);
+    fallback.error = "";
   });
   return saving;
 }

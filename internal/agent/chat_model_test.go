@@ -140,7 +140,7 @@ func chatModelCoordinator(t *testing.T) (*coordinator, *recordingStreamModel, st
 	c := newGateTestCoordinator(t, false)
 	_ = c.readyWg.Wait()
 	c.cfg.Config().Providers.Set("mock2", config.ProviderConfig{
-		ID: "mock2", Name: "Mock 2", Type: "openai", BaseURL: "http://127.0.0.1:9/v1", APIKey: "key-2",
+		ID: "mock2", Name: "Mock 2", Type: "openai", BaseURL: "http://127.0.0.1:9/v1", APIKey: "key-2", SystemPromptPrefix: "PREFIX-2",
 		Models: []catwalk.Model{{ID: "m2", Name: "Mock 2", ContextWindow: 200_000, DefaultMaxTokens: 4321}},
 	})
 	own := &recordingStreamModel{finishStreamModel: finishStreamModel{text: "the chat's model"}}
@@ -168,6 +168,22 @@ func TestTurnSettingsComeFromTheChatsModel(t *testing.T) {
 	require.Equal(t, int64(4321), *call.MaxOutputTokens, "the chat's model's reply length")
 	require.NotNil(t, call.Temperature)
 	require.InDelta(t, 0.3, *call.Temperature, 1e-9, "the chat's model's temperature")
+	require.NotEmpty(t, call.Prompt)
+	first, ok := call.Prompt[0].Content[0].(fantasy.TextPart)
+	require.True(t, ok)
+	require.Equal(t, "PREFIX-2", first.Text, "the chat's provider's prompt prefix comes first")
+}
+
+// A canceled turn is recorded on the chat's model: an old chat adopts the
+// model its last reply names, so a wrong one would move it.
+func TestACanceledTurnRecordsTheChatsModel(t *testing.T) {
+	c, _, chat, _ := chatModelCoordinator(t)
+	agent := c.currentAgent().(*sessionAgent)
+	require.NoError(t, agent.persistCanceledTurn(t.Context(), SessionAgentCall{SessionID: chat, Prompt: "hello"}, false))
+	msgs, err := c.messages.List(t.Context(), chat)
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	require.Equal(t, [2]string{"mock2", "m2"}, [2]string{msgs[1].Provider, msgs[1].Model})
 }
 
 // A refreshed sign-in builds the chat's model again, so its next request

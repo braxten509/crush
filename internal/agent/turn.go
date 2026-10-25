@@ -404,7 +404,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	}
 
 	startTime := time.Now()
-	a.eventPromptSent(t.call.SessionID)
+	a.eventPromptSent(t.call.SessionID, t.largeModel)
 
 	t.sanitizedToolCalls = make(map[string]bool)
 	t.completedToolCalls = make(map[string]struct{})
@@ -420,11 +420,11 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 		}, t.interruptOnToolCall)
 	}
 	streamCall := t.buildStreamCall(history, files)
-	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID)
+	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID, t.largeModel)
 	defer t.fileReview.finish(t.ctx)
 	result, err := stream(t.genCtx, streamCall)
 
-	a.eventPromptResponded(t.call.SessionID, time.Since(startTime).Truncate(time.Second))
+	a.eventPromptResponded(t.call.SessionID, t.largeModel, time.Since(startTime).Truncate(time.Second))
 
 	if t.wasInterruptedForProgress() && err == nil {
 		err = context.Canceled
@@ -468,7 +468,7 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 		// CLI agents get the note with their turn's text instead.
 		systemPrompt += "\n\n" + note
 	}
-	t.promptPrefix = a.systemPromptPrefix.Get()
+	t.promptPrefix = a.promptPrefixFor(t.largeModel)
 	if !t.isCLI && a.cfg != nil && a.cfg.Config().Options != nil && a.cfg.Config().Options.DisableInstructionFiles {
 		systemPrompt += "\n\n" + sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
 		if a.tasks != nil && !a.isSubAgent {

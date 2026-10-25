@@ -30,12 +30,13 @@ type turnFileReview struct {
 	lastTool string
 }
 
-func (a *sessionAgent) startFileReview(ctx context.Context, sessionID string) *turnFileReview {
+// startFileReview starts the review of the files a turn on model changes.
+func (a *sessionAgent) startFileReview(ctx context.Context, sessionID string, model Model) *turnFileReview {
 	r := &turnFileReview{
 		messages: a.messages, sessionID: sessionID,
 		trackers: map[string]*filechange.Tracker{}, results: map[string]string{},
 	}
-	_, r.cli = a.largeModel.Get().Model.(*cliagent.Model)
+	_, r.cli = model.Model.(*cliagent.Model)
 	var root string
 	exclude := []string{config.GlobalCacheDir(), filepath.Dir(config.GlobalConfigData())}
 	if a.cfg != nil {
@@ -43,8 +44,8 @@ func (a *sessionAgent) startFileReview(ctx context.Context, sessionID string) *t
 		if options := a.cfg.Config().Options; options != nil {
 			exclude = append(exclude, options.DataDirectory)
 		}
-	} else if model, ok := a.largeModel.Get().Model.(*cliagent.Model); ok {
-		root = model.Dir
+	} else if cli, ok := model.Model.(*cliagent.Model); ok {
+		root = cli.Dir
 	}
 	if root == "" {
 		return r

@@ -38,7 +38,8 @@ Engine run, on the fresh /tmp/home/proj: tests/check.sh p3_start.py
                 answers late holds "Starting Crush…" for the gate's captures.
   START-007     a broken MCP server says its error; LSPs, skills, the model and
                 the branch still fill.
-  START-017     a global large model and the project's: the project's shows.
+  START-017     each chat owns its model: a new folder's landing page shows the
+                last pick, not a model the folder's crush.json names.
   START-019     the old "theme" setting reaches options.tui.active_theme.
   START-012     a fresh folder opened with --yolo=false (the first window on
                 it, so its value holds): the engine asks before tools, and a
@@ -588,11 +589,11 @@ def engine_run():
             focus(main)
             key("ctrl+n")
             screen_is(main, "landing", 5)
-            ok, start = wait_on(main, "start", lambda s: s.get("landing") == {"blank": True} and (s.get("large_model") or {}).get("model"), 10)
+            ok, start = wait_on(main, "start", lambda s: s.get("landing") == {"blank": True} and (s.get("chat_model") or {}).get("model"), 10)
             check(ok, f"the landing page is blank ({start.get('landing')})")
             branch = (client.get("git/branch") or {}).get("branch") or ""
             check(start.get("branch") == branch, f"the window has the engine's branch: {start.get('branch')!r} (engine {branch!r})")
-            check((start.get("large_model") or {}).get("model") == "fake-large", f"the window has the project's model: {start.get('large_model')}")
+            check((start.get("chat_model") or {}).get("model") == "fake-large", f"the landing page shows the last pick, fake-large: {start.get('chat_model')}")
             engine_counts = {"lsp": len(client.get("lsps") or {}), "mcp": len(client.get("mcp/states") or {}), "skills": len(client.get("skills") or [])}
             for k, n in engine_counts.items():
                 got = len(panel_rows(main, k))
@@ -810,35 +811,31 @@ def engine_run():
             skills = eng("skills") or []
             check(len(panel_rows(app, "skills")) == len(skills), f"the skills rows have the engine's {len(skills)} skills")
             start = section(app, "start")
-            check((start.get("large_model") or {}).get("model") == "fake-large", f"the model fills ({start.get('large_model')})")
+            check((start.get("chat_model") or {}).get("model") == "fake-large", f"the model fills ({start.get('chat_model')})")
             branch = (eng("git/branch") or {}).get("branch") or ""
             check(bool(branch) and start.get("branch") == branch, f"the branch fills ({start.get('branch')!r}, engine {branch!r})")
             close(app)
 
         with step("START-017", out_dir):
-            gdir = os.path.join(HOMEDIR, ".config", "crush")
-            gfile = os.path.join(gdir, "crush.json")
-            os.makedirs(gdir, exist_ok=True)
-            kept = open(gfile).read() if os.path.exists(gfile) else None
-            glob = json.loads(kept) if kept else {}
-            glob["models"] = {"large": {"model": "fake-small", "provider": "fake"}, "small": {"model": "fake-small", "provider": "fake"}}
-            with open(gfile, "w") as f:
-                json.dump(glob, f)
+            # Each chat owns its model (owner, 2026-10-24): a new chat starts on
+            # the last pick, never on a model a folder's config names. The
+            # project's crush.json (tests/project) still names fake-large under
+            # the old "large" key, which is only read once to seed a first pick.
+            kept = client.get("last-pick")
+            client.post("last-pick", {"model": "fake-small", "provider": "fake"})
             try:
                 path = pc.make_project(os.path.join(HOMEDIR, "proj-models"), port)
                 app = AppRun("models", out_dir, path)
                 extra.append(app)
-                check(joined(app), "a window on a project whose crush.json sets fake-large, under a global fake-small, joins")
+                check(joined(app), "a window on a project whose crush.json names fake-large joins")
                 answer_no(app)
-                ok, start = wait_on(app, "start", lambda s: (s.get("large_model") or {}).get("model"), 10)
-                check((start.get("large_model") or {}).get("model") == "fake-large", f"the merged config's large model is the project's ({start.get('large_model')})")
+                ok, start = wait_on(app, "start", lambda s: (s.get("chat_model") or {}).get("model"), 10)
+                check((start.get("chat_model") or {}).get("model") == "fake-small",
+                      f"its landing page shows the last pick, fake-small, not the folder's fake-large ({start.get('chat_model')})")
                 close(app)
             finally:
-                if kept is None:
-                    os.remove(gfile)
-                else:
-                    with open(gfile, "w") as f:
-                        f.write(kept)
+                if kept:
+                    client.post("last-pick", kept)
 
         with step("START-019", out_dir):
             path = pc.make_project(os.path.join(HOMEDIR, "proj-theme"), port)
@@ -993,7 +990,7 @@ def fixture_run():
             ok, start = wait_on(app, "start", lambda s: s.get("screen") == "landing" and s.get("landing") == {"blank": True}, 10)
             check(ok, f"the blank landing page shows ({start.get('landing')})")
             check(start.get("branch") == "main", f"the window has the branch: {start.get('branch')!r}")
-            check((start.get("large_model") or {}).get("model"), f"the window has the model: {start.get('large_model')}")
+            check((start.get("chat_model") or {}).get("model"), f"the window has the model: {start.get('chat_model')}")
             # The panel lists only the MCP servers the config names (this recording names none).
             configured = set(((data["get"].get("config") or {}).get("mcp") or {}).keys())
             counts = {"lsp": len(data["get"]["lsps"]), "mcp": len(configured & set(data["get"]["mcp/states"])), "skills": len(data["get"]["skills"])}

@@ -20,18 +20,20 @@ project's engine, its nine steps, then LIST-012's step.
      starts a new chat (Ctrl+N) and sends "from the terminal": the desktop's
      list gains it, "Working…" within 1 s of the first streamed words in the
      pane, and no state within 1 s of the reply's end.
- R7. Two chats, two models (risk R7, LIST-035): the terminal's chat runs on
-     fake-small (the project's model set through the engine, as its model
-     picker does); the desktop opens its own chat again (a launch with -s),
-     which restores that chat's model, fake-large, for the whole project; the
-     desktop's next prompt runs on fake-large (the engine's message and the
-     fake AI server's request say so). The model button's words are checked
+ R7. Two chats, two models (risk R7): each chat owns its model (owner,
+     2026-10-24). The terminal's chat is set to fake-small through the
+     engine, as its model picker does, and runs on it; the desktop opens its
+     own chat again (a launch with -s), which still owns fake-large, and the
+     terminal's chat keeps fake-small: nothing is set for the whole folder.
+     The desktop's next prompt runs on fake-large and the terminal's chat
+     still owns fake-small (the engine's messages and chats and the fake AI
+     server's requests say so). The model button's words are checked
      when the probe's composer or panel section shows a model name (1.9 pins
      no such field). Without P3.7's composer section the step prints NOT RUN,
      and a step that did not run fails the check, never passes it.
 Fails when a wait times out, the apps and the engine disagree on order or
-text, the desktop shows a message twice, step 8's reply stops, or the
-desktop's chat runs on another model. The replies are scripts/stream2m.json's
+text, the desktop shows a message twice, step 8's reply stops, or a chat
+runs on, or is given, another chat's model. The replies are scripts/stream2m.json's
 two-app turns, so stream2m is made the active script (6.2: drivers activate
 the script whose turns they use; 2.9's step 2 names basic, another piece's
 script). The engine is the one in the probe's connection.engine (1.9,
@@ -39,7 +41,7 @@ script). The engine is the one in the probe's connection.engine (1.9,
 says so).
 
 --stand-in plays the desktop's part with the engine API calls the desktop
-makes (join, send, read, and LIST-035's model restore), for running the
+makes (join, send, read), for running the
 terminal and engine half before the window's pieces are merged; it proves
 nothing about the window.
 Usage: tests/check.sh p3_two_apps.py [--stand-in]
@@ -171,14 +173,13 @@ class EngineView:
         return [{"id": m["id"], "role": m["role"], "finished": engine_finished(m), "text": engine_text(m), "model": m.get("model")}
                 for m in self.get(f"sessions/{sid}/messages")]
 
-    def large_model(self):
-        # Only the models block is read: the config holds the providers' keys and is never printed.
-        return (((self.get("config") or {}).get("models") or {}).get("large") or {}).get("model")
+    def chat_model(self, sid):
+        """The model one chat owns (GET sessions/{sid}), or None."""
+        return ((self.get(f"sessions/{sid}") or {}).get("model") or {}).get("model")
 
-    def set_large_model(self, model, provider="fake"):
-        """The project's model, as the terminal's model picker sets it (model_select.go)."""
-        self.post("config/model", {"scope": 1, "model_type": "large", "model": {"model": model, "provider": provider}})
-        self.post("agent/update")
+    def set_chat_model(self, sid, model, provider="fake"):
+        """One chat's own model, as the terminal's model picker sets it (model_select.go)."""
+        self.post(f"sessions/{sid}/model", {"model": {"model": model, "provider": provider}})
 
     def queued(self, sid):
         return self.get(f"agent/sessions/{sid}/prompts/list") or []
@@ -298,7 +299,7 @@ class Window:
         return "composer" in self.report()
 
     def open_chat(self, sid):
-        """Opens the chat again the way a launch with -s does (LIST-035 restores its model)."""
+        """Opens the chat again the way a launch with -s does."""
         if not self.close():
             return False
         since = self.relaunch(sid, "app-r7.log")
@@ -394,15 +395,8 @@ class StandIn:
         return True
 
     def open_chat(self, sid):
-        """LIST-035's restore done by the stand-in itself: the chat's last model
-        (summaries skipped) becomes the project's model."""
+        """The stand-in's chat is the one it sends on; the chat keeps its own model."""
         self.sid = sid
-        last = [m for m in self.view.get(f"sessions/{sid}/messages")
-                if m.get("role") == "assistant" and m.get("model") and not m.get("is_summary_message")]
-        if not last:
-            return False
-        print("NOTE --stand-in: the stand-in restores the chat's model itself; LIST-035's port is the window's", flush=True)
-        self.view.set_large_model(last[-1]["model"], last[-1].get("provider") or "fake")
         return True
 
     def model_words(self):
@@ -629,7 +623,9 @@ def main():
             elif not new_id:
                 not_run("R7-models", "it needs LIST-012's chat in the terminal")
             else:
-                engine.set_large_model("fake-small")
+                before = engine.chat_model(sid)
+                check(before == "fake-large", f"the desktop's chat owns fake-large ({before})")
+                engine.set_chat_model(new_id, "fake-small")
                 tmux("send-keys", "-t", "tui", "-l", R7_TERMINAL)
                 tmux("send-keys", "-t", "tui", "Enter")
                 ok, reply, _ = poll(lambda: last_assistant_after(engine.messages(new_id), R7_TERMINAL) or {}, lambda m: m.get("finished"), 20, 0.3)
@@ -637,8 +633,9 @@ def main():
                 check(ok and reply.get("model") == "fake-small" and asked == "fake-small",
                       f"the terminal's chat runs on another model, fake-small (message {reply.get('model')}, request {asked})")
                 check(desktop.open_chat(sid), "the desktop opens its own chat again (a launch with -s)")
-                ok, model, took = poll(engine.large_model, lambda m: m == "fake-large", 10, 0.3)
-                check(ok, f"opening it restores that chat's model, fake-large, for the whole project (LIST-035; engine {model}, {took:.1f} s)")
+                mine, theirs = engine.chat_model(sid), engine.chat_model(new_id)
+                check(mine == "fake-large" and theirs == "fake-small",
+                      f"it still owns fake-large, and the terminal's chat keeps fake-small (desktop {mine}, terminal {theirs})")
                 # The button follows the engine's model event, which can land
                 # a moment after the engine's answer above.
                 _, shown, _ = poll(desktop.model_words, lambda w: w is not None and "Fake Large" in w and "Fake Small" not in w, 5, 0.2)
@@ -653,8 +650,8 @@ def main():
                 check(ok and reply.get("model") == "fake-large" and asked == "fake-large",
                       f"the desktop's chat runs on its model, fake-large (message {reply.get('model')}, request {asked})")
                 save_pane("R7-models")
-                print(f"NOTE R7's effect, decided to stay (PLAN.md:300): the model is the project's, so the terminal's chat "
-                      f"now runs on {engine.large_model()} too", flush=True)
+                theirs = engine.chat_model(new_id)
+                check(theirs == "fake-small", f"the terminal's chat still owns its own model, fake-small ({theirs})")
     finally:
         tmux("kill-server")
         desktop.stop()

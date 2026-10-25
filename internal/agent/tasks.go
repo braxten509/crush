@@ -331,14 +331,18 @@ func SessionHasRunningWork(sessionID string) bool {
 // `crush bg`, such as Claude Code's run_in_background. Crush lists those as
 // background processes, so they hold back the completion alert too. Crush's
 // own jobs are listed with their session as well, but hasRunning judges
-// those, leaving services out. It takes hubsMu, so callers must not hold it.
+// those, leaving services out. A command listening on a port is a server,
+// and like a service it does not hold the alert back. It takes hubsMu, so
+// callers must not hold it.
 func cliBackgroundRunning(sessionID string) bool {
+	var mine []Process
 	for _, p := range BackgroundProcesses() {
 		if p.JobID == "" && p.Session == sessionID {
-			return true
+			mine = append(mine, p)
 		}
 	}
-	return false
+	_, rest := FindServers(mine)
+	return len(rest) > 0
 }
 
 // env is added to the CLI process of a session that may spawn tasks.

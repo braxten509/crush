@@ -352,3 +352,26 @@ func TestCLIBackgroundProcessHoldsCompletionAlert(t *testing.T) {
 	require.True(t, SessionHasRunningWork(t.Name()), "a command the CLI backgrounded itself is still running work")
 	require.False(t, SessionHasRunningWork("other"))
 }
+
+func TestCLIBackgroundServerDoesNotHoldCompletionAlert(t *testing.T) {
+	noMinAge(t)
+	h := registerTestHub(t)
+	listen := `import socket,time
+s=socket.socket()
+s.bind(("127.0.0.1",0))
+s.listen()
+time.sleep(60)`
+	cmd := exec.Command("sh", "-c", "setsid python3 -c '"+listen+"' >/dev/null 2>&1 &")
+	cmd.Env = append(os.Environ(), TasksDirEnv+"="+h.dir, TasksSessionEnv+"="+t.Name())
+	require.NoError(t, cmd.Run())
+	t.Cleanup(func() {
+		for _, p := range markedProcs([]string{TasksDirEnv + "=" + h.dir}) {
+			_ = syscall.Kill(p.pid, syscall.SIGKILL)
+		}
+	})
+	require.Eventually(t, func() bool {
+		servers, _ := FindServers(SessionBackgroundProcesses(t.Name()))
+		return len(servers) == 1
+	}, 5*time.Second, 20*time.Millisecond)
+	require.False(t, SessionHasRunningWork(t.Name()), "a server the CLI left running is not unfinished work")
+}

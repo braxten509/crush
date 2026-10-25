@@ -81,7 +81,7 @@ func TestRemoveConfigField_PublishesConfigChanged(t *testing.T) {
 	awaitConfigChanged(t, evc, ws.ID)
 }
 
-func TestUpdatePreferredModel_PublishesConfigChanged(t *testing.T) {
+func TestSetHelperModel_PublishesConfigChanged(t *testing.T) {
 	if raceEnabled {
 		// SetHelperModel writes config.Models concurrently
 		// with the agent coordinator's async sub-agent builder

@@ -482,7 +482,7 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		// Simulate the Load path: resolve (pure), then persist fallbacks
 		// under writeMu using updateLocked. Before the refactor, the
 		// combined configureSelectedModels(persist=true) self-deadlocked
-		// because UpdatePreferredModel re-acquired writeMu.
+		// because SetHelperModel re-acquired writeMu.
 		done := make(chan error, 1)
 		go func() {
 			cfg.takeLegacyChatModel()

@@ -111,7 +111,7 @@ func TestClientWorkspace_ConfigChangedRefreshesSiblingCache(t *testing.T) {
 	// Client A flips a real config-mutating workspace operation
 	// (SetCompactMode) via the server. PLAN item 4 acceptance:
 	// B's cached ws.Config must reflect this change without restart.
-	// SetCompactMode is used over UpdatePreferredModel because the
+	// SetCompactMode is used over SetHelperModel because the
 	// latter's autoReload reverts unknown-provider models back to
 	// defaults during configureSelectedModels, which would make the
 	// assertion test infrastructure rather than the cache wiring.

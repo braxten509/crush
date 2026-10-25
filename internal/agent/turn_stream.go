@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 // onCompacting marks the assistant message while an agent CLI compacts.
@@ -355,13 +356,13 @@ func (t *turn) onStepFinish(stepResult fantasy.StepResult) error {
 	t.sessionLock.Lock()
 	defer t.sessionLock.Unlock()
 
-	updatedSession, getSessionErr := a.sessions.Get(t.ctx, t.call.SessionID)
-	if getSessionErr != nil {
-		return getSessionErr
-	}
 	usage, estimated := fallbackStepUsage(t.stepMessages, stepResult)
-	a.updateSessionUsage(t.largeModel, &updatedSession, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
-	_, sessionErr := a.sessions.Save(t.ctx, updatedSession)
+	var updatedSession session.Session
+	_, sessionErr := a.sessions.Edit(t.ctx, t.call.SessionID, func(current *session.Session) bool {
+		a.updateSessionUsage(t.largeModel, current, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
+		updatedSession = *current
+		return true
+	})
 	if sessionErr != nil {
 		return sessionErr
 	}

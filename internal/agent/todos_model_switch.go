@@ -27,10 +27,15 @@ func (a *sessionAgent) handOverTodos(ctx context.Context, sessionID, provider, m
 	if last, ok := lastModelReply(msgs); !ok || last.Provider == provider && last.Model == model {
 		return ""
 	}
-	old := current.Todos
-	current.Todos = nil
-	if _, err := a.sessions.Save(ctx, current); err != nil {
+	var old []session.Todo
+	if _, err := a.sessions.Edit(ctx, sessionID, func(current *session.Session) bool {
+		old, current.Todos = current.Todos, nil
+		return len(old) > 0
+	}); err != nil {
 		slog.Error("Failed to clear the last model's to-do list", "error", err)
+		return ""
+	}
+	if len(old) == 0 {
 		return ""
 	}
 	return todoHandoverNote(old)

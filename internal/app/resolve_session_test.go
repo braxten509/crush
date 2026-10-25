@@ -60,6 +60,15 @@ func (m *mockSessionService) Save(_ context.Context, s session.Session) (session
 	return s, nil
 }
 
+func (m *mockSessionService) Edit(ctx context.Context, id string, edit func(*session.Session) bool) (session.Session, error) {
+	s, err := m.Get(ctx, id)
+	if err != nil {
+		return session.Session{}, err
+	}
+	edit(&s)
+	return s, nil
+}
+
 func (m *mockSessionService) SetChannel(_ context.Context, sessionID, channel string) (session.Session, error) {
 	return session.Session{ID: sessionID, Channel: channel}, nil
 }

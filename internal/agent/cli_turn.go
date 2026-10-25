@@ -137,7 +137,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		}
 		text = wrap(text, link, resume)
 
-		s := &cliSteps{call: call, onQueuedInput: call.onQueuedInput, ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, onActivity: onActivity, onToolInterrupt: interruptToolCall, lastToolMessage: lastToolMessage, steerReady: make(chan struct{}, 1), steerAnyTime: m.Kind == config.TypeOpenCodeCLI}
+		s := &cliSteps{call: call, onQueuedInput: call.onQueuedInput, ctx: ctx, sc: sc, m: m, a: a, sessionID: call.SessionID, onCompacting: onCompacting, onActivity: onActivity, onToolInterrupt: interruptToolCall, lastToolMessage: lastToolMessage, steerReady: make(chan struct{}, 1), steerAnyTime: cliagent.SteersAnyTime(m.Kind)}
 		if err := s.begin(); err != nil {
 			return nil, err
 		}

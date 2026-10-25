@@ -432,6 +432,13 @@ func CanBackground(kind catwalk.Type) bool {
 	return kind == config.TypeClaudeCode || kind == config.TypeCodexCLI || kind == config.TypeOpenCodeCLI || kind == config.TypeOpenCodeZenCLI
 }
 
+// SteersAnyTime reports whether a CLI folds a queued message into its
+// running turn at any step (OpenCode's own server takes it), not only while
+// a tool runs.
+func SteersAnyTime(kind catwalk.Type) bool {
+	return kind == config.TypeOpenCodeCLI || kind == config.TypeOpenCodeZenCLI
+}
+
 // unprompted holds the handlers [OnUnprompted] registered, one per
 // coordinator (a server can run several workspaces).
 var unprompted struct {

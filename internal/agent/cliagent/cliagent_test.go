@@ -111,6 +111,13 @@ func TestUnwrapShellMixedAndNestedQuotes(t *testing.T) {
 	require.Equal(t, "echo 'hello'", unwrapShell(`/bin/zsh -lc 'echo '"'hello'"`))
 }
 
+// Both OpenCode providers run the same driver and its steering server.
+func TestOpenCodeKindsSteerAnyTime(t *testing.T) {
+	require.True(t, SteersAnyTime(config.TypeOpenCodeCLI))
+	require.True(t, SteersAnyTime(config.TypeOpenCodeZenCLI))
+	require.False(t, SteersAnyTime(config.TypeClaudeCode))
+}
+
 func TestHelpers(t *testing.T) {
 	require.Equal(t, "echo 'a b'", unwrapShell(`/bin/zsh -lc 'echo '\''a b'\'''`))
 	require.Equal(t, `say "x" $HOME`, unwrapShell(`/bin/bash -lc "say \"x\" \$HOME"`))

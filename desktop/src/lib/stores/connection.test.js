@@ -544,4 +544,13 @@ describe("several folders at once (owner, 2026-10-22)", () => {
     expect(notice?.text).toContain("other");
     expect(notice?.text).toContain("reconnecting");
   });
+
+  it("another folder's sub-agent that ended leaves its row", async () => {
+    const helpers = await import("./helperchats.svelte.js");
+    helpers.startHelperChats();
+    await C.start();
+    helpers.helperChats.byId.c1 = { id: "c1", parent: "p1", name: "helper", dir: "/tmp/home/two", running: true };
+    await deliver({ ...ev("helper", "updated", { child_session_id: "c1", session_id: "p1", status: "done" }), folder: "/tmp/home/two" });
+    expect(helpers.helperChats.byId.c1).toBeUndefined();
+  });
 });

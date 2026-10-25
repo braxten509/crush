@@ -7,7 +7,7 @@
 // terminal). The row leaves once the sub-agent is done and its chat is not
 // shown; its × hides the row and never stops the sub-agent.
 import { api } from "../engine/api.js";
-import { onEvent } from "../engine/events.js";
+import { onEvent, onFolderEvent } from "../engine/events.js";
 import { conn } from "./connection.svelte.js";
 import { allowHelperChat, onLeave, openChat, removeSession, sessions } from "./sessions.svelte.js";
 
@@ -91,12 +91,16 @@ let started = false;
 export function startHelperChats() {
   if (started) return;
   started = true;
-  onEvent("helper", (_kind, h) => {
+  const heard = (_kind, h) => {
     const chat = h?.child_session_id ? helperChats.byId[h.child_session_id] : null;
     if (!chat) return;
     adopt(chat, h);
     settle();
-  });
+  };
+  onEvent("helper", heard);
+  // A sub-agent of a folder the window does not show (watch.rs passes its
+  // helper events on), so its row too leaves once it is done.
+  onFolderEvent("helper", heard);
   // Leaving a sub-agent's chat settles its row; an effect on the shown chat
   // stopped re-running there (2026-10-21), the switch itself always runs.
   onLeave((sid) => {

@@ -234,11 +234,11 @@
           <span class="folder-name" title={group.dir}>{group.label}</span>
           {#if group.rows.length === 0}
             <button class="folder-button folder-drop" type="button" aria-label="Remove {group.label}" title="Remove folder" onclick={() => dropFolder(group.dir)}>
-              <Icon name="close" size={12} />
+              <Icon name="close" size={12} frame={30} />
             </button>
           {/if}
           <button class="folder-button folder-new" type="button" aria-label="New chat in {group.label}" title="New chat here" onclick={() => startIn("session", group.dir)}>
-            <Icon name="plus" />
+            <Icon name="plus" frame={30} />
           </button>
         </div>
         {#if group.rows.length > 0}

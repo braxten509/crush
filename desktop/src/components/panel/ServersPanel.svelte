@@ -1,6 +1,6 @@
 <script>
   // SERVERS (owner, 2026-10-19: moved here from the bottom of the left list):
-  // the ports the project's background jobs listen on (lib/leftlist/
+  // the ports the background jobs of every joined folder listen on (lib/leftlist/
   // servers.js, read every second by plugins/leftlist.js). A server's name
   // opens http://localhost:<port>; a program with several ports is one row
   // that opens to list them. The stop cross keeps its place and shows on

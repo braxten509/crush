@@ -3,7 +3,11 @@
   // few strokes in the current colour; none carries meaning on its own, so they
   // are hidden from screen readers and their text sits next to them. `size`
   // (picture pixels) scales an icon whose longer side is not that size, for
-  // example a 16 px icon drawn at 12.
+  // example a 16 px icon drawn at 12. `frame` (picture pixels) makes the
+  // picture fill a square button of that size with the icon drawn in its
+  // middle: the picture then moves with the button's box, which the window
+  // puts on whole pixels, so the icon stays centred in a box that sits at a
+  // part-pixel spot (owner, 2026-10-25: a lower folder's "+" was 1 px off).
   //
   // The working mark (desktop-design-5-6 look 5.2) is a ring in --icon-ring
   // with a quarter arc in --icon-arc that steps every 100 ms on the wall
@@ -11,7 +15,7 @@
   // background mark. Reduced motion: the arc stands still.
   import { ticker } from "../lib/ticker.svelte.js";
 
-  let { name, class: extra = "", size = null } = $props();
+  let { name, class: extra = "", size = null, frame = null } = $props();
 
   const icons = {
     plus: { w: 20, h: 20 },
@@ -58,13 +62,16 @@
   };
   const box = $derived(icons[name]);
   const scale = $derived(size ? size / Math.max(box.w, box.h) : 1);
+  // The frame in the icon's own units, and where the icon sits in it.
+  const span = $derived(frame ? frame / scale : null);
+  const view = $derived(span ? `${(box.w - span) / 2} ${(box.h - span) / 2} ${span} ${span}` : `0 0 ${box.w} ${box.h}`);
 </script>
 
 <svg
   class="icon {extra}"
-  style:--w={box.w * scale}
-  style:--h={box.h * scale}
-  viewBox="0 0 {box.w} {box.h}"
+  style:--w={frame ?? box.w * scale}
+  style:--h={frame ?? box.h * scale}
+  viewBox={view}
   aria-hidden="true"
   focusable="false"
 >

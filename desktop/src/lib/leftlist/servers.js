@@ -1,13 +1,13 @@
 // Server rows (desktop-design-5-6 2.22; LIST-028 to LIST-032, LIST-047),
 // ported from the session host's (internal/ui/sessionhost/servers.go): the
-// ports the project's chats' background jobs listen on (G-18's GET servers,
+// ports the chats' background jobs of every joined folder listen on (G-18's GET servers,
 // read every 1 s while the window is connected), each port once, in list
 // order. A program with two or more ports folds into one row; opened, its
 // servers follow it, named after the program holding each port. Rows show
 // only in the open list, as many as leave room for one chat.
 import { api } from "../engine/api.js";
 import { open_link } from "../engine/commands.js";
-import { conn } from "../stores/connection.svelte.js";
+import { conn, inFolder } from "../stores/connection.svelte.js";
 import { rootOf, sessions } from "../stores/sessions.svelte.js";
 import { leftList } from "./store.svelte.js";
 
@@ -15,8 +15,8 @@ export const SERVER_HINT = " ↵ open · x stop · esc back"; // servers.go:37
 
 // G-18's ServerPort as a row's server: group is the background program it is
 // under (its job, else its process: session_host.go:47); ref names it for a
-// stop.
-export function toServer(entry) {
+// stop; dir is the joined folder whose engine answered ("" for the shown one).
+export function toServer(entry, dir = "") {
   const port = Number(entry?.port);
   if (!Number.isInteger(port) || port <= 0) return null;
   const jobId = typeof entry.job_id === "string" ? entry.job_id : "";
@@ -28,6 +28,7 @@ export function toServer(entry) {
     owner: String(entry.program ?? ""),
     group: jobId || (pid ? String(pid) : ""),
     ref: jobId ? { job_id: jobId } : pid ? { pid } : null,
+    dir,
   };
 }
 
@@ -45,7 +46,7 @@ export function urlOf(port) {
 export function orderServers(answer, chatOrder) {
   const place = new Map(chatOrder.map((id, i) => [id, i]));
   const placed = (Array.isArray(answer) ? answer : [])
-    .map((entry, i) => ({ server: toServer(entry), i }))
+    .map((entry, i) => ({ server: toServer(entry, entry?.dir ?? ""), i }))
     .filter((x) => x.server)
     .map((x) => ({ ...x, at: place.get(rootOf(x.server.session) || x.server.session) ?? Infinity }))
     .sort((a, b) => a.at - b.at || a.i - b.i);
@@ -154,20 +155,26 @@ export function stopServer(server) {
   const fold = foldOf(server);
   leftList.servers = leftList.servers.filter((s) => (server.group ? foldOf(s) !== fold : s.port !== server.port));
   if (!server.session || !server.ref) return;
-  api.killJob(server.session, server.ref).catch((error) => console.error("stopping a server failed", error?.message ?? error));
+  api.killJob(server.session, server.ref, server.dir ?? "").catch((error) => console.error("stopping a server failed", error?.message ?? error));
 }
 
-// One read of G-18; an answer older than a newer read or a stop is dropped.
+// One read of G-18 from every folder the window keeps joined (owner,
+// 2026-10-25: servers are not per folder or chat; each folder's engine knows
+// only its own jobs); an answer older than a newer read or a stop is dropped.
 export async function readServers() {
   const clientId = conn.clientId;
   const mine = ++reads;
   const stopsBefore = stops;
-  let answer = [];
-  try {
-    answer = await api.servers();
-  } catch {
-    answer = []; // no route (an older engine) or no engine: no rows
-  }
+  const dirs = ["", ...Object.keys(conn.folders ?? {}).filter((dir) => !inFolder(dir))];
+  const answers = await Promise.all(
+    dirs.map((dir) =>
+      api.servers(dir).then(
+        (list) => (Array.isArray(list) ? list : []).map((entry) => ({ ...entry, dir })),
+        () => [], // no route (an older engine) or no engine: no rows
+      ),
+    ),
+  );
+  const answer = answers.flat();
   if (mine !== reads || stopsBefore !== stops || clientId !== conn.clientId) return;
   leftList.servers = orderServers(answer, sessions.order);
   leftList.serversClientId = clientId;

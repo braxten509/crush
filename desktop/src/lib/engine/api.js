@@ -318,10 +318,13 @@ export const api = {
   helpers: (sid) => get(`${chat(sid)}/helpers`),
   stopHelper: (sid, hid) => post(`${chat(sid)}/helpers/${seg(hid)}/stop`),
   jobs: (sid) => get(`${chat(sid)}/jobs`),
-  // ref: a JobRef {job_id?, pid?}.
-  killJob: (sid, ref) => post(`${chat(sid)}/jobs/kill`, ref),
+  // ref: a JobRef {job_id?, pid?}. dir, when given, is the folder whose
+  // engine runs the job ("" for the shown folder).
+  killJob: (sid, ref, dir) =>
+    dir === undefined ? post(`${chat(sid)}/jobs/kill`, ref) : commands.api("POST", `${chat(sid)}/jobs/kill`, undefined, ref, undefined, dir),
   background: (sid) => post(`${chat(sid)}/background`),
-  servers: () => get("servers"),
+  // The servers of one joined folder's engine ("" for the shown folder).
+  servers: (dir = "") => commands.api("GET", "servers", undefined, undefined, undefined, dir),
 
   // One share per chat (owner, 2026-10-21); session_id "" is this window's
   // new chat.

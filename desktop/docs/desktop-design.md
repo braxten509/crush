@@ -408,7 +408,7 @@ All commands are registered in `main.rs` by S3. Arguments are the JS names (Taur
 |---|---|---|
 | GET | `/v1/version`, `/v1/engine`, `/v1/limits` | `routes.go:26`; engine design 5.2, 5.9 |
 | POST | `/v1/limits/{kind}/refresh` | 5.9 |
-| GET | `config`, `providers`, `agent`, `agent/default-small-model`, `git/branch`, `lsps`, `mcp/states`, `skills`, `messages/user` | `routes.go:41,42,95,112,47,78,140,128,46` |
+| GET | `config`, `providers`, `agent`, `git/branch`, `lsps`, `mcp/states`, `skills`, `messages/user` | `routes.go:41,42,95,47,78,140,128,46` |
 | GET, POST | `sessions` | `routes.go:57-58` |
 | GET, PUT, DELETE | `sessions/{sid}` | `routes.go:59-61` |
 | GET | `sessions/{sid}/messages`, `sessions/{sid}/messages/user`, `sessions/{sid}/messages/{mid}/review`, `sessions/{sid}/history`, `sessions/{sid}/filetracker/files` | `routes.go:63,65,64,62,71` |

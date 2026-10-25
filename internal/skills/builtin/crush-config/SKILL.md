@@ -104,9 +104,9 @@ model small [<provider>/<id>] [flags]  # set the helper model; no arg prints it
 - `model small` with no argument prints the current selection as `provider/id`,
   usable in `$(model small)`.
 
-`small` is the helper model for chat titles and branch summaries. There is no
-`model large`: each chat owns its model, picked in the chat, and a new chat
-starts on the last model picked.
+`small` is the helper model for chat titles and branch summaries. No command
+sets a chat's model: each chat owns its model, picked in the chat, and a new
+chat starts on the last model picked.
 
 ### mcp
 

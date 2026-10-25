@@ -140,7 +140,7 @@ locals first and return a message, then apply the result in `Update`.
 - `doThen(work, then)` (`model/config_write.go`) runs `work` off the Update
   goroutine and delivers a `workDoneMsg`; `then` runs on the Update
   goroutine with the error, so it may change UI state. `writeConfigField`
-  and `savePreferredModel` build on it.
+  and `saveHelperModel` build on it.
 - Keep optimistic UI changes (closing a dialog, switching layout) where the
   user expects them at once, and report a failed write when it lands.
 - Results that may arrive out of order carry a sequence or generation

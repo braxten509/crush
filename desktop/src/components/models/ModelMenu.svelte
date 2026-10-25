@@ -9,7 +9,7 @@
   // level can be picked next; a click on a level saves it. Esc, a click
   // outside or the button again close it. While it is open the key router
   // asks only the "menu" scope, so no other shortcut fires.
-  // The full sheet (Large/Small Task, sign-in edits) stays on Ctrl+P.
+  // The full sheet (sign-in edits) stays on Ctrl+P.
   // Under the effort, a Claude Code or Codex model with two or more accounts
   // gets an Account drop-down the width of the row (owner, 2026-10-21, pick
   // A as one drop-down); a new model of the same tool keeps the account.

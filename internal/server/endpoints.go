@@ -536,7 +536,7 @@ func (c *controllerV1) configEndpoints() []apigen.Endpoint {
 			Build(),
 
 		route(c, rpc.SetHelperModel, c.setHelperModel).
-			Summary("Set the preferred model").
+			Summary("Set the helper model").
 			Tags("config").
 			PathParam("id", "Workspace ID").
 			Fails(400, 404, 500).

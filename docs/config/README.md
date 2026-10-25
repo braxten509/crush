@@ -237,14 +237,15 @@ Usage:
   model rm <provider>/<id>
 ```
 
-#### `model large`, `model small`
+#### `model small`
 
-Set the large or small model slot. With no model argument, print the current
-selection.
+Set the helper model, which writes chat titles and branch summaries. With no
+model argument, print the current selection. No command sets a chat's model:
+each chat owns its model, picked in that chat, and a new chat starts on the
+last model picked.
 
 ```text
 Usage:
-  model large [<provider>/<id>] [flags]
   model small [<provider>/<id>] [flags]
 
 Flags:
@@ -260,8 +261,8 @@ Flags:
 ```
 
 ```bash
-model large openai/gpt-4o --think
-echo "coding with: $(model large)"   # prints: openai/gpt-4o
+model small openai/gpt-4o-mini
+echo "titles by: $(model small)"   # prints: openai/gpt-4o-mini
 ```
 
 ### mcp

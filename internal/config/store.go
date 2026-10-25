@@ -26,7 +26,7 @@ type RuntimeOverrides struct {
 	// Models records the model choices made in this instance, whether
 	// persisted or not. They are reapplied after a config reload so that a
 	// selection made here always outranks whatever the shared config file
-	// happens to hold — see pinPreferredModelLocked.
+	// happens to hold — see pinHelperModelLocked.
 	Models map[SelectedModelType]SelectedModel
 }
 

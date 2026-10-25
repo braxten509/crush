@@ -223,11 +223,11 @@ func (s *ConfigStore) OverrideHelperModel(model SelectedModel) {
 			c.Models = make(map[SelectedModelType]SelectedModel)
 		}
 		c.Models[SelectedModelTypeSmall] = model
-		s.pinPreferredModelLocked(SelectedModelTypeSmall, model)
+		s.pinHelperModelLocked(SelectedModelTypeSmall, model)
 	})
 }
 
-// pinPreferredModelLocked records a model choice made in this instance so
+// pinHelperModelLocked records a helper model choice made in this instance so
 // that a later config reload cannot replace it with a choice made
 // somewhere else. Several Crush instances share one global config file, so
 // a reload triggered by an unrelated write (a token refresh, say) would
@@ -235,7 +235,7 @@ func (s *ConfigStore) OverrideHelperModel(model SelectedModel) {
 // switch models out from under the user mid-session.
 //
 // Caller must hold writeMu.
-func (s *ConfigStore) pinPreferredModelLocked(modelType SelectedModelType, model SelectedModel) {
+func (s *ConfigStore) pinHelperModelLocked(modelType SelectedModelType, model SelectedModel) {
 	if s.overrides.Models == nil {
 		s.overrides.Models = make(map[SelectedModelType]SelectedModel)
 	}
@@ -355,7 +355,7 @@ func (s *ConfigStore) helperModelFields(c *Config, model SelectedModel) map[stri
 		c.Models = make(map[SelectedModelType]SelectedModel)
 	}
 	c.Models[SelectedModelTypeSmall] = model
-	s.pinPreferredModelLocked(SelectedModelTypeSmall, model)
+	s.pinHelperModelLocked(SelectedModelTypeSmall, model)
 	return pickFields(c, SelectedModelTypeSmall, model, map[string]any{
 		fmt.Sprintf("models.%s", SelectedModelTypeSmall): model,
 	})

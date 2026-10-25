@@ -435,16 +435,18 @@ files from the internet into your config.
 
 With a Codex model selected, open commands with `ctrl+p` and choose
 **Enable FAST Mode** (search `fast`). **Disable FAST Mode** switches back to
-standard speed. The selection is saved, applies to new and resumed chats, and
+standard speed. The selection is saved with the chat's own model (each chat
+owns its model), a new chat starts with the last pick's setting, and it
 appears as **FAST** beside the reasoning level. Reasoning effort stays unchanged.
 
-You can also select the tier in `crushrc`:
+For the helper model (chat titles and branch summaries) you can select the
+tier in `crushrc`:
 
 ```bash
-model large codex-cli/gpt-6-astra --reasoning-effort max --service-tier fast
+model small codex-cli/gpt-6-astra --service-tier fast
 ```
 
-In JSON, set `models.large.service_tier` to `"fast"` or `"default"`. Leaving it
+In JSON, set `models.small.service_tier` to `"fast"` or `"default"`. Leaving it
 unset inherits Codex's own setting. FAST uses more of your Codex usage allowance;
 availability depends on the model and account.
 

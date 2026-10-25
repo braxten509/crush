@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -73,6 +74,7 @@ func fallbackCoordinator(t *testing.T, blocks []config.FallbackBlock, usage map[
 	c.fallback.try = func(context.Context, catwalk.Type, string, string) error { return errors.New("no real CLI in tests") }
 	sess, err := c.sessions.Create(t.Context(), "fallback")
 	require.NoError(t, err)
+	setChatModel(t, c, sess.ID, fallbackModelOf(blocks[0]))
 	return c, sess.ID
 }
 
@@ -84,8 +86,22 @@ func useBlock(kind catwalk.Type, account, model string) config.FallbackBlock {
 	return config.FallbackBlock{Type: config.FallbackUse, Provider: string(kind), Model: model, Account: account}
 }
 
-func large(c *coordinator) config.SelectedModel {
-	return c.cfg.Config().Models[config.SelectedModelTypeLarge]
+// chatModelOf is the model the chat runs on.
+func chatModelOf(t *testing.T, c *coordinator, sessionID string) config.SelectedModel {
+	t.Helper()
+	chat, err := c.sessions.Get(t.Context(), sessionID)
+	require.NoError(t, err)
+	var m config.SelectedModel
+	require.NoError(t, json.Unmarshal(chat.Model, &m))
+	return m
+}
+
+func setChatModel(t *testing.T, c *coordinator, sessionID string, m config.SelectedModel) {
+	t.Helper()
+	data, err := json.Marshal(m)
+	require.NoError(t, err)
+	_, err = c.sessions.SetModel(t.Context(), sessionID, data)
+	require.NoError(t, err)
 }
 
 func chatLines(t *testing.T, c *coordinator, sessionID string) []string {
@@ -114,14 +130,9 @@ func TestRunningOutSwitchesToTheNextAccountAndContinues(t *testing.T) {
 	c, sid := fallbackCoordinator(t, blocks, map[string]float64{"claude-code/": 100}, nil)
 	sent := make(chan string, 1)
 	c.fallback.send = func(id string) { sent <- id }
-	switched := 0
-	var seen string // the agent's account when the apps are told
-	c.SetModelSwitchHook(func() { switched++; seen = c.Model().ModelCfg.Account })
 
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
-	require.Equal(t, "claude-2", large(c).Account)
-	require.Equal(t, 1, switched)
-	require.Equal(t, "claude-2", seen, "the agent runs on the new account before the apps read it")
+	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
 	lines := chatLines(t, c, sid)
 	require.Len(t, lines, 1)
 	require.Equal(t, "Switched to Claude 2 · Claude Opus: Claude 1 it ran out.", lines[0])
@@ -143,7 +154,7 @@ func TestWaitBlockWaitsThenReturnsToTheAccount(t *testing.T) {
 	}
 	usage := map[string]float64{"claude-code/": 100, "claude-code/claude-2": 100}
 	c, sid := fallbackCoordinator(t, blocks, usage, nil)
-	c.cfg.Config().Models[config.SelectedModelTypeLarge] = fallbackModelOf(blocks[1])
+	setChatModel(t, c, sid, fallbackModelOf(blocks[1]))
 	clock := &fakeClock{now: time.Now()}
 	c.limitRetries.now = clock.Now
 
@@ -152,7 +163,7 @@ func TestWaitBlockWaitsThenReturnsToTheAccount(t *testing.T) {
 	require.Len(t, lines, 1)
 	require.True(t, strings.HasPrefix(lines[0], "Claude 2 it ran out. Waiting for Claude 1 to refill at "), lines[0])
 	require.Len(t, c.limitRetries.pending, 1)
-	require.Equal(t, "claude-2", large(c).Account, "nothing moves before the refill")
+	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account, "nothing moves before the refill")
 
 	sent := make(chan string, 1)
 	c.fallback.send = func(id string) { sent <- id }
@@ -163,7 +174,7 @@ func TestWaitBlockWaitsThenReturnsToTheAccount(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the chat was not continued after the refill")
 	}
-	require.Equal(t, "", large(c).Account)
+	require.Equal(t, "", chatModelOf(t, c, sid).Account)
 }
 
 func TestRefillFirstSpendsACodexRefill(t *testing.T) {
@@ -178,7 +189,7 @@ func TestRefillFirstSpendsACodexRefill(t *testing.T) {
 	}))
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
 	require.Equal(t, "codex-2", asked)
-	require.Equal(t, "codex-2", large(c).Account, "the chat stays on the refilled account")
+	require.Equal(t, "codex-2", chatModelOf(t, c, sid).Account, "the chat stays on the refilled account")
 	require.Equal(t, []string{"Used a free refill on Codex 2."}, chatLines(t, c, sid))
 }
 
@@ -189,7 +200,7 @@ func TestFailedRefillMovesOn(t *testing.T) {
 	c, sid := fallbackCoordinator(t, blocks, map[string]float64{"codex-cli/codex-2": 100}, map[string]int{"codex-cli/codex-2": 1})
 	t.Cleanup(cliagent.SetConsumeRefillForTest(func(context.Context, string) (string, error) { return "noCredit", nil }))
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
-	require.Equal(t, config.SelectedModel{Provider: "claude-code", Model: "opus"}, config.SelectedModel{Provider: large(c).Provider, Model: large(c).Model, Account: large(c).Account})
+	require.Equal(t, config.SelectedModel{Provider: "claude-code", Model: "opus"}, config.SelectedModel{Provider: chatModelOf(t, c, sid).Provider, Model: chatModelOf(t, c, sid).Model, Account: chatModelOf(t, c, sid).Account})
 }
 
 func TestComeBackSwitchesBackBeforeATurn(t *testing.T) {
@@ -197,9 +208,9 @@ func TestComeBackSwitchesBackBeforeATurn(t *testing.T) {
 	first.ComeBack = true
 	blocks := []config.FallbackBlock{first, useBlock(config.TypeClaudeCode, "claude-2", "opus")}
 	c, sid := fallbackCoordinator(t, blocks, map[string]float64{"claude-code/": 20}, nil)
-	c.cfg.Config().Models[config.SelectedModelTypeLarge] = fallbackModelOf(blocks[1])
+	setChatModel(t, c, sid, fallbackModelOf(blocks[1]))
 	c.fallbackBeforeTurn(t.Context(), sid)
-	require.Equal(t, "", large(c).Account)
+	require.Equal(t, "", chatModelOf(t, c, sid).Account)
 	require.Equal(t, []string{"Switched to Claude 1 · Claude Opus by the fallback order."}, chatLines(t, c, sid))
 }
 
@@ -207,7 +218,7 @@ func TestAnErrorThatIsNotAUsageLimitLeavesTheChat(t *testing.T) {
 	blocks := []config.FallbackBlock{useBlock(config.TypeClaudeCode, "", "opus"), useBlock(config.TypeClaudeCode, "claude-2", "opus")}
 	c, sid := fallbackCoordinator(t, blocks, nil, nil)
 	require.False(t, c.fallbackOnOut(t.Context(), sid, errors.New("connection reset by peer")))
-	require.Equal(t, "", large(c).Account)
+	require.Equal(t, "", chatModelOf(t, c, sid).Account)
 	require.Empty(t, chatLines(t, c, sid))
 }
 
@@ -225,7 +236,7 @@ func TestASwitchSkipsAnAccountWithNoRoomLeft(t *testing.T) {
 	usage["claude-code/claude-2"] = 100 // used up since its last reading
 
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
-	require.Equal(t, config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol", ChosenProvider: "claude-code", ChosenModel: "opus"}, large(c))
+	require.Equal(t, config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol", ChosenProvider: "claude-code", ChosenModel: "opus"}, chatModelOf(t, c, sid))
 	require.Equal(t, []string{"Switched to Codex 1 · GPT-5.6 Sol: Claude 1 it ran out."}, chatLines(t, c, sid))
 }
 
@@ -259,7 +270,7 @@ func TestASwitchTriesAnAccountWhoseUsageCantBeRead(t *testing.T) {
 
 			require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
 			require.Equal(t, []string{"claude-code/claude-2 opus"}, tried)
-			require.Equal(t, tc.want, large(c))
+			require.Equal(t, tc.want, chatModelOf(t, c, sid))
 			require.Equal(t, []string{tc.line}, chatLines(t, c, sid))
 		})
 	}
@@ -281,10 +292,10 @@ func TestEachPickedModelFollowsItsOwnList(t *testing.T) {
 		useBlock(config.TypeClaudeCode, "claude-2", "opus"),
 	}}}
 	gpt := fallbackModelOf(blocks[1])
-	cfg.Models[config.SelectedModelTypeLarge] = gpt
+	setChatModel(t, c, sid, gpt)
 
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
-	got := large(c)
+	got := chatModelOf(t, c, sid)
 	require.Equal(t, [3]string{"claude-code", "opus", "claude-2"}, [3]string{got.Provider, got.Model, got.Account})
 	require.Equal(t, [2]string{"codex-cli", "gpt-5.6-sol"}, [2]string{got.ChosenProvider, got.ChosenModel}, "the picked model stays the start")
 
@@ -327,8 +338,8 @@ func opusOrder(t *testing.T, usage map[string]float64) (*coordinator, string, *f
 
 // where is the chat's account and effort, and the model whose list it
 // follows.
-func where(c *coordinator) [3]string {
-	m := large(c)
+func where(t *testing.T, c *coordinator, sid string) [3]string {
+	m := chatModelOf(t, c, sid)
 	provider, model := fallback.Chosen(m)
 	return [3]string{m.Account, m.ReasoningEffort, provider + "/" + model}
 }
@@ -342,28 +353,28 @@ func TestTheOwnersOpusOrderStepByStep(t *testing.T) {
 	start := clock.Now()
 
 	c.fallbackBeforeTurn(t.Context(), sid)
-	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(c), "account 1 has room: the chat comes back to it")
+	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(t, c, sid), "account 1 has room: the chat comes back to it")
 
 	usage["claude-code/claude-2"] = 100
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 2h")))
-	require.Equal(t, [3]string{"", "high", "claude-code/opus"}, where(c))
+	require.Equal(t, [3]string{"", "high", "claude-code/opus"}, where(t, c, sid))
 
 	usage["claude-code/"] = 100
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 3h")))
-	require.Equal(t, [3]string{"claude-3", "high", "claude-code/opus"}, where(c))
+	require.Equal(t, [3]string{"claude-3", "high", "claude-code/opus"}, where(t, c, sid))
 
 	// Account 2 refilled (3h on), account 1 is still out: back to 2.
 	usage["claude-code/"] = 0
 	clock.Set(start.Add(3*time.Hour + time.Minute))
 	c.fallbackBeforeTurn(t.Context(), sid)
-	require.Equal(t, [3]string{"", "high", "claude-code/opus"}, where(c))
+	require.Equal(t, [3]string{"", "high", "claude-code/opus"}, where(t, c, sid))
 
 	// Account 1 refilled too, as the between-turns reading shows: back to 1.
 	usage["claude-code/claude-2"] = 0
 	_, err := cliagent.RefreshAccountLimits(t.Context(), config.TypeClaudeCode, "claude-2", true)
 	require.NoError(t, err)
 	c.fallbackBeforeTurn(t.Context(), sid)
-	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(c))
+	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(t, c, sid))
 
 	require.Equal(t, []string{
 		"Switched to Claude 2 · Claude Opus by the fallback order.",
@@ -372,4 +383,49 @@ func TestTheOwnersOpusOrderStepByStep(t *testing.T) {
 		"Switched to Claude 1 · Claude Opus by the fallback order.",
 		"Switched to Claude 2 · Claude Opus by the fallback order.",
 	}, chatLines(t, c, sid))
+}
+
+// Every chat owns its model (owner, 2026-10-24): when one chat runs out,
+// only that chat moves; another chat and the old shared model stay put.
+func TestRunningOutMovesOnlyThatChat(t *testing.T) {
+	blocks := []config.FallbackBlock{
+		useBlock(config.TypeClaudeCode, "", "opus"),
+		useBlock(config.TypeClaudeCode, "claude-2", "opus"),
+	}
+	c, sid := fallbackCoordinator(t, blocks, map[string]float64{"claude-code/": 100}, nil)
+	shared := config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol"}
+	c.cfg.Config().Models[config.SelectedModelTypeLarge] = shared
+	other, err := c.sessions.Create(t.Context(), "other chat")
+	require.NoError(t, err)
+	setChatModel(t, c, other.ID, shared)
+
+	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut), "the chat's own model is in the order")
+	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
+	require.Equal(t, shared, chatModelOf(t, c, other.ID), "another chat keeps its model")
+	require.Equal(t, shared, c.cfg.Config().Models[config.SelectedModelTypeLarge], "no shared model is written")
+}
+
+// A refill that fails before a turn only moves the chat when an account has
+// room: it never plans a wait and a later "continue" the user did not ask
+// for.
+func TestAFailedRefillBeforeATurnPlansNoWait(t *testing.T) {
+	first := useBlock(config.TypeCodexCLI, "codex-2", "gpt-5.6-sol")
+	first.RefillFirst = true
+	first.MoveAtPercent = 50
+	blocks := []config.FallbackBlock{
+		first,
+		useBlock(config.TypeClaudeCode, "", "opus"),
+		{Type: config.FallbackWait, Kind: config.TypeClaudeCode},
+	}
+	usage := map[string]float64{"codex-cli/codex-2": 60, "claude-code/": 100}
+	c, sid := fallbackCoordinator(t, blocks, usage, map[string]int{"codex-cli/codex-2": 1})
+	t.Cleanup(cliagent.SetConsumeRefillForTest(func(context.Context, string) (string, error) { return "noCredit", nil }))
+	sent := 0
+	c.fallback.send = func(string) { sent++ }
+
+	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Empty(t, chatLines(t, c, sid), "no wait is announced")
+	require.Empty(t, c.limitRetries.pending, "no wait is planned")
+	require.Zero(t, sent)
+	require.Equal(t, "codex-2", chatModelOf(t, c, sid).Account)
 }

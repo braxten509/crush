@@ -32,6 +32,10 @@ func (m *mockSessionAgent) BeginAccepted(sessionID string) *AcceptedRun {
 }
 
 func (m *mockSessionAgent) Model() Model                        { return m.model }
+func (m *mockSessionAgent) ChatModel(context.Context, string) (Model, error) {
+	return m.model, nil
+}
+func (m *mockSessionAgent) ForgetChatModels() {}
 func (m *mockSessionAgent) SetModels(large, small Model)        {}
 func (m *mockSessionAgent) SetTools(tools []fantasy.AgentTool)  {}
 func (m *mockSessionAgent) SetSystemPrompt(systemPrompt string) {}

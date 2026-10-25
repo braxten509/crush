@@ -38,6 +38,9 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		Notify:               c.notify,
 		RunComplete:          c.runComplete,
 		ModelFor:             c.modelForSelection,
+		NewChatModel: func() (config.SelectedModel, bool) {
+			return config.NewChatModel(c.cfg.Config())
+		},
 	})
 
 	// The readiness goroutines below perform one-time setup — building the
@@ -193,6 +196,11 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 	// guards make this a no-op once a catalog exists.
 	c.cfg.RefetchOpenAIChatGPTModels(ctx)
 	c.cfg.RefetchGrokModels(ctx)
+
+	// A refreshed sign-in or key, or a changed provider, is only in a model
+	// built after it, so the chats build theirs again. A running turn keeps
+	// its choice and picks the new build up at its next request.
+	c.forgetChatModels()
 
 	// A model switch in another chat must not swap the model under a run
 	// that is already streaming: the in-flight request would go out on the

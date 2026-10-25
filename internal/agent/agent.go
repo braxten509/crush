@@ -95,6 +95,9 @@ type SessionAgentCall struct {
 	// the active turn that drains it started outside that session owner.
 	sessionRun              *sessionRun
 	queuedSessionRunRelease func(error)
+	// model is the chat's model the call's settings were built from, so
+	// the turn runs on exactly it; unset, the turn looks the chat's up.
+	model Model
 	// OnComplete, when non-nil, replaces the default RunComplete
 	// publish path: the inner Run hands the terminal payload to this
 	// callback instead of emitting it on the RunComplete broker. The
@@ -160,6 +163,12 @@ type SessionAgent interface {
 	RecallQueuedPrompt(sessionID string) *message.QueuedPrompt
 	Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error) error
 	Model() Model
+	// ChatModel is the model the chat runs on: its own (owner, 2026-10-24:
+	// every chat owns its model).
+	ChatModel(ctx context.Context, sessionID string) (Model, error)
+	// ForgetChatModels drops the chats' built models, so the next request
+	// builds them again with fresh credentials.
+	ForgetChatModels()
 	GenerateTitle(ctx context.Context, sessionID, userPrompt string)
 }
 
@@ -206,7 +215,8 @@ type sessionAgent struct {
 	// keeps the ones already built, so a turn on a chat's own model never
 	// rebuilds it twice (owner, 2026-10-23: a model picked in one chat must
 	// not reach another).
-	chatModels chatModelCache
+	chatModels   chatModelCache
+	newChatModel func() (config.SelectedModel, bool)
 }
 
 // chatModelBuilder builds a model from a chat's saved choice.
@@ -236,8 +246,12 @@ type SessionAgentOptions struct {
 	Notify               pubsub.Publisher[notify.Notification]
 	RunComplete          pubsub.Publisher[notify.RunComplete]
 	// ModelFor builds the model a chat runs on from its saved choice. Nil
-	// keeps every chat on the workspace's model.
+	// makes an agent for one model (a sub-agent's), which every chat it
+	// runs uses.
 	ModelFor chatModelBuilder
+	// NewChatModel is the model a chat that has none starts on (the last
+	// pick); it is saved with the chat.
+	NewChatModel func() (config.SelectedModel, bool)
 }
 
 func NewSessionAgent(
@@ -259,6 +273,7 @@ func NewSessionAgent(
 		notify:               opts.Notify,
 		runComplete:          opts.RunComplete,
 		chatModels:           chatModelCache{build: opts.ModelFor, byKey: map[string]Model{}},
+		newChatModel:         opts.NewChatModel,
 	}
 	a.sessionScheduler = newSessionScheduler(a)
 	return a
@@ -529,6 +544,7 @@ func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
 		slog.Warn("Could not read the chat's own model", "error", err)
 		return Model{}, false
 	}
+	selection = knownAccount(a.cfg, selection)
 	// The whole choice is the key: another account, FAST or Ultracode on the
 	// same model runs elsewhere, so it gets its own build (owner, 2026-10-23).
 	keyJSON, _ := json.Marshal(selection)
@@ -548,6 +564,69 @@ func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
 	a.chatModels.byKey[key] = built
 	a.chatModels.mu.Unlock()
 	return built, true
+}
+
+// ChatModel is the model the chat runs on: the one saved with it. A chat
+// that has none (made by an older app) starts on the last pick, which is
+// saved with it, so it owns that model from then on. An agent made for one
+// model (a sub-agent's) runs every chat on that model.
+func (a *sessionAgent) ChatModel(ctx context.Context, sessionID string) (Model, error) {
+	fixed := a.largeModel.Get()
+	if a.chatModels.build == nil {
+		if fixed.Model == nil {
+			return Model{}, errLargeModelNotSelected
+		}
+		return fixed, nil
+	}
+	// A chat that can't be read (it may be made later in the run) has no
+	// model yet: it runs on the new chat's, with nothing to save it with.
+	var choice session.ModelChoice
+	chat, readErr := a.sessions.Get(ctx, sessionID)
+	if readErr == nil {
+		choice = chat.Model
+	}
+	if len(choice) == 0 && a.newChatModel != nil {
+		if m, ok := a.newChatModel(); ok {
+			if data, err := json.Marshal(m); err == nil {
+				choice = data
+				if readErr == nil {
+					if _, err := a.sessions.SetModel(ctx, sessionID, choice); err != nil {
+						slog.Warn("Could not save the chat's model", "session_id", sessionID, "error", err)
+					}
+				}
+			}
+		}
+	}
+	if own, ok := a.modelForChat(choice); ok {
+		return own, nil
+	}
+	if len(choice) == 0 && fixed.Model != nil {
+		return fixed, nil
+	}
+	return Model{}, fmt.Errorf("the chat's model could not be built")
+}
+
+// knownAccount runs a model whose added account was since removed on the
+// tool's own login; the chat keeps its saved choice.
+func knownAccount(store *config.ConfigStore, m config.SelectedModel) config.SelectedModel {
+	if m.Account == "" || store == nil || store.Config() == nil || store.Config().Options == nil {
+		return m
+	}
+	for _, acct := range store.Config().Options.Accounts {
+		if acct.ID == m.Account {
+			return m
+		}
+	}
+	m.Account = ""
+	return m
+}
+
+// ForgetChatModels drops the built chat models: a refreshed sign-in or key
+// is only in a model built after it.
+func (a *sessionAgent) ForgetChatModels() {
+	a.chatModels.mu.Lock()
+	clear(a.chatModels.byKey)
+	a.chatModels.mu.Unlock()
 }
 
 func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {

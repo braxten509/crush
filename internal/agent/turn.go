@@ -445,16 +445,21 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string) {
 	}
 	// Copy mutable fields under lock to avoid races with SetTools/SetModels.
 	agentTools := a.callTools(t.call)
-	t.largeModel = a.largeModel.Get()
-	// A chat runs on its own model when it has one, so a model picked in
-	// another chat never reaches it (owner, 2026-10-23).
+	// A chat runs on its own model, so a model picked in another chat never
+	// reaches it (owner, 2026-10-24: every chat owns its model). The
+	// coordinator hands in the model the call's settings came from; an
+	// agent made for one model (a sub-agent's) always runs on that one.
+	t.largeModel = t.call.model
+	if t.largeModel.Model == nil || a.chatModels.build == nil {
+		own, err := a.ChatModel(t.ctx, t.call.SessionID)
+		if err != nil {
+			slog.Warn("Could not read the chat's model", "session_id", t.call.SessionID, "error", err)
+			own = a.largeModel.Get()
+		}
+		t.largeModel = own
+	}
 	if chat, err := a.sessions.Get(t.ctx, t.call.SessionID); err == nil {
 		t.currentSession = chat
-		if own, ok := a.modelForChat(chat.Model); ok {
-			t.largeModel = own
-		}
-	} else {
-		slog.Warn("Could not read the chat's model", "session_id", t.call.SessionID, "error", err)
 	}
 	t.cliModel, t.isCLI = t.largeModel.Model.(*cliagent.Model)
 	systemPrompt := a.systemPrompt.Get()

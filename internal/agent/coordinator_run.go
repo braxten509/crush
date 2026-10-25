@@ -168,11 +168,17 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 		return nil, fmt.Errorf("failed to update models: %w", err)
 	}
 
-	model := agent.Model()
+	// The request's settings and the request itself come from the model
+	// the chat runs on (owner, 2026-10-24: every chat owns its model).
+	model, err := agent.ChatModel(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
 	call, err := c.turnModelSettings(ctx, model)
 	if err != nil {
 		return nil, err
 	}
+	call.model = model
 
 	// Coalesce per-attempt RunComplete payloads so only the final
 	// outcome reaches subscribers. Without this, the first attempt's

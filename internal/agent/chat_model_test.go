@@ -2,9 +2,11 @@ package agent
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
@@ -112,4 +114,76 @@ func assistantText(t *testing.T, env fakeEnv, sessionID string) string {
 		return messages[i].Content().Text
 	}
 	return ""
+}
+
+// recordingStreamModel answers like finishStreamModel and keeps every call
+// it was sent.
+type recordingStreamModel struct {
+	finishStreamModel
+	mu    sync.Mutex
+	calls []fantasy.Call
+}
+
+func (m *recordingStreamModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	m.mu.Lock()
+	m.calls = append(m.calls, call)
+	m.mu.Unlock()
+	return m.finishStreamModel.Stream(ctx, call)
+}
+
+// chatModelCoordinator is a coordinator whose one chat runs on its own
+// model, on the provider "mock2" (default reply length 4321), while the
+// workspace's model is "mock" (128). It returns the chat's model, the chat
+// and how many times the chat's model was built.
+func chatModelCoordinator(t *testing.T) (*coordinator, *recordingStreamModel, string, *int) {
+	t.Helper()
+	c := newGateTestCoordinator(t, false)
+	_ = c.readyWg.Wait()
+	c.cfg.Config().Providers.Set("mock2", config.ProviderConfig{
+		ID: "mock2", Name: "Mock 2", Type: "openai", BaseURL: "http://127.0.0.1:9/v1", APIKey: "key-2",
+		Models: []catwalk.Model{{ID: "m2", Name: "Mock 2", ContextWindow: 200_000, DefaultMaxTokens: 4321}},
+	})
+	own := &recordingStreamModel{finishStreamModel: finishStreamModel{text: "the chat's model"}}
+	built := 0
+	c.currentAgent().(*sessionAgent).chatModels.build = func(_ context.Context, selection config.SelectedModel) (Model, error) {
+		built++
+		return Model{Model: own, CatwalkCfg: *c.cfg.Config().GetModel(selection.Provider, selection.Model), ModelCfg: selection}, nil
+	}
+	chat, err := c.sessions.Create(t.Context(), "own model")
+	require.NoError(t, err)
+	_, err = c.sessions.SetModel(t.Context(), chat.ID, session.ModelChoice(`{"provider":"mock2","model":"m2","temperature":0.3}`))
+	require.NoError(t, err)
+	return c, own, chat.ID, &built
+}
+
+// The request's settings come from the model the chat runs on, not from
+// the workspace's (owner, 2026-10-24: no shared model anywhere).
+func TestTurnSettingsComeFromTheChatsModel(t *testing.T) {
+	c, own, chat, _ := chatModelCoordinator(t)
+	_, err := c.Run(t.Context(), chat, "hello")
+	require.NoError(t, err)
+	require.NotEmpty(t, own.calls, "the chat's own model answered")
+	call := own.calls[0]
+	require.NotNil(t, call.MaxOutputTokens)
+	require.Equal(t, int64(4321), *call.MaxOutputTokens, "the chat's model's reply length")
+	require.NotNil(t, call.Temperature)
+	require.InDelta(t, 0.3, *call.Temperature, 1e-9, "the chat's model's temperature")
+}
+
+// A refreshed sign-in builds the chat's model again, so its next request
+// carries the new key instead of the one it was first built with.
+func TestARefreshedSignInRebuildsTheChatsModel(t *testing.T) {
+	c, _, chat, built := chatModelCoordinator(t)
+	_, err := c.Run(t.Context(), chat, "hello")
+	require.NoError(t, err)
+	_, err = c.Run(t.Context(), chat, "again")
+	require.NoError(t, err)
+	require.Equal(t, 1, *built, "a chat's model is built once")
+
+	providerCfg, _ := c.cfg.Config().Providers.Get("mock2")
+	providerCfg.APIKeyTemplate = "key-3"
+	require.NoError(t, c.refreshApiKeyTemplate(t.Context(), providerCfg))
+	_, err = c.Run(t.Context(), chat, "after the refresh")
+	require.NoError(t, err)
+	require.Equal(t, 2, *built, "the refresh built the chat's model again")
 }

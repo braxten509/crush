@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -44,9 +45,9 @@ type fallbackOut struct {
 type fallbackState struct {
 	mu  sync.Mutex
 	out map[fallback.Account]fallbackOut
-	ret *fallback.Return
-	// switched tells the apps the selected model changed.
-	switched func()
+	// ret is each chat's planned way back, by chat: every chat follows the
+	// order on its own model (owner, 2026-10-24).
+	ret map[string]*fallback.Return
 	// now is the clock, send continues a chat and try sends the hidden
 	// request that tests an account (cliagent.TryAccount); tests replace
 	// them.
@@ -62,12 +63,24 @@ func (s *fallbackState) clock() time.Time {
 	return time.Now()
 }
 
-// SetModelSwitchHook installs fn, run after the fallback order switched
-// the selected model, so the apps refresh it.
-func (c *coordinator) SetModelSwitchHook(fn func()) {
+// chatSelection is the model the chat runs on, as saved with it.
+func (c *coordinator) chatSelection(ctx context.Context, sessionID string) (config.SelectedModel, bool) {
+	chat, err := c.sessions.Get(ctx, sessionID)
+	if err != nil || len(chat.Model) == 0 {
+		return config.SelectedModel{}, false
+	}
+	var m config.SelectedModel
+	if err := json.Unmarshal(chat.Model, &m); err != nil || m.Provider == "" || m.Model == "" {
+		return config.SelectedModel{}, false
+	}
+	return m, true
+}
+
+// chatReturn is the chat's planned way back, if any.
+func (c *coordinator) chatReturn(sessionID string) *fallback.Return {
 	c.fallback.mu.Lock()
 	defer c.fallback.mu.Unlock()
-	c.fallback.switched = fn
+	return c.fallback.ret[sessionID]
 }
 
 // fallbackOrder is the order a chat on cur follows (its picked model's
@@ -182,16 +195,13 @@ func (c *coordinator) markOut(acct fallback.Account, err error, now time.Time) {
 
 // redecide asks the order again once the account it picked could not take
 // the chat: as after running out when resume is set, else as before a turn.
-func (c *coordinator) redecide(order config.FallbackOrder, at int, resume bool, noRefill, skip map[fallback.Account]bool) fallback.Action {
+func (c *coordinator) redecide(sessionID string, order config.FallbackOrder, at int, resume bool, noRefill, skip map[fallback.Account]bool) fallback.Action {
 	now := c.fallback.clock()
 	read := c.fallbackReadings(now, skip)
 	if resume {
 		return fallback.OnOut(order, c.providerKind, at, read, now, noRefill)
 	}
-	c.fallback.mu.Lock()
-	ret := c.fallback.ret
-	c.fallback.mu.Unlock()
-	return fallback.BeforeTurn(order, c.providerKind, at, ret, read, now)
+	return fallback.BeforeTurn(order, c.providerKind, at, c.chatReturn(sessionID), read, now)
 }
 
 // isUsageLimit reports whether a turn failed because its account ran out.
@@ -230,9 +240,15 @@ func fallbackHolds(store *config.ConfigStore, m config.SelectedModel) bool {
 // fallbackBeforeTurn moves the chat first when the order says so: back to
 // an account that refilled, or on from one past its block's own limit.
 func (c *coordinator) fallbackBeforeTurn(ctx context.Context, sessionID string) {
-	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
+	if !c.interactiveTurn(ctx) {
+		return
+	}
+	cur, ok := c.chatSelection(ctx, sessionID)
+	if !ok {
+		return
+	}
 	order, ok := c.fallbackOrder(cur)
-	if !ok || !c.interactiveTurn(ctx) {
+	if !ok {
 		return
 	}
 	at := fallback.Position(order, c.providerKind, cur)
@@ -240,10 +256,7 @@ func (c *coordinator) fallbackBeforeTurn(ctx context.Context, sessionID string) 
 		return
 	}
 	now := c.fallback.clock()
-	c.fallback.mu.Lock()
-	ret := c.fallback.ret
-	c.fallback.mu.Unlock()
-	act := fallback.BeforeTurn(order, c.providerKind, at, ret, c.fallbackReadings(now, nil), now)
+	act := fallback.BeforeTurn(order, c.providerKind, at, c.chatReturn(sessionID), c.fallbackReadings(now, nil), now)
 	c.applyFallback(ctx, sessionID, order, at, act, false, nil, map[fallback.Account]bool{})
 }
 
@@ -254,7 +267,10 @@ func (c *coordinator) fallbackOnOut(ctx context.Context, sessionID string, err e
 	if !c.interactiveTurn(ctx) || !isUsageLimit(err) {
 		return false
 	}
-	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
+	cur, ok := c.chatSelection(ctx, sessionID)
+	if !ok {
+		return false
+	}
 	order, ok := c.fallbackOrder(cur)
 	if !ok {
 		return false
@@ -287,18 +303,21 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 		to := fallback.BlockAccount(b, c.providerKind)
 		if !c.fallbackReady(ctx, b, to) {
 			skip[to] = true
-			return c.applyFallback(ctx, sessionID, order, at, c.redecide(order, at, resume, noRefill, skip), resume, noRefill, skip)
+			return c.applyFallback(ctx, sessionID, order, at, c.redecide(sessionID, order, at, resume, noRefill, skip), resume, noRefill, skip)
 		}
 		c.fallback.mu.Lock()
-		switch {
+		switch ret := c.fallback.ret[sessionID]; {
 		case act.Return != nil:
-			c.fallback.ret = act.Return
-		case c.fallback.ret != nil && c.fallback.ret.Block == act.Block:
-			c.fallback.ret = nil
+			if c.fallback.ret == nil {
+				c.fallback.ret = map[string]*fallback.Return{}
+			}
+			c.fallback.ret[sessionID] = act.Return
+		case ret != nil && ret.Block == act.Block:
+			delete(c.fallback.ret, sessionID)
 		}
 		c.fallback.mu.Unlock()
 		c.saveFallbackMemory()
-		if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
+		if err := c.switchModel(ctx, sessionID, fallback.Model(b)); err != nil {
 			slog.Warn("The fallback order could not switch the model", "error", err)
 			return false
 		}
@@ -337,6 +356,12 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 			}
 			noRefill[act.Account] = true
 			next := fallback.OnOut(order, c.providerKind, at, c.fallbackReadings(now, skip), now, noRefill)
+			// Before a turn the chat only moves to room it can use now, as
+			// BeforeTurn decides: it never waits for a refill, and so never
+			// gets a "continue" nobody asked for.
+			if !resume && next.Kind != fallback.Switch && next.Kind != fallback.Refill {
+				return false
+			}
 			return c.applyFallback(ctx, sessionID, order, at, next, resume, noRefill, skip)
 		}
 		c.fallback.mu.Lock()
@@ -346,7 +371,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 		line := fmt.Sprintf("Used a free refill on %s.", accounts.Label(cfg, act.Account.Kind, act.Account.ID))
 		if act.Block != at {
 			b := order.Blocks[act.Block]
-			if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
+			if err := c.switchModel(ctx, sessionID, fallback.Model(b)); err != nil {
 				return false
 			}
 			line = fmt.Sprintf("Used a free refill on %s and switched to it.", accounts.Label(cfg, act.Account.Kind, act.Account.ID))
@@ -360,9 +385,11 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 	return false
 }
 
-// switchModel makes m the selected large model and tells the apps.
-func (c *coordinator) switchModel(ctx context.Context, m config.SelectedModel) error {
-	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
+// switchModel moves the chat to m. Only that chat's own model changes
+// (owner, 2026-10-24: every chat owns its model); the chat's update tells
+// the apps.
+func (c *coordinator) switchModel(ctx context.Context, sessionID string, m config.SelectedModel) error {
+	cur, _ := c.chatSelection(ctx, sessionID)
 	if cur.Provider == m.Provider && cur.Model == m.Model && cur.Account == m.Account && (m.ReasoningEffort == "" || cur.ReasoningEffort == m.ReasoningEffort) {
 		return nil
 	}
@@ -376,24 +403,12 @@ func (c *coordinator) switchModel(ctx context.Context, m config.SelectedModel) e
 	if m.ReasoningEffort != "" {
 		next.ReasoningEffort = m.ReasoningEffort
 	}
-	if err := c.cfg.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeLarge, next); err != nil {
+	data, err := json.Marshal(next)
+	if err != nil {
 		return err
 	}
-	// The agent takes the new model now, not at its next turn, so the apps'
-	// read after the hook below shows the new account and model (owner,
-	// 2026-10-21: the usage meters kept the old account).
-	if agent, name := c.activeAgent(); agent != nil {
-		if err := c.updateAgentModels(context.WithoutCancel(ctx), agent, name); err != nil {
-			slog.Warn("The fallback order could not refresh the agent's model", "error", err)
-		}
-	}
-	c.fallback.mu.Lock()
-	switched := c.fallback.switched
-	c.fallback.mu.Unlock()
-	if switched != nil {
-		switched()
-	}
-	return nil
+	_, err = c.sessions.SetModel(context.WithoutCancel(ctx), sessionID, data)
+	return err
 }
 
 func (c *coordinator) modelName(provider, model string) string {
@@ -422,11 +437,11 @@ func (c *coordinator) waitForRoom(ctx context.Context, sessionID string, order c
 	// with nowhere else to go the chat tries it anyway.
 	if !c.fallbackReady(ctx, b, to) {
 		skip := map[fallback.Account]bool{to: true}
-		if next := c.redecide(order, at, true, nil, skip); next.Kind != fallback.Stay && c.applyFallback(ctx, sessionID, order, at, next, true, nil, skip) {
+		if next := c.redecide(sessionID, order, at, true, nil, skip); next.Kind != fallback.Stay && c.applyFallback(ctx, sessionID, order, at, next, true, nil, skip) {
 			return
 		}
 	}
-	if err := c.switchModel(ctx, fallback.Model(b)); err != nil {
+	if err := c.switchModel(ctx, sessionID, fallback.Model(b)); err != nil {
 		slog.Warn("The fallback order could not switch the model", "error", err)
 	}
 	c.sendContinue(sessionID)

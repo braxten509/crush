@@ -238,6 +238,22 @@ func (c *coordinator) activeAgent() (SessionAgent, string) {
 	return c.mainAgent, c.mainAgentName
 }
 
+// forgetChatModels drops every agent's built chat models.
+func (c *coordinator) forgetChatModels() {
+	c.agentMu.RLock()
+	agents := make([]SessionAgent, 0, len(c.agents)+1)
+	for _, a := range c.agents {
+		agents = append(agents, a)
+	}
+	if c.mainAgent != nil {
+		agents = append(agents, c.mainAgent)
+	}
+	c.agentMu.RUnlock()
+	for _, a := range agents {
+		a.ForgetChatModels()
+	}
+}
+
 // currentAgent returns the current main agent.
 func (c *coordinator) currentAgent() SessionAgent {
 	agent, _ := c.activeAgent()

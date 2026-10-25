@@ -90,8 +90,10 @@ type savedPrompt struct {
 type pendingWork struct {
 	Waits  []savedWait   `json:"waits,omitempty"`
 	Queue  []savedPrompt `json:"queue,omitempty"`
-	Out    []savedOut    `json:"out,omitempty"`
-	Return *savedReturn  `json:"return,omitempty"`
+	Out   []savedOut    `json:"out,omitempty"`
+	// Returns is each chat's planned way back, by chat. An older Crush's
+	// single "return" named no chat and is not read.
+	Returns map[string]savedReturn `json:"returns,omitempty"`
 }
 
 // clock is the coordinator's wall clock, the one the fallback order and the
@@ -234,7 +236,7 @@ func (c *coordinator) continueFallbackWait(w savedWait) {
 	// where the chat is if that is gone too.
 	if w.Provider != "" {
 		m := config.SelectedModel{Provider: w.Provider, Model: w.Model, Account: w.Account}
-		if err := c.switchModel(ctx, m); err != nil {
+		if err := c.switchModel(ctx, w.SessionID, m); err != nil {
 			slog.Warn("The fallback order could not switch the model a wait named", "error", err)
 		}
 	}
@@ -243,7 +245,10 @@ func (c *coordinator) continueFallbackWait(w savedWait) {
 
 // waitBlock finds the block a saved wait named in the chat's own order.
 func (c *coordinator) waitBlock(w savedWait) (config.FallbackOrder, int, config.FallbackBlock, bool) {
-	cur := c.cfg.Config().Models[config.SelectedModelTypeLarge]
+	cur, ok := c.chatSelection(context.Background(), w.SessionID)
+	if !ok {
+		return config.FallbackOrder{}, 0, config.FallbackBlock{}, false
+	}
 	order, ok := c.fallbackOrder(cur)
 	if !ok {
 		return config.FallbackOrder{}, 0, config.FallbackBlock{}, false
@@ -264,16 +269,19 @@ func (c *coordinator) saveFallbackMemory() {
 	for a, o := range c.fallback.out {
 		out = append(out, savedOut{Kind: string(a.Kind), ID: a.ID, Until: o.until, Known: o.known})
 	}
-	var ret *savedReturn
-	if c.fallback.ret != nil {
-		ret = &savedReturn{Block: c.fallback.ret.Block, At: c.fallback.ret.At}
+	var ret map[string]savedReturn
+	for sessionID, r := range c.fallback.ret {
+		if ret == nil {
+			ret = map[string]savedReturn{}
+		}
+		ret[sessionID] = savedReturn{Block: r.Block, At: r.At}
 	}
 	c.fallback.mu.Unlock()
 	slices.SortFunc(out, func(a, b savedOut) int {
 		return strings.Compare(string(a.Kind)+"\x00"+a.ID, string(b.Kind)+"\x00"+b.ID)
 	})
 	err := c.updatePending(func(p *pendingWork) bool {
-		p.Out, p.Return = out, ret
+		p.Out, p.Returns = out, ret
 		return true
 	})
 	if err != nil {
@@ -302,8 +310,13 @@ func (c *coordinator) loadFallbackMemory() {
 		}
 		c.fallback.out[fallback.Account{Kind: catwalk.Type(o.Kind), ID: o.ID}] = fallbackOut{until: o.Until, known: o.Known}
 	}
-	if saved.Return != nil && c.fallback.ret == nil {
-		c.fallback.ret = &fallback.Return{Block: saved.Return.Block, At: saved.Return.At}
+	for sessionID, r := range saved.Returns {
+		if c.fallback.ret == nil {
+			c.fallback.ret = map[string]*fallback.Return{}
+		}
+		if _, ok := c.fallback.ret[sessionID]; !ok {
+			c.fallback.ret[sessionID] = &fallback.Return{Block: r.Block, At: r.At}
+		}
 	}
 }
 

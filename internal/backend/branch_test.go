@@ -331,3 +331,32 @@ func TestBranchWhileReplying(t *testing.T) {
 	roles := requests[len(requests)-1]
 	t.Logf("the branch's request ended with the roles %v", roles[max(0, len(roles)-3):])
 }
+
+// TestBranchStartsOnItsSourceModel: a branch is a copy, and a copy keeps
+// its chat's model with its effort and FAST setting (owner, 2026-10-24),
+// not the last pick a new chat starts on.
+func TestBranchStartsOnItsSourceModel(t *testing.T) {
+	b, ws, _ := replyWorkspace(t, newReplyLLM(t))
+	ctx := t.Context()
+	require.NoError(t, config.WriteLastPick(config.SelectedModel{Provider: "test-openai-compat", Model: "other-model"}))
+
+	const own = `{"provider":"test-openai-compat","model":"test-model","reasoning_effort":"high","service_tier":"fast"}`
+	source, err := ws.Sessions.Create(ctx, "Source")
+	require.NoError(t, err)
+	_, err = ws.Sessions.SetModel(ctx, source.ID, session.ModelChoice(own))
+	require.NoError(t, err)
+	_, err = ws.Messages.Create(ctx, source.ID, message.CreateMessageParams{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Plan a trip"}}})
+	require.NoError(t, err)
+	answer, err := ws.Messages.Create(ctx, source.ID, message.CreateMessageParams{
+		Role:  message.Assistant,
+		Parts: []message.ContentPart{message.TextContent{Text: "Lisbon in May"}, message.Finish{Reason: message.FinishReasonEndTurn}},
+	})
+	require.NoError(t, err)
+
+	branch, err := b.CreateBranch(ctx, ws.ID, source.ID, proto.BranchRequest{MessageID: answer.ID, HighlightText: "Lisbon", HighlightStart: 0, HighlightEnd: 6, Title: "Lisbon"})
+	require.NoError(t, err)
+	require.JSONEq(t, own, string(branch.Session.Model), "the apps are told the branch's own model")
+	stored, err := ws.Sessions.Get(ctx, branch.Session.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, own, string(stored.Model), "the branch keeps its source's model")
+}

@@ -3213,7 +3213,8 @@ esac"#,
                     .then(|| Answer::Json(404, json!({"code": "not_found", "message": "workspace not found"})))
             }));
             fake.end_streams();
-            let created = fake.wait_seen(Duration::from_secs(5), |seen| seen.iter().any(|s| s.line() == "POST /v1/workspaces"));            assert!(created, "the folder joined its new engine again");
+            let created = fake.wait_seen(Duration::from_secs(5), |seen| seen.iter().any(|s| s.line() == "POST /v1/workspaces"));
+            assert!(created, "the folder joined its new engine again");
         }
         // The create is heard just before the new link is kept.
         let end = Instant::now() + Duration::from_secs(5);

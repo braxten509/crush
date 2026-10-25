@@ -190,9 +190,9 @@ func TestNamesComeFromTheGivenNameThenTheEmail(t *testing.T) {
 	require.Equal(t, "Codex 1", Name(cfg, config.TypeCodexCLI, ""))
 }
 
-// A tool folder kept in Git never has its .git linked into an account:
-// Claude's read-only sandbox refuses to start when a protected .git path
-// is a symlink, so a read-only sub-agent on that account could not run.
+// Names Claude's sandbox guards (.git, .agents, shell startup files…) are
+// never linked into an account: its read-only sandbox refuses to start when
+// one is a symlink, so a read-only sub-agent on that account could not run.
 // A link made before is taken away.
 func TestAccountFolderNeverLinksGit(t *testing.T) {
 	home := t.TempDir()
@@ -200,19 +200,26 @@ func TestAccountFolderNeverLinksGit(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(home, "data"))
 	claude := filepath.Join(home, ".claude")
-	require.NoError(t, os.MkdirAll(filepath.Join(claude, ".git"), 0o700))
+	for _, name := range []string{".git", ".agents", ".codex"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(claude, name), 0o700))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(claude, ".bashrc"), nil, 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(claude, "settings.json"), []byte(`{}`), 0o600))
 
 	dir := filepath.Join(home, "data", "accounts", "claude-2")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.Symlink(filepath.Join(claude, ".git"), filepath.Join(dir, ".git")))
+	require.NoError(t, os.Symlink(filepath.Join(claude, ".agents"), filepath.Join(dir, ".agents")))
 
 	_, err := Prepare(config.TypeClaudeCode, "claude-2")
 	require.NoError(t, err)
-	_, err = os.Lstat(filepath.Join(dir, ".git"))
-	require.True(t, os.IsNotExist(err), "the old .git link is gone")
-	_, err = os.Stat(filepath.Join(claude, ".git"))
-	require.NoError(t, err, "account 1's own .git stays")
+	// Every name Claude's sandbox guards stays unlinked, and old links go.
+	for _, name := range []string{".git", ".agents", ".codex", ".bashrc"} {
+		_, err = os.Lstat(filepath.Join(dir, name))
+		require.True(t, os.IsNotExist(err), "%s is not linked", name)
+		_, err = os.Stat(filepath.Join(claude, name))
+		require.NoError(t, err, "account 1's own %s stays", name)
+	}
 	_, err = os.Lstat(filepath.Join(dir, "settings.json"))
 	require.NoError(t, err, "everything else is still linked")
 }

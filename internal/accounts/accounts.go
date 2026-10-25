@@ -33,10 +33,19 @@ var own = map[catwalk.Type][]string{
 // ownPrefixes are per-account lock files.
 var ownPrefixes = []string{".oauth_refresh", ".lock"}
 
-// neverLinked are names never linked into an account: a tool folder kept in
-// Git must not lend its .git, since Claude's read-only sandbox refuses to
-// start when a protected .git path is a symlink.
-var neverLinked = []string{".git"}
+// neverLinked are names never linked into an account. Claude's sandbox
+// guards these in every folder it may write (Claude Code 2.1.310's list),
+// and its read-only mode refuses to start when one is a symlink, so a
+// read-only sub-agent on that account could not run at all.
+var neverLinked = []string{
+	".git", ".gitconfig", ".gitmodules", ".claude", ".agents", ".codex", ".cursor", ".vscode", ".idea",
+	".bashrc", ".bash_profile", ".bash_login", ".bash_aliases", ".bash_logout", ".profile",
+	".zshrc", ".zprofile", ".zshenv", ".zlogin", ".zlogout", ".envrc", ".ripgreprc", ".mcp.json",
+	".npmrc", ".yarnrc", ".yarnrc.yml", ".pnp.cjs", ".pnp.loader.mjs", ".pnpmfile.cjs",
+	"bunfig.toml", ".bunfig.toml", ".bazelrc", ".bazelversion", ".bazeliskrc",
+	".pre-commit-config.yaml", "lefthook.yml", ".lefthook.yml", "lefthook.yaml", ".lefthook.yaml",
+	"gradle-wrapper.properties", "maven-wrapper.properties", ".devcontainer.json", "pyrightconfig.json",
+}
 
 // home is the tool's own folder, account 1's.
 func home(kind catwalk.Type) (string, error) {

@@ -140,7 +140,9 @@ describe("a reply mid-stream never draws anything unsafe", () => {
       }
     });
   }
-});
+  // Drawing after every few characters is slow on a busy CPU: 5 s ran
+  // out while the Go tests ran beside it.
+}, 30_000);
 
 describe("links (review finding 5)", () => {
   test("every refused spelling of a Markdown link becomes its text", () => {

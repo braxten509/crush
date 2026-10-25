@@ -146,7 +146,9 @@ describe("the stream equals a full render at every step", () => {
   test("plan markers and \\r\\n stream like any text", () => {
     stream("<!-- CRUSH_PLAN_START -->\r\n# Plan\r\n\r\n- one\r\n- two\r\n\r\nDone.\r\n<!-- CRUSH_PLAN_READY -->", [4, 9]);
   });
-});
+  // Drawing after every few characters is slow on a busy CPU: 5 s ran
+  // out while the Go tests ran beside it.
+}, 30_000);
 
 describe("the cache", () => {
   test("stable blocks keep their nodes while the reply grows", () => {

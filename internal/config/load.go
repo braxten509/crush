@@ -33,6 +33,7 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 			store.loadedPaths = files.loaded
 		},
 		onCatalog: store.refreshShadowCatalogs,
+		envOwner:  store,
 	})
 	store.loading.Store(false)
 
@@ -156,6 +157,7 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 		modelOverrides:  s.overrides.Models,
 		refreshHyper:    s.refreshHyperToken,
 		reload:          true,
+		envOwner:        s,
 	})
 	if res != nil {
 		s.applyPendingWrites(res.pending)

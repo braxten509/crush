@@ -840,3 +840,14 @@ func TestSwitchPlanToYolo(t *testing.T) {
 		require.Equal(t, config.AgentCoder, ws.setMainCalledWith)
 	}
 }
+
+// A file list loaded for one chat is dropped when another chat is open by
+// the time it arrives, so it neither shows there nor starts its LSPs.
+func TestStaleSessionFilesAreDropped(t *testing.T) {
+	t.Parallel()
+	u := newTestUI()
+	u.session = &session.Session{ID: "b"}
+	_, ok := u.handleSessionMsg(sessionFilesUpdatesMsg{sessionID: "a", sessionFiles: []SessionFile{{Additions: 1}}})
+	require.True(t, ok)
+	require.Empty(t, u.sessionFiles)
+}

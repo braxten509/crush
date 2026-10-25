@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -159,6 +160,71 @@ func TestDeleteSucceedsWhenHistoryCleanupFails(t *testing.T) {
 	require.True(t, called)
 	_, err = sessions.Get(t.Context(), chat.ID)
 	require.Error(t, err)
+}
+
+// testSessions is a session service on a fresh database, with the database
+// for raw edits.
+func testSessions(t *testing.T) (Service, *sql.DB) {
+	t.Helper()
+	directory := t.TempDir()
+	conn, err := db.Connect(t.Context(), directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Release(directory) })
+	return NewService(db.New(conn), conn), conn
+}
+
+// `crush run --continue` resumes the last top-level chat, never a
+// sub-agent's or title chat under it.
+func TestGetLastSkipsChildChats(t *testing.T) {
+	sessions, conn := testSessions(t)
+	parent, err := sessions.Create(t.Context(), "parent")
+	require.NoError(t, err)
+	child, err := sessions.CreateTaskSession(t.Context(), "call-1", parent.ID, "helper")
+	require.NoError(t, err)
+	// The trigger stamps updated_at with now, so drop it to set the times.
+	_, err = conn.ExecContext(t.Context(), `DROP TRIGGER update_sessions_updated_at`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(t.Context(), `UPDATE sessions SET updated_at = CASE id WHEN ? THEN 1000 ELSE 2000 END`, parent.ID)
+	require.NoError(t, err)
+
+	last, err := sessions.GetLast(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, parent.ID, last.ID, "not the child %s", child.ID)
+}
+
+// Deleting a chat deletes its sub-agent and title chats too, all the way
+// down (owner, 2026-10-24).
+func TestDeleteRemovesChildChats(t *testing.T) {
+	sessions, _ := testSessions(t)
+	parent, err := sessions.Create(t.Context(), "parent")
+	require.NoError(t, err)
+	child, err := sessions.CreateTaskSession(t.Context(), "call-1", parent.ID, "helper")
+	require.NoError(t, err)
+	title, err := sessions.CreateTitleSession(t.Context(), parent.ID)
+	require.NoError(t, err)
+	grandchild, err := sessions.CreateTaskSession(t.Context(), "call-2", child.ID, "helper's helper")
+	require.NoError(t, err)
+
+	require.NoError(t, sessions.Delete(t.Context(), parent.ID))
+	for _, id := range []string{parent.ID, child.ID, title.ID, grandchild.ID} {
+		_, err = sessions.Get(t.Context(), id)
+		require.Error(t, err, id)
+	}
+}
+
+// Renaming a chat keeps its place in the list: only its title changes.
+func TestRenameKeepsTheChatsPlace(t *testing.T) {
+	sessions, conn := testSessions(t)
+	chat, err := sessions.Create(t.Context(), "old name")
+	require.NoError(t, err)
+	_, err = conn.ExecContext(t.Context(), `UPDATE sessions SET updated_at = 1000 WHERE id = ?`, chat.ID)
+	require.NoError(t, err)
+
+	require.NoError(t, sessions.Rename(t.Context(), chat.ID, "new name"))
+	got, err := sessions.Get(t.Context(), chat.ID)
+	require.NoError(t, err)
+	require.Equal(t, "new name", got.Title)
+	require.EqualValues(t, 1000, got.UpdatedAt)
 }
 
 func TestKeptSkillsPersistInOrder(t *testing.T) {

@@ -213,6 +213,7 @@ func (m *UI) handleFileEvent(file history.File) tea.Cmd {
 		}
 
 		return sessionFilesUpdatesMsg{
+			sessionID:    sessionID,
 			sessionFiles: sessionFiles,
 		}
 	}

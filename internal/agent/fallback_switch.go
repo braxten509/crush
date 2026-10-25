@@ -420,7 +420,11 @@ func (c *coordinator) waitForRoom(ctx context.Context, sessionID string, order c
 	to := fallback.BlockAccount(b, c.providerKind)
 	// Still no room at the refill time: the order decides again, quietly;
 	// with nowhere else to go the chat tries it anyway.
-	if !c.fallbackReady(ctx, b, to) {
+	ready := c.fallbackReady(ctx, b, to)
+	if c.tasks != nil && c.tasks.isClosing() {
+		return // the check took a while; nothing moves while shutting down
+	}
+	if !ready {
 		skip := map[fallback.Account]bool{to: true}
 		if next := c.redecide(order, at, true, nil, skip); next.Kind != fallback.Stay && c.applyFallback(ctx, sessionID, order, at, next, true, nil, skip) {
 			return

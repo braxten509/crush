@@ -133,6 +133,8 @@ type (
 
 	// sessionFilesUpdatesMsg is sent when the files for this session have been updated
 	sessionFilesUpdatesMsg struct {
+		// sessionID is the chat the files were loaded for.
+		sessionID    string
 		sessionFiles []SessionFile
 	}
 

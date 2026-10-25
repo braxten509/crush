@@ -15,21 +15,64 @@ import (
 	powernapConfig "github.com/charmbracelet/x/powernap/pkg/config"
 )
 
-// applyEnv sets top-level env vars from the config. Keys are sorted for
+// configEnv remembers the process env vars configs set, so a reload can
+// undo the ones a config no longer sets. Several workspaces in one engine
+// share the process env, so a key goes back to its value from before
+// Crush set it only once no config (owner) sets it any more.
+var configEnv struct {
+	mu     sync.Mutex
+	before map[string]*string      // nil: the key was unset
+	owners map[string]map[any]bool // key -> the stores whose config sets it
+}
+
+// applyEnv sets top-level env vars from the config, and undoes the ones
+// owner's config set before and no longer does. Keys are sorted for
 // deterministic ordering so that vars referencing other vars via the
 // value resolver produce consistent results.
-func (c *Config) applyEnv(resolver VariableResolver) {
+func (c *Config) applyEnv(resolver VariableResolver, owner any) {
 	keys := make([]string, 0, len(c.Env))
 	for k := range c.Env {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
+
+	configEnv.mu.Lock()
+	defer configEnv.mu.Unlock()
+	if configEnv.owners == nil {
+		configEnv.before = map[string]*string{}
+		configEnv.owners = map[string]map[any]bool{}
+	}
+	for k, set := range configEnv.owners {
+		if !set[owner] || slices.Contains(keys, k) {
+			continue
+		}
+		delete(set, owner)
+		if len(set) > 0 {
+			continue
+		}
+		if old := configEnv.before[k]; old != nil {
+			os.Setenv(k, *old)
+		} else {
+			os.Unsetenv(k)
+		}
+		delete(configEnv.before, k)
+		delete(configEnv.owners, k)
+	}
 	for _, k := range keys {
 		resolved, err := resolver.ResolveValue(c.Env[k])
 		if err != nil {
 			slog.Warn("Skipping env var due to resolution failure.", "key", k, "value", c.Env[k], "error", err)
 			continue
 		}
+		if configEnv.owners[k] == nil {
+			var old *string
+			if v, ok := os.LookupEnv(k); ok {
+				old = &v
+			}
+			configEnv.before[k] = old
+			configEnv.owners[k] = map[any]bool{}
+		}
+		configEnv.owners[k][owner] = true
 		os.Setenv(k, resolved)
 	}
 }

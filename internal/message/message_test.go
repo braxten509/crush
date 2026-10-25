@@ -544,6 +544,40 @@ func TestFlush_WaitsForInFlightWrite(t *testing.T) {
 	require.Equal(t, "payload", got.Content().Text)
 }
 
+// TestUpdate_DeltaDuringTimerFlushIsWritten asserts a delta that arrives
+// while a timer-fired write is in flight is written later on its own, with
+// no further update or Flush to pick it up.
+func TestUpdate_DeltaDuringTimerFlushIsWritten(t *testing.T) {
+	t.Parallel()
+
+	conn, err := db.Connect(t.Context(), t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	q := db.New(conn)
+	sess, err := session.NewService(q, conn).Create(t.Context(), "test")
+	require.NoError(t, err)
+	slow := &slowUpdateQuerier{Querier: q, release: make(chan struct{}), started: make(chan struct{})}
+	svc := NewService(slow, WithDebounce(10*time.Millisecond))
+
+	msg, err := svc.Create(t.Context(), sess.ID, CreateMessageParams{Role: Assistant})
+	require.NoError(t, err)
+	msg.AppendContent("a")
+	require.NoError(t, svc.Update(t.Context(), msg))
+	select {
+	case <-slow.started:
+	case <-time.After(time.Second):
+		t.Fatal("timer-fired flush never reached UpdateMessage")
+	}
+	msg.AppendContent("b")
+	require.NoError(t, svc.Update(t.Context(), msg))
+	close(slow.release)
+
+	require.Eventually(t, func() bool {
+		got, err := q.GetMessage(t.Context(), msg.ID)
+		return err == nil && strings.Contains(got.Parts, "ab")
+	}, 500*time.Millisecond, 5*time.Millisecond)
+}
+
 // TestFlushAll_WaitsForInFlightWrite asserts FlushAll picks up IDs
 // whose buffer is currently flushing (dirty=false) so shutdown and
 // session-switch callers don't return while an SQL write is mid-flight.

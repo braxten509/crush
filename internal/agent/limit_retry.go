@@ -250,6 +250,17 @@ func (r *limitRetries) drop(sessionID string) {
 	}
 }
 
+// stopAll cancels every planned retry, as the coordinator shuts down. Their
+// saved entries stay, so the next engine continues them.
+func (r *limitRetries) stopAll() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for sessionID, stop := range r.pending {
+		close(stop)
+		delete(r.pending, sessionID)
+	}
+}
+
 // has reports whether the chat already has a planned retry in this Crush.
 func (r *limitRetries) has(sessionID string) bool {
 	r.mu.Lock()

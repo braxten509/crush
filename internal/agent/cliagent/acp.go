@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"slices"
@@ -291,6 +293,13 @@ func (r *acpRun) steerHTTP(text string) bool {
 	}
 	ctx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
 	defer cancel()
+	// Once the whole request is out, the server may have taken it even if
+	// its reply is lost, so it is never sent again. A reply that refuses it
+	// (not 200) still means not sent.
+	var written atomic.Bool
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(info httptrace.WroteRequestInfo) {
+		written.Store(info.Err == nil)
+	}})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.steerURL+"/api/session/"+url.PathEscape(*session)+"/prompt", bytes.NewReader(body))
 	if err != nil {
 		return false
@@ -299,11 +308,15 @@ func (r *acpRun) steerHTTP(text string) bool {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return false
+		if !written.Load() {
+			return false
+		}
+		slog.Warn("OpenCode's reply to a queued message was lost; counting it as sent", "error", err)
+	} else {
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return false
+		}
 	}
 	r.steerMu.Lock()
 	r.prompts++

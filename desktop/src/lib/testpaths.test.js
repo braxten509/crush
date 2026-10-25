@@ -12,6 +12,18 @@ describe("test paths", () => {
     expect(isTestPath("src/contest/app.js")).toBe(true);
   });
 
+  // Build output is hidden the same way (owner, 2026-10-25): a rebuild's
+  // thousands of generated lines are not the agent's changes.
+  it("spots files inside build output folders", () => {
+    expect(isTestPath("desktop/dist/assets/chunk-UHW7PFBP.js")).toBe(true);
+    expect(isTestPath("/home/me/app/node_modules/x/index.js")).toBe(true);
+    expect(isTestPath("src-tauri/target/release/app")).toBe(true);
+    expect(isTestPath("android/app/build/out.apk")).toBe(true);
+    expect(isTestPath("pkg/__pycache__/m.pyc")).toBe(true);
+    expect(isTestPath("src/distance.js")).toBe(false);
+    expect(isTestPath("src/build.js")).toBe(false);
+  });
+
   it("keeps ordinary paths", () => {
     expect(isTestPath("src/app.js")).toBe(false);
     expect(isTestPath("internal/agent/agent.go")).toBe(false);

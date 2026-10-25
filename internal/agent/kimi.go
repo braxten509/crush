@@ -15,6 +15,8 @@ const KimiProviderID = string(catwalk.InferenceKimiCoding)
 const (
 	kimiNoGitMessage = "Moonshot AI is not usable here: this folder is not a git project"
 	kimiHomeMessage  = "Moonshot AI is not usable here: this is your home folder"
+	// A folder inside a Git project that starts at the home folder.
+	kimiHomeProjectMessage = "Moonshot AI is not usable here: this folder's git project is your home folder"
 )
 
 // KimiUnusable returns why a provider cannot run in dir, or "" when it
@@ -40,7 +42,7 @@ func kimiUnusableAt(provider, dir, home string) string {
 		return kimiNoGitMessage
 	}
 	if home != "" && root == home {
-		return kimiHomeMessage
+		return kimiHomeProjectMessage
 	}
 	return ""
 }
@@ -60,13 +62,14 @@ func canonicalPath(path string) string {
 	return filepath.Clean(abs)
 }
 
-// gitRoot is the nearest folder at or above dir that holds a .git entry
-// (a directory, or the file a worktree uses), or "" when there is none.
+// gitRoot is the nearest folder at or above dir that holds a real .git
+// entry (a directory with a HEAD, or the file a worktree uses), or ""
+// when there is none. An empty .git folder is not a project.
 func gitRoot(dir string) string {
 	if dir == "" || dir == string(filepath.Separator) {
 		return ""
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+	if isGitDir(filepath.Join(dir, ".git")) {
 		return dir
 	}
 	parent := filepath.Dir(dir)
@@ -74,4 +77,16 @@ func gitRoot(dir string) string {
 		return ""
 	}
 	return gitRoot(parent)
+}
+
+func isGitDir(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if !info.IsDir() {
+		return true
+	}
+	_, err = os.Stat(filepath.Join(path, "HEAD"))
+	return err == nil
 }

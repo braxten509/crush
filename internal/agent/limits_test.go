@@ -52,6 +52,7 @@ func TestKimiLimitsRefreshDuringTurn(t *testing.T) {
 	env := testEnv(t)
 	// Kimi only runs inside a git project (kimi.go).
 	require.NoError(t, os.Mkdir(filepath.Join(env.workingDir, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(env.workingDir, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 	model := &kimiLimitModel{
 		finishStreamModel: finishStreamModel{text: "done"},
 		entered:           make(chan struct{}),

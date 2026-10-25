@@ -11,11 +11,17 @@ import (
 func TestKimiUnusable(t *testing.T) {
 	t.Parallel()
 
+	// gitInit makes dir look like a real Git project.
+	gitInit := func(t *testing.T, dir string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	}
 	project := func(t *testing.T, home string) string {
 		t.Helper()
 		dir := filepath.Join(home, "dev", "project")
 		require.NoError(t, os.MkdirAll(dir, 0o755))
-		require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+		gitInit(t, dir)
 		return dir
 	}
 
@@ -61,7 +67,7 @@ func TestKimiUnusable(t *testing.T) {
 			provider: KimiProviderID,
 			setup: func(t *testing.T) (string, string) {
 				home := t.TempDir()
-				require.NoError(t, os.Mkdir(filepath.Join(home, ".git"), 0o755))
+				gitInit(t, home)
 				return home, home
 			},
 			want: kimiHomeMessage,
@@ -71,12 +77,38 @@ func TestKimiUnusable(t *testing.T) {
 			provider: KimiProviderID,
 			setup: func(t *testing.T) (string, string) {
 				home := t.TempDir()
-				require.NoError(t, os.Mkdir(filepath.Join(home, ".git"), 0o755))
+				gitInit(t, home)
 				dir := filepath.Join(home, "dev", "project")
 				require.NoError(t, os.MkdirAll(dir, 0o755))
 				return dir, home
 			},
-			want: kimiHomeMessage,
+			want: kimiHomeProjectMessage,
+		},
+		{
+			// An empty ~/.git is not a project, so ~/dev is just a
+			// plain folder, not the home folder.
+			name:     "folder under a home with an empty .git",
+			provider: KimiProviderID,
+			setup: func(t *testing.T) (string, string) {
+				home := t.TempDir()
+				require.NoError(t, os.Mkdir(filepath.Join(home, ".git"), 0o755))
+				dir := filepath.Join(home, "dev")
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				return dir, home
+			},
+			want: kimiNoGitMessage,
+		},
+		{
+			name:     "worktree with a .git file",
+			provider: KimiProviderID,
+			setup: func(t *testing.T) (string, string) {
+				home := t.TempDir()
+				dir := filepath.Join(home, "wt")
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: /elsewhere\n"), 0o644))
+				return dir, home
+			},
+			want: "",
 		},
 		{
 			name:     "other provider in a plain folder",

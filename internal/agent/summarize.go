@@ -159,15 +159,16 @@ func (a *sessionAgent) failSummary(ctx context.Context, summaryMessage *message.
 // summary message, resetting the context token counts.
 func (a *sessionAgent) saveSummaryUsage(ctx context.Context, largeModel Model, currentSession session.Session, resp *fantasy.AgentResult, summaryMessage message.Message) error {
 	openrouterCost := a.stepsOpenrouterCost(resp.Steps)
-	a.updateSessionUsage(largeModel, &currentSession, resp.TotalUsage, openrouterCost, false)
-
 	// Just in case, get just the last usage info.
 	usage := resp.Response.Usage
-	currentSession.SummaryMessageID = summaryMessage.ID
-	currentSession.CompletionTokens = summaryCompletionTokens(usage, summaryMessage)
-	currentSession.PromptTokens = 0
-	currentSession.EstimatedUsage = usageIsZero(usage)
-	_, err := a.sessions.Save(ctx, currentSession)
+	_, err := a.sessions.Edit(ctx, currentSession.ID, func(current *session.Session) bool {
+		a.updateSessionUsage(largeModel, current, resp.TotalUsage, openrouterCost, false)
+		current.SummaryMessageID = summaryMessage.ID
+		current.CompletionTokens = summaryCompletionTokens(usage, summaryMessage)
+		current.PromptTokens = 0
+		current.EstimatedUsage = usageIsZero(usage)
+		return true
+	})
 	return err
 }
 

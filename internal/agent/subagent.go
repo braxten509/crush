@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/providers"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 // subAgentParams holds the parameters for running a sub-agent.
@@ -189,14 +190,15 @@ func (c *coordinator) updateParentSessionCost(ctx context.Context, childSessionI
 		return fmt.Errorf("get child session: %w", err)
 	}
 
-	parentSession, err := c.sessions.Get(ctx, parentSessionID)
-	if err != nil {
-		return fmt.Errorf("get parent session: %w", err)
-	}
-
-	parentSession.Cost += childSession.Cost
-
-	if _, err := c.sessions.Save(ctx, parentSession); err != nil {
+	read := false
+	if _, err := c.sessions.Edit(ctx, parentSessionID, func(parent *session.Session) bool {
+		read = true
+		parent.Cost += childSession.Cost
+		return true
+	}); err != nil {
+		if !read {
+			return fmt.Errorf("get parent session: %w", err)
+		}
 		return fmt.Errorf("save parent session: %w", err)
 	}
 

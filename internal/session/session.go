@@ -108,6 +108,11 @@ type Service interface {
 	GetLast(ctx context.Context) (Session, error)
 	List(ctx context.Context) ([]Session, error)
 	Save(ctx context.Context, session Session) (Session, error)
+	// Edit changes a chat as it is now: it reads the chat, lets edit change
+	// it and saves it when edit reports a change, all under the lock the
+	// service's other writes take, so no title or usage update made at the
+	// same time is lost. edit must not call the service.
+	Edit(ctx context.Context, id string, edit func(*Session) bool) (Session, error)
 	// SetModel saves the model this chat runs on; nil clears it, so the chat
 	// follows the workspace again.
 	SetModel(ctx context.Context, sessionID string, model ModelChoice) (Session, error)
@@ -147,6 +152,11 @@ type service struct {
 	// SQLite and incorrectly clear the UI "~" marker.
 	estimatedUsageMu sync.RWMutex
 	estimatedUsage   map[string]bool
+
+	// writeMu serializes the writes of a chat's row (Save, Edit, Rename,
+	// UpdateTitleAndUsage), so Edit's read and write see no other write
+	// in between.
+	writeMu sync.Mutex
 
 	newChatModel atomic.Pointer[func(context.Context) ModelChoice]
 }
@@ -369,6 +379,13 @@ func (s *service) GetLast(ctx context.Context) (Session, error) {
 }
 
 func (s *service) Save(ctx context.Context, session Session) (Session, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.save(ctx, session)
+}
+
+// save writes the whole chat row. Caller must hold writeMu.
+func (s *service) save(ctx context.Context, session Session) (Session, error) {
 	todosJSON, err := marshalTodos(session.Todos)
 	if err != nil {
 		return Session{}, err
@@ -415,6 +432,19 @@ func (s *service) Save(ctx context.Context, session Session) (Session, error) {
 	return session, nil
 }
 
+func (s *service) Edit(ctx context.Context, id string, edit func(*Session) bool) (Session, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	current, err := s.Get(ctx, id)
+	if err != nil {
+		return Session{}, err
+	}
+	if !edit(&current) {
+		return current, nil
+	}
+	return s.save(ctx, current)
+}
+
 func (s *service) SetChannel(ctx context.Context, sessionID, channel string) (Session, error) {
 	dbSession, err := s.q.SetSessionChannel(ctx, db.SetSessionChannelParams{
 		ID: sessionID,
@@ -435,13 +465,16 @@ func (s *service) SetChannel(ctx context.Context, sessionID, channel string) (Se
 // UpdateTitleAndUsage updates only the title and usage fields atomically.
 // This is safer than fetching, modifying, and saving the entire session.
 func (s *service) UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens int64, cost float64) error {
-	if err := s.q.UpdateSessionTitleAndUsage(ctx, db.UpdateSessionTitleAndUsageParams{
+	s.writeMu.Lock()
+	err := s.q.UpdateSessionTitleAndUsage(ctx, db.UpdateSessionTitleAndUsageParams{
 		ID:               sessionID,
 		Title:            title,
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 		Cost:             cost,
-	}); err != nil {
+	})
+	s.writeMu.Unlock()
+	if err != nil {
 		return err
 	}
 	s.publishSessionUpdate(ctx, sessionID)
@@ -451,10 +484,13 @@ func (s *service) UpdateTitleAndUsage(ctx context.Context, sessionID, title stri
 // Rename updates only the title of a session without touching updated_at or
 // usage fields.
 func (s *service) Rename(ctx context.Context, id string, title string) error {
-	if err := s.q.RenameSession(ctx, db.RenameSessionParams{
+	s.writeMu.Lock()
+	err := s.q.RenameSession(ctx, db.RenameSessionParams{
 		ID:    id,
 		Title: title,
-	}); err != nil {
+	})
+	s.writeMu.Unlock()
+	if err != nil {
 		return err
 	}
 	s.publishSessionUpdate(ctx, id)

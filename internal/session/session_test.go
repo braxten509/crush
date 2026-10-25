@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/stretchr/testify/require"
@@ -225,6 +226,43 @@ func TestRenameKeepsTheChatsPlace(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "new name", got.Title)
 	require.EqualValues(t, 1000, got.UpdatedAt)
+}
+
+// A title and usage update that comes while another change is being made
+// to the chat is kept: Edit changes the chat as it is when it writes, not
+// as it was when the change started.
+func TestEditKeepsAConcurrentUsageUpdate(t *testing.T) {
+	sessions, _ := testSessions(t)
+	chat, err := sessions.Create(t.Context(), "New Session")
+	require.NoError(t, err)
+	inEdit, release := make(chan struct{}), make(chan struct{})
+	edited := make(chan error, 1)
+	go func() {
+		_, err := sessions.Edit(t.Context(), chat.ID, func(s *Session) bool {
+			close(inEdit)
+			<-release
+			s.Todos = []Todo{{Content: "a", Status: TodoStatusPending}}
+			return true
+		})
+		edited <- err
+	}()
+	<-inEdit
+	usage := make(chan error, 1)
+	go func() { usage <- sessions.UpdateTitleAndUsage(t.Context(), chat.ID, "Named", 10, 5, 0.25) }()
+	select {
+	case err := <-usage: // not held back: it lands in the middle of the edit
+		usage <- err
+	case <-time.After(200 * time.Millisecond): // waits for the edit
+	}
+	close(release)
+	require.NoError(t, <-edited)
+	require.NoError(t, <-usage)
+
+	got, err := sessions.Get(t.Context(), chat.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Named", got.Title)
+	require.EqualValues(t, 10, got.PromptTokens)
+	require.Len(t, got.Todos, 1)
 }
 
 func TestKeptSkillsPersistInOrder(t *testing.T) {

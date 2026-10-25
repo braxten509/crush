@@ -43,20 +43,22 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for managing todos")
 			}
 
-			currentSession, err := sessions.Get(ctx, sessionID)
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to get session: %w", err)
-			}
-
-			todos, metadata, err := UpdateTodos(currentSession.Todos, params.Todos)
-			if err != nil {
-				return fantasy.ToolResponse{}, err
-			}
-
-			currentSession.Todos = todos
-			_, err = sessions.Save(ctx, currentSession)
+			var todos []session.Todo
+			var metadata TodosResponseMetadata
+			var invalid error
+			_, err := sessions.Edit(ctx, sessionID, func(current *session.Session) bool {
+				todos, metadata, invalid = UpdateTodos(current.Todos, params.Todos)
+				if invalid != nil {
+					return false
+				}
+				current.Todos = todos
+				return true
+			})
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("failed to save todos: %w", err)
+			}
+			if invalid != nil {
+				return fantasy.ToolResponse{}, invalid
 			}
 
 			response := "Todo list updated successfully.\n\n"

@@ -424,10 +424,6 @@ func (s *cliSteps) handleCompacting(e cliagent.Event) error {
 
 // handleContextBudget records the context budget the CLI reports.
 func (s *cliSteps) handleContextBudget(e cliagent.Event) error {
-	current, err := s.a.sessions.Get(s.ctx, s.sessionID)
-	if err != nil {
-		return err
-	}
 	budget := session.ContextBudget{
 		Provider: string(s.m.Kind), Model: s.m.ID,
 		Tokens: e.ContextLimit, Estimated: e.ContextEstimated,
@@ -435,17 +431,19 @@ func (s *cliSteps) handleContextBudget(e cliagent.Event) error {
 	if e.ContextUsed > 0 {
 		s.contextUsed = e.ContextUsed
 	}
-	if current.ContextBudget == budget && (e.ContextUsed <= 0 || current.PromptTokens == e.ContextUsed) {
-		return nil
-	}
-	current.ContextBudget = budget
-	if e.ContextUsed > 0 {
-		// The CLI's own count of the context in use; its turn total counts
-		// every step and is far too large for the meter.
-		current.PromptTokens = e.ContextUsed
-		current.CompletionTokens = 0
-	}
-	_, err = s.a.sessions.Save(s.ctx, current)
+	_, err := s.a.sessions.Edit(s.ctx, s.sessionID, func(current *session.Session) bool {
+		if current.ContextBudget == budget && (e.ContextUsed <= 0 || current.PromptTokens == e.ContextUsed) {
+			return false
+		}
+		current.ContextBudget = budget
+		if e.ContextUsed > 0 {
+			// The CLI's own count of the context in use; its turn total counts
+			// every step and is far too large for the meter.
+			current.PromptTokens = e.ContextUsed
+			current.CompletionTokens = 0
+		}
+		return true
+	})
 	return err
 }
 
@@ -709,20 +707,22 @@ func (s *cliSteps) saveTodos(input string) (string, error) {
 	if json.Unmarshal([]byte(input), &params) != nil {
 		return "", nil
 	}
-	current, err := s.a.sessions.Get(s.ctx, s.sessionID)
-	if err != nil {
+	var meta tools.TodosResponseMetadata
+	var unreadable error
+	if _, err := s.a.sessions.Edit(s.ctx, s.sessionID, func(current *session.Session) bool {
+		var todos []session.Todo
+		todos, meta, unreadable = tools.UpdateTodos(current.Todos, params.Todos)
+		if unreadable != nil || slices.Equal(current.Todos, todos) {
+			return false
+		}
+		current.Todos = todos
+		return true
+	}); err != nil {
 		return "", err
 	}
-	todos, meta, err := tools.UpdateTodos(current.Todos, params.Todos)
-	if err != nil {
-		slog.Debug("Ignoring a CLI to-do list Crush can't read", "error", err)
+	if unreadable != nil {
+		slog.Debug("Ignoring a CLI to-do list Crush can't read", "error", unreadable)
 		return "", nil
-	}
-	if !slices.Equal(current.Todos, todos) {
-		current.Todos = todos
-		if _, err := s.a.sessions.Save(s.ctx, current); err != nil {
-			return "", err
-		}
 	}
 	data, _ := json.Marshal(meta)
 	return string(data), nil

@@ -9,6 +9,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 // ErrTreeRevisionChanged refuses a tree action made against a chat whose
@@ -204,12 +205,10 @@ func (c *coordinator) NavigateTree(ctx context.Context, id, target string, summa
 		}
 		// Account for this opt-in model request without changing which history
 		// is visible. The branch switch itself remains a separate atomic write.
-		current, err := a.sessions.Get(genCtx, id)
-		if err != nil {
-			return err
-		}
-		a.updateSessionUsage(model, &current, result.TotalUsage, a.openrouterCost(result.Response.ProviderMetadata), false)
-		if _, err = a.sessions.Save(genCtx, current); err != nil {
+		if _, err = a.sessions.Edit(genCtx, id, func(current *session.Session) bool {
+			a.updateSessionUsage(model, current, result.TotalUsage, a.openrouterCost(result.Response.ProviderMetadata), false)
+			return true
+		}); err != nil {
 			return err
 		}
 		oldLeaf := history[len(history)-1].ID

@@ -83,7 +83,11 @@ type savedPrompt struct {
 	SessionID   string               `json:"session_id"`
 	Prompt      string               `json:"prompt"`
 	Attachments []message.Attachment `json:"attachments,omitempty"`
-	Owner       int                  `json:"owner"`
+	// Owner is the process ID of the Crush whose agent queue holds the
+	// prompt; 0 once a shutdown released it for the next resume.
+	Owner int `json:"owner"`
+	// Saved is when the entry was last written; an old one is not run.
+	Saved time.Time `json:"saved,omitzero"`
 }
 
 // pendingWork is what a project's data directory keeps across a restart.
@@ -135,6 +139,9 @@ func (c *coordinator) planWait(w savedWait, send func()) {
 		slog.Warn("Failed to save a planned wait", "session_id", w.SessionID, "error", err)
 	}
 	c.limitRetries.plan(w.SessionID, w.At, func() {
+		if c.tasks != nil && c.tasks.isClosing() {
+			return // stays saved: the next engine continues it
+		}
 		c.clearWait(w.SessionID)
 		send()
 	})
@@ -338,20 +345,24 @@ func queuedBySession(prompts []savedPrompt) map[string][]savedPrompt {
 	return grouped
 }
 
-// claimPrompts takes the saved prompts whose Crush is gone and drops the
-// ones whose chat is gone. They are dropped from the file as they are
-// taken, so only one Crush runs them. Prompts of a Crush that still runs,
-// this one included, stay: its agent queue already holds them, so running
-// them here would repeat them.
+// claimPrompts takes the saved prompts whose Crush is gone or that a
+// shutdown released (owner 0), and drops the ones too old or whose chat is
+// gone. They are dropped from the file as they are taken, so only one Crush
+// runs them. Prompts of a Crush that still runs, this one included, stay:
+// its agent queue already holds them, so running them here would repeat
+// them.
 func (c *coordinator) claimPrompts() ([]savedPrompt, error) {
 	self := os.Getpid()
+	now := c.clock()
 	var claimed []savedPrompt
 	err := c.updatePending(func(p *pendingWork) bool {
 		kept := p.Queue[:0]
 		for _, q := range p.Queue {
 			switch {
-			case q.Owner == self || taskProcessAlive(q.Owner):
+			case q.Owner != 0 && (q.Owner == self || taskProcessAlive(q.Owner)):
 				kept = append(kept, q)
+			case !q.Saved.IsZero() && now.Sub(q.Saved) > resumeWindow:
+				slog.Info("Not running a prompt queued long ago", "session_id", q.SessionID, "saved", q.Saved)
 			case !c.sessionExists(q.SessionID):
 				slog.Info("Dropping a queued prompt whose chat is gone", "session_id", q.SessionID)
 			default:
@@ -380,7 +391,7 @@ func (h *taskHub) watchQueues() {
 		case <-h.queueStop:
 			return
 		case <-ticker.C:
-			h.writeQueues()
+			h.writeQueues(false)
 		}
 	}
 }
@@ -413,12 +424,18 @@ func (c *coordinator) queuedPrompts() map[string][]message.QueuedPrompt {
 
 // writeQueues saves every chat's queued prompts, replacing this Crush's own
 // entries and leaving other Crush processes' alone. Nothing is written when
-// the queue is as it was.
-func (h *taskHub) writeQueues() {
-	if h.c.savedDataPath(savedPendingFile) == "" {
+// the queue is as it was, nor once the hub closes: release is the shutdown's
+// last write, which saves the queue with no owner so the next resume, in
+// this process or the next Crush, runs it.
+func (h *taskHub) writeQueues(release bool) {
+	if h.c.savedDataPath(savedPendingFile) == "" || !release && h.isClosing() {
 		return
 	}
 	self := os.Getpid()
+	owner := self
+	if release {
+		owner = 0
+	}
 	entries := make([]savedPrompt, 0)
 	for sessionID, prompts := range h.c.queuedPrompts() {
 		for _, p := range prompts {
@@ -430,7 +447,7 @@ func (h *taskHub) writeQueues() {
 				slog.Warn("Not saving a queued prompt whose files are too big", "session_id", sessionID, "bytes", size)
 				continue
 			}
-			entries = append(entries, savedPrompt{SessionID: sessionID, Prompt: p.Prompt, Attachments: p.Attachments, Owner: self})
+			entries = append(entries, savedPrompt{SessionID: sessionID, Prompt: p.Prompt, Attachments: p.Attachments, Owner: owner})
 		}
 	}
 	slices.SortStableFunc(entries, func(a, b savedPrompt) int {
@@ -443,11 +460,15 @@ func (h *taskHub) writeQueues() {
 	h.queueMu.Lock()
 	unchanged := h.queueSaved != "" && h.queueSaved == string(encoded)
 	h.queueMu.Unlock()
-	if unchanged {
+	if unchanged && !release {
 		return
 	}
 	err = h.c.updatePending(func(p *pendingWork) bool {
 		kept := slices.DeleteFunc(p.Queue, func(s savedPrompt) bool { return s.Owner == self })
+		now := h.c.clock()
+		for i := range entries {
+			entries[i].Saved = now
+		}
 		p.Queue = append(kept, entries...)
 		return true
 	})

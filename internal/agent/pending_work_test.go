@@ -236,6 +236,51 @@ func TestPromptsOfThisCrushAreLeftAlone(t *testing.T) {
 	require.Len(t, readPendingFile(t, c).Queue, 1, "the entry stays saved for it")
 }
 
+// A workspace shutdown releases the chats' queued prompts instead of
+// dropping them: the agent's own cancel empties its queue, and the second
+// shutdown pass must not erase the saved copy. A prompt saved long ago is
+// not run.
+func TestQueuedPromptsSurviveAWorkspaceShutdown(t *testing.T) {
+	c, sessionID := queueTestCoordinator(t)
+	scheduler, ok := c.mainAgent.(*sessionAgent)
+	require.True(t, ok)
+	scheduler.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "waiting here"})
+	h := &taskHub{c: c, queueStop: make(chan struct{}), cancels: map[string]context.CancelFunc{}, tasks: map[string]*Task{}}
+
+	h.stopAll()
+	scheduler.ClearQueue(sessionID) // as the agent's CancelAll does
+	h.stopAll()                     // App.Shutdown cancels everything again
+	require.NoError(t, c.updatePending(func(p *pendingWork) bool {
+		p.Queue = append(p.Queue, savedPrompt{SessionID: sessionID, Prompt: "old", Owner: deadPID(t), Saved: time.Now().Add(-2 * resumeWindow)})
+		return true
+	}))
+
+	claimed, err := c.claimPrompts()
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	require.Equal(t, "waiting here", claimed[0].Prompt)
+	require.Empty(t, readPendingFile(t, c).Queue)
+}
+
+// A wait whose time comes during a shutdown stays saved for the next
+// engine, and is not sent by the one closing.
+func TestShutdownKeepsAPlannedWait(t *testing.T) {
+	c, sessionID := queueTestCoordinator(t)
+	clock := &fakeClock{now: time.Now()}
+	c.limitRetries.now, c.limitRetries.poll = clock.Now, time.Millisecond
+	c.tasks = &taskHub{c: c, queueStop: make(chan struct{}), cancels: map[string]context.CancelFunc{}, tasks: map[string]*Task{}}
+	at := clock.Now().Add(time.Minute)
+	var sent atomic.Int32
+	c.planWait(savedWait{SessionID: sessionID, At: at, Kind: waitKindLimit}, func() { sent.Add(1) })
+
+	c.CancelAll()
+	clock.Set(at)
+	time.Sleep(50 * time.Millisecond)
+
+	require.Zero(t, sent.Load())
+	require.Len(t, readPendingFile(t, c).Waits, 1, "the next engine continues it")
+}
+
 // queueTestCoordinator is an interactive coordinator whose agent answers
 // with a fixed reply, for the queued-prompt tests.
 func queueTestCoordinator(t *testing.T) (*coordinator, string) {
@@ -265,14 +310,14 @@ func TestQueuedPromptIsSavedWhileItWaits(t *testing.T) {
 	scheduler.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "waiting here"})
 	h := &taskHub{c: c}
 	h.queueStop = make(chan struct{})
-	h.writeQueues()
+	h.writeQueues(false)
 
 	saved := readPendingFile(t, c)
 	require.Len(t, saved.Queue, 1)
 	require.Equal(t, "waiting here", saved.Queue[0].Prompt)
 
 	scheduler.ClearQueue(sessionID)
-	h.writeQueues()
+	h.writeQueues(false)
 	require.Empty(t, readPendingFile(t, c).Queue)
 }
 

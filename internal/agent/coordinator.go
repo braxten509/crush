@@ -290,6 +290,8 @@ func (c *coordinator) CancelAll() {
 	if c.tasks != nil {
 		c.tasks.stopAll()
 	}
+	// Planned waits stay saved for the next engine instead of firing here.
+	c.limitRetries.stopAll()
 	c.currentAgent().CancelAll()
 }
 

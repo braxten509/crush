@@ -396,7 +396,7 @@ func (h *taskHub) stopAll() {
 	h.mu.Unlock()
 	// The last look at the queues, then the loop ends (a hub tests build by
 	// hand has none).
-	h.writeQueues()
+	h.writeQueues(true)
 	if h.queueStop != nil {
 		h.queueStopOnce.Do(func() { close(h.queueStop) })
 	}

@@ -1402,3 +1402,23 @@ func TestConfig_configureProviders_UnsetAzureEndpointSkipsProvider(t *testing.T)
 	_, exists := cfg.Providers.Get("azure")
 	require.False(t, exists)
 }
+
+// Kimi Coding is a paid plan, not billed per use: it comes out flat-rate so
+// no cost is counted and the apps don't list it as a per-use API.
+func TestConfig_configureProviders_KimiCodingIsFlatRate(t *testing.T) {
+	knownProviders := []catwalk.Provider{
+		{ID: catwalk.InferenceKimiCoding, APIKey: "$KIMI_API_KEY", APIEndpoint: "https://api.kimi.com/coding", Type: catwalk.TypeAnthropic, Models: []catwalk.Model{{ID: "k3.1-pro"}}},
+		{ID: "openai", APIKey: "$OPENAI_API_KEY", APIEndpoint: "https://api.openai.com/v1", Models: []catwalk.Model{{ID: "test-model"}}},
+	}
+	cfg := &Config{}
+	cfg.setDefaults("/tmp", "")
+	env := env.NewFromMap(map[string]string{"KIMI_API_KEY": "k", "OPENAI_API_KEY": "o"})
+	_, err := cfg.configureProviders(context.Background(), env, NewShellVariableResolver(env), knownProviders)
+	require.NoError(t, err)
+
+	kimi, ok := cfg.Providers.Get(string(catwalk.InferenceKimiCoding))
+	require.True(t, ok)
+	require.True(t, kimi.FlatRate)
+	openai, _ := cfg.Providers.Get("openai")
+	require.False(t, openai.FlatRate)
+}

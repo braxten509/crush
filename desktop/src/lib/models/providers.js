@@ -36,6 +36,9 @@ export function safeProvider(id, cfg) {
     // way too.
     cheapest_host: cfg?.cheapest_host !== false,
     quality_floor: cfg?.quality_floor !== false,
+    // A paid plan (Kimi Coding), not billed per use: Accounts lists it
+    // under Subscriptions, not API providers.
+    flat_rate: cfg?.flat_rate === true,
     has_api_key: cfg?.has_api_key === true,
     has_oauth: cfg?.has_oauth === true,
     oauth_expired: cfg?.has_oauth === true && oauthExpired(cfg.oauth_times),

@@ -249,10 +249,20 @@ func prepareKnownProvider(p catwalk.Provider, config ProviderConfig, headers map
 	prepared.Type = p.Type
 	prepared.Models = p.Models
 	prepared.ExtraHeaders = headers
+	if planProvider(p.ID) {
+		prepared.FlatRate = true
+	}
 	if prepared.ExtraParams == nil {
 		prepared.ExtraParams = make(map[string]string)
 	}
 	return prepared
+}
+
+// planProvider lists the catalog providers sold as a paid plan, not billed
+// per use: Kimi Coding (owner, 2026-10-24). They come out flat-rate, so no
+// cost is counted and the apps don't list them as per-use APIs.
+func planProvider(id catwalk.InferenceProvider) bool {
+	return id == catwalk.InferenceKimiCoding
 }
 
 // resolveProviderHeaders expands every header value in place, dropping

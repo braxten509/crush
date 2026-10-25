@@ -18,11 +18,14 @@ function row(id, name, provider, extra = {}) {
     hasKey: provider?.has_api_key === true,
     hasOAuth: provider?.has_oauth === true,
     oauthExpired: provider?.oauth_expired === true,
+    flatRate: provider?.flat_rate === true,
     ...extra,
   };
 }
 
-// → [{label, rows}] with "Agent CLIs" first, then "API providers".
+// → [{label, rows}] with "Agent CLIs" first, then "Subscriptions" (paid
+// plans like Kimi Coding, flat_rate in the config; owner, 2026-10-24), then
+// "API providers".
 export function accountGroups(cfg, catalog) {
   const providers = cfg?.providers ?? new Map();
   const list = Array.isArray(catalog) ? catalog : [];
@@ -52,8 +55,13 @@ export function accountGroups(cfg, catalog) {
     api.push(row(entry.id, provider?.name || entry.name || entry.id, provider));
   }
 
+  const plans = [];
+  const perUse = [];
+  for (const entry of [...custom, ...api]) (entry.flatRate ? plans : perUse).push(entry);
+
   return [
     { label: "Agent CLIs", rows: clis },
-    { label: "API providers", rows: [...custom, ...api] },
+    { label: "Subscriptions", rows: plans },
+    { label: "API providers", rows: perUse },
   ];
 }

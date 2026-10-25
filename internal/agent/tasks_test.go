@@ -85,6 +85,7 @@ func TestAPIProvidersAvailableForBackgroundTasks(t *testing.T) {
 		"abacus":      {ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{{ID: "claude-opus-5-5-thinking"}}},
 		"gemini":      {ID: "gemini", Type: catwalk.TypeGoogle, Models: []catwalk.Model{{ID: "gemini-3.8-flash", ReasoningLevels: []string{"low", "medium", "high"}}}},
 		"claude-code": {ID: "claude-code", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus"}}},
+		"kimi-coding": {ID: "kimi-coding", Type: catwalk.TypeAnthropic, FlatRate: true, Models: []catwalk.Model{{ID: "k3.1-pro"}}},
 		"off":         {ID: "off", Type: catwalk.TypeOpenAI, Disable: true, Models: []catwalk.Model{{ID: "gpt"}}},
 		"empty":       {ID: "empty", Type: catwalk.TypeOpenAI},
 	})})}}
@@ -92,11 +93,12 @@ func TestAPIProvidersAvailableForBackgroundTasks(t *testing.T) {
 	for _, p := range h.taskProviders() {
 		names = append(names, taskProviderName(p))
 	}
-	require.Equal(t, []string{"abacus", "claude", "gemini"}, names, "API providers join the agent CLIs; disabled and model-less ones don't")
+	require.Equal(t, []string{"abacus", "claude", "gemini", "kimi-coding"}, names, "API providers join the agent CLIs; disabled and model-less ones don't")
 
 	text := h.instructions()
 	require.Contains(t, text, "- gemini: gemini-3.8-flash (effort: low, medium, high) [API]\n")
 	require.Contains(t, text, "- claude: opus\n", "agent CLIs aren't marked as API services")
+	require.Contains(t, text, "- kimi-coding: k3.1-pro\n", "paid-plan providers aren't billed per use")
 	require.Contains(t, text, "never start a sub-agent on one unless the user asks for that provider")
 
 	gemini, _ := h.c.cfg.Config().Providers.Get("gemini")

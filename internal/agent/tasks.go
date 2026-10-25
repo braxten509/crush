@@ -643,7 +643,9 @@ func (h *taskHub) instructions() string {
 		if levels := p.Models[0].ReasoningLevels; len(levels) > 0 {
 			fmt.Fprintf(&clis, " (effort: %s)", strings.Join(levels, ", "))
 		}
-		if !config.IsCLIProviderType(p.Type) {
+		// A flat-rate provider (a paid plan, like Kimi Coding) is not
+		// billed per use, so it isn't marked as one.
+		if !config.IsCLIProviderType(p.Type) && !p.FlatRate {
 			clis.WriteString(" [API]")
 		}
 		clis.WriteString("\n")

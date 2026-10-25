@@ -13,6 +13,7 @@ const cfg = {
     provider("anthropic", { name: "Anthropic", type: "anthropic", has_api_key: true }),
     provider("my-proxy", { name: "My Proxy", type: "openai", has_api_key: true }),
     provider("openrouter", { name: "OpenRouter", type: "openrouter", disable: true }),
+    provider("kimi-coding", { name: "Moonshot AI", type: "anthropic", flat_rate: true, has_api_key: true }),
   ]),
 };
 
@@ -23,25 +24,29 @@ const catalog = [
   { id: "hyper", name: "Hyper", type: "hyper", models: [] },
   { id: "copilot", name: "GitHub Copilot", type: "copilot", models: [] },
   { id: "openai", name: "ChatGPT", type: "openai", models: [] },
+  { id: "kimi-coding", name: "Moonshot AI", type: "anthropic", models: [] },
 ];
 
 describe("accountGroups", () => {
-  it("lists the installed CLIs first, then every API provider", () => {
+  it("lists the installed CLIs first, then plan providers, then every API provider", () => {
     const groups = accountGroups(cfg, catalog);
-    expect(groups.map((group) => group.label)).toEqual(["Agent CLIs", "API providers"]);
+    expect(groups.map((group) => group.label)).toEqual(["Agent CLIs", "Subscriptions", "API providers"]);
+    // A paid-plan provider (flat_rate) is not billed per use, so it is not
+    // listed as an API provider.
+    expect(groups[1].rows.map((row) => row.id)).toEqual(["kimi-coding"]);
     // A CLI hidden in the config is left out.
     expect(groups[0].rows.map((row) => row.id)).toEqual(["claude-code", "codex-cli", "grok-cli"]);
     // Custom providers first, then the catalog's order; the three removed
     // platforms and a disabled provider are not listed.
-    expect(groups[1].rows.map((row) => row.id)).toEqual(["my-proxy", "anthropic", "deepinfra"]);
-    expect(groups[1].rows[0].name).toBe("My Proxy");
-    expect(groups[1].rows[2].configured).toBe(false);
-    expect(groups[1].rows[1].hasKey).toBe(true);
+    expect(groups[2].rows.map((row) => row.id)).toEqual(["my-proxy", "anthropic", "deepinfra"]);
+    expect(groups[2].rows[0].name).toBe("My Proxy");
+    expect(groups[2].rows[2].configured).toBe(false);
+    expect(groups[2].rows[1].hasKey).toBe(true);
   });
 
   it("keeps a provider's own name", () => {
     const renamed = { providers: new Map([provider("anthropic", { name: "Work Anthropic", type: "anthropic" })]) };
     const groups = accountGroups(renamed, catalog);
-    expect(groups[1].rows.find((row) => row.id === "anthropic").name).toBe("Work Anthropic");
+    expect(groups[2].rows.find((row) => row.id === "anthropic").name).toBe("Work Anthropic");
   });
 });

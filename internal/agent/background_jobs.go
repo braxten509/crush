@@ -82,7 +82,7 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 			input = tools.JobOutputParams{ShellID: id}
 		}
 	} else {
-		tool = shelltool.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, "", reportStartedJob)
+		tool = shelltool.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, reportStartedJob)
 		input = tools.BashParams{Command: params.Command, WorkingDir: params.WorkingDir, Description: params.Name, RunInBackground: true}
 	}
 	tool = guardedTool{tool}

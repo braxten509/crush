@@ -37,7 +37,6 @@ type bashDescriptionData struct {
 	BannedCommands  string
 	MaxOutputLength int
 	Attribution     config.Attribution
-	ModelID         string
 	RgAvailable     bool
 	GhAvailable     bool
 }
@@ -115,14 +114,13 @@ var bannedCommands = []string{
 	"ufw",
 }
 
-func bashDescription(attribution *config.Attribution, modelID string) string {
+func bashDescription(attribution *config.Attribution) string {
 	bannedCommandsStr := strings.Join(bannedCommands, ", ")
 	var out bytes.Buffer
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
 		BannedCommands:  bannedCommandsStr,
 		MaxOutputLength: tools.MaxOutputLength,
 		Attribution:     *attribution,
-		ModelID:         modelID,
 		RgAvailable:     tools.GetRg() != "",
 		GhAvailable:     tools.GHAvailable,
 	}); err != nil {
@@ -166,7 +164,7 @@ func blockFuncs() []shell.BlockFunc {
 
 // NewBashTool returns the bash tool. jobStarted, when set, is told about
 // the jobs its calls leave running in the background.
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, jobStarted tools.JobStarted) fantasy.AgentTool {
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, jobStarted tools.JobStarted) fantasy.AgentTool {
 	t := &bashTool{
 		permissions: permissions,
 		workingDir:  workingDir,
@@ -175,7 +173,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 	}
 	return fantasy.NewAgentTool(
 		tools.BashToolName,
-		string(bashDescription(attribution, modelID)),
+		string(bashDescription(attribution)),
 		t.run,
 	)
 }

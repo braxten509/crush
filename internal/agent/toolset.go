@@ -78,18 +78,10 @@ func (c *coordinator) subAgentTools(ctx context.Context, agent config.Agent) ([]
 
 // builtinTools builds every built-in tool the agent could be allowed.
 func (c *coordinator) builtinTools(agent config.Agent, isSubAgent bool) []fantasy.AgentTool {
-	// Get the model name for the agent
-	modelID := ""
-	if modelCfg, ok := c.cfg.Config().Models[agent.Model]; ok {
-		if model := c.cfg.Config().GetModel(modelCfg.Provider, modelCfg.Model); model != nil {
-			modelID = model.ID
-		}
-	}
-
 	logFile := filepath.Join(c.cfg.Config().Options.DataDirectory, "logs", "crush.log")
 
 	allTools := []fantasy.AgentTool{
-		shelltool.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, modelID, reportStartedJob),
+		shelltool.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, reportStartedJob),
 		tools.NewCrushInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
 		tools.NewCrushLogsTool(logFile),
 		shelltool.NewJobOutputTool(c.cfg.Config().Options.DataDirectory),

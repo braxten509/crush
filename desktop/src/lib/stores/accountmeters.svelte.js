@@ -42,18 +42,21 @@ export const READ_EVERY_MS = Object.fromEntries(LIST_KINDS.map((kind) => [kind, 
 // Any other tool waits its normal interval.
 export const MISSING_EVERY_MS = { ...READ_EVERY_MS, [CODEX]: 60_000, [CLAUDE]: 3 * 60_000 };
 
+// A row's name (owner, 2026-10-25): the tool's name, and from a tool's second
+// sign-in on, a number after it (Claude, Claude 2, Claude 3).
 const TOOL_NAMES = {
-  [CLAUDE]: "Claude Code",
+  [CLAUDE]: "Claude",
   [CODEX]: "Codex",
   [GROK]: "Grok",
-  "agy-cli": "Antigravity",
-  "opencode-cli": "OpenCode",
+  "agy-cli": "Agy",
+  "opencode-cli": "Opencode Go",
   "kimi-coding": "Kimi",
 };
 
-// A usage window's column heading, and the order the known ones go in.
-const SPAN_WORDS = { "5h": "5h", Weekly: "Week", Monthly: "Month" };
-const SPAN_ORDER = Object.keys(SPAN_WORDS);
+// The columns every tool shares (owner, 2026-10-25), and the window each
+// reads. A window of any other length is not shown.
+export const SPANS = ["5h", "Week", "Month"];
+const SPAN_WINDOWS = ["5h", "Weekly", "Monthly"];
 
 export function setAccountMeters(on) {
   accountMeters.on = Boolean(on);
@@ -82,10 +85,20 @@ export function checkingKinds(accounts = [], byKind = {}) {
   );
 }
 
+// Antigravity counts each model apart: only its Gemini models are shown
+// (owner, 2026-10-25). Gemini quotas reset every five hours, and one not yet
+// used has no reset time, so its "Limit" window goes in the 5h column.
+function windowsOf(kind, reading) {
+  const windows = reading?.windows ?? [];
+  if (kind !== "agy-cli") return windows;
+  const gemini = windows.filter((w) => /gemini/i.test(w.model ?? ""));
+  return (gemini.length > 0 ? gemini : windows).map((w) => (w.name === "Limit" ? { ...w, name: "5h" } : w));
+}
+
 // One span's part left: the window for the whole account, else the lowest
-// of the per-model ones (Antigravity counts each model apart).
-function partOf(reading, name, now) {
-  const windows = (reading?.windows ?? []).filter((w) => w.name === name);
+// of the per-model ones.
+function partOf(kind, reading, name, now) {
+  const windows = windowsOf(kind, reading).filter((w) => w.name === name);
   const whole = windows.filter((w) => !w.model);
   const pick = whole.length > 0 ? whole : windows;
   if (pick.length === 0) return null;
@@ -93,18 +106,9 @@ function partOf(reading, name, now) {
   return { left, level: meterLevel(left) };
 }
 
-// The window names a tool's readings carry: 5h, Weekly, Monthly first, then
-// any other in the order read.
-function spanNames(readings) {
-  const names = [...new Set(readings.flatMap((r) => (r?.windows ?? []).map((w) => w.name)))];
-  const known = SPAN_ORDER.filter((name) => names.includes(name));
-  return [...known, ...names.filter((name) => !SPAN_ORDER.includes(name))];
-}
-
-// The panel's groups: [{kind, title, spans, rows: [{id, name, inUse, state,
-// parts}]}]. spans are the column headings ("5h", "Week", "Month" or the
-// tool's own name for a span); parts line up with them, each {left, level}
-// or null. state is "ready", "checking" (no reading yet), "error" (the first
+// The panel's groups: [{kind, rows: [{id, name, email, inUse, state,
+// parts}]}]. name is the row's label, email the login's own name (shown on
+// hover). parts line up with SPANS, each {left, level} or null. state is "ready", "checking" (no reading yet), "error" (the first
 // read failed), "idle" (the last read failed, so the numbers are old: an
 // unused Claude login expires until Claude Code runs on it again) or
 // "signed-out".
@@ -113,28 +117,23 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
     const logins = SIGN_IN_KINDS.includes(kind)
       ? accounts.filter((a) => a.kind === kind)
       : [{ id: "", kind, name: TOOL_NAMES[kind], signed_in: true }];
-    const readings = logins.map((a) => {
-      const reading = byKind[limitsKey(kind, a.id)] ?? null;
-      return readTime(reading?.read_at) ? reading : null;
-    });
-    const names = spanNames(readings);
+    const tool = TOOL_NAMES[kind] ?? kind;
     return {
       kind,
-      title: TOOL_NAMES[kind] ?? kind,
-      spans: names.map((name) => SPAN_WORDS[name] ?? name),
       rows: logins.map((a, at) => {
         const reading = byKind[limitsKey(kind, a.id)] ?? null;
-        const read = readings[at] !== null;
+        const read = Boolean(readTime(reading?.read_at));
         let state = "ready";
         if (!a.signed_in) state = "signed-out";
         else if (!read) state = reading?.state === "error" ? "error" : "checking";
         else if (reading.state === "error") state = "idle";
         return {
           id: a.id,
-          name: a.name || a.label || TOOL_NAMES[kind],
+          name: at === 0 ? tool : `${tool} ${at + 1}`,
+          email: a.name || a.label || tool,
           inUse: inUse.kind === kind && (inUse.account ?? "") === a.id,
           state,
-          parts: names.map((name) => (read ? partOf(reading, name, now) : null)),
+          parts: SPAN_WINDOWS.map((name) => (read ? partOf(kind, reading, name, now) : null)),
         };
       }),
     };

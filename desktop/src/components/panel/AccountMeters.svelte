@@ -1,16 +1,15 @@
 <script>
   // Every sign-in's usage (owner, 2026-10-21, the compact pick): under the
-  // meters, a heading per tool that reports usage (owner, 2026-10-25: every
-  // tool, one sign-in or many), naming that tool's own spans (5h, Week,
-  // Month, ...), then one line per account: its name (a dot on the one in
-  // use), each span's part left as a small bar and a percent, amber under
-  // 30 % and rose under 10 % as the meters above. The span columns line up
-  // across tools: as many as the widest tool needs, never under two. Shown
+  // meters, one heading row naming the columns every tool shares (5h, Week,
+  // Month; owner, 2026-10-25), then one line per account of every tool that
+  // reports usage: its name (Claude, Claude 2, Codex, ...; a dot on the one
+  // in use), each span's part left as a small bar and a percent, amber under
+  // 30 % and rose under 10 % as the meters above. Shown
   // only while Settings > Appearance > "Show every account's usage" is on;
   // lib/stores/accountmeters.svelte.js reads them.
   import { limitKind } from "../../lib/footer.js";
   import { fallback } from "../../lib/fallback/store.svelte.js";
-  import { accountGroups, accountMeters } from "../../lib/stores/accountmeters.svelte.js";
+  import { SPANS, accountGroups, accountMeters } from "../../lib/stores/accountmeters.svelte.js";
   import { limits } from "../../lib/stores/limits.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
   import { agentNow } from "./panel.svelte.js";
@@ -25,22 +24,21 @@
         })
       : [],
   );
-  const columns = $derived(Math.max(2, ...groups.map((g) => g.spans.length)));
 
   const NOTE = { checking: "checking…", "signed-out": "signed out", error: "can't read" };
 </script>
 
 {#if groups.length > 0}
-  <section class="panel-section accounts" data-section="accounts" aria-label="Accounts" style:--spans={columns}>
+  <section class="panel-section accounts" data-section="accounts" aria-label="Accounts" style:--spans={SPANS.length}>
+    <h2 class="head">
+      <span class="label"></span>
+      {#each SPANS as span (span)}<span class="col">{span}</span>{/each}
+    </h2>
     {#each groups as group (group.kind)}
       <div class="group" data-kind={group.kind}>
-        <h2 class="head">
-          <span class="label">{group.title}</span>
-          {#each group.spans as span (span)}<span class="col">{span}</span>{/each}
-        </h2>
         {#each group.rows as row (row.id)}
           <div class="row" class:idle={row.state === "idle"} data-account={row.id}>
-            <span class="name" title={row.state === "idle" ? `${row.name}: last numbers; this login is idle until it runs again` : row.name}>
+            <span class="name" title={row.state === "idle" ? `${row.email}: last numbers; this login is idle until it runs again` : row.email}>
               <span class="text">{row.name}</span>{#if row.inUse}<span class="dot" aria-label="in use"></span>{/if}{#if row.state === "idle"}<span class="note">idle</span>{/if}
             </span>
             {#if NOTE[row.state]}
@@ -67,9 +65,6 @@
 <style>
   .accounts {
     margin-bottom: calc(22 * var(--px));
-  }
-  .group + .group {
-    margin-top: calc(10 * var(--px));
   }
   .head,
   .row {

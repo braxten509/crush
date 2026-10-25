@@ -61,6 +61,9 @@ sys.stdin.read()
 	data, err := os.ReadFile(filepath.Join(m.Dir, "made.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "hi", string(data))
+	if err := filechange.WatchUnavailable(); err != nil {
+		t.Skipf("commands cannot be watched here (run outside a Crush command): %v", err)
+	}
 	var review *filechange.Review
 	for _, e := range events {
 		if e.Type == EventToolResult && e.ID == "c1" {

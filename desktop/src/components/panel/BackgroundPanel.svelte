@@ -2,7 +2,8 @@
   // SUBAGENTS, then BACKGROUND (owner, 2026-10-19: moved here from the
   // tray's entries; 2026-10-21: sub-agents get their own list): the shown
   // chat's running helpers, then its background jobs that are no server
-  // (the Background Processes sheet's rows), each with how long it has run.
+  // (the Background Processes sheet's rows) and have run over 4 seconds,
+  // each with how long it has run.
   // A sub-agent's row shows only how long it has run; its model is in the
   // name's hover text (owner, 2026-10-21). The stop cross keeps its place on
   // every row and shows on hover; it stops a helper or kills a job at once,
@@ -11,7 +12,7 @@
   import Icon from "../Icon.svelte";
   import { openHelperChat } from "../../lib/stores/helperchats.svelte.js";
   import { helperInfo, runningHelpers, secondNow, since, stopHelper } from "../../lib/live/helpers.svelte.js";
-  import { jobInfo, jobKey, killJob, trayJobs } from "../../lib/live/jobs.svelte.js";
+  import { jobInfo, jobKey, killJob, lastingJobs, trayJobs } from "../../lib/live/jobs.svelte.js";
 
   const now = $derived(secondNow());
   const sections = $derived([
@@ -23,7 +24,7 @@
     {
       id: "background",
       title: "Background",
-      rows: trayJobs().map((job) => ({ key: jobKey(job), text: job.command ?? "", info: jobInfo(job, now), stop: () => killJob(job), label: "Kill" })),
+      rows: lastingJobs(trayJobs(), now).map((job) => ({ key: jobKey(job), text: job.command ?? "", info: jobInfo(job, now), stop: () => killJob(job), label: "Kill" })),
     },
   ]);
 </script>

@@ -11,7 +11,7 @@ import { api } from "../engine/api.js";
 import { onResync } from "../engine/events.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
-import { since } from "./helpers.svelte.js";
+import { since, timeOf } from "./helpers.svelte.js";
 
 const READ_EVERY_MS = 1000;
 // As for helpers (helpers.svelte.js): a killed row stays out until a read
@@ -57,6 +57,14 @@ export function trayJobs() {
   if (!sid || sid !== sessions.currentId) return [];
   const servers = jobs.servers;
   return jobs.list.filter((job) => !isServer(job, servers) && !held.has(jobKey(job)));
+}
+
+// The jobs the right panel's Background list shows: those past their 4th
+// second (owner, 2026-10-25: a quick check's wave of 1-2 second jobs stays
+// out). A job with no start time is shown.
+const SHOW_AFTER_MS = 4000;
+export function lastingJobs(list, now = Date.now()) {
+  return list.filter((job) => !(now - timeOf(job.started) <= SHOW_AFTER_MS));
 }
 
 // The server jobs left out of the tray (for the probe).

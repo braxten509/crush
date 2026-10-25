@@ -32,6 +32,17 @@ export function gateView(conn) {
   return { kind: "blank" };
 }
 
+// The gray loading layer over the window (owner, 2026-10-25), or null: while
+// a folder opens, "Opening <name>…"; while the app starts, until the engine
+// joins and the chat list comes, the starting line. A failure has its own
+// screen and notices, so the layer steps aside for it.
+export function loadingView({ state, workspace, switching, switchingTo, listLoaded }) {
+  if (state === "failed") return null;
+  if (switching > 0 && switchingTo) return { label: `Opening ${baseName(switchingTo) || switchingTo}…` };
+  if (!workspace || !listLoaded) return { label: STARTING };
+  return null;
+}
+
 // Which start screen the middle column shows once joined (the terminal
 // decides the same way at start, internal/ui/model/ui.go:522-528, and shows
 // the opening line instead of the chat while a switch is pending,

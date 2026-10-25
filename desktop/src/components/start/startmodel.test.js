@@ -7,6 +7,7 @@ import {
   gateView,
   gateWords,
   initKey,
+  loadingView,
   lspRows,
   lspState,
   mcpRows,
@@ -51,6 +52,23 @@ describe("the engine gate (2.9, 4.12)", () => {
     for (const state of ["connected", "reconnecting", "connecting", "failed"]) {
       expect(gateView({ state, slow: true, error: { code: "x", message: "y" }, workspace: joined })).toBeNull();
     }
+  });
+});
+
+// The gray loading layer over the window (owner, 2026-10-25): while the app
+// starts or a folder opens, with what it is doing.
+describe("the loading layer", () => {
+  const joined = { state: "connected", workspace: { id: "w1" }, switching: 0, switchingTo: "", listLoaded: true };
+
+  it("covers the start until the engine joins and the chat list comes", () => {
+    expect(loadingView({ ...joined, state: "connecting", workspace: null, listLoaded: false })).toEqual({ label: STARTING });
+    expect(loadingView({ ...joined, listLoaded: false })).toEqual({ label: STARTING });
+    expect(loadingView(joined)).toBeNull();
+  });
+
+  it("names the folder being opened, and steps aside for a failure", () => {
+    expect(loadingView({ ...joined, switching: 1, switchingTo: "/home/u/dev/site/" })).toEqual({ label: "Opening site…" });
+    expect(loadingView({ ...joined, state: "failed", workspace: null, listLoaded: false })).toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@
   import { probeSection } from "../../lib/probe.js";
   import { conn, retry } from "../../lib/stores/connection.svelte.js";
   import ActivityDots from "./ActivityDots.svelte";
+  import { loadingLayer } from "./loading.svelte.js";
   import { gateMarks } from "./marks.js";
   import { watchStart } from "./start.svelte.js";
   import { gateView, STARTING, TRY_AGAIN } from "./startmodel.js";
@@ -60,7 +61,7 @@
 {:else}
   <main class="gate" aria-label="Crush">
     {#if view.kind === "starting"}
-      <p class="starting" role="status"><ActivityDots /><span class="label">{STARTING}</span></p>
+      <p class="starting" class:covered={loadingLayer.shown} role="status"><ActivityDots /><span class="label">{STARTING}</span></p>
     {:else if view.kind === "failed"}
       <div class="block" role="alert">
         <h2 class="title">{view.title}</h2>
@@ -94,6 +95,11 @@
     gap: calc(12 * var(--px));
     font: var(--t-small);
     color: var(--slate);
+  }
+
+  /* The gray loading layer says the same over the whole window. */
+  .covered {
+    visibility: hidden;
   }
 
   .block {

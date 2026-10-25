@@ -22,6 +22,7 @@
   import SettingsNav from "./components/settings/SettingsNav.svelte";
   import SidePanel from "./components/SidePanel.svelte";
   import EngineGate from "./components/start/EngineGate.svelte";
+  import LoadingLayer from "./components/start/LoadingLayer.svelte";
   import DebugOverlay from "./components/system/DebugOverlay.svelte";
   import TitleBar from "./components/system/TitleBar.svelte";
   import "./lib/closing.js"; // the window's close steps answer close-requested
@@ -228,6 +229,7 @@
       {/if}
     {/if}
   </div>
+  <LoadingLayer />
 </div>
 
 <OverlayHost />

@@ -33,6 +33,7 @@ export const conn = $state({
   slow: false, // the join has taken over 400 ms: the gate shows "Starting Crush…" (2.9)
   launch: { session: "", continueLast: false }, // -s and -C (START-006)
   switching: 0, // folder switches under way: the shown chat may not be this folder's yet
+  switchingTo: "", // the folder the latest of them opens (the loading layer names it)
 });
 
 const NOTICE_LIMIT = 20;
@@ -251,10 +252,12 @@ export async function switchFolder(dir, { keepShown = false } = {}) {
     if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
     if (!keepShown) showLanding();
     conn.error = null;
+    conn.switchingTo = dir;
     joining = showFolder(dir);
     return await joining;
   } finally {
     conn.switching -= 1;
+    if (conn.switching === 0) conn.switchingTo = "";
   }
 }
 

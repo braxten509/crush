@@ -1,10 +1,15 @@
 #!/bin/sh
 # The real crush (tests/out/bin/crush, from tests/build-crush.sh), except that
 # `crush engine ensure` fails while /tmp/fail-ensure exists, as a crush that
-# cannot start its engine does (desktop-design 2.9, p3_reconnect's second case).
+# cannot start its engine does (desktop-design 2.9, p3_reconnect's second case),
+# and takes half a second longer while /tmp/slow-ensure exists, as a slow
+# engine start does (loading_layer.py).
 real="$(dirname "$0")/../out/bin/crush"
 if [ "$1" = engine ] && [ "$2" = ensure ] && [ -e /tmp/fail-ensure ]; then
   echo '{"error":{"code":"start_failed","message":"The engine did not start: /tmp/fail-ensure exists (tests/fakes/crush-wrap)."}}'
   exit 5
+fi
+if [ "$1" = engine ] && [ "$2" = ensure ] && [ -e /tmp/slow-ensure ]; then
+  sleep 0.5
 fi
 exec "$real" "$@"

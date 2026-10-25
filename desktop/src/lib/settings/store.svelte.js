@@ -139,13 +139,13 @@ export function parseTokens(text) {
 
 export async function saveAutoCompact(value) {
   if (windowBusy()) {
-    notify("warn", "Agent is busy, please wait before saving fallback compaction");
+    notify("warn", "Agent is busy, please wait before saving the compaction limit");
     return false;
   }
   try {
     await setOption("options.auto_compact_token_limit", value);
     await api.updateAgent();
-    notify("info", `Fallback compaction set to ${value} tokens`);
+    notify("info", `Compaction limit for API chats set to ${value} tokens`);
     return true;
   } catch (error) {
     notify("error", errorText(error));

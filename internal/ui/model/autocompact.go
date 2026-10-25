@@ -26,7 +26,7 @@ func (m *UI) openAutocompactDialog() tea.Cmd {
 
 func (m *UI) setAutocompact(tokens int64) tea.Cmd {
 	if m.isAgentBusy() {
-		return util.ReportWarn("Agent is busy, please wait before saving fallback compaction")
+		return util.ReportWarn("Agent is busy, please wait before saving the compaction limit")
 	}
 	cfg := m.com.Config()
 	if cfg == nil {
@@ -48,6 +48,6 @@ func (m *UI) saveAutocompactCmd(tokens int64) tea.Cmd {
 		if err := ws.UpdateAgentModel(context.Background()); err != nil {
 			return util.ReportError(err)()
 		}
-		return util.NewInfoMsg(fmt.Sprintf("Fallback compaction set to %d tokens", tokens))
+		return util.NewInfoMsg(fmt.Sprintf("Compaction limit for API chats set to %d tokens", tokens))
 	}
 }

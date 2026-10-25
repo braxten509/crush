@@ -180,19 +180,9 @@
     <HelperModel />
     <CompactionModel />
     <div class="row">
-      <span class="name">Fallback compaction</span>
+      <span class="name">Compaction limit for API chats</span>
       <span class="value">{(Number(options().auto_compact_token_limit) || DEFAULT_AUTOCOMPACT).toLocaleString("en-US")} tokens</span>
       <button type="button" class="act" onclick={() => openDialog("autocompact")}>Change…</button>
-    </div>
-    <div class="row">
-      <span class="name">Free DeepSeek keeps its whole 1,000,000 tokens</span>
-      <button
-        type="button"
-        class="switch"
-        role="switch"
-        aria-checked={options().opencode_zen_free_deepseek_full_context === true}
-        aria-label="Free DeepSeek keeps its whole 1,000,000 tokens"
-        onclick={toggleZenFreeDeepSeekFullContext}></button>
     </div>
     <div class="row">
       <span class="name">Codex API compacts before the price goes up</span>
@@ -204,6 +194,16 @@
         aria-checked={options().codex_api_compact_before_price_step !== false}
         aria-label="Codex API compacts before the price goes up"
         onclick={toggleCodexAPICompactBeforePriceStep}></button>
+    </div>
+    <div class="row">
+      <span class="name">Free DeepSeek keeps its whole 1,000,000 tokens</span>
+      <button
+        type="button"
+        class="switch"
+        role="switch"
+        aria-checked={options().opencode_zen_free_deepseek_full_context === true}
+        aria-label="Free DeepSeek keeps its whole 1,000,000 tokens"
+        onclick={toggleZenFreeDeepSeekFullContext}></button>
     </div>
     <div class="row">
       <span class="name">Check-in messages every</span>

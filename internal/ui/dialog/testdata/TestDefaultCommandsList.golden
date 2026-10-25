@@ -3,7 +3,7 @@ new_session | New Session | ctrl+n | dialog.ActionNewSession{} | New Session cle
 switch_session | Sessions | ctrl+s | dialog.ActionOpenDialog{DialogID:session} | Sessions
 switch_model | Switch Model | ctrl+l | dialog.ActionOpenDialog{DialogID:models} | Switch Model
 usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
-autocompact | Fallback compaction |  | dialog.ActionOpenDialog{DialogID:autocompact} | Fallback compaction
+autocompact | Compaction limit for API chats |  | dialog.ActionOpenDialog{DialogID:autocompact} | Compaction limit for API chats
 select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
 toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
 toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
@@ -32,7 +32,7 @@ new_session | New Session | ctrl+n | dialog.ActionNewSession{} | New Session cle
 switch_session | Sessions | ctrl+s | dialog.ActionOpenDialog{DialogID:session} | Sessions
 switch_model | Switch Model | ctrl+l | dialog.ActionOpenDialog{DialogID:models} | Switch Model
 usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
-autocompact | Fallback compaction |  | dialog.ActionOpenDialog{DialogID:autocompact} | Fallback compaction
+autocompact | Compaction limit for API chats |  | dialog.ActionOpenDialog{DialogID:autocompact} | Compaction limit for API chats
 undo-file-restore | Undo Last File Restore |  | dialog.ActionUndoFiles{} | Undo Last File Restore
 tree | Session Tree |  | dialog.ActionOpenDialog{DialogID:tree} | Session Tree
 fork | Fork from Prompt |  | dialog.ActionOpenDialog{DialogID:fork} | Fork from Prompt
@@ -73,7 +73,7 @@ new_session | New Session | ctrl+n | dialog.ActionNewSession{} | New Session cle
 switch_session | Sessions | ctrl+s | dialog.ActionOpenDialog{DialogID:session} | Sessions
 switch_model | Switch Model | ctrl+l | dialog.ActionOpenDialog{DialogID:models} | Switch Model
 usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
-autocompact | Fallback compaction |  | dialog.ActionOpenDialog{DialogID:autocompact} | Fallback compaction
+autocompact | Compaction limit for API chats |  | dialog.ActionOpenDialog{DialogID:autocompact} | Compaction limit for API chats
 undo-file-restore | Undo Last File Restore |  | dialog.ActionUndoFiles{} | Undo Last File Restore
 tree | Session Tree |  | dialog.ActionOpenDialog{DialogID:tree} | Session Tree
 fork | Fork from Prompt |  | dialog.ActionOpenDialog{DialogID:fork} | Fork from Prompt
@@ -113,7 +113,7 @@ new_session | New Session | ctrl+n | dialog.ActionNewSession{} | New Session cle
 switch_session | Sessions | ctrl+s | dialog.ActionOpenDialog{DialogID:session} | Sessions
 switch_model | Switch Model | ctrl+l | dialog.ActionOpenDialog{DialogID:models} | Switch Model
 usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
-autocompact | Fallback compaction |  | dialog.ActionOpenDialog{DialogID:autocompact} | Fallback compaction
+autocompact | Compaction limit for API chats |  | dialog.ActionOpenDialog{DialogID:autocompact} | Compaction limit for API chats
 toggle_pills | Toggle To-Dos | ctrl+t | dialog.ActionTogglePills{} | Toggle To-Dos
 select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
 toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode

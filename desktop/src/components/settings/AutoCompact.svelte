@@ -43,9 +43,9 @@
   }
 </script>
 
-<Sheet id={ID} title="Fallback compaction" width="small" {help} {onKey}>
+<Sheet id={ID} title="Compaction limit for API chats" width="small" {help} {onKey}>
   <p class="hint">When a chat reaches this many tokens, Crush sums it up so the chat can go on. Agents that shorten their own chats are not affected.</p>
-  <Field bind:value={text} prompt="Tokens: " label="Fallback compaction tokens" {error} />
+  <Field bind:value={text} prompt="Tokens: " label="Compaction limit for API chats, in tokens" {error} />
   <div class="actions">
     <Buttons buttons={[{ id: "save", label: "Save" }, { id: "cancel", label: "Cancel" }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
   </div>

@@ -116,18 +116,24 @@ func (s *service) Update(ctx context.Context, msg Message) error {
 	}
 
 	// Debounce: schedule a single flush per pending state. If a flush
-	// is already running we let it finish; the trailing dirty bit will
-	// be picked up by the next Update or by Flush.
-	if p.timer == nil && !p.flushing {
-		id := msg.ID
-		p.timer = time.AfterFunc(s.debounce, func() {
-			// Detached from caller ctx so a cancelled stream context
-			// does not strand the buffered write.
-			_ = s.flushOne(context.Background(), id, false)
-		})
-	}
+	// is already running we let it finish; it schedules the next one for
+	// the trailing dirty bit.
+	s.scheduleFlushLocked(p, msg.ID)
 	s.mu.Unlock()
 	return nil
+}
+
+// scheduleFlushLocked starts the debounce timer for id unless one is set or
+// a flush is running. Caller must hold s.mu.
+func (s *service) scheduleFlushLocked(p *pendingState, id string) {
+	if p.timer != nil || p.flushing {
+		return
+	}
+	p.timer = time.AfterFunc(s.debounce, func() {
+		// Detached from caller ctx so a cancelled stream context
+		// does not strand the buffered write.
+		_ = s.flushOne(context.Background(), id, false)
+	})
 }
 
 // Flush implements [Service.Flush].
@@ -234,6 +240,10 @@ func (s *service) flushOne(ctx context.Context, id string, syncCaller bool) erro
 			// latest here would pin every finished message's parts
 			// for the life of the process.
 			p.latest = Message{}
+		} else if err == nil && !syncCaller && s.debounce > 0 {
+			// A delta arrived during this timer-fired write: nothing
+			// else may come to write it, so schedule the next flush.
+			s.scheduleFlushLocked(p, id)
 		}
 		s.mu.Unlock()
 

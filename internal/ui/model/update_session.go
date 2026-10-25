@@ -22,6 +22,9 @@ func (m *UI) handleSessionMsg(msg tea.Msg) (tea.Cmd, bool) {
 		cmds = append(cmds, m.handleSessionLoadMsg(msg)...)
 
 	case sessionFilesUpdatesMsg:
+		if m.session == nil || m.session.ID != msg.sessionID {
+			break // loaded for a chat that is no longer open
+		}
 		m.sessionFiles = msg.sessionFiles
 		var paths []string
 		for _, f := range msg.sessionFiles {

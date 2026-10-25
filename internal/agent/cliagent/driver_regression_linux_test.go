@@ -226,7 +226,9 @@ cat >/dev/null
 				return nil
 			}})
 			require.NoError(t, err, "pending input must time out before context cancellation")
-			require.Equal(t, 0, confirmed, "unconfirmed input stays available for the next turn")
+			// Claude has the message; queueing it again would get it
+			// answered twice (owner, 2026-10-24: mark it taken, keep Claude).
+			require.Equal(t, 1, confirmed, "unconfirmed input counts as taken")
 		})
 	}
 }

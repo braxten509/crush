@@ -16,7 +16,6 @@
   import { sign_in_run } from "../../lib/engine/commands.js";
   import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
   import { modelData, refreshModels } from "../../lib/models/store.svelte.js";
-  import { signIn, signOut } from "../../lib/signin/accounts.js";
   import { projectDir } from "../../lib/stores/composer.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
   import { openTerminal } from "../../lib/terminal/tabs.svelte.js";
@@ -146,12 +145,6 @@
             ownLogin={current.id === "grok-cli" ? current.cli.login : null}
             ownSignedIn={current.id === "grok-cli" ? cliSignedIn(current) : null}
           />
-          {#if current.cli.subscription}
-            <div class="row">
-              <span class="name">Grok subscription</span>
-              <button type="button" class="act" onclick={() => (stored("xai") ? signOut("grok") : signIn("grok"))}>{stored("xai") ? "Sign out" : "Sign in…"}</button>
-            </div>
-          {/if}
         {:else}
           <div class="row">
             <span class="name">Sign-in</span>

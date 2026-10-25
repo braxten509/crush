@@ -12,7 +12,7 @@
   //
   // Phases 5 and 6 (desktop-design-5-6 7.1, 2.5): registered list sections
   // draw under the search's rule ("header"), after the chat rows ("rows") and
-  // above the end rule ("footer"). The search hands off to the Sessions
+  // last ("footer"); no rule ends the list (owner, 2026-10-24). The search hands off to the Sessions
   // sheet: a typed character, Enter or a click in it opens the sheet with the
   // box's text in its filter.
   import { onMount } from "svelte";
@@ -260,7 +260,6 @@
     {#each listSections("footer") as entry (entry.id)}
       <entry.component />
     {/each}
-    {#if !empty}<Rule marks="both" class="end-of-list" />{/if}
   </div>
 
   <!-- Settings without the Ctrl+P menu (owner, 2026-10-19). -->
@@ -481,18 +480,5 @@
     font: var(--t-small);
     font-style: italic;
     color: var(--slate);
-  }
-
-  .chats :global(.rule.end-of-list) {
-    margin-top: 0;
-  }
-  /* Right under the open chat's band the list's end rule would be a second
-     line beneath its own; it goes clear there (owner, 2026-10-20). */
-  .chats :global(.group:has(.chat.selected:last-child) + .rule.end-of-list) {
-    visibility: hidden;
-  }
-  /* No end rule under the terminals (owner, 2026-10-24). */
-  .chats :global(.terminals ~ .rule.end-of-list) {
-    display: none;
   }
 </style>

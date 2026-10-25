@@ -6,8 +6,9 @@
 export const AGENT_CLIS = [
   { kind: "claude-code", name: "Claude Code", login: ["claude", "auth", "login"], accounts: true },
   { kind: "codex-cli", name: "Codex", login: ["codex", "login"], accounts: true },
-  // Grok's detail also holds the separate xAI subscription sign-in.
-  { kind: "grok-cli", name: "Grok", login: ["grok", "login"], accounts: true, subscription: true },
+  // Grok shows only its CLI accounts; the xAI subscription sign-in row is
+  // gone (owner, 2026-10-24).
+  { kind: "grok-cli", name: "Grok", login: ["grok", "login"], accounts: true },
   // AGY has no login subcommand; `agy models` is what fetches a token when
   // none is stored (internal/agent/cliagent/limits.go, agyToken). OpenCode's
   // `auth login` asks its questions in a terminal, so both run in a tab.

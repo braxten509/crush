@@ -86,26 +86,18 @@ rail = run("""
 check(rail.get("rail") is not None and abs(rail["rail"] - rail["column"]) <= 0.5, f"the rail starts at the column's top ({rail})")
 
 # The open chat's band reaches 1px past the lines on each side and its words
-# stay where a plain row has them; the list's end rule right under it goes
-# clear, so no second line shows beneath the band (owner, 2026-10-20).
+# stay where a plain row has them. The list has no end rule under its last
+# chat (owner, 2026-10-24).
 band = run("""
   const li = document.querySelector('nav.chats .chat.selected'), next = li?.nextElementSibling;
   if (!li || !next || !next.matches('.chat')) return null;
   const r = li.querySelector('.row').getBoundingClientRect(), n = next.getBoundingClientRect();
   const textTop = (e) => e.querySelector('.title').getBoundingClientRect().top - e.getBoundingClientRect().top - parseFloat(getComputedStyle(e).borderTopWidth);
-  const end = document.querySelector('nav.chats .rule.end-of-list');
-  const groups = [...document.querySelectorAll('nav.chats .group')], last = groups.at(-1)?.querySelector('.chat:last-child');
-  const shownEnd = end && getComputedStyle(end).visibility;
-  // The last row open, as its class says, while the rule is read.
-  li.classList.remove('selected'); last.classList.add('selected');
-  const hiddenEnd = end && getComputedStyle(end).visibility;
-  last.classList.remove('selected'); li.classList.add('selected');
-  return { past: r.bottom - n.top, text: textTop(li), plain: textTop(next), end_after: !!end && end.previousElementSibling === groups.at(-1), shownEnd, hiddenEnd };
+  return { past: r.bottom - n.top, text: textTop(li), plain: textTop(next), end: !!document.querySelector('nav.chats .rule.end-of-list') };
 """) or {}
 check(band.get("past") == 1, f"the open chat's band reaches 1px over the line under it ({band})")
 check(band and abs(band["text"] - band["plain"]) <= 0.5, f"its title sits where a plain row's does ({band})")
-check(band.get("end_after") and band.get("shownEnd") == "visible" and band.get("hiddenEnd") == "hidden",
-      f"the end rule shows under a plain last row and goes clear under an open one ({band})")
+check(band.get("end") is False, f"no end rule under the list's last chat ({band})")
 
 # The list's "‹‹" sits on the middle of the wordmark's capitals (owner,
 # 2026-10-20: "not centered"), read from the font's own ink box.

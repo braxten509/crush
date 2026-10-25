@@ -64,7 +64,7 @@
 
 {#each accounts as a (a.id)}
   <div class="row account" data-account={`${a.kind}/${a.id}`}>
-    <span class="name">
+    <span class="name" title={renaming === `${a.kind}/${a.id}` ? undefined : a.name}>
       {#if renaming === `${a.kind}/${a.id}`}
         <!-- svelte-ignore a11y_autofocus -->
         <input class="rename" type="text" bind:value={draft} aria-label="Account name" autofocus onkeydown={(e) => finishRename(a, e)} onblur={() => finishRename(a)} />
@@ -108,9 +108,14 @@
   .account {
     border-bottom-color: transparent;
   }
+  /* A long name ends in "…" before the buttons; hovering shows it whole
+     (owner, 2026-10-24, pick A). */
   .name {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font: var(--t-item);
     color: var(--ink);
   }
@@ -122,6 +127,7 @@
     color: var(--slate);
   }
   .act {
+    flex: none;
     height: calc(36 * var(--px));
     padding: 0 calc(16 * var(--px));
     border: 1px solid var(--rule-control);

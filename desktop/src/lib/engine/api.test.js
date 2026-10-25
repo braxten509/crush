@@ -40,7 +40,6 @@ describe("paths and bodies (desktop-design 1.5.2, the routes of 1.3)", () => {
     ["config", [], "GET", "config"],
     ["providers", [], "GET", "providers"],
     ["agentInfo", [], "GET", "agent"],
-    ["defaultSmallModel", ["openai"], "GET", "agent/default-small-model", { provider_id: "openai" }],
     ["gitBranch", [], "GET", "git/branch"],
     ["lsps", [], "GET", "lsps"],
     ["lspDiagnostics", ["gopls"], "GET", "lsps/gopls/diagnostics"],

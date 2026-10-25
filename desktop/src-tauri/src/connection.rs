@@ -271,7 +271,6 @@ const ROUTES: &[(&str, &str)] = &[
     ("GET", "config"),
     ("GET", "providers"),
     ("GET", "agent"),
-    ("GET", "agent/default-small-model"),
     ("GET", "git/branch"),
     ("GET", "providers/availability"),
     ("GET", "lsps"),
@@ -2551,7 +2550,7 @@ mod tests {
     const DESIGN_ROUTES: &[(&str, &[&str])] = &[
         ("GET", &["/v1/version", "/v1/engine", "/v1/limits"]),
         ("POST", &["/v1/limits/{kind}/refresh"]),
-        ("GET", &["config", "providers", "agent", "agent/default-small-model", "git/branch", "providers/availability", "lsps", "mcp/states", "skills", "messages/user"]),
+        ("GET", &["config", "providers", "agent", "git/branch", "providers/availability", "lsps", "mcp/states", "skills", "messages/user"]),
         ("GET", &["sessions"]),
         ("POST", &["sessions"]),
         ("GET", &["sessions/{sid}"]),

@@ -114,8 +114,6 @@ export const api = {
   // Which agent CLIs hold their own login (rpc.GetAuthState).
   authState: () => get("auth/state"),
   agentInfo: () => get("agent"),
-  // The engine reads provider_id (internal/server/handlers_agent.go:102-104).
-  defaultSmallModel: (providerId) => get("agent/default-small-model", providerId ? { provider_id: providerId } : undefined),
   gitBranch: () => get("git/branch"),
   // Use the chat's folder when a chat is shown (rpc.ProviderUsable).
   providerAvailability: (sid) => commands.api("GET", "providers/availability", undefined, undefined, undefined, folderOf(sid)),

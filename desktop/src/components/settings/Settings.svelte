@@ -38,6 +38,7 @@
   import { panelSetting } from "../../lib/stores/ui.svelte.js";
   import { accountMeters, setAccountMeters } from "../../lib/stores/accountmeters.svelte.js";
   import FallbackOrder from "./FallbackOrder.svelte";
+  import HelperModel from "./HelperModel.svelte";
   import ProviderAccounts from "./ProviderAccounts.svelte";
 
   let checkIn = $state(String(options().check_in_minutes ?? DEFAULT_CHECK_IN));
@@ -174,6 +175,7 @@
     </div>
   {/if}
   {#if section === "work"}
+    <HelperModel />
     <div class="row">
       <span class="name">Fallback compaction</span>
       <span class="value">{(Number(options().auto_compact_token_limit) || DEFAULT_AUTOCOMPACT).toLocaleString("en-US")} tokens</span>

@@ -1,14 +1,15 @@
 <script>
   // The model picker (desktop-design-5-6 2.3, look 5.4; DLG-021 to DLG-034):
   // a port of internal/ui/dialog/models/models.go. Groups as
-  // lib/models/groups.js builds them, "Large Task" / "Small Task" on the
-  // title line (Tab), the filter matching group and model names without
-  // spaces or case. Enter/Ctrl+Y or a double click chooses
+  // lib/models/groups.js builds them, the filter matching group and model
+  // names without spaces or case. It picks the chat's own model (the last
+  // pick with no chat open); opened from Settings with helper, it picks the
+  // helper model (titles) instead. Enter/Ctrl+Y or a double click chooses
   // (lib/models/choose.js); Ctrl+E edits the sign-in of a configured
   // provider's model. The data is read again on config_changed while open,
   // keeping the selection on the same row. During onboarding the sheet sits
   // at the bottom left of the main column without the task selector.
-  //   onboarding?
+  //   onboarding?, helper?
   import { untrack } from "svelte";
   import Field from "../kit/Field.svelte";
   import FilterList from "../kit/FilterList.svelte";
@@ -21,14 +22,11 @@
   import { notify } from "../../lib/stores/ui.svelte.js";
 
   const ID = "models";
-  const TYPES = [
-    { id: "large", label: "Large task", placeholder: "Choose a model for large, complex tasks" },
-    { id: "small", label: "Small task", placeholder: "Choose a model for small, simple tasks" },
-  ];
 
-  let { onboarding = false } = $props();
+  let { onboarding = false, helper = false } = $props();
 
-  let type = $state("large");
+  // "large" names the chats' recent list (config.SelectedModelTypeChat).
+  const type = $derived(helper ? "small" : "large");
   let query = $state("");
   let selected = $state(-1);
   let selectedId = null; // the selected row's id, kept across rebuilds
@@ -39,12 +37,11 @@
   const current = $derived((type === "small" ? modelData.cfg?.models?.small : coderModel(modelData).selected) ?? {});
   const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current }) : { items: [], selectedKey: "", prunedRecent: null });
   const items = $derived(built.items);
-  const placeholder = $derived(onboarding ? "Find your fave" : TYPES.find((t) => t.id === type).placeholder);
+  const placeholder = $derived(onboarding ? "Find your fave" : helper ? "Choose the helper model for titles" : "Choose a model for this chat");
   const chosenItem = $derived(selected >= 0 ? items[selected] : null);
   const editable = $derived(Boolean(chosenItem && modelData.cfg?.providers.has(chosenItem.provider.id)));
   const help = $derived([
     { key: "↑/↓", text: "choose" },
-    { key: "tab", text: "toggle type", disabled: onboarding },
     { key: "enter", text: "confirm" },
     { key: "ctrl+e", text: "edit", disabled: !editable },
     { key: "esc", text: "close" },
@@ -96,18 +93,8 @@
     chooseModel({ provider: item.provider, model: selectedModelOf(item, modelData.cfg?.model_efforts), modelType: type, reAuthenticate, onboarding });
   }
 
-  function toggleType() {
-    if (onboarding) return;
-    type = type === "large" ? "small" : "large";
-    selectedId = null;
-  }
-
   function onKey(event, combo) {
     switch (combo) {
-      case "Tab":
-      case "Shift+Tab":
-        toggleType();
-        return true;
       case "Ctrl+P":
         list?.move(-1);
         return true;
@@ -129,7 +116,7 @@
   const isCurrent = (item) => item.model.id === current.model && item.provider.id === current.provider;
 </script>
 
-<Sheet id={ID} title="Switch model" width="standard" maxHeight={720} {help} {onKey} {onboarding} controls={onboarding ? null : controls}>
+<Sheet id={ID} title={helper ? "Helper model" : "Switch model"} width="standard" maxHeight={720} {help} {onKey} {onboarding}>
   {#if onboarding}
     <p class="lead">To start, let's choose a provider and model.</p>
   {/if}
@@ -149,12 +136,6 @@
     />
   {/if}
 </Sheet>
-
-{#snippet controls()}
-  {#each TYPES as t (t.id)}
-    <button type="button" aria-pressed={type === t.id} onclick={() => type !== t.id && toggleType()}>{t.label}</button>
-  {/each}
-{/snippet}
 
 <style>
   .lead {

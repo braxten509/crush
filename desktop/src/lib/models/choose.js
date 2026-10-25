@@ -112,14 +112,12 @@ export async function chooseModel(choice) {
     }
   }
 
-  // Step 7: save, filling the helper model when none is set. A chat's model
-  // is saved with the chat (or as the last pick with none open); the helper
-  // model is set in config.
+  // Step 7: save. A chat's model is saved with the chat (or as the last pick
+  // with none open); the helper model is set in config.
   closeDialog("api_key_input");
   closeDialog("oauth");
   closeDialog("models");
   const helper = modelType === "small";
-  const fillSmall = !cfg.models?.small && !helper;
   try {
     if (helper) await api.setHelperModel(model);
     else await saveModelChoice(model);
@@ -127,21 +125,13 @@ export async function chooseModel(choice) {
     notify("error", errorText(error));
     return false;
   }
-  if (fillSmall) {
-    try {
-      const small = await api.defaultSmallModel(providerId);
-      if (small) await api.setHelperModel(small);
-    } catch (error) {
-      notify("error", errorText(error));
-    }
-  }
 
   // Step 8: onboarding starts the agent; a new helper model is built into
   // it. A chat's next turn builds the chat's own model.
   const name = modelInfo(cfg, modelData.catalog, model)?.name || model.model;
   try {
     if (onboarding) await api.initAgent();
-    if (helper || fillSmall) await api.updateAgent();
+    if (helper) await api.updateAgent();
     notify("info", `${helper ? "Helper model" : "Model"} changed to ${name}`);
   } catch (error) {
     notify("error", errorText(error));

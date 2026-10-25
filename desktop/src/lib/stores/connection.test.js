@@ -16,6 +16,7 @@ const h = vi.hoisted(() => ({
   opened: [],
   shown: [],
   left: [],
+  showFail: null,
 }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
@@ -49,6 +50,7 @@ vi.mock("../engine/commands.js", () => ({
     return opened({ cwd, client_id: `client-${cwd}`, workspace: { id: `ws-${cwd}`, path: cwd } });
   },
   engine_show_folder: async (cwd) => {
+    if (h.showFail) throw h.showFail;
     h.shown.push(cwd);
     return opened({ cwd, client_id: `client-${cwd}`, workspace: { id: `ws-${cwd}`, path: cwd } });
   },
@@ -105,6 +107,7 @@ beforeEach(async () => {
   h.opened.length = 0;
   h.shown.length = 0;
   h.left.length = 0;
+  h.showFail = null;
   h.info = { version: "0.1.0", probe: false, fixture: false, cwd: "/tmp/home/proj", session: "", continue_last: false, ui_debug: false, platform: "linux" };
   h.open = async () => opened();
   vi.stubGlobal("requestAnimationFrame", (fn) => setTimeout(() => fn(0), 0));
@@ -530,5 +533,15 @@ describe("several folders at once (owner, 2026-10-22)", () => {
     // The shown folder stays: Rust refuses to let it go.
     expect(h.left).toEqual(["/tmp/home/two"]);
     expect(C.joinedFolder("/tmp/home/two")).toBe(false);
+  });
+
+  it("a folder that can't be shown says so, with Try again", async () => {
+    await C.start();
+    h.notices.length = 0;
+    h.showFail = { code: "engine_unavailable", message: "Crush Desktop is reconnecting to the Crush engine; try again in a moment." };
+    expect(await C.switchFolder("/tmp/home/other")).toBe(false);
+    const notice = h.notices.find((n) => n.kind === "error");
+    expect(notice?.text).toContain("other");
+    expect(notice?.text).toContain("reconnecting");
   });
 });

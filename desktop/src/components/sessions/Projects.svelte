@@ -45,7 +45,8 @@
     }
     closeDialog(ID);
     // In place, with no reload (owner, 2026-10-20: the folder is per chat).
-    if (!(await switchFolder(row.path))) notify("error", conn.error?.message ?? "Couldn't switch to that folder.");
+    // A failed switch shows its own notice, with Try again.
+    await switchFolder(row.path);
   }
 
   // projects.go:136-150: the row goes at once, the folder stays.

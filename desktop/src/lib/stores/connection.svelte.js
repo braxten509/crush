@@ -268,6 +268,10 @@ async function showFolder(dir) {
   } catch (error) {
     console.error("could not show a folder", error?.message ?? error);
     conn.error = plainError(error);
+    // The window still shows the folder it had: say so, or a click on a
+    // chat of that folder seems to do nothing.
+    const name = baseName(dir) || dir;
+    notify("error", `Couldn't open ${name}: ${conn.error.message}`, 0, { label: "Try again", run: () => switchFolder(dir) });
     return false;
   }
   conn.launch = { session: "", continueLast: false };

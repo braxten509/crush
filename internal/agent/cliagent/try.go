@@ -17,8 +17,8 @@ import (
 // tryPrompt is the hidden request TryAccount sends.
 const tryPrompt = "Reply with the word OK."
 
-// tryTimeout bounds TryAccount.
-const tryTimeout = 90 * time.Second
+// tryTimeout bounds TryAccount; a variable so tests can shorten it.
+var tryTimeout = 90 * time.Second
 
 // TryAccount sends one tiny request to model on an account, outside every
 // chat: no session is saved, and the tool runs in an empty folder without
@@ -59,6 +59,14 @@ func TryAccount(ctx context.Context, kind catwalk.Type, account, model string) e
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), config.AccountEnv(kind, account)...)
+	// Past the limit the tool's own children go too, and a child that
+	// still holds the output can't keep the try waiting.
+	ownGroup(cmd)
+	cmd.Cancel = func() error {
+		(&proc{cmd: cmd}).kill()
+		return nil
+	}
+	cmd.WaitDelay = time.Second
 	out, err := cmd.CombinedOutput()
 	if why := tryFailure(kind, out); why != "" {
 		return fmt.Errorf("%s: %s", name, why)

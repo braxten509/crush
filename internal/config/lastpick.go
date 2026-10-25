@@ -63,21 +63,26 @@ func WriteLastPick(m SelectedModel) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-// NewChatModel is the model a new chat starts on: the last pick. With none
-// yet, the starting model seeds it once.
+// NewChatModel is the model a new chat starts on: the last pick, when this
+// folder's config offers it. With no pick yet, the starting model seeds it
+// once; a folder that can't run the pick starts on its own starting model
+// and leaves the pick for the others.
 func NewChatModel(cfg *Config) (SelectedModel, bool) {
-	if m, ok := ReadLastPick(); ok {
-		return m, true
-	}
+	pick, picked := ReadLastPick()
 	if cfg == nil {
-		return SelectedModel{}, false
+		return pick, picked
+	}
+	if picked && cfg.IsModelAvailable(pick.Provider, pick.Model) {
+		return pick, true
 	}
 	start, ok := cfg.Models[SelectedModelTypeLarge]
 	if !ok || start.Provider == "" || start.Model == "" {
 		return SelectedModel{}, false
 	}
-	if err := WriteLastPick(start); err != nil {
-		slog.Warn("Could not save the starting model as the last pick", "error", err)
+	if !picked {
+		if err := WriteLastPick(start); err != nil {
+			slog.Warn("Could not save the starting model as the last pick", "error", err)
+		}
 	}
 	return start, true
 }

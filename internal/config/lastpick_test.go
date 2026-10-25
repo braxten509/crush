@@ -3,6 +3,8 @@ package config
 import (
 	"testing"
 
+	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,10 +17,16 @@ func TestLastPickIsReadFreshAcrossStores(t *testing.T) {
 	_, ok := ReadLastPick()
 	require.False(t, ok, "nothing picked yet")
 
+	cfg := &Config{
+		Providers: csync.NewMapFrom(map[string]ProviderConfig{
+			"claude-code": {ID: "claude-code", Models: []catwalk.Model{{ID: "opus"}}},
+			"codex-cli":   {ID: "codex-cli", Models: []catwalk.Model{{ID: "gpt-6-sol"}}},
+		}),
+		Models: map[SelectedModelType]SelectedModel{
+			SelectedModelTypeLarge: {Provider: "claude-code", Model: "opus"},
+		},
+	}
 	// With no pick yet, the first new chat seeds it from the starting model.
-	cfg := &Config{Models: map[SelectedModelType]SelectedModel{
-		SelectedModelTypeLarge: {Provider: "claude-code", Model: "opus"},
-	}}
 	seeded, ok := NewChatModel(cfg)
 	require.True(t, ok)
 	require.Equal(t, SelectedModel{Provider: "claude-code", Model: "opus"}, seeded)
@@ -30,9 +38,21 @@ func TestLastPickIsReadFreshAcrossStores(t *testing.T) {
 	read, ok := ReadLastPick()
 	require.True(t, ok)
 	require.Equal(t, picked, read, "the whole choice comes back")
-	fresh, ok := NewChatModel(&Config{})
+	fresh, ok := NewChatModel(cfg)
 	require.True(t, ok)
 	require.Equal(t, picked, fresh)
+
+	// A folder whose config doesn't offer the pick starts on its own
+	// starting model, and the pick stays for the others.
+	other := &Config{
+		Providers: csync.NewMapFrom(map[string]ProviderConfig{"claude-code": {ID: "claude-code", Models: []catwalk.Model{{ID: "opus"}}}}),
+		Models:    map[SelectedModelType]SelectedModel{SelectedModelTypeLarge: {Provider: "claude-code", Model: "opus"}},
+	}
+	start, ok := NewChatModel(other)
+	require.True(t, ok)
+	require.Equal(t, SelectedModel{Provider: "claude-code", Model: "opus"}, start)
+	read, _ = ReadLastPick()
+	require.Equal(t, picked, read)
 
 	require.Equal(t, SelectedModel{Provider: "claude-code", Model: "opus"}, cfg.Models[SelectedModelTypeLarge], "a pick writes no model")
 }

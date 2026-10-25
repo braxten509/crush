@@ -8,7 +8,7 @@
   // it started (owner, 2026-10-22).
   import Icon from "../Icon.svelte";
   import { modelButtonText } from "../../lib/composer/modes.js";
-  import { agentWithModel } from "../../lib/models/chatmodel.js";
+  import { shownAgent, watchModels } from "../../lib/models/store.svelte.js";
   import { helperAgent } from "../../lib/live/helpers.svelte.js";
   import { helperChats } from "../../lib/stores/helperchats.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
@@ -17,9 +17,12 @@
 
   const items = $derived(ws.config?.options?.tui?.composer_footer);
   const helper = $derived(helperChats.byId[sessions.currentId] ?? null);
-  const label = $derived(helper ? modelButtonText(helperAgent(helper, ws.providers).agent, items) : modelButtonText(agentWithModel(ws.agent, sessions.byId[sessions.currentId], ws.providers), items));
+  const label = $derived(helper ? modelButtonText(helperAgent(helper, ws.providers).agent, items) : modelButtonText(shownAgent(), items));
   const open = $derived(ui.menu?.kind === "model");
   let button = $state();
+
+  // The saved models, read once and kept fresh, so the label matches the menu.
+  $effect(() => watchModels());
 
   function toggle() {
     if (open) closeMenu();

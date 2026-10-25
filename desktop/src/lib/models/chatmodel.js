@@ -19,16 +19,23 @@ function catwalkModel(providers, provider, model) {
 }
 
 // agentWithModel is the agent info as the shown chat sees it: its own model
-// when it has one, else the agent's (the workspace's default).
-export function agentWithModel(agent, chat, providers = []) {
-  const own = shownChatModel(chat);
+// when it has one, else the workspace's saved model (workspace, the config's
+// coder model), else the agent's. The saved model beats the agent's because
+// the engine keeps its old model while another chat runs (UpdateModels skips
+// a busy agent), and the menu already shows the saved one (owner,
+// 2026-10-24). infoOf(selected) may name a model the catalog lacks, as the
+// CLI providers' models.
+export function agentWithModel(agent, chat, providers = [], { workspace = null, infoOf = null } = {}) {
+  const own = shownChatModel(chat) ?? shownChatModel({ model: workspace });
   if (!own || !agent) return agent;
-  const known = catwalkModel(providers, own.provider, own.model);
+  const cfg = agent.model_cfg ?? {};
+  const same = cfg.provider === own.provider && cfg.model === own.model;
+  const known = infoOf?.(own) ?? catwalkModel(providers, own.provider, own.model);
   return {
     ...agent,
-    // An unknown model (a provider this window has not read) keeps the
-    // agent's name rather than showing an empty one.
-    model: known ? { ...agent.model, ...known } : agent.model,
+    // An unknown model (a provider this window has not read) shows its id,
+    // never another model's name.
+    model: known ? { ...agent.model, ...known } : same ? agent.model : { ...agent.model, id: own.model, name: own.model },
     model_cfg: { ...own },
   };
 }

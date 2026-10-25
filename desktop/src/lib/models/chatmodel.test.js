@@ -33,9 +33,26 @@ describe("agentWithModel", () => {
     expect(agentWithModel(null, { model: { provider: "codex-cli", model: "gpt-6-sol" } }, providers)).toBe(null);
   });
 
-  it("keeps the agent's name for a model this window has not read", () => {
+  it("names a model this window has not read by its id, never the agent's", () => {
     const shown = agentWithModel(agent, { model: { provider: "gone", model: "gone-model" } }, providers);
     expect(shown.model_cfg).toEqual({ provider: "gone", model: "gone-model" });
+    expect(shown.model.name).toBe("gone-model");
+  });
+
+  // The engine keeps its old model while another chat runs (UpdateModels
+  // skips a busy agent), so a new chat shows the saved choice, as the menu
+  // does (owner, 2026-10-24).
+  it("shows the saved workspace model over a stale agent for a chat without one", () => {
+    const stale = { is_ready: true, model: { id: "flash", name: "DeepSeek V4.1 Flash" }, model_cfg: { provider: "zen", model: "flash", reasoning_effort: "max" } };
+    const saved = { provider: "claude-code", model: "opus", reasoning_effort: "high" };
+    const shown = agentWithModel(stale, null, providers, { workspace: saved });
+    expect(shown.model_cfg).toEqual(saved);
     expect(shown.model.name).toBe("Opus 5.5");
+  });
+
+  it("finds a name through infoOf when the catalog lacks it", () => {
+    const saved = { provider: "claude", model: "opus" };
+    const shown = agentWithModel(agent, null, providers, { workspace: saved, infoOf: () => ({ id: "opus", name: "Claude Opus" }) });
+    expect(shown.model.name).toBe("Claude Opus");
   });
 });

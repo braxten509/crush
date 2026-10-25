@@ -4,7 +4,8 @@
 // the palette's labels that depend on the coder model.
 import { onEvent } from "../engine/events.js";
 import { sessions } from "../stores/sessions.svelte.js";
-import { shownChatModel } from "./chatmodel.js";
+import { ws } from "../stores/workspace.svelte.js";
+import { agentWithModel, shownChatModel } from "./chatmodel.js";
 import { modelInfo, readCatalog, readModelConfig } from "./providers.js";
 
 export const modelData = $state({
@@ -60,4 +61,14 @@ export function coderModel(data = modelData, chat = null) {
   const shown = chat ?? sessions.byId[sessions.currentId];
   const selected = shownChatModel(shown) ?? cfg.models?.[type] ?? null;
   return { type, selected, info: modelInfo(cfg, data.catalog, selected) };
+}
+
+// The agent info as the shown chat sees it (the model button, the panel and
+// the composer), from the same saved model as the menu: the chat's own, else
+// the workspace's coder model once read, else the agent's.
+export function shownAgent(data = modelData) {
+  const cfg = data.cfg;
+  const workspace = cfg ? (cfg.models?.[cfg.coderType] ?? null) : null;
+  const infoOf = cfg ? (selected) => modelInfo(cfg, data.catalog, selected) : null;
+  return agentWithModel(ws.agent, sessions.byId[sessions.currentId], ws.providers, { workspace, infoOf });
 }

@@ -33,18 +33,14 @@ var own = map[catwalk.Type][]string{
 // ownPrefixes are per-account lock files.
 var ownPrefixes = []string{".oauth_refresh", ".lock"}
 
-// neverLinked are names never linked into an account. Claude's sandbox
-// guards these in every folder it may write (Claude Code 2.1.310's list),
-// and its read-only mode refuses to start when one is a symlink, so a
-// read-only sub-agent on that account could not run at all.
-var neverLinked = []string{
-	".git", ".gitconfig", ".gitmodules", ".claude", ".agents", ".codex", ".cursor", ".vscode", ".idea",
-	".bashrc", ".bash_profile", ".bash_login", ".bash_aliases", ".bash_logout", ".profile",
-	".zshrc", ".zprofile", ".zshenv", ".zlogin", ".zlogout", ".envrc", ".ripgreprc", ".mcp.json",
-	".npmrc", ".yarnrc", ".yarnrc.yml", ".pnp.cjs", ".pnp.loader.mjs", ".pnpmfile.cjs",
-	"bunfig.toml", ".bunfig.toml", ".bazelrc", ".bazelversion", ".bazeliskrc",
-	".pre-commit-config.yaml", "lefthook.yml", ".lefthook.yml", "lefthook.yaml", ".lefthook.yaml",
-	"gradle-wrapper.properties", "maven-wrapper.properties", ".devcontainer.json", "pyrightconfig.json",
+// neverLinked reports names never linked into an account. A tool folder
+// kept in Git never lends its .git. Claude's folder lends no hidden (dot)
+// name at all: its read-only sandbox guards many of them (.git, .agents,
+// .aws, shell startup files…) and refuses to start when one is a symlink,
+// so a read-only sub-agent on that account could not run (owner,
+// 2026-10-24).
+func neverLinked(kind catwalk.Type, name string) bool {
+	return name == ".git" || (kind == config.TypeClaudeCode && strings.HasPrefix(name, "."))
 }
 
 // home is the tool's own folder, account 1's.
@@ -91,19 +87,25 @@ func Prepare(kind catwalk.Type, id string) (string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
-	for _, name := range neverLinked {
-		// A link made before this rule is taken away; a real folder of the
-		// account's own is left alone.
-		target := filepath.Join(dir, name)
-		if link, err := os.Readlink(target); err == nil && link == filepath.Join(src, name) {
-			if err := os.Remove(target); err != nil {
-				return "", err
+	// A link made before that rule is taken away; the account's own files
+	// (its login, a real folder) are left alone.
+	if mine, err := os.ReadDir(dir); err == nil {
+		for _, e := range mine {
+			name := e.Name()
+			if !neverLinked(kind, name) || e.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			target := filepath.Join(dir, name)
+			if link, err := os.Readlink(target); err == nil && link == filepath.Join(src, name) {
+				if err := os.Remove(target); err != nil {
+					return "", err
+				}
 			}
 		}
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if slices.Contains(neverLinked, name) || slices.Contains(own[kind], name) || slices.ContainsFunc(ownPrefixes, func(p string) bool { return strings.HasPrefix(name, p) }) {
+		if neverLinked(kind, name) || slices.Contains(own[kind], name) || slices.ContainsFunc(ownPrefixes, func(p string) bool { return strings.HasPrefix(name, p) }) {
 			continue
 		}
 		target := filepath.Join(dir, name)

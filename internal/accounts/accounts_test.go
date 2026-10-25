@@ -190,19 +190,21 @@ func TestNamesComeFromTheGivenNameThenTheEmail(t *testing.T) {
 	require.Equal(t, "Codex 1", Name(cfg, config.TypeCodexCLI, ""))
 }
 
-// Names Claude's sandbox guards (.git, .agents, shell startup files…) are
-// never linked into an account: its read-only sandbox refuses to start when
-// one is a symlink, so a read-only sub-agent on that account could not run.
-// A link made before is taken away.
+// No hidden (dot) name of Claude's folder is linked into an account: Claude's
+// read-only sandbox guards many of them (.git, .agents, .aws, shell startup
+// files…) and refuses to start when one is a symlink, so a read-only
+// sub-agent on that account could not run. A link made before is taken away
+// (owner, 2026-10-24).
 func TestAccountFolderNeverLinksGit(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(home, "data"))
 	claude := filepath.Join(home, ".claude")
-	for _, name := range []string{".git", ".agents", ".codex"} {
+	for _, name := range []string{".git", ".agents", ".codex", ".aws"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(claude, name), 0o700))
 	}
+	require.NoError(t, os.WriteFile(filepath.Join(claude, ".caveman-active"), nil, 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(claude, ".bashrc"), nil, 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(claude, "settings.json"), []byte(`{}`), 0o600))
 
@@ -210,11 +212,12 @@ func TestAccountFolderNeverLinksGit(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.Symlink(filepath.Join(claude, ".git"), filepath.Join(dir, ".git")))
 	require.NoError(t, os.Symlink(filepath.Join(claude, ".agents"), filepath.Join(dir, ".agents")))
+	require.NoError(t, os.Symlink(filepath.Join(claude, ".aws"), filepath.Join(dir, ".aws")))
 
 	_, err := Prepare(config.TypeClaudeCode, "claude-2")
 	require.NoError(t, err)
-	// Every name Claude's sandbox guards stays unlinked, and old links go.
-	for _, name := range []string{".git", ".agents", ".codex", ".bashrc"} {
+	// No hidden (dot) name is linked, and old links go.
+	for _, name := range []string{".git", ".agents", ".codex", ".aws", ".bashrc", ".caveman-active"} {
 		_, err = os.Lstat(filepath.Join(dir, name))
 		require.True(t, os.IsNotExist(err), "%s is not linked", name)
 		_, err = os.Stat(filepath.Join(claude, name))

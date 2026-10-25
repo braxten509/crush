@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"charm.land/fantasy"
@@ -120,6 +121,33 @@ func TestCLISteer(t *testing.T) {
 	require.Zero(t, sa.QueuedPrompts(sess.ID))
 	s.returnUnsteered()
 	require.Zero(t, sa.QueuedPrompts(sess.ID))
+}
+
+// AGY and OpenCode confirm a steered prompt from their steering goroutine
+// while the read loop handles the CLI's own events; run with -race.
+func TestCLIStepsHandleIsSerialized(t *testing.T) {
+	t.Parallel()
+	env := testEnv(t)
+	sa := NewSessionAgent(SessionAgentOptions{Sessions: env.sessions, Messages: env.messages}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "session")
+	require.NoError(t, err)
+	s := &cliSteps{running: toolRunningForSteer(), ctx: t.Context(), a: sa, sessionID: sess.ID, sc: fantasy.AgentStreamCall{
+		PrepareStep: func(ctx context.Context, _ fantasy.PrepareStepFunctionOptions) (context.Context, fantasy.PrepareStepResult, error) {
+			return ctx, fantasy.PrepareStepResult{}, nil
+		},
+		OnStepFinish: func(fantasy.StepResult) error { return nil },
+		OnTextDelta:  func(string, string) error { return nil },
+	}}
+	require.NoError(t, s.begin())
+	for range 10 {
+		sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "queued"})
+		text := s.steer()
+		require.NotEmpty(t, text)
+		var wait sync.WaitGroup
+		wait.Go(func() { _ = s.handle(cliagent.Event{Type: cliagent.EventUserMessage, Text: text}) })
+		wait.Go(func() { _ = s.handle(cliagent.Event{Type: cliagent.EventText, Text: "x"}) })
+		wait.Wait()
+	}
 }
 
 func TestCLISteerPreservesQueuedImages(t *testing.T) {

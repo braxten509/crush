@@ -105,8 +105,9 @@
       <Icon name="chevron" class="chevron" />
     {/if}
   </button>
-  <button class="close" type="button" aria-label="Close {row.title}" onclick={close} onkeydown={closeKey}>
-    <Icon name="close" size={12} />
+  <!-- A sub-agent's row only hides, so it gets a dash (owner, 2026-10-24). -->
+  <button class="close" type="button" aria-label={row.helper ? `Hide ${row.title}` : `Close ${row.title}`} onclick={close} onkeydown={closeKey}>
+    <Icon name={row.helper ? "minimize" : "close"} size={12} />
   </button>
 </li>
 

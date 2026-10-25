@@ -18,23 +18,23 @@ import (
 //	    [--price-output F] [--price-cache-create F]
 //	    [--price-cache-hit F] [--reasoning-effort low|medium|high]
 //	model remove <provider>/<id>   (alias: rm)
-//	model large [<provider>/<id>] [--think] [--reasoning-effort L]
+//	model small [<provider>/<id>] [--think] [--reasoning-effort L]
 //	    [--max-tokens N] [--temperature F] [--top-p F] [--top-k N]
 //	    [--frequency-penalty F] [--presence-penalty F]
 //	    [--provider-options JSON] [--service-tier fast|default]
-//	model small [<provider>/<id>] [...]
 //
 // "add" registers a model on an existing provider (the provider must have
-// been declared with `provider add` first). "remove" removes it. "large" and
-// "small" set the selected model for that slot, or print the current
-// selection as <provider>/<id> when given no argument.
+// been declared with `provider add` first). "remove" removes it. "small"
+// sets the helper model (titles, branch summaries), or prints it as
+// <provider>/<id> when given no argument. There is no "large": each chat
+// owns its model (owner, 2026-10-24), picked in the chat.
 func handleModel(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	b := configBuilderFromCtx(ctx)
 	if b == nil {
 		return nil
 	}
 	if len(args) < 2 {
-		return usage(stderr, "usage: model add|remove <provider>/<id> | model large|small [<provider>/<id>]")
+		return usage(stderr, "usage: model add|remove <provider>/<id> | model small [<provider>/<id>]")
 	}
 
 	switch args[1] {
@@ -42,10 +42,12 @@ func handleModel(ctx context.Context, args []string, stdin io.Reader, stdout, st
 		return modelAdd(b, args, stderr)
 	case "remove", "rm":
 		return modelRemove(b, args, stderr)
-	case "large", "small":
+	case "small":
 		return modelSelect(b, args, stdout, stderr)
+	case "large":
+		return usage(stderr, "model large: each chat owns its model now; pick it in the chat (the helper model is set with `model small`)")
 	default:
-		return usage(stderr, fmt.Sprintf("model: unknown subcommand %q (expected add, remove, large, or small)", args[1]))
+		return usage(stderr, fmt.Sprintf("model: unknown subcommand %q (expected add, remove, or small)", args[1]))
 	}
 }
 
@@ -138,7 +140,7 @@ func modelRemove(b *ConfigBuilder, args []string, stderr io.Writer) error {
 	return nil
 }
 
-// modelSelectFlags is the declarative flag surface for `model large`/`small`.
+// modelSelectFlags is the declarative flag surface for `model small`.
 var modelSelectFlags = []flagSpec{
 	{name: "--think", jsonKey: "think", kind: flagBoolTrue, op: opSet},
 	{name: "--reasoning-effort", jsonKey: "reasoning_effort", kind: flagString, op: opSet},

@@ -77,7 +77,7 @@ func TestModelSelectRejectsInvalidTopP(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "crushrc")
-	_, err := LoadShellConfig(t.Context(), path, []byte(`model large openai/gpt-x --top-p 1.5`))
+	_, err := LoadShellConfig(t.Context(), path, []byte(`model small openai/gpt-x --top-p 1.5`))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "between 0 and 1")
 }
@@ -87,13 +87,13 @@ func TestModelSelectServiceTier(t *testing.T) {
 	for _, tier := range []string{"fast", "default"} {
 		t.Run(tier, func(t *testing.T) {
 			t.Parallel()
-			result := loadScript(t, "model large codex-cli/gpt-6-astra --reasoning-effort max --service-tier "+tier)
-			model := result["models"].(map[string]any)["large"].(map[string]any)
+			result := loadScript(t, "model small codex-cli/gpt-6-astra --reasoning-effort max --service-tier "+tier)
+			model := result["models"].(map[string]any)["small"].(map[string]any)
 			require.Equal(t, tier, model["service_tier"])
 			require.Equal(t, "max", model["reasoning_effort"])
 		})
 	}
-	_, err := LoadShellConfig(t.Context(), filepath.Join(t.TempDir(), "crushrc"), []byte("model large codex-cli/gpt-6-astra --service-tier typo"))
+	_, err := LoadShellConfig(t.Context(), filepath.Join(t.TempDir(), "crushrc"), []byte("model small codex-cli/gpt-6-astra --service-tier typo"))
 	require.ErrorContains(t, err, "--service-tier expects fast or default")
 }
 
@@ -101,7 +101,7 @@ func TestModelSelectRejectsNonObjectProviderOptions(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "crushrc")
-	_, err := LoadShellConfig(t.Context(), path, []byte(`model large openai/gpt-x --provider-options '[]'`))
+	_, err := LoadShellConfig(t.Context(), path, []byte(`model small openai/gpt-x --provider-options '[]'`))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expects a JSON object")
 }
@@ -149,30 +149,29 @@ model remove openai/a`)
 	require.Equal(t, "b", models[0].(map[string]any)["id"])
 }
 
-func TestModelLargeSmall(t *testing.T) {
+// TestModelLargeIsGone: each chat owns its model (owner, 2026-10-24), so
+// crushrc no longer sets a folder-wide one; `model large` stops with a hint,
+// and `model small` sets the helper model.
+func TestModelLargeIsGone(t *testing.T) {
 	t.Parallel()
 
-	result := loadScript(t, `model large openai/gpt-4o --think
-model small anthropic/claude-3-5-haiku`)
+	_, err := LoadShellConfig(t.Context(), filepath.Join(t.TempDir(), "crushrc"), []byte(`model large openai/gpt-4o --think`))
+	require.ErrorContains(t, err, "each chat owns its model")
+	require.ErrorContains(t, err, "model small")
 
-	models := result["models"].(map[string]any)
-	large := models["large"].(map[string]any)
-	require.Equal(t, "openai", large["provider"])
-	require.Equal(t, "gpt-4o", large["model"])
-	require.Equal(t, true, large["think"])
-
-	small := models["small"].(map[string]any)
+	result := loadScript(t, `model small anthropic/claude-3-5-haiku`)
+	small := result["models"].(map[string]any)["small"].(map[string]any)
 	require.Equal(t, "anthropic", small["provider"])
 	require.Equal(t, "claude-3-5-haiku", small["model"])
 }
 
-// TestModelLargePrint verifies that `model large` with no argument prints the
-// current selection, capturable via command substitution.
-func TestModelLargePrint(t *testing.T) {
+// TestModelSmallPrint verifies that `model small` with no argument prints
+// the current selection, capturable via command substitution.
+func TestModelSmallPrint(t *testing.T) {
 	t.Parallel()
 
-	result := loadScript(t, `model large openai/gpt-4o
-option data-directory "$(model large)"`)
+	result := loadScript(t, `model small openai/gpt-4o
+option data-directory "$(model small)"`)
 
 	require.Equal(t, "openai/gpt-4o", result["options"].(map[string]any)["data_directory"])
 }

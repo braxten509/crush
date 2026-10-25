@@ -25,7 +25,12 @@ func opencodeEnv(noAutoCompact bool) (env []string, signal string) {
 	if err != nil {
 		return nil, ""
 	}
+	// Each switch setting has its own dir: chats can start OpenCode at the
+	// same time, and one turn's config must not change another's.
 	dir := filepath.Join(cache, "crush", "opencode")
+	if noAutoCompact {
+		dir += "-whole-context"
+	}
 	tool := filepath.Join(dir, "tools", "bash.ts")
 	if old, _ := os.ReadFile(tool); !bytes.Equal(old, opencodeBash) {
 		if os.MkdirAll(filepath.Dir(tool), 0o700) != nil || os.WriteFile(tool, opencodeBash, 0o600) != nil {
@@ -52,7 +57,8 @@ var opencodeNoCompaction = []byte("{\n  \"compaction\": {\n    \"auto\": false\n
 
 // writeCompactionSwitch leaves OpenCode's config as the switch asks: its own
 // compaction off while Crush gives the model its whole window, and the file
-// gone again otherwise. Only a file Crush wrote is removed.
+// gone otherwise (older Crush wrote it into the shared dir). Only a file
+// Crush wrote is removed.
 func writeCompactionSwitch(dir string, noAutoCompact bool) {
 	file := filepath.Join(dir, "opencode.json")
 	old, _ := os.ReadFile(file)

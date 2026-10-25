@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -12,16 +13,26 @@ import (
 
 // Keeping the free DeepSeek's whole context also turns OpenCode's own
 // compaction off, and only while that switch is on (owner, 2026-10-23).
+// Two chats with different switches can start OpenCode at the same time,
+// so neither may change the other's config.
 func TestOpenCodeEnvTurnsItsCompactionOff(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	cache, err := os.UserCacheDir()
-	require.NoError(t, err)
-	file := filepath.Join(cache, "crush", "opencode", "opencode.json")
+	configDir := func(env []string) string {
+		for _, e := range env {
+			if dir, ok := strings.CutPrefix(e, "OPENCODE_CONFIG_DIR="); ok {
+				return dir
+			}
+		}
+		t.Fatal("no OPENCODE_CONFIG_DIR")
+		return ""
+	}
 
-	_, signal := opencodeEnv(true)
+	whole, signal := opencodeEnv(true)
 	require.NotEmpty(t, signal)
-	data, err := os.ReadFile(file)
-	require.NoError(t, err)
+	other, _ := opencodeEnv(false)
+
+	data, err := os.ReadFile(filepath.Join(configDir(whole), "opencode.json"))
+	require.NoError(t, err, "a later chat leaves the whole-context chat's config")
 	var config struct {
 		Compaction struct {
 			Auto *bool `json:"auto"`
@@ -31,9 +42,12 @@ func TestOpenCodeEnvTurnsItsCompactionOff(t *testing.T) {
 	require.NotNil(t, config.Compaction.Auto)
 	require.False(t, *config.Compaction.Auto, "OpenCode no longer compacts the chat by itself")
 
-	_, _ = opencodeEnv(false)
-	_, err = os.Stat(file)
+	_, err = os.Stat(filepath.Join(configDir(other), "opencode.json"))
 	require.True(t, os.IsNotExist(err), "every other model gets OpenCode's own compaction back")
+	for _, env := range [][]string{whole, other} {
+		_, err = os.Stat(filepath.Join(configDir(env), "tools", "bash.ts"))
+		require.NoError(t, err, "both keep Crush's bash tool")
+	}
 }
 
 // The meter measures against the window Crush gives the model, not the one

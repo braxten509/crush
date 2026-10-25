@@ -8,7 +8,7 @@ import { closeDialog, hasDialog, openDialog } from "../dialogs.js";
 import { api, SCOPE } from "../engine/api.js";
 import { loadAgent } from "../stores/workspace.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
-import { modelInfo } from "./providers.js";
+import { modelInfo, needsKeyFirst } from "./providers.js";
 import { modelData, refreshModels } from "./store.svelte.js";
 import { saveModelChoice } from "./toggles.js";
 
@@ -96,7 +96,7 @@ export async function chooseModel(choice) {
   }
 
   // Step 5: no credential yet, or Ctrl+E.
-  if (!configured || reAuthenticate) {
+  if (!configured || reAuthenticate || needsKeyFirst(providerId, configured)) {
     signIn(choice, reAuthenticate);
     return false;
   }

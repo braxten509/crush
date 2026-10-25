@@ -108,6 +108,12 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 		}
 	}
 
+	// Before the custom-provider check: a key saved from Settings is the
+	// whole entry, and this fills in the rest.
+	if listCodexAPI {
+		c.addCodexAPIProvider()
+	}
+
 	discovered := s.discoverCustomModels(ctx)
 	s.applyDynamicModels(discovered)
 

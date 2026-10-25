@@ -416,6 +416,9 @@ func (b Builder) Provider(providerCfg config.ProviderConfig, model config.Select
 		// A ChatGPT login is the provider's single credential: every
 		// request goes through the Codex backend with the OAuth token.
 		token := providerCfg.OAuthToken
+		if token == nil && config.IsCodexAPIModel(model.Model) {
+			return b.buildCodexAPIProvider(baseURL, apiKey, headers, providerCfg, model)
+		}
 		if token != nil {
 			baseURL = openaioauth.CodexBaseURL
 			apiKey = token.AccessToken

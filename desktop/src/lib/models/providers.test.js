@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { footerText } from "../timeline.js";
-import { footerProviders, safeProvider } from "./providers.js";
+import { footerProviders, needsKeyFirst, safeProvider } from "./providers.js";
 import { cheapestHostOn, qualityFloorOn } from "./openrouter.js";
 
 const cfg = {
@@ -58,5 +58,16 @@ describe("the picker's provider view keeps the FP8 floor switch (owner, 2026-10-
     expect(qualityFloorOn(read({ type: "openrouter", quality_floor: false }), "openrouter")).toBe(false);
     expect(qualityFloorOn(read({ type: "openrouter", quality_floor: true }), "openrouter")).toBe(true);
     expect(qualityFloorOn(read({ type: "openrouter" }), "openrouter")).toBe(true);
+  });
+});
+
+describe("needsKeyFirst (picking a model before its key is saved)", () => {
+  test("the Codex API asks for its key until one is saved", () => {
+    expect(needsKeyFirst("codex-api", safeProvider("codex-api", { type: "openai" }))).toBe(true);
+    expect(needsKeyFirst("codex-api", safeProvider("codex-api", { type: "openai", has_api_key: true }))).toBe(false);
+  });
+
+  test("a keyless local provider is used as it is", () => {
+    expect(needsKeyFirst("ollama", safeProvider("ollama", { type: "openai-compat" }))).toBe(false);
   });
 });

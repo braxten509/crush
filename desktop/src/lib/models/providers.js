@@ -48,6 +48,13 @@ export function safeProvider(id, cfg) {
   };
 }
 
+// Providers that are always listed but useless without a key (the engine
+// adds the Codex API with none, so Settings → Accounts can take it):
+// picking one of their models opens the key sheet first.
+const KEY_FIRST = new Set(["codex-api"]);
+
+export const needsKeyFirst = (providerId, configured) => KEY_FIRST.has(providerId) && !configured?.has_api_key && !configured?.has_oauth;
+
 // {models, recent_models, providers: Map(id → safe provider)}
 // from GET …/config; the raw answer is dropped here.
 export async function readModelConfig() {

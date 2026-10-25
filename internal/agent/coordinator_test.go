@@ -18,9 +18,11 @@ import (
 
 // mockSessionAgent is a minimal mock for the SessionAgent interface.
 type mockSessionAgent struct {
-	model     Model
-	runFunc   func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error)
-	cancelled []string
+	model Model
+	// chatModels, when set, are the chats' own models by chat.
+	chatModels map[string]Model
+	runFunc    func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error)
+	cancelled  []string
 }
 
 func (m *mockSessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
@@ -32,7 +34,10 @@ func (m *mockSessionAgent) BeginAccepted(sessionID string) *AcceptedRun {
 }
 
 func (m *mockSessionAgent) Model() Model                        { return m.model }
-func (m *mockSessionAgent) ChatModel(context.Context, string) (Model, error) {
+func (m *mockSessionAgent) ChatModel(_ context.Context, sessionID string) (Model, error) {
+	if own, ok := m.chatModels[sessionID]; ok {
+		return own, nil
+	}
 	return m.model, nil
 }
 func (m *mockSessionAgent) ForgetChatModels() {}
@@ -120,6 +125,31 @@ func TestRunSubAgent(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "done", resp.Content)
 		assert.False(t, resp.IsError)
+	})
+
+	// The Agent tool's sub-agent runs on its parent chat's model, which its
+	// own chat starts on, never on a shared one (owner, 2026-10-24).
+	t.Run("settings come from the chat's model", func(t *testing.T) {
+		env := testEnv(t)
+		coord := newTestCoordinator(t, env, providerID, providerCfg)
+		parentSession, err := env.sessions.Create(t.Context(), "Parent")
+		require.NoError(t, err)
+
+		agent := newMockAgent(providerID, 4096, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+			assert.Equal(t, int64(1234), call.MaxOutputTokens, "the chat's model's reply length")
+			return agentResultWithText("done"), nil
+		})
+		own := Model{CatwalkCfg: catwalk.Model{DefaultMaxTokens: 1234}, ModelCfg: config.SelectedModel{Provider: providerID}}
+		agent.chatModels = map[string]Model{
+			parentSession.ID: own,
+			env.sessions.CreateAgentToolSessionID("msg-1", "call-1"): own,
+		}
+		resp, err := coord.runSubAgent(t.Context(), subAgentParams{
+			Agent: agent, SessionID: parentSession.ID, AgentMessageID: "msg-1", ToolCallID: "call-1",
+			Prompt: "do something", SessionTitle: "Test Session",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "done", resp.Content)
 	})
 
 	t.Run("cost update failure preserves output", func(t *testing.T) {

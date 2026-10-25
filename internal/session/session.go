@@ -197,22 +197,40 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if err = qtx.DeleteSessionMessages(ctx, dbSession.ID); err != nil {
-		return fmt.Errorf("deleting session messages: %w", err)
+	// The chat's sub-agent and title chats go with it, all the way down
+	// (owner, 2026-10-24).
+	ids, err := sessionTree(ctx, tx, dbSession.ID)
+	if err != nil {
+		return fmt.Errorf("listing child sessions: %w", err)
 	}
-	if err = qtx.DeleteSessionFiles(ctx, dbSession.ID); err != nil {
-		return fmt.Errorf("deleting session files: %w", err)
-	}
-	if err = qtx.DeleteSession(ctx, dbSession.ID); err != nil {
-		return fmt.Errorf("deleting session: %w", err)
+	removed := make([]db.Session, 0, len(ids))
+	for _, sessionID := range ids {
+		row := dbSession
+		if sessionID != dbSession.ID {
+			if row, err = qtx.GetSessionByID(ctx, sessionID); err != nil {
+				return fmt.Errorf("reading child session: %w", err)
+			}
+		}
+		if err = qtx.DeleteSessionMessages(ctx, row.ID); err != nil {
+			return fmt.Errorf("deleting session messages: %w", err)
+		}
+		if err = qtx.DeleteSessionFiles(ctx, row.ID); err != nil {
+			return fmt.Errorf("deleting session files: %w", err)
+		}
+		if err = qtx.DeleteSession(ctx, row.ID); err != nil {
+			return fmt.Errorf("deleting session: %w", err)
+		}
+		removed = append(removed, row)
 	}
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("committing transaction: %w", err)
 	}
 
-	session := s.fromDBItem(dbSession)
-	s.clearEstimatedUsageState(dbSession.ID)
-	s.Publish(pubsub.DeletedEvent, session)
+	for _, row := range removed {
+		session := s.fromDBItem(row)
+		s.clearEstimatedUsageState(row.ID)
+		s.Publish(pubsub.DeletedEvent, session)
+	}
 	event.SessionDeleted()
 	for _, cleanup := range s.fileHistoryCleanup {
 		if err := cleanup(ctx); err != nil {
@@ -220,6 +238,29 @@ func (s *service) Delete(ctx context.Context, id string) error {
 		}
 	}
 	return nil
+}
+
+// sessionTree lists a session and every session under it: its children,
+// their children, and so on. The session itself comes first.
+func sessionTree(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `WITH RECURSIVE tree(id) AS (
+		SELECT ? UNION SELECT s.id FROM sessions s JOIN tree t ON s.parent_session_id = t.id
+	) SELECT id FROM tree`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{id}
+	for rows.Next() {
+		var child string
+		if err := rows.Scan(&child); err != nil {
+			return nil, err
+		}
+		if child != id {
+			ids = append(ids, child)
+		}
+	}
+	return ids, rows.Err()
 }
 
 func (s *service) Get(ctx context.Context, id string) (Session, error) {

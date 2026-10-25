@@ -131,12 +131,8 @@ fn tick(app: &AppHandle, listeners: &mut HashMap<PathBuf, Listener>, written: &m
 /// with the engine's socket and workspace, from GET /v1/engine.
 async fn engines() -> HashMap<PathBuf, (String, String)> {
     let mut found = HashMap::new();
-    let mut dirs = Vec::new();
-    if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR").filter(|v| !v.is_empty()) {
-        dirs.push(PathBuf::from(runtime).join("crush"));
-    }
     // SAFETY: getuid cannot fail.
-    dirs.push(std::env::temp_dir().join(format!("crush-{}", unsafe { libc::getuid() })));
+    let dirs = socket_dirs(std::env::var_os("XDG_RUNTIME_DIR"), &std::env::temp_dir(), unsafe { libc::getuid() });
     for dir in dirs {
         let Ok(entries) = std::fs::read_dir(&dir) else { continue };
         for entry in entries.flatten() {
@@ -156,6 +152,24 @@ async fn engines() -> HashMap<PathBuf, (String, String)> {
         }
     }
     found
+}
+
+/// The folders Go may put engine sockets in ($XDG_RUNTIME_DIR/crush, then
+/// <temp>/crush-<uid>), each kept only when private as Go's checkPrivateDir
+/// wants it (internal/server/socketdir.go): a real folder, not a symlink,
+/// ours, mode 0700. Only its owner can put a socket in such a folder, so
+/// another user cannot serve the windows a fake engine.
+fn socket_dirs(runtime: Option<std::ffi::OsString>, temp: &Path, uid: u32) -> Vec<PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+    let mut dirs = Vec::new();
+    if let Some(runtime) = runtime.filter(|v| !v.is_empty()) {
+        dirs.push(PathBuf::from(runtime).join("crush"));
+    }
+    dirs.push(temp.join(format!("crush-{uid}")));
+    dirs.retain(|dir| {
+        std::fs::symlink_metadata(dir).is_ok_and(|meta| meta.file_type().is_dir() && meta.uid() == uid && meta.mode() & 0o7777 == 0o700)
+    });
+    dirs
 }
 
 /// What each open chat of another folder is doing, by chat id: its record
@@ -330,6 +344,26 @@ fn encode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A socket folder another user made (or one open to others) is never
+    // read: only a real folder of ours with mode 0700, as Go accepts.
+    #[test]
+    fn only_private_socket_folders_are_read() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = std::env::temp_dir().join(format!("crush-desktop-watch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let open = base.join("run").join("crush");
+        // SAFETY: getuid cannot fail.
+        let uid = unsafe { libc::getuid() };
+        let private = base.join("tmp").join(format!("crush-{uid}"));
+        for (dir, mode) in [(&open, 0o755), (&private, 0o700)] {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(mode)).unwrap();
+        }
+        let dirs = socket_dirs(Some(base.join("run").into_os_string()), &base.join("tmp"), uid);
+        let _ = std::fs::remove_dir_all(&base);
+        assert_eq!(dirs, vec![private]);
+    }
 
     #[test]
     fn work_changes_are_new_messages_agent_events_run_ends_and_prompts() {

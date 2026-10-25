@@ -107,6 +107,9 @@ export function helperAgent(h, providers = []) {
     kind = p.type ?? "";
     break;
   }
+  // An API provider the catalog does not list (Moonshot AI's kimi-coding) is
+  // named by its own id, so its usage meter still shows (owner, 2026-10-24).
+  if (!cfg.provider && h?.cli) cfg.provider = h.cli;
   return { agent: { model, model_cfg: cfg }, kind };
 }
 

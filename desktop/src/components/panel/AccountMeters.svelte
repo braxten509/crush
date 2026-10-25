@@ -10,13 +10,15 @@
   import { accountGroups, accountMeters } from "../../lib/stores/accountmeters.svelte.js";
   import { limits } from "../../lib/stores/limits.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
+  import { agentNow } from "./panel.svelte.js";
 
   const groups = $derived(
     accountMeters.on
       ? accountGroups({
           accounts: fallback.accounts,
           byKind: limits.byKind,
-          inUse: { kind: cliKind(ws.agent, ws.providers) ?? "", account: ws.agent?.model_cfg?.account ?? "" },
+          // The shown chat's agent: a sub-agent's chat marks its own account.
+          inUse: { kind: cliKind(agentNow(), ws.providers) ?? "", account: agentNow()?.model_cfg?.account ?? "" },
         })
       : [],
   );

@@ -8,8 +8,6 @@ import { chatOf, isFinished, load, messages, parseAgentChatId, readyChat, return
 import { keepPromptsFor, seedMarks } from "./prompts.svelte.js";
 import { clearNotice, notify } from "./ui.svelte.js";
 import { dropFiles, setFiles, startFilesRead, ws } from "./workspace.svelte.js";
-import { shownChatModel } from "../models/chatmodel.js";
-import { rememberedModel } from "../models/groups.js";
 
 export const sessions = $state({
   byId: {},
@@ -599,7 +597,6 @@ async function showChat(id) {
   delete sessions.live[id]; // its messages answer for it now (1.5.3)
   keepPromptsFor(id);
   if (old && old !== id) leave(old);
-  restoreModel(id);
   runDeferred(id);
   return true;
 }
@@ -628,7 +625,6 @@ export function showKept(id, { refresh = true } = {}) {
     return true;
   }
   report(id);
-  restoreModel(id);
   runDeferred(id);
   refreshKept(id);
   return true;
@@ -639,7 +635,6 @@ export function showKept(id, { refresh = true } = {}) {
 export function shownJoined(id) {
   if (!id || sessions.currentId !== id) return;
   report(id);
-  restoreModel(id);
   refreshKept(id);
 }
 
@@ -715,54 +710,3 @@ export async function openLaunchChat({ session = "", continueLast = false } = {}
   return false;
 }
 
-// -- LIST-035: the chat's last model (restoreModelFromSession,
-// internal/ui/model/model_select.go:40-101) --
-
-// config.IsModelAvailable (internal/config/config.go:225-250).
-function modelAvailable(config, provider, model) {
-  const p = config?.providers?.[provider];
-  if (!p || p.disable === true) return false;
-  return [p.models, p.chatgpt_models, p.grok_models].some((list) => Array.isArray(list) && list.some((m) => m?.id === model));
-}
-
-async function restoreModel(sid) {
-  const chat = messages.bySession[sid];
-  // A sub-agent's chat runs on the sub-agent's model, not the window's.
-  if (!chat || helperChatIds.has(sid)) return;
-  let last = null;
-  for (let i = chat.ids.length - 1; i >= 0 && !last; i -= 1) {
-    const m = chat.byId.get(chat.ids[i]);
-    if (m?.role === "assistant" && !m.is_summary_message) last = m;
-  }
-  if (!last?.provider || !last.model) return;
-  // A chat that already keeps its own model needs nothing (owner, 2026-10-23:
-  // a model picked in one chat never reaches another).
-  if (shownChatModel(sessions.byId[sid])) return;
-  let available = false;
-  let model = null;
-  try {
-    // The whole config holds the providers' keys: it is read here and never kept.
-    const config = await api.config();
-    available = modelAvailable(config, last.provider, last.model);
-    // The model comes back with the effort last used with it, not its
-    // default (owner, 2026-10-22: the effort was lost on opening a chat).
-    model = rememberedModel(config, last.provider, last.model);
-    // Until now the chat ran on the workspace's model, so on the same tool
-    // it keeps that model's account, not the tool's own login (owner,
-    // 2026-10-23: an old chat showed the default account).
-    const shared = config?.models?.large;
-    if (shared?.account && shared.provider === last.provider) model.account = shared.account;
-  } catch (error) {
-    console.error("model restore: config read failed", errorText(error));
-    return;
-  }
-  if (!available || sessions.currentId !== sid) return;
-  // The chat adopts the model it last replied with, saved with the chat: the
-  // workspace's copy stays the default for chats without one.
-  try {
-    await api.setSessionModel(sid, model);
-    if (sessions.byId[sid]) sessions.byId[sid] = { ...sessions.byId[sid], model: { ...model } };
-  } catch (error) {
-    console.error("Failed to restore model from session", errorText(error));
-  }
-}

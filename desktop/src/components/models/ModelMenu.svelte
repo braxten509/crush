@@ -71,7 +71,8 @@
 
   const coder = $derived(coderModel(modelData));
   const barMode = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
-  const type = $derived(coder.type ?? "large");
+  // The chat's model (the picker's chat list), not the helper model.
+  const type = "large";
   const current = $derived(coder.selected);
   const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type }) : { items: [] });
   const groups = $derived(menuGroups(built.items, addableProviders(modelData.cfg)));

@@ -15,7 +15,6 @@ import { saveModelChoice } from "./toggles.js";
 const BUSY = "Agent is busy, please wait...";
 const HYPER_REFRESH_MS = 15000;
 
-const capital = (text) => (text ? text[0].toUpperCase() + text.slice(1) : text);
 const errorText = (error) => error?.message ?? String(error);
 
 function withLimit(promise, ms) {
@@ -113,13 +112,17 @@ export async function chooseModel(choice) {
     }
   }
 
-  // Step 7: save, filling the small model when none is set.
+  // Step 7: save, filling the helper model when none is set. A chat's model
+  // is saved with the chat (or as the last pick with none open); the helper
+  // model is set in config.
   closeDialog("api_key_input");
   closeDialog("oauth");
   closeDialog("models");
-  const fillSmall = !cfg.models?.small && modelType !== "small";
+  const helper = modelType === "small";
+  const fillSmall = !cfg.models?.small && !helper;
   try {
-    await saveModelChoice(modelType, model);
+    if (helper) await api.setHelperModel(model);
+    else await saveModelChoice(model);
   } catch (error) {
     notify("error", errorText(error));
     return false;
@@ -127,18 +130,19 @@ export async function chooseModel(choice) {
   if (fillSmall) {
     try {
       const small = await api.defaultSmallModel(providerId);
-      if (small) await api.setModel(SCOPE.global, "small", small);
+      if (small) await api.setHelperModel(small);
     } catch (error) {
       notify("error", errorText(error));
     }
   }
 
-  // Step 8: the agent takes the new model; onboarding starts it first.
+  // Step 8: onboarding starts the agent; a new helper model is built into
+  // it. A chat's next turn builds the chat's own model.
   const name = modelInfo(cfg, modelData.catalog, model)?.name || model.model;
   try {
     if (onboarding) await api.initAgent();
-    await api.updateAgent();
-    notify("info", `${capital(modelType)} model changed to ${name}`);
+    if (helper || fillSmall) await api.updateAgent();
+    notify("info", `${helper ? "Helper model" : "Model"} changed to ${name}`);
   } catch (error) {
     notify("error", errorText(error));
   }

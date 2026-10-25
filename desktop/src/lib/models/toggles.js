@@ -1,9 +1,9 @@
 // FAST, Ultracode and Thinking, and the effort save (desktop-design-5-6 2.3;
 // CMD-024 to CMD-026; internal/ui/model/fast_mode.go and model_select.go:
-// 400-475). Each writes the coder's selected model and rebuilds the agent's
-// model. Support comes from G-8's capabilities, not ported rules.
+// 400-475). Each writes the shown chat's own model; its next turn builds it.
+// Support comes from G-8's capabilities, not ported rules.
 import { windowBusy } from "../busy.js";
-import { api, SCOPE } from "../engine/api.js";
+import { api } from "../engine/api.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { loadAgent } from "../stores/workspace.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
@@ -17,28 +17,28 @@ const errorText = (error) => error?.message ?? String(error);
 async function coder() {
   if (!modelData.cfg) await refreshModels();
   if (!modelData.cfg) throw new Error("configuration not found");
-  const { type, selected } = coderModel();
-  if (!selected?.model) throw new Error("agent configuration not found");
-  return { type, selected: { ...selected } };
+  const { selected } = coderModel();
+  if (!selected?.model) throw new Error("no model is selected");
+  return { selected: { ...selected } };
 }
 
-// A model picked in a chat is saved with that chat (owner, 2026-10-23), so
-// another chat keeps its own; the workspace's copy stays the default for
-// chats without one and for new chats.
-export async function saveModelChoice(type, selected) {
+// A model picked in a chat is saved with that chat (owner, 2026-10-24:
+// every chat owns its model); with no chat open it is the last pick a new
+// chat starts on. A failed save reaches the picker.
+export async function saveModelChoice(selected) {
   const sid = sessions.currentId;
-  if (sid && type === "large") {
-    // A failed chat save must reach the picker: changing only the shared
-    // default would leave this chat running its previous model or effort.
-    await api.setSessionModel(sid, selected);
-    sessions.byId[sid] = { ...sessions.byId[sid], model: { ...selected } };
+  if (!sid) {
+    await api.setLastPick(selected);
+    modelData.lastPick = { ...selected };
+    return;
   }
-  await api.setModel(SCOPE.global, type, selected);
+  await api.setSessionModel(sid, selected);
+  // The chat may have been deleted while its save was on its way.
+  if (sessions.byId[sid]) sessions.byId[sid] = { ...sessions.byId[sid], model: { ...selected } };
 }
 
-async function save(type, selected, info) {
-  await saveModelChoice(type, selected);
-  await api.updateAgent();
+async function save(selected, info) {
+  await saveModelChoice(selected);
   notify("info", info);
   loadAgent();
   refreshModels();
@@ -49,10 +49,10 @@ export async function toggleFast() {
   if (windowBusy()) return notify("warn", BUSY);
   try {
     if (!capabilities.supports_fast) throw new Error("selected model does not support FAST mode");
-    const { type, selected } = await coder();
+    const { selected } = await coder();
     const on = selected.service_tier !== "fast";
     selected.service_tier = on ? "fast" : "default";
-    await save(type, selected, `FAST mode ${on ? "enabled" : "disabled"}`);
+    await save(selected, `FAST mode ${on ? "enabled" : "disabled"}`);
   } catch (error) {
     notify("error", errorText(error));
   }
@@ -63,9 +63,9 @@ export async function toggleUltracode() {
   if (windowBusy()) return notify("warn", BUSY);
   try {
     if (!capabilities.supports_ultracode) throw new Error("selected model does not support Ultracode");
-    const { type, selected } = await coder();
+    const { selected } = await coder();
     selected.ultracode = !selected.ultracode;
-    await save(type, selected, `Ultracode ${onOff(selected.ultracode)}`);
+    await save(selected, `Ultracode ${onOff(selected.ultracode)}`);
   } catch (error) {
     notify("error", errorText(error));
   }
@@ -75,9 +75,9 @@ export async function toggleUltracode() {
 export async function toggleThinking() {
   try {
     if (!capabilities.supports_thinking_toggle) throw new Error("selected model does not support a thinking toggle");
-    const { type, selected } = await coder();
+    const { selected } = await coder();
     selected.think = !selected.think;
-    await save(type, selected, `Thinking mode ${selected.think ? "enabled" : "disabled"}`);
+    await save(selected, `Thinking mode ${selected.think ? "enabled" : "disabled"}`);
   } catch (error) {
     notify("error", errorText(error));
   }
@@ -86,21 +86,16 @@ export async function toggleThinking() {
 // setReasoningEffort (model_select.go:440-475); ultracode is null when the
 // model has no Ultracode switch. Throws a failed save, so the sheet stays.
 export async function setEffort(effort, ultracode = null) {
-  const { type, selected } = await coder();
+  const { selected } = await coder();
   selected.reasoning_effort = effort;
   let info = `Reasoning effort set to ${effort}`;
   if (ultracode !== null) {
     selected.ultracode = ultracode;
     info += ` · Ultracode ${onOff(ultracode)}`;
   }
-  await saveModelChoice(type, selected);
-  api
-    .updateAgent()
-    .then(() => {
-      notify("info", info);
-      loadAgent();
-    })
-    .catch((error) => notify("error", errorText(error)));
+  await saveModelChoice(selected);
+  notify("info", info);
+  loadAgent();
   refreshModels();
 }
 
@@ -108,8 +103,8 @@ export async function setEffort(effort, ultracode = null) {
 // account; "" is the tool's own login), from the model menu's Account row.
 export async function setAccount(account, name) {
   if (windowBusy()) return notify("warn", BUSY);
-  const { type, selected } = await coder();
+  const { selected } = await coder();
   if (account) selected.account = account;
   else delete selected.account;
-  await save(type, selected, `Account set to ${name}`);
+  await save(selected, `Account set to ${name}`);
 }

@@ -290,6 +290,9 @@ const ROUTES: &[(&str, &str)] = &[
     ("GET", "sessions/{sid}/filetracker/files"),
     ("POST", "sessions/{sid}/kept-skills"),
     ("POST", "sessions/{sid}/model"),
+    // The model a new chat starts on (routes.go LastPick, SetLastPick).
+    ("GET", "last-pick"),
+    ("POST", "last-pick"),
     ("POST", "agent"),
     ("POST", "agent/main"),
     // The model restore after `config/model` (routes.go:98).
@@ -2459,8 +2462,9 @@ mod tests {
         design.extend(FALLBACK_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))));
         design.extend(OTHER_FOLDER_ROUTES.iter().map(|p| ("GET", *p)));
         design.extend(OPENROUTER_ROUTES.iter().map(|p| ("GET", *p)));
+        design.extend(LAST_PICK_ROUTES.iter().copied());
         design.sort();
-        assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5, the fallback, other-folder and OpenRouter routes, no more and no less");
+        assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5, the fallback, other-folder, OpenRouter and last-pick routes, no more and no less");
         for (method, pattern) in ROUTES {
             let path = pattern
                 .replace("{sid}", "s-1")
@@ -2591,6 +2595,9 @@ mod tests {
         ("PUT", &["/v1/memory/limit", "/v1/themes/{name}"]),
         ("DELETE", &["/v1/themes/{name}"]),
     ];
+
+    /// The last pick, the model a new chat starts on (internal/rpc/routes.go LastPick).
+    const LAST_PICK_ROUTES: &[(&str, &str)] = &[("GET", "last-pick"), ("POST", "last-pick")];
 
     /// Other folders' open chats, read from their saved files (TimelineStack).
     const OTHER_FOLDER_ROUTES: &[&str] = &["saved-sessions/{sid}", "saved-sessions/{sid}/messages"];

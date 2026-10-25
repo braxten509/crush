@@ -45,7 +45,7 @@ func (b *Backend) FallbackSettings(workspaceID string) (proto.FallbackSettings, 
 func fallbackSettings(cfg *config.Config) proto.FallbackSettings {
 	out := proto.FallbackSettings{Accounts: []proto.AccountInfo{}}
 	for _, a := range accounts.Every(cfg) {
-		out.Accounts = append(out.Accounts, proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: a.Name, Label: a.Label, SignedIn: accounts.SignedIn(a.Kind, a.ID)})
+		out.Accounts = append(out.Accounts, proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: a.Name, Label: a.Label, SignedIn: accounts.SignedIn(a.Kind, a.ID), Email: accounts.LoginEmail(a.Kind, a.ID)})
 	}
 	if cfg.Options != nil && cfg.Options.Fallback != nil {
 		out.Order = *cfg.Options.Fallback
@@ -222,7 +222,7 @@ func accountLogin(cfg *config.Config, a config.Account) (proto.AccountLogin, err
 	if err != nil {
 		return proto.AccountLogin{}, err
 	}
-	info := proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: accounts.Name(cfg, a.Kind, a.ID), Label: accounts.Label(cfg, a.Kind, a.ID), SignedIn: accounts.SignedIn(a.Kind, a.ID)}
+	info := proto.AccountInfo{ID: a.ID, Kind: string(a.Kind), Name: accounts.Name(cfg, a.Kind, a.ID), Label: accounts.Label(cfg, a.Kind, a.ID), SignedIn: accounts.SignedIn(a.Kind, a.ID), Email: accounts.LoginEmail(a.Kind, a.ID)}
 	return proto.AccountLogin{Account: info, LoginArgv: argv}, nil
 }
 

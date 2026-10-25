@@ -226,3 +226,20 @@ func TestAccountFolderNeverLinksGit(t *testing.T) {
 	_, err = os.Lstat(filepath.Join(dir, "settings.json"))
 	require.NoError(t, err, "everything else is still linked")
 }
+
+// The panel's hover text shows each sign-in's email (owner, 2026-10-25):
+// Grok keeps it in auth.json under its login's key. Grok's shown name
+// stays its number.
+func TestLoginEmailReadsGrok(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GROK_HOME", "")
+	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(home, "data"))
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".grok"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".grok", "auth.json"), []byte(`{"https://auth.x.ai::abc":{"key":"k","email":"me@x.ai"}}`), 0o600))
+	cfg := &config.Config{Options: &config.Options{}}
+
+	require.Equal(t, "me@x.ai", LoginEmail(config.TypeGrokCLI, ""))
+	require.Empty(t, LoginEmail(config.TypeGrokCLI, "grok-2"), "not signed in yet")
+	require.Equal(t, "Grok 1", Name(cfg, config.TypeGrokCLI, ""))
+}

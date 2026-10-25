@@ -242,6 +242,32 @@ func Email(kind catwalk.Type, id string) string {
 	return ""
 }
 
+// LoginEmail is Email, and for Grok the email in its auth.json, under its
+// login's key. It is for hover text (the panel's usage list; owner,
+// 2026-10-25); a Grok account's shown name stays its number.
+func LoginEmail(kind catwalk.Type, id string) string {
+	if kind != config.TypeGrokCLI {
+		return Email(kind, id)
+	}
+	dir := config.AccountDir(id)
+	if dir == "" {
+		var err error
+		if dir, err = home(kind); err != nil {
+			return ""
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "auth.json"))
+	if err != nil {
+		return ""
+	}
+	email := ""
+	gjson.ParseBytes(data).ForEach(func(_, login gjson.Result) bool {
+		email = strings.TrimSpace(login.Get("email").String())
+		return email == ""
+	})
+	return email
+}
+
 // Name is an account's shown name: the name it was given, else the email
 // it signed in with, else its tool and number ("Claude 2").
 func Name(cfg *config.Config, kind catwalk.Type, id string) string {

@@ -12,6 +12,9 @@ type AccountInfo struct {
 	Name     string `json:"name"`
 	Label    string `json:"label"`
 	SignedIn bool   `json:"signed_in"`
+	// Email is the email it signed in with, "" when none can be read
+	// (accounts.LoginEmail): the panel's hover text.
+	Email string `json:"email,omitempty"`
 }
 
 // FallbackSettings is the accounts and the fallback order.

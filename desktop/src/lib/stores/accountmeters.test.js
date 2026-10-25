@@ -30,10 +30,20 @@ describe("account meters", () => {
     expect(listedKinds(accounts, read)).toEqual(["claude-code", "codex-cli", "agy-cli", "kimi-coding"]);
   });
 
-  it("names a tool with one sign-in after the tool, and keeps the email for hovering", () => {
+  it("names a tool with one sign-in after the tool", () => {
     const byKind = { "codex-cli": reading("codex-cli", "", 29, 60) };
     const codex = accountGroups({ accounts, byKind, now }).find((g) => g.kind === "codex-cli");
-    expect(codex.rows.map((r) => [r.name, r.email, r.state, r.parts])).toEqual([["Codex", "Codex 1", "ready", [{ left: 71, level: "" }, { left: 40, level: "" }, null]]]);
+    expect(codex.rows.map((r) => [r.name, r.email, r.state, r.parts])).toEqual([["Codex", "", "ready", [{ left: 71, level: "" }, { left: 40, level: "" }, null]]]);
+  });
+
+  it("shows a login's email on hover, from its email or a name that is one", () => {
+    const logins = [
+      { id: "", kind: "claude-code", name: "Personal", email: "me@example.com", signed_in: true },
+      { id: "c2", kind: "claude-code", name: "work@example.com", signed_in: true },
+      { id: "", kind: "grok-cli", name: "Grok 1", signed_in: true },
+    ];
+    const rows = accountGroups({ accounts: logins, now }).flatMap((g) => g.rows);
+    expect(rows.map((r) => [r.name, r.email])).toEqual([["Claude", "me@example.com"], ["Claude 2", "work@example.com"], ["Grok", ""]]);
   });
 
   it("puts every tool in the same 5h, Week, Month columns", () => {
@@ -65,8 +75,8 @@ describe("account meters", () => {
     const byKind = { "claude-code": reading("claude-code", "", 0, 31), "claude-code#c2": reading("claude-code", "c2", 88, 95) };
     const [group] = accountGroups({ accounts, byKind, inUse: { kind: "claude-code", account: "" }, now });
     expect(group.rows.map((r) => [r.name, r.email, r.inUse, r.state, r.parts])).toEqual([
-      ["Claude", "Main", true, "ready", [{ left: 100, level: "" }, { left: 69, level: "" }, null]],
-      ["Claude 2", "Work", false, "ready", [{ left: 12, level: "low" }, { left: 5, level: "out" }, null]],
+      ["Claude", "", true, "ready", [{ left: 100, level: "" }, { left: 69, level: "" }, null]],
+      ["Claude 2", "", false, "ready", [{ left: 12, level: "low" }, { left: 5, level: "out" }, null]],
     ]);
   });
 

@@ -107,8 +107,8 @@ function partOf(kind, reading, name, now) {
 }
 
 // The panel's groups: [{kind, rows: [{id, name, email, inUse, state,
-// parts}]}]. name is the row's label, email the login's own name (shown on
-// hover). parts line up with SPANS, each {left, level} or null. state is "ready", "checking" (no reading yet), "error" (the first
+// parts}]}]. name is the row's label, email the email it signed in with, or
+// "" when none is known (shown on hover). parts line up with SPANS, each {left, level} or null. state is "ready", "checking" (no reading yet), "error" (the first
 // read failed), "idle" (the last read failed, so the numbers are old: an
 // unused Claude login expires until Claude Code runs on it again) or
 // "signed-out".
@@ -130,7 +130,7 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
         return {
           id: a.id,
           name: at === 0 ? tool : `${tool} ${at + 1}`,
-          email: a.name || a.label || tool,
+          email: a.email || ([a.name, a.label].find((n) => String(n ?? "").includes("@")) ?? ""),
           inUse: inUse.kind === kind && (inUse.account ?? "") === a.id,
           state,
           parts: SPAN_WINDOWS.map((name) => (read ? partOf(kind, reading, name, now) : null)),

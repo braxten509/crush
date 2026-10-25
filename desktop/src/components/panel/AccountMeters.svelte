@@ -37,8 +37,8 @@
     {#each groups as group (group.kind)}
       <div class="group" data-kind={group.kind}>
         {#each group.rows as row (row.id)}
-          <div class="row" class:idle={row.state === "idle"} data-account={row.id}>
-            <span class="name" title={row.state === "idle" ? `${row.email}: last numbers; this login is idle until it runs again` : row.email}>
+          <div class="row" class:idle={row.state === "idle"} data-account={row.id} title={[row.email, row.state === "idle" ? "last numbers; this login is idle until it runs again" : ""].filter(Boolean).join(": ") || null}>
+            <span class="name">
               <span class="text">{row.name}</span>{#if row.inUse}<span class="dot" aria-label="in use"></span>{/if}{#if row.state === "idle"}<span class="note">idle</span>{/if}
             </span>
             {#if NOTE[row.state]}
@@ -84,6 +84,15 @@
   }
   .col {
     color: var(--slate);
+  }
+  /* A row lights up under the pointer, so its numbers are easy to match
+     to its name (owner, 2026-10-25). */
+  .row {
+    margin: 0 calc(-6 * var(--px));
+    padding: 0 calc(6 * var(--px));
+  }
+  .row:hover {
+    background: var(--control-hover);
   }
   .row {
     min-height: calc(24 * var(--px));

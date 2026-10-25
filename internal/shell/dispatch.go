@@ -14,7 +14,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -31,7 +30,7 @@ const probeWindow = 128
 // path-prefixed argv[0] (e.g. ./foo.sh, /opt/bin/tool, C:\foo\bar.exe) and
 // dispatches based on the file's contents:
 //
-//  1. Shebang line (#!...) → exec the named interpreter via os/exec. The
+//  1. Shebang line (#!...) → exec the named interpreter via next. The
 //     interpreter is resolved literally first, then via PATH on the
 //     basename as a permissive fallback (so #!/bin/bash works on Windows
 //     boxes where Git for Windows puts bash.exe on PATH).
@@ -64,7 +63,7 @@ func scriptDispatchHandler(blockFuncs []BlockFunc) execMiddleware {
 
 			switch {
 			case hasShebang(probe):
-				return dispatchShebang(ctx, scriptPath, probe, args)
+				return dispatchShebang(ctx, next, scriptPath, probe, args)
 			case isBinary(probe):
 				return next(ctx, args)
 			default:
@@ -168,11 +167,13 @@ func isBinary(probe []byte) bool {
 	return false
 }
 
-// dispatchShebang parses probe's shebang line and execs the resolved
-// interpreter via os/exec, inheriting the parent runner's cwd, env, and
-// stdio. Returns interp.ExitStatus on non-zero interpreter exit so the
-// parent interpreter sees it as a normal non-zero status.
-func dispatchShebang(ctx context.Context, scriptPath string, probe []byte, args []string) error {
+// dispatchShebang parses probe's shebang line and runs the resolved
+// interpreter through next, the same exec path as any other program: the
+// parent runner's cwd, env and stdio, its own process group, and on
+// cancellation a kill of that whole group, so children the script left
+// running cannot keep the call waiting. A non-zero interpreter exit comes
+// back as interp.ExitStatus.
+func dispatchShebang(ctx context.Context, next interp.ExecHandlerFunc, scriptPath string, probe []byte, args []string) error {
 	sb, err := parseShebang(probe)
 	if err != nil {
 		hc := interp.HandlerCtx(ctx)
@@ -187,35 +188,10 @@ func dispatchShebang(ctx context.Context, scriptPath string, probe []byte, args 
 		return interp.ExitStatus(127)
 	}
 
-	cmdArgs := append([]string{}, sb.args...)
+	cmdArgs := append([]string{interpreter}, sb.args...)
 	cmdArgs = append(cmdArgs, scriptPath)
 	cmdArgs = append(cmdArgs, args[1:]...)
-
-	cmd := exec.CommandContext(ctx, interpreter, cmdArgs...)
-	hc := interp.HandlerCtx(ctx)
-	cmd.Dir = hc.Dir
-	cmd.Env = execEnvList(hc.Env)
-	cmd.Stdin = hc.Stdin
-	cmd.Stdout = hc.Stdout
-	cmd.Stderr = hc.Stderr
-	isolateProcess(cmd)
-
-	observer, runErr := filechange.StartCommand(ctx, cmd)
-	if runErr == nil {
-		runErr = observer.Wait(cmd)
-	}
-	if err := runErr; err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			code := exitErr.ExitCode()
-			if code < 0 {
-				code = 1
-			}
-			return interp.ExitStatus(uint8(code))
-		}
-		return err
-	}
-	return nil
+	return next(ctx, cmdArgs)
 }
 
 // resolveInterpreter tries the literal shebang path first, then falls back

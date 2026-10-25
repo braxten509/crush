@@ -141,3 +141,34 @@ func TestProcessIsolation_ChildProcessGroupKill(t *testing.T) {
 		t.Fatalf("cancellation took %v; expected prompt process group kill", elapsed)
 	}
 }
+
+// TestProcessIsolation_ShebangScriptGroupKill verifies that cancelling a
+// #! script stops its whole process group, so a child it left running
+// cannot hold the output open and keep the call waiting.
+func TestProcessIsolation_ShebangScriptGroupKill(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	script := writeScript(t, dir, "wait.sh", "#!/bin/sh\nsleep 6 &\nwait\n")
+
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	start := time.Now()
+	err := Run(ctx, RunOptions{
+		Command: script,
+		Cwd:     dir,
+		Env:     os.Environ(),
+		Stdout:  &stdout,
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+	// Allow up to 4s: 300ms context timeout + 2s kill timeout + margin.
+	if elapsed > 4*time.Second {
+		t.Fatalf("cancellation took %v; expected prompt process group kill", elapsed)
+	}
+}

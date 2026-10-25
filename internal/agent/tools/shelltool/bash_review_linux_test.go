@@ -23,6 +23,7 @@ import (
 )
 
 func TestNativeBashReviewsScriptsAndRedirections(t *testing.T) {
+	requireWatch(t)
 	root := visibleReviewRoot(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "existing"), []byte("before\n"), 0o600))
 	command := `printf 'first\n' > created
@@ -45,6 +46,7 @@ printf 'last\n' >> created`
 }
 
 func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
+	requireWatch(t)
 	for _, manual := range []bool{false, true} {
 		t.Run(map[bool]string{false: "explicit", true: "manual"}[manual], func(t *testing.T) {
 			root := visibleReviewRoot(t)
@@ -121,6 +123,16 @@ func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
 			outputReview.Changes[0].After.RestoreData = ""
 			require.Equal(t, review, outputReview)
 		})
+	}
+}
+
+// requireWatch skips a test that needs a command watched where none can be:
+// inside a command another Crush already watches (Linux allows one seccomp
+// listener per process tree), commands run here without a review.
+func requireWatch(t *testing.T) {
+	t.Helper()
+	if err := filechange.WatchUnavailable(); err != nil {
+		t.Skipf("commands cannot be watched here (run outside a Crush command): %v", err)
 	}
 }
 

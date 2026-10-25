@@ -218,7 +218,8 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
       // As the sidebar's context line (elements.go:144): over 80 % used.
       warn: left !== null && left < 20,
       level: meterLevel(left),
-      resets: "",
+      // Under it, the tokens used and the limit (owner, 2026-10-25).
+      resets: words ? words.tokens.replace("/", " / ") : "",
     });
     contextLine.push(words ? words.context : "Context unknown");
   }

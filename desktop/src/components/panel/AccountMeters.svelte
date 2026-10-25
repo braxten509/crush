@@ -48,7 +48,7 @@
                 <span class="part">
                   {#if part}
                     <span class="bar"><span class="fill {part.level}" style:width="{part.left}%"></span></span>
-                    <span class="pct {part.level}">{part.left}%</span>
+                    <span class="pct {part.level}"><span class="room" aria-hidden="true">100%</span><span>{part.left}%</span></span>
                   {:else}
                     <span class="pct none">–</span>
                   {/if}
@@ -145,10 +145,18 @@
   .fill.out {
     background: var(--error-ink);
   }
+  /* Always as wide as "100%", so every bar is the same width whatever the
+     number (owner, 2026-10-25): the hidden "100%" holds the room. */
   .pct {
     flex: none;
-    min-width: 3.2ch;
-    text-align: right;
+    display: inline-grid;
+    justify-items: end;
+  }
+  .pct > * {
+    grid-area: 1 / 1;
+  }
+  .room {
+    visibility: hidden;
   }
   .pct.low {
     color: var(--amber-ink);

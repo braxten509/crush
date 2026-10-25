@@ -334,6 +334,13 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
     ]);
   });
 
+  it("puts the tokens used and the limit under CONTEXT (owner, 2026-10-25)", () => {
+    const session = { prompt_tokens: 120_000, completion_tokens: 4_000 };
+    const [context] = meterModel({ items: ["context"], session, limit: 200_000 }).meters;
+    expect([context.text, context.resets]).toEqual(["38% left", "124k / 200k tokens"]);
+    expect(meterModel({ items: ["context"] }).meters[0].resets).toBe("");
+  });
+
   it("an AGY Gemini quota feeds the 5-HOUR meter the owner shows (2026-10-22)", () => {
     const agy = reading({ kind: "agy-cli", windows: [
       { name: "5h", used: 12, resets_at: "2026-10-18T16:00:00Z", model: "gemini-3.8-flash-tiered" },

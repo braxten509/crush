@@ -18,6 +18,10 @@ import (
 // key yet (owner, 2026-10-24: every provider in the picker can have more
 // than one account).
 func TestAddProviderAccountCopiesTheProviderWithoutItsKey(t *testing.T) {
+	// Its own global config: a "mine" provider another test of this run
+	// left would make the copy "mine-3".
+	t.Setenv("CRUSH_GLOBAL_CONFIG", t.TempDir())
+	t.Setenv("CRUSH_GLOBAL_DATA", t.TempDir())
 	b, ws, _ := newPublishingWorkspace(t)
 	require.NoError(t, b.SetConfigField(ws.ID, config.ScopeGlobal, "providers.mine", config.ProviderConfig{
 		ID:      "mine",

@@ -29,6 +29,14 @@ func (s *savingSessions) Save(_ context.Context, sess session.Session) (session.
 	return sess, nil
 }
 
+func (s *savingSessions) Edit(_ context.Context, _ string, edit func(*session.Session) bool) (session.Session, error) {
+	current := s.saved
+	if edit(&current) {
+		s.saved = current
+	}
+	return current, nil
+}
+
 // fixedHistory returns a fixed list of history files.
 type fixedHistory struct {
 	history.Service
@@ -54,7 +62,8 @@ func newWireFieldsController(t *testing.T, a *app.App) (*controllerV1, string) {
 // and was written back to the database.
 func TestPutSessionKeepsSnakeCaseFields(t *testing.T) {
 	t.Parallel()
-	sessions := &savingSessions{}
+	// The stored chat already has the usage Crush counted.
+	sessions := &savingSessions{saved: session.Session{ID: "s1", MessageCount: 4, PromptTokens: 100, CompletionTokens: 200, Cost: 0.5}}
 	c, wsID := newWireFieldsController(t, &app.App{Sessions: sessions})
 
 	want := session.Session{

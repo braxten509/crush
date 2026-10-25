@@ -57,7 +57,7 @@ func openRouterHostOrder(body []byte, now time.Time) []string {
 		return nil
 	}
 	type host struct {
-		tag             string
+		tag              string
 		price, cacheRead float64
 	}
 	clock := now.UTC().Hour()*100 + now.UTC().Minute()

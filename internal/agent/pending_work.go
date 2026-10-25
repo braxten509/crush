@@ -92,8 +92,8 @@ type savedPrompt struct {
 
 // pendingWork is what a project's data directory keeps across a restart.
 type pendingWork struct {
-	Waits  []savedWait   `json:"waits,omitempty"`
-	Queue  []savedPrompt `json:"queue,omitempty"`
+	Waits []savedWait   `json:"waits,omitempty"`
+	Queue []savedPrompt `json:"queue,omitempty"`
 	Out   []savedOut    `json:"out,omitempty"`
 	// Returns is each chat's planned way back, by chat. An older Crush's
 	// single "return" named no chat and is not read.

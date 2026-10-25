@@ -115,6 +115,30 @@ func TestSaveSessionKeepsEstimatedUsage(t *testing.T) {
 	require.Equal(t, session.ContextBudget{Provider: "openai", Model: "gpt", Tokens: 200000}, stored.ContextBudget)
 }
 
+// An app renames a chat by sending back the copy it read; a turn that
+// counted usage since must not be undone by it.
+func TestSaveSessionKeepsNewerUsage(t *testing.T) {
+	h := newRealCreateHarness(t)
+	ws, _ := newRealWorkspace(t, h)
+	ctx := t.Context()
+
+	sess, err := ws.Sessions.Create(ctx, "chat")
+	require.NoError(t, err)
+	path := "/v1/workspaces/" + ws.ID + "/sessions/" + sess.ID
+	read := callAPI[proto.Session](t, h, http.MethodGet, path, nil)
+
+	require.NoError(t, ws.Sessions.UpdateTitleAndUsage(ctx, sess.ID, "chat", 100, 200, 0.5))
+	read.Title = "renamed"
+	callAPI[proto.Session](t, h, http.MethodPut, path, read)
+
+	stored, err := ws.Sessions.Get(ctx, sess.ID)
+	require.NoError(t, err)
+	require.Equal(t, "renamed", stored.Title)
+	require.Equal(t, int64(100), stored.PromptTokens)
+	require.Equal(t, int64(200), stored.CompletionTokens)
+	require.InDelta(t, 0.5, stored.Cost, 1e-9)
+}
+
 func TestSessionListPendingPrompt(t *testing.T) {
 	h := newRealCreateHarness(t)
 	ws, _ := newRealWorkspace(t, h)

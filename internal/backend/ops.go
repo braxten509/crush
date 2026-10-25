@@ -88,8 +88,18 @@ func (o Ops) ListSessions(ctx context.Context) ([]session.Session, error) {
 }
 
 // SaveSession updates a session.
+// An app sends back the whole chat it read; the usage Crush counted since
+// (a turn that ran meanwhile) is kept, not undone by the older copy.
 func (o Ops) SaveSession(ctx context.Context, sess session.Session) (session.Session, error) {
-	return o.App.Sessions.Save(ctx, sess)
+	return o.App.Sessions.Edit(ctx, sess.ID, func(current *session.Session) bool {
+		counted := *current
+		*current = sess
+		current.MessageCount = counted.MessageCount
+		current.PromptTokens = counted.PromptTokens
+		current.CompletionTokens = counted.CompletionTokens
+		current.Cost = counted.Cost
+		return true
+	})
 }
 
 // DeleteSession deletes a session.

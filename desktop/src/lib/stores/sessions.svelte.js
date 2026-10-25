@@ -353,8 +353,12 @@ onResync(async () => {
 
 // -- Showing a chat --
 
+// Each report waits for the one before it: the engine keeps the last one to
+// arrive, and a landing page's "" landing after the new chat's would hold
+// back that chat's permission requests (START-012).
+let reporting = Promise.resolve();
 function report(sid) {
-  setCurrentSession(sid).catch((error) => console.error("current session report failed", error));
+  reporting = reporting.then(() => setCurrentSession(sid)).catch((error) => console.error("current session report failed", error));
 }
 
 function errorText(error) {

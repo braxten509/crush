@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The real event loop (events.js) with fake Tauri calls (see prompts.test.js).
-const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], ring: null, current: [], notices: [] }));
+const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], ring: null, current: [], notices: [], holdReports: false, heldReports: [] }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
   getCurrentWebviewWindow: () => ({
@@ -22,9 +22,14 @@ vi.mock("../engine/commands.js", () => ({
     return null;
   },
   api_abort: async () => true,
-  engine_set_current_session: async (sid) => {
-    h.current.push(sid);
-    return null;
+  // h.current is the engine's order of arrival; with holdReports the test
+  // answers each report itself (h.heldReports), in any order it likes.
+  engine_set_current_session: (sid) => {
+    if (!h.holdReports) {
+      h.current.push(sid);
+      return Promise.resolve(null);
+    }
+    return new Promise((resolve) => h.heldReports.push(() => (h.current.push(sid), resolve(null))));
   },
   events_take: async () => h.entries.splice(0),
   lastClipboardWrite: () => null,
@@ -67,6 +72,8 @@ beforeEach(async () => {
   h.ring = null;
   h.current.length = 0;
   h.notices.length = 0;
+  h.holdReports = false;
+  h.heldReports.length = 0;
   vi.stubGlobal("requestAnimationFrame", (fn) => setTimeout(() => fn(0), 0));
   // Every notice, in order (a newer one replaces the shown one).
   vi.doMock("./ui.svelte.js", async (importOriginal) => {
@@ -570,6 +577,7 @@ describe("deleted, new and first chats (LIST-037, LIST-033, TYPE-041)", () => {
     expect(ui.ui.notice).toBeNull();
     expect(S.busy("s1")).toBe(true);
     expect(S.sessions.currentId).toBe("fresh");
+    await settle(); // reports reach the engine one after another
     expect(h.current.at(-1)).toBe("fresh");
     expect(h.calls.filter((c) => c.method === "POST" && c.path === "sessions")).toHaveLength(1);
     openable("fresh");
@@ -610,7 +618,25 @@ describe("deleted, new and first chats (LIST-037, LIST-033, TYPE-041)", () => {
     expect(S.sessions.currentId).toBe("fresh");
     expect(S.sessions.order).toEqual(["fresh"]);
     expect(M.messages.bySession.fresh.status).toBe("ready");
+    await settle(); // reports reach the engine one after another
     expect(h.current.at(-1)).toBe("fresh");
     expect(await S.ensureSession()).toBe("fresh");
+  });
+
+  // START-012: the landing page's "" and the new chat's report went out at
+  // once and could land in either order; a late "" left the engine thinking
+  // the window showed no chat, so it held back the chat's permission request.
+  it("the new chat's report reaches the engine after the landing page's, whatever order the engine answers in", async () => {
+    await withList();
+    h.routes.set("POST sessions", ({ body }) => chat("fresh", { title: body.title }));
+    h.holdReports = true;
+    const made = S.ensureSession();
+    await settle();
+    while (h.heldReports.length) {
+      h.heldReports.pop()();
+      await settle();
+    }
+    expect(await made).toBe("fresh");
+    expect(h.current.at(-1)).toBe("fresh");
   });
 });

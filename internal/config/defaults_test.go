@@ -6,9 +6,28 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/stretchr/testify/require"
 )
+
+// A key removed from the config's env goes back to what it was before
+// Crush set it: unset when it was unset, else its old value.
+func TestApplyEnvUndoesRemovedKeys(t *testing.T) {
+	t.Setenv("CRUSH_TEST_KEEP", "orig")
+	t.Setenv("CRUSH_TEST_GONE", "")
+	require.NoError(t, os.Unsetenv("CRUSH_TEST_GONE"))
+	resolver := NewShellVariableResolver(env.New())
+	owner := new(int)
+
+	(&Config{Env: map[string]string{"CRUSH_TEST_GONE": "x", "CRUSH_TEST_KEEP": "y"}}).applyEnv(resolver, owner)
+	require.Equal(t, "y", os.Getenv("CRUSH_TEST_KEEP"))
+	(&Config{Env: map[string]string{}}).applyEnv(resolver, owner)
+
+	_, set := os.LookupEnv("CRUSH_TEST_GONE")
+	require.False(t, set)
+	require.Equal(t, "orig", os.Getenv("CRUSH_TEST_KEEP"))
+}
 
 func TestConfig_setDefaults(t *testing.T) {
 	t.Run("sets default data directory", func(t *testing.T) {

@@ -48,6 +48,9 @@ type buildParams struct {
 	onCatalog func(cfg *Config) *Config
 	// reload selects the reload wording for errors and log messages.
 	reload bool
+	// envOwner is the store whose config sets the top-level env vars, so
+	// a reload can undo the ones its config no longer sets.
+	envOwner any
 }
 
 // configFiles records where a built config came from.
@@ -117,7 +120,7 @@ func buildConfig(ctx context.Context, p buildParams) (*buildResult, error) {
 
 	// Apply top-level env vars before configuring providers so variables
 	// like AWS_PROFILE are visible to the AWS SDK credential chain.
-	cfg.applyEnv(resolver)
+	cfg.applyEnv(resolver, p.envOwner)
 
 	res.pending, err = cfg.configureProviders(ctx, vars, resolver, providers)
 	if err != nil {

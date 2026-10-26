@@ -573,9 +573,14 @@ describe("history and the queue (TYPE-017 to TYPE-019, TYPE-050)", () => {
     h.routes.set("GET /v1/prompt-history", ["second", "first", "!ls"]);
     show("s1");
     await settle();
+    const field = { value: "", setSelectionRange(a, b) { this.selectionStart = a; this.selectionEnd = b; } };
+    const detach = C.attachField(field);
     C.setText("draft");
     expect(await C.historyUp()).toBe(true);
     expect(C.draftOf().text).toBe("second");
+    // The caret lands at the end of the recalled prompt.
+    expect([field.selectionStart, field.selectionEnd]).toEqual([6, 6]);
+    detach();
     await C.historyUp();
     expect(C.draftOf().text).toBe("first");
     await C.historyUp();

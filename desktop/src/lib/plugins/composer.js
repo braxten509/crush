@@ -96,10 +96,12 @@ fieldKey("Alt+Backspace", () => {
   return true;
 });
 
-// TYPE-017: the first ↑ goes to the first line's start, the next one older.
+// TYPE-017: the first ↑ goes to the first line's start, the next one older;
+// while a recalled prompt is shown unchanged (caret at its end), every ↑ goes
+// older.
 fieldKey("ArrowUp", () => {
   const { value, start, end } = caret();
-  if (value.length === 0 || (start === 0 && end === 0)) {
+  if (value.length === 0 || (start === 0 && end === 0) || C.browsingHistory()) {
     C.historyUp();
     return true;
   }

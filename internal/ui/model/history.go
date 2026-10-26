@@ -36,8 +36,9 @@ func (m *UI) savePrompt(text string) tea.Cmd {
 // handleHistoryUp handles up arrow for history navigation.
 func (m *UI) handleHistoryUp(msg tea.Msg) tea.Cmd {
 	prevHeight := m.textarea.Height()
-	// Navigate to older history entry from cursor position (0,0).
-	if m.textarea.Length() == 0 || m.isAtEditorStart() {
+	// Navigate to an older history entry from cursor position (0,0), or
+	// from anywhere while a recalled prompt is shown unchanged.
+	if m.textarea.Length() == 0 || m.isAtEditorStart() || m.promptHistory.index >= 0 {
 		if !m.bangMode && len(m.queue.recalledDrafts[m.currentSessionID()]) > 0 {
 			return m.restoreRecalledDrafts()
 		}
@@ -226,8 +227,8 @@ func (m *UI) historyPrev() bool {
 	m.promptHistory.index = nextIndex
 	m.textarea.Reset()
 	m.textarea.InsertString(m.promptHistory.messages[nextIndex])
-	m.textarea.MoveToBegin()
 	m.syncBangModeFromTextarea()
+	m.textarea.MoveToEnd()
 	return true
 }
 

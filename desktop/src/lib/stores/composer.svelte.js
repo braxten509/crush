@@ -307,7 +307,7 @@ function showEntry(entry, at) {
 function olderEntry() {
   const entry = history.prev(draftOf().text);
   if (entry === null) return false;
-  showEntry(entry, "start");
+  showEntry(entry, "end");
   return true;
 }
 

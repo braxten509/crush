@@ -1,12 +1,12 @@
 <script>
   // The app's scrollbar on a sheet's scroller (desktop-design-5-6 2.1, 2.13
-  // SET-006): the target's own scrollbar, the system's bar with arrows and a
-  // grey handle, as everywhere in the app (owner, 2026-10-26). It exists only
+  // SET-006): the target's own scrollbar, the app's plain bar (app.css: a
+  // thin grey rectangle, no arrows), as everywhere in the app (owner, 2026-10-26). It exists only
   // while the content overflows, so its column is kept only then (DLG-012,
   // internal/ui/dialog/internal/kit/layout.go:59-76). Modes as
   // options.tui.scrollbar: "never" hides it; "default" and "always" show it
-  // (the system's bar cannot fade, so "default" no longer waits for a scroll;
-  // kit-bar-shown still marks the 2 s after one). Draws nothing itself.
+  // whenever the content overflows (kit-bar-shown still marks the 2 s after a
+  // scroll). Draws nothing itself.
   //   target (the scrolling element), mode: "default" | "always" | "never"
   const SHOW_MS = 2000;
 

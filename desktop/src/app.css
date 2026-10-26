@@ -260,6 +260,28 @@ ul {
   inherits: false;
   initial-value: 0;
 }
+/* The one scroll bar of the whole app (owner, 2026-10-26: "the simple
+   rectangle"): a 6 wide grey thumb, no arrows, no track. It shows whenever
+   its area is too full. Areas that show no bar hide it with
+   scrollbar-width: none, which the browser puts before these rules. The
+   chat's grip (lib/bardrag.js) counts on the thumb's least length here. */
+::-webkit-scrollbar {
+  width: calc(6 * var(--px));
+  height: calc(6 * var(--px));
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  min-height: 20px;
+  min-width: 20px;
+  background: var(--rule-control);
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
 /* A piece that arrives settles in place (new messages, notices, figures):
    a short slide, fully drawn from the first frame. */
 @keyframes paper-settle {

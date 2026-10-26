@@ -12,10 +12,10 @@
   // window and put back when it returns, so scrolling back never draws a
   // reply again; an item whose version changed meanwhile is updated in place.
   //
-  // The scrollbar is the system's own, with arrows and a grey handle, as
-  // everywhere in the app (owner, 2026-10-26; CHAT-095): "never" hides it;
-  // "default" and "always" show it (the system's bar cannot fade, so bar-shown
-  // only marks the 2 s after a scroll).
+  // The scrollbar is the app's plain one (app.css: a thin grey rectangle, no
+  // arrows), as everywhere in the app (owner, 2026-10-26; CHAT-095): "never"
+  // hides it; "default" and "always" show it whenever the chat is too full
+  // (bar-shown only marks the 2 s after a scroll).
   // Placed by Timeline.
   import { flushSync, mount, unmount, untrack } from "svelte";
   import { barThumb, dragTop } from "../../lib/bardrag.js";
@@ -352,7 +352,7 @@
     onscrolled?.({ up });
   }
 
-  // A press on the bar's column, the arrows or the track (CHAT-095): it
+  // A press on the bar's column, or its track (CHAT-095): it
   // lasts until the button is released anywhere.
   function onMouseDown(event) {
     if (event.button !== 0 || event.target !== scroller || event.offsetX < scroller.clientWidth) return;
@@ -369,12 +369,12 @@
   }
 
   // The grip: an invisible piece over the bar's thumb, so a press on the
-  // thumb is dragged here, not by the browser (lib/bardrag.js). The system's
+  // thumb is dragged here, not by the browser (lib/bardrag.js). The browser's
   // bar keeps the mouse to itself while its thumb is dragged and moves by the
   // mouse's steps, so as the chat measured older messages a drag to the top
   // stopped a quarter of the way down (2026-10-26). Here each move puts the
-  // view where the mouse is, on the chat as long as it is now. The arrows and
-  // the track stay the browser's.
+  // view where the mouse is, on the chat as long as it is now. The track stays
+  // the browser's.
   let grip = $state(null); // {left, top, width, height, travel} in the parent's px
   let gripDrag = null;
 

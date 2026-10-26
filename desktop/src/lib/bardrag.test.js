@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { barThumb, dragTop } from "./bardrag.js";
 
-// A chat 828 tall showing 828 of 84 940, its bar's arrows 18 long each.
+// A chat 828 tall showing 828 of 84 940, its plain bar with no arrows.
 const bar = { height: 828, client: 828, total: 84940 };
 
 describe("the chat bar's own drag (bardrag.js)", () => {
-  it("places the thumb between the arrows, never shorter than the least length", () => {
-    expect(barThumb({ ...bar, top: 0 })).toEqual({ start: 18, length: 17, travel: 775 });
+  it("places the thumb on the whole column, never shorter than the least length", () => {
+    expect(barThumb({ ...bar, top: 0 })).toEqual({ start: 0, length: 20, travel: 808 });
     const end = barThumb({ ...bar, top: 84940 - 828 });
-    expect(end.start + end.length).toBeCloseTo(828 - 18, 6);
-    expect(barThumb({ height: 400, client: 400, total: 800, top: 0 }).length).toBe(182);
+    expect(end.start + end.length).toBeCloseTo(828, 6);
+    expect(barThumb({ height: 400, client: 400, total: 800, top: 0 }).length).toBe(200);
   });
 
   it("maps the drag on today's length, so the ends are always reached", () => {

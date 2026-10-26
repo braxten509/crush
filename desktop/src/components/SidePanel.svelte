@@ -7,8 +7,8 @@
   // no props. App.svelte hides it (D11, or its own switch).
   //
   // Focus (SIDE-012): → or l from the timeline, or a click, focuses the body
-  // (lib/plugins/panel.js has the keys); the body's scrollbar is the system's
-  // own and shows whenever the body is too full (owner, 2026-10-26). With composer_focus_only a click
+  // (lib/plugins/panel.js has the keys); the body's scrollbar is the app's
+  // plain one (app.css) and shows whenever the body is too full (owner, 2026-10-26). With composer_focus_only a click
   // leaves focus in the field and the wheel still scrolls the body on hover.
   import { setFocus, setPanelShown, ui } from "../lib/stores/ui.svelte.js";
   import { ws } from "../lib/stores/workspace.svelte.js";

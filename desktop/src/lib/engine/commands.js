@@ -218,9 +218,10 @@ export async function alertSound(id) {
   return invoke("alert_sound", { id });
 }
 
-// state: "idle" | "working" | "blocked" | "done" | "error".
-export async function alertWindowState(state, projectDir, sessionId, focused) {
-  return invoke("alert_window_state", { state, projectDir, sessionId, focused });
+// state: "idle" | "working" | "blocked" | "done" | "error"; waiting: the
+// chat ids this window sees waiting for an answer (system/waiting.js).
+export async function alertWindowState(state, projectDir, sessionId, focused, waiting = []) {
+  return invoke("alert_window_state", { state, projectDir, sessionId, focused, waiting });
 }
 
 // → the label of the window that handles that chat's alert.

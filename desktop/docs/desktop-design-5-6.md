@@ -1218,7 +1218,7 @@ The finished alert is checked twice, as in the terminal: when the event arrives 
 - done: a turn finished there while the window was not focused; error: a turn ended with an error event while it was not focused;
 - idle otherwise.
 
-Each window reports its state with `alert_window_state(state, projectDir, sessionId, focused)` (6.4). From that app-wide table, `taskbar.rs` shows on the taskbar or dock icon a count of windows that are blocked, done or in error, and asks for attention when a window becomes blocked while not focused.
+Each window reports its state with `alert_window_state(state, projectDir, sessionId, focused, waiting)` (6.4), where `waiting` lists the open chats of every folder it sees waiting for a question or permission answer (`system/waiting.js`). From that app-wide table, `taskbar.rs` shows on the taskbar or dock icon how many chats wait for an answer anywhere in the app, each once (owner, 2026-10-25; a blocked window with no chat, such as the AWS sign-in sheet, counts as one), and asks for attention when a window becomes blocked while not focused.
 
 **Progress (NOTE-008).** While any window is working, `taskbar.rs` shows an indeterminate progress bar on the icon, from the same table. `options.progress: false` turns it off (`internal/config/options.go:169`; `internal/ui/model/ui.go:536`). The terminal sends a random percent only to keep one terminal from hiding the bar (`internal/ui/model/draw.go:285-293`); the desktop has no such need.
 

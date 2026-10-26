@@ -550,8 +550,9 @@ pub fn alert_window_state(
     project_dir: String,
     session_id: String,
     focused: bool,
+    waiting: Vec<String>,
 ) -> AppResult<()> {
-    alerts::window_state(&app, window.label(), &state, &project_dir, &session_id, focused)
+    alerts::window_state(&app, window.label(), &state, &project_dir, &session_id, focused, waiting)
 }
 
 pub fn alert_handler(app: AppHandle, project_dir: String, session_id: String) -> AppResult<String> {

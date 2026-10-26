@@ -3,15 +3,20 @@
 // secure form or the AWS sign-in waits; working while its chat is busy
 // (unless options.progress is false); done or error after a turn ended there
 // while unfocused, cleared when the window gains focus; idle otherwise. Each
-// change goes to alert_window_state, which keeps the app-wide table.
+// change goes to alert_window_state, which keeps the app-wide table. With
+// it go the chats this window sees waiting for an answer, which the badge
+// counts across the app (owner, 2026-10-25).
 import { windowBusy } from "../busy.js";
 import { dialogs } from "../dialogs.js";
 import { alertWindowState } from "../engine/commands.js";
 import { projectDir } from "../stores/composer.svelte.js";
+import { folders } from "../stores/folders.svelte.js";
+import { openChats } from "../stores/openchats.svelte.js";
 import { prompts } from "../stores/prompts.svelte.js";
-import { sessions } from "../stores/sessions.svelte.js";
+import { rootOf, sessions } from "../stores/sessions.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
 import { onFocusGain, windowFocus } from "./focus.js";
+import { waitingChats } from "./waiting.js";
 
 const marks = $state({ done: false, error: false, focused: windowFocus.focused });
 
@@ -44,10 +49,13 @@ export function startBadge() {
       const focused = marks.focused;
       const sid = sessions.currentId ?? "";
       const dir = projectDir() ?? "";
-      const key = `${state}|${focused}|${sid}|${dir}`;
+      const pendingOf = (id) => sessions.byId[id]?.pending_prompt || folders.states[id]?.pending_prompt || "";
+      const asked = Boolean(prompts.permission || prompts.question);
+      const waiting = waitingChats(openChats.list.map((c) => c?.id).filter(Boolean), pendingOf, rootOf(sid) || sid, asked);
+      const key = `${state}|${focused}|${sid}|${dir}|${waiting.join(",")}`;
       if (key === last) return;
       last = key;
-      alertWindowState(state, dir, sid, focused).catch(() => {});
+      alertWindowState(state, dir, sid, focused, waiting).catch(() => {});
     });
   });
 }

@@ -1,13 +1,14 @@
 //! Notifications, sounds and the app-wide window states (desktop-design-5-6
 //! 2.18, 6.4). One table for every window: its alert state, project, shown
-//! chat and focus. From it, the badge counts windows that are blocked, done
-//! or in error; the progress shows while any works; attention is asked when
+//! chat, focus and the chats it sees waiting for an answer. From it, the
+//! badge counts the chats waiting anywhere in the app; the progress shows
+//! while any works; attention is asked when
 //! a window becomes blocked while not focused. SYS owns this file (7.3).
 
 use crate::error::{AppError, AppResult};
 use serde::Serialize;
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
@@ -21,6 +22,25 @@ struct WindowState {
     session: String,
     /// When the window first reported, so the earliest window leads.
     since: Instant,
+    /// The open chats, of every folder, the window sees waiting for a
+    /// question or permission answer.
+    waiting: Vec<String>,
+}
+
+/// The badge: each chat waiting for an answer anywhere in the app, once
+/// (owner, 2026-10-25). A blocked window counts its shown chat, or itself
+/// when it shows none (the AWS sign-in sheet on the landing page).
+fn badge_count<'a>(windows: impl Iterator<Item = &'a WindowState> + Clone) -> u32 {
+    let mut chats: HashSet<&str> = windows.clone().flat_map(|w| w.waiting.iter().map(String::as_str)).collect();
+    let mut extra = 0;
+    for w in windows.filter(|w| w.state == "blocked") {
+        if w.session.is_empty() {
+            extra += 1;
+        } else {
+            chats.insert(w.session.as_str());
+        }
+    }
+    chats.len() as u32 + extra
 }
 
 /// The window states behind the badge and progress (managed by main.rs).
@@ -135,7 +155,7 @@ pub fn sound(_app: &AppHandle, id: &str) -> AppResult<Sounded> {
 }
 
 /// `alert_window_state`: state is "idle", "working", "blocked", "done" or "error".
-pub fn window_state(app: &AppHandle, label: &str, state: &str, project_dir: &str, session_id: &str, focused: bool) -> AppResult<()> {
+pub fn window_state(app: &AppHandle, label: &str, state: &str, project_dir: &str, session_id: &str, focused: bool, waiting: Vec<String>) -> AppResult<()> {
     if !STATES.contains(&state) {
         return Err(AppError::new("bad_state", format!("unknown alert state \"{state}\"")));
     }
@@ -147,8 +167,8 @@ pub fn window_state(app: &AppHandle, label: &str, state: &str, project_dir: &str
         windows.retain(|l, _| open.contains(l));
         let was_blocked = windows.get(label).is_some_and(|w| w.state == "blocked");
         let since = windows.get(label).map_or_else(Instant::now, |w| w.since);
-        windows.insert(label.to_string(), WindowState { state: state.to_string(), project: project_dir.to_string(), session: session_id.to_string(), since });
-        let badge = windows.values().filter(|w| matches!(w.state.as_str(), "blocked" | "done" | "error")).count() as u32;
+        windows.insert(label.to_string(), WindowState { state: state.to_string(), project: project_dir.to_string(), session: session_id.to_string(), since, waiting });
+        let badge = badge_count(windows.values());
         let working = windows.values().any(|w| w.state == "working");
         (badge, working, state == "blocked" && !was_blocked && !focused)
     };
@@ -163,8 +183,7 @@ pub fn window_gone(app: &AppHandle, label: &str) {
         if windows.remove(label).is_none() {
             return;
         }
-        let badge = windows.values().filter(|w| matches!(w.state.as_str(), "blocked" | "done" | "error")).count() as u32;
-        (badge, windows.values().any(|w| w.state == "working"))
+        (badge_count(windows.values()), windows.values().any(|w| w.state == "working"))
     };
     let _ = crate::taskbar::apply(app, Some(badge), working.then_some("indeterminate"), None);
 }
@@ -223,6 +242,34 @@ mod tests {
         assert_eq!(pick_handler(&reported, "/p/a", "s-a").as_deref(), Some("w1"));
         let reported = vec![shown("w1", "/p/a", "s-b", 1), shown("w2", "/p/a", "s-a", 2)];
         assert_eq!(pick_handler(&reported, "/p/a", "s-a").as_deref(), Some("w2"));
+    }
+
+    fn state(state: &str, session: &str, waiting: &[&str]) -> WindowState {
+        WindowState {
+            state: state.to_string(),
+            project: String::new(),
+            session: session.to_string(),
+            since: Instant::now(),
+            waiting: waiting.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    // The badge counts chats waiting for an answer anywhere in the app, each
+    // once however many windows list it (owner, 2026-10-25). A blocked window
+    // whose wait no list names yet (the AWS sign-in sheet) counts too; done
+    // and error don't.
+    #[test]
+    fn badge_counts_each_waiting_chat_once() {
+        let windows = [
+            state("idle", "s-a", &["s-b", "s-c"]),
+            state("done", "s-x", &["s-c", "s-d"]),
+            state("blocked", "s-b", &["s-b", "s-c"]),
+            state("error", "s-y", &[]),
+        ];
+        assert_eq!(badge_count(windows.iter()), 3);
+        let windows = [state("blocked", "", &[]), state("blocked", "s-a", &["s-a"])];
+        assert_eq!(badge_count(windows.iter()), 2);
+        assert_eq!(badge_count([state("done", "s-a", &[])].iter()), 0);
     }
 
     // No window reports the folder: the caller falls back to the launch

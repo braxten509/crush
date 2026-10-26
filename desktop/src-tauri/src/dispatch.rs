@@ -140,6 +140,7 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
             arg(args, "projectDir")?,
             arg(args, "sessionId")?,
             arg(args, "focused")?,
+            arg::<Option<Vec<String>>>(args, "waiting")?.unwrap_or_default(),
         )),
         "alert_handler" => res(commands::alert_handler(a, arg(args, "projectDir")?, arg(args, "sessionId")?)),
         "crash_pending" => res(commands::crash_pending(a, w)),

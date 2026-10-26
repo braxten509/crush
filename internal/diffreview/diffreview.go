@@ -13,6 +13,7 @@ import (
 
 	"github.com/aymanbagabas/go-udiff"
 	"github.com/charmbracelet/crush/internal/filechange"
+	"github.com/charmbracelet/crush/internal/linediff"
 )
 
 // Kind is what happened to a file.
@@ -282,7 +283,7 @@ func fromContent(path, before, after string, numbered bool) (File, bool) {
 			f.Kind = Deleted
 		}
 	}
-	ud, err := udiff.ToUnifiedDiff(path, path, before, udiff.Lines(before, after), contextLines)
+	ud, err := udiff.ToUnifiedDiff(path, path, before, linediff.Edits(before, after), contextLines)
 	if err != nil {
 		return File{}, false
 	}

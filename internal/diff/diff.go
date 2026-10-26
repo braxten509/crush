@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/aymanbagabas/go-udiff"
+	"github.com/charmbracelet/crush/internal/linediff"
 )
 
 // GenerateDiff creates a unified diff from two file contents
@@ -11,9 +12,9 @@ func GenerateDiff(beforeContent, afterContent, fileName string) (string, int, in
 	fileName = strings.TrimPrefix(fileName, "/")
 
 	var (
-		unified   = udiff.Unified("a/"+fileName, "b/"+fileName, beforeContent, afterContent)
-		additions = 0
-		removals  = 0
+		unified, _ = udiff.ToUnified("a/"+fileName, "b/"+fileName, beforeContent, linediff.Edits(beforeContent, afterContent), udiff.DefaultContextLines)
+		additions  = 0
+		removals   = 0
 	)
 
 	lines := strings.SplitSeq(unified, "\n")

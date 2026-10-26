@@ -80,6 +80,8 @@ type invocation struct {
 	tracker  *Tracker
 	captured map[string]int64
 	moves    map[string]moveSource
+	// head is the commit checked out when this process first wrote.
+	head string
 }
 
 func (p *ProcessReview) executed(parent *invocation, args []string) *invocation {
@@ -163,6 +165,9 @@ func (p *ProcessReview) before(record *invocation, path string) {
 		tracker.imported = transferKind(record.args) != ""
 		record.tracker = tracker
 		record.captured = map[string]int64{}
+		if tracker.repository != "" {
+			record.head = headCommit(tracker.repository)
+		}
 	}
 	if record.tracker.excluded(path) {
 		return
@@ -235,6 +240,7 @@ func (p *ProcessReview) End(id string) *Review {
 			continue
 		}
 		review.Deletions = review.Deletions || changes.Deletions
+		gitBaselines(record.tracker.repository, record.head, changes.Changes)
 		for _, change := range changes.Changes {
 			change.Order = record.captured[change.Path]
 			if kind := transferKind(record.args); kind != "" && change.Before == nil && change.After != nil {

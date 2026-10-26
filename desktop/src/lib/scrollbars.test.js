@@ -54,10 +54,14 @@ function appRule(selector) {
 }
 
 describe("scrollbars", () => {
-  it("app.css draws the one plain bar: a thin grey rectangle, no arrows, no track", () => {
+  it("app.css draws the one plain bar: a thin grey rectangle, no arrows, no track, hidden until used", () => {
     expect(appRule("::-webkit-scrollbar")).toMatch(/width: calc\(6 \* var\(--px\)\)/);
     expect(appRule("::-webkit-scrollbar")).toMatch(/height: calc\(6 \* var\(--px\)\)/);
-    expect(appRule("::-webkit-scrollbar-thumb")).toMatch(/background: var\(--rule-control\)/);
+    // Hidden until its area scrolls (lib/barfade.js), or always with Settings "always".
+    expect(appRule("::-webkit-scrollbar-thumb")).toMatch(/background: transparent/);
+    expect(appRule(".bar-used::-webkit-scrollbar-thumb")).toMatch(/background: var\(--rule-control\)/);
+    expect(appRule(':root[data-scrollbar="always"] *::-webkit-scrollbar-thumb')).toMatch(/background: var\(--rule-control\)/);
+    expect(appRule(':root[data-scrollbar="never"] *')).toMatch(/scrollbar-width: none/);
     expect(appRule("::-webkit-scrollbar-button")).toMatch(/display: none/);
     expect(appRule("::-webkit-scrollbar-track")).toMatch(/background: transparent/);
     expect(appRule("::-webkit-scrollbar-corner")).toMatch(/background: transparent/);

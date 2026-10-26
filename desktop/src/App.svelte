@@ -38,6 +38,12 @@
   import { ws } from "./lib/stores/workspace.svelte.js";
   import { listRoom, meterRoom } from "./components/panel/panel.svelte.js";
 
+  // The Settings choice for scroll bars, for every area at once (app.css,
+  // lib/barfade.js): "default" hides each bar until used, "always", "never".
+  $effect(() => {
+    document.documentElement.dataset.scrollbar = ws.config?.options?.tui?.scrollbar ?? "default";
+  });
+
   // D11 (SIDE-002): the project panel hides when keeping it would leave the
   // conversation under its minimum with both side columns at theirs (1,060
   // picture px of inner width), when the window is under 640 picture px tall,

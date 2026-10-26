@@ -14,11 +14,13 @@
   //
   // The scrollbar is the app's plain one (app.css: a thin grey rectangle, no
   // arrows), as everywhere in the app (owner, 2026-10-26; CHAT-095): "never"
-  // hides it; "default" and "always" show it whenever the chat is too full
-  // (bar-shown only marks the 2 s after a scroll).
+  // hides it; "always" shows it; "default" shows its thumb while scrolling
+  // and 2 s after (and while it is dragged). A hidden thumb is only
+  // transparent (app.css), so the bar still takes presses.
   // Placed by Timeline.
   import { flushSync, mount, unmount, untrack } from "svelte";
   import { barThumb, dragTop } from "../../lib/bardrag.js";
+  import { userActed } from "../../lib/barfade.js";
   import {
     anchorAt,
     atBottom,
@@ -342,7 +344,9 @@
     // Still at the bottom while following: the page moved the view (the
     // typing box shrank after a send), not the user, so the thumb stays off.
     if (follow && bottom) return;
-    flashBar();
+    // Only a scroll the user made shows the thumb, not the view kept still
+    // while the window or a row above changed size (lib/barfade.js).
+    if (userActed() || dragging) flashBar();
     // Within about two lines of the bottom still counts as the bottom, so a
     // tiny nudge keeps following (owner, 2026-10-22).
     const near = nearBottom(t, scroller.clientHeight, scroller.scrollHeight, zoom);
@@ -434,9 +438,10 @@
     return top;
   }
 
-  // Whether the bar shows now: unless the Settings choice is "never".
+  // Whether the thumb shows now (CHAT-094): "always", or with "default"
+  // while scrolling and 2 s after, or while it is dragged.
   export function barShowing() {
-    return scrollbar !== "never";
+    return scrollbar === "always" || (scrollbar === "default" && (barShown || dragging));
   }
 
   export function viewportHeight() {
@@ -529,6 +534,7 @@
 <div
   class="scroller"
   class:bar-never={scrollbar === "never"}
+  data-bar-fade="own"
   class:bar-always={scrollbar === "always"}
   class:bar-shown={scrollbar === "default" && (barShown || dragging)}
   bind:this={scroller}

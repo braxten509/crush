@@ -4,10 +4,13 @@
   // thin grey rectangle, no arrows), as everywhere in the app (owner, 2026-10-26). It exists only
   // while the content overflows, so its column is kept only then (DLG-012,
   // internal/ui/dialog/internal/kit/layout.go:59-76). Modes as
-  // options.tui.scrollbar: "never" hides it; "default" and "always" show it
-  // whenever the content overflows (kit-bar-shown still marks the 2 s after a
-  // scroll). Draws nothing itself.
+  // options.tui.scrollbar: "never" hides it;
+  // "always" shows it; "default" shows the thumb while scrolling and 2 s after
+  // (and while it is dragged). A hidden thumb is only transparent (app.css),
+  // so the bar still takes presses. Draws nothing itself.
   //   target (the scrolling element), mode: "default" | "always" | "never"
+  import { userActed } from "../../lib/barfade.js";
+
   const SHOW_MS = 2000;
 
   let { target = null, mode = "default" } = $props();
@@ -35,7 +38,10 @@
     const element = target;
     if (!element) return;
     element.classList.add("kit-scroll");
-    const onScroll = () => flash();
+    // Only a scroll the user made shows it (lib/barfade.js).
+    const onScroll = () => {
+      if (userActed() || dragging) flash();
+    };
     // A press on the bar's column, even while its thumb is hidden.
     const onDown = (event) => {
       if (event.button !== 0 || event.target !== element || event.offsetX < element.clientWidth) return;
@@ -91,7 +97,7 @@
 
   // Whether the bar shows now (for the probe).
   export function showing() {
-    return mode !== "never";
+    return mode === "always" || (mode === "default" && (shown || dragging));
   }
 </script>
 

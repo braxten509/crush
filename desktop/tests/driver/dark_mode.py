@@ -4,10 +4,11 @@ not scrolling and currently it's not clickable since the resize for the
 vertical bar is overtaking the hitbox"). In the real window on the hidden
 screen, with real mouse moves, wheel turns and clicks:
 
-- the chat's scroll bar shows while the wheel turns and stays painted once
-  scrolling stops (owner, 2026-10-26: the system's bar everywhere, shown
-  whenever the chat is too full), and the point on the bar belongs to the
-  chat, not to the right column's grip beside it;
+- the chat's scroll bar is not painted before any scroll, shows while the
+  wheel turns and paints away again 2 s after scrolling stops (owner,
+  2026-10-26: "hide after a few seconds ... not showing until it was used",
+  app-wide), and the point on the bar belongs to the chat, not to the right
+  column's grip beside it;
 - Settings > Appearance > Mode > Dark lays soft linen ink on graphite paper
   (owner, 2026-10-20: "it loses the soft vibe", then the Graphite pick):
   the paper is #232321, the ink reads at 10 to 13:1 (not 18:1), every window
@@ -142,12 +143,13 @@ if "scroll" in parts and check(bar is not None and "x" in bar, f"the chat scroll
     # Real wheel turns over the chat.
     xdo("mousemove", geo_x + round(bar["left"] + bar["width"] / 2), geo_y + round(bar["y"]))
     before = run("return document.querySelector('.slot:not(.parked) .scroller, .scroller').scrollTop;")
+    strip = (round(bar["x"]) - 2, round(bar["top"] + 20), 5, round(bar["height"] - 40))
+    unused = column_mean(shot("bar-unused", 0.2), *strip)
     for _ in range(4):
         xdo("click", 4)
         time.sleep(0.05)
     time.sleep(0.25)
     shown = run("return document.querySelector('.slot:not(.parked) .scroller, .scroller').classList.contains('bar-shown');")
-    strip = (round(bar["x"]) - 2, round(bar["top"] + 20), 5, round(bar["height"] - 40))
     during = column_mean(shot("bar-scrolling", 0), *strip)
     time.sleep(BAR_SHOW_MS / 1000 + 1.5)
     hidden = run("return !document.querySelector('.slot:not(.parked) .scroller, .scroller').classList.contains('bar-shown');")
@@ -156,8 +158,10 @@ if "scroll" in parts and check(bar is not None and "x" in bar, f"the chat scroll
     check(before is not None and moved is not None and moved != before, f"the wheel scrolls the chat ({before} to {moved})")
     check(shown is True, "the thumb shows while the wheel turns")
     check(hidden is True, "the thumb's class goes once scrolling stops")
-    check(during is not None and after is not None and abs(after - during) < 0.01,
-          f"the bar stays painted on screen after scrolling stops (strip brightness {during} while scrolling, {after} after)")
+    check(unused is not None and after is not None and abs(after - unused) < 0.01,
+          f"the bar is not painted before any scroll (strip brightness {unused} before, {after} after it hid)")
+    check(during is not None and after is not None and after - during > 0.01,
+          f"the thumb is painted away on screen after scrolling stops (strip brightness {during} while scrolling, {after} after)")
 xdo("mousemove", geo_x + 5, geo_y + 400)
 if "scroll" in parts:
     xdo("windowsize", wid, 1600, 992)

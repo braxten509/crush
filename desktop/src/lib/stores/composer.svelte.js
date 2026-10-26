@@ -14,7 +14,7 @@ import { openDialog } from "../dialogs.js";
 import { api, uuid } from "../engine/api.js";
 import { clipboard_read, clipboard_write, file_info, file_read, files_list } from "../engine/commands.js";
 import { onEvent, onResync } from "../engine/events.js";
-import { bangAfterPaste, bangAfterTyping, bangFromValue, historyEntries, joinDrafts, PromptHistory } from "../composer/history.js";
+import { bangAfterPaste, bangAfterTyping, bangFromValue, joinDrafts, PromptHistory } from "../composer/history.js";
 import { absolutePath, fileRows, insertPick, mentionQuery, mentionSpan, moveFocus, opensAt, pickFile, previewPick, rankRows, rankSlash, slashOpens, slashQuery } from "../composer/mentions.js";
 import { AGENT_FOR, bannerFor, BUSY_SWITCH, cycleSteps, isQuitWord, markOf, pickPlaceholders, placeholderFor, SWITCHING, YOLO_BANNER, YOLO_OFF } from "../composer/modes.js";
 import {
@@ -264,18 +264,28 @@ export function clearAttachments() {
 
 let historyRead = 0;
 
-// loadPromptHistory (history.go:23-62): the chat's prompts, or every chat's on
-// the landing page.
+// loadPromptHistory: the prompts sent from every folder and app, the same in
+// every chat (internal/prompthistory).
 export async function loadHistory(sid = sessions.currentId) {
   const turn = ++historyRead;
   let list = [];
   try {
-    list = sid ? await api.userMessages(sid) : await api.allUserMessages();
+    list = await api.promptHistory();
   } catch (error) {
     console.error("Failed to load prompt history", errorText(error));
   }
   if (turn !== historyRead || sid !== sessions.currentId) return;
-  history.load(historyEntries(list));
+  history.load(Array.isArray(list) ? list : []);
+}
+
+// A sent prompt joins the shared history, then the history reloads.
+async function savePrompt(text) {
+  try {
+    await api.addPromptHistory(text);
+  } catch (error) {
+    console.error("Failed to save prompt history", errorText(error));
+  }
+  loadHistory();
 }
 
 export function browsingHistory() {
@@ -930,6 +940,7 @@ export async function send() {
     history.reset();
     syncMode();
     runShell(text);
+    savePrompt(`!${text}`);
     requestEnd();
     return true;
   }
@@ -951,9 +962,9 @@ export async function send() {
   composer.picks = pickPlaceholders();
   history.reset();
   syncMode();
-  const sent = await sendMessage(text, attachments);
-  loadHistory();
-  return sent;
+  const sending = sendMessage(text, attachments);
+  savePrompt(text);
+  return sending;
 }
 
 // -- `!` commands (TYPE-020, TYPE-021) --

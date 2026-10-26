@@ -2,14 +2,13 @@ package model
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/prompthistory"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
@@ -18,47 +17,19 @@ type promptHistoryLoadedMsg struct {
 	messages []string
 }
 
-// loadPromptHistory loads user messages for history navigation. Both queries
-// stop at the 200 most recent entries; recall only steps back one at a time.
+// loadPromptHistory loads the prompts sent from every folder and app
+// (prompthistory), newest first, for history navigation.
 func (m *UI) loadPromptHistory() tea.Cmd {
-	// Capture the session now: the command runs off the Update goroutine.
-	ws := m.com.Workspace
-	var sessionID string
-	hasSession := m.session != nil
-	if hasSession {
-		sessionID = m.session.ID
-	}
 	return func() tea.Msg {
-		ctx := context.Background()
-		var messages []message.Message
-		var err error
+		return promptHistoryLoadedMsg{messages: prompthistory.List()}
+	}
+}
 
-		if hasSession {
-			messages, err = ws.ListUserMessages(ctx, sessionID)
-		} else {
-			messages, err = ws.ListAllUserMessages(ctx)
-		}
-		if err != nil {
-			slog.Error("Failed to load prompt history", "error", err)
-			return promptHistoryLoadedMsg{messages: nil}
-		}
-
-		texts := make([]string, 0, len(messages))
-		for _, msg := range messages {
-			// Skip prompts Crush wrote itself: hidden continuations and
-			// <crush-task-result> answers from sub-agents, questions and jobs.
-			content := msg.Content()
-			if content.Hidden || strings.HasPrefix(strings.TrimSpace(content.Text), "<"+agent.TaskNotificationTag+">") {
-				continue
-			}
-			if text := content.Text; text != "" {
-				texts = append(texts, text)
-			}
-			for _, sc := range msg.ShellCommands() {
-				texts = append(texts, "!"+sc.Command)
-			}
-		}
-		return promptHistoryLoadedMsg{messages: texts}
+// savePrompt saves a sent prompt to the shared history, then loads it.
+func (m *UI) savePrompt(text string) tea.Cmd {
+	return func() tea.Msg {
+		prompthistory.Add(text)
+		return promptHistoryLoadedMsg{messages: prompthistory.List()}
 	}
 }
 

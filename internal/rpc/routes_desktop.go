@@ -32,4 +32,9 @@ var (
 
 	// SetCPUAffinity turns the agent CPUs on or off for the engine (G-16).
 	SetCPUAffinity = Op[proto.CPUAffinityRequest, proto.CPUAffinity]{Method: post, Path: "/v1/cpu-affinity"}
+
+	// PromptHistory lists the prompts sent from every folder and app, newest
+	// first; AddPromptHistory saves one.
+	PromptHistory    = Op[Empty, []string]{Method: get, Path: "/v1/prompt-history"}
+	AddPromptHistory = Op[proto.PromptHistoryEntry, Empty]{Method: post, Path: "/v1/prompt-history"}
 )

@@ -306,6 +306,9 @@ export const api = {
   // the caller names the episode it saw.
   claimMemoryNotice: (_episode) => post("/v1/memory/claim-notice"),
   setCpuAffinity: (enabled) => post("/v1/cpu-affinity", { enabled }),
+  // The prompts sent from every folder and app, newest first (≤ 100).
+  promptHistory: () => get("/v1/prompt-history"),
+  addPromptHistory: (text) => post("/v1/prompt-history", { text }),
 
   themes: () => get("/v1/themes"),
   theme: (name) => get(`/v1/themes/${seg(name)}`),

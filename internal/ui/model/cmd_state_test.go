@@ -225,15 +225,6 @@ func TestFilePickerSelectionClosesPickerOnUpdate(t *testing.T) {
 	require.False(t, u.dialog.ContainsDialog(dialog.FilePickerID))
 }
 
-func TestLoadPromptHistoryCapturesSession(t *testing.T) {
-	t.Parallel()
-
-	u, ws := newCmdStateUI(t)
-	cmd := u.loadPromptHistory()
-	runOffLoop(t, cmd, func() { u.session = &session.Session{ID: "s2"} })
-	require.Equal(t, []string{"s1"}, ws.userMsgs)
-}
-
 func TestHandleFileEventCapturesSession(t *testing.T) {
 	t.Parallel()
 

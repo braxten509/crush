@@ -6,35 +6,10 @@ import {
   bangAfterPaste,
   bangAfterTyping,
   bangFromValue,
-  historyEntries,
   joinDrafts,
   onFirstLine,
   onLastLine,
 } from "./history.js";
-
-const user = (...parts) => ({ role: "user", parts });
-const text = (value, extra = {}) => ({ type: "text", data: { text: value, ...extra } });
-const shell = (command) => ({ type: "shell_command", data: { command, output: "", exit_code: 0 } });
-
-describe("historyEntries (TYPE-017, history.go:22-61)", () => {
-  it("keeps the engine's newest-first order and gives text, then each shell command", () => {
-    const list = [user(text("third")), user(text(""), shell("ls -la")), user(text("first"), shell("pwd"))];
-    expect(historyEntries(list)).toEqual(["third", "!ls -la", "first", "!pwd"]);
-  });
-
-  it("skips hidden prompts and task results", () => {
-    const list = [
-      user(text("Implement the plan.", { hidden: true })),
-      user(text("  <crush-task-result><name>t1</name></crush-task-result>")),
-      user(text("kept")),
-    ];
-    expect(historyEntries(list)).toEqual(["kept"]);
-  });
-
-  it("is empty for nothing", () => {
-    expect(historyEntries(null)).toEqual([]);
-  });
-});
 
 describe("PromptHistory (TYPE-017, history.go:183-282)", () => {
   const history = () => {

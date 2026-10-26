@@ -105,6 +105,7 @@ beforeEach(async () => {
   h.routes.set("GET agent/sessions/s1/prompts/list", []);
   h.routes.set("GET sessions/s1/messages/user", []);
   h.routes.set("GET messages/user", []);
+  h.routes.set("GET /v1/prompt-history", []);
 });
 
 afterEach(() => {
@@ -134,6 +135,8 @@ describe("sending", () => {
     expect(body).toMatchObject({ session_id: "s1", prompt: "hello there" });
     expect(M.messages.pending[body.submission_id]).toMatchObject({ text: "hello there", sessionId: "s1", held: false });
     expect(C.draftOf().text).toBe("");
+    // Every sent prompt goes to the history shared by every folder and app.
+    expect(h.calls.filter((c) => c.method === "POST" && c.path === "/v1/prompt-history").map((c) => c.body)).toEqual([{ text: "hello there" }]);
   });
 
   it("sends nothing for an empty field (TYPE-004)", async () => {
@@ -332,7 +335,7 @@ describe("sending", () => {
     C.setText("first prompt");
     await C.send();
     await settle();
-    const order = h.calls.filter((c) => c.method === "POST").map((c) => c.path);
+    const order = h.calls.filter((c) => c.method === "POST" && c.path !== "/v1/prompt-history").map((c) => c.path);
     expect(order).toEqual(["sessions", "sessions/n1/kept-skills", "agent"]);
     expect(h.calls.find((c) => c.path === "sessions/n1/kept-skills").body).toEqual({ id: "sk1", name: "demo", on: true, toggleable: false });
     expect(sends()[0].body.session_id).toBe("n1");
@@ -566,11 +569,8 @@ describe("input mode and YOLO (TYPE-023 to TYPE-025)", () => {
 });
 
 describe("history and the queue (TYPE-017 to TYPE-019, TYPE-050)", () => {
-  it("steps through the chat's prompts and back to the draft", async () => {
-    h.routes.set("GET sessions/s1/messages/user", [
-      { id: "u2", role: "user", parts: [{ type: "text", data: { text: "second" } }] },
-      { id: "u1", role: "user", parts: [{ type: "text", data: { text: "first" } }, { type: "shell_command", data: { command: "ls" } }] },
-    ]);
+  it("steps through the prompts sent anywhere and back to the draft", async () => {
+    h.routes.set("GET /v1/prompt-history", ["second", "first", "!ls"]);
     show("s1");
     await settle();
     C.setText("draft");

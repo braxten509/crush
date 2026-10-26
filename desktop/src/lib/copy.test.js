@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 // Copying (CHAT-012, CHAT-017, CHAT-030, CHAT-087 to CHAT-091): a reply's
-// visible text with the Go cases (copy_source_test.go), selections rebuilt
-// as Markdown source through the source maps (source_copy_test.go,
-// inline code), the middle of a long selection read from the items, never
+// visible text with the Go cases (copy_source_test.go), selections of a
+// reply as plain text (no Markdown marks; code exactly as it is), the middle of a long selection read from the items, never
 // the page, and the clipboard's failure text.
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -113,12 +112,12 @@ function select(root, [a, ai], [b, bi]) {
 const reply = (key, text) => ({ kind: "reply", key, messageId: key, version: 1, text, finished: true, plan: "none" });
 const user = (key, text) => ({ kind: "user", key, messageId: key, version: 1, text, chips: [] });
 
-describe("a selection copies its Markdown source (CHAT-088, CHAT-089)", () => {
-  test("whole inline code brings its backticks; part of it only the letters (CHAT-017)", () => {
+describe("a selection copies plain text (CHAT-088, CHAT-089)", () => {
+  test("inline code copies without its backticks, whole or in part (CHAT-017)", () => {
     const items = [reply("r1", "Started a wait (PID `1438360`) with `sleep 10`.")];
     const root = page(items);
     const [node, at] = find(root, "r1", "1438360");
-    expect(copySelection(select(root, [node, at], [node, at + 7]), items)).toBe("`1438360`");
+    expect(copySelection(select(root, [node, at], [node, at + 7]), items)).toBe("1438360");
     expect(copySelection(select(root, [node, at + 1], [node, at + 6]), items)).toBe("43836");
   });
 
@@ -156,13 +155,20 @@ describe("a selection copies its Markdown source (CHAT-088, CHAT-089)", () => {
     expect(copySelection(select(root, [node, 0], [node, node.data.length]), items)).toBe(long);
   });
 
-  test("across a code span and a list the marks come along", () => {
-    const text = "Run `make` first:\n\n- one\n- *two*";
-    const items = [reply("r1", text)];
+  test("across a code span and a list the marks are left out", () => {
+    const items = [reply("r1", "Run `make` first:\n\n- one\n- *two*")];
     const root = page(items);
     const start = find(root, "r1", "Run");
     const end = find(root, "r1", "two");
-    expect(copySelection(select(root, start, [end[0], end[1] + 3]), items)).toBe(text);
+    expect(copySelection(select(root, start, [end[0], end[1] + 3]), items)).toBe("Run make first:\n\none\n\ntwo");
+  });
+
+  test("a selection from inside a code block on into the text keeps the code as it is", () => {
+    const items = [reply("r1", "```sh\n  make all\n```\n\nThen **run** it.")];
+    const root = page(items);
+    const start = find(root, "r1", "make");
+    const end = find(root, "r1", "it.");
+    expect(copySelection(select(root, start, [end[0], end[1] + 3]), items)).toBe("make all\n\nThen run it.");
   });
 
   test("a user message copies as typed", () => {
@@ -194,7 +200,8 @@ describe("the middle of a long selection is never read from the page (CHAT-087)"
     const all = copyWith(() => true);
     const ends = copyWith((item) => item === first || item === last);
     expect(ends).toBe(all);
-    expect(all.startsWith("wer **0**:")).toBe(true);
+    expect(all.startsWith("wer 0:")).toBe(true);
+    expect(all).not.toContain("**");
     expect(all.endsWith("echo")).toBe(true);
     expect(all).toContain("Question 1 with `code` and *marks*");
     expect(all).toContain("Task job10 finished");

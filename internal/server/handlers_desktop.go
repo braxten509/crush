@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 
+	"github.com/charmbracelet/crush/internal/prompthistory"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/charmbracelet/crush/internal/skills"
@@ -47,4 +48,15 @@ func (c *controllerV1) hyperCredits(r *http.Request, _ rpc.Empty) (proto.HyperCr
 // setCPUAffinity turns the agent CPUs on or off.
 func (c *controllerV1) setCPUAffinity(_ *http.Request, req proto.CPUAffinityRequest) (proto.CPUAffinity, error) {
 	return c.backend.SetCPUAffinity(req.Enabled)
+}
+
+// promptHistory lists the prompts sent from every folder and app.
+func (c *controllerV1) promptHistory(_ *http.Request, _ rpc.Empty) ([]string, error) {
+	return prompthistory.List(), nil
+}
+
+// addPromptHistory saves a sent prompt.
+func (c *controllerV1) addPromptHistory(_ *http.Request, req proto.PromptHistoryEntry) (rpc.Empty, error) {
+	prompthistory.Add(req.Text)
+	return rpc.Empty{}, nil
 }

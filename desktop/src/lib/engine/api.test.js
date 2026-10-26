@@ -46,6 +46,8 @@ describe("paths and bodies (desktop-design 1.5.2, the routes of 1.3)", () => {
     ["mcpStates", [], "GET", "mcp/states"],
     ["skills", [], "GET", "skills"],
     ["allUserMessages", [], "GET", "messages/user"],
+    ["promptHistory", [], "GET", "/v1/prompt-history"],
+    ["addPromptHistory", ["hi"], "POST", "/v1/prompt-history", undefined, { text: "hi" }],
     ["listSessions", [], "GET", "sessions"],
     ["createSession", [{ title: "New Session" }], "POST", "sessions", undefined, { title: "New Session" }],
     ["getSession", [sid], "GET", "sessions/S1"],

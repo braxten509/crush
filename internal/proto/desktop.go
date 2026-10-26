@@ -60,6 +60,11 @@ type HyperCredits struct {
 	Credits *int `json:"credits"`
 }
 
+// PromptHistoryEntry is a prompt the user sent, saved to the shared history.
+type PromptHistoryEntry struct {
+	Text string `json:"text"`
+}
+
 // CPUAffinityRequest turns the agent CPUs on or off (G-16).
 type CPUAffinityRequest struct {
 	Enabled bool `json:"enabled"`

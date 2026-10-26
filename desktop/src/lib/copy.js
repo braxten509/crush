@@ -15,10 +15,11 @@
 //                            tool, tool group and shell items copy in their own
 //                            formats (CHAT-044, CHAT-056: lib/tools/copy.js, P3.6)
 //   copySelection(range, items)
-//                            the selected text as Markdown source (CHAT-088):
-//                            each end item through its source map, the items
-//                            between whole from their stored text, never read
-//                            from the page, joined with a blank line (1.6 item 8)
+//                            the selected text (CHAT-088): each end item
+//                            through its source map, the items between whole
+//                            from their stored text, never read from the page,
+//                            joined with a blank line (1.6 item 8); replies as
+//                            plain text, code as it is, user text as typed
 //   writeClipboard(text, notice)
 import { clipboard_write } from "./engine/commands.js";
 import { lexMarkdown } from "./render/lex.js";
@@ -57,6 +58,14 @@ export function copyBlocks(stored) {
 
 export function copyVisible(stored) {
   return copyBlocks(stored).join("\n\n");
+}
+
+// A selected reply's text: the visible text with each code block's last
+// newline dropped, so blocks meet with one blank line.
+function plainText(source) {
+  return copyBlocks(source)
+    .map((block) => block.replace(/\n$/, ""))
+    .join("\n\n");
 }
 
 // The block walk (copy_source.go:33-49): code verbatim, HTML blocks skipped,
@@ -224,7 +233,7 @@ export function wholeText(item) {
     case "pending":
       return trimSpace(item.text ?? "");
     case "reply":
-      return stripPlanMarkers(item.text ?? "");
+      return plainText(item.text);
     case "notice":
       return noticeLine(item);
     case "banner":
@@ -271,9 +280,24 @@ function partOf(item, frame, range, side) {
   if (map) {
     const hit = map.rangeToSource(clip, { wholeSpans: true });
     if (!hit) return "";
-    return stripPlanMarkers(map.source.slice(hit.start, hit.end));
+    const source = stripPlanMarkers(map.source.slice(hit.start, hit.end));
+    if (item.kind !== "reply") return source;
+    const startCode = side === "end" ? null : codeAround(range.startContainer, root);
+    const endCode = side === "start" ? null : codeAround(range.endContainer, root);
+    // Inside one code block the text is the code itself; a selection that
+    // starts inside one gets its opening fence back, so the rest still reads
+    // as code.
+    if (startCode && startCode === endCode) return source;
+    return plainText(startCode ? `\`\`\`\n${source}` : source);
   }
   return clip.toString();
+}
+
+// The code block (pre) holding node, inside root, or null.
+function codeAround(node, root) {
+  const el = node?.nodeType === 1 ? node : node?.parentElement;
+  const pre = el?.closest?.("pre");
+  return pre && root.contains(pre) ? pre : null;
 }
 
 // The frame (the element carrying data-key) of an item, inside root.

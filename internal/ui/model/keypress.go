@@ -352,7 +352,7 @@ func (m *UI) submitEditor() (cmd tea.Cmd, done bool) {
 		m.setEditorPrompt(m.yoloModeCached())
 		m.randomizePlaceholders()
 		m.historyReset()
-		return tea.Batch(m.runShellCommand(value)), true
+		return tea.Batch(m.runShellCommand(value), m.savePrompt("!"+value)), true
 	}
 
 	attachments := m.attachments.List()
@@ -368,7 +368,7 @@ func (m *UI) submitEditor() (cmd tea.Cmd, done bool) {
 
 	m.randomizePlaceholders()
 	m.historyReset()
-	return tea.Batch(m.sendPrompt(value, attachments), m.loadPromptHistory()), true
+	return tea.Batch(m.sendPrompt(value, attachments), m.savePrompt(value)), true
 }
 
 // openExternalEditor opens the prompt in the user's editor, unless the

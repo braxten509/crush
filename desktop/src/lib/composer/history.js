@@ -1,28 +1,8 @@
 // Prompt history and bang mode as pure rules (TYPE-017 to TYPE-020; a port
 // of internal/ui/model/history.go:16-96,183-282 and keypress.go:381-449).
-// The composer store holds one PromptHistory and the field's value; these
-// functions say what the field shows next.
-
-// agent.TaskNotificationTag (internal/agent/tasks.go:41).
-const TASK_RESULT = "<crush-task-result>";
-
-const partsOf = (m, type) => (m?.parts ?? []).filter((p) => p?.type === type);
-
-// loadPromptHistory (history.go:22-61): the user messages as the engine lists
-// them (newest first, at most 200), without the prompts Crush wrote itself
-// (hidden continuations and task results). A message gives its text when it
-// has one, then "!command" for each shell command it ran.
-export function historyEntries(list) {
-  const texts = [];
-  for (const m of Array.isArray(list) ? list : []) {
-    const first = partsOf(m, "text")[0]?.data ?? {};
-    const text = first.text ?? "";
-    if (first.hidden === true || text.trim().startsWith(TASK_RESULT)) continue;
-    if (text !== "") texts.push(text);
-    for (const part of partsOf(m, "shell_command")) texts.push(`!${part.data?.command ?? ""}`);
-  }
-  return texts;
-}
+// The composer store holds one PromptHistory, loaded with the prompts sent
+// from every folder and app (internal/prompthistory, newest first), and the
+// field's value; these functions say what the field shows next.
 
 // Where the caret is, in the terminal's terms (composer.go:51-66): the start is
 // position 0 of the first line, the end the last character of the last line.

@@ -87,6 +87,22 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Fails(400, 403, 404, 500).
 			Handle(c.localOnly(serve(c, rpc.SetCPUAffinity, c.setCPUAffinity))),
 
+		apigen.For(rpc.PromptHistory).
+			Summary("List the prompt history").
+			Description("The prompts sent from every folder and app, newest first, at most 100; " +
+				"shell commands start with \"!\". Answers only on the engine's unix socket.").
+			Tags("system").
+			Fails(403).
+			Handle(c.localOnly(serve(c, rpc.PromptHistory, c.promptHistory))),
+
+		apigen.For(rpc.AddPromptHistory).
+			Summary("Save a sent prompt").
+			Description("Adds a sent prompt to the shared history; blank text is skipped. "+
+				"Answers only on the engine's unix socket.").
+			Tags("system").
+			Fails(400, 403).
+			Handle(c.localOnly(serve(c, rpc.AddPromptHistory, c.addPromptHistory))),
+
 		apigen.For(rpc.StartAuthFlow).
 			Summary("Start a sign-in").
 			Description("Starts `crush login`'s flow for platform (hyper, copilot, openai or grok) and "+

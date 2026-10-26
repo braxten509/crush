@@ -4,7 +4,8 @@ real engine and the Tailscale stand-in (seam remote), real keys and clicks:
 
 - Remote control from the palette slides "● REMOTE" in under the typing box,
   the space under the field gliding with it; nothing inside the typing box
-  says REMOTE any more;
+  says REMOTE any more; in no frame of a slide do its words cross the
+  field's bottom edge or the column's foot (owner, 2026-10-25);
 - its dot is whole pixels, vermilion, and centred with the word's capitals
   (read from the capture's ink); the word is in the strip's label type;
 - the line belongs to the chat: a new chat slides it away and another chat
@@ -75,11 +76,37 @@ def shown_chat():
 # has changed and then held still for 12 frames (or 600 frames).
 RECORD = """
   window.__room = [];
+  window.__over = [];
   const room = () => { const a = document.querySelector('[data-meter-strip]')?.parentElement; return a ? Math.round(a.getBoundingClientRect().height * 100) / 100 : 0; };
+  // How far the strip's drawn words reach past the room they are uncovered
+  // in: above the typing box's bottom edge or below the column's foot (the
+  // strip's own room). Each word is cut by every box between it and the
+  // strip that clips.
+  const over = () => {
+    const strip = document.querySelector('[data-meter-strip]'), field = document.querySelector('.composer .field');
+    if (!strip || !field) return 0;
+    const top = field.getBoundingClientRect().bottom, foot = strip.parentElement.getBoundingClientRect().bottom;
+    let most = 0;
+    for (const word of strip.querySelectorAll('.label, .value, .tokens')) {
+      const r = word.getBoundingClientRect();
+      let up = r.top, down = r.bottom;
+      for (let e = word.parentElement; e; e = e.parentElement) {
+        const s = getComputedStyle(e);
+        if (s.overflow !== 'visible' || s.clipPath !== 'none') {
+          const c = e.getBoundingClientRect();
+          up = Math.max(up, c.top);
+          down = Math.min(down, c.bottom);
+        }
+        if (e === strip.parentElement) break;
+      }
+      if (up < down) most = Math.max(most, top - up, down - foot);
+    }
+    return Math.round(most * 100) / 100;
+  };
   let still = 0, frames = 0;
   const tick = () => {
     const h = room(); const last = window.__room[window.__room.length - 1];
-    window.__room.push(h); still = h === last ? still + 1 : 0; frames += 1;
+    window.__room.push(h); window.__over.push(over()); still = h === last ? still + 1 : 0; frames += 1;
     if ((still < 12 || window.__room.every((v) => v === window.__room[0])) && frames < 600) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -96,6 +123,15 @@ def recorded(timeout=5):
             break
         time.sleep(0.2)
     return got
+
+
+def stays_under():
+    """The strip's words never reach above the typing box's bottom edge or
+    below the column's foot in any recorded frame: they are uncovered in
+    the room between, not drawn over either line (owner, 2026-10-25)."""
+    over = run("return window.__over ?? [];") or []
+    most = max(over) if over else None
+    return check(bool(over) and most <= 0.5, f"its words stay between the typing box's bottom edge and the column's foot in every frame (most past them: {most} px)")
 
 
 def glides(values, start, stop):
@@ -169,6 +205,7 @@ key("Return")
 check(until("return !!document.querySelector('[data-remote-line]');", 10), "Remote control from the palette turns the line on")
 room = recorded()
 check(glides(room, 0, 18 * PX), f"the line slides in, the space under the field gliding with it ({room[:3]}…{room[-3:]}, {len(set(room))} sizes)")
+stays_under()
 sheet = run("const s = [...document.querySelectorAll('[role=dialog]')].find((d) => d.textContent.includes('Your phone can see this chat')); if (!s) return null; const td = [...s.querySelectorAll('td')].map((e) => e.textContent); return td;")
 check(bool(sheet), f"the Remote control sheet opens on it ({sheet})")
 port = None
@@ -219,6 +256,7 @@ key("ctrl+n")
 gone = until("return !document.querySelector('[data-meter-strip]');", 6)
 room = recorded()
 check(gone and glides(room, 18 * PX, 0), f"a new chat slides the line away ({room[:3]}…{room[-3:]})")
+stays_under()
 check(send("Seed turn short"), "a second chat starts")
 chat_b = shown_chat()
 time.sleep(0.6)
@@ -233,6 +271,7 @@ if check(row is not None, "the first chat is in the left list"):
     back = until("return !!document.querySelector('[data-remote-line]');", 8)
     room = recorded()
     check(back and shown_chat() == chat_a and glides(room, 0, 18 * PX), f"going back to it slides the line in again ({room[:3]}…{room[-3:]})")
+    stays_under()
 
 # -- The terminal shows the same share, and either app turns it off --
 term = Term(args=("-s", chat_a), env=SEAMS)
@@ -269,6 +308,7 @@ term_shot("off")
 off = until("return !document.querySelector('[data-meter-strip]');", 8)
 room = recorded()
 check(off and glides(room, 18 * PX, 0), f"turned off in the terminal, the desktop's line slides away ({room[:3]}…{room[-3:]})")
+stays_under()
 time.sleep(1)
 term_shot("after")
 dead = subprocess.run(["tmux", "-L", "crushtest", "display-message", "-p", "-t", "tui", "#{pane_dead} #{pane_dead_status}"], capture_output=True, text=True).stdout.strip()
@@ -285,6 +325,7 @@ terminal_remote()
 back = until("return !!document.querySelector('[data-remote-line]');", 15)
 room = recorded()
 check(back and glides(room, 0, 18 * PX), f"turned on again in the terminal, the desktop's line slides in ({room[:3]}…{room[-3:]})")
+stays_under()
 term.wait_text("Keep on", 10)
 term.keys("Escape")
 
@@ -300,6 +341,7 @@ if check(line is not None, "the line is there to click"):
     off = until("return !document.querySelector('[data-meter-strip]');", 6)
     room = recorded()
     check(off and glides(room, 18 * PX, 0), f"Turn off slides the line away ({room[:3]}…{room[-3:]})")
+    stays_under()
     time.sleep(1)
     check("REMOTE" not in term.text(), "the terminal's REMOTE goes too")
     # The terminal's start may have taken another port.

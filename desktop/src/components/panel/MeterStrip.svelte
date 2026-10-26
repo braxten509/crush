@@ -12,7 +12,9 @@
   // rolls away, so the space under the field glides along (owner,
   // 2026-10-20: "slide the bottom area's space at the same time"). Placed by
   // Conversation while either shows; a part that comes or goes while the
-  // other stays settles in or rolls away by itself.
+  // other stays settles in or rolls away by itself. The strip unrolls in
+  // place, with no drop: dropped, its words crossed the column's foot as
+  // they came (owner, 2026-10-25: "just reveal without crossing lines").
   import { paper, settle, tick } from "../../lib/motion.js";
   import { openRemote } from "../../lib/remote/share.js";
 
@@ -37,7 +39,7 @@
 </script>
 
 <div class="strip-anchor" transition:room|global>
-  <div class="strip" data-meter-strip transition:settle|global={{ fold: true }}>
+  <div class="strip" data-meter-strip transition:settle|global={{ fold: true, rise: 0 }}>
     {#if meters}<span class="meters" role="group" aria-label="Usage" transition:settle>
     {#each model.meters as meter (meter.id)}
       <span class="item" data-meter={meter.id}>

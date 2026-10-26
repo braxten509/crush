@@ -8,7 +8,9 @@ screen, with real mouse moves, wheel turns and clicks:
   wheel turns and paints away again 2 s after scrolling stops (owner,
   2026-10-26: "hide after a few seconds ... not showing until it was used",
   app-wide), and the point on the bar belongs to the chat, not to the right
-  column's grip beside it;
+  column's grip beside it; frame by frame it grows in and shrinks out
+  (owner, 2026-10-26: "grow from the right side to its full width and vice
+  versa"), and half grown it fills the bar's right half;
 - Settings > Appearance > Mode > Dark lays soft linen ink on graphite paper
   (owner, 2026-10-20: "it loses the soft vibe", then the Graphite pick):
   the paper is #232321, the ink reads at 10 to 13:1 (not 18:1), every window
@@ -145,6 +147,16 @@ if "scroll" in parts and check(bar is not None and "x" in bar, f"the chat scroll
     before = run("return document.querySelector('.slot:not(.parked) .scroller, .scroller').scrollTop;")
     strip = (round(bar["x"]) - 2, round(bar["top"] + 20), 5, round(bar["height"] - 40))
     unused = column_mean(shot("bar-unused", 0.2), *strip)
+    # The thumb's growth, every frame from here to after it hid.
+    run("""
+      const s = document.querySelector('.slot:not(.parked) .scroller, .scroller');
+      window.__grow = [];
+      const tick = () => {
+        window.__grow.push(Number(getComputedStyle(s).getPropertyValue('--bar-grow')) || 0);
+        if (window.__grow.length < 600) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    """)
     for _ in range(4):
         xdo("click", 4)
         time.sleep(0.05)
@@ -158,6 +170,32 @@ if "scroll" in parts and check(bar is not None and "x" in bar, f"the chat scroll
     check(before is not None and moved is not None and moved != before, f"the wheel scrolls the chat ({before} to {moved})")
     check(shown is True, "the thumb shows while the wheel turns")
     check(hidden is True, "the thumb's class goes once scrolling stops")
+    grow = run("return window.__grow;") or []
+    peak = grow.index(max(grow)) if grow else 0
+    rising = [v for v in grow[:peak] if 0 < v < 1]
+    falling = [v for v in grow[peak:] if 0 < v < 1]
+    jumps = max((abs(b - a) for a, b in zip(grow, grow[1:])), default=1)
+    check(bool(grow) and max(grow) == 1 and grow[-1] == 0, f"the thumb grows to full and back to nothing ({len(grow)} frames, last {grow[-1:]})")
+    check(len(rising) >= 3 and len(falling) >= 3,
+          f"it grows in and shrinks out over several frames ({len(rising)} in, {len(falling)} out: {[round(v, 2) for v in rising]} / {[round(v, 2) for v in falling]})")
+    check(jumps <= 0.6, f"no frame jumps most of the way at once (largest step {jumps:.2f})")
+    # Held half grown: the paint is in the bar's right half only.
+    run("document.querySelector('.slot:not(.parked) .scroller, .scroller').style.setProperty('--bar-grow', '0.5');")
+    half = shot("bar-half", 0.3)
+    # Where the thumb is (no arrows, at least 20 long: lib/bardrag.js).
+    t = run("""
+      const s = document.querySelector('.slot:not(.parked) .scroller, .scroller');
+      const r = s.getBoundingClientRect(), ch = s.clientHeight, sh = s.scrollHeight;
+      const len = Math.max(20, ch * ch / sh), start = s.scrollTop / Math.max(1, sh - ch) * (ch - len);
+      return { right: Math.round(r.right), width: s.offsetWidth - s.clientWidth, y: Math.round(r.top + start + 3), h: Math.max(1, Math.floor(len - 6)) };
+    """)
+    run("document.querySelector('.slot:not(.parked) .scroller, .scroller').style.removeProperty('--bar-grow');")
+    if check(bool(t) and t["width"] >= 2, f"the thumb is found ({t})"):
+        w = t["width"]
+        left = column_mean(half, t["right"] - w, t["y"], max(1, w // 2), t["h"])
+        right = column_mean(half, t["right"] - w // 2, t["y"], max(1, w // 2), t["h"])
+        check(left is not None and right is not None and left - right > 0.03,
+              f"half grown, it fills from the right edge (left half {left}, right half {right})")
     check(unused is not None and after is not None and abs(after - unused) < 0.01,
           f"the bar is not painted before any scroll (strip brightness {unused} before, {after} after it hid)")
     check(during is not None and after is not None and after - during > 0.01,

@@ -20,7 +20,7 @@
   // Placed by Timeline.
   import { flushSync, mount, unmount, untrack } from "svelte";
   import { barThumb, dragTop } from "../../lib/bardrag.js";
-  import { userActed } from "../../lib/barfade.js";
+  import { setBarShown, userActed } from "../../lib/barfade.js";
   import {
     anchorAt,
     atBottom,
@@ -316,6 +316,11 @@
   let barShown = $state(false);
   let dragging = $state(false);
   let barTimer = null;
+
+  // The thumb grows in and out (lib/barfade.js).
+  $effect(() => {
+    if (scroller) setBarShown(scroller, scrollbar === "default" && (barShown || dragging));
+  });
 
   function flashBar() {
     if (scrollbar !== "default") return;

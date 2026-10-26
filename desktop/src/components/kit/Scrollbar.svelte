@@ -9,7 +9,7 @@
   // (and while it is dragged). A hidden thumb is only transparent (app.css),
   // so the bar still takes presses. Draws nothing itself.
   //   target (the scrolling element), mode: "default" | "always" | "never"
-  import { userActed } from "../../lib/barfade.js";
+  import { setBarShown, userActed } from "../../lib/barfade.js";
 
   const SHOW_MS = 2000;
 
@@ -93,6 +93,8 @@
     element.classList.toggle("kit-bar-never", mode === "never");
     element.classList.toggle("kit-bar-always", mode === "always");
     element.classList.toggle("kit-bar-shown", mode === "default" && (shown || dragging));
+    // The thumb grows in and out (lib/barfade.js).
+    setBarShown(element, mode === "default" && (shown || dragging));
   });
 
   // Whether the bar shows now (for the probe).

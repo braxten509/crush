@@ -58,8 +58,10 @@ describe("scrollbars", () => {
     expect(appRule("::-webkit-scrollbar")).toMatch(/width: calc\(6 \* var\(--px\)\)/);
     expect(appRule("::-webkit-scrollbar")).toMatch(/height: calc\(6 \* var\(--px\)\)/);
     // Hidden until its area scrolls (lib/barfade.js), or always with Settings "always".
-    expect(appRule("::-webkit-scrollbar-thumb")).toMatch(/background: transparent/);
-    expect(appRule(".bar-used::-webkit-scrollbar-thumb")).toMatch(/background: var\(--rule-control\)/);
+    // Filled from its right edge (from its foot when it lies flat) by
+    // --bar-grow, which lib/barfade.js moves from 0 to 1 and back.
+    expect(appRule("::-webkit-scrollbar-thumb")).toMatch(/linear-gradient\(to left, var\(--rule-control\) calc\(var\(--bar-grow\) \* 100%\), transparent 0\)/);
+    expect(appRule("::-webkit-scrollbar-thumb:horizontal")).toMatch(/linear-gradient\(to top, /);
     expect(appRule(':root[data-scrollbar="always"] *::-webkit-scrollbar-thumb')).toMatch(/background: var\(--rule-control\)/);
     expect(appRule(':root[data-scrollbar="never"] *')).toMatch(/scrollbar-width: none/);
     expect(appRule("::-webkit-scrollbar-button")).toMatch(/display: none/);

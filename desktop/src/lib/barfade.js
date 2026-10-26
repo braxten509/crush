@@ -8,19 +8,49 @@
 // the Settings choice "always"), so the bar's room stays and text never
 // moves. The chat (VirtualList, data-bar-fade="own") and the sheets
 // (kit/Scrollbar, .kit-scroll) fade their own bar, asking userActed().
+// A bar grows in from its right edge and shrinks back to it (owner,
+// 2026-10-26, "quick"): setBarShown moves the area's --bar-grow from 0 to 1
+// in GROW_IN_MS and back in GROW_OUT_MS, and app.css fills the thumb that
+// much from its right edge.
 //
 //   startBarFade(doc) listens on doc; returns the stop function
 //   userActed()       whether the user turned the wheel, typed or pressed
 //                     (or dragged) within the last INPUT_MS
+//   setBarShown(el, on) grows el's bar in (on) or out, from where it is now
 
 export const SHOW_MS = 2000;
 export const INPUT_MS = 600;
+export const GROW_IN_MS = 150;
+export const GROW_OUT_MS = 200;
 const OWN = '.kit-scroll, [data-bar-fade="own"]';
 
 let lastInput = -Infinity;
 
 export function userActed() {
   return Date.now() - lastInput < INPUT_MS;
+}
+
+const grows = new WeakMap(); // el -> {value, frame}
+
+export function setBarShown(el, on) {
+  const state = grows.get(el) ?? { value: 0, frame: 0 };
+  grows.set(el, state);
+  const to = on ? 1 : 0;
+  cancelAnimationFrame(state.frame);
+  if (state.value === to) return;
+  const from = state.value;
+  // A bar caught part way takes only the rest of the time.
+  const ms = (on ? GROW_IN_MS : GROW_OUT_MS) * Math.abs(to - from);
+  const start = performance.now();
+  const step = () => {
+    const t = Math.min(1, (performance.now() - start) / ms);
+    const eased = 1 - (1 - t) ** 3;
+    state.value = t === 1 ? to : from + (to - from) * eased;
+    if (state.value === 0) el.style.removeProperty("--bar-grow");
+    else el.style.setProperty("--bar-grow", String(Math.round(state.value * 1000) / 1000));
+    state.frame = t === 1 ? 0 : requestAnimationFrame(step);
+  };
+  state.frame = requestAnimationFrame(step);
 }
 
 export function startBarFade(doc = document) {
@@ -33,13 +63,16 @@ export function startBarFade(doc = document) {
       el,
       setTimeout(() => {
         timers.delete(el);
-        if (el !== held) el.classList.remove("bar-used");
+        if (el === held) return;
+        el.classList.remove("bar-used");
+        setBarShown(el, false);
       }, SHOW_MS),
     );
   }
 
   function show(el) {
     el.classList.add("bar-used");
+    setBarShown(el, true);
     hideLater(el);
   }
 

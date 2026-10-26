@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { INPUT_MS, SHOW_MS, startBarFade, userActed } from "./barfade.js";
+import { GROW_IN_MS, GROW_OUT_MS, INPUT_MS, SHOW_MS, setBarShown, startBarFade, userActed } from "./barfade.js";
 
 // A scroll area 100 wide with a 6 wide bar (jsdom has no layout, so the
 // sizes are set by hand).
@@ -72,5 +72,22 @@ describe("every scroll bar hides until used (barfade.js)", () => {
     window.dispatchEvent(new MouseEvent("mouseup"));
     vi.advanceTimersByTime(SHOW_MS + 10);
     expect(el.classList.contains("bar-used")).toBe(false);
+  });
+
+  it("grows a bar in from its right edge and shrinks it out, step by step", () => {
+    const el = area();
+    const grow = () => Number(el.style.getPropertyValue("--bar-grow") || 0);
+    setBarShown(el, true);
+    vi.advanceTimersByTime(GROW_IN_MS / 2);
+    expect(grow()).toBeGreaterThan(0.1);
+    expect(grow()).toBeLessThan(1);
+    vi.advanceTimersByTime(GROW_IN_MS);
+    expect(grow()).toBe(1);
+    setBarShown(el, false);
+    vi.advanceTimersByTime(GROW_OUT_MS / 2);
+    expect(grow()).toBeGreaterThan(0);
+    expect(grow()).toBeLessThan(0.9);
+    vi.advanceTimersByTime(GROW_OUT_MS);
+    expect(grow()).toBe(0);
   });
 });

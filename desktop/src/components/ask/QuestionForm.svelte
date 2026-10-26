@@ -358,9 +358,9 @@
     }
   }
 
-  // Every page sits in one grid cell (only the active one shows), so the
-  // tallest page decides the height and a tab switch never moves the chat
-  // (form_draw.go:15-35).
+  // Every page sits in one grid cell, but only the active one has height, so
+  // a short tab never sits over the empty space of a tall one (owner,
+  // 2026-10-25; the terminal sizes to the tallest, form_draw.go:15-35).
   function measure() {
     if (!root || collapsed) return;
     const column = root.closest("main")?.clientHeight ?? innerHeight;
@@ -631,6 +631,11 @@
   }
   .page.active {
     visibility: visible;
+  }
+  /* Hidden pages keep their width (fields keep measuring) but no height. */
+  .page:not(.active) {
+    height: 0;
+    overflow: hidden;
   }
   .body {
     display: flex;

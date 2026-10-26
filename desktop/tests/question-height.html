@@ -1,0 +1,20 @@
+<html><body><main style="height:900px;width:800px;display:flex;flex-direction:column;justify-content:flex-end"></main><script type="module">
+import {mount} from 'svelte';
+import QuestionForm from '/src/components/ask/QuestionForm.svelte';
+import '/src/app.css';
+const long=Array.from({length:30},(_,i)=>'Line '+i+' of a very long description that makes this tab tall.').join('\n\n');
+const request={batch_id:'b',questions:[
+ {id:'short',type:'single_choice',label:'Short',question:'Short one?',description:'Brief.',choices:[{id:'a',label:'A'},{id:'b',label:'B'}]},
+ {id:'tall',type:'free_text',label:'Tall',question:'Tall one?',description:long},
+]};
+mount(QuestionForm,{target:document.querySelector('main'),props:{request,local:{onSubmit(){},onCancel(){},onGone(){}}}});
+window.heightCheck=async(tab=0)=>{
+ document.querySelectorAll('.tab')[tab]?.click();
+ await document.fonts.ready;
+ await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ const pages=document.querySelector('.pages');
+ const page=document.querySelector('.page.active');
+ const top=page.getBoundingClientRect().top;
+ return {pages:pages.getBoundingClientRect().height,page:page.lastElementChild.getBoundingClientRect().bottom-top};
+};
+</script></body></html>

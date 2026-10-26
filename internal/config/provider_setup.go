@@ -113,6 +113,9 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 	if listCodexAPI {
 		c.addCodexAPIProvider()
 	}
+	if listTinfoil {
+		c.addTinfoilProviders(ctx)
+	}
 
 	discovered := s.discoverCustomModels(ctx)
 	s.applyDynamicModels(discovered)

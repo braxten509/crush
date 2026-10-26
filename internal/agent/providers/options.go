@@ -416,6 +416,9 @@ var compatQuirks = map[string]compatQuirk{
 func compatOptions(c *optionsCall) fantasy.ProviderOptions {
 	extraBody := make(map[string]any)
 	quirk := compatQuirks[c.provider.ID]
+	if config.IsTinfoilProvider(c.provider) {
+		quirk = tinfoilQuirk
+	}
 
 	if _, ok := c.merged["reasoning_effort"]; !ok && c.setEffort {
 		if quirk.effort != nil {

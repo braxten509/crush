@@ -453,6 +453,13 @@ func (b Builder) Provider(providerCfg config.ProviderConfig, model config.Select
 			}
 			providerCfg.ExtraBody["tool_stream"] = true
 		}
+		if config.IsTinfoilProvider(providerCfg) {
+			client, err := tinfoilHTTPClient(baseURL)
+			if err != nil {
+				return nil, err
+			}
+			return b.buildOpenaiCompatProvider(baseURL, apiKey, headers, providerCfg.ExtraBody, providerCfg.ID, isSubAgent, client)
+		}
 		return b.buildOpenaiCompatProvider(baseURL, apiKey, headers, providerCfg.ExtraBody, providerCfg.ID, isSubAgent)
 	default:
 		// Known custom providers (litellm, llamacpp, lmstudio, ollama,

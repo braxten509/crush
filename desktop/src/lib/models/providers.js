@@ -49,11 +49,14 @@ export function safeProvider(id, cfg) {
 }
 
 // Providers that are always listed but useless without a key (the engine
-// adds the Codex API with none, so Settings → Accounts can take it):
-// picking one of their models opens the key sheet first.
-const KEY_FIRST = new Set(["codex-api"]);
+// adds the Codex API and Tinfoil with none, so Settings → Accounts can take
+// it): picking one of their models opens the key sheet first. Another
+// account of one ("tinfoil-2") is the same.
+const KEY_FIRST = new Set(["codex-api", "tinfoil"]);
 
-export const needsKeyFirst = (providerId, configured) => KEY_FIRST.has(providerId) && !configured?.has_api_key && !configured?.has_oauth;
+const keyFirstProvider = (providerId) => KEY_FIRST.has(String(providerId ?? "").replace(/-\d+$/, ""));
+
+export const needsKeyFirst = (providerId, configured) => keyFirstProvider(providerId) && !configured?.has_api_key && !configured?.has_oauth;
 
 // {models, recent_models, providers: Map(id → safe provider)}
 // from GET …/config; the raw answer is dropped here.

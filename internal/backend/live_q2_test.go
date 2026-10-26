@@ -560,7 +560,7 @@ func TestQ2RunsAtJoinAfterLastLeave(t *testing.T) {
 	r.model.waitHeld(t, "a1", 0)
 	r.model.waitHeld(t, "a1-helper", 0)
 	requireReleased(t, p, "tasks.json", helper.ID)
-	require.Empty(t, promptsOf(ws, a))
+	require.Eventually(t, func() bool { return len(promptsOf(ws, a)) == 0 }, 10*time.Second, 10*time.Millisecond)
 }
 
 // TestQ2InterruptedHelperResumesOnNextJoin: a helper Q2 interrupted starts

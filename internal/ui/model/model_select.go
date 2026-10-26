@@ -116,9 +116,10 @@ func (m *UI) selectModel(msg dialog.ActionSelectModel, copilotImported bool) tea
 		}
 	}
 
-	// The Codex API is always listed, key or not: ask for the key first.
-	if providerID == config.CodexAPIProviderID && msg.Model.Model != "" {
-		if providerCfg, _ := cfg.Providers.Get(providerID); !providerCfg.HasAPIKey(m.com.Workspace.Resolver()) {
+	// The Codex API and Tinfoil are always listed, key or not: ask for the
+	// key first.
+	if providerCfg, _ := cfg.Providers.Get(providerID); (providerID == config.CodexAPIProviderID || config.IsTinfoilProvider(providerCfg)) && msg.Model.Model != "" {
+		if !providerCfg.HasAPIKey(m.com.Workspace.Resolver()) {
 			m.dialog.CloseDialog(dialog.ModelsID)
 			return m.openAuthenticationDialog(msg.Provider, msg.Model, msg.ModelType)
 		}

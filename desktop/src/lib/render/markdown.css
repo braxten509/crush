@@ -142,17 +142,6 @@
   white-space: pre;
   tab-size: 4;
   font: inherit;
-  scrollbar-width: thin;
-  scrollbar-color: var(--rule-control) transparent;
-}
-.md .md-code-body::-webkit-scrollbar {
-  height: calc(6 * var(--px));
-}
-.md .md-code-body::-webkit-scrollbar-thumb {
-  background: var(--rule-control);
-}
-.md .md-code-body::-webkit-scrollbar-track {
-  background: transparent;
 }
 .md .md-code-lang {
   position: absolute;

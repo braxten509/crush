@@ -7,8 +7,8 @@
   // no props. App.svelte hides it (D11, or its own switch).
   //
   // Focus (SIDE-012): → or l from the timeline, or a click, focuses the body
-  // (lib/plugins/panel.js has the keys); the body's scrollbar shows while it
-  // has focus or for 2 s after a wheel turn. With composer_focus_only a click
+  // (lib/plugins/panel.js has the keys); the body's scrollbar is the system's
+  // own and shows whenever the body is too full (owner, 2026-10-26). With composer_focus_only a click
   // leaves focus in the field and the wheel still scrolls the body on hover.
   import { setFocus, setPanelShown, ui } from "../lib/stores/ui.svelte.js";
   import { ws } from "../lib/stores/workspace.svelte.js";
@@ -31,19 +31,9 @@
     return () => setPanelBody(null);
   });
 
-  // The scrollbar: while focus is in the panel, or 2 s after a wheel turn
-  // (the terminal's sidebar scrollbar, chat_scroll.go:37 scrollbarHideDuration).
-  let wheelTimer = null;
-  function wheel() {
-    panel.wheeled = true;
-    clearTimeout(wheelTimer);
-    wheelTimer = setTimeout(() => (panel.wheeled = false), 2000);
-  }
   // Hidden with focus inside (SIDE-002): focus goes to the field. App asks
   // the composer first; this covers a field that did not take it.
   $effect(() => () => {
-    clearTimeout(wheelTimer);
-    panel.wheeled = false;
     panel.focused = false;
     if (ui.focus === "panel") toField(aside);
   });
@@ -92,12 +82,10 @@
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
     class="body"
-    class:show-bar={panel.focused || panel.wheeled}
     tabindex="-1"
     role="region"
     aria-label="Work"
     bind:this={body}
-    onwheel={wheel}
   >
     <AccountMeters />
     <TodoPanel />
@@ -139,24 +127,9 @@
     overflow-y: auto;
     margin: 0 calc(-19 * var(--px)) 0 calc(-26 * var(--px));
     padding: calc(22 * var(--px)) calc(19 * var(--px)) calc(26 * var(--px)) calc(26 * var(--px));
-    scrollbar-width: none;
     display: flex;
     flex-direction: column;
     gap: calc(24 * var(--px));
-  }
-  .body::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-  }
-  .body.show-bar {
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
-  }
-  .body.show-bar::-webkit-scrollbar {
-    width: calc(6 * var(--px));
-  }
-  .body.show-bar::-webkit-scrollbar-thumb {
-    background: var(--rule-control);
   }
   .body:focus-visible {
     outline-offset: -1px;

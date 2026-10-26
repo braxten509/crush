@@ -419,12 +419,6 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  .diffs::-webkit-scrollbar {
-    width: calc(6 * var(--px));
-  }
-  .diffs::-webkit-scrollbar-thumb {
-    background: var(--rule-control);
-  }
   .file + .file {
     margin-top: calc(16 * var(--px));
   }

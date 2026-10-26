@@ -36,7 +36,8 @@ while time.time() < end and not bar:
       const thumb = Math.max(20, s.clientHeight * s.clientHeight / s.scrollHeight);
       const at = s.scrollTop / Math.max(1, s.scrollHeight - s.clientHeight) * (s.clientHeight - thumb);
       // Halfway down, the thumb's middle is the track's middle, whatever its least length.
-      return { x: r.right - 2, top: r.top, h: s.clientHeight, y: r.top + s.clientHeight / 2, thumb, range: s.scrollHeight };
+      // The bar column's middle: the system's bar draws its thumb narrower than its column.
+      return { x: r.right - (s.offsetWidth - s.clientWidth) / 2, top: r.top, h: s.clientHeight, y: r.top + s.clientHeight / 2, thumb, range: s.scrollHeight };
     """)
     time.sleep(0.3)
 check(bool(bar), f"the long chat shows with its scroll bar ({bar})")

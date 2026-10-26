@@ -12,12 +12,13 @@
   // window and put back when it returns, so scrolling back never draws a
   // reply again; an item whose version changed meanwhile is updated in place.
   //
-  // The scrollbar is the web view's own, styled thin (CHAT-094, CHAT-095):
-  // "default" shows its thumb while scrolling and 2 s after (and while it is
-  // dragged), "always", or "never". A hidden thumb is only transparent, so
-  // the bar still takes presses.
+  // The scrollbar is the system's own, with arrows and a grey handle, as
+  // everywhere in the app (owner, 2026-10-26; CHAT-095): "never" hides it;
+  // "default" and "always" show it (the system's bar cannot fade, so bar-shown
+  // only marks the 2 s after a scroll).
   // Placed by Timeline.
   import { flushSync, mount, unmount, untrack } from "svelte";
+  import { barThumb, dragTop } from "../../lib/bardrag.js";
   import {
     anchorAt,
     atBottom,
@@ -217,6 +218,7 @@
       flushSync();
     }
     evenEnd();
+    placeGrip();
   });
 
   // The scroll range ends on a whole pixel (owner, 2026-10-20: "scrolling
@@ -274,7 +276,14 @@
         if (t !== null && Math.abs(t - scroller.scrollTop) >= 0.5) setTop(clampTop(l, scroller.clientHeight, t));
       }
       anchor = null;
+      placeGrip();
     });
+  });
+
+  // The grip follows the Settings choice for the bar.
+  $effect(() => {
+    scrollbar;
+    untrack(placeGrip);
   });
 
   function setTop(t) {
@@ -322,6 +331,7 @@
   }
 
   function onScroll() {
+    placeGrip();
     const t = scroller.scrollTop;
     if (Math.abs(t - lastTop) < 0.5) return; // our own
     const up = t < lastTop;
@@ -342,8 +352,8 @@
     onscrolled?.({ up });
   }
 
-  // A press on the bar's column, even while its thumb is hidden (CHAT-095):
-  // it stays shown until the button is released anywhere.
+  // A press on the bar's column, the arrows or the track (CHAT-095): it
+  // lasts until the button is released anywhere.
   function onMouseDown(event) {
     if (event.button !== 0 || event.target !== scroller || event.offsetX < scroller.clientWidth) return;
     dragging = true;
@@ -356,6 +366,56 @@
       },
       { once: true, capture: true },
     );
+  }
+
+  // The grip: an invisible piece over the bar's thumb, so a press on the
+  // thumb is dragged here, not by the browser (lib/bardrag.js). The system's
+  // bar keeps the mouse to itself while its thumb is dragged and moves by the
+  // mouse's steps, so as the chat measured older messages a drag to the top
+  // stopped a quarter of the way down (2026-10-26). Here each move puts the
+  // view where the mouse is, on the chat as long as it is now. The arrows and
+  // the track stay the browser's.
+  let grip = $state(null); // {left, top, width, height, travel} in the parent's px
+  let gripDrag = null;
+
+  function placeGrip() {
+    if (!scroller) return;
+    const thickness = scroller.offsetWidth - scroller.clientWidth;
+    const client = scroller.clientHeight;
+    const total = scroller.scrollHeight;
+    if (scrollbar === "never" || thickness <= 0 || total <= client) {
+      grip = null;
+      return;
+    }
+    const thumb = barThumb({ height: client, client, total, top: scroller.scrollTop });
+    grip = { left: scroller.offsetLeft + scroller.clientWidth, top: scroller.offsetTop + thumb.start, width: thickness, height: thumb.length, travel: thumb.travel };
+  }
+
+  function gripDown(event) {
+    if (event.button !== 0 || !grip) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    gripDrag = { y0: event.clientY, frac: scroller.scrollTop / Math.max(1, scroller.scrollHeight - scroller.clientHeight), travel: grip.travel };
+    dragging = true;
+    flashBar();
+  }
+
+  function gripMove(event) {
+    if (!gripDrag) return;
+    const range = scroller.scrollHeight - scroller.clientHeight;
+    scroller.scrollTop = dragTop({ frac: gripDrag.frac, dy: event.clientY - gripDrag.y0, travel: gripDrag.travel, range });
+  }
+
+  function gripUp() {
+    if (!gripDrag) return;
+    gripDrag = null;
+    dragging = false;
+    flashBar();
+  }
+
+  // A wheel turned over the grip still scrolls the chat.
+  function gripWheel(event) {
+    scroller.scrollBy({ top: event.deltaMode === 1 ? event.deltaY * 40 : event.deltaY });
   }
 
   // -- What Timeline asks --
@@ -374,10 +434,9 @@
     return top;
   }
 
-  // Whether the thumb shows now (CHAT-094): "default" while scrolling and 2 s
-  // after, or while it is dragged.
+  // Whether the bar shows now: unless the Settings choice is "never".
   export function barShowing() {
-    return scrollbar === "always" || (scrollbar === "default" && (barShown || dragging));
+    return scrollbar !== "never";
   }
 
   export function viewportHeight() {
@@ -489,8 +548,29 @@
     {/each}
   </div>
 </div>
+{#if grip}
+  <div
+    class="grip"
+    style:left="{grip.left}px"
+    style:top="{grip.top}px"
+    style:width="{grip.width}px"
+    style:height="{grip.height}px"
+    aria-hidden="true"
+    data-probe="chat-grip"
+    onpointerdown={gripDown}
+    onpointermove={gripMove}
+    onpointerup={gripUp}
+    onpointercancel={gripUp}
+    onwheel={gripWheel}
+  ></div>
+{/if}
 
 <style>
+  /* Over the thumb, drawing nothing; placed in the scroller's parent. */
+  .grip {
+    position: absolute;
+    z-index: 1;
+  }
   .scroller {
     flex: 1;
     min-height: 0;
@@ -498,23 +578,9 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  .scroller::-webkit-scrollbar {
-    width: calc(6 * var(--px));
-    background: transparent;
-  }
-  .scroller::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .scroller::-webkit-scrollbar-thumb {
-    background: transparent;
-  }
   /* --bar-shown makes WebKitGTK redraw the bar (app.css). */
   .scroller.bar-shown {
     --bar-shown: 1;
-  }
-  .scroller.bar-shown::-webkit-scrollbar-thumb,
-  .scroller.bar-always::-webkit-scrollbar-thumb {
-    background: var(--rule-control);
   }
   .scroller.bar-never {
     scrollbar-width: none;

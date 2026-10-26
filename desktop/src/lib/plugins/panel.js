@@ -173,7 +173,6 @@ probeSection(
       focus: ui.focus,
       dom_focus: describe(document.activeElement),
       focused: panel.focused,
-      scrollbar: panel.focused || panel.wheeled,
       details: detailsShown(),
       help: ui.help ? helpLines(helpGroups(helpNow())) : null,
       customize: ui.slot?.kind === "customize" ? { cursor: customizing.cursor, picked: [...customizing.picked] } : null,

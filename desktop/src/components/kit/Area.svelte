@@ -195,11 +195,4 @@
   textarea::selection {
     background: var(--selection);
   }
-  textarea::-webkit-scrollbar {
-    width: calc(6 * var(--px));
-    background: transparent;
-  }
-  textarea::-webkit-scrollbar-thumb {
-    background: var(--rule-control);
-  }
 </style>

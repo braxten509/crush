@@ -130,8 +130,6 @@
     min-height: 0;
     overflow-y: auto;
     padding: calc(18 * var(--px)) calc(23 * var(--px)) calc(22 * var(--px)) calc(66 * var(--px));
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
   }
   .head {
     display: flex;

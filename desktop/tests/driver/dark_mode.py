@@ -4,8 +4,9 @@ not scrolling and currently it's not clickable since the resize for the
 vertical bar is overtaking the hitbox"). In the real window on the hidden
 screen, with real mouse moves, wheel turns and clicks:
 
-- the chat's scroll bar shows its thumb while the wheel turns and paints it
-  away again once scrolling stops, and the point on the bar belongs to the
+- the chat's scroll bar shows while the wheel turns and stays painted once
+  scrolling stops (owner, 2026-10-26: the system's bar everywhere, shown
+  whenever the chat is too full), and the point on the bar belongs to the
   chat, not to the right column's grip beside it;
 - Settings > Appearance > Mode > Dark lays soft linen ink on graphite paper
   (owner, 2026-10-20: "it loses the soft vibe", then the Graphite pick):
@@ -155,8 +156,8 @@ if "scroll" in parts and check(bar is not None and "x" in bar, f"the chat scroll
     check(before is not None and moved is not None and moved != before, f"the wheel scrolls the chat ({before} to {moved})")
     check(shown is True, "the thumb shows while the wheel turns")
     check(hidden is True, "the thumb's class goes once scrolling stops")
-    check(during is not None and after is not None and after - during > 0.01,
-          f"the thumb is painted away on screen after scrolling stops (strip brightness {during} while scrolling, {after} after)")
+    check(during is not None and after is not None and abs(after - during) < 0.01,
+          f"the bar stays painted on screen after scrolling stops (strip brightness {during} while scrolling, {after} after)")
 xdo("mousemove", geo_x + 5, geo_y + 400)
 if "scroll" in parts:
     xdo("windowsize", wid, 1600, 992)

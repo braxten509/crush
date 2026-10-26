@@ -315,8 +315,6 @@
   /* The picture's table (SidePanel.svelte); a wide one scrolls inside the figure. */
   .figure-body :global(.figure-table) {
     overflow-x: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
   }
   .figure-body :global(.md-table) {
     width: 100%;

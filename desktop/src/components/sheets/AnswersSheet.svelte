@@ -36,9 +36,11 @@
   p {
     margin: 0;
   }
+  /* No scroll box of its own: the pop-up grows to fit, and only a window too
+     short for it scrolls the sheet's body (owner, 2026-10-26). Its own box
+     came out a dot shorter than the text, so a bar showed for nothing. */
   .page {
-    overflow-y: auto;
-    min-height: 0;
+    flex: none;
   }
   .answer + .answer {
     margin-top: calc(16 * var(--px));

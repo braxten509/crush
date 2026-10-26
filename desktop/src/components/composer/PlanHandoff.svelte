@@ -239,8 +239,6 @@
     font: var(--t-field);
     color: var(--ink);
     caret-color: var(--ink);
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
   }
   .feedback:focus-visible {
     outline: 1px solid var(--vermilion);
@@ -253,15 +251,6 @@
   .feedback::selection {
     background: var(--selection);
     color: var(--ink);
-  }
-  .feedback::-webkit-scrollbar {
-    width: calc(6 * var(--px));
-  }
-  .feedback::-webkit-scrollbar-thumb {
-    background: var(--rule-control);
-  }
-  .feedback::-webkit-scrollbar-track {
-    background: transparent;
   }
   .hint {
     margin: 0;

@@ -90,8 +90,6 @@
     padding: calc(16 * var(--px)) calc(23 * var(--px)) calc(18 * var(--px)) calc(66 * var(--px));
     columns: 3;
     column-gap: calc(32 * var(--px));
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
   }
   .group {
     break-inside: avoid;

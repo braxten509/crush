@@ -163,8 +163,6 @@
     max-width: calc(440 * var(--px));
     max-height: calc(13 * 32 * var(--px) + 2px);
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
     padding: calc(4 * var(--px)) 0;
     border: 1px solid var(--rule-control);
     background: var(--paper-raised);

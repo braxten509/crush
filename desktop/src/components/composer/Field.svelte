@@ -182,17 +182,6 @@
   }
   .input.scrolls {
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
-  }
-  .input::-webkit-scrollbar {
-    width: calc(6 * var(--px));
-  }
-  .input::-webkit-scrollbar-thumb {
-    background: var(--rule-control);
-  }
-  .input::-webkit-scrollbar-track {
-    background: transparent;
   }
   .input::placeholder {
     color: var(--slate);

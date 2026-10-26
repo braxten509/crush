@@ -1,10 +1,9 @@
 // The right panel's own state and the values its parts share (P3.8).
 //
-//   panel                  {detailsOpen, focused, wheeled}. detailsOpen: the details
+//   panel                  {detailsOpen, focused}. detailsOpen: the details
 //                          overlay (SIDE-003), kept while the panel shows, as the
 //                          terminal keeps detailsOpen (keypress.go:588-591), drawn only
-//                          while the panel is hidden. focused, wheeled: focus is in the
-//                          panel; a wheel turned it in the last 2 s (its scrollbar shows)
+//                          while the panel is hidden. focused: focus is in the panel
 //   toggleDetails(), closeDetails()
 //   meterNow(now)          meterModel for the shown chat (SIDE-007, SIDE-014, SIDE-019 to SIDE-024)
 //   modelNow(now)          modelInfo for the details overlay's header
@@ -34,7 +33,7 @@ import { ws } from "../../lib/stores/workspace.svelte.js";
 import { agentNow } from "../../lib/live/helpers.svelte.js";
 import { lspRows, mcpRows, skillRows } from "./rows.js";
 
-export const panel = $state({ detailsOpen: false, focused: false, wheeled: false, needsInit: false });
+export const panel = $state({ detailsOpen: false, focused: false, needsInit: false });
 
 // The panel width, in picture px, its meters' words need to show whole
 // (Meters.svelte measures it; App.svelte keeps the panel at least this wide).

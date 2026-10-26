@@ -308,18 +308,6 @@
     background: var(--code-bg);
     font: var(--t-code);
     color: var(--ink);
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
-  }
-  .content::-webkit-scrollbar {
-    width: calc(6 * var(--px));
-    height: calc(6 * var(--px));
-  }
-  .content::-webkit-scrollbar-thumb {
-    background: var(--rule-control);
-  }
-  .content::-webkit-scrollbar-track {
-    background: transparent;
   }
   .content.diff {
     flex: 1 1 auto;

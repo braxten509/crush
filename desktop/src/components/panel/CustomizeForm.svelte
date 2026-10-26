@@ -133,8 +133,6 @@
     padding: calc(14 * var(--px)) calc(16 * var(--px)) calc(12 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--paper-raised);
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
   }
   .title {
     display: flex;

@@ -72,17 +72,6 @@
     overflow-y: auto;
     border-top: 1px solid var(--rule-faint);
     background: var(--paper);
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule-control) transparent;
-  }
-  .tray::-webkit-scrollbar {
-    width: calc(6 * var(--px));
-  }
-  .tray::-webkit-scrollbar-thumb {
-    background: var(--rule-control);
-  }
-  .tray::-webkit-scrollbar-track {
-    background: transparent;
   }
   .section {
     padding: calc(6 * var(--px)) calc(20 * var(--px));

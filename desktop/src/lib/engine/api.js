@@ -300,7 +300,8 @@ export const api = {
   dockerMcp: (enable) => post(enable ? "mcp/docker/enable" : "mcp/docker/disable"),
 
   memory: () => get("/v1/memory"),
-  setMemoryLimit: (value) => commands.api("PUT", "/v1/memory/limit", undefined, { value }),
+  // The engine takes the limit as typed text ("8", "7.5"), never a number.
+  setMemoryLimit: (value) => commands.api("PUT", "/v1/memory/limit", undefined, { value: String(value) }),
   // The engine claims its current episode (internal/server/handlers_live.go:94);
   // the caller names the episode it saw.
   claimMemoryNotice: (_episode) => post("/v1/memory/claim-notice"),

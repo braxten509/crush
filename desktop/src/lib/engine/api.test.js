@@ -357,3 +357,12 @@ describe("a chat's calls go to that chat's folder (owner, 2026-10-22: several fo
     expect(last()).toMatchObject({ path: "sessions/S9", dir: "/tmp/home/other" });
   });
 });
+
+// The engine reads the memory limit as typed text (proto.MemoryLimitRequest
+// Value string); a JSON number fails with "failed to decode request".
+it("sends the memory limit as text", async () => {
+  await api.setMemoryLimit(29);
+  expect(last()).toMatchObject({ method: "PUT", path: "/v1/memory/limit", body: { value: "29" } });
+  await api.setMemoryLimit(0);
+  expect(last().body).toEqual({ value: "0" });
+});

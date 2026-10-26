@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -75,4 +76,74 @@ func TestChatMessageGoesToItsSubAgent(t *testing.T) {
 		t.Fatal("the finished sub-agent got no follow-up")
 	}
 	reported("follow-up report")
+}
+
+// The agent that started a sub-agent can message it while it works, as the
+// user can in its chat (owner, 2026-10-25): `crush spawn --continue` puts
+// the message in line, and --interrupt also cuts its current turn short.
+// Either way the sub-agent's one result reaches the parent.
+func TestAgentMessagesRunningSubAgent(t *testing.T) {
+	for _, interrupt := range []bool{false, true} {
+		t.Run(map[bool]string{false: "in line", true: "interrupt"}[interrupt], func(t *testing.T) {
+			parentPrompts := make(chan string, 4)
+			c := sessionRunTestCoordinator(t, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+				parentPrompts <- call.Prompt
+				return fakeSessionReply(call, "received"), nil
+			})
+			h := resumeTestHub(t, c)
+			c.tasks = h
+			parent, child := helperChats(t, c)
+
+			// The message is held in line, as a busy chat holds it, and its
+			// turn comes once the current one ends.
+			cut, arrived, messaged := make(chan struct{}), make(chan struct{}), make(chan SessionAgentCall, 1)
+			var sub *mockSessionAgent
+			sub = newMockAgent("claude", 4096, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+				if call.Prompt == "work" {
+					if interrupt {
+						<-cut
+						return nil, context.Canceled
+					}
+					<-arrived
+					return agentResultWithText("first report"), nil
+				}
+				messaged <- call
+				close(arrived)
+				go func() {
+					if interrupt {
+						<-cut
+					}
+					call.report.fill(agentResultWithText("report after the message"), nil)
+				}()
+				return nil, nil
+			})
+			sub.interrupt = func(sessionID string) {
+				require.Equal(t, child.ID, sessionID)
+				close(cut)
+			}
+			m := Model{CatwalkCfg: catwalk.Model{DefaultMaxTokens: 4096}}
+			task, err := h.start(t.Context(), func() {}, &Task{SessionID: parent.ID, ChildID: child.ID, Name: "worker", CLI: "claude", Model: "opus", Status: TaskRunning, Started: time.Now()}, sub, m, config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode}, "work")
+			require.NoError(t, err)
+
+			req, err := json.Marshal(TaskRequest{Session: parent.ID, Continue: task.ID, Prompt: "also check the error paths", Interrupt: interrupt})
+			require.NoError(t, err)
+			reply := h.handle(req)
+			require.Empty(t, reply.Error)
+			require.Contains(t, reply.Message, task.ID)
+			select {
+			case call := <-messaged:
+				require.Equal(t, child.ID, call.SessionID)
+				require.Contains(t, call.Prompt, "also check the error paths")
+				require.Contains(t, call.Prompt, "agent that started you")
+			case <-time.After(5 * time.Second):
+				t.Fatal("the running sub-agent never got the message")
+			}
+			select {
+			case prompt := <-parentPrompts:
+				require.Contains(t, prompt, "report after the message")
+			case <-time.After(5 * time.Second):
+				t.Fatal("the parent never got the sub-agent's result")
+			}
+		})
+	}
 }

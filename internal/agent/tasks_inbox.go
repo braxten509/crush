@@ -145,7 +145,14 @@ func (h *taskHub) handle(data []byte) TaskReply {
 	if req.Stop != "" {
 		t, err = h.stop(req.Session, req.Stop)
 	} else if req.Continue != "" {
-		t, err = h.continueTask(req)
+		var reply string
+		var sent bool
+		if reply, sent, err = h.messageRunning(req); sent {
+			return TaskReply{Message: reply}
+		}
+		if err == nil {
+			t, err = h.continueTask(req)
+		}
 	} else {
 		t, err = h.spawn(req)
 	}

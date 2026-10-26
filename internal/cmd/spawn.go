@@ -37,6 +37,10 @@ crush spawn --continue t2 <<'EOF'
 Also check the error paths you skipped.
 EOF
 
+crush spawn --continue t2 --interrupt <<'EOF'
+Stop: leave the database code alone.
+EOF
+
 crush spawn --stop t2`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -47,6 +51,10 @@ crush spawn --stop t2`,
 		req := agent.TaskRequest{Session: session}
 		req.Stop, _ = cmd.Flags().GetString("stop")
 		req.Continue, _ = cmd.Flags().GetString("continue")
+		req.Interrupt, _ = cmd.Flags().GetBool("interrupt")
+		if req.Interrupt && req.Continue == "" {
+			return errors.New("--interrupt goes with --continue <task-id>")
+		}
 		if req.Stop == "" {
 			req.CLI, _ = cmd.Flags().GetString("cli")
 			req.Model, _ = cmd.Flags().GetString("model")
@@ -77,6 +85,11 @@ crush spawn --stop t2`,
 		}
 		if reply.Error != "" {
 			return errors.New(reply.Error)
+		}
+		// A message to a running task is answered in words.
+		if reply.Message != "" {
+			cmd.Println(reply.Message)
+			return nil
 		}
 		t := reply.Task
 		if req.Stop != "" {
@@ -111,7 +124,8 @@ func init() {
 	spawnCmd.Flags().Bool("read-only", false, "Run where it can't change the project's files, as for reviews; follow-ups stay read-only")
 	spawnCmd.Flags().String("name", "", "Short title shown in Crush")
 	spawnCmd.Flags().String("stop", "", "Stop the task with this ID instead")
-	spawnCmd.Flags().String("continue", "", "Send the prompt as a follow-up to this finished task; it keeps its conversation")
+	spawnCmd.Flags().String("continue", "", "Send the prompt to this task, which keeps its conversation: as a follow-up once it is done, or into its work while it runs")
+	spawnCmd.Flags().Bool("interrupt", false, "With --continue on a running task, stop its current step so it reads the prompt at once")
 	rootCmd.AddCommand(spawnCmd)
 }
 

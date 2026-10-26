@@ -101,6 +101,55 @@ func (h *taskHub) findTask(sessionID, id string) (Task, bool) {
 	return Task{}, false
 }
 
+const runningMessagePreamble = `This is a message from the agent that started you, sent while you work. Take it into account and carry on; your final report still goes back to that agent.
+
+`
+
+const interruptPreamble = `The agent that started you stopped your current step to send this message. Read it and carry on from there; your final report still goes back to that agent.
+
+`
+
+// messageRunning sends an agent's `crush spawn --continue` to a task that
+// is still running, as the user's message in its chat goes (owner,
+// 2026-10-25): into its work, and with Interrupt its current turn is cut
+// short so the message runs at once. The task keeps its conversation and
+// hands on one result, after the message's turn. sent is false when the
+// task is not running, so the caller follows up as usual.
+func (h *taskHub) messageRunning(req TaskRequest) (reply string, sent bool, err error) {
+	prompt := strings.TrimSpace(req.Prompt)
+	if prompt == "" {
+		return "", false, errors.New("the follow-up prompt is empty")
+	}
+	t, ok := h.findTask(req.Session, req.Continue)
+	if !ok || !h.childRunning(t.ChildID) {
+		return "", false, nil
+	}
+	current, box, running := h.joinRun(t.ID)
+	if !running {
+		// It is ending: wait out its last moments, then follow up.
+		for end := time.Now().Add(5 * time.Second); h.childRunning(t.ChildID) && time.Now().Before(end); {
+			time.Sleep(20 * time.Millisecond)
+		}
+		return "", false, nil
+	}
+	preamble := runningMessagePreamble
+	if req.Interrupt {
+		preamble = interruptPreamble
+	}
+	go func() {
+		result, err := current.message(box, SessionAgentCall{SessionID: t.ChildID, Prompt: preamble + prompt})
+		// Waiting behind the current turn: cut it short, so the message's
+		// turn comes next. A turn that ran here needs no cut.
+		if req.Interrupt && result == nil && err == nil {
+			current.sub.Interrupt(t.ChildID)
+		}
+	}()
+	if req.Interrupt {
+		return fmt.Sprintf("Interrupted task %s (%s): it stops its current step and reads your message now. It keeps its conversation, and its one result will still arrive as a <%s> message. Don't wait for it.", t.ID, t.Name, TaskNotificationTag), true, nil
+	}
+	return fmt.Sprintf("Sent to task %s (%s), which is still working: it reads your message during its current work if its tool allows, otherwise right after. It keeps its conversation, and its one result will still arrive as a <%s> message. Don't wait for it.", t.ID, t.Name, TaskNotificationTag), true, nil
+}
+
 // continueTask runs a follow-up on a finished task's child session.
 func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 	ctx, release := h.reserveFollowUp(req.Session)

@@ -102,8 +102,12 @@ type TaskRequest struct {
 	Name     string `json:"name,omitempty"`
 	Prompt   string `json:"prompt,omitempty"`
 	Stop     string `json:"stop,omitempty"`
-	// Continue sends Prompt as a follow-up to this finished task.
+	// Continue sends Prompt to this task: as a follow-up once it is done,
+	// or into its work while it runs.
 	Continue string `json:"continue,omitempty"`
+	// Interrupt, with Continue, cuts a running task's current turn short so
+	// it reads Prompt at once.
+	Interrupt bool `json:"interrupt,omitempty"`
 	// Ask holds question tool input from `crush ask`.
 	Ask         json.RawMessage    `json:"ask,omitempty"`
 	SecureEntry *secureentry.Spec  `json:"secure_entry,omitempty"`
@@ -675,6 +679,7 @@ To give a finished sub-agent more work or corrections, continue it instead of st
   %[1]s spawn --continue <task-id> <<'EOF'
   <follow-up>
   EOF
+The same command messages a sub-agent that is still working, to correct or steer it: the message reaches it during its current work, or right after, and its one result still arrives when it finishes. Add --interrupt to stop its current step so it reads the message at once (for a wrong turn you want stopped now).
 Task IDs keep working after Crush restarts. Never start, resume or continue an agent CLI yourself (claude, codex, grok, opencode, agy) through bg, systemd-run, scripts or its own resume flags: Crush shows those as plain background processes and cannot report their results.
 
 Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Run longer waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).

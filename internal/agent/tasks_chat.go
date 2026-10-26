@@ -79,35 +79,14 @@ func (h *taskHub) chatMessage(ctx context.Context, accept *AcceptedRun, sessionI
 	accept.Close()
 	ids := chatCall{submissionID: message.SubmissionID(ctx), runID: RunIDFromContext(ctx)}
 
-	// The fallback order moves a sub-agent under h.mu, so its agent and
-	// model are read while it is held.
-	h.mu.Lock()
-	run := h.runs[t.ID]
-	var box *reportBox
-	var current taskRun
-	if run != nil {
-		box = newReportBox()
-		run.pending = append(run.pending, box)
-		current = taskRun{ctx: run.ctx, sub: run.sub, model: run.model, provider: run.provider}
-	}
-	h.mu.Unlock()
-	if run != nil {
-		result, err = current.sub.Run(current.ctx, SessionAgentCall{
-			SessionID:       sessionID,
-			SubmissionID:    ids.submissionID,
-			RunID:           ids.runID,
-			Prompt:          prompt,
-			Attachments:     attachments,
-			MaxOutputTokens: subAgentMaxTokens(current.model),
-			NonInteractive:  true,
-			ProviderOptions: getProviderOptions(current.model, current.provider),
-			report:          box,
+	if current, box, running := h.joinRun(t.ID); running {
+		result, err = current.message(box, SessionAgentCall{
+			SessionID:    sessionID,
+			SubmissionID: ids.submissionID,
+			RunID:        ids.runID,
+			Prompt:       prompt,
+			Attachments:  attachments,
 		})
-		// A queued message's box fills when its turn ends; a turn that
-		// ran here fills it now (fill keeps the first).
-		if result != nil || err != nil {
-			box.fill(result, err)
-		}
 		MarkRunCompletePublished(ctx)
 		return result, true, err
 	}
@@ -120,6 +99,39 @@ func (h *taskHub) chatMessage(ctx context.Context, accept *AcceptedRun, sessionI
 		return nil, true, err
 	}
 	return nil, true, nil
+}
+
+// joinRun adds a message to the running task id: the task waits for the
+// returned box before it hands its result on. running is false once the
+// task is ending.
+func (h *taskHub) joinRun(id string) (current taskRun, box *reportBox, running bool) {
+	// The fallback order moves a sub-agent under h.mu, so its agent and
+	// model are read while it is held.
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	run := h.runs[id]
+	if run == nil {
+		return taskRun{}, nil, false
+	}
+	box = newReportBox()
+	run.pending = append(run.pending, box)
+	return taskRun{ctx: run.ctx, sub: run.sub, model: run.model, provider: run.provider}, box, true
+}
+
+// message sends call into the run's work, as any chat's mid-reply message:
+// it joins the running turn or waits for the next. A waiting message
+// returns no result; its box fills when its turn ends.
+func (r taskRun) message(box *reportBox, call SessionAgentCall) (*fantasy.AgentResult, error) {
+	call.MaxOutputTokens = subAgentMaxTokens(r.model)
+	call.NonInteractive = true
+	call.ProviderOptions = getProviderOptions(r.model, r.provider)
+	call.report = box
+	result, err := r.sub.Run(r.ctx, call)
+	// A turn that ran here fills the box now (fill keeps the first).
+	if result != nil || err != nil {
+		box.fill(result, err)
+	}
+	return result, err
 }
 
 // awaitChatMessages waits for the turns of the messages the user sent in

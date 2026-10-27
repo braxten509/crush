@@ -128,7 +128,10 @@ func (h *taskHub) runCheckIns(sessionID string, s *sessionCheckIns) {
 		if prompt == "" || sendCtx == nil {
 			return
 		}
-		if _, err := h.c.Run(sendCtx, sessionID, prompt); err != nil {
+		// The turn is the parent's own: stopping or ending the work it
+		// reports on must not cut it short (the parent may be stopping
+		// that very work from this turn).
+		if _, err := h.c.Run(context.WithoutCancel(sendCtx), sessionID, prompt); err != nil {
 			slog.Warn("Progress check-in failed", "session", sessionID, "error", err)
 		}
 	}

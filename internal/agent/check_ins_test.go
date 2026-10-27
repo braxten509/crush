@@ -367,3 +367,36 @@ collect:
 	defer h.mu.Unlock()
 	require.Empty(t, h.checkIns)
 }
+
+// A check-in turn is the parent's own: stopping the helper it reports on
+// (or the helper ending) must not cut the parent's turn short. It once ran
+// on the helper's context, so a parent that stopped its helper from that
+// turn ended with "user cancelled" (owner, 2026-10-27).
+func TestStoppingWorkLeavesTheCheckInTurnRunning(t *testing.T) {
+	turns := make(chan context.Context, 8)
+	release := make(chan struct{})
+	c := sessionRunTestCoordinator(t, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		turns <- ctx
+		<-release
+		return fakeSessionReply(call, "received"), nil
+	})
+	defer close(release)
+	h := c.tasks
+	h.checkInEvery = 200 * time.Millisecond
+	parent, err := c.sessions.Create(t.Context(), "parent")
+	require.NoError(t, err)
+	helperCtx, stopHelper := context.WithCancel(context.Background())
+	work := fixedWork("t1", "helper", "working", time.Now())
+	work.ctx = helperCtx
+	remove := h.addCheckIn(parent.ID, work)
+	defer remove()
+
+	var turn context.Context
+	select {
+	case turn = <-turns:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no check-in turn started")
+	}
+	stopHelper()
+	require.Never(t, func() bool { return turn.Err() != nil }, 300*time.Millisecond, 10*time.Millisecond, "stopping the helper cut the parent's check-in turn short")
+}

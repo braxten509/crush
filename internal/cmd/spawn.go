@@ -37,6 +37,10 @@ crush spawn --continue t2 <<'EOF'
 Also check the error paths you skipped.
 EOF
 
+crush spawn --continue t2 --cli claude --model sonnet <<'EOF'
+Carry on with a different model; it keeps its earlier work.
+EOF
+
 crush spawn --continue t2 --interrupt <<'EOF'
 Stop: leave the database code alone.
 EOF
@@ -117,8 +121,8 @@ crush spawn --stop t2`,
 }
 
 func init() {
-	spawnCmd.Flags().String("cli", "", "Agent CLI to run the sub-agent on (claude, codex, grok, opencode, agy)")
-	spawnCmd.Flags().String("model", "", "Model to use (defaults to the CLI's first model)")
+	spawnCmd.Flags().String("cli", "", "Agent CLI to run the sub-agent on (claude, codex, grok, opencode, agy); with --continue, switches a stopped or finished task to it")
+	spawnCmd.Flags().String("model", "", "Model to use (defaults to the CLI's first model); with --continue, switches a stopped or finished task to it")
 	spawnCmd.Flags().String("effort", "", "Reasoning effort, one of the model's levels (like low, medium, high, xhigh, max)")
 	spawnCmd.Flags().Bool("fast", false, "Run in fast mode (claude and codex only)")
 	spawnCmd.Flags().Bool("read-only", false, "Run where it can't change the project's files, as for reviews; follow-ups stay read-only")

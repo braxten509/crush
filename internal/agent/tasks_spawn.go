@@ -47,6 +47,34 @@ func (h *taskHub) taskProviders() []config.ProviderConfig {
 	return out
 }
 
+// taskProvider finds the provider a sub-agent names with --cli.
+func (h *taskHub) taskProvider(name string) (config.ProviderConfig, error) {
+	var provider *config.ProviderConfig
+	var names []string
+	for _, p := range h.taskProviders() {
+		names = append(names, taskProviderName(p))
+		if strings.EqualFold(name, taskProviderName(p)) || (config.IsCLIProviderType(p.Type) && strings.EqualFold(name, string(p.Type))) {
+			provider = &p
+		}
+	}
+	if provider == nil {
+		return config.ProviderConfig{}, fmt.Errorf("unknown CLI %q; available: %s", name, strings.Join(names, ", "))
+	}
+	return *provider, nil
+}
+
+// providerModel finds a provider's model by ID; no ID takes its first.
+func providerModel(provider config.ProviderConfig, id string) (catwalk.Model, error) {
+	if id == "" {
+		return provider.Models[0], nil
+	}
+	i := slices.IndexFunc(provider.Models, func(m catwalk.Model) bool { return strings.EqualFold(m.ID, id) })
+	if i < 0 {
+		return catwalk.Model{}, fmt.Errorf("unknown %s model %q; available: %s", taskProviderName(provider), id, strings.Join(modelIDs(provider.Models), ", "))
+	}
+	return provider.Models[i], nil
+}
+
 func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	ctx, release := h.reserveFollowUp(req.Session)
 	started := false
@@ -59,24 +87,14 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	if prompt == "" {
 		return nil, errors.New("the task prompt is empty")
 	}
-	var provider *config.ProviderConfig
-	var names []string
-	for _, p := range h.taskProviders() {
-		names = append(names, taskProviderName(p))
-		if strings.EqualFold(req.CLI, taskProviderName(p)) || (config.IsCLIProviderType(p.Type) && strings.EqualFold(req.CLI, string(p.Type))) {
-			provider = &p
-		}
+	found, err := h.taskProvider(req.CLI)
+	if err != nil {
+		return nil, err
 	}
-	if provider == nil {
-		return nil, fmt.Errorf("unknown CLI %q; available: %s", req.CLI, strings.Join(names, ", "))
-	}
-	model := provider.Models[0]
-	if req.Model != "" {
-		i := slices.IndexFunc(provider.Models, func(m catwalk.Model) bool { return strings.EqualFold(m.ID, req.Model) })
-		if i < 0 {
-			return nil, fmt.Errorf("unknown %s model %q; available: %s", taskProviderName(*provider), req.Model, strings.Join(modelIDs(provider.Models), ", "))
-		}
-		model = provider.Models[i]
+	provider := &found
+	model, err := providerModel(found, req.Model)
+	if err != nil {
+		return nil, err
 	}
 
 	if _, err := h.c.sessions.Get(ctx, req.Session); err != nil {

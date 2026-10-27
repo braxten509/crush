@@ -2,6 +2,7 @@ package agent
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -124,6 +125,9 @@ func (h *taskHub) messageRunning(req TaskRequest) (reply string, sent bool, err 
 	if !ok || !h.childRunning(t.ChildID) {
 		return "", false, nil
 	}
+	if req.CLI != "" || req.Model != "" {
+		return "", false, fmt.Errorf("task %s is still running, so it can't switch models: stop it first (crush spawn --stop %s), then continue it with --cli/--model", t.ID, t.ID)
+	}
 	current, box, running := h.joinRun(t.ID)
 	if !running {
 		// It is ending: wait out its last moments, then follow up.
@@ -173,26 +177,46 @@ func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 	if _, err := h.c.sessions.Get(ctx, prev.ChildID); err != nil {
 		return nil, fmt.Errorf("task %s's conversation is gone, so start a new task instead", prev.ID)
 	}
-	provider, model, err := h.taskTarget(prev)
+	provider, model, err := h.continueTarget(prev, req)
 	if err != nil {
 		return nil, err
 	}
-	tuning := TaskRequest{Effort: cmp.Or(req.Effort, prev.Effort), Fast: req.Fast || prev.Fast}
+	sameCLI := strings.EqualFold(taskProviderName(provider), prev.CLI)
+	switched := !sameCLI || model.ID != prev.Model
+	// A new model takes only the tuning asked for now: the old effort may
+	// not be one of its levels.
+	tuning := TaskRequest{Effort: req.Effort, Fast: req.Fast}
+	if !switched {
+		tuning = TaskRequest{Effort: cmp.Or(req.Effort, prev.Effort), Fast: req.Fast || prev.Fast}
+	}
 	selected, err := taskModel(provider, model, tuning)
 	if err != nil {
 		return nil, err
 	}
-	selected.Account = h.taskAccount(req.Session, provider, prev.Account)
+	account := prev.Account
+	if !sameCLI {
+		account = ""
+	}
+	selected.Account = h.taskAccount(req.Session, provider, account)
 	readOnly := prev.ReadOnly || req.ReadOnly
 	sub, m, err := h.subAgent(ctx, provider, model, selected, readOnly)
 	if err != nil {
 		return nil, err
+	}
+	if switched {
+		// Its chat shows the model it now runs on.
+		if choice, err := json.Marshal(selected); err == nil {
+			if _, err := h.c.sessions.SetModel(ctx, prev.ChildID, choice); err != nil {
+				slog.Warn("Could not save the worker's new model with its chat", "session_id", prev.ChildID, "error", err)
+			}
+		}
 	}
 	if !config.IsCLIProviderType(provider.Type) {
 		h.c.permissions.AutoApproveSession(prev.ChildID)
 	}
 
 	t := prev
+	t.CLI, t.Model, t.Account = taskProviderName(provider), model.ID, selected.Account
 	t.Status, t.Started, t.Ended, t.Delivered = TaskRunning, time.Now(), time.Time{}, false
 	t.Effort, t.Fast, t.ReadOnly = selected.ReasoningEffort, tuning.Fast, readOnly
 	h.mu.Lock()
@@ -214,6 +238,22 @@ func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 		return nil, err
 	}
 	return &snapshot, nil
+}
+
+// continueTarget picks the provider and model for a follow-up: the task's
+// own, unless the request names another CLI or model. A model alone stays
+// on the task's CLI; a CLI alone takes its first model.
+func (h *taskHub) continueTarget(prev Task, req TaskRequest) (config.ProviderConfig, catwalk.Model, error) {
+	if req.CLI == "" && req.Model == "" {
+		return h.taskTarget(prev)
+	}
+	name := cmp.Or(req.CLI, prev.CLI)
+	provider, err := h.taskProvider(name)
+	if err != nil {
+		return config.ProviderConfig{}, catwalk.Model{}, err
+	}
+	model, err := providerModel(provider, req.Model)
+	return provider, model, err
 }
 
 // childRunning reports whether a task on this child session is running.

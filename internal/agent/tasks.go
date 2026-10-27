@@ -682,6 +682,7 @@ To give a finished sub-agent more work or corrections, continue it instead of st
   %[1]s spawn --continue <task-id> <<'EOF'
   <follow-up>
   EOF
+Add --model and/or --cli to carry on with another model (--model alone keeps its provider; --cli alone takes that provider's first model); it still remembers its earlier work. A running sub-agent can't switch: stop it first.
 The same command messages a sub-agent that is still working, to correct or steer it: the message reaches it during its current work, or right after, and its one result still arrives when it finishes. Add --interrupt to stop its current step so it reads the message at once (for a wrong turn you want stopped now).
 Task IDs keep working after Crush restarts. Never start, resume or continue an agent CLI yourself (claude, codex, grok, opencode, agy) through bg, systemd-run, scripts or its own resume flags: Crush shows those as plain background processes and cannot report their results.
 

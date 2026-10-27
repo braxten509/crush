@@ -105,7 +105,8 @@ const recallTokens = new Map();
 
 export const api = {
   version: () => get("/v1/version"),
-  engine: () => get("/v1/engine"),
+  // dir: the joined folder whose engine answers ("" for the shown folder).
+  engine: (dir = "") => commands.api("GET", "/v1/engine", undefined, undefined, undefined, dir),
   limits: () => get("/v1/limits"),
   refreshLimits: (kind) => post(`/v1/limits/${seg(kind)}/refresh`),
 

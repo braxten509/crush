@@ -43,6 +43,7 @@ func newRepoFile(t *testing.T, content string) (root, path string) {
 	t.Helper()
 	root = t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 	path = filepath.Join(root, "file.txt")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	return root, path

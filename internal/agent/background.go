@@ -203,6 +203,8 @@ type detachedKey struct {
 type detachedProc struct {
 	session string
 	command string
+	// lastSeen is the last scan that found it alive.
+	lastSeen time.Time
 }
 
 // watchDetached tells a session's agent when a process it detached ends,
@@ -230,22 +232,34 @@ func completedDetached(seen map[detachedKey]detachedProc, procs map[int]proc) ma
 	if procs == nil {
 		return ended
 	}
+	now := time.Now()
 	alive := make(map[detachedKey]bool)
 	for _, p := range procs {
 		key := detachedKey{p.pid, p.started}
 		// A previously tracked process stays alive even if it is reparented.
 		alive[key] = true
+		if tracked, ok := seen[key]; ok {
+			tracked.lastSeen = now
+			seen[key] = tracked
+		}
 		if p.session == "" || p.busService || p.cliHelper || p.nativeShellID != "" || !isDetached(p, procs) {
 			continue
 		}
 		if _, ok := seen[key]; !ok {
-			seen[key] = detachedProc{session: p.session, command: commandText(p.args)}
+			seen[key] = detachedProc{session: p.session, command: commandText(p.args), lastSeen: now}
 		}
 	}
 	for key, process := range seen {
-		if !alive[key] {
+		if alive[key] {
+			continue
+		}
+		delete(seen, key)
+		// A helper a tool started that outlived it for a moment (Chromium's
+		// crash reporter, an MCP server's launcher) is not background work
+		// the agent waits on (owner, 2026-10-27). Its age is how long it was
+		// seen alive, not when its end was noticed.
+		if process.lastSeen.Sub(key.started) >= backgroundMinAge {
 			ended[key] = process
-			delete(seen, key)
 		}
 	}
 	return ended

@@ -482,9 +482,22 @@ pub fn window_open(
 }
 
 /// After the window's close steps (lib/closing.js); the last window ends the app.
-pub async fn window_close(app: AppHandle, window: Window) -> AppResult<()> {
-    windows::close(&app, window.label()).await;
+/// `stop`: the folders whose engines stop their work and exit first.
+pub async fn window_close(app: AppHandle, window: Window, stop: Option<Vec<String>>) -> AppResult<()> {
+    windows::close(&app, window.label(), &stop.unwrap_or_default()).await;
     Ok(())
+}
+
+/// lib/closeask.js holds the close fallback off while it decides (`asking`)
+/// and answers how many other windows stay open; done, it lets go, and a
+/// window that goes on closing (`closing`) gets a fresh fallback.
+pub fn window_close_hold(app: &AppHandle, window: Window, asking: bool, closing: bool) -> usize {
+    let Some(windows) = app.try_state::<Windows>() else { return 0 };
+    let others = windows.hold_close(window.label(), asking);
+    if !asking && closing {
+        windows::arm_fallback(app, window.label());
+    }
+    others
 }
 
 pub async fn project_switch(app: AppHandle, window: Window, project_dir: String) -> AppResult<bool> {

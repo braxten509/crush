@@ -64,6 +64,7 @@ func TestCLIEditReportedLateIsUndoneFromItsReplacement(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 	path := filepath.Join(dir, "notes.txt")
 	require.NoError(t, os.WriteFile(path, []byte("one\nbanana\nthree\n"), 0o644))
 	input, err := json.Marshal(tools.EditParams{FilePath: path, OldString: "apple", NewString: "banana"})

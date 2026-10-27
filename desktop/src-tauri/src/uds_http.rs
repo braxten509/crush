@@ -40,6 +40,11 @@ impl EngineHttp {
         }
     }
 
+    /// The engine's socket: one per engine, so it tells engines apart.
+    pub fn socket(&self) -> &std::path::Path {
+        &self.socket
+    }
+
     /// `path_and_query` starts with "/v1/". Body is sent as JSON when Some, always with
     /// `Content-Length` (`http_body_util::Full<Bytes>`), never chunked (1.2.4).
     /// 2xx → Ok(Reply). Other statuses → Err(AppError::from_engine). Connect refused or a missing

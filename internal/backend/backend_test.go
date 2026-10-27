@@ -1725,6 +1725,19 @@ func TestRetireClientKeepWork_KeepsRunningWork(t *testing.T) {
 	b.registerClient(ws, cid)
 	require.NoError(t, b.RetireClientKeepWork(cid))
 	require.Eventually(t, gone(shutdowns), time.Second, 5*time.Millisecond, "nothing running closes at once")
+
+	// The desktop's last window closing (owner, 2026-10-27: "Close window
+	// only" keeps the work going) keeps it with no app open, until it ends.
+	appOpen.Store(false)
+	working.Store(true)
+	ws, shutdowns = insertTestWorkspace(t, b, "/tmp/keep-work-last-window")
+	cid = newClientID(t)
+	b.registerClient(ws, cid)
+	require.NoError(t, b.RetireClientKeepWorkAlone(cid))
+	time.Sleep(50 * time.Millisecond)
+	require.Zero(t, shutdowns.Load(), "no app open, and the work runs on")
+	working.Store(false)
+	require.Eventually(t, gone(shutdowns), time.Second, 5*time.Millisecond, "closes once the work ends, so the engine idles out")
 }
 
 // TestRetireClient_RefusesLaterCreates is what makes teardown exact

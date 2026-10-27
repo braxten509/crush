@@ -13,6 +13,10 @@ const (
 	// unknown command instead of shutting down and taking other sessions
 	// with them.
 	ServerControlShutdownIfIdle = "shutdown_if_idle"
+	// ServerControlStop stops every chat's turn and sub-agent for good and
+	// shuts the server down although it is busy: the desktop's "Stop engine"
+	// when its last window closes. Servers predating it reject it.
+	ServerControlStop = "stop"
 )
 
 // ServerControl represents a server control request.

@@ -90,7 +90,7 @@ func (b *Backend) admitLocked(clientID string) error {
 // for workspaces the client was last on run after b.mu is released and
 // re-check under both locks.
 func (b *Backend) RetireClient(clientID string) error {
-	return b.retire(clientID, false)
+	return b.retire(clientID, false, false)
 }
 
 // RetireClientKeepWork retires clientID like [Backend.RetireClient], but a
@@ -99,10 +99,18 @@ func (b *Backend) RetireClient(clientID string) error {
 // open: the desktop left the folder for another one, and that folder's
 // chats keep working (owner, 2026-10-21). See [Backend.linger].
 func (b *Backend) RetireClientKeepWork(clientID string) error {
-	return b.retire(clientID, true)
+	return b.retire(clientID, true, false)
 }
 
-func (b *Backend) retire(clientID string, keepWork bool) error {
+// RetireClientKeepWorkAlone is [Backend.RetireClientKeepWork] for the
+// desktop's last window: its folders keep their running work although no
+// app is open any more ("Close window only", owner 2026-10-27), and each
+// closes once its work ends, so the engine still idles out.
+func (b *Backend) RetireClientKeepWorkAlone(clientID string) error {
+	return b.retire(clientID, true, true)
+}
+
+func (b *Backend) retire(clientID string, keepWork, alone bool) error {
 	if _, err := validateClientID(clientID); err != nil {
 		return err
 	}
@@ -123,6 +131,9 @@ func (b *Backend) retire(clientID string, keepWork bool) error {
 			left = append(left, ws)
 			if len(ws.clients) == 0 {
 				orphaned = append(orphaned, ws)
+				if alone {
+					ws.lingerAlone = true
+				}
 				if keepWork && !ws.lingering {
 					ws.lingering = true
 					kept = append(kept, ws)
@@ -154,7 +165,8 @@ func (b *Backend) retire(clientID string, keepWork bool) error {
 }
 
 // linger keeps a workspace no app is on while its work runs and some app
-// is open, checking every lingerPoll; then it tears it down, as the last
+// is open (or with none, after the desktop's last window: lingerAlone),
+// checking every lingerPoll; then it tears it down, as the last
 // app leaving would have. An app coming back ends the watch (a later
 // leave starts another).
 func (b *Backend) linger(ws *Workspace) {
@@ -177,19 +189,20 @@ func (b *Backend) linger(ws *Workspace) {
 		ws.clientsMu.Lock()
 		back := len(ws.clients) > 0
 		if !live || back {
-			ws.lingering = false
+			ws.lingering, ws.lingerAlone = false, false
 		}
+		alone := ws.lingerAlone
 		ws.clientsMu.Unlock()
 		b.mu.Unlock()
 		if !live || back {
 			return
 		}
-		if working(ws) && appOpen() {
+		if working(ws) && (alone || appOpen()) {
 			b.letGoClosedShares(ws)
 			continue
 		}
 		ws.clientsMu.Lock()
-		ws.lingering = false
+		ws.lingering, ws.lingerAlone = false, false
 		ws.clientsMu.Unlock()
 		b.teardown(ws)
 		return

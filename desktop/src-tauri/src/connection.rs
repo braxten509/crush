@@ -582,6 +582,21 @@ fn folder_key(dir: &str) -> String {
     dir.trim_end_matches('/').to_string()
 }
 
+/// What the engine does with a folder's running work when a window's client
+/// leaves it (DELETE /v1/clients/{id}).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Keep {
+    /// The window closes: its own work stops (Q2).
+    No,
+    /// The window moves to another folder (owner, 2026-10-21): the work
+    /// runs on while some app is open.
+    WhileAppOpen,
+    /// The app's last window closes ("Close window only", owner
+    /// 2026-10-27): the work runs on with no app open, and the engine idles
+    /// out once it ends.
+    Alone,
+}
+
 struct Inner {
     phase: Phase,
     /// The shown folder's plan, from its join.
@@ -950,7 +965,7 @@ impl WindowConn {
         };
         if let Some(folder) = folder {
             self.log(&format!("letting {dir} go"));
-            self.retire_keeping(&folder.link.http, &folder.client_id, true).await;
+            self.retire_keeping(&folder.link.http, &folder.client_id, Keep::WhileAppOpen).await;
             drop(folder.reader);
         }
         Ok(())
@@ -1231,19 +1246,63 @@ impl WindowConn {
 
     /// Gives a client's claim back (a failed open, or a closing window).
     async fn retire(&self, http: &EngineHttp, client_id: &str) {
-        self.retire_keeping(http, client_id, false).await;
+        self.retire_keeping(http, client_id, Keep::No).await;
     }
 
-    /// keep_work: the engine keeps this folder's running work going after
-    /// this client leaves it (the window moves to another folder; owner,
-    /// 2026-10-21). The engine closes the folder once that work ends or no
-    /// app is open.
-    async fn retire_keeping(&self, http: &EngineHttp, client_id: &str, keep_work: bool) {
-        let keep = if keep_work { "?keep_work=1" } else { "" };
+    /// keep: whether the engine keeps this folder's running work going after
+    /// this client leaves it (Keep).
+    async fn retire_keeping(&self, http: &EngineHttp, client_id: &str, keep: Keep) {
+        let keep = match keep {
+            Keep::No => "",
+            Keep::WhileAppOpen => "?keep_work=1",
+            Keep::Alone => "?keep_work=alone",
+        };
         let path = format!("/v1/clients/{}{keep}", encode(client_id));
         if let Err(e) = http.call("DELETE", &path, None, Some(self.tuning.close_limit)).await {
             self.log(&format!("could not leave the engine: {} ({})", e.message, e.code));
         }
+    }
+
+    /// The close question's "Stop engine" (owner, 2026-10-27): the engine of
+    /// each folder of `dirs` ("" the shown one) stops its chats and helpers
+    /// for good and exits (POST /v1/control "stop"), once per engine. Every
+    /// folder on a stopped engine leaves the window first, not only those of
+    /// `dirs` (folders of one project share an engine), so no stream's end
+    /// starts a reconnect, which would start the engine again; the streams
+    /// are kept until the engines answered, so no app leaving stops work the
+    /// engine would save for later.
+    async fn stop_engines(&self, dirs: &[String]) {
+        let folders: Vec<(String, Folder)> = {
+            let mut inner = self.inner();
+            let shown = inner.shown.clone();
+            let engines: Vec<std::path::PathBuf> = dirs
+                .iter()
+                .filter_map(|dir| Some(folder_key(dir)).filter(|key| !key.is_empty()).or_else(|| shown.clone()))
+                .filter_map(|key| inner.folders.get(&key).map(|folder| folder.link.http.socket().to_path_buf()))
+                .collect();
+            let gone: Vec<String> = inner
+                .folders
+                .iter()
+                .filter(|(_, folder)| engines.iter().any(|socket| socket == folder.link.http.socket()))
+                .map(|(key, _)| key.clone())
+                .collect();
+            gone.into_iter().filter_map(|key| inner.folders.remove(&key).map(|folder| (key, folder))).collect()
+        };
+        let mut stopped: Vec<&std::path::Path> = Vec::new();
+        for (dir, folder) in &folders {
+            let socket = folder.link.http.socket();
+            if stopped.contains(&socket) {
+                continue;
+            }
+            stopped.push(socket);
+            self.log(&format!("stopping {dir}'s engine and its work"));
+            // The engine exits as it answers, so a lost answer is no failure.
+            let stop = json!({ "command": "stop" });
+            if let Err(e) = folder.link.http.call("POST", "/v1/control", Some(&stop), Some(self.tuning.call_limit)).await {
+                self.log(&format!("{dir}'s engine stop ended with: {} ({})", e.message, e.code));
+            }
+        }
+        drop(folders);
     }
 
     // Losing the engine (1.2.6).
@@ -1628,12 +1687,17 @@ impl WindowConn {
 
     /// The window is closing: stop its calls, leave the engine, stop reading.
     async fn close(&self) {
-        self.end(false).await;
+        self.end(Keep::No).await;
     }
 
-    /// As close, for a window moving to another folder: the engine keeps
-    /// the folders' running work going.
-    async fn end(&self, keep_work: bool) {
+    /// As close, for the app's last window: the engines keep the folders'
+    /// running work going with no app open ("Close window only").
+    async fn close_last(&self) {
+        self.end(Keep::Alone).await;
+    }
+
+    /// As close, keeping the folders' running work as `keep` says.
+    async fn end(&self, keep: Keep) {
         let running: Vec<Running> = self.calls.lock().unwrap().drain().map(|(_, r)| r).collect();
         for call in running {
             call.abort.abort();
@@ -1648,7 +1712,7 @@ impl WindowConn {
             task.abort();
         }
         for (_, folder) in folders {
-            self.retire_keeping(&folder.link.http, &folder.client_id, keep_work).await;
+            self.retire_keeping(&folder.link.http, &folder.client_id, keep).await;
             drop(folder.reader);
         }
     }
@@ -1908,10 +1972,22 @@ pub fn ensured(app: &crate::host::AppHandle, label: &str) -> Option<Ensured> {
 
 /// Window closing: abort every running call of that window (so its `!` commands end with it,
 /// 1.2.4), then DELETE /v1/clients/{client_id} (1 s limit, errors only logged), stop the reader.
-pub async fn close(app: &crate::host::AppHandle, label: &str) {
+/// The app's last window (`last`) leaves the folders' running work going (WindowConn::close_last).
+pub async fn close(app: &crate::host::AppHandle, label: &str, last: bool) {
     let conn = app.state::<AppState>().windows.lock().unwrap().remove(label);
     if let Some(conn) = conn {
-        conn.close().await;
+        if last {
+            conn.close_last().await;
+        } else {
+            conn.close().await;
+        }
+    }
+}
+
+/// WindowConn::stop_engines on the window's connection, before it closes.
+pub async fn stop_engines(app: &crate::host::AppHandle, label: &str, dirs: &[String]) {
+    if let Some(conn) = connection(app, label) {
+        conn.stop_engines(dirs).await;
     }
 }
 
@@ -1920,7 +1996,7 @@ pub async fn close(app: &crate::host::AppHandle, label: &str) {
 pub async fn leave(app: &crate::host::AppHandle, label: &str) {
     let conn = app.state::<AppState>().windows.lock().unwrap().remove(label);
     if let Some(conn) = conn {
-        conn.end(true).await;
+        conn.end(Keep::WhileAppOpen).await;
     }
 }
 
@@ -3272,9 +3348,17 @@ esac"#,
     fn leaving_for_another_folder_asks_the_engine_to_keep_its_work() {
         let j = joined("conn-leave", TEST_TUNING);
         j.conn.take();
-        run(j.conn.end(true));
+        run(j.conn.end(Keep::WhileAppOpen));
         let retired: Vec<String> = j.fake.seen().iter().filter(|s| s.method == "DELETE").map(|s| s.target.clone()).collect();
         assert_eq!(retired, [format!("/v1/clients/{}?keep_work=1", j.opened.client_id)]);
+
+        // The app's last window closing keeps the work going with no app open
+        // ("Close window only", owner 2026-10-27).
+        let j = joined("conn-close-last", TEST_TUNING);
+        j.conn.take();
+        run(j.conn.close_last());
+        let retired: Vec<String> = j.fake.seen().iter().filter(|s| s.method == "DELETE").map(|s| s.target.clone()).collect();
+        assert_eq!(retired, [format!("/v1/clients/{}?keep_work=alone", j.opened.client_id)]);
     }
 
     #[test]

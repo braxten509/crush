@@ -16,6 +16,11 @@ type EngineInfo struct {
 	WorkspacePath string    `json:"workspace_path,omitempty"` // the folder the AI works in
 	Apps          int       `json:"apps"`                     // registered clients
 	Closing       bool      `json:"closing"`                  // the engine decided to exit
+	// BusyChats and RunningHelpers count the work every workspace runs: chats
+	// with a turn running and sub-agents (`crush spawn`). The desktop asks
+	// before its last window closes while either is not 0.
+	BusyChats      int `json:"busy_chats"`
+	RunningHelpers int `json:"running_helpers"`
 }
 
 // PromptPending is the prompt_pending event: whether a chat waits for a

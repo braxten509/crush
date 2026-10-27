@@ -33,6 +33,7 @@ func TestNativeFileHistoryRespectsRepositoryBoundary(t *testing.T) {
 			root := t.TempDir()
 			if mode != "no-repository" {
 				require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
+				require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 			}
 			path := filepath.Join(root, "file.txt")
 			if mode == "outside" || mode == "external-symlink" {
@@ -63,6 +64,7 @@ func TestNativeFileHistoryRespectsRepositoryBoundary(t *testing.T) {
 func TestNativeWriteOutsideRepositoryDoesNotSaveHistory(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 	path := filepath.Join(t.TempDir(), "file.txt")
 	versions := &scopeHistory{}
 	tool := NewWriteTool(nil, &mockPermissionService{}, versions, mockFileTrackerService{}, root)

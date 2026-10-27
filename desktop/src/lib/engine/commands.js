@@ -143,8 +143,18 @@ export async function windowOpen(projectDir, sessionId, newChat, launchId) {
 }
 
 // After the window's close steps (lib/closing.js); the last window ends the app.
-export async function windowClose() {
-  return invoke("window_close");
+// stop: the folders whose engines stop their work and exit first ("" the
+// shown one; the close question's Stop engine).
+export async function windowClose(stop = []) {
+  return invoke("window_close", { stop });
+}
+
+// The close question (lib/closeask.js): asking true holds Rust's close
+// fallback off and answers how many other windows stay open; asking false
+// lets go, and closing true arms a fresh fallback for the window that goes on
+// closing (windows.rs hold_close).
+export async function windowCloseHold(asking, closing = false) {
+  return invoke("window_close_hold", { asking, closing });
 }
 
 // Leaves this window's engine and records the new folder, true: the page

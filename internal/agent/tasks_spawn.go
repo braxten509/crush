@@ -265,9 +265,15 @@ func (h *taskHub) startRun(ctx context.Context, release func(), t *Task, sub Ses
 	t.StartedBy = owner
 	snapshot := *t
 	h.mu.Unlock()
-	if h.saves(ctx) {
+	// A task StopAllWork stopped meanwhile is not saved: it is gone for good.
+	h.saveMu.Lock()
+	h.mu.Lock()
+	running := t.Status == TaskRunning
+	h.mu.Unlock()
+	if running && h.saves(ctx) {
 		h.remember(snapshot, provider.ID)
 	}
+	h.saveMu.Unlock()
 	h.publish(snapshot)
 
 	go func() {

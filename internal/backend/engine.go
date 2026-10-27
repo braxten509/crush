@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/version"
@@ -100,7 +101,8 @@ func (b *Backend) Closing() bool {
 // EngineInfo describes this engine for GET /v1/engine; address is where
 // the server listens. The workspace fields are filled when exactly one
 // workspace is live, which is always the case for an engine that hosts
-// one; Apps counts the registered apps of every workspace.
+// one; Apps counts the registered apps of every workspace, and BusyChats
+// and RunningHelpers its running work.
 func (b *Backend) EngineInfo(address string) proto.EngineInfo {
 	b.mu.Lock()
 	info := proto.EngineInfo{
@@ -120,6 +122,9 @@ func (b *Backend) EngineInfo(address string) proto.EngineInfo {
 		ws.clientsMu.Lock()
 		info.Apps += len(ws.clients)
 		ws.clientsMu.Unlock()
+		chats, helpers := agent.RunningWork(ws.coordinator())
+		info.BusyChats += chats
+		info.RunningHelpers += helpers
 	}
 	if live != 1 {
 		info.WorkspaceID, info.WorkspacePath = "", ""

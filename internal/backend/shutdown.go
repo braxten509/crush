@@ -2,7 +2,10 @@ package backend
 
 import (
 	"log/slog"
+	"slices"
 	"time"
+
+	"github.com/charmbracelet/crush/internal/agent"
 )
 
 // teardown removes the workspace from the index, shuts down its
@@ -143,4 +146,40 @@ func (b *Backend) ShutdownIfIdle() bool {
 		fn()
 	}
 	return true
+}
+
+// StopEngine ends the server although it is busy: the desktop's "Stop
+// engine" when its last window closes with work running (owner, 2026-10-27).
+// Creates are refused from the start; every chat's turn and every helper
+// stops for good ([agent.StopAllWork]), every workspace closes, then the
+// server shuts down. Terminal sessions on the engine end with it.
+func (b *Backend) StopEngine() {
+	b.mu.Lock()
+	b.closing = true
+	b.cancelShutdownLocked()
+	list := slices.Collect(b.workspaces.Seq())
+	fn := b.shutdownFn
+	b.mu.Unlock()
+	slog.Info("Stopping the engine and its running work", "workspaces", len(list))
+
+	for _, ws := range list {
+		agent.StopAllWork(ws.coordinator())
+	}
+	for _, ws := range list {
+		b.mu.Lock()
+		if existing, ok := b.pathIndex[ws.resolvedPath]; ok && existing == ws.ID {
+			delete(b.pathIndex, ws.resolvedPath)
+		}
+		b.workspaces.Del(ws.ID)
+		b.mu.Unlock()
+		b.runHooks(func(h clientHooks) {
+			if h.teardown != nil {
+				h.teardown(ws)
+			}
+		})
+		ws.invokeShutdown()
+	}
+	if fn != nil {
+		fn()
+	}
 }

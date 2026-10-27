@@ -210,6 +210,7 @@ func TestOutsideRepositoryToolMetadataIsNotRecorded(t *testing.T) {
 	env := testEnv(t)
 	root := visibleReviewRoot(t)
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 	outside := t.TempDir()
 	path := filepath.Join(outside, "outside.txt")
 	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))

@@ -21,7 +21,7 @@ func RepositoryRoot(directory string) string {
 		return ""
 	}
 	for {
-		if info, err := os.Stat(filepath.Join(directory, ".git")); err == nil && (info.IsDir() || info.Mode().IsRegular()) {
+		if isGitDir(filepath.Join(directory, ".git")) {
 			return directory
 		}
 		parent := filepath.Dir(directory)
@@ -30,6 +30,24 @@ func RepositoryRoot(directory string) string {
 		}
 		directory = parent
 	}
+}
+
+// isGitDir reports whether path is a linked worktree's .git file or a .git
+// folder git would use: one holding HEAD. An empty .git folder is no
+// repository (git says so too).
+func isGitDir(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if info.Mode().IsRegular() {
+		return true
+	}
+	if !info.IsDir() {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(path, "HEAD"))
+	return err == nil
 }
 
 // InRepository checks the actual parent directory, so directory symlinks do

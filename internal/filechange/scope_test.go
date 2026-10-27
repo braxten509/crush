@@ -11,6 +11,7 @@ import (
 func TestRepositoryScopeIncludesSiblingAndNewFilesButNotExternalAliases(t *testing.T) {
 	root := visibleRestoreRoot(t)
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 	require.NoError(t, os.Mkdir(filepath.Join(root, "subdir"), 0o700))
 	outside := visibleRestoreRoot(t)
 	put(t, root, "sibling.txt", "before")
@@ -67,6 +68,7 @@ func TestReportedDeletionIsFlagOnlyEvenWithoutRepository(t *testing.T) {
 func TestOutsideWritesDoNotAccumulateCapturePaths(t *testing.T) {
 	root := visibleRestoreRoot(t)
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 	outside := t.TempDir()
 	process := newProcessReview(root, nil)
 	record := process.executed(nil, []string{"writer"})
@@ -80,4 +82,17 @@ func TestOutsideWritesDoNotAccumulateCapturePaths(t *testing.T) {
 	require.Empty(t, process.invocations)
 	require.Empty(t, report.directAt)
 	require.Nil(t, report.Finish())
+}
+
+// An empty .git folder is not a repository, as git itself says; a stray one
+// in /tmp made every scratch folder look like part of a repository
+// (owner, 2026-10-27).
+func TestEmptyGitFolderIsNoRepository(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+	require.Empty(t, RepositoryRoot(root))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	resolved, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	require.Equal(t, resolved, RepositoryRoot(root))
 }

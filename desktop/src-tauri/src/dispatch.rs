@@ -69,7 +69,7 @@ pub async fn call(app: AppHandle, label: String, cmd: String, args: Value) -> Re
         )
         .await),
         "api_secret" => res(commands::api_secret(app.clone(), w, app.state(), arg(&args, "path")?, arg(&args, "body")?).await),
-        "window_close" => res(commands::window_close(app.clone(), w).await),
+        "window_close" => res(commands::window_close(app.clone(), w, arg(&args, "stop")?).await),
         "project_switch" => res(commands::project_switch(app.clone(), w, arg(&args, "projectDir")?).await),
         "project_enter" => res(commands::project_enter(app.clone(), w, arg(&args, "projectDir")?).await),
         // No engines in fixture runs: a list with nothing in it.
@@ -86,6 +86,12 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
     let a = app.clone();
     match cmd {
         "app_info" => ok(commands::app_info(w, app.state(), app.state())),
+        "window_close_hold" => ok(commands::window_close_hold(
+            app,
+            w,
+            arg::<Option<bool>>(&args, "asking")?.unwrap_or(true),
+            arg::<Option<bool>>(&args, "closing")?.unwrap_or(false),
+        )),
         "probe_write" => res(commands::probe_write(w, app.state(), arg(args, "json")?)),
         "probe_request" => res(commands::probe_request(app.state())),
         "probe_eval" => res(commands::probe_eval(w, app.state())),

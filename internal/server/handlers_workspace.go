@@ -41,6 +41,11 @@ func (c *controllerV1) postControl(_ *http.Request, req proto.ServerControl) (rp
 			return rpc.Empty{}, backend.ErrServerNotIdle
 		}
 		return rpc.Empty{}, nil
+	case proto.ServerControlStop:
+		// Explicit, unlike the commands above: the desktop sends it only
+		// after its user chose "Stop engine" over the running work.
+		c.backend.StopEngine()
+		return rpc.Empty{}, nil
 	default:
 		return rpc.Empty{}, backend.ErrUnknownCommand
 	}
@@ -53,10 +58,15 @@ func (c *controllerV1) getConfig(*http.Request, rpc.Empty) (*config.ConfigStore,
 
 // deleteClient retires a client, releasing every claim it holds. With
 // keep_work=1 a workspace it was the last app on stays while its work runs
-// (the desktop moving to another folder).
+// (the desktop moving to another folder); with keep_work=alone it stays so
+// even with no app open (the desktop's last window closing). Older engines
+// read keep_work=alone as a plain retire.
 func (c *controllerV1) deleteClient(r *http.Request, _ rpc.Empty) (rpc.Empty, error) {
-	if r.URL.Query().Get("keep_work") == "1" {
+	switch r.URL.Query().Get("keep_work") {
+	case "1":
 		return rpc.Empty{}, c.backend.RetireClientKeepWork(r.PathValue("client_id"))
+	case "alone":
+		return rpc.Empty{}, c.backend.RetireClientKeepWorkAlone(r.PathValue("client_id"))
 	}
 	return rpc.Empty{}, c.backend.RetireClient(r.PathValue("client_id"))
 }

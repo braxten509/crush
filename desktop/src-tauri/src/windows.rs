@@ -6,7 +6,8 @@
 //!
 //! Closing: the system close button sends `close-requested` to the window,
 //! whose page runs its close steps (`lib/closing.js`) and then calls
-//! `window_close`; when it has not done so 10 s later, `close` runs anyway.
+//! `window_close`; when it has not done so 10 s later, `close` runs anyway,
+//! unless the page held it off to ask its close question (`hold_close`).
 //! `close` keeps S3's order: leave the engine first, then destroy the window.
 //! The app ends with its last window (LIST-017).
 
@@ -68,6 +69,12 @@ struct Inner {
     last: u32,
     /// Windows whose close has begun.
     closing: HashSet<String>,
+    /// Per window, how often its page held the close fallback off; a
+    /// fallback armed before the latest hold does nothing.
+    holds: HashMap<String, u64>,
+    /// Windows whose page asks its close question now: a close request
+    /// meanwhile arms no fallback.
+    asking: HashSet<String>,
 }
 
 /// Window label → how it was opened. Managed by main.rs.
@@ -220,11 +227,50 @@ impl Windows {
         self.inner().closing.contains(label)
     }
 
+    /// How many windows are open and not closing.
+    pub fn open_count(&self) -> usize {
+        let inner = self.inner();
+        inner.by_label.keys().filter(|label| !inner.closing.contains(*label)).count()
+    }
+
+    /// The page may ask before it closes (lib/closeask.js, `asking` true)
+    /// and take as long as its user does: the close fallbacks armed so far do
+    /// nothing, and none is armed until it is done (`asking` false). Asking,
+    /// it answers how many other windows stay open, neither closing nor
+    /// asking themselves: counted under the one lock that marks this window,
+    /// so of two windows closing at once the second sees the first gone and
+    /// asks.
+    pub fn hold_close(&self, label: &str, asking: bool) -> usize {
+        let mut inner = self.inner();
+        if !asking {
+            inner.asking.remove(label);
+            return 0;
+        }
+        *inner.holds.entry(label.to_string()).or_default() += 1;
+        inner.asking.insert(label.to_string());
+        inner
+            .by_label
+            .keys()
+            .filter(|other| *other != label && !inner.closing.contains(*other) && !inner.asking.contains(*other))
+            .count()
+    }
+
+    /// The count `hold_close` has reached for the window.
+    pub fn holds(&self, label: &str) -> u64 {
+        self.inner().holds.get(label).copied().unwrap_or(0)
+    }
+
+    pub fn is_asking(&self, label: &str) -> bool {
+        self.inner().asking.contains(label)
+    }
+
     /// The window is gone.
     pub fn remove(&self, label: &str) {
         let mut inner = self.inner();
         inner.by_label.remove(label);
         inner.closing.remove(label);
+        inner.holds.remove(label);
+        inner.asking.remove(label);
     }
 }
 
@@ -280,28 +326,34 @@ pub fn open(
     }
 }
 
-/// Ends the window `label`: leave its engine (DELETE /v1/clients/{id}) or its
-/// fixture player first, then destroy it. A second call while the first runs
-/// does nothing. The app exits with its last window.
-pub async fn close(app: &AppHandle, label: &str) {
+/// Ends the window `label`: stop the engines of `stop` (the close question's
+/// "Stop engine"), leave its engine (DELETE /v1/clients/{id}; the last
+/// window keeps the running work going) or its fixture player, then destroy it. A second call while the first runs does nothing.
+/// The app exits with its last window.
+pub async fn close(app: &AppHandle, label: &str, stop: &[String]) {
     let windows = app.state::<Windows>();
     if !windows.begin_close(label) {
         return;
     }
-    leave_engine(app, label).await;
+    if !stop.is_empty() && app.try_state::<fixture::Fixture>().is_none() {
+        connection::stop_engines(app, label, stop).await;
+    }
+    let last = windows.open_count() == 0;
+    leave_engine(app, label, last).await;
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.destroy();
     }
     windows.remove(label);
 }
 
-/// The window's engine connection (or fixture player) ends; Q2 is the engine's job.
-async fn leave_engine(app: &AppHandle, label: &str) {
+/// The window's engine connection (or fixture player) ends; Q2 is the engine's
+/// job. The app's last window (`last`) leaves the running work going.
+async fn leave_engine(app: &AppHandle, label: &str, last: bool) {
     if let Some(fixture) = app.try_state::<fixture::Fixture>() {
         fixture.close(label);
         return;
     }
-    connection::close(app, label).await;
+    connection::close(app, label, last).await;
 }
 
 /// leave_engine for a window moving to another folder: the folder it leaves
@@ -354,23 +406,38 @@ pub async fn enter(app: &AppHandle, label: &str, project_dir: &str) -> AppResult
 }
 
 /// The system close button: the page runs its close steps; after
-/// CLOSE_FALLBACK, a window still open is closed anyway.
+/// CLOSE_FALLBACK, a window still open is closed anyway, unless its page held
+/// the fallback off meanwhile to ask first.
 pub fn close_requested(app: &AppHandle, label: &str) {
     if app.state::<Windows>().is_closing(label) {
+        return;
+    }
+    if app.state::<Windows>().is_asking(label) {
+        // Its page is deciding already, and closes or stays when done.
         return;
     }
     if let Err(e) = app.emit_to(label, "close-requested", ()) {
         eprintln!("crush-desktop: could not ask window {label} to close: {e}");
     }
+    arm_fallback(app, label);
+}
+
+/// After CLOSE_FALLBACK, closes the window if it is still open, neither
+/// closing nor held off by its page since.
+pub fn arm_fallback(app: &AppHandle, label: &str) {
+    let holds = app.state::<Windows>().holds(label);
     let (app, label) = (app.clone(), label.to_string());
     crate::host::async_runtime::spawn(async move {
         let still_open = {
             let (app, label) = (app.clone(), label.clone());
-            move || app.get_webview_window(&label).is_some() && !app.state::<Windows>().is_closing(&label)
+            move || {
+                let windows = app.state::<Windows>();
+                app.get_webview_window(&label).is_some() && !windows.is_closing(&label) && windows.holds(&label) == holds
+            }
         };
         if close_fallback(CLOSE_FALLBACK, still_open).await {
             eprintln!("crush-desktop: window {label} did not close itself within {} s; closing it", CLOSE_FALLBACK.as_secs());
-            close(&app, &label).await;
+            close(&app, &label, &[]).await;
         }
     });
 }

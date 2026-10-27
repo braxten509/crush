@@ -88,6 +88,10 @@ type Workspace struct {
 	// lingering is set while [Backend.linger] keeps this workspace for
 	// its running work with no app on it. Guarded by clientsMu.
 	lingering bool
+	// lingerAlone keeps it lingering with no app open: the desktop's last
+	// window closed and left its work running ([Backend.RetireClientKeepWorkAlone]).
+	// Guarded by clientsMu, like lingering.
+	lingerAlone bool
 
 	// rootCache memoizes [Backend.RootSessionID] resolutions, keyed by
 	// session ID. Session parentage is fixed at creation, so entries
@@ -100,6 +104,9 @@ type Workspace struct {
 	// embedded [app.App.Shutdown]; tests may override it to avoid
 	// driving a full [app.App] through shutdown.
 	shutdownFn func()
+	// shutdownOnce runs it once: [Backend.StopEngine] closes workspaces
+	// while an app leaving at the same time may tear one down too.
+	shutdownOnce sync.Once
 
 	// streamMu guards streams: the apps' SSE streams that take engine-sent
 	// events ([Backend.SubscribeClient], [Backend.SendTo],
@@ -117,13 +124,15 @@ type Workspace struct {
 // invokeShutdown calls the workspace shutdown hook if set, falling
 // back to the workspace [Workspace.Shutdown] wrapper when not.
 func (w *Workspace) invokeShutdown() {
-	if w.shutdownFn != nil {
-		w.shutdownFn()
-		return
-	}
-	if w.App != nil {
-		w.Shutdown()
-	}
+	w.shutdownOnce.Do(func() {
+		if w.shutdownFn != nil {
+			w.shutdownFn()
+			return
+		}
+		if w.App != nil {
+			w.Shutdown()
+		}
+	})
 }
 
 // Shutdown tears the workspace down in an order that is safe for

@@ -145,6 +145,9 @@ type taskHub struct {
 	askSession string
 	// closing is set once Crush shuts down; tasks it cuts off stay saved.
 	closing bool
+	// saveMu covers a starting task's save (startRun) and StopAllWork's
+	// forget, so a task stopped for good is never saved after it.
+	saveMu sync.Mutex
 	// interrupting marks the tasks and jobs (by task ID and job ID) that
 	// InterruptTask and InterruptJob ended: like closing, their end is saved
 	// for a later resume instead of handed to the agent.

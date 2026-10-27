@@ -27,7 +27,7 @@ func TestCheckInLoopSendsUntilDone(t *testing.T) {
 		}
 	}
 	note := func(time.Duration) string { return "note" }
-	checkInLoop(t.Context(), 5*time.Millisecond, done, func() bool { return false }, note, send)
+	checkInLoop(t.Context(), 5*time.Millisecond, done, func() bool { return false }, nil, note, send)
 	require.Equal(t, []string{"note", "note", "note"}, sent, "stops once the work is done")
 }
 
@@ -45,7 +45,7 @@ func TestCheckInLoopWaitsForEachSendToFinish(t *testing.T) {
 			close(done)
 		}
 	}
-	checkInLoop(t.Context(), 10*time.Millisecond, done, func() bool { return false }, func(time.Duration) string { return "" }, send)
+	checkInLoop(t.Context(), 10*time.Millisecond, done, func() bool { return false }, nil, func(time.Duration) string { return "" }, send)
 	require.Len(t, starts, 2)
 	require.GreaterOrEqual(t, starts[1].Sub(starts[0]), 40*time.Millisecond)
 }
@@ -59,17 +59,17 @@ func TestCheckInLoopOffAndStops(t *testing.T) {
 
 	// Each call returning at all is the check: 0 turns check-ins off, then
 	// done work, a closing Crush and an ended context each stop the loop.
-	checkInLoop(t.Context(), 0, open, func() bool { return false }, note, never)
+	checkInLoop(t.Context(), 0, open, func() bool { return false }, nil, note, never)
 
 	closed := make(chan struct{})
 	close(closed)
-	checkInLoop(t.Context(), time.Millisecond, closed, func() bool { return false }, note, never)
+	checkInLoop(t.Context(), time.Millisecond, closed, func() bool { return false }, nil, note, never)
 
-	checkInLoop(t.Context(), time.Millisecond, open, func() bool { return true }, note, never)
+	checkInLoop(t.Context(), time.Millisecond, open, func() bool { return true }, nil, note, never)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	checkInLoop(ctx, time.Hour, open, func() bool { return false }, note, never)
+	checkInLoop(ctx, time.Hour, open, func() bool { return false }, nil, note, never)
 }
 
 // A check-in that fails (a cancelled turn, a provider error) doesn't end
@@ -399,4 +399,28 @@ func TestStoppingWorkLeavesTheCheckInTurnRunning(t *testing.T) {
 	}
 	stopHelper()
 	require.Never(t, func() bool { return turn.Err() != nil }, 300*time.Millisecond, 10*time.Millisecond, "stopping the helper cut the parent's check-in turn short")
+}
+
+// The first note waits a full interval after the oldest running work
+// started, even when a service kept the chat's loop going from before
+// (owner, 2026-10-27: a reminder came after only 30 seconds).
+func TestFirstCheckInWaitsForTheOldestWork(t *testing.T) {
+	h, calls := checkInTest(t)
+	session, err := h.c.sessions.Create(t.Context(), "late work")
+	require.NoError(t, err)
+	service := fixedWork("Job S", "server", "log", time.Now())
+	service.service = true
+	removeService := h.addCheckIn(session.ID, service)
+	defer removeService()
+	time.Sleep(300 * time.Millisecond) // the loop is part-way through a round
+
+	removeJob := h.addCheckIn(session.ID, fixedWork("Job A", "build", "a out", time.Now()))
+	defer removeJob()
+	require.Never(t, func() bool { return len(calls) > 0 }, 180*time.Millisecond, 10*time.Millisecond, "a note before the work had run a full interval")
+	select {
+	case call := <-calls:
+		require.Contains(t, call.Prompt, "[Job A]")
+	case <-time.After(time.Second):
+		t.Fatal("no check-in once the work had run a full interval")
+	}
 }

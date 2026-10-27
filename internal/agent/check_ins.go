@@ -135,7 +135,27 @@ func (h *taskHub) runCheckIns(sessionID string, s *sessionCheckIns) {
 			slog.Warn("Progress check-in failed", "session", sessionID, "error", err)
 		}
 	}
-	checkInLoop(context.Background(), h.checkInInterval(), s.done, h.isClosing, note, send)
+	interval := h.checkInInterval()
+	checkInLoop(context.Background(), interval, s.done, h.isClosing, func() time.Time { return h.firstCheckInDue(s, interval) }, note, send)
+}
+
+// firstCheckInDue is when the session's oldest running work, other than
+// services, has run a full interval: no note comes before it, however long
+// the loop has run for earlier work or services (owner, 2026-10-27). With
+// no such work it is now, as the note is then skipped anyway.
+func (h *taskHub) firstCheckInDue(s *sessionCheckIns, interval time.Duration) time.Time {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var oldest time.Time
+	for _, w := range s.work {
+		if !w.service && (oldest.IsZero() || w.started.Before(oldest)) {
+			oldest = w.started
+		}
+	}
+	if oldest.IsZero() {
+		return time.Now()
+	}
+	return oldest.Add(interval)
 }
 
 // checkInSnapshot lists the session's running work, oldest first, a
@@ -156,10 +176,11 @@ func (h *taskHub) checkInSnapshot(s *sessionCheckIns) ([]checkInWork, context.Co
 }
 
 // checkInLoop waits interval, sends a note, and repeats; each wait starts
-// after the previous note was handled. A failed send waits for the next
-// round, since the work it reports on is still running. It returns when
-// done is closed, the context ends, or closing reports true.
-func checkInLoop(ctx context.Context, interval time.Duration, done <-chan struct{}, closing func() bool, note func(elapsed time.Duration) string, send func(context.Context, string)) {
+// after the previous note was handled, and lasts at least until notBefore
+// (when not nil). A failed send waits for the next round, since the work
+// it reports on is still running. It returns when done is closed, the
+// context ends, or closing reports true.
+func checkInLoop(ctx context.Context, interval time.Duration, done <-chan struct{}, closing func() bool, notBefore func() time.Time, note func(elapsed time.Duration) string, send func(context.Context, string)) {
 	if interval <= 0 {
 		return
 	}
@@ -181,6 +202,12 @@ func checkInLoop(ctx context.Context, interval time.Duration, done <-chan struct
 		}
 		if closing() {
 			return
+		}
+		if notBefore != nil {
+			if wait := time.Until(notBefore()); wait > 0 {
+				timer.Reset(wait)
+				continue
+			}
 		}
 		send(ctx, note(time.Since(started).Round(time.Second)))
 		timer.Reset(interval)

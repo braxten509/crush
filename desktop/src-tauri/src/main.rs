@@ -108,6 +108,7 @@ fn main() {
         app.manage(fixture);
     } else {
         watch::start(app.clone());
+        refresh_models_at_start(&app);
     }
     settings::watch(app.clone());
     app.send(&json!({"t": "ready"}));
@@ -127,6 +128,20 @@ fn main() {
 /// own (which every child process inherits: the engine, sound players,
 /// terminals) at /dev/null and stderr, so nothing else ever writes into the
 /// line or reads from it.
+/// Asks the agent CLIs for their model lists again on every app start, off
+/// the main thread; a failure leaves the cached lists as they were.
+fn refresh_models_at_start(app: &AppHandle) {
+    let setting = app.state::<AppState>().settings.lock().unwrap().crush_path.clone();
+    std::thread::spawn(move || {
+        let env = login_env::login_env();
+        let path = env.iter().find(|(name, _)| name == "PATH").map(|(_, value)| value.as_str());
+        let Ok(bin) = crush_bin::resolve(setting.as_deref(), path) else { return };
+        if !engine_cli::refresh_models(&bin, &env) {
+            applog::write("warn", "app", "the model lists could not be refreshed");
+        }
+    });
+}
+
 fn take_lines() -> (std::io::BufReader<std::fs::File>, std::fs::File) {
     use std::os::fd::FromRawFd;
     // SAFETY: plain descriptor calls on 0, 1 and 2; each new descriptor is owned by one File.

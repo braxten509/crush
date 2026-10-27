@@ -1,7 +1,7 @@
 // Helpers, background jobs and memory (desktop-design-5-6 2.15 to 2.17, 7.3;
 // LIVE): the tray's helpers (order 30) and jobs (order 40) entries, both
 // entered by ↓ from the typing box; the sheets "background" and "sub-agents";
-// Ctrl+X and Ctrl+B; the 60-second hint under a running command; the memory
+// Ctrl+B; the 60-second hint under a running command; the memory
 // notice; and the probe's "live" section.
 import Background from "../../components/live/Background.svelte";
 import SubAgents from "../../components/live/SubAgents.svelte";
@@ -13,7 +13,6 @@ import { hintedCalls, hintFor } from "../live/hint.js";
 import {
   helpers,
   helpersLabel,
-  openSheet,
   probes,
   runningHelpers,
   SHEET,
@@ -28,7 +27,6 @@ import { mainView } from "../mainview.js";
 import { capabilities } from "../models/capabilities.svelte.js";
 import { probeSection } from "../probe.js";
 import { timelineRange } from "../selection.js";
-import { sessions } from "../stores/sessions.svelte.js";
 import { ui } from "../stores/ui.svelte.js";
 import { ticker } from "../ticker.svelte.js";
 import { registerToolHint } from "../toolhints.js";
@@ -42,13 +40,8 @@ registerDialog(SHEET.helpers, SubAgents);
 
 // -- Keys --
 
-// Ctrl+X in a chat (keypress.go:592-599): the tray's LIVE entries take it while
-// one of them is selected (above); anywhere else it opens Background Processes.
-bindKey("global", "Ctrl+X", () => {
-  if (!sessions.currentId) return false;
-  openSheet(SHEET.jobs);
-  return true;
-});
+// Ctrl+X is the page's own cut (owner, 2026-10-27); Background Processes
+// opens from the palette.
 
 // Ctrl+B (LIVE-003): whatever has the focus, except a sheet, which the router
 // does not ask global keys for.

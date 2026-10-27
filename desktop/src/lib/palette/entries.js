@@ -85,7 +85,7 @@ export function systemEntries({ summarize, toggleYolo, initProject }) {
     own("init", "Initialize project", initProject),
     action("save_project", "Save project", "project.save"),
     sheet("open_project", "Open project", "projects", { aliases: ["projects"] }),
-    sheet("background", "Background processes", "background", { shortcut: "ctrl+x", aliases: ["processes", "kill"] }),
+    sheet("background", "Background processes", "background", { aliases: ["processes", "kill"] }),
     sheet("sub_agents", "Sub-agents", "sub-agents", { aliases: ["agents", "tasks", "stop"] }),
     action("remote", "Remote control", "remote.open", { aliases: ["rc", "phone"] }),
     action("update_clis", "Update agent CLIs", "updates.clis", { aliases: ["upgrade", "version"] }),

@@ -127,6 +127,24 @@ fn ensure_within(
     }
 }
 
+const REFRESH_LIMIT: Duration = Duration::from_secs(60);
+
+/// Runs `<bin> models --refresh --json` with `env` as the child's whole
+/// environment, so the agent CLIs' model lists are asked again on each app
+/// start (owner, 2026-10-27). A running engine reloads when the refreshed
+/// list is written. True when crush exited cleanly.
+pub fn refresh_models(bin: &CrushBin, env: &[(String, String)]) -> bool {
+    refresh_models_within(bin, env, REFRESH_LIMIT)
+}
+
+fn refresh_models_within(bin: &CrushBin, env: &[(String, String)], limit: Duration) -> bool {
+    let mut cmd = Command::new(&bin.path);
+    cmd.args(["models", "--refresh", "--json"])
+        .env_clear()
+        .envs(env.iter().map(|(k, v)| (k, v)));
+    matches!(run_limited(&mut cmd, limit, false), Ok(Ran::Exited { code: Some(0), .. }))
+}
+
 /// The arguments of `crush engine ensure` (START-009: `-D` goes to `--data-dir`).
 pub(crate) fn ensure_args(cwd: &str, data_dir: Option<&str>) -> Vec<String> {
     let mut args: Vec<String> = vec!["engine".into(), "ensure".into(), "--cwd".into(), cwd.into()];
@@ -347,6 +365,27 @@ exit {exit}"#)));
         let slow = bin(script(&dir.join("slow"), "sleep 5"));
         let e = ensure_within(&slow, "/p", None, &env, Duration::from_millis(300)).err().unwrap();
         assert_eq!(e.code, "ensure_failed");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn refresh_models_asks_crush_with_the_login_path() {
+        let dir = scratch("refresh-models");
+        let args_file = dir.join("args");
+        let env_file = dir.join("env");
+        let fake = bin(script(&dir.join("crush"), &format!(
+            r#"for a in "$@"; do printf '%s\n' "$a"; done > '{}'
+export -p > '{}'"#,
+            args_file.display(), env_file.display()
+        )));
+        let env = vec![("PATH".to_string(), "/login/bin:/usr/bin".to_string())];
+        assert!(refresh_models_within(&fake, &env, ENSURE_LIMIT));
+        let args = std::fs::read_to_string(&args_file).unwrap();
+        assert_eq!(args.lines().collect::<Vec<_>>(), ["models", "--refresh", "--json"]);
+        // The CLIs are found on the login PATH, not the app's own.
+        assert!(std::fs::read_to_string(&env_file).unwrap().contains("/login/bin"));
+        let failing = bin(script(&dir.join("fail"), "exit 1"));
+        assert!(!refresh_models_within(&failing, &env, ENSURE_LIMIT));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

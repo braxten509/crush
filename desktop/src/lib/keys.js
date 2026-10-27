@@ -201,6 +201,6 @@ export const shortcuts = [
   { keys: ["ArrowLeft", "ArrowRight"], scope: "tray", action: "switch section", row: "SIDE-033" },
   { keys: ["Ctrl+C"], scope: "global", action: "copy when text is selected; otherwise quit", row: "DLG-290s", phase: 5 },
   { keys: ["Ctrl+P", "Ctrl+L", "Ctrl+M", "Ctrl+S", "Ctrl+F"], scope: "global", action: "commands, models, sessions, add attachment", row: "—", phase: 5 },
-  { keys: ["Ctrl+O", "Ctrl+X", "Ctrl+B", "Ctrl+Z"], scope: "global", action: "editor, helpers, background", row: "—", phase: 6 },
+  { keys: ["Ctrl+O", "Ctrl+B", "Ctrl+Z"], scope: "global", action: "editor, background", row: "—", phase: 6 },
   { keys: ["Ctrl++", "Ctrl+-", "Ctrl+0"], scope: "global", action: "zoom", row: "PLAN.md:243" },
 ];

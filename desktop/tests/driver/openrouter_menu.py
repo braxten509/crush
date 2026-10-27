@@ -11,7 +11,9 @@
 - "Add model" opens the catalog sheet: every catalog model with its price,
   the saved one marked, a search that narrows it; a click ticks a model
   and Done saves the saved list plus it, then the menu opens again on
-  OpenRouter.
+  OpenRouter;
+- OrcaRouter (owner, 2026-10-27) shows with nothing saved, "Add model"
+  alone, no host switches, and its sheet reads its own catalog.
 Pictures go to tests/out/openrouter_menu/.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
@@ -123,7 +125,8 @@ check("OpenRouter" in (groups or []), f"the agents column lists OpenRouter ({gro
 since = api_count()
 click_at(center(ROW, "Sonnet 5.5"))
 time.sleep(1.0)
-got = calls(since, "config/model")
+# A pick is saved with the open chat (POST sessions/{sid}/model).
+got = calls(since, "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01/model")
 model = (got[0].get("body") or {}).get("model", {}) if got else {}
 check(model.get("model") == "sonnet" and model.get("reasoning_effort") == "low", f"Sonnet is saved with its remembered effort, Low ({model})")
 
@@ -224,4 +227,23 @@ check(body.get("key") == "providers.openrouter.models" and ids == ["moonshot/kim
 chosen = run(f"return [...document.querySelectorAll({json.dumps(GROUP)})].filter((b) => b.getAttribute('aria-selected') === 'true').map((b) => b.textContent.trim());")
 check(menu_open() and chosen == ["OpenRouter"], f"the menu opens again on OpenRouter ({chosen})")
 snap("after")
+
+# 5. OrcaRouter: nothing saved yet, so "Add model" alone, and no host
+# switches (OpenRouter only); its sheet reads its own catalog.
+if not menu_open():
+    open_menu()
+click_at(center(GROUP, "OrcaRouter"))
+time.sleep(0.3)
+rows = shown_rows()
+check(rows == ["Add model"], f"OrcaRouter with nothing saved lists Add model alone ({rows})")
+route = run("""return Boolean(document.querySelector('[data-menu="model"] [data-column="route"]'));""")
+check(route is False, f"OrcaRouter shows no host switches ({route})")
+snap("orcarouter")
+click_at(center(ROW, "Add model"))
+time.sleep(1.0)
+orca = run(f"""
+  return {{ title: [...document.querySelectorAll('[role=dialog] *')].map((e) => e.textContent.trim()).find((t) => t.startsWith('Add OrcaRouter models')) ?? null,
+           rows: [...document.querySelectorAll({json.dumps(SHEET_ROWS)})].map((b) => b.getAttribute('aria-label')) }};
+""")
+check(orca and orca["title"] and orca["rows"] == ["Claude Fable 5"], f"OrcaRouter's sheet lists its own catalog ({orca})")
 finish()

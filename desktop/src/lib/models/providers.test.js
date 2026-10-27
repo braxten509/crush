@@ -74,6 +74,14 @@ describe("needsKeyFirst (picking a model before its key is saved)", () => {
     }
   });
 
+  test("every OrcaRouter account asks for its key until one is saved", () => {
+    for (const id of ["orcarouter", "orcarouter-2"]) {
+      expect(needsKeyFirst(id, safeProvider(id, { type: "openai-compat" }))).toBe(true);
+      expect(needsKeyFirst(id, safeProvider(id, { type: "openai-compat", has_api_key: true }))).toBe(false);
+    }
+    expect(needsKeyFirst("work", safeProvider("work", { type: "openai-compat", base_host: "api.orcarouter.ai" }))).toBe(true);
+  });
+
   test("a keyless local provider is used as it is", () => {
     expect(needsKeyFirst("ollama", safeProvider("ollama", { type: "openai-compat" }))).toBe(false);
   });

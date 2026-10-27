@@ -1,7 +1,7 @@
 <script>
   // Add OpenRouter models (owner, 2026-10-22, pick B): opened by "+ Add
   // model" under the OpenRouter group of the model menu. It reads the
-  // account's catalog (GET …/openrouter/catalog: the account's provider and
+  // account's catalog (GET …/providers/{id}/catalog: the account's provider and
   // privacy preferences applied, tool-capable models only), searchable by
   // name or id, each row with its price per million tokens in and out and
   // its context size. Space, Enter or a click ticks a row (the pointer selects, as in the palette); Done saves the
@@ -93,7 +93,7 @@
   onMount(() => {
     if (!modelData.cfg) refreshModels();
     api
-      .openRouterCatalog()
+      .providerCatalog(providerId)
       .then((models) => (catalog = Array.isArray(models) ? models : []))
       .catch((error) => {
         failed = error?.message ?? String(error);

@@ -206,8 +206,9 @@ export const api = {
   abort: (callId) => commands.api_abort(callId),
 
   setConfig: (scope, key, value) => post("config/set", { scope: scopeOf(scope), key, value }),
-  // OpenRouter's catalog, the account's preferences applied (the model menu's "+").
-  openRouterCatalog: () => get("openrouter/catalog"),
+  // An OpenRouter or OrcaRouter account's catalog (the model menu's "+"),
+  // an OpenRouter account's preferences applied.
+  providerCatalog: (id) => get(`providers/${encodeURIComponent(id)}/catalog`),
   removeConfig: (scope, key) => post("config/remove", { scope: scopeOf(scope), key }),
   // The helper model (titles, branch summaries), set in config; model:
   // {provider, model, …} (config.SelectedModel). Each chat owns its own model.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addableProviders, catalogRows, cheapestHostOn, contextText, priceText, savedWith, savedWithout } from "./openrouter.js";
+import { addableProviders, catalogRows, cheapestHostOn, contextText, hostSwitches, priceText, savedWith, savedWithout } from "./openrouter.js";
 
 // The OpenRouter "+" (owner, 2026-10-22): a slip lists a model twice, drops
 // a saved one, or shows the wrong price.
@@ -15,6 +15,22 @@ describe("OpenRouter models", () => {
       ["deepinfra", { id: "deepinfra", name: "DeepInfra", type: "openai-compat", models: [] }],
     ]) };
     expect(addableProviders(cfg)).toEqual([{ id: "openrouter", name: "OpenRouter" }]);
+  });
+
+  it("takes every OrcaRouter account too, without OpenRouter's host switches", () => {
+    const cfg = { providers: new Map([
+      ["openrouter", { id: "openrouter", name: "OpenRouter", type: "openrouter", models: [] }],
+      ["orcarouter", { id: "orcarouter", name: "OrcaRouter", type: "openai-compat", models: [] }],
+      ["orcarouter-2", { id: "orcarouter-2", name: "OrcaRouter (2)", type: "openai-compat", models: [] }],
+      ["orcarouterx", { id: "orcarouterx", name: "Other", type: "openai-compat", models: [] }],
+      // A copy of a copy, and one named freely: the address says OrcaRouter.
+      ["orcarouter-2-2", { id: "orcarouter-2-2", name: "OrcaRouter (3)", type: "openai-compat", base_host: "api.orcarouter.ai", models: [] }],
+      ["work", { id: "work", name: "Work", type: "openai-compat", base_host: "api.orcarouter.ai", models: [] }],
+    ]) };
+    expect(addableProviders(cfg).map((p) => p.id)).toEqual(["openrouter", "orcarouter", "orcarouter-2", "orcarouter-2-2", "work"]);
+    expect(hostSwitches(cfg, "openrouter")).toBe(true);
+    expect(hostSwitches(cfg, "orcarouter")).toBe(false);
+    expect(hostSwitches(cfg, "")).toBe(false);
   });
 
   it("searches names and ids, spaces and case ignored", () => {

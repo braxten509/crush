@@ -1,13 +1,23 @@
 // OpenRouter's "+" in the model menu (owner, 2026-10-22, pick B): its
 // catalog is large, so only the models saved under the provider show in the
 // menu; "+ Add model" under them opens a sheet that searches the account's
-// catalog (GET …/openrouter/catalog, the account's preferences applied).
+// catalog (GET …/providers/{id}/catalog, the account's preferences applied).
+// OrcaRouter works the same way (owner, 2026-10-27).
+import { isOrcaRouter } from "./providers.js";
 
-// The configured OpenRouter providers that take saved models: [{id, name}].
+// The configured OpenRouter and OrcaRouter providers that take saved
+// models: [{id, name}].
 export function addableProviders(cfg) {
   const out = [];
-  for (const [id, p] of cfg?.providers ?? []) if (p?.type === "openrouter" && !p.disable) out.push({ id, name: p.name || id });
+  for (const [id, p] of cfg?.providers ?? []) if ((p?.type === "openrouter" || isOrcaRouter(id, p)) && !p.disable) out.push({ id, name: p.name || id });
   return out;
+}
+
+// Whether the provider takes OpenRouter's host switches (Cheapest, FP8
+// floor): OpenRouter only, OrcaRouter has no such setting.
+export function hostSwitches(cfg, id) {
+  for (const [pid, p] of cfg?.providers ?? []) if (pid === id) return p?.type === "openrouter";
+  return false;
 }
 
 // Whether an OpenRouter provider asks for the cheapest host first (its

@@ -39,6 +39,9 @@ export function safeProvider(id, cfg) {
     // A paid plan (Kimi Coding), not billed per use: Accounts lists it
     // under Subscriptions, not API providers.
     flat_rate: cfg?.flat_rate === true,
+    // The base URL's host alone (commands.rs redact_config), so an
+    // OrcaRouter account is known however it is named.
+    base_host: typeof cfg?.base_host === "string" ? cfg.base_host : "",
     has_api_key: cfg?.has_api_key === true,
     has_oauth: cfg?.has_oauth === true,
     oauth_expired: cfg?.has_oauth === true && oauthExpired(cfg.oauth_times),
@@ -49,14 +52,24 @@ export function safeProvider(id, cfg) {
 }
 
 // Providers that are always listed but useless without a key (the engine
-// adds the Codex API and Tinfoil with none, so Settings → Accounts can take
-// it): picking one of their models opens the key sheet first. Another
-// account of one ("tinfoil-2") is the same.
-const KEY_FIRST = new Set(["codex-api", "tinfoil"]);
+// adds the Codex API, Tinfoil and OrcaRouter with none, so Settings →
+// Accounts can take it): picking one of their models opens the key sheet
+// first. Another account of one ("tinfoil-2") is the same.
+const KEY_FIRST = new Set(["codex-api", "tinfoil", "orcarouter"]);
 
 const keyFirstProvider = (providerId) => KEY_FIRST.has(String(providerId ?? "").replace(/-\d+$/, ""));
 
-export const needsKeyFirst = (providerId, configured) => keyFirstProvider(providerId) && !configured?.has_api_key && !configured?.has_oauth;
+// An OrcaRouter account, as the engine's config.IsOrcaRouterProvider names
+// it: "orcarouter", a copy of it ("orcarouter-2", "orcarouter-2-2"), or any
+// provider whose address is on orcarouter.ai.
+export function isOrcaRouter(id, provider) {
+  if (/^orcarouter(-\d+)*$/.test(String(id ?? ""))) return true;
+  const host = String(provider?.base_host ?? "");
+  return host === "orcarouter.ai" || host.endsWith(".orcarouter.ai");
+}
+
+export const needsKeyFirst = (providerId, configured) =>
+  (keyFirstProvider(providerId) || isOrcaRouter(providerId, configured)) && !configured?.has_api_key && !configured?.has_oauth;
 
 // {models, recent_models, providers: Map(id → safe provider)}
 // from GET …/config; the raw answer is dropped here.

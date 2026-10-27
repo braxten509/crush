@@ -116,6 +116,9 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 	if listTinfoil {
 		c.addTinfoilProviders(ctx)
 	}
+	if listOrcaRouter {
+		c.addOrcaRouterProviders()
+	}
 
 	discovered := s.discoverCustomModels(ctx)
 	s.applyDynamicModels(discovered)
@@ -135,13 +138,14 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 	return s.pending, nil
 }
 
-// dropVendorWords drops the vendor word OpenRouter puts before its model
-// names, for the models saved in the config and the catalog's own alike, so
-// the apps show "DeepSeek V4.1 Flash 1017" rather than "DeepSeek: DeepSeek
-// V4.1 Flash 1017" (owner, 2026-10-22). Other providers keep their names.
+// dropVendorWords drops the vendor word OpenRouter and OrcaRouter put
+// before their model names, for the models saved in the config and the
+// catalog's own alike, so the apps show "DeepSeek V4.1 Flash 1017" rather
+// than "DeepSeek: DeepSeek V4.1 Flash 1017" (owner, 2026-10-22). Other
+// providers keep their names.
 func (s *providerSetup) dropVendorWords() {
 	for id, providerConfig := range s.cfg.Providers.Seq2() {
-		if providerConfig.Type != catwalk.TypeOpenRouter {
+		if !keepsWithoutModels(providerConfig) {
 			continue
 		}
 		changed := false
@@ -543,9 +547,9 @@ func (s *providerSetup) validateCustomProvider(id string, providerConfig *Provid
 		}
 	}
 
-	// OpenRouter's models are saved from its catalog in the app, so it stays
-	// with none saved yet: the app shows its "+" there.
-	if len(providerConfig.Models) == 0 && providerConfig.Type != catwalk.TypeOpenRouter {
+	// OpenRouter's and OrcaRouter's models are saved from their catalog in
+	// the app, so they stay with none saved yet: the app shows a "+" there.
+	if len(providerConfig.Models) == 0 && !keepsWithoutModels(*providerConfig) {
 		slog.Warn("Skipping custom provider because the provider has no models", "provider", id)
 		return false, nil
 	}

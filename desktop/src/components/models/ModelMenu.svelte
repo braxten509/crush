@@ -29,7 +29,7 @@
   import { buildGroups, levelTitle, selectedModelOf } from "../../lib/models/groups.js";
   import { effortShown, isCurrent, menuGroups, RECENT, searchRows, startGroup } from "../../lib/models/menu.js";
   import { coderModel, modelData, refreshModels, watchModels } from "../../lib/models/store.svelte.js";
-  import { addableProviders, cheapestHostOn, qualityFloorOn, savedWithout } from "../../lib/models/openrouter.js";
+  import { addableProviders, cheapestHostOn, hostSwitches, qualityFloorOn, savedWithout } from "../../lib/models/openrouter.js";
   import { openDialog } from "../../lib/dialogs.js";
   import { shortUnavailable, unavailableReason } from "../../lib/availability.js";
   import { availability, loadAvailability } from "../../lib/stores/availability.svelte.js";
@@ -91,7 +91,8 @@
   // The account belongs to the model in use, so it shows only on that
   // model's own provider, not while another one is browsed (owner,
   // 2026-10-21).
-  const routeTo = $derived(!searching ? (shownGroup?.addTo ?? "") : "");
+  // OpenRouter's host switches; OrcaRouter has none.
+  const routeTo = $derived(!searching && hostSwitches(modelData.cfg, shownGroup?.addTo) ? shownGroup.addTo : "");
   const cheapestNow = $derived(cheapest ?? cheapestHostOn(modelData.cfg, routeTo));
   const floorNow = $derived(floor ?? qualityFloorOn(modelData.cfg, routeTo));
   const onCurrentGroup = $derived(!searching && shownGroup?.name === startGroup(groups, current));

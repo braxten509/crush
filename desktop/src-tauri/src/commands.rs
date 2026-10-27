@@ -340,6 +340,14 @@ fn bare_url(url: &str) -> String {
     format!("{scheme}://{host}{path}")
 }
 
+/// An address's host name alone: no user part, port, path or query.
+fn url_host(url: &str) -> String {
+    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    host.split(':').next().unwrap_or("").to_ascii_lowercase()
+}
+
 fn redact_config(config: &mut Value) {
     const PROVIDER_KEEP: &[&str] = &["id", "name", "type", "disable", "models", "chatgpt_models", "grok_models", "discover_models", "flat_rate", "cheapest_host", "quality_floor"];
     const ENTRY_KEEP: &[&str] = &["type", "disabled", "timeout"];
@@ -360,7 +368,13 @@ fn redact_config(config: &mut Value) {
                 }
                 Value::Object(kept)
             });
+            let host = fields.get("base_url").and_then(Value::as_str).map(url_host).unwrap_or_default();
             fields.retain(|key, _| PROVIDER_KEEP.contains(&key.as_str()));
+            // The host alone, so the page knows an OrcaRouter account
+            // however it is named (lib/models/providers.js isOrcaRouter).
+            if !host.is_empty() {
+                fields.insert("base_host".into(), Value::String(host));
+            }
             fields.insert("has_api_key".into(), Value::Bool(has_key));
             fields.insert("has_oauth".into(), Value::Bool(oauth.is_some()));
             if let Some(token) = oauth {
@@ -710,6 +724,20 @@ mod scrub_tests {
         assert_eq!(out["mcp"]["srv"], json!({"type": "http", "disabled": true}));
         assert_eq!(out["lsp"]["go"], json!({"timeout": 5}));
         assert_eq!(out["options"]["engine"], "shared", "plain options still cross");
+    }
+
+    // Only a provider's host crosses, so the page knows an OrcaRouter account
+    // however it is named (owner, 2026-10-27); a password or key in the
+    // address stays behind.
+    #[test]
+    fn only_the_base_url_host_crosses() {
+        let config = json!({"providers": {"work": {"id": "work", "base_url": "https://u:secret@api.orcarouter.ai:443/v1?key=k2"}}});
+        let out = redact_answer("GET", "/config", config);
+        let text = out.to_string();
+        for secret in ["secret", "k2", "/v1"] {
+            assert!(!text.contains(secret), "{secret} crossed: {text}");
+        }
+        assert_eq!(out["providers"]["work"]["base_host"], "api.orcarouter.ai");
     }
 
     // The model menu's OpenRouter "Cheapest host" switch saves through

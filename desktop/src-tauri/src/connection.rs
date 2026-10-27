@@ -406,8 +406,8 @@ const ROUTES: &[(&str, &str)] = &[
     // stays drawn without that folder's engine (owner, 2026-10-22).
     ("GET", "saved-sessions/{sid}"),
     ("GET", "saved-sessions/{sid}/messages"),
-    // OpenRouter's catalog for the model menu's "+" (internal/rpc/routes_openrouter.go).
-    ("GET", "openrouter/catalog"),
+    // A provider's catalog for the model menu's "+" (internal/rpc/routes_catalog.go).
+    ("GET", "providers/{pid}/catalog"),
 ];
 
 /// The only routes `api_secret` posts to (6.4): a secure form's answers,
@@ -2538,10 +2538,10 @@ mod tests {
         design.extend(DESIGN_5_6_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))));
         design.extend(FALLBACK_ROUTES.iter().flat_map(|(m, patterns)| patterns.iter().map(move |p| (*m, *p))));
         design.extend(OTHER_FOLDER_ROUTES.iter().map(|p| ("GET", *p)));
-        design.extend(OPENROUTER_ROUTES.iter().map(|p| ("GET", *p)));
+        design.extend(CATALOG_ROUTES.iter().map(|p| ("GET", *p)));
         design.extend(LAST_PICK_ROUTES.iter().copied());
         design.sort();
-        assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5, the fallback, other-folder, OpenRouter and last-pick routes, no more and no less");
+        assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5, the fallback, other-folder, catalog and last-pick routes, no more and no less");
         for (method, pattern) in ROUTES {
             let path = pattern
                 .replace("{sid}", "s-1")
@@ -2552,7 +2552,8 @@ mod tests {
             .replace("{fid}", "form-1")
             .replace("{name}", "scholars-edition")
             .replace("{hid}", "h-1")
-            .replace("{aid}", "a-1");
+            .replace("{aid}", "a-1")
+            .replace("{pid}", "orcarouter");
             assert!(Route::find(method, &path).is_ok(), "{method} {path}");
         }
         for (method, path) in [("POST", "agent/update"), ("GET", "lsps/gopls/diagnostics")] {
@@ -2679,8 +2680,8 @@ mod tests {
     /// Other folders' open chats, read from their saved files (TimelineStack).
     const OTHER_FOLDER_ROUTES: &[&str] = &["saved-sessions/{sid}", "saved-sessions/{sid}/messages"];
 
-    /// OpenRouter's catalog for the model menu's "+" (internal/rpc/routes_openrouter.go).
-    const OPENROUTER_ROUTES: &[&str] = &["openrouter/catalog"];
+    /// A provider's catalog for the model menu's "+" (internal/rpc/routes_catalog.go).
+    const CATALOG_ROUTES: &[&str] = &["providers/{pid}/catalog"];
 
     /// Accounts and the fallback order (internal/rpc/routes_fallback.go), row by row.
     const FALLBACK_ROUTES: &[(&str, &[&str])] = &[

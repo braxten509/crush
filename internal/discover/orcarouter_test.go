@@ -10,14 +10,24 @@ import (
 )
 
 // OrcaRouter's own /models list fills the "+ Add model" sheet (owner,
-// 2026-10-27): only models that call tools, its own auto-pick routers left
-// out, names without the vendor word, and Low, Medium, High for every
-// model that thinks.
+// 2026-10-27): every chat model, its own auto-pick routers too (owner,
+// 2026-10-28), names without the vendor word, and Low, Medium, High for
+// every model that thinks. Voice, picture and search-index models stay out.
 func TestOrcaRouterCatalog(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/v1/models", r.URL.Path)
 		_, _ = w.Write([]byte(`{"data":[
-		 {"id":"orcarouter/fusion","owned_by":"orcarouter","context_length":1000000},
+		 {"id":"orcarouter/fusion","owned_by":"orcarouter","context_length":1000000,
+		  "supported_endpoint_types":["openai","openai-response","anthropic","gemini"]},
+		 {"id":"orcarouter/pod","owned_by":"orcarouter",
+		  "supported_endpoint_types":["openai","openai-response","anthropic","gemini"]},
+		 {"id":"qwen/qwen3.7-max","name":"Qwen3.7 Max","context_length":1000000,
+		  "supported_endpoint_types":["openai","anthropic"],
+		  "endpoint_capabilities":["chat_completions","anthropic_messages"]},
+		 {"id":"openai/tts-1","supported_endpoint_types":["openai"],
+		  "endpoint_capabilities":["audio_speech"],"supported_parameters":["voice"]},
+		 {"id":"openai/text-embedding-3-small","supported_endpoint_types":["embeddings"],
+		  "endpoint_capabilities":["embedding"]},
 		 {"id":"anthropic/claude-fable-5","name":"Anthropic: Claude Fable 5","context_length":1000000,
 		  "max_completion_tokens":128000,
 		  "architecture":{"input_modalities":["text","image","file"]},
@@ -43,9 +53,13 @@ func TestOrcaRouterCatalog(t *testing.T) {
 	for i, m := range models {
 		ids[i] = m.ID
 	}
-	require.Equal(t, []string{"anthropic/claude-fable-5", "z-ai/glm-5.3", "plain/coder"}, ids)
+	require.Equal(t, []string{"orcarouter/fusion", "orcarouter/pod", "qwen/qwen3.7-max", "anthropic/claude-fable-5", "z-ai/glm-5.3", "plain/coder"}, ids)
 
-	fable := models[0]
+	require.EqualValues(t, 1000000, models[0].ContextWindow)
+	require.EqualValues(t, 200000, models[1].ContextWindow, "a router with no size listed gets 200K")
+	require.Equal(t, "Qwen3.7 Max", models[2].Name)
+
+	fable := models[3]
 	require.Equal(t, "Claude Fable 5", fable.Name)
 	require.EqualValues(t, 1000000, fable.ContextWindow)
 	require.EqualValues(t, 32000, fable.DefaultMaxTokens)
@@ -57,12 +71,12 @@ func TestOrcaRouterCatalog(t *testing.T) {
 	require.Equal(t, []string{"low", "medium", "high"}, fable.ReasoningLevels)
 	require.Equal(t, "medium", fable.DefaultReasoningEffort)
 
-	glm := models[1]
+	glm := models[4]
 	require.True(t, glm.CanReason, "reasoning_effort alone counts as thinking")
 	require.Equal(t, []string{"low", "medium", "high"}, glm.ReasoningLevels)
 	require.EqualValues(t, 16000, glm.DefaultMaxTokens)
 
-	plain := models[2]
+	plain := models[5]
 	require.False(t, plain.CanReason)
 	require.Empty(t, plain.ReasoningLevels)
 	require.Zero(t, plain.CostPer1MIn)

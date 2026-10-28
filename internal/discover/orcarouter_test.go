@@ -15,6 +15,10 @@ import (
 // every model that thinks. Voice, picture and search-index models stay out.
 func TestOrcaRouterCatalog(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/pricing" {
+			http.NotFound(w, r) // a missing price list leaves the main list alone
+			return
+		}
 		require.Equal(t, "/v1/models", r.URL.Path)
 		_, _ = w.Write([]byte(`{"data":[
 		 {"id":"orcarouter/fusion","owned_by":"orcarouter","context_length":1000000,
@@ -80,4 +84,61 @@ func TestOrcaRouterCatalog(t *testing.T) {
 	require.False(t, plain.CanReason)
 	require.Empty(t, plain.ReasoningLevels)
 	require.Zero(t, plain.CostPer1MIn)
+}
+
+// OrcaRouter's /models list leaves out its locked OrcaCyber models, which
+// need an approved security account; its public price list has them, so
+// they show too (owner, 2026-10-28). Only models that call tools are added,
+// none twice, priced from the list's ratios ($2 a million per ratio point).
+func TestOrcaRouterCatalogLockedModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[
+			 {"id":"z-ai/glm-5.3","name":"Z.ai: GLM 5.3","supported_parameters":["tools"]}
+			]}`))
+		case "/api/pricing":
+			_, _ = w.Write([]byte(`{"success":true,"data":[
+			 {"model_name":"z-ai/glm-5.3","display_name":"Z.ai: GLM 5.3 again","supported_parameters":["tools"]},
+			 {"model_name":"orca/orcacyber-zero-1.5","display_name":"Orca: OrcaCyber Zero 1.5","quota_type":0,
+			  "model_ratio":1.5,"completion_ratio":2.5,"cache_ratio":0.25,
+			  "context_length":1000000,"max_completion_tokens":128000,"input_modalities":["text"],
+			  "supported_parameters":["reasoning_effort","tools"],"locked":true},
+			 {"model_name":"orca/orcacyber-glm-5.3-flash","display_name":"OrcaCyber: GLM 5.3 Flash Abliterated","quota_type":1,
+			  "model_ratio":0,"model_price":0,"context_length":1048576,"input_modalities":["text","image"],
+			  "supported_parameters":["reasoning","tools"],"locked":true},
+			 {"model_name":"openai/tts-1","supported_parameters":["voice"]}
+			]}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	models, err := OrcaRouterCatalog(context.Background(), server.URL+"/v1", "", nil, plainResolver{})
+	require.NoError(t, err)
+
+	ids := make([]string, len(models))
+	for i, m := range models {
+		ids[i] = m.ID
+	}
+	require.Equal(t, []string{"z-ai/glm-5.3", "orca/orcacyber-zero-1.5", "orca/orcacyber-glm-5.3-flash"}, ids)
+	require.Equal(t, "GLM 5.3", models[0].Name, "the /models entry wins")
+
+	zero := models[1]
+	require.Equal(t, "OrcaCyber Zero 1.5", zero.Name)
+	require.EqualValues(t, 1000000, zero.ContextWindow)
+	require.EqualValues(t, 32000, zero.DefaultMaxTokens)
+	require.InDelta(t, 3, zero.CostPer1MIn, 1e-9)
+	require.InDelta(t, 7.5, zero.CostPer1MOut, 1e-9)
+	require.InDelta(t, 0.75, zero.CostPer1MInCached, 1e-9)
+	require.True(t, zero.CanReason)
+	require.Equal(t, []string{"low", "medium", "high"}, zero.ReasoningLevels)
+	require.Equal(t, "medium", zero.DefaultReasoningEffort)
+
+	glm := models[2]
+	require.Equal(t, "GLM 5.3 Flash Abliterated", glm.Name)
+	require.True(t, glm.SupportsImages)
+	require.Zero(t, glm.CostPer1MIn, "priced per request, and free")
+	require.True(t, glm.CanReason)
 }

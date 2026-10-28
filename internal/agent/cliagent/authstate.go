@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,6 +86,31 @@ func agySignedIn() bool {
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "secret-tool", "lookup", "service", "gemini", "username", "antigravity").Output()
 	return err == nil && len(bytes.TrimSpace(out)) > 0
+}
+
+// LoginEmail is the email kind's own login signed in with, where the CLI
+// keeps one apart from its credential: Antigravity's active account in
+// ~/.gemini/google_accounts.json. OpenCode keeps only a key and every other
+// kind answers elsewhere, so they have none (owner, 2026-10-28).
+func LoginEmail(kind catwalk.Type) string {
+	if kind != config.TypeAGYCLI {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".gemini", "google_accounts.json"))
+	if err != nil {
+		return ""
+	}
+	var accounts struct {
+		Active string `json:"active"`
+	}
+	if json.Unmarshal(data, &accounts) != nil {
+		return ""
+	}
+	return strings.TrimSpace(accounts.Active)
 }
 
 func fileHasBytes(path string) bool {

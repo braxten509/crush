@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { safeProvider } from "../models/providers.js";
-import { accountGroups } from "./providers.js";
+import { accountGroups, cliRowLabel } from "./providers.js";
 
 const provider = (id, fields) => [id, safeProvider(id, fields)];
 
@@ -49,4 +49,14 @@ describe("accountGroups", () => {
     const groups = accountGroups(renamed, catalog);
     expect(groups[2].rows.find((row) => row.id === "anthropic").name).toBe("Work Anthropic");
   });
+});
+
+// A CLI that signs in itself (Antigravity, OpenCode Go and Zen) names its
+// row after the account once signed in (owner, 2026-10-28): the email when
+// the CLI keeps one, else the tool's name; "Sign-in" until then.
+it("a signed-in CLI row shows its email, else the tool's name", () => {
+  const row = { id: "agy-cli", name: "Antigravity" };
+  expect(cliRowLabel(row, true, "me@example.com")).toBe("me@example.com");
+  expect(cliRowLabel(row, true, "")).toBe("Antigravity");
+  expect(cliRowLabel(row, false, "")).toBe("Sign-in");
 });

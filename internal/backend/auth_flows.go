@@ -402,15 +402,20 @@ func (b *Backend) sendAuthFlow(a *authFlow, state, text string) {
 }
 
 // AuthState reports which agent CLIs hold their own login on this machine
-// (cliagent.SignedIn), for Settings → Accounts. Only booleans leave: no
-// credential or account name is read into the answer.
+// (cliagent.SignedIn), for Settings → Accounts, and the email a signed-in
+// login uses where the CLI keeps one (cliagent.LoginEmail). No credential is
+// read into the answer.
 func (b *Backend) AuthState(workspaceID string) (proto.AuthStateResponse, error) {
 	if _, err := b.GetWorkspace(workspaceID); err != nil {
 		return proto.AuthStateResponse{}, err
 	}
-	out := proto.AuthStateResponse{Providers: map[string]bool{}}
+	out := proto.AuthStateResponse{Providers: map[string]bool{}, Emails: map[string]string{}}
 	for _, kind := range []catwalk.Type{config.TypeGrokCLI, config.TypeAGYCLI, config.TypeOpenCodeCLI, config.TypeOpenCodeZenCLI} {
-		out.Providers[string(kind)] = cliagent.SignedIn(kind)
+		signedIn := cliagent.SignedIn(kind)
+		out.Providers[string(kind)] = signedIn
+		if email := cliagent.LoginEmail(kind); signedIn && email != "" {
+			out.Emails[string(kind)] = email
+		}
 	}
 	return out, nil
 }

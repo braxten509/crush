@@ -53,7 +53,9 @@ type VerifyKey struct {
 
 // AuthStateResponse says, by provider id, whether an agent CLI holds its own
 // login on this machine. Only the CLIs that sign in themselves are listed:
-// Grok, Antigravity, OpenCode Go and OpenCode Zen.
+// Grok, Antigravity, OpenCode Go and OpenCode Zen. Emails holds the email
+// a signed-in CLI's login uses, where the CLI keeps one (Antigravity).
 type AuthStateResponse struct {
-	Providers map[string]bool `json:"providers"`
+	Providers map[string]bool   `json:"providers"`
+	Emails    map[string]string `json:"emails,omitempty"`
 }

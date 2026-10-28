@@ -9,7 +9,7 @@
   // AddAccount). A row is just a short label and its actions (owner,
   // 2026-10-24: no subtext and no Signed in / API key set words).
   import { onMount } from "svelte";
-  import { accountGroups } from "../../lib/accounts/providers.js";
+  import { accountGroups, cliRowLabel } from "../../lib/accounts/providers.js";
   import { cliState, loadCLIState } from "../../lib/accounts/state.svelte.js";
   import { openDialog } from "../../lib/dialogs.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
@@ -147,7 +147,7 @@
           />
         {:else}
           <div class="row">
-            <span class="name">Sign-in</span>
+            <span class="name">{cliRowLabel(current, cliSignedIn(current), cliState.emails[current.id])}</span>
             <button type="button" class="act" disabled={busy === current.id} onclick={() => signInCLI(current)}>{cliSignedIn(current) ? "Sign in again" : "Sign in…"}</button>
           </div>
         {/if}

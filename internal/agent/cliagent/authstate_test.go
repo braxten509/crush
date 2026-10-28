@@ -49,3 +49,18 @@ func TestSignedInReadsEachCLIsOwnLogin(t *testing.T) {
 	require.False(t, SignedIn(config.TypeClaudeCode), "account folders are listed by the fallback settings")
 	require.False(t, SignedIn(config.TypeCodexCLI))
 }
+
+// Antigravity's row shows the email it signed in with (owner, 2026-10-28):
+// the active account in ~/.gemini/google_accounts.json. OpenCode keeps only
+// a key, so it and every other kind have none.
+func TestLoginEmailReadsAntigravitysActiveAccount(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	require.Empty(t, LoginEmail(config.TypeAGYCLI), "no accounts file yet")
+
+	path := filepath.Join(home, ".gemini", "google_accounts.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(`{"active":" me@example.com ","old":["old@example.com"]}`), 0o600))
+	require.Equal(t, "me@example.com", LoginEmail(config.TypeAGYCLI))
+	require.Empty(t, LoginEmail(config.TypeOpenCodeCLI))
+}

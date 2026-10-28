@@ -65,3 +65,12 @@ export function accountGroups(cfg, catalog) {
     { label: "API providers", rows: perUse },
   ];
 }
+
+// The label of a CLI that signs in itself (Antigravity, OpenCode Go and
+// Zen) once signed in (owner, 2026-10-28): the email its login uses when
+// the CLI keeps one, else the tool's name, as Claude Code and Codex rows
+// show; "Sign-in" until then.
+export function cliRowLabel(row, signedIn, email) {
+  if (!signedIn) return "Sign-in";
+  return email || row.name;
+}

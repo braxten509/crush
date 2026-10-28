@@ -52,11 +52,23 @@ export function unfold(node, { from = "bottom", duration = MOTION_MS, delay = 0,
   return paper((t, u) => `clip-path: ${unfoldInset(from, u)}; transform: translateY(${(sign * u * RISE).toFixed(2)}px);${tick(t)}`, { duration, delay, overlay, off });
 }
 
+const SLIDE = 14; // CSS px a page travels sideways
+
 // The inset that hides a piece leaving to one side: `dir` 1 rolls it away
-// to the right (its left edge follows), -1 to the left.
-export function sideInset(dir, u) {
+// to the right (its left edge follows), -1 to the left. `cut` CSS px are
+// also hidden on the far side, the part slid out past the piece's box.
+export function sideInset(dir, u, cut = 0) {
   const hidden = `${(u * 100).toFixed(2)}%`;
-  return dir === 1 ? `inset(0 0 0 ${hidden})` : `inset(0 ${hidden} 0 0)`;
+  const edge = cut ? `${cut.toFixed(2)}px` : "0";
+  return dir === 1 ? `inset(0 ${edge} 0 ${hidden})` : `inset(0 ${hidden} 0 ${edge})`;
+}
+
+// The inset that cuts off the part of a page slid `dir` past its own box, so
+// it goes at the column's lines instead of painting over them (owner,
+// 2026-10-27).
+function edgeInset(dir, u) {
+  const cut = `${(u * SLIDE).toFixed(2)}px`;
+  return dir === 1 ? `inset(0 ${cut} 0 0)` : `inset(0 0 0 ${cut})`;
 }
 
 // A page or column coming in from one side: `dir` 1 from the right, -1 from
@@ -65,7 +77,14 @@ export function slidePage(node, { dir = 1, duration = MOTION_MS, delay = 0, over
   // No fade: a page drawn from its first frame never blinks (owner, 2026-10-19).
   // --slide-shift lets a mark that must hold still (the open row's
   // vermilion edge) take the slide back out (owner, 2026-10-21).
-  return paper((t, u) => `transform: translateX(${(dir * u * 14).toFixed(2)}px); --slide-shift: ${(dir * u * 14).toFixed(2)}px;${tick(t)}`, { duration, delay, overlay, off, away: (u) => sideInset(dir, u) });
+  const shift = (u) => (dir * u * SLIDE).toFixed(2);
+  return paper((t, u) => `transform: translateX(${shift(u)}px); --slide-shift: ${shift(u)}px; clip-path: ${edgeInset(dir, u)};${tick(t)}`, {
+    duration,
+    delay,
+    overlay,
+    off,
+    away: (u) => sideInset(dir, u, u * SLIDE),
+  });
 }
 
 // A piece that holds still while its column's moving edge covers and

@@ -38,6 +38,8 @@ async function mine(sessionId) {
   }
 }
 
+// A toast names its chat and folder, so a click opens Crush on that chat
+// (owner, 2026-10-28).
 async function raise({ sessionId, sound = null, title = null, body = "" }) {
   const kind = style();
   if (kind === "disabled") return;
@@ -47,7 +49,7 @@ async function raise({ sessionId, sound = null, title = null, body = "" }) {
   const shown = windowFocus.focused && sessionId === sessions.currentId;
   if (shown) return;
   if (kind === "bell") alertSound("bell").catch(() => {});
-  else alertNotify(title, body).catch(() => {});
+  else alertNotify(title, body, { sessionId, projectDir: projectDir() }).catch(() => {});
 }
 
 async function idle(sid) {

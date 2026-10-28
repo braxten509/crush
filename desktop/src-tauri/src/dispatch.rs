@@ -137,7 +137,7 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
         "pty_close_all" => res(commands::pty_close_all(a, w)),
         "editor_prepare" => res(commands::editor_prepare(app.state(), arg(args, "text")?, arg(args, "line")?, arg(args, "column")?)),
         "editor_finish" => res(commands::editor_finish(app.state(), arg(args, "path")?)),
-        "alert_notify" => res(commands::alert_notify(a, arg(args, "title")?, arg(args, "body")?)),
+        "alert_notify" => res(commands::alert_notify(a, arg(args, "title")?, arg(args, "body")?, arg(args, "sessionId")?, arg(args, "projectDir")?)),
         "alert_sound" => res(commands::alert_sound(a, arg(args, "id")?)),
         "alert_window_state" => res(commands::alert_window_state(
             a,

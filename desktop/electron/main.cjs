@@ -187,6 +187,32 @@ function fromHelper(message) {
   }
 }
 
+// A toast; a click on it brings up the window for its chat's folder, or
+// opens one, on that chat (owner, 2026-10-28), through the helper's
+// window_open as the page's own "open this chat" does. A shown toast is held
+// until it closes: one Electron lets go of never reports its click.
+const toasts = new Set();
+function showNotification(message) {
+  const toast = new Notification({ title: message.title, body: message.body, icon: ICON });
+  toasts.add(toast);
+  toast.on("close", () => toasts.delete(toast));
+  toast.on("click", () => {
+    toasts.delete(toast);
+    openChatFromToast(message.project, message.session);
+  });
+  toast.show();
+}
+
+function openChatFromToast(projectDir, sessionId) {
+  const label = [...windows.entries()].find(([, win]) => !win.isDestroyed())?.[0];
+  if (!projectDir || !label || !helper) return;
+  const id = nextCall++;
+  calls.set(id, (result) => {
+    if (result?.err) console.error(`crush-desktop: a toast's chat did not open: ${result.err}`);
+  });
+  send({ t: "call", id, label, cmd: "window_open", args: { projectDir, sessionId: sessionId || null, newChat: false, launchId: null } });
+}
+
 // What the helper asks for and waits on.
 async function answer(message) {
   switch (message.op) {
@@ -195,7 +221,7 @@ async function answer(message) {
       return true;
     case "notify":
       if (!Notification.isSupported()) throw new Error("this desktop shows no notifications");
-      new Notification({ title: message.title, body: message.body, icon: ICON }).show();
+      showNotification(message);
       return true;
     case "pick-folder": {
       const parent = BrowserWindow.getFocusedWindow() ?? [...windows.values()].find((win) => !win.isDestroyed());

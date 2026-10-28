@@ -218,9 +218,10 @@ export async function editorFinish(path) {
   return invoke("editor_finish", { path });
 }
 
-// → {sent, error?}
-export async function alertNotify(title, body) {
-  return invoke("alert_notify", { title, body });
+// → {sent, error?}. chat {sessionId, projectDir} is the chat a click on the
+// toast opens; none opens nothing.
+export async function alertNotify(title, body, chat = {}) {
+  return invoke("alert_notify", { title, body, sessionId: chat.sessionId ?? null, projectDir: chat.projectDir ?? null });
 }
 
 // → {player} (null when none worked)

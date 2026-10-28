@@ -85,15 +85,16 @@ pub struct Sounded {
 const STATES: &[&str] = &["idle", "working", "blocked", "done", "error"];
 const SOUND_LIMIT: Duration = Duration::from_secs(5);
 
-/// `alert_notify`.
-pub fn notify(app: &AppHandle, title: &str, body: &str) -> AppResult<Notified> {
+/// `alert_notify`. `session` and `project` name the chat a click on the
+/// toast opens (owner, 2026-10-28); Electron's main side does the opening.
+pub fn notify(app: &AppHandle, title: &str, body: &str, session: Option<&str>, project: Option<&str>) -> AppResult<Notified> {
     let state = app.state::<crate::state::AppState>();
     if let Some(file) = state.launch.probe_side_file("alerts.jsonl") {
         let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
-        crate::state::append_json_line(&file, &json!({ "kind": "notify", "title": title, "body": body, "at": at as u64 }));
+        crate::state::append_json_line(&file, &json!({ "kind": "notify", "title": title, "body": body, "session": session, "project": project, "at": at as u64 }));
         return Ok(Notified { sent: true, error: None });
     }
-    match app.ask("notify", json!({"title": title, "body": body}), Some(std::time::Duration::from_secs(5))) {
+    match app.ask("notify", json!({"title": title, "body": body, "session": session, "project": project}), Some(std::time::Duration::from_secs(5))) {
         Ok(_) => Ok(Notified { sent: true, error: None }),
         Err(e) => Ok(Notified { sent: false, error: Some(e) }),
     }

@@ -562,8 +562,8 @@ pub fn editor_finish(edits: State<editor::Edits>, path: String) -> AppResult<edi
     editor::finish(&edits, &path)
 }
 
-pub fn alert_notify(app: AppHandle, title: String, body: String) -> AppResult<alerts::Notified> {
-    alerts::notify(&app, &title, &body)
+pub fn alert_notify(app: AppHandle, title: String, body: String, session_id: Option<String>, project_dir: Option<String>) -> AppResult<alerts::Notified> {
+    alerts::notify(&app, &title, &body, session_id.as_deref(), project_dir.as_deref())
 }
 
 pub fn alert_sound(app: AppHandle, id: String) -> AppResult<alerts::Sounded> {

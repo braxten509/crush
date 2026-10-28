@@ -16,12 +16,14 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/google/uuid"
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/sandbox"
 	"github.com/charmbracelet/crush/internal/shell"
 )
 
@@ -178,12 +180,30 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 	)
 }
 
+// NewReadOnlyBashTool returns a bash tool whose commands run inside the
+// read-only sandbox: they can read anything but can't change the project.
+func NewReadOnlyBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, jobStarted tools.JobStarted) fantasy.AgentTool {
+	t := &bashTool{
+		permissions: permissions,
+		workingDir:  workingDir,
+		spillDir:    spillDir,
+		jobStarted:  jobStarted,
+		readOnly:    true,
+	}
+	return fantasy.NewAgentTool(
+		tools.BashToolName,
+		string(bashDescription(attribution)),
+		t.run,
+	)
+}
+
 // bashTool holds what the bash tool needs to run a command.
 type bashTool struct {
 	permissions permission.Service
 	workingDir  string
 	spillDir    string
 	jobStarted  tools.JobStarted
+	readOnly    bool
 }
 
 // bashRun is one command the bash tool is running.
@@ -194,6 +214,10 @@ type bashRun struct {
 	shellEnv  []string
 	workDir   string
 	startTime time.Time
+	// shellDir and shellCommand are where and what the shell runs: the
+	// working folder and command, or the sandbox wrapping them.
+	shellDir     string
+	shellCommand string
 }
 
 func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantasy.ToolCall) (toolResponse fantasy.ToolResponse, resultErr error) {
@@ -252,6 +276,16 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 		marker:    marker,
 		shellEnv:  shellEnv,
 		workDir:   execWorkingDir,
+
+		shellDir:     execWorkingDir,
+		shellCommand: params.Command,
+	}
+	if t.readOnly {
+		dir, command, err := lockedCommand(params.Command, execWorkingDir)
+		if err != nil {
+			return fantasy.NewTextErrorResponse(err.Error()), nil
+		}
+		r.shellDir, r.shellCommand = dir, command
 	}
 	// If explicitly requested as background, start immediately with detached context
 	if params.RunInBackground {
@@ -260,6 +294,24 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 	}
 	toolResponse, backgrounded, resultErr = t.runInForeground(ctx, r)
 	return toolResponse, resultErr
+}
+
+// lockedCommand wraps a command so bash runs it read-only in dir. It
+// returns the folder to start the shell in and the shell command.
+func lockedCommand(command, dir string) (string, string, error) {
+	shellDir, name, args, err := sandbox.ReadOnly(dir, nil, "bash", []string{"-c", command})
+	if err != nil {
+		return "", "", err
+	}
+	quoted := make([]string, 0, len(args)+1)
+	for _, arg := range append([]string{name}, args...) {
+		q, err := syntax.Quote(arg, syntax.LangBash)
+		if err != nil {
+			return "", "", err
+		}
+		quoted = append(quoted, q)
+	}
+	return shellDir, strings.Join(quoted, " "), nil
 }
 
 // isSafeReadOnlyCommand reports whether a command is a single read-only
@@ -291,7 +343,7 @@ func (t *bashTool) runInBackground(ctx context.Context, r *bashRun, movedSleep b
 	bgManager := shell.GetBackgroundShellManager()
 	bgManager.Cleanup()
 	// Use background context so it continues after tool returns
-	bgShell, err := bgManager.Start(context.WithoutCancel(ctx), r.workDir, blockFuncs(), r.params.Command, r.params.Description, r.shellEnv...)
+	bgShell, err := bgManager.Start(context.WithoutCancel(ctx), r.shellDir, blockFuncs(), r.shellCommand, r.params.Description, r.shellEnv...)
 	if err != nil {
 		return fantasy.ToolResponse{}, false, fmt.Errorf("error starting background shell: %w", err)
 	}
@@ -329,7 +381,7 @@ func (t *bashTool) runInForeground(ctx context.Context, r *bashRun) (fantasy.Too
 	// Start with detached context so it can survive if moved to background
 	bgManager := shell.GetBackgroundShellManager()
 	bgManager.Cleanup()
-	bgShell, err := bgManager.Start(context.WithoutCancel(ctx), r.workDir, blockFuncs(), r.params.Command, r.params.Description, r.shellEnv...)
+	bgShell, err := bgManager.Start(context.WithoutCancel(ctx), r.shellDir, blockFuncs(), r.shellCommand, r.params.Description, r.shellEnv...)
 	if err != nil {
 		return fantasy.ToolResponse{}, false, fmt.Errorf("error starting shell: %w", err)
 	}

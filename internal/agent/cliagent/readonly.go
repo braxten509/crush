@@ -1,16 +1,13 @@
 package cliagent
 
 import (
-	"errors"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"charm.land/catwalk/pkg/catwalk"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 // Read-only sub-agents run their CLI inside Codex's sandbox with nothing
@@ -42,45 +39,20 @@ func (m *Model) startTurnProc(noTools bool, env []string, name string, args ...s
 	return startReviewProc(dir, env, false, name, args...)
 }
 
-// readOnlyCommand wraps a CLI command so it runs read-only. The sandbox
-// makes its own working folder writable, so it starts in the temporary
-// folder (writable anyway) and the CLI moves into the project itself.
+// readOnlyCommand wraps a CLI command so it runs read-only, with its own
+// state still writable.
 func (m *Model) readOnlyCommand(name string, args []string) (string, string, []string, error) {
-	if _, err := exec.LookPath("codex"); err != nil {
-		return "", "", nil, errors.New("read-only sub-agents run inside Codex's sandbox, and codex isn't installed")
-	}
-	tmp := os.TempDir()
-	if within(m.Dir, tmp) {
-		return "", "", nil, fmt.Errorf("can't keep %s read-only: the sandbox always lets programs write in %s", m.Dir, tmp)
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", "", nil, err
 	}
-	var roots []string
-	dirs := append([]string{".cache"}, readOnlyStateDirs[m.Kind]...)
-	for _, dir := range dirs {
-		dir = filepath.Join(home, dir)
-		if fi, err := os.Stat(dir); err == nil && fi.IsDir() && !within(m.Dir, dir) {
-			roots = append(roots, fmt.Sprintf("%q", dir))
-		}
+	var writable []string
+	for _, dir := range readOnlyStateDirs[m.Kind] {
+		writable = append(writable, filepath.Join(home, dir))
 	}
 	// An added account's folder is the CLI's state while it runs there.
-	if dir := config.AccountDir(m.Account); dir != "" && !within(m.Dir, dir) {
-		roots = append(roots, fmt.Sprintf("%q", dir))
+	if dir := config.AccountDir(m.Account); dir != "" {
+		writable = append(writable, dir)
 	}
-	wrapped := []string{
-		"sandbox",
-		"-c", `sandbox_mode="workspace-write"`,
-		"-c", "sandbox_workspace_write.network_access=true",
-		"-c", "sandbox_workspace_write.writable_roots=[" + strings.Join(roots, ",") + "]",
-		"--", "/bin/sh", "-c", `cd "$0" && exec "$@"`, m.Dir, name,
-	}
-	return tmp, "codex", append(wrapped, args...), nil
-}
-
-// within reports whether path is dir or inside it.
-func within(path, dir string) bool {
-	rel, err := filepath.Rel(dir, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return sandbox.ReadOnly(m.Dir, writable, name, args)
 }

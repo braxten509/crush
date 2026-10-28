@@ -10,14 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWithin(t *testing.T) {
-	t.Parallel()
-	require.True(t, within("/a/b", "/a"))
-	require.True(t, within("/a", "/a"))
-	require.False(t, within("/ab", "/a"))
-	require.False(t, within("/", "/a"))
-}
-
 // A read-only sub-agent's commands can't change the project, while the
 // CLI's own state and the cache stay writable.
 func TestReadOnlyCommandKeepsProjectUnchanged(t *testing.T) {

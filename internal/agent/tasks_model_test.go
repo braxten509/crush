@@ -2,12 +2,17 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
+	"path/filepath"
+	"slices"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
@@ -77,7 +82,8 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 }
 
 // An API sub-agent that isn't read-only must be able to change files and run
-// commands; a read-only one only looks.
+// commands; a read-only one runs commands too, but locked so they can't
+// change anything.
 func TestAPISubAgentToolsFollowReadOnly(t *testing.T) {
 	env := testEnv(t)
 	providerCfg := config.ProviderConfig{ID: hyper.Name, Type: catwalk.TypeOpenAICompat, APIKey: "test-key"}
@@ -88,14 +94,17 @@ func TestAPISubAgentToolsFollowReadOnly(t *testing.T) {
 	selected := config.SelectedModel{Provider: hyper.Name, Model: model.ID}
 	h := &taskHub{c: coord, dir: t.TempDir()}
 
-	names := func(readOnly bool) []string {
+	toolsOf := func(readOnly bool) map[string]fantasy.AgentTool {
 		sub, _, err := h.subAgent(t.Context(), providerCfg, model, selected, readOnly)
 		require.NoError(t, err)
-		var out []string
+		out := map[string]fantasy.AgentTool{}
 		for _, tool := range sub.(*sessionAgent).tools.Copy() {
-			out = append(out, tool.Info().Name)
+			out[tool.Info().Name] = tool
 		}
 		return out
+	}
+	names := func(readOnly bool) []string {
+		return slices.Collect(maps.Keys(toolsOf(readOnly)))
 	}
 
 	writer := names(false)
@@ -107,8 +116,19 @@ func TestAPISubAgentToolsFollowReadOnly(t *testing.T) {
 	}
 
 	reader := names(true)
-	require.Contains(t, reader, "view")
-	for _, banned := range []string{"bash", "edit", "multiedit", "write", "download"} {
+	for _, want := range []string{"bash", "job_output", "job_kill", "view", "grep"} {
+		require.Contains(t, reader, want)
+	}
+	for _, banned := range []string{"edit", "multiedit", "write", "download"} {
 		require.NotContains(t, reader, banned)
 	}
+
+	// The reader's commands run locked: this project sits in the temporary
+	// folder, which the lock can't protect, so nothing runs at all.
+	input, err := json.Marshal(tools.BashParams{Command: "touch locked-file", Description: "write attempt"})
+	require.NoError(t, err)
+	ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, "read-only-test")
+	_, err = toolsOf(true)["bash"].Run(ctx, fantasy.ToolCall{ID: "call", Name: "bash", Input: string(input)})
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(coord.cfg.WorkingDir(), "locked-file"))
 }

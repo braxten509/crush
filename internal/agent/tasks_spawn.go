@@ -12,10 +12,13 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/fantasy"
 	"github.com/google/uuid"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	agentprompt "github.com/charmbracelet/crush/internal/agent/prompt"
+	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
 )
 
@@ -203,6 +206,9 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		if err != nil {
 			return nil, Model{}, err
 		}
+		if readOnly {
+			nativeTools = h.lockCommands(nativeTools)
+		}
 		sub.SetTools(nativeTools)
 		buildPrompt := taskPrompt
 		if !readOnly {
@@ -222,12 +228,21 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 }
 
 // apiSubAgentConfig picks the tools of a sub-agent on an API provider. A
-// read-only one gets the task agent's look-only tools; any other one does
-// real work, so it gets the coder's tools like an agent CLI would, minus
-// nested helpers and MCP servers.
+// read-only one gets the task agent's look-only tools plus commands, which
+// lockCommands keeps from changing anything; any other one does real work,
+// so it gets the coder's tools like an agent CLI would, minus nested helpers
+// and MCP servers.
 func apiSubAgentConfig(agents map[string]config.Agent, readOnly bool) config.Agent {
 	if readOnly {
-		return agents[config.AgentTask]
+		cfg := agents[config.AgentTask]
+		cfg.AllowedTools = slices.Clone(cfg.AllowedTools)
+		// Commands only when the user hasn't turned them off.
+		for _, name := range []string{tools.BashToolName, tools.JobOutputToolName, tools.JobKillToolName} {
+			if slices.Contains(agents[config.AgentCoder].AllowedTools, name) {
+				cfg.AllowedTools = append(cfg.AllowedTools, name)
+			}
+		}
+		return cfg
 	}
 	cfg := agents[config.AgentCoder]
 	cfg.AllowedTools = slices.DeleteFunc(slices.Clone(cfg.AllowedTools), func(name string) bool {
@@ -235,6 +250,19 @@ func apiSubAgentConfig(agents map[string]config.Agent, readOnly bool) config.Age
 	})
 	cfg.AllowedMCP = map[string][]string{}
 	return cfg
+}
+
+// lockCommands swaps a read-only sub-agent's bash tool for one that runs
+// every command inside the read-only sandbox, as read-only agent CLIs do.
+func (h *taskHub) lockCommands(agentTools []fantasy.AgentTool) []fantasy.AgentTool {
+	options := h.c.cfg.Config().Options
+	locked := guardTools([]fantasy.AgentTool{shelltool.NewReadOnlyBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, reportStartedJob)})[0]
+	for i, tool := range agentTools {
+		if tool.Info().Name == tools.BashToolName {
+			agentTools[i] = locked
+		}
+	}
+	return agentTools
 }
 
 // errHubClosing refuses to start a task on a hub whose Crush, or whose

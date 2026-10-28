@@ -1,9 +1,10 @@
 <script>
   // The API key sheet (desktop-design-5-6 2.4, look 5.6; DLG-046 to DLG-053):
   // a port of internal/ui/dialog/auth/api_key_input.go. The key is typed in a
-  // plain field (as the terminal), verified through G-5's verify-key route
-  // with a spinner of at least 750 ms, during which every key is ignored;
-  // once validated, Enter/Ctrl+Y or Esc saves it to the global config, once.
+  // password field, verified through G-5's verify-key route with a spinner
+  // of at least 750 ms, during which every key is ignored; once validated it
+  // is saved to the global config, once, and the sheet closes with no
+  // further key press (owner, 2026-10-28).
   // Both calls go through apiSecret, so the key never reaches the generic
   // api command, a store, the probe, a notice or a log; the field is emptied
   // when the sheet closes. Esc before validation cancels.
@@ -64,7 +65,8 @@
     await sleep(Math.max(0, MIN_VERIFY_MS - (Date.now() - started)));
     if (ok) verifiedKey = checking;
     state = ok ? "verified" : "error";
-    if (!ok) queueMicrotask(() => document.querySelector(`[data-sheet="${ID}"] input`)?.focus());
+    if (ok) save();
+    else queueMicrotask(() => document.querySelector(`[data-sheet="${ID}"] input`)?.focus());
   }
 
   async function save() {
@@ -120,7 +122,7 @@
 
 <Sheet id={ID} {title} width="standard" {help} {onKey} onboarding={props.onboarding === true}>
   <div class="body" class:busy={state === "verifying"}>
-    <Field bind:value={key} prompt={state === "verifying" ? "… " : "> "} placeholder="Enter your API key..." label="API key" error={saveError} />
+    <Field bind:value={key} masked prompt={state === "verifying" ? "… " : "> "} placeholder="Enter your API key..." label="API key" error={saveError} />
     <p class="note">This will be written in your global configuration:</p>
     <p class="path">{configPath}</p>
   </div>

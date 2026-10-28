@@ -8,9 +8,9 @@ import { fileURLToPath } from "node:url";
 // Tauri's page functions go to src/lib/bridge/, which runs them on Electron.
 // Unit tests run in Node; the renderer's tests (src/lib/render), the sheet
 // stack's (it mounts OverlayHost) and the mounted pieces' own (the model menu,
-// the helper model row in Settings) run in a page model (jsdom), with Svelte's browser build. Vitest 5 has no
+// the helper model row in Settings, the API key sheet) run in a page model (jsdom), with Svelte's browser build. Vitest 5 has no
 // environmentMatchGlobs, so each is a project.
-const PAGE_TESTS = ["src/lib/render/**/*.test.js", "src/lib/dialogs.test.js", "src/components/models/*.test.js", "src/components/settings/*.test.js"];
+const PAGE_TESTS = ["src/lib/render/**/*.test.js", "src/lib/dialogs.test.js", "src/components/models/*.test.js", "src/components/settings/*.test.js", "src/components/signin/*.test.js"];
 
 const bridge = (file) => fileURLToPath(new URL(`./src/lib/bridge/${file}`, import.meta.url));
 

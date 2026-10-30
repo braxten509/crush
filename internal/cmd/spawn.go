@@ -29,6 +29,10 @@ crush spawn --cli claude --model opus --read-only --name "Review the design" <<'
 Critique the new page-identifier code; don't change it.
 EOF
 
+crush spawn --cli codex --mcp --name "Decompile the APK" <<'EOF'
+Use REA to find where the save file is written.
+EOF
+
 crush spawn --cli claude --model opus --effort max --fast --name "Compose a tune" <<'EOF'
 Write the song.
 EOF
@@ -65,6 +69,7 @@ crush spawn --stop t2`,
 			req.Effort, _ = cmd.Flags().GetString("effort")
 			req.Fast, _ = cmd.Flags().GetBool("fast")
 			req.ReadOnly, _ = cmd.Flags().GetBool("read-only")
+			req.MCP, _ = cmd.Flags().GetBool("mcp")
 			req.Name, _ = cmd.Flags().GetString("name")
 			if len(args) > 0 {
 				req.Prompt = args[0]
@@ -114,6 +119,9 @@ crush spawn --stop t2`,
 		if t.ReadOnly {
 			tuning += ", read-only"
 		}
+		if t.MCP {
+			tuning += ", with MCP add-ons"
+		}
 		cmd.Printf("%s task %s (%s) on %s/%s%s. It runs in the background; its result will arrive as a <%s> message when it finishes. Don't wait for it.\n",
 			verb, t.ID, t.Name, t.CLI, t.Model, tuning, agent.TaskNotificationTag)
 		return nil
@@ -126,6 +134,7 @@ func init() {
 	spawnCmd.Flags().String("effort", "", "Reasoning effort, one of the model's levels (like low, medium, high, xhigh, max)")
 	spawnCmd.Flags().Bool("fast", false, "Run in fast mode (claude and codex only)")
 	spawnCmd.Flags().Bool("read-only", false, "Run where it can't change the project's files, as for reviews; follow-ups stay read-only")
+	spawnCmd.Flags().Bool("mcp", false, "Start it with the MCP add-on servers (REA, Cloudflare, ...), which sub-agents otherwise go without; with --continue, turns them on for a stopped or finished task")
 	spawnCmd.Flags().String("name", "", "Short title shown in Crush")
 	spawnCmd.Flags().String("stop", "", "Stop the task with this ID instead")
 	spawnCmd.Flags().String("continue", "", "Send the prompt to this task, which keeps its conversation: as a follow-up once it is done, or into its work while it runs")

@@ -133,6 +133,7 @@ func codexGuardTrust(result json.RawMessage) map[string]any {
 // that needs anything else starts a new one.
 type codexKey struct {
 	dir, model, tier, approval, sandbox, account string
+	noMCP                                        bool
 }
 
 // codexLive is a Codex process kept open between the turns of one Crush
@@ -209,7 +210,7 @@ type codexRun struct {
 
 func runCodex(ctx context.Context, m *Model, t Turn) error {
 	r := newCodexRun(ctx, m, t)
-	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: r.approval, sandbox: r.sandbox, account: m.Account}
+	key := codexKey{dir: m.Dir, model: m.ID, tier: m.ServiceTier, approval: r.approval, sandbox: r.sandbox, account: m.Account, noMCP: m.NoMCP}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	live, lines, err := r.open(keep, key)
@@ -294,6 +295,9 @@ func (r *codexRun) open(keep bool, key codexKey) (*codexLive, <-chan []byte, err
 	var err error
 	args := []string{"app-server", "--disable", "memories", "-c", "project_doc_max_bytes=0", "-c", codexGuardHook()}
 	env := append(slices.Clone(r.t.Env), config.AccountEnv(r.m.Kind, r.m.Account)...)
+	if r.m.NoMCP {
+		args = append(args, codexNoMCPArgs(r.m.Dir, env)...)
+	}
 	if r.p, err = startReviewProc(r.m.Dir, env, !r.t.NoTools, "codex", args...); err != nil {
 		return nil, nil, err
 	}

@@ -109,6 +109,7 @@ type claudeKey struct {
 	dir, model, effort, account string
 	bypass, fast                bool
 	ultracode                   bool
+	noMCP                       bool
 }
 
 // claudeLive is a Claude process kept open between the turns of one Crush
@@ -323,6 +324,12 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	if t.Instructions != "" {
 		args = append(args, "--append-system-prompt", t.Instructions)
 	}
+	if key.noMCP && !t.NoTools {
+		// No --mcp-config with it: no MCP servers at all. The env var keeps
+		// the claude.ai connectors off too.
+		args = append(args, "--strict-mcp-config")
+		env = append(env, "ENABLE_CLAUDEAI_MCP_SERVERS=false")
+	}
 	if !t.NoTools {
 		// Main agents ask the user through `crush ask` and sub-agents
 		// through their report; Claude's own question tool reaches no one.
@@ -400,7 +407,7 @@ type claudeRun struct {
 }
 
 func runClaude(ctx context.Context, m *Model, t Turn) error {
-	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, account: m.Account, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID)}
+	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, account: m.Account, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID), noMCP: m.NoMCP}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *claudeLive

@@ -108,7 +108,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		return nil, err
 	}
 	selected.Account = h.taskAccount(req.Session, *provider, "")
-	sub, m, err := h.subAgent(ctx, *provider, model, selected, req.ReadOnly)
+	sub, m, err := h.subAgent(ctx, *provider, model, selected, req.ReadOnly, req.MCP)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	h.skipUsedIDs(req.Session)
 	t := &Task{
 		SessionID: req.Session, ChildID: child.ID, Name: name,
-		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, ReadOnly: req.ReadOnly, Status: TaskRunning, Started: time.Now(),
+		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, ReadOnly: req.ReadOnly, MCP: req.MCP, Status: TaskRunning, Started: time.Now(),
 	}
 	started = true
 	snapshot, err := h.start(ctx, release, t, sub, m, *provider, subAgentPrompt(prompt, req.ReadOnly))
@@ -155,8 +155,9 @@ func (h *taskHub) taskAccount(parentSessionID string, provider config.ProviderCo
 	return previous
 }
 
-// subAgent builds the agent a task runs on.
-func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly bool) (SessionAgent, Model, error) {
+// subAgent builds the agent a task runs on. Without mcp an agent CLI starts
+// without the user's MCP add-ons; API sub-agents never get them.
+func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly, mcp bool) (SessionAgent, Model, error) {
 	if h.subAgentHook != nil {
 		return h.subAgentHook(provider, model), Model{CatwalkCfg: model, ModelCfg: selected}, nil
 	}
@@ -173,6 +174,7 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 	if cm, ok := lm.(*cliagent.Model); ok {
 		cm.Guarded = true
 		cm.ReadOnly = readOnly
+		cm.NoMCP = !mcp
 		// Marks what it starts, so leftovers show up as background
 		// processes. Without a session it can't spawn sub-agents itself.
 		// A read-only one isn't told where Crush is: Crush runs its

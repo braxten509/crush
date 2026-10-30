@@ -118,7 +118,7 @@ func (h *taskHub) subAgentOn(ctx context.Context, t *Task, b config.FallbackBloc
 	if selected.ReasoningEffort == "" {
 		selected.ReasoningEffort = model.DefaultReasoningEffort
 	}
-	sub, m, err := h.subAgent(ctx, provider, model, selected, t.ReadOnly)
+	sub, m, err := h.subAgent(ctx, provider, model, selected, t.ReadOnly, t.MCP)
 	if err != nil {
 		slog.Warn("The fallback order could not move a sub-agent", "task", t.ID, "error", err)
 		return subAgentNext{}, false

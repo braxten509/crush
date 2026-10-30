@@ -128,6 +128,9 @@ func (h *taskHub) messageRunning(req TaskRequest) (reply string, sent bool, err 
 	if req.CLI != "" || req.Model != "" {
 		return "", false, fmt.Errorf("task %s is still running, so it can't switch models: stop it first (crush spawn --stop %s), then continue it with --cli/--model", t.ID, t.ID)
 	}
+	if req.MCP && !t.MCP {
+		return "", false, fmt.Errorf("task %s is still running without MCP add-ons and can't get them now: stop it first (crush spawn --stop %s), then continue it with --mcp", t.ID, t.ID)
+	}
 	current, box, running := h.joinRun(t.ID)
 	if !running {
 		// It is ending: wait out its last moments, then follow up.
@@ -199,7 +202,8 @@ func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 	}
 	selected.Account = h.taskAccount(req.Session, provider, account)
 	readOnly := prev.ReadOnly || req.ReadOnly
-	sub, m, err := h.subAgent(ctx, provider, model, selected, readOnly)
+	mcp := prev.MCP || req.MCP
+	sub, m, err := h.subAgent(ctx, provider, model, selected, readOnly, mcp)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +222,7 @@ func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 	t := prev
 	t.CLI, t.Model, t.Account = taskProviderName(provider), model.ID, selected.Account
 	t.Status, t.Started, t.Ended, t.Delivered = TaskRunning, time.Now(), time.Time{}, false
-	t.Effort, t.Fast, t.ReadOnly = selected.ReasoningEffort, tuning.Fast, readOnly
+	t.Effort, t.Fast, t.ReadOnly, t.MCP = selected.ReasoningEffort, tuning.Fast, readOnly, mcp
 	h.mu.Lock()
 	if other, taken := h.tasks[t.ID]; taken && other.ChildID != t.ChildID {
 		t.ID = "" // a newer task has its ID; give it the next one

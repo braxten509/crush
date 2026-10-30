@@ -164,6 +164,10 @@ type Model struct {
 	Guarded bool
 	// ReadOnly runs a sub-agent where it can't change the project's files.
 	ReadOnly bool
+	// NoMCP starts the CLI without the user's MCP add-on servers: each
+	// helper would start its own copies, and few use them (owner,
+	// 2026-10-30). Sub-agents run this way unless spawned with --mcp.
+	NoMCP bool
 	// Env is added to the CLI process environment on every turn.
 	Env []string
 	// Account is the Claude Code or Codex sign-in the model runs on (an
@@ -240,11 +244,11 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 		if t.Effort != "" {
 			args = append(args, "--reasoning-effort", t.Effort)
 		}
-		// Crush hands every CLI the shared memory; Grok's own stays off.
-		t.Env = append(slices.Clone(t.Env), "GROK_MEMORY=0")
-		t.Env = append(t.Env, config.AccountEnv(m.Kind, m.Account)...)
+		t.Env = grokEnv(m, t.Env)
 		return runACP(ctx, m, t, "grok", append(args, "stdio"), false)
 	case config.TypeOpenCodeCLI, config.TypeOpenCodeZenCLI:
+		// OpenCode's ACP sessions start no MCP servers of their own; Crush
+		// passes none, so NoMCP needs nothing here.
 		return runACP(ctx, m, t, "opencode", []string{"acp"}, true)
 	case config.TypeAGYCLI:
 		return runAGY(ctx, m, t)

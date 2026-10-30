@@ -67,7 +67,7 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 	selected := config.SelectedModel{Provider: hyper.Name, Model: model.ID}
 	h := &taskHub{c: coord, dir: t.TempDir()}
 
-	sub, m, err := h.subAgent(t.Context(), providerCfg, model, selected, false)
+	sub, m, err := h.subAgent(t.Context(), providerCfg, model, selected, false, false)
 	require.NoError(t, err)
 
 	// The decorators are the providers package's; their types name them.
@@ -95,7 +95,7 @@ func TestAPISubAgentToolsFollowReadOnly(t *testing.T) {
 	h := &taskHub{c: coord, dir: t.TempDir()}
 
 	toolsOf := func(readOnly bool) map[string]fantasy.AgentTool {
-		sub, _, err := h.subAgent(t.Context(), providerCfg, model, selected, readOnly)
+		sub, _, err := h.subAgent(t.Context(), providerCfg, model, selected, readOnly, false)
 		require.NoError(t, err)
 		out := map[string]fantasy.AgentTool{}
 		for _, tool := range sub.(*sessionAgent).tools.Copy() {

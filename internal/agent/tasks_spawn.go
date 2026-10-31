@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -108,7 +110,12 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		return nil, err
 	}
 	selected.Account = h.taskAccount(req.Session, *provider, "")
-	sub, m, err := h.subAgent(ctx, *provider, model, selected, req.ReadOnly, req.MCP)
+	if req.Dir != "" {
+		if info, err := os.Stat(req.Dir); err != nil || !info.IsDir() || !filepath.IsAbs(req.Dir) {
+			return nil, fmt.Errorf("the folder %q is not there", req.Dir)
+		}
+	}
+	sub, m, err := h.subAgent(ctx, *provider, model, selected, req.ReadOnly, req.MCP, req.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +138,7 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	h.skipUsedIDs(req.Session)
 	t := &Task{
 		SessionID: req.Session, ChildID: child.ID, Name: name,
-		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, ReadOnly: req.ReadOnly, MCP: req.MCP, Status: TaskRunning, Started: time.Now(),
+		CLI: taskProviderName(*provider), Model: model.ID, Effort: selected.ReasoningEffort, Fast: req.Fast, ReadOnly: req.ReadOnly, MCP: req.MCP, Dir: req.Dir, Status: TaskRunning, Started: time.Now(),
 	}
 	started = true
 	snapshot, err := h.start(ctx, release, t, sub, m, *provider, subAgentPrompt(prompt, req.ReadOnly))
@@ -156,8 +163,9 @@ func (h *taskHub) taskAccount(parentSessionID string, provider config.ProviderCo
 }
 
 // subAgent builds the agent a task runs on. Without mcp an agent CLI starts
-// without the user's MCP add-ons; API sub-agents never get them.
-func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly, mcp bool) (SessionAgent, Model, error) {
+// without the user's MCP add-ons; API sub-agents never get them. A dir starts
+// an agent CLI in that folder, which its sandbox then lets it save to.
+func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, model catwalk.Model, selected config.SelectedModel, readOnly, mcp bool, dir string) (SessionAgent, Model, error) {
 	if h.subAgentHook != nil {
 		return h.subAgentHook(provider, model), Model{CatwalkCfg: model, ModelCfg: selected}, nil
 	}
@@ -175,6 +183,9 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		cm.Guarded = true
 		cm.ReadOnly = readOnly
 		cm.NoMCP = !mcp
+		if dir != "" {
+			cm.Dir = dir
+		}
 		// Marks what it starts, so leftovers show up as background
 		// processes. Without a session it can't spawn sub-agents itself.
 		// A read-only one isn't told where Crush is: Crush runs its

@@ -22,7 +22,7 @@ func TestCLISubAgentMCPFollowsRequest(t *testing.T) {
 	h := &taskHub{c: coord, dir: t.TempDir()}
 	selected := config.SelectedModel{Provider: providerCfg.ID, Model: "opus"}
 	for _, mcp := range []bool{false, true} {
-		_, m, err := h.subAgent(t.Context(), providerCfg, providerCfg.Models[0], selected, false, mcp)
+		_, m, err := h.subAgent(t.Context(), providerCfg, providerCfg.Models[0], selected, false, mcp, "")
 		require.NoError(t, err)
 		cm, ok := m.Model.(*cliagent.Model)
 		require.True(t, ok)

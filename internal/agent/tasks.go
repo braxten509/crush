@@ -70,7 +70,10 @@ type Task struct {
 	ReadOnly bool `json:"read_only,omitempty"`
 	// MCP starts the sub-agent with the user's MCP add-on servers, which
 	// it otherwise goes without. Follow-ups keep it.
-	MCP       bool       `json:"mcp,omitempty"`
+	MCP bool `json:"mcp,omitempty"`
+	// Dir is the folder it works in, as `crush spawn -c` gave it; empty is
+	// the chat's own folder. Follow-ups and fallbacks keep it.
+	Dir       string     `json:"dir,omitempty"`
 	Status    TaskStatus `json:"status"`
 	Started   time.Time  `json:"started"`
 	Ended     time.Time  `json:"ended"`
@@ -103,7 +106,10 @@ type TaskRequest struct {
 	// ReadOnly runs the sub-agent where it can't change files.
 	ReadOnly bool `json:"read_only,omitempty"`
 	// MCP starts the sub-agent with the MCP add-ons (`crush spawn --mcp`).
-	MCP    bool   `json:"mcp,omitempty"`
+	MCP bool `json:"mcp,omitempty"`
+	// Dir is the folder an agent CLI starts in and may save to (`crush
+	// spawn -c`); empty is the chat's own folder.
+	Dir    string `json:"dir,omitempty"`
 	Name   string `json:"name,omitempty"`
 	Prompt string `json:"prompt,omitempty"`
 	Stop   string `json:"stop,omitempty"`

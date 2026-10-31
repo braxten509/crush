@@ -71,6 +71,17 @@ crush spawn --stop t2`,
 			req.ReadOnly, _ = cmd.Flags().GetBool("read-only")
 			req.MCP, _ = cmd.Flags().GetBool("mcp")
 			req.Name, _ = cmd.Flags().GetString("name")
+			// -c starts a new sub-agent in that folder; a follow-up keeps its own.
+			if f := cmd.Flag("cwd"); f != nil && f.Value.String() != "" && req.Continue == "" {
+				abs, err := filepath.Abs(f.Value.String())
+				if err != nil {
+					return err
+				}
+				if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+					return fmt.Errorf("the folder %s is not there", abs)
+				}
+				req.Dir = abs
+			}
 			if len(args) > 0 {
 				req.Prompt = args[0]
 			} else {
@@ -121,6 +132,9 @@ crush spawn --stop t2`,
 		}
 		if t.MCP {
 			tuning += ", with MCP add-ons"
+		}
+		if t.Dir != "" {
+			tuning += ", in " + t.Dir
 		}
 		cmd.Printf("%s task %s (%s) on %s/%s%s. It runs in the background; its result will arrive as a <%s> message when it finishes. Don't wait for it.\n",
 			verb, t.ID, t.Name, t.CLI, t.Model, tuning, agent.TaskNotificationTag)

@@ -333,3 +333,6 @@ Actual: the View row shows only the path. Chat DB rows for these results have `"
 
 ## Sub-agent reviews
 - 2026-10-30: codex gpt-6.1-terra (read-only): (1) ACP may send the picture on an earlier update than the completed one → now kept per call (`acpTool.image`); (2) a picture view was saved as empty "known file contents" → skipped when the result carries a picture; (3) only the first picture of a multi-picture result is kept → left as is (one picture per stored result; Read returns one).
+
+## Verified 2026-10-30 22:34
+After the update plus a full Crush restart (the folder engine kept the old code until then), two Claude Read results in ~/dev/arm32-bridge/.crush/crush.db saved `mime_type":"image/jpeg"` with data (54 KB and 347 KB rows). Note: Check for updates does not restart running engines.

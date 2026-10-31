@@ -26,6 +26,7 @@
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { selectItem } from "../../lib/stores/ui.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
+  import { openViewer } from "../../lib/stores/ui.svelte.js";
   import { cells } from "../../lib/diff.js";
   import { singleClick } from "../../lib/tools/click.js";
   import { copyWithNotice } from "../../lib/tools/clip.js";
@@ -82,6 +83,13 @@
   });
   const mark = $derived(row && !live ? row.mark : null);
   const hint = $derived(!sample && item.working ? toolHint(item) : null);
+  // Pictures the run's tools read show in the chat under the row, folded
+  // or open, not inside it (owner, 2026-10-30).
+  const pictures = $derived(
+    calls
+      .filter((c) => c.result && !c.result.is_error && c.result.data && String(c.result.mime_type ?? "").startsWith("image/"))
+      .map((c) => ({ id: c.id, mime: c.result.mime_type, data: c.result.data })),
+  );
 
   const earlier = $derived(open && !allShown.has(openKey) ? Math.max(0, calls.length - SHOWN) : 0);
   const shownCalls = $derived(earlier > 0 ? calls.slice(earlier) : calls);
@@ -223,12 +231,30 @@
     {#if hint !== null}
       <p class="hint">{hint}</p>
     {/if}
+    {#each pictures as pic (pic.id)}
+      {@const src = `data:${pic.mime};base64,${pic.data}`}
+      <button class="picture" type="button" onclick={() => openViewer({ src, name: pic.mime, mime: pic.mime })} aria-label="Open the picture">
+        <img {src} alt="" draggable="false" />
+      </button>
+    {/each}
   {/if}
 </div>
 
 <style>
   .group {
     position: relative;
+  }
+  .picture {
+    display: block;
+    margin-top: calc(12 * var(--px));
+    padding: 0;
+    border: 1px solid var(--rule-faint);
+    cursor: zoom-in;
+  }
+  .picture img {
+    display: block;
+    max-width: 100%;
+    max-height: calc(480 * var(--px));
   }
   .tool-row {
     display: flex;

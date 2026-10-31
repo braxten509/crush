@@ -562,6 +562,10 @@ func (s *cliSteps) handleToolResult(e cliagent.Event) error {
 	e.Metadata = metadata
 	s.setToolRunning(e.ID, false)
 	var out fantasy.ToolResultOutputContent = fantasy.ToolResultOutputContentText{Text: e.Output}
+	if e.Data != "" && strings.HasPrefix(e.MimeType, "image/") {
+		// The picture the CLI read, saved so the chat shows it.
+		out = fantasy.ToolResultOutputContentMedia{Data: e.Data, MediaType: e.MimeType, Text: e.Output}
+	}
 	if e.IsError {
 		out = fantasy.ToolResultOutputContentError{Error: errors.New(e.Output)}
 	}
@@ -578,7 +582,7 @@ func (s *cliSteps) handleToolResult(e cliagent.Event) error {
 	if meta, ok := s.todoMeta[e.ID]; ok && !e.IsError {
 		e.Metadata = meta
 	}
-	if e.Name == tools.ViewToolName && !e.IsError && !strings.Contains(s.inputs[e.ID], `"offset"`) && !strings.Contains(s.inputs[e.ID], `"limit"`) {
+	if e.Name == tools.ViewToolName && !e.IsError && e.Data == "" && !strings.Contains(s.inputs[e.ID], `"offset"`) && !strings.Contains(s.inputs[e.ID], `"limit"`) {
 		var view tools.ViewResponseMetadata
 		if json.Unmarshal([]byte(e.Metadata), &view) == nil && view.FilePath != "" {
 			s.known[view.FilePath] = view.Content

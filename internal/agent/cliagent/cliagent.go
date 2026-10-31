@@ -100,11 +100,14 @@ type Event struct {
 	Input            string
 	Output           string
 	Metadata         string
-	IsError          bool
-	Usage            fantasy.Usage
-	Session          string
-	Activity         string
-	Marker           *Marker
+	// Data and MimeType carry a picture a tool result returned (base64).
+	Data     string
+	MimeType string
+	IsError  bool
+	Usage    fantasy.Usage
+	Session  string
+	Activity string
+	Marker   *Marker
 }
 
 // Turn is one user prompt sent to a CLI.

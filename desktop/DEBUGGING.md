@@ -315,3 +315,21 @@ Other open items from wave 1:
 
 ## Open
 - Why the store-level `$effect` stopped re-running. helpers.svelte.js uses the same pattern.
+
+# Debugging: pictures an agent CLI opens never show in chat (2026-10-30)
+
+## Symptom
+Expected: a picture Claude Code reads (Read on a .png/.jpg) shows in the chat, as for API models.
+Actual: the View row shows only the path. Chat DB rows for these results have `"data":""` and `"mime_type":""`; the last saved picture in ~/dev/arm32-bridge/.crush/crush.db was 2026-10-18 (an API-model chat). Long or short chats alike.
+
+## Attempts
+### 1. Followed the result from the CLI stream to the DB
+- Where: `internal/agent/cliagent/claude_handlers.go` handleUser, `claudeResultText`; `acp.go` tool_call_update; `internal/agent/cli_steps.go` handleToolResult.
+- Result: Claude's tool_result content is `[{"type":"image","source":{"type":"base64",...}}]`; `claudeResultText` keeps only text blocks and `Event` had no picture field, so every CLI picture was dropped before saving. ACP image content (`{"type":"image","data","mimeType"}`) was dropped the same way. The desktop draws a View picture only from `result.data` + an `image/` mime (`src/lib/tools/registry.js` viewView), so it had nothing to draw.
+- Conclusion: root cause. The code never kept CLI pictures; the saved pictures in this DB all come from API-model chats (owner recalled them showing earlier on 10-30; no saved row backs that).
+
+## Fix
+`Event.Data`/`MimeType`; Claude (`claudeResultImage`) and ACP fill them; `handleToolResult` saves them as a media result, which `prompt_messages.go` stores as `data`/`mime_type`. Test: `cliagent/claude_image_test.go`.
+
+## Sub-agent reviews
+- 2026-10-30: codex gpt-6.1-terra (read-only): (1) ACP may send the picture on an earlier update than the completed one → now kept per call (`acpTool.image`); (2) a picture view was saved as empty "known file contents" → skipped when the result carries a picture; (3) only the first picture of a multi-picture result is kept → left as is (one picture per stored result; Read returns one).

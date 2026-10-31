@@ -224,7 +224,8 @@ func (r *claudeRun) handleUser(line claudeLine) error {
 				meta = markBackground(call[0], meta)
 			}
 		}
-		if err := r.t.Emit(Event{Type: EventToolResult, ID: b.ToolUseID, Name: call[0], Output: out, Metadata: meta, IsError: b.IsError}); err != nil {
+		data, mime := claudeResultImage(b.Content)
+		if err := r.t.Emit(Event{Type: EventToolResult, ID: b.ToolUseID, Name: call[0], Output: out, Metadata: meta, Data: data, MimeType: mime, IsError: b.IsError}); err != nil {
 			return err
 		}
 	}

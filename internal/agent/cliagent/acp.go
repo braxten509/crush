@@ -54,8 +54,10 @@ type acpContent struct {
 	Type    string `json:"type"`
 	Text    string `json:"text"`
 	Content *struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type     string `json:"type"`
+		Text     string `json:"text"`
+		Data     string `json:"data"`
+		MimeType string `json:"mimeType"`
 	} `json:"content"`
 	Path    string `json:"path"`
 	OldText string `json:"oldText"`
@@ -76,9 +78,12 @@ type acpTool struct {
 	kind, title string
 	input       map[string]any
 	diff        *acpContent
-	output      strings.Builder
-	announced   bool
-	crushName   string
+	// image is the picture the call returned, from whichever update
+	// carried it (an update may leave content out).
+	image     *acpContent
+	output    strings.Builder
+	announced bool
+	crushName string
 }
 
 const (
@@ -621,6 +626,9 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 			if c.Type == "diff" {
 				tc.diff = &parts[i]
 			}
+			if c.Content != nil && c.Content.Type == "image" && c.Content.Data != "" {
+				tc.image = &parts[i]
+			}
 		}
 		done := u.Status == "completed" || u.Status == "failed"
 		// Announce once the input is known; some agents only fill it in
@@ -638,11 +646,14 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 			}
 		}
 		if done {
-			out := ""
+			out, data, mime := "", "", ""
 			for _, c := range parts {
 				if c.Content != nil && c.Content.Type == "text" {
 					out += c.Content.Text
 				}
+			}
+			if tc.image != nil {
+				data, mime = tc.image.Content.Data, tc.image.Content.MimeType
 			}
 			failed := u.Status == "failed"
 			meta := ""
@@ -654,7 +665,7 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 				}
 			}
 			delete(calls, u.ToolCallID)
-			return emit(Event{Type: EventToolResult, ID: u.ToolCallID, Name: tc.crushName, Output: out, Metadata: meta, IsError: failed})
+			return emit(Event{Type: EventToolResult, ID: u.ToolCallID, Name: tc.crushName, Output: out, Metadata: meta, Data: data, MimeType: mime, IsError: failed})
 		}
 	}
 	return nil

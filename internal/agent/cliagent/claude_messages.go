@@ -143,6 +143,19 @@ func claudeResultText(raw json.RawMessage) string {
 	return strings.Join(parts, "\n")
 }
 
+// claudeResultImage returns the first base64 picture in tool_result
+// content, as Claude's Read returns for an image file.
+func claudeResultImage(raw json.RawMessage) (data, mime string) {
+	var blocks []claudeBlock
+	_ = json.Unmarshal(raw, &blocks)
+	for _, b := range blocks {
+		if b.Type == "image" && b.Source != nil && b.Source.Type == "base64" && b.Source.Data != "" {
+			return b.Source.Data, b.Source.MediaType
+		}
+	}
+	return "", ""
+}
+
 // claudeUsageRecorder emits each request once, merging cumulative stream
 // updates and ignoring the turn-wide result when request usage was emitted.
 func claudeUsageRecorder(emit func(Event) error) func(claudeLine) error {

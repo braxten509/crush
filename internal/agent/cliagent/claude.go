@@ -83,6 +83,11 @@ type claudeBlock struct {
 	IsError   bool            `json:"is_error"`
 	Text      string          `json:"text"`
 	Thinking  string          `json:"thinking"`
+	Source    *struct {
+		Type      string `json:"type"`
+		MediaType string `json:"media_type"`
+		Data      string `json:"data"`
+	} `json:"source"`
 }
 
 type claudeRequest struct {

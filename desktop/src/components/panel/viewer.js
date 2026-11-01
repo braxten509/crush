@@ -51,3 +51,18 @@ export function pictureSize(width, height, bytes) {
   if (Number.isFinite(bytes) && bytes >= 0) parts.push(byteWords(bytes));
   return parts.join(" · ");
 }
+
+// The file name the save button offers: the shown name without folder-like
+// parts ("image/jpeg" is no name), ending as its kind does.
+export function saveName(name, mime) {
+  const ending = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif" }[String(mime ?? "").toLowerCase()] ?? "";
+  let base = String(name ?? "").trim();
+  if (!base || base.includes("/") || base.includes("\\")) base = "picture";
+  if (ending && !/\.[a-z0-9]{2,5}$/iu.test(base)) base += ending;
+  return base;
+}
+
+// A data: URL's kind ("image/png"), or "".
+export function dataMime(src) {
+  return /^data:([^;,]*)/iu.exec(String(src ?? ""))?.[1]?.toLowerCase() ?? "";
+}

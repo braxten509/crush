@@ -8,27 +8,42 @@
   // Esc closes; focus stays inside while it is open and goes back to what
   // opened it. Its keys take the overlay scope, which is the only one asked
   // while the viewer is open (lib/keys.js). Placed by OverlayHost.
+  //
+  // The save button (an arrow into a box, left of Fit) saves the picture
+  // through the system's Save window (electron/main.cjs, will-download). A
+  // picture attached but not sent yet (ui.viewer.attachment) also gets the
+  // red pen and Undo (Ctrl+Z): lines drawn on it go into the attachment
+  // when the viewer closes (marks.js, markAttachment). Owner, 2026-11-01.
   import { unfold } from "../../lib/motion.js";
   import { untrack } from "svelte";
   import { file_read } from "../../lib/engine/commands.js";
+  import { markAttachment } from "../../lib/stores/composer.svelte.js";
+  import Icon from "../Icon.svelte";
+  import { bakeMarks, drawLines, penWidth } from "./marks.js";
   import { bindKey } from "../../lib/keys.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { openViewer, ui } from "../../lib/stores/ui.svelte.js";
   import { PICTURE_FAILED, PICTURE_MAX_BYTES } from "../render/FigureView.svelte";
   import Rule from "../Rule.svelte";
   import { viewing } from "./panel.svelte.js";
-  import { base64Bytes, dataBytes, pictureName, pictureSize, viewerSource } from "./viewer.js";
+  import { base64Bytes, dataBytes, dataMime, pictureName, pictureSize, saveName, viewerSource } from "./viewer.js";
 
   const PAN_STEP = 40;
 
   let root = $state(null);
   let canvas = $state(null);
+  let picture = $state(null);
+  let sheet = $state(null);
+  let pen = $state(false);
+  let lines = $state([]);
+  let place = $state({ left: 0, top: 0, width: 0, height: 0 });
   let src = $state("");
   let bytes = $state(null);
   let natural = $state({ width: 0, height: 0 });
   let opener = null;
 
   const open = $derived(Boolean(ui.viewer));
+  const markable = $derived(Boolean(ui.viewer?.attachment));
   const name = $derived(pictureName(ui.viewer));
   const size = $derived(pictureSize(natural.width, natural.height, bytes));
   const ratio = () => globalThis.devicePixelRatio || 1;
@@ -37,6 +52,8 @@
   $effect(() => {
     viewing.name = open ? name : "";
     viewing.size = open ? size : "";
+    viewing.pen = pen;
+    viewing.lines = lines.length;
   });
 
   // A new picture: read it, from the project folder or as it is.
@@ -46,6 +63,16 @@
     bytes = null;
     natural = { width: 0, height: 0 };
     viewing.fit = true;
+    pen = false;
+    lines = [];
+    // Closing (or another picture) puts the lines into the attachment.
+    const attachment = ui.viewer?.attachment;
+    const keep = () => {
+      if (!attachment) return;
+      const drawn = untrack(() => $state.snapshot(lines));
+      const from = untrack(() => src);
+      if (drawn.length && from) bakeMarks(from, drawn).then((baked) => markAttachment(attachment, baked), () => {});
+    };
     if (!ui.viewer) {
       viewing.state = "idle";
       return;
@@ -58,7 +85,7 @@
       viewing.state = "loading";
       src = source.src;
       bytes = dataBytes(source.src);
-      return;
+      return keep;
     }
     let live = true;
     viewing.state = "loading";
@@ -79,6 +106,7 @@
     );
     return () => {
       live = false;
+      keep();
     };
   });
 
@@ -93,6 +121,61 @@
 
   function close() {
     openViewer(null);
+  }
+
+  // Save: the picture as shown, with its lines when it has any.
+  async function save() {
+    if (!src) return;
+    const drawn = $state.snapshot(lines);
+    const url = drawn.length ? (await bakeMarks(src, drawn)).url : src;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = saveName(name, dataMime(url));
+    link.click();
+  }
+
+  // The pen's sheet lies exactly over the picture, in the picture's own pixels.
+  $effect(() => {
+    if (!picture || !canvas) return;
+    const element = picture;
+    const measure = () => (place = { left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  });
+
+  $effect(() => {
+    if (!sheet || !natural.width) return;
+    const context = sheet.getContext("2d");
+    context.clearRect(0, 0, sheet.width, sheet.height);
+    drawLines(context, lines, penWidth(natural.width, natural.height));
+  });
+
+  function pointAt(event) {
+    const box = sheet.getBoundingClientRect();
+    return {
+      x: ((event.clientX - box.left) / box.width) * natural.width,
+      y: ((event.clientY - box.top) / box.height) * natural.height,
+    };
+  }
+
+  function drawStart(event) {
+    if (!pen || event.button !== 0 || !natural.width) return;
+    event.preventDefault();
+    event.stopPropagation();
+    sheet.setPointerCapture(event.pointerId);
+    lines.push([pointAt(event)]);
+  }
+
+  function drawMove(event) {
+    if (!pen || !sheet?.hasPointerCapture(event.pointerId)) return;
+    lines[lines.length - 1].push(pointAt(event));
+  }
+
+  function undo() {
+    lines.pop();
   }
 
   // Actual size starts centered on the picture.
@@ -116,7 +199,7 @@
   // Dragging pans the picture at actual size.
   let drag = null;
   function down(event) {
-    if (viewing.fit || event.button !== 0 || !canvas) return;
+    if (pen || viewing.fit || event.button !== 0 || !canvas) return;
     event.preventDefault();
     drag = { x: event.clientX, y: event.clientY, left: canvas.scrollLeft, top: canvas.scrollTop };
     const move = (e) => {
@@ -152,6 +235,7 @@
     ArrowDown: () => pan(0, 1),
     Tab: () => cycle(false),
     "Shift+Tab": () => cycle(true),
+    "Ctrl+Z": () => undo(),
   };
 
   $effect(() => {
@@ -191,6 +275,11 @@
       <p class="name" title={name}>{name}</p>
       {#if size}<p class="size">{size}</p>{/if}
       <div class="buttons">
+        {#if markable}
+          <button type="button" class="icon pen" class:on={pen} aria-pressed={pen} title="Red pen" aria-label="Red pen" data-viewer-pen onclick={() => (pen = !pen)}><Icon name="pen" size={16} /></button>
+          {#if pen}<button type="button" disabled={lines.length === 0} data-viewer-undo onclick={undo}>Undo</button>{/if}
+        {/if}
+        <button type="button" class="icon" title="Save picture" aria-label="Save picture" disabled={!src} data-viewer-save onclick={save}><Icon name="download" size={16} /></button>
         <button type="button" class:active={viewing.fit} aria-pressed={viewing.fit} data-viewer-fit onclick={() => setFit(true)}>Fit</button>
         <button type="button" class:active={!viewing.fit} aria-pressed={!viewing.fit} data-viewer-actual onclick={() => setFit(false)}>Actual size</button>
         <button type="button" data-viewer-close onclick={close}>Close <span class="key">Esc</span></button>
@@ -208,9 +297,26 @@
           draggable="false"
           style:width={!viewing.fit && natural.width ? `${natural.width / ratio()}px` : null}
           style:height={!viewing.fit && natural.height ? `${natural.height / ratio()}px` : null}
+          bind:this={picture}
           onload={loaded}
           onerror={failed}
         />
+        {#if markable && natural.width}
+          <canvas
+            class="sheet"
+            class:drawing={pen}
+            width={natural.width}
+            height={natural.height}
+            style:left="{place.left}px"
+            style:top="{place.top}px"
+            style:width="{place.width}px"
+            style:height="{place.height}px"
+            bind:this={sheet}
+            data-viewer-sheet
+            onpointerdown={drawStart}
+            onpointermove={drawMove}
+          ></canvas>
+        {/if}
       {/if}
     </div>
   </div>
@@ -264,8 +370,29 @@
     text-decoration-thickness: 1px;
     text-underline-offset: calc(4 * var(--px));
   }
+  .buttons .icon {
+    display: flex;
+    align-items: center;
+  }
+  .buttons button:disabled {
+    color: var(--slate);
+    text-decoration: none;
+  }
+  .buttons .pen.on {
+    color: #e5322d;
+    box-shadow: inset 0 calc(-2 * var(--px)) 0 #e5322d;
+  }
   .key {
     color: var(--slate);
+  }
+  .sheet {
+    position: absolute;
+    pointer-events: none;
+  }
+  .sheet.drawing {
+    pointer-events: auto;
+    cursor: crosshair;
+    touch-action: none;
   }
   .viewer :global(.rule.viewer-rule) {
     flex: none;

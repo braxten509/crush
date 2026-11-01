@@ -9,7 +9,7 @@
 // src-tauri/src/host.rs.
 "use strict";
 
-const { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, protocol } = require("electron");
+const { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, protocol, session } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -597,6 +597,11 @@ app.whenReady().then(() => {
   // No menu: its keys (reload, developer tools, close) are not the app's.
   Menu.setApplicationMenu(null);
   protocol.handle("app", serve);
+  // The picture viewer's save button (4.5) is a link with download: the
+  // system's Save window opens in Downloads with the picture's name.
+  session.defaultSession.on("will-download", (_event, item) => {
+    item.setSaveDialogOptions({ title: "Save picture", defaultPath: path.join(app.getPath("downloads"), item.getFilename()) });
+  });
   startHelper();
 });
 

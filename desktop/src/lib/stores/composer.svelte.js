@@ -190,6 +190,22 @@ export function addAttachment(attachment) {
   draftFor().attachments.push(attachment);
 }
 
+// A picture marked with the viewer's red pen takes the place of the
+// attachment it was drawn on, in whichever chat's draft still holds it. A
+// new picture kind changes the name's ending to match. False when no draft
+// holds it any more (sent or removed).
+export function markAttachment(attachment, { mime, base64 }) {
+  for (const draft of Object.values(composer.drafts)) {
+    const index = draft.attachments.indexOf(attachment);
+    if (index < 0) continue;
+    const ending = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp" }[mime];
+    const rename = (name) => (ending && mime !== attachment.mime && name ? name.replace(/(\.[^./\\]*)?$/u, ending) : name);
+    draft.attachments[index] = { ...attachment, mime, base64, name: rename(attachment.name), path: rename(attachment.path) };
+    return true;
+  }
+  return false;
+}
+
 export function removeAttachment(index) {
   const list = draftFor().attachments;
   if (index < 0 || index >= list.length) return;

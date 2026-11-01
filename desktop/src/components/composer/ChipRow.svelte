@@ -14,7 +14,7 @@
   const MIN_NAME = 5;
 
   const items = $derived([
-    ...draftOf().attachments.map((attachment, index) => ({ key: `a${index}`, chip: attachmentChip(attachment), index })),
+    ...draftOf().attachments.map((attachment, index) => ({ key: `a${index}`, chip: attachmentChip(attachment), index, attachment })),
     ...keptSkills().map((skill) => ({ key: `s${skill.id}`, chip: skillChip(skill), skill })),
   ]);
 
@@ -82,7 +82,7 @@
   <div class="chips" bind:this={row}>
     {#each shown as item, at (item.key)}
       <span class="place" data-chip style:max-width={at === 0 && fit.firstName !== null ? `${fit.fixed + fit.firstName}px` : null}>
-        <Chip chip={item.chip} removable number={digit(item)} onremove={() => remove(item)} />
+        <Chip chip={item.chip} removable number={digit(item)} onremove={() => remove(item)} attachment={item.attachment ?? null} />
       </span>
     {/each}
     {#if fit.more > 0}<span class="more" data-more>{moreText(fit.more)}</span>{/if}

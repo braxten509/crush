@@ -43,7 +43,7 @@ export const listRoom = $state({ width: 0 });
 
 export const customizing = $state({ cursor: 0, picked: [] });
 
-export const viewing = $state({ fit: true, state: "idle", name: "", size: "" });
+export const viewing = $state({ fit: true, state: "idle", name: "", size: "", pen: false, lines: 0 });
 
 export function toggleDetails() {
   panel.detailsOpen = !panel.detailsOpen;

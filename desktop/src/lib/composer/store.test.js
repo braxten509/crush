@@ -202,6 +202,23 @@ describe("sending", () => {
     expect(M.heldFor("s1")).toHaveLength(1);
   });
 
+  it("a picture marked with the red pen replaces the attachment it came from", async () => {
+    show("s1");
+    C.addAttachment({ kind: "text", name: "notes.txt", mime: "text/plain", path: "notes.txt", base64: "aGk=" });
+    C.addAttachment({ kind: "picture", name: "shot.jpg", mime: "image/jpeg", path: "shot.jpg", base64: "T0xE" });
+    const picture = C.draftOf().attachments[1];
+    expect(C.markAttachment(picture, { mime: "image/png", base64: "TkVX" })).toBe(true);
+    expect(C.draftOf().attachments.map((a) => [a.name, a.mime, a.base64])).toEqual([
+      ["notes.txt", "text/plain", "aGk="],
+      ["shot.png", "image/png", "TkVX"],
+    ]);
+    C.setText("look");
+    await C.send();
+    expect(sends()[0].body.attachments[1]).toMatchObject({ file_name: "shot.png", mime_type: "image/png", content: "TkVX" });
+    // Gone from the draft (sent): nothing to mark.
+    expect(C.markAttachment(picture, { mime: "image/png", base64: "TkVX" })).toBe(false);
+  });
+
   describe("a failed send (TYPE-048)", () => {
     it("an engine refusal puts the text and attachments back with the error", async () => {
       show("s1");

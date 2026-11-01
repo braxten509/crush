@@ -23,7 +23,7 @@
   import Icon from "../Icon.svelte";
   import { openViewer } from "../../lib/stores/ui.svelte.js";
 
-  let { chip, removable = false, number = null, onremove = null } = $props();
+  let { chip, removable = false, number = null, onremove = null, attachment = null } = $props();
 
   const ICONS = { picture: "image", file: "file", text: "text" };
   // A press that moves farther than this before the release is a drag.
@@ -40,13 +40,13 @@
   function open(event) {
     if (!viewable || deleting || event.button !== 0) return;
     if (event.detail !== 0 && (!press || Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRAG_SLOP)) return;
-    openViewer({ src: chip.src, name: chip.name, mime: chip.mime });
+    openViewer({ src: chip.src, name: chip.name, mime: chip.mime, ...(attachment ? { attachment } : {}) });
   }
 
   function key(event) {
     if (viewable && !deleting && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
-      openViewer({ src: chip.src, name: chip.name, mime: chip.mime });
+      openViewer({ src: chip.src, name: chip.name, mime: chip.mime, ...(attachment ? { attachment } : {}) });
     }
   }
 </script>

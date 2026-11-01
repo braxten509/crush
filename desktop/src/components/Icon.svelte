@@ -59,6 +59,8 @@
     restore: { w: 16, h: 16 },
     panel: { w: 16, h: 16 },
     "panel-on": { w: 16, h: 16 },
+    download: { w: 16, h: 16 },
+    pen: { w: 16, h: 16 },
   };
   const box = $derived(icons[name]);
   const scale = $derived(size ? size / Math.max(box.w, box.h) : 1);
@@ -179,6 +181,12 @@
     <path d="M13.5 8H3M7 4 3 8l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
   {:else if name === "arrow-down"}
     <path d="M8 2.5V13M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+  {:else if name === "download"}
+    <!-- An arrow down into an open box (owner, 2026-11-01). -->
+    <path d="M8 1.8v8M4.8 6.8 8 10l3.2-3.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M2.2 9.5v4.3h11.6V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+  {:else if name === "pen"}
+    <path d="M2.5 13.5l.7-3.2 7.6-7.6 2.5 2.5-7.6 7.6zM9.3 4.2l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
   {:else if name === "bullet"}
     <circle cx="8" cy="8" r="2" fill="currentColor" />
   {:else if name === "arrow-up-right"}

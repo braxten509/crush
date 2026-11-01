@@ -9,6 +9,7 @@
 mod alerts;
 mod appupdate;
 mod openchats;
+mod phone;
 mod watch;
 mod applog;
 mod batch;

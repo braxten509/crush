@@ -12,7 +12,7 @@ import { untrack } from "svelte";
 import { shownAgent } from "../models/store.svelte.js";
 import { openDialog } from "../dialogs.js";
 import { api, uuid } from "../engine/api.js";
-import { clipboard_read, clipboard_write, file_info, file_read, files_list } from "../engine/commands.js";
+import { clipboard_read, clipboard_write, file_info, file_read, files_list, phone_screenshot } from "../engine/commands.js";
 import { onEvent, onResync } from "../engine/events.js";
 import { bangAfterPaste, bangAfterTyping, bangFromValue, joinDrafts, PromptHistory } from "../composer/history.js";
 import { absolutePath, fileRows, insertPick, mentionQuery, mentionSpan, moveFocus, opensAt, pickFile, previewPick, rankRows, rankSlash, slashOpens, slashQuery } from "../composer/mentions.js";
@@ -21,6 +21,7 @@ import {
   attachPath,
   dropText,
   EMPTY_CLIPBOARD,
+  MAX_ATTACHMENT_BYTES,
   NO_PICTURES,
   normalize,
   NOT_A_PICTURE,
@@ -754,6 +755,47 @@ export async function pastePicture(file) {
   if (result.error) notify("error", result.error);
   else if (result.warn) notify("warn", result.warn);
   else draftFor(sid).attachments.push(result.attachment);
+}
+
+// The phone button (owner, 2026-11-01): the connected phone's screen (adb,
+// USB or wireless) as a picture attachment, phone_1.png, phone_2.png, ...
+// A screen over the 5 MB attachment limit goes as a JPEG instead.
+export async function attachPhoneScreen() {
+  if (!supportsImages(shownAgent())) {
+    notify("warn", NO_PICTURES);
+    return;
+  }
+  const sid = sessions.currentId;
+  let shot;
+  try {
+    shot = await phone_screenshot();
+  } catch (error) {
+    notify("error", errorText(error));
+    return;
+  }
+  let { mime, base64 } = shot;
+  if (base64Size(base64) > MAX_ATTACHMENT_BYTES) ({ mime, base64 } = await asJpeg(`data:${mime};base64,${base64}`));
+  const list = draftFor(sid).attachments;
+  let most = 0;
+  for (const a of list) most = Math.max(most, Number(/^phone_(\d+)\.\w+$/u.exec(a?.name ?? "")?.[1] ?? 0));
+  const name = `phone_${most + 1}.${mime === "image/jpeg" ? "jpg" : "png"}`;
+  list.push({ kind: "picture", name, mime, path: name, base64 });
+}
+
+function base64Size(text) {
+  return Math.floor((String(text).length * 3) / 4);
+}
+
+async function asJpeg(src) {
+  const picture = new Image();
+  picture.src = src;
+  await picture.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = picture.naturalWidth;
+  canvas.height = picture.naturalHeight;
+  canvas.getContext("2d").drawImage(picture, 0, 0);
+  const url = canvas.toDataURL("image/jpeg", 0.9);
+  return { mime: "image/jpeg", base64: url.slice(url.indexOf(",") + 1) };
 }
 
 // Files dropped on the window (TYPE-012's GUI version): the paste of their

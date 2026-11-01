@@ -16,7 +16,8 @@
   import QueueLine from "./QueueLine.svelte";
   import Popup from "./Popup.svelte";
   import Slot from "./Slot.svelte";
-  import { composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
+  import { attachPhoneScreen, composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
+  import { phone, watchPhone } from "../../lib/stores/phone.svelte.js";
   import { helperChats } from "../../lib/stores/helperchats.svelte.js";
   import { closeListed } from "../../lib/stores/openchats.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
@@ -85,6 +86,19 @@
     fullTop = column && rule ? rule.getBoundingClientRect().bottom - column.getBoundingClientRect().top : 0;
   });
 
+  $effect(() => watchPhone());
+
+  async function phoneShot() {
+    if (phone.busy) return;
+    phone.busy = true;
+    try {
+      await attachPhoneScreen();
+    } finally {
+      phone.busy = false;
+    }
+    focusField();
+  }
+
   function complete() {
     closeListed(sessionId).catch((error) => console.error("completing a chat failed", error));
   }
@@ -109,11 +123,18 @@
   {#if ui.slot}
     <Slot entry={ui.slot} />
   {:else}
-    {#if sessionId || hasChips()}
+    {#if sessionId || hasChips() || phone.connected}
       <!-- Complete (owner, 2026-10-21, pick A): closes the shown chat for
            every app, as the list's × does. It sits on the right of the
            attached files' row (owner, 2026-10-21). -->
       <div class="complete-row">
+        <!-- The phone button (owner, 2026-11-01): the connected phone's
+             screen as an attachment; only while a phone is connected. -->
+        {#if phone.connected}
+          <button class="phone" type="button" title="Add the phone's screen" aria-label="Add the phone's screen" disabled={phone.busy} data-phone-shot onclick={phoneShot}>
+            <Icon name="phone" size={20} />
+          </button>
+        {/if}
         {#if hasChips()}<div class="chips-side"><ChipRow /></div>{:else if sessionId}<QueueLine />{/if}
         {#if sessionId}
           <button class="complete" type="button" onclick={complete}>
@@ -206,6 +227,19 @@
   /* Square, as tall as the one-line field; the plane's drawing is balanced
      in its own box, so it sits in the exact middle (owner, 2026-10-20: the
      old nudge to the right read as off-centre). */
+  .phone {
+    flex: none;
+    display: flex;
+    align-items: center;
+    margin-right: auto;
+    color: var(--slate);
+  }
+  .phone:hover {
+    color: var(--ink);
+  }
+  .phone:disabled {
+    opacity: 0.5;
+  }
   .complete-row {
     display: flex;
     align-items: center;

@@ -121,6 +121,16 @@ export async function file_read(path, cwd, maxBytes) {
   return invoke("file_read", { path, cwd, maxBytes });
 }
 
+// The connected phone (adb): whether one is there, and its screen as
+// {mime, base64}; fails with "No phone connected" without one.
+export async function phone_connected() {
+  return invoke("phone_connected", {});
+}
+
+export async function phone_screenshot() {
+  return invoke("phone_screenshot", {});
+}
+
 export async function files_list(cwd, maxDepth, maxItems) {
   return invoke("files_list", { cwd, maxDepth, maxItems });
 }

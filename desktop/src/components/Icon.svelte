@@ -61,6 +61,7 @@
     "panel-on": { w: 16, h: 16 },
     download: { w: 16, h: 16 },
     pen: { w: 16, h: 16 },
+    phone: { w: 16, h: 16 },
   };
   const box = $derived(icons[name]);
   const scale = $derived(size ? size / Math.max(box.w, box.h) : 1);
@@ -187,6 +188,9 @@
     <path d="M2.2 9.5v4.3h11.6V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
   {:else if name === "pen"}
     <path d="M2.5 13.5l.7-3.2 7.6-7.6 2.5 2.5-7.6 7.6zM9.3 4.2l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+  {:else if name === "phone"}
+    <rect x="4" y="1.2" width="8" height="13.6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5" />
+    <path d="M7 12.4h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
   {:else if name === "bullet"}
     <circle cx="8" cy="8" r="2" fill="currentColor" />
   {:else if name === "arrow-up-right"}

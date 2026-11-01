@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The composer store (lib/stores/composer.svelte.js) with the real event loop
 // and stores, and fake Tauri calls: engine answers come from `routes`
 // ("METHOD path" → value or fn); an unknown GET fails as not_found.
-const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], ring: null, notices: [], abort: true, files: new Map() }));
+const h = vi.hoisted(() => ({ routes: new Map(), calls: [], entries: [], ring: null, notices: [], abort: true, files: new Map(), phone: null }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
   getCurrentWebviewWindow: () => ({
@@ -30,6 +30,10 @@ vi.mock("../engine/commands.js", async (importOriginal) => ({
   },
   engine_set_current_session: async () => null,
   events_take: async () => h.entries.splice(0),
+  phone_screenshot: async () => {
+    if (!h.phone) throw { code: "no_phone", message: "No phone connected" };
+    return h.phone;
+  },
   lastClipboardWrite: () => null,
   files_list: async () => [...h.files.keys()].map((path) => ({ path, is_dir: false })),
   file_info: async (path) => {
@@ -79,6 +83,7 @@ beforeEach(async () => {
   h.notices.length = 0;
   h.abort = true;
   h.files.clear();
+  h.phone = null;
   vi.stubGlobal("requestAnimationFrame", (fn) => setTimeout(() => fn(0), 0));
   vi.doMock("../stores/ui.svelte.js", async (importOriginal) => {
     const real = await importOriginal();
@@ -200,6 +205,22 @@ describe("sending", () => {
     const id = sends()[0].body.submission_id;
     expect(M.messages.pending[id].held).toBe(true);
     expect(M.heldFor("s1")).toHaveLength(1);
+  });
+
+  it("the phone button adds the phone's screen as a picture attachment", async () => {
+    W.ws.providers = [{ id: "p", models: [{ id: "m", name: "M", supports_attachments: true }] }];
+    show("s1", { model: { provider: "p", model: "m" } });
+    h.phone = { mime: "image/png", base64: "iVBORw0KGgo=" };
+    await C.attachPhoneScreen();
+    await C.attachPhoneScreen();
+    expect(C.draftOf().attachments.map((a) => [a.name, a.mime, a.base64])).toEqual([
+      ["phone_1.png", "image/png", "iVBORw0KGgo="],
+      ["phone_2.png", "image/png", "iVBORw0KGgo="],
+    ]);
+    h.phone = null;
+    await C.attachPhoneScreen();
+    expect(C.draftOf().attachments).toHaveLength(2);
+    expect(h.notices).toContainEqual({ kind: "error", text: "No phone connected" });
   });
 
   it("a picture marked with the red pen replaces the attachment it came from", async () => {

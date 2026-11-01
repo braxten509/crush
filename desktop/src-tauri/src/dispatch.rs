@@ -118,6 +118,7 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
         "open_link" => res(commands::open_link(a, arg(args, "url")?, arg(args, "cwd")?)),
         "phone_connected" => ok(crate::phone::connected()),
         "phone_screenshot" => res(crate::phone::screenshot()),
+        "phone_find" => res(crate::phone::find()),
         "file_info" => res(commands::file_info(arg(args, "path")?, arg(args, "cwd")?)),
         "file_read" => res(commands::file_read(arg(args, "path")?, arg(args, "cwd")?, arg(args, "maxBytes")?)),
         "files_list" => res(commands::files_list(w, arg(args, "cwd")?, arg(args, "maxDepth")?, arg(args, "maxItems")?)),

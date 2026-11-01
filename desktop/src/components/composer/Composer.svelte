@@ -17,7 +17,7 @@
   import Popup from "./Popup.svelte";
   import Slot from "./Slot.svelte";
   import { attachPhoneScreen, composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
-  import { phone, watchPhone } from "../../lib/stores/phone.svelte.js";
+  import { findPhone, phone, watchPhone } from "../../lib/stores/phone.svelte.js";
   import { helperChats } from "../../lib/stores/helperchats.svelte.js";
   import { closeListed } from "../../lib/stores/openchats.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
@@ -129,10 +129,16 @@
            attached files' row (owner, 2026-10-21). -->
       <div class="complete-row">
         <!-- The phone button (owner, 2026-11-01): the connected phone's
-             screen as an attachment; only while a phone is connected. -->
+             screen as an attachment; with no phone, Find phone looks for it
+             on Wi-Fi and connects. -->
         {#if phone.connected}
           <button class="phone" type="button" title="Add the phone's screen" aria-label="Add the phone's screen" disabled={phone.busy} data-phone-shot onclick={phoneShot}>
             <Icon name="phone" size={20} />
+          </button>
+        {:else}
+          <button class="phone find" type="button" disabled={phone.finding} data-phone-find onclick={findPhone}>
+            <Icon name="phone" size={20} />
+            <span>{phone.finding ? "Finding phone…" : "Find phone"}</span>
           </button>
         {/if}
         {#if hasChips()}<div class="chips-side"><ChipRow /></div>{:else if sessionId}<QueueLine />{/if}
@@ -233,6 +239,10 @@
     align-items: center;
     margin-right: auto;
     color: var(--slate);
+  }
+  .phone.find {
+    gap: calc(6 * var(--px));
+    font: var(--t-small);
   }
   .phone:hover {
     color: var(--ink);

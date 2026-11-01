@@ -14,6 +14,7 @@ use std::time::Duration;
 const NO_PHONE: &str = "No phone connected";
 const LIST_LIMIT: Duration = Duration::from_secs(4);
 const SHOT_LIMIT: Duration = Duration::from_secs(15);
+const FIND_LIMIT: Duration = Duration::from_secs(10);
 
 #[derive(Serialize)]
 pub struct PhoneShot {
@@ -62,6 +63,26 @@ fn first_phone(adb: &PathBuf) -> Option<String> {
 
 pub fn connected() -> bool {
     adb().and_then(|adb| first_phone(&adb)).is_some()
+}
+
+/// The Find phone button: the phones adb sees on Wi-Fi (`adb mdns services`,
+/// Wireless debugging's `_adb-tls-connect` entries), each `adb connect`ed.
+/// True when a phone is connected afterwards.
+pub fn find() -> AppResult<bool> {
+    let adb = adb().ok_or_else(|| AppError::new("no_adb", "adb is not installed"))?;
+    if first_phone(&adb).is_some() {
+        return Ok(true);
+    }
+    if let Ok(Ran::Exited { stdout, .. }) = run_limited(Command::new(&adb).args(["mdns", "services"]), FIND_LIMIT, false) {
+        for line in String::from_utf8_lossy(&stdout).lines() {
+            let mut parts = line.split_whitespace();
+            let (Some(_), Some(kind), Some(address)) = (parts.next(), parts.next(), parts.next()) else { continue };
+            if kind.starts_with("_adb-tls-connect") {
+                let _ = run_limited(Command::new(&adb).args(["connect", address]), FIND_LIMIT, false);
+            }
+        }
+    }
+    Ok(first_phone(&adb).is_some())
 }
 
 pub fn screenshot() -> AppResult<PhoneShot> {

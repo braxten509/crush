@@ -127,6 +127,12 @@ export async function phone_connected() {
   return invoke("phone_connected", {});
 }
 
+// Looks for a phone on Wi-Fi (Wireless debugging) and connects it; true when
+// one is connected afterwards.
+export async function phone_find() {
+  return invoke("phone_find", {});
+}
+
 export async function phone_screenshot() {
   return invoke("phone_screenshot", {});
 }

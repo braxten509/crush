@@ -96,6 +96,13 @@ app.commandLine.appendSwitch("ozone-platform-hint", "auto");
 // and Chromium otherwise draws the parts it has not painted yet as empty
 // paper (tests/driver/scroll_drag.py records them).
 app.commandLine.appendSwitch("run-all-compositor-stages-before-draw");
+// The window stays bright after the screen dims (owner, 2026-11-01: "when my
+// screen darkens the entire crush GUI darkens until I move it"). KWin dims by
+// announcing a dimmer white over Wayland's color protocol, many times a
+// second; Chromium followed it and kept the dark one until the window moved
+// (tests/driver/screen_dim.py). Without the protocol KWin draws the window
+// as plain sRGB, as it does for apps that never use it.
+app.commandLine.appendSwitch("disable-features", "WaylandWpColorManagerV1");
 // The window's class (X11) and app id (Wayland) is "crush-desktop", the name
 // the menu entry and the test drivers know it by.
 app.setName("crush-desktop");

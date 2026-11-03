@@ -128,7 +128,9 @@
     const below = top < MARGIN * unit;
     if (below) top = Math.min(a.bottom + GAP * unit, window.innerHeight - MARGIN * unit - height);
     const left = Math.max(MARGIN * unit, Math.min(a.right - width, window.innerWidth - MARGIN * unit - width));
-    place = { left, top: Math.max(MARGIN * unit, top), from: below ? "top" : "bottom" };
+    // On whole pixels, as the rows' heights (styles below): rows that start
+    // between pixels left stray hover lines between them while scrolling.
+    place = { left: Math.round(left), top: Math.round(Math.max(MARGIN * unit, top)), from: below ? "top" : "bottom" };
   }
 
   $effect(() => {
@@ -456,7 +458,7 @@
     color: var(--slate);
   }
   .groups {
-    padding: calc(14 * var(--px)) calc(8 * var(--px));
+    padding: round(calc(14 * var(--px)), 1px) round(calc(8 * var(--px)), 1px);
     border-right: 1px solid var(--rule-control);
     overflow-y: auto;
     max-height: calc(480 * var(--px));
@@ -476,7 +478,9 @@
     align-items: center;
     gap: calc(8 * var(--px));
     width: 100%;
-    height: calc(38 * var(--px));
+    /* Whole pixels: at zooms where 38 dots is a fraction of a pixel, scrolling
+       the list left thin stray lines between the rows (owner, 2026-11-03). */
+    height: round(calc(38 * var(--px)), 1px);
     padding: 0 calc(10 * var(--px));
     text-align: left;
   }

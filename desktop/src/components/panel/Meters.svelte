@@ -24,10 +24,21 @@
   const meters = $derived(model.meters);
   const perRow = $derived(metersPerRow(meters.length));
   const rows = $derived(Math.ceil(meters.length / perRow));
-  // Four meters go two over two, split by a horizontal rule between the
-  // rows rather than a vertical one between the columns (owner,
-  // 2026-10-24).
-  const ruled = $derived(perRow === 2 && rows > 1);
+  // More than one row: a horizontal rule between the rows, and each later
+  // row gets the same gap above its words as the first row has under the
+  // panel's top (owner, 2026-11-03). Four meters go two over two with only
+  // that rule (owner, 2026-10-24); five and six go three over two or three,
+  // keeping the lines between the columns too (owner, 2026-11-03).
+  const ruled = $derived(rows > 1);
+  const columnLines = $derived(!(perRow === 2 && rows > 1));
+  const HEAD = 21; // .usage-wrap's margin-top
+  const rowTemplate = $derived.by(() => {
+    if (!ruled) return null;
+    const height = resets ? 134 : 110;
+    const parts = [`calc(${height} * var(--px))`];
+    for (let r = 1; r < rows; r++) parts.push("calc(1 * var(--px))", `calc(${height + HEAD} * var(--px))`);
+    return parts.join(" ");
+  });
   const columns = $derived(perRow === 3 ? "116fr 32fr 115fr 31fr 114fr" : Array.from({ length: perRow }, () => "115fr").join(" 31fr "));
   const resets = $derived(meters.some((m) => m.resets));
 
@@ -73,16 +84,15 @@
 </script>
 
 <div class="usage-wrap">
-  <section class="usage" class:with-resets={resets} class:ruled aria-label="Usage" style:grid-template-columns={columns} bind:this={section}>
+  <section class="usage" class:with-resets={resets} class:ruled aria-label="Usage" style:grid-template-columns={columns} style:grid-template-rows={rowTemplate} bind:this={section}>
     {#each meters as meter, i (meter.id)}
       {@const col = i % perRow}
       {@const row = Math.floor(i / perRow) + 1}
-      {#if ruled}
-        {#if col === 0 && row > 1}<span class="row-rule" style:grid-row={row * 2 - 2} style:grid-column="1 / -1" aria-hidden="true"></span>{/if}
-      {:else if col > 0}
-        <span class="separator" class:second={col === 2} style:grid-row={row} style:grid-column={2 * col} aria-hidden="true"></span>
+      {#if ruled && col === 0 && row > 1}<span class="row-rule" style:grid-row={row * 2 - 2} style:grid-column="1 / -1" aria-hidden="true"></span>{/if}
+      {#if columnLines && col > 0}
+        <span class="separator" class:second={col === 2} class:later={row > 1} style:grid-row={ruled ? row * 2 - 1 : row} style:grid-column={2 * col} aria-hidden="true"></span>
       {/if}
-      <div class="cell" data-meter={meter.id} style:grid-row={ruled ? row * 2 - 1 : row} style:grid-column={2 * col + 1}>
+      <div class="cell" class:later={row > 1} data-meter={meter.id} style:grid-row={ruled ? row * 2 - 1 : row} style:grid-column={2 * col + 1}>
         <h3 class="label">{meter.label}</h3>
         <p class="value {meter.level}" class:pending={meter.text === "checking…"}>
           <span>{meter.text}</span>
@@ -113,13 +123,8 @@
   .usage.with-resets {
     grid-auto-rows: calc(134 * var(--px));
   }
-  /* A rule row of its own between the two content rows. */
-  .usage.ruled {
-    grid-auto-rows: calc(110 * var(--px)) calc(1 * var(--px));
-  }
-  .usage.ruled.with-resets {
-    grid-auto-rows: calc(134 * var(--px)) calc(1 * var(--px));
-  }
+  /* Several rows: a rule row of its own between the content rows (the rows'
+     heights come from rowTemplate). */
   .usage:focus-visible {
     outline-offset: calc(4 * var(--px));
   }
@@ -127,6 +132,14 @@
     position: relative;
     min-width: 0;
     padding-top: calc(7 * var(--px));
+  }
+  /* A row under a rule starts as far below it as the first row starts below
+     the panel's top (HEAD, 21 dots), its column lines too. */
+  .cell.later {
+    padding-top: calc((21 + 7) * var(--px));
+  }
+  .separator.later {
+    margin-top: calc(21 * var(--px));
   }
   .label {
     font: var(--t-label);

@@ -137,7 +137,8 @@ describe("downloaded local models", () => {
     };
     mount();
     await vi.waitFor(() => expect(document.querySelector(".local-action")?.textContent).toBe("Load"));
-    expect(document.querySelector(".local-row").textContent).toContain("Example.gguf · 11.2 GiB");
+    expect(document.querySelector(".local-row .name").textContent).toBe("Example.gguf");
+    expect(document.querySelector(".local-row .local-size").textContent).toBe("11.2 GiB");
     document.querySelector(".local-action").click();
     await vi.waitFor(() => expect(document.querySelector(".local-status")?.textContent).toBe("Loading model…"));
     expect(state.posts.some((p) => p.path === "last-pick")).toBe(false);

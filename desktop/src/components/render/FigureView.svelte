@@ -50,27 +50,81 @@
   let body = $state(null);
   let drawState = $state("pending");
   let press = null;
-  let mathSizes = null; // the ResizeObserver that keeps drawn math fitted
+  let fitSizes = null; // the ResizeObserver that keeps the drawn figure fitted
 
-  // Long math shrinks to the width it is given instead of scrolling sideways
-  // (owner, 2026-11-03: shrink to fit, one line): its font size goes down by
-  // the share it is too wide (KaTeX is sized in em), again whenever the width
-  // changes. A hidden figure (no width) keeps its size until it shows.
-  function fitMath(holder) {
+  // Rich figures never scroll sideways (owner, 2026-11-03). Math shrinks to
+  // the width without end (one line); a table shrinks down to TABLE_MIN, then
+  // its cells wrap; a diagram shrinks down to DIAGRAM_MIN of Mermaid's own
+  // size, then a left-right flowchart is drawn top-down instead (other kinds
+  // keep shrinking). Fitted again whenever the width changes; a hidden figure
+  // (no width) keeps its size until it shows.
+  const TABLE_MIN = 0.8;
+  const DIAGRAM_MIN = 0.6;
+  const SIDEWAYS = /^(\s*(?:graph|flowchart))\s+(?:LR|RL)\b/m;
+
+  function keepFitted(holder, fit) {
     let lastWidth = -1;
-    const fit = () => {
+    const run = () => {
       const width = holder.clientWidth;
       if (!width || width === lastWidth) return;
       lastWidth = width;
+      fit(width);
+    };
+    run();
+    if (typeof ResizeObserver === "function") {
+      fitSizes = new ResizeObserver(run);
+      fitSizes.observe(holder);
+    }
+  }
+
+  // KaTeX is sized in em: the font size goes down by the share it is too wide.
+  function fitMath(holder) {
+    keepFitted(holder, (width) => {
       holder.style.setProperty("--math-fit", "1");
       const natural = holder.scrollWidth;
       if (natural > width) holder.style.setProperty("--math-fit", String(Math.floor((width / natural) * 1000) / 1000));
-    };
-    fit();
-    if (typeof ResizeObserver === "function") {
-      mathSizes = new ResizeObserver(fit);
-      mathSizes.observe(holder);
-    }
+    });
+  }
+
+  // The table's sizes are fixed tokens, so the whole table is zoomed.
+  function fitTable(holder) {
+    const table = holder.querySelector("table");
+    if (!table) return;
+    keepFitted(holder, (width) => {
+      holder.classList.remove("table-wrap");
+      table.style.zoom = "1";
+      const natural = holder.scrollWidth;
+      if (natural <= width) return;
+      const zoom = Math.floor((width / natural) * 1000) / 1000;
+      table.style.zoom = String(Math.max(zoom, TABLE_MIN));
+      if (zoom < TABLE_MIN) holder.classList.add("table-wrap");
+    });
+  }
+
+  function diagramWidth(target) {
+    const svg = target.querySelector("svg");
+    return svg?.viewBox?.baseVal?.width || 0;
+  }
+
+  // A left-right flowchart too wide for DIAGRAM_MIN is drawn top-down, and
+  // back as written once there is room again.
+  function fitFlowchart(target, source, current) {
+    if (!SIDEWAYS.test(source)) return;
+    let shown = "written";
+    let writtenWidth = diagramWidth(target);
+    let busy = false;
+    keepFitted(target, async (width) => {
+      if (busy || !writtenWidth) return;
+      const want = width / writtenWidth < DIAGRAM_MIN ? "down" : "written";
+      if (want === shown) return;
+      busy = true;
+      const fragment = await renderDiagram(want === "down" ? source.replace(SIDEWAYS, "$1 TD") : source);
+      busy = false;
+      if (!current() || !fragment) return;
+      target.replaceChildren(fragment);
+      fitDiagram(target);
+      shown = want;
+    });
   }
 
   function sourceBlock(doc, source) {
@@ -102,13 +156,14 @@
   }
 
   function draw(target, current) {
-    mathSizes?.disconnect();
-    mathSizes = null;
+    fitSizes?.disconnect();
+    fitSizes = null;
     const doc = target.ownerDocument;
     const { kind, source, title } = figure;
     if (kind === "table") {
       const table = drawTable(source, { doc });
       target.replaceChildren(table ?? sourceBlock(doc, source));
+      if (table) fitTable(table);
       drawState = table ? "drawn" : "fallback";
       return;
     }
@@ -127,6 +182,7 @@
         if (fragment) {
           target.replaceChildren(fragment);
           fitDiagram(target);
+          fitFlowchart(target, source, current);
           drawState = "drawn";
         } else {
           target.replaceChildren(sourceBlock(doc, source), line(doc, DIAGRAM_FAILED));
@@ -199,8 +255,8 @@
     untrack(() => draw(target, () => live));
     return () => {
       live = false;
-      mathSizes?.disconnect();
-      mathSizes = null;
+      fitSizes?.disconnect();
+      fitSizes = null;
     };
   });
 
@@ -340,9 +396,14 @@
     cursor: zoom-in;
   }
 
-  /* The picture's table (SidePanel.svelte); a wide one scrolls inside the figure. */
+  /* The picture's table (SidePanel.svelte); fitTable shrinks a wide one, then
+     wraps its cells (a word too long for any line still scrolls). */
   .figure-body :global(.figure-table) {
     overflow-x: auto;
+  }
+  .figure-body :global(.figure-table.table-wrap .md-table :is(th, td)) {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .figure-body :global(.md-table) {
     width: 100%;

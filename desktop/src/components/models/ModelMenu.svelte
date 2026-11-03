@@ -65,6 +65,9 @@
   let localAction = $state(false);
   let localError = $state("");
   let pendingLocal = null;
+  let localRevision = 0;
+
+  const localLabel = (item) => /^(.*) · ([\d.]+ GiB)$/.exec(item.model.name || "");
 
   const hasLocal = $derived(rows.some((item) => item.provider.id === "local-gguf"));
   $effect(() => {
@@ -72,11 +75,12 @@
     let alive = true;
     let polling = false;
     async function read() {
-      if (polling) return;
+      if (polling || localAction) return;
       polling = true;
+      const revision = localRevision;
       try {
         const status = await api.localModels();
-        if (!alive || !status) return;
+        if (!alive || !status || revision !== localRevision) return;
         local = status;
         if (pendingLocal && status.model_id === pendingLocal.model.id) {
           if (status.state === "ready") {
@@ -97,6 +101,7 @@
   async function changeLocal(item) {
     if (localAction) return;
     localAction = true;
+    localRevision += 1;
     localError = "";
     try {
       if (local.model_id === item.model.id && ["ready", "loading"].includes(local.state)) {
@@ -354,7 +359,10 @@
     };
     window.addEventListener("pointerdown", down, true);
     window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    if (box) observer?.observe(box);
     return () => {
+      observer?.disconnect();
       for (const off of unbind) off();
       window.removeEventListener("pointerdown", down, true);
       window.removeEventListener("resize", measure);
@@ -420,8 +428,8 @@
           onclick={() => pick(item)}
           oncontextmenu={(event) => offerRemove(event, item)}
         >
-          <span class="name">{item.model.name || item.model.id}</span>
-          {#if blocked}<span class="info">{shortUnavailable(blocked)}</span>{:else if checking}<span class="info">{checking}</span>{:else if searching}<span class="info">{item.group}</span>{/if}
+          <span class="name" title={isLocal ? item.model.name : undefined}>{isLocal ? localLabel(item)?.[1] || item.model.name || item.model.id : item.model.name || item.model.id}</span>
+          {#if isLocal}<span class="info local-size">{localLabel(item)?.[2] || ""}</span>{:else if blocked}<span class="info">{shortUnavailable(blocked)}</span>{:else if checking}<span class="info">{checking}</span>{:else if searching}<span class="info">{item.group}</span>{/if}
           {#if isCurrent(item, current)}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
         </button>
         {#if isLocal}
@@ -446,8 +454,8 @@
       {/if}
     </div>
     <Scrollbar target={rowsBox} mode={barMode} />
-    {#if hasLocal && (localError || local.error || ["loading", "ready"].includes(local.state))}
-      <p class="local-status" class:failed={Boolean(localError || local.error)} role="status">{localError || local.error || (local.state === "loading" ? "Loading model…" : "Model loaded")}</p>
+    {#if hasLocal}
+      <p class="local-status" class:failed={Boolean(localError || local.error)} role="status">{localError || local.error || (local.state === "loading" ? "Loading model…" : local.state === "ready" ? "Model loaded" : "")}</p>
     {/if}
     {#if routeTo}
       <div class="route" data-column="route">
@@ -503,10 +511,14 @@
 <style>
   .local-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) calc(64 * var(--px));
+    grid-template-columns: minmax(0, 1fr) calc(80 * var(--px));
     align-items: center;
   }
   .local-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 calc(6 * var(--px));
     height: calc(30 * var(--px));
     border: 1px solid var(--rule-control);
     background: transparent;
@@ -517,7 +529,8 @@
   .local-action:hover:not(:disabled) { background: var(--paper); }
   .local-action:focus-visible { outline: 1px solid var(--vermilion); outline-offset: -2px; }
   .local-action:disabled { opacity: 0.45; cursor: default; }
-  .local-status { margin: calc(8 * var(--px)) 0; color: var(--slate); font: var(--t-item); overflow-wrap: anywhere; }
+  .local-size { flex: none; font-variant-numeric: tabular-nums; }
+  .local-status { min-height: 1.5em; margin: calc(8 * var(--px)) calc(10 * var(--px)) 0; color: var(--slate); font: var(--t-item); overflow-wrap: anywhere; }
   .local-status.failed { color: var(--vermilion); }
   /* The paper and hairlines of the app's other popups (Popup.svelte), on the
      menu layer the chat's context menu uses; no shadow, as every other menu. */

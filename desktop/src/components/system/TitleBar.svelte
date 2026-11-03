@@ -14,6 +14,10 @@
   // (app-region), the buttons are not. Close runs the page's close steps, as
   // the system's button does (electron/main.cjs). Where the system draws the
   // bar (Mac, Windows, outside the app) this draws nothing.
+  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "../../lib/engine/api.js";
+  import { conversationMarkdown } from "../../lib/export-conversation.js";
+  import { notify } from "../../lib/stores/ui.svelte.js";
   import appIcon from "../../assets/heart.svg?url";
   import { getCurrentWindow } from "../../lib/bridge/window.js";
   import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
@@ -39,6 +43,18 @@
     const id = sessions.currentId ? parentOf(sessions.currentId) : null;
     return id && sessions.byId[id] ? { id, title: sessions.byId[id].title || "New Session" } : null;
   });
+
+  async function exportChat() {
+    const sid = sessions.currentId;
+    if (!sid) return;
+    const title = sessions.byId[sid]?.title || "Conversation";
+    try {
+      const messages = await api.messages(sid);
+      const name = title.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").slice(0, 150) || "Conversation";
+      const saved = await invoke("save_conversation", { name: `${name}.md`, text: conversationMarkdown(title, messages) });
+      if (saved) notify("info", "Conversation exported.");
+    } catch (error) { notify("error", error?.message ?? String(error)); }
+  }
 
   async function openParent() {
     const id = parent?.id;
@@ -75,6 +91,9 @@
     {/if}
     </span>
     <span class="buttons">
+      {#if sessions.currentId}
+        <button type="button" title="Export conversation" aria-label="Export conversation" onclick={exportChat}><Icon name="download" /></button>
+      {/if}
       <button
         type="button"
         tabindex="-1"

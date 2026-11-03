@@ -503,6 +503,17 @@ ipcMain.on("crush-label", (event) => {
 ipcMain.handle("crush-invoke", (event, cmd, callArgs) => {
   const label = labels.get(event.sender.id);
   if (!label) return { err: "the window is gone" };
+  if (cmd === "save_conversation") {
+    return (async () => {
+      try {
+        const parent = BrowserWindow.fromWebContents(event.sender);
+        const picked = await dialog.showSaveDialog(parent, { title: "Export conversation", defaultPath: callArgs.name, filters: [{ name: "Markdown", extensions: ["md"] }] });
+        if (picked.canceled || !picked.filePath) return { ok: false };
+        await fs.promises.writeFile(picked.filePath, callArgs.text, "utf8");
+        return { ok: true };
+      } catch (error) { return { err: error.message }; }
+    })();
+  }
   if (!helper) return { err: "the helper is not running" };
   const id = nextCall++;
   return new Promise((resolve) => {

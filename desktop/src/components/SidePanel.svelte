@@ -118,6 +118,11 @@
     margin: calc(22 * var(--px)) calc(-19 * var(--px)) 0 calc(-26 * var(--px));
   }
 
+  /* The last meter row already contains its own bottom spacing. */
+  .panel:has(:global(.usage.ruled)) :global(.rule.under-usage) {
+    margin-top: 0;
+  }
+
   /* The body runs to the panel's edges, so its scrollbar sits in the right
      gutter, outside the rows, and the reveal mark has room in the left one. */
   .body {

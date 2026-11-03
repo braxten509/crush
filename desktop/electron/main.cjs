@@ -194,9 +194,11 @@ function fromHelper(message) {
   }
 }
 
-// A toast; a click on it brings up the window for its chat's folder, or
-// opens one, on that chat (owner, 2026-10-28), through the helper's
-// window_open as the page's own "open this chat" does. A shown toast is held
+// A toast; a click on it brings up a window already open on its chat,
+// switching that window's folder in place (owner, 2026-11-03), through the
+// helper's window_show_chat; a window opens only when none is. (window_open
+// went by each window's first folder, so a chat of another folder opened a
+// second window.) A shown toast is held
 // until it closes: one Electron lets go of never reports its click.
 const toasts = new Set();
 function showNotification(message) {
@@ -217,7 +219,7 @@ function openChatFromToast(projectDir, sessionId) {
   calls.set(id, (result) => {
     if (result?.err) console.error(`crush-desktop: a toast's chat did not open: ${result.err}`);
   });
-  send({ t: "call", id, label, cmd: "window_open", args: { projectDir, sessionId: sessionId || null, newChat: false, launchId: null } });
+  send({ t: "call", id, label, cmd: "window_show_chat", args: { projectDir, sessionId: sessionId || null } });
 }
 
 // What the helper asks for and waits on.

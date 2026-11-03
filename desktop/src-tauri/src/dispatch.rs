@@ -129,6 +129,7 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
             arg(args, "newChat")?,
             arg(args, "launchId")?,
         )),
+        "window_show_chat" => res(commands::window_show_chat(a, arg(args, "projectDir")?, arg(args, "sessionId")?)),
         "pty_spawn" => {
             let on_data = channel(app, w.label(), args, "onData")?;
             res(commands::pty_spawn(a, w, arg(args, "cwd")?, arg(args, "argv")?, arg(args, "cols")?, arg(args, "rows")?, on_data))

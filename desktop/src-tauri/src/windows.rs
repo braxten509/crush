@@ -105,6 +105,10 @@ pub struct WindowRequest {
     pub session_id: Option<String>,
     pub new_chat: bool,
     pub launch_id: Option<String>,
+    /// The chat's folder, when the window is to switch to it in place and
+    /// show the chat there (`show_chat`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_dir: Option<String>,
 }
 
 /// A folder as windows compare it: links resolved, else as given.
@@ -190,6 +194,17 @@ impl Windows {
             .by_label
             .iter()
             .filter(|(label, entry)| entry.project == wanted && !inner.closing.contains(*label))
+            .min_by_key(|(_, entry)| entry.launch.opened_at)
+            .map(|(label, _)| label.clone())
+    }
+
+    /// The window open longest, none closing.
+    pub fn earliest(&self) -> Option<String> {
+        let inner = self.inner();
+        inner
+            .by_label
+            .iter()
+            .filter(|(label, _)| !inner.closing.contains(*label))
             .min_by_key(|(_, entry)| entry.launch.opened_at)
             .map(|(label, _)| label.clone())
     }
@@ -305,7 +320,7 @@ pub fn open(
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-            let request = WindowRequest { session_id, new_chat, launch_id };
+            let request = WindowRequest { session_id, new_chat, launch_id, project_dir: None };
             if let Err(e) = app.emit_to(label.as_str(), "window-request", request) {
                 eprintln!("crush-desktop: could not hand the request to window {label}: {e}");
             }
@@ -324,6 +339,33 @@ pub fn open(
             }
         }
     }
+}
+
+/// `window_show_chat`: a toast's click (owner, 2026-11-03). A window shows
+/// any folder's chats, so the chat opens in a window already open, which
+/// switches to its folder in place as a left-list click does: the window
+/// opened on that folder, else the earliest one. Only with no window open
+/// does a window open for it (`open`). Before, the click went through
+/// `open`, which compares each window's first folder: a chat of any other
+/// folder opened a second window.
+pub fn show_chat(app: &AppHandle, project_dir: &str, session_id: Option<String>) -> AppResult<Opened> {
+    if project_dir.is_empty() || !Path::new(project_dir).is_absolute() {
+        return Err(AppError::new("bad_path", format!("Crush Desktop shows a chat only of an absolute folder, not \"{project_dir}\".")));
+    }
+    let windows = app.state::<Windows>();
+    let Some(label) = windows.lead_window(Path::new(project_dir)).or_else(|| windows.earliest()) else {
+        return open(app, project_dir, session_id, false, None);
+    };
+    if let Some(window) = app.get_webview_window(&label) {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    let request = WindowRequest { session_id, new_chat: false, launch_id: None, project_dir: Some(project_dir.to_string()) };
+    if let Err(e) = app.emit_to(label.as_str(), "window-request", request) {
+        eprintln!("crush-desktop: could not hand the chat to window {label}: {e}");
+    }
+    Ok(Opened { label, created: false })
 }
 
 /// Ends the window `label`: stop the engines of `stop` (the close question's
@@ -381,7 +423,7 @@ pub async fn switch(app: &AppHandle, label: &str, project_dir: &str) -> AppResul
             let _ = window.show();
             let _ = window.set_focus();
         }
-        let request = WindowRequest { session_id: None, new_chat: true, launch_id: None };
+        let request = WindowRequest { session_id: None, new_chat: true, launch_id: None, project_dir: None };
         if let Err(e) = app.emit_to(other.as_str(), "window-request", request) {
             eprintln!("crush-desktop: could not hand the request to window {other}: {e}");
         }

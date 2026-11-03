@@ -495,6 +495,11 @@ pub fn window_open(
     windows::open(&app, &project_dir, session_id, new_chat.unwrap_or(false), launch_id)
 }
 
+/// A toast's click: the chat shows in a window already open (windows::show_chat).
+pub fn window_show_chat(app: AppHandle, project_dir: String, session_id: Option<String>) -> AppResult<Opened> {
+    windows::show_chat(&app, &project_dir, session_id)
+}
+
 /// After the window's close steps (lib/closing.js); the last window ends the app.
 /// `stop`: the folders whose engines stop their work and exit first.
 pub async fn window_close(app: AppHandle, window: Window, stop: Option<Vec<String>>) -> AppResult<()> {

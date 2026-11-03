@@ -2,7 +2,8 @@
 // the sheets `sessions` and `projects`, the action `project.save` (Save
 // Project, CMD-038), and window-request's sessionId: window_open focused this
 // window to show one of its chats (the Sessions sheet of another folder's
-// window, DLG-088).
+// window, DLG-088), or a toast's click (window_show_chat) sends a chat of any
+// folder with its projectDir: this window switches there in place.
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import Projects from "../../components/sessions/Projects.svelte";
 import Sessions from "../../components/sessions/Sessions.svelte";
@@ -13,6 +14,7 @@ import { short } from "../leftlist/picker.js";
 import { leftList } from "../leftlist/store.svelte.js";
 import { isClosed, reopen } from "../stores/closed.svelte.js";
 import { conn } from "../stores/connection.svelte.js";
+import { openInFolder } from "../stores/openchats.svelte.js";
 import { openChat } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 
@@ -41,7 +43,9 @@ try {
       const id = event?.payload?.sessionId;
       if (!id) return;
       if (isClosed(id)) await reopen(id);
-      openChat(id);
+      const dir = event?.payload?.projectDir;
+      if (dir) openInFolder(dir, id);
+      else openChat(id);
     })
     .catch(() => {});
 } catch {

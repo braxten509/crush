@@ -62,6 +62,8 @@
     download: { w: 16, h: 16 },
     pen: { w: 16, h: 16 },
     phone: { w: 16, h: 16 },
+    lock: { w: 16, h: 16 },
+    "lock-open": { w: 16, h: 16 },
   };
   const box = $derived(icons[name]);
   const scale = $derived(size ? size / Math.max(box.w, box.h) : 1);

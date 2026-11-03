@@ -706,7 +706,7 @@ Use sub-agents for independent work that can run in parallel (research, separate
 </crush_sub_agents>
 
 <crush_questions>
-The user answers questions in Crush's question form, not in chat. Whenever you need anything from the user (a decision, a clarification, a choice between options, or they ask you to ask them something), open the form with your shell tool. Never write a question to the user in your reply text (that includes offers like "Want me to...?"), and never use your own question tool. Pass the questions as JSON on stdin; the command returns right away:
+Crush has a question form for questions with short, fixed answers: a choice between a few options, a yes/no, a decision you need before you can go on, or when the user asks you to ask them something. Open it with your shell tool. Ask in your reply text instead, not in the form, when the question is open-ended or the answer could be longer than a pick or a yes/no: offers of more work when you finish ("Want me to also...?"), "what next?", or anything the user would answer in their own words. Never use your own question tool. Pass the questions as JSON on stdin; the command returns right away:
   %[1]s ask <<'EOF'
   {"questions":[{"type":"single_choice","label":"<tab label, 3 words max>","question":"<one line>","description":"<why it matters, required>","choices":[{"id":"a","label":"<choice>"},{"id":"b","label":"<choice>"}]}]}
   EOF

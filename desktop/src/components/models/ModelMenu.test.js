@@ -113,6 +113,54 @@ function mount() {
 const modelRows = () => [...document.querySelectorAll('.model-menu [role="option"].model')];
 const levelButtons = () => [...document.querySelectorAll('.model-menu [data-column="effort"] .level')];
 
+describe("downloaded local models", () => {
+  function localModels() {
+    state.routes["GET config"] = {
+      providers: { "local-gguf": { name: "Local models", type: "openai-compat", has_api_key: true,
+        models: [{ id: "gguf-a", name: "Example.gguf · 11.2 GiB" }] } },
+    };
+    state.routes["GET providers"] = [];
+    state.routes["GET /v1/local-models"] = { state: "unloaded", model_id: "", models: [] };
+  }
+
+  it("loads from the provider list, selects only after ready, then unloads", async () => {
+    localModels();
+    state.routes["POST /v1/local-models/load"] = ({ model_id }) => {
+      const status = { state: "loading", model_id };
+      state.routes["GET /v1/local-models"] = status;
+      return status;
+    };
+    state.routes["POST /v1/local-models/unload"] = () => {
+      const status = { state: "unloaded", model_id: "" };
+      state.routes["GET /v1/local-models"] = status;
+      return status;
+    };
+    mount();
+    await vi.waitFor(() => expect(document.querySelector(".local-action")?.textContent).toBe("Load"));
+    expect(document.querySelector(".local-row").textContent).toContain("Example.gguf · 11.2 GiB");
+    document.querySelector(".local-action").click();
+    await vi.waitFor(() => expect(document.querySelector(".local-status")?.textContent).toBe("Loading model…"));
+    expect(state.posts.some((p) => p.path === "last-pick")).toBe(false);
+    state.routes["GET /v1/local-models"] = { state: "ready", model_id: "gguf-a" };
+    await vi.waitFor(() => expect(state.posts.some((p) => p.path === "last-pick" && p.body.model === "gguf-a")).toBe(true), { timeout: 2500 });
+    expect(document.querySelector(".local-action").textContent).toBe("Unload");
+    document.querySelector(".local-action").click();
+    await vi.waitFor(() => expect(document.querySelector(".local-action")?.textContent).toBe("Load"));
+    expect(state.posts.some((p) => p.path === "/v1/local-models/unload")).toBe(true);
+  });
+
+  it("shows a failed load and leaves the existing chat model alone", async () => {
+    localModels();
+    state.routes["POST /v1/local-models/load"] = () => { throw new Error("llama-server is not installed"); };
+    mount();
+    await vi.waitFor(() => expect(document.querySelector(".local-action")).not.toBeNull());
+    document.querySelector(".local-action").click();
+    await vi.waitFor(() => expect(document.querySelector(".local-status")?.textContent).toBe("llama-server is not installed"));
+    expect(state.posts.some((p) => p.path === "last-pick")).toBe(false);
+    expect(document.querySelector(".local-action").disabled).toBe(false);
+  });
+});
+
 // Waits for the data reads and the choice's own writes to land: a microtask
 // turn for each promise, then the effects that follow it.
 async function settle(turns = 40) {

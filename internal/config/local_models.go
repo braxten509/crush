@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
@@ -12,10 +13,11 @@ import (
 // Local weights are a built-in provider, not saved credentials or a dependency
 // on the RE sandbox. Explicit-provider sandboxes opt out with the other defaults.
 func (c *Config) addLocalModels() {
-	if testing.Testing() || c.Options.DisableDefaultProviders {
+	if testing.Testing() && os.Getenv("CRUSH_LOCAL_MODEL_DIRS") == "" {
 		return
 	}
-	if p, ok := c.Providers.Get(localmodel.ProviderID); ok && p.Disable {
+	p, configured := c.Providers.Get(localmodel.ProviderID)
+	if p.Disable || (c.Options.DisableDefaultProviders && !configured) {
 		return
 	}
 	models := localmodel.Discover(localmodel.Roots())

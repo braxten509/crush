@@ -50,6 +50,28 @@
   let body = $state(null);
   let drawState = $state("pending");
   let press = null;
+  let mathSizes = null; // the ResizeObserver that keeps drawn math fitted
+
+  // Long math shrinks to the width it is given instead of scrolling sideways
+  // (owner, 2026-11-03: shrink to fit, one line): its font size goes down by
+  // the share it is too wide (KaTeX is sized in em), again whenever the width
+  // changes. A hidden figure (no width) keeps its size until it shows.
+  function fitMath(holder) {
+    let lastWidth = -1;
+    const fit = () => {
+      const width = holder.clientWidth;
+      if (!width || width === lastWidth) return;
+      lastWidth = width;
+      holder.style.setProperty("--math-fit", "1");
+      const natural = holder.scrollWidth;
+      if (natural > width) holder.style.setProperty("--math-fit", String(Math.floor((width / natural) * 1000) / 1000));
+    };
+    fit();
+    if (typeof ResizeObserver === "function") {
+      mathSizes = new ResizeObserver(fit);
+      mathSizes.observe(holder);
+    }
+  }
 
   function sourceBlock(doc, source) {
     const pre = doc.createElement("pre");
@@ -80,6 +102,8 @@
   }
 
   function draw(target, current) {
+    mathSizes?.disconnect();
+    mathSizes = null;
     const doc = target.ownerDocument;
     const { kind, source, title } = figure;
     if (kind === "table") {
@@ -118,6 +142,7 @@
         holder.className = "figure-math";
         holder.append(fragment);
         target.replaceChildren(holder);
+        fitMath(holder);
         drawState = "drawn";
       }
     });
@@ -174,6 +199,8 @@
     untrack(() => draw(target, () => live));
     return () => {
       live = false;
+      mathSizes?.disconnect();
+      mathSizes = null;
     };
   });
 
@@ -288,12 +315,13 @@
     color: var(--slate);
   }
 
+  /* No sideways scrolling: fitMath shrinks a long formula to the width. */
   .figure-body :global(.figure-math) {
     text-align: center;
-    overflow-x: auto;
+    overflow-x: hidden;
   }
   .figure-body :global(.figure-math .katex) {
-    font-size: 1.1em;
+    font-size: calc(1.1em * var(--math-fit, 1));
   }
 
   .figure-body :global(svg) {

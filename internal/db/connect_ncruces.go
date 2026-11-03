@@ -58,3 +58,21 @@ func openDB(dbPath string) (*sql.DB, error) {
 func registerTreeReader(c *sqlite3.Conn) error {
 	return c.CreateFunction("Upgrade Crush: this database uses session trees", 0, sqlite3.DETERMINISTIC, func(ctx sqlite3.Context, args ...sqlite3.Value) { ctx.ResultInt(1) })
 }
+
+// OpenForeign opens another program's SQLite file (an agent CLI's store)
+// with secure_delete on, so removed rows leave no readable text, and no
+// migrations. Locked chats move rows out of these (owner, 2026-11-03).
+func OpenForeign(path string) (*sql.DB, error) {
+	dsn := (&url.URL{Scheme: "file", Path: path, RawQuery: "_txlock=immediate"}).String()
+	conn, err := driver.Open(dsn, func(c *sqlite3.Conn) error {
+		if err := c.Exec("PRAGMA busy_timeout = 10000;"); err != nil {
+			return err
+		}
+		return c.Exec("PRAGMA secure_delete = ON;")
+	})
+	if err != nil {
+		return nil, err
+	}
+	conn.SetMaxOpenConns(1)
+	return conn, nil
+}

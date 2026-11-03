@@ -14,14 +14,14 @@ import (
 // sessionID or unknown. Unknown blocks, so the check fails safe.
 func SessionBackgroundBlock(sessionID string) error {
 	if sessionShellsPending(sessionID) || len(SessionBackgroundProcesses(sessionID)) > 0 {
-		return fmt.Errorf("wait for background commands and their completion messages before switching branches")
+		return fmt.Errorf("wait for background commands and their completion messages to finish first")
 	}
 	owners := backgroundJobOwners()
 	jobs := shell.GetBackgroundShellManager()
 	for _, id := range jobs.List() {
 		if job, ok := jobs.Get(id); ok && !job.IsDone() {
 			if owner, known := owners[id]; !known || owner == sessionID {
-				return fmt.Errorf("wait for background commands before switching branches")
+				return fmt.Errorf("wait for background commands to finish first")
 			}
 		}
 	}

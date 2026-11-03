@@ -7,6 +7,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -22,9 +25,13 @@ import (
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/herdr"
 	"github.com/charmbracelet/crush/internal/history"
+	"github.com/charmbracelet/crush/internal/lockedchats"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/projects"
+	"github.com/charmbracelet/crush/internal/prompthistory"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
@@ -50,6 +57,10 @@ type App struct {
 	FileTracker filetracker.Service
 
 	AgentCoordinator agent.Coordinator
+
+	// LockedChats locks chats into the Plasma Vault and back (owner,
+	// 2026-11-03).
+	LockedChats *lockedchats.Service
 
 	LSPManager *lsp.Manager
 
@@ -123,6 +134,10 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 
 	app.setupEvents()
 	app.wireChatModels(ctx)
+	app.LockedChats = app.newLockedChats(conn, store)
+	if err := app.LockedChats.Start(ctx); err != nil {
+		return nil, fmt.Errorf("cannot secure unlocked chats before startup: %w", err)
+	}
 
 	// Initialize clipboard support. This is best-effort; if it fails
 	// (e.g., headless environment), clipboard operations will return nil.
@@ -327,7 +342,14 @@ func (app *App) Shutdown() {
 		app.AgentCoordinator.CancelAll()
 	}
 
-	// Shared shutdown context for all timeout-bounded cleanup.
+	// Lock again every chat this Crush unlocked (owner, 2026-11-03:
+	// quitting Crush relocks), before the database closes.
+	if app.LockedChats != nil {
+		// Stop background commands too: the idle gate refuses live jobs.
+		shell.GetBackgroundShellManager().KillAll(context.Background())
+		app.LockedChats.Stop(context.Background())
+	}
+	// Bound only the remaining cleanup, after turns and relocking finished.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -389,4 +411,72 @@ func (app *App) checkForUpdates(ctx context.Context) {
 		LatestVersion:  info.Latest,
 		IsDevelopment:  info.IsDevelopment(),
 	})
+}
+
+// newLockedChats makes the folder's locked-chats service. Prompts and
+// locking share the coordinator's run locks through its idle gate.
+func (app *App) newLockedChats(conn *sql.DB, store *config.ConfigStore) *lockedchats.Service {
+	cache, _ := os.UserCacheDir()
+	if cache != "" {
+		cache = filepath.Join(cache, "crush")
+	}
+	return &lockedchats.Service{
+		DB:       conn,
+		DataDir:  store.Config().Options.DataDirectory,
+		Folder:   store.WorkingDir(),
+		Sessions: app.Sessions,
+		Vault:    lockedchats.KDEVault{},
+		OtherAttachmentStores: func() ([]string, error) {
+			known, err := projects.List()
+			if err != nil {
+				return nil, err
+			}
+			var paths []string
+			for _, project := range known {
+				if project.DataDir != "" {
+					paths = append(paths, filepath.Join(project.DataDir, "crush.db"))
+				}
+			}
+			return paths, nil
+		},
+		StopWork: func(ctx context.Context, ids []string) error {
+			if drain, ok := app.AgentCoordinator.(agent.LockShutdownGate); ok {
+				if err := drain.StopForLock(ctx, ids); err != nil {
+					return err
+				}
+			}
+			return app.Messages.FlushAll(ctx)
+		},
+		Gate: func(ctx context.Context, ids []string, fn func() error) error {
+			if gate, ok := app.AgentCoordinator.(agent.IdleChatGate); ok {
+				return gate.WithIdleChat(ctx, ids, fn)
+			}
+			return fn()
+		},
+		Shown: lockedChatShown,
+		Notify: func(sessionID, text string) {
+			app.agentNotifications.Publish(pubsub.CreatedEvent, notify.Notification{
+				SessionID: sessionID,
+				Type:      notify.TypeAgentError,
+				Message:   text,
+			})
+		},
+		PromptHistory: prompthistory.Path(),
+		CacheDir:      cache,
+	}
+}
+
+// lockedChatShown reports whether a running app shows the chat: it is in
+// the open-chats list the terminal and desktop share, and an app runs. An
+// unlocked chat no app shows is locked again (closed with ×, Complete, or
+// every app quit).
+func lockedChatShown(id string) bool {
+	list, err := openchats.Open()
+	if err != nil {
+		return true // can't tell; quitting relocks it anyway
+	}
+	if !list.AppOpen() {
+		return false
+	}
+	return slices.ContainsFunc(list.Chats(), func(c openchats.Chat) bool { return c.ID == id })
 }

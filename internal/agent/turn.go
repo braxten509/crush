@@ -105,6 +105,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		return t.cancelOnEntry(ctx)
 	case dispatchQueued:
 		return nil, nil
+	case dispatchLocked:
+		return nil, session.ErrChatLocked
 	}
 
 	defer t.cancel()
@@ -133,6 +135,9 @@ const (
 	dispatchQueued
 	// dispatchCanceled: a cancel covered the accepted call before it ran.
 	dispatchCanceled
+	// dispatchLocked: the chat is locked or being locked (owner,
+	// 2026-11-03); nothing runs or queues in it.
+	dispatchLocked
 )
 
 // dispatch decides, under the session's dispatch mutex, whether the call
@@ -148,6 +153,16 @@ func (t *turn) dispatch(ctx context.Context) dispatchOutcome {
 	a := t.a
 	sessMu := a.sessionMu(t.call.SessionID)
 	sessMu.Lock()
+
+	// Checked under the lock locking takes to mark the chat, so a prompt
+	// either runs before the mark or is refused after it.
+	if chatHidden(ctx, a.sessions, t.call.SessionID) {
+		if t.call.Accepted != nil {
+			t.call.Accepted.Close()
+		}
+		sessMu.Unlock()
+		return dispatchLocked
+	}
 
 	if t.call.Accepted != nil && (t.call.Accepted.canceled.Load() || a.canceledBySeq(t.call.SessionID, t.call.Accepted.seq)) {
 		// Cancel-on-entry: a cancel arrived while this accepted run was

@@ -246,6 +246,7 @@ func (b *Backend) newWorkspace(args proto.Workspace, key string) (*Workspace, er
 		cancel:       wsCancel,
 		clients:      make(map[string]*clientState),
 	}
+	b.lockSharing(workspace)
 	return workspace, nil
 }
 

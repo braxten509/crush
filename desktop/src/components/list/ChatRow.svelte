@@ -83,6 +83,17 @@
   >
     <span class="title">{row.title}</span>
     <span class="line2">
+      <!-- Locked chats (owner, 2026-11-03): a small lock after the title;
+           open while unlocked; amber while a crash left it outside the
+           vault. -->
+      {#if row.lock}
+        <span
+          class="lock-mark"
+          class:warn={row.lock === "relock"}
+          title={row.lock === "unlocked" ? "Locked chat, unlocked now" : row.lock === "relock" ? "Locked chat: not back in the vault yet" : "Locked chat"}
+          data-lock={row.lock}
+        ><Icon name={row.lock === "unlocked" ? "lock-open" : "lock"} size={14} /></span>
+      {/if}
       {#if row.helper}<span class="helper-mark">Subagent</span>{/if}
       {#if row.state}
         <span class="state {row.stateKind}">
@@ -166,6 +177,14 @@
   }
   .has-state .line2 {
     padding-right: calc(4 * var(--px));
+  }
+  .lock-mark {
+    flex: none;
+    display: flex;
+    color: var(--slate);
+  }
+  .lock-mark.warn {
+    color: var(--amber-ink);
   }
   /* A sub-agent's chat (owner, 2026-10-21), in the panel headings' type. */
   .helper-mark {

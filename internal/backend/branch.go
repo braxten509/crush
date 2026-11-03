@@ -30,12 +30,18 @@ func (b *Backend) CreateBranch(ctx context.Context, workspaceID, sessionID strin
 	if !ok {
 		return proto.Branch{}, errors.New("branches need the engine's message store")
 	}
+	if err := ws.ops().checkReadable(ctx, sessionID); err != nil {
+		return proto.Branch{}, err
+	}
 	res, err := brancher.Branch(ctx, message.BranchRequest{
 		SessionID: sessionID, MessageID: req.MessageID,
 		HighlightText: req.HighlightText, HighlightStart: req.HighlightStart, HighlightEnd: req.HighlightEnd,
 		Title: req.Title,
 	})
 	if err != nil {
+		return proto.Branch{}, err
+	}
+	if err := inheritLock(ctx, ws, sessionID, res.SessionID); err != nil {
 		return proto.Branch{}, err
 	}
 	if err := announce(ctx, ws, res.SessionID); err != nil {

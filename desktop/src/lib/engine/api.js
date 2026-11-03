@@ -138,6 +138,12 @@ export const api = {
   // model picked in a chat never reaches another chat, and it is also the
   // last pick a new chat starts on.
   setSessionModel: (sid, model) => commands.api("POST", `${chat(sid)}/model`, undefined, { model }, undefined, folderOf(sid)),
+  // Locked chats (owner, 2026-11-03; rpc.LockSession, rpc.UnlockSession):
+  // both answer at once with the chat marked locking or unlocking; the rest
+  // arrives as session events. Unlock with stop turns the chat into a
+  // normal chat for good. KDE asks for the vault password.
+  lockChat: (sid) => commands.api("POST", `${chat(sid)}/lock`, undefined, {}, undefined, folderOf(sid)),
+  unlockChat: (sid, { stop = false } = {}) => commands.api("POST", `${chat(sid)}/unlock`, undefined, stop ? { stop } : {}, undefined, folderOf(sid)),
   // The last pick: the model a new chat starts on (rpc.LastPick), set by a
   // pick made with no chat open. No chat runs on it.
   lastPick: () => get("last-pick"),
@@ -313,7 +319,9 @@ export const api = {
   setCpuAffinity: (enabled) => post("/v1/cpu-affinity", { enabled }),
   // The prompts sent from every folder and app, newest first (≤ 100).
   promptHistory: () => get("/v1/prompt-history"),
-  addPromptHistory: (text) => post("/v1/prompt-history", { text }),
+  // chat is the chat it was sent in, so locking that chat takes it out
+  // (owner, 2026-11-03).
+  addPromptHistory: (text, chat) => post("/v1/prompt-history", chat ? { text, chat } : { text }),
 
   themes: () => get("/v1/themes"),
   theme: (name) => get(`/v1/themes/${seg(name)}`),

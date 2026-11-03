@@ -30,8 +30,16 @@ INSERT INTO messages (
     is_summary_message,
     created_at,
     updated_at
-) VALUES (
+)
+SELECT
     ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now')
+WHERE NOT EXISTS (
+    WITH RECURSIVE ancestors(id, parent_session_id, lock_state) AS (
+        SELECT id, parent_session_id, lock_state FROM sessions WHERE id = sqlc.arg(session_id)
+        UNION
+        SELECT s.id, s.parent_session_id, s.lock_state FROM sessions s JOIN ancestors a ON s.id = a.parent_session_id
+    )
+    SELECT 1 FROM ancestors WHERE lock_state IN ('locking', 'locked', 'unlocking', 'relock')
 )
 RETURNING *;
 

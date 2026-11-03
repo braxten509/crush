@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({
   remoteActionDone: vi.fn(() => Promise.resolve()),
 }));
 const notify = vi.hoisted(() => vi.fn());
-const sessions = vi.hoisted(() => ({ currentId: "s1" }));
+const sessions = vi.hoisted(() => ({ currentId: "s1", byId: {} }));
 const runAction = vi.hoisted(() => vi.fn());
 const ensureSession = vi.hoisted(() => vi.fn());
 const busy = vi.hoisted(() => ({ value: false }));

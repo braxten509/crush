@@ -128,7 +128,13 @@ func (m *UI) handleSessionEvent(msg pubsub.Event[session.Session]) []tea.Cmd {
 		prevHasInProgress := hasInProgressTodo(m.session.Todos)
 		prevPillsHeight := m.pillsAreaHeight()
 		m.updateHyperCredits()
+		// A lock or unlock of the open chat (owner, 2026-11-03): its
+		// messages leave or come back, so it is read again.
+		wasHidden := session.Hidden(m.session.LockState)
 		m.session = &msg.Payload
+		if wasHidden != session.Hidden(m.session.LockState) {
+			cmds = append(cmds, m.loadSession(m.session.ID))
+		}
 		m.syncKeptSkillsDialog()
 		if !prevHasInProgress && hasInProgressTodo(m.session.Todos) {
 			m.todoIsSpinning = true

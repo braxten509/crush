@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/app"
@@ -211,6 +212,9 @@ func (o Ops) DiscardEmptySession(ctx context.Context, id string) error {
 // state; a cold List would otherwise miss streaming deltas at
 // session-switch time.
 func (o Ops) ListMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
+	if err := o.checkReadable(ctx, sessionID); err != nil {
+		return nil, err
+	}
 	if err := o.App.Messages.FlushAll(ctx); err != nil {
 		return nil, err
 	}
@@ -219,12 +223,28 @@ func (o Ops) ListMessages(ctx context.Context, sessionID string) ([]message.Mess
 
 // ListUserMessages returns the user-role messages of a session.
 func (o Ops) ListUserMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
+	if err := o.checkReadable(ctx, sessionID); err != nil {
+		return nil, err
+	}
 	return o.App.Messages.ListUserMessages(ctx, sessionID)
 }
 
-// ListAllUserMessages returns the user-role messages of every session.
+// ListAllUserMessages returns the user-role messages of every session,
+// leaving out chats that are locked or on their way into the vault.
 func (o Ops) ListAllUserMessages(ctx context.Context) ([]message.Message, error) {
-	return o.App.Messages.ListAllUserMessages(ctx)
+	list, err := o.App.Messages.ListAllUserMessages(ctx)
+	if err != nil || o.App.Sessions == nil {
+		return list, err
+	}
+	hidden := map[string]bool{}
+	return slices.DeleteFunc(list, func(m message.Message) bool {
+		h, ok := hidden[m.SessionID]
+		if !ok {
+			h = o.checkReadable(ctx, m.SessionID) != nil
+			hidden[m.SessionID] = h
+		}
+		return h
+	}), nil
 }
 
 // LoadMessageReview loads the retained file review of a message, which

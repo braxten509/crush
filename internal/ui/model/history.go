@@ -27,8 +27,14 @@ func (m *UI) loadPromptHistory() tea.Cmd {
 
 // savePrompt saves a sent prompt to the shared history, then loads it.
 func (m *UI) savePrompt(text string) tea.Cmd {
+	// The chat it was sent in, so locking that chat takes it out (owner,
+	// 2026-11-03).
+	chat := ""
+	if m.session != nil {
+		chat = m.session.ID
+	}
 	return func() tea.Msg {
-		prompthistory.Add(text)
+		prompthistory.AddFor(text, chat)
 		return promptHistoryLoadedMsg{messages: prompthistory.List()}
 	}
 }

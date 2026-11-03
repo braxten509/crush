@@ -54,6 +54,9 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	// Anything new in the chat replaces a planned usage-limit retry; if
 	// it hits the limit too, it plans its own. The saved copy goes with it,
 	// so a restart doesn't continue a chat you took over.
+	if chatHidden(ctx, c.sessions, sessionID) {
+		return nil, ErrChatLocked
+	}
 	c.limitRetries.drop(sessionID)
 	c.clearWait(sessionID)
 	if err := ctx.Err(); err != nil {

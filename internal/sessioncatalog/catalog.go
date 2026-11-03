@@ -137,9 +137,11 @@ func catalogProject(ctx context.Context, directory, data, selected string, shown
 			slog.Warn("Could not discard abandoned empty chats", "directory", directory, "error", err)
 		}
 	}
-	rows, err := conn.QueryContext(ctx, `SELECT s.id, s.title, s.message_count, s.created_at, s.updated_at
+	// A locked chat has no messages here (they are in the vault) and is
+	// listed all the same, with its lock (owner, 2026-11-03).
+	rows, err := conn.QueryContext(ctx, `SELECT s.id, s.title, s.message_count, s.created_at, s.updated_at, s.lock_state
  FROM sessions s WHERE s.parent_session_id IS NULL
- AND EXISTS (SELECT 1 FROM messages m WHERE m.session_id=s.id AND m.role='user')
+ AND (s.lock_state != '' OR EXISTS (SELECT 1 FROM messages m WHERE m.session_id=s.id AND m.role='user'))
  ORDER BY s.updated_at DESC`)
 	if err != nil {
 		return nil, err
@@ -148,7 +150,7 @@ func catalogProject(ctx context.Context, directory, data, selected string, shown
 	result := []session.Session{}
 	for rows.Next() {
 		s := session.Session{Directory: directory, DataDirectory: data}
-		if err := rows.Scan(&s.ID, &s.Title, &s.MessageCount, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &s.MessageCount, &s.CreatedAt, &s.UpdatedAt, &s.LockState); err != nil {
 			return nil, err
 		}
 		result = append(result, s)
@@ -165,8 +167,10 @@ func discardEmptyBefore(ctx context.Context, conn *sql.DB, before int64, selecte
 			args = append(args, id)
 		}
 	}
+	// A locked chat has no messages here and is never an empty draft.
 	_, err := conn.ExecContext(ctx, `DELETE FROM sessions WHERE parent_session_id IS NULL
- AND id != ? AND created_at < ?`+keep+`
+ AND id != ? AND created_at < ?`+keep+` AND lock_state = ''
+
  AND NOT EXISTS (SELECT 1 FROM messages WHERE session_id=sessions.id AND role='user')
  AND NOT EXISTS (SELECT 1 FROM messages WHERE session_id=sessions.id AND role='assistant' AND finished_at IS NULL)
  AND NOT EXISTS (SELECT 1 FROM sessions child WHERE child.parent_session_id=sessions.id)`, args...)
@@ -204,6 +208,11 @@ func (c Catalog) Change(ctx context.Context, target session.Session, remove bool
 		if unfinished {
 			return fmt.Errorf("this chat is still running")
 		}
+		// A locked chat's messages are in the vault: unlock it first.
+		var lockState string
+		if err := conn.QueryRowContext(ctx, "SELECT lock_state FROM sessions WHERE id=?", target.ID).Scan(&lockState); err == nil && lockState != "" && lockState != session.LockStateUnlocked {
+			return fmt.Errorf("unlock this chat before deleting it")
+		}
 		service := session.NewService(db.New(conn), conn)
 		return service.Delete(ctx, target.ID)
 	}
@@ -221,7 +230,7 @@ func (c Catalog) DiscardEmpty(ctx context.Context, id string) error {
 		return err
 	}
 	defer db.Release(c.DataDirectory)
-	_, err = conn.ExecContext(ctx, `DELETE FROM sessions WHERE id=? AND parent_session_id IS NULL
+	_, err = conn.ExecContext(ctx, `DELETE FROM sessions WHERE id=? AND parent_session_id IS NULL AND lock_state = ''
  AND NOT EXISTS(SELECT 1 FROM messages WHERE session_id=sessions.id AND role='user')
  AND NOT EXISTS(SELECT 1 FROM messages WHERE session_id=sessions.id AND role='assistant' AND finished_at IS NULL)
  AND NOT EXISTS(SELECT 1 FROM sessions child WHERE child.parent_session_id=sessions.id)`, id)
@@ -257,7 +266,9 @@ func (c Catalog) Read(ctx context.Context, dir, id string, messages bool) (sessi
 		if err != nil {
 			return session.Session{}, nil, err
 		}
-		if !messages {
+		// A locked chat's record shows; its messages don't (owner,
+		// 2026-11-03).
+		if !messages || session.Hidden(record.LockState) {
 			return record, nil, nil
 		}
 		list, err := message.NewService(queries).List(ctx, id)

@@ -73,6 +73,10 @@ func (m *mockSessionService) SetChannel(_ context.Context, sessionID, channel st
 	return session.Session{ID: sessionID, Channel: channel}, nil
 }
 
+func (m *mockSessionService) SetLockState(_ context.Context, sessionID, state, _ string) (session.Session, error) {
+	return session.Session{ID: sessionID, LockState: state}, nil
+}
+
 func (m *mockSessionService) UpdateTitleAndUsage(context.Context, string, string, int64, int64, float64) error {
 	return nil
 }

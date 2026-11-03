@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/lockedchats"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 )
@@ -71,6 +73,10 @@ func (c *coordinator) withIdleTree(ctx context.Context, sessionID string, operat
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
 	defer mu.Unlock()
+	// A locked chat's branches are in the vault (owner, 2026-11-03).
+	if chatHidden(ctx, c.sessions, sessionID) {
+		return ErrChatLocked
+	}
 	accepted, _ := a.acceptedRuns.Get(sessionID)
 	if accepted > 0 || a.IsSessionBusy(sessionID) || a.QueuedPrompts(sessionID) > 0 {
 		return treeBusyError{"wait for the reply and queued prompts to finish, or recall queued prompts first"}
@@ -250,6 +256,11 @@ func (c *coordinator) CopyTree(ctx context.Context, id, target string, fork bool
 		newID, prompt, copyErr = tree.CopyTree(ctx, id, target, fork)
 		return copyErr
 	})
+	if err == nil && c.cfg != nil && c.cfg.Config().Options != nil {
+		if lockErr := lockedchats.Inherit(ctx, c.sessions, c.cfg.Config().Options.DataDirectory, id, newID); lockErr != nil {
+			slog.Warn("A copy of an unlocked chat could not be marked locked", "session", newID, "error", lockErr)
+		}
+	}
 	return
 }
 

@@ -191,6 +191,14 @@
   {:else if name === "phone"}
     <rect x="4" y="1.2" width="8" height="13.6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5" />
     <path d="M7 12.4h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+  {:else if name === "lock"}
+    <!-- Locked chats (owner, 2026-11-03): a padlock, shackle closed. -->
+    <rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" />
+    <path d="M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+  {:else if name === "lock-open"}
+    <!-- An unlocked locked chat: the shackle swung open. -->
+    <rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" />
+    <path d="M5.2 7V5a2.8 2.8 0 0 1 5.5-.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
   {:else if name === "bullet"}
     <circle cx="8" cy="8" r="2" fill="currentColor" />
   {:else if name === "arrow-up-right"}

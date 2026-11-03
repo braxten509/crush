@@ -123,6 +123,12 @@ func (m *UI) handleSessionDialogAction(action dialog.Action) (cmd tea.Cmd, ok bo
 		cmds = append(cmds, m.openSubagentView(msg.Task))
 	case dialog.ActionUndoFiles:
 		cmds = append(cmds, m.previewUndoFiles())
+	case dialog.ActionLockChat:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.lockChat())
+	case dialog.ActionUnlockChat:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.unlockChat(msg.Stop))
 	case dialog.ActionFileRestore:
 		cmds = append(cmds, m.chooseFileRestore(msg))
 	case dialog.ActionSelectSession:

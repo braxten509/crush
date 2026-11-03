@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -69,10 +70,40 @@ type Session struct {
 	// until the user turns them off.
 	KeptSkills []KeptSkill
 	// Model is the model this chat runs on; zero means the workspace's.
-	Model     ModelChoice
+	Model ModelChoice
+	// LockState is the chat's place in locking (owner, 2026-11-03): ""
+	// for a normal chat, or one of the LockState constants.
+	LockState string
 	CreatedAt int64
 	UpdatedAt int64
 }
+
+// Lock states of a chat. A locked chat's messages live only in the Plasma
+// Vault (owner, 2026-11-03); its row stays so the list shows its title.
+const (
+	LockStateLocking   = "locking"
+	LockStateLocked    = "locked"
+	LockStateUnlocking = "unlocking"
+	// LockStateUnlocked: copied back from the vault and usable until it is
+	// locked again (the lock button, closing the chat, quitting Crush).
+	LockStateUnlocked = "unlocked"
+	// LockStateRelock: a plain copy is still outside the vault after a
+	// crash. The chat stays hidden until it is put back.
+	LockStateRelock = "relock"
+)
+
+// Hidden reports whether a chat in this lock state may not be read or run:
+// every state but a normal or an unlocked chat.
+// LockedTitle stands in for a locked chat's name in the list: names can
+// quote the secret, so the real one waits in the vault (owner, 2026-11-03).
+const LockedTitle = "Locked chat"
+
+func Hidden(lockState string) bool {
+	return lockState != "" && lockState != LockStateUnlocked
+}
+
+// ErrChatLocked refuses to read or run a locked chat.
+var ErrChatLocked = errors.New("This chat is locked.") //nolint:staticcheck // shown to the owner as is
 
 // KeptSkill is a skill turned on for a whole chat. ID is the skill's
 // catalog ID (its SKILL.md path or builtin ID).
@@ -123,6 +154,8 @@ type Service interface {
 	// returns, and reports how many it gave one.
 	AdoptModels(ctx context.Context, pick func(context.Context, Session) ModelChoice) (int, error)
 	SetChannel(ctx context.Context, sessionID, channel string) (Session, error)
+	// SetLockState saves where the chat is in locking and tells every app.
+	SetLockState(ctx context.Context, sessionID, state, phase string) (Session, error)
 	UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens int64, cost float64) error
 	Rename(ctx context.Context, id string, title string) error
 	Delete(ctx context.Context, id string) error
@@ -229,6 +262,7 @@ func (s *service) CreateTaskSession(ctx context.Context, toolCallID, parentSessi
 func (s *service) AdoptModels(ctx context.Context, pick func(context.Context, Session) ModelChoice) (int, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM sessions
 		WHERE (parent_session_id IS NULL OR parent_session_id = '')
+		AND lock_state = ''
 		AND id NOT IN (SELECT session_id FROM session_models)`)
 	if err != nil {
 		return 0, err
@@ -291,6 +325,10 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	dbSession, err := qtx.GetSessionByID(ctx, id)
 	if err != nil {
 		return err
+	}
+	// A locked chat is deleted only once unlocked (PLAN §2).
+	if Hidden(dbSession.LockState) {
+		return ErrChatLocked
 	}
 	// The chat's sub-agent and title chats go with it, all the way down
 	// (owner, 2026-10-24).
@@ -462,6 +500,25 @@ func (s *service) SetChannel(ctx context.Context, sessionID, channel string) (Se
 	return session, nil
 }
 
+// SetLockState saves the chat's lock state and phase. The columns are not
+// in update_sessions_updated_at's list, so the chat keeps its place.
+func (s *service) SetLockState(ctx context.Context, sessionID, state, phase string) (Session, error) {
+	s.writeMu.Lock()
+	dbSession, err := s.q.SetSessionLockState(ctx, db.SetSessionLockStateParams{
+		ID:        sessionID,
+		LockState: state,
+		LockPhase: phase,
+	})
+	s.writeMu.Unlock()
+	if err != nil {
+		return Session{}, err
+	}
+	session := s.fromDBItem(dbSession)
+	s.applyEstimatedUsageState(&session)
+	s.Publish(pubsub.UpdatedEvent, session)
+	return session, nil
+}
+
 // UpdateTitleAndUsage updates only the title and usage fields atomically.
 // This is safer than fetching, modifying, and saving the entire session.
 func (s *service) UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens int64, cost float64) error {
@@ -485,6 +542,11 @@ func (s *service) UpdateTitleAndUsage(ctx context.Context, sessionID, title stri
 // usage fields.
 func (s *service) Rename(ctx context.Context, id string, title string) error {
 	s.writeMu.Lock()
+	// A locked chat's real name is in the vault; unlocking would undo this.
+	if row, err := s.q.GetSessionByID(ctx, id); err == nil && Hidden(row.LockState) {
+		s.writeMu.Unlock()
+		return ErrChatLocked
+	}
 	err := s.q.RenameSession(ctx, db.RenameSessionParams{
 		ID:    id,
 		Title: title,
@@ -577,6 +639,7 @@ func (s *service) fromDBItem(item db.Session) Session {
 		Todos:            todos,
 		Channel:          item.Channel.String,
 		KeptSkills:       kept,
+		LockState:        item.LockState,
 		CreatedAt:        item.CreatedAt,
 		UpdatedAt:        item.UpdatedAt,
 	}

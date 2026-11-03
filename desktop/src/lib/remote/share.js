@@ -7,6 +7,7 @@
 import { closeDialog, hasDialog, openDialog } from "../dialogs.js";
 import { api } from "../engine/api.js";
 import { notify } from "../stores/ui.svelte.js";
+import { sessions } from "../stores/sessions.svelte.js";
 import { share, shownChat, shownShare } from "./store.svelte.js";
 
 let startSeq = 0; // bumped by every start, and by Cancel or a stop of its chat: older answers are dropped
@@ -32,6 +33,12 @@ function heard(chat, status) {
 // One start for the chat this window shows. `launchId` once per launch;
 // `quiet` opens no sheet.
 export async function startShare({ launchId = null, quiet = false } = {}) {
+  // Locked chats are never shared with the phone, locked or unlocked
+  // (owner, 2026-11-03); the engine refuses them too.
+  if (sessions.byId[shownChat()]?.lock_state) {
+    notify("error", "Locked chats are never shared with the phone.");
+    return;
+  }
   const mine = ++startSeq;
   latestStart = mine;
   const chat = shownChat();

@@ -38,6 +38,9 @@ tree | Session Tree |  | dialog.ActionOpenDialog{DialogID:tree} | Session Tree
 fork | Fork from Prompt |  | dialog.ActionOpenDialog{DialogID:fork} | Fork from Prompt
 clone | Clone Current Branch |  | dialog.ActionTreeClone{} | Clone Current Branch
 summarize | Summarize Session |  | dialog.ActionSummarize{SessionID:s1} | Summarize Session compact
+lock_chat | Lock Chat |  | dialog.ActionLockChat{} | Lock Chat lock
+unlock_chat | Unlock Chat |  | dialog.ActionUnlockChat{Stop:false} | Unlock Chat unlock
+stop_locking | Stop Locking |  | dialog.ActionUnlockChat{Stop:true} | Stop Locking
 toggle_thinking | Disable Thinking Mode |  | dialog.ActionToggleThinking{} | Disable Thinking Mode
 toggle_sidebar | Toggle Sidebar |  | dialog.ActionToggleCompactMode{} | Toggle Sidebar
 file_picker | Open File Picker | ctrl+f | dialog.ActionOpenDialog{DialogID:filepicker} | Open File Picker
@@ -79,6 +82,9 @@ tree | Session Tree |  | dialog.ActionOpenDialog{DialogID:tree} | Session Tree
 fork | Fork from Prompt |  | dialog.ActionOpenDialog{DialogID:fork} | Fork from Prompt
 clone | Clone Current Branch |  | dialog.ActionTreeClone{} | Clone Current Branch
 summarize | Summarize Session |  | dialog.ActionSummarize{SessionID:} | Summarize Session compact
+lock_chat | Lock Chat |  | dialog.ActionLockChat{} | Lock Chat lock
+unlock_chat | Unlock Chat |  | dialog.ActionUnlockChat{Stop:false} | Unlock Chat unlock
+stop_locking | Stop Locking |  | dialog.ActionUnlockChat{Stop:true} | Stop Locking
 toggle_fast_mode | Disable FAST Mode |  | dialog.ActionToggleFastMode{} | Disable FAST Mode fast speed
 toggle_ultracode | Turn Off Ultracode |  | dialog.ActionToggleUltracode{} | Turn Off Ultracode ultracode ultra workflows
 select_reasoning_effort | Select Reasoning Effort |  | dialog.ActionOpenDialog{DialogID:reasoning} | Select Reasoning Effort effort

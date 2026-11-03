@@ -780,6 +780,22 @@ func (w *ClientWorkspace) SetSessionModel(ctx context.Context, sessionID string,
 	return proto.SessionToDomain(*sess), nil
 }
 
+func (w *ClientWorkspace) LockSession(ctx context.Context, sessionID string) (session.Session, error) {
+	sess, err := w.client.LockSession(ctx, w.workspaceID(), sessionID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return proto.SessionToDomain(*sess), nil
+}
+
+func (w *ClientWorkspace) UnlockSession(ctx context.Context, sessionID string, stop bool) (session.Session, error) {
+	sess, err := w.client.UnlockSession(ctx, w.workspaceID(), sessionID, stop)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return proto.SessionToDomain(*sess), nil
+}
+
 func (w *ClientWorkspace) LastPick(ctx context.Context) (config.SelectedModel, bool) {
 	pick, err := w.client.LastPick(ctx, w.workspaceID())
 	if err != nil {

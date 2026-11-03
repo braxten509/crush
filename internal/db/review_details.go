@@ -185,7 +185,9 @@ func (q *Queries) MigrateMessageReview(ctx context.Context, id, original, compac
 }
 
 func (q *Queries) FinishReviewMigration(ctx context.Context, sessionID string) error {
-	_, err := q.db.ExecContext(ctx, `INSERT OR IGNORE INTO message_review_migrations(session_id) VALUES (?)`, sessionID)
+	// A locked chat gets no row outside the vault.
+	_, err := q.db.ExecContext(ctx, `INSERT OR IGNORE INTO message_review_migrations(session_id)
+		SELECT id FROM sessions WHERE id = ? AND lock_state = ''`, sessionID)
 	return err
 }
 

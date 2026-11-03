@@ -31,7 +31,7 @@ WHERE id = ? LIMIT 1;
 -- name: GetLastSession :one
 SELECT *
 FROM sessions
-WHERE parent_session_id IS NULL
+WHERE parent_session_id IS NULL AND lock_state = ''
 ORDER BY updated_at DESC, created_at DESC, id DESC
 LIMIT 1;
 
@@ -70,6 +70,14 @@ SET
     updated_at = strftime('%s', 'now')
 WHERE id = ?;
 
+
+-- name: SetSessionLockState :one
+UPDATE sessions
+SET
+    lock_state = ?,
+    lock_phase = ?
+WHERE id = ?
+RETURNING *;
 
 -- name: RenameSession :exec
 UPDATE sessions

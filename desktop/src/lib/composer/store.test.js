@@ -140,8 +140,9 @@ describe("sending", () => {
     expect(body).toMatchObject({ session_id: "s1", prompt: "hello there" });
     expect(M.messages.pending[body.submission_id]).toMatchObject({ text: "hello there", sessionId: "s1", held: false });
     expect(C.draftOf().text).toBe("");
-    // Every sent prompt goes to the history shared by every folder and app.
-    expect(h.calls.filter((c) => c.method === "POST" && c.path === "/v1/prompt-history").map((c) => c.body)).toEqual([{ text: "hello there" }]);
+    // Every sent prompt goes to the history shared by every folder and app,
+    // with its chat, so locking the chat takes it out.
+    expect(h.calls.filter((c) => c.method === "POST" && c.path === "/v1/prompt-history").map((c) => c.body)).toEqual([{ text: "hello there", chat: "s1" }]);
   });
 
   it("sends nothing for an empty field (TYPE-004)", async () => {

@@ -494,6 +494,10 @@ func (c *Commands) sessionCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "fork", "Fork from Prompt", "", ActionOpenDialog{ForkID}))
 	commands = append(commands, NewCommandItem(c.com.Styles, "clone", "Clone Current Branch", "", ActionTreeClone{}))
 	commands = append(commands, NewCommandItem(c.com.Styles, "summarize", "Summarize Session", "", ActionSummarize{SessionID: c.sessionID}).WithAliases("compact"))
+	// Locked chats (owner, 2026-11-03).
+	commands = append(commands, NewCommandItem(c.com.Styles, "lock_chat", "Lock Chat", "", ActionLockChat{}).WithAliases("lock"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "unlock_chat", "Unlock Chat", "", ActionUnlockChat{}).WithAliases("unlock"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "stop_locking", "Stop Locking", "", ActionUnlockChat{Stop: true}))
 	return commands
 }
 

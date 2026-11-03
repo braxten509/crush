@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/filehistory"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/google/uuid"
 )
 
@@ -84,6 +85,29 @@ type service struct {
 	fileHistory *filehistory.Store
 }
 
+// checkUnlocked refuses a message for a chat that is locked, being locked
+// or unlocked, or waiting to go back into the vault (owner, 2026-11-03):
+// it would never reach the vault copy. Every writer goes through Create,
+// so this holds for writers that skip the chat's run lock too (PLAN §9.3).
+// A sub-agent's chat answers for its top chat.
+func (s *service) checkUnlocked(ctx context.Context, sessionID string) error {
+	id := sessionID
+	for range 16 {
+		row, err := s.q.GetSessionByID(ctx, id)
+		if err != nil {
+			return nil // a missing chat fails where it is used
+		}
+		if session.Hidden(row.LockState) {
+			return session.ErrChatLocked
+		}
+		if !row.ParentSessionID.Valid || row.ParentSessionID.String == "" {
+			return nil
+		}
+		id = row.ParentSessionID.String
+	}
+	return nil
+}
+
 // ServiceOption configures a [Service] at construction.
 type ServiceOption func(*service)
 
@@ -135,6 +159,9 @@ func (s *service) Delete(ctx context.Context, id string) error {
 }
 
 func (s *service) Create(ctx context.Context, sessionID string, params CreateMessageParams) (Message, error) {
+	if err := s.checkUnlocked(ctx, sessionID); err != nil {
+		return Message{}, err
+	}
 	if params.Role != Assistant {
 		params.Parts = append(params.Parts, Finish{
 			Reason: "stop",
@@ -180,6 +207,11 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 		dbMessage, err = s.q.CreateMessage(ctx, arg)
 	}
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			if locked := s.checkUnlocked(ctx, sessionID); locked != nil {
+				return Message{}, locked
+			}
+		}
 		return Message{}, err
 	}
 	message, err := s.fromDBItem(dbMessage)

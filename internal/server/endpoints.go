@@ -458,6 +458,24 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Build(),
 
+		route(c, rpc.LockSession, c.lockSession).
+			Summary("Lock a chat into the vault, or lock an unlocked locked chat again").
+			Description("Answers at once with the chat marked locking; 409 with the reason while the chat has work running.").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Fails(404, 409, 500).
+			Build(),
+
+		route(c, rpc.UnlockSession, c.unlockSession).
+			Summary("Unlock a locked chat; with stop, for good").
+			Description("KDE asks for the vault password. Answers at once with the chat marked unlocking.").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Fails(404, 409, 500).
+			Build(),
+
 		route(c, rpc.LastPick, c.getLastPick).
 			Summary("Get the model a new chat starts on").
 			Tags("sessions").

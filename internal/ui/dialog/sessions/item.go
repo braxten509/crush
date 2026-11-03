@@ -82,6 +82,11 @@ func (s *SessionItem) Cursor() *tea.Cursor {
 // InfoText returns the secondary text shown on the right of the item.
 func (s *SessionItem) InfoText() string {
 	when := humanize.Time(time.Unix(s.UpdatedAt, 0))
+	// A locked chat keeps its real title, with a dim mark (owner,
+	// 2026-11-03).
+	if s.LockState != "" {
+		when += " · locked"
+	}
 	if s.Directory != "" {
 		return home.Short(s.Directory) + " · " + when
 	}

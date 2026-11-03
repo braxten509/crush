@@ -147,6 +147,8 @@ export function buildRows(list, options = {}) {
       stateKind: state?.kind ?? "",
       branches: kids,
       expanded: kids > 0 && open.has(s.id),
+      // A locked chat's lock state (owner, 2026-11-03): the row draws a lock.
+      ...(s.lock_state ? { lock: s.lock_state } : {}),
     };
   };
 

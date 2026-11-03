@@ -21,8 +21,16 @@ INSERT INTO messages (
     is_summary_message,
     created_at,
     updated_at
-) VALUES (
+)
+SELECT
     ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now')
+WHERE NOT EXISTS (
+    WITH RECURSIVE ancestors(id, parent_session_id, lock_state) AS (
+        SELECT id, parent_session_id, lock_state FROM sessions WHERE id = ?
+        UNION
+        SELECT s.id, s.parent_session_id, s.lock_state FROM sessions s JOIN ancestors a ON s.id = a.parent_session_id
+    )
+    SELECT 1 FROM ancestors WHERE lock_state IN ('locking', 'locked', 'unlocking', 'relock')
 )
 RETURNING id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
 `
@@ -46,6 +54,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		arg.Model,
 		arg.Provider,
 		arg.IsSummaryMessage,
+		arg.SessionID,
 	)
 	var i Message
 	err := row.Scan(

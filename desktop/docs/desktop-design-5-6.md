@@ -2238,6 +2238,7 @@ Functions marked P3.3 already exist (3-4 design §1.5.2) or come with P3.3: `upd
 | `apiSecret("config/provider-key", body)` | POST `config/provider-key` | `routes.go:121` | AUTH |
 | `savedSessions(selected)` | GET `saved-sessions?selected=` | `routes.go:55` | SES |
 | `changeSavedSession(change)` | POST `saved-sessions` | `routes.go:56` | SES, LST |
+| `lockChat(sid)`, `unlockChat(sid, {stop})` | POST `sessions/{sid}/lock`, `sessions/{sid}/unlock` `{stop}` | `routes.go` LockSession, UnlockSession (locked chats, owner 2026-11-03) | LST, TYPE |
 | `listSessions()`, `getSession(sid)`, `messages(sid)` (P3.3) | GET `sessions`, `sessions/{sid}`, `sessions/{sid}/messages` | `routes.go:57`, `:59`, `:63` | SES, LIVE, LST |
 | `answerQuestions(answer)`, `cancelQuestions()` | POST `questions/answer`, `questions/cancel` | `routes.go:89-90` | ASK |
 | `pendingQuestion(sid)` | GET `questions/pending?session_id=` | G-12 | ASK |

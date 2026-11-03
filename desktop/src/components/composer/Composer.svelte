@@ -20,6 +20,7 @@
   import { findPhone, phone, watchPhone } from "../../lib/stores/phone.svelte.js";
   import { helperChats } from "../../lib/stores/helperchats.svelte.js";
   import { closeListed } from "../../lib/stores/openchats.svelte.js";
+  import { lockChat, sessions } from "../../lib/stores/sessions.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { closeSlot, openSlot, ui } from "../../lib/stores/ui.svelte.js";
 
@@ -99,6 +100,21 @@
     focusField();
   }
 
+  // The lock button (owner, 2026-11-03): locks the chat into the vault, or
+  // locks an unlocked locked chat again. Refused while the chat works.
+  const lockState = $derived(sessions.byId[sessionId]?.lock_state ?? "");
+  const lockBusy = $derived(working());
+  let locking = $state(false);
+  async function lock() {
+    if (!sessionId || lockBusy || locking) return;
+    locking = true;
+    try {
+      await lockChat(sessionId);
+    } finally {
+      locking = false;
+    }
+  }
+
   function complete() {
     closeListed(sessionId).catch((error) => console.error("completing a chat failed", error));
   }
@@ -128,6 +144,19 @@
            every app, as the list's × does. It sits on the right of the
            attached files' row (owner, 2026-10-21). -->
       <div class="complete-row">
+        {#if sessionId && !readOnly}
+          <button
+            class="lock"
+            type="button"
+            title={lockBusy ? "Wait for the reply to finish before locking" : lockState === "unlocked" ? "Lock this chat again" : "Lock this chat"}
+            aria-label={lockState === "unlocked" ? "Lock this chat again" : "Lock this chat"}
+            disabled={lockBusy || locking}
+            data-lock-chat={lockState || "none"}
+            onclick={lock}
+          >
+            <Icon name="lock" size={20} />
+          </button>
+        {/if}
         <!-- The phone button (owner, 2026-11-01): the connected phone's
              screen as an attachment; with no phone, Find phone looks for it
              on Wi-Fi and connects. -->
@@ -239,6 +268,20 @@
     align-items: center;
     margin-right: auto;
     color: var(--slate);
+  }
+  /* The lock button, just left of the phone button and drawn like it
+     (owner, 2026-11-03). */
+  .lock {
+    flex: none;
+    display: flex;
+    align-items: center;
+    color: var(--slate);
+  }
+  .lock:hover {
+    color: var(--ink);
+  }
+  .lock:disabled {
+    opacity: 0.5;
   }
   .phone.find {
     gap: calc(6 * var(--px));

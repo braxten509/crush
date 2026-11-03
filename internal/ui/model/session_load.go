@@ -338,6 +338,9 @@ func (m *UI) applyLoadedSession(msg loadSessionMsg) []tea.Cmd {
 			cmds = append(cmds, m.todoSpinner.Tick)
 		}
 	}
+	if session.Hidden(m.session.LockState) {
+		cmds = append(cmds, util.ReportInfo(lockedChatNote))
+	}
 	// Reload prompt history for the new session.
 	m.historyReset()
 	if cmd := m.restoreRecalledDrafts(); cmd != nil {

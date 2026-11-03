@@ -63,6 +63,9 @@ type HyperCredits struct {
 // PromptHistoryEntry is a prompt the user sent, saved to the shared history.
 type PromptHistoryEntry struct {
 	Text string `json:"text"`
+	// Chat is the chat the prompt was sent in, so locking that chat takes
+	// it out (owner, 2026-11-03).
+	Chat string `json:"chat,omitempty"`
 }
 
 // CPUAffinityRequest turns the agent CPUs on or off (G-16).

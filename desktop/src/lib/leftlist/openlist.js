@@ -69,7 +69,9 @@ export function listedRows(open, options = {}) {
     const saved = catalog[c.id];
     const at = saved?.UpdatedAt ?? 0;
     const doing = states[c.id] ? rowState(states[c.id], states[c.id].is_busy) : null;
+    const lock = states[c.id]?.lock_state || saved?.LockState || "";
     rows.push({
+      ...(lock ? { lock } : {}),
       kind: "chat",
       id: c.id,
       title: saved?.Title || c.title || "New Session",

@@ -18,6 +18,12 @@ type File struct {
 	UpdatedAt int64  `json:"updated_at"`
 }
 
+type LockPendingWipe struct {
+	SessionID string `json:"session_id"`
+	Kind      string `json:"kind"`
+	Target    string `json:"target"`
+}
+
 type McpDisabledServer struct {
 	Name string `json:"name"`
 }
@@ -62,4 +68,6 @@ type Session struct {
 	SummaryMessageID sql.NullString `json:"summary_message_id"`
 	Todos            sql.NullString `json:"todos"`
 	Channel          sql.NullString `json:"channel"`
+	LockState        string         `json:"lock_state"`
+	LockPhase        string         `json:"lock_phase"`
 }

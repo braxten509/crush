@@ -200,11 +200,12 @@ describe("FigureView", () => {
     ]);
     const cell = table.querySelector("td");
     expect(cell.querySelector("code.md-icode").textContent).toBe("a.go");
-    expect(cell.querySelector("a").getAttribute("href")).toBe("https://example.com");
+    // `a.go` is a file name, so its code span opens like a link too (owner, 2026-11-03).
+    expect([...cell.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual(["a.go", "https://example.com"]);
     expect(cell.querySelector(".md-link-refused").textContent).toBe("bad");
     expect(table.querySelector("strong").textContent).toBe("12");
     const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 });
-    cell.querySelector("a").dispatchEvent(click);
+    cell.querySelector('a[href="https://example.com"]').dispatchEvent(click);
     expect(click.defaultPrevented).toBe(true);
   });
 

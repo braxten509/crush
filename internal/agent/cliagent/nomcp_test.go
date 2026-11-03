@@ -33,6 +33,8 @@ func startLine(t *testing.T, lines <-chan []byte) string {
 // A sub-agent's Claude loads no MCP servers, claude.ai connectors
 // included, unless it was asked for them.
 func TestClaudeSubAgentWithoutMCP(t *testing.T) {
+	// A Crush sub-agent running the tests has it set already.
+	t.Setenv("ENABLE_CLAUDEAI_MCP_SERVERS", "")
 	dir := fakeScript(t, "claude", "read -r _\nprintf '%s|%s\\n' \"$*\" \"${ENABLE_CLAUDEAI_MCP_SERVERS:-unset}\"\ncat >/dev/null\n")
 	for _, noMCP := range []bool{false, true} {
 		live, err := startClaude(&Model{ID: "test", Dir: dir, Guarded: true, NoMCP: noMCP}, Turn{}, claudeKey{noMCP: noMCP})

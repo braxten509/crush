@@ -491,6 +491,14 @@ func (w *AppWorkspace) SetSessionModel(ctx context.Context, sessionID string, mo
 	return w.ops.SetSessionModel(ctx, sessionID, model)
 }
 
+func (w *AppWorkspace) LockSession(ctx context.Context, sessionID string) (session.Session, error) {
+	return w.ops.LockSession(ctx, sessionID)
+}
+
+func (w *AppWorkspace) UnlockSession(ctx context.Context, sessionID string, stop bool) (session.Session, error) {
+	return w.ops.UnlockSession(ctx, sessionID, stop)
+}
+
 func (w *AppWorkspace) LastPick(context.Context) (config.SelectedModel, bool) {
 	return w.ops.LastPick()
 }

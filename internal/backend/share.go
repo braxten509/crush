@@ -336,6 +336,29 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, sessio
 	if err != nil {
 		return proto.RemoteStatus{}, err
 	}
+	var releaseChat func()
+	if sessionID != "" && ws.App != nil && ws.App.LockedChats != nil {
+		releaseChat, err = ws.App.LockedChats.AcquireChat(ctx, sessionID)
+		if err != nil {
+			return proto.RemoteStatus{}, err
+		}
+		defer func() {
+			if releaseChat != nil {
+				releaseChat()
+			}
+		}()
+	}
+	// Locked chats are never shared with the phone, locked or unlocked
+	// (owner, 2026-11-03).
+	if sessionID != "" && ws.App != nil && ws.App.Sessions != nil {
+		s, err := ws.App.Sessions.Get(ctx, sessionID)
+		if err != nil {
+			return proto.RemoteStatus{}, err
+		}
+		if s.LockState != "" {
+			return proto.RemoteStatus{}, errLockedNotShared
+		}
+	}
 	st := &ws.share
 	st.startMu.Lock()
 	defer st.startMu.Unlock()
@@ -378,6 +401,18 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, sessio
 	}
 
 	sh := &share{chat: sessionID, owner: clientID, srv: srv, pending: make(map[string]*pendingAction), quit: make(chan struct{})}
+	// Check again just before registration, still holding the same flock
+	// startLock takes before stopping a share and marking the chat hidden.
+	if sessionID != "" && ws.App != nil && ws.App.Sessions != nil {
+		s, err := ws.App.Sessions.Get(ctx, sessionID)
+		if err != nil || s.LockState != "" {
+			srv.Stop()
+			if err != nil {
+				return proto.RemoteStatus{}, err
+			}
+			return proto.RemoteStatus{}, errLockedNotShared
+		}
+	}
 	st.mu.Lock()
 	// The app may have left, or the workspace closed, while the share
 	// started; its gone and teardown hooks found nothing to stop then.
@@ -414,6 +449,10 @@ func (b *Backend) StartRemote(ctx context.Context, workspaceID, clientID, sessio
 		shown = now
 	}
 	st.mu.Unlock()
+	if releaseChat != nil {
+		releaseChat()
+		releaseChat = nil
+	}
 	go b.pumpShare(ws, sh)
 	if shown != "" {
 		b.bindNewChat(ws, clientID, shown)
@@ -518,6 +557,25 @@ func (b *Backend) windowShows(ws *Workspace, clientID string, change func(*proto
 // window now shows; the phone stays on that chat from now on. When that
 // chat has a share already, the new chat's share ends.
 func (b *Backend) bindNewChat(ws *Workspace, clientID, sessionID string) {
+	if ws.App != nil && ws.App.LockedChats != nil {
+		release, err := ws.App.LockedChats.AcquireChat(context.Background(), sessionID)
+		if err != nil {
+			return
+		}
+		defer release()
+	}
+	if ws.App != nil && ws.App.Sessions != nil {
+		s, err := ws.App.Sessions.Get(context.Background(), sessionID)
+		if err != nil || s.LockState != "" {
+			ws.share.mu.Lock()
+			sh := ws.share.shares[shareKey(clientID, "")]
+			ws.share.mu.Unlock()
+			if sh != nil {
+				b.endShare(ws, sh, errPhoneShareOff)
+			}
+			return
+		}
+	}
 	st := &ws.share
 	st.mu.Lock()
 	sh := st.shares[shareKey(clientID, "")]

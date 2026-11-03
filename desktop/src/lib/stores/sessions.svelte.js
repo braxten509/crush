@@ -81,7 +81,66 @@ function storeSession(s, { fromEvent, since }) {
       else delete sessions.live[s.id];
     }
   }
+  const wasHidden = lockHidden(s.id);
   sessions.byId[s.id] = next;
+  lockChanged(s.id, wasHidden);
+}
+
+// -- Locked chats (owner, 2026-11-03) --
+// A locked chat's messages live only in the vault. While it is locked,
+// being locked or unlocked, or waiting to go back after a crash, the
+// window shows the locked page instead of its messages and keeps none of
+// them in memory.
+
+export const HIDDEN_LOCK = new Set(["locking", "locked", "unlocking", "relock"]);
+
+// lockHidden: the chat shows the locked page.
+export function lockHidden(sid) {
+  return HIDDEN_LOCK.has(sessions.byId[sid]?.lock_state ?? "");
+}
+
+const lockHooks = [];
+
+// onLockChange(hook): hook(sid) runs when a chat becomes hidden (the
+// composer drops its draft).
+export function onLockChange(hook) {
+  lockHooks.push(hook);
+}
+
+function lockChanged(sid, wasHidden) {
+  const hidden = lockHidden(sid);
+  if (hidden && !wasHidden) {
+    kept.delete(sid);
+    unload(sid);
+    for (const hook of lockHooks) hook(sid);
+  } else if (!hidden && wasHidden && sid === sessions.currentId) {
+    // Unlocked: its messages are back; read them.
+    queueMicrotask(() => openChat(sid));
+  }
+}
+
+// Lock the chat (the composer's lock button); an unlocked locked chat is
+// locked again. The engine answers at once with the chat marked locking.
+export async function lockChat(sid) {
+  try {
+    upsertSession(await api.lockChat(sid), { fromEvent: true });
+    return true;
+  } catch (error) {
+    notify("error", errorText(error));
+    return false;
+  }
+}
+
+// Unlock the chat (KDE asks for the vault password); stop turns it into a
+// normal chat for good ("Stop locking this chat").
+export async function unlockChat(sid, { stop = false } = {}) {
+  try {
+    upsertSession(await api.unlockChat(sid, { stop }), { fromEvent: true });
+    return true;
+  } catch (error) {
+    notify("error", errorText(error));
+    return false;
+  }
 }
 
 // fromEvent keeps is_busy, attached_clients, has_unfinished_work and
@@ -463,6 +522,7 @@ function keep(sid, record) {
 // when it is kept.
 export async function preloadChat(id) {
   if (!id || id === sessions.currentId || sessions.opening?.id === id || messages.bySession[id]) return false;
+  if (lockHidden(id)) return false; // a locked chat's messages stay in the vault
   let record;
   try {
     [record] = await Promise.all([api.getSession(id), load(id)]);
@@ -563,6 +623,8 @@ async function showChat(id) {
   }
   report(id);
   const since = readStart();
+  // A locked chat shows its locked page: its record only, no messages.
+  if (lockHidden(id)) return showLocked(id, seq, since);
   // The file history only fills FILES (SIDE-008): unlike the terminal's load,
   // which fails as a whole (session.go:115-117), a failed history read opens
   // the chat with no files and a warning.
@@ -579,6 +641,12 @@ async function showChat(id) {
     return false;
   }
   const failed = [read, loaded].find((r) => r.status === "rejected");
+  // Locked meanwhile, or a chat this window did not know was locked.
+  if (read.status === "fulfilled" && HIDDEN_LOCK.has(read.value?.lock_state ?? "")) {
+    unload(id);
+    upsertSession(read.value, { since });
+    return showLocked(id, seq, since);
+  }
   if (failed || !read.value?.id) {
     if (sessions.opening?.id === id) sessions.opening = null;
     report(sessions.currentId);
@@ -602,6 +670,30 @@ async function showChat(id) {
   keepPromptsFor(id);
   if (old && old !== id) leave(old);
   runDeferred(id);
+  return true;
+}
+
+// showLocked shows a locked chat: its record is read, its messages are not
+// (they are in the vault); the conversation draws the locked page.
+async function showLocked(id, seq, since) {
+  let record;
+  try {
+    record = await api.getSession(id);
+  } catch (error) {
+    if (seq !== openSeq) return false;
+    if (sessions.opening?.id === id) sessions.opening = null;
+    report(sessions.currentId);
+    notify("error", `Couldn't load this chat: ${errorText(error)}`, 5000, { label: "Try again", run: () => openChat(id) });
+    return false;
+  }
+  if (seq !== openSeq) return false;
+  upsertSession(record, { since });
+  const old = sessions.currentId;
+  sessions.currentId = id;
+  sessions.draft = false;
+  if (sessions.opening?.id === id) sessions.opening = null;
+  keepPromptsFor(id);
+  if (old && old !== id) leave(old);
   return true;
 }
 

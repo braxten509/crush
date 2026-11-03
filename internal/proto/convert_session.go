@@ -34,6 +34,7 @@ func SessionFromDomain(s session.Session) Session {
 		ContextBudget:    ContextBudgetFromDomain(s.ContextBudget),
 		Model:            SessionModelFromDomain(s.Model),
 		EstimatedUsage:   s.EstimatedUsage,
+		LockState:        s.LockState,
 	}
 }
 
@@ -61,6 +62,7 @@ func SessionToDomain(s Session) session.Session {
 		ContextBudget:    ContextBudgetToDomain(s.ContextBudget),
 		Model:            SessionModelToDomain(s.Model),
 		EstimatedUsage:   s.EstimatedUsage,
+		LockState:        s.LockState,
 	}
 }
 

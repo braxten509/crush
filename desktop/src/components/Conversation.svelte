@@ -13,6 +13,7 @@
   import MeterStrip from "./panel/MeterStrip.svelte";
   import Rule from "./Rule.svelte";
   import InitPrompt from "./start/InitPrompt.svelte";
+  import LockedPage from "./LockedPage.svelte";
   import Landing from "./start/Landing.svelte";
   import Onboarding from "./start/Onboarding.svelte";
   import Opening from "./start/Opening.svelte";
@@ -20,7 +21,7 @@
   import TimelineStack from "./timeline/TimelineStack.svelte";
   import { messages } from "../lib/stores/messages.svelte.js";
   import { shownShare } from "../lib/remote/store.svelte.js";
-  import { sessions } from "../lib/stores/sessions.svelte.js";
+  import { lockHidden, sessions } from "../lib/stores/sessions.svelte.js";
   import { metersUnderField } from "../lib/stores/ui.svelte.js";
   import { screen } from "./start/start.svelte.js";
 
@@ -37,6 +38,9 @@
   // The rail draws under the shown chat once its messages are in.
   const chatShown = $derived(Boolean(sessionId) && !sessions.opening && messages.bySession[sessionId]?.status === "ready");
   let column = $state(null);
+  // A locked chat (owner, 2026-11-03) shows the locked page in place of its
+  // timeline and composer; its messages are in the vault.
+  const locked = $derived(Boolean(sessionId) && !sessions.opening && lockHidden(sessionId));
 </script>
 
 <main class="conversation" bind:this={column} aria-label={session?.title || "Conversation"}>
@@ -53,18 +57,32 @@
   <!-- The rail is drawn before the chats, so their keys cover it (owner,
        2026-10-22: the line ran through the "A" boxes). -->
   {#if column}<Rail {column} shown={chatShown} />{/if}
-  <TimelineStack {sessionId} />
+  <div class="middle">
+    <TimelineStack {sessionId} />
+    {#if locked}<LockedPage {session} />{/if}
+  </div>
 
   <NoticeLine />
-  <Tray />
+  {#if !locked}
+    <Tray />
 
-  <Rule marks="both" class="above-composer" />
+    <Rule marks="both" class="above-composer" />
 
-  <Composer {sessionId} />
+    <Composer {sessionId} />
+  {/if}
   {#if metersUnderField() || remote}<MeterStrip meters={metersUnderField()} {remote} />{/if}
 </main>
 
 <style>
+  /* The timelines' box, with the locked page over it when the chat is
+     locked; the timelines stay drawn under it. */
+  .middle {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
   /* Vertical positions follow the approved picture at 12/12 (column top = 0). */
   .conversation {
     position: relative;

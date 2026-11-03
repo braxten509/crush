@@ -36,7 +36,7 @@ import { planReadyPresent } from "../render/plan.js";
 import { conn, refusedWhileFailed } from "./connection.svelte.js";
 import { addPending, finishPending, markUncertain, messages, resolvePending, returnDraft, takeReturned } from "./messages.svelte.js";
 import { queue, recall as recallQueued, recalled, refresh as refreshQueue } from "./queue.svelte.js";
-import { busy, deferSend, ensureSession, sessions, upsertSession } from "./sessions.svelte.js";
+import { busy, deferSend, ensureSession, onLockChange, sessions, upsertSession } from "./sessions.svelte.js";
 import { notify, requestEnd, setFocus, ui } from "./ui.svelte.js";
 import { loadAgent, ws } from "./workspace.svelte.js";
 
@@ -58,6 +58,12 @@ export const composer = $state({
   slotFull: false, // the permission prompt covers the middle column (DLG-138)
   slotTall: false, // the slot form takes all of its 60%: a diff (contentViewportHeight, permissions.go:365-373)
 });
+// A chat that locks leaves no draft text or attachments in memory (owner,
+// 2026-11-03; PLAN §9.6).
+onLockChange((sid) => {
+  delete composer.drafts[sid];
+});
+
 
 const NOT_READY = "coder agent is not initialized"; // workspace.ErrAgentNotInitialized (internal/workspace/workspace.go:34)
 const RECOVERED_IN_BANG = "Queued message recovered. Press Up outside shell mode to edit it."; // history.go:145
@@ -295,10 +301,11 @@ export async function loadHistory(sid = sessions.currentId) {
   history.load(Array.isArray(list) ? list : []);
 }
 
-// A sent prompt joins the shared history, then the history reloads.
-async function savePrompt(text) {
+// A sent prompt joins the shared history, then the history reloads. It
+// records its chat, so locking that chat takes it out (owner, 2026-11-03).
+async function savePrompt(text, sid) {
   try {
-    await api.addPromptHistory(text);
+    await api.addPromptHistory(text, sid);
   } catch (error) {
     console.error("Failed to save prompt history", errorText(error));
   }
@@ -998,7 +1005,7 @@ export async function send() {
     history.reset();
     syncMode();
     runShell(text);
-    savePrompt(`!${text}`);
+    savePrompt(`!${text}`, sid);
     requestEnd();
     return true;
   }
@@ -1021,7 +1028,7 @@ export async function send() {
   history.reset();
   syncMode();
   const sending = sendMessage(text, attachments);
-  savePrompt(text);
+  savePrompt(text, sid);
   return sending;
 }
 

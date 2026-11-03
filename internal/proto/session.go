@@ -24,26 +24,29 @@ import "encoding/json"
 // ContextBudget and EstimatedUsage are stored. A save sends back the whole
 // record it read, so both survive it.
 type Session struct {
-	ID                string          `json:"id"`
-	ParentSessionID   string          `json:"parent_session_id"`
-	Title             string          `json:"title"`
-	MessageCount      int64           `json:"message_count"`
-	PromptTokens      int64           `json:"prompt_tokens"`
-	CompletionTokens  int64           `json:"completion_tokens"`
-	SummaryMessageID  string          `json:"summary_message_id"`
-	Cost              float64         `json:"cost"`
-	Todos             []Todo          `json:"todos,omitempty"`
-	Channel           string          `json:"channel,omitempty"`
-	KeptSkills        []KeptSkill     `json:"kept_skills,omitempty"`
-	CreatedAt         int64           `json:"created_at"`
-	UpdatedAt         int64           `json:"updated_at"`
-	ContextBudget     *ContextBudget  `json:"context_budget,omitempty"` // nil when the domain Provider is ""
-	Model             json.RawMessage `json:"model,omitempty"`          // config.SelectedModel: the model this chat owns
-	EstimatedUsage    bool            `json:"estimated_usage"`
-	IsBusy            bool            `json:"is_busy"`
-	AttachedClients   int             `json:"attached_clients"`
-	HasUnfinishedWork bool            `json:"has_unfinished_work"` // computed on read, like is_busy
-	PendingPrompt     string          `json:"pending_prompt"`      // computed on read: "" | "permission" | "question"
+	ID               string          `json:"id"`
+	ParentSessionID  string          `json:"parent_session_id"`
+	Title            string          `json:"title"`
+	MessageCount     int64           `json:"message_count"`
+	PromptTokens     int64           `json:"prompt_tokens"`
+	CompletionTokens int64           `json:"completion_tokens"`
+	SummaryMessageID string          `json:"summary_message_id"`
+	Cost             float64         `json:"cost"`
+	Todos            []Todo          `json:"todos,omitempty"`
+	Channel          string          `json:"channel,omitempty"`
+	KeptSkills       []KeptSkill     `json:"kept_skills,omitempty"`
+	CreatedAt        int64           `json:"created_at"`
+	UpdatedAt        int64           `json:"updated_at"`
+	ContextBudget    *ContextBudget  `json:"context_budget,omitempty"` // nil when the domain Provider is ""
+	Model            json.RawMessage `json:"model,omitempty"`          // config.SelectedModel: the model this chat owns
+	EstimatedUsage   bool            `json:"estimated_usage"`
+	// LockState is "" for a normal chat, or locking, locked, unlocking,
+	// unlocked or relock (owner, 2026-11-03: locked chats).
+	LockState         string `json:"lock_state,omitempty"`
+	IsBusy            bool   `json:"is_busy"`
+	AttachedClients   int    `json:"attached_clients"`
+	HasUnfinishedWork bool   `json:"has_unfinished_work"` // computed on read, like is_busy
+	PendingPrompt     string `json:"pending_prompt"`      // computed on read: "" | "permission" | "question"
 }
 
 // ContextBudget is the native agent's compaction boundary for one
@@ -59,6 +62,13 @@ type ContextBudget struct {
 // config.SelectedModel, so a model picked in a chat never reaches another.
 type SetSessionModelRequest struct {
 	Model json.RawMessage `json:"model"`
+}
+
+// UnlockSessionRequest unlocks a locked chat. Stop turns it into a normal
+// chat for good ("Stop locking this chat"); KDE asks for the vault
+// password either way.
+type UnlockSessionRequest struct {
+	Stop bool `json:"stop,omitempty"`
 }
 
 // KeptSkill is a skill turned on for a whole session.

@@ -111,6 +111,11 @@ func (m *UI) loadSession(sessionID string) tea.Cmd {
 		// of megabytes and would freeze the event loop while it loads.
 		wg.Go(func() { messages, messagesErr = ws.ListMessages(ctx, sessionID) })
 		wg.Wait()
+		// A locked chat's messages are in the vault (owner, 2026-11-03): it
+		// opens empty, with a note on how to unlock it.
+		if sessErr == nil && session.Hidden(sess.LockState) {
+			sessionFiles, filesErr, readFiles, messages, messagesErr = nil, nil, nil, nil, nil
+		}
 		if err := cmp.Or(sessErr, filesErr, messagesErr); err != nil {
 			return sessionLoadFailedMsg{seq: seq, err: err}
 		}

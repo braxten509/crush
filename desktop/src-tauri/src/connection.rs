@@ -292,6 +292,9 @@ const ROUTES: &[(&str, &str)] = &[
     ("GET", "sessions/{sid}/filetracker/files"),
     ("POST", "sessions/{sid}/kept-skills"),
     ("POST", "sessions/{sid}/model"),
+    // Locked chats (owner, 2026-11-03).
+    ("POST", "sessions/{sid}/lock"),
+    ("POST", "sessions/{sid}/unlock"),
     // The model a new chat starts on (routes.go LastPick, SetLastPick).
     ("GET", "last-pick"),
     ("POST", "last-pick"),
@@ -2543,6 +2546,7 @@ mod tests {
         design.extend(OTHER_FOLDER_ROUTES.iter().map(|p| ("GET", *p)));
         design.extend(CATALOG_ROUTES.iter().map(|p| ("GET", *p)));
         design.extend(LAST_PICK_ROUTES.iter().copied());
+        design.extend(LOCK_ROUTES.iter().copied());
         design.extend([("GET", "/v1/local-models"), ("POST", "/v1/local-models/load"), ("POST", "/v1/local-models/unload")]);
         design.sort();
         assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5, the fallback, other-folder, catalog and last-pick routes, no more and no less");
@@ -2680,6 +2684,9 @@ mod tests {
 
     /// The last pick, the model a new chat starts on (internal/rpc/routes.go LastPick).
     const LAST_PICK_ROUTES: &[(&str, &str)] = &[("GET", "last-pick"), ("POST", "last-pick")];
+
+    /// Locking a chat into the vault and unlocking it (owner, 2026-11-03).
+    const LOCK_ROUTES: &[(&str, &str)] = &[("POST", "sessions/{sid}/lock"), ("POST", "sessions/{sid}/unlock")];
 
     /// Other folders' open chats, read from their saved files (TimelineStack).
     const OTHER_FOLDER_ROUTES: &[&str] = &["saved-sessions/{sid}", "saved-sessions/{sid}/messages"];

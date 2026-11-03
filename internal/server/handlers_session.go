@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/lockedchats"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/rpc"
@@ -133,6 +135,37 @@ func (c *controllerV1) setSessionModel(r *http.Request, req proto.SetSessionMode
 		return proto.Session{}, err
 	}
 	return proto.SessionFromDomain(sess), nil
+}
+
+// lockSession locks a chat (owner, 2026-11-03).
+func (c *controllerV1) lockSession(r *http.Request, _ rpc.Empty) (proto.Session, error) {
+	sess, err := c.backend.LockSession(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+	if err != nil {
+		return proto.Session{}, err
+	}
+	return proto.SessionFromDomain(sess), nil
+}
+
+// unlockSession unlocks a locked chat, or with stop turns it into a
+// normal chat for good.
+func (c *controllerV1) unlockSession(r *http.Request, req proto.UnlockSessionRequest) (proto.Session, error) {
+	sess, err := c.backend.UnlockSession(r.Context(), r.PathValue("id"), r.PathValue("sid"), req.Stop)
+	if err != nil {
+		return proto.Session{}, err
+	}
+	return proto.SessionFromDomain(sess), nil
+}
+
+// lockErrors maps locked-chat refusals to 409 with their own text.
+func lockErrors() []apiError {
+	is := func(target error) func(error) bool {
+		return func(err error) bool { return errors.Is(err, target) }
+	}
+	return []apiError{
+		{Match: is(session.ErrChatLocked), Status: http.StatusConflict, Code: "chat_locked"},
+		{Match: is(lockedchats.ErrBusyLocking), Status: http.StatusConflict, Code: "chat_locking"},
+		{Match: is(backend.ErrLockingUnavailable), Status: http.StatusConflict, Code: "locking_unavailable"},
+	}
 }
 
 // getLastPick returns the model a new chat in this folder starts on.

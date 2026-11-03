@@ -57,6 +57,6 @@ func (c *controllerV1) promptHistory(_ *http.Request, _ rpc.Empty) ([]string, er
 
 // addPromptHistory saves a sent prompt.
 func (c *controllerV1) addPromptHistory(_ *http.Request, req proto.PromptHistoryEntry) (rpc.Empty, error) {
-	prompthistory.Add(req.Text)
+	prompthistory.AddFor(req.Text, req.Chat)
 	return rpc.Empty{}, nil
 }

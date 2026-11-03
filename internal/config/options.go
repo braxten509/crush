@@ -182,6 +182,7 @@ type Options struct {
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=crush-config"`
 	CheckInMinutes            *int         `json:"check_in_minutes,omitempty" jsonschema:"description=Minutes between automatic progress check-ins Crush sends the agent while its background jobs and sub-agents run (services excluded). 0 turns them off.,default=2,minimum=0"`
 	InterruptAfterToolCalls   *int         `json:"interrupt_after_tool_calls,omitempty" jsonschema:"description=Consecutive tool calls without a user-visible update before Crush interrupts the agent and asks for a progress update. 0 turns this off.,default=21,minimum=0"`
+	StallRetrySeconds         *int         `json:"stall_retry_seconds,omitempty" jsonschema:"description=Seconds an agent CLI's reply may stop arriving before Crush asks the model again on a fresh request (Codex: after a finished step\\, while nothing runs; Claude Code: its own no-data limit\\, at least 10). 0 leaves each CLI's own limit (Codex: 5 minutes\\, Claude Code: 3 minutes).,default=20,minimum=0"`
 	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity\\, so slow but active streams are never killed. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
 	// AgentCPUsEnabled keeps Crush and everything it starts on AgentCPUs so
 	// the other CPUs stay free for the desktop. See the cpuaffinity package.
@@ -221,6 +222,21 @@ func (o *Options) GetInterruptAfterToolCalls() int {
 		return DefaultInterruptAfterToolCalls
 	}
 	return max(0, *o.InterruptAfterToolCalls)
+}
+
+// DefaultStallRetry is how long an agent CLI's reply may stop arriving
+// before Crush asks again (owner, 2026-11-02: "silent after 20 seconds it
+// auto-retries").
+const DefaultStallRetry = 20 * time.Second
+
+// GetStallRetry returns how long an agent CLI's reply may stop arriving
+// before Crush asks the model again, or zero to leave each CLI's own
+// limit. The nil receiver and unset field both mean DefaultStallRetry.
+func (o *Options) GetStallRetry() time.Duration {
+	if o == nil || o.StallRetrySeconds == nil {
+		return DefaultStallRetry
+	}
+	return time.Duration(max(0, *o.StallRetrySeconds)) * time.Second
 }
 
 // GetCheckInInterval returns the time between progress check-ins, or zero

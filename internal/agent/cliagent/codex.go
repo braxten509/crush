@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -193,6 +194,17 @@ type codexRun struct {
 	// it, which can take a minute for a long patch.
 	cue writingCue
 
+	// stallRetries counts the turns interrupted because the model's reply
+	// stopped arriving; retrying is set while such a turn winds down.
+	stallRetries int
+	retrying     bool
+	stall        *time.Timer
+	// openItems holds the items Codex started and has not completed, such
+	// as a running tool call; while any is open, silence is expected.
+	openItems map[string]bool
+	// approvals counts requests waiting on the user.
+	approvals atomic.Int32
+
 	// Ctrl+B interrupts the turn: Codex keeps its commands running in
 	// their terminal sessions, and a new turn tells the model so.
 	running          atomic.Int32 // commands in progress
@@ -264,6 +276,7 @@ func newCodexRun(ctx context.Context, m *Model, t Turn) *codexRun {
 		ctx: ctx, m: m, t: t,
 		openCmds:     map[string]time.Time{},
 		backgrounded: map[string]bool{},
+		openItems:    map[string]bool{},
 		calls:        map[string][2]string{},
 		changes:      map[string][]codexChange{},
 		output:       map[string]*strings.Builder{},
@@ -370,6 +383,10 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 	quiet := time.NewTimer(codexWritingQuiet)
 	quiet.Stop()
 	defer quiet.Stop()
+	stall := time.NewTimer(time.Hour)
+	stall.Stop()
+	defer stall.Stop()
+	r.stall = stall
 	for {
 		var raw []byte
 		select {
@@ -385,10 +402,16 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 				}
 			}
 			continue
+		case <-stall.C:
+			r.retryStalled()
+			continue
 		}
 		var msg rpcMessage
 		if json.Unmarshal(raw, &msg) != nil {
 			continue
+		}
+		if msg.Method != "" && !codexSideNotice[msg.Method] {
+			stall.Stop() // the model moved on
 		}
 		id := strings.Trim(string(msg.ID), `"`)
 
@@ -398,7 +421,11 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 			quiet.Stop()
 			var params codexParams
 			_ = json.Unmarshal(msg.Params, &params)
-			go codexRequest(r.ctx, r.m, r.t, r.p, msg, params, r.changes[params.ItemID])
+			r.approvals.Add(1)
+			go func() {
+				defer r.approvals.Add(-1)
+				codexRequest(r.ctx, r.m, r.t, r.p, msg, params, r.changes[params.ItemID])
+			}()
 			continue
 		}
 		if r.ctx.Err() != nil {
@@ -428,7 +455,60 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 				return true, err
 			}
 		}
+		if (msg.Method == "item/completed" || msg.Method == "turn/plan/updated") && r.t.StallRetry > 0 && !r.itemsOpen() {
+			stall.Reset(r.stallWait())
+		}
 	}
+}
+
+// codexSideNotice lists notifications that say nothing about the model's
+// reply, so they neither show it is still coming nor end a stall.
+var codexSideNotice = map[string]bool{
+	"account/rateLimits/updated":      true,
+	"thread/tokenUsage/updated":       true,
+	"thread/status/changed":           true,
+	"remoteControl/status/changed":    true,
+	"mcpServer/startupStatus/updated": true,
+}
+
+// codexStallNote starts the turn that replaces one whose reply stopped
+// arriving. Codex keeps what the model said and did before it.
+const codexStallNote = "Your last reply stopped arriving partway (the connection to the model stalled), so Crush asked again. Carry on from where you were."
+
+// stallWait is how long Codex may stay silent after a step ends before the
+// turn is asked again. Each retry in the same turn doubles it, so a long
+// command the model really is still writing gets through in the end.
+func (r *codexRun) stallWait() time.Duration {
+	return r.t.StallRetry << min(r.stallRetries, 6)
+}
+
+// itemsOpen reports whether a started item, other than a command running
+// on in the background, has not completed yet.
+func (r *codexRun) itemsOpen() bool {
+	for id := range r.openItems {
+		if !r.backgrounded[id] {
+			return true
+		}
+	}
+	return false
+}
+
+// retryStalled interrupts a turn that went silent right after a step: the
+// model's next output stopped arriving (seen with a tool call stuck for
+// minutes, 2026-11-02). Asking again on a new turn works at once, as the
+// user's own cancel and resend did. A command running or a question to the
+// user is a reason for silence, so neither is touched.
+func (r *codexRun) retryStalled() {
+	if r.ctx.Err() != nil || r.retrying || r.itemsOpen() || r.running.Load() > 0 || r.approvals.Load() > 0 || r.ctrlB.Load() || r.movedToBg.Load() {
+		return
+	}
+	ids := r.active.Load()
+	if ids == nil {
+		return
+	}
+	slog.Info("Codex reply stalled; asking again", "thread", ids[0], "turn", ids[1], "after", r.stallWait())
+	r.retrying = true
+	_ = r.p.send(map[string]any{"id": "stall", "method": "turn/interrupt", "params": map[string]any{"threadId": ids[0], "turnId": ids[1]}})
 }
 
 // followCue acts on what the item that just ended says comes next. Any

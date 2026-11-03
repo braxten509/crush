@@ -20,12 +20,14 @@
     DEFAULT_AUTOCOMPACT,
     DEFAULT_CHECK_IN,
     DEFAULT_INTERRUPT_AFTER_TOOL_CALLS,
+    DEFAULT_STALL_RETRY,
     NOTIFICATION_STYLES,
     notificationStyle,
     options,
     setAgentCpus,
     setCheckInMinutes,
     setInterruptAfterToolCalls,
+    setStallRetrySeconds,
     setLaunchTarget,
     setSidebarShown,
     toggleAgentCpus,
@@ -45,9 +47,10 @@
 
   let checkIn = $state(String(options().check_in_minutes ?? DEFAULT_CHECK_IN));
   let interruptAfterToolCalls = $state(String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS));
+  let stallRetry = $state(String(options().stall_retry_seconds ?? DEFAULT_STALL_RETRY));
   let cpus = $state(String(options().agent_cpus ?? ""));
   let hasPassword = $state(false);
-  let editing = $state(""); // the focused field: check-in, tool limit, CPUs, or ""
+  let editing = $state(""); // the focused field: check-in, tool limit, stuck-reply wait, CPUs, or ""
   let atFocus = ""; // its text when it took the focus
 
   // A field not being typed in follows the config, so leaving it untouched
@@ -55,9 +58,11 @@
   $effect(() => {
     const minutes = String(options().check_in_minutes ?? DEFAULT_CHECK_IN);
     const toolCalls = String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS);
+    const stall = String(options().stall_retry_seconds ?? DEFAULT_STALL_RETRY);
     const set = String(options().agent_cpus ?? "");
     if (editing !== "check_in") checkIn = minutes;
     if (editing !== "interrupt_after_tool_calls") interruptAfterToolCalls = toolCalls;
+    if (editing !== "stall_retry") stallRetry = stall;
     if (editing !== "cpus") cpus = set;
   });
 
@@ -90,6 +95,13 @@
     if (!(await setInterruptAfterToolCalls(interruptAfterToolCalls))) {
       interruptAfterToolCalls = String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS);
     }
+  }
+
+  async function saveStallRetry() {
+    editing = "";
+    if (stallRetry === atFocus) return;
+    if (String(options().stall_retry_seconds ?? DEFAULT_STALL_RETRY) === stallRetry.trim()) return;
+    if (!(await setStallRetrySeconds(stallRetry))) stallRetry = String(options().stall_retry_seconds ?? DEFAULT_STALL_RETRY);
   }
 
   async function saveCpus() {
@@ -212,6 +224,10 @@
     <div class="row">
       <span class="name">Interrupt after</span>
       <span class="field"><input type="text" inputmode="numeric" bind:value={interruptAfterToolCalls} onfocus={() => ((editing = "interrupt_after_tool_calls"), (atFocus = interruptAfterToolCalls))} onblur={saveInterruptAfterToolCalls} onkeydown={fieldKey} aria-label="Tool calls without an update" /> consecutive tool calls without an update (0 disables)</span>
+    </div>
+    <div class="row">
+      <span class="name">Ask again when a reply is stuck after</span>
+      <span class="field"><input type="text" inputmode="numeric" bind:value={stallRetry} onfocus={() => ((editing = "stall_retry"), (atFocus = stallRetry))} onblur={saveStallRetry} onkeydown={fieldKey} aria-label="Seconds before a stuck reply is asked again" /> seconds of silence (Codex and Claude; 0 keeps each tool's own limit)</span>
     </div>
     <div class="row">
       <span class="name">Sub-agent instructions</span>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -115,6 +116,9 @@ type claudeKey struct {
 	bypass, fast                bool
 	ultracode                   bool
 	noMCP                       bool
+	// stall is [Turn.StallRetry]; a process started with another keeps
+	// the old limit, so a change starts a new one.
+	stall time.Duration
 }
 
 // claudeLive is a Claude process kept open between the turns of one Crush
@@ -361,6 +365,12 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	// instead of holding the turn (owner, 2026-10-21: "if a command has been
 	// running for 2 minutes or more it is forced to background").
 	env = append(env, claudeAutoBackground)
+	if ms := claudeStallMillis(key.stall); ms > 0 {
+		// Claude Code's own watchdog drops a reply whose bytes stopped
+		// arriving and asks again on a fresh connection. Its default waits 3
+		// minutes; the stream's keep-alive pings keep a slow reply alive.
+		env = append(env, "CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS="+strconv.FormatInt(ms, 10))
+	}
 	p, err := m.startTurnProc(t.NoTools, env, "claude", args...)
 	if err != nil {
 		return nil, err
@@ -412,7 +422,7 @@ type claudeRun struct {
 }
 
 func runClaude(ctx context.Context, m *Model, t Turn) error {
-	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, account: m.Account, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID), noMCP: m.NoMCP}
+	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, account: m.Account, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID), noMCP: m.NoMCP, stall: t.StallRetry}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *claudeLive
@@ -538,6 +548,15 @@ func (r *claudeRun) readLoop(pending [][]byte) (done bool, err error) {
 			return true, err
 		}
 	}
+}
+
+// claudeStallMillis is the CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS for a stall
+// limit, or 0 to leave Claude Code's own. Claude takes nothing under 10 s.
+func claudeStallMillis(d time.Duration) int64 {
+	if d <= 0 {
+		return 0
+	}
+	return max(d.Milliseconds(), 10_000)
 }
 
 // claudeAutoBackground caps Claude Code's foreground Bash wait (its own

@@ -13,6 +13,7 @@ import { ws } from "../stores/workspace.svelte.js";
 export const DEFAULT_AUTOCOMPACT = 400_000;
 export const DEFAULT_CHECK_IN = 2;
 export const DEFAULT_INTERRUPT_AFTER_TOOL_CALLS = 21;
+export const DEFAULT_STALL_RETRY = 20;
 // Each style says in everyday words what it does (owner, 2026-10-20).
 export const NOTIFICATION_STYLES = [
   { id: "auto", label: "Auto", description: "Crush picks the best way for where it runs" },
@@ -111,6 +112,23 @@ export async function setInterruptAfterToolCalls(text) {
   }
   try {
     await setOption("options.interrupt_after_tool_calls", calls);
+    return true;
+  } catch (error) {
+    notify("error", errorText(error));
+    return false;
+  }
+}
+
+// Seconds a CLI's reply may stop arriving before Crush asks again (owner,
+// 2026-11-02); 0 leaves each CLI's own limit.
+export async function setStallRetrySeconds(text) {
+  const seconds = Number(String(text).trim());
+  if (String(text).trim() === "" || !Number.isInteger(seconds) || seconds < 0) {
+    notify("error", "Enter a whole number of seconds (0 keeps each tool's own limit)");
+    return false;
+  }
+  try {
+    await setOption("options.stall_retry_seconds", seconds);
     return true;
   } catch (error) {
     notify("error", errorText(error));

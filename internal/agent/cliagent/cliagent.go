@@ -146,6 +146,10 @@ type Turn struct {
 	// SteerReady wakes the driver as soon as a prompt is queued. Polling
 	// remains a fallback for prompts queued before the driver starts.
 	SteerReady <-chan struct{}
+	// StallRetry is options.stall_retry_seconds: how long the model's reply
+	// may stop arriving before it is asked again on a fresh request. Zero
+	// leaves each CLI's own, much longer, limit.
+	StallRetry time.Duration
 }
 
 // Model is a CLI-backed model. It implements [fantasy.LanguageModel] for

@@ -45,6 +45,16 @@ func (r *codexRun) handleResponse(id string, msg rpcMessage) error {
 			r.startThread()
 		}
 		return nil
+	case id == "stall":
+		// Most likely the turn ended before the interrupt reached it; if
+		// not, the wait starts over.
+		if msg.Error != nil {
+			r.retrying = false
+			if r.stall != nil {
+				r.stall.Reset(r.stallWait())
+			}
+		}
+		return nil
 	case strings.HasPrefix(id, "steer-"):
 		// A steer that missed the turn is never confirmed, so it
 		// runs as the next turn instead.
@@ -161,8 +171,10 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 		r.compacting = false
 		err = r.t.Emit(Event{Type: EventCompacting})
 	case "item/started":
+		r.openItems[params.Item.ID] = true
 		err = r.handleItemStarted(params.Item)
 	case "item/completed":
+		delete(r.openItems, params.Item.ID)
 		err = r.handleItemCompleted(params.Item)
 	}
 	return err != nil, err
@@ -201,6 +213,7 @@ func (r *codexRun) handleTurnCompleted(params codexParams) (done bool, err error
 	}
 	if params.Turn.Status == "interrupted" && r.movedToBg.Load() && r.ctx.Err() == nil {
 		r.movedToBg.Store(false)
+		r.retrying = false // Ctrl+B goes first; its turn goes on
 		r.active.Store(nil)
 		for id := range r.openCmds {
 			r.backgrounded[id] = true
@@ -214,6 +227,15 @@ func (r *codexRun) handleTurnCompleted(params codexParams) (done bool, err error
 		_ = r.p.send(map[string]any{"id": "ctrl-b-list", "method": "thread/backgroundTerminals/list", "params": map[string]any{"threadId": r.threadID}})
 		return false, nil
 	}
+	if params.Turn.Status == "interrupted" && r.retrying && r.ctx.Err() == nil {
+		// Stopped by [codexRun.retryStalled]: ask again in a new turn.
+		r.retrying = false
+		r.stallRetries++
+		r.active.Store(nil)
+		r.startTurn([]any{map[string]any{"type": "text", "text": codexStallNote, "text_elements": []any{}}})
+		return false, nil
+	}
+	r.retrying = false
 	switch params.Turn.Status {
 	case "completed":
 		r.finished = true

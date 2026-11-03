@@ -1,6 +1,5 @@
 // The left list's registrations (desktop-design-5-6 2.20 to 2.23; LST): the
-// list sections "terminals" (after the chats) and "servers" (at the bottom)
-// and the "‹‹" control (in the header place, drawn on the wordmark's row);
+// "‹‹" control (in the header place, drawn on the wordmark's row);
 // the phase 6 row state "Done"; the sheet "folder_picker"; the close step
 // "draft"; window-request's newChat; the list keys; the reads that keep the
 // chats' states, the server poll and the list's saved collapsed choice; and
@@ -9,7 +8,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { untrack } from "svelte";
 import CollapseButton from "../../components/leftlist/CollapseButton.svelte";
 import FolderPicker from "../../components/leftlist/FolderPicker.svelte";
-import TerminalRows from "../../components/leftlist/TerminalRows.svelte";
 import { runAction } from "../actions.js";
 import { registerCloseStep } from "../closing.js";
 import { registerDialog } from "../dialogs.js";
@@ -30,10 +28,9 @@ import { registerRowState } from "../rowstates.js";
 import { conn } from "../stores/connection.svelte.js";
 import { folders } from "../stores/folders.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
-import { askCloseTerminal, terminals } from "../terminal/tabs.svelte.js";
+import { askCloseTerminal } from "../terminal/tabs.svelte.js";
 
 registerListSection({ id: "collapse", order: 0, place: "header", component: CollapseButton });
-registerListSection({ id: "terminals", order: 10, place: "rows", visible: () => terminals.length > 0, component: TerminalRows });
 // The servers are the right panel's SERVERS (owner, 2026-10-19); the list
 // still reads them (below).
 registerRowState(rowStateOf);
@@ -243,7 +240,6 @@ probeSection(
       strip_new_session: rectOf(one("nav.strip .new-session")),
       strip_new_terminal: rectOf(one("nav.strip .new-terminal")),
       folder_name: rectOf(one('[data-probe="folder-picker"]')),
-      strip_rule: rectOf(one("nav.strip .group-rule")),
       strip_cells: all("nav.strip .cell").map((el) => ({
         row: el.dataset.row,
         number: el.querySelector(".number")?.textContent ?? "",
@@ -254,11 +250,14 @@ probeSection(
         shown: el.classList.contains("shown"),
       })),
       scroll: scroll && { top: scroll.scrollTop, height: scroll.clientHeight, content: scroll.scrollHeight, rect: rectOf(scroll) },
+      // Each folder's terminal rows sit after its chats (owner, 2026-11-03).
       terminals: {
-        heading: rectOf(one("nav.chats .terminals .group")),
-        heading_text: one("nav.chats .terminals .group .label")?.textContent ?? "",
-        add: rectOf(one("nav.chats .terminals .add")),
-        rows: all("nav.chats li.terminal").map((el) => ({ id: el.dataset.id, rect: rectOf(el), selected: el.classList.contains("selected") })),
+        rows: all("nav.chats li.terminal").map((el) => ({
+          id: el.dataset.id,
+          folder: el.closest("section.group")?.dataset.folder ?? "",
+          rect: rectOf(el),
+          selected: el.classList.contains("selected"),
+        })),
       },
       failure: rectOf(one("nav.chats .start-failure")),
       failure_text: one("nav.chats .start-failure")?.textContent ?? "",

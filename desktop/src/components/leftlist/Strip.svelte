@@ -5,9 +5,10 @@
   // top row opens the list), "+" (a new chat in this folder), ">_"
   // (a new terminal in this folder), then one cell per row with its state mark and its
   // number (its Alt+number, at most two digits); the shown row's cell has the
-  // vermilion edge, and a rule parts the chats from the terminal tabs. No
-  // notice line and no server rows (servers.go:96-99). A terminal tab's cell
-  // drags like its row (LIST-009). Mounting it starts the page-width watch.
+  // vermilion edge. The cells follow the list's order, a folder's terminal
+  // tabs after its chats (owner, 2026-11-03). No notice line and no server
+  // rows (servers.go:96-99). A terminal tab's cell drags like its row, among
+  // its folder's terminals (LIST-009). Mounting it starts the page-width watch.
   import { onMount } from "svelte";
   import { slidePage } from "../../lib/motion.js";
   import { settingsOpen } from "../../lib/settings/page.svelte.js";
@@ -29,7 +30,6 @@
       shown: isShown(row),
     })),
   );
-  const firstTerminal = $derived(rows.findIndex((row) => row.kind === "terminal"));
 
   // The shown row's cell stays in view when the shown row changes.
   $effect(() => {
@@ -41,7 +41,7 @@
   function press(event, row) {
     if (row.kind !== "terminal") return;
     showRow(row);
-    startDrag(event, row.id, cells, () => [...(cells?.querySelectorAll(".cell.terminal") ?? [])]);
+    startDrag(event, row.id, cells, () => [...(cells?.querySelectorAll(".cell.terminal") ?? [])].filter((cell) => cell.dataset.group === row.group));
   }
 </script>
 
@@ -59,14 +59,14 @@
     <Icon name="terminal" size={18} />
   </button>
   <div class="cells" bind:this={cells}>
-    {#each rows as row, i (row.key)}
-      {#if i === firstTerminal && i > 0}<span class="group-rule" aria-hidden="true"></span>{/if}
+    {#each rows as row (row.key)}
       <button
         class="cell {row.state}"
         class:shown={row.shown}
         class:dragging={row.kind === "terminal" && leftList.dragging === row.id}
         type="button"
         data-row={row.key}
+        data-group={row.group}
         data-number={row.number}
         aria-label="{row.title}, {row.number}"
         aria-current={row.shown ? "page" : undefined}
@@ -141,12 +141,6 @@
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: none;
-  }
-  .group-rule {
-    display: block;
-    height: 1px;
-    margin: 0 calc(12 * var(--px));
-    background: var(--rule);
   }
 
   /* One cell per row: the mark, then the number. */

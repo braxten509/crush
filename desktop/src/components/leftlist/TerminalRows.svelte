@@ -1,29 +1,25 @@
 <script>
-  // This window's terminal tabs in the open list (desktop-design-5-6 2.20,
-  // 2.25, look 5.17; LIST-001, LIST-009, LIST-010, LIST-045, LIST-055): the
-  // list section "terminals" after the chats (internal/ui/sessionhost/
-  // draw.go:18-23), under the group heading "Terminals [<n>]" (draw.go:
-  // 450-469) with a "+" for a new terminal. A row has the terminal mark,
-  // "Terminal" and, below, its folder's name; the shown tab sits on the band
-  // with the vermilion edge, and its "×" asks to close it (TERM's close box).
-  // A click shows the tab; pressing and dragging moves it within the group
-  // (the pointer is captured until the release). The shown row stays in view.
-  import { askCloseTerminal } from "../../lib/terminal/tabs.svelte.js";
-  import { orderedTerminals, showRow, shownTerminal, startDrag } from "../../lib/leftlist/numbers.js";
-  import { baseOf, clean, short } from "../../lib/leftlist/picker.js";
-  import { leftList, newTerminal } from "../../lib/leftlist/store.svelte.js";
+  // One folder's terminal tabs (desktop-design-5-6 2.20, 2.25, look 5.17;
+  // LIST-001, LIST-009, LIST-010, LIST-045, LIST-055), drawn in the folder
+  // after its chats (owner, 2026-11-03: no separate terminals part). A row has
+  // the terminal mark and its title; the shown tab sits on the band with the
+  // vermilion edge, and its "×" asks to close it (TERM's close box). A click
+  // shows the tab; pressing and dragging moves it among its folder's
+  // terminals (the pointer is captured until the release). A double-click or
+  // right-click renames it in place: Enter or leaving the box keeps the name,
+  // Esc drops it, an empty name goes back to the shell's title, and the keys
+  // go back to the shown terminal (owner, 2026-11-03). The shown row stays in view.
+  import { askCloseTerminal, renameTerminal, showTerminal } from "../../lib/terminal/tabs.svelte.js";
+  import { showRow, shownTerminal, startDrag } from "../../lib/leftlist/numbers.js";
+  import { leftList } from "../../lib/leftlist/store.svelte.js";
   import Icon from "../Icon.svelte";
-  import Rule from "../Rule.svelte";
 
+  let { tabs = [] } = $props();
   let list = $state(null);
+  let editing = $state(""); // the tab being renamed
+  let draft = $state("");
 
-  const tabs = $derived(orderedTerminals());
   const shown = $derived(shownTerminal());
-
-  // The folder's name, home as "~" (draw.go:397-400).
-  function folderOf(tab) {
-    return tab?.cwd ? baseOf(short(clean(tab.cwd), leftList.home)) : "";
-  }
 
   function titleOf(tab) {
     return tab?.title || "Terminal";
@@ -35,9 +31,57 @@
   });
 
   function press(event, tab) {
-    if (event.button !== 0 || event.target?.closest?.(".close")) return;
+    if (event.button !== 0 || event.target?.closest?.(".close, .rename")) return;
     showRow({ kind: "terminal", id: tab.id });
     startDrag(event, tab.id, list, () => [...(list?.querySelectorAll("li.terminal") ?? [])]);
+  }
+
+  function rename(tab) {
+    editing = tab.id;
+    draft = tab.name || titleOf(tab);
+  }
+
+  // The drag holds the pointer on the list, so a double-click lands on the
+  // list itself: the row under the pointer is the one meant.
+  function dblclick(event) {
+    const id = document.elementFromPoint(event.clientX, event.clientY)?.closest?.("li.terminal")?.dataset.id;
+    const tab = tabs.find((t) => t.id === id);
+    if (tab) rename(tab);
+  }
+
+  function menu(event, tab) {
+    event.preventDefault();
+    rename(tab);
+  }
+
+  // Done by Enter or Esc: the keys go back to the shown terminal (a click
+  // elsewhere keeps the name and leaves the focus where it went).
+  function stop(id, refocus = true) {
+    editing = "";
+    if (refocus && id === shown) showTerminal(id);
+  }
+
+  function keep(refocus = true) {
+    if (!editing) return;
+    const id = editing;
+    renameTerminal(id, draft);
+    stop(id, refocus);
+  }
+
+  function onRenameKey(event) {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      keep();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      stop(editing);
+    }
+  }
+
+  function focusSelect(node) {
+    node.focus();
+    node.select();
   }
 
   function close(event, tab) {
@@ -46,83 +90,68 @@
   }
 </script>
 
-<section class="terminals" aria-label="Terminals">
-  <Rule marks="both" class="above-terminals" />
-  <h2 class="group">
-    <span class="label">Terminals [{tabs.length}]</span>
-    <button class="add" type="button" aria-label="New terminal" title="New terminal (Alt+T)" onclick={newTerminal}>
-      <Icon name="plus" />
-    </button>
-  </h2>
-  <ul class="list" bind:this={list}>
-    {#each tabs as tab (tab.id)}
-      <li class="terminal" class:selected={tab.id === shown} class:dragging={leftList.dragging === tab.id} data-id={tab.id}>
+<ul class="terminals" aria-label="Terminals" bind:this={list} ondblclick={dblclick}>
+  {#each tabs as tab (tab.id)}
+    <li class="terminal" class:selected={tab.id === shown} class:dragging={leftList.dragging === tab.id} data-id={tab.id}>
+      {#if editing === tab.id}
+        <div class="row editing">
+          <span class="title">
+            <Icon name="terminal" size={18} />
+            <input
+              class="rename"
+              type="text"
+              aria-label="Terminal name"
+              placeholder="Terminal"
+              maxlength="80"
+              bind:value={draft}
+              use:focusSelect
+              onkeydown={onRenameKey}
+              onblur={() => keep(false)}
+            />
+          </span>
+        </div>
+      {:else}
         <button
           class="row"
           type="button"
+          title="Double-click to rename"
           aria-current={tab.id === shown ? "page" : undefined}
           onclick={() => showRow({ kind: "terminal", id: tab.id })}
           onpointerdown={(event) => press(event, tab)}
+          oncontextmenu={(event) => menu(event, tab)}
         >
           <span class="title"><Icon name="terminal" size={18} /><span class="name">{titleOf(tab)}</span></span>
-          <span class="folder"><Icon name="folder-filled" size={12} /><span class="path">{folderOf(tab)}</span></span>
         </button>
-        <button class="close" type="button" aria-label="Close {titleOf(tab)}" onclick={(event) => close(event, tab)}>
-          <Icon name="close" size={12} />
-        </button>
-      </li>
-    {/each}
-  </ul>
-</section>
+      {/if}
+      <button class="close" type="button" aria-label="Close {titleOf(tab)}" onclick={(event) => close(event, tab)}>
+        <Icon name="close" size={12} />
+      </button>
+    </li>
+  {/each}
+</ul>
 
 <style>
-  /* Set apart from the chats by a 24 gap plus a blank row (owner,
-     2026-10-22) and a clear-ended rule, the heading 10 below it (owner's
-     pick D, 2026-10-21). */
-  .terminals :global(.rule.above-terminals) {
-    margin-top: calc(46 * var(--px));
+  /* Straight under the folder's chats; under its line, 3 px down as the
+     chats are (ChatList.svelte .list). */
+  :global(.folder) + .terminals {
+    margin-top: 3px;
   }
-  /* The day heading's style (ChatList.svelte .day), with the "+" 20 x 20 at
-     the list's right edge minus 19, on the heading's centre line. */
-  .group {
-    position: relative;
-    display: flex;
-    align-items: center;
-    margin: calc(10 * var(--px)) 0 0 calc(20 * var(--px));
-    font: var(--t-label);
-    letter-spacing: var(--track-label);
-    text-transform: uppercase;
+  /* 2 screen px after the last chat and between rows, as between chats
+     (ChatRow.svelte), so two bands never touch. */
+  :global(.list) + .terminals,
+  .terminal + .terminal {
+    margin-top: 2px;
   }
-  .add {
-    position: absolute;
-    right: calc(19 * var(--px));
-    top: 50%;
-    transform: translateY(-50%);
-    display: grid;
-    place-items: center;
-    width: calc(20 * var(--px));
-    height: calc(20 * var(--px));
-    padding: 0;
-    color: var(--slate);
-  }
-  .add:hover {
-    color: var(--ink);
-  }
-  .add:focus-visible,
   .close:focus-visible {
     outline: 1px solid var(--vermilion);
     outline-offset: calc(2 * var(--px));
-  }
-
-  .list {
-    margin-top: calc(13 * var(--px));
   }
   .terminal {
     position: relative;
   }
 
   /* The chat row's geometry (list/ChatRow.svelte): one line 44 high, text
-     from 23, the folder in the time's place. */
+     from 23. */
   .row {
     position: relative;
     display: grid;
@@ -151,20 +180,22 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .folder {
-    display: flex;
-    align-items: center;
-    gap: calc(6 * var(--px));
+  /* The name box sits where the name was, on the same line. */
+  .rename {
+    flex: 1 1 auto;
     min-width: 0;
-    max-width: calc(140 * var(--px));
-    font: var(--t-small);
-    color: var(--slate);
+    height: calc(30 * var(--px));
+    padding: 0 calc(6 * var(--px));
+    margin-left: calc(-7 * var(--px));
+    box-sizing: border-box;
+    border: 1px solid var(--rule-control);
+    background: var(--paper-raised);
+    font: var(--t-item);
+    color: var(--ink);
+    outline: none;
   }
-  .path {
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .rename:focus-visible {
+    border-color: var(--vermilion);
   }
   .row:hover .name {
     text-decoration: underline;

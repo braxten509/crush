@@ -1,7 +1,8 @@
 <script>
   // The left column: the wordmark, New chat and New terminal, the search,
   // and the open chats shared with the terminal's session list (owner,
-  // 2026-10-20: "the two should be in sync"), under their folders (owner,
+  // 2026-10-20: "the two should be in sync"), with this window's terminal
+  // tabs after them (owner, 2026-11-03), under their folders (owner,
   // 2026-10-21, pick A: the path in quiet italic, a plain "+" on its right
   // for a new chat there). A folder stays after its last chat closes; then
   // an × beside the "+" takes it off (lib/stores/listfolders.svelte.js). The open chat sits on a band with a vermilion edge; a row
@@ -28,6 +29,7 @@
   import { setFocus } from "../lib/stores/ui.svelte.js";
   import Icon from "./Icon.svelte";
   import ChatRow from "./list/ChatRow.svelte";
+  import TerminalRows from "./leftlist/TerminalRows.svelte";
   import { searchFocused, setSearchField } from "./list/listfocus.js";
   import { newChat, newTerminal, startIn } from "../lib/leftlist/store.svelte.js";
   import { listRoom } from "./panel/panel.svelte.js";
@@ -232,7 +234,7 @@
         <div class="folder">
           <Icon name="folder-filled" size={12} class="folder-icon" />
           <span class="folder-name" title={group.dir}>{group.label}</span>
-          {#if group.rows.length === 0}
+          {#if group.rows.length === 0 && group.terminals.length === 0}
             <button class="folder-button folder-drop" type="button" aria-label="Remove {group.label}" title="Remove folder" onclick={() => dropFolder(group.dir)}>
               <Icon name="close" size={12} frame={30} />
             </button>
@@ -247,8 +249,11 @@
               <ChatRow {row} />
             {/each}
           </ul>
-        {:else}
+        {:else if group.terminals.length === 0}
           <p class="folder-empty">No open chats</p>
+        {/if}
+        {#if group.terminals.length > 0}
+          <TerminalRows tabs={group.terminals} />
         {/if}
       </section>
     {/each}

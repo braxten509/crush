@@ -21,7 +21,11 @@ import { theme } from "../themes/current.svelte.js";
 import * as K from "./keys.js";
 import { pageZoom, themeFromPage, xtermType } from "./xtermtheme.js";
 
-export const terminals = $state([]); // [{id, title, cwd, exited, state, error}]
+// [{id, title, base, name, shellTitle, cwd, dir, exited, state, error}]: dir
+// is the folder it opened in; title is what the list shows, the typed name,
+// else the title the shell or program sets, else base, the opening title
+// (owner, 2026-11-03).
+export const terminals = $state([]);
 
 const tabs = new Map(); // id → the tab's own parts (below)
 let count = 0;
@@ -48,6 +52,22 @@ function loadXterm() {
 // folder picker's failure line can follow it (LIST-048).
 export function openTerminal({ cwd, argv = null, title = "Terminal" } = {}) {
   return openTab({ cwd, argv, title });
+}
+
+// The list's name for a tab: a typed one, else the shell's, else its opening
+// title.
+function retitle(entry) {
+  entry.title = entry.name || entry.shellTitle || entry.base;
+}
+
+// A name typed on the list's row (owner, 2026-11-03); an empty one goes back
+// to the shell's title.
+export function renameTerminal(id, name) {
+  const entry = terminals.find((t) => t.id === id);
+  if (!entry) return false;
+  entry.name = String(name ?? "").trim().slice(0, 80);
+  retitle(entry);
+  return true;
 }
 
 // The tab's view in the middle column (the chat stays mounted underneath).
@@ -130,7 +150,7 @@ export function openTab({ cwd, argv = null, title = "Terminal", backToChat = fal
   let resolveExited, resolveStarted;
   const exited = new Promise((resolve) => (resolveExited = resolve));
   const started = new Promise((resolve) => (resolveStarted = resolve));
-  terminals.push({ id, title, cwd: cwd ?? "", exited, state: "starting", error: "" });
+  terminals.push({ id, title, base: title, name: "", shellTitle: "", cwd: cwd ?? "", dir: cwd ?? "", exited, state: "starting", error: "" });
   const tab = {
     id,
     entry: terminals[terminals.length - 1],
@@ -331,6 +351,11 @@ export function copySelection(tab) {
 
 function wire(tab) {
   const term = tab.term;
+  // OSC 0 / OSC 2: the title the shell or a program sets.
+  term.onTitleChange((text) => {
+    tab.entry.shellTitle = String(text ?? "").trim().slice(0, 80);
+    retitle(tab.entry);
+  });
   term.onData((data) => {
     if (K.isFocusReport(data)) return;
     sendInput(tab, data);

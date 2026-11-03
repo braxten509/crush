@@ -1,8 +1,8 @@
 // The list's rows in order (desktop-design-5-6 2.20; LIST-008, LIST-009,
-// LIST-044): the open chats shared with the terminal as the list draws them
-// (openlist.listedRows), then this window's terminal tabs in their list
-// order. A row's number is its Alt+number, chats first
-// (internal/ui/sessionhost/input.go:53-56); the strip shows it.
+// LIST-044): folder by folder, the open chats shared with the terminal as the
+// list draws them (openlist.listedRows), then this window's terminal tabs
+// opened in that folder (owner, 2026-11-03: no separate terminals part). A
+// row's number is its Alt+number in that order; the strip shows it.
 import { closeMain, mainView } from "../mainview.js";
 import { conn, inFolder, switchFolder } from "../stores/connection.svelte.js";
 import { folders } from "../stores/folders.svelte.js";
@@ -40,13 +40,28 @@ function draftDir() {
   return sessions.draft && !sessions.currentId ? dir : "";
 }
 
-// The chats under their folders (owner, 2026-10-21): [{dir, label, rows}],
-// the kept folders first (lib/stores/listfolders.svelte.js).
+// The folder a terminal tab sits under: the one it opened in (owner,
+// 2026-11-03), else where it is now.
+export function terminalFolder(tab) {
+  return folderKey(tab?.dir || tab?.cwd || "");
+}
+
+// The chats under their folders (owner, 2026-10-21): [{dir, label, rows,
+// terminals}], the kept folders first (lib/stores/listfolders.svelte.js); a
+// folder's terminal tabs come after its chats, and a terminal whose folder
+// has no line gets one.
 export function chatGroups(now = Date.now()) {
   const dir = draftDir();
   const rows = withHelpers(dir ? draftRow(listedChats(now), dir, now) : listedChats(now));
-  return folderGroups(rows, listFolders.dirs, folderKey).map((group) => ({
+  const tabs = orderedTerminals();
+  const groups = folderGroups(rows, listFolders.dirs, folderKey);
+  for (const tab of tabs) {
+    const k = terminalFolder(tab);
+    if (k && !groups.some((group) => group.dir === k)) groups.push({ dir: k, rows: [] });
+  }
+  return groups.map((group) => ({
     ...group,
+    terminals: tabs.filter((tab) => terminalFolder(tab) === group.dir),
     // A heading always says where it is: a folder whose short name came out
     // empty falls back to its own path, never an empty box (owner,
     // 2026-10-23: the new-chat flash).
@@ -90,11 +105,22 @@ export function shownTerminal() {
   return view?.kind === "terminal" ? (view.props?.id ?? "") : "";
 }
 
-// Every row, numbered: {kind: "chat" | "terminal", id, title, number}; a chat
-// of another folder also has folder: {dir}.
+// Every row, numbered, in the drawn order: {kind: "chat" | "terminal", id,
+// title, group, number}; a chat of another folder also has folder: {dir}. A
+// terminal tab with no folder at all comes last.
 export function listRows() {
-  const rows = chatRows().map((row) => ({ kind: "chat", id: row.id, title: row.title, folder: row.folder ?? null }));
-  for (const tab of orderedTerminals()) rows.push({ kind: "terminal", id: tab.id, title: tab.title || "Terminal" });
+  const rows = [];
+  const placed = new Set();
+  for (const group of chatGroups()) {
+    for (const row of group.rows) rows.push({ kind: "chat", id: row.id, title: row.title, group: group.dir, folder: row.folder ?? null });
+    for (const tab of group.terminals) {
+      placed.add(tab.id);
+      rows.push({ kind: "terminal", id: tab.id, title: tab.title || "Terminal", group: group.dir });
+    }
+  }
+  for (const tab of orderedTerminals()) {
+    if (!placed.has(tab.id)) rows.push({ kind: "terminal", id: tab.id, title: tab.title || "Terminal", group: "" });
+  }
   return rows.map((row, i) => ({ ...row, number: i + 1 }));
 }
 
@@ -141,27 +167,37 @@ export function showNumber(n) {
   return showRow(listRows()[n - 1]);
 }
 
-// Moves a terminal tab to place `to` among the terminal tabs (moveActive,
-// input.go:262-286). Chats keep the list's day order, so only terminal tabs
-// move (2.20, inferred).
+// The terminal tabs that share id's folder, in list order.
+function folderMates(id) {
+  const tabs = orderedTerminals();
+  const k = terminalFolder(tabs.find((tab) => tab.id === id));
+  return tabs.filter((tab) => terminalFolder(tab) === k);
+}
+
+// Moves a terminal tab to place `to` among its folder's terminal tabs
+// (moveActive, input.go:262-286). Chats keep the list's order, so only
+// terminal tabs move, and only within their folder (owner, 2026-11-03).
 export function moveTerminal(id, to) {
-  return moveTab(id, to);
+  const mates = folderMates(id);
+  const target = mates[Math.min(Math.max(to, 0), mates.length - 1)];
+  if (!target || target.id === id) return false;
+  return moveTab(id, orderedTerminals().findIndex((tab) => tab.id === target.id));
 }
 
 // Alt+Shift+↑ and Alt+Shift+↓: the shown row one place, within its group.
 export function moveShown(by) {
   const id = shownTerminal();
   if (!id) return false;
-  const order = orderedTerminals().map((tab) => tab.id);
+  const order = folderMates(id).map((tab) => tab.id);
   return moveTerminal(id, order.indexOf(id) + by);
 }
 
 // A terminal row's drag (input.go:149-163, :245-286; LIST-009, LIST-055):
 // while the button is held after the press, the tab moves to the row under
-// the pointer, within the terminal group. The pointer is captured by holder,
-// the list part that holds the rows (it stays put while they reorder), so the
+// the pointer, within its folder. The pointer is captured by holder, the
+// list part that holds the rows (it stays put while they reorder), so the
 // drag ends at the release or cancel wherever the pointer is. rowElements()
-// gives the terminal rows' elements in list order.
+// gives the elements of the terminal rows of the tab's folder, in list order.
 export function startDrag(event, id, holder, rowElements) {
   if (event.button !== 0 || !holder || event.target?.closest?.(".close")) return;
   const pointer = event.pointerId;

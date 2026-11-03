@@ -128,6 +128,7 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 	if err := s.validateCustomProviders(discovered); err != nil {
 		return s.pending, err
 	}
+	c.addLocalModels()
 
 	if c.Providers.Len() == 0 && c.Options.DisableDefaultProviders {
 		return s.pending, fmt.Errorf("default providers are disabled and there are no custom providers are configured")

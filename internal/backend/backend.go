@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/localmodel"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/version"
 )
@@ -173,6 +174,7 @@ func New(ctx context.Context, cfg *config.ConfigStore, shutdownFn ShutdownFunc) 
 		promptWatchers: make(map[*Workspace]*promptWatcher),
 	}
 	b.startChannelRouter()
+	go func() { <-ctx.Done(); localmodel.Default.Close() }()
 	return b
 }
 

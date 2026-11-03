@@ -14,7 +14,7 @@
   import { slidePage } from "../../lib/motion.js";
   import { closeSettings, settingsPage, settingsSections } from "../../lib/settings/page.svelte.js";
   import { runAction } from "../../lib/actions.js";
-  import { crushDirs, remotePasswordExists } from "../../lib/engine/commands.js";
+  import { crushDirs, open_link, remotePasswordExists } from "../../lib/engine/commands.js";
   import { refreshModels } from "../../lib/models/store.svelte.js";
   import {
     DEFAULT_AUTOCOMPACT,
@@ -38,7 +38,7 @@
     tui,
   } from "../../lib/settings/store.svelte.js";
   import { chooseAppearance, chosenTheme, theme } from "../../lib/themes/current.svelte.js";
-  import { panelSetting } from "../../lib/stores/ui.svelte.js";
+  import { notify, panelSetting } from "../../lib/stores/ui.svelte.js";
   import { accountMeters, setAccountMeters } from "../../lib/stores/accountmeters.svelte.js";
   import CompactionModel from "./CompactionModel.svelte";
   import FallbackOrder from "./FallbackOrder.svelte";
@@ -232,6 +232,14 @@
     <div class="row">
       <span class="name">Sub-agent instructions</span>
       <button type="button" class="act" onclick={() => openDialog("subagent_instructions")}>Edit…</button>
+    </div>
+    <!-- The shared memory list every agent gets each turn, which links to all
+         the other memory notes (internal/agent/memory.go), in the desktop's
+         editor for .md files (owner, 2026-11-03). -->
+    <div class="row">
+      <span class="name">Main memory file</span>
+      <span class="value">MEMORY.md</span>
+      <button type="button" class="act" onclick={() => open_link("~/.local/share/agent-memory/MEMORY.md", "~").catch((error) => notify("error", error?.message ?? String(error)))}>Open…</button>
     </div>
   {/if}
   {#if section === "system"}

@@ -112,6 +112,9 @@ export const api = {
 
   config: () => get("config"),
   providers: () => get("providers"),
+  localModels: () => get("/v1/local-models"),
+  loadLocalModel: (model_id) => post("/v1/local-models/load", { model_id }),
+  unloadLocalModel: () => post("/v1/local-models/unload"),
   // Which agent CLIs hold their own login (rpc.GetAuthState).
   authState: () => get("auth/state"),
   agentInfo: () => get("agent"),

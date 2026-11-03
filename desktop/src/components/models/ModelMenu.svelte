@@ -61,6 +61,56 @@
   let account = $state(null); // the account just picked, shown until the config says so
   let cheapest = $state(null); // the switch just flipped, shown until the config says so
   let floor = $state(null); // the FP8 floor switch just flipped
+  let local = $state({ state: "unloaded", model_id: "", error: "" });
+  let localAction = $state(false);
+  let localError = $state("");
+  let pendingLocal = null;
+
+  const hasLocal = $derived(rows.some((item) => item.provider.id === "local-gguf"));
+  $effect(() => {
+    if (!hasLocal) return;
+    let alive = true;
+    let polling = false;
+    async function read() {
+      if (polling) return;
+      polling = true;
+      try {
+        const status = await api.localModels();
+        if (!alive || !status) return;
+        local = status;
+        if (pendingLocal && status.model_id === pendingLocal.model.id) {
+          if (status.state === "ready") {
+            const item = pendingLocal;
+            pendingLocal = null;
+            await pick(item);
+          } else if (status.state === "error") pendingLocal = null;
+        }
+      } catch (error) {
+        if (alive) localError = error?.message ?? String(error);
+      } finally { polling = false; }
+    }
+    read();
+    const timer = setInterval(read, 1000);
+    return () => { alive = false; clearInterval(timer); };
+  });
+
+  async function changeLocal(item) {
+    if (localAction) return;
+    localAction = true;
+    localError = "";
+    try {
+      if (local.model_id === item.model.id && ["ready", "loading"].includes(local.state)) {
+        pendingLocal = null;
+        local = await api.unloadLocalModel();
+      } else {
+        pendingLocal = item;
+        local = await api.loadLocalModel(item.model.id);
+      }
+    } catch (error) {
+      pendingLocal = null;
+      localError = error?.message ?? String(error);
+    } finally { localAction = false; }
+  }
 
   $effect(() => watchModels());
   $effect(() => {
@@ -354,6 +404,9 @@
     <div class="rows" role="listbox" aria-label="Models" bind:this={rowsBox}>
       {#each rows as item (item.id)}
         {@const blocked = unavailableReason(item.provider.id, byProvider)}
+        {@const isLocal = item.provider.id === "local-gguf"}
+        {@const localHere = isLocal && local.model_id === item.model.id}
+        <div class:local-row={isLocal}>
         <button
           type="button"
           class="model"
@@ -371,6 +424,17 @@
           {#if blocked}<span class="info">{shortUnavailable(blocked)}</span>{:else if checking}<span class="info">{checking}</span>{:else if searching}<span class="info">{item.group}</span>{/if}
           {#if isCurrent(item, current)}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
         </button>
+        {#if isLocal}
+          <button
+            type="button"
+            class="local-action"
+            data-stop
+            aria-label={`${localHere && ["ready", "loading"].includes(local.state) ? "Unload" : "Load"} ${item.model.name || item.model.id}`}
+            disabled={localAction || (local.state === "loading" && !localHere)}
+            onclick={() => changeLocal(item)}
+          >{localHere && ["ready", "loading"].includes(local.state) ? "Unload" : "Load"}</button>
+        {/if}
+        </div>
       {:else}
         <p class="empty">{searching ? "No models match." : shownGroup?.addTo ? "No models saved yet." : modelData.cfg ? "No models here." : "Reading models…"}</p>
       {/each}
@@ -382,6 +446,9 @@
       {/if}
     </div>
     <Scrollbar target={rowsBox} mode={barMode} />
+    {#if hasLocal && (localError || local.error || ["loading", "ready"].includes(local.state))}
+      <p class="local-status" class:failed={Boolean(localError || local.error)} role="status">{localError || local.error || (local.state === "loading" ? "Loading model…" : "Model loaded")}</p>
+    {/if}
     {#if routeTo}
       <div class="route" data-column="route">
         <div class="route-item">
@@ -434,6 +501,24 @@
 </div>
 
 <style>
+  .local-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) calc(64 * var(--px));
+    align-items: center;
+  }
+  .local-action {
+    height: calc(30 * var(--px));
+    border: 1px solid var(--rule-control);
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+  }
+  .local-action:hover:not(:disabled) { background: var(--paper); }
+  .local-action:focus-visible { outline: 1px solid var(--vermilion); outline-offset: -2px; }
+  .local-action:disabled { opacity: 0.45; cursor: default; }
+  .local-status { margin: calc(8 * var(--px)) 0; color: var(--slate); font: var(--t-item); overflow-wrap: anywhere; }
+  .local-status.failed { color: var(--vermilion); }
   /* The paper and hairlines of the app's other popups (Popup.svelte), on the
      menu layer the chat's context menu uses; no shadow, as every other menu. */
   .model-menu {

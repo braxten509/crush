@@ -25,6 +25,26 @@ import { notify } from "../stores/ui.svelte.js";
 
 const KEPT = new Set(["http:", "https:", "mailto:", "file:"]);
 
+// A code span that is only a file path or a web address opens like a link
+// (owner, 2026-11-03: Claude writes files as `path`, Codex as links). A path
+// is ~/…, or has a / and a last part with an ending (src/app.css), or is a
+// bare file name with a common code ending (README.md); :line and :line:col
+// may follow. Anything with spaces, or a / with no ending (origin/main,
+// /v1/limits), stays code. Returns the link target or null.
+const FILE_ENDINGS =
+  /\.(?:md|txt|go|rs|js|cjs|mjs|ts|tsx|jsx|svelte|vue|py|rb|java|kt|c|h|cc|cpp|hpp|cs|swift|sh|zsh|bash|fish|json|jsonl|toml|yaml|yml|ini|cfg|conf|xml|html|css|scss|sql|lua|png|jpg|jpeg|gif|svg|webp|pdf|lock|mod|sum|env|log)$/i;
+export function codePathTarget(text) {
+  const t = String(text ?? "").trim();
+  if (!t || /\s/.test(t) || t.length > 400) return null;
+  if (/^https?:\/\/[^\s<>"]+$/.test(t)) return t;
+  const path = t.replace(/:\d+(?::\d+)?$/, "");
+  const last = path.split("/").pop();
+  if (/^~\/./.test(path)) return t;
+  if (path.includes("/") && /^[^.][^/]*\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(last) && !/^[a-z][a-z0-9+.-]*:/i.test(path)) return t;
+  if (!path.includes("/") && FILE_ENDINGS.test(path) && /^[\w.-]+$/.test(path)) return t;
+  return null;
+}
+
 export function safeHref(target) {
   if (typeof target !== "string" || target.trim() === "") return null;
   let url;

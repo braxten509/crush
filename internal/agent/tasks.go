@@ -749,6 +749,7 @@ The user reads this chat in Crush Desktop, which draws Mermaid diagrams and LaTe
 - Diagrams: a fenced code block with the language mermaid (flowchart, sequence, state, class, ER, Gantt, mindmap and the other Mermaid kinds).
 - Math: $...$ or \(...\) inline; $$...$$ or \[...\] on their own lines for display math. A lone $ before a number stays a dollar sign.
 Put them in your reply text, not in files. The terminal Crush shows them as plain source, so keep the words around them meaningful on their own.
+- Links: write every file and website you mention as a Markdown link so it is clickable: [name](path) or [name](path:line) for files (absolute, ~/..., or relative to the working directory), [name](https://...) for websites. Not a bare path in backticks.
 </crush_rich_replies>`
 }
 

@@ -19,7 +19,7 @@
 //   alignLines(derived, raw)      offsets of a container's inner text → its raw
 import { highlight } from "./code.js";
 import { KIND_LABEL, figureOf, visualBlocks } from "./figures.js";
-import { makeAnchor, safeHref } from "./links.js";
+import { codePathTarget, makeAnchor, safeHref } from "./links.js";
 import { renderMath } from "./math.js";
 import { ENTITY_REF, decodeEntities, decodeEntity, htmlTextUnits, stripTags } from "./sanitize.js";
 import { emitText } from "./sourcemap.js";
@@ -520,7 +520,16 @@ export class Builder {
     // shown character still stands for one stored character.
     this.text(code, inner.slice(off - ticks, off - ticks + token.text.length), shift(abs, off), { entities: false, shown: token.text });
     this.span(code, abs(0), abs(token.raw.length), abs(off), abs(off + token.text.length));
-    parent.append(code);
+    // A span that is only a file path or web address opens like a link.
+    const target = this.inLink ? null : safeHref(codePathTarget(token.text) ?? "");
+    if (!target) {
+      parent.append(code);
+      return;
+    }
+    const anchor = makeAnchor(this.doc, target);
+    anchor.append(code);
+    this.span(anchor, abs(0), abs(token.raw.length), abs(0), abs(token.raw.length));
+    parent.append(anchor);
   }
 
   mark(token, abs, parent) {

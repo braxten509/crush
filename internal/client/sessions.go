@@ -84,7 +84,7 @@ func (c *Client) SetSessionModel(ctx context.Context, id, sessionID string, mode
 // LockSession locks a chat, or an unlocked locked chat again (owner,
 // 2026-11-03). It answers with the chat marked locking.
 func (c *Client) LockSession(ctx context.Context, id, sessionID string) (*proto.Session, error) {
-	sess, err := newCall(c, rpc.LockSession, "lock session", "session").at(id, sessionID).do(ctx, rpc.Empty{})
+	sess, err := newCall(c, rpc.LockSession, "lock session", "session").at(id, sessionID).do(ctx, proto.LockSessionRequest{})
 	if err != nil {
 		return nil, err
 	}

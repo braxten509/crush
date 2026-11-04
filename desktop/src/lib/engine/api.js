@@ -141,9 +141,13 @@ export const api = {
   // Locked chats (owner, 2026-11-03; rpc.LockSession, rpc.UnlockSession):
   // both answer at once with the chat marked locking or unlocking; the rest
   // arrives as session events. Unlock with stop turns the chat into a
-  // normal chat for good. KDE asks for the vault password.
-  lockChat: (sid) => commands.api("POST", `${chat(sid)}/lock`, undefined, {}, undefined, folderOf(sid)),
-  unlockChat: (sid, { stop = false } = {}) => commands.api("POST", `${chat(sid)}/unlock`, undefined, stop ? { stop } : {}, undefined, folderOf(sid)),
+  // normal chat for good. A closed vault opens with the password typed in
+  // Crush (409 wrong_password); vaultState tells whether it is open.
+  lockChat: (sid, { password = "" } = {}) =>
+    commands.api("POST", `${chat(sid)}/lock`, undefined, password ? { password } : {}, undefined, folderOf(sid)),
+  unlockChat: (sid, { stop = false, password = "" } = {}) =>
+    commands.api("POST", `${chat(sid)}/unlock`, undefined, { ...(stop ? { stop } : {}), ...(password ? { password } : {}) }, undefined, folderOf(sid)),
+  vaultState: (sid) => commands.api("GET", "vault", undefined, undefined, undefined, folderOf(sid)),
   // The last pick: the model a new chat starts on (rpc.LastPick), set by a
   // pick made with no chat open. No chat runs on it.
   lastPick: () => get("last-pick"),

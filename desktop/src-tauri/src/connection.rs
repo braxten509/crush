@@ -295,6 +295,7 @@ const ROUTES: &[(&str, &str)] = &[
     // Locked chats (owner, 2026-11-03).
     ("POST", "sessions/{sid}/lock"),
     ("POST", "sessions/{sid}/unlock"),
+    ("GET", "vault"),
     // The model a new chat starts on (routes.go LastPick, SetLastPick).
     ("GET", "last-pick"),
     ("POST", "last-pick"),
@@ -2686,7 +2687,8 @@ mod tests {
     const LAST_PICK_ROUTES: &[(&str, &str)] = &[("GET", "last-pick"), ("POST", "last-pick")];
 
     /// Locking a chat into the vault and unlocking it (owner, 2026-11-03).
-    const LOCK_ROUTES: &[(&str, &str)] = &[("POST", "sessions/{sid}/lock"), ("POST", "sessions/{sid}/unlock")];
+    const LOCK_ROUTES: &[(&str, &str)] =
+        &[("POST", "sessions/{sid}/lock"), ("POST", "sessions/{sid}/unlock"), ("GET", "vault")];
 
     /// Other folders' open chats, read from their saved files (TimelineStack).
     const OTHER_FOLDER_ROUTES: &[&str] = &["saved-sessions/{sid}", "saved-sessions/{sid}/messages"];

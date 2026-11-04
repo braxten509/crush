@@ -215,6 +215,13 @@ func (s *Service) gate(ctx context.Context, ids []string, fn func() error) error
 // again (the lock button, owner 2026-11-03). It refuses while the chat has
 // work running, marks it locking at once and finishes in the background.
 func (s *Service) Lock(ctx context.Context, id string) error {
+	return s.LockWith(ctx, id, "")
+}
+
+// LockWith is Lock with the vault password typed in Crush: a closed vault
+// is opened with it first, so a wrong password is refused at once. With
+// no password a closed vault asks in KDE's box (the terminal UI).
+func (s *Service) LockWith(ctx context.Context, id, password string) error {
 	state, _, parent, err := s.state(ctx, id)
 	if err != nil {
 		return err
@@ -230,6 +237,10 @@ func (s *Service) Lock(ctx context.Context, id string) error {
 	}
 	if !s.claim(id) {
 		return ErrBusyLocking
+	}
+	if err := s.openWith(ctx, password); err != nil {
+		s.release(id)
+		return err
 	}
 	if err := s.startLock(ctx, id); err != nil {
 		s.release(id)
@@ -276,6 +287,11 @@ func (s *Service) startLock(ctx context.Context, id string) error {
 // left outside by a crash (relock) is put back into the vault first, then
 // unlocked (owner, 2026-11-03: Crush retries on the next Unlock click).
 func (s *Service) Unlock(ctx context.Context, id string) error {
+	return s.UnlockWith(ctx, id, "")
+}
+
+// UnlockWith is Unlock with the vault password typed in Crush.
+func (s *Service) UnlockWith(ctx context.Context, id, password string) error {
 	state, _, _, err := s.state(ctx, id)
 	if err != nil {
 		return err
@@ -289,6 +305,10 @@ func (s *Service) Unlock(ctx context.Context, id string) error {
 	}
 	if !s.claim(id) {
 		return ErrBusyLocking
+	}
+	if err := s.openWith(ctx, password); err != nil {
+		s.release(id)
+		return err
 	}
 	s.goBackground(func(ctx context.Context) {
 		defer s.release(id)
@@ -309,6 +329,11 @@ func (s *Service) Unlock(ctx context.Context, id string) error {
 // vault password is given: it is unlocked, its vault copy deleted and its
 // lock state cleared (owner, 2026-11-03).
 func (s *Service) StopLocking(ctx context.Context, id string) error {
+	return s.StopLockingWith(ctx, id, "")
+}
+
+// StopLockingWith is StopLocking with the vault password typed in Crush.
+func (s *Service) StopLockingWith(ctx context.Context, id, password string) error {
 	state, _, _, err := s.state(ctx, id)
 	if err != nil {
 		return err
@@ -321,6 +346,10 @@ func (s *Service) StopLocking(ctx context.Context, id string) error {
 	}
 	if !s.claim(id) {
 		return ErrBusyLocking
+	}
+	if err := s.openWith(ctx, password); err != nil {
+		s.release(id)
+		return err
 	}
 	s.goBackground(func(ctx context.Context) {
 		defer s.release(id)
@@ -477,6 +506,30 @@ func (s *Service) openVault(ctx context.Context) (string, error) {
 		}
 	}
 	return s.Vault.Open(ctx)
+}
+
+// openWith opens a closed vault with a typed password; nothing to do
+// without one or when the vault is already open.
+func (s *Service) openWith(ctx context.Context, password string) error {
+	if password == "" {
+		return nil
+	}
+	exists, mount, err := s.Vault.Find(ctx)
+	if err != nil || mount != "" {
+		return err
+	}
+	if !exists {
+		return nil // openVault starts KDE's wizard for a new vault
+	}
+	_, err = s.Vault.OpenWith(ctx, password)
+	return err
+}
+
+// VaultState reports whether the vault exists and is open, so an app
+// knows whether to ask for the password.
+func (s *Service) VaultState(ctx context.Context) (exists, open bool, err error) {
+	exists, mount, err := s.Vault.Find(ctx)
+	return exists, mount != "", err
 }
 
 // closeVaultIfDone closes the vault when no chat is unlocked and no lock

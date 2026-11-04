@@ -138,8 +138,8 @@ func (c *controllerV1) setSessionModel(r *http.Request, req proto.SetSessionMode
 }
 
 // lockSession locks a chat (owner, 2026-11-03).
-func (c *controllerV1) lockSession(r *http.Request, _ rpc.Empty) (proto.Session, error) {
-	sess, err := c.backend.LockSession(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+func (c *controllerV1) lockSession(r *http.Request, req proto.LockSessionRequest) (proto.Session, error) {
+	sess, err := c.backend.LockSession(r.Context(), r.PathValue("id"), r.PathValue("sid"), req.Password)
 	if err != nil {
 		return proto.Session{}, err
 	}
@@ -149,11 +149,18 @@ func (c *controllerV1) lockSession(r *http.Request, _ rpc.Empty) (proto.Session,
 // unlockSession unlocks a locked chat, or with stop turns it into a
 // normal chat for good.
 func (c *controllerV1) unlockSession(r *http.Request, req proto.UnlockSessionRequest) (proto.Session, error) {
-	sess, err := c.backend.UnlockSession(r.Context(), r.PathValue("id"), r.PathValue("sid"), req.Stop)
+	sess, err := c.backend.UnlockSession(r.Context(), r.PathValue("id"), r.PathValue("sid"), req.Stop, req.Password)
 	if err != nil {
 		return proto.Session{}, err
 	}
 	return proto.SessionFromDomain(sess), nil
+}
+
+// vaultState tells whether the vault is open, so the app asks for its
+// password only when it must.
+func (c *controllerV1) vaultState(r *http.Request, _ rpc.Empty) (proto.VaultState, error) {
+	exists, open, err := c.backend.VaultState(r.Context(), r.PathValue("id"))
+	return proto.VaultState{Exists: exists, Open: open}, err
 }
 
 // lockErrors maps locked-chat refusals to 409 with their own text.
@@ -165,6 +172,7 @@ func lockErrors() []apiError {
 		{Match: is(session.ErrChatLocked), Status: http.StatusConflict, Code: "chat_locked"},
 		{Match: is(lockedchats.ErrBusyLocking), Status: http.StatusConflict, Code: "chat_locking"},
 		{Match: is(backend.ErrLockingUnavailable), Status: http.StatusConflict, Code: "locking_unavailable"},
+		{Match: is(lockedchats.ErrWrongPassword), Status: http.StatusConflict, Code: "wrong_password"},
 	}
 }
 

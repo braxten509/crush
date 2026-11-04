@@ -16,31 +16,48 @@ import (
 var ErrLockingUnavailable = errors.New("locking chats is unavailable here")
 
 // LockSession locks a chat, or locks an unlocked locked chat again.
-func (b *Backend) LockSession(ctx context.Context, workspaceID, sessionID string) (session.Session, error) {
+// A closed vault opens with password, typed in Crush.
+func (b *Backend) LockSession(ctx context.Context, workspaceID, sessionID, password string) (session.Session, error) {
 	o, err := b.ops(workspaceID)
 	if err != nil {
 		return session.Session{}, err
 	}
-	return o.LockSession(ctx, sessionID)
+	return o.lockSession(ctx, sessionID, password)
 }
 
 // UnlockSession unlocks a locked chat; with stop, for good ("Stop locking
 // this chat").
-func (b *Backend) UnlockSession(ctx context.Context, workspaceID, sessionID string, stop bool) (session.Session, error) {
+func (b *Backend) UnlockSession(ctx context.Context, workspaceID, sessionID string, stop bool, password string) (session.Session, error) {
 	o, err := b.ops(workspaceID)
 	if err != nil {
 		return session.Session{}, err
 	}
-	return o.UnlockSession(ctx, sessionID, stop)
+	return o.unlockSession(ctx, sessionID, stop, password)
+}
+
+// VaultState tells whether the vault exists and is open.
+func (b *Backend) VaultState(ctx context.Context, workspaceID string) (exists, open bool, err error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return false, false, err
+	}
+	if o.App == nil || o.App.LockedChats == nil {
+		return false, false, ErrLockingUnavailable
+	}
+	return o.App.LockedChats.VaultState(ctx)
 }
 
 // LockSession locks a chat. It answers at once with the chat marked
 // locking; a busy chat is refused with the gate's reason.
 func (o Ops) LockSession(ctx context.Context, sessionID string) (session.Session, error) {
+	return o.lockSession(ctx, sessionID, "")
+}
+
+func (o Ops) lockSession(ctx context.Context, sessionID, password string) (session.Session, error) {
 	if o.App == nil || o.App.LockedChats == nil {
 		return session.Session{}, ErrLockingUnavailable
 	}
-	if err := o.App.LockedChats.Lock(ctx, sessionID); err != nil {
+	if err := o.App.LockedChats.LockWith(ctx, sessionID, password); err != nil {
 		return session.Session{}, err
 	}
 	return o.App.Sessions.Get(ctx, sessionID)
@@ -49,14 +66,18 @@ func (o Ops) LockSession(ctx context.Context, sessionID string) (session.Session
 // UnlockSession unlocks a locked chat (KDE asks for the vault password);
 // with stop the chat becomes a normal chat for good.
 func (o Ops) UnlockSession(ctx context.Context, sessionID string, stop bool) (session.Session, error) {
+	return o.unlockSession(ctx, sessionID, stop, "")
+}
+
+func (o Ops) unlockSession(ctx context.Context, sessionID string, stop bool, password string) (session.Session, error) {
 	if o.App == nil || o.App.LockedChats == nil {
 		return session.Session{}, ErrLockingUnavailable
 	}
-	unlock := o.App.LockedChats.Unlock
+	unlock := o.App.LockedChats.UnlockWith
 	if stop {
-		unlock = o.App.LockedChats.StopLocking
+		unlock = o.App.LockedChats.StopLockingWith
 	}
-	if err := unlock(ctx, sessionID); err != nil {
+	if err := unlock(ctx, sessionID, password); err != nil {
 		return session.Session{}, err
 	}
 	return o.App.Sessions.Get(ctx, sessionID)

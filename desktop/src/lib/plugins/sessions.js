@@ -5,6 +5,7 @@
 // window, DLG-088), or a toast's click (window_show_chat) sends a chat of any
 // folder with its projectDir: this window switches there in place.
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import LockBox from "../../components/LockBox.svelte";
 import Projects from "../../components/sessions/Projects.svelte";
 import Sessions from "../../components/sessions/Sessions.svelte";
 import { registerAction } from "../actions.js";
@@ -20,6 +21,8 @@ import { notify } from "../stores/ui.svelte.js";
 
 registerDialog("sessions", Sessions);
 registerDialog("projects", Projects);
+// The lock button's "Lock this chat?" box (owner, 2026-11-03).
+registerDialog("lock_chat", LockBox);
 
 // dialog_actions.go:400-407.
 registerAction({

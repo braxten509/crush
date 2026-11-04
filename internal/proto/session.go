@@ -64,11 +64,25 @@ type SetSessionModelRequest struct {
 	Model json.RawMessage `json:"model"`
 }
 
+// LockSessionRequest locks a chat. Password is the vault password typed
+// in Crush; empty when the vault is open (or KDE's box should ask).
+type LockSessionRequest struct {
+	Password string `json:"password,omitempty"`
+}
+
 // UnlockSessionRequest unlocks a locked chat. Stop turns it into a normal
-// chat for good ("Stop locking this chat"); KDE asks for the vault
-// password either way.
+// chat for good ("Stop locking this chat"). Password is the vault
+// password typed in Crush, as for LockSessionRequest.
 type UnlockSessionRequest struct {
-	Stop bool `json:"stop,omitempty"`
+	Stop     bool   `json:"stop,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+// VaultState tells whether the locked chats vault exists and is open, so
+// an app knows whether to ask for its password.
+type VaultState struct {
+	Exists bool `json:"exists"`
+	Open   bool `json:"open"`
 }
 
 // KeptSkill is a skill turned on for a whole session.

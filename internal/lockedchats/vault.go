@@ -26,6 +26,10 @@ type Vault interface {
 	// Open asks for the password (KDE's own box) and waits until the vault
 	// is open, or ctx ends. It returns the mounted folder.
 	Open(ctx context.Context) (string, error)
+	// OpenWith opens the vault with a password typed in Crush (owner,
+	// 2026-11-03: no KDE box to hunt for). ErrWrongPassword when it is
+	// wrong. It returns the mounted folder.
+	OpenWith(ctx context.Context, password string) (string, error)
 	// Close closes the vault. It never forces it closed.
 	Close(ctx context.Context) error
 	// Create opens KDE's wizard for a new vault and returns at once.
@@ -39,6 +43,8 @@ var (
 	// ErrVaultClosed: the password box was not answered in time, or was
 	// cancelled.
 	ErrVaultClosed = errors.New("The vault stayed closed") //nolint:staticcheck // shown to the owner as is
+	// ErrWrongPassword: the typed vault password is wrong.
+	ErrWrongPassword = errors.New("Wrong password") //nolint:staticcheck // shown to the owner as is
 )
 
 // openWait is how long Open waits for the password (PLAN §3).
@@ -237,6 +243,63 @@ func (v KDEVault) Open(ctx context.Context) (string, error) {
 	}
 }
 
+// gocryptfsWrongPassword is gocryptfs's exit code for a wrong password.
+const gocryptfsWrongPassword = 12
+
+func (v KDEVault) OpenWith(ctx context.Context, password string) (string, error) {
+	d, ok, err := v.device(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", ErrNoVault
+	}
+	mount := v.mountPoint(d)
+	if mounted(mount) {
+		return mount, nil
+	}
+	if err := mountGocryptfs(ctx, d.Device, mount, password); err != nil {
+		return "", err
+	}
+	// Let Plasma Vault see it open (its tray and closeVault).
+	if obj, err := v.object(); err == nil {
+		_ = obj.CallWithContext(ctx, vaultInterface+".updateStatus", 0).Err
+	}
+	return mount, nil
+}
+
+// mountGocryptfs opens the gocryptfs folder device at mount with password.
+func mountGocryptfs(ctx context.Context, device, mount, password string) error {
+	if err := os.MkdirAll(mount, 0o700); err != nil {
+		return err
+	}
+	// gocryptfs reads the password from stdin (not a terminal), mounts,
+	// and leaves its daemon running. The user's systemd starts it, so it
+	// outlives this engine as KDE's own mount does, and the mount works
+	// even when Crush runs with no_new_privs (fusermount3 is setuid).
+	// KillMode=process keeps the daemon when gocryptfs's first process
+	// exits; --pipe hands the password over on stdin.
+	args := []string{"gocryptfs", "-q", "--", device, mount}
+	if systemdRun, err := exec.LookPath("systemd-run"); err == nil {
+		args = append([]string{systemdRun, "--user", "--quiet", "--collect", "--wait", "--pipe",
+			"-p", "KillMode=process"}, args...)
+	}
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Stdin = strings.NewReader(password + "\n")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == gocryptfsWrongPassword {
+			return ErrWrongPassword
+		}
+		return fmt.Errorf("the vault did not open: %s", strings.TrimSpace(string(out)))
+	}
+	if !mounted(mount) {
+		return errors.New("the vault did not open")
+	}
+	return nil
+}
+
 func (v KDEVault) Close(ctx context.Context) error {
 	d, ok, err := v.device(ctx)
 	if err != nil || !ok {
@@ -258,7 +321,31 @@ func (v KDEVault) Close(ctx context.Context) error {
 		return err
 	}
 	// closeVault, never forceCloseVault (owner, 2026-11-03).
-	return obj.CallWithContext(ctx, vaultInterface+".closeVault", 0, d.Device).Err
+	if err := obj.CallWithContext(ctx, vaultInterface+".closeVault", 0, d.Device).Err; err != nil {
+		return err
+	}
+	// A vault Crush opened itself may be one KDE missed; then unmount it
+	// the same gentle way (refused while busy).
+	for range 10 {
+		if !mounted(mount) {
+			return nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return unmountGocryptfs(ctx, mount)
+}
+
+// unmountGocryptfs closes a gocryptfs mount the gentle way (refused while
+// busy), through the user's systemd for the same reason as the mount.
+func unmountGocryptfs(ctx context.Context, mount string) error {
+	args := []string{"fusermount3", "-u", mount}
+	if systemdRun, err := exec.LookPath("systemd-run"); err == nil {
+		args = append([]string{systemdRun, "--user", "--quiet", "--collect", "--wait", "--pipe"}, args...)
+	}
+	if out, err := exec.CommandContext(ctx, args[0], args[1:]...).CombinedOutput(); err != nil {
+		return fmt.Errorf("the vault did not close: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func (v KDEVault) Create(ctx context.Context) error {
@@ -269,6 +356,20 @@ func (v KDEVault) Create(ctx context.Context) error {
 	return obj.CallWithContext(ctx, vaultInterface+".requestNewVault", 0).Err
 }
 
+// newVault makes the vault Crush uses; the desktop checks' test seam swaps
+// in a DirVault (crushtest builds only).
+var newVault = func() Vault { return KDEVault{} }
+
+// NewVault is the vault Crush uses: KDE's Plasma Vault.
+func NewVault() Vault { return newVault() }
+
+// SetVaultForTest makes NewVault return v until restore is called.
+func SetVaultForTest(v Vault) (restore func()) {
+	old := newVault
+	newVault = func() Vault { return v }
+	return func() { newVault = old }
+}
+
 // DirVault is a plain folder standing in for the vault in tests: always
 // there and open.
 type DirVault struct {
@@ -276,6 +377,9 @@ type DirVault struct {
 	// Closed makes Open fail as a cancelled password box would.
 	Closed bool
 	Opens  int
+	// Password, when set, is the one OpenWith takes; an open with it
+	// clears Closed.
+	Password string
 }
 
 func (v *DirVault) Find(context.Context) (bool, string, error) {
@@ -293,5 +397,21 @@ func (v *DirVault) Open(context.Context) (string, error) {
 	return v.Dir, os.MkdirAll(v.Dir, 0o700)
 }
 
-func (v *DirVault) Close(context.Context) error  { return nil }
+func (v *DirVault) OpenWith(_ context.Context, password string) (string, error) {
+	v.Opens++
+	if v.Password != "" && password != v.Password {
+		return "", ErrWrongPassword
+	}
+	v.Closed = false
+	return v.Dir, os.MkdirAll(v.Dir, 0o700)
+}
+
+// Close closes a vault with a password, as KDE's does; without one it
+// stays open (the tests' always-open folder).
+func (v *DirVault) Close(context.Context) error {
+	if v.Password != "" {
+		v.Closed = true
+	}
+	return nil
+}
 func (v *DirVault) Create(context.Context) error { return nil }

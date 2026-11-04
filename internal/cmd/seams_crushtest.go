@@ -22,6 +22,7 @@ import (
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/cliupdate"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/lockedchats"
 	"github.com/charmbracelet/crush/internal/login"
 	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/oauth"
@@ -96,6 +97,12 @@ type testSeams struct {
 	// SkillsSearch are the skills.sh results by query; other queries find
 	// nothing (G-24).
 	SkillsSearch map[string][]skills.DirectorySkill `json:"skills_search"`
+	// Vault stands in for the Plasma Vault: a plain folder, closed at start,
+	// that opens only with this password (locked chats).
+	Vault *struct {
+		Dir      string `json:"dir"`
+		Password string `json:"password"`
+	} `json:"vault"`
 }
 
 // installTestSeams installs the seams CRUSH_TEST_SEAMS names, once, at
@@ -230,6 +237,10 @@ func loadTestSeams(path string) (restore func(), err error) {
 		restores = append(restores, backend.SetSkillsSearchForTest(func(_ context.Context, query string) ([]skills.DirectorySkill, error) {
 			return found[query], nil
 		}))
+	}
+
+	if v := seams.Vault; v != nil {
+		restores = append(restores, lockedchats.SetVaultForTest(&lockedchats.DirVault{Dir: v.Dir, Password: v.Password, Closed: true}))
 	}
 	return restore, nil
 }

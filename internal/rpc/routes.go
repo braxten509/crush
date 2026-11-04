@@ -70,8 +70,9 @@ var (
 	SetSessionModel      = Op[proto.SetSessionModelRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/model"}
 	// Locked chats (owner, 2026-11-03): both answer at once with the chat
 	// marked locking or unlocking; the rest arrives as session events.
-	LockSession   = Op[Empty, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/lock"}
+	LockSession   = Op[proto.LockSessionRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/lock"}
 	UnlockSession = Op[proto.UnlockSessionRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/unlock"}
+	VaultState    = Op[Empty, proto.VaultState]{Method: get, Path: "/v1/workspaces/{id}/vault"}
 	// The last pick is the model a new chat starts on; a pick made with no
 	// chat open sets it. No chat runs on it.
 	LastPick    = Op[Empty, config.SelectedModel]{Method: get, Path: "/v1/workspaces/{id}/last-pick"}

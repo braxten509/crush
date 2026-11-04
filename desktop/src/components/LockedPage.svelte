@@ -4,27 +4,59 @@
   // composer. Unlock asks KDE for the vault password (KDE's own box; the
   // password never passes through Crush) and the chat comes back. Under it,
   // a quiet link turns the chat into a normal chat for good, after the same
-  // password (owner, 2026-11-03, sketch stop.png).
+  // password (owner, 2026-11-03, sketch stop.png). The password is typed
+  // here, above Unlock, and Crush opens the vault itself (owner, 2026-11-03:
+  // KDE's box could hide behind the window); the field shows only while the
+  // vault is closed, a wrong password shows under it, Enter unlocks, and
+  // the password is kept nowhere.
   //
   // States: locking ("Locking this chat…"), locked, unlocking ("Waiting for
   // the vault…"), relock (a crash left a plain copy outside; it stays hidden
   // until it is back in the vault, and Unlock puts it back first).
   import Icon from "./Icon.svelte";
-  import { unlockChat } from "../lib/stores/sessions.svelte.js";
+  import Field from "./kit/Field.svelte";
+  import { unlockChat, vaultState } from "../lib/stores/sessions.svelte.js";
 
   let { session } = $props();
 
   const state = $derived(session?.lock_state ?? "");
   const waiting = $derived(state === "locking" || state === "unlocking");
   let asked = $state(false);
+  let password = $state("");
+  let error = $state("");
+  let vault = $state(null); // {exists, open}, null until known
+
+  // Asked again whenever the chat or its state changes: another chat's
+  // unlock may have opened the vault, a relock closed it.
+  $effect(() => {
+    const sid = session?.id;
+    void state;
+    if (!sid) return;
+    vaultState(sid).then((now) => {
+      if (sid === session?.id) vault = now ?? { exists: true, open: false };
+    });
+  });
+
+  const needsPassword = $derived(vault?.exists === true && vault?.open === false);
+  const blocked = $derived(waiting || asked || vault === null || (needsPassword && !password));
 
   async function unlock(stop = false) {
-    if (!session?.id || waiting) return;
+    if (!session?.id || blocked) return;
     asked = true;
+    error = "";
     try {
-      await unlockChat(session.id, { stop });
+      const done = await unlockChat(session.id, { stop, password: needsPassword ? password : "" });
+      if (done === "wrong_password") error = "Wrong password";
     } finally {
+      password = "";
       asked = false;
+    }
+  }
+
+  function onkeydown(event) {
+    if (event.key === "Enter" && !event.isComposing) {
+      event.preventDefault();
+      unlock(false);
     }
   }
 </script>
@@ -37,12 +69,17 @@
       <p class="note warn">It is not back in the vault yet; unlocking puts it back first.</p>
     {/if}
     {#if state !== "locking"}
-      <button type="button" class="unlock" disabled={waiting || asked} onclick={() => unlock(false)} data-unlock>
+      {#if needsPassword && !waiting}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="password" {onkeydown} data-vault-password>
+          <Field bind:value={password} masked placeholder="Vault password" label="Vault password" {error} />
+        </div>
+      {/if}
+      <button type="button" class="unlock" disabled={blocked} onclick={() => unlock(false)} data-unlock>
         <Icon name="lock-open" />
-        <span>{state === "unlocking" ? "Waiting for the vault…" : "Unlock"}</span>
+        <span>{state === "unlocking" ? "Unlocking…" : "Unlock"}</span>
       </button>
-      <p class="note">KDE asks for the vault password</p>
-      <button type="button" class="stop" disabled={waiting || asked} onclick={() => unlock(true)} data-stop-locking>Stop locking this chat</button>
+      <button type="button" class="stop" disabled={blocked} onclick={() => unlock(true)} data-stop-locking>Stop locking this chat</button>
     {/if}
     <!-- The first lock opens KDE's vault wizard (PLAN §3). -->
     <details class="setup">
@@ -120,7 +157,16 @@
   .stop:hover:not(:disabled) {
     color: var(--ink);
   }
+  .password {
+    width: calc(320 * var(--px));
+    margin-top: calc(8 * var(--px));
+    text-align: left;
+  }
+  /* Opening it shows the steps under it and moves nothing above: the
+     steps hang below the line, out of the centered block (owner,
+     2026-11-03). */
   .setup {
+    position: relative;
     margin-top: calc(24 * var(--px));
     font: var(--t-small);
     color: var(--slate);
@@ -130,7 +176,11 @@
     cursor: pointer;
   }
   .setup ol {
+    position: absolute;
+    top: 100%;
+    left: 0;
     margin: calc(8 * var(--px)) 0 0;
     padding-left: calc(24 * var(--px));
+    white-space: nowrap;
   }
 </style>

@@ -119,27 +119,40 @@ function lockChanged(sid, wasHidden) {
   }
 }
 
-// Lock the chat (the composer's lock button); an unlocked locked chat is
-// locked again. The engine answers at once with the chat marked locking.
-export async function lockChat(sid) {
+// Lock the chat (the lock box); an unlocked locked chat is locked again.
+// The engine answers at once with the chat marked locking. password opens
+// a closed vault; a wrong one answers "wrong_password" (shown under the
+// field, no toast).
+export async function lockChat(sid, { password = "" } = {}) {
   try {
-    upsertSession(await api.lockChat(sid), { fromEvent: true });
+    upsertSession(await api.lockChat(sid, { password }), { fromEvent: true });
     return true;
   } catch (error) {
+    if (error?.code === "wrong_password") return "wrong_password";
     notify("error", errorText(error));
     return false;
   }
 }
 
-// Unlock the chat (KDE asks for the vault password); stop turns it into a
-// normal chat for good ("Stop locking this chat").
-export async function unlockChat(sid, { stop = false } = {}) {
+// Unlock the chat with the vault password typed on the locked page; stop
+// turns it into a normal chat for good ("Stop locking this chat").
+export async function unlockChat(sid, { stop = false, password = "" } = {}) {
   try {
-    upsertSession(await api.unlockChat(sid, { stop }), { fromEvent: true });
+    upsertSession(await api.unlockChat(sid, { stop, password }), { fromEvent: true });
     return true;
   } catch (error) {
+    if (error?.code === "wrong_password") return "wrong_password";
     notify("error", errorText(error));
     return false;
+  }
+}
+
+// Whether the vault is open ({exists, open}); null when it can't be told.
+export async function vaultState(sid) {
+  try {
+    return await api.vaultState(sid);
+  } catch {
+    return null;
   }
 }
 

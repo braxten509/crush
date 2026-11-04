@@ -19,8 +19,9 @@
   import { attachPhoneScreen, composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
   import { findPhone, phone, watchPhone } from "../../lib/stores/phone.svelte.js";
   import { helperChats } from "../../lib/stores/helperchats.svelte.js";
+  import { hasDialog, openDialog } from "../../lib/dialogs.js";
   import { closeListed } from "../../lib/stores/openchats.svelte.js";
-  import { lockChat, sessions } from "../../lib/stores/sessions.svelte.js";
+  import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { closeSlot, openSlot, ui } from "../../lib/stores/ui.svelte.js";
 
@@ -100,19 +101,16 @@
     focusField();
   }
 
-  // The lock button (owner, 2026-11-03): locks the chat into the vault, or
-  // locks an unlocked locked chat again. Refused while the chat works.
+  // The lock button (owner, 2026-11-03): asks in the lock box first (with
+  // the vault password while the vault is closed), then locks the chat into
+  // the vault, or locks an unlocked locked chat again. Refused while the
+  // chat works.
   const lockState = $derived(sessions.byId[sessionId]?.lock_state ?? "");
   const lockBusy = $derived(working());
-  let locking = $state(false);
-  async function lock() {
+  const locking = $derived(hasDialog("lock_chat"));
+  function lock() {
     if (!sessionId || lockBusy || locking) return;
-    locking = true;
-    try {
-      await lockChat(sessionId);
-    } finally {
-      locking = false;
-    }
+    openDialog("lock_chat", { sessionId });
   }
 
   function complete() {

@@ -460,7 +460,7 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 
 		route(c, rpc.LockSession, c.lockSession).
 			Summary("Lock a chat into the vault, or lock an unlocked locked chat again").
-			Description("Answers at once with the chat marked locking; 409 with the reason while the chat has work running.").
+			Description("A closed vault opens with the password typed in Crush (409 wrong_password when wrong). Answers at once with the chat marked locking; 409 with the reason while the chat has work running.").
 			Tags("sessions").
 			PathParam("id", "Workspace ID").
 			PathParam("sid", "Session ID").
@@ -469,10 +469,17 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 
 		route(c, rpc.UnlockSession, c.unlockSession).
 			Summary("Unlock a locked chat; with stop, for good").
-			Description("KDE asks for the vault password. Answers at once with the chat marked unlocking.").
+			Description("A closed vault opens with the password typed in Crush (409 wrong_password when wrong). Answers at once with the chat marked unlocking.").
 			Tags("sessions").
 			PathParam("id", "Workspace ID").
 			PathParam("sid", "Session ID").
+			Fails(404, 409, 500).
+			Build(),
+
+		route(c, rpc.VaultState, c.vaultState).
+			Summary("Tell whether the locked chats vault exists and is open").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
 			Fails(404, 409, 500).
 			Build(),
 

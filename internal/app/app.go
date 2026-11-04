@@ -425,7 +425,7 @@ func (app *App) newLockedChats(conn *sql.DB, store *config.ConfigStore) *lockedc
 		DataDir:  store.Config().Options.DataDirectory,
 		Folder:   store.WorkingDir(),
 		Sessions: app.Sessions,
-		Vault:    lockedchats.KDEVault{},
+		Vault:    lockedchats.NewVault(),
 		OtherAttachmentStores: func() ([]string, error) {
 			known, err := projects.List()
 			if err != nil {

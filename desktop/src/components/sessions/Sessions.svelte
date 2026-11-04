@@ -5,11 +5,10 @@
   // "~/folder · 3 hours ago" in the info column (35 % budget). Enter, Tab and
   // Ctrl+Y open the selected chat; Ctrl+R renames it in its row, Ctrl+X asks
   // to delete it; both go through POST …/saved-sessions as the terminal's
-  // CatalogChange. Under "Recent", the 5 newest chats of the 10 most
-  // recently used folders, with their folder; then, under "Current folder ·
-  // ~/path", the rest of this folder's chats with only their time (owner,
-  // 2026-10-20), a rule between the two; the folder's newest 10 first, 10 more
-  // per "Show more" at the list's end (a query searches them all). A chat of
+  // CatalogChange. One list: the chats of the 10 most recently used folders,
+  // newest first, each with its folder (no "Current folder" part; owner,
+  // 2026-11-04); the newest 10 first, 10 more per "Show more" at the list's
+  // end (a query searches them all). A chat of
   // another folder switches the window there in
   // place. Session events rename or remove rows in place.
   //   query? (the filter's first text: the left list's search box, START-021's id)
@@ -23,7 +22,6 @@
   import { api } from "../../lib/engine/api.js";
   import { file_info } from "../../lib/engine/commands.js";
   import { onEvent } from "../../lib/engine/events.js";
-  import { clean, short } from "../../lib/leftlist/picker.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
   import { infoText, inProject } from "../../lib/sessions/match.js";
   import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
@@ -34,16 +32,14 @@
   import { secondNow } from "../../lib/live/helpers.svelte.js";
 
   const ID = "sessions";
-  const RECENT = 5;
-  const LOCAL = 10; // the current folder's chats shown at first, and per "Show more"
-  const FOLDERS = 10; // Recent reads the 10 most recently used folders (owner, 2026-10-20)
+  const PAGE = 10; // the chats shown at first, and per "Show more"
+  const FOLDERS = 10; // the list reads the 10 most recently used folders (owner, 2026-10-20)
   const BUSY = "Agent is busy, please wait..."; // sessions.go:196-198
 
   let { query: firstQuery = "" } = $props();
 
   let query = $state(untrack(() => firstQuery));
   let rows = $state([]);
-  let recent = $state(new Set()); // the ids under "Recent"
   let selected = $state(-1);
   let mode = $state("normal"); // "normal" | "rename" | "delete" (sessions.go's sessionsMode)
   let target = null; // the chat id that entered rename or delete; the action is for it alone
@@ -52,16 +48,11 @@
   let loaded = $state(false);
   let failed = $state(false);
   let list = $state(null);
-  let localShown = $state(LOCAL);
+  let shownCount = $state(PAGE);
 
-  // What the list draws: Recent, then the folder's first localShown chats
-  // (rows keeps them all; a query searches them all). Recent come first in
-  // rows, so these are rows' first entries and share its indexes.
-  const shownRows = $derived.by(() => {
-    if (query) return rows;
-    let local = 0;
-    return rows.filter((row) => recent.has(row.ID) || local++ < localShown);
-  });
+  // What the list draws: the first shownCount chats (rows keeps them all; a
+  // query searches them all). These are rows' first entries and share its indexes.
+  const shownRows = $derived(query ? rows : rows.slice(0, shownCount));
   const hiddenCount = $derived(rows.length - shownRows.length);
 
   const now = $derived(secondNow());
@@ -88,18 +79,13 @@
   async function read() {
     try {
       const all = (await api.savedSessions(sessions.currentId || "", FOLDERS)) ?? [];
-      const newest = [...all].sort((a, b) => Number(b.UpdatedAt ?? 0) - Number(a.UpdatedAt ?? 0)).slice(0, RECENT);
-      const top = new Set(newest.map((row) => row.ID));
-      const here = all.filter((row) => !top.has(row.ID) && inProject(row, conn.project.path || conn.project.cwd));
       const keep = rows[selected]?.ID ?? sessions.currentId;
-      recent = top;
-      rows = [...newest, ...here];
+      rows = [...all].sort((a, b) => Number(b.UpdatedAt ?? 0) - Number(a.UpdatedAt ?? 0));
       failed = false;
       const at = rows.findIndex((row) => row.ID === keep);
       selected = at >= 0 ? at : rows.length > 0 ? 0 : -1;
-      // The kept chat stays in view: enough of the folder's chats show to reach it.
-      const localAt = at - newest.length;
-      if (localAt >= localShown) localShown = Math.ceil((localAt + 1) / LOCAL) * LOCAL;
+      // The kept chat stays in view: enough chats show to reach it.
+      if (at >= shownCount) shownCount = Math.ceil((at + 1) / PAGE) * PAGE;
     } catch (error) {
       failed = rows.length === 0;
       notify("error", error?.message ?? String(error));
@@ -313,8 +299,8 @@
       bind:this={list}
       items={shownRows}
       filterText={(row) => row.Title ?? ""}
-      groups={(row) => (recent.has(row.ID) ? "Recent" : `Current folder · ${short(clean(conn.project.path || conn.project.cwd), leftList.home)}`)}
-      info={(row) => infoText(recent.has(row.ID) ? row : { ...row, Directory: "" }, leftList.home, now)}
+      groups={() => "Recent"}
+      info={(row) => infoText(row, leftList.home, now)}
       infoBudget={35}
       {query}
       bind:selected
@@ -334,7 +320,7 @@
 {/snippet}
 
 {#snippet showMore()}
-  <button type="button" class="more" data-show-more onclick={() => (localShown += LOCAL)}>Show more ({hiddenCount})</button>
+  <button type="button" class="more" data-show-more onclick={() => (shownCount += PAGE)}>Show more ({hiddenCount})</button>
 {/snippet}
 
 {#snippet renameRow(item, index, state)}

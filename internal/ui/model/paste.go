@@ -112,11 +112,28 @@ func (m *UI) handlePasteMsg(msg tea.PasteMsg) tea.Cmd {
 		return util.ReportWarn("The current model does not support image attachments")
 	}
 
+	// A picture over the attachment limit goes in as its path instead
+	// (owner, 2026-11-04), so the agent can read it from disk.
 	var cmds []tea.Cmd
+	var big []string
 	for _, path := range paths {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() && info.Size() > common.MaxAttachmentSize {
+			big = append(big, escapePastedPath(path))
+			continue
+		}
 		cmds = append(cmds, m.handleFilePathPaste(path))
 	}
+	if len(big) > 0 {
+		prevHeight := m.textarea.Height()
+		cmds = append(cmds, m.updateTextareaWithPrevHeight(tea.PasteMsg{Content: strings.Join(big, " ")}, prevHeight))
+	}
 	return tea.Batch(cmds...)
+}
+
+// escapePastedPath escapes a path's backslashes and spaces, as a terminal
+// pastes a dropped file, so fsext.ParsePastedFiles reads it back.
+func escapePastedPath(path string) string {
+	return strings.NewReplacer(`\`, `\\`, " ", `\ `).Replace(path)
 }
 
 func hasPasteExceededThreshold(msg tea.PasteMsg) bool {

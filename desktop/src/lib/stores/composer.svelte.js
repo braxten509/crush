@@ -20,6 +20,7 @@ import { AGENT_FOR, bannerFor, BUSY_SWITCH, cycleSteps, isQuitWord, markOf, pick
 import {
   attachPath,
   dropText,
+  FILE_TOO_BIG,
   EMPTY_CLIPBOARD,
   MAX_ATTACHMENT_BYTES,
   NO_PICTURES,
@@ -709,12 +710,22 @@ async function pastePaths(text, sid, start, end) {
     notify("warn", NO_PICTURES);
     return;
   }
+  // A picture over the attachment limit goes in as its path instead
+  // (owner, 2026-11-04), so the agent can read it from disk.
+  const big = [];
   for (const path of paths) {
     const result = await attachPath(path, { stat, read: (p, max) => file_read(p, dir, max) });
-    if (result.error) notify("error", result.error);
+    if (result.warn === FILE_TOO_BIG) big.push(path);
+    else if (result.error) notify("error", result.error);
     else if (result.warn) notify("warn", result.warn);
     else draftFor(sid).attachments.push(result.attachment);
   }
+  if (big.length === 0 || sid !== typingChat()) return;
+  const insert = dropText(big);
+  const value = draftOf(sid).text;
+  const next = value.slice(0, start) + insert + value.slice(end);
+  await place(next, start + insert.length, sid);
+  typed({ before: value, value: next, caret: start + insert.length, paste: true });
 }
 
 // Ctrl+Shift+V (pasteTextFromClipboard, paste.go:171-180).

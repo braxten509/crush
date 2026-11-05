@@ -6,6 +6,7 @@
   // load never flickers. Dialogs and notices stay above it.
   import { fade } from "svelte/transition";
   import { probeSection } from "../../lib/probe.js";
+  import { leftList } from "../../lib/leftlist/store.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
   import ActivityDots from "./ActivityDots.svelte";
@@ -23,6 +24,7 @@
       switching: conn.switching,
       switchingTo: conn.switchingTo,
       listLoaded: sessions.loaded || start.listGaveUp,
+      startingChat: leftList.startingChats > 0,
     }),
   );
   const pending = $derived(view !== null);

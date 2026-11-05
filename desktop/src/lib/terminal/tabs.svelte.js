@@ -175,6 +175,7 @@ export function openTab({ cwd, argv = null, title = "Terminal", backToChat = fal
     scrolledBack: false,
     oscFolder: null,
     cwdTimer: null,
+    startedTimer: null, // ends "starting" for a command that prints nothing
     sized: null, // resolves once the view gave the widget its size
     focus: null, // set by the view while it shows this tab
   };
@@ -229,12 +230,22 @@ async function start(tab, cwd) {
       ptyClose(spawned.id).catch(() => {});
       return;
     }
-    if (tab.entry.state === "starting") tab.entry.state = "running";
+    // "Starting…" stays until the shell's first output: a shell that is
+    // slow to print its prompt otherwise shows a blank tab (owner,
+    // 2026-11-05). A quiet command is "running" after STARTED_WAIT_MS.
+    tab.startedTimer = setTimeout(() => markRunning(tab), STARTED_WAIT_MS);
     pumpWrites(tab);
     refreshCwd(tab);
   } catch (error) {
     finishStart(tab, error?.message ?? String(error));
   }
+}
+
+const STARTED_WAIT_MS = 10000;
+
+function markRunning(tab) {
+  clearTimeout(tab.startedTimer);
+  if (tab.entry.state === "starting") tab.entry.state = "running";
 }
 
 // A start that failed (or a tab closed while starting): the error stays in
@@ -255,6 +266,7 @@ function finishStart(tab, error) {
 function fromPty(tab, message) {
   if (message?.data !== undefined) {
     if (tab.term && !tab.disposed) tab.term.write(K.fromBase64(message.data));
+    markRunning(tab);
     scheduleCwd(tab);
   } else if (message?.exit) {
     ended(tab, message.exit);
@@ -285,6 +297,7 @@ function removeTab(tab, { show }) {
     else if (closeMain()) refocusChat();
   }
   clearTimeout(tab.cwdTimer);
+  clearTimeout(tab.startedTimer);
   // The widget goes once its view let go of it.
   queueMicrotask(() => {
     tab.disposed = true;

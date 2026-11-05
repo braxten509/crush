@@ -4,6 +4,7 @@
 // MCP / skill rows.
 
 export const STARTING = "Starting Crush…";
+export const STARTING_CHAT = "Starting a chat…";
 export const TRY_AGAIN = "Try again";
 
 // The engine gate's words for a join that failed before the window ever
@@ -33,13 +34,15 @@ export function gateView(conn) {
 }
 
 // The gray loading layer over the window (owner, 2026-10-25), or null: while
-// a folder opens, "Opening <name>…"; while the app starts, until the engine
+// a folder opens, "Opening <name>…"; while a chat starts (the "+", the
+// folder picker), "Starting a chat…"; while the app starts, until the engine
 // joins and the chat list comes, the starting line. A failure has its own
 // screen and notices, so the layer steps aside for it.
-export function loadingView({ state, workspace, switching, switchingTo, listLoaded }) {
+export function loadingView({ state, workspace, switching, switchingTo, listLoaded, startingChat = false }) {
   if (state === "failed") return null;
   if (switching > 0 && switchingTo) return { label: `Opening ${baseName(switchingTo) || switchingTo}…` };
   if (!workspace || !listLoaded) return { label: STARTING };
+  if (startingChat) return { label: STARTING_CHAT };
   return null;
 }
 

@@ -18,7 +18,7 @@
   // box's text in its filter.
   import { onMount } from "svelte";
   import { hasDialog, openDialog } from "../lib/dialogs.js";
-  import { slidePage } from "../lib/motion.js";
+  import { slidePage, unfold } from "../lib/motion.js";
   import { settingsOpen } from "../lib/settings/page.svelte.js";
   import { listSections } from "../lib/listsections.js";
   import { probeSection } from "../lib/probe.js";
@@ -27,6 +27,7 @@
   import { focusField } from "../lib/stores/composer.svelte.js";
   import { sessions } from "../lib/stores/sessions.svelte.js";
   import { setFocus } from "../lib/stores/ui.svelte.js";
+  import { bindKey } from "../lib/keys.js";
   import Icon from "./Icon.svelte";
   import ChatRow from "./list/ChatRow.svelte";
   import TerminalRows from "./leftlist/TerminalRows.svelte";
@@ -59,6 +60,91 @@
     if (!id || !nav) return;
     queueMicrotask(() => nav?.querySelector(`.scroll [data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" }));
   });
+
+  // A folder's "+" opens a small menu right under it, its right edge on the
+  // "+" (owner, 2026-11-05): New Chat, New Terminal, both in that folder.
+  // ↑/↓ move, Enter picks, Esc, Tab, a press outside, a scroll or the
+  // window losing focus closes it.
+  let plus = $state(null); // {dir, button} while open
+  let plusBox = $state(null);
+  let plusPlace = $state(null); // {x, y} once measured
+
+  function togglePlus(event, dir) {
+    const button = event.currentTarget;
+    plus = plus?.dir === dir ? null : { dir, button };
+  }
+
+  function closePlus({ refocus = false } = {}) {
+    const button = plus?.button;
+    plus = null;
+    if (refocus && button?.isConnected) button.focus({ preventScroll: true });
+  }
+
+  function pickPlus(what) {
+    const dir = plus?.dir;
+    closePlus();
+    if (dir) startIn(what, dir);
+  }
+
+  $effect(() => {
+    if (!plus || !plusBox) {
+      plusPlace = null;
+      return;
+    }
+    const r = plus.button.getBoundingClientRect();
+    const gap = 2;
+    const w = plusBox.offsetWidth;
+    const h = plusBox.offsetHeight;
+    const below = r.bottom + gap;
+    plusPlace = {
+      x: Math.max(0, r.right - w),
+      y: below + h > window.innerHeight ? Math.max(0, r.top - gap - h) : below,
+    };
+    plusBox.querySelector("button")?.focus({ preventScroll: true });
+    const outside = (event) => {
+      if (!plusBox?.contains(event.target) && !plus?.button.contains(event.target)) closePlus();
+    };
+    const away = () => closePlus();
+    window.addEventListener("mousedown", outside, true);
+    window.addEventListener("wheel", away, { capture: true, passive: true });
+    window.addEventListener("blur", away);
+    window.addEventListener("resize", away);
+    // Through the app's keys (lib/keys.js), which run before the page's own:
+    // the "overlay" scope is asked first while no sheet is open.
+    const unbind = [
+      bindKey("overlay", "ArrowDown", () => plusStep(1)),
+      bindKey("overlay", "ArrowUp", () => plusStep(-1)),
+      bindKey("overlay", "Enter", plusEnter),
+      bindKey("overlay", "Escape", () => (closePlus({ refocus: true }), true)),
+      bindKey("overlay", "Tab", () => (closePlus(), false)),
+      bindKey("overlay", "Shift+Tab", () => (closePlus(), false)),
+    ];
+    return () => {
+      for (const fn of unbind) fn();
+      window.removeEventListener("mousedown", outside, true);
+      window.removeEventListener("wheel", away, { capture: true });
+      window.removeEventListener("blur", away);
+      window.removeEventListener("resize", away);
+    };
+  });
+
+  function plusItems() {
+    return [...(plusBox?.querySelectorAll("button") ?? [])];
+  }
+
+  function plusStep(dir) {
+    const items = plusItems();
+    const at = items.indexOf(document.activeElement);
+    items[(at + dir + items.length) % items.length]?.focus({ preventScroll: true });
+    return true;
+  }
+
+  function plusEnter() {
+    const item = plusItems().find((b) => b === document.activeElement);
+    if (!item) return false;
+    item.click();
+    return true;
+  }
 
   const groups = $derived(chatGroups(now));
   const rows = $derived(groups.flatMap((group) => group.rows));
@@ -239,7 +325,7 @@
               <Icon name="close" size={12} frame={30} />
             </button>
           {/if}
-          <button class="folder-button folder-new" type="button" aria-label="New chat in {group.label}" title="New chat here" onclick={() => startIn("session", group.dir)}>
+          <button class="folder-button folder-new" class:open={plus?.dir === group.dir} type="button" aria-label="New in {group.label}" aria-haspopup="menu" aria-expanded={plus?.dir === group.dir} onclick={(event) => togglePlus(event, group.dir)}>
             <Icon name="plus" frame={30} />
           </button>
         </div>
@@ -266,6 +352,24 @@
       <entry.component />
     {/each}
   </div>
+
+  {#if plus}
+    <!-- svelte-ignore a11y_interactive_supports_focus -->
+    <div
+      class="plus-menu"
+      role="menu"
+      aria-label="New in folder"
+      data-plus-menu
+      bind:this={plusBox}
+      style:left="{plusPlace?.x ?? 0}px"
+      style:top="{plusPlace?.y ?? 0}px"
+      style:visibility={plusPlace ? null : "hidden"}
+      transition:unfold={{ from: "top" }}
+    >
+      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("session")}>New Chat</button>
+      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("terminal")}>New Terminal</button>
+    </div>
+  {/if}
 
   <!-- Settings without the Ctrl+P menu (owner, 2026-10-19). -->
   <button class="settings" type="button" onclick={() => openDialog("settings")}>
@@ -470,6 +574,38 @@
   }
   .folder-button:focus-visible {
     outline: 1px solid var(--vermilion);
+  }
+  .folder-button.open {
+    background: var(--control-hover);
+  }
+  /* The "+" menu: the right-click menu's paper and hairline (ContextMenu),
+     sized to its words. */
+  .plus-menu {
+    position: fixed;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: calc(6 * var(--px)) 0;
+    background: var(--paper-raised);
+    border: 1px solid var(--rule-control);
+  }
+  .plus-entry {
+    box-sizing: border-box;
+    min-height: calc(36 * var(--px));
+    padding: calc(5 * var(--px)) calc(16 * var(--px));
+    border: 0;
+    background: none;
+    font: var(--t-body-small);
+    color: var(--ink);
+    text-align: left;
+    white-space: nowrap;
+    cursor: default;
+  }
+  .plus-entry:hover,
+  .plus-entry:focus-visible {
+    background: var(--pick);
+    outline: none;
   }
   /* The × shows while the folder's line is pointed at or holds the focus. */
   .folder-drop {

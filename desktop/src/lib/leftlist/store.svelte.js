@@ -26,6 +26,7 @@ export const leftList = $state({
   serversClientId: "", // the engine connection that supplied these ports
   openFolds: {}, // fold → true: a program's row opened to show its servers
   picked: null, // null | {fold} | {port}: the picked server row
+  startingChats: 0, // chats being started (startIn): the loading cover says so
   serverRoom: Infinity, // how many server rows fit while leaving room for one chat (no longer measured: the servers are the right panel's)
 });
 
@@ -117,7 +118,11 @@ export async function startIn(what, dir) {
   }
   // Folder changes and saving are one operation: a second + must not
   // change the engine while the first chat is still being created.
-  const starting = startingChats.then(() => startChatIn(dir));
+  // The gray loading cover says "Starting a chat…" from the click until the
+  // chat shows, a wait for an earlier start included (owner, 2026-11-05: a
+  // start often showed nothing for seconds).
+  leftList.startingChats += 1;
+  const starting = startingChats.then(() => startChatIn(dir)).finally(() => (leftList.startingChats -= 1));
   startingChats = starting.catch(() => {});
   return starting;
 }

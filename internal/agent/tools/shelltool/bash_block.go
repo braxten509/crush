@@ -253,6 +253,11 @@ func wordText(w *syntax.Word) string {
 // ForegroundWaitLimit is the longest wait protected from automatic backgrounding.
 const ForegroundWaitLimit = 10 * time.Second
 
+// GuardRefusal tells a sub-agent why [CommandBlocked] refused its command.
+// "The user denied this tool call" had read as the user's no, and a helper
+// stopped its whole task over a `~/` path (owner, 2026-11-06).
+const GuardRefusal = "Blocked by Crush's command guard, not by the user. It refuses blocked programs (downloads, sudo, package installs) and any word it can't see through: ~, $NAME or ${NAME}, $(...), backticks, or a * ? [ pattern. Write the command with full paths and plain words (name the files, or use find or grep -r; run an inner command first and use its answer in the next one), then carry on."
+
 // SleepRefusal tells an agent why its sleep didn't run.
 const SleepRefusal = "Blocked: a `sleep` longer than 10 seconds in the foreground only stalls you. Run the wait in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done)."
 

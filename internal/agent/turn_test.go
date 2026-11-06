@@ -11,6 +11,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/providers"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestClassifyRunError(t *testing.T) {
 	}{
 		{"canceled", fmt.Errorf("stream: %w", context.Canceled), false, message.FinishReasonCanceled, "User canceled request", ""},
 		{"request timeout", fmt.Errorf("stream: %w", timeout), false, message.FinishReasonError, "Request timed out", timeout.UserMessage()},
-		{"hyper unauthorized", &fantasy.ProviderError{StatusCode: http.StatusUnauthorized, Title: "unauthorized", Message: "bad key"}, true, message.FinishReasonError, "Unauthorized", `Please re-authenticate with Hyper. You can also run "crush auth" to re-authenticate.`},
+		{"hyper unauthorized", &fantasy.ProviderError{StatusCode: http.StatusUnauthorized, Title: "unauthorized", Message: "bad key"}, true, message.FinishReasonError, "Unauthorized", `Please sign in to Hyper again. You can also run "crush login hyper --force".`},
 		{"other unauthorized", &fantasy.ProviderError{StatusCode: http.StatusUnauthorized, Title: "unauthorized", Message: "bad key"}, false, message.FinishReasonError, "Unauthorized", "bad key"},
 		{"provider error without title", &fantasy.ProviderError{Message: "overloaded"}, false, message.FinishReasonError, "Provider Error", "overloaded"},
 		{"fantasy error", &fantasy.Error{Title: "bad request", Message: "nope"}, false, message.FinishReasonError, "Bad Request", "nope"},
@@ -36,7 +37,7 @@ func TestClassifyRunError(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			reason, title, details := classifyRunError(test.err, Model{OAuth: test.isHyper, CatwalkCfg: catwalk.Model{Name: "Model"}})
+			reason, title, details := classifyRunError(test.err, Model{OAuth: test.isHyper, ProviderName: "Hyper", ModelCfg: config.SelectedModel{Provider: "hyper"}, CatwalkCfg: catwalk.Model{Name: "Model"}})
 			require.Equal(t, test.reason, reason)
 			require.Equal(t, test.title, title)
 			require.Equal(t, test.details, details)

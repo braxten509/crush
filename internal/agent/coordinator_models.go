@@ -242,16 +242,24 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 	// its choice and picks the new build up at its next request.
 	c.forgetChatModels()
 
+	// With no main agent (a coordinator that only runs subagents), the
+	// forgotten builds above are all there is to refresh: asking a missing
+	// agent whether it is busy panicked a subagent's retry after a renewed
+	// sign-in (2026-11-06).
+	agent, name := c.activeAgent()
+	if agent == nil {
+		return nil
+	}
+
 	// A model switch in another chat must not swap the model under a run
 	// that is already streaming: the in-flight request would go out on the
 	// new model, which may be one the provider cannot serve. The next turn
 	// rebuilds models from config anyway (runTurn calls updateAgentModels),
 	// so the switch still lands as soon as the run finishes.
-	if c.IsBusy() {
+	if agent.IsBusy() {
 		return nil
 	}
 
-	agent, name := c.activeAgent()
 	return c.updateAgentModels(ctx, agent, name)
 }
 

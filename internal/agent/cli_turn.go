@@ -110,7 +110,11 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			}
 		}
 		// Native memory is disabled; every CLI receives Crush's shared store.
-		memory := sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
+		shared := sharedCLIInstructions
+		if a.isSubAgent {
+			shared += "\n\n" + subAgentCommandNote
+		}
+		memory := shared + "\n\n" + memoryInstructions(a.isSubAgent)
 		if m.Kind == config.TypeClaudeCode && memory != "" {
 			instructions = memory + "\n\n" + instructions
 		}

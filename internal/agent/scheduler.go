@@ -246,6 +246,9 @@ func (s *sessionScheduler) enqueueCall(call SessionAgentCall) {
 		s.acceptedMu.Unlock()
 	}
 	queued.Accepted = nil
+	// Once queued the call is accepted: if no step folds it in, it runs as
+	// its own turn rather than being refused as idle.
+	queued.QueueOnly = false
 	if call.Accepted != nil && call.Accepted.handoff != nil {
 		pending, _ := s.interrupting.Get(call.SessionID)
 		s.interrupting.Set(call.SessionID, appendQueuedInOrder(pending, queued))

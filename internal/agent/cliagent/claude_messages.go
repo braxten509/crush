@@ -113,6 +113,8 @@ func claudeControl(ctx context.Context, m *Model, t Turn, p *proc, line claudeLi
 	msg := "The user denied this tool call."
 	if sleepRefused(name, input) {
 		msg = shelltool.SleepRefusal
+	} else if guardRefused(m, name, input) {
+		msg = shelltool.GuardRefusal
 	}
 	respond(map[string]any{"behavior": "deny", "message": msg})
 }

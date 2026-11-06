@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,6 +46,9 @@ func newGateTestCoordinator(t *testing.T, interactive bool) *coordinator {
 		filetracker: *env.filetracker,
 		agents:      make(map[string]SessionAgent),
 		interactive: interactive,
+		// As newCoordinator makes it: CancelAll stops the dispatched
+		// subagents, and a nil map made TestShutdownKeepsAPlannedWait panic.
+		dispatched: csync.NewMap[string, *dispatchedAgent](),
 	}
 
 	p, err := coderPrompt(prompt.WithWorkingDir(env.workingDir))

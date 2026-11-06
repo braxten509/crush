@@ -1,5 +1,19 @@
 package agent
 
+// subAgentCommandNote tells a CLI sub-agent about the command guard its
+// shell commands pass (shelltool.CommandBlocked), which refuses without
+// asking anyone. A helper took a refused `~/` path for the user's no and
+// stopped its task (owner, 2026-11-06: keep the guard, teach the helpers).
+const subAgentCommandNote = `<crush_command_guard>
+Crush checks every shell command you run and refuses, without asking anyone,
+one that runs a blocked program (downloads, sudo, package installs) or has a
+word it can't see through: ~, $NAME or ${NAME}, $(...), backticks, or a * ? [
+pattern. Write commands with full paths (/home/... rather than ~ or $HOME) and
+plain words: name the files, or use find or grep -r instead of a pattern; run
+an inner command first and use its answer in the next one. A refusal is the
+guard's, not the user's: rewrite the command and carry on.
+</crush_command_guard>`
+
 const sharedCLIInstructions = `<crush_instruction_sources>
 Inside Crush, use the user's messages, Crush's instructions, the shared memory,
 and shared skills under ~/.agents/skills. Personal and project instruction

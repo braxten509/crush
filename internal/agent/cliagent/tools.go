@@ -219,6 +219,13 @@ func (m *Model) approve(ctx context.Context, sessionID, callID, name, input stri
 	return err == nil && ok
 }
 
+// guardRefused reports whether Crush's command guard refuses a sub-agent's
+// shell command (approve's check), so the refusal can say why.
+func guardRefused(m *Model, name, input string) bool {
+	var in struct{ Command string }
+	return m.Guarded && name == tools.BashToolName && json.Unmarshal([]byte(input), &in) == nil && shelltool.CommandBlocked(in.Command)
+}
+
 // sleepRefused reports whether a tool call is a shell command that starts
 // with a long foreground sleep, which Crush refuses as its own shell does.
 func sleepRefused(name, input string) bool {

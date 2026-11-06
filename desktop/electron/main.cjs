@@ -542,7 +542,13 @@ ipcMain.on("crush-window", (event, action, value) => {
       return;
     }
     quitting = true;
-    app.relaunch({ args: relaunchArgs(value) });
+    // Not app.relaunch: Chromium starts that copy with no_new_privs, which
+    // every terminal in it inherits, so sudo fails there (owner, 2026-11-06).
+    // A plain detached shell waits for this app to exit (the single-instance
+    // lock frees with it; at most 30 s) and starts the new one.
+    spawn("/bin/sh", ["-c", 'i=0; while kill -0 "$0" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; exec "$@"',
+      String(process.pid), process.execPath, ...relaunchArgs(value)],
+      { detached: true, stdio: "ignore", cwd: process.cwd() }).unref();
     app.quit();
   }
 });

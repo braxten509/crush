@@ -83,11 +83,24 @@ run() {
   mkdir -p src-tauri/target/release
   cp "$WORK/target/release/crush-desktop-core" src-tauri/target/release/
   echo "== terminal crush" >>"$LOG"
-  [ -f "$PROVIDERS" ] && cp "$PROVIDERS" "$src/internal/config/cli_providers.go"
-  local base version
+  local base version providers="$src/internal/config/cli_providers.go" copied=""
+  if [ -f "$PROVIDERS" ] && ! cmp -s "$PROVIDERS" "$providers"; then
+    cp "$providers" "$WORK/cli_providers.fork.go"
+    cp "$PROVIDERS" "$providers" && copied=1
+  fi
   base="$("$CRUSH" --version 2>/dev/null | awk '{print $3}' | sed 's/-local.*//')"
   version="${base:-v0.0.0}-local.$(date +%Y%m%d)-${commit:0:8}"
-  (cd "$src" && nice -n 10 go build -buildvcs=false -ldflags="-X github.com/charmbracelet/crush/internal/version.Version=$version -X github.com/charmbracelet/crush/internal/version.Commit=${commit:0:8} -X github.com/charmbracelet/crush/internal/version.SourceDir=$SOURCE_DIR" -o "$WORK/crush" .) >>"$LOG" 2>&1 || fail "building the terminal crush failed"
+  build_crush() {
+    (cd "$src" && nice -n 10 go build -buildvcs=false -ldflags="-X github.com/charmbracelet/crush/internal/version.Version=$version -X github.com/charmbracelet/crush/internal/version.Commit=${commit:0:8} -X github.com/charmbracelet/crush/internal/version.SourceDir=$SOURCE_DIR" -o "$WORK/crush" .) >>"$LOG" 2>&1
+  }
+  if ! build_crush; then
+    # The local cli_providers.go may not fit the fork's code (say, during an
+    # unfinished merge in ~/dev/crush): build with the fork's own file.
+    [ -n "$copied" ] || fail "building the terminal crush failed"
+    echo "== terminal crush again, with the fork's own cli_providers.go" >>"$LOG"
+    cp "$WORK/cli_providers.fork.go" "$providers"
+    build_crush || fail "building the terminal crush failed"
+  fi
 
   # Every build passed: install the app (its old folder swapped out whole),
   # then the terminal crush (backed up first).

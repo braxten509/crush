@@ -6,9 +6,12 @@
 // automatic checks run once per app start in the first window.
 import { askYesNo } from "../ask/localform.js";
 import { api } from "../engine/api.js";
-import { selfupdateInstall, selfupdateRun, updatesClaim } from "../engine/commands.js";
+import { selfupdateInstall, updatesClaim } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
+import { startIn } from "../leftlist/store.svelte.js";
+import { sendPromptText } from "../stores/composer.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
+import { ws } from "../stores/workspace.svelte.js";
 
 const NOTICE_MS = 10_000;
 
@@ -125,15 +128,43 @@ function offerInstall(tag, fixed) {
   });
 }
 
-async function runUpdate(tag) {
+// The steps the update chat gets. The chat asks before installing.
+export function updateChatPrompt(tag, dir) {
+  return [
+    `Update this fork of Crush to upstream's stable release ${tag}. The checkout in ${dir} is the fork: take upstream's changes and keep every fork feature.`,
+    "",
+    `1. Run \`crush self-update merge\`. It saves any uncommitted changes in a commit, then merges ${tag}. If it lists clashing files, resolve each one so both the fork's behavior and upstream's change survive (read both sides and the code around them; never drop a fork feature), then \`git add\` them and \`git commit --no-edit\`.`,
+    "2. Run `crush self-update build`. It builds Crush and runs every test. If anything fails, fix it, commit, and run it again until it passes.",
+    "3. Tell me in plain words what you changed and ask me whether to install it. Only after I say yes, run `crush self-update install`: it backs up the old Crush, installs the tested build and uploads the merge to my fork on GitHub. Then tell me to restart Crush.",
+    "",
+    "Never discard work, reset, rebase, force-push or rewrite history, and leave the working tree clean.",
+  ].join("\n");
+}
+
+// A new chat's engine may still be starting; wait for it before sending.
+async function agentReady(limitMs = 60_000) {
+  const end = Date.now() + limitMs;
+  while (!ws.agent?.is_ready) {
+    if (Date.now() > end) return false;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return true;
+}
+
+// The update runs in a new chat in the fork's checkout, on the model a new
+// chat starts on, so it can be watched and answered like any chat (owner,
+// 2026-11-05: it used to run hidden in the background).
+async function runUpdate(tag, dir) {
   updating = true;
-  notify("update", `Updating Crush to ${tag} in the background: saving changes, merging, building and testing…`, 3_600_000);
   try {
-    const result = await selfupdateRun(tag);
-    if (result?.ok) offerInstall(tag, result.fixed ?? []);
-    else notify("error", `Crush ${tag} update stopped: ${firstLine(result?.firstLine)}. Details: ${result?.logPath ?? ""}`);
+    if (!(await startIn("chat", dir))) return;
+    if (!(await agentReady())) {
+      notify("error", `Couldn't start the Crush ${tag} update: the chat didn't get ready.`);
+      return;
+    }
+    if (!(await sendPromptText(updateChatPrompt(tag, dir)))) notify("error", `Couldn't send the Crush ${tag} update steps to the chat.`);
   } catch (error) {
-    notify("error", `Crush ${tag} update stopped: ${firstLine(error?.message ?? error)}.`);
+    notify("error", `Couldn't start the Crush ${tag} update: ${firstLine(error?.message ?? error)}`);
   } finally {
     updating = false;
   }
@@ -144,9 +175,9 @@ function offerUpdate(release) {
   offer({
     label: "Crush update",
     question: `Update Crush to ${tag}?`,
-    description: `Upstream released ${tag} (you have ${current}). Crush first saves any uncommitted changes in a commit, then brings the update into ${dir}, builds it and runs every test in the background. If files clash or tests fail, an AI agent fixes them. You're asked again before anything is installed. Saying No skips this version.`,
+    description: `Upstream released ${tag} (you have ${current}). A new chat opens in ${dir} and an AI does the update there: it saves any uncommitted changes in a commit, merges, fixes clashes, builds and runs every test. You can watch and type to it like any chat, and it asks you before installing. Saying No skips this version.`,
     fallback: `Crush ${tag} is out. Run Update Crush from the command palette.`,
-    onYes: () => runUpdate(tag),
+    onYes: () => runUpdate(tag, dir),
     onNo: async () => {
       try {
         await api.declineCrushUpdate(tag);

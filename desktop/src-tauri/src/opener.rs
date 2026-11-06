@@ -87,6 +87,8 @@ fn link_target(destination: &str, working_dir: &Path, home: Option<&OsStr>) -> R
         other => return Err(format!("cannot open links of type {}", go::quote(other.as_bytes()))),
     }
     let mut path = u.path;
+    let relative = !path.starts_with(b"/") && !path.starts_with(b"~/");
+    let written = path.clone();
     if path.starts_with(b"~/") {
         // os.UserHomeDir on Unix: $HOME, or an error when it is empty.
         let home = home
@@ -110,10 +112,66 @@ fn link_target(destination: &str, working_dir: &Path, home: Option<&OsStr>) -> R
         path = strip_line_suffix(&path);
     }
     if let Err(e) = std::fs::metadata(OsStr::from_bytes(&path)) {
+        // A relative name that is not in the project's top folder (Claude
+        // writes `relation.py` for src/project3/relation.py): open the
+        // closest file in the project whose path ends with it.
+        if relative {
+            let rel = go::clean(&written);
+            let stripped = strip_line_suffix(&rel);
+            let found = find_in_project(working_dir, &rel)
+                .or_else(|| (stripped != rel).then(|| find_in_project(working_dir, &stripped)).flatten());
+            if let Some(found) = found {
+                return Ok(LinkKind::File(found));
+            }
+        }
         let shown = String::from_utf8_lossy(&path);
         return Err(format!("cannot open {shown}: stat {shown}: {}", go_error_text(&e)));
     }
     Ok(LinkKind::File(PathBuf::from(OsString::from_vec(path))))
+}
+
+/// How many folder entries `find_in_project` looks at before giving up.
+const PROJECT_SEARCH_LIMIT: usize = 50_000;
+
+/// The file under `root` whose path ends with `rel`, fewest folders deep
+/// first, then by name. Skips hidden folders and node_modules, and does not
+/// follow folder links. Same rules as the terminal's findInProject.
+fn find_in_project(root: &Path, rel: &[u8]) -> Option<PathBuf> {
+    if rel.is_empty() || rel == b"." || rel == b".." || rel.starts_with(b"../") || rel.starts_with(b"/") {
+        return None;
+    }
+    let rel = Path::new(OsStr::from_bytes(rel));
+    let mut level = vec![root.to_path_buf()];
+    let mut seen = 0usize;
+    while !level.is_empty() {
+        let mut found = Vec::new();
+        let mut next = Vec::new();
+        for dir in &level {
+            let Ok(entries) = std::fs::read_dir(dir) else { continue };
+            for entry in entries.flatten() {
+                seen += 1;
+                if seen > PROJECT_SEARCH_LIMIT {
+                    found.sort();
+                    return found.into_iter().next();
+                }
+                let path = entry.path();
+                if path.ends_with(rel) && path.exists() {
+                    found.push(path.clone());
+                }
+                let name = entry.file_name();
+                let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+                if is_dir && !name.as_bytes().starts_with(b".") && name != "node_modules" {
+                    next.push(path);
+                }
+            }
+        }
+        if !found.is_empty() {
+            found.sort();
+            return found.into_iter().next();
+        }
+        level = next;
+    }
+    None
 }
 
 /// Removes the terminal's linkLineSuffix, `:[0-9]+(?::[0-9]+)?$`, at its
